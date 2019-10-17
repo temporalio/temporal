@@ -38,12 +38,11 @@ import (
 
 	"github.com/uber/cadence/.gen/go/admin"
 	"github.com/uber/cadence/.gen/go/cadence/workflowservicetest"
-	"github.com/uber/cadence/.gen/go/replicator"
-	"github.com/uber/cadence/client/frontend"
-
 	"github.com/uber/cadence/.gen/go/history"
+	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/client/frontend"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/log"

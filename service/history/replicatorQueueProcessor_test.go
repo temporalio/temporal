@@ -314,6 +314,22 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 		LastWorkerIdentity:       activityLastWorkerIdentity,
 		LastFailureDetails:       activityLastFailureDetails,
 	}, true)
+	versionHistory := &persistence.VersionHistory{
+		BranchToken: []byte{},
+		Items: []*persistence.VersionHistoryItem{
+			{
+				EventID: scheduleID,
+				Version: 333,
+			},
+		},
+	}
+	versionHistories := &persistence.VersionHistories{
+		CurrentVersionHistoryIndex: 0,
+		Histories: []*persistence.VersionHistory{
+			versionHistory,
+		},
+	}
+	msBuilder.On("GetVersionHistories").Return(versionHistories)
 	s.mockDomainCache.On("GetDomainByID", domainID).Return(cache.NewGlobalDomainCacheEntryForTest(
 		&persistence.DomainInfo{ID: domainID, Name: domainName},
 		&persistence.DomainConfig{Retention: 1},
@@ -345,6 +361,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 			LastFailureReason:  common.StringPtr(activityLastFailureReason),
 			LastWorkerIdentity: common.StringPtr(activityLastWorkerIdentity),
 			LastFailureDetails: activityLastFailureDetails,
+			VersionHistory:     versionHistory.ToThrift(),
 		},
 	}).Return(nil).Once()
 
@@ -407,6 +424,22 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 		LastWorkerIdentity:       activityLastWorkerIdentity,
 		LastFailureDetails:       activityLastFailureDetails,
 	}, true)
+	versionHistory := &persistence.VersionHistory{
+		BranchToken: []byte{},
+		Items: []*persistence.VersionHistoryItem{
+			{
+				EventID: scheduleID,
+				Version: 333,
+			},
+		},
+	}
+	versionHistories := &persistence.VersionHistories{
+		CurrentVersionHistoryIndex: 0,
+		Histories: []*persistence.VersionHistory{
+			versionHistory,
+		},
+	}
+	msBuilder.On("GetVersionHistories").Return(versionHistories)
 	s.mockDomainCache.On("GetDomainByID", domainID).Return(cache.NewGlobalDomainCacheEntryForTest(
 		&persistence.DomainInfo{ID: domainID, Name: domainName},
 		&persistence.DomainConfig{Retention: 1},
@@ -437,6 +470,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 			LastFailureReason:  common.StringPtr(activityLastFailureReason),
 			LastWorkerIdentity: common.StringPtr(activityLastWorkerIdentity),
 			LastFailureDetails: activityLastFailureDetails,
+			VersionHistory:     versionHistory.ToThrift(),
 		},
 	}).Return(nil).Once()
 

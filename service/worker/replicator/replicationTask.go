@@ -142,6 +142,7 @@ func newActivityReplicationTask(
 			LastFailureReason:  attr.LastFailureReason,
 			LastWorkerIdentity: attr.LastWorkerIdentity,
 			LastFailureDetails: attr.LastFailureDetails,
+			VersionHistory:     attr.VersionHistory,
 		},
 		historyRereplicator: historyRereplicator,
 		nDCHistoryResender:  nDCHistoryResender,

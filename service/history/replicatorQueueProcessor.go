@@ -548,6 +548,17 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 			// LastHeartBeatUpdatedTime must be valid when getting the sync activity replication task
 			heartbeatTime = common.Int64Ptr(activityInfo.LastHeartBeatUpdatedTime.UnixNano())
 
+			//Version history uses when replicate the sync activity task
+			versionHistories := mutableState.GetVersionHistories()
+			var versionHistory *shared.VersionHistory
+			if versionHistories != nil {
+				rawVersionHistory, err := versionHistories.GetCurrentVersionHistory()
+				if err != nil {
+					return nil, err
+				}
+				versionHistory = rawVersionHistory.ToThrift()
+			}
+
 			return &replicator.ReplicationTask{
 				TaskType: replicator.ReplicationTaskType.Ptr(replicator.ReplicationTaskTypeSyncActivity),
 				SyncActicvityTaskAttributes: &replicator.SyncActicvityTaskAttributes{
@@ -565,6 +576,7 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 					LastFailureReason:  common.StringPtr(activityInfo.LastFailureReason),
 					LastWorkerIdentity: common.StringPtr(activityInfo.LastWorkerIdentity),
 					LastFailureDetails: activityInfo.LastFailureDetails,
+					VersionHistory:     versionHistory,
 				},
 			}, nil
 		},
