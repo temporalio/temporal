@@ -55,6 +55,11 @@ var checks = []conditionAndAction{
 }
 
 func localActivityWorkfow(ctx workflow.Context) (string, error) {
+	profile, err := beginWorkflow(ctx, wfTypeSignal, workflow.Now(ctx).UnixNano())
+	if err != nil {
+		return "", err
+	}
+
 	logger := workflow.GetLogger(ctx)
 
 	lao := workflow.LocalActivityOptions{
@@ -64,9 +69,9 @@ func localActivityWorkfow(ctx workflow.Context) (string, error) {
 	ctx = workflow.WithLocalActivityOptions(ctx, lao)
 
 	var data int32
-	err := workflow.ExecuteLocalActivity(ctx, getConditionData).Get(ctx, &data)
+	err = workflow.ExecuteLocalActivity(ctx, getConditionData).Get(ctx, &data)
 	if err != nil {
-		return "", err
+		return "", profile.end(err)
 	}
 	logger.Sugar().Infof("Get condition data %v", data)
 
@@ -82,7 +87,7 @@ func localActivityWorkfow(ctx workflow.Context) (string, error) {
 		var conditionMeet bool
 		err := workflow.ExecuteLocalActivity(ctx, check.condition, data).Get(ctx, &conditionMeet)
 		if err != nil {
-			return "", err
+			return "", profile.end(err)
 		}
 
 		logger.Sugar().Infof("condition meet for %v: %v", i, conditionMeet)
@@ -96,7 +101,7 @@ func localActivityWorkfow(ctx workflow.Context) (string, error) {
 	for _, f := range actionFutures {
 		var actionResult string
 		if err := f.Get(ctx, &actionResult); err != nil {
-			return "", err
+			return "", profile.end(err)
 		}
 		if len(processResult) > 0 {
 			processResult += " and "
@@ -106,7 +111,7 @@ func localActivityWorkfow(ctx workflow.Context) (string, error) {
 
 	logger.Sugar().Infof("Processed condition %v: %v", data, processResult)
 
-	return processResult, nil
+	return processResult, profile.end(nil)
 }
 
 func getConditionData() (int32, error) {

@@ -46,7 +46,7 @@ func init() {
 func concurrentExecWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain string) error {
 	profile, err := beginWorkflow(ctx, wfTypeConcurrentExec, scheduledTimeNanos)
 	if err != nil {
-		return profile.end(err)
+		return err
 	}
 
 	selector := workflow.NewSelector(ctx)

@@ -49,7 +49,7 @@ func init() {
 func archivalWorkflow(ctx workflow.Context, scheduledTimeNanos int64, _ string) error {
 	profile, err := beginWorkflow(ctx, wfTypeArchival, scheduledTimeNanos)
 	if err != nil {
-		return profile.end(err)
+		return err
 	}
 	ch := workflow.NewBufferedChannel(ctx, numArchivals)
 	for i := 0; i < numArchivals; i++ {
@@ -138,7 +138,7 @@ func archivalActivity(ctx context.Context, scheduledTimeNanos int64) error {
 func archivalExternalWorkflow(ctx workflow.Context, scheduledTimeNanos int64) error {
 	profile, err := beginWorkflow(ctx, wfTypeArchivalExternal, scheduledTimeNanos)
 	if err != nil {
-		return profile.end(err)
+		return err
 	}
 	ao := workflow.ActivityOptions{
 		ScheduleToStartTimeout: time.Minute,

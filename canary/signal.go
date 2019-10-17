@@ -47,7 +47,7 @@ func signalWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain strin
 	var err error
 	profile, err := beginWorkflow(ctx, wfTypeSignal, scheduledTimeNanos)
 	if err != nil {
-		return profile.end(err)
+		return err
 	}
 
 	execInfo := workflow.GetInfo(ctx).WorkflowExecution
@@ -79,7 +79,7 @@ func signalWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain strin
 	signalFuture := childFuture.SignalChildWorkflow(childCtx, signalName, signalValue)
 	err = signalFuture.Get(childCtx, nil)
 	if err != nil {
-		profile.end(err)
+		return profile.end(err)
 	}
 
 	decisionSignalTestFn := func(useRunID bool) error {

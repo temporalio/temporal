@@ -55,7 +55,7 @@ func queryWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain string
 
 	profile, err := beginWorkflow(ctx, wfTypeQuery, scheduledTimeNanos)
 	if err != nil {
-		return profile.end(err)
+		return err
 	}
 
 	execution := workflow.GetInfo(ctx).WorkflowExecution

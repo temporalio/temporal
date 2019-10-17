@@ -46,7 +46,7 @@ func init() {
 func retryWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain string) error {
 	profile, err := beginWorkflow(ctx, wfTypeRetry, scheduledTimeNanos)
 	if err != nil {
-		return profile.end(err)
+		return err
 	}
 
 	info := workflow.GetInfo(ctx)
@@ -95,7 +95,7 @@ func retryWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain string
 		return profile.end(errUnexpectedResult)
 	}
 
-	return nil
+	return profile.end(nil)
 
 }
 

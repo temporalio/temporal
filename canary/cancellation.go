@@ -46,7 +46,7 @@ func init() {
 func cancellationWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain string) error {
 	profile, err := beginWorkflow(ctx, wfTypeCancellation, scheduledTimeNanos)
 	if err != nil {
-		return profile.end(err)
+		return err
 	}
 
 	// this test cancel external workflow
@@ -62,7 +62,11 @@ func cancellationWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain
 	childCtx := workflow.WithChildOptions(ctx, cwo)
 	childCtx, cancel := workflow.WithCancel(childCtx)
 	childFuture := workflow.ExecuteChildWorkflow(childCtx, wfTypeCancellationExternal, workflow.Now(ctx).UnixNano(), sleepDuration)
-	workflow.Sleep(ctx, 1*time.Second)
+
+	if err := workflow.Sleep(ctx, 1*time.Second); err != nil {
+		return profile.end(err)
+	}
+
 	cancel()
 	err = childFuture.Get(childCtx, nil)
 	if err == nil {

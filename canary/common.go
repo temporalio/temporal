@@ -89,7 +89,7 @@ func beginWorkflow(ctx workflow.Context, wfType string, scheduledTimeNanos int64
 	profile := recordWorkflowStart(ctx, wfType, scheduledTimeNanos)
 	if err := checkWFVersionCompatibility(ctx); err != nil {
 		profile.scope.Counter(errIncompatibleVersion).Inc(1)
-		return nil, err
+		return nil, profile.end(err)
 	}
 	return profile, nil
 }

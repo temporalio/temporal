@@ -47,12 +47,15 @@ func visibilityWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain s
 	var err error
 	profile, err := beginWorkflow(ctx, wfTypeVisibility, scheduledTimeNanos)
 	if err != nil {
-		return profile.end(err)
+		return err
 	}
 
 	execInfo := workflow.GetInfo(ctx).WorkflowExecution
 	aCtx := workflow.WithActivityOptions(ctx, newActivityOptions())
-	workflow.Sleep(ctx, 2*time.Second) // wait for visibility on ES
+	// wait for visibility on ES {}
+	if err := workflow.Sleep(ctx, 2*time.Second); err != nil {
+		return profile.end(err)
+	}
 	now := workflow.Now(ctx).UnixNano()
 	err = workflow.ExecuteActivity(aCtx, activityTypeVisibility, now, execInfo).Get(ctx, nil)
 	if err != nil {
@@ -60,7 +63,7 @@ func visibilityWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain s
 		return profile.end(err)
 	}
 
-	return profile.end(err)
+	return profile.end(nil)
 }
 
 // visibilityActivity exercises the visibility apis

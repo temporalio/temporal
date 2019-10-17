@@ -46,7 +46,7 @@ func searchAttributesWorkflow(ctx workflow.Context, scheduledTimeNanos int64, do
 	var err error
 	profile, err := beginWorkflow(ctx, wfTypeSearchAttributes, scheduledTimeNanos)
 	if err != nil {
-		return profile.end(err)
+		return err
 	}
 
 	attr := map[string]interface{}{
@@ -60,7 +60,10 @@ func searchAttributesWorkflow(ctx workflow.Context, scheduledTimeNanos int64, do
 
 	execInfo := workflow.GetInfo(ctx).WorkflowExecution
 	aCtx := workflow.WithActivityOptions(ctx, newActivityOptions())
-	workflow.Sleep(ctx, timeToWaitVisibilityDataOnESInDuration) // wait for visibility on ES
+	// wait for visibility on ES
+	if err := workflow.Sleep(ctx, timeToWaitVisibilityDataOnESInDuration); err != nil {
+		return profile.end(err)
+	}
 	now := workflow.Now(ctx).UnixNano()
 	err = workflow.ExecuteActivity(aCtx, activityTypeSearchAttributes, now, execInfo).Get(ctx, nil)
 	if err != nil {
@@ -68,7 +71,7 @@ func searchAttributesWorkflow(ctx workflow.Context, scheduledTimeNanos int64, do
 		return profile.end(err)
 	}
 
-	return profile.end(err)
+	return profile.end(nil)
 }
 
 // searchAttributesActivity exercises the visibility apis

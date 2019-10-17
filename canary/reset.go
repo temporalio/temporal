@@ -52,7 +52,7 @@ func init() {
 func resetWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain string) error {
 	profile, err := beginWorkflow(ctx, wfTypeReset, scheduledTimeNanos)
 	if err != nil {
-		return profile.end(err)
+		return err
 	}
 	info := workflow.GetInfo(ctx)
 
@@ -60,12 +60,14 @@ func resetWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain string
 	baseCtx := workflow.WithChildOptions(ctx, cwo)
 	baseFuture := workflow.ExecuteChildWorkflow(baseCtx, wfTypeResetBase, workflow.Now(ctx).UnixNano(), info.WorkflowExecution.ID, info.WorkflowExecution.RunID, domain)
 	var baseWE workflow.Execution
-	baseFuture.GetChildWorkflowExecution().Get(baseCtx, &baseWE)
+	if err := baseFuture.GetChildWorkflowExecution().Get(baseCtx, &baseWE); err != nil {
+		return profile.end(err)
+	}
 
 	signalFuture1 := baseFuture.SignalChildWorkflow(baseCtx, signalBeforeReset, "signalValue")
 	err = signalFuture1.Get(baseCtx, nil)
 	if err != nil {
-		profile.end(err)
+		return profile.end(err)
 	}
 
 	// use signal to wait for baseWF to get reach reset point
@@ -76,7 +78,7 @@ func resetWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain string
 	signalFuture2 := baseFuture.SignalChildWorkflow(baseCtx, signalAfterReset, "signalValue")
 	err = signalFuture2.Get(baseCtx, nil)
 	if err != nil {
-		profile.end(err)
+		return profile.end(err)
 	}
 
 	expiration := time.Duration(info.ExecutionStartToCloseTimeoutSeconds) * time.Second
@@ -90,7 +92,9 @@ func resetWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain string
 	if err != nil {
 		return profile.end(err)
 	}
-	workflow.Sleep(ctx, time.Duration(bigWait*2)*time.Second)
+	if err := workflow.Sleep(ctx, time.Duration(bigWait*2)*time.Second); err != nil {
+		return profile.end(err)
+	}
 	err = workflow.ExecuteActivity(activityCtx, activityTypeVerifyReset, domain, newWE).Get(activityCtx, nil)
 
 	return profile.end(err)
@@ -99,7 +103,7 @@ func resetWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain string
 func resetBaseWorkflow(ctx workflow.Context, scheduledTimeNanos int64, parentID, parentRunID, domain string) error {
 	profile, err := beginWorkflow(ctx, wfTypeResetBase, scheduledTimeNanos)
 	if err != nil {
-		return profile.end(err)
+		return err
 	}
 
 	info := workflow.GetInfo(ctx)
@@ -127,7 +131,7 @@ func resetBaseWorkflow(ctx workflow.Context, scheduledTimeNanos int64, parentID,
 	var f workflow.Future
 	futures1 := []workflow.Future{}
 	futures2 := []workflow.Future{}
-	//completed before reset
+	// completed before reset
 	f = workflow.ExecuteActivity(activityCtxWithRetry, activityTypeResetBase, smallWait)
 	futures1 = append(futures1, f)
 
@@ -149,13 +153,15 @@ func resetBaseWorkflow(ctx workflow.Context, scheduledTimeNanos int64, parentID,
 
 	// wait until first set of futures1 are done: 1 act, 1 timer
 	for _, future := range futures1 {
-		future.Get(ctx, nil)
+		if err := future.Get(ctx, nil); err != nil {
+			return profile.end(err)
+		}
 	}
 
 	signalFuture := workflow.SignalExternalWorkflow(ctx, parentID, parentRunID, signalToTrigger, "signalValue")
 	err = signalFuture.Get(ctx, nil)
 	if err != nil {
-		profile.end(err)
+		return profile.end(err)
 	}
 
 	var value string
