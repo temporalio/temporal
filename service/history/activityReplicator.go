@@ -248,19 +248,19 @@ func (r *activityReplicatorImpl) shouldApplySyncActivity(
 				common.Int64Ptr(endEventID),
 				common.Int64Ptr(endEventVersion),
 			)
-		} else {
-			// activity schedule event is the last event
-			// use nil event ID & version indicating re-send to end
-			return false, newNDCRetryTaskErrorWithHint(
-				domainID,
-				workflowID,
-				runID,
-				common.Int64Ptr(lcaItem.GetEventID()),
-				common.Int64Ptr(lcaItem.GetVersion()),
-				nil,
-				nil,
-			)
 		}
+
+		// activity schedule event is the last event
+		// use nil event ID & version indicating re-send to end
+		return false, newNDCRetryTaskErrorWithHint(
+			domainID,
+			workflowID,
+			runID,
+			common.Int64Ptr(lcaItem.GetEventID()),
+			common.Int64Ptr(lcaItem.GetVersion()),
+			nil,
+			nil,
+		)
 	} else if msBuilder.GetReplicationState() != nil {
 		// TODO when 2DC is deprecated, remove this block
 		if !msBuilder.IsWorkflowExecutionRunning() {
