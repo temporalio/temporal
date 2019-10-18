@@ -171,6 +171,8 @@ func (r *nDCStateRebuilderImpl) rebuild(
 		return nil, 0, err
 	}
 
+	// mutable state rebuild should use the same time stamp
+	rebuiltMutableState.GetExecutionInfo().StartTimestamp = now
 	return rebuiltMutableState, r.rebuiltHistorySize, nil
 }
 

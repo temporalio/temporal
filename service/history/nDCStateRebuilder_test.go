@@ -345,4 +345,5 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 			[]*persistence.VersionHistoryItem{persistence.NewVersionHistoryItem(lastEventID, version)},
 		),
 	), rebuildMutableState.GetVersionHistories())
+	s.Equal(rebuildMutableState.GetExecutionInfo().StartTimestamp, now)
 }

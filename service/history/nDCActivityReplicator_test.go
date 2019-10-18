@@ -68,7 +68,7 @@ type (
 		mockTimerProcessor       *MockTimerQueueProcessor
 		historyCache             *historyCache
 
-		activityReplicator activityReplicator
+		nDCActivityReplicator nDCActivityReplicator
 	}
 )
 
@@ -152,7 +152,7 @@ func (s *activityReplicatorSuite) SetupTest() {
 	}
 	s.mockShard.SetEngine(engine)
 
-	s.activityReplicator = newActivityReplicator(
+	s.nDCActivityReplicator = newNDCActivityReplicator(
 		s.mockShard,
 		s.historyCache,
 		s.logger,
@@ -207,7 +207,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_WorkflowNotFound() {
 		), nil,
 	)
 
-	err := s.activityReplicator.SyncActivity(ctx.Background(), request)
+	err := s.nDCActivityReplicator.SyncActivity(ctx.Background(), request)
 	s.Nil(err)
 }
 
@@ -256,7 +256,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_WorkflowClosed() {
 		), nil,
 	)
 
-	err = s.activityReplicator.SyncActivity(ctx.Background(), request)
+	err = s.nDCActivityReplicator.SyncActivity(ctx.Background(), request)
 	s.Nil(err)
 }
 
@@ -313,7 +313,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_IncomingScheduleIDLarger_Inco
 		), nil,
 	)
 
-	err = s.activityReplicator.SyncActivity(ctx.Background(), request)
+	err = s.nDCActivityReplicator.SyncActivity(ctx.Background(), request)
 	s.Nil(err)
 }
 
@@ -370,7 +370,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_IncomingScheduleIDLarger_Inco
 		), nil,
 	)
 
-	err = s.activityReplicator.SyncActivity(ctx.Background(), request)
+	err = s.nDCActivityReplicator.SyncActivity(ctx.Background(), request)
 	s.Equal(newRetryTaskErrorWithHint(ErrRetrySyncActivityMsg, domainID, workflowID, runID, nextEventID), err)
 }
 
@@ -449,7 +449,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_IncomingVers
 		), nil,
 	)
 
-	err = s.activityReplicator.SyncActivity(ctx.Background(), request)
+	err = s.nDCActivityReplicator.SyncActivity(ctx.Background(), request)
 	s.Nil(err)
 }
 
@@ -527,7 +527,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_DifferentVersionHistories_Inc
 		), nil,
 	)
 
-	err = s.activityReplicator.SyncActivity(ctx.Background(), request)
+	err = s.nDCActivityReplicator.SyncActivity(ctx.Background(), request)
 	s.Equal(newNDCRetryTaskErrorWithHint(
 		domainID,
 		workflowID,
@@ -619,7 +619,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_IncomingSche
 		), nil,
 	)
 
-	err = s.activityReplicator.SyncActivity(ctx.Background(), request)
+	err = s.nDCActivityReplicator.SyncActivity(ctx.Background(), request)
 	s.Equal(newNDCRetryTaskErrorWithHint(
 		domainID,
 		workflowID,
@@ -708,7 +708,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_SameSchedule
 		), nil,
 	)
 
-	err = s.activityReplicator.SyncActivity(ctx.Background(), request)
+	err = s.nDCActivityReplicator.SyncActivity(ctx.Background(), request)
 	s.Nil(err)
 }
 
@@ -765,7 +765,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityCompleted() {
 	)
 	msBuilder.On("GetActivityInfo", scheduleID).Return(nil, false)
 
-	err = s.activityReplicator.SyncActivity(ctx.Background(), request)
+	err = s.nDCActivityReplicator.SyncActivity(ctx.Background(), request)
 	s.Nil(err)
 }
 
@@ -824,7 +824,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_LocalActivity
 		Version: lastWriteVersion - 1,
 	}, true)
 
-	err = s.activityReplicator.SyncActivity(ctx.Background(), request)
+	err = s.nDCActivityReplicator.SyncActivity(ctx.Background(), request)
 	s.Nil(err)
 }
 
@@ -901,7 +901,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 	expectedErr := errors.New("this is error is used to by pass lots of mocking")
 	msBuilder.On("ReplicateActivityInfo", request, false).Return(expectedErr)
 
-	err = s.activityReplicator.SyncActivity(ctx.Background(), request)
+	err = s.nDCActivityReplicator.SyncActivity(ctx.Background(), request)
 	s.Equal(expectedErr, err)
 }
 
@@ -978,7 +978,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 	expectedErr := errors.New("this is error is used to by pass lots of mocking")
 	msBuilder.On("ReplicateActivityInfo", request, true).Return(expectedErr)
 
-	err = s.activityReplicator.SyncActivity(ctx.Background(), request)
+	err = s.nDCActivityReplicator.SyncActivity(ctx.Background(), request)
 	s.Equal(expectedErr, err)
 }
 
@@ -1055,6 +1055,6 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_Larger
 	expectedErr := errors.New("this is error is used to by pass lots of mocking")
 	msBuilder.On("ReplicateActivityInfo", request, true).Return(expectedErr)
 
-	err = s.activityReplicator.SyncActivity(ctx.Background(), request)
+	err = s.nDCActivityReplicator.SyncActivity(ctx.Background(), request)
 	s.Equal(expectedErr, err)
 }
