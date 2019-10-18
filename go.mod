@@ -52,7 +52,7 @@ require (
 	github.com/sirupsen/logrus v1.2.0
 	github.com/stretchr/testify v1.3.0
 	github.com/uber-common/bark v1.2.1 // indirect
-	github.com/uber-go/kafka-client v0.2.2
+	github.com/uber-go/kafka-client v0.2.3-0.20191018205945-8b3555b395f9
 	github.com/uber-go/tally v3.3.11+incompatible
 	github.com/uber/ringpop-go v0.8.5
 	github.com/uber/tchannel-go v1.14.0

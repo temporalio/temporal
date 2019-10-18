@@ -68,7 +68,7 @@ services:
 clusterMetadata:
   enableGlobalDomain: true
   replicationConsumer:
-    type: rpc
+    type: kafka
     fetcher:
       rpcParallelism: 1
       aggregationIntervalSecs: 2
