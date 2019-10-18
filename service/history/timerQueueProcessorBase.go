@@ -482,6 +482,7 @@ func (t *timerQueueProcessorBase) archiveWorkflow(
 			DomainID:   task.DomainID,
 			WorkflowID: task.WorkflowID,
 			RunID:      task.RunID,
+			DomainName: domainCacheEntry.GetInfo().Name,
 		},
 		CallerService:        common.HistoryServiceName,
 		AttemptArchiveInline: true, // archive inline by default
@@ -493,7 +494,6 @@ func (t *timerQueueProcessorBase) archiveWorkflow(
 		}
 		req.AttemptArchiveInline = executionStats.HistorySize < int64(t.config.TimerProcessorHistoryArchivalSizeLimit())
 		req.ArchiveRequest.ShardID = t.shard.GetShardID()
-		req.ArchiveRequest.DomainName = domainCacheEntry.GetInfo().Name
 		req.ArchiveRequest.BranchToken, err = msBuilder.GetCurrentBranchToken()
 		if err != nil {
 			return err
