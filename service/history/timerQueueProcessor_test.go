@@ -28,6 +28,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 
@@ -48,20 +49,20 @@ import (
 type (
 	timerQueueProcessorSuite struct {
 		suite.Suite
+		*require.Assertions
+
+		controller         *gomock.Controller
+		mockMatchingClient *matchingservicetest.MockClient
+
 		TestBase
 		engineImpl     *historyEngineImpl
 		matchingClient matching.Client
 		shardClosedCh  chan int
 		logger         log.Logger
 
-		controller               *gomock.Controller
-		mockVisibilityMgr        *mocks.VisibilityManager
-		mockMatchingClient       *matchingservicetest.MockClient
-		mockClusterMetadata      *mocks.ClusterMetadata
-		mockEventsCache          *MockEventsCache
-		mockTxProcessor          *MockTransferQueueProcessor
-		mockReplicationProcessor *MockReplicatorQueueProcessor
-		mockTimerProcessor       *MockTimerQueueProcessor
+		mockVisibilityMgr *mocks.VisibilityManager
+
+		mockClusterMetadata *mocks.ClusterMetadata
 	}
 )
 
@@ -71,6 +72,10 @@ func TestTimerQueueProcessorSuite(t *testing.T) {
 }
 
 func (s *timerQueueProcessorSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+
+	s.controller = gomock.NewController(s.T())
+	s.mockMatchingClient = matchingservicetest.NewMockClient(s.controller)
 
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 
@@ -84,20 +89,11 @@ func (s *timerQueueProcessorSuite) SetupTest() {
 	s.ShardContext.config.TransferProcessorUpdateAckInterval = dynamicconfig.GetDurationPropertyFn(100 * time.Millisecond)
 	s.ShardContext.config.TimerProcessorUpdateAckInterval = dynamicconfig.GetDurationPropertyFn(100 * time.Millisecond)
 
-	s.controller = gomock.NewController(s.T())
-
-	s.mockMatchingClient = matchingservicetest.NewMockClient(s.controller)
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false)
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", common.EmptyVersion).Return(cluster.TestCurrentClusterName)
-	s.mockTxProcessor = &MockTransferQueueProcessor{}
-	s.mockTxProcessor.On("NotifyNewTask", mock.Anything, mock.Anything).Maybe()
-	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.controller)
-	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
-	s.mockTimerProcessor = &MockTimerQueueProcessor{}
-	s.mockTimerProcessor.On("NotifyNewTimers", mock.Anything, mock.Anything).Maybe()
 
 	historyCache := newHistoryCache(s.ShardContext)
 	historyCache.disabled = true
@@ -114,9 +110,6 @@ func (s *timerQueueProcessorSuite) SetupTest() {
 		tokenSerializer:      common.NewJSONTaskTokenSerializer(),
 		metricsClient:        metrics.NewClient(tally.NoopScope, metrics.History),
 		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string) int { return 0 }),
-		txProcessor:          s.mockTxProcessor,
-		replicatorProcessor:  s.mockReplicationProcessor,
-		timerProcessor:       s.mockTimerProcessor,
 	}
 	s.ShardContext.SetEngine(s.engineImpl)
 	s.engineImpl.historyEventNotifier = newHistoryEventNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string) int { return 0 })
@@ -131,6 +124,7 @@ func (s *timerQueueProcessorSuite) SetupTest() {
 func (s *timerQueueProcessorSuite) TearDownTest() {
 	s.TeardownDomains()
 	s.TearDownWorkflowStore()
+	s.controller.Finish()
 }
 
 func (s *timerQueueProcessorSuite) updateTimerSeqNumbers(timerTasks []persistence.Task) {

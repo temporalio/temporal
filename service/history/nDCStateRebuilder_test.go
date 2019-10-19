@@ -27,9 +27,10 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
@@ -48,8 +49,10 @@ import (
 type (
 	nDCStateRebuilderSuite struct {
 		suite.Suite
+		*require.Assertions
 
 		controller        *gomock.Controller
+		mockEventsCache   *MockeventsCache
 		mockTaskRefresher *MockmutableStateTaskRefresher
 
 		mockService         service.Service
@@ -57,7 +60,6 @@ type (
 		mockHistoryV2Mgr    *mocks.HistoryV2Manager
 		mockClusterMetadata *mocks.ClusterMetadata
 		mockDomainCache     *cache.DomainCacheMock
-		mockEventsCache     *MockEventsCache
 		logger              log.Logger
 
 		domainID   string
@@ -75,6 +77,13 @@ func TestNDCStateRebuilderSuite(t *testing.T) {
 }
 
 func (s *nDCStateRebuilderSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+
+	s.controller = gomock.NewController(s.T())
+	s.mockEventsCache = NewMockeventsCache(s.controller)
+	s.mockTaskRefresher = NewMockmutableStateTaskRefresher(s.controller)
+	s.mockEventsCache.EXPECT().putEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.mockHistoryV2Mgr = &mocks.HistoryV2Manager{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
@@ -88,7 +97,6 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 		nil,
 		nil)
 	s.mockDomainCache = &cache.DomainCacheMock{}
-	s.mockEventsCache = &MockEventsCache{}
 
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
@@ -106,9 +114,6 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 	}
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 
-	s.controller = gomock.NewController(s.T())
-	s.mockTaskRefresher = NewMockmutableStateTaskRefresher(s.controller)
-
 	s.workflowID = "some random workflow ID"
 	s.runID = uuid.New()
 	s.nDCStateRebuilder = newNDCStateRebuilder(
@@ -120,8 +125,7 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 func (s *nDCStateRebuilderSuite) TearDownTest() {
 	s.mockHistoryV2Mgr.AssertExpectations(s.T())
 	s.mockDomainCache.AssertExpectations(s.T())
-	s.mockEventsCache.AssertExpectations(s.T())
-	// s.controller.Finish()
+	s.controller.Finish()
 }
 
 func (s *nDCStateRebuilderSuite) TestInitializeBuilders() {
@@ -149,9 +153,8 @@ func (s *nDCStateRebuilderSuite) TestApplyEvents() {
 
 	workflowIdentifier := definition.NewWorkflowIdentifier(s.domainID, s.workflowID, s.runID)
 
-	mockStateBuilder := &mockStateBuilder{}
-	defer mockStateBuilder.AssertExpectations(s.T())
-	mockStateBuilder.On("applyEvents",
+	mockStateBuilder := NewMockstateBuilder(s.controller)
+	mockStateBuilder.EXPECT().applyEvents(
 		s.domainID,
 		requestID,
 		shared.WorkflowExecution{
@@ -161,7 +164,7 @@ func (s *nDCStateRebuilderSuite) TestApplyEvents() {
 		events,
 		[]*shared.HistoryEvent(nil),
 		true,
-	).Return(nil, nil, nil, nil).Once()
+	).Return(nil, nil, nil, nil).Times(1)
 
 	err := s.nDCStateRebuilder.applyEvents(workflowIdentifier, mockStateBuilder, events, requestID)
 	s.NoError(err)
@@ -320,7 +323,6 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	), nil)
 	s.mockTaskRefresher.EXPECT().refreshTasks(now, gomock.Any()).Return(nil).Times(1)
 
-	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 	rebuildMutableState, rebuiltHistorySize, err := s.nDCStateRebuilder.rebuild(
 		ctx.Background(),
 		now,

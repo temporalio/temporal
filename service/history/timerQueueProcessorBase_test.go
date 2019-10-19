@@ -25,7 +25,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -47,13 +49,20 @@ import (
 
 type (
 	timerQueueProcessorBaseSuite struct {
-		clusterName           string
-		logger                log.Logger
+		suite.Suite
+		*require.Assertions
+
+		clusterName string
+		logger      log.Logger
+
+		controller                   *gomock.Controller
+		mockWorkflowExecutionContext *MockworkflowExecutionContext
+		mockMutableState             *MockmutableState
+
 		mockService           service.Service
 		mockShard             ShardContext
 		mockClusterMetadata   *mocks.ClusterMetadata
 		mockMessagingClient   messaging.Client
-		mockProcessor         *MockTimerProcessor
 		mockQueueAckMgr       *MockTimerQueueAckMgr
 		mockClientBean        *client.MockClientBean
 		mockExecutionManager  *mocks.ExecutionManager
@@ -64,7 +73,6 @@ type (
 		scope            int
 		notificationChan chan struct{}
 
-		suite.Suite
 		timerQueueProcessor *timerQueueProcessorBase
 	}
 )
@@ -83,11 +91,16 @@ func (s *timerQueueProcessorBaseSuite) TearDownSuite() {
 }
 
 func (s *timerQueueProcessorBaseSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+
+	s.controller = gomock.NewController(s.T())
+	s.mockWorkflowExecutionContext = NewMockworkflowExecutionContext(s.controller)
+	s.mockMutableState = NewMockmutableState(s.controller)
+
 	shardID := 0
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.clusterName = cluster.TestAlternativeClusterName
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
-	s.mockProcessor = &MockTimerProcessor{}
 	s.mockQueueAckMgr = &MockTimerQueueAckMgr{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockClientBean = &client.MockClientBean{}
@@ -131,17 +144,16 @@ func (s *timerQueueProcessorBaseSuite) SetupTest() {
 		dynamicconfig.GetIntPropertyFn(10),
 		s.logger,
 	)
-	s.timerQueueProcessor.timerProcessor = s.mockProcessor
 }
 
 func (s *timerQueueProcessorBaseSuite) TearDownTest() {
-	s.mockProcessor.AssertExpectations(s.T())
 	s.mockQueueAckMgr.AssertExpectations(s.T())
 	s.mockClientBean.AssertExpectations(s.T())
 	s.mockExecutionManager.AssertExpectations(s.T())
 	s.mockHistoryV2Manager.AssertExpectations(s.T())
 	s.mockVisibilityManager.AssertExpectations(s.T())
 	s.mockArchivalClient.AssertExpectations(s.T())
+	s.controller.Finish()
 }
 
 func (s *timerQueueProcessorBaseSuite) TestDeleteWorkflow_NoErr() {
@@ -154,29 +166,28 @@ func (s *timerQueueProcessorBaseSuite) TestDeleteWorkflow_NoErr() {
 		RunId:      &task.RunID,
 	}
 	ctx := newWorkflowExecutionContext(task.DomainID, executionInfo, s.mockShard, s.mockExecutionManager, log.NewNoop())
-	mockMutableState := &mockMutableState{}
+
 	s.mockExecutionManager.On("DeleteCurrentWorkflowExecution", mock.Anything).Return(nil).Once()
 	s.mockExecutionManager.On("DeleteWorkflowExecution", mock.Anything).Return(nil).Once()
 	s.mockHistoryV2Manager.On("DeleteHistoryBranch", mock.Anything).Return(nil).Once()
 	s.mockVisibilityManager.On("DeleteWorkflowExecution", mock.Anything).Return(nil).Once()
-	mockMutableState.On("GetCurrentBranchToken").Return([]byte{1, 2, 3}, nil).Once()
-	mockMutableState.On("GetLastWriteVersion").Return(int64(1234), nil)
+	s.mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{1, 2, 3}, nil).Times(1)
+	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1234), nil).AnyTimes()
 
-	err := s.timerQueueProcessor.deleteWorkflow(task, ctx, mockMutableState)
+	err := s.timerQueueProcessor.deleteWorkflow(task, ctx, s.mockMutableState)
 	s.NoError(err)
 }
 
 func (s *timerQueueProcessorBaseSuite) TestArchiveHistory_NoErr_InlineArchivalFailed() {
-	mockWorkflowExecutionContext := &mockWorkflowExecutionContext{}
-	mockWorkflowExecutionContext.On("loadExecutionStats").Return(&persistence.ExecutionStats{
-		HistorySize: 1024,
-	}, nil)
-	mockWorkflowExecutionContext.On("clear")
 
-	mockMutableState := &mockMutableState{}
-	mockMutableState.On("GetCurrentBranchToken").Return([]byte{1, 2, 3}, nil).Once()
-	mockMutableState.On("GetLastWriteVersion").Return(int64(1234), nil).Once()
-	mockMutableState.On("GetNextEventID").Return(int64(101)).Once()
+	s.mockWorkflowExecutionContext.EXPECT().loadExecutionStats().Return(&persistence.ExecutionStats{
+		HistorySize: 1024,
+	}, nil).Times(1)
+	s.mockWorkflowExecutionContext.EXPECT().clear().Times(1)
+
+	s.mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{1, 2, 3}, nil).Times(1)
+	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1234), nil).Times(1)
+	s.mockMutableState.EXPECT().GetNextEventID().Return(int64(101)).Times(1)
 
 	s.mockExecutionManager.On("DeleteCurrentWorkflowExecution", mock.Anything).Return(nil).Once()
 	s.mockExecutionManager.On("DeleteWorkflowExecution", mock.Anything).Return(nil).Once()
@@ -189,48 +200,44 @@ func (s *timerQueueProcessorBaseSuite) TestArchiveHistory_NoErr_InlineArchivalFa
 	}, nil)
 
 	domainCacheEntry := cache.NewDomainCacheEntryForTest(&persistence.DomainInfo{}, &persistence.DomainConfig{}, false, nil, 0, nil)
-	err := s.timerQueueProcessor.archiveWorkflow(&persistence.TimerTaskInfo{}, mockWorkflowExecutionContext, mockMutableState, domainCacheEntry, true, false)
+	err := s.timerQueueProcessor.archiveWorkflow(&persistence.TimerTaskInfo{}, s.mockWorkflowExecutionContext, s.mockMutableState, domainCacheEntry, true, false)
 	s.NoError(err)
 }
 
 func (s *timerQueueProcessorBaseSuite) TestArchiveHistory_SendSignalErr() {
-	mockWorkflowExecutionContext := &mockWorkflowExecutionContext{}
-	mockWorkflowExecutionContext.On("loadExecutionStats").Return(&persistence.ExecutionStats{
+	s.mockWorkflowExecutionContext.EXPECT().loadExecutionStats().Return(&persistence.ExecutionStats{
 		HistorySize: 1024 * 1024 * 1024,
-	}, nil)
+	}, nil).Times(1)
 
-	mockMutableState := &mockMutableState{}
-	mockMutableState.On("GetCurrentBranchToken").Return([]byte{1, 2, 3}, nil).Once()
-	mockMutableState.On("GetLastWriteVersion").Return(int64(1234), nil).Once()
-	mockMutableState.On("GetNextEventID").Return(int64(101)).Once()
+	s.mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{1, 2, 3}, nil).Times(1)
+	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1234), nil).Times(1)
+	s.mockMutableState.EXPECT().GetNextEventID().Return(int64(101)).Times(1)
 
 	s.mockArchivalClient.On("Archive", mock.Anything, mock.MatchedBy(func(req *archiver.ClientRequest) bool {
 		return req.CallerService == common.HistoryServiceName && !req.AttemptArchiveInline && req.ArchiveRequest.Targets[0] == archiver.ArchiveTargetHistory
 	})).Return(nil, errors.New("failed to send signal"))
 
 	domainCacheEntry := cache.NewDomainCacheEntryForTest(&persistence.DomainInfo{}, &persistence.DomainConfig{}, false, nil, 0, nil)
-	err := s.timerQueueProcessor.archiveWorkflow(&persistence.TimerTaskInfo{}, mockWorkflowExecutionContext, mockMutableState, domainCacheEntry, true, false)
+	err := s.timerQueueProcessor.archiveWorkflow(&persistence.TimerTaskInfo{}, s.mockWorkflowExecutionContext, s.mockMutableState, domainCacheEntry, true, false)
 	s.Error(err)
 }
 
 func (s *timerQueueProcessorBaseSuite) TestArchiveVisibility_SendSignalNoErr() {
-	mockWorkflowExecutionContext := &mockWorkflowExecutionContext{}
-	mockWorkflowExecutionContext.On("clear")
+	s.mockWorkflowExecutionContext.EXPECT().clear().Times(1)
 
-	mockMutableState := &mockMutableState{}
-	mockMutableState.On("GetCurrentBranchToken").Return([]byte{1, 2, 3}, nil).Once()
-	mockMutableState.On("GetNextEventID").Return(int64(101)).Once()
-	mockMutableState.On("GetStartEvent").Return(&workflow.HistoryEvent{
+	s.mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{1, 2, 3}, nil).Times(1)
+	s.mockMutableState.EXPECT().GetNextEventID().Return(int64(101)).AnyTimes()
+	s.mockMutableState.EXPECT().GetStartEvent().Return(&workflow.HistoryEvent{
 		Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-	}, nil).Once()
-	mockMutableState.On("GetCompletionEvent").Return(&workflow.HistoryEvent{
+	}, nil).Times(1)
+	s.mockMutableState.EXPECT().GetCompletionEvent().Return(&workflow.HistoryEvent{
 		Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-	}, nil).Once()
-	mockMutableState.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{
+	}, nil).Times(1)
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
 		WorkflowTypeName: "some random workflow type name",
 		StartTimestamp:   time.Now().Add(-time.Hour),
 		CloseStatus:      1,
-	}).Once()
+	}).Times(1)
 
 	s.mockExecutionManager.On("DeleteCurrentWorkflowExecution", mock.Anything).Return(nil).Once()
 	s.mockExecutionManager.On("DeleteWorkflowExecution", mock.Anything).Return(nil).Once()
@@ -244,37 +251,35 @@ func (s *timerQueueProcessorBaseSuite) TestArchiveVisibility_SendSignalNoErr() {
 	}, nil)
 
 	domainCacheEntry := cache.NewDomainCacheEntryForTest(&persistence.DomainInfo{}, &persistence.DomainConfig{}, false, nil, 0, nil)
-	err := s.timerQueueProcessor.archiveWorkflow(&persistence.TimerTaskInfo{}, mockWorkflowExecutionContext, mockMutableState, domainCacheEntry, false, true)
+	err := s.timerQueueProcessor.archiveWorkflow(&persistence.TimerTaskInfo{}, s.mockWorkflowExecutionContext, s.mockMutableState, domainCacheEntry, false, true)
 	s.NoError(err)
 }
 
 func (s *timerQueueProcessorBaseSuite) TestArchiveBoth_SendSignalErr() {
-	mockWorkflowExecutionContext := &mockWorkflowExecutionContext{}
-	mockWorkflowExecutionContext.On("loadExecutionStats").Return(&persistence.ExecutionStats{
+	s.mockWorkflowExecutionContext.EXPECT().loadExecutionStats().Return(&persistence.ExecutionStats{
 		HistorySize: 1024 * 1024 * 1024,
-	}, nil)
+	}, nil).Times(1)
 
-	mockMutableState := &mockMutableState{}
-	mockMutableState.On("GetCurrentBranchToken").Return([]byte{1, 2, 3}, nil).Once()
-	mockMutableState.On("GetLastWriteVersion").Return(int64(1234), nil).Once()
-	mockMutableState.On("GetNextEventID").Return(int64(101)).Twice()
-	mockMutableState.On("GetStartEvent").Return(&workflow.HistoryEvent{
+	s.mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{1, 2, 3}, nil).Times(1)
+	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1234), nil).Times(1)
+	s.mockMutableState.EXPECT().GetNextEventID().Return(int64(101)).Times(2)
+	s.mockMutableState.EXPECT().GetStartEvent().Return(&workflow.HistoryEvent{
 		Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-	}, nil).Once()
-	mockMutableState.On("GetCompletionEvent").Return(&workflow.HistoryEvent{
+	}, nil).Times(1)
+	s.mockMutableState.EXPECT().GetCompletionEvent().Return(&workflow.HistoryEvent{
 		Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-	}, nil).Once()
-	mockMutableState.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{
+	}, nil).Times(1)
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
 		WorkflowTypeName: "some random workflow type name",
 		StartTimestamp:   time.Now().Add(-time.Hour),
 		CloseStatus:      1,
-	}).Once()
+	}).Times(1)
 
 	s.mockArchivalClient.On("Archive", mock.Anything, mock.MatchedBy(func(req *archiver.ClientRequest) bool {
 		return req.CallerService == common.HistoryServiceName && !req.AttemptArchiveInline && len(req.ArchiveRequest.Targets) == 2
 	})).Return(nil, errors.New("failed to send signal"))
 
 	domainCacheEntry := cache.NewDomainCacheEntryForTest(&persistence.DomainInfo{}, &persistence.DomainConfig{}, false, nil, 0, nil)
-	err := s.timerQueueProcessor.archiveWorkflow(&persistence.TimerTaskInfo{}, mockWorkflowExecutionContext, mockMutableState, domainCacheEntry, true, true)
+	err := s.timerQueueProcessor.archiveWorkflow(&persistence.TimerTaskInfo{}, s.mockWorkflowExecutionContext, s.mockMutableState, domainCacheEntry, true, true)
 	s.Error(err)
 }

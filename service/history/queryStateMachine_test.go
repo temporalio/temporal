@@ -31,8 +31,8 @@ import (
 )
 
 type QuerySuite struct {
-	*require.Assertions
 	suite.Suite
+	*require.Assertions
 }
 
 func TestQuerySuite(t *testing.T) {

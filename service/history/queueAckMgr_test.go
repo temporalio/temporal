@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 
@@ -44,6 +45,7 @@ import (
 type (
 	queueAckMgrSuite struct {
 		suite.Suite
+		*require.Assertions
 
 		mockExecutionMgr    *mocks.ExecutionManager
 		mockShardMgr        *mocks.ShardManager
@@ -61,6 +63,7 @@ type (
 
 	queueFailoverAckMgrSuite struct {
 		suite.Suite
+		*require.Assertions
 
 		mockExecutionMgr    *mocks.ExecutionManager
 		mockShardMgr        *mocks.ShardManager
@@ -97,6 +100,8 @@ func (s *queueAckMgrSuite) TearDownSuite() {
 }
 
 func (s *queueAckMgrSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
 	s.mockShardMgr = &mocks.ShardManager{}
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
@@ -300,6 +305,8 @@ func (s *queueFailoverAckMgrSuite) TearDownSuite() {
 }
 
 func (s *queueFailoverAckMgrSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
 	s.mockShardMgr = &mocks.ShardManager{}
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)

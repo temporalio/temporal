@@ -28,7 +28,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 
@@ -51,22 +51,28 @@ import (
 type (
 	activityReplicatorSuite struct {
 		suite.Suite
-		logger                   log.Logger
-		mockCtrl                 *gomock.Controller
-		mockExecutionMgr         *mocks.ExecutionManager
-		mockHistoryV2Mgr         *mocks.HistoryV2Manager
-		mockShardManager         *mocks.ShardManager
-		mockClusterMetadata      *mocks.ClusterMetadata
-		mockProducer             *mocks.KafkaProducer
-		mockDomainCache          *cache.DomainCacheMock
-		mockMessagingClient      messaging.Client
-		mockService              service.Service
-		mockShard                *shardContextImpl
-		mockClientBean           *client.MockClientBean
-		mockTxProcessor          *MockTransferQueueProcessor
+		*require.Assertions
+
+		controller               *gomock.Controller
+		mockTxProcessor          *MocktransferQueueProcessor
 		mockReplicationProcessor *MockReplicatorQueueProcessor
-		mockTimerProcessor       *MockTimerQueueProcessor
-		historyCache             *historyCache
+		mockTimerProcessor       *MocktimerQueueProcessor
+
+		mockContext      *MockworkflowExecutionContext
+		mockMutableState *MockmutableState
+
+		logger              log.Logger
+		mockExecutionMgr    *mocks.ExecutionManager
+		mockHistoryV2Mgr    *mocks.HistoryV2Manager
+		mockShardManager    *mocks.ShardManager
+		mockClusterMetadata *mocks.ClusterMetadata
+		mockProducer        *mocks.KafkaProducer
+		mockDomainCache     *cache.DomainCacheMock
+		mockMessagingClient messaging.Client
+		mockService         service.Service
+		mockShard           *shardContextImpl
+		mockClientBean      *client.MockClientBean
+		historyCache        *historyCache
 
 		nDCActivityReplicator nDCActivityReplicator
 	}
@@ -86,8 +92,20 @@ func (s *activityReplicatorSuite) TearDownSuite() {
 }
 
 func (s *activityReplicatorSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+
+	s.controller = gomock.NewController(s.T())
+	s.mockTxProcessor = NewMocktransferQueueProcessor(s.controller)
+	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.controller)
+	s.mockTimerProcessor = NewMocktimerQueueProcessor(s.controller)
+	s.mockTxProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
+	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
+
+	s.mockContext = NewMockworkflowExecutionContext(s.controller)
+	s.mockMutableState = NewMockmutableState(s.controller)
+
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
-	s.mockCtrl = gomock.NewController(s.T())
 	s.mockHistoryV2Mgr = &mocks.HistoryV2Manager{}
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
@@ -108,8 +126,8 @@ func (s *activityReplicatorSuite) SetupTest() {
 
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
-		shardInfo:                 &persistence.ShardInfo{ShardID: testShardID, RangeID: 1, TransferAckLevel: 0},
-		shardID:                   testShardID,
+		shardInfo:                 &persistence.ShardInfo{ShardID: 0, RangeID: 1, TransferAckLevel: 0},
+		shardID:                   0,
 		transferSequenceNumber:    1,
 		executionManager:          s.mockExecutionMgr,
 		shardManager:              s.mockShardManager,
@@ -127,12 +145,6 @@ func (s *activityReplicatorSuite) SetupTest() {
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	s.mockClusterMetadata.On("GetAllClusterInfo").Return(cluster.TestAllClusterInfo)
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
-	s.mockTxProcessor = &MockTransferQueueProcessor{}
-	s.mockTxProcessor.On("NotifyNewTask", mock.Anything, mock.Anything).Maybe()
-	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.mockCtrl)
-	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
-	s.mockTimerProcessor = &MockTimerQueueProcessor{}
-	s.mockTimerProcessor.On("NotifyNewTimers", mock.Anything, mock.Anything).Maybe()
 
 	s.historyCache = newHistoryCache(s.mockShard)
 	engine := &historyEngineImpl{
@@ -160,16 +172,12 @@ func (s *activityReplicatorSuite) SetupTest() {
 }
 
 func (s *activityReplicatorSuite) TearDownTest() {
-	s.mockCtrl.Finish()
 	s.mockExecutionMgr.AssertExpectations(s.T())
 	s.mockShardManager.AssertExpectations(s.T())
 	s.mockProducer.AssertExpectations(s.T())
 	s.mockDomainCache.AssertExpectations(s.T())
-	s.mockTxProcessor.AssertExpectations(s.T())
-	s.mockTimerProcessor.AssertExpectations(s.T())
 	s.mockClientBean.AssertExpectations(s.T())
-	s.mockTxProcessor.AssertExpectations(s.T())
-	s.mockTimerProcessor.AssertExpectations(s.T())
+	s.controller.Finish()
 }
 
 func (s *activityReplicatorSuite) TestSyncActivity_WorkflowNotFound() {
@@ -226,20 +234,18 @@ func (s *activityReplicatorSuite) TestSyncActivity_WorkflowClosed() {
 		},
 	)
 	s.Nil(err)
-	msBuilder := &mockMutableState{}
-	defer msBuilder.AssertExpectations(s.T())
-	context.(*workflowExecutionContextImpl).msBuilder = msBuilder
+	context.(*workflowExecutionContextImpl).msBuilder = s.mockMutableState
 	release(nil)
 	request := &h.SyncActivityRequest{
 		DomainId:   common.StringPtr(domainID),
 		WorkflowId: common.StringPtr(workflowID),
 		RunId:      common.StringPtr(runID),
 	}
-	msBuilder.On("StartTransaction", mock.Anything).Return(false, nil).Once()
-	msBuilder.On("IsWorkflowExecutionRunning").Return(false)
+	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
+	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	var versionHistories *persistence.VersionHistories
-	msBuilder.On("GetVersionHistories").Return(versionHistories)
-	msBuilder.On("GetReplicationState").Return(&persistence.ReplicationState{})
+	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
+	s.mockMutableState.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes()
 	s.mockDomainCache.On("GetDomainByID", domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID, Name: domainName},
@@ -279,9 +285,8 @@ func (s *activityReplicatorSuite) TestSyncActivity_IncomingScheduleIDLarger_Inco
 		},
 	)
 	s.Nil(err)
-	msBuilder := &mockMutableState{}
-	defer msBuilder.AssertExpectations(s.T())
-	context.(*workflowExecutionContextImpl).msBuilder = msBuilder
+
+	context.(*workflowExecutionContextImpl).msBuilder = s.mockMutableState
 	release(nil)
 	request := &h.SyncActivityRequest{
 		DomainId:    common.StringPtr(domainID),
@@ -290,13 +295,13 @@ func (s *activityReplicatorSuite) TestSyncActivity_IncomingScheduleIDLarger_Inco
 		Version:     common.Int64Ptr(version),
 		ScheduledId: common.Int64Ptr(scheduleID),
 	}
-	msBuilder.On("StartTransaction", mock.Anything).Return(false, nil).Once()
-	msBuilder.On("IsWorkflowExecutionRunning").Return(true)
-	msBuilder.On("GetNextEventID").Return(nextEventID)
-	msBuilder.On("GetLastWriteVersion").Return(lastWriteVersion, nil)
+	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
+	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
+	s.mockMutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
+	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastWriteVersion, nil)
 	var versionHistories *persistence.VersionHistories
-	msBuilder.On("GetVersionHistories").Return(versionHistories)
-	msBuilder.On("GetReplicationState").Return(&persistence.ReplicationState{})
+	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
+	s.mockMutableState.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes()
 	s.mockDomainCache.On("GetDomainByID", domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID, Name: domainName},
@@ -336,9 +341,8 @@ func (s *activityReplicatorSuite) TestSyncActivity_IncomingScheduleIDLarger_Inco
 		},
 	)
 	s.Nil(err)
-	msBuilder := &mockMutableState{}
-	defer msBuilder.AssertExpectations(s.T())
-	context.(*workflowExecutionContextImpl).msBuilder = msBuilder
+
+	context.(*workflowExecutionContextImpl).msBuilder = s.mockMutableState
 	release(nil)
 	request := &h.SyncActivityRequest{
 		DomainId:    common.StringPtr(domainID),
@@ -347,13 +351,13 @@ func (s *activityReplicatorSuite) TestSyncActivity_IncomingScheduleIDLarger_Inco
 		Version:     common.Int64Ptr(version),
 		ScheduledId: common.Int64Ptr(scheduleID),
 	}
-	msBuilder.On("StartTransaction", mock.Anything).Return(false, nil).Once()
-	msBuilder.On("IsWorkflowExecutionRunning").Return(true)
-	msBuilder.On("GetNextEventID").Return(nextEventID)
-	msBuilder.On("GetLastWriteVersion").Return(lastWriteVersion, nil)
+	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
+	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
+	s.mockMutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
+	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastWriteVersion, nil).AnyTimes()
 	var versionHistories *persistence.VersionHistories
-	msBuilder.On("GetVersionHistories").Return(versionHistories)
-	msBuilder.On("GetReplicationState").Return(&persistence.ReplicationState{})
+	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
+	s.mockMutableState.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes()
 	s.mockDomainCache.On("GetDomainByID", domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID, Name: domainName},
@@ -405,9 +409,8 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_IncomingVers
 		},
 	)
 	s.Nil(err)
-	msBuilder := &mockMutableState{}
-	defer msBuilder.AssertExpectations(s.T())
-	context.(*workflowExecutionContextImpl).msBuilder = msBuilder
+
+	context.(*workflowExecutionContextImpl).msBuilder = s.mockMutableState
 	release(nil)
 	request := &h.SyncActivityRequest{
 		DomainId:       common.StringPtr(domainID),
@@ -417,7 +420,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_IncomingVers
 		ScheduledId:    common.Int64Ptr(scheduleID),
 		VersionHistory: incomingVersionHistory.ToThrift(),
 	}
-	msBuilder.On("StartTransaction", mock.Anything).Return(false, nil).Once()
+	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
 	localVersionHistories := &persistence.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
 		Histories: []*persistence.VersionHistory{
@@ -432,7 +435,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_IncomingVers
 			},
 		},
 	}
-	msBuilder.On("GetVersionHistories").Return(localVersionHistories)
+	s.mockMutableState.EXPECT().GetVersionHistories().Return(localVersionHistories).AnyTimes()
 	s.mockDomainCache.On("GetDomainByID", domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID, Name: domainName},
@@ -483,9 +486,8 @@ func (s *activityReplicatorSuite) TestSyncActivity_DifferentVersionHistories_Inc
 		},
 	)
 	s.Nil(err)
-	msBuilder := &mockMutableState{}
-	defer msBuilder.AssertExpectations(s.T())
-	context.(*workflowExecutionContextImpl).msBuilder = msBuilder
+
+	context.(*workflowExecutionContextImpl).msBuilder = s.mockMutableState
 	release(nil)
 	request := &h.SyncActivityRequest{
 		DomainId:       common.StringPtr(domainID),
@@ -495,7 +497,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_DifferentVersionHistories_Inc
 		ScheduledId:    common.Int64Ptr(scheduleID),
 		VersionHistory: incomingVersionHistory.ToThrift(),
 	}
-	msBuilder.On("StartTransaction", mock.Anything).Return(false, nil).Once()
+	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
 	localVersionHistories := &persistence.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
 		Histories: []*persistence.VersionHistory{
@@ -510,7 +512,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_DifferentVersionHistories_Inc
 			},
 		},
 	}
-	msBuilder.On("GetVersionHistories").Return(localVersionHistories)
+	s.mockMutableState.EXPECT().GetVersionHistories().Return(localVersionHistories).AnyTimes()
 	s.mockDomainCache.On("GetDomainByID", domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID, Name: domainName},
@@ -575,9 +577,8 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_IncomingSche
 		},
 	)
 	s.Nil(err)
-	msBuilder := &mockMutableState{}
-	defer msBuilder.AssertExpectations(s.T())
-	context.(*workflowExecutionContextImpl).msBuilder = msBuilder
+
+	context.(*workflowExecutionContextImpl).msBuilder = s.mockMutableState
 	release(nil)
 	request := &h.SyncActivityRequest{
 		DomainId:       common.StringPtr(domainID),
@@ -587,7 +588,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_IncomingSche
 		ScheduledId:    common.Int64Ptr(scheduleID),
 		VersionHistory: incomingVersionHistory.ToThrift(),
 	}
-	msBuilder.On("StartTransaction", mock.Anything).Return(false, nil).Once()
+	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
 	localVersionHistories := &persistence.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
 		Histories: []*persistence.VersionHistory{
@@ -602,7 +603,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_IncomingSche
 			},
 		},
 	}
-	msBuilder.On("GetVersionHistories").Return(localVersionHistories)
+	s.mockMutableState.EXPECT().GetVersionHistories().Return(localVersionHistories).AnyTimes()
 	s.mockDomainCache.On("GetDomainByID", domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID, Name: domainName},
@@ -663,9 +664,8 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_SameSchedule
 		},
 	)
 	s.Nil(err)
-	msBuilder := &mockMutableState{}
-	defer msBuilder.AssertExpectations(s.T())
-	context.(*workflowExecutionContextImpl).msBuilder = msBuilder
+
+	context.(*workflowExecutionContextImpl).msBuilder = s.mockMutableState
 	release(nil)
 	request := &h.SyncActivityRequest{
 		DomainId:       common.StringPtr(domainID),
@@ -675,7 +675,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_SameSchedule
 		ScheduledId:    common.Int64Ptr(scheduleID),
 		VersionHistory: incomingVersionHistory.ToThrift(),
 	}
-	msBuilder.On("StartTransaction", mock.Anything).Return(false, nil).Once()
+	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
 	localVersionHistories := &persistence.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
 		Histories: []*persistence.VersionHistory{
@@ -690,8 +690,8 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_SameSchedule
 			},
 		},
 	}
-	msBuilder.On("GetVersionHistories").Return(localVersionHistories)
-	msBuilder.On("GetActivityInfo", scheduleID).Return(nil, false)
+	s.mockMutableState.EXPECT().GetVersionHistories().Return(localVersionHistories).AnyTimes()
+	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(nil, false).AnyTimes()
 	s.mockDomainCache.On("GetDomainByID", domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID, Name: domainName},
@@ -731,9 +731,8 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityCompleted() {
 		},
 	)
 	s.Nil(err)
-	msBuilder := &mockMutableState{}
-	defer msBuilder.AssertExpectations(s.T())
-	context.(*workflowExecutionContextImpl).msBuilder = msBuilder
+
+	context.(*workflowExecutionContextImpl).msBuilder = s.mockMutableState
 	release(nil)
 	request := &h.SyncActivityRequest{
 		DomainId:    common.StringPtr(domainID),
@@ -742,12 +741,12 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityCompleted() {
 		Version:     common.Int64Ptr(version),
 		ScheduledId: common.Int64Ptr(scheduleID),
 	}
-	msBuilder.On("StartTransaction", mock.Anything).Return(false, nil).Once()
-	msBuilder.On("IsWorkflowExecutionRunning").Return(true)
-	msBuilder.On("GetNextEventID").Return(nextEventID)
+	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
+	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
+	s.mockMutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
 	var versionHistories *persistence.VersionHistories
-	msBuilder.On("GetVersionHistories").Return(versionHistories)
-	msBuilder.On("GetReplicationState").Return(&persistence.ReplicationState{})
+	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
+	s.mockMutableState.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes()
 	s.mockDomainCache.On("GetDomainByID", domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID, Name: domainName},
@@ -763,7 +762,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityCompleted() {
 			nil,
 		), nil,
 	)
-	msBuilder.On("GetActivityInfo", scheduleID).Return(nil, false)
+	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(nil, false).AnyTimes()
 
 	err = s.nDCActivityReplicator.SyncActivity(ctx.Background(), request)
 	s.Nil(err)
@@ -788,9 +787,8 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_LocalActivity
 		},
 	)
 	s.Nil(err)
-	msBuilder := &mockMutableState{}
-	defer msBuilder.AssertExpectations(s.T())
-	context.(*workflowExecutionContextImpl).msBuilder = msBuilder
+
+	context.(*workflowExecutionContextImpl).msBuilder = s.mockMutableState
 	release(nil)
 	request := &h.SyncActivityRequest{
 		DomainId:    common.StringPtr(domainID),
@@ -799,12 +797,12 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_LocalActivity
 		Version:     common.Int64Ptr(version),
 		ScheduledId: common.Int64Ptr(scheduleID),
 	}
-	msBuilder.On("StartTransaction", mock.Anything).Return(false, nil).Once()
-	msBuilder.On("IsWorkflowExecutionRunning").Return(true)
-	msBuilder.On("GetNextEventID").Return(nextEventID)
+	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
+	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
+	s.mockMutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
 	var versionHistories *persistence.VersionHistories
-	msBuilder.On("GetVersionHistories").Return(versionHistories)
-	msBuilder.On("GetReplicationState").Return(&persistence.ReplicationState{})
+	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
+	s.mockMutableState.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes()
 	s.mockDomainCache.On("GetDomainByID", domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID, Name: domainName},
@@ -820,9 +818,9 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_LocalActivity
 			nil,
 		), nil,
 	)
-	msBuilder.On("GetActivityInfo", scheduleID).Return(&persistence.ActivityInfo{
+	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(&persistence.ActivityInfo{
 		Version: lastWriteVersion - 1,
-	}, true)
+	}, true).AnyTimes()
 
 	err = s.nDCActivityReplicator.SyncActivity(ctx.Background(), request)
 	s.Nil(err)
@@ -852,9 +850,8 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 		},
 	)
 	s.Nil(err)
-	msBuilder := &mockMutableState{}
-	defer msBuilder.AssertExpectations(s.T())
-	context.(*workflowExecutionContextImpl).msBuilder = msBuilder
+
+	context.(*workflowExecutionContextImpl).msBuilder = s.mockMutableState
 	release(nil)
 	request := &h.SyncActivityRequest{
 		DomainId:          common.StringPtr(domainID),
@@ -869,12 +866,12 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 		LastHeartbeatTime: common.Int64Ptr(heartBeatUpdatedTime.UnixNano()),
 		Details:           details,
 	}
-	msBuilder.On("StartTransaction", mock.Anything).Return(false, nil).Once()
-	msBuilder.On("IsWorkflowExecutionRunning").Return(true)
-	msBuilder.On("GetNextEventID").Return(nextEventID)
+	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
+	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
+	s.mockMutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
 	var versionHistories *persistence.VersionHistories
-	msBuilder.On("GetVersionHistories").Return(versionHistories)
-	msBuilder.On("GetReplicationState").Return(&persistence.ReplicationState{})
+	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
+	s.mockMutableState.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes()
 	s.mockDomainCache.On("GetDomainByID", domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID, Name: domainName},
@@ -895,11 +892,11 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 		ScheduleID: scheduleID,
 		Attempt:    attempt,
 	}
-	msBuilder.On("GetActivityInfo", scheduleID).Return(activityInfo, true)
+	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(activityInfo, true).AnyTimes()
 	s.mockClusterMetadata.On("IsVersionFromSameCluster", version, activityInfo.Version).Return(true)
 
 	expectedErr := errors.New("this is error is used to by pass lots of mocking")
-	msBuilder.On("ReplicateActivityInfo", request, false).Return(expectedErr)
+	s.mockMutableState.EXPECT().ReplicateActivityInfo(request, false).Return(expectedErr).Times(1)
 
 	err = s.nDCActivityReplicator.SyncActivity(ctx.Background(), request)
 	s.Equal(expectedErr, err)
@@ -929,9 +926,8 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 		},
 	)
 	s.Nil(err)
-	msBuilder := &mockMutableState{}
-	defer msBuilder.AssertExpectations(s.T())
-	context.(*workflowExecutionContextImpl).msBuilder = msBuilder
+
+	context.(*workflowExecutionContextImpl).msBuilder = s.mockMutableState
 	release(nil)
 	request := &h.SyncActivityRequest{
 		DomainId:          common.StringPtr(domainID),
@@ -946,12 +942,12 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 		LastHeartbeatTime: common.Int64Ptr(heartBeatUpdatedTime.UnixNano()),
 		Details:           details,
 	}
-	msBuilder.On("StartTransaction", mock.Anything).Return(false, nil).Once()
-	msBuilder.On("IsWorkflowExecutionRunning").Return(true)
-	msBuilder.On("GetNextEventID").Return(nextEventID)
+	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
+	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
+	s.mockMutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
 	var versionHistories *persistence.VersionHistories
-	msBuilder.On("GetVersionHistories").Return(versionHistories)
-	msBuilder.On("GetReplicationState").Return(&persistence.ReplicationState{})
+	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
+	s.mockMutableState.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes()
 	s.mockDomainCache.On("GetDomainByID", domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID, Name: domainName},
@@ -972,11 +968,11 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 		ScheduleID: scheduleID,
 		Attempt:    attempt - 1,
 	}
-	msBuilder.On("GetActivityInfo", scheduleID).Return(activityInfo, true)
+	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(activityInfo, true).AnyTimes()
 	s.mockClusterMetadata.On("IsVersionFromSameCluster", version, activityInfo.Version).Return(true)
 
 	expectedErr := errors.New("this is error is used to by pass lots of mocking")
-	msBuilder.On("ReplicateActivityInfo", request, true).Return(expectedErr)
+	s.mockMutableState.EXPECT().ReplicateActivityInfo(request, true).Return(expectedErr).Times(1)
 
 	err = s.nDCActivityReplicator.SyncActivity(ctx.Background(), request)
 	s.Equal(expectedErr, err)
@@ -1006,9 +1002,8 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_Larger
 		},
 	)
 	s.Nil(err)
-	msBuilder := &mockMutableState{}
-	defer msBuilder.AssertExpectations(s.T())
-	context.(*workflowExecutionContextImpl).msBuilder = msBuilder
+
+	context.(*workflowExecutionContextImpl).msBuilder = s.mockMutableState
 	release(nil)
 	request := &h.SyncActivityRequest{
 		DomainId:          common.StringPtr(domainID),
@@ -1023,12 +1018,12 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_Larger
 		LastHeartbeatTime: common.Int64Ptr(heartBeatUpdatedTime.UnixNano()),
 		Details:           details,
 	}
-	msBuilder.On("StartTransaction", mock.Anything).Return(false, nil).Once()
-	msBuilder.On("IsWorkflowExecutionRunning").Return(true)
-	msBuilder.On("GetNextEventID").Return(nextEventID)
+	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
+	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
+	s.mockMutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
 	var versionHistories *persistence.VersionHistories
-	msBuilder.On("GetVersionHistories").Return(versionHistories)
-	msBuilder.On("GetReplicationState").Return(&persistence.ReplicationState{})
+	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
+	s.mockMutableState.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes()
 	s.mockDomainCache.On("GetDomainByID", domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID, Name: domainName},
@@ -1049,11 +1044,11 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_Larger
 		ScheduleID: scheduleID,
 		Attempt:    attempt + 1,
 	}
-	msBuilder.On("GetActivityInfo", scheduleID).Return(activityInfo, true)
+	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(activityInfo, true).AnyTimes()
 	s.mockClusterMetadata.On("IsVersionFromSameCluster", version, activityInfo.Version).Return(false)
 
 	expectedErr := errors.New("this is error is used to by pass lots of mocking")
-	msBuilder.On("ReplicateActivityInfo", request, true).Return(expectedErr)
+	s.mockMutableState.EXPECT().ReplicateActivityInfo(request, true).Return(expectedErr).Times(1)
 
 	err = s.nDCActivityReplicator.SyncActivity(ctx.Background(), request)
 	s.Equal(expectedErr, err)

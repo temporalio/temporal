@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber/cadence/common/clock"
 )
@@ -31,11 +32,15 @@ import (
 type (
 	localTimerGateSuite struct {
 		suite.Suite
+		*require.Assertions
+
 		localTimerGate LocalTimerGate
 	}
 
 	remoteTimerGateSuite struct {
 		suite.Suite
+		*require.Assertions
+
 		currentTime     time.Time
 		remoteTimerGate RemoteTimerGate
 	}
@@ -68,6 +73,8 @@ func (s *localTimerGateSuite) TearDownSuite() {
 }
 
 func (s *localTimerGateSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+
 	s.localTimerGate = NewLocalTimerGate(clock.NewRealTimeSource())
 }
 
@@ -84,6 +91,8 @@ func (s *remoteTimerGateSuite) TearDownSuite() {
 }
 
 func (s *remoteTimerGateSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+
 	s.currentTime = time.Now().Add(-10 * time.Minute)
 	s.remoteTimerGate = NewRemoteTimerGate()
 	s.remoteTimerGate.SetCurrentTime(s.currentTime)

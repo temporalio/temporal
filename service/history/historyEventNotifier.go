@@ -38,6 +38,17 @@ const (
 )
 
 type (
+	historyEventNotification struct {
+		id                     definition.WorkflowIdentifier
+		lastFirstEventID       int64
+		nextEventID            int64
+		previousStartedEventID int64
+		timestamp              time.Time
+		currentBranchToken     []byte
+		workflowState          int
+		workflowCloseState     int
+	}
+
 	historyEventNotifierImpl struct {
 		timeSource clock.TimeSource
 		metrics    metrics.Client

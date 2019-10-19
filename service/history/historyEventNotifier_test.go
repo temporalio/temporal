@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 	gen "github.com/uber/cadence/.gen/go/shared"
@@ -38,6 +39,8 @@ import (
 type (
 	historyEventNotifierSuite struct {
 		suite.Suite
+		*require.Assertions
+
 		historyEventNotifier *historyEventNotifierImpl
 	}
 )
@@ -56,6 +59,8 @@ func (s *historyEventNotifierSuite) TearDownSuite() {
 }
 
 func (s *historyEventNotifierSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+
 	s.historyEventNotifier = newHistoryEventNotifier(
 		clock.NewRealTimeSource(),
 		metrics.NewClient(tally.NoopScope, metrics.History),

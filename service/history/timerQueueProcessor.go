@@ -18,6 +18,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination timerQueueProcessor_mock.go
+
 package history
 
 import (
@@ -29,6 +31,7 @@ import (
 
 	h "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/client/matching"
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
@@ -41,6 +44,14 @@ var (
 )
 
 type (
+	timerQueueProcessor interface {
+		common.Daemon
+		FailoverDomain(domainIDs map[string]struct{})
+		NotifyNewTimers(clusterName string, timerTask []persistence.Task)
+		LockTaskProcessing()
+		UnlockTaskPrrocessing()
+	}
+
 	timeNow                 func() time.Time
 	updateTimerAckLevel     func(TimerSequenceID) error
 	timerQueueShutdown      func() error
@@ -223,7 +234,7 @@ func (t *timerQueueProcessorImpl) FailoverDomain(
 	failoverTimerProcessor.Start()
 }
 
-func (t *timerQueueProcessorImpl) LockTaskPrrocessing() {
+func (t *timerQueueProcessorImpl) LockTaskProcessing() {
 	t.taskAllocator.lock()
 }
 

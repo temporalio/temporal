@@ -27,9 +27,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/clock"
@@ -42,11 +44,15 @@ import (
 type (
 	timerBuilderProcessorSuite struct {
 		suite.Suite
-		tb              *timerBuilder
-		mockShard       *shardContextImpl
-		mockEventsCache *MockEventsCache
-		config          *Config
-		logger          log.Logger
+		*require.Assertions
+
+		controller      *gomock.Controller
+		mockEventsCache *MockeventsCache
+
+		tb        *timerBuilder
+		mockShard *shardContextImpl
+		config    *Config
+		logger    log.Logger
 	}
 )
 
@@ -69,6 +75,12 @@ func (s *timerBuilderProcessorSuite) SetupSuite() {
 }
 
 func (s *timerBuilderProcessorSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+
+	s.controller = gomock.NewController(s.T())
+	s.mockEventsCache = NewMockeventsCache(s.controller)
+	s.mockEventsCache.EXPECT().putEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
 	s.mockShard = &shardContextImpl{
 		shardInfo:                 &persistence.ShardInfo{ShardID: 0, RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber:    1,
@@ -78,8 +90,10 @@ func (s *timerBuilderProcessorSuite) SetupTest() {
 		logger:                    s.logger,
 		timeSource:                clock.NewRealTimeSource(),
 	}
-	s.mockEventsCache = &MockEventsCache{}
-	s.mockEventsCache.On("putEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+}
+
+func (s *timerBuilderProcessorSuite) TearDownTest() {
+	s.controller.Finish()
 }
 
 func (s *timerBuilderProcessorSuite) TestTimerBuilderSingleUserTimer() {

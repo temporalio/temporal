@@ -27,6 +27,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 
@@ -45,10 +46,13 @@ import (
 type (
 	nDCWorkflowResetterSuite struct {
 		suite.Suite
+		*require.Assertions
 
-		controller         *gomock.Controller
-		mockTransactionMgr *MocknDCTransactionMgr
-		mockStateBuilder   *MocknDCStateRebuilder
+		controller              *gomock.Controller
+		mockBaseMutableState    *MockmutableState
+		mockRebuiltMutableState *MockmutableState
+		mockTransactionMgr      *MocknDCTransactionMgr
+		mockStateBuilder        *MocknDCStateRebuilder
 
 		logger           log.Logger
 		mockHistoryV2Mgr *mocks.HistoryV2Manager
@@ -72,7 +76,11 @@ func TestNDCWorkflowResetterSuite(t *testing.T) {
 }
 
 func (s *nDCWorkflowResetterSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+
 	s.controller = gomock.NewController(s.T())
+	s.mockBaseMutableState = NewMockmutableState(s.controller)
+	s.mockRebuiltMutableState = NewMockmutableState(s.controller)
 	s.mockTransactionMgr = NewMocknDCTransactionMgr(s.controller)
 	s.mockStateBuilder = NewMocknDCStateRebuilder(s.controller)
 
@@ -142,19 +150,14 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 	rebuiltHistorySize := int64(9999)
 	newBranchToken := []byte("other random branch token")
 
-	mockBaseMutableState := &mockMutableState{}
-	defer mockBaseMutableState.AssertExpectations(s.T())
-	mockBaseMutableState.On("GetVersionHistories").Return(versionHistories)
-
-	mockRebuiltMutableState := &mockMutableState{}
-	defer mockRebuiltMutableState.AssertExpectations(s.T())
+	s.mockBaseMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 
 	mockBaseWorkflowReleaseFnCalled := false
 	mockBaseWorkflowReleaseFn := func(err error) {
 		mockBaseWorkflowReleaseFnCalled = true
 	}
 	mockBaseWorkflow := NewMocknDCWorkflow(s.controller)
-	mockBaseWorkflow.EXPECT().getMutableState().Return(mockBaseMutableState).AnyTimes()
+	mockBaseWorkflow.EXPECT().getMutableState().Return(s.mockBaseMutableState).AnyTimes()
 	mockBaseWorkflow.EXPECT().getReleaseFn().Return(mockBaseWorkflowReleaseFn).Times(1)
 
 	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(
@@ -182,7 +185,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 		),
 		newBranchToken,
 		gomock.Any(),
-	).Return(mockRebuiltMutableState, rebuiltHistorySize, nil).Times(1)
+	).Return(s.mockRebuiltMutableState, rebuiltHistorySize, nil).Times(1)
 
 	s.mockHistoryV2Mgr.On("ForkHistoryBranch", &persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: branchToken,
@@ -200,7 +203,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 		incomingVersion,
 	)
 	s.NoError(err)
-	s.Equal(mockRebuiltMutableState, rebuiltMutableState)
+	s.Equal(s.mockRebuiltMutableState, rebuiltMutableState)
 	s.Equal(s.newContext.getHistorySize(), rebuiltHistorySize)
 	s.True(mockBaseWorkflowReleaseFnCalled)
 }
@@ -222,14 +225,12 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_Error() {
 	incomingFirstEventID := baseEventID + 12
 	incomingFirstEventVersion := baseVersion + 3
 
-	mockBaseMutableState := &mockMutableState{}
-	defer mockBaseMutableState.AssertExpectations(s.T())
-	mockBaseMutableState.On("GetVersionHistories").Return(versionHistories)
+	s.mockBaseMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 
 	mockBaseWorkflowReleaseFn := func(err error) {
 	}
 	mockBaseWorkflow := NewMocknDCWorkflow(s.controller)
-	mockBaseWorkflow.EXPECT().getMutableState().Return(mockBaseMutableState).AnyTimes()
+	mockBaseWorkflow.EXPECT().getMutableState().Return(s.mockBaseMutableState).AnyTimes()
 	mockBaseWorkflow.EXPECT().getReleaseFn().Return(mockBaseWorkflowReleaseFn).Times(1)
 
 	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(
@@ -253,12 +254,12 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_Error() {
 
 	retryErr, isRetryError := err.(*shared.RetryTaskV2Error)
 	s.True(isRetryError)
-	exepectedErr := &shared.RetryTaskV2Error{
+	expectedErr := &shared.RetryTaskV2Error{
 		DomainId:        common.StringPtr(s.domainID),
 		WorkflowId:      common.StringPtr(s.workflowID),
 		RunId:           common.StringPtr(s.newRunID),
 		EndEventId:      common.Int64Ptr(incomingFirstEventID),
 		EndEventVersion: common.Int64Ptr(incomingFirstEventVersion),
 	}
-	s.Equal(retryErr, exepectedErr)
+	s.Equal(retryErr, expectedErr)
 }

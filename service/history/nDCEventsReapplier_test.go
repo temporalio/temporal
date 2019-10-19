@@ -24,10 +24,12 @@ import (
 	"context"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log/loggerimpl"
@@ -38,6 +40,10 @@ import (
 type (
 	nDCEventReapplicationSuite struct {
 		suite.Suite
+		*require.Assertions
+
+		controller *gomock.Controller
+
 		nDCReapplication nDCEventsReapplier
 	}
 )
@@ -48,12 +54,20 @@ func TestNDCEventReapplicationSuite(t *testing.T) {
 }
 
 func (s *nDCEventReapplicationSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+
+	s.controller = gomock.NewController(s.T())
+
 	logger := loggerimpl.NewDevelopmentForTest(s.Suite)
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.nDCReapplication = newNDCEventsReapplier(
 		metricsClient,
 		logger,
 	)
+}
+
+func (s *nDCEventReapplicationSuite) TearDownTest() {
+	s.controller.Finish()
 }
 
 func (s *nDCEventReapplicationSuite) TestReapplyEvents() {
@@ -69,12 +83,15 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents() {
 			Input:      []byte{},
 		},
 	}
-	msBuilderCurrent := &mockMutableState{}
-	msBuilderCurrent.On("GetLastWriteVersion").Return(int64(1), nil)
-	msBuilderCurrent.On("UpdateReplicationStateVersion", int64(1), true).Return()
-	msBuilderCurrent.On("GetExecutionInfo").Return(execution)
-	msBuilderCurrent.On("AddWorkflowExecutionSignaled", mock.Anything, mock.Anything, mock.Anything).Return(event, nil).Once()
-	msBuilderCurrent.On("IsWorkflowExecutionRunning").Return(true)
+	attr := event.WorkflowExecutionSignaledEventAttributes
+
+	msBuilderCurrent := NewMockmutableState(s.controller)
+	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(int64(1), nil).AnyTimes()
+	msBuilderCurrent.EXPECT().GetExecutionInfo().Return(execution).AnyTimes()
+	msBuilderCurrent.EXPECT().AddWorkflowExecutionSignaled(
+		attr.GetSignalName(), attr.GetInput(), attr.GetIdentity(),
+	).Return(event, nil).Times(1)
 
 	events := []*shared.HistoryEvent{
 		{EventType: common.EventTypePtr(shared.EventTypeWorkflowExecutionStarted)},

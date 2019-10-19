@@ -18,6 +18,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination eventsCache_mock.go
+
 package history
 
 import (
@@ -34,10 +36,27 @@ import (
 
 type (
 	eventsCache interface {
-		getEvent(domainID, workflowID, runID string, firstEventID, eventID int64,
-			branchToken []byte) (*shared.HistoryEvent, error)
-		putEvent(domainID, workflowID, runID string, eventID int64, event *shared.HistoryEvent)
-		deleteEvent(domainID, workflowID, runID string, eventID int64)
+		getEvent(
+			domainID string,
+			workflowID string,
+			runID string,
+			firstEventID int64,
+			eventID int64,
+			branchToken []byte,
+		) (*shared.HistoryEvent, error)
+		putEvent(
+			domainID string,
+			workflowID string,
+			runID string,
+			eventID int64,
+			event *shared.HistoryEvent,
+		)
+		deleteEvent(
+			domainID string,
+			workflowID string,
+			runID string,
+			eventID int64,
+		)
 	}
 
 	eventsCacheImpl struct {

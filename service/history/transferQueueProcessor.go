@@ -18,6 +18,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination transferQueueProcessor_mock.go
+
 package history
 
 import (
@@ -30,6 +32,7 @@ import (
 	h "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
@@ -42,6 +45,14 @@ var (
 )
 
 type (
+	transferQueueProcessor interface {
+		common.Daemon
+		FailoverDomain(domainIDs map[string]struct{})
+		NotifyNewTask(clusterName string, transferTasks []persistence.Task)
+		LockTaskProcessing()
+		UnlockTaskPrrocessing()
+	}
+
 	taskFilter func(task *taskInfo) (bool, error)
 
 	transferQueueProcessorImpl struct {
@@ -244,7 +255,7 @@ func (t *transferQueueProcessorImpl) FailoverDomain(
 	failoverTaskProcessor.Start()
 }
 
-func (t *transferQueueProcessorImpl) LockTaskPrrocessing() {
+func (t *transferQueueProcessorImpl) LockTaskProcessing() {
 	t.taskAllocator.lock()
 }
 

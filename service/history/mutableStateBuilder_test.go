@@ -24,7 +24,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/uber/cadence/.gen/go/shared"
@@ -39,10 +41,14 @@ import (
 type (
 	mutableStateSuite struct {
 		suite.Suite
-		msBuilder       *mutableStateBuilder
-		mockShard       *shardContextImpl
-		mockEventsCache *MockEventsCache
-		logger          log.Logger
+		*require.Assertions
+
+		controller      *gomock.Controller
+		mockEventsCache *MockeventsCache
+
+		msBuilder *mutableStateBuilder
+		mockShard *shardContextImpl
+		logger    log.Logger
 	}
 )
 
@@ -60,6 +66,11 @@ func (s *mutableStateSuite) TearDownSuite() {
 }
 
 func (s *mutableStateSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+
+	s.controller = gomock.NewController(s.T())
+	s.mockEventsCache = NewMockeventsCache(s.controller)
+
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.mockShard = &shardContextImpl{
 		shardInfo:                 &persistence.ShardInfo{ShardID: 0, RangeID: 1, TransferAckLevel: 0},
@@ -70,13 +81,12 @@ func (s *mutableStateSuite) SetupTest() {
 		logger:                    s.logger,
 		timeSource:                clock.NewRealTimeSource(),
 	}
-	s.mockEventsCache = &MockEventsCache{}
-	s.msBuilder = newMutableStateBuilder(s.mockShard, s.mockEventsCache,
-		s.logger, testLocalDomainEntry)
+
+	s.msBuilder = newMutableStateBuilder(s.mockShard, s.mockEventsCache, s.logger, testLocalDomainEntry)
 }
 
 func (s *mutableStateSuite) TearDownTest() {
-
+	s.controller.Finish()
 }
 
 func (s *mutableStateSuite) TestTransientDecisionCompletionFirstBatchReplicated_ReplicateDecisionCompleted() {
@@ -103,7 +113,8 @@ func (s *mutableStateSuite) TestTransientDecisionCompletionFirstBatchReplicated_
 			Identity:         common.StringPtr("some random identity"),
 		},
 	}
-	s.msBuilder.ReplicateDecisionTaskCompletedEvent(newDecisionCompletedEvent)
+	err := s.msBuilder.ReplicateDecisionTaskCompletedEvent(newDecisionCompletedEvent)
+	s.NoError(err)
 	s.Equal(0, len(s.msBuilder.GetHistoryBuilder().transientHistory))
 	s.Equal(0, len(s.msBuilder.GetHistoryBuilder().history))
 }
@@ -557,8 +568,10 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 	}
 	eventID++
 
-	s.mockEventsCache.On("putEvent", domainID, execution.GetWorkflowId(), execution.GetRunId(),
-		workflowStartEvent.GetEventId(), workflowStartEvent).Return(nil).Once()
+	s.mockEventsCache.EXPECT().putEvent(
+		domainID, execution.GetWorkflowId(), execution.GetRunId(),
+		workflowStartEvent.GetEventId(), workflowStartEvent,
+	).Times(1)
 	err := s.msBuilder.ReplicateWorkflowExecutionStartedEvent(
 		nil,
 		execution,

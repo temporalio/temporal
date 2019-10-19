@@ -23,6 +23,7 @@ package history
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
@@ -37,6 +38,7 @@ import (
 type (
 	decisionAttrValidatorSuite struct {
 		suite.Suite
+		*require.Assertions
 
 		mockDomainCache *cache.DomainCacheMock
 
@@ -62,6 +64,8 @@ func (s *decisionAttrValidatorSuite) TearDownSuite() {
 }
 
 func (s *decisionAttrValidatorSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+
 	s.mockDomainCache = &cache.DomainCacheMock{}
 	config := &Config{
 		MaxIDLengthLimit:                  dynamicconfig.GetIntPropertyFn(1000),

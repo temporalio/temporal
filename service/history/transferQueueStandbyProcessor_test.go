@@ -27,6 +27,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/.gen/go/history"
@@ -52,29 +53,32 @@ import (
 type (
 	transferQueueStandbyProcessorSuite struct {
 		suite.Suite
+		*require.Assertions
 
 		controller               *gomock.Controller
-		mockShardManager         *mocks.ShardManager
-		mockHistoryEngine        *historyEngineImpl
-		mockDomainCache          *cache.DomainCacheMock
-		mockVisibilityMgr        *mocks.VisibilityManager
-		mockMatchingClient       *matchingservicetest.MockClient
-		mockExecutionMgr         *mocks.ExecutionManager
-		mockShard                ShardContext
-		mockClusterMetadata      *mocks.ClusterMetadata
-		mockProducer             *mocks.KafkaProducer
-		mockClientBean           *client.MockClientBean
-		mockMessagingClient      messaging.Client
-		mockQueueAckMgr          *MockQueueAckMgr
-		mockService              service.Service
-		mockHistoryRereplicator  *xdc.MockHistoryRereplicator
-		mockNDCHistoryResender   *xdc.MockNDCHistoryResender
-		logger                   log.Logger
-		mockTxProcessor          *MockTransferQueueProcessor
+		mockTxProcessor          *MocktransferQueueProcessor
 		mockReplicationProcessor *MockReplicatorQueueProcessor
-		mockTimerProcessor       *MockTimerQueueProcessor
-		mockArchivalMetadata     *archiver.MockArchivalMetadata
-		mockArchiverProvider     *provider.MockArchiverProvider
+		mockTimerProcessor       *MocktimerQueueProcessor
+
+		mockShardManager        *mocks.ShardManager
+		mockHistoryEngine       *historyEngineImpl
+		mockDomainCache         *cache.DomainCacheMock
+		mockVisibilityMgr       *mocks.VisibilityManager
+		mockMatchingClient      *matchingservicetest.MockClient
+		mockExecutionMgr        *mocks.ExecutionManager
+		mockShard               ShardContext
+		mockClusterMetadata     *mocks.ClusterMetadata
+		mockProducer            *mocks.KafkaProducer
+		mockClientBean          *client.MockClientBean
+		mockMessagingClient     messaging.Client
+		mockQueueAckMgr         *MockQueueAckMgr
+		mockService             service.Service
+		mockHistoryRereplicator *xdc.MockHistoryRereplicator
+		mockNDCHistoryResender  *xdc.MockNDCHistoryResender
+		logger                  log.Logger
+
+		mockArchivalMetadata *archiver.MockArchivalMetadata
+		mockArchiverProvider *provider.MockArchiverProvider
 
 		domainID                      string
 		domainEntry                   *cache.DomainCacheEntry
@@ -96,9 +100,17 @@ func (s *transferQueueStandbyProcessorSuite) SetupSuite() {
 }
 
 func (s *transferQueueStandbyProcessorSuite) SetupTest() {
-	shardID := 0
-	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
+	s.Assertions = require.New(s.T())
+
 	s.controller = gomock.NewController(s.T())
+	s.mockTxProcessor = NewMocktransferQueueProcessor(s.controller)
+	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.controller)
+	s.mockTimerProcessor = NewMocktimerQueueProcessor(s.controller)
+	s.mockTxProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
+	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
+
+	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.mockShardManager = &mocks.ShardManager{}
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
 	s.mockVisibilityMgr = &mocks.VisibilityManager{}
@@ -135,7 +147,7 @@ func (s *transferQueueStandbyProcessorSuite) SetupTest() {
 	shardContext := &shardContextImpl{
 		service:                   s.mockService,
 		clusterMetadata:           s.mockClusterMetadata,
-		shardInfo:                 &persistence.ShardInfo{ShardID: shardID, RangeID: 1, TransferAckLevel: 0},
+		shardInfo:                 &persistence.ShardInfo{RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber:    1,
 		executionManager:          s.mockExecutionMgr,
 		shardManager:              s.mockShardManager,
@@ -154,12 +166,6 @@ func (s *transferQueueStandbyProcessorSuite) SetupTest() {
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	s.mockClusterMetadata.On("GetAllClusterInfo").Return(cluster.TestAllClusterInfo)
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
-	s.mockTxProcessor = &MockTransferQueueProcessor{}
-	s.mockTxProcessor.On("NotifyNewTask", mock.Anything, mock.Anything).Maybe()
-	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.controller)
-	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
-	s.mockTimerProcessor = &MockTimerQueueProcessor{}
-	s.mockTimerProcessor.On("NotifyNewTimers", mock.Anything, mock.Anything).Maybe()
 
 	historyCache := newHistoryCache(s.mockShard)
 	h := &historyEngineImpl{
@@ -202,17 +208,15 @@ func (s *transferQueueStandbyProcessorSuite) SetupTest() {
 }
 
 func (s *transferQueueStandbyProcessorSuite) TearDownTest() {
-	s.controller.Finish()
 	s.mockShardManager.AssertExpectations(s.T())
 	s.mockExecutionMgr.AssertExpectations(s.T())
 	s.mockVisibilityMgr.AssertExpectations(s.T())
 	s.mockProducer.AssertExpectations(s.T())
 	s.mockClientBean.AssertExpectations(s.T())
 	s.mockHistoryRereplicator.AssertExpectations(s.T())
-	s.mockTxProcessor.AssertExpectations(s.T())
-	s.mockTimerProcessor.AssertExpectations(s.T())
 	s.mockArchivalMetadata.AssertExpectations(s.T())
 	s.mockArchiverProvider.AssertExpectations(s.T())
+	s.controller.Finish()
 }
 
 func (s *transferQueueStandbyProcessorSuite) TestProcessActivityTask_Pending() {

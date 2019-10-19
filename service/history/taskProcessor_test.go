@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 
@@ -41,6 +42,9 @@ import (
 
 type (
 	taskProcessorSuite struct {
+		suite.Suite
+		*require.Assertions
+
 		clusterName     string
 		logger          log.Logger
 		mockService     service.Service
@@ -52,7 +56,6 @@ type (
 		scope            int
 		notificationChan chan struct{}
 
-		suite.Suite
 		taskProcessor *taskProcessor
 	}
 )
@@ -71,7 +74,8 @@ func (s *taskProcessorSuite) TearDownSuite() {
 }
 
 func (s *taskProcessorSuite) SetupTest() {
-	shardID := 0
+	s.Assertions = require.New(s.T())
+
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.clusterName = cluster.TestAlternativeClusterName
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
@@ -81,7 +85,7 @@ func (s *taskProcessorSuite) SetupTest() {
 	s.mockService = service.NewTestService(nil, nil, metricsClient, nil, nil, nil, nil)
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
-		shardInfo:                 &persistence.ShardInfo{ShardID: shardID, RangeID: 1, TransferAckLevel: 0},
+		shardInfo:                 &persistence.ShardInfo{ShardID: 0, RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber:    1,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   make(chan int, 100),

@@ -25,6 +25,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -46,9 +47,10 @@ import (
 type (
 	historyCacheSuite struct {
 		suite.Suite
-		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
-		// not merely log an error
 		*require.Assertions
+
+		controller *gomock.Controller
+
 		logger              log.Logger
 		mockExecutionMgr    *mocks.ExecutionManager
 		mockClusterMetadata *mocks.ClusterMetadata
@@ -75,6 +77,10 @@ func (s *historyCacheSuite) TearDownSuite() {
 }
 
 func (s *historyCacheSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+
+	s.controller = gomock.NewController(s.T())
+
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
@@ -115,6 +121,7 @@ func (s *historyCacheSuite) TearDownTest() {
 	s.mockExecutionMgr.AssertExpectations(s.T())
 	s.mockProducer.AssertExpectations(s.T())
 	s.mockClientBean.AssertExpectations(s.T())
+	s.controller.Finish()
 }
 
 func (s *historyCacheSuite) TestHistoryCacheBasic() {
@@ -125,7 +132,7 @@ func (s *historyCacheSuite) TestHistoryCacheBasic() {
 		WorkflowId: common.StringPtr("some random workflow ID"),
 		RunId:      common.StringPtr(uuid.New()),
 	}
-	mockMS1 := &mockMutableState{}
+	mockMS1 := NewMockmutableState(s.controller)
 	context, release, err := s.cache.getOrCreateWorkflowExecutionForBackground(domainID, execution1)
 	s.Nil(err)
 	context.(*workflowExecutionContextImpl).msBuilder = mockMS1
