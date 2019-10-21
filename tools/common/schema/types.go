@@ -52,7 +52,6 @@ type (
 	DB interface {
 		// Exec executes a cql statement
 		Exec(stmt string) error
-		//ListTables() ([]string, error)
 		// DropAllTables drops all tables
 		DropAllTables() error
 		// CreateSchemaVersionTables sets up the schema version tables

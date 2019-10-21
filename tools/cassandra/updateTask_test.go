@@ -25,6 +25,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
+	"github.com/uber/cadence/schema/cassandra"
 	"github.com/uber/cadence/tools/common/schema/test"
 )
 
@@ -60,5 +61,13 @@ func (s *UpdateSchemaTestSuite) TestDryrun() {
 	s.Nil(err)
 	defer client.Close()
 	dir := "../../schema/cassandra/cadence/versioned"
-	s.RunDryrunTest(buildCLIOptions(), client, "-k", dir, "0.23")
+	s.RunDryrunTest(buildCLIOptions(), client, "-k", dir, cassandra.Version)
+}
+
+func (s *UpdateSchemaTestSuite) TestVisibilityDryrun() {
+	client, err := newTestCQLClient(s.DBName)
+	s.Nil(err)
+	defer client.Close()
+	dir := "../../schema/cassandra/visibility/versioned"
+	s.RunDryrunTest(buildCLIOptions(), client, "-k", dir, cassandra.VisibilityVersion)
 }

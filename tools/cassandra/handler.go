@@ -47,7 +47,7 @@ func VerifyCompatibleVersion(cfg config.Persistence, rootPath string) error {
 	ds, ok := cfg.DataStores[cfg.DefaultStore]
 	if ok && ds.Cassandra != nil {
 		schemaPath := path.Join(rootPath, "schema/cassandra/cadence/versioned")
-		err := checkCompatibleVersion(*ds.Cassandra, ds.Cassandra.Keyspace, schemaPath)
+		err := checkCompatibleVersion(*ds.Cassandra, schemaPath)
 		if err != nil {
 			return err
 		}
@@ -55,25 +55,29 @@ func VerifyCompatibleVersion(cfg config.Persistence, rootPath string) error {
 	ds, ok = cfg.DataStores[cfg.VisibilityStore]
 	if ok && ds.Cassandra != nil {
 		schemaPath := path.Join(rootPath, "schema/cassandra/visibility/versioned")
-		return checkCompatibleVersion(*ds.Cassandra, ds.Cassandra.Keyspace, schemaPath)
+		err := checkCompatibleVersion(*ds.Cassandra, schemaPath)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 // checkCompatibleVersion check the version compatibility
-func checkCompatibleVersion(cfg config.Cassandra, keyspace string, dirPath string) error {
+func checkCompatibleVersion(cfg config.Cassandra, dirPath string) error {
 	client, err := newCQLClient(&CQLClientConfig{
 		Hosts:    cfg.Hosts,
 		Port:     cfg.Port,
 		User:     cfg.User,
 		Password: cfg.Password,
-		Keyspace: keyspace,
+		Keyspace: cfg.Keyspace,
 		Timeout:  defaultTimeout,
 	})
 	if err != nil {
 		return fmt.Errorf("unable to create CQL Client: %v", err.Error())
 	}
 	defer client.Close()
+
 	return schema.VerifyCompatibleVersion(client, dirPath, cfg.Keyspace)
 }
 

@@ -165,8 +165,9 @@ func (s *VersionTestSuite) runCheckCompatibleVersion(
 		Port:     defaultCassandraPort,
 		User:     "",
 		Password: "",
+		Keyspace: keyspace,
 	}
-	err = checkCompatibleVersion(cfg, keyspace, subdir)
+	err = checkCompatibleVersion(cfg, subdir)
 	if len(errStr) > 0 {
 		s.Error(err)
 		s.Contains(err.Error(), errStr)

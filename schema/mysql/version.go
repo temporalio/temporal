@@ -18,14 +18,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-// +build tools
+package mysql
 
-package tools
+// NOTE: whenever there is a new data base schema update, plz update the following versions
 
-// the 2 dependency below are used for yarpc / thriftrw compatible code generation
-import (
-	// thriftrw code gen
-	_ "go.uber.org/thriftrw"
-	// yarpc plugin for thriftrw code gen
-	_ "go.uber.org/yarpc/encoding/thrift/thriftrw-plugin-yarpc"
-)
+// Version is the MySQL database release version
+const Version = "0.2"
+
+// VisibilityVersion is the MySQL visibility database release version
+const VisibilityVersion = "0.1"

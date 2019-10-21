@@ -27,6 +27,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 	"github.com/uber/cadence/environment"
+	"github.com/uber/cadence/schema/mysql"
 	"github.com/uber/cadence/tools/common/schema/test"
 )
 
@@ -65,5 +66,13 @@ func (s *UpdateSchemaTestSuite) TestDryrun() {
 	s.Nil(err)
 	defer conn.Close()
 	dir := "../../schema/mysql/v57/cadence/versioned"
-	s.RunDryrunTest(buildCLIOptions(), conn, "--db", dir, "0.2")
+	s.RunDryrunTest(buildCLIOptions(), conn, "--db", dir, mysql.Version)
+}
+
+func (s *UpdateSchemaTestSuite) TestVisibilityDryrun() {
+	conn, err := newTestConn(s.DBName)
+	s.Nil(err)
+	defer conn.Close()
+	dir := "../../schema/mysql/v57/visibility/versioned"
+	s.RunDryrunTest(buildCLIOptions(), conn, "--db", dir, mysql.VisibilityVersion)
 }
