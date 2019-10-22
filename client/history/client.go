@@ -738,7 +738,7 @@ func (c *clientImpl) QueryWorkflow(
 	request *h.QueryWorkflowRequest,
 	opts ...yarpc.CallOption,
 ) (*h.QueryWorkflowResponse, error) {
-	client, err := c.getClientForWorkflowID(request.Execution.GetWorkflowId())
+	client, err := c.getClientForWorkflowID(request.GetRequest().GetExecution().GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}

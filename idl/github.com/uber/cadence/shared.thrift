@@ -321,6 +321,13 @@ enum QueryRejectCondition {
   NOT_COMPLETED_CLEANLY
 }
 
+enum QueryConsistencyLevel {
+  // EVENTUAL indicates that query should be eventually consistent
+  EVENTUAL
+  // STRONG indicates that any events that came before query should be reflected in workflow state before running query
+  STRONG
+}
+
 struct DataBlob {
   10: optional EncodingType EncodingType
   20: optional binary Data
@@ -1093,7 +1100,7 @@ struct PollForDecisionTaskResponse {
   90: optional TaskList WorkflowExecutionTaskList
   100:  optional i64 (js.type = "Long") scheduledTimestamp
   110:  optional i64 (js.type = "Long") startedTimestamp
-  120:  optional list<WorkflowQuery> queries
+  120:  optional map<string, WorkflowQuery> queries
 }
 
 struct StickyExecutionAttributes {
@@ -1110,7 +1117,7 @@ struct RespondDecisionTaskCompletedRequest {
   60: optional bool returnNewDecisionTask
   70: optional bool forceCreateNewDecisionTask
   80: optional string binaryChecksum
-  90: optional list<WorkflowQueryResult> queryResults
+  90: optional map<string, WorkflowQueryResult> queryResults
 }
 
 struct RespondDecisionTaskCompletedResponse {
@@ -1361,6 +1368,7 @@ struct QueryWorkflowRequest {
   30: optional WorkflowQuery query
   // QueryRejectCondition can used to reject the query if workflow state does not satisify condition
   40: optional QueryRejectCondition queryRejectCondition
+  50: optional QueryConsistencyLevel queryConsistencyLevel
 }
 
 struct QueryRejected {

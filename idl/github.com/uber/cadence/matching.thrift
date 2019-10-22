@@ -44,8 +44,9 @@ struct PollForDecisionTaskResponse {
   100: optional shared.TaskList WorkflowExecutionTaskList
   110: optional i32 eventStoreVersion
   120: optional binary branchToken
-  130:  optional i64 (js.type = "Long") scheduledTimestamp
-  140:  optional i64 (js.type = "Long") startedTimestamp
+  130: optional i64 (js.type = "Long") scheduledTimestamp
+  140: optional i64 (js.type = "Long") startedTimestamp
+  150: optional map<string, shared.WorkflowQuery> queries
 }
 
 struct PollForActivityTaskRequest {

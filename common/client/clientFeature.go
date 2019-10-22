@@ -36,14 +36,14 @@ const (
 var defaultVersion = version{0, 0, 0}
 
 type (
-	// Feature provides information about client's capibility
+	// Feature provides information about client's capabilities
 	Feature interface {
 		SupportStickyQuery() bool
 	}
 
-	// FeatureImpl is used for determining the client's capibility.
+	// FeatureImpl is used for determining the client's capabilities.
 	// This can be useful when service support a feature, while
-	// client does not, so we can use be backward comparible
+	// client does not, so we can be backward compatible
 	FeatureImpl struct {
 		libVersion     version
 		featureVersion version
@@ -72,12 +72,6 @@ func NewFeatureImpl(libVersion string, featureVersion string, lang string) *Feat
 // SupportStickyQuery whether a client support sticky query
 func (feature *FeatureImpl) SupportStickyQuery() bool {
 	return feature.featureVersion.major > 0
-}
-
-// SupportConsistentQuery whether a client supports consistent query
-func (feature *FeatureImpl) SupportConsistentQuery() bool {
-	// TODO: andrewjdawson2016 once client side changes for consistent query are done then update this
-	return false
 }
 
 func parseVersion(versionStr string) version {

@@ -207,7 +207,15 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 		Logger:          s.Logger,
 		T:               s.T(),
 	}
-	_, newTask, err := poller.PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(false, false, true, true, int64(0), 1, true)
+	_, newTask, err := poller.PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(
+		false,
+		false,
+		true,
+		true,
+		int64(0),
+		1,
+		true,
+		nil)
 	s.Nil(err)
 	s.NotNil(newTask)
 	s.NotNil(newTask.DecisionTask)
@@ -880,7 +888,15 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 	}
 
 	// process 1st decision and assert decision is handled correctly.
-	_, newTask, err := poller.PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(false, false, true, true, int64(0), 1, true)
+	_, newTask, err := poller.PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(
+		false,
+		false,
+		true,
+		true,
+		int64(0),
+		1,
+		true,
+		nil)
 	s.Nil(err)
 	s.NotNil(newTask)
 	s.NotNil(newTask.DecisionTask)
@@ -921,7 +937,15 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 	s.True(verified)
 
 	// process 2nd decision and assert decision is handled correctly.
-	_, newTask, err = poller.PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(false, false, true, true, int64(0), 1, true)
+	_, newTask, err = poller.PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(
+		false,
+		false,
+		true,
+		true,
+		int64(0),
+		1,
+		true,
+		nil)
 	s.Nil(err)
 	s.NotNil(newTask)
 	s.NotNil(newTask.DecisionTask)

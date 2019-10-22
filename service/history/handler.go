@@ -59,6 +59,7 @@ type (
 		executionMgrFactory     persistence.ExecutionManagerFactory
 		domainCache             cache.DomainCache
 		historyServiceClient    hc.Client
+		rawMatchingClient       matching.Client
 		matchingServiceClient   matching.Client
 		publicClient            workflowserviceclient.Interface
 		hServiceResolver        membership.ServiceResolver
@@ -142,13 +143,13 @@ func (h *Handler) Start() error {
 	h.domainCache = cache.NewDomainCache(h.metadataMgr, h.GetClusterMetadata(), h.GetMetricsClient(), h.GetLogger())
 	h.domainCache.Start()
 
-	matchingClient, err := h.GetClientBean().GetMatchingClient(h.domainCache.GetDomainName)
+	rawMatchingClient, err := h.GetClientBean().GetMatchingClient(h.domainCache.GetDomainName)
 	if err != nil {
 		return err
 	}
-
+	h.rawMatchingClient = rawMatchingClient
 	h.matchingServiceClient = matching.NewRetryableClient(
-		matchingClient,
+		rawMatchingClient,
 		common.CreateMatchingServiceRetryPolicy(),
 		common.IsWhitelistServiceTransientError,
 	)
@@ -212,7 +213,7 @@ func (h *Handler) Stop() {
 // CreateEngine is implementation for HistoryEngineFactory used for creating the engine instance for shard
 func (h *Handler) CreateEngine(context ShardContext) Engine {
 	return NewEngineWithShardContext(context, h.visibilityMgr, h.matchingServiceClient, h.historyServiceClient,
-		h.publicClient, h.historyEventNotifier, h.publisher, h.config, h.replicationTaskFetchers, h.domainReplicator)
+		h.publicClient, h.historyEventNotifier, h.publisher, h.config, h.replicationTaskFetchers, h.domainReplicator, h.rawMatchingClient)
 }
 
 // Health is for health check
@@ -1133,7 +1134,7 @@ func (h *Handler) QueryWorkflow(
 		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
-	workflowID := request.GetExecution().GetWorkflowId()
+	workflowID := request.GetRequest().GetExecution().GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, domainID, workflowID)

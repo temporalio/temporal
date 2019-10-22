@@ -3342,9 +3342,8 @@ func (v *PollMutableStateResponse) IsSetWorkflowCloseState() bool {
 }
 
 type QueryWorkflowRequest struct {
-	DomainUUID *string                   `json:"domainUUID,omitempty"`
-	Execution  *shared.WorkflowExecution `json:"execution,omitempty"`
-	Query      *shared.WorkflowQuery     `json:"query,omitempty"`
+	DomainUUID *string                      `json:"domainUUID,omitempty"`
+	Request    *shared.QueryWorkflowRequest `json:"request,omitempty"`
 }
 
 // ToWire translates a QueryWorkflowRequest struct into a Thrift-level intermediate
@@ -3364,7 +3363,7 @@ type QueryWorkflowRequest struct {
 //   }
 func (v *QueryWorkflowRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [3]wire.Field
+		fields [2]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -3378,28 +3377,20 @@ func (v *QueryWorkflowRequest) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 10, Value: w}
 		i++
 	}
-	if v.Execution != nil {
-		w, err = v.Execution.ToWire()
+	if v.Request != nil {
+		w, err = v.Request.ToWire()
 		if err != nil {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 20, Value: w}
 		i++
 	}
-	if v.Query != nil {
-		w, err = v.Query.ToWire()
-		if err != nil {
-			return w, err
-		}
-		fields[i] = wire.Field{ID: 30, Value: w}
-		i++
-	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
 
-func _WorkflowQuery_Read(w wire.Value) (*shared.WorkflowQuery, error) {
-	var v shared.WorkflowQuery
+func _QueryWorkflowRequest_Read(w wire.Value) (*shared.QueryWorkflowRequest, error) {
+	var v shared.QueryWorkflowRequest
 	err := v.FromWire(w)
 	return &v, err
 }
@@ -3438,15 +3429,7 @@ func (v *QueryWorkflowRequest) FromWire(w wire.Value) error {
 			}
 		case 20:
 			if field.Value.Type() == wire.TStruct {
-				v.Execution, err = _WorkflowExecution_Read(field.Value)
-				if err != nil {
-					return err
-				}
-
-			}
-		case 30:
-			if field.Value.Type() == wire.TStruct {
-				v.Query, err = _WorkflowQuery_Read(field.Value)
+				v.Request, err = _QueryWorkflowRequest_Read(field.Value)
 				if err != nil {
 					return err
 				}
@@ -3465,18 +3448,14 @@ func (v *QueryWorkflowRequest) String() string {
 		return "<nil>"
 	}
 
-	var fields [3]string
+	var fields [2]string
 	i := 0
 	if v.DomainUUID != nil {
 		fields[i] = fmt.Sprintf("DomainUUID: %v", *(v.DomainUUID))
 		i++
 	}
-	if v.Execution != nil {
-		fields[i] = fmt.Sprintf("Execution: %v", v.Execution)
-		i++
-	}
-	if v.Query != nil {
-		fields[i] = fmt.Sprintf("Query: %v", v.Query)
+	if v.Request != nil {
+		fields[i] = fmt.Sprintf("Request: %v", v.Request)
 		i++
 	}
 
@@ -3496,10 +3475,7 @@ func (v *QueryWorkflowRequest) Equals(rhs *QueryWorkflowRequest) bool {
 	if !_String_EqualsPtr(v.DomainUUID, rhs.DomainUUID) {
 		return false
 	}
-	if !((v.Execution == nil && rhs.Execution == nil) || (v.Execution != nil && rhs.Execution != nil && v.Execution.Equals(rhs.Execution))) {
-		return false
-	}
-	if !((v.Query == nil && rhs.Query == nil) || (v.Query != nil && rhs.Query != nil && v.Query.Equals(rhs.Query))) {
+	if !((v.Request == nil && rhs.Request == nil) || (v.Request != nil && rhs.Request != nil && v.Request.Equals(rhs.Request))) {
 		return false
 	}
 
@@ -3515,11 +3491,8 @@ func (v *QueryWorkflowRequest) MarshalLogObject(enc zapcore.ObjectEncoder) (err 
 	if v.DomainUUID != nil {
 		enc.AddString("domainUUID", *v.DomainUUID)
 	}
-	if v.Execution != nil {
-		err = multierr.Append(err, enc.AddObject("execution", v.Execution))
-	}
-	if v.Query != nil {
-		err = multierr.Append(err, enc.AddObject("query", v.Query))
+	if v.Request != nil {
+		err = multierr.Append(err, enc.AddObject("request", v.Request))
 	}
 	return err
 }
@@ -3539,38 +3512,23 @@ func (v *QueryWorkflowRequest) IsSetDomainUUID() bool {
 	return v != nil && v.DomainUUID != nil
 }
 
-// GetExecution returns the value of Execution if it is set or its
+// GetRequest returns the value of Request if it is set or its
 // zero value if it is unset.
-func (v *QueryWorkflowRequest) GetExecution() (o *shared.WorkflowExecution) {
-	if v != nil && v.Execution != nil {
-		return v.Execution
+func (v *QueryWorkflowRequest) GetRequest() (o *shared.QueryWorkflowRequest) {
+	if v != nil && v.Request != nil {
+		return v.Request
 	}
 
 	return
 }
 
-// IsSetExecution returns true if Execution is not nil.
-func (v *QueryWorkflowRequest) IsSetExecution() bool {
-	return v != nil && v.Execution != nil
-}
-
-// GetQuery returns the value of Query if it is set or its
-// zero value if it is unset.
-func (v *QueryWorkflowRequest) GetQuery() (o *shared.WorkflowQuery) {
-	if v != nil && v.Query != nil {
-		return v.Query
-	}
-
-	return
-}
-
-// IsSetQuery returns true if Query is not nil.
-func (v *QueryWorkflowRequest) IsSetQuery() bool {
-	return v != nil && v.Query != nil
+// IsSetRequest returns true if Request is not nil.
+func (v *QueryWorkflowRequest) IsSetRequest() bool {
+	return v != nil && v.Request != nil
 }
 
 type QueryWorkflowResponse struct {
-	QueryResult []byte `json:"queryResult,omitempty"`
+	Response *shared.QueryWorkflowResponse `json:"response,omitempty"`
 }
 
 // ToWire translates a QueryWorkflowResponse struct into a Thrift-level intermediate
@@ -3596,8 +3554,8 @@ func (v *QueryWorkflowResponse) ToWire() (wire.Value, error) {
 		err    error
 	)
 
-	if v.QueryResult != nil {
-		w, err = wire.NewValueBinary(v.QueryResult), error(nil)
+	if v.Response != nil {
+		w, err = v.Response.ToWire()
 		if err != nil {
 			return w, err
 		}
@@ -3606,6 +3564,12 @@ func (v *QueryWorkflowResponse) ToWire() (wire.Value, error) {
 	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _QueryWorkflowResponse_Read(w wire.Value) (*shared.QueryWorkflowResponse, error) {
+	var v shared.QueryWorkflowResponse
+	err := v.FromWire(w)
+	return &v, err
 }
 
 // FromWire deserializes a QueryWorkflowResponse struct from its Thrift-level
@@ -3631,8 +3595,8 @@ func (v *QueryWorkflowResponse) FromWire(w wire.Value) error {
 	for _, field := range w.GetStruct().Fields {
 		switch field.ID {
 		case 10:
-			if field.Value.Type() == wire.TBinary {
-				v.QueryResult, err = field.Value.GetBinary(), error(nil)
+			if field.Value.Type() == wire.TStruct {
+				v.Response, err = _QueryWorkflowResponse_Read(field.Value)
 				if err != nil {
 					return err
 				}
@@ -3653,8 +3617,8 @@ func (v *QueryWorkflowResponse) String() string {
 
 	var fields [1]string
 	i := 0
-	if v.QueryResult != nil {
-		fields[i] = fmt.Sprintf("QueryResult: %v", v.QueryResult)
+	if v.Response != nil {
+		fields[i] = fmt.Sprintf("Response: %v", v.Response)
 		i++
 	}
 
@@ -3671,7 +3635,7 @@ func (v *QueryWorkflowResponse) Equals(rhs *QueryWorkflowResponse) bool {
 	} else if rhs == nil {
 		return false
 	}
-	if !((v.QueryResult == nil && rhs.QueryResult == nil) || (v.QueryResult != nil && rhs.QueryResult != nil && bytes.Equal(v.QueryResult, rhs.QueryResult))) {
+	if !((v.Response == nil && rhs.Response == nil) || (v.Response != nil && rhs.Response != nil && v.Response.Equals(rhs.Response))) {
 		return false
 	}
 
@@ -3684,25 +3648,25 @@ func (v *QueryWorkflowResponse) MarshalLogObject(enc zapcore.ObjectEncoder) (err
 	if v == nil {
 		return nil
 	}
-	if v.QueryResult != nil {
-		enc.AddString("queryResult", base64.StdEncoding.EncodeToString(v.QueryResult))
+	if v.Response != nil {
+		err = multierr.Append(err, enc.AddObject("response", v.Response))
 	}
 	return err
 }
 
-// GetQueryResult returns the value of QueryResult if it is set or its
+// GetResponse returns the value of Response if it is set or its
 // zero value if it is unset.
-func (v *QueryWorkflowResponse) GetQueryResult() (o []byte) {
-	if v != nil && v.QueryResult != nil {
-		return v.QueryResult
+func (v *QueryWorkflowResponse) GetResponse() (o *shared.QueryWorkflowResponse) {
+	if v != nil && v.Response != nil {
+		return v.Response
 	}
 
 	return
 }
 
-// IsSetQueryResult returns true if QueryResult is not nil.
-func (v *QueryWorkflowResponse) IsSetQueryResult() bool {
-	return v != nil && v.QueryResult != nil
+// IsSetResponse returns true if Response is not nil.
+func (v *QueryWorkflowResponse) IsSetResponse() bool {
+	return v != nil && v.Response != nil
 }
 
 type ReapplyEventsRequest struct {
@@ -5513,20 +5477,59 @@ func (v *RecordDecisionTaskStartedRequest) IsSetPollRequest() bool {
 }
 
 type RecordDecisionTaskStartedResponse struct {
-	WorkflowType              *shared.WorkflowType          `json:"workflowType,omitempty"`
-	PreviousStartedEventId    *int64                        `json:"previousStartedEventId,omitempty"`
-	ScheduledEventId          *int64                        `json:"scheduledEventId,omitempty"`
-	StartedEventId            *int64                        `json:"startedEventId,omitempty"`
-	NextEventId               *int64                        `json:"nextEventId,omitempty"`
-	Attempt                   *int64                        `json:"attempt,omitempty"`
-	StickyExecutionEnabled    *bool                         `json:"stickyExecutionEnabled,omitempty"`
-	DecisionInfo              *shared.TransientDecisionInfo `json:"decisionInfo,omitempty"`
-	WorkflowExecutionTaskList *shared.TaskList              `json:"WorkflowExecutionTaskList,omitempty"`
-	EventStoreVersion         *int32                        `json:"eventStoreVersion,omitempty"`
-	BranchToken               []byte                        `json:"branchToken,omitempty"`
-	ScheduledTimestamp        *int64                        `json:"scheduledTimestamp,omitempty"`
-	StartedTimestamp          *int64                        `json:"startedTimestamp,omitempty"`
+	WorkflowType              *shared.WorkflowType             `json:"workflowType,omitempty"`
+	PreviousStartedEventId    *int64                           `json:"previousStartedEventId,omitempty"`
+	ScheduledEventId          *int64                           `json:"scheduledEventId,omitempty"`
+	StartedEventId            *int64                           `json:"startedEventId,omitempty"`
+	NextEventId               *int64                           `json:"nextEventId,omitempty"`
+	Attempt                   *int64                           `json:"attempt,omitempty"`
+	StickyExecutionEnabled    *bool                            `json:"stickyExecutionEnabled,omitempty"`
+	DecisionInfo              *shared.TransientDecisionInfo    `json:"decisionInfo,omitempty"`
+	WorkflowExecutionTaskList *shared.TaskList                 `json:"WorkflowExecutionTaskList,omitempty"`
+	EventStoreVersion         *int32                           `json:"eventStoreVersion,omitempty"`
+	BranchToken               []byte                           `json:"branchToken,omitempty"`
+	ScheduledTimestamp        *int64                           `json:"scheduledTimestamp,omitempty"`
+	StartedTimestamp          *int64                           `json:"startedTimestamp,omitempty"`
+	Queries                   map[string]*shared.WorkflowQuery `json:"queries,omitempty"`
 }
+
+type _Map_String_WorkflowQuery_MapItemList map[string]*shared.WorkflowQuery
+
+func (m _Map_String_WorkflowQuery_MapItemList) ForEach(f func(wire.MapItem) error) error {
+	for k, v := range m {
+		if v == nil {
+			return fmt.Errorf("invalid [%v]: value is nil", k)
+		}
+		kw, err := wire.NewValueString(k), error(nil)
+		if err != nil {
+			return err
+		}
+
+		vw, err := v.ToWire()
+		if err != nil {
+			return err
+		}
+		err = f(wire.MapItem{Key: kw, Value: vw})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (m _Map_String_WorkflowQuery_MapItemList) Size() int {
+	return len(m)
+}
+
+func (_Map_String_WorkflowQuery_MapItemList) KeyType() wire.Type {
+	return wire.TBinary
+}
+
+func (_Map_String_WorkflowQuery_MapItemList) ValueType() wire.Type {
+	return wire.TStruct
+}
+
+func (_Map_String_WorkflowQuery_MapItemList) Close() {}
 
 // ToWire translates a RecordDecisionTaskStartedResponse struct into a Thrift-level intermediate
 // representation. This intermediate representation may be serialized
@@ -5545,7 +5548,7 @@ type RecordDecisionTaskStartedResponse struct {
 //   }
 func (v *RecordDecisionTaskStartedResponse) ToWire() (wire.Value, error) {
 	var (
-		fields [13]wire.Field
+		fields [14]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -5655,6 +5658,14 @@ func (v *RecordDecisionTaskStartedResponse) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 130, Value: w}
 		i++
 	}
+	if v.Queries != nil {
+		w, err = wire.NewValueMap(_Map_String_WorkflowQuery_MapItemList(v.Queries)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 140, Value: w}
+		i++
+	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
@@ -5663,6 +5674,40 @@ func _TransientDecisionInfo_Read(w wire.Value) (*shared.TransientDecisionInfo, e
 	var v shared.TransientDecisionInfo
 	err := v.FromWire(w)
 	return &v, err
+}
+
+func _WorkflowQuery_Read(w wire.Value) (*shared.WorkflowQuery, error) {
+	var v shared.WorkflowQuery
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _Map_String_WorkflowQuery_Read(m wire.MapItemList) (map[string]*shared.WorkflowQuery, error) {
+	if m.KeyType() != wire.TBinary {
+		return nil, nil
+	}
+
+	if m.ValueType() != wire.TStruct {
+		return nil, nil
+	}
+
+	o := make(map[string]*shared.WorkflowQuery, m.Size())
+	err := m.ForEach(func(x wire.MapItem) error {
+		k, err := x.Key.GetString(), error(nil)
+		if err != nil {
+			return err
+		}
+
+		v, err := _WorkflowQuery_Read(x.Value)
+		if err != nil {
+			return err
+		}
+
+		o[k] = v
+		return nil
+	})
+	m.Close()
+	return o, err
 }
 
 // FromWire deserializes a RecordDecisionTaskStartedResponse struct from its Thrift-level
@@ -5809,6 +5854,14 @@ func (v *RecordDecisionTaskStartedResponse) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 140:
+			if field.Value.Type() == wire.TMap {
+				v.Queries, err = _Map_String_WorkflowQuery_Read(field.Value.GetMap())
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -5822,7 +5875,7 @@ func (v *RecordDecisionTaskStartedResponse) String() string {
 		return "<nil>"
 	}
 
-	var fields [13]string
+	var fields [14]string
 	i := 0
 	if v.WorkflowType != nil {
 		fields[i] = fmt.Sprintf("WorkflowType: %v", v.WorkflowType)
@@ -5876,8 +5929,29 @@ func (v *RecordDecisionTaskStartedResponse) String() string {
 		fields[i] = fmt.Sprintf("StartedTimestamp: %v", *(v.StartedTimestamp))
 		i++
 	}
+	if v.Queries != nil {
+		fields[i] = fmt.Sprintf("Queries: %v", v.Queries)
+		i++
+	}
 
 	return fmt.Sprintf("RecordDecisionTaskStartedResponse{%v}", strings.Join(fields[:i], ", "))
+}
+
+func _Map_String_WorkflowQuery_Equals(lhs, rhs map[string]*shared.WorkflowQuery) bool {
+	if len(lhs) != len(rhs) {
+		return false
+	}
+
+	for lk, lv := range lhs {
+		rv, ok := rhs[lk]
+		if !ok {
+			return false
+		}
+		if !lv.Equals(rv) {
+			return false
+		}
+	}
+	return true
 }
 
 // Equals returns true if all the fields of this RecordDecisionTaskStartedResponse match the
@@ -5929,8 +6003,22 @@ func (v *RecordDecisionTaskStartedResponse) Equals(rhs *RecordDecisionTaskStarte
 	if !_I64_EqualsPtr(v.StartedTimestamp, rhs.StartedTimestamp) {
 		return false
 	}
+	if !((v.Queries == nil && rhs.Queries == nil) || (v.Queries != nil && rhs.Queries != nil && _Map_String_WorkflowQuery_Equals(v.Queries, rhs.Queries))) {
+		return false
+	}
 
 	return true
+}
+
+type _Map_String_WorkflowQuery_Zapper map[string]*shared.WorkflowQuery
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of _Map_String_WorkflowQuery_Zapper.
+func (m _Map_String_WorkflowQuery_Zapper) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	for k, v := range m {
+		err = multierr.Append(err, enc.AddObject((string)(k), v))
+	}
+	return err
 }
 
 // MarshalLogObject implements zapcore.ObjectMarshaler, enabling
@@ -5977,6 +6065,9 @@ func (v *RecordDecisionTaskStartedResponse) MarshalLogObject(enc zapcore.ObjectE
 	}
 	if v.StartedTimestamp != nil {
 		enc.AddInt64("startedTimestamp", *v.StartedTimestamp)
+	}
+	if v.Queries != nil {
+		err = multierr.Append(err, enc.AddObject("queries", (_Map_String_WorkflowQuery_Zapper)(v.Queries)))
 	}
 	return err
 }
@@ -6174,6 +6265,21 @@ func (v *RecordDecisionTaskStartedResponse) GetStartedTimestamp() (o int64) {
 // IsSetStartedTimestamp returns true if StartedTimestamp is not nil.
 func (v *RecordDecisionTaskStartedResponse) IsSetStartedTimestamp() bool {
 	return v != nil && v.StartedTimestamp != nil
+}
+
+// GetQueries returns the value of Queries if it is set or its
+// zero value if it is unset.
+func (v *RecordDecisionTaskStartedResponse) GetQueries() (o map[string]*shared.WorkflowQuery) {
+	if v != nil && v.Queries != nil {
+		return v.Queries
+	}
+
+	return
+}
+
+// IsSetQueries returns true if Queries is not nil.
+func (v *RecordDecisionTaskStartedResponse) IsSetQueries() bool {
+	return v != nil && v.Queries != nil
 }
 
 type RemoveSignalMutableStateRequest struct {
@@ -12330,7 +12436,7 @@ var ThriftModule = &thriftreflect.ThriftModule{
 	Name:     "history",
 	Package:  "github.com/uber/cadence/.gen/go/history",
 	FilePath: "history.thrift",
-	SHA1:     "e3177e80be21457270626e9a3286200d549d7ecc",
+	SHA1:     "8d557418b102fc60d3c21fbc0529531b210da519",
 	Includes: []*thriftreflect.ThriftModule{
 		replicator.ThriftModule,
 		shared.ThriftModule,
@@ -12338,7 +12444,7 @@ var ThriftModule = &thriftreflect.ThriftModule{
 	Raw: rawIDL,
 }
 
-const rawIDL = "// Copyright (c) 2017 Uber Technologies, Inc.\n//\n// Permission is hereby granted, free of charge, to any person obtaining a copy\n// of this software and associated documentation files (the \"Software\"), to deal\n// in the Software without restriction, including without limitation the rights\n// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n// copies of the Software, and to permit persons to whom the Software is\n// furnished to do so, subject to the following conditions:\n//\n// The above copyright notice and this permission notice shall be included in\n// all copies or substantial portions of the Software.\n//\n// THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n// THE SOFTWARE.\n\ninclude \"shared.thrift\"\ninclude \"replicator.thrift\"\n\nnamespace java com.uber.cadence.history\n\nexception EventAlreadyStartedError {\n  1: required string message\n}\n\nexception ShardOwnershipLostError {\n  10: optional string message\n  20: optional string owner\n}\n\nstruct ParentExecutionInfo {\n  10: optional string domainUUID\n  15: optional string domain\n  20: optional shared.WorkflowExecution execution\n  30: optional i64 (js.type = \"Long\") initiatedId\n}\n\nstruct StartWorkflowExecutionRequest {\n  10: optional string domainUUID\n  20: optional shared.StartWorkflowExecutionRequest startRequest\n  30: optional ParentExecutionInfo parentExecutionInfo\n  40: optional i32 attempt\n  50: optional i64 (js.type = \"Long\") expirationTimestamp\n  55: optional shared.ContinueAsNewInitiator continueAsNewInitiator\n  56: optional string continuedFailureReason\n  57: optional binary continuedFailureDetails\n  58: optional binary lastCompletionResult\n  60: optional i32 firstDecisionTaskBackoffSeconds\n}\n\nstruct DescribeMutableStateRequest{\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution execution\n}\n\nstruct DescribeMutableStateResponse{\n  30: optional string mutableStateInCache\n  40: optional string mutableStateInDatabase\n}\n\nstruct GetMutableStateRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution execution\n  30: optional i64 (js.type = \"Long\") expectedNextEventId\n  40: optional binary currentBranchToken\n}\n\nstruct GetMutableStateResponse {\n  10: optional shared.WorkflowExecution execution\n  20: optional shared.WorkflowType workflowType\n  30: optional i64 (js.type = \"Long\") NextEventId\n  35: optional i64 (js.type = \"Long\") PreviousStartedEventId\n  40: optional i64 (js.type = \"Long\") LastFirstEventId\n  50: optional shared.TaskList taskList\n  60: optional shared.TaskList stickyTaskList\n  70: optional string clientLibraryVersion\n  80: optional string clientFeatureVersion\n  90: optional string clientImpl\n  //TODO: isWorkflowRunning is deprecating. workflowState is going replace this field\n  100: optional bool isWorkflowRunning\n  110: optional i32 stickyTaskListScheduleToStartTimeout\n  120: optional i32 eventStoreVersion\n  130: optional binary currentBranchToken\n  140: optional map<string, shared.ReplicationInfo> replicationInfo\n  // TODO: when migrating to gRPC, make this a enum\n  // TODO: when migrating to gRPC, unify internal & external representation\n  // NOTE: workflowState & workflowCloseState are the same as persistence representation\n  150: optional i32 workflowState\n  160: optional i32 workflowCloseState\n  170: optional shared.VersionHistories versionHistories\n}\n\nstruct PollMutableStateRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution execution\n  30: optional i64 (js.type = \"Long\") expectedNextEventId\n  40: optional binary currentBranchToken\n}\n\nstruct PollMutableStateResponse {\n  10: optional shared.WorkflowExecution execution\n  20: optional shared.WorkflowType workflowType\n  30: optional i64 (js.type = \"Long\") NextEventId\n  35: optional i64 (js.type = \"Long\") PreviousStartedEventId\n  40: optional i64 (js.type = \"Long\") LastFirstEventId\n  50: optional shared.TaskList taskList\n  60: optional shared.TaskList stickyTaskList\n  70: optional string clientLibraryVersion\n  80: optional string clientFeatureVersion\n  90: optional string clientImpl\n  100: optional i32 stickyTaskListScheduleToStartTimeout\n  110: optional binary currentBranchToken\n  120: optional map<string, shared.ReplicationInfo> replicationInfo\n  130: optional shared.VersionHistories versionHistories\n  // TODO: when migrating to gRPC, make this a enum\n  // TODO: when migrating to gRPC, unify internal & external representation\n  // NOTE: workflowState & workflowCloseState are the same as persistence representation\n  140: optional i32 workflowState\n  150: optional i32 workflowCloseState\n}\n\nstruct ResetStickyTaskListRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution execution\n}\n\nstruct ResetStickyTaskListResponse {\n  // The reason to keep this response is to allow returning\n  // information in the future.\n}\n\nstruct RespondDecisionTaskCompletedRequest {\n  10: optional string domainUUID\n  20: optional shared.RespondDecisionTaskCompletedRequest completeRequest\n}\n\nstruct RespondDecisionTaskCompletedResponse {\n  10: optional RecordDecisionTaskStartedResponse startedResponse\n}\n\nstruct RespondDecisionTaskFailedRequest {\n  10: optional string domainUUID\n  20: optional shared.RespondDecisionTaskFailedRequest failedRequest\n}\n\nstruct RecordActivityTaskHeartbeatRequest {\n  10: optional string domainUUID\n  20: optional shared.RecordActivityTaskHeartbeatRequest heartbeatRequest\n}\n\nstruct RespondActivityTaskCompletedRequest {\n  10: optional string domainUUID\n  20: optional shared.RespondActivityTaskCompletedRequest completeRequest\n}\n\nstruct RespondActivityTaskFailedRequest {\n  10: optional string domainUUID\n  20: optional shared.RespondActivityTaskFailedRequest failedRequest\n}\n\nstruct RespondActivityTaskCanceledRequest {\n  10: optional string domainUUID\n  20: optional shared.RespondActivityTaskCanceledRequest cancelRequest\n}\n\nstruct RecordActivityTaskStartedRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution workflowExecution\n  30: optional i64 (js.type = \"Long\") scheduleId\n  40: optional i64 (js.type = \"Long\") taskId\n  45: optional string requestId // Unique id of each poll request. Used to ensure at most once delivery of tasks.\n  50: optional shared.PollForActivityTaskRequest pollRequest\n}\n\nstruct RecordActivityTaskStartedResponse {\n  20: optional shared.HistoryEvent scheduledEvent\n  30: optional i64 (js.type = \"Long\") startedTimestamp\n  40: optional i64 (js.type = \"Long\") attempt\n  50: optional i64 (js.type = \"Long\") scheduledTimestampOfThisAttempt\n  60: optional binary heartbeatDetails\n  70: optional shared.WorkflowType workflowType\n  80: optional string workflowDomain\n}\n\nstruct RecordDecisionTaskStartedRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution workflowExecution\n  30: optional i64 (js.type = \"Long\") scheduleId\n  40: optional i64 (js.type = \"Long\") taskId\n  45: optional string requestId // Unique id of each poll request. Used to ensure at most once delivery of tasks.\n  50: optional shared.PollForDecisionTaskRequest pollRequest\n}\n\nstruct RecordDecisionTaskStartedResponse {\n  10: optional shared.WorkflowType workflowType\n  20: optional i64 (js.type = \"Long\") previousStartedEventId\n  30: optional i64 (js.type = \"Long\") scheduledEventId\n  40: optional i64 (js.type = \"Long\") startedEventId\n  50: optional i64 (js.type = \"Long\") nextEventId\n  60: optional i64 (js.type = \"Long\") attempt\n  70: optional bool stickyExecutionEnabled\n  80: optional shared.TransientDecisionInfo decisionInfo\n  90: optional shared.TaskList WorkflowExecutionTaskList\n  100: optional i32 eventStoreVersion\n  110: optional binary branchToken\n  120:  optional i64 (js.type = \"Long\") scheduledTimestamp\n  130:  optional i64 (js.type = \"Long\") startedTimestamp\n}\n\nstruct SignalWorkflowExecutionRequest {\n  10: optional string domainUUID\n  20: optional shared.SignalWorkflowExecutionRequest signalRequest\n  30: optional shared.WorkflowExecution externalWorkflowExecution\n  40: optional bool childWorkflowOnly\n}\n\nstruct SignalWithStartWorkflowExecutionRequest {\n  10: optional string domainUUID\n  20: optional shared.SignalWithStartWorkflowExecutionRequest signalWithStartRequest\n}\n\nstruct RemoveSignalMutableStateRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution workflowExecution\n  30: optional string requestId\n}\n\nstruct TerminateWorkflowExecutionRequest {\n  10: optional string domainUUID\n  20: optional shared.TerminateWorkflowExecutionRequest terminateRequest\n}\n\nstruct ResetWorkflowExecutionRequest {\n  10: optional string domainUUID\n  20: optional shared.ResetWorkflowExecutionRequest resetRequest\n}\n\nstruct RequestCancelWorkflowExecutionRequest {\n  10: optional string domainUUID\n  20: optional shared.RequestCancelWorkflowExecutionRequest cancelRequest\n  30: optional i64 (js.type = \"Long\") externalInitiatedEventId\n  40: optional shared.WorkflowExecution externalWorkflowExecution\n  50: optional bool childWorkflowOnly\n}\n\nstruct ScheduleDecisionTaskRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution workflowExecution\n  30: optional bool isFirstDecision\n}\n\nstruct DescribeWorkflowExecutionRequest {\n  10: optional string domainUUID\n  20: optional shared.DescribeWorkflowExecutionRequest request\n}\n\n/**\n* RecordChildExecutionCompletedRequest is used for reporting the completion of child execution to parent workflow\n* execution which started it.  When a child execution is completed it creates this request and calls the\n* RecordChildExecutionCompleted API with the workflowExecution of parent.  It also sets the completedExecution of the\n* child as it could potentially be different than the ChildExecutionStartedEvent of parent in the situation when\n* child creates multiple runs through ContinueAsNew before finally completing.\n**/\nstruct RecordChildExecutionCompletedRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution workflowExecution\n  30: optional i64 (js.type = \"Long\") initiatedId\n  40: optional shared.WorkflowExecution completedExecution\n  50: optional shared.HistoryEvent completionEvent\n}\n\nstruct ReplicateEventsRequest {\n  10: optional string sourceCluster\n  20: optional string domainUUID\n  30: optional shared.WorkflowExecution workflowExecution\n  40: optional i64 (js.type = \"Long\") firstEventId\n  50: optional i64 (js.type = \"Long\") nextEventId\n  60: optional i64 (js.type = \"Long\") version\n  70: optional map<string, shared.ReplicationInfo> replicationInfo\n  80: optional shared.History history\n  90: optional shared.History newRunHistory\n  100: optional bool forceBufferEvents // this attribute is deprecated\n  110: optional i32 eventStoreVersion\n  120: optional i32 newRunEventStoreVersion\n  130: optional bool resetWorkflow\n  140: optional bool newRunNDC\n}\n\nstruct ReplicateRawEventsRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution workflowExecution\n  30: optional map<string, shared.ReplicationInfo> replicationInfo\n  40: optional shared.DataBlob history\n  50: optional shared.DataBlob newRunHistory\n  60: optional i32 eventStoreVersion\n  70: optional i32 newRunEventStoreVersion\n}\n\nstruct ReplicateEventsV2Request {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution workflowExecution\n  30: optional list<shared.VersionHistoryItem> versionHistoryItems\n  40: optional shared.DataBlob events\n  // new run events does not need version history since there is no prior events\n  60: optional shared.DataBlob newRunEvents\n}\n\nstruct SyncShardStatusRequest {\n  10: optional string sourceCluster\n  20: optional i64 (js.type = \"Long\") shardId\n  30: optional i64 (js.type = \"Long\") timestamp\n}\n\nstruct SyncActivityRequest {\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") version\n  50: optional i64 (js.type = \"Long\") scheduledId\n  60: optional i64 (js.type = \"Long\") scheduledTime\n  70: optional i64 (js.type = \"Long\") startedId\n  80: optional i64 (js.type = \"Long\") startedTime\n  90: optional i64 (js.type = \"Long\") lastHeartbeatTime\n  100: optional binary details\n  110: optional i32 attempt\n  120: optional string lastFailureReason\n  130: optional string lastWorkerIdentity\n  140: optional binary lastFailureDetails\n  150: optional shared.VersionHistory versionHistory\n}\n\nstruct QueryWorkflowRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution execution\n  30: optional shared.WorkflowQuery query\n}\n\nstruct QueryWorkflowResponse {\n  10: optional binary queryResult\n}\n\nstruct ReapplyEventsRequest {\n  10: optional string domainUUID\n  20: optional shared.ReapplyEventsRequest request\n}\n\n/**\n* HistoryService provides API to start a new long running workflow instance, as well as query and update the history\n* of workflow instances already created.\n**/\nservice HistoryService {\n  /**\n  * StartWorkflowExecution starts a new long running workflow instance.  It will create the instance with\n  * 'WorkflowExecutionStarted' event in history and also schedule the first DecisionTask for the worker to make the\n  * first decision for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already\n  * exists with same workflowId.\n  **/\n  shared.StartWorkflowExecutionResponse StartWorkflowExecution(1: StartWorkflowExecutionRequest startRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.WorkflowExecutionAlreadyStartedError sessionAlreadyExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * Returns the information from mutable state of workflow execution.\n  * It fails with 'EntityNotExistError' if specified workflow execution in unknown to the service.\n  * It returns CurrentBranchChangedError if the workflow version branch has changed.\n  **/\n  GetMutableStateResponse GetMutableState(1: GetMutableStateRequest getRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.LimitExceededError limitExceededError,\n      6: shared.ServiceBusyError serviceBusyError,\n      7: shared.CurrentBranchChangedError currentBranchChangedError,\n    )\n\n  /**\n   * Returns the information from mutable state of workflow execution.\n   * It fails with 'EntityNotExistError' if specified workflow execution in unknown to the service.\n   * It returns CurrentBranchChangedError if the workflow version branch has changed.\n   **/\n   PollMutableStateResponse PollMutableState(1: PollMutableStateRequest pollRequest)\n     throws (\n       1: shared.BadRequestError badRequestError,\n       2: shared.InternalServiceError internalServiceError,\n       3: shared.EntityNotExistsError entityNotExistError,\n       4: ShardOwnershipLostError shardOwnershipLostError,\n       5: shared.LimitExceededError limitExceededError,\n       6: shared.ServiceBusyError serviceBusyError,\n       7: shared.CurrentBranchChangedError currentBranchChangedError,\n     )\n\n  /**\n  * Reset the sticky tasklist related information in mutable state of a given workflow.\n  * Things cleared are:\n  * 1. StickyTaskList\n  * 2. StickyScheduleToStartTimeout\n  * 3. ClientLibraryVersion\n  * 4. ClientFeatureVersion\n  * 5. ClientImpl\n  **/\n  ResetStickyTaskListResponse ResetStickyTaskList(1: ResetStickyTaskListRequest resetRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.LimitExceededError limitExceededError,\n      6: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RecordDecisionTaskStarted is called by the Matchingservice before it hands a decision task to the application worker in response to\n  * a PollForDecisionTask call. It records in the history the event that the decision task has started. It will return 'EventAlreadyStartedError',\n  * if the workflow's execution history already includes a record of the event starting.\n  **/\n  RecordDecisionTaskStartedResponse RecordDecisionTaskStarted(1: RecordDecisionTaskStartedRequest addRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: EventAlreadyStartedError eventAlreadyStartedError,\n      4: shared.EntityNotExistsError entityNotExistError,\n      5: ShardOwnershipLostError shardOwnershipLostError,\n      6: shared.DomainNotActiveError domainNotActiveError,\n      7: shared.LimitExceededError limitExceededError,\n      8: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RecordActivityTaskStarted is called by the Matchingservice before it hands a decision task to the application worker in response to\n  * a PollForActivityTask call. It records in the history the event that the decision task has started. It will return 'EventAlreadyStartedError',\n  * if the workflow's execution history already includes a record of the event starting.\n  **/\n  RecordActivityTaskStartedResponse RecordActivityTaskStarted(1: RecordActivityTaskStartedRequest addRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: EventAlreadyStartedError eventAlreadyStartedError,\n      4: shared.EntityNotExistsError entityNotExistError,\n      5: ShardOwnershipLostError shardOwnershipLostError,\n      6: shared.DomainNotActiveError domainNotActiveError,\n      7: shared.LimitExceededError limitExceededError,\n      8: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RespondDecisionTaskCompleted is called by application worker to complete a DecisionTask handed as a result of\n  * 'PollForDecisionTask' API call.  Completing a DecisionTask will result in new events for the workflow execution and\n  * potentially new ActivityTask being created for corresponding decisions.  It will also create a DecisionTaskCompleted\n  * event in the history for that session.  Use the 'taskToken' provided as response of PollForDecisionTask API call\n  * for completing the DecisionTask.\n  **/\n  RespondDecisionTaskCompletedResponse RespondDecisionTaskCompleted(1: RespondDecisionTaskCompletedRequest completeRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RespondDecisionTaskFailed is called by application worker to indicate failure.  This results in\n  * DecisionTaskFailedEvent written to the history and a new DecisionTask created.  This API can be used by client to\n  * either clear sticky tasklist or report ny panics during DecisionTask processing.\n  **/\n  void RespondDecisionTaskFailed(1: RespondDecisionTaskFailedRequest failedRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RecordActivityTaskHeartbeat is called by application worker while it is processing an ActivityTask.  If worker fails\n  * to heartbeat within 'heartbeatTimeoutSeconds' interval for the ActivityTask, then it will be marked as timedout and\n  * 'ActivityTaskTimedOut' event will be written to the workflow history.  Calling 'RecordActivityTaskHeartbeat' will\n  * fail with 'EntityNotExistsError' in such situations.  Use the 'taskToken' provided as response of\n  * PollForActivityTask API call for heartbeating.\n  **/\n  shared.RecordActivityTaskHeartbeatResponse RecordActivityTaskHeartbeat(1: RecordActivityTaskHeartbeatRequest heartbeatRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RespondActivityTaskCompleted is called by application worker when it is done processing an ActivityTask.  It will\n  * result in a new 'ActivityTaskCompleted' event being written to the workflow history and a new DecisionTask\n  * created for the workflow so new decisions could be made.  Use the 'taskToken' provided as response of\n  * PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid\n  * anymore due to activity timeout.\n  **/\n  void  RespondActivityTaskCompleted(1: RespondActivityTaskCompletedRequest completeRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RespondActivityTaskFailed is called by application worker when it is done processing an ActivityTask.  It will\n  * result in a new 'ActivityTaskFailed' event being written to the workflow history and a new DecisionTask\n  * created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of\n  * PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid\n  * anymore due to activity timeout.\n  **/\n  void RespondActivityTaskFailed(1: RespondActivityTaskFailedRequest failRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RespondActivityTaskCanceled is called by application worker when it is successfully canceled an ActivityTask.  It will\n  * result in a new 'ActivityTaskCanceled' event being written to the workflow history and a new DecisionTask\n  * created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of\n  * PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid\n  * anymore due to activity timeout.\n  **/\n  void RespondActivityTaskCanceled(1: RespondActivityTaskCanceledRequest canceledRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in\n  * WorkflowExecutionSignaled event recorded in the history and a decision task being created for the execution.\n  **/\n  void SignalWorkflowExecution(1: SignalWorkflowExecutionRequest signalRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.ServiceBusyError serviceBusyError,\n      7: shared.LimitExceededError limitExceededError,\n    )\n\n  /**\n  * SignalWithStartWorkflowExecution is used to ensure sending a signal event to a workflow execution.\n  * If workflow is running, this results in WorkflowExecutionSignaled event recorded in the history\n  * and a decision task being created for the execution.\n  * If workflow is not running or not found, it will first try start workflow with given WorkflowIDResuePolicy,\n  * and record WorkflowExecutionStarted and WorkflowExecutionSignaled event in case of success.\n  * It will return `WorkflowExecutionAlreadyStartedError` if start workflow failed with given policy.\n  **/\n  shared.StartWorkflowExecutionResponse SignalWithStartWorkflowExecution(1: SignalWithStartWorkflowExecutionRequest signalWithStartRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: ShardOwnershipLostError shardOwnershipLostError,\n      4: shared.DomainNotActiveError domainNotActiveError,\n      5: shared.LimitExceededError limitExceededError,\n      6: shared.ServiceBusyError serviceBusyError,\n      7: shared.WorkflowExecutionAlreadyStartedError workflowAlreadyStartedError,\n    )\n\n  /**\n  * RemoveSignalMutableState is used to remove a signal request ID that was previously recorded.  This is currently\n  * used to clean execution info when signal decision finished.\n  **/\n  void RemoveSignalMutableState(1: RemoveSignalMutableStateRequest removeRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * TerminateWorkflowExecution terminates an existing workflow execution by recording WorkflowExecutionTerminated event\n  * in the history and immediately terminating the execution instance.\n  **/\n  void TerminateWorkflowExecution(1: TerminateWorkflowExecutionRequest terminateRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * ResetWorkflowExecution reset an existing workflow execution by a firstEventID of a existing event batch\n  * in the history and immediately terminating the current execution instance.\n  * After reset, the history will grow from nextFirstEventID.\n  **/\n  shared.ResetWorkflowExecutionResponse ResetWorkflowExecution(1: ResetWorkflowExecutionRequest resetRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RequestCancelWorkflowExecution is called by application worker when it wants to request cancellation of a workflow instance.\n  * It will result in a new 'WorkflowExecutionCancelRequested' event being written to the workflow history and a new DecisionTask\n  * created for the workflow instance so new decisions could be made. It fails with 'EntityNotExistsError' if the workflow is not valid\n  * anymore due to completion or doesn't exist.\n  **/\n  void RequestCancelWorkflowExecution(1: RequestCancelWorkflowExecutionRequest cancelRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.CancellationAlreadyRequestedError cancellationAlreadyRequestedError,\n      6: shared.DomainNotActiveError domainNotActiveError,\n      7: shared.LimitExceededError limitExceededError,\n      8: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * ScheduleDecisionTask is used for creating a decision task for already started workflow execution.  This is mainly\n  * used by transfer queue processor during the processing of StartChildWorkflowExecution task, where it first starts\n  * child execution without creating the decision task and then calls this API after updating the mutable state of\n  * parent execution.\n  **/\n  void ScheduleDecisionTask(1: ScheduleDecisionTaskRequest scheduleRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RecordChildExecutionCompleted is used for reporting the completion of child workflow execution to parent.\n  * This is mainly called by transfer queue processor during the processing of DeleteExecution task.\n  **/\n  void RecordChildExecutionCompleted(1: RecordChildExecutionCompletedRequest completionRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * DescribeWorkflowExecution returns information about the specified workflow execution.\n  **/\n  shared.DescribeWorkflowExecutionResponse DescribeWorkflowExecution(1: DescribeWorkflowExecutionRequest describeRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.LimitExceededError limitExceededError,\n      6: shared.ServiceBusyError serviceBusyError,\n    )\n\n  void ReplicateEvents(1: ReplicateEventsRequest replicateRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.LimitExceededError limitExceededError,\n      6: shared.RetryTaskError retryTaskError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  void ReplicateRawEvents(1: ReplicateRawEventsRequest replicateRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.LimitExceededError limitExceededError,\n      6: shared.RetryTaskError retryTaskError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  void ReplicateEventsV2(1: ReplicateEventsV2Request replicateV2Request)\n    throws (\n        1: shared.BadRequestError badRequestError,\n        2: shared.InternalServiceError internalServiceError,\n        3: shared.EntityNotExistsError entityNotExistError,\n        4: ShardOwnershipLostError shardOwnershipLostError,\n        5: shared.LimitExceededError limitExceededError,\n        6: shared.RetryTaskV2Error retryTaskError,\n        7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * SyncShardStatus sync the status between shards\n  **/\n  void SyncShardStatus(1: SyncShardStatusRequest syncShardStatusRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.LimitExceededError limitExceededError,\n      6: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * SyncActivity sync the activity status\n  **/\n  void SyncActivity(1: SyncActivityRequest syncActivityRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.ServiceBusyError serviceBusyError,\n      6: shared.RetryTaskError retryTaskError,\n      7: shared.RetryTaskV2Error retryTaskV2Error,\n    )\n\n  /**\n  * DescribeMutableState returns information about the internal states of workflow mutable state.\n  **/\n  DescribeMutableStateResponse DescribeMutableState(1: DescribeMutableStateRequest request)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: shared.AccessDeniedError accessDeniedError,\n      5: ShardOwnershipLostError shardOwnershipLostError,\n      6: shared.LimitExceededError limitExceededError,\n    )\n\n  /**\n  * DescribeHistoryHost returns information about the internal states of a history host\n  **/\n  shared.DescribeHistoryHostResponse DescribeHistoryHost(1: shared.DescribeHistoryHostRequest request)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.AccessDeniedError accessDeniedError,\n    )\n\n /**\n * CloseShard close the shard\n **/\n void CloseShard(1: shared.CloseShardRequest request)\n    throws (\n    1: shared.BadRequestError badRequestError,\n    2: shared.InternalServiceError internalServiceError,\n    3: shared.AccessDeniedError accessDeniedError,\n    )\n\n  /**\n  * RemoveTask remove task based on type, taskid, shardid\n  **/\n  void RemoveTask(1: shared.RemoveTaskRequest request)\n     throws (\n     1: shared.BadRequestError badRequestError,\n     2: shared.InternalServiceError internalServiceError,\n     3: shared.AccessDeniedError accessDeniedError,\n     )\n  replicator.GetReplicationMessagesResponse GetReplicationMessages(1: replicator.GetReplicationMessagesRequest request)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.LimitExceededError limitExceededError,\n      4: shared.ServiceBusyError serviceBusyError,\n      5: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,\n    )\n\n  /**\n  * QueryWorkflow returns query result for a specified workflow execution\n  **/\n  QueryWorkflowResponse QueryWorkflow(1: QueryWorkflowRequest queryRequest)\n\tthrows (\n\t  1: shared.BadRequestError badRequestError,\n\t  2: shared.InternalServiceError internalServiceError,\n\t  3: shared.EntityNotExistsError entityNotExistError,\n\t  4: shared.QueryFailedError queryFailedError,\n\t  5: shared.LimitExceededError limitExceededError,\n\t  6: shared.ServiceBusyError serviceBusyError,\n\t  7: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,\n\t)\n\n  /**\n  * ReapplyEvents applies stale events to the current workflow and current run\n  **/\n  void ReapplyEvents(1: ReapplyEventsRequest reapplyEventsRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.DomainNotActiveError domainNotActiveError,\n      4: shared.LimitExceededError limitExceededError,\n      5: shared.ServiceBusyError serviceBusyError,\n      6: ShardOwnershipLostError shardOwnershipLostError,\n      7: shared.EntityNotExistsError entityNotExistError,\n    )\n}\n"
+const rawIDL = "// Copyright (c) 2017 Uber Technologies, Inc.\n//\n// Permission is hereby granted, free of charge, to any person obtaining a copy\n// of this software and associated documentation files (the \"Software\"), to deal\n// in the Software without restriction, including without limitation the rights\n// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n// copies of the Software, and to permit persons to whom the Software is\n// furnished to do so, subject to the following conditions:\n//\n// The above copyright notice and this permission notice shall be included in\n// all copies or substantial portions of the Software.\n//\n// THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n// THE SOFTWARE.\n\ninclude \"shared.thrift\"\ninclude \"replicator.thrift\"\n\nnamespace java com.uber.cadence.history\n\nexception EventAlreadyStartedError {\n  1: required string message\n}\n\nexception ShardOwnershipLostError {\n  10: optional string message\n  20: optional string owner\n}\n\nstruct ParentExecutionInfo {\n  10: optional string domainUUID\n  15: optional string domain\n  20: optional shared.WorkflowExecution execution\n  30: optional i64 (js.type = \"Long\") initiatedId\n}\n\nstruct StartWorkflowExecutionRequest {\n  10: optional string domainUUID\n  20: optional shared.StartWorkflowExecutionRequest startRequest\n  30: optional ParentExecutionInfo parentExecutionInfo\n  40: optional i32 attempt\n  50: optional i64 (js.type = \"Long\") expirationTimestamp\n  55: optional shared.ContinueAsNewInitiator continueAsNewInitiator\n  56: optional string continuedFailureReason\n  57: optional binary continuedFailureDetails\n  58: optional binary lastCompletionResult\n  60: optional i32 firstDecisionTaskBackoffSeconds\n}\n\nstruct DescribeMutableStateRequest{\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution execution\n}\n\nstruct DescribeMutableStateResponse{\n  30: optional string mutableStateInCache\n  40: optional string mutableStateInDatabase\n}\n\nstruct GetMutableStateRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution execution\n  30: optional i64 (js.type = \"Long\") expectedNextEventId\n  40: optional binary currentBranchToken\n}\n\nstruct GetMutableStateResponse {\n  10: optional shared.WorkflowExecution execution\n  20: optional shared.WorkflowType workflowType\n  30: optional i64 (js.type = \"Long\") NextEventId\n  35: optional i64 (js.type = \"Long\") PreviousStartedEventId\n  40: optional i64 (js.type = \"Long\") LastFirstEventId\n  50: optional shared.TaskList taskList\n  60: optional shared.TaskList stickyTaskList\n  70: optional string clientLibraryVersion\n  80: optional string clientFeatureVersion\n  90: optional string clientImpl\n  //TODO: isWorkflowRunning is deprecating. workflowState is going replace this field\n  100: optional bool isWorkflowRunning\n  110: optional i32 stickyTaskListScheduleToStartTimeout\n  120: optional i32 eventStoreVersion\n  130: optional binary currentBranchToken\n  140: optional map<string, shared.ReplicationInfo> replicationInfo\n  // TODO: when migrating to gRPC, make this a enum\n  // TODO: when migrating to gRPC, unify internal & external representation\n  // NOTE: workflowState & workflowCloseState are the same as persistence representation\n  150: optional i32 workflowState\n  160: optional i32 workflowCloseState\n  170: optional shared.VersionHistories versionHistories\n}\n\nstruct PollMutableStateRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution execution\n  30: optional i64 (js.type = \"Long\") expectedNextEventId\n  40: optional binary currentBranchToken\n}\n\nstruct PollMutableStateResponse {\n  10: optional shared.WorkflowExecution execution\n  20: optional shared.WorkflowType workflowType\n  30: optional i64 (js.type = \"Long\") NextEventId\n  35: optional i64 (js.type = \"Long\") PreviousStartedEventId\n  40: optional i64 (js.type = \"Long\") LastFirstEventId\n  50: optional shared.TaskList taskList\n  60: optional shared.TaskList stickyTaskList\n  70: optional string clientLibraryVersion\n  80: optional string clientFeatureVersion\n  90: optional string clientImpl\n  100: optional i32 stickyTaskListScheduleToStartTimeout\n  110: optional binary currentBranchToken\n  120: optional map<string, shared.ReplicationInfo> replicationInfo\n  130: optional shared.VersionHistories versionHistories\n  // TODO: when migrating to gRPC, make this a enum\n  // TODO: when migrating to gRPC, unify internal & external representation\n  // NOTE: workflowState & workflowCloseState are the same as persistence representation\n  140: optional i32 workflowState\n  150: optional i32 workflowCloseState\n}\n\nstruct ResetStickyTaskListRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution execution\n}\n\nstruct ResetStickyTaskListResponse {\n  // The reason to keep this response is to allow returning\n  // information in the future.\n}\n\nstruct RespondDecisionTaskCompletedRequest {\n  10: optional string domainUUID\n  20: optional shared.RespondDecisionTaskCompletedRequest completeRequest\n}\n\nstruct RespondDecisionTaskCompletedResponse {\n  10: optional RecordDecisionTaskStartedResponse startedResponse\n}\n\nstruct RespondDecisionTaskFailedRequest {\n  10: optional string domainUUID\n  20: optional shared.RespondDecisionTaskFailedRequest failedRequest\n}\n\nstruct RecordActivityTaskHeartbeatRequest {\n  10: optional string domainUUID\n  20: optional shared.RecordActivityTaskHeartbeatRequest heartbeatRequest\n}\n\nstruct RespondActivityTaskCompletedRequest {\n  10: optional string domainUUID\n  20: optional shared.RespondActivityTaskCompletedRequest completeRequest\n}\n\nstruct RespondActivityTaskFailedRequest {\n  10: optional string domainUUID\n  20: optional shared.RespondActivityTaskFailedRequest failedRequest\n}\n\nstruct RespondActivityTaskCanceledRequest {\n  10: optional string domainUUID\n  20: optional shared.RespondActivityTaskCanceledRequest cancelRequest\n}\n\nstruct RecordActivityTaskStartedRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution workflowExecution\n  30: optional i64 (js.type = \"Long\") scheduleId\n  40: optional i64 (js.type = \"Long\") taskId\n  45: optional string requestId // Unique id of each poll request. Used to ensure at most once delivery of tasks.\n  50: optional shared.PollForActivityTaskRequest pollRequest\n}\n\nstruct RecordActivityTaskStartedResponse {\n  20: optional shared.HistoryEvent scheduledEvent\n  30: optional i64 (js.type = \"Long\") startedTimestamp\n  40: optional i64 (js.type = \"Long\") attempt\n  50: optional i64 (js.type = \"Long\") scheduledTimestampOfThisAttempt\n  60: optional binary heartbeatDetails\n  70: optional shared.WorkflowType workflowType\n  80: optional string workflowDomain\n}\n\nstruct RecordDecisionTaskStartedRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution workflowExecution\n  30: optional i64 (js.type = \"Long\") scheduleId\n  40: optional i64 (js.type = \"Long\") taskId\n  45: optional string requestId // Unique id of each poll request. Used to ensure at most once delivery of tasks.\n  50: optional shared.PollForDecisionTaskRequest pollRequest\n}\n\nstruct RecordDecisionTaskStartedResponse {\n  10: optional shared.WorkflowType workflowType\n  20: optional i64 (js.type = \"Long\") previousStartedEventId\n  30: optional i64 (js.type = \"Long\") scheduledEventId\n  40: optional i64 (js.type = \"Long\") startedEventId\n  50: optional i64 (js.type = \"Long\") nextEventId\n  60: optional i64 (js.type = \"Long\") attempt\n  70: optional bool stickyExecutionEnabled\n  80: optional shared.TransientDecisionInfo decisionInfo\n  90: optional shared.TaskList WorkflowExecutionTaskList\n  100: optional i32 eventStoreVersion\n  110: optional binary branchToken\n  120: optional i64 (js.type = \"Long\") scheduledTimestamp\n  130: optional i64 (js.type = \"Long\") startedTimestamp\n  140: optional map<string, shared.WorkflowQuery> queries\n}\n\nstruct SignalWorkflowExecutionRequest {\n  10: optional string domainUUID\n  20: optional shared.SignalWorkflowExecutionRequest signalRequest\n  30: optional shared.WorkflowExecution externalWorkflowExecution\n  40: optional bool childWorkflowOnly\n}\n\nstruct SignalWithStartWorkflowExecutionRequest {\n  10: optional string domainUUID\n  20: optional shared.SignalWithStartWorkflowExecutionRequest signalWithStartRequest\n}\n\nstruct RemoveSignalMutableStateRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution workflowExecution\n  30: optional string requestId\n}\n\nstruct TerminateWorkflowExecutionRequest {\n  10: optional string domainUUID\n  20: optional shared.TerminateWorkflowExecutionRequest terminateRequest\n}\n\nstruct ResetWorkflowExecutionRequest {\n  10: optional string domainUUID\n  20: optional shared.ResetWorkflowExecutionRequest resetRequest\n}\n\nstruct RequestCancelWorkflowExecutionRequest {\n  10: optional string domainUUID\n  20: optional shared.RequestCancelWorkflowExecutionRequest cancelRequest\n  30: optional i64 (js.type = \"Long\") externalInitiatedEventId\n  40: optional shared.WorkflowExecution externalWorkflowExecution\n  50: optional bool childWorkflowOnly\n}\n\nstruct ScheduleDecisionTaskRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution workflowExecution\n  30: optional bool isFirstDecision\n}\n\nstruct DescribeWorkflowExecutionRequest {\n  10: optional string domainUUID\n  20: optional shared.DescribeWorkflowExecutionRequest request\n}\n\n/**\n* RecordChildExecutionCompletedRequest is used for reporting the completion of child execution to parent workflow\n* execution which started it.  When a child execution is completed it creates this request and calls the\n* RecordChildExecutionCompleted API with the workflowExecution of parent.  It also sets the completedExecution of the\n* child as it could potentially be different than the ChildExecutionStartedEvent of parent in the situation when\n* child creates multiple runs through ContinueAsNew before finally completing.\n**/\nstruct RecordChildExecutionCompletedRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution workflowExecution\n  30: optional i64 (js.type = \"Long\") initiatedId\n  40: optional shared.WorkflowExecution completedExecution\n  50: optional shared.HistoryEvent completionEvent\n}\n\nstruct ReplicateEventsRequest {\n  10: optional string sourceCluster\n  20: optional string domainUUID\n  30: optional shared.WorkflowExecution workflowExecution\n  40: optional i64 (js.type = \"Long\") firstEventId\n  50: optional i64 (js.type = \"Long\") nextEventId\n  60: optional i64 (js.type = \"Long\") version\n  70: optional map<string, shared.ReplicationInfo> replicationInfo\n  80: optional shared.History history\n  90: optional shared.History newRunHistory\n  100: optional bool forceBufferEvents // this attribute is deprecated\n  110: optional i32 eventStoreVersion\n  120: optional i32 newRunEventStoreVersion\n  130: optional bool resetWorkflow\n  140: optional bool newRunNDC\n}\n\nstruct ReplicateRawEventsRequest {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution workflowExecution\n  30: optional map<string, shared.ReplicationInfo> replicationInfo\n  40: optional shared.DataBlob history\n  50: optional shared.DataBlob newRunHistory\n  60: optional i32 eventStoreVersion\n  70: optional i32 newRunEventStoreVersion\n}\n\nstruct ReplicateEventsV2Request {\n  10: optional string domainUUID\n  20: optional shared.WorkflowExecution workflowExecution\n  30: optional list<shared.VersionHistoryItem> versionHistoryItems\n  40: optional shared.DataBlob events\n  // new run events does not need version history since there is no prior events\n  60: optional shared.DataBlob newRunEvents\n}\n\nstruct SyncShardStatusRequest {\n  10: optional string sourceCluster\n  20: optional i64 (js.type = \"Long\") shardId\n  30: optional i64 (js.type = \"Long\") timestamp\n}\n\nstruct SyncActivityRequest {\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") version\n  50: optional i64 (js.type = \"Long\") scheduledId\n  60: optional i64 (js.type = \"Long\") scheduledTime\n  70: optional i64 (js.type = \"Long\") startedId\n  80: optional i64 (js.type = \"Long\") startedTime\n  90: optional i64 (js.type = \"Long\") lastHeartbeatTime\n  100: optional binary details\n  110: optional i32 attempt\n  120: optional string lastFailureReason\n  130: optional string lastWorkerIdentity\n  140: optional binary lastFailureDetails\n  150: optional shared.VersionHistory versionHistory\n}\n\nstruct QueryWorkflowRequest {\n  10: optional string domainUUID\n  20: optional shared.QueryWorkflowRequest request\n}\n\nstruct QueryWorkflowResponse {\n  10: optional shared.QueryWorkflowResponse response\n}\n\nstruct ReapplyEventsRequest {\n  10: optional string domainUUID\n  20: optional shared.ReapplyEventsRequest request\n}\n\n/**\n* HistoryService provides API to start a new long running workflow instance, as well as query and update the history\n* of workflow instances already created.\n**/\nservice HistoryService {\n  /**\n  * StartWorkflowExecution starts a new long running workflow instance.  It will create the instance with\n  * 'WorkflowExecutionStarted' event in history and also schedule the first DecisionTask for the worker to make the\n  * first decision for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already\n  * exists with same workflowId.\n  **/\n  shared.StartWorkflowExecutionResponse StartWorkflowExecution(1: StartWorkflowExecutionRequest startRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.WorkflowExecutionAlreadyStartedError sessionAlreadyExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * Returns the information from mutable state of workflow execution.\n  * It fails with 'EntityNotExistError' if specified workflow execution in unknown to the service.\n  * It returns CurrentBranchChangedError if the workflow version branch has changed.\n  **/\n  GetMutableStateResponse GetMutableState(1: GetMutableStateRequest getRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.LimitExceededError limitExceededError,\n      6: shared.ServiceBusyError serviceBusyError,\n      7: shared.CurrentBranchChangedError currentBranchChangedError,\n    )\n\n  /**\n   * Returns the information from mutable state of workflow execution.\n   * It fails with 'EntityNotExistError' if specified workflow execution in unknown to the service.\n   * It returns CurrentBranchChangedError if the workflow version branch has changed.\n   **/\n   PollMutableStateResponse PollMutableState(1: PollMutableStateRequest pollRequest)\n     throws (\n       1: shared.BadRequestError badRequestError,\n       2: shared.InternalServiceError internalServiceError,\n       3: shared.EntityNotExistsError entityNotExistError,\n       4: ShardOwnershipLostError shardOwnershipLostError,\n       5: shared.LimitExceededError limitExceededError,\n       6: shared.ServiceBusyError serviceBusyError,\n       7: shared.CurrentBranchChangedError currentBranchChangedError,\n     )\n\n  /**\n  * Reset the sticky tasklist related information in mutable state of a given workflow.\n  * Things cleared are:\n  * 1. StickyTaskList\n  * 2. StickyScheduleToStartTimeout\n  * 3. ClientLibraryVersion\n  * 4. ClientFeatureVersion\n  * 5. ClientImpl\n  **/\n  ResetStickyTaskListResponse ResetStickyTaskList(1: ResetStickyTaskListRequest resetRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.LimitExceededError limitExceededError,\n      6: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RecordDecisionTaskStarted is called by the Matchingservice before it hands a decision task to the application worker in response to\n  * a PollForDecisionTask call. It records in the history the event that the decision task has started. It will return 'EventAlreadyStartedError',\n  * if the workflow's execution history already includes a record of the event starting.\n  **/\n  RecordDecisionTaskStartedResponse RecordDecisionTaskStarted(1: RecordDecisionTaskStartedRequest addRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: EventAlreadyStartedError eventAlreadyStartedError,\n      4: shared.EntityNotExistsError entityNotExistError,\n      5: ShardOwnershipLostError shardOwnershipLostError,\n      6: shared.DomainNotActiveError domainNotActiveError,\n      7: shared.LimitExceededError limitExceededError,\n      8: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RecordActivityTaskStarted is called by the Matchingservice before it hands a decision task to the application worker in response to\n  * a PollForActivityTask call. It records in the history the event that the decision task has started. It will return 'EventAlreadyStartedError',\n  * if the workflow's execution history already includes a record of the event starting.\n  **/\n  RecordActivityTaskStartedResponse RecordActivityTaskStarted(1: RecordActivityTaskStartedRequest addRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: EventAlreadyStartedError eventAlreadyStartedError,\n      4: shared.EntityNotExistsError entityNotExistError,\n      5: ShardOwnershipLostError shardOwnershipLostError,\n      6: shared.DomainNotActiveError domainNotActiveError,\n      7: shared.LimitExceededError limitExceededError,\n      8: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RespondDecisionTaskCompleted is called by application worker to complete a DecisionTask handed as a result of\n  * 'PollForDecisionTask' API call.  Completing a DecisionTask will result in new events for the workflow execution and\n  * potentially new ActivityTask being created for corresponding decisions.  It will also create a DecisionTaskCompleted\n  * event in the history for that session.  Use the 'taskToken' provided as response of PollForDecisionTask API call\n  * for completing the DecisionTask.\n  **/\n  RespondDecisionTaskCompletedResponse RespondDecisionTaskCompleted(1: RespondDecisionTaskCompletedRequest completeRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RespondDecisionTaskFailed is called by application worker to indicate failure.  This results in\n  * DecisionTaskFailedEvent written to the history and a new DecisionTask created.  This API can be used by client to\n  * either clear sticky tasklist or report ny panics during DecisionTask processing.\n  **/\n  void RespondDecisionTaskFailed(1: RespondDecisionTaskFailedRequest failedRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RecordActivityTaskHeartbeat is called by application worker while it is processing an ActivityTask.  If worker fails\n  * to heartbeat within 'heartbeatTimeoutSeconds' interval for the ActivityTask, then it will be marked as timedout and\n  * 'ActivityTaskTimedOut' event will be written to the workflow history.  Calling 'RecordActivityTaskHeartbeat' will\n  * fail with 'EntityNotExistsError' in such situations.  Use the 'taskToken' provided as response of\n  * PollForActivityTask API call for heartbeating.\n  **/\n  shared.RecordActivityTaskHeartbeatResponse RecordActivityTaskHeartbeat(1: RecordActivityTaskHeartbeatRequest heartbeatRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RespondActivityTaskCompleted is called by application worker when it is done processing an ActivityTask.  It will\n  * result in a new 'ActivityTaskCompleted' event being written to the workflow history and a new DecisionTask\n  * created for the workflow so new decisions could be made.  Use the 'taskToken' provided as response of\n  * PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid\n  * anymore due to activity timeout.\n  **/\n  void  RespondActivityTaskCompleted(1: RespondActivityTaskCompletedRequest completeRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RespondActivityTaskFailed is called by application worker when it is done processing an ActivityTask.  It will\n  * result in a new 'ActivityTaskFailed' event being written to the workflow history and a new DecisionTask\n  * created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of\n  * PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid\n  * anymore due to activity timeout.\n  **/\n  void RespondActivityTaskFailed(1: RespondActivityTaskFailedRequest failRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RespondActivityTaskCanceled is called by application worker when it is successfully canceled an ActivityTask.  It will\n  * result in a new 'ActivityTaskCanceled' event being written to the workflow history and a new DecisionTask\n  * created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of\n  * PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid\n  * anymore due to activity timeout.\n  **/\n  void RespondActivityTaskCanceled(1: RespondActivityTaskCanceledRequest canceledRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in\n  * WorkflowExecutionSignaled event recorded in the history and a decision task being created for the execution.\n  **/\n  void SignalWorkflowExecution(1: SignalWorkflowExecutionRequest signalRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.ServiceBusyError serviceBusyError,\n      7: shared.LimitExceededError limitExceededError,\n    )\n\n  /**\n  * SignalWithStartWorkflowExecution is used to ensure sending a signal event to a workflow execution.\n  * If workflow is running, this results in WorkflowExecutionSignaled event recorded in the history\n  * and a decision task being created for the execution.\n  * If workflow is not running or not found, it will first try start workflow with given WorkflowIDResuePolicy,\n  * and record WorkflowExecutionStarted and WorkflowExecutionSignaled event in case of success.\n  * It will return `WorkflowExecutionAlreadyStartedError` if start workflow failed with given policy.\n  **/\n  shared.StartWorkflowExecutionResponse SignalWithStartWorkflowExecution(1: SignalWithStartWorkflowExecutionRequest signalWithStartRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: ShardOwnershipLostError shardOwnershipLostError,\n      4: shared.DomainNotActiveError domainNotActiveError,\n      5: shared.LimitExceededError limitExceededError,\n      6: shared.ServiceBusyError serviceBusyError,\n      7: shared.WorkflowExecutionAlreadyStartedError workflowAlreadyStartedError,\n    )\n\n  /**\n  * RemoveSignalMutableState is used to remove a signal request ID that was previously recorded.  This is currently\n  * used to clean execution info when signal decision finished.\n  **/\n  void RemoveSignalMutableState(1: RemoveSignalMutableStateRequest removeRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * TerminateWorkflowExecution terminates an existing workflow execution by recording WorkflowExecutionTerminated event\n  * in the history and immediately terminating the execution instance.\n  **/\n  void TerminateWorkflowExecution(1: TerminateWorkflowExecutionRequest terminateRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * ResetWorkflowExecution reset an existing workflow execution by a firstEventID of a existing event batch\n  * in the history and immediately terminating the current execution instance.\n  * After reset, the history will grow from nextFirstEventID.\n  **/\n  shared.ResetWorkflowExecutionResponse ResetWorkflowExecution(1: ResetWorkflowExecutionRequest resetRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RequestCancelWorkflowExecution is called by application worker when it wants to request cancellation of a workflow instance.\n  * It will result in a new 'WorkflowExecutionCancelRequested' event being written to the workflow history and a new DecisionTask\n  * created for the workflow instance so new decisions could be made. It fails with 'EntityNotExistsError' if the workflow is not valid\n  * anymore due to completion or doesn't exist.\n  **/\n  void RequestCancelWorkflowExecution(1: RequestCancelWorkflowExecutionRequest cancelRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.CancellationAlreadyRequestedError cancellationAlreadyRequestedError,\n      6: shared.DomainNotActiveError domainNotActiveError,\n      7: shared.LimitExceededError limitExceededError,\n      8: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * ScheduleDecisionTask is used for creating a decision task for already started workflow execution.  This is mainly\n  * used by transfer queue processor during the processing of StartChildWorkflowExecution task, where it first starts\n  * child execution without creating the decision task and then calls this API after updating the mutable state of\n  * parent execution.\n  **/\n  void ScheduleDecisionTask(1: ScheduleDecisionTaskRequest scheduleRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * RecordChildExecutionCompleted is used for reporting the completion of child workflow execution to parent.\n  * This is mainly called by transfer queue processor during the processing of DeleteExecution task.\n  **/\n  void RecordChildExecutionCompleted(1: RecordChildExecutionCompletedRequest completionRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.DomainNotActiveError domainNotActiveError,\n      6: shared.LimitExceededError limitExceededError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * DescribeWorkflowExecution returns information about the specified workflow execution.\n  **/\n  shared.DescribeWorkflowExecutionResponse DescribeWorkflowExecution(1: DescribeWorkflowExecutionRequest describeRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.LimitExceededError limitExceededError,\n      6: shared.ServiceBusyError serviceBusyError,\n    )\n\n  void ReplicateEvents(1: ReplicateEventsRequest replicateRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.LimitExceededError limitExceededError,\n      6: shared.RetryTaskError retryTaskError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  void ReplicateRawEvents(1: ReplicateRawEventsRequest replicateRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.LimitExceededError limitExceededError,\n      6: shared.RetryTaskError retryTaskError,\n      7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  void ReplicateEventsV2(1: ReplicateEventsV2Request replicateV2Request)\n    throws (\n        1: shared.BadRequestError badRequestError,\n        2: shared.InternalServiceError internalServiceError,\n        3: shared.EntityNotExistsError entityNotExistError,\n        4: ShardOwnershipLostError shardOwnershipLostError,\n        5: shared.LimitExceededError limitExceededError,\n        6: shared.RetryTaskV2Error retryTaskError,\n        7: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * SyncShardStatus sync the status between shards\n  **/\n  void SyncShardStatus(1: SyncShardStatusRequest syncShardStatusRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.LimitExceededError limitExceededError,\n      6: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * SyncActivity sync the activity status\n  **/\n  void SyncActivity(1: SyncActivityRequest syncActivityRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: ShardOwnershipLostError shardOwnershipLostError,\n      5: shared.ServiceBusyError serviceBusyError,\n      6: shared.RetryTaskError retryTaskError,\n      7: shared.RetryTaskV2Error retryTaskV2Error,\n    )\n\n  /**\n  * DescribeMutableState returns information about the internal states of workflow mutable state.\n  **/\n  DescribeMutableStateResponse DescribeMutableState(1: DescribeMutableStateRequest request)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: shared.AccessDeniedError accessDeniedError,\n      5: ShardOwnershipLostError shardOwnershipLostError,\n      6: shared.LimitExceededError limitExceededError,\n    )\n\n  /**\n  * DescribeHistoryHost returns information about the internal states of a history host\n  **/\n  shared.DescribeHistoryHostResponse DescribeHistoryHost(1: shared.DescribeHistoryHostRequest request)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.AccessDeniedError accessDeniedError,\n    )\n\n /**\n * CloseShard close the shard\n **/\n void CloseShard(1: shared.CloseShardRequest request)\n    throws (\n    1: shared.BadRequestError badRequestError,\n    2: shared.InternalServiceError internalServiceError,\n    3: shared.AccessDeniedError accessDeniedError,\n    )\n\n  /**\n  * RemoveTask remove task based on type, taskid, shardid\n  **/\n  void RemoveTask(1: shared.RemoveTaskRequest request)\n     throws (\n     1: shared.BadRequestError badRequestError,\n     2: shared.InternalServiceError internalServiceError,\n     3: shared.AccessDeniedError accessDeniedError,\n     )\n  replicator.GetReplicationMessagesResponse GetReplicationMessages(1: replicator.GetReplicationMessagesRequest request)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.LimitExceededError limitExceededError,\n      4: shared.ServiceBusyError serviceBusyError,\n      5: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,\n    )\n\n  /**\n  * QueryWorkflow returns query result for a specified workflow execution\n  **/\n  QueryWorkflowResponse QueryWorkflow(1: QueryWorkflowRequest queryRequest)\n\tthrows (\n\t  1: shared.BadRequestError badRequestError,\n\t  2: shared.InternalServiceError internalServiceError,\n\t  3: shared.EntityNotExistsError entityNotExistError,\n\t  4: shared.QueryFailedError queryFailedError,\n\t  5: shared.LimitExceededError limitExceededError,\n\t  6: shared.ServiceBusyError serviceBusyError,\n\t  7: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,\n\t)\n\n  /**\n  * ReapplyEvents applies stale events to the current workflow and current run\n  **/\n  void ReapplyEvents(1: ReapplyEventsRequest reapplyEventsRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.DomainNotActiveError domainNotActiveError,\n      4: shared.LimitExceededError limitExceededError,\n      5: shared.ServiceBusyError serviceBusyError,\n      6: ShardOwnershipLostError shardOwnershipLostError,\n      7: shared.EntityNotExistsError entityNotExistError,\n    )\n}\n"
 
 // HistoryService_CloseShard_Args represents the arguments for the HistoryService.CloseShard function.
 //
@@ -17381,7 +17487,7 @@ func (v *HistoryService_QueryWorkflow_Args) ToWire() (wire.Value, error) {
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
 
-func _QueryWorkflowRequest_Read(w wire.Value) (*QueryWorkflowRequest, error) {
+func _QueryWorkflowRequest_1_Read(w wire.Value) (*QueryWorkflowRequest, error) {
 	var v QueryWorkflowRequest
 	err := v.FromWire(w)
 	return &v, err
@@ -17411,7 +17517,7 @@ func (v *HistoryService_QueryWorkflow_Args) FromWire(w wire.Value) error {
 		switch field.ID {
 		case 1:
 			if field.Value.Type() == wire.TStruct {
-				v.QueryRequest, err = _QueryWorkflowRequest_Read(field.Value)
+				v.QueryRequest, err = _QueryWorkflowRequest_1_Read(field.Value)
 				if err != nil {
 					return err
 				}
@@ -17772,7 +17878,7 @@ func (v *HistoryService_QueryWorkflow_Result) ToWire() (wire.Value, error) {
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
 
-func _QueryWorkflowResponse_Read(w wire.Value) (*QueryWorkflowResponse, error) {
+func _QueryWorkflowResponse_1_Read(w wire.Value) (*QueryWorkflowResponse, error) {
 	var v QueryWorkflowResponse
 	err := v.FromWire(w)
 	return &v, err
@@ -17808,7 +17914,7 @@ func (v *HistoryService_QueryWorkflow_Result) FromWire(w wire.Value) error {
 		switch field.ID {
 		case 0:
 			if field.Value.Type() == wire.TStruct {
-				v.Success, err = _QueryWorkflowResponse_Read(field.Value)
+				v.Success, err = _QueryWorkflowResponse_1_Read(field.Value)
 				if err != nil {
 					return err
 				}

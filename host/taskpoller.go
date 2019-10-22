@@ -75,22 +75,56 @@ func (p *TaskPoller) PollAndProcessDecisionTaskWithoutRetry(dumpHistory bool, dr
 }
 
 // PollAndProcessDecisionTaskWithAttempt for decision tasks
-func (p *TaskPoller) PollAndProcessDecisionTaskWithAttempt(dumpHistory bool, dropTask bool,
-	pollStickyTaskList bool, respondStickyTaskList bool, decisionAttempt int64) (isQueryTask bool, err error) {
-	return p.PollAndProcessDecisionTaskWithAttemptAndRetry(dumpHistory, dropTask, pollStickyTaskList,
-		respondStickyTaskList, decisionAttempt, 5)
+func (p *TaskPoller) PollAndProcessDecisionTaskWithAttempt(
+	dumpHistory bool,
+	dropTask bool,
+	pollStickyTaskList bool,
+	respondStickyTaskList bool,
+	decisionAttempt int64,
+) (isQueryTask bool, err error) {
+
+	return p.PollAndProcessDecisionTaskWithAttemptAndRetry(
+		dumpHistory,
+		dropTask,
+		pollStickyTaskList,
+		respondStickyTaskList,
+		decisionAttempt,
+		5)
 }
 
 // PollAndProcessDecisionTaskWithAttemptAndRetry for decision tasks
-func (p *TaskPoller) PollAndProcessDecisionTaskWithAttemptAndRetry(dumpHistory bool, dropTask bool,
-	pollStickyTaskList bool, respondStickyTaskList bool, decisionAttempt int64, retryCount int) (isQueryTask bool, err error) {
-	isQueryTask, _, err = p.PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(dumpHistory, dropTask, pollStickyTaskList, respondStickyTaskList, decisionAttempt, retryCount, false)
+func (p *TaskPoller) PollAndProcessDecisionTaskWithAttemptAndRetry(
+	dumpHistory bool,
+	dropTask bool,
+	pollStickyTaskList bool,
+	respondStickyTaskList bool,
+	decisionAttempt int64,
+	retryCount int,
+) (isQueryTask bool, err error) {
+
+	isQueryTask, _, err = p.PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(
+		dumpHistory,
+		dropTask,
+		pollStickyTaskList,
+		respondStickyTaskList,
+		decisionAttempt,
+		retryCount,
+		false,
+		nil)
 	return isQueryTask, err
 }
 
 // PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision for decision tasks
-func (p *TaskPoller) PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(dumpHistory bool, dropTask bool,
-	pollStickyTaskList bool, respondStickyTaskList bool, decisionAttempt int64, retryCount int, forceCreateNewDecision bool) (isQueryTask bool, newTask *workflow.RespondDecisionTaskCompletedResponse, err error) {
+func (p *TaskPoller) PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(
+	dumpHistory bool,
+	dropTask bool,
+	pollStickyTaskList bool,
+	respondStickyTaskList bool,
+	decisionAttempt int64,
+	retryCount int,
+	forceCreateNewDecision bool,
+	queryResult *workflow.WorkflowQueryResult,
+) (isQueryTask bool, newTask *workflow.RespondDecisionTaskCompletedResponse, err error) {
 Loop:
 	for attempt := 0; attempt < retryCount; attempt++ {
 
@@ -218,6 +252,7 @@ Loop:
 				Decisions:                  decisions,
 				ReturnNewDecisionTask:      common.BoolPtr(forceCreateNewDecision),
 				ForceCreateNewDecisionTask: common.BoolPtr(forceCreateNewDecision),
+				QueryResults:               getQueryResults(response.GetQueries(), queryResult),
 			})
 			return false, newTask, err
 		}
@@ -235,6 +270,7 @@ Loop:
 				},
 				ReturnNewDecisionTask:      common.BoolPtr(forceCreateNewDecision),
 				ForceCreateNewDecisionTask: common.BoolPtr(forceCreateNewDecision),
+				QueryResults:               getQueryResults(response.GetQueries(), queryResult),
 			},
 			yarpc.WithHeader(common.LibraryVersionHeaderName, "0.0.1"),
 			yarpc.WithHeader(common.FeatureVersionHeaderName, "1.0.0"),
@@ -456,4 +492,12 @@ retry:
 func createContext() context.Context {
 	ctx, _ := context.WithTimeout(context.Background(), 90*time.Second)
 	return ctx
+}
+
+func getQueryResults(queries map[string]*workflow.WorkflowQuery, queryResult *workflow.WorkflowQueryResult) map[string]*workflow.WorkflowQueryResult {
+	result := make(map[string]*workflow.WorkflowQueryResult)
+	for k := range queries {
+		result[k] = queryResult
+	}
+	return result
 }

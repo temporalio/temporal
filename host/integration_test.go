@@ -449,7 +449,15 @@ func (s *integrationSuite) TestCompleteDecisionTaskAndCreateNewOne() {
 		T:               s.T(),
 	}
 
-	_, newTask, err := poller.PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(false, false, true, true, int64(0), 1, true)
+	_, newTask, err := poller.PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(
+		false,
+		false,
+		true,
+		true,
+		int64(0),
+		1,
+		true,
+		nil)
 	s.Nil(err)
 	s.NotNil(newTask)
 	s.NotNil(newTask.DecisionTask)
@@ -2656,7 +2664,15 @@ func (s *integrationSuite) TestRelayDecisionTimeout() {
 	}
 
 	// First decision task complete with a marker decision, and request to relay decision (immediately return a new decision task)
-	_, newTask, err := poller.PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(false, false, false, false, 0, 3, true)
+	_, newTask, err := poller.PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(
+		false,
+		false,
+		false,
+		false,
+		0,
+		3,
+		true,
+		nil)
 	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.Nil(err)
 	s.NotNil(newTask)
@@ -3245,7 +3261,15 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 	}
 
 	// first decision, which will schedule an activity and add marker
-	_, task, err := poller.PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(true, false, false, false, int64(0), 1, true)
+	_, task, err := poller.PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(
+		true,
+		false,
+		false,
+		false,
+		int64(0),
+		1,
+		true,
+		nil)
 	s.Logger.Info("pollAndProcessDecisionTask", tag.Error(err))
 	s.Nil(err)
 

@@ -34,7 +34,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-
 	"github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/history/historyservicetest"
 	"github.com/uber/cadence/.gen/go/matching/matchingservicetest"
@@ -535,10 +534,125 @@ func (s *engineSuite) TestGetMutableStateLongPollTimeout() {
 	s.Equal(int64(4), response.GetNextEventId())
 }
 
-func (s *engineSuite) TestQueryWorkflow() {
-
+func (s *engineSuite) TestQueryWorkflow_RejectBasedOnCompleted() {
 	execution := workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr("test-get-workflow-execution-event-id"),
+		WorkflowId: common.StringPtr("TestQueryWorkflow_RejectBasedOnCompleted"),
+		RunId:      common.StringPtr(testRunID),
+	}
+	tasklist := "testTaskList"
+	identity := "testIdentity"
+
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache, loggerimpl.NewDevelopmentForTest(s.Suite), execution.GetRunId())
+	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, []byte("input"), 100, 200, identity)
+	di := addDecisionTaskScheduledEvent(msBuilder)
+	event := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tasklist, identity)
+	di.StartedID = event.GetEventId()
+	event = addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, di.StartedID, nil, "some random identity")
+	addCompleteWorkflowEvent(msBuilder, event.GetEventId(), nil)
+	ms := createMutableState(msBuilder)
+	gweResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gweResponse, nil).Once()
+
+	request := &history.QueryWorkflowRequest{
+		DomainUUID: common.StringPtr(testDomainID),
+		Request: &workflow.QueryWorkflowRequest{
+			Execution:            &execution,
+			Query:                &workflow.WorkflowQuery{},
+			QueryRejectCondition: common.QueryRejectConditionPtr(workflow.QueryRejectConditionNotOpen),
+		},
+	}
+	resp, err := s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
+	s.NoError(err)
+	s.Nil(resp.GetResponse().QueryResult)
+	s.NotNil(resp.GetResponse().QueryRejected)
+	s.True(resp.GetResponse().GetQueryRejected().CloseStatus.Equals(workflow.WorkflowExecutionCloseStatusCompleted))
+}
+
+func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("TestQueryWorkflow_RejectBasedOnFailed"),
+		RunId:      common.StringPtr(testRunID),
+	}
+	tasklist := "testTaskList"
+	identity := "testIdentity"
+
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache, loggerimpl.NewDevelopmentForTest(s.Suite), execution.GetRunId())
+	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, []byte("input"), 100, 200, identity)
+	di := addDecisionTaskScheduledEvent(msBuilder)
+	event := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tasklist, identity)
+	di.StartedID = event.GetEventId()
+	event = addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, di.StartedID, nil, "some random identity")
+	addFailWorkflowEvent(msBuilder, event.GetEventId(), "failure reason", []byte{1, 2, 3})
+	ms := createMutableState(msBuilder)
+	gweResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gweResponse, nil).Once()
+
+	request := &history.QueryWorkflowRequest{
+		DomainUUID: common.StringPtr(testDomainID),
+		Request: &workflow.QueryWorkflowRequest{
+			Execution:            &execution,
+			Query:                &workflow.WorkflowQuery{},
+			QueryRejectCondition: common.QueryRejectConditionPtr(workflow.QueryRejectConditionNotOpen),
+		},
+	}
+	resp, err := s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
+	s.NoError(err)
+	s.Nil(resp.GetResponse().QueryResult)
+	s.NotNil(resp.GetResponse().QueryRejected)
+	s.True(resp.GetResponse().GetQueryRejected().CloseStatus.Equals(workflow.WorkflowExecutionCloseStatusFailed))
+
+	request = &history.QueryWorkflowRequest{
+		DomainUUID: common.StringPtr(testDomainID),
+		Request: &workflow.QueryWorkflowRequest{
+			Execution:            &execution,
+			Query:                &workflow.WorkflowQuery{},
+			QueryRejectCondition: common.QueryRejectConditionPtr(workflow.QueryRejectConditionNotCompletedCleanly),
+		},
+	}
+	resp, err = s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
+	s.NoError(err)
+	s.Nil(resp.GetResponse().QueryResult)
+	s.NotNil(resp.GetResponse().QueryRejected)
+	s.True(resp.GetResponse().GetQueryRejected().CloseStatus.Equals(workflow.WorkflowExecutionCloseStatusFailed))
+}
+
+func (s *engineSuite) TestQueryWorkflow_DirectlyThroughMatching() {
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("TestQueryWorkflow_DirectlyThroughMatching"),
+		RunId:      common.StringPtr(testRunID),
+	}
+	tasklist := "testTaskList"
+	identity := "testIdentity"
+
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache, loggerimpl.NewDevelopmentForTest(s.Suite), execution.GetRunId())
+	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, []byte("input"), 100, 200, identity)
+	di := addDecisionTaskScheduledEvent(msBuilder)
+	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tasklist, identity)
+	ms := createMutableState(msBuilder)
+	gweResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gweResponse, nil).Once()
+	s.mockMatchingClient.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Return(&workflow.QueryWorkflowResponse{QueryResult: []byte{1, 2, 3}}, nil)
+	s.mockHistoryEngine.matchingClient = s.mockMatchingClient
+	request := &history.QueryWorkflowRequest{
+		DomainUUID: common.StringPtr(testDomainID),
+		Request: &workflow.QueryWorkflowRequest{
+			Execution: &execution,
+			Query:     &workflow.WorkflowQuery{},
+			// since workflow is open this filter does not reject query
+			QueryRejectCondition:  common.QueryRejectConditionPtr(workflow.QueryRejectConditionNotOpen),
+			QueryConsistencyLevel: common.QueryConsistencyLevelPtr(workflow.QueryConsistencyLevelEventual),
+		},
+	}
+	resp, err := s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
+	s.NoError(err)
+	s.NotNil(resp.GetResponse().QueryResult)
+	s.Nil(resp.GetResponse().QueryRejected)
+	s.Equal([]byte{1, 2, 3}, resp.GetResponse().GetQueryResult())
+}
+
+func (s *engineSuite) TestQueryWorkflow_DecisionTaskDispatch_Timeout() {
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("TestQueryWorkflow_DecisionTaskDispatch_Timeout"),
 		RunId:      common.StringPtr(testRunID),
 	}
 	tasklist := "testTaskList"
@@ -547,6 +661,53 @@ func (s *engineSuite) TestQueryWorkflow() {
 	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, []byte("input"), 100, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tasklist, identity)
+
+	ms := createMutableState(msBuilder)
+	gweResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gweResponse, nil).Once()
+	request := &history.QueryWorkflowRequest{
+		DomainUUID: common.StringPtr(testDomainID),
+		Request: &workflow.QueryWorkflowRequest{
+			Execution: &execution,
+			Query:     &workflow.WorkflowQuery{},
+			// since workflow is open this filter does not reject query
+			QueryRejectCondition:  common.QueryRejectConditionPtr(workflow.QueryRejectConditionNotOpen),
+			QueryConsistencyLevel: common.QueryConsistencyLevelPtr(workflow.QueryConsistencyLevelStrong),
+		},
+	}
+
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		resp, err := s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
+		s.Equal(ErrQueryTimeout, err)
+		s.Nil(resp)
+		wg.Done()
+	}()
+
+	<-time.After(time.Second)
+	builder := s.getBuilder(testDomainID, execution)
+	s.NotNil(builder)
+	qr := builder.GetQueryRegistry()
+	s.True(qr.hasBuffered())
+	s.False(qr.hasCompleted())
+	wg.Wait()
+	s.False(qr.hasBuffered())
+	s.False(qr.hasCompleted())
+}
+
+func (s *engineSuite) TestQueryWorkflow_DecisionTaskDispatch_Complete() {
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("TestQueryWorkflow_DecisionTaskDispatch_Complete"),
+		RunId:      common.StringPtr(testRunID),
+	}
+	tasklist := "testTaskList"
+	identity := "testIdentity"
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache, loggerimpl.NewDevelopmentForTest(s.Suite), execution.GetRunId())
+	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, []byte("input"), 100, 200, identity)
+	di := addDecisionTaskScheduledEvent(msBuilder)
+	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tasklist, identity)
+
 	ms := createMutableState(msBuilder)
 	gweResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gweResponse, nil).Once()
@@ -557,48 +718,41 @@ func (s *engineSuite) TestQueryWorkflow() {
 		<-time.After(delay)
 		builder := s.getBuilder(testDomainID, execution)
 		s.NotNil(builder)
-		queryRegistry := builder.GetQueryRegistry()
-		buffered := queryRegistry.getBufferedSnapshot()
+		qr := builder.GetQueryRegistry()
+		buffered := qr.getBufferedSnapshot()
 		for _, id := range buffered {
-			changed, err := queryRegistry.recordEvent(id, queryEventStart, nil)
-			s.True(changed)
-			s.NoError(err)
-		}
-		started := queryRegistry.getStartedSnapshot()
-		for _, id := range started {
-			changed, err := queryRegistry.recordEvent(id, queryEventPersistenceConditionSatisfied, nil)
-			s.False(changed)
-			s.NoError(err)
 			resultType := workflow.QueryResultTypeAnswered
-			changed, err = queryRegistry.recordEvent(id, queryEventRecordResult, &workflow.WorkflowQueryResult{
+			err := qr.completeQuery(id, &workflow.WorkflowQueryResult{
 				ResultType: &resultType,
 				Answer:     answer,
 			})
-			s.True(changed)
 			s.NoError(err)
-			querySnapshot, err := queryRegistry.getQuerySnapshot(id)
+			state, err := qr.getQueryInternalState(id)
 			s.NoError(err)
-			s.Equal(queryStateCompleted, querySnapshot.state)
+			s.Equal(queryStateCompleted, state.state)
 		}
 		waitGroup.Done()
 	}
+
 	request := &history.QueryWorkflowRequest{
 		DomainUUID: common.StringPtr(testDomainID),
-		Execution:  &execution,
-		Query:      &workflow.WorkflowQuery{},
+		Request: &workflow.QueryWorkflowRequest{
+			Execution:             &execution,
+			Query:                 &workflow.WorkflowQuery{},
+			QueryConsistencyLevel: common.QueryConsistencyLevelPtr(workflow.QueryConsistencyLevelStrong),
+		},
 	}
-
-	// time out because query is not completed in time
-	resp, err := s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
-	s.Nil(resp)
-	s.Equal(ErrQueryTimeout, err)
-
 	go asyncQueryUpdate(time.Second*2, []byte{1, 2, 3})
 	start := time.Now()
-	resp, err = s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
+	resp, err := s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
 	s.True(time.Now().After(start.Add(time.Second)))
 	s.NoError(err)
-	s.Equal([]byte{1, 2, 3}, resp.GetQueryResult())
+	s.Equal([]byte{1, 2, 3}, resp.GetResponse().GetQueryResult())
+	builder := s.getBuilder(testDomainID, execution)
+	s.NotNil(builder)
+	qr := builder.GetQueryRegistry()
+	s.False(qr.hasBuffered())
+	s.False(qr.hasCompleted())
 	waitGroup.Wait()
 }
 
@@ -3927,6 +4081,148 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 	s.True(executionBuilder.HasPendingDecision())
 }
 
+func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_SuccessWithQueries() {
+	we := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("wId"),
+		RunId:      common.StringPtr(testRunID),
+	}
+	tl := "testTaskList"
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: *we.WorkflowId,
+		RunID:      *we.RunId,
+		ScheduleID: 7,
+	})
+	identity := "testIdentity"
+	activityID := "activity1_id"
+	activityType := "activity_type1"
+	activityInput := []byte("input1")
+
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
+		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 100, identity)
+	di := addDecisionTaskScheduledEvent(msBuilder)
+	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
+	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID,
+		*decisionStartedEvent.EventId, nil, identity)
+	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, *decisionCompletedEvent.EventId, activityID,
+		activityType, tl, activityInput, 100, 10, 1)
+	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, identity)
+	di2 := addDecisionTaskScheduledEvent(msBuilder)
+	addDecisionTaskStartedEvent(msBuilder, di2.ScheduleID, tl, identity)
+
+	ms := createMutableState(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+
+	decisions := []*workflow.Decision{{
+		DecisionType: common.DecisionTypePtr(workflow.DecisionTypeRequestCancelActivityTask),
+		RequestCancelActivityTaskDecisionAttributes: &workflow.RequestCancelActivityTaskDecisionAttributes{
+			ActivityId: common.StringPtr(activityID),
+		},
+	}}
+
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
+
+	// load mutable state such that it already exists in memory when respond decision task is called
+	// this enables us to set query registry on it
+	ctx, release, err := s.mockHistoryEngine.historyCache.getOrCreateWorkflowExecutionForBackground(testDomainID, we)
+	s.NoError(err)
+	loadedMS, err := ctx.loadWorkflowExecution()
+	s.NoError(err)
+	qr := newQueryRegistry()
+	id1, _ := qr.bufferQuery(&workflow.WorkflowQuery{})
+	id2, _ := qr.bufferQuery(&workflow.WorkflowQuery{})
+	id3, _ := qr.bufferQuery(&workflow.WorkflowQuery{})
+	loadedMS.(*mutableStateBuilder).queryRegistry = qr
+	release(nil)
+	result1 := &workflow.WorkflowQueryResult{
+		ResultType: common.QueryResultTypePtr(workflow.QueryResultTypeAnswered),
+		Answer:     []byte{1, 2, 3},
+	}
+	result2 := &workflow.WorkflowQueryResult{
+		ResultType:   common.QueryResultTypePtr(workflow.QueryResultTypeFailed),
+		ErrorReason:  common.StringPtr("error reason"),
+		ErrorDetails: []byte{1, 2, 3},
+	}
+	queryResults := map[string]*workflow.WorkflowQueryResult{
+		id1: result1,
+		id2: result2,
+	}
+	_, err = s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &history.RespondDecisionTaskCompletedRequest{
+		DomainUUID: common.StringPtr(testDomainID),
+		CompleteRequest: &workflow.RespondDecisionTaskCompletedRequest{
+			TaskToken:        taskToken,
+			Decisions:        decisions,
+			ExecutionContext: []byte("context"),
+			Identity:         &identity,
+			QueryResults:     queryResults,
+		},
+	})
+	s.Nil(err)
+
+	executionBuilder := s.getBuilder(testDomainID, we)
+	s.Equal(int64(12), executionBuilder.GetExecutionInfo().NextEventID)
+	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
+	s.True(executionBuilder.HasPendingDecision()) // ensure new decision task was created
+	s.Len(qr.getCompletedSnapshot(), 2)
+	completed1, err := qr.getQueryInternalState(id1)
+	s.NoError(err)
+	s.True(result1.Equals(completed1.queryResult))
+	s.Equal(queryStateCompleted, completed1.state)
+	completed2, err := qr.getQueryInternalState(id2)
+	s.NoError(err)
+	s.True(result2.Equals(completed2.queryResult))
+	s.Equal(queryStateCompleted, completed2.state)
+	s.Len(qr.getBufferedSnapshot(), 1)
+	buffered1, err := qr.getQueryInternalState(id3)
+	s.NoError(err)
+	s.Nil(buffered1.queryResult)
+	s.Equal(queryStateBuffered, buffered1.state)
+
+	// Try recording activity heartbeat
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
+
+	activityTaskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: "wId",
+		RunID:      we.GetRunId(),
+		ScheduleID: 5,
+	})
+
+	hbResponse, err := s.mockHistoryEngine.RecordActivityTaskHeartbeat(context.Background(), &history.RecordActivityTaskHeartbeatRequest{
+		DomainUUID: common.StringPtr(testDomainID),
+		HeartbeatRequest: &workflow.RecordActivityTaskHeartbeatRequest{
+			TaskToken: activityTaskToken,
+			Identity:  &identity,
+			Details:   []byte("details"),
+		},
+	})
+	s.Nil(err)
+	s.NotNil(hbResponse)
+	s.True(*hbResponse.CancelRequested)
+
+	// Try cancelling the request.
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
+
+	err = s.mockHistoryEngine.RespondActivityTaskCanceled(context.Background(), &history.RespondActivityTaskCanceledRequest{
+		DomainUUID: common.StringPtr(testDomainID),
+		CancelRequest: &workflow.RespondActivityTaskCanceledRequest{
+			TaskToken: activityTaskToken,
+			Identity:  &identity,
+			Details:   []byte("details"),
+		},
+	})
+	s.Nil(err)
+
+	executionBuilder = s.getBuilder(testDomainID, we)
+	s.Equal(int64(13), executionBuilder.GetExecutionInfo().NextEventID)
+	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
+	s.True(executionBuilder.HasPendingDecision())
+}
+
 func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 
 	we := workflow.WorkflowExecution{
@@ -4589,7 +4885,19 @@ func addCompleteWorkflowEvent(builder mutableState, decisionCompletedEventID int
 	event, _ := builder.AddCompletedWorkflowEvent(decisionCompletedEventID, &workflow.CompleteWorkflowExecutionDecisionAttributes{
 		Result: result,
 	})
+	return event
+}
 
+func addFailWorkflowEvent(
+	builder mutableState,
+	decisionCompletedEventID int64,
+	reason string,
+	details []byte,
+) *workflow.HistoryEvent {
+	event, _ := builder.AddFailWorkflowEvent(decisionCompletedEventID, &workflow.FailWorkflowExecutionDecisionAttributes{
+		Reason:  &reason,
+		Details: details,
+	})
 	return event
 }
 

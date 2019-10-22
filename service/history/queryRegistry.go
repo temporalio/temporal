@@ -23,10 +23,13 @@
 package history
 
 import (
-	"errors"
 	"sync"
 
 	"github.com/uber/cadence/.gen/go/shared"
+)
+
+var (
+	errQueryNotExists = &shared.InternalServiceError{Message: "query does not exist"}
 )
 
 type (
@@ -34,34 +37,29 @@ type (
 		hasBuffered() bool
 		getBufferedSnapshot() []string
 
-		hasStarted() bool
-		getStartedSnapshot() []string
-
 		hasCompleted() bool
 		getCompletedSnapshot() []string
 
-		getQuerySnapshot(string) (*querySnapshot, error)
+		getQueryInternalState(string) (*queryInternalState, error)
 		getQueryTermCh(string) (<-chan struct{}, error)
 
-		bufferQuery(*shared.WorkflowQuery) (string, *querySnapshot, <-chan struct{})
-		recordEvent(string, queryEvent, *shared.WorkflowQueryResult) (bool, error)
+		bufferQuery(*shared.WorkflowQuery) (string, <-chan struct{})
+		completeQuery(string, *shared.WorkflowQueryResult) error
 		removeQuery(string)
 	}
 
 	queryRegistryImpl struct {
 		sync.RWMutex
 
-		buffered  map[string]queryStateMachine
-		started   map[string]queryStateMachine
-		completed map[string]queryStateMachine
+		buffered  map[string]query
+		completed map[string]query
 	}
 )
 
 func newQueryRegistry() queryRegistry {
 	return &queryRegistryImpl{
-		buffered:  make(map[string]queryStateMachine),
-		started:   make(map[string]queryStateMachine),
-		completed: make(map[string]queryStateMachine),
+		buffered:  make(map[string]query),
+		completed: make(map[string]query),
 	}
 }
 
@@ -79,20 +77,6 @@ func (r *queryRegistryImpl) getBufferedSnapshot() []string {
 	return getIDs(r.buffered)
 }
 
-func (r *queryRegistryImpl) hasStarted() bool {
-	r.RLock()
-	defer r.RUnlock()
-
-	return len(r.started) > 0
-}
-
-func (r *queryRegistryImpl) getStartedSnapshot() []string {
-	r.RLock()
-	defer r.RUnlock()
-
-	return getIDs(r.started)
-}
-
 func (r *queryRegistryImpl) hasCompleted() bool {
 	r.RLock()
 	defer r.RUnlock()
@@ -107,67 +91,52 @@ func (r *queryRegistryImpl) getCompletedSnapshot() []string {
 	return getIDs(r.completed)
 }
 
-func (r *queryRegistryImpl) getQuerySnapshot(id string) (*querySnapshot, error) {
+func (r *queryRegistryImpl) getQueryInternalState(id string) (*queryInternalState, error) {
 	r.RLock()
 	defer r.RUnlock()
 
-	qsm, err := r.getQueryStateMachine(id)
+	q, err := r.getQuery(id)
 	if err != nil {
 		return nil, err
 	}
-	return qsm.getQuerySnapshot(), nil
+	return q.getQueryInternalState(), nil
 }
 
 func (r *queryRegistryImpl) getQueryTermCh(id string) (<-chan struct{}, error) {
 	r.RLock()
 	defer r.RUnlock()
 
-	qsm, err := r.getQueryStateMachine(id)
+	q, err := r.getQuery(id)
 	if err != nil {
 		return nil, err
 	}
-	return qsm.getQueryTermCh(), nil
+	return q.getQueryTermCh(), nil
 }
 
-func (r *queryRegistryImpl) bufferQuery(queryInput *shared.WorkflowQuery) (string, *querySnapshot, <-chan struct{}) {
+func (r *queryRegistryImpl) bufferQuery(queryInput *shared.WorkflowQuery) (string, <-chan struct{}) {
 	r.Lock()
 	defer r.Unlock()
 
-	qsm := newQueryStateMachine(queryInput)
-	id := qsm.getQuerySnapshot().id
-	r.buffered[id] = qsm
-	return id, qsm.getQuerySnapshot(), qsm.getQueryTermCh()
+	q := newQuery(queryInput)
+	id := q.getQueryInternalState().id
+	r.buffered[id] = q
+	return id, q.getQueryTermCh()
 }
 
-func (r *queryRegistryImpl) recordEvent(id string, event queryEvent, queryResult *shared.WorkflowQueryResult) (bool, error) {
+func (r *queryRegistryImpl) completeQuery(id string, queryResult *shared.WorkflowQueryResult) error {
 	r.Lock()
 	defer r.Unlock()
 
-	qsm, err := r.getQueryStateMachine(id)
-	if err != nil {
-		return false, err
+	q, ok := r.buffered[id]
+	if !ok {
+		return errQueryNotExists
 	}
-	changed, err := qsm.recordEvent(event, queryResult)
-	if err != nil {
-		return false, err
-	}
-	if !changed {
-		return false, nil
+	if err := q.completeQuery(queryResult); err != nil {
+		return err
 	}
 	delete(r.buffered, id)
-	delete(r.started, id)
-	delete(r.completed, id)
-	switch qsm.getQuerySnapshot().state {
-	case queryStateBuffered:
-		r.buffered[id] = qsm
-	case queryStateStarted:
-		r.started[id] = qsm
-	case queryStateCompleted:
-		r.completed[id] = qsm
-	default:
-		panic("unknown query state")
-	}
-	return true, nil
+	r.completed[id] = q
+	return nil
 }
 
 func (r *queryRegistryImpl) removeQuery(id string) {
@@ -175,24 +144,20 @@ func (r *queryRegistryImpl) removeQuery(id string) {
 	defer r.Unlock()
 
 	delete(r.buffered, id)
-	delete(r.started, id)
 	delete(r.completed, id)
 }
 
-func (r *queryRegistryImpl) getQueryStateMachine(id string) (queryStateMachine, error) {
-	if qsm, ok := r.buffered[id]; ok {
-		return qsm, nil
+func (r *queryRegistryImpl) getQuery(id string) (query, error) {
+	if q, ok := r.buffered[id]; ok {
+		return q, nil
 	}
-	if qsm, ok := r.started[id]; ok {
-		return qsm, nil
+	if q, ok := r.completed[id]; ok {
+		return q, nil
 	}
-	if qsm, ok := r.completed[id]; ok {
-		return qsm, nil
-	}
-	return nil, errors.New("query does not exist")
+	return nil, errQueryNotExists
 }
 
-func getIDs(m map[string]queryStateMachine) []string {
+func getIDs(m map[string]query) []string {
 	result := make([]string, len(m), len(m))
 	index := 0
 	for id := range m {

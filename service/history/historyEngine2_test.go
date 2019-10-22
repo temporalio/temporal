@@ -259,6 +259,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyExpired() {
 	s.NotNil(response)
 	expectedResponse.StartedTimestamp = response.StartedTimestamp
 	expectedResponse.ScheduledTimestamp = common.Int64Ptr(0)
+	expectedResponse.Queries = make(map[string]*workflow.WorkflowQuery)
 	s.Equal(&expectedResponse, response)
 }
 
@@ -329,6 +330,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	s.NotNil(response)
 	expectedResponse.StartedTimestamp = response.StartedTimestamp
 	expectedResponse.ScheduledTimestamp = common.Int64Ptr(0)
+	expectedResponse.Queries = make(map[string]*workflow.WorkflowQuery)
 	s.Equal(&expectedResponse, response)
 }
 
@@ -661,6 +663,19 @@ func (s *engine2Suite) TestRecordDecisionTaskSuccess() {
 		MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{},
 	}, nil).Once()
 
+	// load mutable state such that it already exists in memory when respond decision task is called
+	// this enables us to set query registry on it
+	ctx, release, err := s.historyEngine.historyCache.getOrCreateWorkflowExecutionForBackground(testDomainID, workflowExecution)
+	s.NoError(err)
+	loadedMS, err := ctx.loadWorkflowExecution()
+	s.NoError(err)
+	qr := newQueryRegistry()
+	id1, _ := qr.bufferQuery(&workflow.WorkflowQuery{})
+	id2, _ := qr.bufferQuery(&workflow.WorkflowQuery{})
+	id3, _ := qr.bufferQuery(&workflow.WorkflowQuery{})
+	loadedMS.(*mutableStateBuilder).queryRegistry = qr
+	release(nil)
+
 	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &h.RecordDecisionTaskStartedRequest{
 		DomainUUID:        common.StringPtr(domainID),
 		WorkflowExecution: &workflowExecution,
@@ -680,6 +695,12 @@ func (s *engine2Suite) TestRecordDecisionTaskSuccess() {
 	s.Equal("wType", *response.WorkflowType.Name)
 	s.True(response.PreviousStartedEventId == nil)
 	s.Equal(int64(3), *response.StartedEventId)
+	expectedQueryMap := map[string]*workflow.WorkflowQuery{
+		id1: {},
+		id2: {},
+		id3: {},
+	}
+	s.Equal(expectedQueryMap, response.Queries)
 }
 
 func (s *engine2Suite) TestRecordActivityTaskStartedIfNoExecution() {

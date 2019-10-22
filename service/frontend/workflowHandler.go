@@ -47,7 +47,6 @@ import (
 	"github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cache"
-	"github.com/uber/cadence/common/client"
 	"github.com/uber/cadence/common/domain"
 	"github.com/uber/cadence/common/elasticsearch/validator"
 	"github.com/uber/cadence/common/log"
@@ -2845,7 +2844,6 @@ func (wh *WorkflowHandler) QueryWorkflow(
 	if queryRequest.GetDomain() == "" {
 		return nil, wh.error(errDomainNotSet, scope)
 	}
-
 	if err := wh.validateExecutionAndEmitMetrics(queryRequest.Execution, scope); err != nil {
 		return nil, err
 	}
@@ -2863,120 +2861,15 @@ func (wh *WorkflowHandler) QueryWorkflow(
 		return nil, wh.error(err, scope)
 	}
 
-	// we should always use the mutable state, since it contains the sticky tasklist information
-	response, err := wh.history.GetMutableState(ctx, &h.GetMutableStateRequest{
+	req := &h.QueryWorkflowRequest{
 		DomainUUID: common.StringPtr(domainID),
-		Execution:  queryRequest.Execution,
-	})
+		Request:    queryRequest,
+	}
+	hResponse, err := wh.history.QueryWorkflow(ctx, req)
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
-
-	// if workflow is closed and a rejection condition is given then check if query should be rejected before proceeding
-	workflowCloseStatus := response.GetWorkflowCloseState()
-	if workflowCloseStatus != persistence.WorkflowCloseStatusNone && queryRequest.QueryRejectCondition != nil {
-		notOpenReject := queryRequest.GetQueryRejectCondition() == gen.QueryRejectConditionNotOpen
-		notCompletedCleanlyReject := queryRequest.GetQueryRejectCondition() == gen.QueryRejectConditionNotCompletedCleanly &&
-			workflowCloseStatus != persistence.WorkflowCloseStatusCompleted
-		if notOpenReject || notCompletedCleanlyReject {
-			return &gen.QueryWorkflowResponse{
-				QueryResult: nil,
-				QueryRejected: &gen.QueryRejected{
-					CloseStatus: persistence.ToThriftWorkflowExecutionCloseStatus(
-						int(response.GetWorkflowCloseState()),
-					).Ptr(),
-				},
-			}, nil
-		}
-	}
-
-	clientFeature := client.NewFeatureImpl(
-		response.GetClientLibraryVersion(),
-		response.GetClientFeatureVersion(),
-		response.GetClientImpl(),
-	)
-	queryRequest.Execution.RunId = response.Execution.RunId
-	if clientFeature.SupportConsistentQuery() {
-		req := &h.QueryWorkflowRequest{
-			DomainUUID: common.StringPtr(domainID),
-			Execution:  queryRequest.GetExecution(),
-			Query:      queryRequest.GetQuery(),
-		}
-		resp, err := wh.history.QueryWorkflow(ctx, req)
-		if err != nil {
-			return nil, err
-		}
-		return &gen.QueryWorkflowResponse{
-			QueryResult:   resp.GetQueryResult(),
-			QueryRejected: nil,
-		}, nil
-	}
-	return wh.queryDirectlyThroughMatching(ctx, response, clientFeature, domainID, queryRequest, scope)
-}
-
-func (wh *WorkflowHandler) queryDirectlyThroughMatching(
-	ctx context.Context,
-	getMutableStateResponse *h.GetMutableStateResponse,
-	clientFeature client.Feature,
-	domainID string,
-	queryRequest *gen.QueryWorkflowRequest,
-	scope metrics.Scope,
-) (*gen.QueryWorkflowResponse, error) {
-	matchingRequest := &m.QueryWorkflowRequest{
-		DomainUUID:   common.StringPtr(domainID),
-		QueryRequest: queryRequest,
-	}
-	if len(getMutableStateResponse.StickyTaskList.GetName()) != 0 && clientFeature.SupportStickyQuery() {
-		matchingRequest.TaskList = getMutableStateResponse.StickyTaskList
-		stickyDecisionTimeout := getMutableStateResponse.GetStickyTaskListScheduleToStartTimeout()
-		// using a clean new context in case customer provide a context which has
-		// a really short deadline, causing we clear the stickyness
-		stickyContext, cancel := context.WithTimeout(context.Background(), time.Duration(stickyDecisionTimeout)*time.Second)
-		matchingResp, err := wh.matchingRawClient.QueryWorkflow(stickyContext, matchingRequest)
-		cancel()
-		if err == nil {
-			return matchingResp, nil
-		}
-		if yarpcError, ok := err.(*yarpcerrors.Status); !ok || yarpcError.Code() != yarpcerrors.CodeDeadlineExceeded {
-			wh.Service.GetLogger().Info("QueryWorkflowFailed.",
-				tag.WorkflowDomainName(queryRequest.GetDomain()),
-				tag.WorkflowID(queryRequest.Execution.GetWorkflowId()),
-				tag.WorkflowRunID(queryRequest.Execution.GetRunId()),
-				tag.WorkflowQueryType(queryRequest.Query.GetQueryType()))
-			return nil, wh.error(err, scope)
-		}
-		// this means sticky timeout, should try using the normal tasklist
-		// we should clear the stickyness of this workflow
-		wh.GetLogger().Info("QueryWorkflowTimeouted with stickyTaskList, will try nonSticky one",
-			tag.WorkflowDomainName(queryRequest.GetDomain()),
-			tag.WorkflowID(queryRequest.Execution.GetWorkflowId()),
-			tag.WorkflowRunID(queryRequest.Execution.GetRunId()),
-			tag.WorkflowQueryType(queryRequest.Query.GetQueryType()),
-			tag.WorkflowTaskListName(getMutableStateResponse.GetStickyTaskList().GetName()),
-			tag.WorkflowNextEventID(getMutableStateResponse.GetNextEventId()))
-		resetContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		_, err = wh.history.ResetStickyTaskList(resetContext, &h.ResetStickyTaskListRequest{
-			DomainUUID: common.StringPtr(domainID),
-			Execution:  queryRequest.Execution,
-		})
-		cancel()
-		if err != nil {
-			return nil, wh.error(err, scope)
-		}
-	}
-
-	matchingRequest.TaskList = getMutableStateResponse.TaskList
-	matchingResp, err := wh.matching.QueryWorkflow(ctx, matchingRequest)
-	if err != nil {
-		wh.Service.GetLogger().Info("QueryWorkflowFailed.",
-			tag.WorkflowDomainName(queryRequest.GetDomain()),
-			tag.WorkflowID(queryRequest.Execution.GetWorkflowId()),
-			tag.WorkflowRunID(queryRequest.Execution.GetRunId()),
-			tag.WorkflowQueryType(queryRequest.Query.GetQueryType()))
-		return nil, wh.error(err, scope)
-	}
-
-	return matchingResp, nil
+	return hResponse.GetResponse(), nil
 }
 
 // DescribeWorkflowExecution returns information about the specified workflow execution.
@@ -3341,6 +3234,7 @@ func (wh *WorkflowHandler) createPollForDecisionTaskResponse(
 		WorkflowExecutionTaskList: matchingResp.WorkflowExecutionTaskList,
 		ScheduledTimestamp:        matchingResp.ScheduledTimestamp,
 		StartedTimestamp:          matchingResp.StartedTimestamp,
+		Queries:                   matchingResp.Queries,
 	}
 
 	return resp, nil
