@@ -1034,10 +1034,7 @@ func assertNotCurrentExecution(
 	assertFn := func(currentRow *sqldb.CurrentExecutionsRow) error {
 		return assertRunIDMismatch(runID, currentRow.RunID)
 	}
-	if err := assertCurrentExecution(tx, shardID, domainID, workflowID, assertFn); err != nil {
-		return err
-	}
-	return nil
+	return assertCurrentExecution(tx, shardID, domainID, workflowID, assertFn)
 }
 
 func assertRunIDAndUpdateCurrentExecution(

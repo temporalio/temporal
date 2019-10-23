@@ -247,10 +247,7 @@ func (r *nDCWorkflowImpl) failDecision(
 		return err
 	}
 
-	if err := r.mutableState.FlushBufferedEvents(); err != nil {
-		return err
-	}
-	return nil
+	return r.mutableState.FlushBufferedEvents()
 }
 
 func (r *nDCWorkflowImpl) terminateWorkflow(

@@ -45,10 +45,7 @@ func failDecision(
 		return err
 	}
 
-	if err := mutableState.FlushBufferedEvents(); err != nil {
-		return err
-	}
-	return nil
+	return mutableState.FlushBufferedEvents()
 }
 
 func scheduleDecision(
