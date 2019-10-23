@@ -136,6 +136,8 @@ const (
 	FlagQueryTypeWithAlias                = FlagQueryType + ", qt"
 	FlagQueryRejectCondition              = "query_reject_condition"
 	FlagQueryRejectConditionWithAlias     = FlagQueryRejectCondition + ", qrc"
+	FlagQueryConsistencyLevel             = "query_consistency_level"
+	FlagQueryConsistencyLevelWithAlias    = FlagQueryConsistencyLevel + ", qcl"
 	FlagShowDetail                        = "show_detail"
 	FlagShowDetailWithAlias               = FlagShowDetail + ", sd"
 	FlagActiveClusterName                 = "active_cluster"
@@ -493,6 +495,10 @@ func getFlagsForQuery() []cli.Flag {
 		cli.StringFlag{
 			Name:  FlagQueryRejectConditionWithAlias,
 			Usage: "Optional flag to reject queries based on workflow state. Valid values are \"not_open\" and \"not_completed_cleanly\"",
+		},
+		cli.StringFlag{
+			Name:  FlagQueryConsistencyLevelWithAlias,
+			Usage: "Optional flag to set query consistency level. Valid values are \"eventual\" and \"strong\"",
 		},
 	}
 }

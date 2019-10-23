@@ -60,7 +60,7 @@ require (
 	github.com/valyala/fastjson v1.4.1
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
 	go.uber.org/atomic v1.4.0
-	go.uber.org/cadence v0.9.1-0.20191001004132-413d13621ce8
+	go.uber.org/cadence v0.9.1-0.20191023030824-883f86358883
 	go.uber.org/config v1.3.1
 	go.uber.org/multierr v1.1.0
 	go.uber.org/net/metrics v1.1.0 // indirect
