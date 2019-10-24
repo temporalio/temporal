@@ -1,4 +1,4 @@
-module github.com/uber/cadence
+module github.com/temporalio/temporal
 
 go 1.12
 
