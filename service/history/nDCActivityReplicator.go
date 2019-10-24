@@ -180,9 +180,12 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	timeSource := clock.NewEventTimeSource()
 	timeSource.Update(now)
 	timerBuilder := newTimerBuilder(timeSource)
-	tt, err := timerBuilder.GetActivityTimerTaskIfNeeded(msBuilder)
+	timerTask, err := timerBuilder.GetActivityTimerTaskIfNeeded(msBuilder)
 	if err != nil {
-		timerTasks = append(timerTasks, tt)
+		return err
+	}
+	if timerTask != nil {
+		timerTasks = append(timerTasks, timerTask)
 	}
 
 	msBuilder.AddTimerTasks(timerTasks...)
