@@ -29,10 +29,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/loggerimpl"
-	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/tools/common/schema"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/log/loggerimpl"
+	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/tools/common/schema"
 )
 
 type (
