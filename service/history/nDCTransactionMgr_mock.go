@@ -29,11 +29,10 @@ package history
 
 import (
 	context "context"
-	reflect "reflect"
-	time "time"
-
 	gomock "github.com/golang/mock/gomock"
 	persistence "github.com/uber/cadence/common/persistence"
+	reflect "reflect"
+	time "time"
 )
 
 // MocknDCTransactionMgr is a mock of nDCTransactionMgr interface
@@ -129,12 +128,4 @@ func (m *MocknDCTransactionMgr) loadNDCWorkflow(ctx context.Context, domainID, w
 func (mr *MocknDCTransactionMgrMockRecorder) loadNDCWorkflow(ctx, domainID, workflowID, runID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "loadNDCWorkflow", reflect.TypeOf((*MocknDCTransactionMgr)(nil).loadNDCWorkflow), ctx, domainID, workflowID, runID)
-}
-
-// reapplyEvents mocks base method
-func (m *MocknDCTransactionMgr) reapplyEvents(ctx context.Context, reapplyEvents *persistence.WorkflowEvents) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "reapplyEvents", ctx, reapplyEvents)
-	ret0, _ := ret[0].(error)
-	return ret0
 }

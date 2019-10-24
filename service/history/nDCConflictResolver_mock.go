@@ -29,9 +29,8 @@ package history
 
 import (
 	context "context"
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
+	reflect "reflect"
 )
 
 // MocknDCConflictResolver is a mock of nDCConflictResolver interface

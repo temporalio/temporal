@@ -38,6 +38,7 @@ var (
 )
 
 type (
+	// TimerSequenceIDs is used for sorting timers
 	TimerSequenceIDs []TimerSequenceID
 
 	timerQueueAckMgrImpl struct {

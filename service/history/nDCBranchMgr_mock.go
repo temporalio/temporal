@@ -58,9 +58,9 @@ func (m *MocknDCBranchMgr) EXPECT() *MocknDCBranchMgrMockRecorder {
 }
 
 // prepareVersionHistory mocks base method
-func (m *MocknDCBranchMgr) prepareVersionHistory(ctx context.Context, incomingVersionHistory *persistence.VersionHistory, incomingFirstEventID int64) (bool, int, error) {
+func (m *MocknDCBranchMgr) prepareVersionHistory(ctx context.Context, incomingVersionHistory *persistence.VersionHistory, incomingFirstEventID, incomingFirstEventVersion int64) (bool, int, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "prepareVersionHistory", ctx, incomingVersionHistory, incomingFirstEventID)
+	ret := m.ctrl.Call(m, "prepareVersionHistory", ctx, incomingVersionHistory, incomingFirstEventID, incomingFirstEventVersion)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(int)
 	ret2, _ := ret[2].(error)
@@ -68,7 +68,7 @@ func (m *MocknDCBranchMgr) prepareVersionHistory(ctx context.Context, incomingVe
 }
 
 // prepareVersionHistory indicates an expected call of prepareVersionHistory
-func (mr *MocknDCBranchMgrMockRecorder) prepareVersionHistory(ctx, incomingVersionHistory, incomingFirstEventID interface{}) *gomock.Call {
+func (mr *MocknDCBranchMgrMockRecorder) prepareVersionHistory(ctx, incomingVersionHistory, incomingFirstEventID, incomingFirstEventVersion interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "prepareVersionHistory", reflect.TypeOf((*MocknDCBranchMgr)(nil).prepareVersionHistory), ctx, incomingVersionHistory, incomingFirstEventID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "prepareVersionHistory", reflect.TypeOf((*MocknDCBranchMgr)(nil).prepareVersionHistory), ctx, incomingVersionHistory, incomingFirstEventID, incomingFirstEventVersion)
 }

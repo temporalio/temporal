@@ -55,8 +55,11 @@ type (
 	timerSequenceIDs []timerSequenceID
 
 	timerSequence interface {
-		nextUserTimer() (*persistence.UserTimerTask, error)
-		nextActivityTimer() (*persistence.ActivityTimeoutTask, error)
+		createNextUserTimer() error
+		createNextActivityTimer() error
+
+		loadAndSortUserTimers() []timerSequenceID
+		loadAndSortActivityTimers() []timerSequenceID
 	}
 
 	timerSequenceImpl struct {
@@ -64,6 +67,8 @@ type (
 		mutableState mutableState
 	}
 )
+
+var _ timerSequence = (*timerSequenceImpl)(nil)
 
 func newTimerSequence(
 	timeSource clock.TimeSource,
@@ -77,7 +82,7 @@ func newTimerSequence(
 
 func (t *timerSequenceImpl) createNextUserTimer() error {
 
-	sequenceIDs := t.loadAndSortUserTimer()
+	sequenceIDs := t.loadAndSortUserTimers()
 	if len(sequenceIDs) == 0 {
 		return nil
 	}
@@ -111,7 +116,7 @@ func (t *timerSequenceImpl) createNextUserTimer() error {
 
 func (t *timerSequenceImpl) createNextActivityTimer() error {
 
-	sequenceIDs := t.loadAndSortActivityTimer()
+	sequenceIDs := t.loadAndSortActivityTimers()
 	if len(sequenceIDs) == 0 {
 		return nil
 	}
@@ -145,7 +150,7 @@ func (t *timerSequenceImpl) createNextActivityTimer() error {
 	return nil
 }
 
-func (t *timerSequenceImpl) loadAndSortUserTimer() timerSequenceIDs {
+func (t *timerSequenceImpl) loadAndSortUserTimers() []timerSequenceID {
 
 	pendingTimers := t.mutableState.GetPendingTimerInfos()
 	timers := make(timerSequenceIDs, 0, len(pendingTimers))
@@ -163,7 +168,7 @@ func (t *timerSequenceImpl) loadAndSortUserTimer() timerSequenceIDs {
 	return timers
 }
 
-func (t *timerSequenceImpl) loadAndSortActivityTimer() timerSequenceIDs {
+func (t *timerSequenceImpl) loadAndSortActivityTimers() []timerSequenceID {
 	// there can be 4 timer per activity
 	// see timerType
 	pendingActivities := t.mutableState.GetPendingActivityInfos()
@@ -205,10 +210,11 @@ func (t *timerSequenceImpl) getUserTimerTimeout(
 ) *timerSequenceID {
 
 	return &timerSequenceID{
-		eventID:   timerInfo.StartedID,
-		timestamp: timerInfo.ExpiryTime,
-		timerType: timerTypeStartToClose,
-		attempt:   0,
+		eventID:      timerInfo.StartedID,
+		timestamp:    timerInfo.ExpiryTime,
+		timerType:    timerTypeStartToClose,
+		timerCreated: timerInfo.TaskID == TimerTaskStatusCreated,
+		attempt:      0,
 	}
 }
 
@@ -354,7 +360,7 @@ func (s timerSequenceIDs) Swap(
 	this int,
 	that int,
 ) {
-	s[this], s[that] = s[this], s[that]
+	s[this], s[that] = s[that], s[this]
 }
 
 // Less implements sort.Interface

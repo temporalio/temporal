@@ -134,7 +134,13 @@ cadence-server: $(ALL_SRC)
 	@echo "compiling cadence-server with OS: $(GOOS), ARCH: $(GOARCH)"
 	go build -ldflags '$(GO_BUILD_LDFLAGS)' -i -o cadence-server cmd/server/cadence.go cmd/server/server.go
 
-bins_nothrift: lint copyright cadence-cassandra-tool cadence-sql-tool cadence cadence-server
+go-generate:
+	GO111MODULE=off go get -u github.com/myitcv/gobin
+	GOOS= GOARCH= gobin -mod=readonly github.com/golang/mock/mockgen
+	@echo "running go generate ./..."
+	@go generate ./...
+
+bins_nothrift: go-generate lint copyright cadence-cassandra-tool cadence-sql-tool cadence cadence-server
 
 bins: thriftc bins_nothrift
 

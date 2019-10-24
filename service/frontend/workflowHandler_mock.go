@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 //
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2019 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -29,11 +29,10 @@ package frontend
 
 import (
 	context "context"
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
 	replicator "github.com/uber/cadence/.gen/go/replicator"
 	shared "github.com/uber/cadence/.gen/go/shared"
+	reflect "reflect"
 )
 
 // MockWorkflowHandler is a mock of Interface interface
@@ -311,6 +310,20 @@ func (m *MockWorkflowHandler) QueryWorkflow(ctx context.Context, QueryRequest *s
 func (mr *MockWorkflowHandlerMockRecorder) QueryWorkflow(ctx, QueryRequest interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryWorkflow", reflect.TypeOf((*MockWorkflowHandler)(nil).QueryWorkflow), ctx, QueryRequest)
+}
+
+// ReapplyEvents mocks base method
+func (m *MockWorkflowHandler) ReapplyEvents(ctx context.Context, ReapplyEventsRequest *shared.ReapplyEventsRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReapplyEvents", ctx, ReapplyEventsRequest)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ReapplyEvents indicates an expected call of ReapplyEvents
+func (mr *MockWorkflowHandlerMockRecorder) ReapplyEvents(ctx, ReapplyEventsRequest interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReapplyEvents", reflect.TypeOf((*MockWorkflowHandler)(nil).ReapplyEvents), ctx, ReapplyEventsRequest)
 }
 
 // RecordActivityTaskHeartbeat mocks base method
@@ -614,12 +627,4 @@ func (m *MockWorkflowHandler) UpdateDomain(ctx context.Context, UpdateRequest *s
 func (mr *MockWorkflowHandlerMockRecorder) UpdateDomain(ctx, UpdateRequest interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDomain", reflect.TypeOf((*MockWorkflowHandler)(nil).UpdateDomain), ctx, UpdateRequest)
-}
-
-// UpdateDomain mocks base method
-func (m *MockWorkflowHandler) ReapplyEvents(ctx context.Context, ReapplyEventsRequest *shared.ReapplyEventsRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReapplyEvents", ctx, ReapplyEventsRequest)
-	ret0, _ := ret[0].(error)
-	return ret0
 }
