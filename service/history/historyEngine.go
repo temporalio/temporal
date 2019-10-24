@@ -797,6 +797,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 		}
 		sw := scope.StartTimer(metrics.DirectQueryDispatchLatency)
 		defer sw.Stop()
+		req.Execution.RunId = msResp.Execution.RunId
 		mresp, err := e.queryDirectlyThroughMatching(ctx, msResp, request.GetDomainUUID(), req)
 		return mresp, err
 	}
