@@ -24,7 +24,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/uber/cadence/common/log"
+	"github.com/temporalio/temporal/common/log"
 )
 
 // nopClient is a dummy implements of dynamicconfig Client interface, all operations will always return default values.

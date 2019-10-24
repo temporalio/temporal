@@ -24,10 +24,10 @@ import (
 	"errors"
 	"sync/atomic"
 
-	s "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/common/persistence"
+	s "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/persistence"
 )
 
 type (

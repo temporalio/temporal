@@ -17,7 +17,7 @@ We highly recommend that you use [Cadence service docker](docker/README.md) to r
 
 ### Run the Samples
 
-Try out the sample recipes for [Go](https://github.com/uber-common/cadence-samples) or [Java](https://github.com/uber/cadence-java-samples) to get started.
+Try out the sample recipes for [Go](https://github.com/uber-common/cadence-samples) or [Java](https://github.com/temporalio/temporal-java-samples) to get started.
 
 ### Use CLI
 
@@ -25,7 +25,7 @@ Try out [Cadence command-line tool](tools/cli/README.md) to perform various task
 
 ### Use Cadence Web
 
-Try out [Cadence Web UI](https://github.com/uber/cadence-web) to view your workflows on Cadence.  
+Try out [Cadence Web UI](https://github.com/temporalio/temporal-web) to view your workflows on Cadence.  
 (This is already available at localhost:8088 if you run Cadence with docker compose)
 
 ## Contributing
@@ -36,4 +36,4 @@ If you'd like to propose a new feature, first join the Cadence [discussion group
 
 ## License
 
-MIT License, please see [LICENSE](https://github.com/uber/cadence/blob/master/LICENSE) for details.
+MIT License, please see [LICENSE](https://github.com/temporalio/temporal/blob/master/LICENSE) for details.

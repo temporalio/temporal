@@ -21,13 +21,13 @@
 package cassandra
 
 import (
-	"github.com/uber/cadence/common"
+	"github.com/temporalio/temporal/common"
 	"sync"
 
 	"github.com/gocql/gocql"
-	"github.com/uber/cadence/common/log"
-	p "github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/service/config"
+	"github.com/temporalio/temporal/common/log"
+	p "github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/service/config"
 )
 
 type (

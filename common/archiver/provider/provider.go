@@ -24,9 +24,9 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/uber/cadence/common/archiver"
-	"github.com/uber/cadence/common/archiver/filestore"
-	"github.com/uber/cadence/common/service/config"
+	"github.com/temporalio/temporal/common/archiver"
+	"github.com/temporalio/temporal/common/archiver/filestore"
+	"github.com/temporalio/temporal/common/service/config"
 )
 
 var (

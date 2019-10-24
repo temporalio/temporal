@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/mock"
-	"github.com/uber/cadence/common/persistence"
+	"github.com/temporalio/temporal/common/persistence"
 )
 
 // MockTimerQueueAckMgr is used as mock implementation for TimerQueueAckMgr

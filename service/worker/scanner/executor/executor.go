@@ -24,8 +24,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/metrics"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/metrics"
 )
 
 type (

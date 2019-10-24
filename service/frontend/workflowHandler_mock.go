@@ -32,8 +32,8 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	replicator "github.com/uber/cadence/.gen/go/replicator"
-	shared "github.com/uber/cadence/.gen/go/shared"
+	replicator "github.com/temporalio/temporal/.gen/go/replicator"
+	shared "github.com/temporalio/temporal/.gen/go/shared"
 )
 
 // MockWorkflowHandler is a mock of Interface interface

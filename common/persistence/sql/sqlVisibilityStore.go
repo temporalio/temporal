@@ -26,13 +26,13 @@ import (
 	"fmt"
 	"time"
 
-	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/log"
-	p "github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/persistence/sql/storage"
-	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
-	"github.com/uber/cadence/common/service/config"
+	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/log"
+	p "github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/persistence/sql/storage"
+	"github.com/temporalio/temporal/common/persistence/sql/storage/sqldb"
+	"github.com/temporalio/temporal/common/service/config"
 )
 
 type (

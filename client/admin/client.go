@@ -25,10 +25,10 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"github.com/uber/cadence/.gen/go/admin"
-	"github.com/uber/cadence/.gen/go/admin/adminserviceclient"
-	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
+	"github.com/temporalio/temporal/.gen/go/admin"
+	"github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"
+	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common"
 	"go.uber.org/yarpc"
 )
 

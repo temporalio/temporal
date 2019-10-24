@@ -8,7 +8,7 @@ along with all its dependencies (cassandra, statsd, graphite). Exposes cadence
 frontend on port 7933 and grafana metrics frontend on port 8080.
 
 ```
-cd $GOPATH/src/github.com/uber/cadence/docker
+cd $GOPATH/src/github.com/temporalio/temporal/docker
 docker-compose up
 ```
 
@@ -25,7 +25,7 @@ Using a pre-built image
 With every tagged release of the cadence server, there is also a corresponding
 docker image that's uploaded to docker hub. In addition, the release will also
 contain a **docker.tar.gz** file (docker-compose startup scripts). 
-Go [here](https://github.com/uber/cadence/releases/latest) to download a latest **docker.tar.gz** 
+Go [here](https://github.com/temporalio/temporal/releases/latest) to download a latest **docker.tar.gz** 
 
 Execute the following
 commands to start a pre-built image along with all dependencies (cassandra/statsd).
@@ -40,7 +40,7 @@ Building an image for any branch and restarting
 -----------------------------------------
 Replace **YOUR_TAG** and **YOUR_CHECKOUT_BRANCH** in the below command to build:
 ```
-cd $GOPATH/src/github.com/uber/cadence
+cd $GOPATH/src/github.com/temporalio/temporal
 git checkout YOUR_CHECKOUT_BRANCH
 docker build . -t ubercadence/server:YOUR_TAG --build-arg TARGET=auto-setup
 ```

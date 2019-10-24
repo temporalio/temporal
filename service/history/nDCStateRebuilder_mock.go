@@ -30,7 +30,7 @@ package history
 import (
 	context "context"
 	gomock "github.com/golang/mock/gomock"
-	definition "github.com/uber/cadence/common/definition"
+	definition "github.com/temporalio/temporal/common/definition"
 	reflect "reflect"
 	time "time"
 )

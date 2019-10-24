@@ -36,7 +36,7 @@ import (
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/uber/cadence/common"
+	"github.com/temporalio/temporal/common"
 	"github.com/urfave/cli"
 	"github.com/valyala/fastjson"
 	s "go.uber.org/cadence/.gen/go/shared"

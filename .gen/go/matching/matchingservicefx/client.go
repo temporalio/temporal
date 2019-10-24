@@ -26,7 +26,7 @@
 package matchingservicefx
 
 import (
-	matchingserviceclient "github.com/uber/cadence/.gen/go/matching/matchingserviceclient"
+	matchingserviceclient "github.com/temporalio/temporal/.gen/go/matching/matchingserviceclient"
 	fx "go.uber.org/fx"
 	yarpc "go.uber.org/yarpc"
 	thrift "go.uber.org/yarpc/encoding/thrift"

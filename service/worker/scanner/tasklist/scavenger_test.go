@@ -28,11 +28,11 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
+	"github.com/temporalio/temporal/common/log/loggerimpl"
+	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/mocks"
+	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/uber-go/tally"
-	"github.com/uber/cadence/common/log/loggerimpl"
-	"github.com/uber/cadence/common/metrics"
-	"github.com/uber/cadence/common/mocks"
-	p "github.com/uber/cadence/common/persistence"
 	"go.uber.org/zap"
 )
 

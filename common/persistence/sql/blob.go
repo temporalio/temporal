@@ -24,9 +24,9 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/uber/cadence/.gen/go/sqlblobs"
-	"github.com/uber/cadence/common"
-	p "github.com/uber/cadence/common/persistence"
+	"github.com/temporalio/temporal/.gen/go/sqlblobs"
+	"github.com/temporalio/temporal/common"
+	p "github.com/temporalio/temporal/common/persistence"
 	"go.uber.org/thriftrw/protocol"
 	"go.uber.org/thriftrw/wire"
 )

@@ -23,9 +23,9 @@ package cli
 import (
 	"context"
 
-	serverAdmin "github.com/uber/cadence/.gen/go/admin/adminserviceclient"
-	serverFrontend "github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
-	"github.com/uber/cadence/common"
+	serverAdmin "github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"
+	serverFrontend "github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
+	"github.com/temporalio/temporal/common"
 	"github.com/urfave/cli"
 	clientFrontend "go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 	"go.uber.org/yarpc"

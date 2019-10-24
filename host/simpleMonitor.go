@@ -23,7 +23,7 @@ package host
 import (
 	"fmt"
 
-	"github.com/uber/cadence/common/membership"
+	"github.com/temporalio/temporal/common/membership"
 )
 
 type simpleMonitor struct {

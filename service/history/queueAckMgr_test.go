@@ -29,17 +29,17 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 
-	"github.com/uber/cadence/client"
-	"github.com/uber/cadence/common/clock"
-	"github.com/uber/cadence/common/cluster"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/loggerimpl"
-	"github.com/uber/cadence/common/messaging"
-	"github.com/uber/cadence/common/metrics"
-	"github.com/uber/cadence/common/mocks"
-	p "github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/service"
-	"github.com/uber/cadence/common/service/dynamicconfig"
+	"github.com/temporalio/temporal/client"
+	"github.com/temporalio/temporal/common/clock"
+	"github.com/temporalio/temporal/common/cluster"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/log/loggerimpl"
+	"github.com/temporalio/temporal/common/messaging"
+	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/mocks"
+	p "github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/service"
+	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
 type (

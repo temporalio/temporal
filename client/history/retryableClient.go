@@ -22,10 +22,10 @@ package history
 
 import (
 	"context"
-	h "github.com/uber/cadence/.gen/go/history"
-	"github.com/uber/cadence/.gen/go/replicator"
-	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common/backoff"
+	h "github.com/temporalio/temporal/.gen/go/history"
+	"github.com/temporalio/temporal/.gen/go/replicator"
+	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common/backoff"
 	"go.uber.org/yarpc"
 )
 

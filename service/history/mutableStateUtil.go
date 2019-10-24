@@ -21,7 +21,7 @@
 package history
 
 import (
-	"github.com/uber/cadence/common/persistence"
+	"github.com/temporalio/temporal/common/persistence"
 )
 
 type transactionPolicy int

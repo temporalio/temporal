@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/robfig/cron"
-	workflow "github.com/uber/cadence/.gen/go/shared"
+	workflow "github.com/temporalio/temporal/.gen/go/shared"
 )
 
 // NoBackoff is used to represent backoff when no cron backoff is needed

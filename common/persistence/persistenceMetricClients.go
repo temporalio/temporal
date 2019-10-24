@@ -21,10 +21,10 @@
 package persistence
 
 import (
-	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/common/metrics"
+	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/metrics"
 )
 
 type (

@@ -24,11 +24,11 @@ import (
 	"context"
 	"errors"
 
-	"github.com/uber/cadence/common"
-	carchiver "github.com/uber/cadence/common/archiver"
-	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/common/metrics"
-	"github.com/uber/cadence/common/persistence"
+	"github.com/temporalio/temporal/common"
+	carchiver "github.com/temporalio/temporal/common/archiver"
+	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/persistence"
 	"go.uber.org/cadence"
 	"go.uber.org/cadence/activity"
 )

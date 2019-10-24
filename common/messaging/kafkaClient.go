@@ -28,11 +28,11 @@ import (
 	"strings"
 
 	"github.com/Shopify/sarama"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/metrics"
 	uberKafkaClient "github.com/uber-go/kafka-client"
 	uberKafka "github.com/uber-go/kafka-client/kafka"
 	"github.com/uber-go/tally"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/metrics"
 	"go.uber.org/zap"
 )
 

@@ -28,9 +28,9 @@ package matchingservicetest
 import (
 	context "context"
 	gomock "github.com/golang/mock/gomock"
-	matching "github.com/uber/cadence/.gen/go/matching"
-	matchingserviceclient "github.com/uber/cadence/.gen/go/matching/matchingserviceclient"
-	shared "github.com/uber/cadence/.gen/go/shared"
+	matching "github.com/temporalio/temporal/.gen/go/matching"
+	matchingserviceclient "github.com/temporalio/temporal/.gen/go/matching/matchingserviceclient"
+	shared "github.com/temporalio/temporal/.gen/go/shared"
 	yarpc "go.uber.org/yarpc"
 )
 

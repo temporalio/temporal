@@ -26,14 +26,14 @@ import (
 	ctx "context"
 	"time"
 
-	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/cache"
-	"github.com/uber/cadence/common/cluster"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/common/metrics"
-	"github.com/uber/cadence/common/persistence"
+	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/cache"
+	"github.com/temporalio/temporal/common/cluster"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/persistence"
 )
 
 // NOTE: terminology
@@ -257,7 +257,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflow(
 	// workflow events reapplication to self (self workflow being current workflow)
 	// we need to handle 2 cases
 	// 1. workflow still running -> just reapply
-	// 2. workflow closed -> TODO wait until https://github.com/uber/cadence/issues/2420
+	// 2. workflow closed -> TODO wait until https://github.com/temporalio/temporal/issues/2420
 	//  NOTE: also remember that workflow reset will acquire a lock on current workflow (this)
 
 	// simple case workflow still running (implies current workflow),
@@ -284,7 +284,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflow(
 				tag.WorkflowID(targetWorkflowEvents.WorkflowID),
 			)
 			r.metricsClient.IncCounter(metrics.HistoryReapplyEventsScope, metrics.EventReapplySkippedCount)
-			// TODO when https://github.com/uber/cadence/issues/2420 is finished
+			// TODO when https://github.com/temporalio/temporal/issues/2420 is finished
 			//  reset to workflow finish event and reapply to new resetted workflow by using
 			//  transactionPolicyActive, ignore this case for now
 		} else {

@@ -41,15 +41,15 @@ import (
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
-	wsc "github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
-	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/cache"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/loggerimpl"
-	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/environment"
-	"github.com/uber/cadence/host"
+	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	wsc "github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/cache"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/log/loggerimpl"
+	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/environment"
+	"github.com/temporalio/temporal/host"
 )
 
 type (

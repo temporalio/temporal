@@ -21,7 +21,7 @@
 package main
 
 import (
-	"github.com/uber/cadence/tools/cassandra"
+	"github.com/temporalio/temporal/tools/cassandra"
 	"os"
 )
 

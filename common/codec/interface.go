@@ -21,7 +21,7 @@
 package codec
 
 import (
-	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/go/shared"
 	"go.uber.org/thriftrw/wire"
 )
 

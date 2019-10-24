@@ -21,10 +21,10 @@
 package host
 
 import (
-	"github.com/uber/cadence/.gen/go/admin/adminserviceclient"
-	"github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
-	"github.com/uber/cadence/.gen/go/history/historyserviceclient"
-	"github.com/uber/cadence/common"
+	"github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"
+	"github.com/temporalio/temporal/.gen/go/history/historyserviceclient"
+	"github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
+	"github.com/temporalio/temporal/common"
 	"go.uber.org/yarpc"
 )
 

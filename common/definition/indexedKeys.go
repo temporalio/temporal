@@ -20,7 +20,7 @@
 
 package definition
 
-import "github.com/uber/cadence/.gen/go/shared"
+import "github.com/temporalio/temporal/.gen/go/shared"
 
 // valid indexed fields on ES
 const (

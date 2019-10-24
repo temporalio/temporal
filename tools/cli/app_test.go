@@ -34,13 +34,13 @@ import (
 	clientFrontendTest "go.uber.org/cadence/.gen/go/cadence/workflowservicetest"
 	"go.uber.org/cadence/.gen/go/shared"
 
-	"github.com/uber/cadence/.gen/go/admin"
-	serverAdmin "github.com/uber/cadence/.gen/go/admin/adminserviceclient"
-	serverAdminTest "github.com/uber/cadence/.gen/go/admin/adminservicetest"
-	serverFrontend "github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
-	serverFrontendTest "github.com/uber/cadence/.gen/go/cadence/workflowservicetest"
-	serverShared "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
+	"github.com/temporalio/temporal/.gen/go/admin"
+	serverAdmin "github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"
+	serverAdminTest "github.com/temporalio/temporal/.gen/go/admin/adminservicetest"
+	serverShared "github.com/temporalio/temporal/.gen/go/shared"
+	serverFrontend "github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
+	serverFrontendTest "github.com/temporalio/temporal/.gen/go/temporal/workflowservicetest"
+	"github.com/temporalio/temporal/common"
 )
 
 type cliAppSuite struct {

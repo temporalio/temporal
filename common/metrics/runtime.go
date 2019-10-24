@@ -26,14 +26,14 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/temporalio/temporal/common/log"
 	"github.com/uber-go/tally"
-	"github.com/uber/cadence/common/log"
 )
 
 var (
 	// Revision is the VCS revision associated with this build. Overridden using ldflags
 	// at compile time. Example:
-	// $ go build -ldflags "-X github.com/uber/cadence/common/metrics.Revision=abcdef" ...
+	// $ go build -ldflags "-X github.com/temporalio/temporal/common/metrics.Revision=abcdef" ...
 	// Adapted from: https://www.atatus.com/blog/golang-auto-build-versioning/
 	Revision = "unknown"
 

@@ -33,7 +33,7 @@ import (
 	time "time"
 
 	gomock "github.com/golang/mock/gomock"
-	persistence "github.com/uber/cadence/common/persistence"
+	persistence "github.com/temporalio/temporal/common/persistence"
 )
 
 // MocknDCTransactionMgr is a mock of nDCTransactionMgr interface

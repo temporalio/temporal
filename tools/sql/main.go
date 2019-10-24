@@ -24,7 +24,7 @@ import (
 	"os"
 
 	_ "github.com/go-sql-driver/mysql" // needed to load the mysql driver
-	"github.com/uber/cadence/tools/common/schema"
+	"github.com/temporalio/temporal/tools/common/schema"
 	"github.com/urfave/cli"
 )
 

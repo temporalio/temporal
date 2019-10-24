@@ -24,9 +24,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/codec"
+	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/codec"
 )
 
 type (

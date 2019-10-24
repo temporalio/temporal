@@ -20,7 +20,7 @@
 
 package mocks
 
-import "github.com/uber/cadence/common/persistence"
+import "github.com/temporalio/temporal/common/persistence"
 import "github.com/stretchr/testify/mock"
 
 // HistoryManager mock implementation

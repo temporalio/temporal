@@ -26,14 +26,14 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/cache"
-	"github.com/uber/cadence/common/clock"
-	"github.com/uber/cadence/common/cluster"
-	"github.com/uber/cadence/common/errors"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/persistence"
+	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/cache"
+	"github.com/temporalio/temporal/common/clock"
+	"github.com/temporalio/temporal/common/cluster"
+	"github.com/temporalio/temporal/common/errors"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/persistence"
 )
 
 type (

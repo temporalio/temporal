@@ -25,8 +25,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/uber/cadence/common/metrics"
-	"github.com/uber/cadence/common/quotas"
+	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/quotas"
 	"golang.org/x/time/rate"
 )
 

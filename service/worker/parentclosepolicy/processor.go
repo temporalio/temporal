@@ -24,12 +24,12 @@ import (
 	"context"
 
 	"github.com/opentracing/opentracing-go"
+	"github.com/temporalio/temporal/client"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/metrics"
 	"github.com/uber-go/tally"
-	"github.com/uber/cadence/client"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/common/metrics"
 	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 	"go.uber.org/cadence/worker"
 )

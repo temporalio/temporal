@@ -23,11 +23,11 @@ package replicator
 import (
 	"testing"
 
-	"github.com/uber/cadence/common/collection"
+	"github.com/temporalio/temporal/common/collection"
 
 	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber/cadence/common/definition"
+	"github.com/temporalio/temporal/common/definition"
 )
 
 type (

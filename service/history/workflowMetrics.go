@@ -23,10 +23,10 @@ package history
 import (
 	"time"
 
-	"github.com/uber/cadence/.gen/go/shared"
-	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common/metrics"
-	"github.com/uber/cadence/common/persistence"
+	"github.com/temporalio/temporal/.gen/go/shared"
+	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/persistence"
 )
 
 func emitWorkflowHistoryStats(

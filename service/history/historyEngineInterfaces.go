@@ -24,10 +24,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/uber/cadence/.gen/go/replicator"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/definition"
-	"github.com/uber/cadence/common/persistence"
+	"github.com/temporalio/temporal/.gen/go/replicator"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/definition"
+	"github.com/temporalio/temporal/common/persistence"
 )
 
 type (

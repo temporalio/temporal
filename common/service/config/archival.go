@@ -23,7 +23,7 @@ package config
 import (
 	"errors"
 
-	"github.com/uber/cadence/common"
+	"github.com/temporalio/temporal/common"
 )
 
 // Validate validates the archival config

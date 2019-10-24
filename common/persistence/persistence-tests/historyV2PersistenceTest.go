@@ -33,11 +33,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	gen "github.com/uber/cadence/.gen/go/shared"
-	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/backoff"
-	p "github.com/uber/cadence/common/persistence"
+	gen "github.com/temporalio/temporal/.gen/go/shared"
+	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/backoff"
+	p "github.com/temporalio/temporal/common/persistence"
 )
 
 type (

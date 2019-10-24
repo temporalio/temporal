@@ -23,7 +23,7 @@ package membership
 import (
 	"errors"
 
-	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/go/shared"
 )
 
 // ErrUnknownService is thrown for a service that is not tracked by this instance

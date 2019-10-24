@@ -23,7 +23,7 @@ package main
 import (
 	"os"
 
-	"github.com/uber/cadence/tools/cli"
+	"github.com/temporalio/temporal/tools/cli"
 )
 
 // Start using this CLI tool with command

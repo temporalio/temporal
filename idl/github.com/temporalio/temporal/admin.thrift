@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-namespace java com.uber.cadence.admin
+namespace java com.temporalio.temporal.admin
 
 include "shared.thrift"
 

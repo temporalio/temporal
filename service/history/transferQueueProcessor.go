@@ -29,15 +29,15 @@ import (
 	"sync/atomic"
 	"time"
 
-	h "github.com/uber/cadence/.gen/go/history"
-	"github.com/uber/cadence/client/history"
-	"github.com/uber/cadence/client/matching"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/common/metrics"
-	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/xdc"
+	h "github.com/temporalio/temporal/.gen/go/history"
+	"github.com/temporalio/temporal/client/history"
+	"github.com/temporalio/temporal/client/matching"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/xdc"
 )
 
 var (

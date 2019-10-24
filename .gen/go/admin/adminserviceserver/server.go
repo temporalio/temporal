@@ -27,8 +27,8 @@ package adminserviceserver
 
 import (
 	context "context"
-	admin "github.com/uber/cadence/.gen/go/admin"
-	shared "github.com/uber/cadence/.gen/go/shared"
+	admin "github.com/temporalio/temporal/.gen/go/admin"
+	shared "github.com/temporalio/temporal/.gen/go/shared"
 	wire "go.uber.org/thriftrw/wire"
 	transport "go.uber.org/yarpc/api/transport"
 	thrift "go.uber.org/yarpc/encoding/thrift"

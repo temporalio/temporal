@@ -25,12 +25,12 @@ import (
 	"errors"
 	"sync/atomic"
 
-	gen "github.com/uber/cadence/.gen/go/matching"
-	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/client/matching"
-	"github.com/uber/cadence/common/metrics"
-	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/quotas"
+	gen "github.com/temporalio/temporal/.gen/go/matching"
+	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/client/matching"
+	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/quotas"
 )
 
 type (

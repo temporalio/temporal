@@ -29,10 +29,10 @@ import (
 	"time"
 
 	"github.com/olekukonko/tablewriter"
-	serviceFrontend "github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
-	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/domain"
+	"github.com/temporalio/temporal/.gen/go/shared"
+	serviceFrontend "github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/domain"
 	"github.com/urfave/cli"
 	s "go.uber.org/cadence/.gen/go/shared"
 )

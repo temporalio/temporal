@@ -21,21 +21,21 @@
 package frontend
 
 import (
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/archiver"
-	"github.com/uber/cadence/common/cache"
-	"github.com/uber/cadence/common/definition"
-	"github.com/uber/cadence/common/domain"
-	"github.com/uber/cadence/common/log/loggerimpl"
-	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/common/messaging"
-	"github.com/uber/cadence/common/mocks"
-	"github.com/uber/cadence/common/persistence"
-	espersistence "github.com/uber/cadence/common/persistence/elasticsearch"
-	persistencefactory "github.com/uber/cadence/common/persistence/persistence-factory"
-	"github.com/uber/cadence/common/service"
-	"github.com/uber/cadence/common/service/config"
-	"github.com/uber/cadence/common/service/dynamicconfig"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/archiver"
+	"github.com/temporalio/temporal/common/cache"
+	"github.com/temporalio/temporal/common/definition"
+	"github.com/temporalio/temporal/common/domain"
+	"github.com/temporalio/temporal/common/log/loggerimpl"
+	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/messaging"
+	"github.com/temporalio/temporal/common/mocks"
+	"github.com/temporalio/temporal/common/persistence"
+	espersistence "github.com/temporalio/temporal/common/persistence/elasticsearch"
+	persistencefactory "github.com/temporalio/temporal/common/persistence/persistence-factory"
+	"github.com/temporalio/temporal/common/service"
+	"github.com/temporalio/temporal/common/service/config"
+	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
 // Config represents configuration for cadence-frontend service

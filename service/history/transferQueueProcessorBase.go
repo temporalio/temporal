@@ -23,13 +23,13 @@ package history
 import (
 	"time"
 
-	m "github.com/uber/cadence/.gen/go/matching"
-	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/client/matching"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/common/persistence"
+	m "github.com/temporalio/temporal/.gen/go/matching"
+	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/client/matching"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/persistence"
 )
 
 type (

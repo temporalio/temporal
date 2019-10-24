@@ -24,11 +24,11 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/uber/cadence/common"
+	"github.com/temporalio/temporal/common"
 
-	workflow "github.com/uber/cadence/.gen/go/shared"
-	p "github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
+	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	p "github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/persistence/sql/storage/sqldb"
 )
 
 func updateSignalsRequested(

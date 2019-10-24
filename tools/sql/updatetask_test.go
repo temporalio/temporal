@@ -26,9 +26,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-	"github.com/uber/cadence/environment"
-	"github.com/uber/cadence/schema/mysql"
-	"github.com/uber/cadence/tools/common/schema/test"
+	"github.com/temporalio/temporal/environment"
+	"github.com/temporalio/temporal/schema/mysql"
+	"github.com/temporalio/temporal/tools/common/schema/test"
 )
 
 type UpdateSchemaTestSuite struct {

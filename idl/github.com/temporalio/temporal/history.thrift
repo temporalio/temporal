@@ -21,7 +21,7 @@
 include "shared.thrift"
 include "replicator.thrift"
 
-namespace java com.uber.cadence.history
+namespace java com.temporalio.temporal.history
 
 exception EventAlreadyStartedError {
   1: required string message

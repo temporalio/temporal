@@ -26,7 +26,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-	workflow "github.com/uber/cadence/.gen/go/shared"
+	workflow "github.com/temporalio/temporal/.gen/go/shared"
 )
 
 type (

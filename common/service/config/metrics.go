@@ -25,12 +25,12 @@ import (
 
 	"github.com/cactus/go-statsd-client/statsd"
 	prom "github.com/m3db/prometheus_client_golang/prometheus"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/log/tag"
+	statsdreporter "github.com/temporalio/temporal/common/metrics/tally/statsd"
 	"github.com/uber-go/tally"
 	"github.com/uber-go/tally/prometheus"
 	tallystatsdreporter "github.com/uber-go/tally/statsd"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
-	statsdreporter "github.com/uber/cadence/common/metrics/tally/statsd"
 )
 
 // tally sanitizer options that satisfy both Prometheus and M3 restrictions.

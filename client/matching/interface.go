@@ -21,7 +21,7 @@
 package matching
 
 import (
-	"github.com/uber/cadence/.gen/go/matching/matchingserviceclient"
+	"github.com/temporalio/temporal/.gen/go/matching/matchingserviceclient"
 )
 
 // Client is the interface exposed by matching service client

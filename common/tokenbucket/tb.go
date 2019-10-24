@@ -25,8 +25,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber/cadence/common/clock"
-	"github.com/uber/cadence/common/service/dynamicconfig"
+	"github.com/temporalio/temporal/common/clock"
+	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
 type (

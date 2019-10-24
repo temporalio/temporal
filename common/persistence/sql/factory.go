@@ -23,12 +23,12 @@ package sql
 import (
 	"sync"
 
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/log"
-	p "github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/persistence/sql/storage"
-	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
-	"github.com/uber/cadence/common/service/config"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/log"
+	p "github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/persistence/sql/storage"
+	"github.com/temporalio/temporal/common/persistence/sql/storage/sqldb"
+	"github.com/temporalio/temporal/common/service/config"
 )
 
 type (

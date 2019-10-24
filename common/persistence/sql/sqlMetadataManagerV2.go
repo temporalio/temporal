@@ -25,12 +25,12 @@ import (
 	"fmt"
 
 	"github.com/go-sql-driver/mysql"
-	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/.gen/go/sqlblobs"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
+	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/go/sqlblobs"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/persistence/sql/storage/sqldb"
 )
 
 type sqlMetadataManagerV2 struct {

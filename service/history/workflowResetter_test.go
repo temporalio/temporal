@@ -29,16 +29,16 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/cache"
-	"github.com/uber/cadence/common/clock"
-	"github.com/uber/cadence/common/collection"
-	"github.com/uber/cadence/common/definition"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/loggerimpl"
-	"github.com/uber/cadence/common/mocks"
-	"github.com/uber/cadence/common/persistence"
+	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/cache"
+	"github.com/temporalio/temporal/common/clock"
+	"github.com/temporalio/temporal/common/collection"
+	"github.com/temporalio/temporal/common/definition"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/log/loggerimpl"
+	"github.com/temporalio/temporal/common/mocks"
+	"github.com/temporalio/temporal/common/persistence"
 )
 
 type (

@@ -28,10 +28,10 @@ package historyservicetest
 import (
 	context "context"
 	gomock "github.com/golang/mock/gomock"
-	history "github.com/uber/cadence/.gen/go/history"
-	historyserviceclient "github.com/uber/cadence/.gen/go/history/historyserviceclient"
-	replicator "github.com/uber/cadence/.gen/go/replicator"
-	shared "github.com/uber/cadence/.gen/go/shared"
+	history "github.com/temporalio/temporal/.gen/go/history"
+	historyserviceclient "github.com/temporalio/temporal/.gen/go/history/historyserviceclient"
+	replicator "github.com/temporalio/temporal/.gen/go/replicator"
+	shared "github.com/temporalio/temporal/.gen/go/shared"
 	yarpc "go.uber.org/yarpc"
 )
 

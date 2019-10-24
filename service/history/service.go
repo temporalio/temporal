@@ -23,19 +23,19 @@ package history
 import (
 	"time"
 
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/archiver"
-	"github.com/uber/cadence/common/cache"
-	"github.com/uber/cadence/common/definition"
-	"github.com/uber/cadence/common/log/loggerimpl"
-	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/common/metrics"
-	"github.com/uber/cadence/common/persistence"
-	espersistence "github.com/uber/cadence/common/persistence/elasticsearch"
-	persistencefactory "github.com/uber/cadence/common/persistence/persistence-factory"
-	"github.com/uber/cadence/common/service"
-	"github.com/uber/cadence/common/service/config"
-	"github.com/uber/cadence/common/service/dynamicconfig"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/archiver"
+	"github.com/temporalio/temporal/common/cache"
+	"github.com/temporalio/temporal/common/definition"
+	"github.com/temporalio/temporal/common/log/loggerimpl"
+	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/persistence"
+	espersistence "github.com/temporalio/temporal/common/persistence/elasticsearch"
+	persistencefactory "github.com/temporalio/temporal/common/persistence/persistence-factory"
+	"github.com/temporalio/temporal/common/service"
+	"github.com/temporalio/temporal/common/service/config"
+	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
 // Config represents configuration for cadence-history service
@@ -167,7 +167,7 @@ type Config struct {
 
 	// Decision settings
 	// StickyTTL is to expire a sticky tasklist if no update more than this duration
-	// TODO https://github.com/uber/cadence/issues/2357
+	// TODO https://github.com/temporalio/temporal/issues/2357
 	StickyTTL dynamicconfig.DurationPropertyFnWithDomainFilter
 	// DecisionHeartbeatTimeout is to timeout behavior of: RespondDecisionTaskComplete with ForceCreateNewDecisionTask == true without any decisions
 	// So that decision will be scheduled to another worker(by clear stickyness)

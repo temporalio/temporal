@@ -27,9 +27,9 @@ package historyserviceclient
 
 import (
 	context "context"
-	history "github.com/uber/cadence/.gen/go/history"
-	replicator "github.com/uber/cadence/.gen/go/replicator"
-	shared "github.com/uber/cadence/.gen/go/shared"
+	history "github.com/temporalio/temporal/.gen/go/history"
+	replicator "github.com/temporalio/temporal/.gen/go/replicator"
+	shared "github.com/temporalio/temporal/.gen/go/shared"
 	wire "go.uber.org/thriftrw/wire"
 	yarpc "go.uber.org/yarpc"
 	transport "go.uber.org/yarpc/api/transport"

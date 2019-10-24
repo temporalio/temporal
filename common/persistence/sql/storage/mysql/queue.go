@@ -24,8 +24,8 @@ import (
 	"database/sql"
 	"encoding/json"
 
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/persistence/sql/storage/sqldb"
 )
 
 const (

@@ -26,7 +26,7 @@
 package metafx
 
 import (
-	metaclient "github.com/uber/cadence/.gen/go/health/metaclient"
+	metaclient "github.com/temporalio/temporal/.gen/go/health/metaclient"
 	fx "go.uber.org/fx"
 	yarpc "go.uber.org/yarpc"
 	thrift "go.uber.org/yarpc/encoding/thrift"

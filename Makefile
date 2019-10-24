@@ -1,5 +1,5 @@
 .PHONY: test bins clean cover cover_ci
-PROJECT_ROOT = github.com/uber/cadence
+PROJECT_ROOT = github.com/temporalio/temporal
 
 export PATH := $(shell go env GOPATH)/bin:$(PATH)
 
@@ -19,15 +19,15 @@ default: test
 # define the list of thrift files the service depends on
 # (if you have some)
 THRIFTRW_SRCS = \
-  idl/github.com/uber/cadence/cadence.thrift \
-  idl/github.com/uber/cadence/health.thrift \
-  idl/github.com/uber/cadence/history.thrift \
-  idl/github.com/uber/cadence/matching.thrift \
-  idl/github.com/uber/cadence/replicator.thrift \
-  idl/github.com/uber/cadence/indexer.thrift \
-  idl/github.com/uber/cadence/shared.thrift \
-  idl/github.com/uber/cadence/admin.thrift \
-  idl/github.com/uber/cadence/sqlblobs.thrift \
+  idl/github.com/temporalio/temporal/temporal.thrift \
+  idl/github.com/temporalio/temporal/health.thrift \
+  idl/github.com/temporalio/temporal/history.thrift \
+  idl/github.com/temporalio/temporal/matching.thrift \
+  idl/github.com/temporalio/temporal/replicator.thrift \
+  idl/github.com/temporalio/temporal/indexer.thrift \
+  idl/github.com/temporalio/temporal/shared.thrift \
+  idl/github.com/temporalio/temporal/admin.thrift \
+  idl/github.com/temporalio/temporal/sqlblobs.thrift \
 
 PROGS = cadence
 TEST_TIMEOUT = 15m

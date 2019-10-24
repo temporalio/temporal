@@ -23,10 +23,10 @@ package cluster
 import (
 	"fmt"
 
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/service/config"
-	"github.com/uber/cadence/common/service/dynamicconfig"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/service/config"
+	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
 type (

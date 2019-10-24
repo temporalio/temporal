@@ -25,12 +25,12 @@ package history
 import (
 	"time"
 
-	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/cache"
-	"github.com/uber/cadence/common/clock"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/persistence"
+	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/cache"
+	"github.com/temporalio/temporal/common/clock"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/persistence"
 )
 
 var emptyTasks = []persistence.Task{}

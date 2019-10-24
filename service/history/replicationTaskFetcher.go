@@ -25,15 +25,15 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
-	r "github.com/uber/cadence/.gen/go/replicator"
-	"github.com/uber/cadence/client"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/backoff"
-	"github.com/uber/cadence/common/cluster"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/common/service/config"
+	r "github.com/temporalio/temporal/.gen/go/replicator"
+	"github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
+	"github.com/temporalio/temporal/client"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/backoff"
+	"github.com/temporalio/temporal/common/cluster"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/service/config"
 )
 
 const (

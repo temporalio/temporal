@@ -25,8 +25,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber/cadence/environment"
-	"github.com/uber/cadence/tools/common/schema"
+	"github.com/temporalio/temporal/environment"
+	"github.com/temporalio/temporal/tools/common/schema"
 )
 
 type (

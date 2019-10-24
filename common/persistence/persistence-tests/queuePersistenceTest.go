@@ -28,8 +28,8 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
-	"github.com/uber/cadence/.gen/go/replicator"
-	"github.com/uber/cadence/common"
+	"github.com/temporalio/temporal/.gen/go/replicator"
+	"github.com/temporalio/temporal/common"
 )
 
 type (

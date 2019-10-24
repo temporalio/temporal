@@ -24,8 +24,8 @@ import (
 	"context"
 
 	"github.com/hashicorp/go-version"
-	gen "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
+	gen "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common"
 	"go.uber.org/yarpc"
 )
 

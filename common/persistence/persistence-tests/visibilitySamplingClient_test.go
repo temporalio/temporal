@@ -26,15 +26,15 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	gen "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/log/loggerimpl"
-	"github.com/uber/cadence/common/metrics"
-	mmocks "github.com/uber/cadence/common/metrics/mocks"
-	"github.com/uber/cadence/common/mocks"
-	p "github.com/uber/cadence/common/persistence"
-	c "github.com/uber/cadence/common/service/config"
-	"github.com/uber/cadence/common/service/dynamicconfig"
+	gen "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/log/loggerimpl"
+	"github.com/temporalio/temporal/common/metrics"
+	mmocks "github.com/temporalio/temporal/common/metrics/mocks"
+	"github.com/temporalio/temporal/common/mocks"
+	p "github.com/temporalio/temporal/common/persistence"
+	c "github.com/temporalio/temporal/common/service/config"
+	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
 type VisibilitySamplingSuite struct {

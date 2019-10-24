@@ -21,12 +21,12 @@
 package matching
 
 import (
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/log/loggerimpl"
-	"github.com/uber/cadence/common/log/tag"
-	persistencefactory "github.com/uber/cadence/common/persistence/persistence-factory"
-	"github.com/uber/cadence/common/service"
-	"github.com/uber/cadence/common/service/dynamicconfig"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/log/loggerimpl"
+	"github.com/temporalio/temporal/common/log/tag"
+	persistencefactory "github.com/temporalio/temporal/common/persistence/persistence-factory"
+	"github.com/temporalio/temporal/common/service"
+	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
 // Service represents the cadence-matching service

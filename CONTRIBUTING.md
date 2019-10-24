@@ -14,8 +14,8 @@ Make sure the repository is cloned to the correct location:
 
 ```bash
 cd $GOPATH
-git clone https://github.com/uber/cadence.git src/github.com/uber/cadence
-cd $GOPATH/src/github.com/uber/cadence
+git clone https://github.com/temporalio/temporal.git src/github.com/temporalio/temporal
+cd $GOPATH/src/github.com/temporalio/temporal
 ```
 
 ## Dependency management
@@ -48,13 +48,13 @@ All PR titles should start with UPPER case.
 
 Examples:
 
-- [Make sync activity retry multiple times before fetch history from remote](https://github.com/uber/cadence/pull/1379)
-- [Enable archival config per domain](https://github.com/uber/cadence/pull/1351)
+- [Make sync activity retry multiple times before fetch history from remote](https://github.com/temporalio/temporal/pull/1379)
+- [Enable archival config per domain](https://github.com/temporalio/temporal/pull/1351)
 
 ## Issues to start with
 
 Take a look at the list of issues labeled 
-[up-for-grabs](https://github.com/uber/cadence/labels/up-for-grabs). These issues 
+[up-for-grabs](https://github.com/temporalio/temporal/labels/up-for-grabs). These issues 
 are a great way to start contributing to Cadence.
 
 ## Building
@@ -93,5 +93,5 @@ go test -v
 # run single test
 go test -v <path> -run <TestSuite> -testify.m <TestSpercificTaskName>
 # example:
-go test -v github.com/uber/cadence/common/persistence -run TestCassandraPersistenceSuite -testify.m TestPersistenceStartWorkflow
+go test -v github.com/temporalio/temporal/common/persistence -run TestCassandraPersistenceSuite -testify.m TestPersistenceStartWorkflow
 ```

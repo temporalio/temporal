@@ -24,9 +24,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/service/worker/scanner/history"
-	"github.com/uber/cadence/service/worker/scanner/tasklist"
+	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/service/worker/scanner/history"
+	"github.com/temporalio/temporal/service/worker/scanner/tasklist"
 	"go.uber.org/cadence"
 	"go.uber.org/cadence/activity"
 	cclient "go.uber.org/cadence/client"

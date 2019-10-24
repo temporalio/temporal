@@ -26,11 +26,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/backoff"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/common/metrics"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/backoff"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/metrics"
 )
 
 type (

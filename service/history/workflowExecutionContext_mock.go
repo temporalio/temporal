@@ -30,9 +30,9 @@ package history
 import (
 	context "context"
 	gomock "github.com/golang/mock/gomock"
-	shared "github.com/uber/cadence/.gen/go/shared"
-	log "github.com/uber/cadence/common/log"
-	persistence "github.com/uber/cadence/common/persistence"
+	shared "github.com/temporalio/temporal/.gen/go/shared"
+	log "github.com/temporalio/temporal/common/log"
+	persistence "github.com/temporalio/temporal/common/persistence"
 	reflect "reflect"
 	time "time"
 )

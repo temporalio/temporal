@@ -25,8 +25,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/uber/cadence/common/clock"
-	"github.com/uber/cadence/common/tokenbucket"
+	"github.com/temporalio/temporal/common/clock"
+	"github.com/temporalio/temporal/common/tokenbucket"
 	"math"
 	"net/http"
 	"os"
@@ -36,9 +36,9 @@ import (
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/olivere/elastic"
-	"github.com/uber/cadence/.gen/go/indexer"
-	es "github.com/uber/cadence/common/elasticsearch"
-	"github.com/uber/cadence/common/elasticsearch/esql"
+	"github.com/temporalio/temporal/.gen/go/indexer"
+	es "github.com/temporalio/temporal/common/elasticsearch"
+	"github.com/temporalio/temporal/common/elasticsearch/esql"
 	"github.com/urfave/cli"
 )
 

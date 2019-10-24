@@ -22,8 +22,8 @@ package config
 
 import (
 	"fmt"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/log/tag"
 	"net/http"
 	"sync/atomic"
 	// DO NOT REMOVE THE LINE BELOW

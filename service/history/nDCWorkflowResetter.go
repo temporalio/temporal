@@ -28,10 +28,10 @@ import (
 
 	"github.com/pborman/uuid"
 
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/definition"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/persistence"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/definition"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/persistence"
 )
 
 type (
