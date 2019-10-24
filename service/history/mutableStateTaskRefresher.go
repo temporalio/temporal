@@ -335,11 +335,13 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForTimer(
 
 	for _, timerInfo := range pendingTimerInfos {
 		// clear all timer task mask for later timer task re-generation
+		// TaskID is a misleading variable, it actually serves
+		// the purpose of indicating whether a timer task is
+		// generated for this timer info
 		timerInfo.TaskID = TimerTaskStatusNone
 
 		// need to update user timer task mask for which task is generated
 		if err := mutableState.UpdateUserTimer(
-			timerInfo.TimerID,
 			timerInfo,
 		); err != nil {
 			return err

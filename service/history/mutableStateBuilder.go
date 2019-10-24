@@ -70,15 +70,16 @@ var (
 
 type (
 	mutableStateBuilder struct {
-		pendingActivityInfoIDs          map[int64]*persistence.ActivityInfo    // Schedule Event ID -> Activity Info.
-		pendingActivityInfoByActivityID map[string]int64                       // Activity ID -> Schedule Event ID of the activity.
-		updateActivityInfos             map[*persistence.ActivityInfo]struct{} // Modified activities from last update.
-		deleteActivityInfos             map[int64]struct{}                     // Deleted activities from last update.
-		syncActivityTasks               map[int64]struct{}                     // Activity to be sync to remote
+		pendingActivityInfoIDs     map[int64]*persistence.ActivityInfo    // Schedule Event ID -> Activity Info.
+		pendingActivityIDToEventID map[string]int64                       // Activity ID -> Schedule Event ID of the activity.
+		updateActivityInfos        map[*persistence.ActivityInfo]struct{} // Modified activities from last update.
+		deleteActivityInfos        map[int64]struct{}                     // Deleted activities from last update.
+		syncActivityTasks          map[int64]struct{}                     // Activity to be sync to remote
 
-		pendingTimerInfoIDs map[string]*persistence.TimerInfo   // User Timer ID -> Timer Info.
-		updateTimerInfos    map[*persistence.TimerInfo]struct{} // Modified timers from last update.
-		deleteTimerInfos    map[string]struct{}                 // Deleted timers from last update.
+		pendingTimerInfoIDs     map[string]*persistence.TimerInfo   // User Timer ID -> Timer Info.
+		pendingTimerEventIDToID map[int64]string                    // User Timer Start Event ID -> User Timer ID.
+		updateTimerInfos        map[*persistence.TimerInfo]struct{} // Modified timers from last update.
+		deleteTimerInfos        map[string]struct{}                 // Deleted timers from last update.
 
 		pendingChildExecutionInfoIDs map[int64]*persistence.ChildExecutionInfo    // Initiated Event ID -> Child Execution Info
 		updateChildExecutionInfos    map[*persistence.ChildExecutionInfo]struct{} // Modified ChildExecution Infos since last update
@@ -145,15 +146,16 @@ func newMutableStateBuilder(
 	domainEntry *cache.DomainCacheEntry,
 ) *mutableStateBuilder {
 	s := &mutableStateBuilder{
-		updateActivityInfos:             make(map[*persistence.ActivityInfo]struct{}),
-		pendingActivityInfoIDs:          make(map[int64]*persistence.ActivityInfo),
-		pendingActivityInfoByActivityID: make(map[string]int64),
-		deleteActivityInfos:             make(map[int64]struct{}),
-		syncActivityTasks:               make(map[int64]struct{}),
+		updateActivityInfos:        make(map[*persistence.ActivityInfo]struct{}),
+		pendingActivityInfoIDs:     make(map[int64]*persistence.ActivityInfo),
+		pendingActivityIDToEventID: make(map[string]int64),
+		deleteActivityInfos:        make(map[int64]struct{}),
+		syncActivityTasks:          make(map[int64]struct{}),
 
-		pendingTimerInfoIDs: make(map[string]*persistence.TimerInfo),
-		updateTimerInfos:    make(map[*persistence.TimerInfo]struct{}),
-		deleteTimerInfos:    make(map[string]struct{}),
+		pendingTimerInfoIDs:     make(map[string]*persistence.TimerInfo),
+		pendingTimerEventIDToID: make(map[int64]string),
+		updateTimerInfos:        make(map[*persistence.TimerInfo]struct{}),
+		deleteTimerInfos:        make(map[string]struct{}),
 
 		updateChildExecutionInfos:    make(map[*persistence.ChildExecutionInfo]struct{}),
 		pendingChildExecutionInfoIDs: make(map[int64]*persistence.ChildExecutionInfo),
@@ -258,7 +260,13 @@ func (e *mutableStateBuilder) Load(
 ) {
 
 	e.pendingActivityInfoIDs = state.ActivityInfos
+	for _, activityInfo := range state.ActivityInfos {
+		e.pendingActivityIDToEventID[activityInfo.ActivityID] = activityInfo.ScheduleID
+	}
 	e.pendingTimerInfoIDs = state.TimerInfos
+	for _, timerInfo := range state.TimerInfos {
+		e.pendingTimerEventIDToID[timerInfo.StartedID] = timerInfo.TimerID
+	}
 	e.pendingChildExecutionInfoIDs = state.ChildExecutionInfos
 	e.pendingRequestCancelInfoIDs = state.RequestCancelInfos
 	e.pendingSignalInfoIDs = state.SignalInfos
@@ -267,9 +275,6 @@ func (e *mutableStateBuilder) Load(
 
 	e.replicationState = state.ReplicationState
 	e.bufferedEvents = state.BufferedEvents
-	for _, ai := range state.ActivityInfos {
-		e.pendingActivityInfoByActivityID[ai.ActivityID] = ai.ScheduleID
-	}
 
 	e.currentVersion = common.EmptyVersion
 	e.hasBufferedEventsInDB = len(e.bufferedEvents) > 0
@@ -937,25 +942,11 @@ func (e *mutableStateBuilder) GetActivityByActivityID(
 	activityID string,
 ) (*persistence.ActivityInfo, bool) {
 
-	eventID, ok := e.pendingActivityInfoByActivityID[activityID]
+	eventID, ok := e.pendingActivityIDToEventID[activityID]
 	if !ok {
 		return nil, false
 	}
-
-	ai, ok := e.pendingActivityInfoIDs[eventID]
-	return ai, ok
-}
-
-// GetScheduleIDByActivityID return scheduleID given activityID
-func (e *mutableStateBuilder) GetScheduleIDByActivityID(
-	activityID string,
-) (int64, error) {
-
-	scheduleID, ok := e.pendingActivityInfoByActivityID[activityID]
-	if !ok {
-		return 0, ErrMissingActivityInfo
-	}
-	return scheduleID, nil
+	return e.GetActivityInfo(eventID)
 }
 
 // GetChildExecutionInfo gives details about a child execution that is currently in progress.
@@ -1045,7 +1036,7 @@ func (e *mutableStateBuilder) GetCronBackoffDuration() (time.Duration, error) {
 	// This only call when doing ContinueAsNew. At this point, the workflow should have a start event
 	workflowStartEvent, err := e.GetStartEvent()
 	if err != nil {
-		e.logger.Error("Unable to find workflow start event", tag.ErrorTypeInvalidHistoryAction)
+		e.logger.Error("unable to find workflow start event", tag.ErrorTypeInvalidHistoryAction)
 		return backoff.NoBackoff, err
 	}
 	firstDecisionTaskBackoff :=
@@ -1137,7 +1128,7 @@ func (e *mutableStateBuilder) DeletePendingChildExecution(
 
 	if _, ok := e.pendingChildExecutionInfoIDs[initiatedEventID]; !ok {
 		e.logger.Error(
-			fmt.Sprintf("Unable to find child workflow: %v in mutable state", initiatedEventID),
+			fmt.Sprintf("unable to find child workflow: %v in mutable state", initiatedEventID),
 			tag.ErrorTypeInvalidMutableStateAction,
 		)
 		return ErrMissingChildWorkflowInfo
@@ -1155,7 +1146,7 @@ func (e *mutableStateBuilder) DeletePendingRequestCancel(
 
 	if _, ok := e.pendingRequestCancelInfoIDs[initiatedEventID]; !ok {
 		e.logger.Error(
-			fmt.Sprintf("Unable to find request cancel info: %v in mutable state", initiatedEventID),
+			fmt.Sprintf("unable to find request cancel info: %v in mutable state", initiatedEventID),
 			tag.ErrorTypeInvalidMutableStateAction,
 		)
 		return ErrMissingRequestCancelInfo
@@ -1173,7 +1164,7 @@ func (e *mutableStateBuilder) DeletePendingSignal(
 
 	if _, ok := e.pendingSignalInfoIDs[initiatedEventID]; !ok {
 		e.logger.Error(
-			fmt.Sprintf("Unable to find signal info: %v in mutable state", initiatedEventID),
+			fmt.Sprintf("unable to find signal info: %v in mutable state", initiatedEventID),
 			tag.ErrorTypeInvalidMutableStateAction,
 		)
 		return ErrMissingSignalInfo
@@ -1228,7 +1219,7 @@ func (e *mutableStateBuilder) ReplicateActivityInfo(
 	ai, ok := e.pendingActivityInfoIDs[request.GetScheduledId()]
 	if !ok {
 		e.logger.Error(
-			fmt.Sprintf("Unable to find activity: %v in mutable state", request.GetScheduledId()),
+			fmt.Sprintf("unable to find activity event ID: %v in mutable state", request.GetScheduledId()),
 			tag.ErrorTypeInvalidMutableStateAction,
 		)
 		return ErrMissingActivityInfo
@@ -1264,7 +1255,7 @@ func (e *mutableStateBuilder) UpdateActivity(
 
 	if _, ok := e.pendingActivityInfoIDs[ai.ScheduleID]; !ok {
 		e.logger.Error(
-			fmt.Sprintf("Unable to find activity: %v in mutable state", ai.ActivityID),
+			fmt.Sprintf("unable to find activity ID: %v in mutable state", ai.ActivityID),
 			tag.ErrorTypeInvalidMutableStateAction,
 		)
 		return ErrMissingActivityInfo
@@ -1280,32 +1271,32 @@ func (e *mutableStateBuilder) DeleteActivity(
 	scheduleEventID int64,
 ) error {
 
-	ai, ok := e.pendingActivityInfoIDs[scheduleEventID]
+	activityInfo, ok := e.pendingActivityInfoIDs[scheduleEventID]
 	if !ok {
 		e.logger.Error(
-			fmt.Sprintf("Unable to find activity with schedule event id: %v in mutable state", scheduleEventID),
+			fmt.Sprintf("unable to find activity event id: %v in mutable state", scheduleEventID),
 			tag.ErrorTypeInvalidMutableStateAction,
 		)
 		return ErrMissingActivityInfo
 	}
+
+	_, ok = e.pendingActivityIDToEventID[activityInfo.ActivityID]
+	if !ok {
+		e.logger.Error(
+			fmt.Sprintf("unable to find activity ID: %v in mutable state", activityInfo.ActivityID),
+			tag.ErrorTypeInvalidMutableStateAction,
+		)
+		return ErrMissingActivityInfo
+	}
+
 	delete(e.pendingActivityInfoIDs, scheduleEventID)
-
-	_, ok = e.pendingActivityInfoByActivityID[ai.ActivityID]
-	if !ok {
-		e.logger.Error(
-			fmt.Sprintf("Unable to find activity: %v in mutable state", ai.ActivityID),
-			tag.ErrorTypeInvalidMutableStateAction,
-		)
-		return ErrMissingActivityInfo
-	}
-	delete(e.pendingActivityInfoByActivityID, ai.ActivityID)
-
+	delete(e.pendingActivityIDToEventID, activityInfo.ActivityID)
 	e.deleteActivityInfos[scheduleEventID] = struct{}{}
 	return nil
 }
 
-// GetUserTimer gives details about a user timer.
-func (e *mutableStateBuilder) GetUserTimer(
+// GetUserTimerInfo gives details about a user timer.
+func (e *mutableStateBuilder) GetUserTimerInfo(
 	timerID string,
 ) (*persistence.TimerInfo, bool) {
 
@@ -1313,15 +1304,35 @@ func (e *mutableStateBuilder) GetUserTimer(
 	return timerInfo, ok
 }
 
+// GetUserTimerInfoByEventID gives details about a user timer.
+func (e *mutableStateBuilder) GetUserTimerInfoByEventID(
+	startEventID int64,
+) (*persistence.TimerInfo, bool) {
+
+	timerID, ok := e.pendingTimerEventIDToID[startEventID]
+	if !ok {
+		return nil, false
+	}
+	return e.GetUserTimerInfo(timerID)
+}
+
 // UpdateUserTimer updates the user timer in progress.
 func (e *mutableStateBuilder) UpdateUserTimer(
-	timerID string,
 	ti *persistence.TimerInfo,
 ) error {
 
+	timerID, ok := e.pendingTimerEventIDToID[ti.StartedID]
+	if !ok {
+		e.logger.Error(
+			fmt.Sprintf("unable to find timer event ID: %v in mutable state", ti.StartedID),
+			tag.ErrorTypeInvalidMutableStateAction,
+		)
+		return ErrMissingTimerInfo
+	}
+
 	if _, ok := e.pendingTimerInfoIDs[timerID]; !ok {
 		e.logger.Error(
-			fmt.Sprintf("Unable to find timer: %v in mutable state", timerID),
+			fmt.Sprintf("unable to find timer ID: %v in mutable state", timerID),
 			tag.ErrorTypeInvalidMutableStateAction,
 		)
 		return ErrMissingTimerInfo
@@ -1337,15 +1348,26 @@ func (e *mutableStateBuilder) DeleteUserTimer(
 	timerID string,
 ) error {
 
-	if _, ok := e.pendingTimerInfoIDs[timerID]; !ok {
+	timerInfo, ok := e.pendingTimerInfoIDs[timerID]
+	if !ok {
 		e.logger.Error(
-			fmt.Sprintf("Unable to find timer: %v in mutable state", timerID),
+			fmt.Sprintf("unable to find timer ID: %v in mutable state", timerID),
+			tag.ErrorTypeInvalidMutableStateAction,
+		)
+		return ErrMissingTimerInfo
+	}
+
+	_, ok = e.pendingTimerEventIDToID[timerInfo.StartedID]
+	if !ok {
+		e.logger.Error(
+			fmt.Sprintf("unable to find timer event ID: %v in mutable state", timerID),
 			tag.ErrorTypeInvalidMutableStateAction,
 		)
 		return ErrMissingTimerInfo
 	}
 
 	delete(e.pendingTimerInfoIDs, timerID)
+	delete(e.pendingTimerEventIDToID, timerInfo.StartedID)
 	e.deleteTimerInfos[timerID] = struct{}{}
 	return nil
 }
@@ -2075,7 +2097,7 @@ func (e *mutableStateBuilder) ReplicateActivityTaskScheduledEvent(
 	}
 
 	e.pendingActivityInfoIDs[scheduleEventID] = ai
-	e.pendingActivityInfoByActivityID[ai.ActivityID] = scheduleEventID
+	e.pendingActivityIDToEventID[ai.ActivityID] = scheduleEventID
 	e.updateActivityInfos[ai] = struct{}{}
 
 	return ai, nil
@@ -2913,7 +2935,7 @@ func (e *mutableStateBuilder) AddTimerStartedEvent(
 	}
 
 	timerID := request.GetTimerId()
-	ti, ok := e.GetUserTimer(timerID)
+	ti, ok := e.GetUserTimerInfo(timerID)
 	if ok {
 		e.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
@@ -2950,6 +2972,7 @@ func (e *mutableStateBuilder) ReplicateTimerStartedEvent(
 	}
 
 	e.pendingTimerInfoIDs[timerID] = ti
+	e.pendingTimerEventIDToID[event.GetEventId()] = timerID
 	e.updateTimerInfos[ti] = struct{}{}
 
 	return ti, nil
@@ -2965,7 +2988,7 @@ func (e *mutableStateBuilder) AddTimerFiredEvent(
 		return nil, err
 	}
 
-	_, ok := e.GetUserTimer(timerID)
+	_, ok := e.GetUserTimerInfo(timerID)
 	if !ok {
 		e.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
@@ -3006,7 +3029,7 @@ func (e *mutableStateBuilder) AddTimerCanceledEvent(
 
 	var timerStartedID int64
 	timerID := attributes.GetTimerId()
-	ti, ok := e.GetUserTimer(timerID)
+	ti, ok := e.GetUserTimerInfo(timerID)
 	if !ok {
 		// if timer is not running then check if it has fired in the mutable state.
 		// If so clear the timer from the mutable state. We need to check both the

@@ -664,7 +664,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeTimerStarted() {
 		TaskID:     TimerTaskStatusNone,
 	}
 	s.mockMutableState.EXPECT().GetPendingTimerInfos().Return(map[string]*persistence.TimerInfo{timerID: ti}).Times(1)
-	s.mockMutableState.EXPECT().UpdateUserTimer(ti.TimerID, ti).Return(nil).Times(1)
+	s.mockMutableState.EXPECT().UpdateUserTimer(ti).Return(nil).Times(1)
 	s.mockMutableState.EXPECT().ReplicateTimerStartedEvent(event).Return(ti, nil).Times(1)
 	s.mockUpdateVersion(event)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{}).AnyTimes()
@@ -713,7 +713,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeTimerFired() {
 		TaskID:     TimerTaskStatusNone,
 	}
 	s.mockMutableState.EXPECT().GetPendingTimerInfos().Return(map[string]*persistence.TimerInfo{ti.TimerID: ti}).Times(1)
-	s.mockMutableState.EXPECT().UpdateUserTimer(ti.TimerID, ti).Return(nil).Times(1)
+	s.mockMutableState.EXPECT().UpdateUserTimer(ti).Return(nil).Times(1)
 	s.mockMutableState.EXPECT().ReplicateTimerFiredEvent(event).Return(nil).Times(1)
 	s.mockUpdateVersion(event)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{}).AnyTimes()
@@ -752,7 +752,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeTimerCanceled() {
 		TaskID:     TimerTaskStatusNone,
 	}
 	s.mockMutableState.EXPECT().GetPendingTimerInfos().Return(map[string]*persistence.TimerInfo{timerID: ti}).Times(1)
-	s.mockMutableState.EXPECT().UpdateUserTimer(ti.TimerID, ti).Return(nil).Times(1)
+	s.mockMutableState.EXPECT().UpdateUserTimer(ti).Return(nil).Times(1)
 
 	evenType := shared.EventTypeTimerCanceled
 	event := &shared.HistoryEvent{

@@ -117,7 +117,7 @@ func (s *timerBuilderProcessorSuite) TestTimerBuilderSingleUserTimer() {
 	s.Equal(int64(201), t1.(*persistence.UserTimerTask).EventID)
 	s.Equal(ti1.ExpiryTime.Unix(), t1.(*persistence.UserTimerTask).VisibilityTimestamp.Unix())
 
-	ti, ok := msb.GetUserTimer("tid1")
+	ti, ok := msb.GetUserTimerInfo("tid1")
 	s.True(ok)
 	s.NotNil(ti)
 	s.Equal(int64(201), ti.StartedID)
@@ -178,7 +178,7 @@ func (s *timerBuilderProcessorSuite) TestTimerBuilderMulitpleUserTimer() {
 	s.Equal(int64(201), t1.(*persistence.UserTimerTask).EventID)
 	s.Equal(tp2.ExpiryTime.Unix(), t1.(*persistence.UserTimerTask).VisibilityTimestamp.Unix())
 
-	ti, ok := msb.GetUserTimer("tid-after")
+	ti, ok := msb.GetUserTimerInfo("tid-after")
 	s.True(ok)
 	s.NotNil(ti)
 	s.Equal(int64(TimerTaskStatusNone), ti.TaskID)

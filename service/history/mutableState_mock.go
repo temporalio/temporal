@@ -60,88 +60,6 @@ func (m *MockmutableState) EXPECT() *MockmutableStateMockRecorder {
 	return m.recorder
 }
 
-// AddInMemoryDecisionTaskScheduled mocks base method
-func (m *MockmutableState) AddInMemoryDecisionTaskScheduled(arg0 time.Duration) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddInMemoryDecisionTaskScheduled", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// AddInMemoryDecisionTaskScheduled indicates an expected call of AddInMemoryDecisionTaskScheduled
-func (mr *MockmutableStateMockRecorder) AddInMemoryDecisionTaskScheduled(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddInMemoryDecisionTaskScheduled", reflect.TypeOf((*MockmutableState)(nil).AddInMemoryDecisionTaskScheduled), arg0)
-}
-
-// AddInMemoryDecisionTaskStarted mocks base method
-func (m *MockmutableState) AddInMemoryDecisionTaskStarted() error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddInMemoryDecisionTaskStarted")
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// AddInMemoryDecisionTaskStarted indicates an expected call of AddInMemoryDecisionTaskStarted
-func (mr *MockmutableStateMockRecorder) AddInMemoryDecisionTaskStarted() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddInMemoryDecisionTaskStarted", reflect.TypeOf((*MockmutableState)(nil).AddInMemoryDecisionTaskStarted))
-}
-
-// DeleteInMemoryDecisionTask mocks base method
-func (m *MockmutableState) DeleteInMemoryDecisionTask() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "DeleteInMemoryDecisionTask")
-}
-
-// DeleteInMemoryDecisionTask indicates an expected call of DeleteInMemoryDecisionTask
-func (mr *MockmutableStateMockRecorder) DeleteInMemoryDecisionTask() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteInMemoryDecisionTask", reflect.TypeOf((*MockmutableState)(nil).DeleteInMemoryDecisionTask))
-}
-
-// HasScheduledInMemoryDecisionTask mocks base method
-func (m *MockmutableState) HasScheduledInMemoryDecisionTask() bool {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HasScheduledInMemoryDecisionTask")
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// HasScheduledInMemoryDecisionTask indicates an expected call of HasScheduledInMemoryDecisionTask
-func (mr *MockmutableStateMockRecorder) HasScheduledInMemoryDecisionTask() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasScheduledInMemoryDecisionTask", reflect.TypeOf((*MockmutableState)(nil).HasScheduledInMemoryDecisionTask))
-}
-
-// HasStartedInMemoryDecisionTask mocks base method
-func (m *MockmutableState) HasStartedInMemoryDecisionTask() bool {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HasStartedInMemoryDecisionTask")
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// HasStartedInMemoryDecisionTask indicates an expected call of HasStartedInMemoryDecisionTask
-func (mr *MockmutableStateMockRecorder) HasStartedInMemoryDecisionTask() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasStartedInMemoryDecisionTask", reflect.TypeOf((*MockmutableState)(nil).HasStartedInMemoryDecisionTask))
-}
-
-// HasInMemoryDecisionTask mocks base method
-func (m *MockmutableState) HasInMemoryDecisionTask() bool {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HasInMemoryDecisionTask")
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// HasInMemoryDecisionTask indicates an expected call of HasInMemoryDecisionTask
-func (mr *MockmutableStateMockRecorder) HasInMemoryDecisionTask() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasInMemoryDecisionTask", reflect.TypeOf((*MockmutableState)(nil).HasInMemoryDecisionTask))
-}
-
 // AddActivityTaskCancelRequestedEvent mocks base method
 func (m *MockmutableState) AddActivityTaskCancelRequestedEvent(arg0 int64, arg1, arg2 string) (*shared.HistoryEvent, *persistence.ActivityInfo, error) {
 	m.ctrl.T.Helper()
@@ -1404,21 +1322,6 @@ func (mr *MockmutableStateMockRecorder) GetCronBackoffDuration() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCronBackoffDuration", reflect.TypeOf((*MockmutableState)(nil).GetCronBackoffDuration))
 }
 
-// GetScheduleIDByActivityID mocks base method
-func (m *MockmutableState) GetScheduleIDByActivityID(arg0 string) (int64, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetScheduleIDByActivityID", arg0)
-	ret0, _ := ret[0].(int64)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetScheduleIDByActivityID indicates an expected call of GetScheduleIDByActivityID
-func (mr *MockmutableStateMockRecorder) GetScheduleIDByActivityID(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetScheduleIDByActivityID", reflect.TypeOf((*MockmutableState)(nil).GetScheduleIDByActivityID), arg0)
-}
-
 // GetSignalInfo mocks base method
 func (m *MockmutableState) GetSignalInfo(arg0 int64) (*persistence.SignalInfo, bool) {
 	m.ctrl.T.Helper()
@@ -1449,19 +1352,34 @@ func (mr *MockmutableStateMockRecorder) GetStartVersion() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStartVersion", reflect.TypeOf((*MockmutableState)(nil).GetStartVersion))
 }
 
-// GetUserTimer mocks base method
-func (m *MockmutableState) GetUserTimer(arg0 string) (*persistence.TimerInfo, bool) {
+// GetUserTimerInfoByEventID mocks base method
+func (m *MockmutableState) GetUserTimerInfoByEventID(arg0 int64) (*persistence.TimerInfo, bool) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetUserTimer", arg0)
+	ret := m.ctrl.Call(m, "GetUserTimerInfoByEventID", arg0)
 	ret0, _ := ret[0].(*persistence.TimerInfo)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
 
-// GetUserTimer indicates an expected call of GetUserTimer
-func (mr *MockmutableStateMockRecorder) GetUserTimer(arg0 interface{}) *gomock.Call {
+// GetUserTimerInfoByEventID indicates an expected call of GetUserTimerInfoByEventID
+func (mr *MockmutableStateMockRecorder) GetUserTimerInfoByEventID(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserTimer", reflect.TypeOf((*MockmutableState)(nil).GetUserTimer), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserTimerInfoByEventID", reflect.TypeOf((*MockmutableState)(nil).GetUserTimerInfoByEventID), arg0)
+}
+
+// GetUserTimerInfo mocks base method
+func (m *MockmutableState) GetUserTimerInfo(arg0 string) (*persistence.TimerInfo, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetUserTimerInfo", arg0)
+	ret0, _ := ret[0].(*persistence.TimerInfo)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// GetUserTimerInfo indicates an expected call of GetUserTimerInfo
+func (mr *MockmutableStateMockRecorder) GetUserTimerInfo(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserTimerInfo", reflect.TypeOf((*MockmutableState)(nil).GetUserTimerInfo), arg0)
 }
 
 // GetWorkflowType mocks base method
@@ -2357,17 +2275,17 @@ func (mr *MockmutableStateMockRecorder) UpdateReplicationStateLastEventID(arg0, 
 }
 
 // UpdateUserTimer mocks base method
-func (m *MockmutableState) UpdateUserTimer(arg0 string, arg1 *persistence.TimerInfo) error {
+func (m *MockmutableState) UpdateUserTimer(arg0 *persistence.TimerInfo) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateUserTimer", arg0, arg1)
+	ret := m.ctrl.Call(m, "UpdateUserTimer", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdateUserTimer indicates an expected call of UpdateUserTimer
-func (mr *MockmutableStateMockRecorder) UpdateUserTimer(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockmutableStateMockRecorder) UpdateUserTimer(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateUserTimer", reflect.TypeOf((*MockmutableState)(nil).UpdateUserTimer), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateUserTimer", reflect.TypeOf((*MockmutableState)(nil).UpdateUserTimer), arg0)
 }
 
 // UpdateCurrentVersion mocks base method

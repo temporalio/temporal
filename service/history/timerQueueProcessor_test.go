@@ -400,7 +400,7 @@ func (s *timerQueueProcessorSuite) checkTimedOutEventForUserTimer(domainID strin
 		s.ShardContext.GetEventsCache(), s.logger, we.GetRunId())
 	builder.Load(info)
 
-	_, ok := builder.GetUserTimer(timerID)
+	_, ok := builder.GetUserTimerInfo(timerID)
 	return ok
 }
 

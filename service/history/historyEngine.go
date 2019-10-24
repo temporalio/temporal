@@ -2534,11 +2534,11 @@ func getScheduleID(
 	if activityID == "" {
 		return 0, &workflow.BadRequestError{Message: "Neither ActivityID nor ScheduleID is provided"}
 	}
-	scheduleID, err := msBuilder.GetScheduleIDByActivityID(activityID)
-	if err != nil {
-		return 0, err
+	activityInfo, ok := msBuilder.GetActivityByActivityID(activityID)
+	if !ok {
+		return 0, &workflow.BadRequestError{Message: "Cannot locate Activity ScheduleID"}
 	}
-	return scheduleID, nil
+	return activityInfo.ScheduleID, nil
 }
 
 func getStartRequest(

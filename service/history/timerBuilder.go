@@ -178,7 +178,7 @@ func (tb *timerBuilder) GetUserTimerTaskIfNeeded(msBuilder mutableState) (persis
 		ti := tb.pendingUserTimers[tb.userTimers[0].TimerID]
 		ti.TaskID = TimerTaskStatusCreated
 		// update timer task mask indicating that task created
-		if err := msBuilder.UpdateUserTimer(ti.TimerID, ti); err != nil {
+		if err := msBuilder.UpdateUserTimer(ti); err != nil {
 			return nil, err
 		}
 	}
