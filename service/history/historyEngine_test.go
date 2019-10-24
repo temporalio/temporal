@@ -715,6 +715,7 @@ func (s *engineSuite) TestQueryWorkflow_DecisionTaskDispatch_Complete() {
 	waitGroup := &sync.WaitGroup{}
 	waitGroup.Add(1)
 	asyncQueryUpdate := func(delay time.Duration, answer []byte) {
+		defer waitGroup.Done()
 		<-time.After(delay)
 		builder := s.getBuilder(testDomainID, execution)
 		s.NotNil(builder)
@@ -731,7 +732,6 @@ func (s *engineSuite) TestQueryWorkflow_DecisionTaskDispatch_Complete() {
 			s.NoError(err)
 			s.Equal(queryStateCompleted, state.state)
 		}
-		waitGroup.Done()
 	}
 
 	request := &history.QueryWorkflowRequest{
