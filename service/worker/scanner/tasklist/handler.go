@@ -25,9 +25,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber/cadence/common/log/tag"
-	p "github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/service/worker/scanner/executor"
+	"github.com/temporalio/temporal/common/log/tag"
+	p "github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/service/worker/scanner/executor"
 )
 
 type handlerStatus = executor.TaskStatus

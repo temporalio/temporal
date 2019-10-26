@@ -28,8 +28,8 @@ import (
 
 	"github.com/gocql/gocql"
 	log "github.com/sirupsen/logrus"
-	"github.com/uber/cadence/tools/cassandra"
-	"github.com/uber/cadence/tools/common/schema"
+	"github.com/temporalio/temporal/tools/cassandra"
+	"github.com/temporalio/temporal/tools/common/schema"
 )
 
 const cassandraPersistenceName = "cassandra"

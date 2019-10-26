@@ -23,7 +23,7 @@ package cli
 import (
 	"strings"
 
-	"github.com/uber/cadence/service/worker/batcher"
+	"github.com/temporalio/temporal/service/worker/batcher"
 	"github.com/urfave/cli"
 )
 

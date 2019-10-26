@@ -25,9 +25,9 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
-	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
-	p "github.com/uber/cadence/common/persistence"
+	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common"
+	p "github.com/temporalio/temporal/common/persistence"
 )
 
 // eventStoreVersion is already deprecated, this is just a constant for place holder.

@@ -31,8 +31,8 @@ import (
 	"strings"
 
 	"github.com/dgryski/go-farm"
-	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common/archiver"
+	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common/archiver"
 )
 
 var (

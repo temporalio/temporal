@@ -25,10 +25,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/uber-go/tally"
 	"github.com/uber-go/tally/m3"
 	"github.com/uber-go/tally/prometheus"
-	"github.com/uber/cadence/common/log/loggerimpl"
 )
 
 type MetricsSuite struct {

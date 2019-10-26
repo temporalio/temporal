@@ -21,7 +21,7 @@
 package main
 
 import (
-	"github.com/uber/cadence/tools/sql"
+	"github.com/temporalio/temporal/tools/sql"
 	"os"
 )
 

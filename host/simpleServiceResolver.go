@@ -22,7 +22,7 @@ package host
 
 import (
 	"github.com/dgryski/go-farm"
-	"github.com/uber/cadence/common/membership"
+	"github.com/temporalio/temporal/common/membership"
 )
 
 type simpleResolver struct {

@@ -23,9 +23,9 @@ package domain
 import (
 	"fmt"
 
-	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common/cluster"
-	"github.com/uber/cadence/common/persistence"
+	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common/cluster"
+	"github.com/temporalio/temporal/common/persistence"
 )
 
 type (

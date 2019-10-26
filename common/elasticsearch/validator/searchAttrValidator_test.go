@@ -22,10 +22,10 @@ package validator
 
 import (
 	"github.com/stretchr/testify/suite"
-	gen "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common/definition"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/service/dynamicconfig"
+	gen "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common/definition"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/service/dynamicconfig"
 	"testing"
 )
 

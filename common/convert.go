@@ -23,7 +23,7 @@ package common
 import (
 	"time"
 
-	s "github.com/uber/cadence/.gen/go/shared"
+	s "github.com/temporalio/temporal/.gen/go/shared"
 	"go.uber.org/cadence/.gen/go/shared"
 )
 

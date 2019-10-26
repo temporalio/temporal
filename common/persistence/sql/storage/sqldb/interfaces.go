@@ -22,7 +22,7 @@ package sqldb
 
 import (
 	"database/sql"
-	"github.com/uber/cadence/common"
+	"github.com/temporalio/temporal/common"
 	"time"
 )
 

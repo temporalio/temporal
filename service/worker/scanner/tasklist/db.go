@@ -23,9 +23,9 @@ package tasklist
 import (
 	"time"
 
-	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common/backoff"
-	p "github.com/uber/cadence/common/persistence"
+	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common/backoff"
+	p "github.com/temporalio/temporal/common/persistence"
 )
 
 var retryForeverPolicy = newRetryForeverPolicy()

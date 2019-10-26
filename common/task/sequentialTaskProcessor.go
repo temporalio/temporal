@@ -25,12 +25,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/common/metrics"
+	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/metrics"
 
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/collection"
-	"github.com/uber/cadence/common/log"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/collection"
+	"github.com/temporalio/temporal/common/log"
 )
 
 type (

@@ -27,7 +27,7 @@ package metaserver
 
 import (
 	context "context"
-	health "github.com/uber/cadence/.gen/go/health"
+	health "github.com/temporalio/temporal/.gen/go/health"
 	wire "go.uber.org/thriftrw/wire"
 	transport "go.uber.org/yarpc/api/transport"
 	thrift "go.uber.org/yarpc/encoding/thrift"

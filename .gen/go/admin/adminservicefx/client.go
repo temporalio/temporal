@@ -26,7 +26,7 @@
 package adminservicefx
 
 import (
-	adminserviceclient "github.com/uber/cadence/.gen/go/admin/adminserviceclient"
+	adminserviceclient "github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"
 	fx "go.uber.org/fx"
 	yarpc "go.uber.org/yarpc"
 	thrift "go.uber.org/yarpc/encoding/thrift"

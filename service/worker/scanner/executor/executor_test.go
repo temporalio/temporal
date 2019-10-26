@@ -27,9 +27,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/metrics"
 	"github.com/uber-go/tally"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/metrics"
 )
 
 type (

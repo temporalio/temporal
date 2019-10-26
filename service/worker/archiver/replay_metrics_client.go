@@ -23,8 +23,8 @@ package archiver
 import (
 	"time"
 
+	"github.com/temporalio/temporal/common/metrics"
 	"github.com/uber-go/tally"
-	"github.com/uber/cadence/common/metrics"
 	"go.uber.org/cadence/workflow"
 )
 

@@ -22,7 +22,7 @@ package log
 
 import (
 	"github.com/stretchr/testify/mock"
-	"github.com/uber/cadence/common/log/tag"
+	"github.com/temporalio/temporal/common/log/tag"
 )
 
 // MockLogger returns a mock for Logger interface

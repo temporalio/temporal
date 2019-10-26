@@ -21,7 +21,7 @@
 package frontend
 
 import (
-	"github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
+	"github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
 )
 
 // Client is the interface exposed by frontend service client

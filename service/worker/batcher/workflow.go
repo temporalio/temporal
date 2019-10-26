@@ -26,12 +26,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/client/frontend"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/common/metrics"
+	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/client/frontend"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/metrics"
 	"go.uber.org/cadence"
 	"go.uber.org/cadence/activity"
 	"go.uber.org/cadence/workflow"
@@ -114,7 +114,7 @@ type (
 		// SignalParams is params only for BatchTypeSignal
 		SignalParams SignalParams
 		// RPS of processing. Default to DefaultRPS
-		// TODO we will implement smarter way than this static rate limiter: https://github.com/uber/cadence/issues/2138
+		// TODO we will implement smarter way than this static rate limiter: https://github.com/temporalio/temporal/issues/2138
 		RPS int
 		// Number of goroutines running in parallel to process
 		Concurrency int

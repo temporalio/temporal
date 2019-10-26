@@ -25,8 +25,8 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/uber/cadence/tools/common/schema"
-	"github.com/uber/cadence/tools/sql/mysql"
+	"github.com/temporalio/temporal/tools/common/schema"
+	"github.com/temporalio/temporal/tools/sql/mysql"
 )
 
 type (

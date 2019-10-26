@@ -21,7 +21,7 @@
 package mocks
 
 import mock "github.com/stretchr/testify/mock"
-import membership "github.com/uber/cadence/common/membership"
+import membership "github.com/temporalio/temporal/common/membership"
 
 // ServiceResolver is an mock implementation
 type ServiceResolver struct {

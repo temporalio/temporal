@@ -21,10 +21,10 @@
 package host
 
 import (
-	"github.com/uber/cadence/common"
+	"github.com/temporalio/temporal/common"
 	"time"
 
-	"github.com/uber/cadence/common/service/dynamicconfig"
+	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
 var (

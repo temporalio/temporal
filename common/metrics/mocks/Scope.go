@@ -21,7 +21,7 @@
 
 package mocks
 
-import metrics "github.com/uber/cadence/common/metrics"
+import metrics "github.com/temporalio/temporal/common/metrics"
 import mock "github.com/stretchr/testify/mock"
 import time "time"
 

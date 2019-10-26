@@ -21,7 +21,7 @@
 package messaging
 
 import (
-	"github.com/uber/cadence/common/metrics"
+	"github.com/temporalio/temporal/common/metrics"
 )
 
 type (

@@ -23,7 +23,7 @@ package errors
 import (
 	"fmt"
 
-	workflow "github.com/uber/cadence/.gen/go/shared"
+	workflow "github.com/temporalio/temporal/.gen/go/shared"
 )
 
 // NewDomainNotActiveError return a domain not exist error

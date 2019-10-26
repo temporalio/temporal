@@ -1,7 +1,7 @@
 # ESQL Cadence Usage
 
 ## Motivation
-Currently [Cadence](https://github.com/uber/cadence) is using [elasticsql](https://github.com/cch123/elasticsql) to translate sql query. However it only support up to ES V2.x while Cadence is using ES V6.x. Beyond that, Cadence has some specific requirements that not supported by elasticsql yet.
+Currently [Cadence](https://github.com/temporalio/temporal) is using [elasticsql](https://github.com/cch123/elasticsql) to translate sql query. However it only support up to ES V2.x while Cadence is using ES V6.x. Beyond that, Cadence has some specific requirements that not supported by elasticsql yet.
 
 Current Cadence query request processing steps are listed below:
 - generate SQL from query
@@ -53,8 +53,8 @@ if err == nil {
 
 ## Testing
 To setup local testing environment:
-- start cassandra service locally. Please refer to [Cadence](https://github.com/uber/cadence) readme.
+- start cassandra service locally. Please refer to [Cadence](https://github.com/temporalio/temporal) readme.
 - start zookeeper and kafka service locally. Here is a [referecne](https://kafka.apache.org/quickstart).
 - start elasticsearch and kibana service locally.
 - start a cadence worker by `./bin/helloworld -m worker` under cadence directory.
-- start cadence service locally. Please refer to [Cadence](https://github.com/uber/cadence) readme.
+- start cadence service locally. Please refer to [Cadence](https://github.com/temporalio/temporal) readme.

@@ -22,13 +22,13 @@ package indexer
 
 import (
 	"fmt"
-	"github.com/uber/cadence/common"
-	es "github.com/uber/cadence/common/elasticsearch"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/common/messaging"
-	"github.com/uber/cadence/common/metrics"
-	"github.com/uber/cadence/common/service/dynamicconfig"
+	"github.com/temporalio/temporal/common"
+	es "github.com/temporalio/temporal/common/elasticsearch"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/messaging"
+	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
 type (

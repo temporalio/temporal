@@ -26,18 +26,18 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	h "github.com/uber/cadence/.gen/go/history"
-	"github.com/uber/cadence/.gen/go/shared"
-	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/cache"
-	"github.com/uber/cadence/common/clock"
-	"github.com/uber/cadence/common/cluster"
-	"github.com/uber/cadence/common/errors"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/common/metrics"
-	"github.com/uber/cadence/common/persistence"
+	h "github.com/temporalio/temporal/.gen/go/history"
+	"github.com/temporalio/temporal/.gen/go/shared"
+	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/cache"
+	"github.com/temporalio/temporal/common/clock"
+	"github.com/temporalio/temporal/common/cluster"
+	"github.com/temporalio/temporal/common/errors"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/persistence"
 )
 
 type (
@@ -1178,7 +1178,7 @@ func (r *historyReplicator) reapplyEventsToCurrentClosedWorkflow(
 	// after the decision task started is decision task finished event
 	lastDecisionTaskStartEventID := msBuilder.GetPreviousStartedEventID()
 	if lastDecisionTaskStartEventID == common.EmptyEventID {
-		// TODO when https://github.com/uber/cadence/issues/2420 is finished
+		// TODO when https://github.com/temporalio/temporal/issues/2420 is finished
 		//  reset to workflow finish event
 		errStr := "cannot reapply signal due to workflow missing decision"
 		logger.Error(errStr)

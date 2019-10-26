@@ -25,9 +25,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/uber/cadence/common/backoff"
-	"github.com/uber/cadence/common/clock"
-	"github.com/uber/cadence/common/persistence"
+	"github.com/temporalio/temporal/common/backoff"
+	"github.com/temporalio/temporal/common/clock"
+	"github.com/temporalio/temporal/common/persistence"
 )
 
 func Test_NextRetry(t *testing.T) {

@@ -25,8 +25,8 @@ import (
 	"math/rand"
 	"strings"
 
-	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common/service/dynamicconfig"
+	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
 type (

@@ -21,7 +21,7 @@
 package domain
 
 import (
-	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/go/shared"
 )
 
 // domainArchivalConfigStateMachine is only used by domainHandler.

@@ -22,7 +22,7 @@ package persistence
 
 import (
 	"fmt"
-	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/go/shared"
 )
 
 // ReadFullPageV2Events reads a full page of history events from HistoryManager. Due to storage format of V2 History

@@ -21,7 +21,7 @@
 package history
 
 import (
-	"github.com/uber/cadence/.gen/go/history/historyserviceclient"
+	"github.com/temporalio/temporal/.gen/go/history/historyserviceclient"
 )
 
 // Client is the interface exposed by history service client

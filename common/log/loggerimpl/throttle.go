@@ -23,10 +23,10 @@ package loggerimpl
 import (
 	"sync/atomic"
 
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/common/quotas"
-	"github.com/uber/cadence/common/service/dynamicconfig"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/quotas"
+	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
 type throttledLogger struct {

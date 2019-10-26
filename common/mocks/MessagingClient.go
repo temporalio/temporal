@@ -21,7 +21,7 @@
 package mocks
 
 import (
-	"github.com/uber/cadence/common/messaging"
+	"github.com/temporalio/temporal/common/messaging"
 )
 
 type (

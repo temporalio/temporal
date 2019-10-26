@@ -28,8 +28,8 @@ package metatest
 import (
 	context "context"
 	gomock "github.com/golang/mock/gomock"
-	health "github.com/uber/cadence/.gen/go/health"
-	metaclient "github.com/uber/cadence/.gen/go/health/metaclient"
+	health "github.com/temporalio/temporal/.gen/go/health"
+	metaclient "github.com/temporalio/temporal/.gen/go/health/metaclient"
 	yarpc "go.uber.org/yarpc"
 )
 

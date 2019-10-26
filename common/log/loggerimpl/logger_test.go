@@ -30,8 +30,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/common/service/dynamicconfig"
+	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/service/dynamicconfig"
 	"go.uber.org/zap"
 )
 

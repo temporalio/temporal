@@ -31,27 +31,27 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	h "github.com/uber/cadence/.gen/go/history"
-	m "github.com/uber/cadence/.gen/go/matching"
-	r "github.com/uber/cadence/.gen/go/replicator"
-	workflow "github.com/uber/cadence/.gen/go/shared"
-	hc "github.com/uber/cadence/client/history"
-	"github.com/uber/cadence/client/matching"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/cache"
-	"github.com/uber/cadence/common/client"
-	"github.com/uber/cadence/common/clock"
-	"github.com/uber/cadence/common/cluster"
-	"github.com/uber/cadence/common/definition"
-	ce "github.com/uber/cadence/common/errors"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/common/messaging"
-	"github.com/uber/cadence/common/metrics"
-	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/service/config"
-	warchiver "github.com/uber/cadence/service/worker/archiver"
-	"github.com/uber/cadence/service/worker/replicator"
+	h "github.com/temporalio/temporal/.gen/go/history"
+	m "github.com/temporalio/temporal/.gen/go/matching"
+	r "github.com/temporalio/temporal/.gen/go/replicator"
+	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	hc "github.com/temporalio/temporal/client/history"
+	"github.com/temporalio/temporal/client/matching"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/cache"
+	"github.com/temporalio/temporal/common/client"
+	"github.com/temporalio/temporal/common/clock"
+	"github.com/temporalio/temporal/common/cluster"
+	"github.com/temporalio/temporal/common/definition"
+	ce "github.com/temporalio/temporal/common/errors"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/messaging"
+	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/service/config"
+	warchiver "github.com/temporalio/temporal/service/worker/archiver"
+	"github.com/temporalio/temporal/service/worker/replicator"
 	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 	"go.uber.org/yarpc/yarpcerrors"
 	"golang.org/x/net/context"
@@ -2703,7 +2703,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 			if msBuilder.GetExecutionInfo().CronSchedule != "" && !msBuilder.HasProcessedOrPendingDecision() {
 				postActions.createDecision = false
 			}
-			// TODO when https://github.com/uber/cadence/issues/2420 is finished
+			// TODO when https://github.com/temporalio/temporal/issues/2420 is finished
 			//  reset to workflow finish event
 			//  ignore this case for now
 			if !msBuilder.IsWorkflowExecutionRunning() {

@@ -29,8 +29,8 @@ package history
 
 import (
 	gomock "github.com/golang/mock/gomock"
-	shared "github.com/uber/cadence/.gen/go/shared"
-	persistence "github.com/uber/cadence/common/persistence"
+	shared "github.com/temporalio/temporal/.gen/go/shared"
+	persistence "github.com/temporalio/temporal/common/persistence"
 	reflect "reflect"
 )
 

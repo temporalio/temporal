@@ -22,7 +22,7 @@ package mysql
 
 import (
 	"github.com/jmoiron/sqlx"
-	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
+	"github.com/temporalio/temporal/common/persistence/sql/storage/sqldb"
 )
 
 // DB represents a logical connection to mysql database

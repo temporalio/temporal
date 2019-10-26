@@ -28,12 +28,12 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	carchiver "github.com/uber/cadence/common/archiver"
-	"github.com/uber/cadence/common/archiver/provider"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/metrics"
-	mmocks "github.com/uber/cadence/common/metrics/mocks"
-	"github.com/uber/cadence/common/service/dynamicconfig"
+	carchiver "github.com/temporalio/temporal/common/archiver"
+	"github.com/temporalio/temporal/common/archiver/provider"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/metrics"
+	mmocks "github.com/temporalio/temporal/common/metrics/mocks"
+	"github.com/temporalio/temporal/common/service/dynamicconfig"
 	"go.uber.org/cadence/mocks"
 )
 

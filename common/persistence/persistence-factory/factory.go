@@ -23,14 +23,14 @@ package persistence
 import (
 	"sync"
 
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/metrics"
-	p "github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/persistence/cassandra"
-	"github.com/uber/cadence/common/persistence/sql"
-	"github.com/uber/cadence/common/quotas"
-	"github.com/uber/cadence/common/service/config"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/metrics"
+	p "github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/persistence/cassandra"
+	"github.com/temporalio/temporal/common/persistence/sql"
+	"github.com/temporalio/temporal/common/quotas"
+	"github.com/temporalio/temporal/common/service/config"
 )
 
 type (

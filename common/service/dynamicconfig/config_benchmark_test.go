@@ -24,7 +24,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/uber/cadence/common/log"
+	"github.com/temporalio/temporal/common/log"
 )
 
 func BenchmarkGetIntProperty(b *testing.B) {

@@ -24,7 +24,7 @@ import (
 	"fmt"
 	"runtime/debug"
 
-	"github.com/uber/cadence/common/log/tag"
+	"github.com/temporalio/temporal/common/log/tag"
 )
 
 var errDefaultPanic = fmt.Errorf("panic object is not error")

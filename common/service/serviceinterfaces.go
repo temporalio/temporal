@@ -21,16 +21,16 @@
 package service
 
 import (
-	"github.com/uber/cadence/client"
-	"github.com/uber/cadence/common/archiver"
-	"github.com/uber/cadence/common/archiver/provider"
-	"github.com/uber/cadence/common/clock"
-	"github.com/uber/cadence/common/cluster"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/membership"
-	"github.com/uber/cadence/common/messaging"
-	"github.com/uber/cadence/common/metrics"
-	"github.com/uber/cadence/common/persistence"
+	"github.com/temporalio/temporal/client"
+	"github.com/temporalio/temporal/common/archiver"
+	"github.com/temporalio/temporal/common/archiver/provider"
+	"github.com/temporalio/temporal/common/clock"
+	"github.com/temporalio/temporal/common/cluster"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/membership"
+	"github.com/temporalio/temporal/common/messaging"
+	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/persistence"
 
 	"go.uber.org/yarpc"
 )

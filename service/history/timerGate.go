@@ -24,7 +24,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/uber/cadence/common/clock"
+	"github.com/temporalio/temporal/common/clock"
 )
 
 type (

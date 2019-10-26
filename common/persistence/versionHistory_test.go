@@ -23,8 +23,8 @@ package persistence
 import (
 	"testing"
 
-	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
+	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common"
 
 	"github.com/stretchr/testify/suite"
 )

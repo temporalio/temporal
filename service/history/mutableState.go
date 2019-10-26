@@ -25,10 +25,10 @@ package history
 import (
 	"time"
 
-	h "github.com/uber/cadence/.gen/go/history"
-	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common/cache"
-	"github.com/uber/cadence/common/persistence"
+	h "github.com/temporalio/temporal/.gen/go/history"
+	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common/cache"
+	"github.com/temporalio/temporal/common/persistence"
 )
 
 type (

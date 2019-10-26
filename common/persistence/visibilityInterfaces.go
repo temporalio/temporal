@@ -21,7 +21,7 @@
 package persistence
 
 import (
-	s "github.com/uber/cadence/.gen/go/shared"
+	s "github.com/temporalio/temporal/.gen/go/shared"
 )
 
 // Interfaces for the Visibility Store.

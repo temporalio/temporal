@@ -21,7 +21,7 @@
 package task
 
 import (
-	"github.com/uber/cadence/common"
+	"github.com/temporalio/temporal/common"
 )
 
 type (

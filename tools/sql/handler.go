@@ -24,7 +24,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/uber/cadence/tools/common/schema"
+	"github.com/temporalio/temporal/tools/common/schema"
 	"github.com/urfave/cli"
 )
 

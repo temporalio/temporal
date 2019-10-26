@@ -21,7 +21,7 @@
 package persistencetests
 
 import (
-	"github.com/uber/cadence/common/persistence"
+	"github.com/temporalio/temporal/common/persistence"
 	"testing"
 )
 

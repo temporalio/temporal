@@ -21,7 +21,7 @@
 package elasticsearch
 
 import (
-	"github.com/uber/cadence/common"
+	"github.com/temporalio/temporal/common"
 	"net/url"
 )
 

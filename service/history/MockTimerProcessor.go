@@ -22,7 +22,7 @@ package history
 
 import (
 	"github.com/stretchr/testify/mock"
-	"github.com/uber/cadence/common/persistence"
+	"github.com/temporalio/temporal/common/persistence"
 )
 
 // MockTimerProcessor is used as mock implementation for timerProcessor

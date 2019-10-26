@@ -20,7 +20,7 @@
 
 package admin
 
-import "github.com/uber/cadence/.gen/go/admin/adminserviceclient"
+import "github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"
 
 // Client is the interface exposed by admin service client
 type Client interface {

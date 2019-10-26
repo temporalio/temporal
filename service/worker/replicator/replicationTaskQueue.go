@@ -22,9 +22,9 @@ package replicator
 
 import (
 	"github.com/dgryski/go-farm"
-	"github.com/uber/cadence/common/collection"
-	"github.com/uber/cadence/common/definition"
-	"github.com/uber/cadence/common/task"
+	"github.com/temporalio/temporal/common/collection"
+	"github.com/temporalio/temporal/common/definition"
+	"github.com/temporalio/temporal/common/task"
 )
 
 type (

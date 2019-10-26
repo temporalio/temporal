@@ -26,10 +26,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	w "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/clock"
-	"github.com/uber/cadence/common/persistence"
+	w "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/clock"
+	"github.com/temporalio/temporal/common/persistence"
 )
 
 // Timer task status

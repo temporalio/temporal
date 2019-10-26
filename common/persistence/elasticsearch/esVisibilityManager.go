@@ -21,13 +21,13 @@
 package elasticsearch
 
 import (
-	es "github.com/uber/cadence/common/elasticsearch"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/messaging"
-	"github.com/uber/cadence/common/metrics"
-	p "github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/quotas"
-	"github.com/uber/cadence/common/service/config"
+	es "github.com/temporalio/temporal/common/elasticsearch"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/messaging"
+	"github.com/temporalio/temporal/common/metrics"
+	p "github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/quotas"
+	"github.com/temporalio/temporal/common/service/config"
 )
 
 // NewESVisibilityManager create a visibility manager for ElasticSearch

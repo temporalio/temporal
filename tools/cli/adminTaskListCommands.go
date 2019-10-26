@@ -27,8 +27,8 @@ import (
 	"strings"
 
 	"github.com/olekukonko/tablewriter"
-	s "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
+	s "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common"
 	"github.com/urfave/cli"
 )
 

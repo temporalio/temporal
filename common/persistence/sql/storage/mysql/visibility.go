@@ -25,7 +25,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
+	"github.com/temporalio/temporal/common/persistence/sql/storage/sqldb"
 )
 
 const (

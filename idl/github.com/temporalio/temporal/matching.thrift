@@ -20,7 +20,7 @@
 
 include "shared.thrift"
 
-namespace java com.uber.cadence.matching
+namespace java com.temporalio.temporal.matching
 
 struct PollForDecisionTaskRequest {
   10: optional string domainUUID

@@ -35,8 +35,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/log/tag"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/log/tag"
 	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 	"go.uber.org/cadence/.gen/go/shared"
 	"go.uber.org/cadence/activity"

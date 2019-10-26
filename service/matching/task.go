@@ -21,9 +21,9 @@
 package matching
 
 import (
-	m "github.com/uber/cadence/.gen/go/matching"
-	s "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common/persistence"
+	m "github.com/temporalio/temporal/.gen/go/matching"
+	s "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common/persistence"
 )
 
 type (

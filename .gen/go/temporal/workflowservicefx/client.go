@@ -26,7 +26,7 @@
 package workflowservicefx
 
 import (
-	workflowserviceclient "github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
+	workflowserviceclient "github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
 	fx "go.uber.org/fx"
 	yarpc "go.uber.org/yarpc"
 	thrift "go.uber.org/yarpc/encoding/thrift"

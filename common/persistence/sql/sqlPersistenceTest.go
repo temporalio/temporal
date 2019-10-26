@@ -27,10 +27,10 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/service/config"
-	"github.com/uber/cadence/common/service/dynamicconfig"
-	"github.com/uber/cadence/environment"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/service/config"
+	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"github.com/temporalio/temporal/environment"
 )
 
 const (
@@ -159,8 +159,8 @@ func getCadencePackageDir() (string, error) {
 	if err != nil {
 		panic(err)
 	}
-	cadenceIndex := strings.LastIndex(cadencePackageDir, "/cadence/")
-	cadencePackageDir = cadencePackageDir[:cadenceIndex+len("/cadence/")]
+	cadenceIndex := strings.LastIndex(cadencePackageDir, "/temporal/")
+	cadencePackageDir = cadencePackageDir[:cadenceIndex+len("/temporal/")]
 	if err != nil {
 		panic(err)
 	}

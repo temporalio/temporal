@@ -25,12 +25,12 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber/cadence/.gen/go/replicator"
-	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/log/loggerimpl"
-	"github.com/uber/cadence/common/persistence"
-	persistencetests "github.com/uber/cadence/common/persistence/persistence-tests"
+	"github.com/temporalio/temporal/.gen/go/replicator"
+	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/log/loggerimpl"
+	"github.com/temporalio/temporal/common/persistence"
+	persistencetests "github.com/temporalio/temporal/common/persistence/persistence-tests"
 	"go.uber.org/zap"
 )
 

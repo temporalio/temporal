@@ -26,7 +26,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-	"github.com/uber/cadence/common/service/config"
+	"github.com/temporalio/temporal/common/service/config"
 )
 
 type StoreTestSuite struct {

@@ -28,14 +28,14 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
-	"github.com/uber/cadence/.gen/go/admin"
-	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/codec"
-	"github.com/uber/cadence/common/log/loggerimpl"
-	"github.com/uber/cadence/common/persistence"
-	cassp "github.com/uber/cadence/common/persistence/cassandra"
-	"github.com/uber/cadence/tools/cassandra"
+	"github.com/temporalio/temporal/.gen/go/admin"
+	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/codec"
+	"github.com/temporalio/temporal/common/log/loggerimpl"
+	"github.com/temporalio/temporal/common/persistence"
+	cassp "github.com/temporalio/temporal/common/persistence/cassandra"
+	"github.com/temporalio/temporal/tools/cassandra"
 	"github.com/urfave/cli"
 )
 

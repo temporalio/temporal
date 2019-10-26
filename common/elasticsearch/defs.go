@@ -20,7 +20,7 @@
 
 package elasticsearch
 
-import "github.com/uber/cadence/.gen/go/indexer"
+import "github.com/temporalio/temporal/.gen/go/indexer"
 
 // All legal fields allowed in elastic search index
 const (

@@ -28,7 +28,7 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
-	"github.com/uber/cadence/tools/common/schema"
+	"github.com/temporalio/temporal/tools/common/schema"
 )
 
 type (

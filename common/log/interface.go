@@ -21,12 +21,12 @@
 package log
 
 import (
-	"github.com/uber/cadence/common/log/tag"
+	"github.com/temporalio/temporal/common/log/tag"
 )
 
 // Logger is our abstraction for logging
 // Usage examples:
-//  import "github.com/uber/cadence/common/log/tag"
+//  import "github.com/temporalio/temporal/common/log/tag"
 //  1) logger = logger.WithTags(
 //          tag.WorkflowNextEventID( 123),
 //          tag.WorkflowActionWorkflowStarted,

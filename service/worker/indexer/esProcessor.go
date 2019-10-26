@@ -26,14 +26,14 @@ import (
 	"time"
 
 	"github.com/olivere/elastic"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/collection"
+	es "github.com/temporalio/temporal/common/elasticsearch"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/messaging"
+	"github.com/temporalio/temporal/common/metrics"
 	"github.com/uber-go/tally"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/collection"
-	es "github.com/uber/cadence/common/elasticsearch"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/common/messaging"
-	"github.com/uber/cadence/common/metrics"
 )
 
 type (

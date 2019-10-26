@@ -28,9 +28,9 @@ package adminservicetest
 import (
 	context "context"
 	gomock "github.com/golang/mock/gomock"
-	admin "github.com/uber/cadence/.gen/go/admin"
-	adminserviceclient "github.com/uber/cadence/.gen/go/admin/adminserviceclient"
-	shared "github.com/uber/cadence/.gen/go/shared"
+	admin "github.com/temporalio/temporal/.gen/go/admin"
+	adminserviceclient "github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"
+	shared "github.com/temporalio/temporal/.gen/go/shared"
 	yarpc "go.uber.org/yarpc"
 )
 

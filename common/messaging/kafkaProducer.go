@@ -24,11 +24,11 @@ import (
 	"errors"
 
 	"github.com/Shopify/sarama"
-	"github.com/uber/cadence/.gen/go/indexer"
-	"github.com/uber/cadence/.gen/go/replicator"
-	"github.com/uber/cadence/common/codec"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
+	"github.com/temporalio/temporal/.gen/go/indexer"
+	"github.com/temporalio/temporal/.gen/go/replicator"
+	"github.com/temporalio/temporal/common/codec"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/log/tag"
 )
 
 type (

@@ -23,9 +23,9 @@ package matching
 import (
 	"context"
 
-	m "github.com/uber/cadence/.gen/go/matching"
-	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common/backoff"
+	m "github.com/temporalio/temporal/.gen/go/matching"
+	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common/backoff"
 	"go.uber.org/yarpc"
 )
 

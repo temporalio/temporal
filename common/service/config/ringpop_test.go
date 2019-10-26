@@ -28,7 +28,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber/cadence/common/log/loggerimpl"
+	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/uber/ringpop-go/discovery/statichosts"
 	"gopkg.in/yaml.v2"
 )

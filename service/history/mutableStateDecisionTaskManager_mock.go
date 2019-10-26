@@ -29,7 +29,7 @@ package history
 
 import (
 	gomock "github.com/golang/mock/gomock"
-	shared "github.com/uber/cadence/.gen/go/shared"
+	shared "github.com/temporalio/temporal/.gen/go/shared"
 	reflect "reflect"
 )
 

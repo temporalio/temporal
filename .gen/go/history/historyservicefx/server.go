@@ -26,7 +26,7 @@
 package historyservicefx
 
 import (
-	historyserviceserver "github.com/uber/cadence/.gen/go/history/historyserviceserver"
+	historyserviceserver "github.com/temporalio/temporal/.gen/go/history/historyserviceserver"
 	fx "go.uber.org/fx"
 	transport "go.uber.org/yarpc/api/transport"
 	thrift "go.uber.org/yarpc/encoding/thrift"

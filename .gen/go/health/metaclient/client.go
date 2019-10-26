@@ -27,7 +27,7 @@ package metaclient
 
 import (
 	context "context"
-	health "github.com/uber/cadence/.gen/go/health"
+	health "github.com/temporalio/temporal/.gen/go/health"
 	wire "go.uber.org/thriftrw/wire"
 	yarpc "go.uber.org/yarpc"
 	transport "go.uber.org/yarpc/api/transport"

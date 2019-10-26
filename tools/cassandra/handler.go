@@ -25,8 +25,8 @@ import (
 	"log"
 	"path"
 
-	"github.com/uber/cadence/common/service/config"
-	"github.com/uber/cadence/tools/common/schema"
+	"github.com/temporalio/temporal/common/service/config"
+	"github.com/temporalio/temporal/tools/common/schema"
 	"github.com/urfave/cli"
 )
 

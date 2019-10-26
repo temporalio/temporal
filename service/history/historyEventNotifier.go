@@ -25,12 +25,12 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	gen "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/clock"
-	"github.com/uber/cadence/common/collection"
-	"github.com/uber/cadence/common/definition"
-	"github.com/uber/cadence/common/metrics"
+	gen "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/clock"
+	"github.com/temporalio/temporal/common/collection"
+	"github.com/temporalio/temporal/common/definition"
+	"github.com/temporalio/temporal/common/metrics"
 )
 
 const (

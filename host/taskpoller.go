@@ -26,12 +26,12 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/service/history"
-	"github.com/uber/cadence/service/matching"
+	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/service/history"
+	"github.com/temporalio/temporal/service/matching"
 	"go.uber.org/yarpc"
 )
 

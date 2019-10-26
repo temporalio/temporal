@@ -26,7 +26,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/uber/cadence/common/persistence"
+	"github.com/temporalio/temporal/common/persistence"
 )
 
 type (
@@ -62,7 +62,7 @@ const (
 // the partitions follow the naming convention above. In addition, the task lists partitions
 // logically form a N-ary tree where N is configurable dynamically. The tree formation is an
 // optimization to allow for partitioned task lists to dispatch tasks with low latency when
-// throughput is low - See https://github.com/uber/cadence/issues/2098
+// throughput is low - See https://github.com/temporalio/temporal/issues/2098
 //
 // Returns error if the given name is non-compliant with the required format
 // for task list names
