@@ -375,6 +375,11 @@ func (r *historyReplicator) ApplyEvents(
 		r.metricsClient.IncCounter(metrics.ReplicateHistoryEventsScope, metrics.EmptyReplicationEventsCounter)
 		return nil
 	}
+
+	// This is to make new release after event v1 deprecation forward-compatible
+	request.EventStoreVersion = common.Int32Ptr(persistence.EventStoreVersionV2)
+	request.NewRunEventStoreVersion = common.Int32Ptr(persistence.EventStoreVersionV2)
+
 	domainID, err := validateDomainUUID(request.DomainUUID)
 	if err != nil {
 		return err
