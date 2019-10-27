@@ -393,12 +393,13 @@ func (r *mutableStateTaskGeneratorImpl) generateRequestCancelExternalTasks(
 
 	attr := event.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes
 	scheduleID := event.GetEventId()
+	version := event.GetVersion()
 	targetDomainName := attr.GetDomain()
 	targetWorkflowID := attr.GetWorkflowExecution().GetWorkflowId()
 	targetRunID := attr.GetWorkflowExecution().GetRunId()
 	targetChildOnly := attr.GetChildWorkflowOnly()
 
-	requestCancelExternalInfo, ok := r.mutableState.GetRequestCancelInfo(scheduleID)
+	_, ok := r.mutableState.GetRequestCancelInfo(scheduleID)
 	if !ok {
 		return &shared.InternalServiceError{
 			Message: fmt.Sprintf("it could be a bug, cannot get pending request cancel external workflow: %v", scheduleID),
@@ -418,7 +419,7 @@ func (r *mutableStateTaskGeneratorImpl) generateRequestCancelExternalTasks(
 		TargetRunID:             targetRunID,
 		TargetChildWorkflowOnly: targetChildOnly,
 		InitiatedID:             scheduleID,
-		Version:                 requestCancelExternalInfo.Version,
+		Version:                 version,
 	})
 
 	return nil
@@ -431,12 +432,13 @@ func (r *mutableStateTaskGeneratorImpl) generateSignalExternalTasks(
 
 	attr := event.SignalExternalWorkflowExecutionInitiatedEventAttributes
 	scheduleID := event.GetEventId()
+	version := event.GetVersion()
 	targetDomainName := attr.GetDomain()
 	targetWorkflowID := attr.GetWorkflowExecution().GetWorkflowId()
 	targetRunID := attr.GetWorkflowExecution().GetRunId()
 	targetChildOnly := attr.GetChildWorkflowOnly()
 
-	signalExternalInfo, ok := r.mutableState.GetSignalInfo(scheduleID)
+	_, ok := r.mutableState.GetSignalInfo(scheduleID)
 	if !ok {
 		return &shared.InternalServiceError{
 			Message: fmt.Sprintf("it could be a bug, cannot get pending signal external workflow: %v", scheduleID),
@@ -456,7 +458,7 @@ func (r *mutableStateTaskGeneratorImpl) generateSignalExternalTasks(
 		TargetRunID:             targetRunID,
 		TargetChildWorkflowOnly: targetChildOnly,
 		InitiatedID:             scheduleID,
-		Version:                 signalExternalInfo.Version,
+		Version:                 version,
 	})
 
 	return nil
@@ -471,7 +473,7 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowSearchAttrTasks(
 	r.mutableState.AddTransferTasks(&persistence.UpsertWorkflowSearchAttributesTask{
 		// TaskID is set by shard
 		VisibilityTimestamp: now,
-		Version:             currentVersion,
+		Version:             currentVersion, // task processing does not check this version
 	})
 
 	return nil

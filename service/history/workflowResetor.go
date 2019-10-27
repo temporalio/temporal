@@ -253,7 +253,7 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 	if retError != nil {
 		return
 	}
-	newMutableState = newStateBuilder.getMutableState()
+	newMutableState = newStateBuilder.(*stateBuilderImpl).mutableState
 
 	// before this, the mutable state is in replay mode
 	// need to close / flush the mutable state for new changes
@@ -681,7 +681,14 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 					resetMutableState = newMutableStateBuilder(w.eng.shard, w.eng.shard.GetEventsCache(), w.eng.logger, domainEntry)
 				}
 
-				sBuilder = newStateBuilder(w.eng.shard, resetMutableState, w.eng.logger)
+				sBuilder = newStateBuilder(
+					w.eng.shard,
+					w.eng.logger,
+					resetMutableState,
+					func(mutableState mutableState) mutableStateTaskGenerator {
+						return newMutableStateTaskGenerator(w.eng.shard.GetDomainCache(), w.eng.logger, mutableState)
+					},
+				)
 			}
 
 			// avoid replay this event in stateBuilder which will run into NPE if WF doesn't enable XDC
@@ -692,7 +699,7 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 				return
 			}
 
-			_, _, _, retError = sBuilder.applyEvents(domainID, requestID, prevExecution, history, nil, false)
+			_, retError = sBuilder.applyEvents(domainID, requestID, prevExecution, history, nil, false)
 			if retError != nil {
 				return
 			}
@@ -920,9 +927,16 @@ func (w *workflowResetorImpl) replicateResetEvent(
 					domainEntry,
 				)
 				newMsBuilder.UpdateReplicationStateVersion(firstEvent.GetVersion(), true)
-				sBuilder = newStateBuilder(w.eng.shard, newMsBuilder, w.eng.logger)
+				sBuilder = newStateBuilder(
+					w.eng.shard,
+					w.eng.logger,
+					newMsBuilder,
+					func(mutableState mutableState) mutableStateTaskGenerator {
+						return newMutableStateTaskGenerator(w.eng.shard.GetDomainCache(), w.eng.logger, mutableState)
+					},
+				)
 			}
-			_, _, _, retError = sBuilder.applyEvents(domainID, requestID, *baseExecution, events, nil, false)
+			_, retError = sBuilder.applyEvents(domainID, requestID, *baseExecution, events, nil, false)
 			if retError != nil {
 				return
 			}
@@ -950,9 +964,19 @@ func (w *workflowResetorImpl) replicateResetEvent(
 	decision.Attempt = 0
 	newMsBuilder.UpdateDecision(decision)
 
+	// before this, the mutable state is in replay mode
+	// need to close / flush the mutable state for new changes
+	_, _, retError = newMsBuilder.CloseTransactionAsSnapshot(
+		time.Unix(0, lastEvent.GetTimestamp()),
+		transactionPolicyPassive,
+	)
+	if retError != nil {
+		return
+	}
+
 	lastEvent = newRunHistory[len(newRunHistory)-1]
 	// replay new history (including decisionTaskScheduled)
-	_, _, _, retError = sBuilder.applyEvents(domainID, requestID, *baseExecution, newRunHistory, nil, false)
+	_, retError = sBuilder.applyEvents(domainID, requestID, *baseExecution, newRunHistory, nil, false)
 	if retError != nil {
 		return
 	}

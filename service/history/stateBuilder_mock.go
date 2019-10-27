@@ -30,7 +30,6 @@ package history
 import (
 	gomock "github.com/golang/mock/gomock"
 	shared "github.com/uber/cadence/.gen/go/shared"
-	persistence "github.com/uber/cadence/common/persistence"
 	reflect "reflect"
 )
 
@@ -58,88 +57,16 @@ func (m *MockstateBuilder) EXPECT() *MockstateBuilderMockRecorder {
 }
 
 // applyEvents mocks base method
-func (m *MockstateBuilder) applyEvents(domainID, requestID string, execution shared.WorkflowExecution, history, newRunHistory []*shared.HistoryEvent, newRunNDC bool) (*shared.HistoryEvent, *decisionInfo, mutableState, error) {
+func (m *MockstateBuilder) applyEvents(domainID, requestID string, execution shared.WorkflowExecution, history, newRunHistory []*shared.HistoryEvent, newRunNDC bool) (mutableState, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "applyEvents", domainID, requestID, execution, history, newRunHistory, newRunNDC)
-	ret0, _ := ret[0].(*shared.HistoryEvent)
-	ret1, _ := ret[1].(*decisionInfo)
-	ret2, _ := ret[2].(mutableState)
-	ret3, _ := ret[3].(error)
-	return ret0, ret1, ret2, ret3
+	ret0, _ := ret[0].(mutableState)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // applyEvents indicates an expected call of applyEvents
 func (mr *MockstateBuilderMockRecorder) applyEvents(domainID, requestID, execution, history, newRunHistory, newRunNDC interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "applyEvents", reflect.TypeOf((*MockstateBuilder)(nil).applyEvents), domainID, requestID, execution, history, newRunHistory, newRunNDC)
-}
-
-// getTransferTasks mocks base method
-func (m *MockstateBuilder) getTransferTasks() []persistence.Task {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getTransferTasks")
-	ret0, _ := ret[0].([]persistence.Task)
-	return ret0
-}
-
-// getTransferTasks indicates an expected call of getTransferTasks
-func (mr *MockstateBuilderMockRecorder) getTransferTasks() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getTransferTasks", reflect.TypeOf((*MockstateBuilder)(nil).getTransferTasks))
-}
-
-// getTimerTasks mocks base method
-func (m *MockstateBuilder) getTimerTasks() []persistence.Task {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getTimerTasks")
-	ret0, _ := ret[0].([]persistence.Task)
-	return ret0
-}
-
-// getTimerTasks indicates an expected call of getTimerTasks
-func (mr *MockstateBuilderMockRecorder) getTimerTasks() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getTimerTasks", reflect.TypeOf((*MockstateBuilder)(nil).getTimerTasks))
-}
-
-// getNewRunTransferTasks mocks base method
-func (m *MockstateBuilder) getNewRunTransferTasks() []persistence.Task {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getNewRunTransferTasks")
-	ret0, _ := ret[0].([]persistence.Task)
-	return ret0
-}
-
-// getNewRunTransferTasks indicates an expected call of getNewRunTransferTasks
-func (mr *MockstateBuilderMockRecorder) getNewRunTransferTasks() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getNewRunTransferTasks", reflect.TypeOf((*MockstateBuilder)(nil).getNewRunTransferTasks))
-}
-
-// getNewRunTimerTasks mocks base method
-func (m *MockstateBuilder) getNewRunTimerTasks() []persistence.Task {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getNewRunTimerTasks")
-	ret0, _ := ret[0].([]persistence.Task)
-	return ret0
-}
-
-// getNewRunTimerTasks indicates an expected call of getNewRunTimerTasks
-func (mr *MockstateBuilderMockRecorder) getNewRunTimerTasks() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getNewRunTimerTasks", reflect.TypeOf((*MockstateBuilder)(nil).getNewRunTimerTasks))
-}
-
-// getMutableState mocks base method
-func (m *MockstateBuilder) getMutableState() mutableState {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getMutableState")
-	ret0, _ := ret[0].(mutableState)
-	return ret0
-}
-
-// getMutableState indicates an expected call of getMutableState
-func (mr *MockstateBuilderMockRecorder) getMutableState() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getMutableState", reflect.TypeOf((*MockstateBuilder)(nil).getMutableState))
 }
