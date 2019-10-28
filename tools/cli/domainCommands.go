@@ -33,6 +33,7 @@ import (
 	serviceFrontend "github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/domain"
+	"github.com/temporalio/temporal/tpb"
 	"github.com/urfave/cli"
 	s "go.uber.org/cadence/.gen/go/shared"
 )
@@ -41,6 +42,8 @@ type (
 	domainCLIImpl struct {
 		// used when making RPC call to frontend service
 		frontendClient serviceFrontend.Interface
+
+		frontendClientGRPC tpb.WorkflowServiceYARPCClient
 
 		// act as admin to modify domain in DB directly
 		domainHandler domain.Handler
@@ -54,15 +57,18 @@ func newDomainCLI(
 ) *domainCLIImpl {
 
 	var frontendClient serviceFrontend.Interface
+	var frontendClientGRPC tpb.WorkflowServiceYARPCClient
 	var domainHandler domain.Handler
 	if !isAdminMode {
 		frontendClient = initializeFrontendClient(c)
+		frontendClientGRPC = initializeFrontendClientGRPC(c)
 	} else {
 		domainHandler = initializeAdminDomainHandler(c)
 	}
 	return &domainCLIImpl{
-		frontendClient: frontendClient,
-		domainHandler:  domainHandler,
+		frontendClient:     frontendClient,
+		frontendClientGRPC: frontendClientGRPC,
+		domainHandler:      domainHandler,
 	}
 }
 
@@ -116,14 +122,21 @@ func (d *domainCLIImpl) RegisterDomain(c *cli.Context) {
 	}
 
 	var clusters []*shared.ClusterReplicationConfiguration
+	var clustersGRPC []*tpb.ClusterReplicationConfiguration
 	if c.IsSet(FlagClusters) {
 		clusterStr := c.String(FlagClusters)
 		clusters = append(clusters, &shared.ClusterReplicationConfiguration{
 			ClusterName: common.StringPtr(clusterStr),
 		})
+		clustersGRPC = append(clustersGRPC, &tpb.ClusterReplicationConfiguration{
+			ClusterName: clusterStr,
+		})
 		for _, clusterStr := range c.Args() {
 			clusters = append(clusters, &shared.ClusterReplicationConfiguration{
 				ClusterName: common.StringPtr(clusterStr),
+			})
+			clustersGRPC = append(clustersGRPC, &tpb.ClusterReplicationConfiguration{
+				ClusterName: clusterStr,
 			})
 		}
 	}
@@ -145,9 +158,26 @@ func (d *domainCLIImpl) RegisterDomain(c *cli.Context) {
 		IsGlobalDomain:                         isGlobalDomainPtr,
 	}
 
+	requestGRPC := &tpb.RegisterDomainRequest{
+		Name:                                   domainName,
+		Description:                            description,
+		OwnerEmail:                             ownerEmail,
+		Data:                                   domainData,
+		WorkflowExecutionRetentionPeriodInDays: int32(retentionDays),
+		EmitMetric:                             emitMetric,
+		Clusters:                               clustersGRPC,
+		ActiveClusterName:                      *activeClusterName,
+		SecurityToken:                          securityToken,
+		HistoryArchivalStatus:                  archivalStatusGRPC(c, FlagHistoryArchivalStatus),
+		HistoryArchivalURI:                     c.String(FlagHistoryArchivalURI),
+		VisibilityArchivalStatus:               archivalStatusGRPC(c, FlagVisibilityArchivalStatus),
+		VisibilityArchivalURI:                  c.String(FlagVisibilityArchivalURI),
+		IsGlobalDomain:                         *isGlobalDomainPtr,
+	}
+
 	ctx, cancel := newContext(c)
 	defer cancel()
-	err = d.registerDomain(ctx, request)
+	err = d.registerDomain(ctx, request, requestGRPC)
 	if err != nil {
 		if _, ok := err.(*s.DomainAlreadyExistsError); !ok {
 			ErrorAndExit("Register Domain operation failed.", err)
@@ -364,7 +394,13 @@ func (d *domainCLIImpl) DescribeDomain(c *cli.Context) {
 func (d *domainCLIImpl) registerDomain(
 	ctx context.Context,
 	request *shared.RegisterDomainRequest,
+	requestGRPC *tpb.RegisterDomainRequest,
 ) error {
+
+	if d.frontendClientGRPC != nil {
+		_, err := d.frontendClientGRPC.RegisterDomain(ctx, requestGRPC)
+		return err
+	}
 
 	if d.frontendClient != nil {
 		return d.frontendClient.RegisterDomain(ctx, request)
@@ -409,6 +445,20 @@ func archivalStatus(c *cli.Context, statusFlagName string) *shared.ArchivalStatu
 		}
 	}
 	return nil
+}
+
+func archivalStatusGRPC(c *cli.Context, statusFlagName string) tpb.ArchivalStatus {
+	if c.IsSet(statusFlagName) {
+		switch c.String(statusFlagName) {
+		case "disabled":
+			return tpb.DISABLED
+		case "enabled":
+			return tpb.ENABLED
+		default:
+			ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", statusFlagName), errors.New("invalid status, valid values are \"disabled\" and \"enabled\""))
+		}
+	}
+	return tpb.DISABLED
 }
 
 func clustersToString(clusters []*shared.ClusterReplicationConfiguration) string {

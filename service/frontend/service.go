@@ -253,6 +253,22 @@ func (s *Service) Start() {
 	if err != nil {
 		log.Fatal("DC redirection handler failed to start", tag.Error(err))
 	}
+
+	wfHandlerGRPC := NewWorkflowHandlerGRPC(
+		base,
+		s.config,
+		metadata,
+		historyV2,
+		visibility,
+		replicationMessageSink,
+		domainReplicationQueue,
+		domainCache)
+	wfHandlerGRPC.RegisterHandler()
+	err = wfHandlerGRPC.Start()
+	if err != nil {
+		log.Fatal("gRPC handler failed to start", tag.Error(err))
+	}
+
 	err = adminHandler.Start()
 	if err != nil {
 		log.Fatal("Admin handler failed to start", tag.Error(err))
