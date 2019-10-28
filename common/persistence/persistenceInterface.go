@@ -180,7 +180,7 @@ type (
 		TaskList                           string
 		WorkflowTypeName                   string
 		WorkflowTimeout                    int32
-		DecisionTimeoutValue               int32
+		DecisionStartToCloseTimeout        int32
 		ExecutionContext                   []byte
 		State                              int
 		CloseStatus                        int

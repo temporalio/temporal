@@ -417,7 +417,7 @@ func createExecution(
 			executionInfo.TaskList,
 			executionInfo.WorkflowTypeName,
 			executionInfo.WorkflowTimeout,
-			executionInfo.DecisionTimeoutValue,
+			executionInfo.DecisionStartToCloseTimeout,
 			executionInfo.ExecutionContext,
 			executionInfo.State,
 			executionInfo.CloseStatus,
@@ -487,7 +487,7 @@ func createExecution(
 			executionInfo.TaskList,
 			executionInfo.WorkflowTypeName,
 			executionInfo.WorkflowTimeout,
-			executionInfo.DecisionTimeoutValue,
+			executionInfo.DecisionStartToCloseTimeout,
 			executionInfo.ExecutionContext,
 			executionInfo.State,
 			executionInfo.CloseStatus,
@@ -562,7 +562,7 @@ func createExecution(
 			executionInfo.TaskList,
 			executionInfo.WorkflowTypeName,
 			executionInfo.WorkflowTimeout,
-			executionInfo.DecisionTimeoutValue,
+			executionInfo.DecisionStartToCloseTimeout,
 			executionInfo.ExecutionContext,
 			executionInfo.State,
 			executionInfo.CloseStatus,
@@ -675,7 +675,7 @@ func updateExecution(
 			executionInfo.TaskList,
 			executionInfo.WorkflowTypeName,
 			executionInfo.WorkflowTimeout,
-			executionInfo.DecisionTimeoutValue,
+			executionInfo.DecisionStartToCloseTimeout,
 			executionInfo.ExecutionContext,
 			executionInfo.State,
 			executionInfo.CloseStatus,
@@ -746,7 +746,7 @@ func updateExecution(
 			executionInfo.TaskList,
 			executionInfo.WorkflowTypeName,
 			executionInfo.WorkflowTimeout,
-			executionInfo.DecisionTimeoutValue,
+			executionInfo.DecisionStartToCloseTimeout,
 			executionInfo.ExecutionContext,
 			executionInfo.State,
 			executionInfo.CloseStatus,
@@ -822,7 +822,7 @@ func updateExecution(
 			executionInfo.TaskList,
 			executionInfo.WorkflowTypeName,
 			executionInfo.WorkflowTimeout,
-			executionInfo.DecisionTimeoutValue,
+			executionInfo.DecisionStartToCloseTimeout,
 			executionInfo.ExecutionContext,
 			executionInfo.State,
 			executionInfo.CloseStatus,
@@ -1845,7 +1845,7 @@ func createWorkflowExecutionInfo(
 		case "workflow_timeout":
 			info.WorkflowTimeout = int32(v.(int))
 		case "decision_task_timeout":
-			info.DecisionTimeoutValue = int32(v.(int))
+			info.DecisionStartToCloseTimeout = int32(v.(int))
 		case "execution_context":
 			info.ExecutionContext = v.([]byte)
 		case "state":

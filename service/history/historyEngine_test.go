@@ -4976,7 +4976,7 @@ func copyWorkflowExecutionInfo(sourceInfo *persistence.WorkflowExecutionInfo) *p
 		StickyScheduleToStartTimeout:       sourceInfo.StickyScheduleToStartTimeout,
 		WorkflowTypeName:                   sourceInfo.WorkflowTypeName,
 		WorkflowTimeout:                    sourceInfo.WorkflowTimeout,
-		DecisionTimeoutValue:               sourceInfo.DecisionTimeoutValue,
+		DecisionStartToCloseTimeout:        sourceInfo.DecisionStartToCloseTimeout,
 		ExecutionContext:                   sourceInfo.ExecutionContext,
 		State:                              sourceInfo.State,
 		CloseStatus:                        sourceInfo.CloseStatus,

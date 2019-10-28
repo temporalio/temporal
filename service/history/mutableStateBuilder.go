@@ -1573,7 +1573,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 	wType := &workflow.WorkflowType{}
 	wType.Name = common.StringPtr(workflowType)
 
-	decisionTimeout := previousExecutionInfo.DecisionTimeoutValue
+	decisionTimeout := previousExecutionInfo.DecisionStartToCloseTimeout
 	if attributes.TaskStartToCloseTimeoutSeconds != nil {
 		decisionTimeout = attributes.GetTaskStartToCloseTimeoutSeconds()
 	}
@@ -1727,7 +1727,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 	e.executionInfo.TaskList = event.TaskList.GetName()
 	e.executionInfo.WorkflowTypeName = event.WorkflowType.GetName()
 	e.executionInfo.WorkflowTimeout = event.GetExecutionStartToCloseTimeoutSeconds()
-	e.executionInfo.DecisionTimeoutValue = event.GetTaskStartToCloseTimeoutSeconds()
+	e.executionInfo.DecisionStartToCloseTimeout = event.GetTaskStartToCloseTimeoutSeconds()
 
 	if err := e.UpdateWorkflowStateCloseStatus(
 		persistence.WorkflowStateCreated,

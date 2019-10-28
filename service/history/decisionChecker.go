@@ -514,7 +514,7 @@ func (v *decisionAttrValidator) validateContinueAsNewWorkflowExecutionAttributes
 
 	// Inherit decision task timeout from previous execution if not provided on decision
 	if attributes.GetTaskStartToCloseTimeoutSeconds() <= 0 {
-		attributes.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(executionInfo.DecisionTimeoutValue)
+		attributes.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(executionInfo.DecisionStartToCloseTimeout)
 	}
 
 	// Check next run decision task delay
@@ -589,7 +589,7 @@ func (v *decisionAttrValidator) validateStartChildExecutionAttributes(
 
 	// Inherit decision task timeout from parent workflow execution if not provided on decision
 	if attributes.GetTaskStartToCloseTimeoutSeconds() <= 0 {
-		attributes.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(parentInfo.DecisionTimeoutValue)
+		attributes.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(parentInfo.DecisionStartToCloseTimeout)
 	}
 
 	return nil

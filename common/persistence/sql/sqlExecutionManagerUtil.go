@@ -1205,7 +1205,7 @@ func buildExecutionRow(
 		TaskList:                                &executionInfo.TaskList,
 		WorkflowTypeName:                        &executionInfo.WorkflowTypeName,
 		WorkflowTimeoutSeconds:                  &executionInfo.WorkflowTimeout,
-		DecisionTaskTimeoutSeconds:              &executionInfo.DecisionTimeoutValue,
+		DecisionTaskTimeoutSeconds:              &executionInfo.DecisionStartToCloseTimeout,
 		ExecutionContext:                        executionInfo.ExecutionContext,
 		State:                                   common.Int32Ptr(int32(executionInfo.State)),
 		CloseStatus:                             common.Int32Ptr(int32(executionInfo.CloseStatus)),

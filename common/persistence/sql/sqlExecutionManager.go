@@ -242,7 +242,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 		TaskList:                           info.GetTaskList(),
 		WorkflowTypeName:                   info.GetWorkflowTypeName(),
 		WorkflowTimeout:                    info.GetWorkflowTimeoutSeconds(),
-		DecisionTimeoutValue:               info.GetDecisionTaskTimeoutSeconds(),
+		DecisionStartToCloseTimeout:        info.GetDecisionTaskTimeoutSeconds(),
 		State:                              int(info.GetState()),
 		CloseStatus:                        int(info.GetCloseStatus()),
 		LastFirstEventID:                   info.GetLastFirstEventID(),

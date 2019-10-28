@@ -34,7 +34,7 @@ CREATE TYPE workflow_execution (
   task_list                        text,
   workflow_type_name               text,
   workflow_timeout                 int,  -- Workflow ExecutionStartToCloseTimeoutSeconds
-  decision_task_timeout            int,
+  decision_task_timeout            int,  -- decision start to close timeout
   execution_context                blob,
   state                            int,  -- enum WorkflowState {Created, Running, Completed}
   close_status                     int,  -- enum WorkflowCloseStatus {None, Completed, Failed, Canceled, Terminated, ContinuedAsNew, TimedOut}
