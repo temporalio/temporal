@@ -262,42 +262,14 @@ func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_DeleteFromV2NonRetryabl
 	s.Equal(errDeleteNonRetriable.Error(), err.Error())
 }
 
-func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_DeleteFromV1NonRetryableError() {
-	s.metricsClient.On("Scope", metrics.ArchiverDeleteHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
-	s.metricsScope.On("IncCounter", metrics.ArchiverNonRetryableErrorCount).Once()
-	mockHistoryManager := &mocks.HistoryManager{}
-	mockHistoryManager.On("DeleteWorkflowExecutionHistory", mock.Anything).Return(errPersistenceNonRetryable)
-	container := &BootstrapContainer{
-		Logger:         s.logger,
-		MetricsClient:  s.metricsClient,
-		HistoryManager: mockHistoryManager,
-	}
-	env := s.NewTestActivityEnvironment()
-	env.SetWorkerOptions(worker.Options{
-		BackgroundActivityContext: context.WithValue(context.Background(), bootstrapContainerKey, container),
-	})
-	request := ArchiveRequest{
-		DomainID:             testDomainID,
-		DomainName:           testDomainName,
-		WorkflowID:           testWorkflowID,
-		RunID:                testRunID,
-		BranchToken:          testBranchToken,
-		NextEventID:          testNextEventID,
-		CloseFailoverVersion: testCloseFailoverVersion,
-		URI:                  testArchivalURI,
-	}
-	_, err := env.ExecuteActivity(deleteHistoryActivity, request)
-	s.Equal(errDeleteNonRetriable.Error(), err.Error())
-}
-
 func (s *activitiesSuite) TestDeleteHistoryActivity_Success() {
 	s.metricsClient.On("Scope", metrics.ArchiverDeleteHistoryActivityScope, []metrics.Tag{metrics.DomainTag(testDomainName)}).Return(s.metricsScope).Once()
-	mockHistoryManager := &mocks.HistoryManager{}
-	mockHistoryManager.On("DeleteWorkflowExecutionHistory", mock.Anything).Return(nil)
+	mockHistoryV2Manager := &mocks.HistoryV2Manager{}
+	mockHistoryV2Manager.On("DeleteHistoryBranch", mock.Anything).Return(nil)
 	container := &BootstrapContainer{
-		Logger:         s.logger,
-		MetricsClient:  s.metricsClient,
-		HistoryManager: mockHistoryManager,
+		Logger:           s.logger,
+		MetricsClient:    s.metricsClient,
+		HistoryV2Manager: mockHistoryV2Manager,
 	}
 	env := s.NewTestActivityEnvironment()
 	env.SetWorkerOptions(worker.Options{

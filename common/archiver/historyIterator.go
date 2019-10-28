@@ -226,32 +226,15 @@ func (i *historyIterator) readHistoryBatches(firstEventID int64) ([]*shared.Hist
 }
 
 func (i *historyIterator) readHistory(firstEventID int64) ([]*shared.History, error) {
-	if i.request.EventStoreVersion == persistence.EventStoreVersionV2 {
-		req := &persistence.ReadHistoryBranchRequest{
-			BranchToken: i.request.BranchToken,
-			MinEventID:  firstEventID,
-			MaxEventID:  common.EndEventID,
-			PageSize:    i.historyPageSize,
-			ShardID:     common.IntPtr(i.request.ShardID),
-		}
-		historyBatches, _, _, err := persistence.ReadFullPageV2EventsByBatch(i.historyV2Manager, req)
-		return historyBatches, err
+	req := &persistence.ReadHistoryBranchRequest{
+		BranchToken: i.request.BranchToken,
+		MinEventID:  firstEventID,
+		MaxEventID:  common.EndEventID,
+		PageSize:    i.historyPageSize,
+		ShardID:     common.IntPtr(i.request.ShardID),
 	}
-	req := &persistence.GetWorkflowExecutionHistoryRequest{
-		DomainID: i.request.DomainID,
-		Execution: shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(i.request.WorkflowID),
-			RunId:      common.StringPtr(i.request.RunID),
-		},
-		FirstEventID: firstEventID,
-		NextEventID:  common.EndEventID,
-		PageSize:     i.historyPageSize,
-	}
-	resp, err := i.historyManager.GetWorkflowExecutionHistoryByBatch(req)
-	if err != nil {
-		return nil, err
-	}
-	return resp.History, nil
+	historyBatches, _, _, err := persistence.ReadFullPageV2EventsByBatch(i.historyV2Manager, req)
+	return historyBatches, err
 }
 
 // reset resets iterator to a certain state given its encoded representation

@@ -24,7 +24,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	carchiver "github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/log/tag"
@@ -106,31 +105,15 @@ func deleteHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 			err = cadence.NewCustomError(err.Error())
 		}
 	}()
-	logger := tagLoggerWithRequest(tagLoggerWithActivityInfo(container.Logger, activity.GetInfo(ctx)), request)
-	if request.EventStoreVersion == persistence.EventStoreVersionV2 {
-		err = persistence.DeleteWorkflowExecutionHistoryV2(container.HistoryV2Manager, request.BranchToken, common.IntPtr(request.ShardID), container.Logger)
-		if err == nil {
-			return nil
-		}
-		logger.Error("failed to delete history from events v2", tag.Error(err))
-		if !common.IsPersistenceTransientError(err) {
-			return errDeleteNonRetriable
-		}
-		return err
-	}
-
-	deleteHistoryReq := &persistence.DeleteWorkflowExecutionHistoryRequest{
-		DomainID: request.DomainID,
-		Execution: shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(request.WorkflowID),
-			RunId:      common.StringPtr(request.RunID),
-		},
-	}
-	err = container.HistoryManager.DeleteWorkflowExecutionHistory(deleteHistoryReq)
+	err = container.HistoryV2Manager.DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
+		BranchToken: request.BranchToken,
+		ShardID:     common.IntPtr(request.ShardID),
+	})
 	if err == nil {
 		return nil
 	}
-	logger.Error("failed to delete history from events v1", tag.Error(err))
+	logger := tagLoggerWithRequest(tagLoggerWithActivityInfo(container.Logger, activity.GetInfo(ctx)), request)
+	logger.Error("failed to delete history events", tag.Error(err))
 	if !common.IsPersistenceTransientError(err) {
 		return errDeleteNonRetriable
 	}

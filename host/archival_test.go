@@ -39,6 +39,9 @@ const (
 )
 
 func (s *integrationSuite) TestArchival_TimerQueueProcessor() {
+	if !s.testClusterConfig.EnableEventsV2 {
+		s.T().Skip()
+	}
 	s.True(s.testCluster.archiverBase.metadata.GetHistoryConfig().ClusterConfiguredForArchival())
 
 	domainID := s.getDomainID(s.archivalDomainName)
@@ -59,6 +62,9 @@ func (s *integrationSuite) TestArchival_TimerQueueProcessor() {
 }
 
 func (s *integrationSuite) TestArchival_ContinueAsNew() {
+	if !s.testClusterConfig.EnableEventsV2 {
+		s.T().Skip()
+	}
 	s.True(s.testCluster.archiverBase.metadata.GetHistoryConfig().ClusterConfiguredForArchival())
 
 	domainID := s.getDomainID(s.archivalDomainName)
@@ -81,6 +87,9 @@ func (s *integrationSuite) TestArchival_ContinueAsNew() {
 }
 
 func (s *integrationSuite) TestArchival_ArchiverWorker() {
+	if !s.testClusterConfig.EnableEventsV2 {
+		s.T().Skip()
+	}
 	s.True(s.testCluster.archiverBase.metadata.GetHistoryConfig().ClusterConfiguredForArchival())
 
 	domainID := s.getDomainID(s.archivalDomainName)
