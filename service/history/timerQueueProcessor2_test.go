@@ -60,6 +60,7 @@ type (
 		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MocktimerQueueProcessor
 		mockEventsCache          *MockeventsCache
+		mockDomainCache          *cache.MockDomainCache
 
 		mockShardManager *mocks.ShardManager
 		shardClosedCh    chan int
@@ -68,7 +69,6 @@ type (
 
 		mockHistoryEngine   *historyEngineImpl
 		mockMatchingClient  *matchingservicetest.MockClient
-		mockDomainCache     *cache.DomainCacheMock
 		mockVisibilityMgr   *mocks.VisibilityManager
 		mockExecutionMgr    *mocks.ExecutionManager
 		mockHistoryV2Mgr    *mocks.HistoryV2Manager
@@ -106,6 +106,7 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.controller)
 	s.mockTimerProcessor = NewMocktimerQueueProcessor(s.controller)
 	s.mockEventsCache = NewMockeventsCache(s.controller)
+	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
 	s.mockTxProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
 	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
@@ -116,13 +117,10 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 	s.mockShardManager = &mocks.ShardManager{}
 	s.mockHistoryV2Mgr = &mocks.HistoryV2Manager{}
 	s.mockVisibilityMgr = &mocks.VisibilityManager{}
-	s.mockDomainCache = &cache.DomainCacheMock{}
+
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	// ack manager will use the domain information
-	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(
-		testLocalDomainEntry,
-		nil,
-	)
+	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(testLocalDomainEntry, nil).AnyTimes()
 	s.mockProducer = &mocks.KafkaProducer{}
 	s.shardClosedCh = make(chan int, 100)
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)

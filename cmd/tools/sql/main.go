@@ -21,8 +21,9 @@
 package main
 
 import (
-	"github.com/uber/cadence/tools/sql"
 	"os"
+
+	"github.com/uber/cadence/tools/sql"
 )
 
 func main() {

@@ -31,7 +31,6 @@ import (
 
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/collection"
 	"github.com/uber/cadence/common/definition"
@@ -47,7 +46,6 @@ type (
 		*require.Assertions
 
 		mockShard           *shardContextImpl
-		mockDomainCache     *cache.DomainCacheMock
 		mockClusterMetadata *mocks.ClusterMetadata
 		mockHistoryV2Mgr    *mocks.HistoryV2Manager
 		mockStateRebuilder  *MocknDCStateRebuilder
@@ -85,7 +83,6 @@ func (s *workflowResetterSuite) SetupTest() {
 	s.mockTransactionMgr = NewMocknDCTransactionMgr(s.controller)
 	s.mockStateRebuilder = NewMocknDCStateRebuilder(s.controller)
 
-	s.mockDomainCache = &cache.DomainCacheMock{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockHistoryV2Mgr = &mocks.HistoryV2Manager{}
 
@@ -93,7 +90,6 @@ func (s *workflowResetterSuite) SetupTest() {
 		shardInfo:                 &persistence.ShardInfo{ShardID: 0, RangeID: 1, TransferAckLevel: 0},
 		config:                    NewDynamicConfigForTest(),
 		historyV2Mgr:              s.mockHistoryV2Mgr,
-		domainCache:               s.mockDomainCache,
 		clusterMetadata:           s.mockClusterMetadata,
 		maxTransferSequenceNumber: 100000,
 		logger:                    s.logger,
@@ -118,7 +114,6 @@ func (s *workflowResetterSuite) SetupTest() {
 }
 
 func (s *workflowResetterSuite) TearDownTest() {
-	s.mockDomainCache.AssertExpectations(s.T())
 	s.mockClusterMetadata.AssertExpectations(s.T())
 	s.mockHistoryV2Mgr.AssertExpectations(s.T())
 	s.controller.Finish()

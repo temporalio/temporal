@@ -23,6 +23,10 @@ package indexer
 import (
 	"encoding/json"
 	"fmt"
+	"sync"
+	"sync/atomic"
+	"time"
+
 	"github.com/olivere/elastic"
 	"github.com/uber/cadence/.gen/go/indexer"
 	"github.com/uber/cadence/.gen/go/shared"
@@ -34,9 +38,6 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
 type indexProcessor struct {

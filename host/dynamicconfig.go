@@ -21,8 +21,9 @@
 package host
 
 import (
-	"github.com/uber/cadence/common"
 	"time"
+
+	"github.com/uber/cadence/common"
 
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )

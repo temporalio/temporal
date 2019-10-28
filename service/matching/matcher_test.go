@@ -28,8 +28,8 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
+
 	gen "github.com/uber/cadence/.gen/go/matching"
 	"github.com/uber/cadence/.gen/go/matching/matchingservicetest"
 	"github.com/uber/cadence/.gen/go/shared"
@@ -391,8 +391,8 @@ func (t *MatcherTestSuite) newDomainCache() cache.DomainCache {
 		&persistence.DomainConfig{},
 		"",
 		nil)
-	dc := &cache.DomainCacheMock{}
-	dc.On("GetDomainByID", mock.Anything).Return(entry, nil)
+	dc := cache.NewMockDomainCache(t.controller)
+	dc.EXPECT().GetDomainByID(gomock.Any()).Return(entry, nil).AnyTimes()
 	return dc
 }
 

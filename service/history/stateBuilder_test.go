@@ -51,6 +51,7 @@ type (
 
 		controller        *gomock.Controller
 		mockEventsCache   *MockeventsCache
+		mockDomainCache   *cache.MockDomainCache
 		mockTaskGenerator *MockmutableStateTaskGenerator
 		mockMutableState  *MockmutableState
 
@@ -58,7 +59,6 @@ type (
 
 		logger              log.Logger
 		mockClusterMetadata *mocks.ClusterMetadata
-		mockDomainCache     *cache.DomainCacheMock
 		mockService         service.Service
 		mockShard           *shardContextImpl
 
@@ -88,12 +88,12 @@ func (s *stateBuilderSuite) SetupTest() {
 	s.mockEventsCache = NewMockeventsCache(s.controller)
 	s.mockTaskGenerator = NewMockmutableStateTaskGenerator(s.controller)
 	s.mockMutableState = NewMockmutableState(s.controller)
+	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
 	s.mockTaskGeneratorForNew = NewMockmutableStateTaskGenerator(s.controller)
 	s.mockEventsCache.EXPECT().putEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
-	s.mockDomainCache = &cache.DomainCacheMock{}
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockService = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, nil, nil, nil, nil)
 
@@ -130,7 +130,6 @@ func (s *stateBuilderSuite) SetupTest() {
 
 func (s *stateBuilderSuite) TearDownTest() {
 	s.stateBuilder = nil
-	s.mockDomainCache.AssertExpectations(s.T())
 	s.controller.Finish()
 }
 
@@ -183,7 +182,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_No
 		WorkflowExecutionStartedEventAttributes: startWorkflowAttribute,
 	}
 
-	s.mockDomainCache.On("GetDomain", testParentDomainName).Return(testGlobalParentDomainEntry, nil).Once()
+	s.mockDomainCache.EXPECT().GetDomain(testParentDomainName).Return(testGlobalParentDomainEntry, nil).Times(1)
 	s.mockMutableState.EXPECT().ReplicateWorkflowExecutionStartedEvent(&testParentDomainID, execution, requestID, event).Return(nil).Times(1)
 	s.mockUpdateVersion(event)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
@@ -234,7 +233,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_Wi
 		WorkflowExecutionStartedEventAttributes: startWorkflowAttribute,
 	}
 
-	s.mockDomainCache.On("GetDomain", testParentDomainName).Return(testGlobalParentDomainEntry, nil).Once()
+	s.mockDomainCache.EXPECT().GetDomain(testParentDomainName).Return(testGlobalParentDomainEntry, nil).Times(1)
 	s.mockMutableState.EXPECT().ReplicateWorkflowExecutionStartedEvent(&testParentDomainID, execution, requestID, event).Return(nil).Times(1)
 	s.mockUpdateVersion(event)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
@@ -481,8 +480,6 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		newRunStartedEvent, newRunSignalEvent, newRunDecisionEvent,
 	}
 
-	// s.mockDomainCache.On("GetDomainByID", testDomainID).Return(testGlobalDomainEntry, nil).Once()
-	// s.mockDomainCache.On("GetDomain", testParentDomainName).Return(testGlobalParentDomainEntry, nil).Once()
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", continueAsNewEvent.GetVersion()).Return(s.sourceCluster)
 	s.mockMutableState.EXPECT().ReplicateWorkflowExecutionContinuedAsNewEvent(
 		continueAsNewEvent.GetEventId(),
@@ -498,7 +495,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
 
 	// new workflow domain
-	s.mockDomainCache.On("GetDomain", testParentDomainName).Return(testGlobalParentDomainEntry, nil).Once()
+	s.mockDomainCache.EXPECT().GetDomain(testParentDomainName).Return(testGlobalParentDomainEntry, nil).AnyTimes()
 	// task for the new workflow
 	s.mockTaskGeneratorForNew.EXPECT().generateRecordWorkflowStartedTasks(
 		s.stateBuilder.unixNanoToTime(newRunStartedEvent.GetTimestamp()),

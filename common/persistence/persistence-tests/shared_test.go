@@ -21,8 +21,9 @@
 package persistencetests
 
 import (
-	"github.com/uber/cadence/common/persistence"
 	"testing"
+
+	"github.com/uber/cadence/common/persistence"
 )
 
 func TestGarbageCleanupInfo(t *testing.T) {

@@ -25,6 +25,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/cache"
@@ -38,20 +40,27 @@ import (
 type (
 	noopDCRedirectionPolicySuite struct {
 		suite.Suite
+		*require.Assertions
+
 		currentClusterName string
 		policy             *NoopRedirectionPolicy
 	}
 
 	selectedAPIsForwardingRedirectionPolicySuite struct {
 		suite.Suite
+		*require.Assertions
+
+		controller      *gomock.Controller
+		mockDomainCache *cache.MockDomainCache
+
 		domainName             string
 		domainID               string
 		currentClusterName     string
 		alternativeClusterName string
 		mockConfig             *Config
-		mockDomainCache        *cache.DomainCacheMock
-		mockClusterMetadata    *mocks.ClusterMetadata
-		policy                 *SelectedAPIsForwardingRedirectionPolicy
+
+		mockClusterMetadata *mocks.ClusterMetadata
+		policy              *SelectedAPIsForwardingRedirectionPolicy
 	}
 )
 
@@ -68,6 +77,8 @@ func (s *noopDCRedirectionPolicySuite) TearDownSuite() {
 }
 
 func (s *noopDCRedirectionPolicySuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+
 	s.currentClusterName = cluster.TestCurrentClusterName
 	s.policy = NewNoopRedirectionPolicy(s.currentClusterName)
 }
@@ -109,6 +120,11 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TearDownSuite() {
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+
+	s.controller = gomock.NewController(s.T())
+	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
+
 	s.domainName = "some random domain name"
 	s.domainID = "some random domain ID"
 	s.currentClusterName = cluster.TestCurrentClusterName
@@ -118,7 +134,6 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) SetupTest() {
 	s.Nil(err)
 
 	s.mockConfig = NewConfig(dynamicconfig.NewCollection(dynamicconfig.NewNopClient(), logger), 0, false)
-	s.mockDomainCache = &cache.DomainCacheMock{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
 	s.policy = NewSelectedAPIsForwardingPolicy(
@@ -129,7 +144,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) SetupTest() {
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) TearDownTest() {
-
+	s.controller.Finish()
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithDomainRedirect_LocalDomain() {
@@ -329,8 +344,8 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) setupLocalDomain() {
 		nil,
 	)
 
-	s.mockDomainCache.On("GetDomainByID", s.domainID).Return(domainEntry, nil)
-	s.mockDomainCache.On("GetDomain", s.domainName).Return(domainEntry, nil)
+	s.mockDomainCache.EXPECT().GetDomainByID(s.domainID).Return(domainEntry, nil).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomain(s.domainName).Return(domainEntry, nil).AnyTimes()
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) setupGlobalDomainWithOneReplicationCluster() {
@@ -348,8 +363,8 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) setupGlobalDomainWithOneR
 		nil,
 	)
 
-	s.mockDomainCache.On("GetDomainByID", s.domainID).Return(domainEntry, nil)
-	s.mockDomainCache.On("GetDomain", s.domainName).Return(domainEntry, nil)
+	s.mockDomainCache.EXPECT().GetDomainByID(s.domainID).Return(domainEntry, nil).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomain(s.domainName).Return(domainEntry, nil).AnyTimes()
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) setupGlobalDomainWithTwoReplicationCluster(forwardingEnabled bool, isRecordActive bool) {
@@ -371,7 +386,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) setupGlobalDomainWithTwoR
 		nil,
 	)
 
-	s.mockDomainCache.On("GetDomainByID", s.domainID).Return(domainEntry, nil)
-	s.mockDomainCache.On("GetDomain", s.domainName).Return(domainEntry, nil)
+	s.mockDomainCache.EXPECT().GetDomainByID(s.domainID).Return(domainEntry, nil).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomain(s.domainName).Return(domainEntry, nil).AnyTimes()
 	s.mockConfig.EnableDomainNotActiveAutoForwarding = dynamicconfig.GetBoolPropertyFnFilteredByDomain(forwardingEnabled)
 }

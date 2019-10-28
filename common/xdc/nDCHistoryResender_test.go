@@ -27,8 +27,8 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.uber.org/zap"
 
 	"github.com/uber/cadence/.gen/go/admin"
 	"github.com/uber/cadence/.gen/go/admin/adminservicetest"
@@ -45,43 +45,50 @@ import (
 )
 
 type (
-	nDChistoryResenderSuite struct {
+	nDCHistoryResenderSuite struct {
 		suite.Suite
+		*require.Assertions
+
+		controller        *gomock.Controller
+		mockDomainCache   *cache.MockDomainCache
+		mockAdminClient   *adminservicetest.MockClient
+		mockHistoryClient *historyservicetest.MockClient
 
 		domainID   string
 		domainName string
 
 		mockClusterMetadata *mocks.ClusterMetadata
-		mockDomainCache     *cache.DomainCacheMock
-		mockAdminClient     *adminservicetest.MockClient
-		mockHistoryClient   *historyservicetest.MockClient
-		serializer          persistence.PayloadSerializer
-		logger              log.Logger
 
-		controller   *gomock.Controller
+		serializer persistence.PayloadSerializer
+		logger     log.Logger
+
 		rereplicator *NDCHistoryResenderImpl
 	}
 )
 
 func TestNDCHistoryResenderSuite(t *testing.T) {
-	s := new(nDChistoryResenderSuite)
+	s := new(nDCHistoryResenderSuite)
 	suite.Run(t, s)
 }
 
-func (s *nDChistoryResenderSuite) SetupSuite() {
+func (s *nDCHistoryResenderSuite) SetupSuite() {
 }
 
-func (s *nDChistoryResenderSuite) TearDownSuite() {
+func (s *nDCHistoryResenderSuite) TearDownSuite() {
 
 }
 
-func (s *nDChistoryResenderSuite) SetupTest() {
-	zapLogger, err := zap.NewDevelopment()
-	s.Require().NoError(err)
-	s.logger = loggerimpl.NewLogger(zapLogger)
+func (s *nDCHistoryResenderSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+
+	s.controller = gomock.NewController(s.T())
+	s.mockAdminClient = adminservicetest.NewMockClient(s.controller)
+	s.mockHistoryClient = historyservicetest.NewMockClient(s.controller)
+	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
+
+	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
-	s.mockDomainCache = &cache.DomainCacheMock{}
 
 	s.domainID = uuid.New()
 	s.domainName = "some random domain name"
@@ -98,13 +105,10 @@ func (s *nDChistoryResenderSuite) SetupTest() {
 		1234,
 		nil,
 	)
-	s.mockDomainCache.On("GetDomainByID", s.domainID).Return(domainEntry, nil).Maybe()
-	s.mockDomainCache.On("GetDomain", s.domainName).Return(domainEntry, nil).Maybe()
+	s.mockDomainCache.EXPECT().GetDomainByID(s.domainID).Return(domainEntry, nil).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomain(s.domainName).Return(domainEntry, nil).AnyTimes()
 	s.serializer = persistence.NewPayloadSerializer()
 
-	s.controller = gomock.NewController(s.T())
-	s.mockAdminClient = adminservicetest.NewMockClient(s.controller)
-	s.mockHistoryClient = historyservicetest.NewMockClient(s.controller)
 	s.rereplicator = NewNDCHistoryResender(
 		s.mockDomainCache,
 		s.mockAdminClient,
@@ -116,11 +120,11 @@ func (s *nDChistoryResenderSuite) SetupTest() {
 	)
 }
 
-func (s *nDChistoryResenderSuite) TearDownTest() {
+func (s *nDCHistoryResenderSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *nDChistoryResenderSuite) TestSendSingleWorkflowHistory() {
+func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	startEventID := int64(123)
@@ -214,7 +218,7 @@ func (s *nDChistoryResenderSuite) TestSendSingleWorkflowHistory() {
 	s.Nil(err)
 }
 
-func (s *nDChistoryResenderSuite) TestCreateReplicateRawEventsRequest() {
+func (s *nDCHistoryResenderSuite) TestCreateReplicateRawEventsRequest() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	blob := &shared.DataBlob{
@@ -244,7 +248,7 @@ func (s *nDChistoryResenderSuite) TestCreateReplicateRawEventsRequest() {
 		versionHistoryItems))
 }
 
-func (s *nDChistoryResenderSuite) TestSendReplicationRawRequest() {
+func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	item := &shared.VersionHistoryItem{
@@ -269,7 +273,7 @@ func (s *nDChistoryResenderSuite) TestSendReplicationRawRequest() {
 	s.Nil(err)
 }
 
-func (s *nDChistoryResenderSuite) TestSendReplicationRawRequest_Err() {
+func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest_Err() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	item := &shared.VersionHistoryItem{
@@ -299,7 +303,7 @@ func (s *nDChistoryResenderSuite) TestSendReplicationRawRequest_Err() {
 	s.Equal(retryErr, err)
 }
 
-func (s *nDChistoryResenderSuite) TestGetHistory() {
+func (s *nDCHistoryResenderSuite) TestGetHistory() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	startEventID := int64(123)
@@ -345,7 +349,7 @@ func (s *nDChistoryResenderSuite) TestGetHistory() {
 	s.Equal(response, out)
 }
 
-func (s *nDChistoryResenderSuite) serializeEvents(events []*shared.HistoryEvent) *shared.DataBlob {
+func (s *nDCHistoryResenderSuite) serializeEvents(events []*shared.HistoryEvent) *shared.DataBlob {
 	blob, err := s.serializer.SerializeBatchEvents(events, common.EncodingTypeThriftRW)
 	s.Nil(err)
 	return &shared.DataBlob{

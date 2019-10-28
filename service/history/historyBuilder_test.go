@@ -25,7 +25,6 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
@@ -46,8 +45,7 @@ type (
 
 		controller      *gomock.Controller
 		mockEventsCache *MockeventsCache
-
-		mockDomainCache *cache.DomainCacheMock
+		mockDomainCache *cache.MockDomainCache
 
 		domainID    string
 		domainEntry *cache.DomainCacheEntry
@@ -68,10 +66,12 @@ func (s *historyBuilderSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockEventsCache = NewMockeventsCache(s.controller)
+	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
 	s.mockEventsCache.EXPECT().putEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(s.domainEntry, nil).AnyTimes()
 
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
-	s.mockDomainCache = &cache.DomainCacheMock{}
+
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 	s.domainID = testDomainID
@@ -91,7 +91,6 @@ func (s *historyBuilderSuite) SetupTest() {
 		s.logger, testLocalDomainEntry)
 	s.builder = newHistoryBuilder(s.msBuilder, s.logger)
 
-	s.mockDomainCache.On("GetDomain", mock.Anything).Return(s.domainEntry, nil).Maybe()
 }
 
 func (s *historyBuilderSuite) TearDownTest() {

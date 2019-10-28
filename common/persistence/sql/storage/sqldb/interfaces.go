@@ -22,8 +22,9 @@ package sqldb
 
 import (
 	"database/sql"
-	"github.com/uber/cadence/common"
 	"time"
+
+	"github.com/uber/cadence/common"
 )
 
 type (

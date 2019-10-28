@@ -28,9 +28,10 @@
 package history
 
 import (
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	persistence "github.com/uber/cadence/common/persistence"
-	reflect "reflect"
 )
 
 // MocktransferQueueProcessor is a mock of transferQueueProcessor interface

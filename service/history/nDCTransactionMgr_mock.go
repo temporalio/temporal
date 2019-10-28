@@ -29,10 +29,11 @@ package history
 
 import (
 	context "context"
-	gomock "github.com/golang/mock/gomock"
-	persistence "github.com/uber/cadence/common/persistence"
 	reflect "reflect"
 	time "time"
+
+	gomock "github.com/golang/mock/gomock"
+	persistence "github.com/uber/cadence/common/persistence"
 )
 
 // MocknDCTransactionMgr is a mock of nDCTransactionMgr interface

@@ -22,6 +22,7 @@ package persistence
 
 import (
 	"fmt"
+
 	"github.com/uber/cadence/.gen/go/shared"
 )
 

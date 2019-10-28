@@ -21,8 +21,9 @@
 package main
 
 import (
-	"github.com/uber/cadence/tools/cassandra"
 	"os"
+
+	"github.com/uber/cadence/tools/cassandra"
 )
 
 func main() {

@@ -56,6 +56,7 @@ type (
 		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MocktimerQueueProcessor
 		mockEventsCache          *MockeventsCache
+		mockDomainCache          *cache.MockDomainCache
 
 		logger              log.Logger
 		mockExecutionMgr    *mocks.ExecutionManager
@@ -67,7 +68,6 @@ type (
 		mockService         service.Service
 		mockShard           *shardContextImpl
 		mockContext         *workflowExecutionContextImpl
-		mockDomainCache     *cache.DomainCacheMock
 		mockClientBean      *client.MockClientBean
 
 		conflictResolver *conflictResolverImpl
@@ -94,6 +94,7 @@ func (s *conflictResolverSuite) SetupTest() {
 	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.controller)
 	s.mockTimerProcessor = NewMocktimerQueueProcessor(s.controller)
 	s.mockEventsCache = NewMockeventsCache(s.controller)
+	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
 	s.mockTxProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
 	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
@@ -116,7 +117,6 @@ func (s *conflictResolverSuite) SetupTest() {
 		nil,
 		nil,
 		nil)
-	s.mockDomainCache = &cache.DomainCacheMock{}
 
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
@@ -161,7 +161,6 @@ func (s *conflictResolverSuite) TearDownTest() {
 	s.mockShardManager.AssertExpectations(s.T())
 	s.mockProducer.AssertExpectations(s.T())
 	s.mockClientBean.AssertExpectations(s.T())
-	s.mockDomainCache.AssertExpectations(s.T())
 	s.controller.Finish()
 }
 
@@ -306,9 +305,9 @@ func (s *conflictResolverSuite) TestReset() {
 	}, nil).Once() // return empty resoonse since we are not testing the load
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", event1.GetVersion()).Return(sourceCluster)
-	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(cache.NewLocalDomainCacheEntryForTest(
+	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(cache.NewLocalDomainCacheEntryForTest(
 		&persistence.DomainInfo{ID: domainID}, &persistence.DomainConfig{}, "", nil,
-	), nil)
+	), nil).AnyTimes()
 
 	_, err := s.conflictResolver.reset(prevRunID, prevLastWriteVersion, prevState, createRequestID, nextEventID-1, executionInfo, s.mockContext.updateCondition)
 	s.Nil(err)

@@ -29,9 +29,10 @@ package history
 
 import (
 	context "context"
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	persistence "github.com/uber/cadence/common/persistence"
-	reflect "reflect"
 )
 
 // MocknDCBranchMgr is a mock of nDCBranchMgr interface

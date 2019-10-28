@@ -53,6 +53,7 @@ type (
 		*require.Assertions
 
 		controller       *gomock.Controller
+		mockDomainCache  *cache.MockDomainCache
 		mockMutableState *MockmutableState
 
 		logger              log.Logger
@@ -60,7 +61,6 @@ type (
 		mockExecutionMgr    *mocks.ExecutionManager
 		mockHistoryV2Mgr    *mocks.HistoryV2Manager
 		mockProducer        *mocks.KafkaProducer
-		mockDomainCache     *cache.DomainCacheMock
 		mockClusterMetadata *mocks.ClusterMetadata
 		mockClientBean      *client.MockClientBean
 		mockMessagingClient messaging.Client
@@ -87,6 +87,7 @@ func (s *replicatorQueueProcessorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
+	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
 	s.mockMutableState = NewMockmutableState(s.controller)
 
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
@@ -94,7 +95,7 @@ func (s *replicatorQueueProcessorSuite) SetupTest() {
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
 	s.mockHistoryV2Mgr = &mocks.HistoryV2Manager{}
 	s.mockProducer = &mocks.KafkaProducer{}
-	s.mockDomainCache = &cache.DomainCacheMock{}
+
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 	s.mockClientBean = &client.MockClientBean{}
@@ -154,7 +155,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 			RunId:      common.StringPtr(runID),
 		},
 	}).Return(nil, &shared.EntityNotExistsError{})
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(cache.NewGlobalDomainCacheEntryForTest(
+	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(cache.NewGlobalDomainCacheEntryForTest(
 		&persistence.DomainInfo{ID: domainID, Name: domainName},
 		&persistence.DomainConfig{Retention: 1},
 		&persistence.DomainReplicationConfig{
@@ -166,7 +167,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 		},
 		1234,
 		nil,
-	), nil)
+	), nil).AnyTimes()
 
 	_, err := s.replicatorQueueProcessor.process(newTaskInfo(nil, task, s.logger))
 	s.Nil(err)
@@ -201,7 +202,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 	release(nil)
 	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(cache.NewGlobalDomainCacheEntryForTest(
+	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(cache.NewGlobalDomainCacheEntryForTest(
 		&persistence.DomainInfo{ID: domainID, Name: domainName},
 		&persistence.DomainConfig{Retention: 1},
 		&persistence.DomainReplicationConfig{
@@ -213,7 +214,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 		},
 		version,
 		nil,
-	), nil)
+	), nil).AnyTimes()
 
 	_, err := s.replicatorQueueProcessor.process(newTaskInfo(nil, task, s.logger))
 	s.Nil(err)
@@ -250,7 +251,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(nil, false).AnyTimes()
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(cache.NewGlobalDomainCacheEntryForTest(
+	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(cache.NewGlobalDomainCacheEntryForTest(
 		&persistence.DomainInfo{ID: domainID, Name: domainName},
 		&persistence.DomainConfig{Retention: 1},
 		&persistence.DomainReplicationConfig{
@@ -262,7 +263,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 		},
 		version,
 		nil,
-	), nil)
+	), nil).AnyTimes()
 
 	_, err := s.replicatorQueueProcessor.process(newTaskInfo(nil, task, s.logger))
 	s.Nil(err)
@@ -339,7 +340,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 		},
 	}
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(cache.NewGlobalDomainCacheEntryForTest(
+	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(cache.NewGlobalDomainCacheEntryForTest(
 		&persistence.DomainInfo{ID: domainID, Name: domainName},
 		&persistence.DomainConfig{Retention: 1},
 		&persistence.DomainReplicationConfig{
@@ -351,7 +352,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 		},
 		version,
 		nil,
-	), nil)
+	), nil).AnyTimes()
 
 	s.mockProducer.On("Publish", &replicator.ReplicationTask{
 		TaskType: replicator.ReplicationTaskType.Ptr(replicator.ReplicationTaskTypeSyncActivity),
@@ -449,7 +450,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 		},
 	}
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(cache.NewGlobalDomainCacheEntryForTest(
+	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(cache.NewGlobalDomainCacheEntryForTest(
 		&persistence.DomainInfo{ID: domainID, Name: domainName},
 		&persistence.DomainConfig{Retention: 1},
 		&persistence.DomainReplicationConfig{
@@ -461,7 +462,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 		},
 		version,
 		nil,
-	), nil)
+	), nil).AnyTimes()
 	s.mockProducer.On("Publish", &replicator.ReplicationTask{
 		TaskType: replicator.ReplicationTaskType.Ptr(replicator.ReplicationTaskTypeSyncActivity),
 		SyncActicvityTaskAttributes: &replicator.SyncActicvityTaskAttributes{

@@ -23,12 +23,13 @@ package elasticsearch
 import (
 	"bytes"
 	"encoding/json"
+	"testing"
+	"time"
+
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/definition"
 	p "github.com/uber/cadence/common/persistence"
-	"testing"
-	"time"
 )
 
 var (

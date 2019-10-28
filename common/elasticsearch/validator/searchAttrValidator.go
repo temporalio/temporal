@@ -22,6 +22,7 @@ package validator
 
 import (
 	"fmt"
+
 	gen "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/log"

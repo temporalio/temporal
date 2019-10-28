@@ -57,10 +57,10 @@ type (
 		mockTxProcessor          *MocktransferQueueProcessor
 		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MocktimerQueueProcessor
+		mockDomainCache          *cache.MockDomainCache
 
 		mockShardManager        *mocks.ShardManager
 		mockHistoryEngine       *historyEngineImpl
-		mockDomainCache         *cache.DomainCacheMock
 		mockVisibilityMgr       *mocks.VisibilityManager
 		mockExecutionMgr        *mocks.ExecutionManager
 		mockShard               ShardContext
@@ -98,6 +98,7 @@ func (s *timerQueueStandbyProcessorSuite) SetupTest() {
 	s.mockTxProcessor = NewMocktransferQueueProcessor(s.controller)
 	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.controller)
 	s.mockTimerProcessor = NewMocktimerQueueProcessor(s.controller)
+	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
 	s.mockTxProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
 	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
@@ -106,12 +107,11 @@ func (s *timerQueueStandbyProcessorSuite) SetupTest() {
 	s.mockShardManager = &mocks.ShardManager{}
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
 	s.mockVisibilityMgr = &mocks.VisibilityManager{}
-	s.mockDomainCache = &cache.DomainCacheMock{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockHistoryRereplicator = &xdc.MockHistoryRereplicator{}
 	s.mockNDCHistoryResender = &xdc.MockNDCHistoryResender{}
 	// ack manager will use the domain information
-	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(testGlobalDomainEntry, nil)
+	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(testGlobalDomainEntry, nil).AnyTimes()
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockClientBean = &client.MockClientBean{}
 	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, nil, nil, nil)

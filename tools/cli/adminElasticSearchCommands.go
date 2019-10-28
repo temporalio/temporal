@@ -25,14 +25,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/uber/cadence/common/clock"
-	"github.com/uber/cadence/common/tokenbucket"
 	"math"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/uber/cadence/common/clock"
+	"github.com/uber/cadence/common/tokenbucket"
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/olivere/elastic"

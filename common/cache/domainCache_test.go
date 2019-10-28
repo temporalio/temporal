@@ -28,7 +28,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	"go.uber.org/zap"
 
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
@@ -43,6 +42,7 @@ import (
 type (
 	domainCacheSuite struct {
 		suite.Suite
+		*require.Assertions
 
 		logger          log.Logger
 		clusterMetadata *mocks.ClusterMetadata
@@ -64,9 +64,9 @@ func (s *domainCacheSuite) TearDownSuite() {
 }
 
 func (s *domainCacheSuite) SetupTest() {
-	zapLogger, err := zap.NewDevelopment()
-	s.Require().NoError(err)
-	s.logger = loggerimpl.NewLogger(zapLogger)
+	s.Assertions = require.New(s.T())
+
+	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.clusterMetadata = &mocks.ClusterMetadata{}
 	s.metadataMgr = &mocks.MetadataManager{}
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)

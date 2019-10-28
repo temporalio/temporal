@@ -28,10 +28,11 @@
 package history
 
 import (
-	gomock "github.com/golang/mock/gomock"
-	shared "github.com/uber/cadence/.gen/go/shared"
 	reflect "reflect"
 	time "time"
+
+	gomock "github.com/golang/mock/gomock"
+	shared "github.com/uber/cadence/.gen/go/shared"
 )
 
 // MockmutableStateTaskGenerator is a mock of mutableStateTaskGenerator interface

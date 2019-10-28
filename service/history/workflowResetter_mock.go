@@ -29,9 +29,10 @@ package history
 
 import (
 	context "context"
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	shared "github.com/uber/cadence/.gen/go/shared"
-	reflect "reflect"
 )
 
 // MockworkflowResetter is a mock of workflowResetter interface

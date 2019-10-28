@@ -33,7 +33,6 @@ import (
 
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
@@ -55,7 +54,6 @@ type (
 
 		mockService         service.Service
 		mockShard           *shardContextImpl
-		mockDomainCache     *cache.DomainCacheMock
 		mockHistoryV2Mgr    *mocks.HistoryV2Manager
 		mockClusterMetadata *mocks.ClusterMetadata
 
@@ -83,7 +81,6 @@ func (s *nDCBranchMgrSuite) SetupTest() {
 	s.mockMutableState = NewMockmutableState(s.controller)
 
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
-	s.mockDomainCache = &cache.DomainCacheMock{}
 	s.mockHistoryV2Mgr = &mocks.HistoryV2Manager{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
@@ -97,7 +94,6 @@ func (s *nDCBranchMgrSuite) SetupTest() {
 		nil)
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
-		domainCache:               s.mockDomainCache,
 		shardInfo:                 &persistence.ShardInfo{ShardID: 10, RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber:    1,
 		historyV2Mgr:              s.mockHistoryV2Mgr,

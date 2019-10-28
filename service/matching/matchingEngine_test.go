@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+
 	gohistory "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/history/historyservicetest"
 	"github.com/uber/cadence/.gen/go/matching"
@@ -49,23 +50,24 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/emirpasic/gods/maps/treemap"
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+
 	"github.com/uber/cadence/common/cache"
 )
 
 type (
 	matchingEngineSuite struct {
 		suite.Suite
-		controller           *gomock.Controller
-		historyClient        *historyservicetest.MockClient
+		controller        *gomock.Controller
+		mockHistoryClient *historyservicetest.MockClient
+		mockDomainCache   *cache.MockDomainCache
+
 		matchingEngine       *matchingEngineImpl
 		taskManager          *testTaskManager
 		mockExecutionManager *mocks.ExecutionManager
 		logger               log.Logger
 		callContext          context.Context
-		domainCache          *cache.DomainCacheMock
 		sync.Mutex
 	}
 )
@@ -108,10 +110,10 @@ func (s *matchingEngineSuite) SetupTest() {
 	defer s.Unlock()
 	s.mockExecutionManager = &mocks.ExecutionManager{}
 	s.controller = gomock.NewController(s.T())
-	s.historyClient = historyservicetest.NewMockClient(s.controller)
+	s.mockHistoryClient = historyservicetest.NewMockClient(s.controller)
 	s.taskManager = newTestTaskManager(s.logger)
-	s.domainCache = &cache.DomainCacheMock{}
-	s.domainCache.On("GetDomainByID", mock.Anything).Return(cache.CreateDomainCacheEntry("domainName"), nil)
+	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
+	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(cache.CreateDomainCacheEntry("domainName"), nil).AnyTimes()
 
 	s.matchingEngine = s.newMatchingEngine(defaultTestConfig(), s.taskManager)
 	s.matchingEngine.Start()
@@ -126,22 +128,22 @@ func (s *matchingEngineSuite) TearDownTest() {
 func (s *matchingEngineSuite) newMatchingEngine(
 	config *Config, taskMgr persistence.TaskManager,
 ) *matchingEngineImpl {
-	return newMatchingEngine(config, taskMgr, s.historyClient, s.logger, s.domainCache)
+	return newMatchingEngine(config, taskMgr, s.mockHistoryClient, s.logger, s.mockDomainCache)
 }
 
 func newMatchingEngine(
-	config *Config, taskMgr persistence.TaskManager, historyClient history.Client,
-	logger log.Logger, domainCache cache.DomainCache,
+	config *Config, taskMgr persistence.TaskManager, mockHistoryClient history.Client,
+	logger log.Logger, mockDomainCache cache.DomainCache,
 ) *matchingEngineImpl {
 	return &matchingEngineImpl{
 		taskManager:     taskMgr,
-		historyService:  historyClient,
+		historyService:  mockHistoryClient,
 		taskLists:       make(map[taskListID]taskListManager),
 		logger:          logger,
 		metricsClient:   metrics.NewClient(tally.NoopScope, metrics.Matching),
 		tokenSerializer: common.NewJSONTaskTokenSerializer(),
 		config:          config,
-		domainCache:     domainCache,
+		domainCache:     mockDomainCache,
 	}
 }
 
@@ -246,7 +248,7 @@ func (s *matchingEngineSuite) PollForDecisionTasksResultTest() {
 	scheduleID := int64(0)
 
 	// History service is using mock
-	s.historyClient.EXPECT().RecordDecisionTaskStarted(gomock.Any(), gomock.Any()).DoAndReturn(
+	s.mockHistoryClient.EXPECT().RecordDecisionTaskStarted(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, taskRequest *gohistory.RecordDecisionTaskStartedRequest) (*gohistory.RecordDecisionTaskStartedResponse, error) {
 			s.logger.Debug("Mock Received RecordDecisionTaskStartedRequest")
 			response := &gohistory.RecordDecisionTaskStartedResponse{}
@@ -506,7 +508,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 	identity := "nobody"
 
 	// History service is using mock
-	s.historyClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any()).DoAndReturn(
+	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, taskRequest *gohistory.RecordActivityTaskStartedRequest) (*gohistory.RecordActivityTaskStartedResponse, error) {
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
 			resp := &gohistory.RecordActivityTaskStartedResponse{
@@ -617,7 +619,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	identity := "nobody"
 
 	// History service is using mock
-	s.historyClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any()).DoAndReturn(
+	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, taskRequest *gohistory.RecordActivityTaskStartedRequest) (*gohistory.RecordActivityTaskStartedResponse, error) {
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
 			return &gohistory.RecordActivityTaskStartedResponse{
@@ -837,7 +839,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	identity := "nobody"
 
 	// History service is using mock
-	s.historyClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any()).DoAndReturn(
+	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, taskRequest *gohistory.RecordActivityTaskStartedRequest) (*gohistory.RecordActivityTaskStartedResponse, error) {
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
 			return &gohistory.RecordActivityTaskStartedResponse{
@@ -969,7 +971,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 	identity := "nobody"
 
 	// History service is using mock
-	s.historyClient.EXPECT().RecordDecisionTaskStarted(gomock.Any(), gomock.Any()).DoAndReturn(
+	s.mockHistoryClient.EXPECT().RecordDecisionTaskStarted(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, taskRequest *gohistory.RecordDecisionTaskStartedRequest) (*gohistory.RecordDecisionTaskStartedResponse, error) {
 			s.logger.Debug("Mock Received RecordDecisionTaskStartedRequest")
 			return &gohistory.RecordDecisionTaskStartedResponse{
@@ -1132,7 +1134,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 	startedTasks := make(map[int64]bool)
 
 	// History service is using mock
-	s.historyClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any()).DoAndReturn(
+	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, taskRequest *gohistory.RecordActivityTaskStartedRequest) (*gohistory.RecordActivityTaskStartedResponse, error) {
 			if _, ok := startedTasks[*taskRequest.TaskId]; ok {
 				s.logger.Debug(fmt.Sprintf("From error function Mock Received DUPLICATED RecordActivityTaskStartedRequest for taskID=%v", taskRequest.TaskId))
@@ -1275,7 +1277,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 	startedTasks := make(map[int64]bool)
 
 	// History service is using mock
-	s.historyClient.EXPECT().RecordDecisionTaskStarted(gomock.Any(), gomock.Any()).DoAndReturn(
+	s.mockHistoryClient.EXPECT().RecordDecisionTaskStarted(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, taskRequest *gohistory.RecordDecisionTaskStartedRequest) (*gohistory.RecordDecisionTaskStartedResponse, error) {
 			if _, ok := startedTasks[*taskRequest.TaskId]; ok {
 				s.logger.Debug(fmt.Sprintf("From error function Mock Received DUPLICATED RecordDecisionTaskStartedRequest for taskID=%v", taskRequest.TaskId))
@@ -1612,7 +1614,7 @@ func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) 
 	activityInput := []byte("Activity1 Input")
 
 	// History service is using mock
-	s.historyClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any()).DoAndReturn(
+	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, taskRequest *gohistory.RecordActivityTaskStartedRequest) (*gohistory.RecordActivityTaskStartedResponse, error) {
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
 			return &gohistory.RecordActivityTaskStartedResponse{

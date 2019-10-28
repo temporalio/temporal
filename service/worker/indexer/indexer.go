@@ -22,6 +22,7 @@ package indexer
 
 import (
 	"fmt"
+
 	"github.com/uber/cadence/common"
 	es "github.com/uber/cadence/common/elasticsearch"
 	"github.com/uber/cadence/common/log"

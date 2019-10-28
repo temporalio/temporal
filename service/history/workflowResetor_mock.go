@@ -29,10 +29,11 @@ package history
 
 import (
 	context "context"
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	history "github.com/uber/cadence/.gen/go/history"
 	shared "github.com/uber/cadence/.gen/go/shared"
-	reflect "reflect"
 )
 
 // MockworkflowResetor is a mock of workflowResetor interface

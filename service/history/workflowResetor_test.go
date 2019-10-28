@@ -64,6 +64,7 @@ type (
 		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MocktimerQueueProcessor
 		mockEventsCache          *MockeventsCache
+		mockDomainCache          *cache.MockDomainCache
 
 		historyEngine       *historyEngineImpl
 		mockMatchingClient  *matchingservicetest.MockClient
@@ -76,7 +77,6 @@ type (
 		mockProducer        *mocks.KafkaProducer
 		mockMessagingClient messaging.Client
 		mockService         service.Service
-		mockDomainCache     *cache.DomainCacheMock
 		mockArchivalClient  *archiver.ClientMock
 		mockClientBean      *client.MockClientBean
 		resetor             workflowResetor
@@ -110,6 +110,7 @@ func (s *resetorSuite) SetupTest() {
 	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.controller)
 	s.mockTimerProcessor = NewMocktimerQueueProcessor(s.controller)
 	s.mockEventsCache = NewMockeventsCache(s.controller)
+	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
 	s.mockTxProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
 	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
@@ -131,7 +132,6 @@ func (s *resetorSuite) SetupTest() {
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 	s.mockClientBean = &client.MockClientBean{}
 	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, nil, nil, nil)
-	s.mockDomainCache = &cache.DomainCacheMock{}
 	s.mockArchivalClient = &archiver.ClientMock{}
 
 	mockShard := &shardContextImpl{
@@ -195,8 +195,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	testDomainEntry := cache.NewLocalDomainCacheEntryForTest(
 		&p.DomainInfo{ID: testDomainID}, &p.DomainConfig{Retention: 1}, "", nil,
 	)
-	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(testDomainEntry, nil)
-	s.mockDomainCache.On("GetDomain", mock.Anything).Return(testDomainEntry, nil)
+	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
 
 	request := &h.ResetWorkflowExecutionRequest{}
 	domainID := testDomainID
@@ -872,8 +872,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 	testDomainEntry := cache.NewLocalDomainCacheEntryForTest(
 		&p.DomainInfo{ID: testDomainID}, &p.DomainConfig{Retention: 1}, "", nil,
 	)
-	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(testDomainEntry, nil)
-	s.mockDomainCache.On("GetDomain", mock.Anything).Return(testDomainEntry, nil)
+	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
 
 	request := &h.ResetWorkflowExecutionRequest{}
 	domainID := testDomainID
@@ -1459,8 +1459,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 		cluster.GetTestClusterMetadata(true, true),
 	)
 	// override domain cache
-	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(testDomainEntry, nil)
-	s.mockDomainCache.On("GetDomain", mock.Anything).Return(testDomainEntry, nil)
+	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
 
 	request := &h.ResetWorkflowExecutionRequest{}
 	domainID := testDomainID
@@ -2164,8 +2164,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 		cluster.GetTestClusterMetadata(true, true),
 	)
 	// override domain cache
-	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(testDomainEntry, nil)
-	s.mockDomainCache.On("GetDomain", mock.Anything).Return(testDomainEntry, nil)
+	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
 
 	request := &h.ResetWorkflowExecutionRequest{}
 	domainID := testDomainID
@@ -2763,8 +2763,8 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 		cluster.GetTestClusterMetadata(true, true),
 	)
 	// override domain cache
-	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(testDomainEntry, nil)
-	s.mockDomainCache.On("GetDomain", mock.Anything).Return(testDomainEntry, nil)
+	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
 
 	request := &h.ResetWorkflowExecutionRequest{}
 	domainID := testDomainID
@@ -3452,8 +3452,8 @@ func (s *resetorSuite) TestApplyReset() {
 		cluster.GetTestClusterMetadata(true, true),
 	)
 	// override domain cache
-	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(testDomainEntry, nil)
-	s.mockDomainCache.On("GetDomain", mock.Anything).Return(testDomainEntry, nil)
+	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
 
 	wid := "wId"
 	wfType := "wfType"

@@ -21,8 +21,9 @@
 package cassandra
 
 import (
-	"github.com/uber/cadence/common"
 	"sync"
+
+	"github.com/uber/cadence/common"
 
 	"github.com/gocql/gocql"
 	"github.com/uber/cadence/common/log"

@@ -27,8 +27,10 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+
 	h "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/history/historyservicetest"
 	"github.com/uber/cadence/.gen/go/replicator"
@@ -45,12 +47,18 @@ import (
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/common/task"
 	"github.com/uber/cadence/common/xdc"
-	"go.uber.org/zap"
 )
 
 type (
 	replicationTaskProcessorSuite struct {
 		suite.Suite
+		*require.Assertions
+
+		controller        *gomock.Controller
+		mockHistoryClient *historyservicetest.MockClient
+		mockDomainCache   *cache.MockDomainCache
+		mockNDCResender   *xdc.MockNDCHistoryResender
+
 		currentCluster string
 		sourceCluster  string
 		config         *Config
@@ -58,16 +66,13 @@ type (
 		metricsClient  metrics.Client
 		msgEncoder     codec.BinaryEncoder
 
-		mockMsg                     *messageMocks.Message
-		mockDomainReplicator        *MockDomainReplicator
-		mockHistoryClient           *historyservicetest.MockClient
-		mockRereplicator            *xdc.MockHistoryRereplicator
-		mockNDCResender             *xdc.MockNDCHistoryResender
-		mockSequentialTaskProcessor *task.MockSequentialTaskProcessor
-		mockDomainCache             *cache.DomainCacheMock
+		mockMsg              *messageMocks.Message
+		mockDomainReplicator *MockDomainReplicator
 
-		controller *gomock.Controller
-		processor  *replicationTaskProcessor
+		mockSequentialTaskProcessor *task.MockSequentialTaskProcessor
+		mockRereplicator            *xdc.MockHistoryRereplicator
+
+		processor *replicationTaskProcessor
 	}
 )
 
@@ -84,26 +89,14 @@ func (s *replicationTaskProcessorSuite) TearDownSuite() {
 }
 
 func (s *replicationTaskProcessorSuite) SetupTest() {
-	zapLogger, err := zap.NewDevelopment()
-	s.Require().NoError(err)
-	s.logger = loggerimpl.NewLogger(zapLogger)
-	s.config = &Config{
-		ReplicatorTaskConcurrency: dynamicconfig.GetIntPropertyFn(10),
-	}
-	s.metricsClient = metrics.NewClient(tally.NoopScope, metrics.Worker)
-	s.msgEncoder = codec.NewThriftRWEncoder()
+	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockMsg = &messageMocks.Message{}
-	s.mockMsg.On("Partition").Return(int32(0))
-	s.mockMsg.On("Offset").Return(int64(0))
-	s.mockDomainReplicator = &MockDomainReplicator{}
+	s.controller = gomock.NewController(s.T())
 	s.mockHistoryClient = historyservicetest.NewMockClient(s.controller)
-	s.mockRereplicator = &xdc.MockHistoryRereplicator{}
-	s.mockNDCResender = &xdc.MockNDCHistoryResender{}
-	s.mockSequentialTaskProcessor = &task.MockSequentialTaskProcessor{}
-	s.mockDomainCache = &cache.DomainCacheMock{}
-	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(
+	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
+	s.mockNDCResender = xdc.NewMockNDCHistoryResender(s.controller)
+	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{},
 			&persistence.DomainConfig{},
@@ -118,7 +111,22 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 			nil,
 		),
 		nil,
-	)
+	).AnyTimes()
+
+	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
+	s.config = &Config{
+		ReplicatorTaskConcurrency: dynamicconfig.GetIntPropertyFn(10),
+	}
+	s.metricsClient = metrics.NewClient(tally.NoopScope, metrics.Worker)
+	s.msgEncoder = codec.NewThriftRWEncoder()
+
+	s.mockMsg = &messageMocks.Message{}
+	s.mockMsg.On("Partition").Return(int32(0))
+	s.mockMsg.On("Offset").Return(int64(0))
+	s.mockDomainReplicator = &MockDomainReplicator{}
+	s.mockRereplicator = &xdc.MockHistoryRereplicator{}
+	s.mockSequentialTaskProcessor = &task.MockSequentialTaskProcessor{}
+
 	s.currentCluster = cluster.TestAlternativeClusterName
 	s.sourceCluster = cluster.TestCurrentClusterName
 

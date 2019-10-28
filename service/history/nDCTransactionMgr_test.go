@@ -33,7 +33,6 @@ import (
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
@@ -58,7 +57,6 @@ type (
 		mockShard           *shardContextImpl
 		mockExecutionMgr    *mocks.ExecutionManager
 		mockClientBean      *client.MockClientBean
-		mockDomainCache     *cache.DomainCacheMock
 		mockClusterMetadata *mocks.ClusterMetadata
 
 		logger log.Logger
@@ -75,12 +73,16 @@ func TestNDCTransactionMgrSuite(t *testing.T) {
 func (s *nDCTransactionMgrSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
+	s.controller = gomock.NewController(s.T())
+	s.mockCreateMgr = NewMocknDCTransactionMgrForNewWorkflow(s.controller)
+	s.mockUpdateMgr = NewMocknDCTransactionMgrForExistingWorkflow(s.controller)
+	s.mockEventsReapplier = NewMocknDCEventsReapplier(s.controller)
+
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockClientBean = &client.MockClientBean{}
 	s.mockService = service.NewTestService(nil, nil, metricsClient, s.mockClientBean, nil, nil, nil)
-	s.mockDomainCache = &cache.DomainCacheMock{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
@@ -93,14 +95,9 @@ func (s *nDCTransactionMgrSuite) SetupTest() {
 		logger:                    s.logger,
 		metricsClient:             metricsClient,
 		timeSource:                clock.NewRealTimeSource(),
-		domainCache:               s.mockDomainCache,
 		clusterMetadata:           s.mockClusterMetadata,
 	}
 
-	s.controller = gomock.NewController(s.T())
-	s.mockCreateMgr = NewMocknDCTransactionMgrForNewWorkflow(s.controller)
-	s.mockUpdateMgr = NewMocknDCTransactionMgrForExistingWorkflow(s.controller)
-	s.mockEventsReapplier = NewMocknDCEventsReapplier(s.controller)
 	s.transactionMgr = newNDCTransactionMgr(s.mockShard, newHistoryCache(s.mockShard), s.mockEventsReapplier, s.logger)
 	s.transactionMgr.createMgr = s.mockCreateMgr
 	s.transactionMgr.updateMgr = s.mockUpdateMgr

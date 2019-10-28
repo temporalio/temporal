@@ -50,13 +50,13 @@ type (
 		*require.Assertions
 
 		controller       *gomock.Controller
+		mockDomainCache  *cache.MockDomainCache
 		mockContext      *MockworkflowExecutionContext
 		mockMutableState *MockmutableState
 
 		mockService         service.Service
 		mockShard           *shardContextImpl
 		mockClusterMetadata *mocks.ClusterMetadata
-		mockDomainCache     *cache.DomainCacheMock
 		logger              log.Logger
 
 		domainID   string
@@ -74,6 +74,7 @@ func (s *nDCWorkflowSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
+	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
 	s.mockContext = NewMockworkflowExecutionContext(s.controller)
 	s.mockMutableState = NewMockmutableState(s.controller)
 
@@ -81,7 +82,6 @@ func (s *nDCWorkflowSuite) SetupTest() {
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockService = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, nil, nil, nil, nil)
-	s.mockDomainCache = &cache.DomainCacheMock{}
 
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
@@ -103,7 +103,6 @@ func (s *nDCWorkflowSuite) SetupTest() {
 }
 
 func (s *nDCWorkflowSuite) TearDownTest() {
-	s.mockDomainCache.AssertExpectations(s.T())
 	s.controller.Finish()
 }
 

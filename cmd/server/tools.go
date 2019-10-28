@@ -28,6 +28,8 @@ import (
 	// yarpc plugin for thriftrw code gen
 	_ "go.uber.org/yarpc/encoding/thrift/thriftrw-plugin-yarpc"
 
+	// goimports
+	_ "golang.org/x/tools/cmd/goimports"
 	// mockgen for generating mocks
 	_ "github.com/golang/mock/mockgen"
 )

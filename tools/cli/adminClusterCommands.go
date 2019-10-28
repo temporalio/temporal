@@ -23,12 +23,13 @@ package cli
 import (
 	"bufio"
 	"fmt"
+	"os"
+	"strings"
+
 	"github.com/fatih/color"
 	"github.com/uber/cadence/.gen/go/admin"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/urfave/cli"
-	"os"
-	"strings"
 )
 
 // AdminAddSearchAttribute to whitelist search attribute

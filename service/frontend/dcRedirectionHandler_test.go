@@ -26,8 +26,10 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+
 	"github.com/uber/cadence/.gen/go/cadence/workflowservicetest"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
@@ -48,6 +50,13 @@ import (
 type (
 	dcRedirectionHandlerSuite struct {
 		suite.Suite
+		*require.Assertions
+
+		controller               *gomock.Controller
+		mockDomainCache          *cache.MockDomainCache
+		mockRemoteFrontendClient *workflowservicetest.MockClient
+		mockFrontendHandler      *MockWorkflowHandler
+
 		logger                 log.Logger
 		domainName             string
 		domainID               string
@@ -56,15 +65,11 @@ type (
 		config                 *Config
 		service                service.Service
 
-		controller               *gomock.Controller
-		mockDCRedirectionPolicy  *MockDCRedirectionPolicy
-		mockClusterMetadata      *mocks.ClusterMetadata
-		mockDomainCache          *cache.DomainCacheMock
-		mockClientBean           *client.MockClientBean
-		mockFrontendHandler      *MockWorkflowHandler
-		mockRemoteFrontendClient *workflowservicetest.MockClient
-		mockArchivalMetadata     *archiver.MockArchivalMetadata
-		mockArchiverProvider     *provider.MockArchiverProvider
+		mockDCRedirectionPolicy *MockDCRedirectionPolicy
+		mockClusterMetadata     *mocks.ClusterMetadata
+		mockClientBean          *client.MockClientBean
+		mockArchivalMetadata    *archiver.MockArchivalMetadata
+		mockArchiverProvider    *provider.MockArchiverProvider
 
 		frontendHandler *WorkflowHandler
 		handler         *DCRedirectionHandlerImpl
@@ -83,23 +88,26 @@ func (s *dcRedirectionHandlerSuite) TearDownSuite() {
 }
 
 func (s *dcRedirectionHandlerSuite) SetupTest() {
-	var err error
-	s.logger, err = loggerimpl.NewDevelopment()
-	s.Require().NoError(err)
+	s.Assertions = require.New(s.T())
+
+	s.controller = gomock.NewController(s.T())
+	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
+	s.mockRemoteFrontendClient = workflowservicetest.NewMockClient(s.controller)
+	s.mockFrontendHandler = NewMockWorkflowHandler(s.controller)
+
+	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.domainName = "some random domain name"
 	s.domainID = "some random domain ID"
 	s.currentClusterName = cluster.TestCurrentClusterName
 	s.alternativeClusterName = cluster.TestAlternativeClusterName
 	s.config = NewConfig(dynamicconfig.NewCollection(dynamicconfig.NewNopClient(), s.logger), 0, false)
-	s.mockDomainCache = &cache.DomainCacheMock{}
 
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(s.currentClusterName)
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.Frontend)
 	s.mockClientBean = &client.MockClientBean{}
-	s.controller = gomock.NewController(s.T())
-	s.mockRemoteFrontendClient = workflowservicetest.NewMockClient(s.controller)
+
 	s.mockArchivalMetadata = &archiver.MockArchivalMetadata{}
 	s.mockArchiverProvider = &provider.MockArchiverProvider{}
 	s.mockClientBean.On("GetRemoteFrontendClient", s.alternativeClusterName).Return(s.mockRemoteFrontendClient)
@@ -111,13 +119,11 @@ func (s *dcRedirectionHandlerSuite) SetupTest() {
 
 	s.handler = NewDCRedirectionHandler(frontendHandler, config.DCRedirectionPolicy{})
 	s.mockDCRedirectionPolicy = &MockDCRedirectionPolicy{}
-	s.mockFrontendHandler = NewMockWorkflowHandler(s.controller)
 	s.handler.frontendHandler = s.mockFrontendHandler
 	s.handler.redirectionPolicy = s.mockDCRedirectionPolicy
 }
 
 func (s *dcRedirectionHandlerSuite) TearDownTest() {
-	s.mockDomainCache.AssertExpectations(s.T())
 	s.mockDCRedirectionPolicy.AssertExpectations(s.T())
 	s.mockArchivalMetadata.AssertExpectations(s.T())
 	s.mockArchiverProvider.AssertExpectations(s.T())

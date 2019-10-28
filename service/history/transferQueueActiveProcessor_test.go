@@ -63,10 +63,10 @@ type (
 		mockTxProcessor          *MocktransferQueueProcessor
 		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MocktimerQueueProcessor
+		mockDomainCache          *cache.MockDomainCache
 
 		mockShardManager            *mocks.ShardManager
 		mockHistoryEngine           *historyEngineImpl
-		mockDomainCache             *cache.DomainCacheMock
 		mockVisibilityMgr           *mocks.VisibilityManager
 		mockExecutionMgr            *mocks.ExecutionManager
 		mockHistoryV2Mgr            *mocks.HistoryV2Manager
@@ -111,9 +111,18 @@ func (s *transferQueueActiveProcessorSuite) SetupTest() {
 	s.mockTxProcessor = NewMocktransferQueueProcessor(s.controller)
 	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.controller)
 	s.mockTimerProcessor = NewMocktimerQueueProcessor(s.controller)
+	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
 	s.mockTxProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
 	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomainByID(testDomainID).Return(testGlobalDomainEntry, nil).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomain(testDomainName).Return(testGlobalDomainEntry, nil).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomainByID(testTargetDomainID).Return(testGlobalTargetDomainEntry, nil).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomain(testTargetDomainName).Return(testGlobalTargetDomainEntry, nil).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomainByID(testParentDomainID).Return(testGlobalParentDomainEntry, nil).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomain(testParentDomainName).Return(testGlobalParentDomainEntry, nil).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomainByID(testChildDomainID).Return(testGlobalChildDomainEntry, nil).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomain(testChildDomainName).Return(testGlobalChildDomainEntry, nil).AnyTimes()
 
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.mockShardManager = &mocks.ShardManager{}
@@ -122,17 +131,8 @@ func (s *transferQueueActiveProcessorSuite) SetupTest() {
 	s.mockVisibilityMgr = &mocks.VisibilityManager{}
 	s.mockMatchingClient = matchingservicetest.NewMockClient(s.controller)
 	s.mockHistoryClient = historyservicetest.NewMockClient(s.controller)
-	s.mockDomainCache = &cache.DomainCacheMock{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.version = testGlobalDomainEntry.GetFailoverVersion()
-	s.mockDomainCache.On("GetDomainByID", testDomainID).Return(testGlobalDomainEntry, nil)
-	s.mockDomainCache.On("GetDomain", testDomainName).Return(testGlobalDomainEntry, nil)
-	s.mockDomainCache.On("GetDomainByID", testTargetDomainID).Return(testGlobalTargetDomainEntry, nil)
-	s.mockDomainCache.On("GetDomain", testTargetDomainName).Return(testGlobalTargetDomainEntry, nil)
-	s.mockDomainCache.On("GetDomainByID", testParentDomainID).Return(testGlobalParentDomainEntry, nil).Maybe()
-	s.mockDomainCache.On("GetDomain", testParentDomainName).Return(testGlobalParentDomainEntry, nil).Maybe()
-	s.mockDomainCache.On("GetDomainByID", testChildDomainID).Return(testGlobalChildDomainEntry, nil).Maybe()
-	s.mockDomainCache.On("GetDomain", testChildDomainName).Return(testGlobalChildDomainEntry, nil).Maybe()
 	s.mockProducer = &mocks.KafkaProducer{}
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)

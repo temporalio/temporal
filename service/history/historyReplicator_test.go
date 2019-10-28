@@ -67,6 +67,7 @@ type (
 		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MocktimerQueueProcessor
 		mockStateBuilder         *MockstateBuilder
+		mockDomainCache          *cache.MockDomainCache
 
 		logger              log.Logger
 		mockExecutionMgr    *mocks.ExecutionManager
@@ -74,7 +75,6 @@ type (
 		mockShardManager    *mocks.ShardManager
 		mockClusterMetadata *mocks.ClusterMetadata
 		mockProducer        *mocks.KafkaProducer
-		mockDomainCache     *cache.DomainCacheMock
 		mockMessagingClient messaging.Client
 		mockService         service.Service
 		mockShard           *shardContextImpl
@@ -106,6 +106,7 @@ func (s *historyReplicatorSuite) SetupTest() {
 	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.controller)
 	s.mockTimerProcessor = NewMocktimerQueueProcessor(s.controller)
 	s.mockStateBuilder = NewMockstateBuilder(s.controller)
+	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
 	s.mockTxProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
 	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
@@ -117,7 +118,6 @@ func (s *historyReplicatorSuite) SetupTest() {
 	s.mockShardManager = &mocks.ShardManager{}
 	s.mockProducer = &mocks.KafkaProducer{}
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
-	s.mockDomainCache = &cache.DomainCacheMock{}
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockClientBean = &client.MockClientBean{}
 	s.mockService = service.NewTestService(
@@ -178,7 +178,6 @@ func (s *historyReplicatorSuite) TearDownTest() {
 	s.mockExecutionMgr.AssertExpectations(s.T())
 	s.mockShardManager.AssertExpectations(s.T())
 	s.mockProducer.AssertExpectations(s.T())
-	s.mockDomainCache.AssertExpectations(s.T())
 	s.mockClientBean.AssertExpectations(s.T())
 	s.controller.Finish()
 }
@@ -477,7 +476,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		},
 	}
 
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID, Name: domainName},
 			&persistence.DomainConfig{Retention: 1},
@@ -491,7 +490,8 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 			currentVersion,
 			nil,
 		), nil,
-	)
+	).AnyTimes()
+
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
 		DomainID:   domainID,
 		WorkflowID: workflowID,
@@ -548,7 +548,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		},
 	}
 
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID, Name: domainName},
 			&persistence.DomainConfig{Retention: 1},
@@ -562,7 +562,8 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 			currentVersion,
 			nil,
 		), nil,
-	)
+	).AnyTimes()
+
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
 		DomainID:   domainID,
 		WorkflowID: workflowID,
@@ -692,7 +693,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		},
 	}
 
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID, Name: domainName},
 			&persistence.DomainConfig{Retention: 1},
@@ -706,7 +707,8 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 			currentVersion,
 			nil,
 		), nil,
-	)
+	).AnyTimes()
+
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
 		DomainID:   domainID,
 		WorkflowID: workflowID,
@@ -761,7 +763,7 @@ func (s *historyReplicatorSuite) TestWorkflowReset() {
 		ResetWorkflow: common.BoolPtr(true),
 	}
 
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID, Name: domainName},
 			&persistence.DomainConfig{Retention: 1},
@@ -775,7 +777,8 @@ func (s *historyReplicatorSuite) TestWorkflowReset() {
 			currentVersion,
 			nil,
 		), nil,
-	)
+	).AnyTimes()
+
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
 		DomainID:   domainID,
 		WorkflowID: workflowID,
@@ -834,7 +837,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		},
 	}
 
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID, Name: domainName},
 			&persistence.DomainConfig{Retention: 1},
@@ -848,7 +851,8 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 			currentVersion,
 			nil,
 		), nil,
-	)
+	).AnyTimes()
+
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
 		DomainID:   domainID,
 		WorkflowID: workflowID,
@@ -1963,7 +1967,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 		}, input)
 		return true
 	})).Return(&persistence.CreateWorkflowExecutionResponse{}, nil).Once()
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID},
 			&persistence.DomainConfig{Retention: 1},
@@ -1977,7 +1981,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 			0, // not used
 			nil,
 		), nil,
-	)
+	).AnyTimes()
 
 	err := s.historyReplicator.replicateWorkflowStarted(ctx.Background(), context, msBuilder, history, s.mockStateBuilder, s.logger)
 	s.Nil(err)
@@ -2077,7 +2081,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, errRet)
 	s.mockShardManager.On("UpdateShard", mock.Anything).Return(nil) // this is called when err is returned, and shard will try to update
 
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID},
 			&persistence.DomainConfig{Retention: 1},
@@ -2091,7 +2095,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 			0, // not used
 			nil,
 		), nil,
-	)
+	).AnyTimes()
 
 	err := s.historyReplicator.replicateWorkflowStarted(ctx.Background(), context, msBuilder, history, s.mockStateBuilder, s.logger)
 	s.Equal(errRet, err)
@@ -2197,7 +2201,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 	}
 	// the test above already assert the create workflow request, so here just use anything
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, errRet).Once()
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID},
 			&persistence.DomainConfig{Retention: 1},
@@ -2211,7 +2215,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 			0, // not used
 			nil,
 		), nil,
-	)
+	).AnyTimes()
 
 	err := s.historyReplicator.replicateWorkflowStarted(ctx.Background(), context, msBuilder, history, s.mockStateBuilder, s.logger)
 	s.Nil(err)
@@ -2350,7 +2354,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 			NewWorkflowSnapshot:      *newWorkflowSnapshot,
 		}, input)
 	})).Return(&persistence.CreateWorkflowExecutionResponse{}, nil).Once()
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID},
 			&persistence.DomainConfig{Retention: 1},
@@ -2364,7 +2368,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 			0, // not used
 			nil,
 		), nil,
-	)
+	).AnyTimes()
 
 	err := s.historyReplicator.replicateWorkflowStarted(ctx.Background(), context, msBuilder, history, s.mockStateBuilder, s.logger)
 	s.Nil(err)
@@ -2486,7 +2490,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 			NewWorkflowSnapshot:      *newWorkflowSnapshot,
 		}, input)
 	})).Return(&persistence.CreateWorkflowExecutionResponse{}, nil).Once()
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID},
 			&persistence.DomainConfig{Retention: 1},
@@ -2500,7 +2504,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 			0, // not used
 			nil,
 		), nil,
-	)
+	).AnyTimes()
 
 	err := s.historyReplicator.replicateWorkflowStarted(ctx.Background(), context, msBuilder, history, s.mockStateBuilder, s.logger)
 	s.Nil(err)
@@ -2622,7 +2626,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 			NewWorkflowSnapshot:      *newWorkflowSnapshot,
 		}, input)
 	})).Return(&persistence.CreateWorkflowExecutionResponse{}, nil).Once()
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID},
 			&persistence.DomainConfig{Retention: 1},
@@ -2636,7 +2640,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 			0, // not used
 			nil,
 		), nil,
-	)
+	).AnyTimes()
 
 	err := s.historyReplicator.replicateWorkflowStarted(ctx.Background(), context, msBuilder, history, s.mockStateBuilder, s.logger)
 	s.Nil(err)
@@ -2748,7 +2752,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	// the test above already assert the create workflow request, so here just use anything
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, errRet).Once()
 	s.mockHistoryV2Mgr.On("DeleteHistoryBranch", delReq).Return(nil).Once()
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID},
 			&persistence.DomainConfig{Retention: 1},
@@ -2762,7 +2766,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 			0, // not used
 			nil,
 		), nil,
-	)
+	).AnyTimes()
 
 	contextCurrent := NewMockworkflowExecutionContext(s.controller)
 	contextCurrent.EXPECT().lock(gomock.Any()).Return(nil).Times(1)
@@ -2906,7 +2910,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	// the test above already assert the create workflow request, so here just use anything
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, errRet).Once()
 	s.mockHistoryV2Mgr.On("DeleteHistoryBranch", mock.Anything).Return(nil).Once()
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID},
 			&persistence.DomainConfig{Retention: 1},
@@ -2920,7 +2924,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 			0, // not used
 			nil,
 		), nil,
-	)
+	).AnyTimes()
 
 	contextCurrent := NewMockworkflowExecutionContext(s.controller)
 	contextCurrent.EXPECT().lock(gomock.Any()).Return(nil).Times(1)
@@ -3084,7 +3088,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	// the test above already assert the create workflow request, so here just use anything
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, errRet).Once()
 	s.mockHistoryV2Mgr.On("DeleteHistoryBranch", mock.Anything).Return(nil).Once()
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID},
 			&persistence.DomainConfig{Retention: 1},
@@ -3098,7 +3102,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 			0, // not used
 			nil,
 		), nil,
-	)
+	).AnyTimes()
 
 	contextCurrent := NewMockworkflowExecutionContext(s.controller)
 	contextCurrent.EXPECT().lock(gomock.Any()).Return(nil).Times(1)
@@ -3288,7 +3292,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	}).AnyTimes()
 	msBuilderCurrent.EXPECT().GetNextEventID().Return(currentNextEventID).AnyTimes()
 
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID},
 			&persistence.DomainConfig{Retention: 1},
@@ -3302,7 +3306,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 			0, // not used
 			nil,
 		), nil,
-	)
+	).AnyTimes()
 
 	err := s.historyReplicator.replicateWorkflowStarted(ctx.Background(), context, msBuilder, history, s.mockStateBuilder, s.logger)
 	s.Equal(newRetryTaskErrorWithHint(ErrRetryExistingWorkflowMsg, domainID, workflowID, currentRunID, currentNextEventID), err)
@@ -3444,7 +3448,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	}).AnyTimes()
 	msBuilderCurrent.EXPECT().GetNextEventID().Return(currentNextEventID).AnyTimes()
 
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID},
 			&persistence.DomainConfig{Retention: 1},
@@ -3458,7 +3462,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 			0, // not used
 			nil,
 		), nil,
-	)
+	).AnyTimes()
 
 	err := s.historyReplicator.replicateWorkflowStarted(ctx.Background(), context, msBuilder, history, s.mockStateBuilder, s.logger)
 	s.Nil(err)
@@ -3602,7 +3606,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	// this mocks are for the terminate current workflow operation
 	domainVersion := int64(4081)
 	domainName := "some random domain name"
-	s.mockDomainCache.On("GetDomainByID", domainID).Return(
+	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID, Name: domainName},
 			&persistence.DomainConfig{Retention: 1},
@@ -3616,7 +3620,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 			domainVersion,
 			nil,
 		), nil,
-	)
+	).AnyTimes()
 
 	contextCurrent := NewMockworkflowExecutionContext(s.controller)
 	contextCurrent.EXPECT().lock(gomock.Any()).Return(nil).Times(1)

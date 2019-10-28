@@ -28,9 +28,10 @@
 package history
 
 import (
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	shared "github.com/uber/cadence/.gen/go/shared"
-	reflect "reflect"
 )
 
 // MockeventsCache is a mock of eventsCache interface

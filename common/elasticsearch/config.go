@@ -21,8 +21,9 @@
 package elasticsearch
 
 import (
-	"github.com/uber/cadence/common"
 	"net/url"
+
+	"github.com/uber/cadence/common"
 )
 
 // Config for connecting to ElasticSearch
