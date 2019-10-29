@@ -45,7 +45,7 @@ import (
 	"github.com/temporalio/temporal/common/quotas"
 	"github.com/temporalio/temporal/common/service"
 	"github.com/temporalio/temporal/service/worker/replicator"
-	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
+	"go.temporal.io/temporal/.gen/go/cadence/workflowserviceclient"
 	"go.uber.org/yarpc/yarpcerrors"
 )
 

@@ -36,8 +36,8 @@ import (
 	"github.com/temporalio/temporal/common/metrics"
 	mmocks "github.com/temporalio/temporal/common/metrics/mocks"
 	"github.com/temporalio/temporal/common/mocks"
-	"go.uber.org/cadence/testsuite"
-	"go.uber.org/cadence/worker"
+	"go.temporal.io/temporal/testsuite"
+	"go.temporal.io/temporal/worker"
 	"go.uber.org/zap"
 )
 

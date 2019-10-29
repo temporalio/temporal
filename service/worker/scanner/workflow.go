@@ -27,10 +27,10 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/service/worker/scanner/history"
 	"github.com/temporalio/temporal/service/worker/scanner/tasklist"
-	"go.uber.org/cadence"
-	"go.uber.org/cadence/activity"
-	cclient "go.uber.org/cadence/client"
-	"go.uber.org/cadence/workflow"
+	"go.temporal.io/temporal"
+	"go.temporal.io/temporal/activity"
+	cclient "go.temporal.io/temporal/client"
+	"go.temporal.io/temporal/workflow"
 )
 
 type (

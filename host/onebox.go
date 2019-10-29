@@ -59,7 +59,7 @@ import (
 	"github.com/temporalio/temporal/service/worker/archiver"
 	"github.com/temporalio/temporal/service/worker/indexer"
 	"github.com/temporalio/temporal/service/worker/replicator"
-	cwsc "go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
+	cwsc "go.temporal.io/temporal/.gen/go/cadence/workflowserviceclient"
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/api/transport"
 	"go.uber.org/yarpc/transport/tchannel"

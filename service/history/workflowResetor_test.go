@@ -51,7 +51,7 @@ import (
 	"github.com/temporalio/temporal/common/service"
 	"github.com/temporalio/temporal/service/worker/archiver"
 	"github.com/uber-go/tally"
-	"go.uber.org/cadence/.gen/go/shared"
+	"go.temporal.io/temporal/.gen/go/shared"
 )
 
 type (

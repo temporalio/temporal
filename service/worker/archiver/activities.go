@@ -29,8 +29,8 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
-	"go.uber.org/cadence"
-	"go.uber.org/cadence/activity"
+	"go.temporal.io/temporal"
+	"go.temporal.io/temporal/activity"
 )
 
 const (

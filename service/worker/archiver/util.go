@@ -29,8 +29,8 @@ import (
 	"github.com/dgryski/go-farm"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
-	"go.uber.org/cadence"
-	"go.uber.org/cadence/activity"
+	"go.temporal.io/temporal"
+	"go.temporal.io/temporal/activity"
 )
 
 // MaxArchivalIterationTimeout returns the max allowed timeout for a single iteration of archival workflow
