@@ -36,11 +36,12 @@ import (
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/uber/cadence/common"
 	"github.com/urfave/cli"
 	"github.com/valyala/fastjson"
 	s "go.uber.org/cadence/.gen/go/shared"
 	"go.uber.org/cadence/client"
+
+	"github.com/uber/cadence/common"
 )
 
 // JSONHistorySerializer is used to encode history event in JSON

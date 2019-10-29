@@ -27,6 +27,9 @@ import (
 	"math/rand"
 	"time"
 
+	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
+	cclient "go.uber.org/cadence/client"
+
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	carchiver "github.com/uber/cadence/common/archiver"
@@ -36,8 +39,6 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/common/service/dynamicconfig"
-	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
-	cclient "go.uber.org/cadence/client"
 )
 
 type (

@@ -26,6 +26,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.uber.org/yarpc/yarpcerrors"
+
 	h "github.com/uber/cadence/.gen/go/history"
 	r "github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
@@ -36,7 +38,6 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
-	"go.uber.org/yarpc/yarpcerrors"
 )
 
 const (

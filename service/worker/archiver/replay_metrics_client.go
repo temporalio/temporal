@@ -24,8 +24,9 @@ import (
 	"time"
 
 	"github.com/uber-go/tally"
-	"github.com/uber/cadence/common/metrics"
 	"go.uber.org/cadence/workflow"
+
+	"github.com/uber/cadence/common/metrics"
 )
 
 type (

@@ -28,6 +28,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	"github.com/uber/cadence/common/log"
 )
 

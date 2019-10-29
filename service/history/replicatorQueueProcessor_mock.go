@@ -29,6 +29,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+
 	replicator "github.com/uber/cadence/.gen/go/replicator"
 )
 

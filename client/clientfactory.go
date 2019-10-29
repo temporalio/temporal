@@ -23,6 +23,8 @@ package client
 import (
 	"time"
 
+	"go.uber.org/yarpc"
+
 	"github.com/uber/cadence/.gen/go/admin/adminserviceclient"
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
 	"github.com/uber/cadence/.gen/go/history/historyserviceclient"
@@ -36,7 +38,6 @@ import (
 	"github.com/uber/cadence/common/membership"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/service/dynamicconfig"
-	"go.uber.org/yarpc"
 )
 
 const (

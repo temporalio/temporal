@@ -27,6 +27,7 @@ import (
 
 	"github.com/olivere/elastic"
 	"github.com/uber-go/tally"
+
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/collection"
 	es "github.com/uber/cadence/common/elasticsearch"

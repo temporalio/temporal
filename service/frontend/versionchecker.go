@@ -24,9 +24,10 @@ import (
 	"context"
 
 	"github.com/hashicorp/go-version"
+	"go.uber.org/yarpc"
+
 	gen "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
-	"go.uber.org/yarpc"
 )
 
 var versionSupported = map[string]version.Constraints{

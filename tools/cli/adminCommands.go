@@ -28,6 +28,8 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
+	"github.com/urfave/cli"
+
 	"github.com/uber/cadence/.gen/go/admin"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
@@ -36,7 +38,6 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	cassp "github.com/uber/cadence/common/persistence/cassandra"
 	"github.com/uber/cadence/tools/cassandra"
-	"github.com/urfave/cli"
 )
 
 const maxEventID = 9999

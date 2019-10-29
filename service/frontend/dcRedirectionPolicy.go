@@ -24,12 +24,13 @@ import (
 	"context"
 	"fmt"
 
+	"go.uber.org/yarpc"
+
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/service/config"
-	"go.uber.org/yarpc"
 )
 
 const (

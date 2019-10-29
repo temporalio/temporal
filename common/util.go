@@ -29,6 +29,9 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
+	"go.uber.org/yarpc/yarpcerrors"
+	"golang.org/x/net/context"
+
 	h "github.com/uber/cadence/.gen/go/history"
 	m "github.com/uber/cadence/.gen/go/matching"
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -36,8 +39,6 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
-	"go.uber.org/yarpc/yarpcerrors"
-	"golang.org/x/net/context"
 )
 
 const (

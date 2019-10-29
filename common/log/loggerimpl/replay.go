@@ -21,9 +21,10 @@
 package loggerimpl
 
 import (
+	"go.uber.org/cadence/workflow"
+
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
-	"go.uber.org/cadence/workflow"
 )
 
 type replayLogger struct {

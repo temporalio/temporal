@@ -22,6 +22,7 @@ package replicator
 
 import (
 	mock "github.com/stretchr/testify/mock"
+
 	replicator "github.com/uber/cadence/.gen/go/replicator"
 )
 

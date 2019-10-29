@@ -24,11 +24,12 @@ import (
 	"bytes"
 	"fmt"
 
+	"go.uber.org/thriftrw/protocol"
+	"go.uber.org/thriftrw/wire"
+
 	"github.com/uber/cadence/.gen/go/sqlblobs"
 	"github.com/uber/cadence/common"
 	p "github.com/uber/cadence/common/persistence"
-	"go.uber.org/thriftrw/protocol"
-	"go.uber.org/thriftrw/wire"
 )
 
 // thriftRWType represents an thrift auto generated type

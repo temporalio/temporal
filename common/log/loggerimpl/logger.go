@@ -26,9 +26,10 @@ import (
 	"runtime"
 
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/zap"
+
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
-	"go.uber.org/zap"
 )
 
 type loggerImpl struct {

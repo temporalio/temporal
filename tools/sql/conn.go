@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+
 	"github.com/uber/cadence/tools/common/schema"
 	"github.com/uber/cadence/tools/sql/mysql"
 )

@@ -26,13 +26,14 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/yarpc"
+
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/service/history"
 	"github.com/uber/cadence/service/matching"
-	"go.uber.org/yarpc"
 )
 
 type (

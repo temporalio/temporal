@@ -26,17 +26,18 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/cadence"
+	"go.uber.org/cadence/activity"
+	"go.uber.org/cadence/workflow"
+	"go.uber.org/yarpc"
+	"golang.org/x/time/rate"
+
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client/frontend"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
-	"go.uber.org/cadence"
-	"go.uber.org/cadence/activity"
-	"go.uber.org/cadence/workflow"
-	"go.uber.org/yarpc"
-	"golang.org/x/time/rate"
 )
 
 const (

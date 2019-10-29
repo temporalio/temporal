@@ -31,9 +31,10 @@ import (
 	uberKafkaClient "github.com/uber-go/kafka-client"
 	uberKafka "github.com/uber-go/kafka-client/kafka"
 	"github.com/uber-go/tally"
+	"go.uber.org/zap"
+
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/metrics"
-	"go.uber.org/zap"
 )
 
 type (

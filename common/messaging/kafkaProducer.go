@@ -24,6 +24,7 @@ import (
 	"errors"
 
 	"github.com/Shopify/sarama"
+
 	"github.com/uber/cadence/.gen/go/indexer"
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/common/codec"

@@ -30,10 +30,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/urfave/cli"
+
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/log/tag"
-	"github.com/urfave/cli"
 )
 
 // SetupSchemaTestBase is the base test suite for all tests

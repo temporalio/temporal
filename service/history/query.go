@@ -26,6 +26,7 @@ import (
 	"sync"
 
 	"github.com/pborman/uuid"
+
 	"github.com/uber/cadence/.gen/go/shared"
 )
 

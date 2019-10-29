@@ -36,6 +36,9 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/zap"
+	"gopkg.in/yaml.v2"
+
 	"github.com/uber/cadence/.gen/go/admin"
 	"github.com/uber/cadence/.gen/go/cadence/workflowservicetest"
 	"github.com/uber/cadence/.gen/go/history"
@@ -52,8 +55,6 @@ import (
 	test "github.com/uber/cadence/common/testing"
 	"github.com/uber/cadence/environment"
 	"github.com/uber/cadence/host"
-	"go.uber.org/zap"
-	"gopkg.in/yaml.v2"
 )
 
 type (

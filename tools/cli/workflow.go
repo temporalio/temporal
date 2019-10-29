@@ -23,8 +23,9 @@ package cli
 import (
 	"strings"
 
-	"github.com/uber/cadence/service/worker/batcher"
 	"github.com/urfave/cli"
+
+	"github.com/uber/cadence/service/worker/batcher"
 )
 
 func newWorkflowCommands() []cli.Command {

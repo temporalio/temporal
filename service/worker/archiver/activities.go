@@ -24,13 +24,14 @@ import (
 	"context"
 	"errors"
 
+	"go.uber.org/cadence"
+	"go.uber.org/cadence/activity"
+
 	"github.com/uber/cadence/common"
 	carchiver "github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
-	"go.uber.org/cadence"
-	"go.uber.org/cadence/activity"
 )
 
 const (

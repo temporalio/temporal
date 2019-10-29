@@ -35,6 +35,8 @@ import (
 
 	"github.com/cch123/elasticsql"
 	"github.com/olivere/elastic"
+	"github.com/valyala/fastjson"
+
 	"github.com/uber/cadence/.gen/go/indexer"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
@@ -45,7 +47,6 @@ import (
 	"github.com/uber/cadence/common/messaging"
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/config"
-	"github.com/valyala/fastjson"
 )
 
 const (

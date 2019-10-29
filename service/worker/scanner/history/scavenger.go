@@ -24,6 +24,9 @@ import (
 	"context"
 	"time"
 
+	"go.uber.org/cadence/activity"
+	"golang.org/x/time/rate"
+
 	"github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/history/historyserviceclient"
 	"github.com/uber/cadence/.gen/go/shared"
@@ -32,8 +35,6 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	p "github.com/uber/cadence/common/persistence"
-	"go.uber.org/cadence/activity"
-	"golang.org/x/time/rate"
 )
 
 type (

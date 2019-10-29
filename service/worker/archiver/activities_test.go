@@ -27,6 +27,10 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/cadence/testsuite"
+	"go.uber.org/cadence/worker"
+	"go.uber.org/zap"
+
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	carchiver "github.com/uber/cadence/common/archiver"
@@ -36,9 +40,6 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	mmocks "github.com/uber/cadence/common/metrics/mocks"
 	"github.com/uber/cadence/common/mocks"
-	"go.uber.org/cadence/testsuite"
-	"go.uber.org/cadence/worker"
-	"go.uber.org/zap"
 )
 
 const (

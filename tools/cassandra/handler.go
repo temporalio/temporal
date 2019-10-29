@@ -25,9 +25,10 @@ import (
 	"log"
 	"path"
 
+	"github.com/urfave/cli"
+
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/tools/common/schema"
-	"github.com/urfave/cli"
 )
 
 const defaultNumReplicas = 1

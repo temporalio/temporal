@@ -24,6 +24,11 @@ import (
 	"context"
 	"time"
 
+	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
+	"go.uber.org/cadence/activity"
+	"go.uber.org/cadence/worker"
+	"go.uber.org/cadence/workflow"
+
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/archiver/provider"
 	"github.com/uber/cadence/common/cache"
@@ -32,10 +37,6 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/dynamicconfig"
-	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
-	"go.uber.org/cadence/activity"
-	"go.uber.org/cadence/worker"
-	"go.uber.org/cadence/workflow"
 )
 
 type (

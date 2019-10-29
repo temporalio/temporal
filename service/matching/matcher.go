@@ -25,9 +25,10 @@ import (
 	"errors"
 	"time"
 
+	"golang.org/x/time/rate"
+
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/quotas"
-	"golang.org/x/time/rate"
 )
 
 // TaskMatcher matches a task producer with a task consumer

@@ -25,11 +25,12 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/xwb1989/sqlparser"
+
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/service/dynamicconfig"
-	"github.com/xwb1989/sqlparser"
 )
 
 // VisibilityQueryValidator for sql query validation

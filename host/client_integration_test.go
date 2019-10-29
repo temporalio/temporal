@@ -35,8 +35,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/log/tag"
 	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 	"go.uber.org/cadence/.gen/go/shared"
 	"go.uber.org/cadence/activity"
@@ -47,6 +45,9 @@ import (
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/transport/tchannel"
 	"go.uber.org/zap"
+
+	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/log/tag"
 )
 
 func init() {

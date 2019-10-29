@@ -37,10 +37,11 @@ import (
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/olivere/elastic"
+	"github.com/urfave/cli"
+
 	"github.com/uber/cadence/.gen/go/indexer"
 	es "github.com/uber/cadence/common/elasticsearch"
 	"github.com/uber/cadence/common/elasticsearch/esql"
-	"github.com/urfave/cli"
 )
 
 const (

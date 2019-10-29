@@ -23,10 +23,11 @@ package admin
 import (
 	"context"
 
+	"go.uber.org/yarpc"
+
 	"github.com/uber/cadence/.gen/go/admin"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/backoff"
-	"go.uber.org/yarpc"
 )
 
 var _ Client = (*retryableClient)(nil)

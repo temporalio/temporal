@@ -27,10 +27,11 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
 	"go.uber.org/cadence"
 	"go.uber.org/cadence/activity"
+
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 )
 
 // MaxArchivalIterationTimeout returns the max allowed timeout for a single iteration of archival workflow

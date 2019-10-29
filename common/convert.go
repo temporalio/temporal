@@ -23,8 +23,9 @@ package common
 import (
 	"time"
 
-	s "github.com/uber/cadence/.gen/go/shared"
 	"go.uber.org/cadence/.gen/go/shared"
+
+	s "github.com/uber/cadence/.gen/go/shared"
 )
 
 // IntPtr makes a copy and returns the pointer to an int.

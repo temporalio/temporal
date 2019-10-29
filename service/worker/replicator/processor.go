@@ -29,6 +29,8 @@ import (
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
 
+	"go.uber.org/yarpc/yarpcerrors"
+
 	h "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
@@ -41,7 +43,6 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/task"
 	"github.com/uber/cadence/common/xdc"
-	"go.uber.org/yarpc/yarpcerrors"
 )
 
 type (

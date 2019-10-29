@@ -22,6 +22,7 @@ package replicator
 
 import (
 	"github.com/dgryski/go-farm"
+
 	"github.com/uber/cadence/common/collection"
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/task"

@@ -25,6 +25,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
+
 	"github.com/uber/cadence/schema/cassandra"
 	"github.com/uber/cadence/tools/common/schema/test"
 )

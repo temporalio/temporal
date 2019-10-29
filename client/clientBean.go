@@ -29,6 +29,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.uber.org/yarpc"
+	"go.uber.org/yarpc/api/peer"
+	"go.uber.org/yarpc/api/transport"
+	"go.uber.org/yarpc/peer/roundrobin"
+	"go.uber.org/yarpc/transport/tchannel"
+
 	"github.com/uber/cadence/client/admin"
 	"github.com/uber/cadence/client/frontend"
 	"github.com/uber/cadence/client/history"
@@ -36,11 +42,6 @@ import (
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
-	"go.uber.org/yarpc"
-	"go.uber.org/yarpc/api/peer"
-	"go.uber.org/yarpc/api/transport"
-	"go.uber.org/yarpc/peer/roundrobin"
-	"go.uber.org/yarpc/transport/tchannel"
 )
 
 const (

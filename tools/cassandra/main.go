@@ -23,8 +23,9 @@ package cassandra
 import (
 	"os"
 
-	"github.com/uber/cadence/tools/common/schema"
 	"github.com/urfave/cli"
+
+	"github.com/uber/cadence/tools/common/schema"
 )
 
 // RunTool runs the cadence-cassandra-tool command line tool

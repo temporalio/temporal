@@ -34,6 +34,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/valyala/fastjson"
+
 	"github.com/uber/cadence/.gen/go/indexer"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
@@ -45,7 +47,6 @@ import (
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
-	"github.com/valyala/fastjson"
 )
 
 type ESVisibilitySuite struct {

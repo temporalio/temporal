@@ -22,6 +22,7 @@ package messaging
 
 import (
 	uberKafka "github.com/uber-go/kafka-client/kafka"
+
 	"github.com/uber/cadence/common/log"
 )
 

@@ -30,6 +30,11 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/uber-go/tally"
 
+	cwsc "go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
+	"go.uber.org/yarpc"
+	"go.uber.org/yarpc/api/transport"
+	"go.uber.org/yarpc/transport/tchannel"
+
 	"github.com/uber/cadence/.gen/go/admin/adminserviceclient"
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
 	"github.com/uber/cadence/.gen/go/history/historyserviceclient"
@@ -59,10 +64,6 @@ import (
 	"github.com/uber/cadence/service/worker/archiver"
 	"github.com/uber/cadence/service/worker/indexer"
 	"github.com/uber/cadence/service/worker/replicator"
-	cwsc "go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
-	"go.uber.org/yarpc"
-	"go.uber.org/yarpc/api/transport"
-	"go.uber.org/yarpc/transport/tchannel"
 )
 
 // Cadence hosts all of cadence services in one process

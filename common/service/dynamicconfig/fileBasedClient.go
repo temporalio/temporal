@@ -28,9 +28,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"gopkg.in/yaml.v2"
+
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
-	"gopkg.in/yaml.v2"
 )
 
 var _ Client = (*fileBasedClient)(nil)

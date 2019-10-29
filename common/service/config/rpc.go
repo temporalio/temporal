@@ -24,10 +24,11 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/transport/tchannel"
+
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 )
 
 // RPCFactory is an implementation of service.RPCFactory interface

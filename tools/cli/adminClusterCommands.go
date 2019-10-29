@@ -27,9 +27,10 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
+	"github.com/urfave/cli"
+
 	"github.com/uber/cadence/.gen/go/admin"
 	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/urfave/cli"
 )
 
 // AdminAddSearchAttribute to whitelist search attribute

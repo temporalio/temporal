@@ -25,6 +25,8 @@ import (
 	"os"
 
 	"github.com/uber-go/tally"
+	"go.uber.org/zap"
+
 	"github.com/uber/cadence/client"
 	frontendclient "github.com/uber/cadence/client/frontend"
 	"github.com/uber/cadence/common"
@@ -43,7 +45,6 @@ import (
 	persistencetests "github.com/uber/cadence/common/persistence/persistence-tests"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
-	"go.uber.org/zap"
 )
 
 type (

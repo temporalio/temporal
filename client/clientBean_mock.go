@@ -22,6 +22,7 @@ package client
 
 import (
 	"github.com/stretchr/testify/mock"
+
 	"github.com/uber/cadence/client/admin"
 	"github.com/uber/cadence/client/frontend"
 	"github.com/uber/cadence/client/history"

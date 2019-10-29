@@ -25,15 +25,16 @@ import (
 
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+	"go.uber.org/cadence/testsuite"
+	"go.uber.org/cadence/worker"
+	"go.uber.org/cadence/workflow"
+	"go.uber.org/zap"
+
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/metrics"
 	mmocks "github.com/uber/cadence/common/metrics/mocks"
 	"github.com/uber/cadence/common/service/dynamicconfig"
-	"go.uber.org/cadence/testsuite"
-	"go.uber.org/cadence/worker"
-	"go.uber.org/cadence/workflow"
-	"go.uber.org/zap"
 )
 
 var (

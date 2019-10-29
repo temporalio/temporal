@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/uber-go/tally"
+
 	"github.com/uber/cadence/.gen/go/health"
 	m "github.com/uber/cadence/.gen/go/matching"
 	"github.com/uber/cadence/.gen/go/matching/matchingserviceserver"

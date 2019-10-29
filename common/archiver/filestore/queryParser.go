@@ -29,9 +29,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xwb1989/sqlparser"
+
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
-	"github.com/xwb1989/sqlparser"
 )
 
 type (

@@ -27,6 +27,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
+
 	gen "github.com/uber/cadence/.gen/go/shared"
 	p "github.com/uber/cadence/common/persistence"
 )

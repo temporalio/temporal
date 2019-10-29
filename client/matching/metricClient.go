@@ -24,10 +24,11 @@ import (
 	"context"
 	"strings"
 
+	"go.uber.org/yarpc"
+
 	m "github.com/uber/cadence/.gen/go/matching"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/metrics"
-	"go.uber.org/yarpc"
 )
 
 var _ Client = (*metricClient)(nil)

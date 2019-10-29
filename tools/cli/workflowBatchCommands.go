@@ -27,11 +27,12 @@ import (
 	"os"
 	"strings"
 
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/service/worker/batcher"
 	"github.com/urfave/cli"
 	"go.uber.org/cadence/.gen/go/shared"
 	cclient "go.uber.org/cadence/client"
+
+	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/service/worker/batcher"
 )
 
 // TerminateBatchJob stops abatch job

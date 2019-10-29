@@ -23,9 +23,10 @@ package membership
 import (
 	"sync"
 
+	ringpop "github.com/uber/ringpop-go"
+
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
-	ringpop "github.com/uber/ringpop-go"
 )
 
 type ringpopMonitor struct {

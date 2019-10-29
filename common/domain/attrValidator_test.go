@@ -30,6 +30,7 @@ import (
 	"github.com/uber/cadence/common/persistence"
 
 	"github.com/stretchr/testify/suite"
+
 	"github.com/uber/cadence/common/mocks"
 )
 

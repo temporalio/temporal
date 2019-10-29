@@ -29,10 +29,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/common/membership"
 	"github.com/uber/ringpop-go"
 	"github.com/uber/ringpop-go/discovery"
 	"github.com/uber/ringpop-go/discovery/jsonfile"
@@ -41,6 +37,11 @@ import (
 	tcg "github.com/uber/tchannel-go"
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/transport/tchannel"
+
+	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
+	"github.com/uber/cadence/common/membership"
 )
 
 const (

@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+
 	m "github.com/uber/cadence/.gen/go/matching"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client/matching"

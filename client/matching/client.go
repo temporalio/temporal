@@ -24,12 +24,13 @@ import (
 	"context"
 	"time"
 
+	"go.uber.org/yarpc"
+
 	m "github.com/uber/cadence/.gen/go/matching"
 	"github.com/uber/cadence/.gen/go/matching/matchingserviceclient"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/persistence"
-	"go.uber.org/yarpc"
 )
 
 var _ Client = (*clientImpl)(nil)

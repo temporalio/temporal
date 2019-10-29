@@ -26,10 +26,11 @@ import (
 
 	"github.com/uber-go/tally/m3"
 	"github.com/uber-go/tally/prometheus"
+	"github.com/uber/ringpop-go/discovery"
+
 	"github.com/uber/cadence/common/elasticsearch"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/service/dynamicconfig"
-	"github.com/uber/ringpop-go/discovery"
 )
 
 const (

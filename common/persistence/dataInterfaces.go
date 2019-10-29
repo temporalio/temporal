@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+
 	"github.com/uber/cadence/.gen/go/replicator"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"

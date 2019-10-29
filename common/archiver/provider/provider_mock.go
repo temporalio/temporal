@@ -24,6 +24,7 @@ package provider
 
 import (
 	"github.com/stretchr/testify/mock"
+
 	"github.com/uber/cadence/common/archiver"
 )
 

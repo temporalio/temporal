@@ -29,6 +29,11 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/yarpc"
+	"go.uber.org/yarpc/transport/tchannel"
+	"go.uber.org/zap"
+	"gopkg.in/yaml.v2"
+
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
@@ -37,10 +42,6 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/environment"
-	"go.uber.org/yarpc"
-	"go.uber.org/yarpc/transport/tchannel"
-	"go.uber.org/zap"
-	"gopkg.in/yaml.v2"
 )
 
 type (

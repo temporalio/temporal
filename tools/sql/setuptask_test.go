@@ -26,6 +26,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/suite"
+
 	"github.com/uber/cadence/environment"
 	"github.com/uber/cadence/tools/common/schema/test"
 )

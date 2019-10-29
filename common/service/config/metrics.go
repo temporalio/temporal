@@ -28,6 +28,7 @@ import (
 	"github.com/uber-go/tally"
 	"github.com/uber-go/tally/prometheus"
 	tallystatsdreporter "github.com/uber-go/tally/statsd"
+
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	statsdreporter "github.com/uber/cadence/common/metrics/tally/statsd"

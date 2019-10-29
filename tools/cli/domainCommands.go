@@ -29,12 +29,13 @@ import (
 	"time"
 
 	"github.com/olekukonko/tablewriter"
+	"github.com/urfave/cli"
+	s "go.uber.org/cadence/.gen/go/shared"
+
 	serviceFrontend "github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/domain"
-	"github.com/urfave/cli"
-	s "go.uber.org/cadence/.gen/go/shared"
 )
 
 type (

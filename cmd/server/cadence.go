@@ -25,9 +25,10 @@ import (
 	"os"
 	"strings"
 
+	"github.com/urfave/cli"
+
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/tools/cassandra"
-	"github.com/urfave/cli"
 )
 
 // validServices is the list of all valid cadence services

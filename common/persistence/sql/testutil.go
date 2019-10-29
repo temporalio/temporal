@@ -27,6 +27,7 @@ import (
 	"github.com/iancoleman/strcase"
 	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
+
 	"github.com/uber/cadence/common/service/config"
 )
 

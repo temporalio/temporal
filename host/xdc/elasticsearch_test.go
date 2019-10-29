@@ -38,6 +38,9 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/zap"
+	"gopkg.in/yaml.v2"
+
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/definition"
@@ -46,8 +49,6 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/environment"
 	"github.com/uber/cadence/host"
-	"go.uber.org/zap"
-	"gopkg.in/yaml.v2"
 )
 
 const (

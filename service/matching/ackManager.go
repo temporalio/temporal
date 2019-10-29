@@ -23,9 +23,10 @@ package matching
 import (
 	"sync"
 
+	"go.uber.org/atomic"
+
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
-	"go.uber.org/atomic"
 )
 
 // Used to convert out of order acks into ackLevel movement.

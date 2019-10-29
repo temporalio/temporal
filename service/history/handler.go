@@ -26,6 +26,9 @@ import (
 	"sync"
 
 	"github.com/pborman/uuid"
+	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
+	"go.uber.org/yarpc/yarpcerrors"
+
 	"github.com/uber/cadence/.gen/go/health"
 	"github.com/uber/cadence/.gen/go/health/metaserver"
 	hist "github.com/uber/cadence/.gen/go/history"
@@ -44,8 +47,6 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/common/service"
-	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
-	"go.uber.org/yarpc/yarpcerrors"
 )
 
 // Handler - Thrift handler interface for history service

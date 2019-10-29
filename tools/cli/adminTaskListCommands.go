@@ -27,9 +27,10 @@ import (
 	"strings"
 
 	"github.com/olekukonko/tablewriter"
+	"github.com/urfave/cli"
+
 	s "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
-	"github.com/urfave/cli"
 )
 
 // AdminDescribeTaskList displays poller and status information of task list.

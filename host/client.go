@@ -21,11 +21,12 @@
 package host
 
 import (
+	"go.uber.org/yarpc"
+
 	"github.com/uber/cadence/.gen/go/admin/adminserviceclient"
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
 	"github.com/uber/cadence/.gen/go/history/historyserviceclient"
 	"github.com/uber/cadence/common"
-	"go.uber.org/yarpc"
 )
 
 // AdminClient is the interface exposed by admin service client

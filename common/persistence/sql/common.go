@@ -27,6 +27,7 @@ import (
 	"fmt"
 
 	"github.com/go-sql-driver/mysql"
+
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/persistence"

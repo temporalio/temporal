@@ -23,15 +23,16 @@ package cli
 import (
 	"context"
 
-	serverAdmin "github.com/uber/cadence/.gen/go/admin/adminserviceclient"
-	serverFrontend "github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
-	"github.com/uber/cadence/common"
 	"github.com/urfave/cli"
 	clientFrontend "go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/api/transport"
 	"go.uber.org/yarpc/transport/tchannel"
 	"go.uber.org/zap"
+
+	serverAdmin "github.com/uber/cadence/.gen/go/admin/adminserviceclient"
+	serverFrontend "github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
+	"github.com/uber/cadence/common"
 )
 
 const (

@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
+
 	"github.com/uber/cadence/tools/common/schema"
 )
 

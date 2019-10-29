@@ -24,8 +24,9 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/uber/cadence/tools/common/schema"
 	"github.com/urfave/cli"
+
+	"github.com/uber/cadence/tools/common/schema"
 )
 
 // setupSchema executes the setupSchemaTask

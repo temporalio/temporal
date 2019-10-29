@@ -25,13 +25,14 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/ringpop-go"
 	"github.com/uber/ringpop-go/events"
 	"github.com/uber/ringpop-go/hashring"
 	"github.com/uber/ringpop-go/swim"
+
+	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/tag"
 )
 
 const (

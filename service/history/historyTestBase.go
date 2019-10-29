@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/uber-go/tally"
+
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"

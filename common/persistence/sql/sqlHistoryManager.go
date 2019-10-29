@@ -26,6 +26,7 @@ import (
 	"fmt"
 
 	"github.com/go-sql-driver/mysql"
+
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/.gen/go/sqlblobs"
 	"github.com/uber/cadence/common"

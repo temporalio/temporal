@@ -26,6 +26,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
+
 	"github.com/uber/cadence/environment"
 	"github.com/uber/cadence/schema/mysql"
 	"github.com/uber/cadence/tools/common/schema/test"

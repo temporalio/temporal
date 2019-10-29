@@ -28,6 +28,7 @@ import (
 
 	"github.com/iancoleman/strcase"
 	"github.com/jmoiron/sqlx"
+
 	"github.com/uber/cadence/common/persistence/sql/storage/mysql"
 	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
 	"github.com/uber/cadence/common/service/config"

@@ -41,6 +41,11 @@ import (
 	"github.com/Shopify/sarama"
 	cluster "github.com/bsm/sarama-cluster"
 	"github.com/gocql/gocql"
+	"github.com/urfave/cli"
+	"go.uber.org/thriftrw/protocol"
+	"go.uber.org/thriftrw/wire"
+	yaml "gopkg.in/yaml.v2"
+
 	"github.com/uber/cadence/.gen/go/indexer"
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
@@ -51,10 +56,6 @@ import (
 	"github.com/uber/cadence/common/persistence/cassandra"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/service/history"
-	"github.com/urfave/cli"
-	"go.uber.org/thriftrw/protocol"
-	"go.uber.org/thriftrw/wire"
-	yaml "gopkg.in/yaml.v2"
 )
 
 type filterFn func(*replicator.ReplicationTask) bool

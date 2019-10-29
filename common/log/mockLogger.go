@@ -22,6 +22,7 @@ package log
 
 import (
 	"github.com/stretchr/testify/mock"
+
 	"github.com/uber/cadence/common/log/tag"
 )
 

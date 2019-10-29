@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/olivere/elastic"
+
 	"github.com/uber/cadence/.gen/go/indexer"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"

@@ -25,6 +25,8 @@ import (
 	"fmt"
 	"time"
 
+	"go.uber.org/yarpc"
+
 	h "github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
@@ -34,7 +36,6 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
-	"go.uber.org/yarpc"
 )
 
 type (

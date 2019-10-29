@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/mock"
+
 	"github.com/uber/cadence/common/persistence"
 )
 

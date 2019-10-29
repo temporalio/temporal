@@ -33,6 +33,7 @@ import (
 	time "time"
 
 	gomock "github.com/golang/mock/gomock"
+
 	shared "github.com/uber/cadence/.gen/go/shared"
 	log "github.com/uber/cadence/common/log"
 	persistence "github.com/uber/cadence/common/persistence"

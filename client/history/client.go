@@ -25,6 +25,8 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/yarpc"
+
 	h "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/history/historyserviceclient"
 	"github.com/uber/cadence/.gen/go/replicator"
@@ -32,7 +34,6 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
-	"go.uber.org/yarpc"
 )
 
 var _ Client = (*clientImpl)(nil)

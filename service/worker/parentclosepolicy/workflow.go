@@ -24,15 +24,16 @@ import (
 	"context"
 	"time"
 
+	"go.uber.org/cadence"
+	"go.uber.org/cadence/activity"
+	"go.uber.org/cadence/workflow"
+
 	h "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
-	"go.uber.org/cadence"
-	"go.uber.org/cadence/activity"
-	"go.uber.org/cadence/workflow"
 )
 
 const (

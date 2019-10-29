@@ -22,9 +22,10 @@ package loggerimpl
 import (
 	"testing"
 
-	"github.com/uber/cadence/common/log/tag"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+
+	"github.com/uber/cadence/common/log/tag"
 )
 
 /**

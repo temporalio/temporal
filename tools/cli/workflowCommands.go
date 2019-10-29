@@ -38,15 +38,16 @@ import (
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/pborman/uuid"
+	"github.com/urfave/cli"
+	"github.com/valyala/fastjson"
+	s "go.uber.org/cadence/.gen/go/shared"
+	"go.uber.org/cadence/client"
+
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/service/history"
-	"github.com/urfave/cli"
-	"github.com/valyala/fastjson"
-	s "go.uber.org/cadence/.gen/go/shared"
-	"go.uber.org/cadence/client"
 )
 
 // ShowHistory shows the history of given workflow execution based on workflowID and runID.
