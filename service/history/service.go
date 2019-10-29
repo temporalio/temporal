@@ -174,6 +174,15 @@ type Config struct {
 	DecisionHeartbeatTimeout dynamicconfig.DurationPropertyFnWithDomainFilter
 	// MaxDecisionStartToCloseSeconds is the StartToCloseSeconds for decision
 	MaxDecisionStartToCloseSeconds dynamicconfig.IntPropertyFnWithDomainFilter
+
+	// The following is used by the new RPC replication stack
+	ReplicationTaskFetcherParallelism             dynamicconfig.IntPropertyFn
+	ReplicationTaskFetcherAggregationInterval     dynamicconfig.DurationPropertyFn
+	ReplicationTaskFetcherTimerJitterCoefficient  dynamicconfig.FloatPropertyFn
+	ReplicationTaskFetcherErrorRetryWait          dynamicconfig.DurationPropertyFn
+	ReplicationTaskProcessorErrorRetryWait        dynamicconfig.DurationPropertyFn
+	ReplicationTaskProcessorErrorRetryMaxAttempts dynamicconfig.IntPropertyFn
+	ReplicationTaskProcessorNoTaskRetryWait       dynamicconfig.DurationPropertyFn
 }
 
 const (
@@ -276,6 +285,14 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		SearchAttributesTotalSizeLimit:    dc.GetIntPropertyFilteredByDomain(dynamicconfig.SearchAttributesTotalSizeLimit, 40*1024),
 		StickyTTL:                         dc.GetDurationPropertyFilteredByDomain(dynamicconfig.StickyTTL, time.Hour*24*365),
 		DecisionHeartbeatTimeout:          dc.GetDurationPropertyFilteredByDomain(dynamicconfig.DecisionHeartbeatTimeout, time.Minute*30),
+
+		ReplicationTaskFetcherParallelism:             dc.GetIntProperty(dynamicconfig.ReplicationTaskFetcherParallelism, 1),
+		ReplicationTaskFetcherAggregationInterval:     dc.GetDurationProperty(dynamicconfig.ReplicationTaskFetcherAggregationInterval, 2*time.Second),
+		ReplicationTaskFetcherTimerJitterCoefficient:  dc.GetFloat64Property(dynamicconfig.ReplicationTaskFetcherTimerJitterCoefficient, 0.15),
+		ReplicationTaskFetcherErrorRetryWait:          dc.GetDurationProperty(dynamicconfig.ReplicationTaskFetcherErrorRetryWait, time.Second),
+		ReplicationTaskProcessorErrorRetryWait:        dc.GetDurationProperty(dynamicconfig.ReplicationTaskProcessorErrorRetryWait, time.Second),
+		ReplicationTaskProcessorErrorRetryMaxAttempts: dc.GetIntProperty(dynamicconfig.ReplicationTaskProcessorErrorRetryMaxAttempts, 20),
+		ReplicationTaskProcessorNoTaskRetryWait:       dc.GetDurationProperty(dynamicconfig.ReplicationTaskProcessorNoTaskInitialWait, 2*time.Second),
 	}
 
 	return cfg

@@ -190,6 +190,13 @@ var keys = map[Key]string{
 	DecisionHeartbeatTimeout:                              "history.decisionHeartbeatTimeout",
 	ParentClosePolicyThreshold:                            "history.parentClosePolicyThreshold",
 	NumParentClosePolicySystemWorkflows:                   "history.numParentClosePolicySystemWorkflows",
+	ReplicationTaskFetcherParallelism:                     "history.ReplicationTaskFetcherParallelism",
+	ReplicationTaskFetcherAggregationInterval:             "history.ReplicationTaskFetcherAggregationInterval",
+	ReplicationTaskFetcherTimerJitterCoefficient:          "history.ReplicationTaskFetcherTimerJitterCoefficient",
+	ReplicationTaskFetcherErrorRetryWait:                  "history.ReplicationTaskFetcherErrorRetryWait",
+	ReplicationTaskProcessorErrorRetryWait:                "history.ReplicationTaskProcessorErrorRetryWait",
+	ReplicationTaskProcessorErrorRetryMaxAttempts:         "history.ReplicationTaskProcessorErrorRetryMaxAttempts",
+	ReplicationTaskProcessorNoTaskInitialWait:             "history.ReplicationTaskProcessorNoTaskInitialWait",
 
 	WorkerPersistenceMaxQPS:                         "worker.persistenceMaxQPS",
 	WorkerReplicatorMetaTaskConcurrency:             "worker.replicatorMetaTaskConcurrency",
@@ -565,6 +572,21 @@ const (
 	EnableBatcher
 	// EnableParentClosePolicyWorker decides whether or not enable system workers for processing parent close policy task
 	EnableParentClosePolicyWorker
+
+	//ReplicationTaskFetcherParallelism determines how many go routines we spin up for fetching tasks
+	ReplicationTaskFetcherParallelism
+	// ReplicationTaskFetcherAggregationInterval determines how frequently the fetch requests are sent
+	ReplicationTaskFetcherAggregationInterval
+	// ReplicationTaskFetcherTimerJitterCoefficient is the jitter for fetcher timer
+	ReplicationTaskFetcherTimerJitterCoefficient
+	// ReplicationTaskFetcherErrorRetryWait is the wait time when fetcher encounters error
+	ReplicationTaskFetcherErrorRetryWait
+	// ReplicationTaskProcessorErrorRetryWait is the initial retry wait when we see errors in applying replication tasks
+	ReplicationTaskProcessorErrorRetryWait
+	// ReplicationTaskProcessorErrorRetryMaxAttempts is the max retry attempts for applying replication tasks
+	ReplicationTaskProcessorErrorRetryMaxAttempts
+	// ReplicationTaskProcessorNoTaskInitialWait is the wait time when not ask is returned
+	ReplicationTaskProcessorNoTaskInitialWait
 
 	// lastKeyForTest must be the last one in this const group for testing purpose
 	lastKeyForTest

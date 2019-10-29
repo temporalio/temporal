@@ -99,7 +99,7 @@ type (
 		VersionHistoriesEncoding string
 	}
 
-	// ExecutionsFilter contains the column names within domain table that
+	// ExecutionsFilter contains the column names within executions table that
 	// can be used to filter results through a WHERE clause
 	ExecutionsFilter struct {
 		ShardID    int
@@ -121,7 +121,7 @@ type (
 		StartVersion     int64
 	}
 
-	// CurrentExecutionsFilter contains the column names within domain table that
+	// CurrentExecutionsFilter contains the column names within current_executions table that
 	// can be used to filter results through a WHERE clause
 	CurrentExecutionsFilter struct {
 		ShardID    int64
@@ -140,7 +140,7 @@ type (
 		DataEncoding string
 	}
 
-	// BufferedEventsFilter contains the column names within domain table that
+	// BufferedEventsFilter contains the column names within buffered_events table that
 	// can be used to filter results through a WHERE clause
 	BufferedEventsFilter struct {
 		ShardID    int
@@ -159,7 +159,7 @@ type (
 		DataEncoding string
 	}
 
-	// TasksFilter contains the column names within domain table that
+	// TasksFilter contains the column names within tasks table that
 	// can be used to filter results through a WHERE clause
 	TasksFilter struct {
 		DomainID             UUID
@@ -184,7 +184,7 @@ type (
 		DataEncoding string
 	}
 
-	// TaskListsFilter contains the column names within domain table that
+	// TaskListsFilter contains the column names within task_lists table that
 	// can be used to filter results through a WHERE clause
 	TaskListsFilter struct {
 		ShardID             int
@@ -206,14 +206,29 @@ type (
 		DataEncoding string
 	}
 
-	// ReplicationTasksFilter contains the column names within domain table that
+	// ReplicationTaskDLQRow represents a row in replication_tasks_dlq table
+	ReplicationTaskDLQRow struct {
+		SourceClusterName string
+		ShardID           int
+		TaskID            int64
+		Data              []byte
+		DataEncoding      string
+	}
+
+	// ReplicationTasksFilter contains the column names within replication_tasks table that
 	// can be used to filter results through a WHERE clause
 	ReplicationTasksFilter struct {
 		ShardID   int
-		TaskID    *int64
-		MinTaskID *int64
-		MaxTaskID *int64
-		PageSize  *int
+		MinTaskID int64
+		MaxTaskID int64
+		PageSize  int
+	}
+
+	// ReplicationTasksDLQFilter contains the column names within replication_tasks_dlq table that
+	// can be used to filter results through a WHERE clause
+	ReplicationTasksDLQFilter struct {
+		ReplicationTasksFilter
+		SourceClusterName string
 	}
 
 	// TimerTasksRow represents a row in timer_tasks table
@@ -225,7 +240,7 @@ type (
 		DataEncoding        string
 	}
 
-	// TimerTasksFilter contains the column names within domain table that
+	// TimerTasksFilter contains the column names within timer_tasks table that
 	// can be used to filter results through a WHERE clause
 	TimerTasksFilter struct {
 		ShardID                int
@@ -249,7 +264,7 @@ type (
 		DataEncoding string
 	}
 
-	// EventsFilter contains the column names within domain table that
+	// EventsFilter contains the column names within events table that
 	// can be used to filter results through a WHERE clause
 	EventsFilter struct {
 		DomainID     UUID
@@ -315,7 +330,7 @@ type (
 		LastHeartbeatUpdatedTime time.Time
 	}
 
-	// ActivityInfoMapsFilter contains the column names within domain table that
+	// ActivityInfoMapsFilter contains the column names within activity_info_maps table that
 	// can be used to filter results through a WHERE clause
 	ActivityInfoMapsFilter struct {
 		ShardID    int64
@@ -336,7 +351,7 @@ type (
 		DataEncoding string
 	}
 
-	// TimerInfoMapsFilter contains the column names within domain table that
+	// TimerInfoMapsFilter contains the column names within timer_info_maps table that
 	// can be used to filter results through a WHERE clause
 	TimerInfoMapsFilter struct {
 		ShardID    int64
@@ -357,7 +372,7 @@ type (
 		DataEncoding string
 	}
 
-	// ChildExecutionInfoMapsFilter contains the column names within domain table that
+	// ChildExecutionInfoMapsFilter contains the column names within child_execution_info_maps table that
 	// can be used to filter results through a WHERE clause
 	ChildExecutionInfoMapsFilter struct {
 		ShardID     int64
@@ -378,7 +393,7 @@ type (
 		DataEncoding string
 	}
 
-	// RequestCancelInfoMapsFilter contains the column names within domain table that
+	// RequestCancelInfoMapsFilter contains the column names within request_cancel_info_maps table that
 	// can be used to filter results through a WHERE clause
 	RequestCancelInfoMapsFilter struct {
 		ShardID     int64
@@ -399,7 +414,7 @@ type (
 		DataEncoding string
 	}
 
-	// SignalInfoMapsFilter contains the column names within domain table that
+	// SignalInfoMapsFilter contains the column names within signal_info_maps table that
 	// can be used to filter results through a WHERE clause
 	SignalInfoMapsFilter struct {
 		ShardID     int64
@@ -418,7 +433,7 @@ type (
 		SignalID   string
 	}
 
-	// SignalsRequestedSetsFilter contains the column names within domain table that
+	// SignalsRequestedSetsFilter contains the column names within signals_requested_sets table that
 	// can be used to filter results through a WHERE clause
 	SignalsRequestedSetsFilter struct {
 		ShardID    int64
@@ -443,7 +458,7 @@ type (
 		Encoding         string
 	}
 
-	// VisibilityFilter contains the column names within domain table that
+	// VisibilityFilter contains the column names within executions_visibility table that
 	// can be used to filter results through a WHERE clause
 	VisibilityFilter struct {
 		DomainID         string
@@ -574,7 +589,12 @@ type (
 		SelectFromReplicationTasks(filter *ReplicationTasksFilter) ([]ReplicationTasksRow, error)
 		// DeleteFromReplicationTasks deletes a row from replication_tasks table
 		// Required filter params - {shardID, taskID}
-		DeleteFromReplicationTasks(filter *ReplicationTasksFilter) (sql.Result, error)
+		DeleteFromReplicationTasks(shardID, taskID int) (sql.Result, error)
+		// InsertIntoReplicationTasksDLQ puts the replication task into DLQ
+		InsertIntoReplicationTasksDLQ(row *ReplicationTaskDLQRow) (sql.Result, error)
+		// SelectFromReplicationTasksDLQ returns one or more rows from replication_tasks_dlq table
+		// Required filter params - {sourceClusterName, shardID, minTaskID, pageSize}
+		SelectFromReplicationTasksDLQ(filter *ReplicationTasksDLQFilter) ([]ReplicationTasksRow, error)
 
 		ReplaceIntoActivityInfoMaps(rows []ActivityInfoMapsRow) (sql.Result, error)
 		// SelectFromActivityInfoMaps returns one or more rows from activity_info_maps

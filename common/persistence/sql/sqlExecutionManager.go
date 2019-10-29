@@ -29,6 +29,7 @@ import (
 	"time"
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/.gen/go/sqlblobs"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/collection"
 	"github.com/uber/cadence/common/log"
@@ -907,33 +908,48 @@ func (m *sqlExecutionManager) GetReplicationTasks(
 	request *p.GetReplicationTasksRequest,
 ) (*p.GetReplicationTasksResponse, error) {
 
-	var readLevel int64
-	var maxReadLevelInclusive int64
-	var err error
+	readLevel, maxReadLevelInclusive, err := getReadLevels(request)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := m.db.SelectFromReplicationTasks(
+		&sqldb.ReplicationTasksFilter{
+			ShardID:   m.shardID,
+			MinTaskID: readLevel,
+			MaxTaskID: maxReadLevelInclusive,
+			PageSize:  request.BatchSize,
+		})
+
+	switch err {
+	case nil:
+		return m.populateGetReplicationTasksResponse(rows, request.MaxReadLevel)
+	case sql.ErrNoRows:
+		return &p.GetReplicationTasksResponse{}, nil
+	default:
+		return nil, &workflow.InternalServiceError{
+			Message: fmt.Sprintf("GetReplicationTasks operation failed. Select failed: %v", err),
+		}
+	}
+}
+
+func getReadLevels(request *p.GetReplicationTasksRequest) (readLevel int64, maxReadLevelInclusive int64, err error) {
+	readLevel = request.ReadLevel
 	if len(request.NextPageToken) > 0 {
 		readLevel, err = deserializePageToken(request.NextPageToken)
 		if err != nil {
-			return nil, err
+			return 0, 0, err
 		}
-	} else {
-		readLevel = request.ReadLevel
 	}
-	maxReadLevelInclusive = collection.MaxInt64(
-		readLevel+int64(request.BatchSize), request.MaxReadLevel)
 
-	rows, err := m.db.SelectFromReplicationTasks(&sqldb.ReplicationTasksFilter{
-		ShardID:   m.shardID,
-		MinTaskID: &readLevel,
-		MaxTaskID: &maxReadLevelInclusive,
-		PageSize:  &request.BatchSize,
-	})
-	if err != nil {
-		if err != sql.ErrNoRows {
-			return nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("GetReplicationTasks operation failed. Select failed: %v", err),
-			}
-		}
-	}
+	maxReadLevelInclusive = collection.MaxInt64(readLevel+int64(request.BatchSize), request.MaxReadLevel)
+	return readLevel, maxReadLevelInclusive, nil
+}
+
+func (m *sqlExecutionManager) populateGetReplicationTasksResponse(
+	rows []sqldb.ReplicationTasksRow,
+	requestMaxReadLevel int64,
+) (*p.GetReplicationTasksResponse, error) {
 	if len(rows) == 0 {
 		return &p.GetReplicationTasksResponse{}, nil
 	}
@@ -971,7 +987,7 @@ func (m *sqlExecutionManager) GetReplicationTasks(
 	}
 	var nextPageToken []byte
 	lastTaskID := rows[len(rows)-1].TaskID
-	if lastTaskID < request.MaxReadLevel {
+	if lastTaskID < requestMaxReadLevel {
 		nextPageToken = serializePageToken(lastTaskID)
 	}
 	return &p.GetReplicationTasksResponse{
@@ -984,15 +1000,44 @@ func (m *sqlExecutionManager) CompleteReplicationTask(
 	request *p.CompleteReplicationTaskRequest,
 ) error {
 
-	if _, err := m.db.DeleteFromReplicationTasks(&sqldb.ReplicationTasksFilter{
-		ShardID: m.shardID,
-		TaskID:  &request.TaskID,
-	}); err != nil {
+	if _, err := m.db.DeleteFromReplicationTasks(m.shardID, int(request.TaskID)); err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("CompleteReplicationTask operation failed. Error: %v", err),
 		}
 	}
 	return nil
+}
+
+func (m *sqlExecutionManager) GetReplicationTasksFromDLQ(
+	request *p.GetReplicationTasksFromDLQRequest,
+) (*p.GetReplicationTasksFromDLQResponse, error) {
+
+	readLevel, maxReadLevelInclusive, err := getReadLevels(&request.GetReplicationTasksRequest)
+	if err != nil {
+		return nil, err
+	}
+
+	filter := sqldb.ReplicationTasksFilter{
+		ShardID:   m.shardID,
+		MinTaskID: readLevel,
+		MaxTaskID: maxReadLevelInclusive,
+		PageSize:  request.BatchSize,
+	}
+	rows, err := m.db.SelectFromReplicationTasksDLQ(&sqldb.ReplicationTasksDLQFilter{
+		ReplicationTasksFilter: filter,
+		SourceClusterName:      request.SourceClusterName,
+	})
+
+	switch err {
+	case nil:
+		return m.populateGetReplicationTasksResponse(rows, request.MaxReadLevel)
+	case sql.ErrNoRows:
+		return &p.GetReplicationTasksResponse{}, nil
+	default:
+		return nil, &workflow.InternalServiceError{
+			Message: fmt.Sprintf("GetReplicationTasks operation failed. Select failed: %v", err),
+		}
+	}
 }
 
 type timerTaskPageToken struct {
@@ -1105,4 +1150,57 @@ func (m *sqlExecutionManager) RangeCompleteTimerTask(
 		}
 	}
 	return nil
+}
+
+func (m *sqlExecutionManager) PutReplicationTaskToDLQ(request *p.PutReplicationTaskToDLQRequest) error {
+	replicationTask := request.TaskInfo
+	blob, err := replicationTaskInfoToBlob(&sqlblobs.ReplicationTaskInfo{
+		DomainID:            sqldb.MustParseUUID(replicationTask.DomainID),
+		WorkflowID:          &replicationTask.WorkflowID,
+		RunID:               sqldb.MustParseUUID(replicationTask.RunID),
+		TaskType:            common.Int16Ptr(int16(replicationTask.TaskType)),
+		FirstEventID:        &replicationTask.FirstEventID,
+		NextEventID:         &replicationTask.NextEventID,
+		Version:             &replicationTask.Version,
+		LastReplicationInfo: toSqldbReplicationInfo(replicationTask.LastReplicationInfo),
+		ScheduledID:         &replicationTask.ScheduledID,
+		BranchToken:         replicationTask.BranchToken,
+		NewRunBranchToken:   replicationTask.NewRunBranchToken,
+		ResetWorkflow:       &replicationTask.ResetWorkflow,
+	})
+	if err != nil {
+		return err
+	}
+
+	row := &sqldb.ReplicationTaskDLQRow{
+		SourceClusterName: request.SourceClusterName,
+		ShardID:           m.shardID,
+		TaskID:            replicationTask.TaskID,
+		Data:              blob.Data,
+		DataEncoding:      string(blob.Encoding),
+	}
+
+	_, err = m.db.InsertIntoReplicationTasksDLQ(row)
+
+	// Tasks are immutable. So it's fine if we already persisted it before.
+	// This can happen when tasks are retried (ack and cleanup can have lag on source side).
+	if err != nil && !isDupEntry(err) {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("Failed to create replication tasks. Error: %v", err),
+		}
+	}
+
+	return nil
+}
+
+func toSqldbReplicationInfo(info map[string]*p.ReplicationInfo) map[string]*sqlblobs.ReplicationInfo {
+	replicationInfoMap := make(map[string]*sqlblobs.ReplicationInfo)
+	for k, v := range info {
+		replicationInfoMap[k] = &sqlblobs.ReplicationInfo{
+			Version:     common.Int64Ptr(v.Version),
+			LastEventID: common.Int64Ptr(v.LastEventID),
+		}
+	}
+
+	return replicationInfoMap
 }

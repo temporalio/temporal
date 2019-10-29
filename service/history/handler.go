@@ -44,7 +44,6 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/common/service"
-	"github.com/uber/cadence/service/worker/replicator"
 	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 	"go.uber.org/yarpc/yarpcerrors"
 )
@@ -72,7 +71,6 @@ type (
 		publisher               messaging.Producer
 		rateLimiter             quotas.Limiter
 		replicationTaskFetchers *ReplicationTaskFetchers
-		domainReplicator        replicator.DomainReplicator
 		service.Service
 	}
 )
@@ -104,8 +102,6 @@ func NewHandler(
 	domainCache cache.DomainCache,
 	publicClient workflowserviceclient.Interface,
 ) *Handler {
-	domainReplicator := replicator.NewDomainReplicator(metadataMgr, sVice.GetLogger())
-
 	handler := &Handler{
 		Service:             sVice,
 		config:              config,
@@ -121,8 +117,7 @@ func NewHandler(
 				return float64(config.RPS())
 			},
 		),
-		publicClient:     publicClient,
-		domainReplicator: domainReplicator,
+		publicClient: publicClient,
 	}
 
 	// prevent us from trying to serve requests before shard controller is started and ready
@@ -176,6 +171,7 @@ func (h *Handler) Start() error {
 
 	h.replicationTaskFetchers = NewReplicationTaskFetchers(
 		h.GetLogger(),
+		h.config,
 		h.GetClusterMetadata().GetReplicationConsumerConfig(),
 		h.Service.GetClusterMetadata(),
 		h.Service.GetClientBean())
@@ -213,7 +209,7 @@ func (h *Handler) Stop() {
 // CreateEngine is implementation for HistoryEngineFactory used for creating the engine instance for shard
 func (h *Handler) CreateEngine(context ShardContext) Engine {
 	return NewEngineWithShardContext(context, h.visibilityMgr, h.matchingServiceClient, h.historyServiceClient,
-		h.publicClient, h.historyEventNotifier, h.publisher, h.config, h.replicationTaskFetchers, h.domainReplicator, h.rawMatchingClient)
+		h.publicClient, h.historyEventNotifier, h.publisher, h.config, h.replicationTaskFetchers, h.rawMatchingClient)
 }
 
 // Health is for health check

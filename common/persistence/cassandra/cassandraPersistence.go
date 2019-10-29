@@ -63,6 +63,9 @@ const (
 	rowTypeReplicationDomainID   = "10000000-5000-f000-f000-000000000000"
 	rowTypeReplicationWorkflowID = "20000000-5000-f000-f000-000000000000"
 	rowTypeReplicationRunID      = "30000000-5000-f000-f000-000000000000"
+	// Row Constants for Replication Task DLQ Row. Source cluster name will be used as WorkflowID.
+	rowTypeDLQDomainID = "10000000-6000-f000-f000-000000000000"
+	rowTypeDLQRunID    = "30000000-6000-f000-f000-000000000000"
 	// Special TaskId constants
 	rowTypeExecutionTaskID  = int64(-10)
 	rowTypeShardTaskID      = int64(-11)
@@ -82,6 +85,7 @@ const (
 	rowTypeTransferTask
 	rowTypeTimerTask
 	rowTypeReplicationTask
+	rowTypeDLQ
 )
 
 const (
@@ -878,8 +882,11 @@ func newShardPersistence(cfg config.Cassandra, clusterName string, logger log.Lo
 }
 
 // NewWorkflowExecutionPersistence is used to create an instance of workflowExecutionManager implementation
-func NewWorkflowExecutionPersistence(shardID int, session *gocql.Session,
-	logger log.Logger) (p.ExecutionStore, error) {
+func NewWorkflowExecutionPersistence(
+	shardID int,
+	session *gocql.Session,
+	logger log.Logger,
+) (p.ExecutionStore, error) {
 	return &cassandraPersistence{cassandraStore: cassandraStore{session: session, logger: logger}, shardID: shardID}, nil
 }
 
@@ -2089,6 +2096,12 @@ func (d *cassandraPersistence) GetReplicationTasks(
 		request.MaxReadLevel,
 	).PageSize(request.BatchSize).PageState(request.NextPageToken)
 
+	return d.populateGetReplicationTasksResponse(query)
+}
+
+func (d *cassandraPersistence) populateGetReplicationTasksResponse(
+	query *gocql.Query,
+) (*p.GetReplicationTasksResponse, error) {
 	iter := query.Iter()
 	if iter == nil {
 		return nil, &workflow.InternalServiceError{
@@ -2690,4 +2703,63 @@ func (d *cassandraPersistence) GetTimerIndexTasks(request *p.GetTimerIndexTasksR
 	}
 
 	return response, nil
+}
+
+func (d *cassandraPersistence) PutReplicationTaskToDLQ(request *p.PutReplicationTaskToDLQRequest) error {
+	task := request.TaskInfo
+	query := d.session.Query(templateCreateReplicationTaskQuery,
+		d.shardID,
+		rowTypeDLQ,
+		rowTypeDLQDomainID,
+		request.SourceClusterName,
+		rowTypeDLQRunID,
+		task.DomainID,
+		task.WorkflowID,
+		task.RunID,
+		task.TaskID,
+		task.TaskType,
+		task.FirstEventID,
+		task.NextEventID,
+		task.Version,
+		task.LastReplicationInfo,
+		task.ScheduledID,
+		defaultEventStoreVersionValue,
+		task.BranchToken,
+		task.ResetWorkflow,
+		defaultEventStoreVersionValue,
+		task.NewRunBranchToken,
+		defaultVisibilityTimestamp,
+		task.GetTaskID())
+
+	err := query.Exec()
+	if err != nil {
+		if isThrottlingError(err) {
+			return &workflow.ServiceBusyError{
+				Message: fmt.Sprintf("PutReplicationTaskToDLQ operation failed. Error: %v", err),
+			}
+		}
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("PutReplicationTaskToDLQ operation failed. Error: %v", err),
+		}
+	}
+
+	return nil
+}
+
+func (d *cassandraPersistence) GetReplicationTasksFromDLQ(
+	request *p.GetReplicationTasksFromDLQRequest,
+) (*p.GetReplicationTasksFromDLQResponse, error) {
+	// Reading replication tasks need to be quorum level consistent, otherwise we could loose task
+	query := d.session.Query(templateGetReplicationTasksQuery,
+		d.shardID,
+		rowTypeDLQ,
+		rowTypeDLQDomainID,
+		request.SourceClusterName,
+		rowTypeDLQRunID,
+		defaultVisibilityTimestamp,
+		request.ReadLevel,
+		request.ReadLevel+int64(request.BatchSize),
+	).PageSize(request.BatchSize).PageState(request.NextPageToken)
+
+	return d.populateGetReplicationTasksResponse(query)
 }

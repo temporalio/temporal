@@ -272,3 +272,7 @@ func (tc *TestCluster) GetAdminClient() AdminClient {
 func (tc *TestCluster) GetHistoryClient() HistoryClient {
 	return tc.host.GetHistoryClient()
 }
+
+func (tc *TestCluster) GetExecutionManagerFactory() persistence.ExecutionManagerFactory {
+	return tc.host.GetExecutionManagerFactory()
+}
