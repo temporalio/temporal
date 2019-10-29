@@ -1563,8 +1563,10 @@ const (
 	WorkflowTimeoutCount
 	WorkflowTerminateCount
 	ArchiverClientSendSignalFailureCount
+	ArchiverClientHistoryRequestCount
 	ArchiverClientHistoryInlineArchiveAttemptCount
 	ArchiverClientHistoryInlineArchiveFailureCount
+	ArchiverClientVisibilityRequestCount
 	ArchiverClientVisibilityInlineArchiveAttemptCount
 	ArchiverClientVisibilityInlineArchiveFailureCount
 	LastRetrievedMessageID
@@ -1873,8 +1875,10 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		WorkflowTimeoutCount:                              {metricName: "workflow_timeout", metricType: Counter},
 		WorkflowTerminateCount:                            {metricName: "workflow_terminate", metricType: Counter},
 		ArchiverClientSendSignalFailureCount:              {metricName: "archiver_client_send_signal_error", metricType: Counter},
+		ArchiverClientHistoryRequestCount:                 {metricName: "archiver_client_history_request", metricType: Counter},
 		ArchiverClientHistoryInlineArchiveAttemptCount:    {metricName: "archiver_client_history_inline_archive_attempt", metricType: Counter},
 		ArchiverClientHistoryInlineArchiveFailureCount:    {metricName: "archiver_client_history_inline_archive_failure", metricType: Counter},
+		ArchiverClientVisibilityRequestCount:              {metricName: "archiver_client_visibility_request", metricType: Counter},
 		ArchiverClientVisibilityInlineArchiveAttemptCount: {metricName: "archiver_client_visibility_inline_archive_attempt", metricType: Counter},
 		ArchiverClientVisibilityInlineArchiveFailureCount: {metricName: "archiver_client_visibility_inline_archive_attempt", metricType: Counter},
 		LastRetrievedMessageID:                            {metricName: "last_retrieved_message_id", metricType: Gauge},

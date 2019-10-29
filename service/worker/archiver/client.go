@@ -137,6 +137,14 @@ func NewClient(
 
 // Archive starts an archival task
 func (c *client) Archive(ctx context.Context, request *ClientRequest) (*ClientResponse, error) {
+	for _, target := range request.ArchiveRequest.Targets {
+		switch target {
+		case ArchiveTargetHistory:
+			c.metricsScope.IncCounter(metrics.ArchiverClientHistoryRequestCount)
+		case ArchiveTargetVisibility:
+			c.metricsScope.IncCounter(metrics.ArchiverClientVisibilityRequestCount)
+		}
+	}
 	logger := c.logger.WithTags(
 		tag.ArchivalCallerServiceName(request.CallerService),
 		tag.ArchivalArchiveAttemptedInline(request.AttemptArchiveInline),
@@ -250,7 +258,6 @@ func (c *client) archiveVisibilityInline(ctx context.Context, request *ClientReq
 }
 
 func (c *client) sendArchiveSignal(ctx context.Context, request *ArchiveRequest, taggedLogger log.Logger) error {
-	fmt.Println(request.Targets)
 	if ok := c.rateLimiter.Allow(); !ok {
 		c.logger.Error(tooManyRequestsErrMsg)
 		c.metricsScope.IncCounter(metrics.CadenceErrServiceBusyCounter)
