@@ -1405,8 +1405,7 @@ struct RespondQueryTaskCompletedRequest {
 struct WorkflowQueryResult {
   10: optional QueryResultType resultType
   20: optional binary answer
-  30: optional string errorReason
-  40: optional binary errorDetails
+  30: optional string errorMessage
 }
 
 struct DescribeWorkflowExecutionRequest {

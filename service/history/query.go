@@ -122,13 +122,11 @@ func validateQueryResult(
 	}
 	validAnswered := queryResult.GetResultType().Equals(shared.QueryResultTypeAnswered) &&
 		queryResult.Answer != nil &&
-		queryResult.ErrorDetails == nil &&
-		queryResult.ErrorReason == nil
+		queryResult.ErrorMessage == nil
 
 	validFailed := queryResult.GetResultType().Equals(shared.QueryResultTypeFailed) &&
 		queryResult.Answer == nil &&
-		queryResult.ErrorDetails != nil &&
-		queryResult.ErrorReason != nil
+		queryResult.ErrorMessage != nil
 
 	if !validAnswered && !validFailed {
 		return errQueryResultIsInvalid

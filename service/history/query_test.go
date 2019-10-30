@@ -83,9 +83,9 @@ func (s *QuerySuite) TestValidateQueryResult() {
 		},
 		{
 			wqr: &shared.WorkflowQueryResult{
-				ResultType:  common.QueryResultTypePtr(shared.QueryResultTypeAnswered),
-				Answer:      []byte{1, 2, 3},
-				ErrorReason: common.StringPtr("should not exist"),
+				ResultType:   common.QueryResultTypePtr(shared.QueryResultTypeAnswered),
+				Answer:       []byte{1, 2, 3},
+				ErrorMessage: common.StringPtr("should not exist"),
 			},
 			expectErr: true,
 		},
@@ -98,16 +98,8 @@ func (s *QuerySuite) TestValidateQueryResult() {
 		},
 		{
 			wqr: &shared.WorkflowQueryResult{
-				ResultType:  common.QueryResultTypePtr(shared.QueryResultTypeFailed),
-				ErrorReason: common.StringPtr("some error reason"),
-			},
-			expectErr: true,
-		},
-		{
-			wqr: &shared.WorkflowQueryResult{
 				ResultType:   common.QueryResultTypePtr(shared.QueryResultTypeFailed),
-				ErrorReason:  common.StringPtr("some error reason"),
-				ErrorDetails: []byte{1, 2, 3},
+				ErrorMessage: common.StringPtr("some error reason"),
 			},
 			expectErr: false,
 		},

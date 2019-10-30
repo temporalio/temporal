@@ -833,7 +833,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 				},
 			}, nil
 		case workflow.QueryResultTypeFailed:
-			return nil, &workflow.QueryFailedError{Message: fmt.Sprintf("%v: %v", result.GetErrorReason(), result.GetErrorDetails())}
+			return nil, &workflow.QueryFailedError{Message: result.GetErrorMessage()}
 		}
 	case <-timer.C:
 		scope.IncCounter(metrics.ConsistentQueryTimeoutCount)
