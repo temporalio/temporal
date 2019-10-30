@@ -26,7 +26,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
-	s "go.uber.org/cadence/.gen/go/shared"
+	s "go.temporal.io/temporal/.gen/go/shared"
 )
 
 const (

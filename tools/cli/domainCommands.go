@@ -35,7 +35,7 @@ import (
 	"github.com/temporalio/temporal/common/domain"
 	"github.com/temporalio/temporal/tpb"
 	"github.com/urfave/cli"
-	s "go.uber.org/cadence/.gen/go/shared"
+	s "go.temporal.io/temporal/.gen/go/shared"
 )
 
 type (

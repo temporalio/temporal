@@ -30,8 +30,8 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/service/worker/batcher"
 	"github.com/urfave/cli"
-	"go.uber.org/cadence/.gen/go/shared"
-	cclient "go.uber.org/cadence/client"
+	"go.temporal.io/temporal/.gen/go/shared"
+	cclient "go.temporal.io/temporal/client"
 )
 
 // TerminateBatchJob stops abatch job

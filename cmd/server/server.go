@@ -41,7 +41,7 @@ import (
 	"github.com/temporalio/temporal/service/history"
 	"github.com/temporalio/temporal/service/matching"
 	"github.com/temporalio/temporal/service/worker"
-	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
+	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
 	"go.uber.org/zap"
 )
 

@@ -25,10 +25,10 @@ import (
 	"fmt"
 	"time"
 
-	"go.uber.org/cadence"
-	"go.uber.org/cadence/.gen/go/shared"
-	"go.uber.org/cadence/client"
-	"go.uber.org/cadence/workflow"
+	"go.temporal.io/temporal"
+	"go.temporal.io/temporal/.gen/go/shared"
+	"go.temporal.io/temporal/client"
+	"go.temporal.io/temporal/workflow"
 )
 
 func init() {
@@ -94,7 +94,7 @@ func batchWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain string
 		return profile.end(err)
 	}
 
-	retryPolicy := &cadence.RetryPolicy{
+	retryPolicy := &temporal.RetryPolicy{
 		InitialInterval:    time.Second,
 		BackoffCoefficient: 2,
 		MaximumInterval:    time.Second * 12,

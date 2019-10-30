@@ -39,8 +39,8 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/urfave/cli"
 	"github.com/valyala/fastjson"
-	s "go.uber.org/cadence/.gen/go/shared"
-	"go.uber.org/cadence/client"
+	s "go.temporal.io/temporal/.gen/go/shared"
+	"go.temporal.io/temporal/client"
 )
 
 // JSONHistorySerializer is used to encode history event in JSON

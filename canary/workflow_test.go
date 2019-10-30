@@ -28,10 +28,10 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	"go.uber.org/cadence/.gen/go/shared"
-	"go.uber.org/cadence/mocks"
-	"go.uber.org/cadence/testsuite"
-	"go.uber.org/cadence/worker"
+	"go.temporal.io/temporal/.gen/go/shared"
+	"go.temporal.io/temporal/mocks"
+	"go.temporal.io/temporal/testsuite"
+	"go.temporal.io/temporal/worker"
 )
 
 type (
@@ -104,7 +104,7 @@ func (s *workflowTestSuite) TestVisibilityWorkflow() {
 	// mockClient := newMockCadenceClient()
 	// // setup the mock for visibility apis after the activity is invoked, because
 	// // we need the workflow id and run id to construct a response for the mock
-	// s.env.SetOnActivityStartedListener(func(activityInfo *cadence.ActivityInfo, ctx context.Context, args cadence.EncodedValues) {
+	// s.env.SetOnActivityStartedListener(func(activityInfo *temporal.ActivityInfo, ctx context.Context, args temporal.EncodedValues) {
 	// 	if activityInfo.ActivityType.Name != activityTypeVisibility {
 	// 		return
 	// 	}

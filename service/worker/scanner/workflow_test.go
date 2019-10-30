@@ -32,8 +32,8 @@ import (
 	"github.com/temporalio/temporal/common/mocks"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/uber-go/tally"
-	"go.uber.org/cadence/testsuite"
-	"go.uber.org/cadence/worker"
+	"go.temporal.io/temporal/testsuite"
+	"go.temporal.io/temporal/worker"
 	"go.uber.org/zap"
 )
 
