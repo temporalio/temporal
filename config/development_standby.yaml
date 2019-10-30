@@ -69,15 +69,6 @@ clusterMetadata:
   enableGlobalDomain: true
   replicationConsumer:
     type: kafka
-    fetcher:
-      rpcParallelism: 1
-      aggregationIntervalSecs: 2
-      errorRetryWaitSecs: 1
-      timerJitterCoefficient: 0.15
-    processor:
-      noTaskInitialWaitIntervalSecs: 2
-      noTaskWaitBackoffCoefficient: 1
-      noTaskMaxWaitIntervalSecs: 2
   failoverVersionIncrement: 10
   masterClusterName: "active"
   currentClusterName: "standby"
@@ -92,6 +83,11 @@ clusterMetadata:
       initialFailoverVersion: 0
       rpcName: "cadence-frontend"
       rpcAddress: "localhost:8933"
+    other:
+      enabled: true
+      initialFailoverVersion: 2
+      rpcName: "cadence-frontend"
+      rpcAddress: "localhost:9933"
 
 dcRedirectionPolicy:
   policy: "selected-apis-forwarding"
@@ -116,6 +112,10 @@ kafka:
       cluster: test
     standby-dlq:
       cluster: test
+    other:
+      cluster: test
+    other-dlq:
+      cluster: test
   cadence-cluster-topics:
     active:
       topic: active
@@ -123,6 +123,9 @@ kafka:
     standby:
       topic: standby
       dlq-topic: standby-dlq
+    other:
+      topic: other
+      dlq-topic: other-dlq
 
 archival:
   history:
@@ -146,4 +149,3 @@ domainDefaults:
 
 publicClient:
   hostPort: "localhost:8933"
-

@@ -6,64 +6,64 @@ persistence:
     cass-default:
       cassandra:
         hosts: "127.0.0.1"
-        keyspace: "cadence_active"
+        keyspace: "cadence_other"
         consistency: "One"
     cass-visibility:
       cassandra:
         hosts: "127.0.0.1"
-        keyspace: "cadence_visibility_active"
+        keyspace: "cadence_visibility_other"
         consistency: "One"
 
 ringpop:
-  name: cadence_active
+  name: cadence_other
   bootstrapMode: hosts
-  bootstrapHosts: ["127.0.0.1:7933", "127.0.0.1:7934", "127.0.0.1:7935", "127.0.0.1:7940"]
+  bootstrapHosts: ["127.0.0.1:9933", "127.0.0.1:9934", "127.0.0.1:9935", "127.0.0.1:9940"]
   maxJoinDuration: 30s
 
 services:
   frontend:
     rpc:
-      port: 7933
+      port: 9933
       bindOnLocalHost: true
     metrics:
       statsd:
         hostPort: "127.0.0.1:8125"
-        prefix: "cadence_active"
+        prefix: "cadence_other"
     pprof:
-      port: 7936
+      port: 9936
 
   matching:
     rpc:
-      port: 7935
+      port: 9935
       bindOnLocalHost: true
     metrics:
       statsd:
         hostPort: "127.0.0.1:8125"
-        prefix: "cadence_active"
+        prefix: "cadence_other"
     pprof:
-      port: 7938
+      port: 9938
 
   history:
     rpc:
-      port: 7934
+      port: 9934
       bindOnLocalHost: true
     metrics:
       statsd:
         hostPort: "127.0.0.1:8125"
-        prefix: "cadence_active"
+        prefix: "cadence_other"
     pprof:
-      port: 7937
+      port: 9937
 
   worker:
     rpc:
-      port: 7940
+      port: 9940
       bindOnLocalHost: true
     metrics:
       statsd:
         hostPort: "127.0.0.1:8125"
-        prefix: "cadence_active"
+        prefix: "cadence_other"
     pprof:
-      port: 7941
+      port: 9941
 
 clusterMetadata:
   enableGlobalDomain: true
@@ -71,7 +71,7 @@ clusterMetadata:
     type: kafka
   failoverVersionIncrement: 10
   masterClusterName: "active"
-  currentClusterName: "active"
+  currentClusterName: "other"
   clusterInformation:
     active:
       enabled: true
@@ -148,4 +148,4 @@ domainDefaults:
       status: "disabled"
 
 publicClient:
-  hostPort: "localhost:7933"
+  hostPort: "localhost:9933"
