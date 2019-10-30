@@ -267,7 +267,6 @@ func transformThrift2GRPC(registerRequest *tpb.RegisterDomainRequest) *shared.Re
 }
 
 func (wh *WorkflowHandlerGRPC) error(err error, scope metrics.Scope) error {
-	// todo: return status
 	switch err := err.(type) {
 	case *shared.InternalServiceError:
 		wh.Service.GetLogger().Error("Internal service error", tag.Error(err))
