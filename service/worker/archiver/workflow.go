@@ -27,7 +27,7 @@ import (
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
-	"go.uber.org/cadence/workflow"
+	"go.temporal.io/temporal/workflow"
 )
 
 type dynamicConfigResult struct {

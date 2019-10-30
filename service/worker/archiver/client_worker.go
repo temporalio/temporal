@@ -32,10 +32,10 @@ import (
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
-	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
-	"go.uber.org/cadence/activity"
-	"go.uber.org/cadence/worker"
-	"go.uber.org/cadence/workflow"
+	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
+	"go.temporal.io/temporal/activity"
+	"go.temporal.io/temporal/worker"
+	"go.temporal.io/temporal/workflow"
 )
 
 type (

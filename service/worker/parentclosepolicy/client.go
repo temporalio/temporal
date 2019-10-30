@@ -29,8 +29,8 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/metrics"
-	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
-	cclient "go.uber.org/cadence/client"
+	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
+	cclient "go.temporal.io/temporal/client"
 )
 
 type (

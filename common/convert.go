@@ -24,7 +24,7 @@ import (
 	"time"
 
 	s "github.com/temporalio/temporal/.gen/go/shared"
-	"go.uber.org/cadence/.gen/go/shared"
+	"go.temporal.io/temporal/.gen/go/shared"
 )
 
 // IntPtr makes a copy and returns the pointer to an int.

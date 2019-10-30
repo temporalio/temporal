@@ -23,7 +23,7 @@ package canary
 import (
 	"time"
 
-	"go.uber.org/cadence/workflow"
+	"go.temporal.io/temporal/workflow"
 )
 
 // global constants

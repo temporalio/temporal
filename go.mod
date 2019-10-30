@@ -17,6 +17,7 @@ require (
 	github.com/eapache/go-resiliency v1.2.0 // indirect
 	github.com/emirpasic/gods v0.0.0-20190624094223-e689965507ab
 	github.com/fatih/color v0.0.0-20181010231311-3f9d52f7176a
+	github.com/fatih/structtag v1.1.0 // indirect
 	github.com/fortytw2/leaktest v1.3.0 // indirect
 	github.com/go-sql-driver/mysql v1.4.1
 	github.com/gocql/gocql v0.0.0-20171220143535-56a164ee9f31
@@ -59,8 +60,8 @@ require (
 	github.com/urfave/cli v1.20.0
 	github.com/valyala/fastjson v1.4.1
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
+	go.temporal.io/temporal v0.9.4
 	go.uber.org/atomic v1.4.0
-	go.uber.org/cadence v0.9.1-0.20191001004132-413d13621ce8
 	go.uber.org/config v1.3.1
 	go.uber.org/multierr v1.1.0
 	go.uber.org/net/metrics v1.1.0 // indirect

@@ -25,9 +25,9 @@ import (
 	"errors"
 	"time"
 
-	"go.uber.org/cadence"
-	"go.uber.org/cadence/activity"
-	"go.uber.org/cadence/workflow"
+	"go.temporal.io/temporal"
+	"go.temporal.io/temporal/activity"
+	"go.temporal.io/temporal/workflow"
 	"go.uber.org/zap"
 )
 
@@ -52,7 +52,7 @@ func retryWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain string
 	info := workflow.GetInfo(ctx)
 	now := workflow.Now(ctx).UnixNano()
 	expiration := time.Duration(info.ExecutionStartToCloseTimeoutSeconds) * time.Second
-	retryPolicy := &cadence.RetryPolicy{
+	retryPolicy := &temporal.RetryPolicy{
 		InitialInterval:    time.Second * 5,
 		BackoffCoefficient: 1,
 		MaximumInterval:    time.Second * 5,

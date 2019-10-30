@@ -25,10 +25,10 @@ import (
 	"fmt"
 	"time"
 
-	"go.uber.org/cadence"
-	"go.uber.org/cadence/.gen/go/shared"
-	"go.uber.org/cadence/activity"
-	"go.uber.org/cadence/workflow"
+	"go.temporal.io/temporal"
+	"go.temporal.io/temporal/.gen/go/shared"
+	"go.temporal.io/temporal/activity"
+	"go.temporal.io/temporal/workflow"
 )
 
 const (
@@ -108,7 +108,7 @@ func resetBaseWorkflow(ctx workflow.Context, scheduledTimeNanos int64, parentID,
 
 	info := workflow.GetInfo(ctx)
 	expiration := time.Duration(info.ExecutionStartToCloseTimeoutSeconds) * time.Second
-	retryPolicy := &cadence.RetryPolicy{
+	retryPolicy := &temporal.RetryPolicy{
 		InitialInterval:    time.Second * 5,
 		BackoffCoefficient: 1,
 		MaximumInterval:    time.Second * 5,

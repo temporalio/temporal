@@ -25,11 +25,11 @@ import (
 	"time"
 
 	"github.com/opentracing/opentracing-go"
-	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
-	"go.uber.org/cadence/.gen/go/shared"
-	"go.uber.org/cadence/activity"
-	"go.uber.org/cadence/client"
-	"go.uber.org/cadence/workflow"
+	"go.temporal.io/temporal/.gen/go/shared"
+	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
+	"go.temporal.io/temporal/activity"
+	"go.temporal.io/temporal/client"
+	"go.temporal.io/temporal/workflow"
 )
 
 const (
