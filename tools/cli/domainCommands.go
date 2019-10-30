@@ -166,13 +166,21 @@ func (d *domainCLIImpl) RegisterDomain(c *cli.Context) {
 		WorkflowExecutionRetentionPeriodInDays: int32(retentionDays),
 		EmitMetric:                             emitMetric,
 		Clusters:                               clustersGRPC,
-		ActiveClusterName:                      *activeClusterName,
-		SecurityToken:                          securityToken,
-		HistoryArchivalStatus:                  archivalStatusGRPC(c, FlagHistoryArchivalStatus),
-		HistoryArchivalURI:                     c.String(FlagHistoryArchivalURI),
-		VisibilityArchivalStatus:               archivalStatusGRPC(c, FlagVisibilityArchivalStatus),
-		VisibilityArchivalURI:                  c.String(FlagVisibilityArchivalURI),
-		IsGlobalDomain:                         *isGlobalDomainPtr,
+		//ActiveClusterName:                      *activeClusterName,
+		SecurityToken:            securityToken,
+		HistoryArchivalStatus:    archivalStatusGRPC(c, FlagHistoryArchivalStatus),
+		HistoryArchivalURI:       c.String(FlagHistoryArchivalURI),
+		VisibilityArchivalStatus: archivalStatusGRPC(c, FlagVisibilityArchivalStatus),
+		VisibilityArchivalURI:    c.String(FlagVisibilityArchivalURI),
+		//IsGlobalDomain:                         *isGlobalDomainPtr,
+	}
+
+	if activeClusterName != nil {
+		requestGRPC.ActiveClusterName = *activeClusterName
+	}
+
+	if isGlobalDomainPtr != nil {
+		requestGRPC.IsGlobalDomain = *isGlobalDomainPtr
 	}
 
 	ctx, cancel := newContext(c)
@@ -399,6 +407,7 @@ func (d *domainCLIImpl) registerDomain(
 
 	if d.frontendClientGRPC != nil {
 		_, err := d.frontendClientGRPC.RegisterDomain(ctx, requestGRPC)
+
 		return err
 	}
 

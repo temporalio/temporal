@@ -249,21 +249,28 @@ func transformThrift2GRPC(registerRequest *tpb.RegisterDomainRequest) *shared.Re
 	}
 
 	return &shared.RegisterDomainRequest{
-		Name:                                   &registerRequest.Name,
-		Description:                            &registerRequest.Description,
-		OwnerEmail:                             &registerRequest.OwnerEmail,
+		Name:                                   stringPtr(registerRequest.Name),
+		Description:                            stringPtr(registerRequest.Description),
+		OwnerEmail:                             stringPtr(registerRequest.OwnerEmail),
 		WorkflowExecutionRetentionPeriodInDays: &registerRequest.WorkflowExecutionRetentionPeriodInDays,
 		EmitMetric:                             &registerRequest.EmitMetric,
 		Clusters:                               clusters,
-		ActiveClusterName:                      &registerRequest.ActiveClusterName,
+		ActiveClusterName:                      stringPtr(registerRequest.ActiveClusterName),
 		Data:                                   registerRequest.Data,
-		SecurityToken:                          &registerRequest.SecurityToken,
+		SecurityToken:                          stringPtr(registerRequest.SecurityToken),
 		IsGlobalDomain:                         &registerRequest.IsGlobalDomain,
 		HistoryArchivalStatus:                  &historyArchivalStatus,
-		HistoryArchivalURI:                     &registerRequest.HistoryArchivalURI,
+		HistoryArchivalURI:                     stringPtr(registerRequest.HistoryArchivalURI),
 		VisibilityArchivalStatus:               &visibilityArchivalStatus,
-		VisibilityArchivalURI:                  &registerRequest.VisibilityArchivalURI,
+		VisibilityArchivalURI:                  stringPtr(registerRequest.VisibilityArchivalURI),
 	}
+}
+func stringPtr(s string) *string {
+	if s == "" {
+		return nil
+	}
+
+	return &s
 }
 
 func (wh *WorkflowHandlerGRPC) error(err error, scope metrics.Scope) error {
