@@ -52,7 +52,7 @@ func retryWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain string
 	info := workflow.GetInfo(ctx)
 	now := workflow.Now(ctx).UnixNano()
 	expiration := time.Duration(info.ExecutionStartToCloseTimeoutSeconds) * time.Second
-	retryPolicy := &cadence.RetryPolicy{
+	retryPolicy := &temporal.RetryPolicy{
 		InitialInterval:    time.Second * 5,
 		BackoffCoefficient: 1,
 		MaximumInterval:    time.Second * 5,

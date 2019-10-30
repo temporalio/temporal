@@ -108,7 +108,7 @@ func resetBaseWorkflow(ctx workflow.Context, scheduledTimeNanos int64, parentID,
 
 	info := workflow.GetInfo(ctx)
 	expiration := time.Duration(info.ExecutionStartToCloseTimeoutSeconds) * time.Second
-	retryPolicy := &cadence.RetryPolicy{
+	retryPolicy := &temporal.RetryPolicy{
 		InitialInterval:    time.Second * 5,
 		BackoffCoefficient: 1,
 		MaximumInterval:    time.Second * 5,

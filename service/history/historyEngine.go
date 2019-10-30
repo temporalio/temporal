@@ -52,7 +52,7 @@ import (
 	"github.com/temporalio/temporal/common/service/config"
 	warchiver "github.com/temporalio/temporal/service/worker/archiver"
 	"github.com/temporalio/temporal/service/worker/replicator"
-	"go.temporal.io/temporal/.gen/go/cadence/workflowserviceclient"
+	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
 	"go.uber.org/yarpc/yarpcerrors"
 	"golang.org/x/net/context"
 )

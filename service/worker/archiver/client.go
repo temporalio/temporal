@@ -36,7 +36,7 @@ import (
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/quotas"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
-	"go.temporal.io/temporal/.gen/go/cadence/workflowserviceclient"
+	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
 	cclient "go.temporal.io/temporal/client"
 )
 

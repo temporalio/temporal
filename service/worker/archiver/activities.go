@@ -59,7 +59,7 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 			if err.Error() == errUploadNonRetriable.Error() {
 				scope.IncCounter(metrics.ArchiverNonRetryableErrorCount)
 			}
-			err = cadence.NewCustomError(err.Error())
+			err = temporal.NewCustomError(err.Error())
 		}
 	}()
 	logger := tagLoggerWithHistoryRequest(tagLoggerWithActivityInfo(container.Logger, activity.GetInfo(ctx)), &request)
@@ -104,7 +104,7 @@ func deleteHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 			if err.Error() == errDeleteNonRetriable.Error() {
 				scope.IncCounter(metrics.ArchiverNonRetryableErrorCount)
 			}
-			err = cadence.NewCustomError(err.Error())
+			err = temporal.NewCustomError(err.Error())
 		}
 	}()
 	err = container.HistoryV2Manager.DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
@@ -132,7 +132,7 @@ func archiveVisibilityActivity(ctx context.Context, request ArchiveRequest) (err
 			if err.Error() == errArchiveVisibilityNonRetriable.Error() {
 				scope.IncCounter(metrics.ArchiverNonRetryableErrorCount)
 			}
-			err = cadence.NewCustomError(err.Error())
+			err = temporal.NewCustomError(err.Error())
 		}
 	}()
 	logger := tagLoggerWithVisibilityRequest(tagLoggerWithActivityInfo(container.Logger, activity.GetInfo(ctx)), &request)

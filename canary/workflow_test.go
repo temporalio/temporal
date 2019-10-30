@@ -104,7 +104,7 @@ func (s *workflowTestSuite) TestVisibilityWorkflow() {
 	// mockClient := newMockCadenceClient()
 	// // setup the mock for visibility apis after the activity is invoked, because
 	// // we need the workflow id and run id to construct a response for the mock
-	// s.env.SetOnActivityStartedListener(func(activityInfo *cadence.ActivityInfo, ctx context.Context, args cadence.EncodedValues) {
+	// s.env.SetOnActivityStartedListener(func(activityInfo *temporal.ActivityInfo, ctx context.Context, args temporal.EncodedValues) {
 	// 	if activityInfo.ActivityType.Name != activityTypeVisibility {
 	// 		return
 	// 	}

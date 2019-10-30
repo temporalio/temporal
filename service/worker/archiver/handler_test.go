@@ -123,7 +123,7 @@ func (s *handlerSuite) TestHandleHistoryRequest_DeleteFails_NonRetryableError() 
 	env := s.NewTestWorkflowEnvironment()
 	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)
 	env.OnActivity(deleteHistoryActivityFnName, mock.Anything, mock.Anything).Return(func(context.Context, ArchiveRequest) error {
-		return cadence.NewCustomError(errDeleteNonRetriable.Error())
+		return temporal.NewCustomError(errDeleteNonRetriable.Error())
 	})
 	env.ExecuteWorkflow(handleHistoryRequestWorkflow, ArchiveRequest{})
 

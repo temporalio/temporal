@@ -112,9 +112,9 @@ func contextExpired(ctx context.Context) bool {
 
 func errorDetails(err error) string {
 	var details string
-	if _, ok := err.(*cadence.CustomError); !ok {
+	if _, ok := err.(*temporal.CustomError); !ok {
 		return details
 	}
-	err.(*cadence.CustomError).Details(&details)
+	err.(*temporal.CustomError).Details(&details)
 	return details
 }

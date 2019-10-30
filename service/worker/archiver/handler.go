@@ -136,7 +136,7 @@ func (h *handler) handleHistoryRequest(ctx workflow.Context, request *ArchiveReq
 	ao := workflow.ActivityOptions{
 		ScheduleToStartTimeout: 1 * time.Minute,
 		StartToCloseTimeout:    1 * time.Minute,
-		RetryPolicy: &cadence.RetryPolicy{
+		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:          time.Second,
 			BackoffCoefficient:       2.0,
 			ExpirationInterval:       5 * time.Minute,
@@ -156,7 +156,7 @@ func (h *handler) handleHistoryRequest(ctx workflow.Context, request *ArchiveReq
 
 	lao := workflow.LocalActivityOptions{
 		ScheduleToCloseTimeout: 1 * time.Minute,
-		RetryPolicy: &cadence.RetryPolicy{
+		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:          time.Second,
 			BackoffCoefficient:       2.0,
 			ExpirationInterval:       5 * time.Minute,
@@ -182,7 +182,7 @@ func (h *handler) handleVisibilityRequest(ctx workflow.Context, request *Archive
 	ao := workflow.ActivityOptions{
 		ScheduleToStartTimeout: 1 * time.Minute,
 		StartToCloseTimeout:    1 * time.Minute,
-		RetryPolicy: &cadence.RetryPolicy{
+		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:          time.Second,
 			BackoffCoefficient:       2.0,
 			ExpirationInterval:       5 * time.Minute,

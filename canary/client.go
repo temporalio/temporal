@@ -25,8 +25,8 @@ import (
 	"time"
 
 	"github.com/opentracing/opentracing-go"
-	"go.temporal.io/temporal/.gen/go/cadence/workflowserviceclient"
 	"go.temporal.io/temporal/.gen/go/shared"
+	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
 	"go.temporal.io/temporal/activity"
 	"go.temporal.io/temporal/client"
 	"go.temporal.io/temporal/workflow"

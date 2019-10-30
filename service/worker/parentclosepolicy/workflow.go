@@ -63,7 +63,7 @@ type (
 )
 
 var (
-	retryPolicy = cadence.RetryPolicy{
+	retryPolicy = temporal.RetryPolicy{
 		InitialInterval:    10 * time.Second,
 		BackoffCoefficient: 1.7,
 		MaximumInterval:    5 * time.Minute,

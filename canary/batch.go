@@ -94,7 +94,7 @@ func batchWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain string
 		return profile.end(err)
 	}
 
-	retryPolicy := &cadence.RetryPolicy{
+	retryPolicy := &temporal.RetryPolicy{
 		InitialInterval:    time.Second,
 		BackoffCoefficient: 2,
 		MaximumInterval:    time.Second * 12,

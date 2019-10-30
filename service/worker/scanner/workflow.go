@@ -58,7 +58,7 @@ const (
 var (
 	tlScavengerHBInterval = 10 * time.Second
 
-	activityRetryPolicy = cadence.RetryPolicy{
+	activityRetryPolicy = temporal.RetryPolicy{
 		InitialInterval:    10 * time.Second,
 		BackoffCoefficient: 1.7,
 		MaximumInterval:    5 * time.Minute,
