@@ -25,6 +25,3 @@ test_eventsV2_xdc.log
 
 # Executables produced by cadence repo
 /cadence*
-
-#pkgdir folder for build dependencies 
-/tmp
