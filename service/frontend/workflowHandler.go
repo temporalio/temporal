@@ -1688,9 +1688,11 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 	}
 
 	wh.Service.GetLogger().Debug("Start workflow execution request domainID", tag.WorkflowDomainID(domainID))
+	wh.GetLogger().WithTags(tag.WorkflowDomainName(domainName), tag.WorkflowID(startRequest.GetWorkflowId())).Warn("**** Starting Workflow")
 	resp, err = wh.history.StartWorkflowExecution(ctx, common.CreateHistoryStartWorkflowRequest(domainID, startRequest))
 
 	if err != nil {
+		wh.GetLogger().WithTags(tag.WorkflowDomainName(domainName), tag.WorkflowID(startRequest.GetWorkflowId())).Warn("**** Start Workflow Failed")
 		return nil, wh.error(err, scope)
 	}
 	return resp, nil
@@ -2163,11 +2165,14 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(
 		return wh.error(err, scope)
 	}
 
+	wh.GetLogger().WithTags(tag.WorkflowDomainName(terminateRequest.GetDomain()), tag.WorkflowID(terminateRequest.GetWorkflowExecution().GetWorkflowId())).Warn("**** Frontend Terminate Workflow Called")
+
 	err = wh.history.TerminateWorkflowExecution(ctx, &h.TerminateWorkflowExecutionRequest{
 		DomainUUID:       common.StringPtr(domainID),
 		TerminateRequest: terminateRequest,
 	})
 	if err != nil {
+		wh.GetLogger().WithTags(tag.WorkflowDomainName(terminateRequest.GetDomain()), tag.WorkflowID(terminateRequest.GetWorkflowExecution().GetWorkflowId()), tag.Error(err)).Warn("**** Frontend Terminate Workflow Failed")
 		return wh.error(err, scope)
 	}
 

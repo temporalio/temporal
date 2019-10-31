@@ -67,6 +67,25 @@ func (d *RPCFactory) CreateDispatcher() *yarpc.Dispatcher {
 	})
 }
 
+// CreateRingpopDispatcher creates a dispatcher for ringpop
+func (d *RPCFactory) CreateRingpopDispatcher() *yarpc.Dispatcher {
+	// Setup dispatcher for onebox
+	var err error
+	hostAddress := fmt.Sprintf("%v:%v", d.getListenIP(), d.config.RingpopPort)
+	ringpopServiceName := fmt.Sprintf("%v-ringpop", d.serviceName)
+	d.ch, err = tchannel.NewChannelTransport(
+		tchannel.ServiceName(ringpopServiceName),
+		tchannel.ListenAddr(hostAddress))
+	if err != nil {
+		d.logger.Fatal("Failed to create transport channel for ringpop", tag.Error(err))
+	}
+	d.logger.Info("Created RPC dispatcher for ringpop and listening", tag.Service(d.serviceName), tag.Address(hostAddress))
+	return yarpc.NewDispatcher(yarpc.Config{
+		Name:     d.serviceName,
+		Inbounds: yarpc.Inbounds{d.ch.NewInbound()},
+	})
+}
+
 // CreateDispatcherForOutbound creates a dispatcher for outbound connection
 func (d *RPCFactory) CreateDispatcherForOutbound(
 	callerName, serviceName, hostName string) *yarpc.Dispatcher {

@@ -21,6 +21,8 @@
 package membership
 
 import (
+	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/temporalio/temporal/common/log"
@@ -29,27 +31,29 @@ import (
 )
 
 type ringpopMonitor struct {
-	started  bool
-	stopped  bool
-	services []string
-	rp       *ringpop.Ringpop
-	rings    map[string]*ringpopServiceResolver
-	logger   log.Logger
-	mutex    sync.Mutex
+	started     bool
+	stopped     bool
+	serviceName string
+	services    map[string]int
+	rp          *ringpop.Ringpop
+	rings       map[string]*ringpopServiceResolver
+	logger      log.Logger
+	mutex       sync.Mutex
 }
 
 var _ Monitor = (*ringpopMonitor)(nil)
 
 // NewRingpopMonitor returns a ringpop-based membership monitor
-func NewRingpopMonitor(services []string, rp *ringpop.Ringpop, logger log.Logger) Monitor {
+func NewRingpopMonitor(serviceName string, services map[string]int, rp *ringpop.Ringpop, logger log.Logger) Monitor {
 	rpo := &ringpopMonitor{
-		services: services,
-		rp:       rp,
-		logger:   logger,
-		rings:    make(map[string]*ringpopServiceResolver),
+		serviceName: serviceName,
+		services:    services,
+		rp:          rp,
+		logger:      logger,
+		rings:       make(map[string]*ringpopServiceResolver),
 	}
-	for _, service := range services {
-		rpo.rings[service] = newRingpopServiceResolver(service, rp, logger)
+	for service, port := range services {
+		rpo.rings[service] = newRingpopServiceResolver(service, port, rp, logger)
 	}
 	return rpo
 }
@@ -101,7 +105,17 @@ func (rpo *ringpopMonitor) WhoAmI() (*HostInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewHostInfo(address, labels.AsMap()), nil
+
+	parts := strings.Split(address, ":")
+	if len(parts) != 2 {
+		return nil, ErrIncorrectAddressFormat
+	}
+	servicePort, ok := rpo.services[rpo.serviceName]
+	if !ok {
+		return nil, ErrUnknownService
+	}
+	serviceAddress := fmt.Sprintf("%s:%v", parts[0], servicePort)
+	return NewHostInfo(serviceAddress, labels.AsMap()), nil
 }
 
 func (rpo *ringpopMonitor) GetResolver(service string) (ServiceResolver, error) {

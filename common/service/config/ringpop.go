@@ -62,11 +62,11 @@ const (
 )
 
 // CadenceServices indicate the list of cadence services
-var CadenceServices = []string{
-	common.FrontendServiceName,
-	common.HistoryServiceName,
-	common.MatchingServiceName,
-	common.WorkerServiceName,
+var CadenceServices = map[string]int{
+	common.FrontendServiceName: 7933,
+	common.HistoryServiceName:  7934,
+	common.MatchingServiceName: 7935,
+	common.WorkerServiceName:   7939,
 }
 
 // RingpopFactory implements the RingpopFactory interface
@@ -163,7 +163,7 @@ func (factory *RingpopFactory) Create(dispatcher *yarpc.Dispatcher) (membership.
 		return nil, fmt.Errorf("ringpop setting role label failed: %v", err)
 	}
 
-	membershipMonitor := membership.NewRingpopMonitor(CadenceServices, rp, factory.logger)
+	membershipMonitor := membership.NewRingpopMonitor(factory.serviceName, CadenceServices, rp, factory.logger)
 	if err = membershipMonitor.Start(); err != nil {
 		return nil, err
 	}
