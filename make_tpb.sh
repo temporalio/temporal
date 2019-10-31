@@ -1,7 +1,7 @@
 #!/bin/bash
 
-go get -u github.com/gogo/protobuf/protoc-gen-gogoslick
-go get -u go.uber.org/yarpc/encoding/protobuf/protoc-gen-yarpc-go
+GO111MODULE=off go get -u github.com/gogo/protobuf/protoc-gen-gogoslick
+GO111MODULE=off go get -u go.uber.org/yarpc/encoding/protobuf/protoc-gen-yarpc-go
 
 git submodule update --remote
 
