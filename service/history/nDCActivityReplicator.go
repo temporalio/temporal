@@ -91,7 +91,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	}
 	defer func() { release(retError) }()
 
-	msBuilder, err := context.loadWorkflowExecution()
+	mutableState, err := context.loadWorkflowExecution()
 	if err != nil {
 		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
 			return err
@@ -112,7 +112,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 		execution.GetRunId(),
 		scheduleID,
 		version,
-		msBuilder,
+		mutableState,
 		request.GetVersionHistory(),
 	)
 	if err != nil {
@@ -122,7 +122,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 		return nil
 	}
 
-	ai, ok := msBuilder.GetActivityInfo(scheduleID)
+	ai, ok := mutableState.GetActivityInfo(scheduleID)
 	if !ok {
 		// this should not retry, can be caused by out of order delivery
 		// since the activity is already finished
@@ -162,7 +162,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	} else if ai.Attempt < request.GetAttempt() {
 		resetActivityTimerTaskStatus = true
 	}
-	err = msBuilder.ReplicateActivityInfo(request, resetActivityTimerTaskStatus)
+	err = mutableState.ReplicateActivityInfo(request, resetActivityTimerTaskStatus)
 	if err != nil {
 		return err
 	}
@@ -175,20 +175,15 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	if eventTime < request.GetLastHeartbeatTime() {
 		eventTime = request.GetLastHeartbeatTime()
 	}
+
+	// passive logic need to explicitly call create timer
 	now := time.Unix(0, eventTime)
-	timerTasks := []persistence.Task{}
-	timeSource := clock.NewEventTimeSource()
-	timeSource.Update(now)
-	timerBuilder := newTimerBuilder(timeSource)
-	timerTask, err := timerBuilder.GetActivityTimerTaskIfNeeded(msBuilder)
-	if err != nil {
+	if _, err := newTimerSequence(
+		clock.NewEventTimeSource().Update(now),
+		mutableState,
+	).createNextActivityTimer(); err != nil {
 		return err
 	}
-	if timerTask != nil {
-		timerTasks = append(timerTasks, timerTask)
-	}
-
-	msBuilder.AddTimerTasks(timerTasks...)
 	return context.updateWorkflowExecutionAsPassive(now)
 }
 
@@ -198,12 +193,12 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 	runID string,
 	scheduleID int64,
 	activityVersion int64,
-	msBuilder mutableState,
+	mutableState mutableState,
 	incomingRawVersionHistory *workflow.VersionHistory,
 ) (bool, error) {
 
-	if msBuilder.GetVersionHistories() != nil {
-		currentVersionHistory, err := msBuilder.GetVersionHistories().GetCurrentVersionHistory()
+	if mutableState.GetVersionHistories() != nil {
+		currentVersionHistory, err := mutableState.GetVersionHistories().GetCurrentVersionHistory()
 		if err != nil {
 			return false, err
 		}
@@ -264,15 +259,15 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 			nil,
 			nil,
 		)
-	} else if msBuilder.GetReplicationState() != nil {
+	} else if mutableState.GetReplicationState() != nil {
 		// TODO when 2DC is deprecated, remove this block
-		if !msBuilder.IsWorkflowExecutionRunning() {
+		if !mutableState.IsWorkflowExecutionRunning() {
 			// perhaps conflict resolution force termination
 			return false, nil
 		}
 
-		if scheduleID >= msBuilder.GetNextEventID() {
-			lastWriteVersion, err := msBuilder.GetLastWriteVersion()
+		if scheduleID >= mutableState.GetNextEventID() {
+			lastWriteVersion, err := mutableState.GetLastWriteVersion()
 			if err != nil {
 				return false, err
 			}
@@ -287,7 +282,7 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 				domainID,
 				workflowID,
 				runID,
-				msBuilder.GetNextEventID(),
+				mutableState.GetNextEventID(),
 			)
 		}
 	} else {

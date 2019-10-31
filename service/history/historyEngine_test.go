@@ -4444,7 +4444,7 @@ func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_TimerFired() 
 	addTimerStartedEvent(msBuilder, *decisionCompletedEvent.EventId, timerID, 10)
 	di2 := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di2.ScheduleID, tl, identity)
-	addTimerFiredEvent(msBuilder, di2.ScheduleID, timerID)
+	addTimerFiredEvent(msBuilder, timerID)
 	_, _, err := msBuilder.CloseTransactionAsMutation(time.Now(), transactionPolicyActive)
 	s.Nil(err)
 
@@ -4649,7 +4649,7 @@ func (s *engineSuite) getBuilder(testDomainID string, we workflow.WorkflowExecut
 	}
 	defer release(nil)
 
-	return context.(*workflowExecutionContextImpl).msBuilder
+	return context.(*workflowExecutionContextImpl).mutableState
 }
 
 func (s *engineSuite) getActivityScheduledEvent(msBuilder mutableState,
@@ -4745,6 +4745,34 @@ func addActivityTaskScheduledEvent(builder mutableState, decisionCompletedID int
 	return event, ai
 }
 
+func addActivityTaskScheduledEventWithRetry(
+	builder mutableState,
+	decisionCompletedID int64,
+	activityID, activityType,
+	taskList string,
+	input []byte,
+	scheduleToCloseTimeout int32,
+	scheduleToStartTimeout int32,
+	startToCloseTimeout int32,
+	heartbeatTimeout int32,
+	retryPolicy *workflow.RetryPolicy,
+) (*workflow.HistoryEvent, *persistence.ActivityInfo) {
+
+	event, ai, _ := builder.AddActivityTaskScheduledEvent(decisionCompletedID, &workflow.ScheduleActivityTaskDecisionAttributes{
+		ActivityId:                    common.StringPtr(activityID),
+		ActivityType:                  &workflow.ActivityType{Name: common.StringPtr(activityType)},
+		TaskList:                      &workflow.TaskList{Name: common.StringPtr(taskList)},
+		Input:                         input,
+		ScheduleToCloseTimeoutSeconds: common.Int32Ptr(scheduleToCloseTimeout),
+		ScheduleToStartTimeoutSeconds: common.Int32Ptr(scheduleToStartTimeout),
+		StartToCloseTimeoutSeconds:    common.Int32Ptr(startToCloseTimeout),
+		HeartbeatTimeoutSeconds:       common.Int32Ptr(heartbeatTimeout),
+		RetryPolicy:                   retryPolicy,
+	})
+
+	return event, ai
+}
+
 func addActivityTaskStartedEvent(builder mutableState, scheduleID int64, identity string) *workflow.HistoryEvent {
 	ai, _ := builder.GetActivityInfo(scheduleID)
 	event, _ := builder.AddActivityTaskStartedEvent(ai, scheduleID, testRunID, identity)
@@ -4782,8 +4810,8 @@ func addTimerStartedEvent(builder mutableState, decisionCompletedEventID int64, 
 	return event, ti
 }
 
-func addTimerFiredEvent(builder mutableState, scheduleID int64, timerID string) *workflow.HistoryEvent {
-	event, _ := builder.AddTimerFiredEvent(scheduleID, timerID)
+func addTimerFiredEvent(mutableState mutableState, timerID string) *workflow.HistoryEvent {
+	event, _ := mutableState.AddTimerFiredEvent(timerID)
 	return event
 }
 

@@ -92,7 +92,7 @@ type (
 		AddStartChildWorkflowExecutionInitiatedEvent(int64, string, *workflow.StartChildWorkflowExecutionDecisionAttributes) (*workflow.HistoryEvent, *persistence.ChildExecutionInfo, error)
 		AddTimeoutWorkflowEvent(int64) (*workflow.HistoryEvent, error)
 		AddTimerCanceledEvent(int64, *workflow.CancelTimerDecisionAttributes, string) (*workflow.HistoryEvent, error)
-		AddTimerFiredEvent(int64, string) (*workflow.HistoryEvent, error)
+		AddTimerFiredEvent(string) (*workflow.HistoryEvent, error)
 		AddTimerStartedEvent(int64, *workflow.StartTimerDecisionAttributes) (*workflow.HistoryEvent, *persistence.TimerInfo, error)
 		AddUpsertWorkflowSearchAttributesEvent(int64, *workflow.UpsertWorkflowSearchAttributesDecisionAttributes) (*workflow.HistoryEvent, error)
 		AddWorkflowExecutionCancelRequestedEvent(string, *h.RequestCancelWorkflowExecutionRequest) (*workflow.HistoryEvent, error)

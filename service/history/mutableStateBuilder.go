@@ -1242,7 +1242,7 @@ func (e *mutableStateBuilder) ReplicateActivityInfo(
 	ai.LastFailureDetails = request.GetLastFailureDetails()
 
 	if resetActivityTimerTaskStatus {
-		ai.TimerTaskStatus = TimerTaskStatusNone
+		ai.TimerTaskStatus = timerTaskStatusNone
 	}
 
 	e.updateActivityInfos[ai] = struct{}{}
@@ -2062,6 +2062,14 @@ func (e *mutableStateBuilder) ReplicateActivityTaskScheduledEvent(
 ) (*persistence.ActivityInfo, error) {
 
 	attributes := event.ActivityTaskScheduledEventAttributes
+	targetDomainID := e.executionInfo.DomainID
+	if attributes.Domain != nil {
+		targetDomainEntry, err := e.shard.GetDomainCache().GetDomain(attributes.GetDomain())
+		if err != nil {
+			return nil, err
+		}
+		targetDomainID = targetDomainEntry.GetInfo().ID
+	}
 
 	scheduleEventID := event.GetEventId()
 	scheduleToCloseTimeout := attributes.GetScheduleToCloseTimeoutSeconds()
@@ -2074,6 +2082,7 @@ func (e *mutableStateBuilder) ReplicateActivityTaskScheduledEvent(
 		StartedID:                common.EmptyEventID,
 		StartedTime:              time.Time{},
 		ActivityID:               common.StringDefault(attributes.ActivityId),
+		DomainID:                 targetDomainID,
 		ScheduleToStartTimeout:   attributes.GetScheduleToStartTimeoutSeconds(),
 		ScheduleToCloseTimeout:   scheduleToCloseTimeout,
 		StartToCloseTimeout:      attributes.GetStartToCloseTimeoutSeconds(),
@@ -2081,7 +2090,7 @@ func (e *mutableStateBuilder) ReplicateActivityTaskScheduledEvent(
 		CancelRequested:          false,
 		CancelRequestID:          common.EmptyEventID,
 		LastHeartBeatUpdatedTime: time.Time{},
-		TimerTaskStatus:          TimerTaskStatusNone,
+		TimerTaskStatus:          timerTaskStatusNone,
 		TaskList:                 attributes.TaskList.GetName(),
 		HasRetryPolicy:           attributes.RetryPolicy != nil,
 	}
@@ -2175,7 +2184,7 @@ func (e *mutableStateBuilder) ReplicateActivityTaskStartedEvent(
 }
 
 func (e *mutableStateBuilder) AddActivityTaskCompletedEvent(
-	scheduleEventID,
+	scheduleEventID int64,
 	startedEventID int64,
 	request *workflow.RespondActivityTaskCompletedRequest,
 ) (*workflow.HistoryEvent, error) {
@@ -2969,7 +2978,7 @@ func (e *mutableStateBuilder) ReplicateTimerStartedEvent(
 		TimerID:    timerID,
 		ExpiryTime: expiryTime,
 		StartedID:  event.GetEventId(),
-		TaskID:     TimerTaskStatusNone,
+		TaskID:     timerTaskStatusNone,
 	}
 
 	e.pendingTimerInfoIDs[timerID] = ti
@@ -2980,7 +2989,6 @@ func (e *mutableStateBuilder) ReplicateTimerStartedEvent(
 }
 
 func (e *mutableStateBuilder) AddTimerFiredEvent(
-	startedEventID int64,
 	timerID string,
 ) (*workflow.HistoryEvent, error) {
 
@@ -2989,18 +2997,17 @@ func (e *mutableStateBuilder) AddTimerFiredEvent(
 		return nil, err
 	}
 
-	_, ok := e.GetUserTimerInfo(timerID)
+	timerInfo, ok := e.GetUserTimerInfo(timerID)
 	if !ok {
 		e.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.WorkflowStartedID(startedEventID),
 			tag.WorkflowTimerID(timerID))
 		return nil, e.createInternalServerError(opTag)
 	}
 
 	// Timer is running.
-	event := e.hBuilder.AddTimerFiredEvent(startedEventID, timerID)
+	event := e.hBuilder.AddTimerFiredEvent(timerInfo.StartedID, timerID)
 	if err := e.ReplicateTimerFiredEvent(event); err != nil {
 		return nil, err
 	}
@@ -3714,7 +3721,7 @@ func (e *mutableStateBuilder) RetryActivity(
 	ai.StartedID = common.EmptyEventID
 	ai.RequestID = ""
 	ai.StartedTime = time.Time{}
-	ai.TimerTaskStatus = TimerTaskStatusNone
+	ai.TimerTaskStatus = timerTaskStatusNone
 	ai.LastFailureReason = failureReason
 	ai.LastWorkerIdentity = ai.StartedIdentity
 	ai.LastFailureDetails = failureDetails

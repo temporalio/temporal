@@ -636,18 +636,18 @@ func (mr *MockmutableStateMockRecorder) AddTimerCanceledEvent(arg0, arg1, arg2 i
 }
 
 // AddTimerFiredEvent mocks base method
-func (m *MockmutableState) AddTimerFiredEvent(arg0 int64, arg1 string) (*shared.HistoryEvent, error) {
+func (m *MockmutableState) AddTimerFiredEvent(arg0 string) (*shared.HistoryEvent, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddTimerFiredEvent", arg0, arg1)
+	ret := m.ctrl.Call(m, "AddTimerFiredEvent", arg0)
 	ret0, _ := ret[0].(*shared.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AddTimerFiredEvent indicates an expected call of AddTimerFiredEvent
-func (mr *MockmutableStateMockRecorder) AddTimerFiredEvent(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockmutableStateMockRecorder) AddTimerFiredEvent(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTimerFiredEvent", reflect.TypeOf((*MockmutableState)(nil).AddTimerFiredEvent), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTimerFiredEvent", reflect.TypeOf((*MockmutableState)(nil).AddTimerFiredEvent), arg0)
 }
 
 // AddTimerStartedEvent mocks base method

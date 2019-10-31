@@ -143,7 +143,7 @@ type (
 		timeSource        clock.TimeSource
 
 		mutex           locks.Mutex
-		msBuilder       mutableState
+		mutableState    mutableState
 		stats           *persistence.ExecutionStats
 		updateCondition int64
 	}
@@ -194,7 +194,7 @@ func (c *workflowExecutionContextImpl) unlock() {
 
 func (c *workflowExecutionContextImpl) clear() {
 	c.metricsClient.IncCounter(metrics.WorkflowContextScope, metrics.WorkflowContextCleared)
-	c.msBuilder = nil
+	c.mutableState = nil
 	c.stats = &persistence.ExecutionStats{
 		HistorySize: 0,
 	}
@@ -243,7 +243,7 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, er
 		return nil, err
 	}
 
-	if c.msBuilder == nil {
+	if c.mutableState == nil {
 		response, err := c.getWorkflowExecutionWithRetry(&persistence.GetWorkflowExecutionRequest{
 			DomainID:  c.domainID,
 			Execution: c.workflowExecution,
@@ -252,13 +252,13 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, er
 			return nil, err
 		}
 
-		c.msBuilder = newMutableStateBuilder(
+		c.mutableState = newMutableStateBuilder(
 			c.shard,
 			c.shard.GetEventsCache(),
 			c.logger,
 			domainEntry,
 		)
-		c.msBuilder.Load(response.State)
+		c.mutableState.Load(response.State)
 		c.stats = response.State.ExecutionStats
 		c.updateCondition = response.State.ExecutionInfo.NextEventID
 
@@ -271,12 +271,12 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, er
 		)
 	}
 
-	flushBeforeReady, err := c.msBuilder.StartTransaction(domainEntry)
+	flushBeforeReady, err := c.mutableState.StartTransaction(domainEntry)
 	if err != nil {
 		return nil, err
 	}
 	if !flushBeforeReady {
-		return c.msBuilder, nil
+		return c.mutableState, nil
 	}
 
 	if err = c.updateWorkflowExecutionAsActive(
@@ -285,7 +285,7 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, er
 		return nil, err
 	}
 
-	flushBeforeReady, err = c.msBuilder.StartTransaction(domainEntry)
+	flushBeforeReady, err = c.mutableState.StartTransaction(domainEntry)
 	if err != nil {
 		return nil, err
 	}
@@ -295,7 +295,7 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, er
 		}
 	}
 
-	return c.msBuilder, nil
+	return c.mutableState, nil
 }
 
 func (c *workflowExecutionContextImpl) createWorkflowExecution(
@@ -582,7 +582,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 		}
 	}()
 
-	currentWorkflow, currentWorkflowEventsSeq, err := c.msBuilder.CloseTransactionAsMutation(
+	currentWorkflow, currentWorkflowEventsSeq, err := c.mutableState.CloseTransactionAsMutation(
 		now,
 		currentWorkflowTransactionPolicy,
 	)
@@ -663,17 +663,17 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 	c.updateCondition = currentWorkflow.ExecutionInfo.NextEventID
 
 	// for any change in the workflow, send a event
-	currentBranchToken, err := c.msBuilder.GetCurrentBranchToken()
+	currentBranchToken, err := c.mutableState.GetCurrentBranchToken()
 	if err != nil {
 		return err
 	}
-	workflowState, workflowCloseState := c.msBuilder.GetWorkflowStateCloseStatus()
+	workflowState, workflowCloseState := c.mutableState.GetWorkflowStateCloseStatus()
 	c.engine.NotifyNewHistoryEvent(newHistoryEventNotification(
 		c.domainID,
 		&c.workflowExecution,
-		c.msBuilder.GetLastFirstEventID(),
-		c.msBuilder.GetNextEventID(),
-		c.msBuilder.GetPreviousStartedEventID(),
+		c.mutableState.GetLastFirstEventID(),
+		c.mutableState.GetNextEventID(),
+		c.mutableState.GetPreviousStartedEventID(),
 		currentBranchToken,
 		workflowState,
 		workflowCloseState,
@@ -701,7 +701,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 		c.metricsClient,
 		domainName,
 		int(c.stats.HistorySize),
-		int(c.msBuilder.GetNextEventID()-1),
+		int(c.mutableState.GetNextEventID()-1),
 	)
 	emitSessionUpdateStats(
 		c.metricsClient,
@@ -710,7 +710,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 	)
 	// emit workflow completion stats if any
 	if currentWorkflow.ExecutionInfo.State == persistence.WorkflowStateCompleted {
-		if event, err := c.msBuilder.GetCompletionEvent(); err == nil {
+		if event, err := c.mutableState.GetCompletionEvent(); err == nil {
 			taskList := currentWorkflow.ExecutionInfo.TaskList
 			emitWorkflowCompletionStats(c.metricsClient, domainName, taskList, event)
 		}

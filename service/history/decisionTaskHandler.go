@@ -35,8 +35,6 @@ import (
 )
 
 type (
-	timerBuilderProvider func() *timerBuilder
-
 	decisionAttrValidationFn func() error
 
 	decisionTaskHandlerImpl struct {
@@ -46,7 +44,6 @@ type (
 
 		// internal state
 		hasUnhandledEventsBeforeDecisions bool
-		timerBuilder                      *timerBuilder
 		failDecision                      bool
 		failDecisionCause                 *workflow.DecisionTaskFailedCause
 		failMessage                       *string
@@ -59,11 +56,10 @@ type (
 		attrValidator    *decisionAttrValidator
 		sizeLimitChecker *workflowSizeChecker
 
-		logger               log.Logger
-		timerBuilderProvider timerBuilderProvider
-		domainCache          cache.DomainCache
-		metricsClient        metrics.Client
-		config               *Config
+		logger        log.Logger
+		domainCache   cache.DomainCache
+		metricsClient metrics.Client
+		config        *Config
 	}
 )
 
@@ -75,7 +71,6 @@ func newDecisionTaskHandler(
 	attrValidator *decisionAttrValidator,
 	sizeLimitChecker *workflowSizeChecker,
 	logger log.Logger,
-	timerBuilderProvider timerBuilderProvider,
 	domainCache cache.DomainCache,
 	metricsClient metrics.Client,
 	config *Config,
@@ -100,12 +95,10 @@ func newDecisionTaskHandler(
 		attrValidator:    attrValidator,
 		sizeLimitChecker: sizeLimitChecker,
 
-		logger:               logger,
-		timerBuilder:         timerBuilderProvider(),
-		timerBuilderProvider: timerBuilderProvider,
-		domainCache:          domainCache,
-		metricsClient:        metricsClient,
-		config:               config,
+		logger:        logger,
+		domainCache:   domainCache,
+		metricsClient: metricsClient,
+		config:        config,
 	}
 }
 
@@ -503,11 +496,6 @@ func (handler *decisionTaskHandlerImpl) handleDecisionCancelTimer(
 		handler.identity)
 	switch err.(type) {
 	case nil:
-		// timer deletion is success. we need to rebuild the timer builder
-		// since timer builder has a local cached version of timers
-		handler.timerBuilder = handler.timerBuilderProvider()
-		handler.timerBuilder.loadUserTimers(handler.mutableState)
-
 		// timer deletion is a success, we may have deleted a fired timer in
 		// which case we should reset hasBufferedEvents
 		// TODO deletion of timer fired event refreshing hasUnhandledEventsBeforeDecisions

@@ -29,6 +29,7 @@ package history
 
 import (
 	reflect "reflect"
+	time "time"
 
 	gomock "github.com/golang/mock/gomock"
 )
@@ -56,12 +57,27 @@ func (m *MocktimerSequence) EXPECT() *MocktimerSequenceMockRecorder {
 	return m.recorder
 }
 
+// isExpired mocks base method
+func (m *MocktimerSequence) isExpired(referenceTime time.Time, timerSequenceID timerSequenceID) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "isExpired", referenceTime, timerSequenceID)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// isExpired indicates an expected call of isExpired
+func (mr *MocktimerSequenceMockRecorder) isExpired(referenceTime, timerSequenceID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "isExpired", reflect.TypeOf((*MocktimerSequence)(nil).isExpired), referenceTime, timerSequenceID)
+}
+
 // createNextUserTimer mocks base method
-func (m *MocktimerSequence) createNextUserTimer() error {
+func (m *MocktimerSequence) createNextUserTimer() (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "createNextUserTimer")
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // createNextUserTimer indicates an expected call of createNextUserTimer
@@ -71,11 +87,12 @@ func (mr *MocktimerSequenceMockRecorder) createNextUserTimer() *gomock.Call {
 }
 
 // createNextActivityTimer mocks base method
-func (m *MocktimerSequence) createNextActivityTimer() error {
+func (m *MocktimerSequence) createNextActivityTimer() (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "createNextActivityTimer")
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // createNextActivityTimer indicates an expected call of createNextActivityTimer

@@ -233,7 +233,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_WorkflowClosed() {
 		},
 	)
 	s.Nil(err)
-	context.(*workflowExecutionContextImpl).msBuilder = s.mockMutableState
+	context.(*workflowExecutionContextImpl).mutableState = s.mockMutableState
 	release(nil)
 	request := &h.SyncActivityRequest{
 		DomainId:   common.StringPtr(domainID),
@@ -285,7 +285,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_IncomingScheduleIDLarger_Inco
 	)
 	s.Nil(err)
 
-	context.(*workflowExecutionContextImpl).msBuilder = s.mockMutableState
+	context.(*workflowExecutionContextImpl).mutableState = s.mockMutableState
 	release(nil)
 	request := &h.SyncActivityRequest{
 		DomainId:    common.StringPtr(domainID),
@@ -341,7 +341,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_IncomingScheduleIDLarger_Inco
 	)
 	s.Nil(err)
 
-	context.(*workflowExecutionContextImpl).msBuilder = s.mockMutableState
+	context.(*workflowExecutionContextImpl).mutableState = s.mockMutableState
 	release(nil)
 	request := &h.SyncActivityRequest{
 		DomainId:    common.StringPtr(domainID),
@@ -409,7 +409,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_IncomingVers
 	)
 	s.Nil(err)
 
-	context.(*workflowExecutionContextImpl).msBuilder = s.mockMutableState
+	context.(*workflowExecutionContextImpl).mutableState = s.mockMutableState
 	release(nil)
 	request := &h.SyncActivityRequest{
 		DomainId:       common.StringPtr(domainID),
@@ -486,7 +486,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_DifferentVersionHistories_Inc
 	)
 	s.Nil(err)
 
-	context.(*workflowExecutionContextImpl).msBuilder = s.mockMutableState
+	context.(*workflowExecutionContextImpl).mutableState = s.mockMutableState
 	release(nil)
 	request := &h.SyncActivityRequest{
 		DomainId:       common.StringPtr(domainID),
@@ -577,7 +577,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_IncomingSche
 	)
 	s.Nil(err)
 
-	context.(*workflowExecutionContextImpl).msBuilder = s.mockMutableState
+	context.(*workflowExecutionContextImpl).mutableState = s.mockMutableState
 	release(nil)
 	request := &h.SyncActivityRequest{
 		DomainId:       common.StringPtr(domainID),
@@ -664,7 +664,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_SameSchedule
 	)
 	s.Nil(err)
 
-	context.(*workflowExecutionContextImpl).msBuilder = s.mockMutableState
+	context.(*workflowExecutionContextImpl).mutableState = s.mockMutableState
 	release(nil)
 	request := &h.SyncActivityRequest{
 		DomainId:       common.StringPtr(domainID),
@@ -731,7 +731,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityCompleted() {
 	)
 	s.Nil(err)
 
-	context.(*workflowExecutionContextImpl).msBuilder = s.mockMutableState
+	context.(*workflowExecutionContextImpl).mutableState = s.mockMutableState
 	release(nil)
 	request := &h.SyncActivityRequest{
 		DomainId:    common.StringPtr(domainID),
@@ -787,7 +787,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_LocalActivity
 	)
 	s.Nil(err)
 
-	context.(*workflowExecutionContextImpl).msBuilder = s.mockMutableState
+	context.(*workflowExecutionContextImpl).mutableState = s.mockMutableState
 	release(nil)
 	request := &h.SyncActivityRequest{
 		DomainId:    common.StringPtr(domainID),
@@ -850,7 +850,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 	)
 	s.Nil(err)
 
-	context.(*workflowExecutionContextImpl).msBuilder = s.mockMutableState
+	context.(*workflowExecutionContextImpl).mutableState = s.mockMutableState
 	release(nil)
 	request := &h.SyncActivityRequest{
 		DomainId:          common.StringPtr(domainID),
@@ -926,7 +926,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_SameVe
 	)
 	s.Nil(err)
 
-	context.(*workflowExecutionContextImpl).msBuilder = s.mockMutableState
+	context.(*workflowExecutionContextImpl).mutableState = s.mockMutableState
 	release(nil)
 	request := &h.SyncActivityRequest{
 		DomainId:          common.StringPtr(domainID),
@@ -1002,7 +1002,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_Update_Larger
 	)
 	s.Nil(err)
 
-	context.(*workflowExecutionContextImpl).msBuilder = s.mockMutableState
+	context.(*workflowExecutionContextImpl).mutableState = s.mockMutableState
 	release(nil)
 	request := &h.SyncActivityRequest{
 		DomainId:          common.StringPtr(domainID),

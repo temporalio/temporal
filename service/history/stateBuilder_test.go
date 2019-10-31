@@ -890,7 +890,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeTimerStarted() {
 		TimerID:    timerID,
 		ExpiryTime: time.Unix(0, event.GetTimestamp()).Add(time.Duration(timeoutSecond) * time.Second),
 		StartedID:  event.GetEventId(),
-		TaskID:     TimerTaskStatusNone,
+		TaskID:     timerTaskStatusNone,
 	}
 	s.mockMutableState.EXPECT().ReplicateTimerStartedEvent(event).Return(ti, nil).Times(1)
 	s.mockUpdateVersion(event)
@@ -1030,7 +1030,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskScheduled() {
 		CancelRequested:          false,
 		CancelRequestID:          common.EmptyEventID,
 		LastHeartBeatUpdatedTime: time.Time{},
-		TimerTaskStatus:          TimerTaskStatusNone,
+		TimerTaskStatus:          timerTaskStatusNone,
 		TaskList:                 tasklist,
 	}
 	executionInfo := &persistence.WorkflowExecutionInfo{

@@ -262,13 +262,19 @@ func (r *mutableStateTaskGeneratorImpl) generateDecisionScheduleTasks(
 	})
 
 	if r.mutableState.IsStickyTaskListEnabled() {
-		timerTask := r.getTimerBuilder(now).AddScheduleToStartDecisionTimoutTask(
-			decision.ScheduleID,
-			decision.Attempt,
-			executionInfo.StickyScheduleToStartTimeout,
-		)
-		timerTask.Version = decision.Version
-		r.mutableState.AddTimerTasks(timerTask)
+		scheduledTime := time.Unix(0, decision.ScheduledTimestamp)
+		scheduleToStartTimeout := time.Duration(
+			r.mutableState.GetExecutionInfo().StickyScheduleToStartTimeout,
+		) * time.Second
+
+		r.mutableState.AddTimerTasks(&persistence.DecisionTimeoutTask{
+			// TaskID is set by shard
+			VisibilityTimestamp: scheduledTime.Add(scheduleToStartTimeout),
+			TimeoutType:         int(timerTypeScheduleToStart),
+			EventID:             decision.ScheduleID,
+			ScheduleAttempt:     decision.Attempt,
+			Version:             decision.Version,
+		})
 	}
 
 	return nil
@@ -288,13 +294,19 @@ func (r *mutableStateTaskGeneratorImpl) generateDecisionStartTasks(
 		}
 	}
 
-	timerTask := r.getTimerBuilder(now).AddStartToCloseDecisionTimoutTask(
-		decision.ScheduleID,
-		decision.Attempt,
+	startedTime := time.Unix(0, decision.StartedTimestamp)
+	startToCloseTimeout := time.Duration(
 		decision.DecisionTimeout,
-	)
-	timerTask.Version = decision.Version
-	r.mutableState.AddTimerTasks(timerTask)
+	) * time.Second
+
+	r.mutableState.AddTimerTasks(&persistence.DecisionTimeoutTask{
+		// TaskID is set by shard
+		VisibilityTimestamp: startedTime.Add(startToCloseTimeout),
+		TimeoutType:         int(timerTypeStartToClose),
+		EventID:             decision.ScheduleID,
+		ScheduleAttempt:     decision.Attempt,
+		Version:             decision.Version,
+	})
 
 	return nil
 }
@@ -306,7 +318,6 @@ func (r *mutableStateTaskGeneratorImpl) generateActivityTransferTasks(
 
 	attr := event.ActivityTaskScheduledEventAttributes
 	activityScheduleID := event.GetEventId()
-	activityTargetDomain := attr.GetDomain()
 
 	activityInfo, ok := r.mutableState.GetActivityInfo(activityScheduleID)
 	if !ok {
@@ -315,9 +326,19 @@ func (r *mutableStateTaskGeneratorImpl) generateActivityTransferTasks(
 		}
 	}
 
-	targetDomainID, err := r.getTargetDomainID(activityTargetDomain)
-	if err != nil {
-		return err
+	var targetDomainID string
+	var err error
+	if activityInfo.DomainID != "" {
+		targetDomainID = activityInfo.DomainID
+	} else {
+		// TODO remove this block after Mar, 1th, 2020
+		//  previously, DomainID in activity info is not used, so need to get
+		//  schedule event from DB checking whether activity to be scheduled
+		//  belongs to this domain
+		targetDomainID, err = r.getTargetDomainID(attr.GetDomain())
+		if err != nil {
+			return err
+		}
 	}
 
 	r.mutableState.AddTransferTasks(&persistence.ActivityTask{
@@ -498,42 +519,22 @@ func (r *mutableStateTaskGeneratorImpl) generateActivityTimerTasks(
 	now time.Time,
 ) error {
 
-	timerTask, err := r.getTimerBuilder(now).GetActivityTimerTaskIfNeeded(r.mutableState)
-	if err != nil {
-		return err
-	}
-	if timerTask != nil {
-		// no need to set the version, since activity timer task
-		// is just a trigger to check all activities
-		r.mutableState.AddTimerTasks(timerTask)
-	}
-
-	return nil
+	_, err := r.getTimerSequence(now).createNextActivityTimer()
+	return err
 }
 
 func (r *mutableStateTaskGeneratorImpl) generateUserTimerTasks(
 	now time.Time,
 ) error {
 
-	timerTask, err := r.getTimerBuilder(now).GetUserTimerTaskIfNeeded(
-		r.mutableState,
-	)
-	if err != nil {
-		return err
-	}
-	if timerTask != nil {
-		// no need to set the version, since user timer task
-		// is just a trigger to check all timers
-		r.mutableState.AddTimerTasks(timerTask)
-	}
-
-	return nil
+	_, err := r.getTimerSequence(now).createNextUserTimer()
+	return err
 }
 
-func (r *mutableStateTaskGeneratorImpl) getTimerBuilder(now time.Time) *timerBuilder {
+func (r *mutableStateTaskGeneratorImpl) getTimerSequence(now time.Time) timerSequence {
 	timeSource := clock.NewEventTimeSource()
 	timeSource.Update(now)
-	return newTimerBuilder(timeSource)
+	return newTimerSequence(timeSource, r.mutableState)
 }
 
 func (r *mutableStateTaskGeneratorImpl) getTargetDomainID(

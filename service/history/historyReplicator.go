@@ -912,7 +912,7 @@ func (r *historyReplicator) terminateWorkflow(
 	var currentLastWriteVersion int64
 	var err error
 	err = r.historyEngine.updateWorkflowExecution(ctx, domainID, execution, false,
-		func(msBuilder mutableState, tBuilder *timerBuilder) error {
+		func(msBuilder mutableState) error {
 
 			// compare the current last write version first
 			// since this function has assumption that

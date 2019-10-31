@@ -21,11 +21,9 @@
 package history
 
 import (
-	"fmt"
 	"math"
 	"time"
 
-	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
 )
@@ -89,11 +87,4 @@ func getBackoffInterval(
 	}
 
 	return backoffInterval
-}
-
-func getTimeoutErrorReason(
-	timeoutType shared.TimeoutType,
-) string {
-
-	return fmt.Sprintf("cadenceInternal:Timeout %v", timeoutType)
 }

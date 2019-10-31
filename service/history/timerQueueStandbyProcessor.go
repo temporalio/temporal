@@ -70,7 +70,7 @@ func newTimerQueueStandbyProcessor(
 	timeNow := func() time.Time {
 		return shard.GetCurrentTime(clusterName)
 	}
-	updateShardAckLevel := func(ackLevel TimerSequenceID) error {
+	updateShardAckLevel := func(ackLevel timerKey) error {
 		return shard.UpdateTimerClusterAckLevel(clusterName, ackLevel.VisibilityTimestamp)
 	}
 	logger = logger.WithTags(tag.ClusterName(clusterName))
@@ -148,11 +148,11 @@ func (t *timerQueueStandbyProcessorImpl) getTaskFilter() taskFilter {
 	return t.timerTaskFilter
 }
 
-func (t *timerQueueStandbyProcessorImpl) getAckLevel() TimerSequenceID {
+func (t *timerQueueStandbyProcessorImpl) getAckLevel() timerKey {
 	return t.timerQueueProcessorBase.timerQueueAckMgr.getAckLevel()
 }
 
-func (t *timerQueueStandbyProcessorImpl) getReadLevel() TimerSequenceID {
+func (t *timerQueueStandbyProcessorImpl) getReadLevel() timerKey {
 	return t.timerQueueProcessorBase.timerQueueAckMgr.getReadLevel()
 }
 
@@ -188,7 +188,7 @@ func (t *timerQueueStandbyProcessorImpl) process(
 	switch timerTask.TaskType {
 	case persistence.TaskTypeUserTimer:
 		if taskInfo.shouldProcessTask {
-			err = t.processExpiredUserTimer(taskInfo)
+			err = t.processUserTimerTimeout(taskInfo)
 		}
 		return metrics.TimerStandbyTaskUserTimerScope, err
 
@@ -228,30 +228,33 @@ func (t *timerQueueStandbyProcessorImpl) process(
 	}
 }
 
-func (t *timerQueueStandbyProcessorImpl) processExpiredUserTimer(
+func (t *timerQueueStandbyProcessorImpl) processUserTimerTimeout(
 	taskInfo *taskInfo,
 ) error {
 
-	actionFn := func(context workflowExecutionContext, msBuilder mutableState) (interface{}, error) {
+	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
 		timerTask := taskInfo.task.(*persistence.TimerTaskInfo)
-		tBuilder := t.getTimerBuilder()
+		timerSequence := t.getTimerSequence(mutableState)
 
-	ExpireUserTimers:
-		for _, td := range tBuilder.GetUserTimers(msBuilder) {
-			hasTimer, _ := tBuilder.GetUserTimer(td.TimerID)
-			if !hasTimer {
-				errString := fmt.Sprintf("Failed to find in memory user timer: %v", td.TimerID)
+	Loop:
+		for _, timerSequenceID := range timerSequence.loadAndSortUserTimers() {
+			_, ok := mutableState.GetUserTimerInfoByEventID(timerSequenceID.eventID)
+			if !ok {
+				errString := fmt.Sprintf("failed to find in user timer event ID: %v", timerSequenceID.eventID)
 				t.logger.Error(errString)
 				return nil, &workflow.InternalServiceError{Message: errString}
 			}
 
-			if isExpired := tBuilder.IsTimerExpired(td, timerTask.VisibilityTimestamp); isExpired {
-				return getHistoryResendInfo(msBuilder)
+			if isExpired := timerSequence.isExpired(
+				timerTask.VisibilityTimestamp,
+				timerSequenceID,
+			); isExpired {
+				return getHistoryResendInfo(mutableState)
 			}
 			// since the user timer are already sorted, so if there is one timer which will not expired
 			// all user timer after this timer will not expired
-			break ExpireUserTimers
+			break Loop
 		}
 		// if there is no user timer expired, then we are good
 		return nil, nil
@@ -287,26 +290,30 @@ func (t *timerQueueStandbyProcessorImpl) processActivityTimeout(
 	// the overall solution is to attempt to generate a new activity timer task whenever the
 	// task passed in is safe to be throw away.
 
-	actionFn := func(context workflowExecutionContext, msBuilder mutableState) (interface{}, error) {
+	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
 		timerTask := taskInfo.task.(*persistence.TimerTaskInfo)
-		tBuilder := t.getTimerBuilder()
+		timerSequence := t.getTimerSequence(mutableState)
+		updateMutableState := false
 
-	ExpireActivityTimers:
-		for _, td := range tBuilder.GetActivityTimers(msBuilder) {
-			_, ok := msBuilder.GetActivityInfo(td.ActivityID)
+	Loop:
+		for _, timerSequenceID := range timerSequence.loadAndSortActivityTimers() {
+			_, ok := mutableState.GetActivityInfo(timerSequenceID.eventID)
 			if !ok {
-				errString := fmt.Sprintf("Failed to find in memory activity timer: %v", td.ActivityID)
+				errString := fmt.Sprintf("failed to find in memory activity timer: %v", timerSequenceID.eventID)
 				t.logger.Error(errString)
 				return nil, &workflow.InternalServiceError{Message: errString}
 			}
 
-			if isExpired := tBuilder.IsTimerExpired(td, timerTask.VisibilityTimestamp); isExpired {
-				return getHistoryResendInfo(msBuilder)
+			if isExpired := timerSequence.isExpired(
+				timerTask.VisibilityTimestamp,
+				timerSequenceID,
+			); isExpired {
+				return getHistoryResendInfo(mutableState)
 			}
 			// since the activity timer are already sorted, so if there is one timer which will not expired
 			// all activity timer after this timer will not expired
-			break ExpireActivityTimers
+			break Loop
 		}
 
 		// for reason to update mutable state & generate a new activity task,
@@ -314,31 +321,27 @@ func (t *timerQueueStandbyProcessorImpl) processActivityTimeout(
 		// NOTE: this is the only place in the standby logic where mutable state can be updated
 
 		// need to clear the activity heartbeat timer task marks
-		doUpdate := false
-		lastWriteVersion, err := msBuilder.GetLastWriteVersion()
+		lastWriteVersion, err := mutableState.GetLastWriteVersion()
 		if err != nil {
 			return nil, err
 		}
 		isHeartBeatTask := timerTask.TimeoutType == int(workflow.TimeoutTypeHeartbeat)
-		if activityInfo, ok := msBuilder.GetActivityInfo(timerTask.EventID); isHeartBeatTask && ok {
-			doUpdate = true
-			activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ TimerTaskStatusCreatedHeartbeat
-			if err := msBuilder.UpdateActivity(activityInfo); err != nil {
+		if activityInfo, ok := mutableState.GetActivityInfo(timerTask.EventID); isHeartBeatTask && ok {
+			activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ timerTaskStatusCreatedHeartbeat
+			if err := mutableState.UpdateActivity(activityInfo); err != nil {
 				return nil, err
 			}
+			updateMutableState = true
 		}
 
-		var newTimerTasks []persistence.Task
-		newTimerTask, err := t.getTimerBuilder().GetActivityTimerTaskIfNeeded(msBuilder)
+		// passive logic need to explicitly call create timer
+		modified, err := timerSequence.createNextActivityTimer()
 		if err != nil {
 			return nil, err
 		}
-		if newTimerTask != nil {
-			doUpdate = true
-			newTimerTasks = append(newTimerTasks, newTimerTask)
-		}
+		updateMutableState = updateMutableState || modified
 
-		if !doUpdate {
+		if !updateMutableState {
 			return nil, nil
 		}
 
@@ -346,15 +349,11 @@ func (t *timerQueueStandbyProcessorImpl) processActivityTimeout(
 		// we need to handcraft some of the variables
 		// since the job being done here is update the activity and possibly write a timer task to DB
 		// also need to reset the current version.
-		if err := msBuilder.UpdateCurrentVersion(lastWriteVersion, true); err != nil {
+		if err := mutableState.UpdateCurrentVersion(lastWriteVersion, true); err != nil {
 			return nil, err
 		}
 
-		msBuilder.AddTimerTasks(newTimerTasks...)
 		err = context.updateWorkflowExecutionAsPassive(now)
-		if err == nil {
-			t.notifyNewTimers(newTimerTasks)
-		}
 		return nil, err
 	}
 
@@ -383,11 +382,11 @@ func (t *timerQueueStandbyProcessorImpl) processDecisionTimeout(
 		return nil
 	}
 
-	actionFn := func(context workflowExecutionContext, msBuilder mutableState) (interface{}, error) {
+	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
 		timerTask := taskInfo.task.(*persistence.TimerTaskInfo)
 
-		decision, isPending := msBuilder.GetDecisionInfo(timerTask.EventID)
+		decision, isPending := mutableState.GetDecisionInfo(timerTask.EventID)
 		if !isPending {
 			return nil, nil
 		}
@@ -397,7 +396,7 @@ func (t *timerQueueStandbyProcessorImpl) processDecisionTimeout(
 			return nil, err
 		}
 
-		return getHistoryResendInfo(msBuilder)
+		return getHistoryResendInfo(mutableState)
 	}
 
 	return t.processTimer(
@@ -418,9 +417,9 @@ func (t *timerQueueStandbyProcessorImpl) processWorkflowBackoffTimer(
 	taskInfo *taskInfo,
 ) error {
 
-	actionFn := func(context workflowExecutionContext, msBuilder mutableState) (interface{}, error) {
+	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
-		if msBuilder.HasProcessedOrPendingDecision() {
+		if mutableState.HasProcessedOrPendingDecision() {
 			// if there is one decision already been processed
 			// or has pending decision, meaning workflow has already running
 			return nil, nil
@@ -436,7 +435,7 @@ func (t *timerQueueStandbyProcessorImpl) processWorkflowBackoffTimer(
 		// standby cluster should just call ack manager to retry this task
 		// since we are stilling waiting for the first DecisionScheduledEvent to be replicated from active side.
 
-		return getHistoryResendInfo(msBuilder)
+		return getHistoryResendInfo(mutableState)
 	}
 
 	return t.processTimer(
@@ -457,14 +456,14 @@ func (t *timerQueueStandbyProcessorImpl) processWorkflowTimeout(
 	taskInfo *taskInfo,
 ) error {
 
-	actionFn := func(context workflowExecutionContext, msBuilder mutableState) (interface{}, error) {
+	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
 		timerTask := taskInfo.task.(*persistence.TimerTaskInfo)
 
 		// we do not need to notify new timer to base, since if there is no new event being replicated
 		// checking again if the timer can be completed is meaningless
 
-		startVersion, err := msBuilder.GetStartVersion()
+		startVersion, err := mutableState.GetStartVersion()
 		if err != nil {
 			return nil, err
 		}
@@ -473,7 +472,7 @@ func (t *timerQueueStandbyProcessorImpl) processWorkflowTimeout(
 			return nil, err
 		}
 
-		return getHistoryResendInfo(msBuilder)
+		return getHistoryResendInfo(mutableState)
 	}
 
 	return t.processTimer(
@@ -496,11 +495,14 @@ func (t *timerQueueStandbyProcessorImpl) getStandbyClusterTime() time.Time {
 	return t.shard.GetCurrentTime(t.clusterName).Add(t.shard.GetConfig().StandbyClusterDelay())
 }
 
-func (t *timerQueueStandbyProcessorImpl) getTimerBuilder() *timerBuilder {
+func (t *timerQueueStandbyProcessorImpl) getTimerSequence(
+	mutableState mutableState,
+) timerSequence {
+
 	timeSource := clock.NewEventTimeSource()
 	now := t.getStandbyClusterTime()
 	timeSource.Update(now)
-	return newTimerBuilder(timeSource)
+	return newTimerSequence(timeSource, mutableState)
 }
 
 func (t *timerQueueStandbyProcessorImpl) processTimer(
@@ -524,17 +526,17 @@ func (t *timerQueueStandbyProcessorImpl) processTimer(
 		}
 	}()
 
-	msBuilder, err := loadMutableStateForTimerTask(context, timerTask, t.metricsClient, t.logger)
-	if err != nil || msBuilder == nil {
+	mutableState, err := loadMutableStateForTimerTask(context, timerTask, t.metricsClient, t.logger)
+	if err != nil || mutableState == nil {
 		return err
 	}
 
-	if !msBuilder.IsWorkflowExecutionRunning() {
+	if !mutableState.IsWorkflowExecutionRunning() {
 		// workflow already finished, no need to process the timer
 		return nil
 	}
 
-	historyResendInfo, err := actionFn(context, msBuilder)
+	historyResendInfo, err := actionFn(context, mutableState)
 	if err != nil {
 		return err
 	}

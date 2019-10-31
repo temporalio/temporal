@@ -53,7 +53,7 @@ type (
 	}
 
 	timeNow                 func() time.Time
-	updateTimerAckLevel     func(TimerSequenceID) error
+	updateTimerAckLevel     func(timerKey) error
 	timerQueueShutdown      func() error
 	timerQueueProcessorImpl struct {
 		isGlobalDomainEnabled  bool
@@ -63,7 +63,7 @@ type (
 		config                 *Config
 		metricsClient          metrics.Client
 		historyService         *historyEngineImpl
-		ackLevel               TimerSequenceID
+		ackLevel               timerKey
 		logger                 log.Logger
 		matchingClient         matching.Client
 		isStarted              int32
@@ -132,7 +132,7 @@ func newTimerQueueProcessor(
 		config:                 shard.GetConfig(),
 		metricsClient:          historyService.metricsClient,
 		historyService:         historyService,
-		ackLevel:               TimerSequenceID{VisibilityTimestamp: shard.GetTimerAckLevel()},
+		ackLevel:               timerKey{VisibilityTimestamp: shard.GetTimerAckLevel()},
 		logger:                 logger,
 		matchingClient:         matchingClient,
 		shutdownChan:           make(chan struct{}),
@@ -230,7 +230,7 @@ func (t *timerQueueProcessorImpl) FailoverDomain(
 
 	// NOTE: READ REF BEFORE MODIFICATION
 	// ref: historyEngine.go registerDomainFailoverCallback function
-	updateShardAckLevel(TimerSequenceID{VisibilityTimestamp: minLevel})
+	updateShardAckLevel(timerKey{VisibilityTimestamp: minLevel})
 	failoverTimerProcessor.Start()
 }
 
@@ -297,7 +297,7 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 
 		for _, failoverInfo := range t.shard.GetAllTimerFailoverLevels() {
 			if !upperAckLevel.VisibilityTimestamp.Before(failoverInfo.MinLevel) {
-				upperAckLevel = TimerSequenceID{VisibilityTimestamp: failoverInfo.MinLevel}
+				upperAckLevel = timerKey{VisibilityTimestamp: failoverInfo.MinLevel}
 			}
 		}
 	}

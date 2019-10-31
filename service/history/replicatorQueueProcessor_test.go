@@ -198,7 +198,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 			RunId:      common.StringPtr(runID),
 		},
 	)
-	context.(*workflowExecutionContextImpl).msBuilder = s.mockMutableState
+	context.(*workflowExecutionContextImpl).mutableState = s.mockMutableState
 	release(nil)
 	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
@@ -246,7 +246,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 		},
 	)
 
-	context.(*workflowExecutionContextImpl).msBuilder = s.mockMutableState
+	context.(*workflowExecutionContextImpl).mutableState = s.mockMutableState
 	release(nil)
 	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
@@ -295,7 +295,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 		},
 	)
 
-	context.(*workflowExecutionContextImpl).msBuilder = s.mockMutableState
+	context.(*workflowExecutionContextImpl).mutableState = s.mockMutableState
 	release(nil)
 
 	activityVersion := int64(333)
@@ -405,7 +405,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 		},
 	)
 
-	context.(*workflowExecutionContextImpl).msBuilder = s.mockMutableState
+	context.(*workflowExecutionContextImpl).mutableState = s.mockMutableState
 	release(nil)
 
 	activityVersion := int64(333)

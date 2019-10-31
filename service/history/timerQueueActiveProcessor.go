@@ -65,7 +65,7 @@ func newTimerQueueActiveProcessor(
 	timeNow := func() time.Time {
 		return shard.GetCurrentTime(currentClusterName)
 	}
-	updateShardAckLevel := func(ackLevel TimerSequenceID) error {
+	updateShardAckLevel := func(ackLevel timerKey) error {
 		return shard.UpdateTimerClusterAckLevel(currentClusterName, ackLevel.VisibilityTimestamp)
 	}
 	logger = logger.WithTags(tag.ClusterName(currentClusterName))
@@ -124,7 +124,7 @@ func newTimerQueueFailoverProcessor(
 	matchingClient matching.Client,
 	taskAllocator taskAllocator,
 	logger log.Logger,
-) (func(ackLevel TimerSequenceID) error, *timerQueueActiveProcessorImpl) {
+) (func(ackLevel timerKey) error, *timerQueueActiveProcessorImpl) {
 
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	timeNow := func() time.Time {
@@ -134,7 +134,7 @@ func newTimerQueueFailoverProcessor(
 	failoverStartTime := shard.GetTimeSource().Now()
 	failoverUUID := uuid.New()
 
-	updateShardAckLevel := func(ackLevel TimerSequenceID) error {
+	updateShardAckLevel := func(ackLevel timerKey) error {
 		return shard.UpdateTimerFailoverLevel(
 			failoverUUID,
 			persistence.TimerFailoverLevel{
@@ -216,11 +216,11 @@ func (t *timerQueueActiveProcessorImpl) getTaskFilter() taskFilter {
 	return t.timerTaskFilter
 }
 
-func (t *timerQueueActiveProcessorImpl) getAckLevel() TimerSequenceID {
+func (t *timerQueueActiveProcessorImpl) getAckLevel() timerKey {
 	return t.timerQueueProcessorBase.timerQueueAckMgr.getAckLevel()
 }
 
-func (t *timerQueueActiveProcessorImpl) getReadLevel() TimerSequenceID {
+func (t *timerQueueActiveProcessorImpl) getReadLevel() timerKey {
 	return t.timerQueueProcessorBase.timerQueueAckMgr.getReadLevel()
 }
 
@@ -255,7 +255,7 @@ func (t *timerQueueActiveProcessorImpl) process(
 	switch timerTask.TaskType {
 	case persistence.TaskTypeUserTimer:
 		if taskInfo.shouldProcessTask {
-			err = t.processExpiredUserTimer(timerTask)
+			err = t.processUserTimerTimeout(timerTask)
 		}
 		return metrics.TimerActiveTaskUserTimerScope, err
 
@@ -300,7 +300,7 @@ func (t *timerQueueActiveProcessorImpl) process(
 	}
 }
 
-func (t *timerQueueActiveProcessorImpl) processExpiredUserTimer(
+func (t *timerQueueActiveProcessorImpl) processUserTimerTimeout(
 	task *persistence.TimerTaskInfo,
 ) (retError error) {
 
@@ -312,45 +312,43 @@ func (t *timerQueueActiveProcessorImpl) processExpiredUserTimer(
 	}
 	defer func() { release(retError) }()
 
-	msBuilder, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
-	} else if msBuilder == nil || !msBuilder.IsWorkflowExecutionRunning() {
+	} else if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
 		return nil
 	}
-	tBuilder := t.historyService.getTimerBuilder(context.getExecution())
 
-	updateHistory := false
-	updateState := false
+	timerSequence := t.getTimerSequence(mutableState)
+	referenceTime := t.shard.GetTimeSource().Now()
+	timerFired := false
 
-ExpireUserTimers:
-	for _, td := range tBuilder.GetUserTimers(msBuilder) {
-		hasTimer, ti := tBuilder.GetUserTimer(td.TimerID)
-		if !hasTimer {
-			t.logger.Debug(fmt.Sprintf("Failed to find in memory user timer: %s", td.TimerID))
-			return fmt.Errorf("Failed to find in memory user timer: %s", td.TimerID)
+Loop:
+	for _, timerSequenceID := range timerSequence.loadAndSortUserTimers() {
+		timerInfo, ok := mutableState.GetUserTimerInfoByEventID(timerSequenceID.eventID)
+		if !ok {
+			errString := fmt.Sprintf("failed to find in user timer event ID: %v", timerSequenceID.eventID)
+			t.logger.Error(errString)
+			return &workflow.InternalServiceError{Message: errString}
 		}
 
-		if isExpired := tBuilder.IsTimerExpired(td, task.VisibilityTimestamp); isExpired {
-			// Add TimerFired event to history.
-			if _, err := msBuilder.AddTimerFiredEvent(ti.StartedID, ti.TimerID); err != nil {
-				return err
-			}
-			updateHistory = true
-		} else {
-			// See if we have next timer in list to be created.
-			if !td.TaskCreated {
-				updateState = true
-			}
-			break ExpireUserTimers
+		if expired := timerSequence.isExpired(referenceTime, timerSequenceID); !expired {
+			// timer sequence IDs are sorted, once there is one timer
+			// sequence ID not expired, all after that wil not expired
+			break Loop
 		}
+
+		if _, err := mutableState.AddTimerFiredEvent(timerInfo.TimerID); err != nil {
+			return err
+		}
+		timerFired = true
 	}
 
-	if updateHistory || updateState {
-		scheduleNewDecision := updateHistory && !msBuilder.HasPendingDecision()
-		return t.updateWorkflowExecution(context, msBuilder, scheduleNewDecision)
+	if !timerFired {
+		return nil
 	}
-	return nil
+
+	return t.updateWorkflowExecution(context, mutableState, timerFired)
 }
 
 func (t *timerQueueActiveProcessorImpl) processActivityTimeout(
@@ -365,142 +363,83 @@ func (t *timerQueueActiveProcessorImpl) processActivityTimeout(
 	}
 	defer func() { release(retError) }()
 
-	referenceTime := t.now()
-
-	msBuilder, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
-	} else if msBuilder == nil || !msBuilder.IsWorkflowExecutionRunning() {
+	} else if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
 		return nil
 	}
-	tBuilder := t.historyService.getTimerBuilder(context.getExecution())
 
-	updateHistory := false
-	updateState := false
-	ai, ok := msBuilder.GetActivityInfo(task.EventID)
-	if ok {
-		// If current one is HB task then we may need to create the next heartbeat timer.  Clear the create flag for this
-		// heartbeat timer so we can create it again if needed.
-		// NOTE: When record activity HB comes in we only update last heartbeat timestamp, this is the place
-		// where we create next timer task based on that new updated timestamp.
-		isHeartBeatTask := task.TimeoutType == int(workflow.TimeoutTypeHeartbeat)
-		if isHeartBeatTask && ai.LastHeartbeatTimeoutVisibility <= task.VisibilityTimestamp.Unix() {
-			ai.TimerTaskStatus = ai.TimerTaskStatus &^ TimerTaskStatusCreatedHeartbeat
-			if err := msBuilder.UpdateActivity(ai); err != nil {
-				return err
-			}
-			updateState = true
-		}
+	timerSequence := t.getTimerSequence(mutableState)
+	referenceTime := t.shard.GetTimeSource().Now()
+	updateMutableState := false
+	scheduleDecision := false
 
-		// No need to check for attempt on the timer task.  ExpireActivityTimer logic below already checks if the
-		// activity should be timedout and it will not let the timer expire for earlier attempts.  And creation of
-		// duplicate timer task is protected by Created flag.
-	}
-
-ExpireActivityTimers:
-	for _, td := range tBuilder.GetActivityTimers(msBuilder) {
-		ai, ok := msBuilder.GetActivityInfo(td.ActivityID)
-		if !ok {
-			//  We might have time out this activity already.
-			continue ExpireActivityTimers
-		}
-
-		if isExpired := tBuilder.IsTimerExpired(td, referenceTime); !isExpired {
-			// See if we have next timer in list to be created.
-			if !td.TaskCreated {
-				updateState = true
-			}
-			break ExpireActivityTimers
-		}
-
-		timeoutType := td.TimeoutType
-		t.logger.Debug(fmt.Sprintf("Activity TimeoutType: %v, scheduledID: %v, startedId: %v. \n",
-			timeoutType, ai.ScheduleID, ai.StartedID))
-
-		if td.Attempt < ai.Attempt {
-			// retry could update ai.Attempt, and we should ignore further timeouts for previous attempt
-			t.logger.Info("Retry attempt mismatch, skip activity timeout processing",
-				tag.WorkflowID(msBuilder.GetExecutionInfo().WorkflowID),
-				tag.WorkflowRunID(msBuilder.GetExecutionInfo().RunID),
-				tag.WorkflowDomainID(msBuilder.GetExecutionInfo().DomainID),
-				tag.WorkflowScheduleID(ai.ScheduleID),
-				tag.Attempt(ai.Attempt),
-				tag.FailoverVersion(ai.Version),
-				tag.TimerTaskStatus(ai.TimerTaskStatus),
-				tag.WorkflowTimeoutType(int64(timeoutType)))
-			continue
-		}
-
-		if timeoutType != workflow.TimeoutTypeScheduleToStart {
-			// ScheduleToStart (queue timeout) is not retriable. Instead of retry, customer should set larger
-			// ScheduleToStart timeout.
-			ok, err := msBuilder.RetryActivity(ai, getTimeoutErrorReason(timeoutType), nil)
-			if err != nil {
-				return err
-			}
-			if ok {
-				updateState = true
-				continue
-			}
-		}
-
-		metricScopeWithDomainTag, err := t.getMetricScopeWithDomainTag(
-			metrics.TimerActiveTaskActivityTimeoutScope,
-			msBuilder.GetExecutionInfo().DomainID)
-		if err != nil {
+	// need to clear activity heartbeat timer task mask for new activity timer task creation
+	isHeartBeatTask := task.TimeoutType == int(workflow.TimeoutTypeHeartbeat)
+	if activityInfo, ok := mutableState.GetActivityInfo(task.EventID); isHeartBeatTask && ok {
+		activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ timerTaskStatusCreatedHeartbeat
+		if err := mutableState.UpdateActivity(activityInfo); err != nil {
 			return err
 		}
+		updateMutableState = true
+	}
 
-		switch timeoutType {
-		case workflow.TimeoutTypeScheduleToClose:
-			{
-				metricScopeWithDomainTag.IncCounter(metrics.ScheduleToCloseTimeoutCounter)
-				if _, err := msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, ai.Details); err != nil {
-					return err
-				}
-				updateHistory = true
-			}
+Loop:
+	for _, timerSequenceID := range timerSequence.loadAndSortActivityTimers() {
+		activityInfo, ok := mutableState.GetActivityInfo(timerSequenceID.eventID)
+		if !ok || timerSequenceID.attempt < activityInfo.Attempt {
+			// handle 2 cases:
+			// 1. !ok
+			//  this case can happen since each activity can have 4 timers
+			//  and one of those 4 timers may have fired in this loop
+			// 2. timerSequenceID.attempt < activityInfo.Attempt
+			//  retry could update activity attempt, should not timeouts new attempt
+			continue Loop
+		}
 
-		case workflow.TimeoutTypeStartToClose:
-			{
-				metricScopeWithDomainTag.IncCounter(metrics.StartToCloseTimeoutCounter)
-				if ai.StartedID != common.EmptyEventID {
-					if _, err := msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, ai.Details); err != nil {
-						return err
-					}
-					updateHistory = true
-				}
-			}
+		if expired := timerSequence.isExpired(referenceTime, timerSequenceID); !expired {
+			// timer sequence IDs are sorted, once there is one timer
+			// sequence ID not expired, all after that wil not expired
+			break Loop
+		}
 
-		case workflow.TimeoutTypeHeartbeat:
-			{
-				metricScopeWithDomainTag.IncCounter(metrics.HeartbeatTimeoutCounter)
-				if _, err := msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, ai.Details); err != nil {
-					return err
-				}
-				updateHistory = true
-			}
-
-		case workflow.TimeoutTypeScheduleToStart:
-			{
-				metricScopeWithDomainTag.IncCounter(metrics.ScheduleToStartTimeoutCounter)
-				if ai.StartedID == common.EmptyEventID {
-					if _, err := msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, ai.Details); err != nil {
-						return err
-					}
-					updateHistory = true
-				}
+		if timerSequenceID.timerType != timerTypeScheduleToStart {
+			// schedule to start timeout is not retriable
+			// customer should set larger schedule to start timeout if necessary
+			if ok, err := mutableState.RetryActivity(
+				activityInfo,
+				timerTypeToReason(timerSequenceID.timerType),
+				nil,
+			); err != nil {
+				return err
+			} else if ok {
+				updateMutableState = true
+				continue Loop
 			}
 		}
+
+		t.emitTimeoutMetricScopeWithDomainTag(
+			mutableState.GetExecutionInfo().DomainID,
+			metrics.TimerActiveTaskActivityTimeoutScope,
+			timerSequenceID.timerType,
+		)
+		if _, err := mutableState.AddActivityTaskTimedOutEvent(
+			activityInfo.ScheduleID,
+			activityInfo.StartedID,
+			timerTypeToThrift(timerSequenceID.timerType),
+			activityInfo.Details,
+		); err != nil {
+			return err
+		}
+		updateMutableState = true
+		scheduleDecision = true
 	}
 
-	if updateHistory || updateState {
-		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
-		// the history and try the operation again.
-		scheduleNewDecision := updateHistory && !msBuilder.HasPendingDecision()
-		return t.updateWorkflowExecution(context, msBuilder, scheduleNewDecision)
+	if !updateMutableState {
+		return nil
 	}
-	return nil
+	return t.updateWorkflowExecution(context, mutableState, scheduleDecision)
 }
 
 func (t *timerQueueActiveProcessorImpl) processDecisionTimeout(
@@ -515,63 +454,63 @@ func (t *timerQueueActiveProcessorImpl) processDecisionTimeout(
 	}
 	defer func() { release(retError) }()
 
-	msBuilder, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
-	} else if msBuilder == nil || !msBuilder.IsWorkflowExecutionRunning() {
+	} else if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
 		return nil
 	}
 
 	scheduleID := task.EventID
-	decision, found := msBuilder.GetDecisionInfo(scheduleID)
-	if !found {
+	decision, ok := mutableState.GetDecisionInfo(scheduleID)
+	if !ok {
 		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.TaskID), tag.WorkflowScheduleID(scheduleID), tag.TaskType(persistence.TaskTypeDecisionTimeout))
 		return nil
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, decision.Version, task.Version, task)
-	if err != nil {
+	ok, err = verifyTaskVersion(t.shard, t.logger, task.DomainID, decision.Version, task.Version, task)
+	if err != nil || !ok {
 		return err
-	} else if !ok {
+	}
+
+	if decision.Attempt != task.ScheduleAttempt {
 		return nil
 	}
 
-	metricScopeWithDomainTag, err := t.getMetricScopeWithDomainTag(
-		metrics.TimerActiveTaskDecisionTimeoutScope,
-		msBuilder.GetExecutionInfo().DomainID)
-	if err != nil {
-		return err
-	}
-
-	scheduleNewDecision := false
-	switch task.TimeoutType {
-	case int(workflow.TimeoutTypeStartToClose):
-		metricScopeWithDomainTag.IncCounter(metrics.StartToCloseTimeoutCounter)
-		if decision.Attempt == task.ScheduleAttempt {
-			// Add a decision task timeout event.
-			msBuilder.AddDecisionTaskTimedOutEvent(scheduleID, decision.StartedID)
-			scheduleNewDecision = true
+	scheduleDecision := false
+	switch timerTypeFromThrift(workflow.TimeoutType(task.TimeoutType)) {
+	case timerTypeStartToClose:
+		t.emitTimeoutMetricScopeWithDomainTag(
+			mutableState.GetExecutionInfo().DomainID,
+			metrics.TimerActiveTaskDecisionTimeoutScope,
+			timerTypeStartToClose,
+		)
+		if _, err := mutableState.AddDecisionTaskTimedOutEvent(
+			decision.ScheduleID,
+			decision.StartedID,
+		); err != nil {
+			return err
 		}
-	case int(workflow.TimeoutTypeScheduleToStart):
-		metricScopeWithDomainTag.IncCounter(metrics.ScheduleToStartTimeoutCounter)
-		// check if scheduled decision still pending and not started yet
-		if decision.Attempt == task.ScheduleAttempt && decision.StartedID == common.EmptyEventID {
-			_, err := msBuilder.AddDecisionTaskScheduleToStartTimeoutEvent(scheduleID)
-			if err != nil {
-				// unable to add DecisionTaskTimeout event to history
-				return &workflow.InternalServiceError{Message: "unable to add DecisionTaskScheduleToStartTimeout event to history."}
-			}
+		scheduleDecision = true
 
-			// reschedule decision, which will be on its original task list
-			scheduleNewDecision = true
+	case timerTypeScheduleToStart:
+		if decision.StartedID != common.EmptyEventID {
+			// decision has already started
+			return nil
 		}
+
+		t.emitTimeoutMetricScopeWithDomainTag(
+			mutableState.GetExecutionInfo().DomainID,
+			metrics.TimerActiveTaskDecisionTimeoutScope,
+			timerTypeScheduleToStart,
+		)
+		_, err := mutableState.AddDecisionTaskScheduleToStartTimeoutEvent(scheduleID)
+		if err != nil {
+			return err
+		}
+		scheduleDecision = true
 	}
 
-	if scheduleNewDecision {
-		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
-		// the history and try the operation again.
-		return t.updateWorkflowExecution(context, msBuilder, scheduleNewDecision)
-	}
-	return nil
+	return t.updateWorkflowExecution(context, mutableState, scheduleDecision)
 }
 
 func (t *timerQueueActiveProcessorImpl) processWorkflowBackoffTimer(
@@ -592,20 +531,20 @@ func (t *timerQueueActiveProcessorImpl) processWorkflowBackoffTimer(
 		t.metricsClient.IncCounter(metrics.TimerActiveTaskWorkflowBackoffTimerScope, metrics.WorkflowCronBackoffTimerCount)
 	}
 
-	msBuilder, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
-	} else if msBuilder == nil || !msBuilder.IsWorkflowExecutionRunning() {
+	} else if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
 		return nil
 	}
 
-	if msBuilder.HasProcessedOrPendingDecision() {
+	if mutableState.HasProcessedOrPendingDecision() {
 		// already has decision task
 		return nil
 	}
 
 	// schedule first decision task
-	return t.updateWorkflowExecution(context, msBuilder, true)
+	return t.updateWorkflowExecution(context, mutableState, true)
 }
 
 func (t *timerQueueActiveProcessorImpl) processActivityRetryTimer(
@@ -620,58 +559,64 @@ func (t *timerQueueActiveProcessorImpl) processActivityRetryTimer(
 	}
 	defer func() { release(retError) }()
 
-	msBuilder, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
-	} else if msBuilder == nil || !msBuilder.IsWorkflowExecutionRunning() {
+	} else if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
 		return nil
 	}
 
 	// generate activity task
 	scheduledID := task.EventID
-	ai, ok := msBuilder.GetActivityInfo(scheduledID)
-	if !ok || task.ScheduleAttempt < int64(ai.Attempt) {
+	activityInfo, ok := mutableState.GetActivityInfo(scheduledID)
+	if !ok || task.ScheduleAttempt < int64(activityInfo.Attempt) || activityInfo.StartedID != common.EmptyEventID {
 		if ok {
 			t.logger.Info("Duplicate activity retry timer task",
-				tag.WorkflowID(msBuilder.GetExecutionInfo().WorkflowID),
-				tag.WorkflowRunID(msBuilder.GetExecutionInfo().RunID),
-				tag.WorkflowDomainID(msBuilder.GetExecutionInfo().DomainID),
-				tag.WorkflowScheduleID(ai.ScheduleID),
-				tag.Attempt(ai.Attempt),
-				tag.FailoverVersion(ai.Version),
-				tag.TimerTaskStatus(ai.TimerTaskStatus),
+				tag.WorkflowID(mutableState.GetExecutionInfo().WorkflowID),
+				tag.WorkflowRunID(mutableState.GetExecutionInfo().RunID),
+				tag.WorkflowDomainID(mutableState.GetExecutionInfo().DomainID),
+				tag.WorkflowScheduleID(activityInfo.ScheduleID),
+				tag.Attempt(activityInfo.Attempt),
+				tag.FailoverVersion(activityInfo.Version),
+				tag.TimerTaskStatus(activityInfo.TimerTaskStatus),
 				tag.ScheduleAttempt(task.ScheduleAttempt))
 		}
 		return nil
 	}
-	ok, err = verifyTaskVersion(t.shard, t.logger, task.DomainID, ai.Version, task.Version, task)
-	if err != nil {
+	ok, err = verifyTaskVersion(t.shard, t.logger, task.DomainID, activityInfo.Version, task.Version, task)
+	if err != nil || !ok {
 		return err
-	} else if !ok {
-		return nil
 	}
 
 	domainID := task.DomainID
 	targetDomainID := domainID
-	scheduledEvent, err := msBuilder.GetActivityScheduledEvent(scheduledID)
-	if err != nil {
-		return err
-	}
-	if scheduledEvent.ActivityTaskScheduledEventAttributes.Domain != nil {
-		domainEntry, err := t.shard.GetDomainCache().GetDomain(scheduledEvent.ActivityTaskScheduledEventAttributes.GetDomain())
+	if activityInfo.DomainID != "" {
+		targetDomainID = activityInfo.DomainID
+	} else {
+		// TODO remove this block after Mar, 1th, 2020
+		//  previously, DomainID in activity info is not used, so need to get
+		//  schedule event from DB checking whether activity to be scheduled
+		//  belongs to this domain
+		scheduledEvent, err := mutableState.GetActivityScheduledEvent(scheduledID)
 		if err != nil {
-			return &workflow.InternalServiceError{Message: "unable to re-schedule activity across domain."}
+			return err
 		}
-		targetDomainID = domainEntry.GetInfo().ID
+		if scheduledEvent.ActivityTaskScheduledEventAttributes.Domain != nil {
+			domainEntry, err := t.shard.GetDomainCache().GetDomain(scheduledEvent.ActivityTaskScheduledEventAttributes.GetDomain())
+			if err != nil {
+				return &workflow.InternalServiceError{Message: "unable to re-schedule activity across domain."}
+			}
+			targetDomainID = domainEntry.GetInfo().ID
+		}
 	}
 
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(task.WorkflowID),
 		RunId:      common.StringPtr(task.RunID)}
 	taskList := &workflow.TaskList{
-		Name: &ai.TaskList,
+		Name: common.StringPtr(activityInfo.TaskList),
 	}
-	scheduleToStartTimeout := ai.ScheduleToStartTimeout
+	scheduleToStartTimeout := activityInfo.ScheduleToStartTimeout
 
 	release(nil) // release earlier as we don't need the lock anymore
 
@@ -680,7 +625,7 @@ func (t *timerQueueActiveProcessorImpl) processActivityRetryTimer(
 		SourceDomainUUID:              common.StringPtr(domainID),
 		Execution:                     &execution,
 		TaskList:                      taskList,
-		ScheduleId:                    &scheduledID,
+		ScheduleId:                    common.Int64Ptr(scheduledID),
 		ScheduleToStartTimeoutSeconds: common.Int32Ptr(scheduleToStartTimeout),
 	})
 }
@@ -696,52 +641,47 @@ func (t *timerQueueActiveProcessorImpl) processWorkflowTimeout(
 	}
 	defer func() { release(retError) }()
 
-	msBuilder, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
-	} else if msBuilder == nil || !msBuilder.IsWorkflowExecutionRunning() {
+	} else if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
 		return nil
 	}
 
-	// do version check for global domain task
-	if msBuilder.GetReplicationState() != nil || msBuilder.GetVersionHistories() != nil {
-		startVersion, err := msBuilder.GetStartVersion()
-		if err != nil {
-			return err
-		}
-		ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, startVersion, task.Version, task)
-		if err != nil {
-			return err
-		} else if !ok {
-			return nil
-		}
+	startVersion, err := mutableState.GetStartVersion()
+	if err != nil {
+		return err
+	}
+	ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, startVersion, task.Version, task)
+	if err != nil || !ok {
+		return err
 	}
 
-	eventBatchFirstEventID := msBuilder.GetNextEventID()
+	eventBatchFirstEventID := mutableState.GetNextEventID()
 
-	timeoutReason := getTimeoutErrorReason(workflow.TimeoutTypeStartToClose)
-	backoffInterval := msBuilder.GetRetryBackoffDuration(timeoutReason)
+	timeoutReason := timerTypeToReason(timerTypeStartToClose)
+	backoffInterval := mutableState.GetRetryBackoffDuration(timeoutReason)
 	continueAsNewInitiator := workflow.ContinueAsNewInitiatorRetryPolicy
 	if backoffInterval == backoff.NoBackoff {
 		// check if a cron backoff is needed
-		backoffInterval, err = msBuilder.GetCronBackoffDuration()
+		backoffInterval, err = mutableState.GetCronBackoffDuration()
 		if err != nil {
 			return err
 		}
 		continueAsNewInitiator = workflow.ContinueAsNewInitiatorCronSchedule
 	}
 	if backoffInterval == backoff.NoBackoff {
-		if err := timeoutWorkflow(msBuilder, eventBatchFirstEventID); err != nil {
+		if err := timeoutWorkflow(mutableState, eventBatchFirstEventID); err != nil {
 			return err
 		}
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 		// the history and try the operation again.
-		return t.updateWorkflowExecution(context, msBuilder, false)
+		return t.updateWorkflowExecution(context, mutableState, false)
 	}
 
 	// workflow timeout, but a retry or cron is needed, so we do continue as new to retry or cron
-	startEvent, err := msBuilder.GetStartEvent()
+	startEvent, err := mutableState.GetStartEvent()
 	if err != nil {
 		return err
 	}
@@ -758,10 +698,10 @@ func (t *timerQueueActiveProcessorImpl) processWorkflowTimeout(
 		BackoffStartIntervalInSeconds:       common.Int32Ptr(int32(backoffInterval.Seconds())),
 		Initiator:                           continueAsNewInitiator.Ptr(),
 		FailureReason:                       common.StringPtr(timeoutReason),
-		CronSchedule:                        common.StringPtr(msBuilder.GetExecutionInfo().CronSchedule),
+		CronSchedule:                        common.StringPtr(mutableState.GetExecutionInfo().CronSchedule),
 	}
 	newMutableState, err := retryWorkflow(
-		msBuilder,
+		mutableState,
 		eventBatchFirstEventID,
 		startAttributes.GetParentWorkflowDomain(),
 		continueAsnewAttributes,
@@ -787,16 +727,24 @@ func (t *timerQueueActiveProcessorImpl) processWorkflowTimeout(
 	)
 }
 
+func (t *timerQueueActiveProcessorImpl) getTimerSequence(
+	mutableState mutableState,
+) timerSequence {
+
+	timeSource := t.shard.GetTimeSource()
+	return newTimerSequence(timeSource, mutableState)
+}
+
 func (t *timerQueueActiveProcessorImpl) updateWorkflowExecution(
 	context workflowExecutionContext,
-	msBuilder mutableState,
+	mutableState mutableState,
 	scheduleNewDecision bool,
 ) error {
 
 	var err error
 	if scheduleNewDecision {
 		// Schedule a new decision.
-		err = scheduleDecision(msBuilder)
+		err = scheduleDecision(mutableState)
 		if err != nil {
 			return err
 		}
@@ -816,11 +764,25 @@ func (t *timerQueueActiveProcessorImpl) updateWorkflowExecution(
 	return nil
 }
 
-func (t *timerQueueActiveProcessorImpl) getMetricScopeWithDomainTag(scope int, domainID string) (metrics.Scope, error) {
+func (t *timerQueueActiveProcessorImpl) emitTimeoutMetricScopeWithDomainTag(
+	domainID string,
+	scope int,
+	timerType timerType,
+) {
+
 	domainEntry, err := t.shard.GetDomainCache().GetDomainByID(domainID)
 	if err != nil {
-		return nil, err
+		return
 	}
-	return t.metricsClient.Scope(metrics.TimerActiveTaskDecisionTimeoutScope).
-		Tagged(metrics.DomainTag(domainEntry.GetInfo().Name)), nil
+	metricsScope := t.metricsClient.Scope(scope).Tagged(metrics.DomainTag(domainEntry.GetInfo().Name))
+	switch timerType {
+	case timerTypeScheduleToStart:
+		metricsScope.IncCounter(metrics.ScheduleToStartTimeoutCounter)
+	case timerTypeScheduleToClose:
+		metricsScope.IncCounter(metrics.ScheduleToCloseTimeoutCounter)
+	case timerTypeStartToClose:
+		metricsScope.IncCounter(metrics.StartToCloseTimeoutCounter)
+	case timerTypeHeartbeat:
+		metricsScope.IncCounter(metrics.HeartbeatTimeoutCounter)
+	}
 }
