@@ -125,6 +125,19 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskScheduledEven
 	scheduleTimestamp int64,
 	originalScheduledTimestamp int64,
 ) (*decisionInfo, error) {
+
+	// set workflow state to running, since decision is scheduled
+	// NOTE: for zombie workflow, should not change the state
+	state, _ := m.msb.GetWorkflowStateCloseStatus()
+	if state != persistence.WorkflowStateZombie {
+		if err := m.msb.UpdateWorkflowStateCloseStatus(
+			persistence.WorkflowStateRunning,
+			persistence.WorkflowCloseStatusNone,
+		); err != nil {
+			return nil, err
+		}
+	}
+
 	decision := &decisionInfo{
 		Version:                    version,
 		ScheduleID:                 scheduleID,
@@ -198,16 +211,6 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskStartedEvent(
 		// certain "magic" needs to be done, i.e. setting attempt to 0 so
 		// if first batch is replicated, but not the second one, decision can be correctly timed out
 		decision.Attempt = 0
-	}
-
-	// set workflow state to running, since decision is scheduled
-	if state, _ := m.msb.GetWorkflowStateCloseStatus(); state == persistence.WorkflowStateCreated {
-		if err := m.msb.UpdateWorkflowStateCloseStatus(
-			persistence.WorkflowStateRunning,
-			persistence.WorkflowCloseStatusNone,
-		); err != nil {
-			return nil, err
-		}
 	}
 
 	// Update mutable decision state
@@ -290,10 +293,6 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskScheduledEventAsHea
 			tag.WorkflowScheduleID(m.msb.executionInfo.DecisionScheduleID))
 		return nil, m.msb.createInternalServerError(opTag)
 	}
-
-	// set workflow state to running
-	// since decision is scheduled
-	m.msb.executionInfo.State = persistence.WorkflowStateRunning
 
 	// Tasklist and decision timeout should already be set from workflow execution started event
 	taskList := m.msb.executionInfo.TaskList
