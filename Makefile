@@ -120,19 +120,19 @@ copyright: cmd/tools/copyright/licensegen.go
 
 cadence-cassandra-tool: $(TOOLS_SRC)
 	@echo "compiling cadence-cassandra-tool with OS: $(GOOS), ARCH: $(GOARCH)"
-	go build -i -o cadence-cassandra-tool -pkgdir ./tmp cmd/tools/cassandra/main.go
+	go build -i -o cadence-cassandra-tool cmd/tools/cassandra/main.go
 
 cadence-sql-tool: $(TOOLS_SRC)
 	@echo "compiling cadence-sql-tool with OS: $(GOOS), ARCH: $(GOARCH)"
-	go build -i -o cadence-sql-tool -pkgdir ./tmp cmd/tools/sql/main.go
+	go build -i -o cadence-sql-tool cmd/tools/sql/main.go
 
 cadence: $(TOOLS_SRC)
 	@echo "compiling cadence with OS: $(GOOS), ARCH: $(GOARCH)"
-	go build -i -o cadence -pkgdir ./tmp cmd/tools/cli/main.go
+	go build -i -o cadence cmd/tools/cli/main.go
 
 cadence-server: $(ALL_SRC)
 	@echo "compiling cadence-server with OS: $(GOOS), ARCH: $(GOARCH)"
-	go build -ldflags '$(GO_BUILD_LDFLAGS)' -i -o cadence-server -pkgdir ./tmp cmd/server/cadence.go cmd/server/server.go
+	go build -ldflags '$(GO_BUILD_LDFLAGS)' -i -o cadence-server cmd/server/cadence.go cmd/server/server.go
 
 bins_nothrift: lint copyright cadence-cassandra-tool cadence-sql-tool cadence cadence-server
 
