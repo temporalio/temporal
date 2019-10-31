@@ -29,7 +29,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/membership"
@@ -61,25 +60,19 @@ const (
 	defaultMaxJoinDuration = 10 * time.Second
 )
 
-// CadenceServices indicate the list of cadence services
-var CadenceServices = map[string]int{
-	common.FrontendServiceName: 7933,
-	common.HistoryServiceName:  7934,
-	common.MatchingServiceName: 7935,
-	common.WorkerServiceName:   7939,
-}
-
 // RingpopFactory implements the RingpopFactory interface
 type RingpopFactory struct {
 	config      *Ringpop
 	logger      log.Logger
 	serviceName string
+	serviceMap  map[string]int
 }
 
 // NewFactory builds a ringpop factory conforming
 // to the underlying configuration
-func (rpConfig *Ringpop) NewFactory(logger log.Logger, serviceName string) (*RingpopFactory, error) {
-	return newRingpopFactory(rpConfig, logger, serviceName)
+func (rpConfig *Ringpop) NewFactory(logger log.Logger, serviceName string,
+	serviceMap map[string]int) (*RingpopFactory, error) {
+	return newRingpopFactory(rpConfig, logger, serviceName, serviceMap)
 }
 
 func (rpConfig *Ringpop) validate() error {
@@ -136,14 +129,15 @@ func validateBootstrapMode(rpConfig *Ringpop) error {
 	return nil
 }
 
-func newRingpopFactory(rpConfig *Ringpop, logger log.Logger, serviceName string) (*RingpopFactory, error) {
+func newRingpopFactory(rpConfig *Ringpop, logger log.Logger, serviceName string,
+	serviceMap map[string]int) (*RingpopFactory, error) {
 	if err := rpConfig.validate(); err != nil {
 		return nil, err
 	}
 	if rpConfig.MaxJoinDuration == 0 {
 		rpConfig.MaxJoinDuration = defaultMaxJoinDuration
 	}
-	return &RingpopFactory{config: rpConfig, logger: logger, serviceName: serviceName}, nil
+	return &RingpopFactory{config: rpConfig, logger: logger, serviceName: serviceName, serviceMap: serviceMap}, nil
 }
 
 // Create is the implementation for MembershipMonitorFactory.Create
@@ -163,7 +157,7 @@ func (factory *RingpopFactory) Create(dispatcher *yarpc.Dispatcher) (membership.
 		return nil, fmt.Errorf("ringpop setting role label failed: %v", err)
 	}
 
-	membershipMonitor := membership.NewRingpopMonitor(factory.serviceName, CadenceServices, rp, factory.logger)
+	membershipMonitor := membership.NewRingpopMonitor(factory.serviceName, factory.serviceMap, rp, factory.logger)
 	if err = membershipMonitor.Start(); err != nil {
 		return nil, err
 	}

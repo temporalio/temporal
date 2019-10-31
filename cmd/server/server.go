@@ -108,7 +108,14 @@ func (s *server) startService() common.Daemon {
 	params.Logger = loggerimpl.NewLogger(s.cfg.Log.NewZapLogger())
 	params.PersistenceConfig = s.cfg.Persistence
 
-	params.MembershipFactory, err = s.cfg.Ringpop.NewFactory(params.Logger, params.Name)
+	// Ringpop uses a different port to register handlers, this map is needed to resolve
+	// services to correct addresses used by clients through ServiceResolver lookup API
+	var serviceMap map[string]int
+	for serviceName, svcCfg := range s.cfg.Services {
+		serviceMap[serviceName] = svcCfg.RPC.RingpopPort
+	}
+
+	params.MembershipFactory, err = s.cfg.Ringpop.NewFactory(params.Logger, params.Name, serviceMap)
 	if err != nil {
 		log.Fatalf("error creating ringpop factory: %v", err)
 	}
