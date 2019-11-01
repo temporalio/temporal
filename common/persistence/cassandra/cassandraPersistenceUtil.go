@@ -31,10 +31,6 @@ import (
 	p "github.com/uber/cadence/common/persistence"
 )
 
-// eventStoreVersion is already deprecated, this is just a constant for place holder.
-// TODO we can remove it after fixing all the query templates
-const defaultEventStoreVersionValue = -1
-
 func applyWorkflowMutationBatch(
 	batch *gocql.Batch,
 	shardID int,
@@ -456,7 +452,7 @@ func createExecution(
 			executionInfo.ExpirationTime,
 			executionInfo.MaximumAttempts,
 			executionInfo.NonRetriableErrors,
-			defaultEventStoreVersionValue,
+			p.EventStoreVersion,
 			executionInfo.BranchToken,
 			executionInfo.CronSchedule,
 			executionInfo.ExpirationSeconds,
@@ -526,7 +522,7 @@ func createExecution(
 			executionInfo.ExpirationTime,
 			executionInfo.MaximumAttempts,
 			executionInfo.NonRetriableErrors,
-			defaultEventStoreVersionValue,
+			p.EventStoreVersion,
 			executionInfo.BranchToken,
 			executionInfo.CronSchedule,
 			executionInfo.ExpirationSeconds,
@@ -601,7 +597,7 @@ func createExecution(
 			executionInfo.ExpirationTime,
 			executionInfo.MaximumAttempts,
 			executionInfo.NonRetriableErrors,
-			defaultEventStoreVersionValue,
+			p.EventStoreVersion,
 			executionInfo.BranchToken,
 			executionInfo.CronSchedule,
 			executionInfo.ExpirationSeconds,
@@ -714,7 +710,7 @@ func updateExecution(
 			executionInfo.ExpirationTime,
 			executionInfo.MaximumAttempts,
 			executionInfo.NonRetriableErrors,
-			defaultEventStoreVersionValue,
+			p.EventStoreVersion,
 			executionInfo.BranchToken,
 			executionInfo.CronSchedule,
 			executionInfo.ExpirationSeconds,
@@ -785,7 +781,7 @@ func updateExecution(
 			executionInfo.ExpirationTime,
 			executionInfo.MaximumAttempts,
 			executionInfo.NonRetriableErrors,
-			defaultEventStoreVersionValue,
+			p.EventStoreVersion,
 			executionInfo.BranchToken,
 			executionInfo.CronSchedule,
 			executionInfo.ExpirationSeconds,
@@ -861,7 +857,7 @@ func updateExecution(
 			executionInfo.ExpirationTime,
 			executionInfo.MaximumAttempts,
 			executionInfo.NonRetriableErrors,
-			defaultEventStoreVersionValue,
+			p.EventStoreVersion,
 			executionInfo.BranchToken,
 			executionInfo.CronSchedule,
 			executionInfo.ExpirationSeconds,
@@ -1088,10 +1084,10 @@ func createReplicationTasks(
 			version,
 			lastReplicationInfo,
 			activityScheduleID,
-			defaultEventStoreVersionValue,
+			p.EventStoreVersion,
 			branchToken,
 			resetWorkflow,
-			defaultEventStoreVersionValue,
+			p.EventStoreVersion,
 			newRunBranchToken,
 			defaultVisibilityTimestamp,
 			task.GetTaskID())

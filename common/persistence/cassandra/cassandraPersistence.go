@@ -2724,10 +2724,10 @@ func (d *cassandraPersistence) PutReplicationTaskToDLQ(request *p.PutReplication
 		task.Version,
 		task.LastReplicationInfo,
 		task.ScheduledID,
-		defaultEventStoreVersionValue,
+		p.EventStoreVersion,
 		task.BranchToken,
 		task.ResetWorkflow,
-		defaultEventStoreVersionValue,
+		p.EventStoreVersion,
 		task.NewRunBranchToken,
 		defaultVisibilityTimestamp,
 		task.GetTaskID())
