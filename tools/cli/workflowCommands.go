@@ -862,6 +862,7 @@ type workflowExecutionInfo struct {
 	HistoryLength    *int64
 	ParentDomainID   *string
 	ParentExecution  *shared.WorkflowExecution
+	Memo             *shared.Memo
 	SearchAttributes map[string]interface{}
 	AutoResetPoints  *shared.ResetPoints
 }
@@ -896,6 +897,7 @@ func convertDescribeWorkflowExecutionResponse(resp *shared.DescribeWorkflowExecu
 		HistoryLength:    info.HistoryLength,
 		ParentDomainID:   info.ParentDomainId,
 		ParentExecution:  info.ParentExecution,
+		Memo:             info.Memo,
 		SearchAttributes: convertSearchAttributesToMapOfInterface(info.SearchAttributes, wfClient, c),
 		AutoResetPoints:  info.AutoResetPoints,
 	}
