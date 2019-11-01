@@ -17,10 +17,12 @@ require (
 	github.com/eapache/go-resiliency v1.2.0 // indirect
 	github.com/emirpasic/gods v0.0.0-20190624094223-e689965507ab
 	github.com/fatih/color v0.0.0-20181010231311-3f9d52f7176a
+	github.com/fatih/structtag v1.1.0 // indirect
 	github.com/fortytw2/leaktest v1.3.0 // indirect
 	github.com/go-sql-driver/mysql v1.4.1
 	github.com/gocql/gocql v0.0.0-20171220143535-56a164ee9f31
 	github.com/gogo/googleapis v1.2.0 // indirect
+	github.com/gogo/protobuf v1.3.1 // indirect
 	github.com/gogo/status v1.1.0 // indirect
 	github.com/golang/mock v1.3.1
 	github.com/google/uuid v1.1.1
@@ -46,35 +48,32 @@ require (
 	github.com/opentracing/opentracing-go v1.1.0
 	github.com/pborman/uuid v0.0.0-20180906182336-adf5a7427709
 	github.com/pierrec/lz4 v0.0.0-20190701081048-057d66e894a4 // indirect
-	github.com/prometheus/common v0.6.0 // indirect
-	github.com/prometheus/procfs v0.0.3 // indirect
+	github.com/prometheus/client_golang v1.2.1 // indirect
 	github.com/robfig/cron v1.2.0
-	github.com/sirupsen/logrus v1.2.0
-	github.com/stretchr/testify v1.3.0
+	github.com/sirupsen/logrus v1.4.2
+	github.com/stretchr/testify v1.4.0
 	github.com/uber-common/bark v1.2.1 // indirect
 	github.com/uber-go/kafka-client v0.2.3-0.20191018205945-8b3555b395f9
-	github.com/uber-go/tally v3.3.11+incompatible
+	github.com/uber-go/tally v3.3.12+incompatible
 	github.com/uber/ringpop-go v0.8.5
-	github.com/uber/tchannel-go v1.14.0
+	github.com/uber/tchannel-go v1.16.0
 	github.com/urfave/cli v1.20.0
 	github.com/valyala/fastjson v1.4.1
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
-	go.uber.org/atomic v1.4.0
+	go.uber.org/atomic v1.5.0
 	go.uber.org/cadence v0.9.1-0.20191023030824-883f86358883
 	go.uber.org/config v1.3.1
-	go.uber.org/multierr v1.1.0
-	go.uber.org/net/metrics v1.1.0 // indirect
-	go.uber.org/thriftrw v1.20.0
-	go.uber.org/tools v0.0.0-20190618225709-2cfd321de3ee // indirect
-	go.uber.org/yarpc v1.39.0
-	go.uber.org/zap v1.10.0
+	go.uber.org/multierr v1.3.0
+	go.uber.org/net/metrics v1.2.0 // indirect
+	go.uber.org/thriftrw v1.20.2
+	go.uber.org/yarpc v1.42.0
+	go.uber.org/zap v1.12.0
 	golang.org/x/crypto v0.0.0-20190701094942-4def268fd1a4 // indirect
-	golang.org/x/net v0.0.0-20190628185345-da137c7871d7
-	golang.org/x/sys v0.0.0-20190626221950-04f50cda93cb // indirect
+	golang.org/x/net v0.0.0-20191101175033-0deb6923b6d9
+	golang.org/x/sys v0.0.0-20191029155521-f43be2a4598c // indirect
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4
-	golang.org/x/tools v0.0.0-20191024220359-3d91e92cde03
+	golang.org/x/tools v0.0.0-20191101175824-a860bcda08c7
 	google.golang.org/appengine v1.6.1 // indirect
-	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/jcmturner/goidentity.v3 v3.0.0 // indirect
 	gopkg.in/jcmturner/gokrb5.v7 v7.3.0 // indirect
