@@ -107,8 +107,8 @@ GOCOVERPKG_ARG := -coverpkg="$(PROJECT_ROOT)/common/...,$(PROJECT_ROOT)/service/
 
 yarpc-install:
 	GO111MODULE=off go get -u github.com/myitcv/gobin
-    GO111MODULE=off go get -u github.com/gogo/protobuf/protoc-gen-gogoslick
-    GO111MODULE=off go get -u go.uber.org/yarpc/encoding/protobuf/protoc-gen-yarpc-go
+	GO111MODULE=off go get -u github.com/gogo/protobuf/protoc-gen-gogoslick
+	GO111MODULE=off go get -u go.uber.org/yarpc/encoding/protobuf/protoc-gen-yarpc-go
 	GOOS= GOARCH= gobin -mod=readonly go.uber.org/thriftrw
 	GOOS= GOARCH= gobin -mod=readonly go.uber.org/yarpc/encoding/thrift/thriftrw-plugin-yarpc
 
@@ -123,7 +123,10 @@ clean_proto:
 update_proto:
 	git submodule update --remote
 
-protoc: yarpc-install clean_proto update_proto
+install_proto:
+	git submodule update --init
+
+protoc: yarpc-install clean_proto install_proto
 	protoc --proto_path=tpb --gogoslick_out=paths=source_relative:tpb tpb/*.proto 
 	protoc --proto_path=tpb --yarpc-go_out=tpb tpb/*.proto 
 
