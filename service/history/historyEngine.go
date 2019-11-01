@@ -173,6 +173,8 @@ var (
 	ErrEventsAterWorkflowFinish = &workflow.InternalServiceError{Message: "error validating last event being workflow finish event"}
 	// ErrQueryTimeout is the error indicating query timed out before being answered
 	ErrQueryTimeout = errors.New("query timed out")
+	// ErrQueryEnteredInvalidState is error indicating query entered invalid state
+	ErrQueryEnteredInvalidState = &workflow.InternalServiceError{Message: "query entered invalid state, this should be impossible"}
 
 	// FailedWorkflowCloseState is a set of failed workflow close states, used for start workflow policy
 	// for start workflow execution API
@@ -824,16 +826,31 @@ func (e *historyEngineImpl) QueryWorkflow(
 		if err != nil {
 			return nil, err
 		}
-		result := state.queryResult
-		switch result.GetResultType() {
-		case workflow.QueryResultTypeAnswered:
-			return &h.QueryWorkflowResponse{
-				Response: &workflow.QueryWorkflowResponse{
-					QueryResult: result.GetAnswer(),
-				},
-			}, nil
-		case workflow.QueryResultTypeFailed:
-			return nil, &workflow.QueryFailedError{Message: result.GetErrorMessage()}
+		switch state.state {
+		case queryStateUnblocked:
+			msResp, err := e.getMutableState(ctx, request.GetDomainUUID(), *request.GetRequest().GetExecution())
+			if err != nil {
+				return nil, err
+			}
+			req.Execution.RunId = msResp.Execution.RunId
+			mresp, err := e.queryDirectlyThroughMatching(ctx, msResp, request.GetDomainUUID(), req)
+			return mresp, err
+		case queryStateCompleted:
+			result := state.queryResult
+			switch result.GetResultType() {
+			case workflow.QueryResultTypeAnswered:
+				return &h.QueryWorkflowResponse{
+					Response: &workflow.QueryWorkflowResponse{
+						QueryResult: result.GetAnswer(),
+					},
+				}, nil
+			case workflow.QueryResultTypeFailed:
+				return nil, &workflow.QueryFailedError{Message: result.GetErrorMessage()}
+			default:
+				return nil, ErrQueryEnteredInvalidState
+			}
+		default:
+			return nil, ErrQueryEnteredInvalidState
 		}
 	case <-timer.C:
 		scope.IncCounter(metrics.ConsistentQueryTimeoutCount)
@@ -842,7 +859,6 @@ func (e *historyEngineImpl) QueryWorkflow(
 		scope.IncCounter(metrics.ConsistentQueryTimeoutCount)
 		return nil, ctx.Err()
 	}
-	return nil, &workflow.InternalServiceError{Message: "query entered unexpected state, this should be impossible"}
 }
 
 func (e *historyEngineImpl) queryDirectlyThroughMatching(

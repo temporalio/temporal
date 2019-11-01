@@ -49,12 +49,12 @@ func (s *QueryRegistrySuite) SetupTest() {
 func (s *QueryRegistrySuite) TestQueryRegistry() {
 	qr := newQueryRegistry()
 	var ids []string
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 15; i++ {
 		id, _ := qr.bufferQuery(&shared.WorkflowQuery{})
 		ids = append(ids, id)
 	}
-	s.assertHasQueries(qr, true, false)
-	s.assertQuerySizes(qr, 10, 0)
+	s.assertHasQueries(qr, true, false, false)
+	s.assertQuerySizes(qr, 15, 0, 0)
 
 	found, err := qr.getQueryInternalState(ids[0])
 	s.NoError(err)
@@ -70,8 +70,8 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 		})
 		s.NoError(err)
 	}
-	s.assertHasQueries(qr, true, true)
-	s.assertQuerySizes(qr, 5, 5)
+	s.assertHasQueries(qr, true, true, false)
+	s.assertQuerySizes(qr, 10, 5, 0)
 
 	for i := 0; i < 5; i++ {
 		qs, err := qr.getQueryInternalState(ids[i])
@@ -90,16 +90,44 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 
 		qr.removeQuery(ids[i])
 	}
-	s.assertHasQueries(qr, true, false)
-	s.assertQuerySizes(qr, 5, 0)
+	s.assertHasQueries(qr, true, false, false)
+	s.assertQuerySizes(qr, 10, 0, 0)
+
+	for i := 5; i < 10; i++ {
+		s.NoError(qr.unblockQuery(ids[i]))
+	}
+	s.assertHasQueries(qr, true, false, true)
+	s.assertQuerySizes(qr, 5, 0, 5)
+
+	for i := 5; i < 10; i++ {
+		qs, err := qr.getQueryInternalState(ids[i])
+		s.NoError(err)
+		s.NotNil(qs)
+		s.Equal(queryStateUnblocked, qs.state)
+		s.Nil(qs.queryResult)
+
+		termCh, err := qr.getQueryTermCh(ids[i])
+		s.NoError(err)
+		select {
+		case <-termCh:
+		default:
+			s.Fail("termination channel should be closed")
+		}
+
+		qr.removeQuery(ids[i])
+	}
+	s.assertHasQueries(qr, true, false, false)
+	s.assertQuerySizes(qr, 5, 0, 0)
 }
 
-func (s *QueryRegistrySuite) assertHasQueries(qr queryRegistry, buffered, completed bool) {
-	s.Equal(buffered, qr.hasBuffered())
-	s.Equal(completed, qr.hasCompleted())
+func (s *QueryRegistrySuite) assertHasQueries(qr queryRegistry, buffered, completed, unblocked bool) {
+	s.Equal(buffered, qr.hasBufferedQuery())
+	s.Equal(completed, qr.hasCompletedQuery())
+	s.Equal(unblocked, qr.hasUnblockedQuery())
 }
 
-func (s *QueryRegistrySuite) assertQuerySizes(qr queryRegistry, buffered, completed int) {
-	s.Len(qr.getBufferedSnapshot(), buffered)
-	s.Len(qr.getCompletedSnapshot(), completed)
+func (s *QueryRegistrySuite) assertQuerySizes(qr queryRegistry, buffered, completed, unblocked int) {
+	s.Len(qr.getBufferedIDs(), buffered)
+	s.Len(qr.getCompletedIDs(), completed)
+	s.Len(qr.getUnblockedIDs(), unblocked)
 }

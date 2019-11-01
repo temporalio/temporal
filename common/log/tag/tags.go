@@ -141,6 +141,11 @@ func WorkflowDecisionTimeoutSeconds(s int32) Tag {
 	return newInt32("wf-decision-timeout", s)
 }
 
+// QueryID returns tag for QueryID
+func QueryID(queryID string) Tag {
+	return newStringTag("query-id", queryID)
+}
+
 // domain related
 
 // WorkflowDomainID returns tag for WorkflowDomainID

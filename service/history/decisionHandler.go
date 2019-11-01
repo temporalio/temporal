@@ -453,29 +453,9 @@ Update_History_Loop:
 			continueAsNewBuilder = nil
 		}
 
-		queryResults := req.GetCompleteRequest().GetQueryResults()
-		bufferedQueries := msBuilder.GetQueryRegistry().getBufferedSnapshot()
-		hasUnhandledQueries := false
-		if len(queryResults) < len(bufferedQueries) {
-			hasUnhandledQueries = true
-		} else {
-			for _, bid := range bufferedQueries {
-				if _, ok := queryResults[bid]; !ok {
-					hasUnhandledQueries = true
-					break
-				}
-			}
-		}
-
-		createNewDecisionTask := msBuilder.IsWorkflowExecutionRunning() && (hasUnhandledEvents || request.GetForceCreateNewDecisionTask() || activityNotStartedCancelled || hasUnhandledQueries)
+		createNewDecisionTask := msBuilder.IsWorkflowExecutionRunning() && (hasUnhandledEvents || request.GetForceCreateNewDecisionTask() || activityNotStartedCancelled)
 		var newDecisionTaskScheduledID int64
 		if createNewDecisionTask {
-			// emit metric is decision task was generated just because there was buffered queries, if this happens a lot then
-			// consider an optimization in which instead of a decision task being created a transfer task is created and is
-			// used to dispatch queries directly through matching
-			if !hasUnhandledEvents && !request.GetForceCreateNewDecisionTask() && !activityNotStartedCancelled && hasUnhandledQueries {
-				handler.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.DecisionTaskCreatedForBufferedQueriesCount)
-			}
 			var newDecision *decisionInfo
 			var err error
 			if decisionHeartbeating && !decisionHeartbeatTimeout {
@@ -528,14 +508,6 @@ Update_History_Loop:
 			)
 		} else {
 			updateErr = context.updateWorkflowExecutionAsActive(handler.shard.GetTimeSource().Now())
-			if updateErr == nil {
-				qr := msBuilder.GetQueryRegistry()
-				for id, result := range req.GetCompleteRequest().GetQueryResults() {
-					if err := qr.completeQuery(id, result); err != nil {
-						handler.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.CompleteQueryFailedCount)
-					}
-				}
-			}
 		}
 
 		if updateErr != nil {
@@ -572,6 +544,27 @@ Update_History_Loop:
 			}
 
 			return nil, updateErr
+		}
+
+		// at this point the update is successful, so answer all the queries which we have answers for
+		qr := msBuilder.GetQueryRegistry()
+		for id, result := range req.GetCompleteRequest().GetQueryResults() {
+			if err := qr.completeQuery(id, result); err != nil {
+				handler.logger.Error("failed to complete query", tag.QueryID(id), tag.Error(err))
+				handler.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.CompleteQueryFailedCount)
+			}
+		}
+
+		// if no decision task was created then it means no buffered events came in during this decision task's handling
+		// this means all buffered queries can be dispatched directly through matching at this point
+		if !createNewDecisionTask {
+			buffered := qr.getBufferedIDs()
+			for _, id := range buffered {
+				if err := qr.unblockQuery(id); err != nil {
+					handler.logger.Error("failed to unblock query", tag.QueryID(id), tag.Error(err))
+					handler.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.UnblockQueryFailedCount)
+				}
+			}
 		}
 
 		if decisionHeartbeatTimeout {
@@ -641,7 +634,7 @@ func (handler *decisionHandlerImpl) createRecordDecisionTaskStartedResponse(
 	response.BranchToken = currentBranchToken
 
 	qr := msBuilder.GetQueryRegistry()
-	buffered := qr.getBufferedSnapshot()
+	buffered := qr.getBufferedIDs()
 	queries := make(map[string]*workflow.WorkflowQuery)
 	for _, id := range buffered {
 		state, err := qr.getQueryInternalState(id)

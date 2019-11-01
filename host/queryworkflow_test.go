@@ -555,9 +555,9 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 }
 
 func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
-	id := "interation-query-workflow-test-consistent"
-	wt := "interation-query-workflow-test-consistent-type"
-	tl := "interation-query-workflow-test-consistent-tasklist"
+	id := "interation-query-workflow-test-consistent-piggyback-query"
+	wt := "interation-query-workflow-test-consistent-piggyback-query-type"
+	tl := "interation-query-workflow-test-consistent-piggyback-query-tasklist"
 	identity := "worker1"
 	activityName := "activity_type1"
 	queryType := "test-query"
@@ -900,10 +900,10 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 	s.Nil(queryResult.Resp)
 }
 
-func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_NonSticky() {
-	id := "interation-query-workflow-test-consistent-new-decision-task-non-sticky"
-	wt := "interation-query-workflow-test-consistent-new-decision-task-non-sticky-type"
-	tl := "interation-query-workflow-test-consistent-new-decision-task-non-sticky-tasklist"
+func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonSticky() {
+	id := "interation-query-workflow-test-consistent-blocked-by-started-non-sticky"
+	wt := "interation-query-workflow-test-consistent-blocked-by-started-non-sticky-type"
+	tl := "interation-query-workflow-test-consistent-blocked-by-started-non-sticky-tasklist"
 	identity := "worker1"
 	activityName := "activity_type1"
 	queryType := "test-query"
@@ -1069,21 +1069,11 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_NonStick
 	default:
 	}
 
-	// now poll for decision task which contains the query which was buffered
-	isQueryTask, _, errInner := poller.PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(
-		false,
-		false,
-		false,
-		false,
-		int64(0),
-		5,
-		false,
-		&workflow.WorkflowQueryResult{
-			ResultType: common.QueryResultTypePtr(workflow.QueryResultTypeAnswered),
-			Answer:     []byte("consistent query result"),
-		})
-	s.False(isQueryTask)
-	s.NoError(errInner)
+	// now that started decision task completes poll for next task which will be a query task
+	// containing the buffered query
+	isQueryTask, err := poller.PollAndProcessDecisionTask(false, false)
+	s.True(isQueryTask)
+	s.NoError(err)
 
 	queryResult := <-queryResultCh
 	s.NoError(queryResult.Err)
@@ -1091,7 +1081,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_NonStick
 	s.NotNil(queryResult.Resp.QueryResult)
 	s.Nil(queryResult.Resp.QueryRejected)
 	queryResultString := string(queryResult.Resp.QueryResult)
-	s.Equal("consistent query result", queryResultString)
+	s.Equal("query-result", queryResultString)
 }
 
 func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky() {
@@ -1254,6 +1244,22 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 		// at the time the query comes in there will be a started decision task
 		// only once signal completes can queryWorkflow unblock
 		<-time.After(time.Second)
+
+		// at this point there is a decision task started on the worker so this second signal will become buffered
+		signalName := "my signal"
+		signalInput := []byte("my signal input.")
+		err = s.engine.SignalWorkflowExecution(createContext(), &workflow.SignalWorkflowExecutionRequest{
+			Domain: common.StringPtr(s.domainName),
+			WorkflowExecution: &workflow.WorkflowExecution{
+				WorkflowId: common.StringPtr(id),
+				RunId:      common.StringPtr(*we.RunId),
+			},
+			SignalName: common.StringPtr(signalName),
+			Input:      signalInput,
+			Identity:   common.StringPtr(identity),
+		})
+		s.Nil(err)
+
 		queryWorkflowFn(queryType, nil)
 	}()
 
@@ -1282,6 +1288,9 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 			ResultType: common.QueryResultTypePtr(workflow.QueryResultTypeAnswered),
 			Answer:     []byte("consistent query result"),
 		})
+
+	// the task should not be a query task because at the time outstanding decision task completed
+	// there existed a buffered event which triggered the creation of a new decision task which query was dispatched on
 	s.False(isQueryTask)
 	s.NoError(errInner)
 

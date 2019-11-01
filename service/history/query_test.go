@@ -45,7 +45,7 @@ func (s *QuerySuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 }
 
-func (s *QuerySuite) TestQuery() {
+func (s *QuerySuite) TestQueryCompleted() {
 	q := newQuery(&shared.WorkflowQuery{})
 	s.assertBufferedState(q)
 	s.NoError(q.completeQuery(&shared.WorkflowQueryResult{
@@ -53,6 +53,13 @@ func (s *QuerySuite) TestQuery() {
 		Answer:     []byte{1, 2, 3},
 	}))
 	s.assertCompletedState(q)
+}
+
+func (s *QuerySuite) TestQueryUnblocked() {
+	q := newQuery(&shared.WorkflowQuery{})
+	s.assertBufferedState(q)
+	s.NoError(q.unblockQuery())
+	s.assertUnblockedState(q)
 }
 
 func (s *QuerySuite) TestValidateQueryResult() {
@@ -127,6 +134,15 @@ func (s *QuerySuite) assertCompletedState(q query) {
 	s.Equal(queryStateCompleted, snapshot.state)
 	s.NotNil(snapshot.queryInput)
 	s.NotNil(snapshot.queryResult)
+	termCh := q.getQueryTermCh()
+	s.True(closed(termCh))
+}
+
+func (s *QuerySuite) assertUnblockedState(q query) {
+	snapshot := q.getQueryInternalState()
+	s.Equal(queryStateUnblocked, snapshot.state)
+	s.NotNil(snapshot.queryInput)
+	s.Nil(snapshot.queryResult)
 	termCh := q.getQueryTermCh()
 	s.True(closed(termCh))
 }
