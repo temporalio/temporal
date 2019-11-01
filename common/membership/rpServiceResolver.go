@@ -21,8 +21,6 @@
 package membership
 
 import (
-	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -137,11 +135,10 @@ func (r *ringpopServiceResolver) Lookup(key string) (*HostInfo, error) {
 		return nil, ErrInsufficientHosts
 	}
 
-	parts := strings.Split(addr, ":")
-	if len(parts) != 2 {
-		return nil, ErrIncorrectAddressFormat
+	serviceAddress, err := replaceServicePort(addr, r.port)
+	if err != nil {
+		return nil, err
 	}
-	serviceAddress := fmt.Sprintf("%s:%v", parts[0], r.port)
 	return NewHostInfo(serviceAddress, r.getLabelsMap()), nil
 }
 

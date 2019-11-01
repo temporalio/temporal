@@ -106,15 +106,15 @@ func (rpo *ringpopMonitor) WhoAmI() (*HostInfo, error) {
 		return nil, err
 	}
 
-	parts := strings.Split(address, ":")
-	if len(parts) != 2 {
-		return nil, ErrIncorrectAddressFormat
-	}
 	servicePort, ok := rpo.services[rpo.serviceName]
 	if !ok {
 		return nil, ErrUnknownService
 	}
-	serviceAddress := fmt.Sprintf("%s:%v", parts[0], servicePort)
+
+	serviceAddress, err := replaceServicePort(address, servicePort)
+	if err != nil {
+		return nil, err
+	}
 	return NewHostInfo(serviceAddress, labels.AsMap()), nil
 }
 
@@ -148,4 +148,13 @@ func (rpo *ringpopMonitor) RemoveListener(service string, name string) error {
 		return err
 	}
 	return ring.RemoveListener(name)
+}
+
+func replaceServicePort(address string, servicePort int) (string, error) {
+	parts := strings.Split(address, ":")
+	if len(parts) != 2 {
+		return "", ErrIncorrectAddressFormat
+	}
+
+	return fmt.Sprintf("%s:%v", parts[0], servicePort), nil
 }
