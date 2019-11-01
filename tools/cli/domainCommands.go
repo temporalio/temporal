@@ -92,13 +92,12 @@ func (d *domainCLIImpl) RegisterDomain(c *cli.Context) {
 			ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", FlagEmitMetric), err)
 		}
 	}
-	var isGlobalDomainPtr *bool
+	var isGlobalDomain bool
 	if c.IsSet(FlagIsGlobalDomain) {
-		isGlobalDomain, err := strconv.ParseBool(c.String(FlagIsGlobalDomain))
+		isGlobalDomain, err = strconv.ParseBool(c.String(FlagIsGlobalDomain))
 		if err != nil {
 			ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", FlagIsGlobalDomain), err)
 		}
-		isGlobalDomainPtr = common.BoolPtr(isGlobalDomain)
 	}
 
 	domainData := map[string]string{}
@@ -116,9 +115,9 @@ func (d *domainCLIImpl) RegisterDomain(c *cli.Context) {
 		}
 	}
 
-	var activeClusterName *string
+	var activeClusterName string
 	if c.IsSet(FlagActiveClusterName) {
-		activeClusterName = common.StringPtr(c.String(FlagActiveClusterName))
+		activeClusterName = c.String(FlagActiveClusterName)
 	}
 
 	var clusters []*shared.ClusterReplicationConfiguration
@@ -149,13 +148,13 @@ func (d *domainCLIImpl) RegisterDomain(c *cli.Context) {
 		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(int32(retentionDays)),
 		EmitMetric:                             common.BoolPtr(emitMetric),
 		Clusters:                               clusters,
-		ActiveClusterName:                      activeClusterName,
+		ActiveClusterName:                      common.StringPtr(activeClusterName),
 		SecurityToken:                          common.StringPtr(securityToken),
 		HistoryArchivalStatus:                  archivalStatus(c, FlagHistoryArchivalStatus),
 		HistoryArchivalURI:                     common.StringPtr(c.String(FlagHistoryArchivalURI)),
 		VisibilityArchivalStatus:               archivalStatus(c, FlagVisibilityArchivalStatus),
 		VisibilityArchivalURI:                  common.StringPtr(c.String(FlagVisibilityArchivalURI)),
-		IsGlobalDomain:                         isGlobalDomainPtr,
+		IsGlobalDomain:                         common.BoolPtr(isGlobalDomain),
 	}
 
 	requestGRPC := &tpb.RegisterDomainRequest{
@@ -166,21 +165,13 @@ func (d *domainCLIImpl) RegisterDomain(c *cli.Context) {
 		WorkflowExecutionRetentionPeriodInDays: int32(retentionDays),
 		EmitMetric:                             emitMetric,
 		Clusters:                               clustersGRPC,
-		//ActiveClusterName:                      *activeClusterName,
-		SecurityToken:            securityToken,
-		HistoryArchivalStatus:    archivalStatusGRPC(c, FlagHistoryArchivalStatus),
-		HistoryArchivalURI:       c.String(FlagHistoryArchivalURI),
-		VisibilityArchivalStatus: archivalStatusGRPC(c, FlagVisibilityArchivalStatus),
-		VisibilityArchivalURI:    c.String(FlagVisibilityArchivalURI),
-		//IsGlobalDomain:                         *isGlobalDomainPtr,
-	}
-
-	if activeClusterName != nil {
-		requestGRPC.ActiveClusterName = *activeClusterName
-	}
-
-	if isGlobalDomainPtr != nil {
-		requestGRPC.IsGlobalDomain = *isGlobalDomainPtr
+		ActiveClusterName:                      activeClusterName,
+		SecurityToken:                          securityToken,
+		HistoryArchivalStatus:                  archivalStatusGRPC(c, FlagHistoryArchivalStatus),
+		HistoryArchivalURI:                     c.String(FlagHistoryArchivalURI),
+		VisibilityArchivalStatus:               archivalStatusGRPC(c, FlagVisibilityArchivalStatus),
+		VisibilityArchivalURI:                  c.String(FlagVisibilityArchivalURI),
+		IsGlobalDomain:                         isGlobalDomain,
 	}
 
 	ctx, cancel := newContext(c)
@@ -460,14 +451,14 @@ func archivalStatusGRPC(c *cli.Context, statusFlagName string) tpb.ArchivalStatu
 	if c.IsSet(statusFlagName) {
 		switch c.String(statusFlagName) {
 		case "disabled":
-			return tpb.DISABLED
+			return tpb.ArchivalStatusDisabled
 		case "enabled":
-			return tpb.ENABLED
+			return tpb.ArchivalStatusEnabled
 		default:
 			ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", statusFlagName), errors.New("invalid status, valid values are \"disabled\" and \"enabled\""))
 		}
 	}
-	return tpb.DISABLED
+	return tpb.ArchivalStatusDefault
 }
 
 func clustersToString(clusters []*shared.ClusterReplicationConfiguration) string {
