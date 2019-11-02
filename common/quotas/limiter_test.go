@@ -36,10 +36,54 @@ const (
 )
 
 func TestNewRateLimiter(t *testing.T) {
-	maxDispatch := float64(0.01)
+	maxDispatch := 0.01
 	rl := NewRateLimiter(&maxDispatch, time.Second, _minBurst)
-	limiter := rl.globalLimiter.Load().(*rate.Limiter)
+	limiter := rl.goRateLimiter.Load().(*rate.Limiter)
 	assert.Equal(t, _minBurst, limiter.Burst())
+}
+
+func TestMultiStageRateLimiterBlockedByDomainRps(t *testing.T) {
+	policy := newFixedRpsMultiStageRateLimiter(2, 1)
+	var result []bool
+	for n := 0; n < 5; n++ {
+		result = append(result, policy.Allow(Info{Domain: defaultDomain}))
+	}
+
+	time.Sleep(time.Second)
+	for n := 0; n < 5; n++ {
+		result = append(result, policy.Allow(Info{Domain: defaultDomain}))
+	}
+
+	var numAllowed int
+	for _, allowed := range result {
+		if allowed {
+			numAllowed++
+		}
+	}
+
+	assert.Equal(t, 2, numAllowed)
+}
+
+func TestMultiStageRateLimiterBlockedByGlobalRps(t *testing.T) {
+	policy := newFixedRpsMultiStageRateLimiter(1, 2)
+	var result []bool
+	for n := 0; n < 5; n++ {
+		result = append(result, policy.Allow(Info{Domain: defaultDomain}))
+	}
+
+	time.Sleep(time.Second)
+	for n := 0; n < 5; n++ {
+		result = append(result, policy.Allow(Info{Domain: defaultDomain}))
+	}
+
+	var numAllowed int
+	for _, allowed := range result {
+		if allowed {
+			numAllowed++
+		}
+	}
+
+	assert.Equal(t, 2, numAllowed)
 }
 
 func BenchmarkRateLimiter(b *testing.B) {
@@ -51,7 +95,7 @@ func BenchmarkRateLimiter(b *testing.B) {
 }
 
 func BenchmarkMultiStageRateLimiter(b *testing.B) {
-	policy := getPolicy()
+	policy := newFixedRpsMultiStageRateLimiter(defaultRps, defaultRps)
 	for n := 0; n < b.N; n++ {
 		policy.Allow(Info{Domain: defaultDomain})
 	}
@@ -59,7 +103,7 @@ func BenchmarkMultiStageRateLimiter(b *testing.B) {
 
 func BenchmarkMultiStageRateLimiter20Domains(b *testing.B) {
 	numDomains := 20
-	policy := getPolicy()
+	policy := newFixedRpsMultiStageRateLimiter(defaultRps, defaultRps)
 	domains := getDomains(numDomains)
 	for n := 0; n < b.N; n++ {
 		policy.Allow(Info{Domain: domains[n%numDomains]})
@@ -68,7 +112,7 @@ func BenchmarkMultiStageRateLimiter20Domains(b *testing.B) {
 
 func BenchmarkMultiStageRateLimiter100Domains(b *testing.B) {
 	numDomains := 100
-	policy := getPolicy()
+	policy := newFixedRpsMultiStageRateLimiter(defaultRps, defaultRps)
 	domains := getDomains(numDomains)
 	for n := 0; n < b.N; n++ {
 		policy.Allow(Info{Domain: domains[n%numDomains]})
@@ -77,20 +121,20 @@ func BenchmarkMultiStageRateLimiter100Domains(b *testing.B) {
 
 func BenchmarkMultiStageRateLimiter1000Domains(b *testing.B) {
 	numDomains := 1000
-	policy := getPolicy()
+	policy := newFixedRpsMultiStageRateLimiter(defaultRps, defaultRps)
 	domains := getDomains(numDomains)
 	for n := 0; n < b.N; n++ {
 		policy.Allow(Info{Domain: domains[n%numDomains]})
 	}
 }
 
-func getPolicy() Policy {
+func newFixedRpsMultiStageRateLimiter(globalRps, domainRps float64) Policy {
 	return NewMultiStageRateLimiter(
 		func() float64 {
-			return float64(defaultRps)
+			return globalRps
 		},
 		func(domain string) float64 {
-			return float64(defaultRps)
+			return domainRps
 		},
 	)
 }
