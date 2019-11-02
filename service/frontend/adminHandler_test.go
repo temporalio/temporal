@@ -22,8 +22,13 @@ package frontend
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
+
+	"github.com/uber/cadence/common/definition"
+	"github.com/uber/cadence/common/elasticsearch"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -40,6 +45,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
+	esmock "github.com/uber/cadence/common/elasticsearch/mocks"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/metrics"
@@ -434,4 +440,121 @@ func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistor
 	s.Equal(request.GetEndEventId(), inputEndEventID)
 	s.Equal(targetVersionHistory, versionHistory1)
 	s.NoError(err)
+}
+
+func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
+	handler := s.handler
+	handler.params = &service.BootstrapParams{}
+	ctx := context.Background()
+
+	type test struct {
+		Name     string
+		Request  *admin.AddSearchAttributeRequest
+		Expected error
+	}
+	// request validation tests
+	testCases1 := []test{
+		{
+			Name:     "nil request",
+			Request:  nil,
+			Expected: &shared.BadRequestError{Message: "Request is not provided"},
+		},
+		{
+			Name:     "empty request",
+			Request:  &admin.AddSearchAttributeRequest{},
+			Expected: &shared.BadRequestError{Message: "SearchAttributes are not provided"},
+		},
+		{
+			Name: "no advanced config",
+			Request: &admin.AddSearchAttributeRequest{
+				SearchAttribute: map[string]shared.IndexedValueType{
+					"CustomKeywordField": 1,
+				},
+			},
+			Expected: &shared.BadRequestError{Message: "AdvancedVisibilityStore is not configured for this Cadence Cluster"},
+		},
+	}
+	for _, testCase := range testCases1 {
+		s.Equal(testCase.Expected, handler.AddSearchAttribute(ctx, testCase.Request))
+	}
+
+	dynamicConfig := dynamicconfig.NewMockClient(s.controller)
+	handler.params.DynamicConfig = dynamicConfig
+	// add advanced visibility store related config
+	handler.params.ESConfig = &elasticsearch.Config{}
+	esClient := &esmock.Client{}
+	defer func() { esClient.AssertExpectations(s.T()) }()
+	handler.params.ESClient = esClient
+
+	mockValidAttr := map[string]interface{}{
+		"testkey": shared.IndexedValueTypeKeyword,
+	}
+	dynamicConfig.EXPECT().GetMapValue(dynamicconfig.ValidSearchAttributes, nil, definition.GetDefaultIndexedKeys()).
+		Return(mockValidAttr, nil).AnyTimes()
+
+	testCases2 := []test{
+		{
+			Name: "reserved key",
+			Request: &admin.AddSearchAttributeRequest{
+				SearchAttribute: map[string]shared.IndexedValueType{
+					"WorkflowID": 1,
+				},
+			},
+			Expected: &shared.BadRequestError{Message: "Key [WorkflowID] is reserved by system"},
+		},
+		{
+			Name: "key already whitelisted",
+			Request: &admin.AddSearchAttributeRequest{
+				SearchAttribute: map[string]shared.IndexedValueType{
+					"testkey": 1,
+				},
+			},
+			Expected: &shared.BadRequestError{Message: "Key [testkey] is already whitelist"},
+		},
+	}
+	for _, testCase := range testCases2 {
+		s.Equal(testCase.Expected, handler.AddSearchAttribute(ctx, testCase.Request))
+	}
+
+	dcUpdateTest := test{
+		Name: "dynamic config update failed",
+		Request: &admin.AddSearchAttributeRequest{
+			SearchAttribute: map[string]shared.IndexedValueType{
+				"testkey2": 1,
+			},
+		},
+		Expected: &shared.InternalServiceError{Message: "Failed to update dynamic config, err: error"},
+	}
+	dynamicConfig.EXPECT().UpdateValue(dynamicconfig.ValidSearchAttributes, map[string]interface{}{
+		"testkey":  shared.IndexedValueTypeKeyword,
+		"testkey2": 1,
+	}).Return(errors.New("error"))
+	s.Equal(dcUpdateTest.Expected, handler.AddSearchAttribute(ctx, dcUpdateTest.Request))
+
+	// ES operations tests
+	dynamicConfig.EXPECT().UpdateValue(gomock.Any(), gomock.Any()).Return(nil).Times(2)
+
+	convertFailedTest := test{
+		Name: "unknown value type",
+		Request: &admin.AddSearchAttributeRequest{
+			SearchAttribute: map[string]shared.IndexedValueType{
+				"testkey3": -1,
+			},
+		},
+		Expected: &shared.BadRequestError{Message: "Unknown value type, IndexedValueType(-1)"},
+	}
+	s.Equal(convertFailedTest.Expected, handler.AddSearchAttribute(ctx, convertFailedTest.Request))
+
+	esClient.On("PutMapping", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(errors.New("error"))
+	esErrorTest := test{
+		Name: "es error",
+		Request: &admin.AddSearchAttributeRequest{
+			SearchAttribute: map[string]shared.IndexedValueType{
+				"testkey4": 1,
+			},
+		},
+		Expected: &shared.InternalServiceError{Message: "Failed to update ES mapping, err: error"},
+	}
+	s.Equal(esErrorTest.Expected, handler.AddSearchAttribute(ctx, esErrorTest.Request))
 }

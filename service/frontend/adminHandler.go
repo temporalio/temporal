@@ -23,6 +23,7 @@ package frontend
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"sync"
@@ -139,13 +140,16 @@ func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *admin.
 	if len(request.GetSearchAttribute()) == 0 {
 		return &gen.BadRequestError{Message: "SearchAttributes are not provided"}
 	}
+	if err := adh.validateConfigForAdvanceVisibility(); err != nil {
+		return &gen.BadRequestError{Message: fmt.Sprintf("AdvancedVisibilityStore is not configured for this Cadence Cluster")}
+	}
 
 	searchAttr := request.GetSearchAttribute()
 	currentValidAttr, _ := adh.params.DynamicConfig.GetMapValue(
 		dynamicconfig.ValidSearchAttributes, nil, definition.GetDefaultIndexedKeys())
 	for k, v := range searchAttr {
 		if definition.IsSystemIndexedKey(k) {
-			return &gen.BadRequestError{Message: fmt.Sprintf("Key [%s] is reserverd by system", k)}
+			return &gen.BadRequestError{Message: fmt.Sprintf("Key [%s] is reserved by system", k)}
 		}
 		if _, exist := currentValidAttr[k]; exist {
 			return &gen.BadRequestError{Message: fmt.Sprintf("Key [%s] is already whitelist", k)}
@@ -180,6 +184,13 @@ func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *admin.
 		}
 	}
 
+	return nil
+}
+
+func (adh *AdminHandler) validateConfigForAdvanceVisibility() error {
+	if adh.params.ESConfig == nil || adh.params.ESClient == nil {
+		return errors.New("ES related config not found")
+	}
 	return nil
 }
 
