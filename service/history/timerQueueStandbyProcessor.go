@@ -527,8 +527,11 @@ func (t *timerQueueStandbyProcessorImpl) processTimer(
 	}()
 
 	mutableState, err := loadMutableStateForTimerTask(context, timerTask, t.metricsClient, t.logger)
-	if err != nil || mutableState == nil {
+	if err != nil {
 		return err
+	}
+	if mutableState == nil {
+		return nil
 	}
 
 	if !mutableState.IsWorkflowExecutionRunning() {

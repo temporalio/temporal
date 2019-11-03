@@ -315,7 +315,8 @@ func (t *timerQueueActiveProcessorImpl) processUserTimerTimeout(
 	mutableState, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
-	} else if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
+	}
+	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
 		return nil
 	}
 
@@ -366,7 +367,8 @@ func (t *timerQueueActiveProcessorImpl) processActivityTimeout(
 	mutableState, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
-	} else if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
+	}
+	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
 		return nil
 	}
 
@@ -457,7 +459,8 @@ func (t *timerQueueActiveProcessorImpl) processDecisionTimeout(
 	mutableState, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
-	} else if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
+	}
+	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
 		return nil
 	}
 
@@ -525,17 +528,18 @@ func (t *timerQueueActiveProcessorImpl) processWorkflowBackoffTimer(
 	}
 	defer func() { release(retError) }()
 
+	mutableState, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
+	if err != nil {
+		return err
+	}
+	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
+		return nil
+	}
+
 	if task.TimeoutType == persistence.WorkflowBackoffTimeoutTypeRetry {
 		t.metricsClient.IncCounter(metrics.TimerActiveTaskWorkflowBackoffTimerScope, metrics.WorkflowRetryBackoffTimerCount)
 	} else {
 		t.metricsClient.IncCounter(metrics.TimerActiveTaskWorkflowBackoffTimerScope, metrics.WorkflowCronBackoffTimerCount)
-	}
-
-	mutableState, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
-	if err != nil {
-		return err
-	} else if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
-		return nil
 	}
 
 	if mutableState.HasProcessedOrPendingDecision() {
@@ -562,7 +566,8 @@ func (t *timerQueueActiveProcessorImpl) processActivityRetryTimer(
 	mutableState, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
-	} else if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
+	}
+	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
 		return nil
 	}
 
@@ -634,8 +639,9 @@ func (t *timerQueueActiveProcessorImpl) processWorkflowTimeout(
 	task *persistence.TimerTaskInfo,
 ) (retError error) {
 
-	domainID, execution := t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(task)
-	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(domainID, execution)
+	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
+		t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(task),
+	)
 	if err != nil {
 		return err
 	}
@@ -644,7 +650,8 @@ func (t *timerQueueActiveProcessorImpl) processWorkflowTimeout(
 	mutableState, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
-	} else if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
+	}
+	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
 		return nil
 	}
 

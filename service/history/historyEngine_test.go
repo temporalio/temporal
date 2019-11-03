@@ -52,6 +52,8 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
+	cconfig "github.com/uber/cadence/common/service/config"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/service/worker/archiver"
 )
 
@@ -184,6 +186,14 @@ var testGlobalChildDomainEntry = cache.NewGlobalDomainCacheEntryForTest(
 	testVersion,
 	nil,
 )
+
+func NewDynamicConfigForTest() *Config {
+	dc := dynamicconfig.NewNopCollection()
+	config := NewConfig(dc, 1, cconfig.StoreTypeCassandra, false)
+	// reduce the duration of long poll to increase test speed
+	config.LongPollExpirationInterval = dc.GetDurationPropertyFilteredByDomain(dynamicconfig.HistoryLongPollExpirationInterval, 10*time.Second)
+	return config
+}
 
 func TestEngineSuite(t *testing.T) {
 	s := new(engineSuite)

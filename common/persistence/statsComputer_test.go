@@ -45,7 +45,7 @@ func TestStatsComputerSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-//TODO need to add more tests
+// TODO need to add more tests
 func (s *statsComputerSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
@@ -70,17 +70,17 @@ func (s *statsComputerSuite) TestStatsWithStartedEvent() {
 	workflowType := &workflow.WorkflowType{
 		Name: common.StringPtr("test-workflow-type-name"),
 	}
-	tasklist := &workflow.TaskList{
+	taskList := &workflow.TaskList{
 		Name: common.StringPtr("test-tasklist"),
 	}
 
 	ms.UpdateWorkflowMutation.ExecutionInfo.DomainID = domainID
-	ms.UpdateWorkflowMutation.ExecutionInfo.WorkflowID = *execution.WorkflowId
-	ms.UpdateWorkflowMutation.ExecutionInfo.RunID = *execution.RunId
-	ms.UpdateWorkflowMutation.ExecutionInfo.WorkflowTypeName = *workflowType.Name
-	ms.UpdateWorkflowMutation.ExecutionInfo.TaskList = *tasklist.Name
+	ms.UpdateWorkflowMutation.ExecutionInfo.WorkflowID = execution.GetWorkflowId()
+	ms.UpdateWorkflowMutation.ExecutionInfo.RunID = execution.GetRunId()
+	ms.UpdateWorkflowMutation.ExecutionInfo.WorkflowTypeName = workflowType.GetName()
+	ms.UpdateWorkflowMutation.ExecutionInfo.TaskList = taskList.GetName()
 
-	expectedSize := len(execution.GetWorkflowId()) + len(workflowType.GetName()) + len(tasklist.GetName())
+	expectedSize := len(execution.GetWorkflowId()) + len(workflowType.GetName()) + len(taskList.GetName())
 
 	stats := s.sc.computeMutableStateUpdateStats(ms)
 	s.Equal(stats.ExecutionInfoSize, expectedSize)
