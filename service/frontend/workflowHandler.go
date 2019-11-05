@@ -1970,7 +1970,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(
 		sizeLimitError,
 		domainID,
 		signalRequest.GetWorkflowExecution().GetWorkflowId(),
-		signalRequest.GetWorkflowExecution().GetWorkflowId(),
+		signalRequest.GetWorkflowExecution().GetRunId(),
 		scope,
 		wh.GetThrottledLogger(),
 	); err != nil {

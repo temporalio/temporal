@@ -1624,10 +1624,10 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 		RunId:      request.WorkflowExecution.RunId,
 	}
 
-	return e.updateWorkflowExecution(ctx, domainID, execution, true,
-		func(mutableState mutableState) error {
+	return e.updateWorkflow(ctx, domainID, execution,
+		func(mutableState mutableState) (*updateWorkflowAction, error) {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return ErrWorkflowCompleted
+				return nil, ErrWorkflowCompleted
 			}
 
 			executionInfo := mutableState.GetExecutionInfo()
@@ -1636,7 +1636,7 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 				parentRunID := executionInfo.ParentRunID
 				if parentExecution.GetWorkflowId() != parentWorkflowID ||
 					parentExecution.GetRunId() != parentRunID {
-					return ErrWorkflowParent
+					return nil, ErrWorkflowParent
 				}
 			}
 
@@ -1646,19 +1646,19 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 				if cancelRequest.RequestId != nil {
 					requestID := *cancelRequest.RequestId
 					if requestID != "" && cancelRequestID == requestID {
-						return nil
+						return updateWorkflowWithNewDecision, nil
 					}
 				}
 				// if we consider workflow cancellation idempotent, then this error is redundant
 				// this error maybe useful if this API is invoked by external, not decision from transfer queue
-				return ErrCancellationAlreadyRequested
+				return nil, ErrCancellationAlreadyRequested
 			}
 
 			if _, err := mutableState.AddWorkflowExecutionCancelRequestedEvent("", req); err != nil {
-				return &workflow.InternalServiceError{Message: "Unable to cancel workflow execution."}
+				return nil, &workflow.InternalServiceError{Message: "Unable to cancel workflow execution."}
 			}
 
-			return nil
+			return updateWorkflowWithNewDecision, nil
 		})
 }
 
@@ -1681,7 +1681,7 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 		RunId:      request.WorkflowExecution.RunId,
 	}
 
-	return e.updateWorkflowExecutionWithAction(ctx, domainID, execution, func(mutableState mutableState) (*updateWorkflowAction, error) {
+	return e.updateWorkflow(ctx, domainID, execution, func(mutableState mutableState) (*updateWorkflowAction, error) {
 		executionInfo := mutableState.GetExecutionInfo()
 		createDecisionTask := true
 		// Do not create decision task when the workflow is cron and the cron has not been started yet
@@ -1994,14 +1994,14 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 		RunId:      request.WorkflowExecution.RunId,
 	}
 
-	return e.updateWorkflowExecution(ctx, domainID, execution, false,
-		func(mutableState mutableState) error {
+	return e.updateWorkflow(ctx, domainID, execution,
+		func(mutableState mutableState) (*updateWorkflowAction, error) {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return ErrWorkflowCompleted
+				return nil, ErrWorkflowCompleted
 			}
 
 			eventBatchFirstEventID := mutableState.GetNextEventID()
-			return terminateWorkflow(
+			return updateWorkflowWithoutDecision, terminateWorkflow(
 				mutableState,
 				eventBatchFirstEventID,
 				request.GetReason(),
@@ -2265,30 +2265,46 @@ func (e *historyEngineImpl) DeleteExecutionFromVisibility(
 	return e.visibilityMgr.DeleteWorkflowExecution(request) // delete from db
 }
 
-type updateWorkflowAction struct {
-	noop           bool
-	createDecision bool
+func (e *historyEngineImpl) updateWorkflow(
+	ctx ctx.Context,
+	domainID string,
+	execution workflow.WorkflowExecution,
+	action updateWorkflowActionFunc,
+) (retError error) {
+
+	workflowContext, err := e.loadWorkflow(ctx, domainID, execution.GetWorkflowId(), execution.GetRunId())
+	if err != nil {
+		return err
+	}
+	defer func() { workflowContext.getReleaseFn()(retError) }()
+
+	return e.updateWorkflowHelper(workflowContext, action)
 }
 
 func (e *historyEngineImpl) updateWorkflowExecutionWithAction(
 	ctx ctx.Context,
 	domainID string,
 	execution workflow.WorkflowExecution,
-	action func(builder mutableState) (*updateWorkflowAction, error),
+	action updateWorkflowActionFunc,
 ) (retError error) {
 
-	context, release, err0 := e.historyCache.getOrCreateWorkflowExecution(ctx, domainID, execution)
-	if err0 != nil {
-		return err0
+	workflowContext, err := e.loadWorkflowOnce(ctx, domainID, execution.GetWorkflowId(), execution.GetRunId())
+	if err != nil {
+		return err
 	}
-	defer func() { release(retError) }()
+	defer func() { workflowContext.getReleaseFn()(retError) }()
 
-Update_History_Loop:
+	return e.updateWorkflowHelper(workflowContext, action)
+}
+
+func (e *historyEngineImpl) updateWorkflowHelper(
+	workflowContext workflowContext,
+	action updateWorkflowActionFunc,
+) (retError error) {
+
+UpdateHistoryLoop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
-		mutableState, err1 := context.loadWorkflowExecution()
-		if err1 != nil {
-			return err1
-		}
+		mutableState := workflowContext.getMutableState()
 
 		// conduct caller action
 		postActions, err := action(mutableState)
@@ -2296,8 +2312,14 @@ Update_History_Loop:
 			if err == ErrStaleState {
 				// Handler detected that cached workflow mutable could potentially be stale
 				// Reload workflow execution history
-				context.clear()
-				continue Update_History_Loop
+				workflowContext.getContext().clear()
+				if attempt != conditionalRetryCount-1 {
+					_, err = workflowContext.reloadMutableState()
+					if err != nil {
+						return err
+					}
+				}
+				continue UpdateHistoryLoop
 			}
 
 			// Returned error back to the caller
@@ -2317,15 +2339,22 @@ Update_History_Loop:
 			}
 		}
 
-		err = context.updateWorkflowExecutionAsActive(e.shard.GetTimeSource().Now())
+		err = workflowContext.getContext().updateWorkflowExecutionAsActive(e.shard.GetTimeSource().Now())
 		if err == ErrConflict {
-			continue Update_History_Loop
+			if attempt != conditionalRetryCount-1 {
+				_, err = workflowContext.reloadMutableState()
+				if err != nil {
+					return err
+				}
+			}
+			continue UpdateHistoryLoop
 		}
 		return err
 	}
 	return ErrMaxAttemptsExceeded
 }
 
+// TODO: remove and use updateWorkflowExecutionWithAction
 func (e *historyEngineImpl) updateWorkflowExecution(
 	ctx ctx.Context,
 	domainID string,
@@ -2335,16 +2364,24 @@ func (e *historyEngineImpl) updateWorkflowExecution(
 ) error {
 
 	return e.updateWorkflowExecutionWithAction(ctx, domainID, execution,
-		func(mutableState mutableState) (*updateWorkflowAction, error) {
-			err := action(mutableState)
-			if err != nil {
-				return nil, err
-			}
-			postActions := &updateWorkflowAction{
-				createDecision: createDecisionTask,
-			}
-			return postActions, nil
-		})
+		getUpdateWorkflowActionFunc(createDecisionTask, action))
+}
+
+func getUpdateWorkflowActionFunc(
+	createDecisionTask bool,
+	action func(builder mutableState) error,
+) updateWorkflowActionFunc {
+
+	return func(builder mutableState) (*updateWorkflowAction, error) {
+		err := action(builder)
+		if err != nil {
+			return nil, err
+		}
+		postActions := &updateWorkflowAction{
+			createDecision: createDecisionTask,
+		}
+		return postActions, nil
+	}
 }
 
 func (e *historyEngineImpl) failDecision(
@@ -2718,4 +2755,75 @@ func (e *historyEngineImpl) ReapplyEvents(
 
 			return postActions, nil
 		})
+}
+
+func (e *historyEngineImpl) loadWorkflowOnce(
+	ctx ctx.Context,
+	domainID string,
+	workflowID string,
+	runID string,
+) (workflowContext, error) {
+
+	context, release, err := e.historyCache.getOrCreateWorkflowExecution(
+		ctx,
+		domainID,
+		workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(workflowID),
+			RunId:      common.StringPtr(runID),
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	mutableState, err := context.loadWorkflowExecution()
+	if err != nil {
+		release(err)
+		return nil, err
+	}
+
+	return newWorkflowContext(context, release, mutableState), nil
+}
+
+func (e *historyEngineImpl) loadWorkflow(
+	ctx ctx.Context,
+	domainID string,
+	workflowID string,
+	runID string,
+) (workflowContext, error) {
+
+	if runID != "" {
+		return e.loadWorkflowOnce(ctx, domainID, workflowID, runID)
+	}
+
+	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
+
+		workflowContext, err := e.loadWorkflowOnce(ctx, domainID, workflowID, "")
+		if err != nil {
+			return nil, err
+		}
+
+		if workflowContext.getMutableState().IsWorkflowExecutionRunning() {
+			return workflowContext, nil
+		}
+
+		// workflow not running, need to check current record
+		resp, err := e.shard.GetExecutionManager().GetCurrentExecution(
+			&persistence.GetCurrentExecutionRequest{
+				DomainID:   domainID,
+				WorkflowID: workflowID,
+			},
+		)
+		if err != nil {
+			workflowContext.getReleaseFn()(err)
+			return nil, err
+		}
+
+		if resp.RunID == workflowContext.getRunID() {
+			return workflowContext, nil
+		}
+		workflowContext.getReleaseFn()(nil)
+	}
+
+	return nil, &workflow.InternalServiceError{Message: "unable to locate current workflow execution"}
 }

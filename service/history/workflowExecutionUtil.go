@@ -25,6 +25,79 @@ import (
 	"github.com/uber/cadence/common"
 )
 
+type workflowContext interface {
+	getContext() workflowExecutionContext
+	getMutableState() mutableState
+	reloadMutableState() (mutableState, error)
+	getReleaseFn() releaseWorkflowExecutionFunc
+	getWorkflowID() string
+	getRunID() string
+}
+
+type workflowContextImpl struct {
+	context      workflowExecutionContext
+	mutableState mutableState
+	releaseFn    releaseWorkflowExecutionFunc
+}
+
+type updateWorkflowAction struct {
+	noop           bool
+	createDecision bool
+}
+
+var (
+	updateWorkflowWithNewDecision = &updateWorkflowAction{
+		createDecision: true,
+	}
+	updateWorkflowWithoutDecision = &updateWorkflowAction{
+		createDecision: false,
+	}
+)
+
+type updateWorkflowActionFunc func(mutableState mutableState) (*updateWorkflowAction, error)
+
+func (w *workflowContextImpl) getContext() workflowExecutionContext {
+	return w.context
+}
+
+func (w *workflowContextImpl) getMutableState() mutableState {
+	return w.mutableState
+}
+
+func (w *workflowContextImpl) reloadMutableState() (mutableState, error) {
+	mutableState, err := w.getContext().loadWorkflowExecution()
+	if err != nil {
+		return nil, err
+	}
+	w.mutableState = mutableState
+	return mutableState, nil
+}
+
+func (w *workflowContextImpl) getReleaseFn() releaseWorkflowExecutionFunc {
+	return w.releaseFn
+}
+
+func (w *workflowContextImpl) getWorkflowID() string {
+	return w.getContext().getExecution().GetWorkflowId()
+}
+
+func (w *workflowContextImpl) getRunID() string {
+	return w.getContext().getExecution().GetRunId()
+}
+
+func newWorkflowContext(
+	context workflowExecutionContext,
+	releaseFn releaseWorkflowExecutionFunc,
+	mutableState mutableState,
+) *workflowContextImpl {
+
+	return &workflowContextImpl{
+		context:      context,
+		releaseFn:    releaseFn,
+		mutableState: mutableState,
+	}
+}
+
 func failDecision(
 	mutableState mutableState,
 	decision *decisionInfo,
