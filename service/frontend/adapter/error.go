@@ -29,8 +29,8 @@ import (
 	"go.uber.org/yarpc/yarpcerrors"
 )
 
-// Error converts Thrift error to gRPC error.
-func Error(thriftError error) error {
+// ToProtoError converts Thrift error to gRPC error.
+func ToProtoError(thriftError error) error {
 	switch thriftError := thriftError.(type) {
 	case *shared.InternalServiceError:
 		return protobuf.NewError(yarpcerrors.CodeInternal, thriftError.Message)

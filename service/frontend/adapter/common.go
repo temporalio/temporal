@@ -25,7 +25,7 @@ import (
 	"github.com/temporalio/temporal/tpb"
 )
 
-func archivalStatus(archivalStatus tpb.ArchivalStatus) *shared.ArchivalStatus {
+func toThriftArchivalStatus(archivalStatus tpb.ArchivalStatus) *shared.ArchivalStatus {
 	switch archivalStatus {
 	case tpb.ArchivalStatusDefault:
 		return nil

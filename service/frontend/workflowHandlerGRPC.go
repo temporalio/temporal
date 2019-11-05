@@ -61,9 +61,9 @@ func (wh *WorkflowHandlerGRPC) RegisterHandler() {
 func (wh *WorkflowHandlerGRPC) RegisterDomain(ctx context.Context, registerRequest *tpb.RegisterDomainRequest) (_ *tpb.RegisterDomainResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
-	err := wh.workflowHandlerThrift.RegisterDomain(ctx, adapter.RegisterDomainRequest(registerRequest))
+	err := wh.workflowHandlerThrift.RegisterDomain(ctx, adapter.ToThriftRegisterDomainRequest(registerRequest))
 	if err != nil {
-		return nil, adapter.Error(err)
+		return nil, adapter.ToProtoError(err)
 	}
 	return &tpb.RegisterDomainResponse{}, nil
 }

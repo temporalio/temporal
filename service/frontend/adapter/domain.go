@@ -25,8 +25,8 @@ import (
 	"github.com/temporalio/temporal/tpb"
 )
 
-// RegisterDomainRequest converts gRPC to Thrift
-func RegisterDomainRequest(registerRequest *tpb.RegisterDomainRequest) *shared.RegisterDomainRequest {
+// ToThriftRegisterDomainRequest converts gRPC to Thrift
+func ToThriftRegisterDomainRequest(registerRequest *tpb.RegisterDomainRequest) *shared.RegisterDomainRequest {
 	var clusters []*shared.ClusterReplicationConfiguration
 	for _, cluster := range registerRequest.Clusters {
 		clusters = append(clusters, &shared.ClusterReplicationConfiguration{ClusterName: &cluster.ClusterName})
@@ -43,9 +43,9 @@ func RegisterDomainRequest(registerRequest *tpb.RegisterDomainRequest) *shared.R
 		Data:                                   registerRequest.Data,
 		SecurityToken:                          &registerRequest.SecurityToken,
 		IsGlobalDomain:                         &registerRequest.IsGlobalDomain,
-		HistoryArchivalStatus:                  archivalStatus(registerRequest.HistoryArchivalStatus),
+		HistoryArchivalStatus:                  toThriftArchivalStatus(registerRequest.HistoryArchivalStatus),
 		HistoryArchivalURI:                     &registerRequest.HistoryArchivalURI,
-		VisibilityArchivalStatus:               archivalStatus(registerRequest.VisibilityArchivalStatus),
+		VisibilityArchivalStatus:               toThriftArchivalStatus(registerRequest.VisibilityArchivalStatus),
 		VisibilityArchivalURI:                  &registerRequest.VisibilityArchivalURI,
 	}
 }
