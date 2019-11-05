@@ -24,7 +24,6 @@ import (
 	"strings"
 
 	"github.com/stretchr/testify/mock"
-	"github.com/temporalio/temporal/tpb"
 	"github.com/uber-go/tally"
 	"github.com/urfave/cli"
 
@@ -215,12 +214,6 @@ func initializeFrontendClient(
 	context *cli.Context,
 ) sericeFrontend.Interface {
 	return cFactory.ServerFrontendClient(context)
-}
-
-func initializeFrontendClientGRPC(
-	context *cli.Context,
-) tpb.WorkflowServiceYARPCClient {
-	return cFactory.ServerFrontendClientGRPC(context)
 }
 
 func initializeAdminDomainHandler(
