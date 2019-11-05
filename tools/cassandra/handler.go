@@ -23,11 +23,11 @@ package cassandra
 import (
 	"fmt"
 	"log"
-	"path"
 
 	"github.com/urfave/cli"
 
 	"github.com/uber/cadence/common/service/config"
+	"github.com/uber/cadence/schema/cassandra"
 	"github.com/uber/cadence/tools/common/schema"
 )
 
@@ -44,19 +44,20 @@ type SetupSchemaConfig struct {
 // In most cases, the versions should match. However if after a schema upgrade there is a code
 // rollback, the code version (expected version) would fall lower than the actual version in
 // cassandra.
-func VerifyCompatibleVersion(cfg config.Persistence, rootPath string) error {
+func VerifyCompatibleVersion(
+	cfg config.Persistence,
+) error {
+
 	ds, ok := cfg.DataStores[cfg.DefaultStore]
 	if ok && ds.Cassandra != nil {
-		schemaPath := path.Join(rootPath, "schema/cassandra/cadence/versioned")
-		err := checkCompatibleVersion(*ds.Cassandra, schemaPath)
+		err := checkCompatibleVersion(*ds.Cassandra, cassandra.Version)
 		if err != nil {
 			return err
 		}
 	}
 	ds, ok = cfg.DataStores[cfg.VisibilityStore]
 	if ok && ds.Cassandra != nil {
-		schemaPath := path.Join(rootPath, "schema/cassandra/visibility/versioned")
-		err := checkCompatibleVersion(*ds.Cassandra, schemaPath)
+		err := checkCompatibleVersion(*ds.Cassandra, cassandra.VisibilityVersion)
 		if err != nil {
 			return err
 		}
@@ -65,7 +66,11 @@ func VerifyCompatibleVersion(cfg config.Persistence, rootPath string) error {
 }
 
 // checkCompatibleVersion check the version compatibility
-func checkCompatibleVersion(cfg config.Cassandra, dirPath string) error {
+func checkCompatibleVersion(
+	cfg config.Cassandra,
+	expectedVersion string,
+) error {
+
 	client, err := newCQLClient(&CQLClientConfig{
 		Hosts:    cfg.Hosts,
 		Port:     cfg.Port,
@@ -79,7 +84,7 @@ func checkCompatibleVersion(cfg config.Cassandra, dirPath string) error {
 	}
 	defer client.Close()
 
-	return schema.VerifyCompatibleVersion(client, dirPath, cfg.Keyspace)
+	return schema.VerifyCompatibleVersion(client, cfg.Keyspace, expectedVersion)
 }
 
 // setupSchema executes the setupSchemaTask

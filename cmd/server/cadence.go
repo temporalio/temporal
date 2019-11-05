@@ -60,12 +60,7 @@ func startHandler(c *cli.Context) {
 	if err := cfg.Validate(); err != nil {
 		log.Fatalf("config validation failed: %v", err)
 	}
-
-	dir, err := os.Getwd()
-	if err != nil {
-		log.Fatal("Unable to get current directory")
-	}
-	if err := cassandra.VerifyCompatibleVersion(cfg.Persistence, dir); err != nil {
+	if err := cassandra.VerifyCompatibleVersion(cfg.Persistence); err != nil {
 		log.Fatal("Incompatible versions: ", err)
 	}
 
