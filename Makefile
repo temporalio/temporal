@@ -107,6 +107,8 @@ GOCOVERPKG_ARG := -coverpkg="$(PROJECT_ROOT)/common/...,$(PROJECT_ROOT)/service/
 
 yarpc-install:
 	GO111MODULE=off go get -u github.com/myitcv/gobin
+	GO111MODULE=off go get -u github.com/gogo/protobuf/protoc-gen-gogoslick
+	GO111MODULE=off go get -u go.uber.org/yarpc/encoding/protobuf/protoc-gen-yarpc-go
 	GOOS= GOARCH= gobin -mod=readonly go.uber.org/thriftrw
 	GOOS= GOARCH= gobin -mod=readonly go.uber.org/yarpc/encoding/thrift/thriftrw-plugin-yarpc
 
@@ -114,6 +116,19 @@ clean_thrift:
 	rm -rf .gen
 
 thriftc: yarpc-install $(THRIFTRW_GEN_SRC)
+
+clean_proto:
+	rm -rf tpb/*.go
+
+update_proto:
+	git submodule update --remote
+
+install_proto:
+	git submodule update --init
+
+protoc: yarpc-install clean_proto install_proto
+	protoc --proto_path=tpb --gogoslick_out=paths=source_relative:tpb tpb/*.proto 
+	protoc --proto_path=tpb --yarpc-go_out=tpb tpb/*.proto 
 
 copyright: cmd/tools/copyright/licensegen.go
 	GOOS= GOARCH= go run ./cmd/tools/copyright/licensegen.go --verifyOnly
@@ -136,7 +151,7 @@ cadence-server: $(ALL_SRC)
 
 bins_nothrift: lint copyright cadence-cassandra-tool cadence-sql-tool cadence cadence-server
 
-bins: thriftc bins_nothrift
+bins: thriftc protoc bins_nothrift
 
 test: bins
 	@rm -f test

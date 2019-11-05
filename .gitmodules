@@ -1,0 +1,3 @@
+[submodule "tpb"]
+	path = tpb
+	url = git@github.com:temporalio/temporal-proto.git
