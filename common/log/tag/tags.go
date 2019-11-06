@@ -723,6 +723,11 @@ func ArchivalDeleteHistoryFailReason(deleteHistoryFailReason string) Tag {
 	return newStringTag("archival-delete-history-fail-reason", deleteHistoryFailReason)
 }
 
+// ArchivalVisibilityQuery returns tag for the query for getting archived visibility record
+func ArchivalVisibilityQuery(query string) Tag {
+	return newStringTag("archival-visibility-query", query)
+}
+
 // The following logger tags are only used by internal archiver implemention.
 // TODO: move them to internal repo once cadence plugin model is in place.
 

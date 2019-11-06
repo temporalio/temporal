@@ -78,23 +78,26 @@ var keys = map[Key]string{
 	MaxIDLengthLimit:       "limit.maxIDLength",
 
 	// frontend settings
-	FrontendPersistenceMaxQPS:         "frontend.persistenceMaxQPS",
-	FrontendVisibilityMaxPageSize:     "frontend.visibilityMaxPageSize",
-	FrontendVisibilityListMaxQPS:      "frontend.visibilityListMaxQPS",
-	FrontendESVisibilityListMaxQPS:    "frontend.esVisibilityListMaxQPS",
-	FrontendMaxBadBinaries:            "frontend.maxBadBinaries",
-	FrontendESIndexMaxResultWindow:    "frontend.esIndexMaxResultWindow",
-	FrontendHistoryMaxPageSize:        "frontend.historyMaxPageSize",
-	FrontendRPS:                       "frontend.rps",
-	FrontendDomainRPS:                 "frontend.domainrps",
-	FrontendHistoryMgrNumConns:        "frontend.historyMgrNumConns",
-	DisableListVisibilityByFilter:     "frontend.disableListVisibilityByFilter",
-	FrontendThrottledLogRPS:           "frontend.throttledLogRPS",
-	EnableClientVersionCheck:          "frontend.enableClientVersionCheck",
-	ValidSearchAttributes:             "frontend.validSearchAttributes",
-	SearchAttributesNumberOfKeysLimit: "frontend.searchAttributesNumberOfKeysLimit",
-	SearchAttributesSizeOfValueLimit:  "frontend.searchAttributesSizeOfValueLimit",
-	SearchAttributesTotalSizeLimit:    "frontend.searchAttributesTotalSizeLimit",
+	FrontendPersistenceMaxQPS:             "frontend.persistenceMaxQPS",
+	FrontendVisibilityMaxPageSize:         "frontend.visibilityMaxPageSize",
+	FrontendVisibilityListMaxQPS:          "frontend.visibilityListMaxQPS",
+	FrontendESVisibilityListMaxQPS:        "frontend.esVisibilityListMaxQPS",
+	FrontendMaxBadBinaries:                "frontend.maxBadBinaries",
+	FrontendESIndexMaxResultWindow:        "frontend.esIndexMaxResultWindow",
+	FrontendHistoryMaxPageSize:            "frontend.historyMaxPageSize",
+	FrontendRPS:                           "frontend.rps",
+	FrontendDomainRPS:                     "frontend.domainrps",
+	FrontendHistoryMgrNumConns:            "frontend.historyMgrNumConns",
+	DisableListVisibilityByFilter:         "frontend.disableListVisibilityByFilter",
+	FrontendThrottledLogRPS:               "frontend.throttledLogRPS",
+	EnableClientVersionCheck:              "frontend.enableClientVersionCheck",
+	ValidSearchAttributes:                 "frontend.validSearchAttributes",
+	SearchAttributesNumberOfKeysLimit:     "frontend.searchAttributesNumberOfKeysLimit",
+	SearchAttributesSizeOfValueLimit:      "frontend.searchAttributesSizeOfValueLimit",
+	SearchAttributesTotalSizeLimit:        "frontend.searchAttributesTotalSizeLimit",
+	VisibilityArchivalQueryMaxPageSize:    "frontend.visibilityArchivalQueryMaxPageSize",
+	VisibilityArchivalQueryMaxRangeInDays: "frontend.visibilityArchivalQueryMaxRangeInDays",
+	VisibilityArchivalQueryMaxQPS:         "frontend.visibilityArchivalQueryMaxQPS",
 
 	// matching settings
 	MatchingRPS:                             "matching.rps",
@@ -327,6 +330,12 @@ const (
 	SearchAttributesSizeOfValueLimit
 	// SearchAttributesTotalSizeLimit is the size limit of the whole map
 	SearchAttributesTotalSizeLimit
+	// VisibilityArchivalQueryMaxPageSize is the maximum page size for a visibility archival query
+	VisibilityArchivalQueryMaxPageSize
+	// VisibilityArchivalQueryMaxRangeInDays is the maximum number of days for a visibility archival query
+	VisibilityArchivalQueryMaxRangeInDays
+	// VisibilityArchivalQueryMaxQPS is the timeout for a visibility archival query
+	VisibilityArchivalQueryMaxQPS
 
 	// key for matching
 

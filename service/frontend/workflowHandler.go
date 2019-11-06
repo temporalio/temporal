@@ -2406,6 +2406,12 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(
 		listRequest.PageSize = common.Int32Ptr(int32(wh.config.VisibilityMaxPageSize(listRequest.GetDomain())))
 	}
 
+	maxPageSize := wh.config.VisibilityArchivalQueryMaxPageSize()
+	if int(listRequest.GetPageSize()) > maxPageSize {
+		return nil, wh.error(&gen.BadRequestError{
+			Message: fmt.Sprintf("Pagesize is larger than allowed %d", maxPageSize)}, scope)
+	}
+
 	if !wh.GetArchivalMetadata().GetVisibilityConfig().ClusterConfiguredForArchival() {
 		return nil, wh.error(&gen.BadRequestError{Message: "Cluster is not configured for visibility archival"}, scope)
 	}

@@ -80,6 +80,9 @@ type Config struct {
 	SearchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithDomainFilter
 	SearchAttributesSizeOfValueLimit  dynamicconfig.IntPropertyFnWithDomainFilter
 	SearchAttributesTotalSizeLimit    dynamicconfig.IntPropertyFnWithDomainFilter
+
+	// VisibilityArchival system protection
+	VisibilityArchivalQueryMaxPageSize dynamicconfig.IntPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -113,6 +116,7 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int, enableReadFro
 		SearchAttributesSizeOfValueLimit:    dc.GetIntPropertyFilteredByDomain(dynamicconfig.SearchAttributesSizeOfValueLimit, 2*1024),
 		SearchAttributesTotalSizeLimit:      dc.GetIntPropertyFilteredByDomain(dynamicconfig.SearchAttributesTotalSizeLimit, 40*1024),
 		MinRetentionDays:                    dc.GetIntProperty(dynamicconfig.MinRetentionDays, domain.MinRetentionDays),
+		VisibilityArchivalQueryMaxPageSize:  dc.GetIntProperty(dynamicconfig.VisibilityArchivalQueryMaxPageSize, 10000),
 	}
 }
 

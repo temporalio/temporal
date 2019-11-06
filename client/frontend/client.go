@@ -152,7 +152,7 @@ func (c *clientImpl) ListArchivedWorkflowExecutions(
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := c.createContext(ctx)
+	ctx, cancel := c.createLongPollContext(ctx)
 	defer cancel()
 	return client.ListArchivedWorkflowExecutions(ctx, request, opts...)
 }
