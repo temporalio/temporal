@@ -63,7 +63,7 @@ func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
 	s.True(ok)
 	root := path.Dir(path.Dir(path.Dir(filename)))
 	sqlFile := path.Join(root, "schema/mysql/v57/cadence/schema.sql")
-	visSqlFile := path.Join(root, "schema/mysql/v57/visibility/schema.sql")
+	visSQLFile := path.Join(root, "schema/mysql/v57/visibility/schema.sql")
 
 	defer s.createDatabase(database)()
 	defer s.createDatabase(visDatabase)()
@@ -92,7 +92,7 @@ func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
 		"-dr", mysql.DriverName,
 		"-q",
 		"setup-schema",
-		"-f", visSqlFile,
+		"-f", visSQLFile,
 		"-version", "10.0",
 		"-o",
 	})

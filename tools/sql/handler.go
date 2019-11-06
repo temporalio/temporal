@@ -31,6 +31,8 @@ import (
 	"github.com/uber/cadence/tools/common/schema"
 )
 
+// VerifyCompatibleVersion ensures that the installed version of cadence and visibility
+// is greater than or equal to the expected version.
 func VerifyCompatibleVersion(
 	cfg config.Persistence,
 ) error {
