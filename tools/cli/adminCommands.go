@@ -263,11 +263,11 @@ func readOneRow(query *gocql.Query) (map[string]interface{}, error) {
 }
 
 func connectToCassandra(c *cli.Context) *gocql.Session {
-	host := getRequiredOption(c, FlagAddress)
-	if !c.IsSet(FlagPort) {
-		ErrorAndExit("port is required", nil)
+	host := getRequiredOption(c, FlagDBAddress)
+	if !c.IsSet(FlagDBPort) {
+		ErrorAndExit("cassandra port is required", nil)
 	}
-	port := c.Int(FlagPort)
+	port := c.Int(FlagDBPort)
 	user := c.String(FlagUsername)
 	pw := c.String(FlagPassword)
 	ksp := getRequiredOption(c, FlagKeyspace)

@@ -43,14 +43,16 @@ func newAdminWorkflowCommands() []cli.Command {
 					Usage: "output file",
 				},
 
-				// for cassandra connection
+				// for persistence connection
+				// TODO need to support other database: https://github.com/uber/cadence/issues/2777
 				cli.StringFlag{
-					Name:  FlagAddress,
-					Usage: "cassandra host address",
+					Name:  FlagDBAddress,
+					Usage: "persistence address(right now only cassandra is supported)",
 				},
 				cli.IntFlag{
-					Name:  FlagPort,
-					Usage: "cassandra port for the host (default is 9042)",
+					Name:  FlagDBPort,
+					Value: 9042,
+					Usage: "persistence port",
 				},
 				cli.StringFlag{
 					Name:  FlagUsername,
@@ -111,15 +113,16 @@ func newAdminWorkflowCommands() []cli.Command {
 					Usage: "skip errors when deleting history",
 				},
 
-				// for cassandra connection
+				// for persistence connection
+				// TODO need to support other database: https://github.com/uber/cadence/issues/2777
 				cli.StringFlag{
-					Name:  FlagAddress,
-					Usage: "cassandra host address",
+					Name:  FlagDBAddress,
+					Usage: "persistence address(right now only cassandra is supported)",
 				},
 				cli.IntFlag{
-					Name:  FlagPort,
+					Name:  FlagDBPort,
 					Value: 9042,
-					Usage: "cassandra port for the host",
+					Usage: "persistence port",
 				},
 				cli.StringFlag{
 					Name:  FlagUsername,
@@ -274,14 +277,16 @@ func newAdminDomainCommands() []cli.Command {
 					Usage: "Domain ID(uuid)",
 				},
 
-				// for cassandra connection
+				// for persistence connection
+				// TODO need to support other database: https://github.com/uber/cadence/issues/2777
 				cli.StringFlag{
-					Name:  FlagAddress,
-					Usage: "cassandra host address",
+					Name:  FlagDBAddress,
+					Usage: "persistence address(right now only cassandra is supported)",
 				},
 				cli.IntFlag{
-					Name:  FlagPort,
-					Usage: "cassandra port for the host (default is 9042)",
+					Name:  FlagDBPort,
+					Value: 9042,
+					Usage: "persistence port",
 				},
 				cli.StringFlag{
 					Name:  FlagUsername,
@@ -475,14 +480,16 @@ clusters:
 					Usage: "DomainID",
 				},
 
-				// for cassandra connection
+				// for persistence connection
+				// TODO need to support other database: https://github.com/uber/cadence/issues/2777
 				cli.StringFlag{
-					Name:  FlagAddress,
-					Usage: "cassandra host address",
+					Name:  FlagDBAddress,
+					Usage: "persistence address(right now only cassandra is supported)",
 				},
 				cli.IntFlag{
-					Name:  FlagPort,
-					Usage: "cassandra port for the host (default is 9042)",
+					Name:  FlagDBPort,
+					Value: 9042,
+					Usage: "persistence port",
 				},
 				cli.StringFlag{
 					Name:  FlagUsername,
