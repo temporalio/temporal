@@ -963,6 +963,95 @@ func (s *transferQueueActiveProcessorSuite) TestProcessCloseExecution_NoParent_H
 	s.Nil(err)
 }
 
+func (s *transferQueueActiveProcessorSuite) TestProcessCloseExecution_NoParent_HasManyAbandonedChildren() {
+
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("some random workflow ID"),
+		RunId:      common.StringPtr(uuid.New()),
+	}
+	workflowType := "some random workflow type"
+	taskListName := "some random task list"
+
+	mutableState := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	_, err := mutableState.AddWorkflowExecutionStartedEvent(
+		execution,
+		&history.StartWorkflowExecutionRequest{
+			DomainUUID: common.StringPtr(s.domainID),
+			StartRequest: &workflow.StartWorkflowExecutionRequest{
+				WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
+				TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskListName)},
+				ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(2),
+				TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+			},
+		},
+	)
+	s.Nil(err)
+
+	di := addDecisionTaskScheduledEvent(mutableState)
+	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskListName, uuid.New())
+	di.StartedID = event.GetEventId()
+
+	dt := workflow.DecisionTypeStartChildWorkflowExecution
+	parentClosePolicy := workflow.ParentClosePolicyAbandon
+	var decisions []*workflow.Decision
+	for i := 0; i < 10; i++ {
+		decisions = append(decisions, &workflow.Decision{
+			DecisionType: &dt,
+			StartChildWorkflowExecutionDecisionAttributes: &workflow.StartChildWorkflowExecutionDecisionAttributes{
+				WorkflowId: common.StringPtr("child workflow" + string(i)),
+				WorkflowType: &workflow.WorkflowType{
+					Name: common.StringPtr("child workflow type"),
+				},
+				TaskList:          &workflow.TaskList{Name: common.StringPtr(taskListName)},
+				Input:             []byte("random input"),
+				ParentClosePolicy: &parentClosePolicy,
+			},
+		})
+	}
+
+	event, _ = mutableState.AddDecisionTaskCompletedEvent(di.ScheduleID, di.StartedID, &workflow.RespondDecisionTaskCompletedRequest{
+		ExecutionContext: nil,
+		Identity:         common.StringPtr("some random identity"),
+		Decisions:        decisions,
+	}, defaultHistoryMaxAutoResetPoints)
+
+	for i := 0; i < 10; i++ {
+		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &workflow.StartChildWorkflowExecutionDecisionAttributes{
+			WorkflowId: common.StringPtr("child workflow" + string(i)),
+			WorkflowType: &workflow.WorkflowType{
+				Name: common.StringPtr("child workflow type"),
+			},
+			TaskList:          &workflow.TaskList{Name: common.StringPtr(taskListName)},
+			Input:             []byte("random input"),
+			ParentClosePolicy: &parentClosePolicy,
+		})
+		s.Nil(err)
+	}
+
+	s.NoError(mutableState.FlushBufferedEvents())
+
+	taskID := int64(59)
+	event = addCompleteWorkflowEvent(mutableState, event.GetEventId(), nil)
+
+	transferTask := &persistence.TransferTaskInfo{
+		Version:    s.version,
+		DomainID:   s.domainID,
+		WorkflowID: execution.GetWorkflowId(),
+		RunID:      execution.GetRunId(),
+		TaskID:     taskID,
+		TaskList:   taskListName,
+		TaskType:   persistence.TransferTaskTypeCloseExecution,
+		ScheduleID: event.GetEventId(),
+	}
+
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	s.mockVisibilityMgr.On("RecordWorkflowExecutionClosed", mock.Anything).Return(nil).Once()
+
+	_, err = s.transferQueueActiveProcessor.process(newTaskInfo(nil, transferTask, s.logger))
+	s.Nil(err)
+}
+
 func (s *transferQueueActiveProcessorSuite) TestProcessCancelExecution_Success() {
 
 	execution := workflow.WorkflowExecution{

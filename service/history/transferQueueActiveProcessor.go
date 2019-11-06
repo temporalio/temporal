@@ -1567,6 +1567,10 @@ func (t *transferQueueActiveProcessorImpl) processParentClosePolicy(
 			})
 		}
 
+		if len(executions) == 0{
+			return nil
+		}
+
 		request := parentclosepolicy.Request{
 			DomainUUID: domainID,
 			DomainName: domainName,
