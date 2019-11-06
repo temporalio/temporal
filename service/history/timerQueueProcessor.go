@@ -40,7 +40,7 @@ import (
 )
 
 var (
-	errUnknownTimerTask = errors.New("Unknown timer task")
+	errUnknownTimerTask = errors.New("unknown timer task")
 )
 
 type (
@@ -49,7 +49,7 @@ type (
 		FailoverDomain(domainIDs map[string]struct{})
 		NotifyNewTimers(clusterName string, timerTask []persistence.Task)
 		LockTaskProcessing()
-		UnlockTaskPrrocessing()
+		UnlockTaskProcessing()
 	}
 
 	timeNow                 func() time.Time
@@ -238,7 +238,7 @@ func (t *timerQueueProcessorImpl) LockTaskProcessing() {
 	t.taskAllocator.lock()
 }
 
-func (t *timerQueueProcessorImpl) UnlockTaskPrrocessing() {
+func (t *timerQueueProcessorImpl) UnlockTaskProcessing() {
 	t.taskAllocator.unlock()
 }
 

@@ -1567,7 +1567,7 @@ func (t *transferQueueActiveProcessorImpl) processParentClosePolicy(
 			})
 		}
 
-		if len(executions) == 0{
+		if len(executions) == 0 {
 			return nil
 		}
 
