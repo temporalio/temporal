@@ -689,6 +689,10 @@ func newAdminClusterCommands() []cli.Command {
 					Value: -1,
 					Usage: "Search Attribute value type. [0:String, 1:Keyword, 2:Int, 3:Double, 4:Bool, 5:Datetime]",
 				},
+				cli.StringFlag{
+					Name:  FlagSecurityTokenWithAlias,
+					Usage: "Optional token for security check",
+				},
 			},
 			Action: func(c *cli.Context) {
 				AdminAddSearchAttribute(c)

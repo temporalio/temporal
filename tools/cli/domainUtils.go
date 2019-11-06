@@ -86,7 +86,7 @@ var (
 		},
 		cli.StringFlag{
 			Name:  FlagSecurityTokenWithAlias,
-			Usage: "Security token with permission",
+			Usage: "Optional token for security check",
 		},
 		cli.StringFlag{
 			Name:  FlagHistoryArchivalStatusWithAlias,
@@ -140,7 +140,7 @@ var (
 		},
 		cli.StringFlag{
 			Name:  FlagSecurityTokenWithAlias,
-			Usage: "Security token with permission ",
+			Usage: "Optional token for security check",
 		},
 		cli.StringFlag{
 			Name:  FlagHistoryArchivalStatusWithAlias,
