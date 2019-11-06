@@ -67,6 +67,7 @@ type (
 		historyV2Mgr  persistence.HistoryManager
 		startWG       sync.WaitGroup
 		params        *service.BootstrapParams
+		config        *Config
 	}
 
 	getWorkflowRawHistoryV2Token struct {
@@ -89,6 +90,7 @@ func NewAdminHandler(
 	domainCache cache.DomainCache,
 	historyV2Mgr persistence.HistoryManager,
 	params *service.BootstrapParams,
+	config *Config,
 ) *AdminHandler {
 	handler := &AdminHandler{
 		status:                common.DaemonStatusInitialized,
@@ -97,6 +99,7 @@ func NewAdminHandler(
 		domainCache:           domainCache,
 		historyV2Mgr:          historyV2Mgr,
 		params:                params,
+		config:                config,
 	}
 	// prevent us from trying to serve requests before handler's Start() is complete
 	handler.startWG.Add(1)
@@ -136,6 +139,9 @@ func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *admin.
 	// validate request
 	if request == nil {
 		return &gen.BadRequestError{Message: "Request is not provided"}
+	}
+	if err := checkPermission(adh.config, request.SecurityToken); err != nil {
+		return errNoPermission
 	}
 	if len(request.GetSearchAttribute()) == 0 {
 		return &gen.BadRequestError{Message: "SearchAttributes are not provided"}

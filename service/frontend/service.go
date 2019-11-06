@@ -244,7 +244,7 @@ func (s *Service) Start() {
 	dcRedirectionHandler := NewDCRedirectionHandler(wfHandler, params.DCRedirectionPolicy)
 	dcRedirectionHandler.RegisterHandler()
 
-	adminHandler := NewAdminHandler(base, pConfig.NumHistoryShards, domainCache, historyV2, s.params)
+	adminHandler := NewAdminHandler(base, pConfig.NumHistoryShards, domainCache, historyV2, s.params, s.config)
 	adminHandler.RegisterHandler()
 
 	// must start base service first

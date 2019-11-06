@@ -257,7 +257,7 @@ func (wh *WorkflowHandler) RegisterDomain(ctx context.Context, registerRequest *
 		return errRequestNotSet
 	}
 
-	if err := wh.checkPermission(registerRequest.SecurityToken); err != nil {
+	if err := checkPermission(wh.config, registerRequest.SecurityToken); err != nil {
 		return err
 	}
 
@@ -346,7 +346,7 @@ func (wh *WorkflowHandler) UpdateDomain(
 
 	// don't require permission for failover request
 	if !isFailoverRequest(updateRequest) {
-		if err := wh.checkPermission(updateRequest.SecurityToken); err != nil {
+		if err := checkPermission(wh.config, updateRequest.SecurityToken); err != nil {
 			return nil, err
 		}
 	}
@@ -379,7 +379,7 @@ func (wh *WorkflowHandler) DeprecateDomain(ctx context.Context, deprecateRequest
 		return errRequestNotSet
 	}
 
-	if err := wh.checkPermission(deprecateRequest.SecurityToken); err != nil {
+	if err := checkPermission(wh.config, deprecateRequest.SecurityToken); err != nil {
 		return err
 	}
 
@@ -3487,15 +3487,15 @@ func (wh *WorkflowHandler) ReapplyEvents(
 	return nil
 }
 
-func (wh *WorkflowHandler) checkPermission(
+func checkPermission(
+	config *Config,
 	securityToken *string,
 ) error {
-
-	if wh.config.EnableAdminProtection() {
+	if config.EnableAdminProtection() {
 		if securityToken == nil {
 			return errNoPermission
 		}
-		requiredToken := wh.config.AdminOperationToken()
+		requiredToken := config.AdminOperationToken()
 		if *securityToken != requiredToken {
 			return errNoPermission
 		}
