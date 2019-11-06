@@ -1233,7 +1233,7 @@ func (r *historyReplicator) reapplyEventsToCurrentClosedWorkflow(
 		return err
 	}
 	defer func() { resetNewRelease(retError) }()
-	resetNewMsBuilder, err := context.loadWorkflowExecution()
+	resetNewMsBuilder, err := resetNewContext.loadWorkflowExecution()
 	if err != nil {
 		return err
 	}
