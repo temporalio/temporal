@@ -29,6 +29,7 @@ import (
 
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/tools/cassandra"
+	"github.com/uber/cadence/tools/sql"
 )
 
 // validServices is the list of all valid cadence services
@@ -60,8 +61,13 @@ func startHandler(c *cli.Context) {
 	if err := cfg.Validate(); err != nil {
 		log.Fatalf("config validation failed: %v", err)
 	}
+	// cassandra schema version validation
 	if err := cassandra.VerifyCompatibleVersion(cfg.Persistence); err != nil {
-		log.Fatal("Incompatible versions: ", err)
+		log.Fatal("Incompatible cassandra versions: ", err)
+	}
+	// sql schema version validation
+	if err := sql.VerifyCompatibleVersion(cfg.Persistence); err != nil {
+		log.Fatal("Incompatible sql versions: ", err)
 	}
 
 	services := getServices(c)
