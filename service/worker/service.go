@@ -21,14 +21,8 @@
 package worker
 
 import (
-	"context"
-	"fmt"
-	"strings"
 	"sync/atomic"
 	"time"
-
-	cshared "go.uber.org/cadence/.gen/go/shared"
-	cclient "go.uber.org/cadence/client"
 
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
@@ -339,37 +333,15 @@ func (s *Service) ensureSystemDomainExists(pFactory persistencefactory.Factory, 
 	}
 	defer metadataProxy.Close()
 	_, err = metadataProxy.GetDomain(&persistence.GetDomainRequest{Name: common.SystemLocalDomainName})
-	if err == nil {
-		s.ensureDomainAvailable()
-	} else {
-		if _, ok := err.(*shared.EntityNotExistsError); ok {
-			s.logger.Info("cadence-system domain does not exist, attempting to register domain")
-			s.registerSystemDomain(pFactory, clusterName)
-		}
+	switch err.(type) {
+	case nil:
+		// noop
+	case *shared.EntityNotExistsError:
+		s.logger.Info("cadence-system domain does not exist, attempting to register domain")
+		s.registerSystemDomain(pFactory, clusterName)
+	default:
 		s.logger.Fatal("failed to verify if cadence system domain exists", tag.Error(err))
 	}
-}
-
-func (s *Service) ensureDomainAvailable() {
-	client := cclient.NewClient(s.params.PublicClient, common.SystemLocalDomainName, &cclient.Options{})
-	// Use TerminateWorkflow to check whether domain is refreshed in cache or not
-	err := client.TerminateWorkflow(context.Background(), "wid-not-exist", "", "test reason", nil)
-	retryCount := 0
-	for err != nil && retryCount <= 10 {
-		nonExistErr, ok := err.(*cshared.EntityNotExistsError)
-		if ok && isErrSystemDomainNotExist(nonExistErr) {
-			s.logger.Info(fmt.Sprintf("cadence-system domain is not ready, waiting %v for domain refresh", domainRefreshInterval), tag.Attempt(int32(retryCount)))
-			time.Sleep(domainRefreshInterval)
-			err = client.TerminateWorkflow(context.Background(), "wid-not-exist", "", "test reason", nil)
-			retryCount++
-		} else {
-			break
-		}
-	}
-}
-
-func isErrSystemDomainNotExist(err *cshared.EntityNotExistsError) bool {
-	return strings.Contains(err.Message, common.SystemLocalDomainName)
 }
 
 func (s *Service) registerSystemDomain(pFactory persistencefactory.Factory, clusterName string) {
@@ -401,8 +373,4 @@ func (s *Service) registerSystemDomain(pFactory persistencefactory.Factory, clus
 		}
 		s.logger.Fatal("failed to register system domain", tag.Error(err))
 	}
-	// this is needed because frontend domainCache will take about 10s to load the
-	// domain after its created first time. Archiver/Scanner cannot start their cadence
-	// workers until this refresh happens
-	time.Sleep(domainRefreshInterval)
 }
