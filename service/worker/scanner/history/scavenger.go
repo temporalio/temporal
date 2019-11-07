@@ -32,7 +32,7 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	p "github.com/temporalio/temporal/common/persistence"
-	"go.uber.org/cadence/activity"
+	"go.temporal.io/temporal/activity"
 	"golang.org/x/time/rate"
 )
 

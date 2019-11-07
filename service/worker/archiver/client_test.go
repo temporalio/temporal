@@ -34,7 +34,7 @@ import (
 	"github.com/temporalio/temporal/common/metrics"
 	mmocks "github.com/temporalio/temporal/common/metrics/mocks"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
-	"go.uber.org/cadence/mocks"
+	"go.temporal.io/temporal/mocks"
 )
 
 type clientSuite struct {

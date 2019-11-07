@@ -24,7 +24,7 @@ import (
 	"fmt"
 
 	"github.com/uber-go/tally"
-	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
+	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
 	"go.uber.org/config"
 	"go.uber.org/zap"
 )

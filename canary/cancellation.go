@@ -25,9 +25,9 @@ import (
 	"errors"
 	"time"
 
-	"go.uber.org/cadence"
-	"go.uber.org/cadence/activity"
-	"go.uber.org/cadence/workflow"
+	"go.temporal.io/temporal"
+	"go.temporal.io/temporal/activity"
+	"go.temporal.io/temporal/workflow"
 	"go.uber.org/zap"
 )
 
@@ -74,7 +74,7 @@ func cancellationWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain
 		workflow.GetLogger(ctx).Info(msg)
 		return profile.end(errors.New(msg))
 	}
-	if _, ok := err.(*cadence.CanceledError); !ok {
+	if _, ok := err.(*temporal.CanceledError); !ok {
 		workflow.GetLogger(ctx).Info("cancellationWorkflow failed: child workflow return non CanceledError", zap.Error(err))
 		return profile.end(err)
 	}
@@ -105,7 +105,7 @@ func cancellationWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain
 			workflow.GetLogger(ctx).Info(msg)
 			return errors.New(msg)
 		}
-		if _, ok := err.(*cadence.CanceledError); !ok {
+		if _, ok := err.(*temporal.CanceledError); !ok {
 			workflow.GetLogger(ctx).Info("cancellationWorkflow failed: child workflow return non CanceledError", zap.Error(err))
 			return err
 		}
@@ -148,7 +148,7 @@ func cancellationWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain
 			workflow.GetLogger(ctx).Info(msg)
 			return errors.New(msg)
 		}
-		if _, ok := err.(*cadence.CanceledError); !ok {
+		if _, ok := err.(*temporal.CanceledError); !ok {
 			workflow.GetLogger(ctx).Info("cancellationWorkflow failed: child workflow return non CanceledError", zap.Error(err))
 			return err
 		}
@@ -189,7 +189,7 @@ func cancellationActivity(ctx context.Context, scheduledTimeNanos int64) error {
 		if err == nil {
 			return errors.New("cancellationWorkflow failed: non child workflow not cancelled")
 		}
-		if _, ok := err.(*cadence.CanceledError); !ok {
+		if _, ok := err.(*temporal.CanceledError); !ok {
 			return err
 		}
 		return nil

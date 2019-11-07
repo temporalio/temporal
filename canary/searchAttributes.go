@@ -26,9 +26,9 @@ import (
 	"time"
 
 	"github.com/uber-go/tally"
-	"go.uber.org/cadence/.gen/go/shared"
-	"go.uber.org/cadence/activity"
-	"go.uber.org/cadence/workflow"
+	"go.temporal.io/temporal/.gen/go/shared"
+	"go.temporal.io/temporal/activity"
+	"go.temporal.io/temporal/workflow"
 	"go.uber.org/zap"
 )
 

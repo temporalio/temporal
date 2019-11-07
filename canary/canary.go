@@ -24,8 +24,8 @@ import (
 	"context"
 
 	"github.com/opentracing/opentracing-go"
-	"go.uber.org/cadence/.gen/go/shared"
-	"go.uber.org/cadence/worker"
+	"go.temporal.io/temporal/.gen/go/shared"
+	"go.temporal.io/temporal/worker"
 	"go.uber.org/zap"
 )
 

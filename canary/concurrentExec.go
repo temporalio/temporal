@@ -23,8 +23,8 @@ package canary
 import (
 	"context"
 
-	"go.uber.org/cadence/activity"
-	"go.uber.org/cadence/workflow"
+	"go.temporal.io/temporal/activity"
+	"go.temporal.io/temporal/workflow"
 	"go.uber.org/zap"
 )
 

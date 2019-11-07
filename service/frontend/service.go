@@ -244,6 +244,9 @@ func (s *Service) Start() {
 	dcRedirectionHandler := NewDCRedirectionHandler(wfHandler, params.DCRedirectionPolicy)
 	dcRedirectionHandler.RegisterHandler()
 
+	wfHandlerGRPC := NewWorkflowHandlerGRPC(wfHandler)
+	wfHandlerGRPC.RegisterHandler()
+
 	adminHandler := NewAdminHandler(base, pConfig.NumHistoryShards, domainCache, historyV2, s.params)
 	adminHandler.RegisterHandler()
 
@@ -253,6 +256,7 @@ func (s *Service) Start() {
 	if err != nil {
 		log.Fatal("DC redirection handler failed to start", tag.Error(err))
 	}
+
 	err = adminHandler.Start()
 	if err != nil {
 		log.Fatal("Admin handler failed to start", tag.Error(err))

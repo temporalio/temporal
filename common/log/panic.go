@@ -25,6 +25,8 @@ import (
 	"runtime/debug"
 
 	"github.com/temporalio/temporal/common/log/tag"
+	"go.uber.org/yarpc/encoding/protobuf"
+	"go.uber.org/yarpc/yarpcerrors"
 )
 
 var errDefaultPanic = fmt.Errorf("panic object is not error")
@@ -43,6 +45,24 @@ func CapturePanic(logger Logger, retError *error) {
 		st := string(debug.Stack())
 
 		logger.Error("Panic is captured", tag.SysStackTrace(st), tag.Error(err))
+
+		*retError = err
+	}
+}
+
+// CapturePanicGRPC is used to capture panic, it will log the panic and also return the error through pointer.
+func CapturePanicGRPC(logger Logger, retError *error) {
+	if errPanic := recover(); errPanic != nil {
+		err, ok := errPanic.(error)
+		if !ok {
+			err = errDefaultPanic
+		}
+
+		st := string(debug.Stack())
+
+		logger.Error("Panic is captured", tag.SysStackTrace(st), tag.Error(err))
+
+		err = protobuf.NewError(yarpcerrors.CodeInternal, err.Error())
 
 		*retError = err
 	}

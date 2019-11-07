@@ -118,7 +118,7 @@ func (d *HandlerImpl) RegisterDomain(
 		registerRequest.IsGlobalDomain = common.BoolPtr(false)
 	} else {
 		// cluster global domain enabled
-		if registerRequest.IsGlobalDomain == nil {
+		if !registerRequest.IsSetIsGlobalDomain() {
 			return &shared.BadRequestError{Message: "Must specify whether domain is a global domain"}
 		}
 		if !d.clusterMetadata.IsMasterCluster() && registerRequest.GetIsGlobalDomain() {
@@ -139,12 +139,14 @@ func (d *HandlerImpl) RegisterDomain(
 		return err
 	}
 
-	activeClusterName := d.clusterMetadata.GetCurrentClusterName()
+	var activeClusterName string
 	// input validation on cluster names
-	if registerRequest.ActiveClusterName != nil {
+	if registerRequest.IsSetActiveClusterName() && registerRequest.GetActiveClusterName() != "" {
 		activeClusterName = registerRequest.GetActiveClusterName()
+	} else {
+		activeClusterName = d.clusterMetadata.GetCurrentClusterName()
 	}
-	clusters := []*persistence.ClusterReplicationConfig{}
+	var clusters []*persistence.ClusterReplicationConfig
 	for _, clusterConfig := range registerRequest.Clusters {
 		clusterName := clusterConfig.GetClusterName()
 		clusters = append(clusters, &persistence.ClusterReplicationConfig{ClusterName: clusterName})

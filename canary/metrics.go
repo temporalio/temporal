@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/uber-go/tally"
-	"go.uber.org/cadence/workflow"
+	"go.temporal.io/temporal/workflow"
 )
 
 // counters go here

@@ -27,7 +27,7 @@ import (
 	serverFrontend "github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
 	"github.com/temporalio/temporal/common"
 	"github.com/urfave/cli"
-	clientFrontend "go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
+	clientFrontend "go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/api/transport"
 	"go.uber.org/yarpc/transport/tchannel"

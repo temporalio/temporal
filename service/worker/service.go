@@ -27,8 +27,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	cshared "go.uber.org/cadence/.gen/go/shared"
-	cclient "go.uber.org/cadence/client"
+	cshared "go.temporal.io/temporal/.gen/go/shared"
+	cclient "go.temporal.io/temporal/client"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"

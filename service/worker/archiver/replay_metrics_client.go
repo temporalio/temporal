@@ -25,7 +25,7 @@ import (
 
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/uber-go/tally"
-	"go.uber.org/cadence/workflow"
+	"go.temporal.io/temporal/workflow"
 )
 
 type (

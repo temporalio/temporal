@@ -29,8 +29,8 @@ import (
 	"github.com/dgryski/go-farm"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
-	"go.uber.org/cadence"
-	"go.uber.org/cadence/activity"
+	"go.temporal.io/temporal"
+	"go.temporal.io/temporal/activity"
 )
 
 // MaxArchivalIterationTimeout returns the max allowed timeout for a single iteration of archival workflow
@@ -112,9 +112,9 @@ func contextExpired(ctx context.Context) bool {
 
 func errorDetails(err error) string {
 	var details string
-	if _, ok := err.(*cadence.CustomError); !ok {
+	if _, ok := err.(*temporal.CustomError); !ok {
 		return details
 	}
-	err.(*cadence.CustomError).Details(&details)
+	err.(*temporal.CustomError).Details(&details)
 	return details
 }
