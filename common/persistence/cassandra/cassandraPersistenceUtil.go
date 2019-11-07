@@ -1395,7 +1395,7 @@ func updateTimerInfos(
 			a.TimerID,
 			a.StartedID,
 			a.ExpiryTime,
-			a.TaskID,
+			a.TaskStatus,
 			shardID,
 			rowTypeExecution,
 			domainID,
@@ -2150,7 +2150,10 @@ func createTimerInfo(
 		case "expiry_time":
 			info.ExpiryTime = v.(time.Time)
 		case "task_id":
-			info.TaskID = v.(int64)
+			// task_id is a misleading variable, it actually serves
+			// the purpose of indicating whether a timer task is
+			// generated for this timer info
+			info.TaskStatus = v.(int64)
 		}
 	}
 	return info
@@ -2310,7 +2313,10 @@ func resetTimerInfoMap(
 		tInfo["timer_id"] = t.TimerID
 		tInfo["started_id"] = t.StartedID
 		tInfo["expiry_time"] = t.ExpiryTime
-		tInfo["task_id"] = t.TaskID
+		// task_id is a misleading variable, it actually serves
+		// the purpose of indicating whether a timer task is
+		// generated for this timer info
+		tInfo["task_id"] = t.TaskStatus
 
 		tMap[t.TimerID] = tInfo
 	}

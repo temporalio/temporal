@@ -81,7 +81,7 @@ func (s *timerSequenceSuite) TestCreateNextUserTimer_AlreadyCreated() {
 		TimerID:    "some random timer ID",
 		StartedID:  456,
 		ExpiryTime: now.Add(100 * time.Second),
-		TaskID:     timerTaskStatusCreated,
+		TaskStatus: timerTaskStatusCreated,
 	}
 	timerInfos := map[string]*persistence.TimerInfo{timerInfo.TimerID: timerInfo}
 	s.mockMutableState.EXPECT().GetPendingTimerInfos().Return(timerInfos).Times(1)
@@ -99,14 +99,14 @@ func (s *timerSequenceSuite) TestCreateNextUserTimer_NotCreated() {
 		TimerID:    "some random timer ID",
 		StartedID:  456,
 		ExpiryTime: now.Add(100 * time.Second),
-		TaskID:     timerTaskStatusNone,
+		TaskStatus: timerTaskStatusNone,
 	}
 	timerInfos := map[string]*persistence.TimerInfo{timerInfo.TimerID: timerInfo}
 	s.mockMutableState.EXPECT().GetPendingTimerInfos().Return(timerInfos).Times(1)
 	s.mockMutableState.EXPECT().GetUserTimerInfoByEventID(timerInfo.StartedID).Return(timerInfo, true).Times(1)
 
 	var timerInfoUpdated = *timerInfo // make a copy
-	timerInfoUpdated.TaskID = timerTaskStatusCreated
+	timerInfoUpdated.TaskStatus = timerTaskStatusCreated
 	s.mockMutableState.EXPECT().UpdateUserTimer(&timerInfoUpdated).Return(nil).Times(1)
 	s.mockMutableState.EXPECT().GetCurrentVersion().Return(currentVersion).Times(1)
 	s.mockMutableState.EXPECT().AddTimerTasks(&persistence.UserTimerTask{
@@ -203,7 +203,7 @@ func (s *timerSequenceSuite) TestLoadAndSortUserTimers_One() {
 		TimerID:    "some random timer ID",
 		StartedID:  456,
 		ExpiryTime: now.Add(100 * time.Second),
-		TaskID:     timerTaskStatusCreated,
+		TaskStatus: timerTaskStatusCreated,
 	}
 	timerInfos := map[string]*persistence.TimerInfo{timerInfo.TimerID: timerInfo}
 	s.mockMutableState.EXPECT().GetPendingTimerInfos().Return(timerInfos).Times(1)
@@ -225,14 +225,14 @@ func (s *timerSequenceSuite) TestLoadAndSortUserTimers_Multiple() {
 		TimerID:    "some random timer ID",
 		StartedID:  456,
 		ExpiryTime: now.Add(100 * time.Second),
-		TaskID:     timerTaskStatusCreated,
+		TaskStatus: timerTaskStatusCreated,
 	}
 	timerInfo2 := &persistence.TimerInfo{
 		Version:    1234,
 		TimerID:    "other random timer ID",
 		StartedID:  4567,
 		ExpiryTime: now.Add(200 * time.Second),
-		TaskID:     timerTaskStatusNone,
+		TaskStatus: timerTaskStatusNone,
 	}
 	timerInfos := map[string]*persistence.TimerInfo{
 		timerInfo1.TimerID: timerInfo1,
@@ -608,7 +608,7 @@ func (s *timerSequenceSuite) TestGetUserTimerTimeout() {
 		TimerID:    "some random timer ID",
 		StartedID:  456,
 		ExpiryTime: now.Add(100 * time.Second),
-		TaskID:     timerTaskStatusCreated,
+		TaskStatus: timerTaskStatusCreated,
 	}
 
 	expectedTimerSequence := &timerSequenceID{
@@ -622,7 +622,7 @@ func (s *timerSequenceSuite) TestGetUserTimerTimeout() {
 	timerSequence := s.timerSequence.getUserTimerTimeout(timerInfo)
 	s.Equal(expectedTimerSequence, timerSequence)
 
-	timerInfo.TaskID = timerTaskStatusNone
+	timerInfo.TaskStatus = timerTaskStatusNone
 	expectedTimerSequence.timerCreated = false
 	timerSequence = s.timerSequence.getUserTimerTimeout(timerInfo)
 	s.Equal(expectedTimerSequence, timerSequence)

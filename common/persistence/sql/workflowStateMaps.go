@@ -243,7 +243,10 @@ func updateTimerInfos(
 				Version:         &v.Version,
 				StartedID:       &v.StartedID,
 				ExpiryTimeNanos: common.Int64Ptr(v.ExpiryTime.UnixNano()),
-				TaskID:          &v.TaskID,
+				// TaskID is a misleading variable, it actually serves
+				// the purpose of indicating whether a timer task is
+				// generated for this timer info
+				TaskID: &v.TaskStatus,
 			})
 			if err != nil {
 				return err
@@ -324,7 +327,10 @@ func getTimerInfoMap(
 			Version:    info.GetVersion(),
 			StartedID:  info.GetStartedID(),
 			ExpiryTime: time.Unix(0, info.GetExpiryTimeNanos()),
-			TaskID:     info.GetTaskID(),
+			// TaskID is a misleading variable, it actually serves
+			// the purpose of indicating whether a timer task is
+			// generated for this timer info
+			TaskStatus: info.GetTaskID(),
 		}
 	}
 

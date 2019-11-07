@@ -890,7 +890,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeTimerStarted() {
 		TimerID:    timerID,
 		ExpiryTime: time.Unix(0, event.GetTimestamp()).Add(time.Duration(timeoutSecond) * time.Second),
 		StartedID:  event.GetEventId(),
-		TaskID:     timerTaskStatusNone,
+		TaskStatus: timerTaskStatusNone,
 	}
 	s.mockMutableState.EXPECT().ReplicateTimerStartedEvent(event).Return(ti, nil).Times(1)
 	s.mockUpdateVersion(event)

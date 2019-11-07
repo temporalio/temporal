@@ -202,6 +202,9 @@ struct TimerInfo {
   10: optional i64 (js.type = "Long") version
   12: optional i64 (js.type = "Long") startedID
   14: optional i64 (js.type = "Long") expiryTimeNanos
+  // TaskID is a misleading variable, it actually serves
+  // the purpose of indicating whether a timer task is
+  // generated for this timer info
   16: optional i64 (js.type = "Long") taskID
 }
 

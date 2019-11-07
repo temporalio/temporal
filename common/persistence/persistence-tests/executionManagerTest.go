@@ -2512,7 +2512,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateTimers() {
 		Version:    3345,
 		TimerID:    timerID,
 		ExpiryTime: currentTime,
-		TaskID:     2,
+		TaskStatus: 2,
 		StartedID:  5,
 	}}
 	err2 := s.UpdateWorkflowExecution(updatedInfo, updatedStats, nil, []int64{int64(4)}, nil, int64(3), nil, nil, nil, timerInfos, nil)
@@ -2525,7 +2525,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateTimers() {
 	s.Equal(int64(3345), state.TimerInfos[timerID].Version)
 	s.Equal(timerID, state.TimerInfos[timerID].TimerID)
 	s.EqualTimesWithPrecision(currentTime, state.TimerInfos[timerID].ExpiryTime, time.Millisecond*500)
-	s.Equal(int64(2), state.TimerInfos[timerID].TaskID)
+	s.Equal(int64(2), state.TimerInfos[timerID].TaskStatus)
 	s.Equal(int64(5), state.TimerInfos[timerID].StartedID)
 
 	err2 = s.UpdateWorkflowExecution(updatedInfo, updatedStats, nil, nil, nil, int64(5), nil, nil, nil, nil, []string{timerID})
@@ -3348,21 +3348,21 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 				TimerID:    "t1",
 				StartedID:  1,
 				ExpiryTime: expiryTime,
-				TaskID:     500,
+				TaskStatus: 500,
 			},
 			"t2": {
 				Version:    2333,
 				TimerID:    "t2",
 				StartedID:  2,
 				ExpiryTime: expiryTime,
-				TaskID:     501,
+				TaskStatus: 501,
 			},
 			"t3": {
 				Version:    2333,
 				TimerID:    "t3",
 				StartedID:  3,
 				ExpiryTime: expiryTime,
-				TaskID:     502,
+				TaskStatus: 502,
 			},
 		},
 
@@ -3490,7 +3490,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 	s.Equal("t1", ti.TimerID)
 	s.Equal(int64(1), ti.StartedID)
 	s.EqualTimes(expiryTime, ti.ExpiryTime)
-	s.Equal(int64(500), ti.TaskID)
+	s.Equal(int64(500), ti.TaskStatus)
 
 	ti, ok = state1.TimerInfos["t2"]
 	s.True(ok)
@@ -3499,7 +3499,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 	s.Equal("t2", ti.TimerID)
 	s.Equal(int64(2), ti.StartedID)
 	s.EqualTimes(expiryTime, ti.ExpiryTime)
-	s.Equal(int64(501), ti.TaskID)
+	s.Equal(int64(501), ti.TaskStatus)
 
 	ti, ok = state1.TimerInfos["t3"]
 	s.True(ok)
@@ -3508,7 +3508,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 	s.Equal("t3", ti.TimerID)
 	s.Equal(int64(3), ti.StartedID)
 	s.EqualTimes(expiryTime, ti.ExpiryTime)
-	s.Equal(int64(502), ti.TaskID)
+	s.Equal(int64(502), ti.TaskStatus)
 
 	s.Equal(1, len(state1.ChildExecutionInfos))
 	ci, ok := state1.ChildExecutionInfos[9]
@@ -3565,14 +3565,14 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 			TimerID:    "t1_new",
 			StartedID:  1,
 			ExpiryTime: expiryTime,
-			TaskID:     600,
+			TaskStatus: 600,
 		},
 		{
 			Version:    3333,
 			TimerID:    "t2_new",
 			StartedID:  2,
 			ExpiryTime: expiryTime,
-			TaskID:     601,
+			TaskStatus: 601,
 		}}
 
 	resetChildExecutionInfos := []*p.ChildExecutionInfo{
@@ -3659,7 +3659,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 	s.Equal("t1_new", ti.TimerID)
 	s.Equal(int64(1), ti.StartedID)
 	s.EqualTimes(expiryTime, ti.ExpiryTime)
-	s.Equal(int64(600), ti.TaskID)
+	s.Equal(int64(600), ti.TaskStatus)
 
 	ti, ok = state4.TimerInfos["t2_new"]
 	s.True(ok)
@@ -3668,7 +3668,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 	s.Equal("t2_new", ti.TimerID)
 	s.Equal(int64(2), ti.StartedID)
 	s.EqualTimes(expiryTime, ti.ExpiryTime)
-	s.Equal(int64(601), ti.TaskID)
+	s.Equal(int64(601), ti.TaskStatus)
 
 	s.Equal(1, len(state4.ChildExecutionInfos))
 	ci, ok = state4.ChildExecutionInfos[10]

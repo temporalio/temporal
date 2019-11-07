@@ -565,7 +565,7 @@ func (w *workflowResetorImpl) generateTimerTasksForReset(
 	// user timer task
 	if len(msBuilder.GetPendingTimerInfos()) > 0 {
 		for _, timerInfo := range msBuilder.GetPendingTimerInfos() {
-			timerInfo.TaskID = timerTaskStatusNone
+			timerInfo.TaskStatus = timerTaskStatusNone
 			if err := msBuilder.UpdateUserTimer(timerInfo); err != nil {
 				return nil, err
 			}

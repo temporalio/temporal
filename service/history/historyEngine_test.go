@@ -5189,7 +5189,7 @@ func copyTimerInfo(sourceInfo *persistence.TimerInfo) *persistence.TimerInfo {
 		TimerID:    sourceInfo.TimerID,
 		StartedID:  sourceInfo.StartedID,
 		ExpiryTime: sourceInfo.ExpiryTime,
-		TaskID:     sourceInfo.TaskID,
+		TaskStatus: sourceInfo.TaskStatus,
 	}
 }
 

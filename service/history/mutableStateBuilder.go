@@ -2978,7 +2978,7 @@ func (e *mutableStateBuilder) ReplicateTimerStartedEvent(
 		TimerID:    timerID,
 		ExpiryTime: expiryTime,
 		StartedID:  event.GetEventId(),
-		TaskID:     timerTaskStatusNone,
+		TaskStatus: timerTaskStatusNone,
 	}
 
 	e.pendingTimerInfoIDs[timerID] = ti

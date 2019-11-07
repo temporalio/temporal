@@ -138,7 +138,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 		Version:    3345,
 		TimerID:    timerID,
 		ExpiryTime: currentTime,
-		TaskID:     2,
+		TaskStatus: 2,
 		StartedID:  5,
 	}}
 	updatedInfo.BranchToken = []byte("branchToken2")
@@ -153,7 +153,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 	s.Equal(int64(3345), state.TimerInfos[timerID].Version)
 	s.Equal(timerID, state.TimerInfos[timerID].TimerID)
 	s.EqualTimesWithPrecision(currentTime, state.TimerInfos[timerID].ExpiryTime, time.Millisecond*500)
-	s.Equal(int64(2), state.TimerInfos[timerID].TaskID)
+	s.Equal(int64(2), state.TimerInfos[timerID].TaskStatus)
 	s.Equal(int64(5), state.TimerInfos[timerID].StartedID)
 
 	err2 = s.UpdateWorkflowExecution(updatedInfo, updatedStats, nil, nil, nil, int64(5), nil, nil, nil, nil, []string{timerID})
@@ -235,7 +235,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 		Version:    3345,
 		TimerID:    timerID,
 		ExpiryTime: currentTime,
-		TaskID:     2,
+		TaskStatus: 2,
 		StartedID:  5,
 	}}
 	versionHistory, err := versionHistories.GetCurrentVersionHistory()
@@ -253,7 +253,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 	s.Equal(int64(3345), state.TimerInfos[timerID].Version)
 	s.Equal(timerID, state.TimerInfos[timerID].TimerID)
 	s.EqualTimesWithPrecision(currentTime, state.TimerInfos[timerID].ExpiryTime, time.Millisecond*500)
-	s.Equal(int64(2), state.TimerInfos[timerID].TaskID)
+	s.Equal(int64(2), state.TimerInfos[timerID].TaskStatus)
 	s.Equal(int64(5), state.TimerInfos[timerID].StartedID)
 	s.Equal(state.VersionHistories, versionHistories)
 }
@@ -853,7 +853,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 		Version:    100,
 		TimerID:    "id101",
 		ExpiryTime: currentTime,
-		TaskID:     102,
+		TaskStatus: 102,
 		StartedID:  103,
 	}}
 
@@ -1268,7 +1268,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 		Version:    100,
 		TimerID:    "id101",
 		ExpiryTime: currentTime,
-		TaskID:     102,
+		TaskStatus: 102,
 		StartedID:  103,
 	}}
 
@@ -1553,7 +1553,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 		Version:    100,
 		TimerID:    "id101",
 		ExpiryTime: currentTime,
-		TaskID:     102,
+		TaskStatus: 102,
 		StartedID:  103,
 	}}
 

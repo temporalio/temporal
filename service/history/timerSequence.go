@@ -128,7 +128,7 @@ func (t *timerSequenceImpl) createNextUserTimer() (bool, error) {
 	}
 	// mark timer task mask as indication that timer task is generated
 	// here TaskID is misleading attr, should be called timer created flag or something
-	timerInfo.TaskID = timerTaskStatusCreated
+	timerInfo.TaskStatus = timerTaskStatusCreated
 	if err := t.mutableState.UpdateUserTimer(timerInfo); err != nil {
 		return false, err
 	}
@@ -240,7 +240,7 @@ func (t *timerSequenceImpl) getUserTimerTimeout(
 		eventID:      timerInfo.StartedID,
 		timestamp:    timerInfo.ExpiryTime,
 		timerType:    timerTypeStartToClose,
-		timerCreated: timerInfo.TaskID == timerTaskStatusCreated,
+		timerCreated: timerInfo.TaskStatus == timerTaskStatusCreated,
 		attempt:      0,
 	}
 }
