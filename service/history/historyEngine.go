@@ -120,7 +120,7 @@ type (
 		taskAllocator             taskAllocator
 		replicator                *historyReplicator
 		nDCReplicator             nDCHistoryReplicator
-		nDCactivityReplicator     nDCActivityReplicator
+		nDCActivityReplicator     nDCActivityReplicator
 		replicatorProcessor       ReplicatorQueueProcessor
 		historyEventNotifier      historyEventNotifier
 		tokenSerializer           common.TaskTokenSerializer
@@ -261,7 +261,7 @@ func NewEngineWithShardContext(
 			historyEngImpl.eventsReapplier,
 			logger,
 		)
-		historyEngImpl.nDCactivityReplicator = newNDCActivityReplicator(
+		historyEngImpl.nDCActivityReplicator = newNDCActivityReplicator(
 			shard,
 			historyCache,
 			logger,
@@ -2113,7 +2113,7 @@ func (e *historyEngineImpl) SyncActivity(
 	request *h.SyncActivityRequest,
 ) (retError error) {
 
-	return e.nDCactivityReplicator.SyncActivity(ctx, request)
+	return e.nDCActivityReplicator.SyncActivity(ctx, request)
 }
 
 func (e *historyEngineImpl) ResetWorkflowExecution(

@@ -333,7 +333,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	msBuilderCurrent.EXPECT().GetNextEventID().Return(currentNextEventID).AnyTimes()
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(currentVersion, nil).AnyTimes()
 	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
-	msBuilderCurrent.EXPECT().UpdateReplicationStateVersion(currentVersion, true).Times(1)
+	msBuilderCurrent.EXPECT().UpdateCurrentVersion(currentVersion, true).Return(nil).Times(1)
 	msBuilderCurrent.EXPECT().AddWorkflowExecutionSignaled(signalName, signalInput, signalIdentity).Return(&shared.HistoryEvent{
 		EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
 		Timestamp: common.Int64Ptr(time.Now().UnixNano()),
@@ -426,7 +426,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	msBuilderCurrent.EXPECT().GetNextEventID().Return(currentNextEventID).AnyTimes()
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(currentVersion, nil).AnyTimes()
 	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
-	msBuilderCurrent.EXPECT().UpdateReplicationStateVersion(currentVersion, true).Times(1)
+	msBuilderCurrent.EXPECT().UpdateCurrentVersion(currentVersion, true).Return(nil).Times(1)
 	msBuilderCurrent.EXPECT().AddWorkflowExecutionSignaled(signalName, signalInput, signalIdentity).Return(&shared.HistoryEvent{
 		EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
 		Timestamp: common.Int64Ptr(time.Now().UnixNano()),
@@ -653,7 +653,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(currentVersion, nil).AnyTimes()
 	msBuilderCurrent.EXPECT().GetNextEventID().Return(currentNextEventID).AnyTimes()
 	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes() // this is used to update the version on mutable state
-	msBuilderCurrent.EXPECT().UpdateReplicationStateVersion(currentVersion, true).Times(1)
+	msBuilderCurrent.EXPECT().UpdateCurrentVersion(currentVersion, true).Return(nil).Times(1)
 
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
 		DomainID:   domainID,
@@ -1045,7 +1045,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 
 	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(currentLastWriteVersion, nil).AnyTimes()
-	msBuilderCurrent.EXPECT().UpdateReplicationStateVersion(currentLastWriteVersion, true).Times(1)
+	msBuilderCurrent.EXPECT().UpdateCurrentVersion(currentLastWriteVersion, true).Return(nil).Times(1)
 	msBuilderCurrent.EXPECT().AddWorkflowExecutionSignaled(signalName, signalInput, signalIdentity).Return(&shared.HistoryEvent{
 		EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
 		Timestamp: common.Int64Ptr(time.Now().UnixNano()),
@@ -1131,7 +1131,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 
 	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(currentLastWriteVersion, nil).AnyTimes()
-	msBuilderCurrent.EXPECT().UpdateReplicationStateVersion(currentLastWriteVersion, true).Times(1)
+	msBuilderCurrent.EXPECT().UpdateCurrentVersion(currentLastWriteVersion, true).Return(nil).Times(1)
 	msBuilderCurrent.EXPECT().AddWorkflowExecutionSignaled(signalName, signalInput, signalIdentity).Return(&shared.HistoryEvent{
 		EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
 		Timestamp: common.Int64Ptr(time.Now().UnixNano()),
@@ -1217,7 +1217,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{LastWriteVersion: currentLastWriteVersion}).AnyTimes()
 	msBuilderIn.EXPECT().GetLastWriteVersion().Return(currentLastWriteVersion, nil).AnyTimes()
 	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
-	msBuilderIn.EXPECT().UpdateReplicationStateVersion(currentLastWriteVersion, true).Times(1)
+	msBuilderIn.EXPECT().UpdateCurrentVersion(currentLastWriteVersion, true).Return(nil).Times(1)
 	msBuilderIn.EXPECT().AddWorkflowExecutionSignaled(signalName, signalInput, signalIdentity).Return(&shared.HistoryEvent{
 		EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
 		Timestamp: common.Int64Ptr(time.Now().UnixNano()),
@@ -1268,7 +1268,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{LastWriteVersion: currentLastWriteVersion}).AnyTimes()
 	msBuilderIn.EXPECT().GetLastWriteVersion().Return(currentLastWriteVersion, nil).AnyTimes()
 	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
-	msBuilderIn.EXPECT().UpdateReplicationStateVersion(currentLastWriteVersion, true).Times(1)
+	msBuilderIn.EXPECT().UpdateCurrentVersion(currentLastWriteVersion, true).Return(nil).Times(1)
 	msBuilderIn.EXPECT().AddWorkflowExecutionSignaled(signalName, signalInput, signalIdentity).Return(&shared.HistoryEvent{
 		EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
 		Timestamp: common.Int64Ptr(time.Now().UnixNano()),
@@ -1724,7 +1724,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	}).Times(1)
 	msBuilderIn.EXPECT().HasBufferedEvents().Return(true).Times(1)
 	msBuilderIn.EXPECT().GetInFlightDecision().Return(pendingDecisionInfo, true).Times(1)
-	msBuilderIn.EXPECT().UpdateReplicationStateVersion(currentLastWriteVersion, true).Times(1)
+	msBuilderIn.EXPECT().UpdateCurrentVersion(currentLastWriteVersion, true).Return(nil).Times(1)
 	msBuilderIn.EXPECT().AddDecisionTaskFailedEvent(pendingDecisionInfo.ScheduleID, pendingDecisionInfo.StartedID,
 		workflow.DecisionTaskFailedCauseFailoverCloseDecision, ([]byte)(nil), identityHistoryService, "", "", "", int64(0),
 	).Return(&shared.HistoryEvent{}, nil).Times(1)
@@ -2959,7 +2959,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 			Identity:   common.StringPtr(signalIdentity),
 		},
 	}, nil).Times(1)
-	msBuilderCurrent.EXPECT().UpdateReplicationStateVersion(currentVersion, true).Times(1)
+	msBuilderCurrent.EXPECT().UpdateCurrentVersion(currentVersion, true).Return(nil).Times(1)
 	msBuilderCurrent.EXPECT().HasPendingDecision().Return(true).Times(1)
 	contextCurrent.EXPECT().updateWorkflowExecutionAsActive(gomock.Any()).Return(nil).Times(1)
 
@@ -3137,7 +3137,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 			Identity:   common.StringPtr(signalIdentity),
 		},
 	}, nil).Times(1)
-	msBuilderCurrent.EXPECT().UpdateReplicationStateVersion(currentVersion, true).Times(1)
+	msBuilderCurrent.EXPECT().UpdateCurrentVersion(currentVersion, true).Return(nil).Times(1)
 	msBuilderCurrent.EXPECT().HasPendingDecision().Return(false).Times(1)
 
 	newDecision := &decisionInfo{
@@ -3639,7 +3639,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	msBuilderCurrent.EXPECT().GetNextEventID().Return(currentNextEventID).AnyTimes()
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(currentVersion, nil).AnyTimes()
 	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes() // this is used to update the version on mutable state
-	msBuilderCurrent.EXPECT().UpdateReplicationStateVersion(currentVersion, true).Times(1)
+	msBuilderCurrent.EXPECT().UpdateCurrentVersion(currentVersion, true).Return(nil).Times(1)
 
 	currentClusterName := cluster.TestCurrentClusterName
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", currentVersion).Return(currentClusterName)
@@ -3770,7 +3770,7 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 	msBuilderCurrent.EXPECT().GetNextEventID().Return(currentNextEventID).AnyTimes()
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(currentVersion, nil).AnyTimes()
 	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes() // this is used to update the version on mutable state
-	msBuilderCurrent.EXPECT().UpdateReplicationStateVersion(currentVersion, true).Times(1)
+	msBuilderCurrent.EXPECT().UpdateCurrentVersion(currentVersion, true).Return(nil).Times(1)
 
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
 		DomainID:   domainID,

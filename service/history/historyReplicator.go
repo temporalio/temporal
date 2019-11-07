@@ -952,7 +952,10 @@ func (r *historyReplicator) terminateWorkflow(
 			}
 
 			// setting the current version to be the last write version
-			msBuilder.UpdateReplicationStateVersion(currentLastWriteVersion, true)
+			if err := msBuilder.UpdateCurrentVersion(currentLastWriteVersion, true); err != nil {
+				return err
+			}
+
 			eventBatchFirstEventID := msBuilder.GetNextEventID()
 			if _, err := msBuilder.AddWorkflowExecutionTerminatedEvent(
 				eventBatchFirstEventID,
@@ -1260,7 +1263,12 @@ func (r *historyReplicator) prepareWorkflowMutation(
 	}
 	lastWriteVersionActive := r.clusterMetadata.ClusterNameForFailoverVersion(lastWriteVersion) == r.clusterMetadata.GetCurrentClusterName()
 	if lastWriteVersionActive {
-		msBuilder.UpdateReplicationStateVersion(lastWriteVersion, true)
+		if err := msBuilder.UpdateCurrentVersion(
+			lastWriteVersion,
+			true,
+		); err != nil {
+			return false, err
+		}
 		return true, nil
 	}
 
@@ -1274,7 +1282,12 @@ func (r *historyReplicator) prepareWorkflowMutation(
 		domainFailoverVersion >= lastWriteVersion
 
 	if domainActive {
-		msBuilder.UpdateReplicationStateVersion(domainFailoverVersion, true)
+		if err := msBuilder.UpdateCurrentVersion(
+			lastWriteVersion,
+			true,
+		); err != nil {
+			return false, err
+		}
 		return true, nil
 	}
 	return false, nil

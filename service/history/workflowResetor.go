@@ -274,15 +274,11 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 	}
 
 	// set the new mutable state with the version in domain
-	if newMutableState.GetReplicationState() != nil {
-		newMutableState.UpdateReplicationStateVersion(domainEntry.GetFailoverVersion(), false)
-	} else if newMutableState.GetVersionHistories() != nil {
-		if retError = newMutableState.UpdateCurrentVersion(
-			domainEntry.GetFailoverVersion(),
-			false,
-		); retError != nil {
-			return
-		}
+	if retError = newMutableState.UpdateCurrentVersion(
+		domainEntry.GetFailoverVersion(),
+		false,
+	); retError != nil {
+		return
 	}
 
 	// failed the in-flight decision(started).
@@ -940,7 +936,13 @@ func (w *workflowResetorImpl) replicateResetEvent(
 					w.eng.logger,
 					domainEntry,
 				)
-				newMsBuilder.UpdateReplicationStateVersion(firstEvent.GetVersion(), true)
+				if err := newMsBuilder.UpdateCurrentVersion(
+					firstEvent.GetVersion(),
+					true,
+				); err != nil {
+					return nil, 0, nil, nil, err
+				}
+
 				sBuilder = newStateBuilder(
 					w.eng.shard,
 					w.eng.logger,
