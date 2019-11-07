@@ -123,6 +123,7 @@ var (
 	errNoPermission                               = &gen.BadRequestError{Message: "No permission to do this operation."}
 	errRequestIDNotSet                            = &gen.BadRequestError{Message: "RequestId is not set on request."}
 	errWorkflowTypeNotSet                         = &gen.BadRequestError{Message: "WorkflowType is not set on request."}
+	errInvalidRetention                           = &gen.BadRequestError{Message: "RetentionDays is invalid."}
 	errInvalidExecutionStartToCloseTimeoutSeconds = &gen.BadRequestError{Message: "A valid ExecutionStartToCloseTimeoutSeconds is not set on request."}
 	errInvalidTaskStartToCloseTimeoutSeconds      = &gen.BadRequestError{Message: "A valid TaskStartToCloseTimeoutSeconds is not set on request."}
 	errClientVersionNotSet                        = &gen.BadRequestError{Message: "Client version is not set on request."}
@@ -253,6 +254,10 @@ func (wh *WorkflowHandler) RegisterDomain(ctx context.Context, registerRequest *
 
 	if registerRequest == nil {
 		return errRequestNotSet
+	}
+
+	if registerRequest.GetWorkflowExecutionRetentionPeriodInDays() > common.MaxWorkflowRetentionPeriodInDays {
+		return errInvalidRetention
 	}
 
 	if err := checkPermission(wh.config, registerRequest.SecurityToken); err != nil {

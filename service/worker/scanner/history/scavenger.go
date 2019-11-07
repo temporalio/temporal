@@ -76,7 +76,11 @@ const (
 	rpsPerConcurrency = 50
 	pageSize          = 1000
 	// only clean up history branches that older than this threshold
-	cleanUpThreshold = time.Hour * 24
+	// we double the MaxWorkflowRetentionPeriodInDays to avoid racing condition with history archival.
+	// Our history archiver delete mutable state, and then upload history to blob store and then delete history.
+	// This scanner will face racing condition with archiver because it relys on describe mutable state returning entityNotExist error.
+	// That's why we need to keep MaxWorkflowRetentionPeriodInDays stable and not decreasing all the time.
+	cleanUpThreshold = time.Hour * 24 * common.MaxWorkflowRetentionPeriodInDays * 2
 )
 
 // NewScavenger returns an instance of history scavenger daemon
