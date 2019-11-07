@@ -23,6 +23,8 @@ package cassandra
 import (
 	"sync"
 
+	"github.com/uber/cadence/common/cassandra"
+
 	"github.com/uber/cadence/common"
 
 	"github.com/gocql/gocql"
@@ -128,15 +130,11 @@ func (f *Factory) executionStoreFactory() (*executionStoreFactory, error) {
 
 // newExecutionStoreFactory is used to create an instance of ExecutionStoreFactory implementation
 func newExecutionStoreFactory(cfg config.Cassandra, logger log.Logger) (*executionStoreFactory, error) {
-	cluster := NewCassandraCluster(cfg.Hosts, cfg.Port, cfg.User, cfg.Password, cfg.Datacenter)
-	cluster.Keyspace = cfg.Keyspace
+	cluster := cassandra.NewCassandraCluster(cfg)
 	cluster.ProtoVersion = cassandraProtoVersion
 	cluster.Consistency = gocql.LocalQuorum
 	cluster.SerialConsistency = gocql.LocalSerial
 	cluster.Timeout = defaultSessionTimeout
-	if cfg.MaxConns > 0 {
-		cluster.NumConns = cfg.MaxConns
-	}
 	session, err := cluster.CreateSession()
 	if err != nil {
 		return nil, err

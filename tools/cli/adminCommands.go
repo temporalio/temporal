@@ -27,6 +27,10 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/uber/cadence/common/auth"
+
+	"github.com/uber/cadence/common/service/config"
+
 	"github.com/gocql/gocql"
 	"github.com/urfave/cli"
 
@@ -267,12 +271,25 @@ func connectToCassandra(c *cli.Context) *gocql.Session {
 	if !c.IsSet(FlagDBPort) {
 		ErrorAndExit("cassandra port is required", nil)
 	}
-	port := c.Int(FlagDBPort)
-	user := c.String(FlagUsername)
-	pw := c.String(FlagPassword)
-	ksp := getRequiredOption(c, FlagKeyspace)
 
-	clusterCfg, err := cassandra.NewCassandraCluster(host, port, user, pw, ksp, 10)
+	cassandraConfig := &config.Cassandra{
+		Hosts:    host,
+		Port:     c.Int(FlagDBPort),
+		User:     c.String(FlagUsername),
+		Password: c.String(FlagPassword),
+		Keyspace: getRequiredOption(c, FlagKeyspace),
+	}
+	if c.Bool(FlagEnableTLS) {
+		cassandraConfig.TLS = &auth.TLS{
+			Enabled:                true,
+			CertFile:               c.String(FlagTLSCertPath),
+			KeyFile:                c.String(FlagTLSKeyPath),
+			CaFile:                 c.String(FlagTLSCaPath),
+			EnableHostVerification: c.Bool(FlagTLSEnableHostVerification),
+		}
+	}
+
+	clusterCfg, err := cassandra.NewCassandraCluster(cassandraConfig, 10)
 	clusterCfg.SerialConsistency = gocql.LocalSerial
 	clusterCfg.NumConns = 20
 	if err != nil {

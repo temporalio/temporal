@@ -24,11 +24,15 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"strings"
 	"time"
+
+	"github.com/uber/cadence/common/auth"
+
+	"github.com/uber/cadence/common/service/config"
 
 	"github.com/gocql/gocql"
 
+	"github.com/uber/cadence/common/cassandra"
 	"github.com/uber/cadence/tools/common/schema"
 )
 
@@ -47,6 +51,7 @@ type (
 		Keyspace    string
 		Timeout     int
 		numReplicas int
+		TLS         *auth.TLS
 	}
 )
 
@@ -90,23 +95,14 @@ const (
 var _ schema.DB = (*cqlClient)(nil)
 
 // NewCassandraCluster return gocql clusterConfig
-func NewCassandraCluster(hostsCsv string, port int, user, password, keyspace string, timeoutSeconds int) (*gocql.ClusterConfig, error) {
-	hosts := parseHosts(hostsCsv)
-	if len(hosts) == 0 {
+func NewCassandraCluster(cfg *config.Cassandra, timeoutSeconds int) (*gocql.ClusterConfig, error) {
+	clusterCfg := cassandra.NewCassandraCluster(*cfg)
+
+	if len(clusterCfg.Hosts) == 0 {
 		return nil, errNoHosts
 	}
-	clusterCfg := gocql.NewCluster(hosts...)
-	if port > 0 {
-		clusterCfg.Port = port
-	}
-	if user != "" && password != "" {
-		clusterCfg.Authenticator = gocql.PasswordAuthenticator{
-			Username: user,
-			Password: password,
-		}
-	}
+
 	timeout := time.Duration(timeoutSeconds) * time.Second
-	clusterCfg.Keyspace = keyspace
 	clusterCfg.Timeout = timeout
 	clusterCfg.ProtoVersion = cqlProtoVersion
 	clusterCfg.Consistency = gocql.ParseConsistency(defaultConsistency)
@@ -116,7 +112,9 @@ func NewCassandraCluster(hostsCsv string, port int, user, password, keyspace str
 // newCQLClient returns a new instance of CQLClient
 func newCQLClient(cfg *CQLClientConfig) (*cqlClient, error) {
 	var err error
-	clusterCfg, err := NewCassandraCluster(cfg.Hosts, cfg.Port, cfg.User, cfg.Password, cfg.Keyspace, cfg.Timeout)
+
+	cassandraConfig := cfg.toCassandraConfig()
+	clusterCfg, err := NewCassandraCluster(cassandraConfig, cfg.Timeout)
 	if err != nil {
 		return nil, err
 	}
@@ -128,6 +126,19 @@ func newCQLClient(cfg *CQLClientConfig) (*cqlClient, error) {
 		return nil, err
 	}
 	return cqlClient, nil
+}
+
+func (cfg *CQLClientConfig) toCassandraConfig() *config.Cassandra {
+	cassandraConfig := config.Cassandra{
+		Hosts:    cfg.Hosts,
+		Port:     cfg.Port,
+		User:     cfg.User,
+		Password: cfg.Password,
+		Keyspace: cfg.Keyspace,
+		TLS:      cfg.TLS,
+	}
+
+	return &cassandraConfig
 }
 
 func (client *cqlClient) CreateDatabase(name string) error {
@@ -268,14 +279,4 @@ func (client *cqlClient) dropAllTablesTypes() error {
 		}
 	}
 	return nil
-}
-
-func parseHosts(input string) []string {
-	var hosts = make([]string, 0)
-	for _, h := range strings.Split(input, ",") {
-		if host := strings.TrimSpace(h); len(host) > 0 {
-			hosts = append(hosts, host)
-		}
-	}
-	return hosts
 }

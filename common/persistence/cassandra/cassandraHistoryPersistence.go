@@ -25,6 +25,8 @@ import (
 	"sort"
 	"time"
 
+	"github.com/uber/cadence/common/cassandra"
+
 	"github.com/gocql/gocql"
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -78,15 +80,11 @@ func newHistoryV2Persistence(
 	logger log.Logger,
 ) (p.HistoryStore, error) {
 
-	cluster := NewCassandraCluster(cfg.Hosts, cfg.Port, cfg.User, cfg.Password, cfg.Datacenter)
-	cluster.Keyspace = cfg.Keyspace
+	cluster := cassandra.NewCassandraCluster(cfg)
 	cluster.ProtoVersion = cassandraProtoVersion
 	cluster.Consistency = gocql.LocalQuorum
 	cluster.SerialConsistency = gocql.LocalSerial
 	cluster.Timeout = defaultSessionTimeout
-	if cfg.MaxConns > 0 {
-		cluster.NumConns = cfg.MaxConns
-	}
 	session, err := cluster.CreateSession()
 	if err != nil {
 		return nil, err

@@ -26,6 +26,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/uber/cadence/common/auth"
+
 	"github.com/gocql/gocql"
 	log "github.com/sirupsen/logrus"
 
@@ -34,33 +36,6 @@ import (
 )
 
 const cassandraPersistenceName = "cassandra"
-
-// NewCassandraCluster creates a cassandra cluster given comma separated list of clusterHosts
-func NewCassandraCluster(clusterHosts string, port int, user, password, dc string) *gocql.ClusterConfig {
-	var hosts []string
-	for _, h := range strings.Split(clusterHosts, ",") {
-		if host := strings.TrimSpace(h); len(host) > 0 {
-			hosts = append(hosts, host)
-		}
-	}
-
-	cluster := gocql.NewCluster(hosts...)
-	cluster.ProtoVersion = 4
-	if port > 0 {
-		cluster.Port = port
-	}
-	if user != "" && password != "" {
-		cluster.Authenticator = gocql.PasswordAuthenticator{
-			Username: user,
-			Password: password,
-		}
-	}
-	if dc != "" {
-		cluster.HostFilter = gocql.DataCentreHostFilter(dc)
-	}
-	cluster.PoolConfig.HostSelectionPolicy = gocql.TokenAwareHostPolicy(gocql.RoundRobinHostPolicy())
-	return cluster
-}
 
 // CreateCassandraKeyspace creates the keyspace using this session for given replica count
 func CreateCassandraKeyspace(s *gocql.Session, keyspace string, replicas int, overwrite bool) (err error) {
@@ -90,9 +65,15 @@ func DropCassandraKeyspace(s *gocql.Session, keyspace string) (err error) {
 	return
 }
 
-// LoadCassandraSchema loads the schema from the given .cql files on this keyspace
-func LoadCassandraSchema(
-	dir string, fileNames []string, hosts []string, port int, keyspace string, override bool,
+// loadCassandraSchema loads the schema from the given .cql files on this keyspace
+func loadCassandraSchema(
+	dir string,
+	fileNames []string,
+	hosts []string,
+	port int,
+	keyspace string,
+	override bool,
+	tls *auth.TLS,
 ) (err error) {
 
 	tmpFile, err := ioutil.TempFile("", "_cadence_")
@@ -120,6 +101,7 @@ func LoadCassandraSchema(
 			Hosts:    strings.Join(hosts, ","),
 			Port:     port,
 			Keyspace: keyspace,
+			TLS:      tls,
 		},
 		SetupConfig: schema.SetupConfig{
 			SchemaFilePath:    tmpFile.Name(),

@@ -98,7 +98,7 @@ kafka:
     enabled: false
     certFile: ""
     keyFile: ""
-    bundleFile: ""
+    caFile: ""
   clusters:
     test:
       brokers:

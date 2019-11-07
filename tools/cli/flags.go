@@ -198,6 +198,11 @@ const (
 	FlagServiceEnvWithAlias               = FlagServiceEnv + ", se"
 	FlagServiceZone                       = "service_zone"
 	FlagServiceZoneWithAlias              = FlagServiceZone + ", sz"
+	FlagEnableTLS                         = "tls"
+	FlagTLSCertPath                       = "tls_cert_path"
+	FlagTLSKeyPath                        = "tls_key_path"
+	FlagTLSCaPath                         = "tls_ca_path"
+	FlagTLSEnableHostVerification         = "tls_enable_host_verification"
 )
 
 var flagsForExecution = []cli.Flag{

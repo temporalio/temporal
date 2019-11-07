@@ -29,6 +29,7 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
+	"github.com/uber/cadence/common/cassandra"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/config"
@@ -71,8 +72,7 @@ func newQueue(
 	logger log.Logger,
 	queueType common.QueueType,
 ) (persistence.Queue, error) {
-	cluster := NewCassandraCluster(cfg.Hosts, cfg.Port, cfg.User, cfg.Password, cfg.Datacenter)
-	cluster.Keyspace = cfg.Keyspace
+	cluster := cassandra.NewCassandraCluster(cfg)
 	cluster.ProtoVersion = cassandraProtoVersion
 	cluster.Consistency = gocql.LocalQuorum
 	cluster.SerialConsistency = gocql.LocalSerial

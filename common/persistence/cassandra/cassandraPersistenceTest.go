@@ -25,6 +25,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/uber/cadence/common/cassandra"
+
 	"github.com/gocql/gocql"
 	log "github.com/sirupsen/logrus"
 
@@ -115,7 +117,12 @@ func (s *TestCluster) TearDownTestDatabase() {
 
 // CreateSession from PersistenceTestCluster interface
 func (s *TestCluster) CreateSession() {
-	s.cluster = NewCassandraCluster(s.cfg.Hosts, s.cfg.Port, testUser, testPassword, "")
+	s.cluster = cassandra.NewCassandraCluster(config.Cassandra{
+		Hosts:    s.cfg.Hosts,
+		Port:     s.cfg.Port,
+		User:     testUser,
+		Password: testPassword,
+	})
 	s.cluster.Consistency = gocql.Consistency(1)
 	s.cluster.Keyspace = "system"
 	s.cluster.Timeout = 40 * time.Second
@@ -147,7 +154,7 @@ func (s *TestCluster) DropDatabase() {
 // LoadSchema from PersistenceTestCluster interface
 func (s *TestCluster) LoadSchema(fileNames []string, schemaDir string) {
 	workflowSchemaDir := schemaDir + "/cadence"
-	err := LoadCassandraSchema(workflowSchemaDir, fileNames, s.cluster.Hosts, s.cluster.Port, s.DatabaseName(), true)
+	err := loadCassandraSchema(workflowSchemaDir, fileNames, s.cluster.Hosts, s.cluster.Port, s.DatabaseName(), true, nil)
 	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
 		log.Fatal(err)
 	}
@@ -156,7 +163,7 @@ func (s *TestCluster) LoadSchema(fileNames []string, schemaDir string) {
 // LoadVisibilitySchema from PersistenceTestCluster interface
 func (s *TestCluster) LoadVisibilitySchema(fileNames []string, schemaDir string) {
 	workflowSchemaDir := schemaDir + "visibility"
-	err := LoadCassandraSchema(workflowSchemaDir, fileNames, s.cluster.Hosts, s.cluster.Port, s.DatabaseName(), false)
+	err := loadCassandraSchema(workflowSchemaDir, fileNames, s.cluster.Hosts, s.cluster.Port, s.DatabaseName(), false, nil)
 	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
 		log.Fatal(err)
 	}

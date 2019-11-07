@@ -28,6 +28,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/uber/cadence/common/auth"
+
 	"io"
 	"io/ioutil"
 	"os"
@@ -462,7 +464,7 @@ func decodeVisibility(message []byte, val *indexer.Message) error {
 // ClustersConfig describes the kafka clusters
 type ClustersConfig struct {
 	Clusters map[string]messaging.ClusterConfig
-	TLS      messaging.TLS
+	TLS      auth.TLS
 }
 
 func doRereplicate(shardID int, domainID, wid, rid string, minID, maxID int64, targets []string, producer messaging.Producer, session *gocql.Session) {

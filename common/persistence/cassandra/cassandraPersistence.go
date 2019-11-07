@@ -25,6 +25,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/uber/cadence/common/cassandra"
+
 	"github.com/gocql/gocql"
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -863,8 +865,7 @@ var _ p.ExecutionStore = (*cassandraPersistence)(nil)
 
 // newShardPersistence is used to create an instance of ShardManager implementation
 func newShardPersistence(cfg config.Cassandra, clusterName string, logger log.Logger) (p.ShardStore, error) {
-	cluster := NewCassandraCluster(cfg.Hosts, cfg.Port, cfg.User, cfg.Password, cfg.Datacenter)
-	cluster.Keyspace = cfg.Keyspace
+	cluster := cassandra.NewCassandraCluster(cfg)
 	cluster.ProtoVersion = cassandraProtoVersion
 	cluster.Consistency = gocql.LocalQuorum
 	cluster.SerialConsistency = gocql.LocalSerial
@@ -893,8 +894,7 @@ func NewWorkflowExecutionPersistence(
 
 // newTaskPersistence is used to create an instance of TaskManager implementation
 func newTaskPersistence(cfg config.Cassandra, logger log.Logger) (p.TaskStore, error) {
-	cluster := NewCassandraCluster(cfg.Hosts, cfg.Port, cfg.User, cfg.Password, cfg.Datacenter)
-	cluster.Keyspace = cfg.Keyspace
+	cluster := cassandra.NewCassandraCluster(cfg)
 	cluster.ProtoVersion = cassandraProtoVersion
 	cluster.Consistency = gocql.LocalQuorum
 	cluster.SerialConsistency = gocql.LocalSerial

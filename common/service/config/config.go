@@ -24,6 +24,8 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/uber/cadence/common/auth"
+
 	"github.com/uber-go/tally/m3"
 	"github.com/uber-go/tally/prometheus"
 	"github.com/uber/ringpop-go/discovery"
@@ -188,6 +190,8 @@ type (
 		MaxQPS int `yaml:"maxQPS"`
 		// MaxConns is the max number of connections to this datastore for a single keyspace
 		MaxConns int `yaml:"maxConns"`
+		// TLS configuration
+		TLS *auth.TLS `yaml:"tls"`
 	}
 
 	// SQL is the configuration for connecting to a SQL backed datastore

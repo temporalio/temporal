@@ -24,6 +24,8 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/uber/cadence/common/auth"
+
 	"github.com/urfave/cli"
 
 	"github.com/uber/cadence/common/service/config"
@@ -78,6 +80,7 @@ func checkCompatibleVersion(
 		Password: cfg.Password,
 		Keyspace: cfg.Keyspace,
 		Timeout:  defaultTimeout,
+		TLS:      cfg.TLS,
 	})
 	if err != nil {
 		return fmt.Errorf("unable to create CQL Client: %v", err.Error())
@@ -177,6 +180,17 @@ func newCQLClientConfig(cli *cli.Context) (*CQLClientConfig, error) {
 	config.Timeout = cli.GlobalInt(schema.CLIOptTimeout)
 	config.Keyspace = cli.GlobalString(schema.CLIOptKeyspace)
 	config.numReplicas = cli.Int(schema.CLIOptReplicationFactor)
+
+	if cli.GlobalBool(schema.CLIFlagEnableTLS) {
+		config.TLS = &auth.TLS{
+			Enabled:                true,
+			CertFile:               cli.GlobalString(schema.CLIFlagTLSCertFile),
+			KeyFile:                cli.GlobalString(schema.CLIFlagTLSKeyFile),
+			CaFile:                 cli.GlobalString(schema.CLIFlagTLSCaFile),
+			EnableHostVerification: cli.GlobalBool(schema.CLIFlagTLSEnableHostVerification),
+		}
+	}
+
 	isDryRun := cli.Bool(schema.CLIOptDryrun)
 	if err := validateCQLClientConfig(config, isDryRun); err != nil {
 		return nil, err

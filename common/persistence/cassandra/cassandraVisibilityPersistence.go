@@ -24,6 +24,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/uber/cadence/common/cassandra"
+
 	"github.com/gocql/gocql"
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -144,8 +146,7 @@ type (
 
 // newVisibilityPersistence is used to create an instance of VisibilityManager implementation
 func newVisibilityPersistence(cfg config.Cassandra, logger log.Logger) (p.VisibilityStore, error) {
-	cluster := NewCassandraCluster(cfg.Hosts, cfg.Port, cfg.User, cfg.Password, cfg.Datacenter)
-	cluster.Keyspace = cfg.Keyspace
+	cluster := cassandra.NewCassandraCluster(cfg)
 	cluster.ProtoVersion = cassandraProtoVersion
 	cluster.Consistency = gocql.LocalQuorum
 	cluster.SerialConsistency = gocql.LocalSerial

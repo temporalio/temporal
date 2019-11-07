@@ -22,24 +22,18 @@ package messaging
 
 import (
 	"fmt"
+
+	"github.com/uber/cadence/common/auth"
 )
 
 type (
 	// KafkaConfig describes the configuration needed to connect to all kafka clusters
 	KafkaConfig struct {
-		TLS            TLS                      `yaml:"tls"`
+		TLS            auth.TLS                 `yaml:"tls"`
 		Clusters       map[string]ClusterConfig `yaml:"clusters"`
 		Topics         map[string]TopicConfig   `yaml:"topics"`
 		ClusterToTopic map[string]TopicList     `yaml:"cadence-cluster-topics"`
 		Applications   map[string]TopicList     `yaml:"applications"`
-	}
-
-	// TLS describe the Kafka TLS configuration
-	TLS struct {
-		Enabled    bool   `yaml:"enabled"`
-		CertFile   string `yaml:"certFile"`
-		KeyFile    string `yaml:"keyFile"`
-		BundleFile string `yaml:"bundleFile"`
 	}
 
 	// ClusterConfig describes the configuration for a single Kafka cluster
