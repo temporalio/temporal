@@ -437,10 +437,12 @@ func (e *mutableStateBuilder) UpdateCurrentVersion(
 	forceUpdate bool,
 ) error {
 
-	if !e.IsWorkflowExecutionRunning() {
+	if state, _ := e.GetWorkflowStateCloseStatus(); state == persistence.WorkflowStateCompleted {
+		// do not update current version only when workflow is completed
 		return nil
 	}
 
+	// TODO when 2DC is deprecated, remove this block
 	if e.replicationState != nil {
 		e.UpdateReplicationStateVersion(version, forceUpdate)
 		return nil
@@ -460,6 +462,7 @@ func (e *mutableStateBuilder) UpdateCurrentVersion(
 			}
 			e.currentVersion = versionHistoryItem.GetVersion()
 		}
+
 		if version > e.currentVersion || forceUpdate {
 			e.currentVersion = version
 		}
@@ -467,6 +470,8 @@ func (e *mutableStateBuilder) UpdateCurrentVersion(
 		return nil
 	}
 
+	// TODO when NDC is fully rolled out remove this block
+	//  since event local domain workflow will have version history
 	if version != common.EmptyVersion {
 		err := &workflow.InternalServiceError{
 			Message: "cannot update current version of local domain workflow to version other than empty version",
