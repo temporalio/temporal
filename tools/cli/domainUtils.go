@@ -38,7 +38,7 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
-	persistenceFactory "github.com/uber/cadence/common/persistence/persistence-factory"
+	"github.com/uber/cadence/common/persistence/client"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
@@ -296,7 +296,7 @@ func initializeMetadataMgr(
 		EnableSampling:                  dynamicconfig.GetBoolPropertyFn(false), // not used by domain operation
 		EnableReadFromClosedExecutionV2: dynamicconfig.GetBoolPropertyFn(false), // not used by domain operation
 	}
-	pFactory := persistenceFactory.New(
+	pFactory := client.NewFactory(
 		&pConfig,
 		clusterMetadata.GetCurrentClusterName(),
 		metricsClient,

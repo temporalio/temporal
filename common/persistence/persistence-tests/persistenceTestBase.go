@@ -39,7 +39,7 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/persistence/cassandra"
-	pfactory "github.com/uber/cadence/common/persistence/persistence-factory"
+	"github.com/uber/cadence/common/persistence/client"
 	"github.com/uber/cadence/common/persistence/sql"
 	"github.com/uber/cadence/common/service/config"
 )
@@ -63,7 +63,7 @@ type (
 	TestBase struct {
 		suite.Suite
 		ShardMgr               p.ShardManager
-		ExecutionMgrFactory    pfactory.Factory
+		ExecutionMgrFactory    client.Factory
 		ExecutionManager       p.ExecutionManager
 		TaskMgr                p.TaskManager
 		HistoryV2Mgr           p.HistoryManager
@@ -175,7 +175,7 @@ func (s *TestBase) Setup() {
 	}
 
 	cfg := s.DefaultTestCluster.Config()
-	factory := pfactory.New(&cfg, clusterName, nil, s.logger)
+	factory := client.NewFactory(&cfg, clusterName, nil, s.logger)
 
 	s.TaskMgr, err = factory.NewTaskManager()
 	s.fatalOnError("NewTaskManager", err)
@@ -183,8 +183,8 @@ func (s *TestBase) Setup() {
 	s.MetadataManager, err = factory.NewMetadataManager()
 	s.fatalOnError("NewMetadataManager", err)
 
-	s.HistoryV2Mgr, err = factory.NewHistoryV2Manager()
-	s.fatalOnError("NewHistoryV2Manager", err)
+	s.HistoryV2Mgr, err = factory.NewHistoryManager()
+	s.fatalOnError("NewHistoryManager", err)
 
 	s.ShardMgr, err = factory.NewShardManager()
 	s.fatalOnError("NewShardManager", err)
@@ -196,7 +196,7 @@ func (s *TestBase) Setup() {
 	visibilityFactory := factory
 	if s.VisibilityTestCluster != s.DefaultTestCluster {
 		vCfg := s.VisibilityTestCluster.Config()
-		visibilityFactory = pfactory.New(&vCfg, clusterName, nil, s.logger)
+		visibilityFactory = client.NewFactory(&vCfg, clusterName, nil, s.logger)
 	}
 	// SQL currently doesn't have support for visibility manager
 	s.VisibilityMgr, err = visibilityFactory.NewVisibilityManager()

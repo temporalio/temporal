@@ -34,7 +34,7 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
-	persistencefactory "github.com/uber/cadence/common/persistence/persistence-factory"
+	"github.com/uber/cadence/common/persistence/client"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/service/worker/archiver"
@@ -148,7 +148,7 @@ func (s *Service) Start() {
 
 	pConfig := s.params.PersistenceConfig
 	pConfig.SetMaxQPS(pConfig.DefaultStore, s.config.ReplicationCfg.PersistenceMaxQPS())
-	pFactory := persistencefactory.New(&pConfig, s.params.ClusterMetadata.GetCurrentClusterName(), s.metricsClient, s.logger)
+	pFactory := client.NewFactory(&pConfig, s.params.ClusterMetadata.GetCurrentClusterName(), s.metricsClient, s.logger)
 	s.ensureSystemDomainExists(pFactory, base.GetClusterMetadata().GetCurrentClusterName())
 	s.metricsClient = base.GetMetricsClient()
 
@@ -283,10 +283,10 @@ func (s *Service) startIndexer(base service.Service) {
 	}
 }
 
-func (s *Service) startArchiver(base service.Service, pFactory persistencefactory.Factory) {
+func (s *Service) startArchiver(base service.Service, pFactory client.Factory) {
 	publicClient := s.params.PublicClient
 
-	historyV2Manager, err := pFactory.NewHistoryV2Manager()
+	historyV2Manager, err := pFactory.NewHistoryManager()
 	if err != nil {
 		s.logger.Fatal("failed to start archiver, could not create HistoryManager", tag.Error(err))
 	}
@@ -326,7 +326,7 @@ func (s *Service) startArchiver(base service.Service, pFactory persistencefactor
 	}
 }
 
-func (s *Service) ensureSystemDomainExists(pFactory persistencefactory.Factory, clusterName string) {
+func (s *Service) ensureSystemDomainExists(pFactory client.Factory, clusterName string) {
 	metadataProxy, err := pFactory.NewMetadataManager()
 	if err != nil {
 		s.logger.Fatal("error creating metadataMgr proxy", tag.Error(err))
@@ -344,7 +344,7 @@ func (s *Service) ensureSystemDomainExists(pFactory persistencefactory.Factory, 
 	}
 }
 
-func (s *Service) registerSystemDomain(pFactory persistencefactory.Factory, clusterName string) {
+func (s *Service) registerSystemDomain(pFactory client.Factory, clusterName string) {
 	metadataV2, err := pFactory.NewMetadataManager()
 	if err != nil {
 		s.logger.Fatal("error creating metadataV2Mgr", tag.Error(err))

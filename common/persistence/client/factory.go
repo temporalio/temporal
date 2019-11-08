@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package persistence
+package client
 
 import (
 	"sync"
@@ -44,8 +44,8 @@ type (
 		NewTaskManager() (p.TaskManager, error)
 		// NewShardManager returns a new shard manager
 		NewShardManager() (p.ShardManager, error)
-		// NewHistoryV2Manager returns a new historyV2 manager
-		NewHistoryV2Manager() (p.HistoryManager, error)
+		// NewHistoryManager returns a new history manager
+		NewHistoryManager() (p.HistoryManager, error)
 		// NewMetadataManager returns a new metadata manager
 		NewMetadataManager() (p.MetadataManager, error)
 		// NewExecutionManager returns a new execution manager for a given shardID
@@ -111,14 +111,14 @@ var storeTypes = []storeType{
 	storeTypeQueue,
 }
 
-// New returns an implementation of factory that vends persistence objects based on
+// NewFactory returns an implementation of factory that vends persistence objects based on
 // specified configuration. This factory takes as input a config.Persistence object
 // which specifies the datastore to be used for a given type of object. This config
 // also contains config for individual datastores themselves.
 //
 // The objects returned by this factory enforce ratelimit and maxconns according to
 // given configuration. In addition, all objects will emit metrics automatically
-func New(
+func NewFactory(
 	cfg *config.Persistence,
 	clusterName string,
 	metricsClient metrics.Client,
@@ -168,7 +168,7 @@ func (f *factoryImpl) NewShardManager() (p.ShardManager, error) {
 }
 
 // NewHistoryManager returns a new history manager
-func (f *factoryImpl) NewHistoryV2Manager() (p.HistoryManager, error) {
+func (f *factoryImpl) NewHistoryManager() (p.HistoryManager, error) {
 	ds := f.datastores[storeTypeHistory]
 	store, err := ds.factory.NewHistoryV2Store()
 	if err != nil {

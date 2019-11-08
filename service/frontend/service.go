@@ -31,8 +31,8 @@ import (
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/persistence/client"
 	espersistence "github.com/uber/cadence/common/persistence/elasticsearch"
-	persistencefactory "github.com/uber/cadence/common/persistence/persistence-factory"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
@@ -158,7 +158,7 @@ func (s *Service) Start() {
 		EnableSampling:                  s.config.EnableVisibilitySampling,
 		EnableReadFromClosedExecutionV2: s.config.EnableReadFromClosedExecutionV2,
 	}
-	pFactory := persistencefactory.New(&pConfig, params.ClusterMetadata.GetCurrentClusterName(), base.GetMetricsClient(), log)
+	pFactory := client.NewFactory(&pConfig, params.ClusterMetadata.GetCurrentClusterName(), base.GetMetricsClient(), log)
 
 	metadata, err := pFactory.NewMetadataManager()
 	if err != nil {
@@ -189,7 +189,7 @@ func (s *Service) Start() {
 		dynamicconfig.GetStringPropertyFn(common.AdvancedVisibilityWritingModeOff), // frontend visibility never write
 	)
 
-	historyV2, err := pFactory.NewHistoryV2Manager()
+	historyV2, err := pFactory.NewHistoryManager()
 	if err != nil {
 		log.Fatal("Creating historyV2 manager persistence failed", tag.Error(err))
 	}

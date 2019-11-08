@@ -102,7 +102,7 @@ type (
 		clientBean            client.Bean
 		timeSource            clock.TimeSource
 		numberOfHistoryShards int
-		// New logger we are in favor of
+
 		logger          log.Logger
 		throttledLogger log.Logger
 

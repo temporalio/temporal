@@ -31,8 +31,8 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/persistence/client"
 	espersistence "github.com/uber/cadence/common/persistence/elasticsearch"
-	persistencefactory "github.com/uber/cadence/common/persistence/persistence-factory"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
@@ -348,7 +348,7 @@ func (s *Service) Start() {
 		EnableSampling:                  s.config.EnableVisibilitySampling,
 		EnableReadFromClosedExecutionV2: s.config.EnableReadFromClosedExecutionV2,
 	}
-	pFactory := persistencefactory.New(&pConfig, params.ClusterMetadata.GetCurrentClusterName(), s.metricsClient, log)
+	pFactory := client.NewFactory(&pConfig, params.ClusterMetadata.GetCurrentClusterName(), s.metricsClient, log)
 
 	shardMgr, err := pFactory.NewShardManager()
 	if err != nil {
@@ -381,7 +381,7 @@ func (s *Service) Start() {
 		s.config.AdvancedVisibilityWritingMode,
 	)
 
-	historyV2, err := pFactory.NewHistoryV2Manager()
+	historyV2, err := pFactory.NewHistoryManager()
 	if err != nil {
 		log.Fatal("Creating historyV2 manager persistence failed", tag.Error(err))
 	}

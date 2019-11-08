@@ -24,7 +24,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/log/tag"
-	persistencefactory "github.com/uber/cadence/common/persistence/persistence-factory"
+	"github.com/uber/cadence/common/persistence/client"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
@@ -60,7 +60,7 @@ func (s *Service) Start() {
 
 	pConfig := params.PersistenceConfig
 	pConfig.SetMaxQPS(pConfig.DefaultStore, s.config.PersistenceMaxQPS())
-	pFactory := persistencefactory.New(&pConfig, params.ClusterMetadata.GetCurrentClusterName(), base.GetMetricsClient(), log)
+	pFactory := client.NewFactory(&pConfig, params.ClusterMetadata.GetCurrentClusterName(), base.GetMetricsClient(), log)
 
 	taskPersistence, err := pFactory.NewTaskManager()
 	if err != nil {
