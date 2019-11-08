@@ -23,10 +23,11 @@ package adapter
 import (
 	"fmt"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/tpb"
 	"go.uber.org/yarpc/encoding/protobuf"
 	"go.uber.org/yarpc/yarpcerrors"
+
+	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/proto/error_details"
 )
 
 // ToProtoError converts Thrift error to gRPC error.
@@ -45,7 +46,7 @@ func ToProtoError(thriftError error) error {
 		}
 	case *shared.DomainNotActiveError:
 		return protobuf.NewError(yarpcerrors.CodeInvalidArgument, thriftError.Message, protobuf.WithErrorDetails(
-			&tpb.DomainNotActiveFailure{
+			&error_details.DomainNotActiveFailure{
 				Message:        thriftError.Message,
 				DomainName:     thriftError.DomainName,
 				CurrentCluster: thriftError.CurrentCluster,
@@ -58,7 +59,7 @@ func ToProtoError(thriftError error) error {
 		return protobuf.NewError(yarpcerrors.CodeNotFound, thriftError.Message)
 	case *shared.WorkflowExecutionAlreadyStartedError:
 		return protobuf.NewError(yarpcerrors.CodeAlreadyExists, *thriftError.Message, protobuf.WithErrorDetails(
-			&tpb.WorkflowExecutionAlreadyStartedFailure{
+			&error_details.WorkflowExecutionAlreadyStartedFailure{
 				Message:        *thriftError.Message,
 				StartRequestId: *thriftError.StartRequestId,
 				RunId:          *thriftError.RunId,
@@ -74,7 +75,7 @@ func ToProtoError(thriftError error) error {
 		return protobuf.NewError(yarpcerrors.CodeResourceExhausted, thriftError.Message)
 	case *shared.ClientVersionNotSupportedError:
 		return protobuf.NewError(yarpcerrors.CodeFailedPrecondition, "Client version is not supported.", protobuf.WithErrorDetails(
-			&tpb.ClientVersionNotSupportedFailure{
+			&error_details.ClientVersionNotSupportedFailure{
 				FeatureVersion: thriftError.FeatureVersion, ClientImpl: thriftError.ClientImpl, SupportedVersions: thriftError.SupportedVersions,
 			},
 		))
