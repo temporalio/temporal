@@ -255,6 +255,21 @@ func (c *cadenceImpl) FrontendAddress() string {
 	}
 }
 
+func (c *cadenceImpl) FrontendRingpopAddress() string {
+	switch c.clusterNo {
+	case 0:
+		return "127.0.0.1:7124"
+	case 1:
+		return "127.0.0.1:8124"
+	case 2:
+		return "127.0.0.1:9124"
+	case 3:
+		return "127.0.0.1:10124"
+	default:
+		return "127.0.0.1:7124"
+	}
+}
+
 func (c *cadenceImpl) FrontendPProfPort() int {
 	switch c.clusterNo {
 	case 0:
@@ -284,6 +299,30 @@ func (c *cadenceImpl) HistoryServiceAddress() []string {
 		startPort = 10201
 	default:
 		startPort = 7201
+	}
+	for i := 0; i < c.historyConfig.NumHistoryHosts; i++ {
+		port := startPort + i
+		hosts = append(hosts, fmt.Sprintf("127.0.0.1:%v", port))
+	}
+
+	c.logger.Info("History hosts", tag.Addresses(hosts))
+	return hosts
+}
+
+func (c *cadenceImpl) HistoryServiceRingpopAddress() []string {
+	hosts := []string{}
+	startPort := 7221
+	switch c.clusterNo {
+	case 0:
+		startPort = 7221
+	case 1:
+		startPort = 8221
+	case 2:
+		startPort = 9221
+	case 3:
+		startPort = 10221
+	default:
+		startPort = 7221
 	}
 	for i := 0; i < c.historyConfig.NumHistoryHosts; i++ {
 		port := startPort + i
@@ -333,6 +372,21 @@ func (c *cadenceImpl) MatchingServiceAddress() string {
 	}
 }
 
+func (c *cadenceImpl) MatchingServiceRingpopAddress() string {
+	switch c.clusterNo {
+	case 0:
+		return "127.0.0.1:7126"
+	case 1:
+		return "127.0.0.1:8126"
+	case 2:
+		return "127.0.0.1:9126"
+	case 3:
+		return "127.0.0.1:10126"
+	default:
+		return "127.0.0.1:7126"
+	}
+}
+
 func (c *cadenceImpl) MatchingPProfPort() int {
 	switch c.clusterNo {
 	case 0:
@@ -360,6 +414,21 @@ func (c *cadenceImpl) WorkerServiceAddress() string {
 		return "127.0.0.1:10108"
 	default:
 		return "127.0.0.1:7108"
+	}
+}
+
+func (c *cadenceImpl) WorkerServiceRingpopAddress() string {
+	switch c.clusterNo {
+	case 0:
+		return "127.0.0.1:7128"
+	case 1:
+		return "127.0.0.1:8128"
+	case 2:
+		return "127.0.0.1:9128"
+	case 3:
+		return "127.0.0.1:10128"
+	default:
+		return "127.0.0.1:7128"
 	}
 }
 
@@ -402,7 +471,8 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 	params.Logger = c.logger
 	params.ThrottledLogger = c.logger
 	params.PProfInitializer = newPProfInitializerImpl(c.logger, c.FrontendPProfPort())
-	params.RPCFactory = newRPCFactoryImpl(common.FrontendServiceName, c.FrontendAddress(), c.logger)
+	params.RPCFactory = newRPCFactoryImpl(common.FrontendServiceName, c.FrontendAddress(), c.FrontendRingpopAddress(),
+		c.logger)
 	params.MetricScope = tally.NewTestScope(common.FrontendServiceName, make(map[string]string))
 	params.MembershipFactory = newMembershipFactory(params.Name, hosts)
 	params.ClusterMetadata = c.clusterMetadata
@@ -501,7 +571,7 @@ func (c *cadenceImpl) startHistory(
 		params.Logger = c.logger
 		params.ThrottledLogger = c.logger
 		params.PProfInitializer = newPProfInitializerImpl(c.logger, pprofPorts[i])
-		params.RPCFactory = newRPCFactoryImpl(common.HistoryServiceName, hostport, c.logger)
+		params.RPCFactory = newRPCFactoryImpl(common.HistoryServiceName, hostport, c.HistoryServiceRingpopAddress()[i], c.logger)
 		params.MetricScope = tally.NewTestScope(common.HistoryServiceName, make(map[string]string))
 		params.MembershipFactory = newMembershipFactory(params.Name, hosts)
 		params.ClusterMetadata = c.clusterMetadata
@@ -591,7 +661,8 @@ func (c *cadenceImpl) startMatching(hosts map[string][]string, startWG *sync.Wai
 	params.Logger = c.logger
 	params.ThrottledLogger = c.logger
 	params.PProfInitializer = newPProfInitializerImpl(c.logger, c.MatchingPProfPort())
-	params.RPCFactory = newRPCFactoryImpl(common.MatchingServiceName, c.MatchingServiceAddress(), c.logger)
+	params.RPCFactory = newRPCFactoryImpl(common.MatchingServiceName, c.MatchingServiceAddress(),
+		c.MatchingServiceRingpopAddress(), c.logger)
 	params.MetricScope = tally.NewTestScope(common.MatchingServiceName, make(map[string]string))
 	params.MembershipFactory = newMembershipFactory(params.Name, hosts)
 	params.ClusterMetadata = c.clusterMetadata
@@ -632,7 +703,8 @@ func (c *cadenceImpl) startWorker(hosts map[string][]string, startWG *sync.WaitG
 	params.Logger = c.logger
 	params.ThrottledLogger = c.logger
 	params.PProfInitializer = newPProfInitializerImpl(c.logger, c.WorkerPProfPort())
-	params.RPCFactory = newRPCFactoryImpl(common.WorkerServiceName, c.WorkerServiceAddress(), c.logger)
+	params.RPCFactory = newRPCFactoryImpl(common.WorkerServiceName, c.WorkerServiceAddress(),
+		c.WorkerServiceRingpopAddress(), c.logger)
 	params.MetricScope = tally.NewTestScope(common.WorkerServiceName, make(map[string]string))
 	params.MembershipFactory = newMembershipFactory(params.Name, hosts)
 	params.ClusterMetadata = c.clusterMetadata
@@ -802,35 +874,53 @@ func newPProfInitializerImpl(logger log.Logger, port int) common.PProfInitialize
 }
 
 type rpcFactoryImpl struct {
-	ch          *tchannel.ChannelTransport
-	serviceName string
-	hostPort    string
-	logger      log.Logger
+	ch                 *tchannel.ChannelTransport
+	serviceName        string
+	ringpopServiceName string
+	hostPort           string
+	ringpopHostPort    string
+	logger             log.Logger
 }
 
-func newRPCFactoryImpl(sName string, hostPort string, logger log.Logger) common.RPCFactory {
+func newRPCFactoryImpl(sName string, hostPort string, ringpopAddress string,
+	logger log.Logger) common.RPCFactory {
 	return &rpcFactoryImpl{
-		serviceName: sName,
-		hostPort:    hostPort,
-		logger:      logger,
+		serviceName:     sName,
+		hostPort:        hostPort,
+		ringpopHostPort: ringpopAddress,
+		logger:          logger,
 	}
 }
 
 func (c *rpcFactoryImpl) CreateDispatcher() *yarpc.Dispatcher {
+	return c.createTChannelDispatcher(c.serviceName, c.hostPort, true)
+}
+
+func (c *rpcFactoryImpl) CreateRingpopDispatcher() *yarpc.Dispatcher {
+	ringpopServiceName := fmt.Sprintf("%v-ringpop", c.serviceName)
+	return c.createTChannelDispatcher(ringpopServiceName, c.ringpopHostPort, false)
+}
+
+func (c *rpcFactoryImpl) createTChannelDispatcher(serviceName string, hostPort string, createOutbound bool) *yarpc.Dispatcher {
 	// Setup dispatcher for onebox
 	var err error
 	c.ch, err = tchannel.NewChannelTransport(
-		tchannel.ServiceName(c.serviceName), tchannel.ListenAddr(c.hostPort))
+		tchannel.ServiceName(serviceName), tchannel.ListenAddr(hostPort))
 	if err != nil {
 		c.logger.Fatal("Failed to create transport channel", tag.Error(err))
 	}
+
+	var outbounds yarpc.Outbounds
+	if createOutbound {
+		outbounds = yarpc.Outbounds{
+			c.serviceName: {Unary: c.ch.NewSingleOutbound(hostPort)},
+		}
+	}
 	return yarpc.NewDispatcher(yarpc.Config{
-		Name:     c.serviceName,
+		Name:     serviceName,
 		Inbounds: yarpc.Inbounds{c.ch.NewInbound()},
 		// For integration tests to generate client out of the same outbound.
-		Outbounds: yarpc.Outbounds{
-			c.serviceName: {Unary: c.ch.NewSingleOutbound(c.hostPort)},
-		},
+		Outbounds: outbounds,
 		InboundMiddleware: yarpc.InboundMiddleware{
 			Unary: &versionMiddleware{},
 		},

@@ -104,11 +104,19 @@ func (s *server) startService() common.Daemon {
 	var err error
 
 	params := service.BootstrapParams{}
-	params.Name = "cadence-" + s.name
+	params.Name = getServiceName(s.name)
 	params.Logger = loggerimpl.NewLogger(s.cfg.Log.NewZapLogger())
 	params.PersistenceConfig = s.cfg.Persistence
 
-	params.MembershipFactory, err = s.cfg.Ringpop.NewFactory(params.Logger, params.Name)
+	// Ringpop uses a different port to register handlers, this map is needed to resolve
+	// services to correct addresses used by clients through ServiceResolver lookup API
+	servicePortMap := make(map[string]int)
+	for roleName, svcCfg := range s.cfg.Services {
+		serviceName := getServiceName(roleName)
+		servicePortMap[serviceName] = svcCfg.RPC.Port
+	}
+
+	params.MembershipFactory, err = s.cfg.Ringpop.NewFactory(params.Logger, params.Name, servicePortMap)
 	if err != nil {
 		log.Fatalf("error creating ringpop factory: %v", err)
 	}
@@ -224,4 +232,9 @@ func (s *server) startService() common.Daemon {
 func execute(d common.Daemon, doneC chan struct{}) {
 	d.Start()
 	close(doneC)
+}
+
+// getServiceName converts the role name used in config to service name used by ringpop ring
+func getServiceName(role string) string {
+	return "cadence-" + role
 }

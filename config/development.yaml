@@ -17,13 +17,14 @@ persistence:
 ringpop:
   name: cadence
   bootstrapMode: hosts
-  bootstrapHosts: ["127.0.0.1:7933", "127.0.0.1:7934", "127.0.0.1:7935"]
+  bootstrapHosts: ["127.0.0.1:6933", "127.0.0.1:6934", "127.0.0.1:6935"]
   maxJoinDuration: 30s
 
 services:
   frontend:
     rpc:
       port: 7933
+      ringpopPort: 6933
       bindOnLocalHost: true
     metrics:
       statsd:
@@ -35,6 +36,7 @@ services:
   matching:
     rpc:
       port: 7935
+      ringpopPort: 6935
       bindOnLocalHost: true
     metrics:
       statsd:
@@ -46,6 +48,7 @@ services:
   history:
     rpc:
       port: 7934
+      ringpopPort: 6934
       bindOnLocalHost: true
     metrics:
       statsd:
@@ -57,6 +60,7 @@ services:
   worker:
     rpc:
       port: 7939
+      ringpopPort: 6939
       bindOnLocalHost: true
     metrics:
       statsd:

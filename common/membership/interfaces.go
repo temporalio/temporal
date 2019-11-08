@@ -35,6 +35,9 @@ var ErrInsufficientHosts = &shared.InternalServiceError{Message: "Not enough hos
 // ErrListenerAlreadyExist is thrown on a duplicate AddListener call from the same listener
 var ErrListenerAlreadyExist = errors.New("Listener already exist for the service")
 
+// ErrIncorrectAddressFormat is thrown on incorrect address format
+var ErrIncorrectAddressFormat = errors.New("Incorrect address format")
+
 type (
 
 	// ChangedEvent describes a change in membership
