@@ -129,6 +129,7 @@ var (
 	errInvalidExecutionStartToCloseTimeoutSeconds = &gen.BadRequestError{Message: "A valid ExecutionStartToCloseTimeoutSeconds is not set on request."}
 	errInvalidTaskStartToCloseTimeoutSeconds      = &gen.BadRequestError{Message: "A valid TaskStartToCloseTimeoutSeconds is not set on request."}
 	errClientVersionNotSet                        = &gen.BadRequestError{Message: "Client version is not set on request."}
+	errQueryDisallowedForDomain                   = &gen.BadRequestError{Message: "Domain is not allowed to query, please contact cadence team to re-enable queries."}
 
 	// err for archival
 	errHistoryHasPassedRetentionPeriod = &gen.BadRequestError{Message: "Requested workflow history has passed retention period."}
@@ -2860,6 +2861,10 @@ func (wh *WorkflowHandler) QueryWorkflow(
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendQueryWorkflowScope, queryRequest)
 	defer sw.Stop()
 
+	if wh.config.DisallowQuery(queryRequest.GetDomain()) {
+		return nil, wh.error(errQueryDisallowedForDomain, scope)
+	}
+
 	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -2984,7 +2989,8 @@ func (wh *WorkflowHandler) queryDirectlyThroughMatching(
 				tag.WorkflowDomainName(queryRequest.GetDomain()),
 				tag.WorkflowID(queryRequest.Execution.GetWorkflowId()),
 				tag.WorkflowRunID(queryRequest.Execution.GetRunId()),
-				tag.WorkflowQueryType(queryRequest.Query.GetQueryType()))
+				tag.WorkflowQueryType(queryRequest.Query.GetQueryType()),
+				tag.Error(err))
 			return nil, wh.error(err, scope)
 		}
 		// this means sticky timeout, should try using the normal tasklist
@@ -2995,7 +3001,8 @@ func (wh *WorkflowHandler) queryDirectlyThroughMatching(
 			tag.WorkflowRunID(queryRequest.Execution.GetRunId()),
 			tag.WorkflowQueryType(queryRequest.Query.GetQueryType()),
 			tag.WorkflowTaskListName(getMutableStateResponse.GetStickyTaskList().GetName()),
-			tag.WorkflowNextEventID(getMutableStateResponse.GetNextEventId()))
+			tag.WorkflowNextEventID(getMutableStateResponse.GetNextEventId()),
+			tag.Error(err))
 		resetContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		_, err = wh.history.ResetStickyTaskList(resetContext, &h.ResetStickyTaskListRequest{
 			DomainUUID: common.StringPtr(domainID),
@@ -3014,7 +3021,8 @@ func (wh *WorkflowHandler) queryDirectlyThroughMatching(
 			tag.WorkflowDomainName(queryRequest.GetDomain()),
 			tag.WorkflowID(queryRequest.Execution.GetWorkflowId()),
 			tag.WorkflowRunID(queryRequest.Execution.GetRunId()),
-			tag.WorkflowQueryType(queryRequest.Query.GetQueryType()))
+			tag.WorkflowQueryType(queryRequest.Query.GetQueryType()),
+			tag.Error(err))
 		return nil, wh.error(err, scope)
 	}
 
