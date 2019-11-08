@@ -130,7 +130,7 @@ update-proto:
 install-proto:
 	git submodule update --init
 
-protoc: yarpc-install clean-proto install-proto
+proto: yarpc-install clean-proto install-proto
 	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=proto --gogoslick_out=paths=source_relative:proto ${PROTO_DIR}*.proto;)
 	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=proto --yarpc-go_out=proto ${PROTO_DIR}*.proto;)
 	go run ./proto/tools/fiximport/fiximport.go -submodule_dir=proto
@@ -156,7 +156,7 @@ cadence-server: $(ALL_SRC)
 
 bins_nothrift: lint copyright cadence-cassandra-tool cadence-sql-tool cadence cadence-server
 
-bins: thriftc protoc bins_nothrift
+bins: thriftc proto bins_nothrift
 
 test: bins
 	@rm -f test
