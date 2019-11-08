@@ -117,16 +117,16 @@ clean_thrift:
 
 thriftc: yarpc-install $(THRIFTRW_GEN_SRC)
 
-clean_proto:
+clean-proto:
 	rm -rf tpb/*.go
 
-update_proto:
+update-proto:
 	git submodule update --remote
 
-install_proto:
+install-proto:
 	git submodule update --init
 
-protoc: yarpc-install clean_proto install_proto
+protoc: yarpc-install clean-proto install-proto
 	protoc --proto_path=tpb --gogoslick_out=paths=source_relative:tpb tpb/*.proto 
 	protoc --proto_path=tpb --yarpc-go_out=tpb tpb/*.proto 
 
