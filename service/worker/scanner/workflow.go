@@ -82,6 +82,7 @@ var (
 		TaskList:                     historyScannerTaskListName,
 		ExecutionStartToCloseTimeout: infiniteDuration,
 		WorkflowIDReusePolicy:        cclient.WorkflowIDReusePolicyAllowDuplicate,
+		CronSchedule:                 "0 */12 * * *",
 	}
 )
 
