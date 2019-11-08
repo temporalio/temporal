@@ -961,6 +961,97 @@ func (s *transferQueueActiveProcessorSuite) TestProcessCloseExecution_NoParent_H
 	s.Nil(err)
 }
 
+func (s *transferQueueActiveProcessorSuite) TestProcessCloseExecution_NoParent_HasManyAbandonedChildren() {
+
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("some random workflow ID"),
+		RunId:      common.StringPtr(uuid.New()),
+	}
+	workflowType := "some random workflow type"
+	taskListName := "some random task list"
+
+	msBuilder := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	_, err := msBuilder.AddWorkflowExecutionStartedEvent(
+		execution,
+		&history.StartWorkflowExecutionRequest{
+			DomainUUID: common.StringPtr(s.domainID),
+			StartRequest: &workflow.StartWorkflowExecutionRequest{
+				WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
+				TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskListName)},
+				ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(2),
+				TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+			},
+		},
+	)
+	s.Nil(err)
+
+	di := addDecisionTaskScheduledEvent(msBuilder)
+	event := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, taskListName, uuid.New())
+	di.StartedID = event.GetEventId()
+
+	dt := workflow.DecisionTypeStartChildWorkflowExecution
+	parentClosePolicy := workflow.ParentClosePolicyAbandon
+	decisions := []*workflow.Decision{}
+	for i := 0; i < 10; i++ {
+		decisions = append(decisions, &workflow.Decision{
+			DecisionType: &dt,
+			StartChildWorkflowExecutionDecisionAttributes: &workflow.StartChildWorkflowExecutionDecisionAttributes{
+				WorkflowId: common.StringPtr("child workflow" + string(i)),
+				WorkflowType: &workflow.WorkflowType{
+					Name: common.StringPtr("child workflow type"),
+				},
+				TaskList:          &workflow.TaskList{Name: common.StringPtr(taskListName)},
+				Input:             []byte("random input"),
+				ParentClosePolicy: &parentClosePolicy,
+			},
+		})
+	}
+
+	event, _ = msBuilder.AddDecisionTaskCompletedEvent(di.ScheduleID, di.StartedID, &workflow.RespondDecisionTaskCompletedRequest{
+		ExecutionContext: nil,
+		Identity:         common.StringPtr("some random identity"),
+		Decisions:        decisions,
+	}, defaultHistoryMaxAutoResetPoints)
+
+	for i := 0; i < 10; i++ {
+		_, _, err = msBuilder.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &workflow.StartChildWorkflowExecutionDecisionAttributes{
+			WorkflowId: common.StringPtr("child workflow" + string(i)),
+			WorkflowType: &workflow.WorkflowType{
+				Name: common.StringPtr("child workflow type"),
+			},
+			TaskList:          &workflow.TaskList{Name: common.StringPtr(taskListName)},
+			Input:             []byte("random input"),
+			ParentClosePolicy: &parentClosePolicy,
+		})
+		s.Nil(err)
+	}
+
+	msBuilder.FlushBufferedEvents()
+
+	taskID := int64(59)
+	event = addCompleteWorkflowEvent(msBuilder, event.GetEventId(), nil)
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", s.version).Return(s.mockClusterMetadata.GetCurrentClusterName())
+	msBuilder.UpdateReplicationStateLastEventID(s.version, event.GetEventId())
+
+	transferTask := &persistence.TransferTaskInfo{
+		Version:    s.version,
+		DomainID:   s.domainID,
+		WorkflowID: execution.GetWorkflowId(),
+		RunID:      execution.GetRunId(),
+		TaskID:     taskID,
+		TaskList:   taskListName,
+		TaskType:   persistence.TransferTaskTypeCloseExecution,
+		ScheduleID: event.GetEventId(),
+	}
+
+	persistenceMutableState := createMutableState(msBuilder)
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	s.mockVisibilityMgr.On("RecordWorkflowExecutionClosed", mock.Anything).Return(nil).Once()
+
+	_, err = s.transferQueueActiveProcessor.process(newTaskInfo(nil, transferTask, s.logger))
+	s.Nil(err)
+}
+
 func (s *transferQueueActiveProcessorSuite) TestProcessCancelExecution_Success() {
 
 	execution := workflow.WorkflowExecution{
