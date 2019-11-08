@@ -3,8 +3,6 @@ version: "3.5"
 services:
   cassandra:
     image: cassandra:3.11
-    ports:
-      - "9042:9042"
     networks:
       services-network:
         aliases:
@@ -17,8 +15,6 @@ services:
       MYSQL_ROOT_PASSWORD: uber
     volumes:
       - ./mysql-init:/docker-entrypoint-initdb.d
-    ports:
-      - "3306:3306"
     networks:
       services-network:
         aliases:
@@ -26,8 +22,6 @@ services:
 
   zookeeper:
     image: wurstmeister/zookeeper:3.4.6
-    ports:
-      - "2181:2181"
     networks:
       services-network:
         aliases:
@@ -37,8 +31,6 @@ services:
     image: wurstmeister/kafka:2.12-2.1.1
     depends_on:
       - zookeeper
-    ports:
-      - "9092:9092"
     networks:
       services-network:
         aliases:
@@ -50,8 +42,6 @@ services:
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch-oss:6.5.1
-    ports:
-      - "9200:9200"
     networks:
       services-network:
         aliases:
@@ -63,11 +53,6 @@ services:
     build:
       context: ../../
       dockerfile: ./docker/buildkite/Dockerfile
-    ports:
-      - "7933:7933"
-      - "7934:7934"
-      - "7935:7935"
-      - "7939:7939"
     environment:
       - "CASSANDRA_SEEDS=cassandra"
       - "MYSQL_SEEDS=mysql"
@@ -90,11 +75,6 @@ services:
     build:
       context: ../../
       dockerfile: ./docker/buildkite/Dockerfile
-    ports:
-      - "7933:7933"
-      - "7934:7934"
-      - "7935:7935"
-      - "7939:7939"
     environment:
       - "CASSANDRA_SEEDS=cassandra"
       - "ES_SEEDS=elasticsearch"
@@ -120,11 +100,6 @@ services:
     build:
       context: ../../
       dockerfile: ./docker/buildkite/Dockerfile
-    ports:
-      - "7933:7933"
-      - "7934:7934"
-      - "7935:7935"
-      - "7939:7939"
     environment:
       - "MYSQL_SEEDS=mysql"
       - "ES_SEEDS=elasticsearch"
@@ -151,11 +126,6 @@ services:
     build:
       context: ../../
       dockerfile: ./docker/buildkite/Dockerfile
-    ports:
-      - "7933:7933"
-      - "7934:7934"
-      - "7935:7935"
-      - "7939:7939"
     environment:
       - "CASSANDRA_SEEDS=cassandra"
       - "ES_SEEDS=elasticsearch"
@@ -182,11 +152,6 @@ services:
     build:
       context: ../../
       dockerfile: ./docker/buildkite/Dockerfile
-    ports:
-      - "7933:7933"
-      - "7934:7934"
-      - "7935:7935"
-      - "7939:7939"
     environment:
       - "MYSQL_SEEDS=mysql"
       - "ES_SEEDS=elasticsearch"
