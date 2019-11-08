@@ -51,13 +51,13 @@ func newRPCFactory(cfg *RPC, sName string, logger log.Logger) *RPCFactory {
 
 // CreateDispatcher creates a dispatcher for inbound
 func (d *RPCFactory) CreateDispatcher() *yarpc.Dispatcher {
-	return d.createInboundDispatcher(d.serviceName, d.config.Port)
+	return d.createInboundTChannelDispatcher(d.serviceName, d.config.Port)
 }
 
 // CreateRingpopDispatcher creates a dispatcher for ringpop
 func (d *RPCFactory) CreateRingpopDispatcher() *yarpc.Dispatcher {
 	ringpopServiceName := fmt.Sprintf("%v-ringpop", d.serviceName)
-	return d.createInboundDispatcher(ringpopServiceName, d.config.RingpopPort)
+	return d.createInboundTChannelDispatcher(ringpopServiceName, d.config.RingpopPort)
 }
 
 // CreateDispatcherForOutbound creates a dispatcher for outbound connection
@@ -77,7 +77,7 @@ func (d *RPCFactory) CreateDispatcherForOutbound(
 	return dispatcher
 }
 
-func (d *RPCFactory) createInboundDispatcher(serviceName string, port int) *yarpc.Dispatcher {
+func (d *RPCFactory) createInboundTChannelDispatcher(serviceName string, port int) *yarpc.Dispatcher {
 	// Setup dispatcher for onebox
 	var err error
 	hostAddress := fmt.Sprintf("%v:%v", d.getListenIP(), port)

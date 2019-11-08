@@ -62,17 +62,17 @@ const (
 
 // RingpopFactory implements the RingpopFactory interface
 type RingpopFactory struct {
-	config      *Ringpop
-	logger      log.Logger
-	serviceName string
-	serviceMap  map[string]int
+	config         *Ringpop
+	logger         log.Logger
+	serviceName    string
+	servicePortMap map[string]int
 }
 
 // NewFactory builds a ringpop factory conforming
 // to the underlying configuration
 func (rpConfig *Ringpop) NewFactory(logger log.Logger, serviceName string,
-	serviceMap map[string]int) (*RingpopFactory, error) {
-	return newRingpopFactory(rpConfig, logger, serviceName, serviceMap)
+	servicePortMap map[string]int) (*RingpopFactory, error) {
+	return newRingpopFactory(rpConfig, logger, serviceName, servicePortMap)
 }
 
 func (rpConfig *Ringpop) validate() error {
@@ -130,14 +130,14 @@ func validateBootstrapMode(rpConfig *Ringpop) error {
 }
 
 func newRingpopFactory(rpConfig *Ringpop, logger log.Logger, serviceName string,
-	serviceMap map[string]int) (*RingpopFactory, error) {
+	servicePortMap map[string]int) (*RingpopFactory, error) {
 	if err := rpConfig.validate(); err != nil {
 		return nil, err
 	}
 	if rpConfig.MaxJoinDuration == 0 {
 		rpConfig.MaxJoinDuration = defaultMaxJoinDuration
 	}
-	return &RingpopFactory{config: rpConfig, logger: logger, serviceName: serviceName, serviceMap: serviceMap}, nil
+	return &RingpopFactory{config: rpConfig, logger: logger, serviceName: serviceName, servicePortMap: servicePortMap}, nil
 }
 
 // Create is the implementation for MembershipMonitorFactory.Create
@@ -157,7 +157,7 @@ func (factory *RingpopFactory) Create(dispatcher *yarpc.Dispatcher) (membership.
 		return nil, fmt.Errorf("ringpop setting role label failed: %v", err)
 	}
 
-	membershipMonitor := membership.NewRingpopMonitor(factory.serviceName, factory.serviceMap, rp, factory.logger)
+	membershipMonitor := membership.NewRingpopMonitor(factory.serviceName, factory.servicePortMap, rp, factory.logger)
 	if err = membershipMonitor.Start(); err != nil {
 		return nil, err
 	}
