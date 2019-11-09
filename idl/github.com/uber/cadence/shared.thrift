@@ -665,6 +665,10 @@ struct ActivityTaskTimedOutEventAttributes {
   10: optional i64 (js.type = "Long") scheduledEventId
   20: optional i64 (js.type = "Long") startedEventId
   30: optional TimeoutType timeoutType
+  // For retry activity, it may have a failure before timeout. It's important to keep those information for debug.
+  // Client can also provide the info for making next decision
+  40: optional string lastFailuireReason
+  50: optional binary lastFailuireDetails
 }
 
 struct ActivityTaskCancelRequestedEventAttributes {
