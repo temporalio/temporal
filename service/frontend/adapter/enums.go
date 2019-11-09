@@ -21,8 +21,8 @@
 package adapter
 
 import (
+	"github.com/temporalio/temporal-proto/enums"
 	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/proto/enums"
 )
 
 func toThriftArchivalStatus(archivalStatus enums.ArchivalStatus) *shared.ArchivalStatus {

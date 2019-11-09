@@ -21,8 +21,8 @@
 package adapter
 
 import (
+	"github.com/temporalio/temporal-proto/workflowservice"
 	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/proto/workflowservice"
 )
 
 // ToThriftRegisterDomainRequest converts gRPC to Thrift
