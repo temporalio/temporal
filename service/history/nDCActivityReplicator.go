@@ -76,7 +76,6 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	// 2. activity heart beat
 	// no sync activity task will be sent when active side fail / timeout activity,
 	// since standby side does not have activity retry timer
-
 	domainID := request.GetDomainId()
 	execution := workflow.WorkflowExecution{
 		WorkflowId: request.WorkflowId,
@@ -184,7 +183,20 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	).createNextActivityTimer(); err != nil {
 		return err
 	}
-	return context.updateWorkflowExecutionAsPassive(now)
+
+	updateMode := persistence.UpdateWorkflowModeUpdateCurrent
+	if state, _ := mutableState.GetWorkflowStateCloseStatus(); state == persistence.WorkflowStateZombie {
+		updateMode = persistence.UpdateWorkflowModeBypassCurrent
+	}
+
+	return context.updateWorkflowExecutionWithNew(
+		now,
+		updateMode,
+		nil, // no new workflow
+		nil, // no new workflow
+		transactionPolicyPassive,
+		nil,
+	)
 }
 
 func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
@@ -224,8 +236,8 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 		// resend the missing event if local version history doesn't have the schedule event
 
 		// case 2: local version history and incoming version history diverged
-		// case 2-1: local version history is the dominator and discard the incoming event
-		// case 2-2: incoming version history is the dominator and resend the missing incoming events
+		// case 2-1: local version history has the higher version and discard the incoming event
+		// case 2-2: incoming version history has the higher version and resend the missing incoming events
 		if currentVersionHistory.IsLCAAppendable(lcaItem) || incomingVersionHistory.IsLCAAppendable(lcaItem) {
 			// case 1
 			if scheduleID > lcaItem.GetEventID() {
@@ -257,6 +269,10 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 				)
 			}
 		}
+
+		if !mutableState.IsWorkflowExecutionRunning() {
+			return false, nil
+		}
 	} else if mutableState.GetReplicationState() != nil {
 		// TODO when 2DC is deprecated, remove this block
 		if !mutableState.IsWorkflowExecutionRunning() {
@@ -286,5 +302,6 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 	} else {
 		return false, &shared.InternalServiceError{Message: "The workflow is neither 2DC or 3DC enabled."}
 	}
+
 	return true, nil
 }

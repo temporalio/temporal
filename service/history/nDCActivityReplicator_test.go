@@ -672,6 +672,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_SameSchedule
 	}
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(localVersionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(nil, false).AnyTimes()
+	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID, Name: domainName},
@@ -747,6 +748,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_LocalVersion
 	}
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(localVersionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(nil, false).AnyTimes()
+	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID, Name: domainName},
@@ -1130,6 +1132,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning() {
 	var versionHistories *persistence.VersionHistories
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes()
+	s.mockMutableState.EXPECT().GetWorkflowStateCloseStatus().Return(1, 0).AnyTimes()
 	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID, Name: domainName},
@@ -1160,7 +1163,98 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning() {
 	s.mockMutableState.EXPECT().GetCurrentVersion().Return(int64(1)).Times(1)
 	s.mockMutableState.EXPECT().AddTimerTasks(gomock.Any()).Times(1)
 	now := time.Unix(0, request.GetLastHeartbeatTime())
-	context.EXPECT().updateWorkflowExecutionAsPassive(now).Return(nil).Times(1)
+	context.EXPECT().updateWorkflowExecutionWithNew(
+		now,
+		persistence.UpdateWorkflowModeUpdateCurrent,
+		nil,
+		nil,
+		transactionPolicyPassive,
+		nil,
+	).Return(nil).Times(1)
+	err = s.nDCActivityReplicator.SyncActivity(ctx.Background(), request)
+	s.NoError(err)
+}
+
+func (s *activityReplicatorSuite) TestSyncActivity_ActivityRunning_ZombieWorkflow() {
+	domainName := "some random domain name"
+	domainID := testDomainID
+	workflowID := "some random workflow ID"
+	runID := uuid.New()
+	version := int64(100)
+	scheduleID := int64(144)
+	scheduledTime := time.Now()
+	startedID := scheduleID + 1
+	startedTime := scheduledTime.Add(time.Minute)
+	heartBeatUpdatedTime := startedTime.Add(time.Minute)
+	attempt := int32(100)
+	details := []byte("some random activity heartbeat progress")
+	nextEventID := scheduleID + 10
+
+	key := definition.NewWorkflowIdentifier(domainID, workflowID, runID)
+	context := NewMockworkflowExecutionContext(s.controller)
+	context.EXPECT().loadWorkflowExecution().Return(s.mockMutableState, nil).Times(1)
+	context.EXPECT().lock(gomock.Any()).Return(nil)
+	context.EXPECT().unlock().Times(1)
+	_, err := s.historyCache.PutIfNotExist(key, context)
+	s.NoError(err)
+
+	request := &h.SyncActivityRequest{
+		DomainId:          common.StringPtr(domainID),
+		WorkflowId:        common.StringPtr(workflowID),
+		RunId:             common.StringPtr(runID),
+		Version:           common.Int64Ptr(version),
+		ScheduledId:       common.Int64Ptr(scheduleID),
+		ScheduledTime:     common.Int64Ptr(scheduledTime.UnixNano()),
+		StartedId:         common.Int64Ptr(startedID),
+		StartedTime:       common.Int64Ptr(startedTime.UnixNano()),
+		Attempt:           common.Int32Ptr(attempt),
+		LastHeartbeatTime: common.Int64Ptr(heartBeatUpdatedTime.UnixNano()),
+		Details:           details,
+	}
+	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
+	s.mockMutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
+	var versionHistories *persistence.VersionHistories
+	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
+	s.mockMutableState.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes()
+	s.mockMutableState.EXPECT().GetWorkflowStateCloseStatus().Return(3, 0).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
+		cache.NewGlobalDomainCacheEntryForTest(
+			&persistence.DomainInfo{ID: domainID, Name: domainName},
+			&persistence.DomainConfig{Retention: 1},
+			&persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestAlternativeClusterName},
+				},
+			},
+			version,
+			nil,
+		), nil,
+	).AnyTimes()
+	activityInfo := &persistence.ActivityInfo{
+		Version:    version - 1,
+		ScheduleID: scheduleID,
+		Attempt:    attempt + 1,
+	}
+	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(activityInfo, true).AnyTimes()
+	activityInfos := map[int64]*persistence.ActivityInfo{activityInfo.ScheduleID: activityInfo}
+	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos).AnyTimes()
+	s.mockClusterMetadata.On("IsVersionFromSameCluster", version, activityInfo.Version).Return(false)
+
+	s.mockMutableState.EXPECT().ReplicateActivityInfo(request, true).Return(nil).Times(1)
+	s.mockMutableState.EXPECT().UpdateActivity(activityInfo).Return(nil).Times(1)
+	s.mockMutableState.EXPECT().GetCurrentVersion().Return(int64(1)).Times(1)
+	s.mockMutableState.EXPECT().AddTimerTasks(gomock.Any()).Times(1)
+	now := time.Unix(0, request.GetLastHeartbeatTime())
+	context.EXPECT().updateWorkflowExecutionWithNew(
+		now,
+		persistence.UpdateWorkflowModeBypassCurrent,
+		nil,
+		nil,
+		transactionPolicyPassive,
+		nil,
+	).Return(nil).Times(1)
 	err = s.nDCActivityReplicator.SyncActivity(ctx.Background(), request)
 	s.NoError(err)
 }
