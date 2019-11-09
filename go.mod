@@ -84,6 +84,7 @@ require (
 	gopkg.in/yaml.v2 v2.2.2
 )
 
-replace github.com/jmoiron/sqlx v1.2.0 => github.com/mfateev/sqlx v0.0.0-20180910213730-fa49b1cf03f7
-
-replace github.com/temporal/temporal-proto => ./proto
+replace (
+	github.com/jmoiron/sqlx v1.2.0 => github.com/mfateev/sqlx v0.0.0-20180910213730-fa49b1cf03f7
+	github.com/temporalio/temporal-proto => ./proto
+)
