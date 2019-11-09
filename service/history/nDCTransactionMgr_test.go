@@ -31,7 +31,6 @@ import (
 	"github.com/uber-go/tally"
 
 	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
@@ -56,7 +55,6 @@ type (
 		mockService         service.Service
 		mockShard           *shardContextImpl
 		mockExecutionMgr    *mocks.ExecutionManager
-		mockClientBean      *client.MockClientBean
 		mockClusterMetadata *mocks.ClusterMetadata
 
 		logger log.Logger
@@ -81,8 +79,7 @@ func (s *nDCTransactionMgrSuite) SetupTest() {
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
-	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(nil, nil, metricsClient, s.mockClientBean, nil, nil, nil)
+	s.mockService = service.NewTestService(nil, nil, metricsClient, nil, nil, nil, nil)
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,

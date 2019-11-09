@@ -33,7 +33,6 @@ import (
 
 	"github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
@@ -67,7 +66,6 @@ type (
 		mockClusterMetadata     *mocks.ClusterMetadata
 		mockMessagingClient     messaging.Client
 		mockService             service.Service
-		mockClientBean          *client.MockClientBean
 		mockHistoryRereplicator *xdc.MockHistoryRereplicator
 		mockNDCHistoryResender  *xdc.MockNDCHistoryResender
 		logger                  log.Logger
@@ -127,8 +125,7 @@ func (s *timerQueueStandbyProcessorSuite) SetupTest() {
 	// ack manager will use the domain information
 	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(testGlobalDomainEntry, nil).AnyTimes()
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
-	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, nil, nil, nil)
+	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, nil, nil, nil, nil)
 
 	shardContext := &shardContextImpl{
 		service:                   s.mockService,
@@ -188,7 +185,6 @@ func (s *timerQueueStandbyProcessorSuite) TearDownTest() {
 	s.mockExecutionMgr.AssertExpectations(s.T())
 	s.mockVisibilityMgr.AssertExpectations(s.T())
 	s.mockHistoryRereplicator.AssertExpectations(s.T())
-	s.mockClientBean.AssertExpectations(s.T())
 	s.controller.Finish()
 }
 

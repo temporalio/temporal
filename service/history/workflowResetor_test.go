@@ -40,7 +40,6 @@ import (
 	"github.com/uber/cadence/.gen/go/history/historyservicetest"
 	"github.com/uber/cadence/.gen/go/matching/matchingservicetest"
 	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
@@ -79,7 +78,6 @@ type (
 		mockMessagingClient messaging.Client
 		mockService         service.Service
 		mockArchivalClient  *archiver.ClientMock
-		mockClientBean      *client.MockClientBean
 		resetor             workflowResetor
 
 		shardClosedCh chan int
@@ -131,8 +129,7 @@ func (s *resetorSuite) SetupTest() {
 	s.shardClosedCh = make(chan int, 100)
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
-	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, nil, nil, nil)
+	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, nil, nil, nil, nil)
 	s.mockArchivalClient = &archiver.ClientMock{}
 
 	mockShard := &shardContextImpl{
@@ -187,7 +184,6 @@ func (s *resetorSuite) TearDownTest() {
 	s.mockShardManager.AssertExpectations(s.T())
 	s.mockVisibilityMgr.AssertExpectations(s.T())
 	s.mockProducer.AssertExpectations(s.T())
-	s.mockClientBean.AssertExpectations(s.T())
 	s.mockArchivalClient.AssertExpectations(s.T())
 	s.controller.Finish()
 }

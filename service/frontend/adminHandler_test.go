@@ -62,6 +62,7 @@ type (
 		controller        *gomock.Controller
 		mockHistoryClient *historyservicetest.MockClient
 		mockDomainCache   *cache.MockDomainCache
+		mockClientBean    *client.MockBean
 
 		logger                 log.Logger
 		domainName             string
@@ -69,7 +70,6 @@ type (
 		currentClusterName     string
 		alternativeClusterName string
 		mockClusterMetadata    *mocks.ClusterMetadata
-		mockClientBean         *client.MockClientBean
 		mockHistoryV2Mgr       *mocks.HistoryV2Manager
 		service                service.Service
 
@@ -88,8 +88,10 @@ func (s *adminHandlerSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockHistoryClient = historyservicetest.NewMockClient(s.controller)
 	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
+	s.mockClientBean = client.NewMockBean(s.controller)
 	s.mockDomainCache.EXPECT().Start().AnyTimes()
 	s.mockDomainCache.EXPECT().Stop().AnyTimes()
+	s.mockClientBean.EXPECT().GetHistoryClient().Return(s.mockHistoryClient).AnyTimes()
 
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.domainName = "some random domain name"
@@ -101,9 +103,7 @@ func (s *adminHandlerSuite) SetupTest() {
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(s.currentClusterName)
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.Frontend)
-	s.mockClientBean = &client.MockClientBean{}
 
-	s.mockClientBean.On("GetHistoryClient").Return(s.mockHistoryClient)
 	s.service = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, s.mockClientBean, nil, nil, nil)
 	s.mockHistoryV2Mgr = &mocks.HistoryV2Manager{}
 	params := &service.BootstrapParams{}

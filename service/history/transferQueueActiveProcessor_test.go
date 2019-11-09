@@ -36,7 +36,6 @@ import (
 	"github.com/uber/cadence/.gen/go/matching"
 	"github.com/uber/cadence/.gen/go/matching/matchingservicetest"
 	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/archiver/provider"
@@ -78,7 +77,6 @@ type (
 		mockProducer                *mocks.KafkaProducer
 		mockMessagingClient         messaging.Client
 		mockQueueAckMgr             *MockQueueAckMgr
-		mockClientBean              *client.MockClientBean
 		mockService                 service.Service
 		logger                      log.Logger
 		mockArchivalMetadata        *archiver.MockArchivalMetadata
@@ -159,14 +157,13 @@ func (s *transferQueueActiveProcessorSuite) SetupTest() {
 	s.mockProducer = &mocks.KafkaProducer{}
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
-	s.mockClientBean = &client.MockClientBean{}
 	s.mockArchivalMetadata = &archiver.MockArchivalMetadata{}
 	s.mockArchiverProvider = &provider.MockArchiverProvider{}
 	s.mockService = service.NewTestService(
 		s.mockClusterMetadata,
 		s.mockMessagingClient,
 		metricsClient,
-		s.mockClientBean,
+		nil,
 		s.mockArchivalMetadata,
 		s.mockArchiverProvider,
 		nil,
@@ -238,7 +235,6 @@ func (s *transferQueueActiveProcessorSuite) TearDownTest() {
 	s.mockVisibilityMgr.AssertExpectations(s.T())
 	s.mockProducer.AssertExpectations(s.T())
 	s.mockQueueAckMgr.AssertExpectations(s.T())
-	s.mockClientBean.AssertExpectations(s.T())
 	s.mockArchivalMetadata.AssertExpectations(s.T())
 	s.mockArchiverProvider.AssertExpectations(s.T())
 	s.controller.Finish()

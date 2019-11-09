@@ -39,7 +39,6 @@ import (
 	"github.com/uber/cadence/.gen/go/history/historyservicetest"
 	"github.com/uber/cadence/.gen/go/matching/matchingservicetest"
 	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
@@ -80,7 +79,6 @@ type (
 		mockShardManager    *mocks.ShardManager
 		mockClusterMetadata *mocks.ClusterMetadata
 		mockProducer        *mocks.KafkaProducer
-		mockClientBean      *client.MockClientBean
 		mockMessagingClient messaging.Client
 		mockService         service.Service
 		mockMetricClient    metrics.Client
@@ -236,12 +234,11 @@ func (s *engineSuite) SetupTest() {
 	s.shardClosedCh = make(chan int, 100)
 	s.mockMetricClient = metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
-	s.mockClientBean = &client.MockClientBean{}
 	s.mockService = service.NewTestService(
 		s.mockClusterMetadata,
 		s.mockMessagingClient,
 		s.mockMetricClient,
-		s.mockClientBean,
+		nil,
 		nil,
 		nil,
 		nil)
@@ -317,7 +314,6 @@ func (s *engineSuite) TearDownTest() {
 	s.mockShardManager.AssertExpectations(s.T())
 	s.mockVisibilityMgr.AssertExpectations(s.T())
 	s.mockProducer.AssertExpectations(s.T())
-	s.mockClientBean.AssertExpectations(s.T())
 	s.mockArchivalClient.AssertExpectations(s.T())
 	s.controller.Finish()
 }

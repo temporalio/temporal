@@ -72,6 +72,7 @@ type (
 
 		controller      *gomock.Controller
 		mockDomainCache *cache.MockDomainCache
+		mockClientBean  *client.MockBean
 
 		testDomain   string
 		testDomainID string
@@ -85,7 +86,6 @@ type (
 		mockMetadataMgr      *mocks.MetadataManager
 		mockHistoryV2Mgr     *mocks.HistoryV2Manager
 		mockVisibilityMgr    *mocks.VisibilityManager
-		mockClientBean       *client.MockClientBean
 		mockService          cs.Service
 		mockArchivalMetadata *archiver.MockArchivalMetadata
 		mockArchiverProvider *provider.MockArchiverProvider
@@ -109,6 +109,7 @@ func (s *workflowHandlerSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
+	s.mockClientBean = client.NewMockBean(s.controller)
 
 	s.testDomain = "test-domain"
 	s.testDomainID = "e4f90ec0-1313-45be-9877-8aa41f72a45a"
@@ -120,7 +121,6 @@ func (s *workflowHandlerSuite) SetupTest() {
 	s.mockMetadataMgr = &mocks.MetadataManager{}
 	s.mockHistoryV2Mgr = &mocks.HistoryV2Manager{}
 	s.mockVisibilityMgr = &mocks.VisibilityManager{}
-	s.mockClientBean = &client.MockClientBean{}
 	s.mockArchivalMetadata = &archiver.MockArchivalMetadata{}
 	s.mockArchiverProvider = &provider.MockArchiverProvider{}
 	s.mockService = cs.NewTestService(
@@ -139,7 +139,6 @@ func (s *workflowHandlerSuite) TearDownTest() {
 	s.mockMetadataMgr.AssertExpectations(s.T())
 	s.mockHistoryV2Mgr.AssertExpectations(s.T())
 	s.mockVisibilityMgr.AssertExpectations(s.T())
-	s.mockClientBean.AssertExpectations(s.T())
 	s.mockArchivalMetadata.AssertExpectations(s.T())
 	s.mockArchiverProvider.AssertExpectations(s.T())
 	s.controller.Finish()

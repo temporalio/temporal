@@ -36,7 +36,6 @@ import (
 	h "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/shared"
 	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
@@ -78,7 +77,6 @@ type (
 		mockMessagingClient messaging.Client
 		mockService         service.Service
 		mockShard           *shardContextImpl
-		mockClientBean      *client.MockClientBean
 
 		historyReplicator *historyReplicator
 	}
@@ -119,12 +117,11 @@ func (s *historyReplicatorSuite) SetupTest() {
 	s.mockProducer = &mocks.KafkaProducer{}
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
-	s.mockClientBean = &client.MockClientBean{}
 	s.mockService = service.NewTestService(
 		s.mockClusterMetadata,
 		s.mockMessagingClient,
 		metricsClient,
-		s.mockClientBean,
+		nil,
 		nil,
 		nil,
 		nil)
@@ -178,7 +175,6 @@ func (s *historyReplicatorSuite) TearDownTest() {
 	s.mockExecutionMgr.AssertExpectations(s.T())
 	s.mockShardManager.AssertExpectations(s.T())
 	s.mockProducer.AssertExpectations(s.T())
-	s.mockClientBean.AssertExpectations(s.T())
 	s.controller.Finish()
 }
 

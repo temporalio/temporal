@@ -54,6 +54,7 @@ type (
 
 		controller               *gomock.Controller
 		mockDomainCache          *cache.MockDomainCache
+		mockClientBean           *client.MockBean
 		mockRemoteFrontendClient *workflowservicetest.MockClient
 		mockFrontendHandler      *MockWorkflowHandler
 
@@ -67,7 +68,6 @@ type (
 
 		mockDCRedirectionPolicy *MockDCRedirectionPolicy
 		mockClusterMetadata     *mocks.ClusterMetadata
-		mockClientBean          *client.MockClientBean
 		mockArchivalMetadata    *archiver.MockArchivalMetadata
 		mockArchiverProvider    *provider.MockArchiverProvider
 
@@ -90,27 +90,28 @@ func (s *dcRedirectionHandlerSuite) TearDownSuite() {
 func (s *dcRedirectionHandlerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
+	s.currentClusterName = cluster.TestCurrentClusterName
+	s.alternativeClusterName = cluster.TestAlternativeClusterName
+
 	s.controller = gomock.NewController(s.T())
 	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
+	s.mockClientBean = client.NewMockBean(s.controller)
 	s.mockRemoteFrontendClient = workflowservicetest.NewMockClient(s.controller)
 	s.mockFrontendHandler = NewMockWorkflowHandler(s.controller)
+	s.mockClientBean.EXPECT().GetRemoteFrontendClient(s.alternativeClusterName).Return(s.mockRemoteFrontendClient).AnyTimes()
 
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.domainName = "some random domain name"
 	s.domainID = "some random domain ID"
-	s.currentClusterName = cluster.TestCurrentClusterName
-	s.alternativeClusterName = cluster.TestAlternativeClusterName
 	s.config = NewConfig(dynamicconfig.NewCollection(dynamicconfig.NewNopClient(), s.logger), 0, false)
 
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(s.currentClusterName)
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.Frontend)
-	s.mockClientBean = &client.MockClientBean{}
 
 	s.mockArchivalMetadata = &archiver.MockArchivalMetadata{}
 	s.mockArchiverProvider = &provider.MockArchiverProvider{}
-	s.mockClientBean.On("GetRemoteFrontendClient", s.alternativeClusterName).Return(s.mockRemoteFrontendClient)
 	s.service = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, s.mockClientBean, s.mockArchivalMetadata, s.mockArchiverProvider, nil)
 
 	frontendHandler := NewWorkflowHandler(s.service, s.config, nil, nil, nil, nil, nil, s.mockDomainCache)

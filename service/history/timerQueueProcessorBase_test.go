@@ -32,7 +32,6 @@ import (
 	"github.com/uber-go/tally"
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
@@ -65,7 +64,6 @@ type (
 		mockClusterMetadata   *mocks.ClusterMetadata
 		mockMessagingClient   messaging.Client
 		mockQueueAckMgr       *MockTimerQueueAckMgr
-		mockClientBean        *client.MockClientBean
 		mockExecutionManager  *mocks.ExecutionManager
 		mockVisibilityManager *mocks.VisibilityManager
 		mockHistoryV2Manager  *mocks.HistoryV2Manager
@@ -104,8 +102,7 @@ func (s *timerQueueProcessorBaseSuite) SetupTest() {
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.mockQueueAckMgr = &MockTimerQueueAckMgr{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
-	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, s.mockClientBean, nil, nil, nil)
+	s.mockService = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, nil, nil, nil, nil)
 	s.mockExecutionManager = &mocks.ExecutionManager{}
 	s.mockVisibilityManager = &mocks.VisibilityManager{}
 	s.mockHistoryV2Manager = &mocks.HistoryV2Manager{}
@@ -149,7 +146,6 @@ func (s *timerQueueProcessorBaseSuite) SetupTest() {
 
 func (s *timerQueueProcessorBaseSuite) TearDownTest() {
 	s.mockQueueAckMgr.AssertExpectations(s.T())
-	s.mockClientBean.AssertExpectations(s.T())
 	s.mockExecutionManager.AssertExpectations(s.T())
 	s.mockHistoryV2Manager.AssertExpectations(s.T())
 	s.mockVisibilityManager.AssertExpectations(s.T())

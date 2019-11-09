@@ -33,7 +33,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 
-	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
@@ -62,7 +61,6 @@ type (
 		mockServiceResolver     *mmocks.ServiceResolver
 		mockMessaging           *mmocks.KafkaProducer
 		mockClusterMetadata     *mmocks.ClusterMetadata
-		mockClientBean          *client.MockClientBean
 		mockEngineFactory       *MockHistoryEngineFactory
 		mockMessagingClient     messaging.Client
 		mockService             service.Service
@@ -97,8 +95,7 @@ func (s *shardControllerSuite) SetupTest() {
 	s.mockMessaging = &mmocks.KafkaProducer{}
 	s.mockClusterMetadata = &mmocks.ClusterMetadata{}
 	s.mockMessagingClient = mmocks.NewMockMessagingClient(s.mockMessaging, nil)
-	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, s.metricsClient, s.mockClientBean, nil, nil, nil)
+	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, s.metricsClient, nil, nil, nil, nil)
 	s.shardController = newShardController(s.mockService, s.hostInfo, s.mockServiceResolver, s.mockShardManager,
 		s.mockHistoryV2Mgr, nil, s.mockExecutionMgrFactory, s.mockEngineFactory, s.config, s.logger, s.metricsClient)
 }
@@ -109,7 +106,6 @@ func (s *shardControllerSuite) TearDownTest() {
 	s.mockServiceResolver.AssertExpectations(s.T())
 	s.mockEngineFactory.AssertExpectations(s.T())
 	s.mockMessaging.AssertExpectations(s.T())
-	s.mockClientBean.AssertExpectations(s.T())
 	s.controller.Finish()
 }
 

@@ -33,7 +33,6 @@ import (
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
 	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
@@ -62,7 +61,6 @@ type (
 		mockHistoryV2Mgr    *mocks.HistoryV2Manager
 		mockProducer        *mocks.KafkaProducer
 		mockClusterMetadata *mocks.ClusterMetadata
-		mockClientBean      *client.MockClientBean
 		mockMessagingClient messaging.Client
 		mockService         service.Service
 
@@ -98,8 +96,7 @@ func (s *replicatorQueueProcessorSuite) SetupTest() {
 
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
-	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.mockClientBean, nil, nil, nil)
+	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, nil, nil, nil, nil)
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
 		shardInfo:                 &persistence.ShardInfo{ShardID: 0, RangeID: 1, TransferAckLevel: 0},
@@ -128,7 +125,6 @@ func (s *replicatorQueueProcessorSuite) TearDownTest() {
 	s.mockExecutionMgr.AssertExpectations(s.T())
 	s.mockHistoryV2Mgr.AssertExpectations(s.T())
 	s.mockProducer.AssertExpectations(s.T())
-	s.mockClientBean.AssertExpectations(s.T())
 	s.controller.Finish()
 }
 
