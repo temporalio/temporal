@@ -133,7 +133,7 @@ install-proto:
 proto: yarpc-install clean-proto install-proto
 	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=proto --gogoslick_out=paths=source_relative:proto ${PROTO_DIR}*.proto;)
 	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=proto --yarpc-go_out=proto ${PROTO_DIR}*.proto;)
-	go run ./proto/tools/fiximport/fiximport.go -submodule_dir=proto
+#	go run ./proto/tools/fiximport/fiximport.go -submodule_dir=proto
 
 copyright: cmd/tools/copyright/licensegen.go
 	GOOS= GOARCH= go run ./cmd/tools/copyright/licensegen.go --verifyOnly

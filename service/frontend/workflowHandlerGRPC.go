@@ -24,6 +24,7 @@ import (
 	"context"
 
 	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/proto/workflowservice"
 	"github.com/temporalio/temporal/service/frontend/adapter"
 )
 

@@ -27,7 +27,7 @@ import (
 	"go.uber.org/yarpc/yarpcerrors"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/proto/error_details"
+	error_details "github.com/temporalio/temporal/proto/errordetails"
 )
 
 // ToProtoError converts Thrift error to gRPC error.
