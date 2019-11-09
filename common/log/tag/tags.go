@@ -745,3 +745,8 @@ func ArchivalBlobIntegrityCheckFailReason(blobIntegrityCheckFailReason string) T
 func ArchivalBlobstoreContextTimeout(blobstoreContextTimeout time.Duration) Tag {
 	return newDurationTag("archival-blobstore-context-timeout", blobstoreContextTimeout)
 }
+
+// ArchivalTPath returns tag for ArchivalTPath
+func ArchivalTPath(tpath string) Tag {
+	return newStringTag("archival-tpath", tpath)
+}
