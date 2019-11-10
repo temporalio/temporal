@@ -29,9 +29,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/membership"
 	"github.com/uber/ringpop-go"
 	"github.com/uber/ringpop-go/discovery"
 	"github.com/uber/ringpop-go/discovery/jsonfile"
@@ -40,6 +37,10 @@ import (
 	tcg "github.com/uber/tchannel-go"
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/transport/tchannel"
+
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/membership"
 )
 
 const (

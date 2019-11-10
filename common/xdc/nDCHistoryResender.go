@@ -117,6 +117,11 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 	for historyIterator.HasNext() {
 		result, err := historyIterator.Next()
 		if err != nil {
+			n.logger.Error("failed to get history events",
+				tag.WorkflowDomainID(domainID),
+				tag.WorkflowID(workflowID),
+				tag.WorkflowRunID(runID),
+				tag.Error(err))
 			return err
 		}
 		historyBatch := result.(*historyBatch)
@@ -132,6 +137,11 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 			historyBatch.versionHistory.GetItems())
 		err = n.sendReplicationRawRequest(replicationRequest)
 		if err != nil {
+			n.logger.Error("failed to replicate events",
+				tag.WorkflowDomainID(domainID),
+				tag.WorkflowID(workflowID),
+				tag.WorkflowRunID(runID),
+				tag.Error(err))
 			return err
 		}
 	}

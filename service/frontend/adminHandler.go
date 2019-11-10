@@ -23,14 +23,18 @@ package frontend
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/olivere/elastic"
 	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/olivere/elastic"
+
 	"github.com/pborman/uuid"
+	"github.com/uber-go/tally"
+
 	"github.com/temporalio/temporal/.gen/go/admin"
 	"github.com/temporalio/temporal/.gen/go/admin/adminserviceserver"
 	h "github.com/temporalio/temporal/.gen/go/history"
@@ -47,7 +51,6 @@ import (
 	"github.com/temporalio/temporal/common/service"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 	historyService "github.com/temporalio/temporal/service/history"
-	"github.com/uber-go/tally"
 )
 
 var _ adminserviceserver.Interface = (*AdminHandler)(nil)
@@ -64,6 +67,7 @@ type (
 		historyV2Mgr  persistence.HistoryManager
 		startWG       sync.WaitGroup
 		params        *service.BootstrapParams
+		config        *Config
 	}
 
 	getWorkflowRawHistoryV2Token struct {
@@ -86,6 +90,7 @@ func NewAdminHandler(
 	domainCache cache.DomainCache,
 	historyV2Mgr persistence.HistoryManager,
 	params *service.BootstrapParams,
+	config *Config,
 ) *AdminHandler {
 	handler := &AdminHandler{
 		status:                common.DaemonStatusInitialized,
@@ -94,6 +99,7 @@ func NewAdminHandler(
 		domainCache:           domainCache,
 		historyV2Mgr:          historyV2Mgr,
 		params:                params,
+		config:                config,
 	}
 	// prevent us from trying to serve requests before handler's Start() is complete
 	handler.startWG.Add(1)
@@ -134,8 +140,14 @@ func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *admin.
 	if request == nil {
 		return &gen.BadRequestError{Message: "Request is not provided"}
 	}
+	if err := checkPermission(adh.config, request.SecurityToken); err != nil {
+		return errNoPermission
+	}
 	if len(request.GetSearchAttribute()) == 0 {
 		return &gen.BadRequestError{Message: "SearchAttributes are not provided"}
+	}
+	if err := adh.validateConfigForAdvanceVisibility(); err != nil {
+		return &gen.BadRequestError{Message: fmt.Sprintf("AdvancedVisibilityStore is not configured for this Cadence Cluster")}
 	}
 
 	searchAttr := request.GetSearchAttribute()
@@ -143,7 +155,7 @@ func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *admin.
 		dynamicconfig.ValidSearchAttributes, nil, definition.GetDefaultIndexedKeys())
 	for k, v := range searchAttr {
 		if definition.IsSystemIndexedKey(k) {
-			return &gen.BadRequestError{Message: fmt.Sprintf("Key [%s] is reserverd by system", k)}
+			return &gen.BadRequestError{Message: fmt.Sprintf("Key [%s] is reserved by system", k)}
 		}
 		if _, exist := currentValidAttr[k]; exist {
 			return &gen.BadRequestError{Message: fmt.Sprintf("Key [%s] is already whitelist", k)}
@@ -178,6 +190,13 @@ func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *admin.
 		}
 	}
 
+	return nil
+}
+
+func (adh *AdminHandler) validateConfigForAdvanceVisibility() error {
+	if adh.params.ESConfig == nil || adh.params.ESClient == nil {
+		return errors.New("ES related config not found")
+	}
 	return nil
 }
 

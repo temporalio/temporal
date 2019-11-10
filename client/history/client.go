@@ -25,6 +25,8 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/yarpc"
+
 	h "github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/history/historyserviceclient"
 	"github.com/temporalio/temporal/.gen/go/replicator"
@@ -32,7 +34,6 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
-	"go.uber.org/yarpc"
 )
 
 var _ Client = (*clientImpl)(nil)

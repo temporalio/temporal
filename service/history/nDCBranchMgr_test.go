@@ -33,7 +33,6 @@ import (
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
@@ -55,7 +54,6 @@ type (
 
 		mockService         service.Service
 		mockShard           *shardContextImpl
-		mockDomainCache     *cache.DomainCacheMock
 		mockHistoryV2Mgr    *mocks.HistoryV2Manager
 		mockClusterMetadata *mocks.ClusterMetadata
 
@@ -83,7 +81,6 @@ func (s *nDCBranchMgrSuite) SetupTest() {
 	s.mockMutableState = NewMockmutableState(s.controller)
 
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
-	s.mockDomainCache = &cache.DomainCacheMock{}
 	s.mockHistoryV2Mgr = &mocks.HistoryV2Manager{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
@@ -97,7 +94,6 @@ func (s *nDCBranchMgrSuite) SetupTest() {
 		nil)
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
-		domainCache:               s.mockDomainCache,
 		shardInfo:                 &persistence.ShardInfo{ShardID: 10, RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber:    1,
 		historyV2Mgr:              s.mockHistoryV2Mgr,
@@ -195,6 +191,7 @@ func (s *nDCBranchMgrSuite) TestFlushBufferedEvents() {
 	)
 	s.NoError(err)
 
+	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastWriteVersion, nil).AnyTimes()
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().HasBufferedEvents().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()

@@ -22,9 +22,10 @@ package loggerimpl
 import (
 	"testing"
 
-	"github.com/temporalio/temporal/common/log/tag"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+
+	"github.com/temporalio/temporal/common/log/tag"
 )
 
 /**

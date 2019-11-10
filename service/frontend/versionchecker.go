@@ -24,15 +24,16 @@ import (
 	"context"
 
 	"github.com/hashicorp/go-version"
+	"go.uber.org/yarpc"
+
 	gen "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
-	"go.uber.org/yarpc"
 )
 
 var versionSupported = map[string]version.Constraints{
-	"uber-go":   mustNewConstraint("<1.4"),
-	"uber-java": mustNewConstraint("<1.4"),
-	"cli":       mustNewConstraint("<1.4"),
+	"uber-go":   mustNewConstraint("<1.5"),
+	"uber-java": mustNewConstraint("<1.5"),
+	"cli":       mustNewConstraint("<1.5"),
 }
 
 type (

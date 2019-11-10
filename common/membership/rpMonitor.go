@@ -25,9 +25,10 @@ import (
 	"strings"
 	"sync"
 
+	ringpop "github.com/uber/ringpop-go"
+
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
-	ringpop "github.com/uber/ringpop-go"
 )
 
 type ringpopMonitor struct {

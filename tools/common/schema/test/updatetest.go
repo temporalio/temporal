@@ -29,10 +29,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/urfave/cli"
+
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/urfave/cli"
 )
 
 // UpdateSchemaTestBase is the base test suite for all tests

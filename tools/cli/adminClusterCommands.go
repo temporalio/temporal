@@ -23,12 +23,15 @@ package cli
 import (
 	"bufio"
 	"fmt"
-	"github.com/fatih/color"
-	"github.com/temporalio/temporal/.gen/go/admin"
-	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/urfave/cli"
 	"os"
 	"strings"
+
+	"github.com/fatih/color"
+	"github.com/urfave/cli"
+
+	"github.com/temporalio/temporal/.gen/go/admin"
+	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common"
 )
 
 // AdminAddSearchAttribute to whitelist search attribute
@@ -56,6 +59,7 @@ func AdminAddSearchAttribute(c *cli.Context) {
 		SearchAttribute: map[string]shared.IndexedValueType{
 			key: shared.IndexedValueType(valType),
 		},
+		SecurityToken: common.StringPtr(c.String(FlagSecurityToken)),
 	}
 
 	err := adminClient.AddSearchAttribute(ctx, request)

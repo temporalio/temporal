@@ -31,8 +31,8 @@ import (
 	"github.com/temporalio/temporal/common/messaging"
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/persistence/client"
 	espersistence "github.com/temporalio/temporal/common/persistence/elasticsearch"
-	persistencefactory "github.com/temporalio/temporal/common/persistence/persistence-factory"
 	"github.com/temporalio/temporal/common/service"
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
@@ -80,6 +80,9 @@ type Config struct {
 	SearchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithDomainFilter
 	SearchAttributesSizeOfValueLimit  dynamicconfig.IntPropertyFnWithDomainFilter
 	SearchAttributesTotalSizeLimit    dynamicconfig.IntPropertyFnWithDomainFilter
+
+	// VisibilityArchival system protection
+	VisibilityArchivalQueryMaxPageSize dynamicconfig.IntPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -113,6 +116,7 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int, enableReadFro
 		SearchAttributesSizeOfValueLimit:    dc.GetIntPropertyFilteredByDomain(dynamicconfig.SearchAttributesSizeOfValueLimit, 2*1024),
 		SearchAttributesTotalSizeLimit:      dc.GetIntPropertyFilteredByDomain(dynamicconfig.SearchAttributesTotalSizeLimit, 40*1024),
 		MinRetentionDays:                    dc.GetIntProperty(dynamicconfig.MinRetentionDays, domain.MinRetentionDays),
+		VisibilityArchivalQueryMaxPageSize:  dc.GetIntProperty(dynamicconfig.VisibilityArchivalQueryMaxPageSize, 10000),
 	}
 }
 
@@ -154,7 +158,7 @@ func (s *Service) Start() {
 		EnableSampling:                  s.config.EnableVisibilitySampling,
 		EnableReadFromClosedExecutionV2: s.config.EnableReadFromClosedExecutionV2,
 	}
-	pFactory := persistencefactory.New(&pConfig, params.ClusterMetadata.GetCurrentClusterName(), base.GetMetricsClient(), log)
+	pFactory := client.NewFactory(&pConfig, params.ClusterMetadata.GetCurrentClusterName(), base.GetMetricsClient(), log)
 
 	metadata, err := pFactory.NewMetadataManager()
 	if err != nil {
@@ -185,7 +189,7 @@ func (s *Service) Start() {
 		dynamicconfig.GetStringPropertyFn(common.AdvancedVisibilityWritingModeOff), // frontend visibility never write
 	)
 
-	historyV2, err := pFactory.NewHistoryV2Manager()
+	historyV2, err := pFactory.NewHistoryManager()
 	if err != nil {
 		log.Fatal("Creating historyV2 manager persistence failed", tag.Error(err))
 	}
@@ -247,7 +251,7 @@ func (s *Service) Start() {
 	wfHandlerGRPC := NewWorkflowHandlerGRPC(wfHandler)
 	wfHandlerGRPC.RegisterHandler()
 
-	adminHandler := NewAdminHandler(base, pConfig.NumHistoryShards, domainCache, historyV2, s.params)
+	adminHandler := NewAdminHandler(base, pConfig.NumHistoryShards, domainCache, historyV2, s.params, s.config)
 	adminHandler.RegisterHandler()
 
 	// must start base service first

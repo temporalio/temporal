@@ -5,7 +5,7 @@ services:
     ports:
       - "9042:9042"
   statsd:
-    image: hopsoft/graphite-statsd
+    image: graphiteapp/graphite-statsd
     ports:
       - "8080:80"
       - "2003:2003"
@@ -58,3 +58,4 @@ services:
       - "8088:8088"
     depends_on:
       - cadence
+

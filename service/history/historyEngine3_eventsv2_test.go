@@ -30,11 +30,12 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/uber-go/tally"
+
 	h "github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/history/historyservicetest"
 	"github.com/temporalio/temporal/.gen/go/matching/matchingservicetest"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
@@ -47,7 +48,6 @@ import (
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/service"
 	"github.com/temporalio/temporal/service/worker/archiver"
-	"github.com/uber-go/tally"
 )
 
 type (
@@ -60,11 +60,11 @@ type (
 		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MocktimerQueueProcessor
 		mockEventsCache          *MockeventsCache
+		mockDomainCache          *cache.MockDomainCache
+		mockMatchingClient       *matchingservicetest.MockClient
+		mockHistoryClient        *historyservicetest.MockClient
 
 		historyEngine       *historyEngineImpl
-		mockMatchingClient  *matchingservicetest.MockClient
-		mockHistoryClient   *historyservicetest.MockClient
-		mockDomainCache     *cache.DomainCacheMock
 		mockVisibilityMgr   *mocks.VisibilityManager
 		mockExecutionMgr    *mocks.ExecutionManager
 		mockHistoryV2Mgr    *mocks.HistoryV2Manager
@@ -73,7 +73,6 @@ type (
 		mockProducer        *mocks.KafkaProducer
 		mockMessagingClient messaging.Client
 		mockService         service.Service
-		mockClientBean      *client.MockClientBean
 		mockArchivalClient  *archiver.ClientMock
 
 		shardClosedCh chan int
@@ -103,6 +102,7 @@ func (s *engine3Suite) SetupTest() {
 	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.controller)
 	s.mockTimerProcessor = NewMocktimerQueueProcessor(s.controller)
 	s.mockEventsCache = NewMockeventsCache(s.controller)
+	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
 	s.mockTxProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
 	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
@@ -119,16 +119,14 @@ func (s *engine3Suite) SetupTest() {
 	s.shardClosedCh = make(chan int, 100)
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
-	s.mockClientBean = &client.MockClientBean{}
 	s.mockService = service.NewTestService(
 		s.mockClusterMetadata,
 		s.mockMessagingClient,
 		metricsClient,
-		s.mockClientBean,
+		nil,
 		nil,
 		nil,
 		nil)
-	s.mockDomainCache = &cache.DomainCacheMock{}
 	s.mockArchivalClient = &archiver.ClientMock{}
 
 	mockShard := &shardContextImpl{
@@ -184,7 +182,6 @@ func (s *engine3Suite) TearDownTest() {
 	s.mockShardManager.AssertExpectations(s.T())
 	s.mockVisibilityMgr.AssertExpectations(s.T())
 	s.mockProducer.AssertExpectations(s.T())
-	s.mockClientBean.AssertExpectations(s.T())
 	s.mockArchivalClient.AssertExpectations(s.T())
 	s.controller.Finish()
 }
@@ -193,8 +190,8 @@ func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 	testDomainEntry := cache.NewLocalDomainCacheEntryForTest(
 		&p.DomainInfo{ID: testDomainID}, &p.DomainConfig{Retention: 1}, "", nil,
 	)
-	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(testDomainEntry, nil)
-	s.mockDomainCache.On("GetDomain", mock.Anything).Return(testDomainEntry, nil)
+	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
 
 	domainID := testDomainID
 	we := workflow.WorkflowExecution{
@@ -268,8 +265,8 @@ func (s *engine3Suite) TestStartWorkflowExecution_BrandNew() {
 	testDomainEntry := cache.NewLocalDomainCacheEntryForTest(
 		&p.DomainInfo{ID: testDomainID}, &p.DomainConfig{Retention: 1}, "", nil,
 	)
-	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(testDomainEntry, nil)
-	s.mockDomainCache.On("GetDomain", mock.Anything).Return(testDomainEntry, nil)
+	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
 
 	domainID := testDomainID
 	workflowID := "workflowID"
@@ -302,8 +299,8 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 	testDomainEntry := cache.NewLocalDomainCacheEntryForTest(
 		&p.DomainInfo{ID: testDomainID}, &p.DomainConfig{Retention: 1}, "", nil,
 	)
-	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(testDomainEntry, nil)
-	s.mockDomainCache.On("GetDomain", mock.Anything).Return(testDomainEntry, nil)
+	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
 
 	sRequest := &h.SignalWithStartWorkflowExecutionRequest{}
 	_, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
@@ -348,8 +345,8 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 	testDomainEntry := cache.NewLocalDomainCacheEntryForTest(
 		&p.DomainInfo{ID: testDomainID}, &p.DomainConfig{Retention: 1}, "", nil,
 	)
-	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(testDomainEntry, nil)
-	s.mockDomainCache.On("GetDomain", mock.Anything).Return(testDomainEntry, nil)
+	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
 
 	sRequest := &h.SignalWithStartWorkflowExecutionRequest{}
 	_, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)

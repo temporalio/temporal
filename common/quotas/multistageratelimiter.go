@@ -84,6 +84,13 @@ func (d *MultiStageRateLimiter) Allow(info Info) bool {
 		return false
 	}
 
+	// check whether the reservation is valid now, otherwise
+	// cancel and return right away so we can drop the request
+	if rsv.Delay() != 0 {
+		rsv.Cancel()
+		return false
+	}
+
 	// ensure that the reservation does not break the global rate limit, if it
 	// does, cancel the reservation and do not allow to proceed.
 	if !d.globalLimiter.Allow() {

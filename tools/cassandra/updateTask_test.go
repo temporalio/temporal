@@ -25,6 +25,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
+
 	"github.com/temporalio/temporal/schema/cassandra"
 	"github.com/temporalio/temporal/tools/common/schema/test"
 )

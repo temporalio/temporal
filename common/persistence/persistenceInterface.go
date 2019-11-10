@@ -77,6 +77,8 @@ type (
 		// Replication task related methods
 		GetReplicationTasks(request *GetReplicationTasksRequest) (*GetReplicationTasksResponse, error)
 		CompleteReplicationTask(request *CompleteReplicationTaskRequest) error
+		PutReplicationTaskToDLQ(request *PutReplicationTaskToDLQRequest) error
+		GetReplicationTasksFromDLQ(request *GetReplicationTasksFromDLQRequest) (*GetReplicationTasksFromDLQResponse, error)
 
 		// Timer related methods.
 		GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error)
@@ -180,7 +182,7 @@ type (
 		TaskList                           string
 		WorkflowTypeName                   string
 		WorkflowTimeout                    int32
-		DecisionTimeoutValue               int32
+		DecisionStartToCloseTimeout        int32
 		ExecutionContext                   []byte
 		State                              int
 		CloseStatus                        int

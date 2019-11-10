@@ -29,9 +29,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xwb1989/sqlparser"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
-	"github.com/xwb1989/sqlparser"
 )
 
 type (

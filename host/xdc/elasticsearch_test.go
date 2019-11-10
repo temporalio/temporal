@@ -38,6 +38,9 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/zap"
+	"gopkg.in/yaml.v2"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
@@ -46,8 +49,6 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/environment"
 	"github.com/temporalio/temporal/host"
-	"go.uber.org/zap"
-	"gopkg.in/yaml.v2"
 )
 
 const (

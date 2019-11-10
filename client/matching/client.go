@@ -24,12 +24,13 @@ import (
 	"context"
 	"time"
 
+	"go.uber.org/yarpc"
+
 	m "github.com/temporalio/temporal/.gen/go/matching"
 	"github.com/temporalio/temporal/.gen/go/matching/matchingserviceclient"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/persistence"
-	"go.uber.org/yarpc"
 )
 
 var _ Client = (*clientImpl)(nil)

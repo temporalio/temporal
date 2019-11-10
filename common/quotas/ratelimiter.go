@@ -43,7 +43,7 @@ const (
 type RateLimiter struct {
 	sync.RWMutex
 	maxDispatchPerSecond *float64
-	globalLimiter        atomic.Value
+	goRateLimiter        atomic.Value
 	// TTL is used to determine whether to update the limit. Until TTL, pick
 	// lower(existing TTL, input TTL). After TTL, pick input TTL if different from existing TTL
 	ttlTimer *time.Timer
@@ -83,20 +83,20 @@ func (rl *RateLimiter) UpdateMaxDispatch(maxDispatchPerSecond *float64) {
 
 // Wait waits up till deadline for a rate limit token
 func (rl *RateLimiter) Wait(ctx context.Context) error {
-	limiter := rl.globalLimiter.Load().(*rate.Limiter)
+	limiter := rl.goRateLimiter.Load().(*rate.Limiter)
 	return limiter.Wait(ctx)
 }
 
 // Reserve reserves a rate limit token
 func (rl *RateLimiter) Reserve() *rate.Reservation {
-	limiter := rl.globalLimiter.Load().(*rate.Limiter)
+	limiter := rl.goRateLimiter.Load().(*rate.Limiter)
 	return limiter.Reserve()
 }
 
 // Allow immediately returns with true or false indicating if a rate limit
 // token is available or not
 func (rl *RateLimiter) Allow() bool {
-	limiter := rl.globalLimiter.Load().(*rate.Limiter)
+	limiter := rl.goRateLimiter.Load().(*rate.Limiter)
 	return limiter.Allow()
 }
 
@@ -115,7 +115,7 @@ func (rl *RateLimiter) storeLimiter(maxDispatchPerSecond *float64) {
 		burst = rl.minBurst
 	}
 	limiter := rate.NewLimiter(rate.Limit(*maxDispatchPerSecond), burst)
-	rl.globalLimiter.Store(limiter)
+	rl.goRateLimiter.Store(limiter)
 }
 
 func (rl *RateLimiter) shouldUpdate(maxDispatchPerSecond *float64) bool {
@@ -151,21 +151,21 @@ func NewDynamicRateLimiter(rps RPSFunc) *DynamicRateLimiter {
 // Allow immediately returns with true or false indicating if a rate limit
 // token is available or not
 func (d *DynamicRateLimiter) Allow() bool {
-	rps := float64(d.rps())
+	rps := d.rps()
 	d.rl.UpdateMaxDispatch(&rps)
 	return d.rl.Allow()
 }
 
 // Wait waits up till deadline for a rate limit token
 func (d *DynamicRateLimiter) Wait(ctx context.Context) error {
-	rps := float64(d.rps())
+	rps := d.rps()
 	d.rl.UpdateMaxDispatch(&rps)
 	return d.rl.Wait(ctx)
 }
 
 // Reserve reserves a rate limit token
 func (d *DynamicRateLimiter) Reserve() *rate.Reservation {
-	rps := float64(d.rps())
+	rps := d.rps()
 	d.rl.UpdateMaxDispatch(&rps)
 	return d.rl.Reserve()
 }

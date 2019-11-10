@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "0.3",
+  "MinCompatibleVersion": "0.3",
+  "Description": "add replication_tasks_dlq table",
+  "SchemaUpdateCqlFiles": [
+    "replication_tasks_dlq.sql"
+  ]
+}

@@ -15,7 +15,7 @@ That's why Cadence add support for enhanced visibility features on top of Elasti
 # Quick Start
 ## Local Cadence Docker Setup
 1. Increase docker memory to higher 6GB. Docker -> Preference -> advanced -> memory limit
-2. Get docker compose file. Run `curl -O https://raw.githubusercontent.com/uber/cadence/master/docker/docker-compose-es.yml`
+2. Get docker compose file. Run `curl -O https://raw.githubusercontent.com/temporalio/temporal/master/docker/docker-compose-es.yml`
 3. Start cadence docker which contains Kafka, Zookeeper and ElasticSearch. Run `docker-compose -f docker-compose-es.yml up`
 4. From docker output log, make sure ES and cadence started correctly. If encounter disk space not enough, try `docker system prune -a --volumes`
 5. Register local domain and start using it. `cadence --do samples-domain d re`

@@ -26,11 +26,12 @@ import (
 	"math/rand"
 	"time"
 
+	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
+	cclient "go.temporal.io/temporal/client"
+
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/metrics"
-	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
-	cclient "go.temporal.io/temporal/client"
 )
 
 type (

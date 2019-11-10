@@ -26,18 +26,20 @@ import (
 	"sync"
 
 	"github.com/pborman/uuid"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 )
 
 const (
 	queryStateBuffered queryState = iota
 	queryStateCompleted
+	queryStateUnblocked
 )
 
 var (
-	errQueryResultIsNil      = &shared.InternalServiceError{Message: "query result is nil"}
-	errQueryResultIsInvalid  = &shared.InternalServiceError{Message: "query result is invalid"}
-	errQueryAlreadyCompleted = &shared.InternalServiceError{Message: "query already completed"}
+	errQueryResultIsNil       = &shared.InternalServiceError{Message: "query result is nil"}
+	errQueryResultIsInvalid   = &shared.InternalServiceError{Message: "query result is invalid"}
+	errAlreadyInTerminalState = &shared.InternalServiceError{Message: "query already in terminal state"}
 )
 
 type (
@@ -47,6 +49,7 @@ type (
 		getQueryInternalState() *queryInternalState
 		getQueryTermCh() <-chan struct{}
 		completeQuery(*shared.WorkflowQueryResult) error
+		unblockQuery() error
 	}
 
 	queryImpl struct {
@@ -100,8 +103,8 @@ func (q *queryImpl) completeQuery(
 	q.Lock()
 	defer q.Unlock()
 
-	if q.state == queryStateCompleted {
-		return errQueryAlreadyCompleted
+	if q.terminalState() {
+		return errAlreadyInTerminalState
 	}
 	if err := validateQueryResult(queryResult); err != nil {
 		return err
@@ -110,6 +113,22 @@ func (q *queryImpl) completeQuery(
 	q.queryResult = queryResult
 	close(q.termCh)
 	return nil
+}
+
+func (q *queryImpl) unblockQuery() error {
+	q.Lock()
+	defer q.Unlock()
+
+	if q.terminalState() {
+		return errAlreadyInTerminalState
+	}
+	q.state = queryStateUnblocked
+	close(q.termCh)
+	return nil
+}
+
+func (q *queryImpl) terminalState() bool {
+	return q.state == queryStateCompleted || q.state == queryStateUnblocked
 }
 
 func validateQueryResult(
@@ -121,13 +140,11 @@ func validateQueryResult(
 	}
 	validAnswered := queryResult.GetResultType().Equals(shared.QueryResultTypeAnswered) &&
 		queryResult.Answer != nil &&
-		queryResult.ErrorDetails == nil &&
-		queryResult.ErrorReason == nil
+		queryResult.ErrorMessage == nil
 
 	validFailed := queryResult.GetResultType().Equals(shared.QueryResultTypeFailed) &&
 		queryResult.Answer == nil &&
-		queryResult.ErrorDetails != nil &&
-		queryResult.ErrorReason != nil
+		queryResult.ErrorMessage != nil
 
 	if !validAnswered && !validFailed {
 		return errQueryResultIsInvalid

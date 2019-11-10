@@ -53,14 +53,14 @@ type (
 		targetClusterName string
 
 		mockClusterMetadata *mocks.ClusterMetadata
-		mockDomainCache     *cache.DomainCacheMock
 		mockAdminClient     *adminservicetest.MockClient
 		mockHistoryClient   *historyservicetest.MockClient
 		serializer          persistence.PayloadSerializer
 		logger              log.Logger
 
-		controller   *gomock.Controller
-		rereplicator *HistoryRereplicatorImpl
+		controller      *gomock.Controller
+		mockDomainCache *cache.MockDomainCache
+		rereplicator    *HistoryRereplicatorImpl
 	}
 )
 
@@ -82,7 +82,11 @@ func (s *historyRereplicatorSuite) SetupTest() {
 	s.logger = loggerimpl.NewLogger(zapLogger)
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
-	s.mockDomainCache = &cache.DomainCacheMock{}
+
+	s.controller = gomock.NewController(s.T())
+	s.mockAdminClient = adminservicetest.NewMockClient(s.controller)
+	s.mockHistoryClient = historyservicetest.NewMockClient(s.controller)
+	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
 
 	s.domainID = uuid.New()
 	s.domainName = "some random domain name"
@@ -100,13 +104,10 @@ func (s *historyRereplicatorSuite) SetupTest() {
 		1234,
 		nil,
 	)
-	s.mockDomainCache.On("GetDomainByID", s.domainID).Return(domainEntry, nil).Maybe()
-	s.mockDomainCache.On("GetDomain", s.domainName).Return(domainEntry, nil).Maybe()
+	s.mockDomainCache.EXPECT().GetDomainByID(s.domainID).Return(domainEntry, nil).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomain(s.domainName).Return(domainEntry, nil).AnyTimes()
 	s.serializer = persistence.NewPayloadSerializer()
 
-	s.controller = gomock.NewController(s.T())
-	s.mockAdminClient = adminservicetest.NewMockClient(s.controller)
-	s.mockHistoryClient = historyservicetest.NewMockClient(s.controller)
 	s.rereplicator = NewHistoryRereplicator(
 		s.targetClusterName,
 		s.mockDomainCache,

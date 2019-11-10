@@ -27,6 +27,7 @@ import (
 	"fmt"
 
 	"github.com/go-sql-driver/mysql"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"

@@ -48,16 +48,15 @@ require (
 	github.com/opentracing/opentracing-go v1.1.0
 	github.com/pborman/uuid v0.0.0-20180906182336-adf5a7427709
 	github.com/pierrec/lz4 v0.0.0-20190701081048-057d66e894a4 // indirect
-	github.com/prometheus/common v0.6.0 // indirect
-	github.com/prometheus/procfs v0.0.3 // indirect
+	github.com/prometheus/client_golang v1.2.1 // indirect
 	github.com/robfig/cron v1.2.0
-	github.com/sirupsen/logrus v1.2.0
-	github.com/stretchr/testify v1.3.0
+	github.com/sirupsen/logrus v1.4.2
+	github.com/stretchr/testify v1.4.0
 	github.com/uber-common/bark v1.2.1 // indirect
-	github.com/uber-go/kafka-client v0.2.2
-	github.com/uber-go/tally v3.3.11+incompatible
+	github.com/uber-go/kafka-client v0.2.3-0.20191018205945-8b3555b395f9
+	github.com/uber-go/tally v3.3.12+incompatible
 	github.com/uber/ringpop-go v0.8.5
-	github.com/uber/tchannel-go v1.14.0
+	github.com/uber/tchannel-go v1.16.0
 	github.com/urfave/cli v1.20.0
 	github.com/valyala/fastjson v1.4.1
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
@@ -66,15 +65,15 @@ require (
 	go.uber.org/config v1.3.1
 	go.uber.org/fx v1.9.0
 	go.uber.org/multierr v1.3.0
-	go.uber.org/net/metrics v1.1.0 // indirect
-	go.uber.org/thriftrw v1.20.0
-	go.uber.org/yarpc v1.41.0
-	go.uber.org/zap v1.10.0
+	go.uber.org/net/metrics v1.2.0 // indirect
+	go.uber.org/thriftrw v1.20.2
+	go.uber.org/yarpc v1.42.0
+	go.uber.org/zap v1.12.0
 	golang.org/x/crypto v0.0.0-20190701094942-4def268fd1a4 // indirect
-	golang.org/x/net v0.0.0-20190628185345-da137c7871d7
-	golang.org/x/sys v0.0.0-20190626221950-04f50cda93cb // indirect
+	golang.org/x/net v0.0.0-20191101175033-0deb6923b6d9
+	golang.org/x/sys v0.0.0-20191029155521-f43be2a4598c // indirect
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4
-	golang.org/x/tools v0.0.0-20191030211004-889af361d29c // indirect
+	golang.org/x/tools v0.0.0-20191030211004-889af361d29c
 	google.golang.org/appengine v1.6.1 // indirect
 	google.golang.org/grpc v1.24.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect

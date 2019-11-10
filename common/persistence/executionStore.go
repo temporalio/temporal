@@ -133,7 +133,7 @@ func (m *executionManagerImpl) DeserializeExecutionInfo(
 		TaskList:                           info.TaskList,
 		WorkflowTypeName:                   info.WorkflowTypeName,
 		WorkflowTimeout:                    info.WorkflowTimeout,
-		DecisionTimeoutValue:               info.DecisionTimeoutValue,
+		DecisionStartToCloseTimeout:        info.DecisionStartToCloseTimeout,
 		ExecutionContext:                   info.ExecutionContext,
 		State:                              info.State,
 		CloseStatus:                        info.CloseStatus,
@@ -451,7 +451,7 @@ func (m *executionManagerImpl) SerializeExecutionInfo(
 		TaskList:                           info.TaskList,
 		WorkflowTypeName:                   info.WorkflowTypeName,
 		WorkflowTimeout:                    info.WorkflowTimeout,
-		DecisionTimeoutValue:               info.DecisionTimeoutValue,
+		DecisionStartToCloseTimeout:        info.DecisionStartToCloseTimeout,
 		ExecutionContext:                   info.ExecutionContext,
 		State:                              info.State,
 		CloseStatus:                        info.CloseStatus,
@@ -811,6 +811,18 @@ func (m *executionManagerImpl) CompleteReplicationTask(
 	request *CompleteReplicationTaskRequest,
 ) error {
 	return m.persistence.CompleteReplicationTask(request)
+}
+
+func (m *executionManagerImpl) PutReplicationTaskToDLQ(
+	request *PutReplicationTaskToDLQRequest,
+) error {
+	return m.persistence.PutReplicationTaskToDLQ(request)
+}
+
+func (m *executionManagerImpl) GetReplicationTasksFromDLQ(
+	request *GetReplicationTasksFromDLQRequest,
+) (*GetReplicationTasksFromDLQResponse, error) {
+	return m.persistence.GetReplicationTasksFromDLQ(request)
 }
 
 // Timer related methods.

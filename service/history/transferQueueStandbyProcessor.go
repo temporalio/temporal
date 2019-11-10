@@ -217,11 +217,11 @@ func (t *transferQueueStandbyProcessorImpl) processActivityTask(
 ) error {
 
 	processTaskIfClosed := false
-	actionFn := func(context workflowExecutionContext, msBuilder mutableState) (interface{}, error) {
+	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
 		transferTask := taskInfo.task.(*persistence.TransferTaskInfo)
 
-		activityInfo, ok := msBuilder.GetActivityInfo(transferTask.ScheduleID)
+		activityInfo, ok := mutableState.GetActivityInfo(transferTask.ScheduleID)
 		if !ok {
 			return nil, nil
 		}
@@ -260,16 +260,16 @@ func (t *transferQueueStandbyProcessorImpl) processDecisionTask(
 ) error {
 
 	processTaskIfClosed := false
-	actionFn := func(context workflowExecutionContext, msBuilder mutableState) (interface{}, error) {
+	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
 		transferTask := taskInfo.task.(*persistence.TransferTaskInfo)
 
-		decisionInfo, ok := msBuilder.GetDecisionInfo(transferTask.ScheduleID)
+		decisionInfo, ok := mutableState.GetDecisionInfo(transferTask.ScheduleID)
 		if !ok {
 			return nil, nil
 		}
 
-		executionInfo := msBuilder.GetExecutionInfo()
+		executionInfo := mutableState.GetExecutionInfo()
 		workflowTimeout := executionInfo.WorkflowTimeout
 		decisionTimeout := common.MinInt32(workflowTimeout, common.MaxTaskTimeout)
 
@@ -308,36 +308,36 @@ func (t *transferQueueStandbyProcessorImpl) processCloseExecution(
 ) error {
 
 	processTaskIfClosed := true
-	actionFn := func(context workflowExecutionContext, msBuilder mutableState) (interface{}, error) {
+	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
 		transferTask := taskInfo.task.(*persistence.TransferTaskInfo)
 
-		if msBuilder.IsWorkflowExecutionRunning() {
+		if mutableState.IsWorkflowExecutionRunning() {
 			// this can happen if workflow is reset.
 			return nil, nil
 		}
 
-		completionEvent, err := msBuilder.GetCompletionEvent()
+		completionEvent, err := mutableState.GetCompletionEvent()
 		if err != nil {
 			return nil, err
 		}
 		wfCloseTime := completionEvent.GetTimestamp()
 
-		executionInfo := msBuilder.GetExecutionInfo()
+		executionInfo := mutableState.GetExecutionInfo()
 		workflowTypeName := executionInfo.WorkflowTypeName
 		workflowStartTimestamp := executionInfo.StartTimestamp.UnixNano()
 		workflowCloseTimestamp := wfCloseTime
 		workflowCloseStatus := persistence.ToThriftWorkflowExecutionCloseStatus(executionInfo.CloseStatus)
-		workflowHistoryLength := msBuilder.GetNextEventID() - 1
-		startEvent, err := msBuilder.GetStartEvent()
+		workflowHistoryLength := mutableState.GetNextEventID() - 1
+		startEvent, err := mutableState.GetStartEvent()
 		if err != nil {
 			return nil, err
 		}
-		workflowExecutionTimestamp := getWorkflowExecutionTimestamp(msBuilder, startEvent)
+		workflowExecutionTimestamp := getWorkflowExecutionTimestamp(mutableState, startEvent)
 		visibilityMemo := getWorkflowMemo(executionInfo.Memo)
 		searchAttr := executionInfo.SearchAttributes
 
-		lastWriteVersion, err := msBuilder.GetLastWriteVersion()
+		lastWriteVersion, err := mutableState.GetLastWriteVersion()
 		if err != nil {
 			return nil, err
 		}
@@ -350,10 +350,8 @@ func (t *transferQueueStandbyProcessorImpl) processCloseExecution(
 		// since event replication should be done by active cluster
 		return nil, t.recordWorkflowClosed(
 			transferTask.DomainID,
-			workflow.WorkflowExecution{
-				WorkflowId: common.StringPtr(transferTask.WorkflowID),
-				RunId:      common.StringPtr(transferTask.RunID),
-			},
+			transferTask.WorkflowID,
+			transferTask.RunID,
 			workflowTypeName,
 			workflowStartTimestamp,
 			workflowExecutionTimestamp.UnixNano(),
@@ -379,11 +377,11 @@ func (t *transferQueueStandbyProcessorImpl) processCancelExecution(
 ) error {
 
 	processTaskIfClosed := false
-	actionFn := func(context workflowExecutionContext, msBuilder mutableState) (interface{}, error) {
+	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
 		transferTask := taskInfo.task.(*persistence.TransferTaskInfo)
 
-		requestCancelInfo, ok := msBuilder.GetRequestCancelInfo(transferTask.ScheduleID)
+		requestCancelInfo, ok := mutableState.GetRequestCancelInfo(transferTask.ScheduleID)
 		if !ok {
 			return nil, nil
 		}
@@ -393,7 +391,7 @@ func (t *transferQueueStandbyProcessorImpl) processCancelExecution(
 			return nil, err
 		}
 
-		return getHistoryResendInfo(msBuilder)
+		return getHistoryResendInfo(mutableState)
 	}
 
 	return t.processTransfer(
@@ -416,11 +414,11 @@ func (t *transferQueueStandbyProcessorImpl) processSignalExecution(
 ) error {
 
 	processTaskIfClosed := false
-	actionFn := func(context workflowExecutionContext, msBuilder mutableState) (interface{}, error) {
+	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
 		transferTask := taskInfo.task.(*persistence.TransferTaskInfo)
 
-		signalInfo, ok := msBuilder.GetSignalInfo(transferTask.ScheduleID)
+		signalInfo, ok := mutableState.GetSignalInfo(transferTask.ScheduleID)
 		if !ok {
 			return nil, nil
 		}
@@ -430,7 +428,7 @@ func (t *transferQueueStandbyProcessorImpl) processSignalExecution(
 			return nil, err
 		}
 
-		return getHistoryResendInfo(msBuilder)
+		return getHistoryResendInfo(mutableState)
 	}
 
 	return t.processTransfer(
@@ -453,11 +451,11 @@ func (t *transferQueueStandbyProcessorImpl) processStartChildExecution(
 ) error {
 
 	processTaskIfClosed := false
-	actionFn := func(context workflowExecutionContext, msBuilder mutableState) (interface{}, error) {
+	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
 		transferTask := taskInfo.task.(*persistence.TransferTaskInfo)
 
-		childWorkflowInfo, ok := msBuilder.GetChildExecutionInfo(transferTask.ScheduleID)
+		childWorkflowInfo, ok := mutableState.GetChildExecutionInfo(transferTask.ScheduleID)
 		if !ok {
 			return nil, nil
 		}
@@ -471,7 +469,7 @@ func (t *transferQueueStandbyProcessorImpl) processStartChildExecution(
 			return nil, nil
 		}
 
-		return getHistoryResendInfo(msBuilder)
+		return getHistoryResendInfo(mutableState)
 	}
 
 	return t.processTransfer(
@@ -497,11 +495,11 @@ func (t *transferQueueStandbyProcessorImpl) processRecordWorkflowStarted(
 	return t.processTransfer(
 		processTaskIfClosed,
 		taskInfo,
-		func(context workflowExecutionContext, msBuilder mutableState) (interface{}, error) {
+		func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
 			transferTask := taskInfo.task.(*persistence.TransferTaskInfo)
 
-			return nil, t.processRecordWorkflowStartedOrUpsertHelper(transferTask, msBuilder, true)
+			return nil, t.processRecordWorkflowStartedOrUpsertHelper(transferTask, mutableState, true)
 		},
 		standbyTaskPostActionNoOp,
 	)
@@ -515,10 +513,10 @@ func (t *transferQueueStandbyProcessorImpl) processUpsertWorkflowSearchAttribute
 	return t.processTransfer(
 		processTaskIfClosed,
 		taskInfo,
-		func(context workflowExecutionContext, msBuilder mutableState) (interface{}, error) {
+		func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
 			transferTask := taskInfo.task.(*persistence.TransferTaskInfo)
-			return nil, t.processRecordWorkflowStartedOrUpsertHelper(transferTask, msBuilder, false)
+			return nil, t.processRecordWorkflowStartedOrUpsertHelper(transferTask, mutableState, false)
 		},
 		standbyTaskPostActionNoOp,
 	)
@@ -526,45 +524,40 @@ func (t *transferQueueStandbyProcessorImpl) processUpsertWorkflowSearchAttribute
 
 func (t *transferQueueStandbyProcessorImpl) processRecordWorkflowStartedOrUpsertHelper(
 	transferTask *persistence.TransferTaskInfo,
-	msBuilder mutableState,
+	mutableState mutableState,
 	isRecordStart bool,
 ) error {
 
 	// verify task version for RecordWorkflowStarted.
 	// upsert doesn't require verifyTask, because it is just a sync of mutableState.
 	if isRecordStart {
-		startVersion, err := msBuilder.GetStartVersion()
+		startVersion, err := mutableState.GetStartVersion()
 		if err != nil {
 			return err
 		}
 		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, startVersion, transferTask.Version, transferTask)
-		if err != nil {
+		if err != nil || !ok {
 			return err
-		} else if !ok {
-			return nil
 		}
 	}
 
-	execution := workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(transferTask.WorkflowID),
-		RunId:      common.StringPtr(transferTask.RunID),
-	}
-	executionInfo := msBuilder.GetExecutionInfo()
+	executionInfo := mutableState.GetExecutionInfo()
 	workflowTimeout := executionInfo.WorkflowTimeout
 	wfTypeName := executionInfo.WorkflowTypeName
 	startTimestamp := executionInfo.StartTimestamp.UnixNano()
-	startEvent, err := msBuilder.GetStartEvent()
+	startEvent, err := mutableState.GetStartEvent()
 	if err != nil {
 		return err
 	}
-	executionTimestamp := getWorkflowExecutionTimestamp(msBuilder, startEvent)
+	executionTimestamp := getWorkflowExecutionTimestamp(mutableState, startEvent)
 	visibilityMemo := getWorkflowMemo(executionInfo.Memo)
 	searchAttr := copySearchAttributes(executionInfo.SearchAttributes)
 
 	if isRecordStart {
 		return t.recordWorkflowStarted(
 			transferTask.DomainID,
-			execution,
+			transferTask.WorkflowID,
+			transferTask.RunID,
 			wfTypeName,
 			startTimestamp,
 			executionTimestamp.UnixNano(),
@@ -576,7 +569,8 @@ func (t *transferQueueStandbyProcessorImpl) processRecordWorkflowStartedOrUpsert
 	}
 	return t.upsertWorkflowExecution(
 		transferTask.DomainID,
-		execution,
+		transferTask.WorkflowID,
+		transferTask.RunID,
 		wfTypeName,
 		startTimestamp,
 		executionTimestamp.UnixNano(),
@@ -610,17 +604,17 @@ func (t *transferQueueStandbyProcessorImpl) processTransfer(
 		}
 	}()
 
-	msBuilder, err := loadMutableStateForTransferTask(context, transferTask, t.metricsClient, t.logger)
-	if err != nil || msBuilder == nil {
+	mutableState, err := loadMutableStateForTransferTask(context, transferTask, t.metricsClient, t.logger)
+	if err != nil || mutableState == nil {
 		return err
 	}
 
-	if !msBuilder.IsWorkflowExecutionRunning() && !processTaskIfClosed {
+	if !mutableState.IsWorkflowExecutionRunning() && !processTaskIfClosed {
 		// workflow already finished, no need to process the timer
 		return nil
 	}
 
-	historyResendInfo, err := actionFn(context, msBuilder)
+	historyResendInfo, err := actionFn(context, mutableState)
 	if err != nil {
 		return err
 	}
@@ -724,14 +718,4 @@ func (t *transferQueueStandbyProcessorImpl) fetchHistoryFromRemote(
 
 func (t *transferQueueStandbyProcessorImpl) getCurrentTime() time.Time {
 	return t.shard.GetCurrentTime(t.clusterName)
-}
-
-func (t *transferQueueStandbyProcessorImpl) getDomainIDAndWorkflowExecution(
-	transferTask *persistence.TransferTaskInfo,
-) (string, workflow.WorkflowExecution) {
-
-	return transferTask.DomainID, workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(transferTask.WorkflowID),
-		RunId:      common.StringPtr(transferTask.RunID),
-	}
 }

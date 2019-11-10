@@ -24,7 +24,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+
 	"github.com/go-sql-driver/mysql"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/go/sqlblobs"
 	"github.com/temporalio/temporal/common"

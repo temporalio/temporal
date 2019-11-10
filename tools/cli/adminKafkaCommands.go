@@ -28,6 +28,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/temporalio/temporal/common/auth"
+
 	"io"
 	"io/ioutil"
 	"os"
@@ -41,6 +43,11 @@ import (
 	"github.com/Shopify/sarama"
 	cluster "github.com/bsm/sarama-cluster"
 	"github.com/gocql/gocql"
+	"github.com/urfave/cli"
+	"go.uber.org/thriftrw/protocol"
+	"go.uber.org/thriftrw/wire"
+	yaml "gopkg.in/yaml.v2"
+
 	"github.com/temporalio/temporal/.gen/go/indexer"
 	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/go/shared"
@@ -51,10 +58,6 @@ import (
 	"github.com/temporalio/temporal/common/persistence/cassandra"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 	"github.com/temporalio/temporal/service/history"
-	"github.com/urfave/cli"
-	"go.uber.org/thriftrw/protocol"
-	"go.uber.org/thriftrw/wire"
-	yaml "gopkg.in/yaml.v2"
 )
 
 type filterFn func(*replicator.ReplicationTask) bool
@@ -461,7 +464,7 @@ func decodeVisibility(message []byte, val *indexer.Message) error {
 // ClustersConfig describes the kafka clusters
 type ClustersConfig struct {
 	Clusters map[string]messaging.ClusterConfig
-	TLS      messaging.TLS
+	TLS      auth.TLS
 }
 
 func doRereplicate(shardID int, domainID, wid, rid string, minID, maxID int64, targets []string, producer messaging.Producer, session *gocql.Session) {

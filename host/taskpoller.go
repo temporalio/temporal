@@ -26,13 +26,14 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/yarpc"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/service/history"
 	"github.com/temporalio/temporal/service/matching"
-	"go.uber.org/yarpc"
 )
 
 type (

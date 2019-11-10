@@ -38,7 +38,7 @@ import (
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/persistence"
-	persistenceFactory "github.com/temporalio/temporal/common/persistence/persistence-factory"
+	"github.com/temporalio/temporal/common/persistence/client"
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
@@ -86,7 +86,7 @@ var (
 		},
 		cli.StringFlag{
 			Name:  FlagSecurityTokenWithAlias,
-			Usage: "Security token with permission",
+			Usage: "Optional token for security check",
 		},
 		cli.StringFlag{
 			Name:  FlagHistoryArchivalStatusWithAlias,
@@ -140,7 +140,7 @@ var (
 		},
 		cli.StringFlag{
 			Name:  FlagSecurityTokenWithAlias,
-			Usage: "Security token with permission ",
+			Usage: "Optional token for security check",
 		},
 		cli.StringFlag{
 			Name:  FlagHistoryArchivalStatusWithAlias,
@@ -296,7 +296,7 @@ func initializeMetadataMgr(
 		EnableSampling:                  dynamicconfig.GetBoolPropertyFn(false), // not used by domain operation
 		EnableReadFromClosedExecutionV2: dynamicconfig.GetBoolPropertyFn(false), // not used by domain operation
 	}
-	pFactory := persistenceFactory.New(
+	pFactory := client.NewFactory(
 		&pConfig,
 		clusterMetadata.GetCurrentClusterName(),
 		metricsClient,

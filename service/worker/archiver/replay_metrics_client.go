@@ -23,9 +23,11 @@ package archiver
 import (
 	"time"
 
-	"github.com/temporalio/temporal/common/metrics"
 	"github.com/uber-go/tally"
+
 	"go.temporal.io/temporal/workflow"
+
+	"github.com/temporalio/temporal/common/metrics"
 )
 
 type (
