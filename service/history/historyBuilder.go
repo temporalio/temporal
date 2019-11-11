@@ -634,8 +634,8 @@ func (b *historyBuilder) newActivityTaskTimedOutEvent(
 	attributes.StartedEventId = common.Int64Ptr(startedEventID)
 	attributes.TimeoutType = common.TimeoutTypePtr(timeoutType)
 	attributes.Details = lastHeartBeatDetails
-	attributes.LastFailuireReason = common.StringPtr(lastFailureReason)
-	attributes.LastFailuireDetails = lastFailureDetail
+	attributes.LastFailureReason = common.StringPtr(lastFailureReason)
+	attributes.LastFailureDetails = lastFailureDetail
 
 	historyEvent.ActivityTaskTimedOutEventAttributes = attributes
 
