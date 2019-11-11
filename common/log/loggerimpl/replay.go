@@ -21,9 +21,10 @@
 package loggerimpl
 
 import (
+	"go.temporal.io/temporal/workflow"
+
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
-	"go.temporal.io/temporal/workflow"
 )
 
 type replayLogger struct {

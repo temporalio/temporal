@@ -21,8 +21,9 @@
 package codec
 
 import (
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"go.uber.org/thriftrw/wire"
+
+	"github.com/temporalio/temporal/.gen/go/shared"
 )
 
 type (

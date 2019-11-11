@@ -35,6 +35,8 @@ import (
 
 	"github.com/cch123/elasticsql"
 	"github.com/olivere/elastic"
+	"github.com/valyala/fastjson"
+
 	"github.com/temporalio/temporal/.gen/go/indexer"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
@@ -45,7 +47,6 @@ import (
 	"github.com/temporalio/temporal/common/messaging"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/service/config"
-	"github.com/valyala/fastjson"
 )
 
 const (

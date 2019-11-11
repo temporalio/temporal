@@ -27,14 +27,16 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
+	"github.com/uber-go/tally"
+	"go.uber.org/zap"
+
+	"go.temporal.io/temporal/testsuite"
+	"go.temporal.io/temporal/worker"
+
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/mocks"
 	p "github.com/temporalio/temporal/common/persistence"
-	"github.com/uber-go/tally"
-	"go.temporal.io/temporal/testsuite"
-	"go.temporal.io/temporal/worker"
-	"go.uber.org/zap"
 )
 
 type scannerWorkflowTestSuite struct {

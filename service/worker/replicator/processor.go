@@ -26,6 +26,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.uber.org/yarpc/yarpcerrors"
+
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
 
@@ -41,7 +43,6 @@ import (
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/task"
 	"github.com/temporalio/temporal/common/xdc"
-	"go.uber.org/yarpc/yarpcerrors"
 )
 
 type (

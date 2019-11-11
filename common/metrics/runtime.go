@@ -26,8 +26,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/temporalio/temporal/common/log"
 	"github.com/uber-go/tally"
+
+	"github.com/temporalio/temporal/common/log"
 )
 
 var (

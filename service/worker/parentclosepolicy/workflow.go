@@ -24,15 +24,16 @@ import (
 	"context"
 	"time"
 
+	"go.temporal.io/temporal"
+	"go.temporal.io/temporal/activity"
+	"go.temporal.io/temporal/workflow"
+
 	h "github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
-	"go.temporal.io/temporal"
-	"go.temporal.io/temporal/activity"
-	"go.temporal.io/temporal/workflow"
 )
 
 const (

@@ -23,15 +23,17 @@ package cli
 import (
 	"context"
 
-	serverAdmin "github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"
-	serverFrontend "github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
-	"github.com/temporalio/temporal/common"
 	"github.com/urfave/cli"
-	clientFrontend "go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/api/transport"
 	"go.uber.org/yarpc/transport/tchannel"
 	"go.uber.org/zap"
+
+	clientFrontend "go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
+
+	serverAdmin "github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"
+	serverFrontend "github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
+	"github.com/temporalio/temporal/common"
 )
 
 const (

@@ -23,7 +23,12 @@ package indexer
 import (
 	"encoding/json"
 	"fmt"
+	"sync"
+	"sync/atomic"
+	"time"
+
 	"github.com/olivere/elastic"
+
 	"github.com/temporalio/temporal/.gen/go/indexer"
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
@@ -34,9 +39,6 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/messaging"
 	"github.com/temporalio/temporal/common/metrics"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
 type indexProcessor struct {

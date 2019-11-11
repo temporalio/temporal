@@ -7,7 +7,7 @@ services:
     environment:
       - "MYSQL_ROOT_PASSWORD=root"
   statsd:
-    image: hopsoft/graphite-statsd
+    image: graphiteapp/graphite-statsd
     ports:
       - "8080:80"
       - "2003:2003"

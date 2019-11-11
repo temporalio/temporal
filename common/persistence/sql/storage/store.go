@@ -28,6 +28,7 @@ import (
 
 	"github.com/iancoleman/strcase"
 	"github.com/jmoiron/sqlx"
+
 	"github.com/temporalio/temporal/common/persistence/sql/storage/mysql"
 	"github.com/temporalio/temporal/common/persistence/sql/storage/sqldb"
 	"github.com/temporalio/temporal/common/service/config"

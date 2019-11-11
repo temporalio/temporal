@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 )

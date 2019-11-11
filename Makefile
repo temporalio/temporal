@@ -13,7 +13,6 @@ endif
 
 THRIFT_GENDIR=.gen
 
-# default target
 default: test
 
 # define the list of thrift files the service depends on
@@ -149,7 +148,33 @@ cadence-server: $(ALL_SRC)
 	@echo "compiling cadence-server with OS: $(GOOS), ARCH: $(GOARCH)"
 	go build -ldflags '$(GO_BUILD_LDFLAGS)' -i -o cadence-server cmd/server/cadence.go cmd/server/server.go
 
-bins_nothrift: lint copyright cadence-cassandra-tool cadence-sql-tool cadence cadence-server
+go-generate:
+	GO111MODULE=off go get -u github.com/myitcv/gobin
+	GOOS= GOARCH= gobin -mod=readonly github.com/golang/mock/mockgen
+	@echo "running go generate ./..."
+	@go generate ./...
+
+lint:
+	@echo "running linter"
+	@lintFail=0; for file in $(ALL_SRC); do \
+		golint "$$file"; \
+		if [ $$? -eq 1 ]; then lintFail=1; fi; \
+	done; \
+	if [ $$lintFail -eq 1 ]; then exit 1; fi;
+	@OUTPUT=`gofmt -l $(ALL_SRC) 2>&1`; \
+	if [ "$$OUTPUT" ]; then \
+		echo "Run 'make fmt'. gofmt must be run on the following files:"; \
+		echo "$$OUTPUT"; \
+		exit 1; \
+	fi
+
+fmt:
+	GO111MODULE=off go get -u github.com/myitcv/gobin
+	GOOS= GOARCH= gobin -mod=readonly golang.org/x/tools/cmd/goimports
+	@echo "running goimports"
+	@goimports -local "github.com/temporalio/temporal" -w $(ALL_SRC)
+
+bins_nothrift: go-generate fmt lint copyright cadence-cassandra-tool cadence-sql-tool cadence cadence-server
 
 bins: thriftc protoc bins_nothrift
 
@@ -224,23 +249,6 @@ cover: $(COVER_ROOT)/cover.out
 cover_ci: $(COVER_ROOT)/cover.out
 	goveralls -coverprofile=$(COVER_ROOT)/cover.out -service=buildkite || echo Coveralls failed;
 
-lint:
-	@echo Running linter
-	@lintFail=0; for file in $(ALL_SRC); do \
-		golint "$$file"; \
-		if [ $$? -eq 1 ]; then lintFail=1; fi; \
-	done; \
-	if [ $$lintFail -eq 1 ]; then exit 1; fi;
-	@OUTPUT=`gofmt -l $(ALL_SRC) 2>&1`; \
-	if [ "$$OUTPUT" ]; then \
-		echo "Run 'make fmt'. gofmt must be run on the following files:"; \
-		echo "$$OUTPUT"; \
-		exit 1; \
-	fi
-
-fmt:
-	@gofmt -w $(ALL_SRC)
-
 clean:
 	rm -f cadence
 	rm -f cadence-sql-tool
@@ -284,8 +292,19 @@ install-schema-cdc: bins
 	./cadence-cassandra-tool --ep 127.0.0.1 -k cadence_visibility_standby setup-schema -v 0.0
 	./cadence-cassandra-tool --ep 127.0.0.1 -k cadence_visibility_standby update-schema -d ./schema/cassandra/visibility/versioned
 
+	@echo Setting up cadence_other key space
+	./cadence-cassandra-tool --ep 127.0.0.1 create -k cadence_other --rf 1
+	./cadence-cassandra-tool --ep 127.0.0.1 -k cadence_other setup-schema -v 0.0
+	./cadence-cassandra-tool --ep 127.0.0.1 -k cadence_other update-schema -d ./schema/cassandra/cadence/versioned
+	./cadence-cassandra-tool --ep 127.0.0.1 create -k cadence_visibility_other --rf 1
+	./cadence-cassandra-tool --ep 127.0.0.1 -k cadence_visibility_other setup-schema -v 0.0
+	./cadence-cassandra-tool --ep 127.0.0.1 -k cadence_visibility_other update-schema -d ./schema/cassandra/visibility/versioned
+
 start-cdc-active: bins
 	./cadence-server --zone active start
 
 start-cdc-standby: bins
 	./cadence-server --zone standby start
+
+start-cdc-other: bins
+	./cadence-server --zone other start

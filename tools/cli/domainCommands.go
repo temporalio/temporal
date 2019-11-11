@@ -29,12 +29,14 @@ import (
 	"time"
 
 	"github.com/olekukonko/tablewriter"
+	"github.com/urfave/cli"
+
+	s "go.temporal.io/temporal/.gen/go/shared"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 	serviceFrontend "github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/domain"
-	"github.com/urfave/cli"
-	s "go.temporal.io/temporal/.gen/go/shared"
 )
 
 type (

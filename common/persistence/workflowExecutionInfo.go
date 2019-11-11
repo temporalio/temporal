@@ -56,18 +56,24 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateCloseStatus(
 			if closeStatus != WorkflowCloseStatusNone {
 				return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
 			}
+
 		case WorkflowStateRunning:
 			if closeStatus != WorkflowCloseStatusNone {
 				return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
 			}
+
 		case WorkflowStateCompleted:
-			if closeStatus != WorkflowCloseStatusTerminated && closeStatus != WorkflowCloseStatusTimedOut {
+			if closeStatus != WorkflowCloseStatusTerminated &&
+				closeStatus != WorkflowCloseStatusTimedOut &&
+				closeStatus != WorkflowCloseStatusContinuedAsNew {
 				return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
 			}
+
 		case WorkflowStateZombie:
 			if closeStatus != WorkflowCloseStatusNone {
 				return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
 			}
+
 		default:
 			return &workflow.InternalServiceError{
 				Message: fmt.Sprintf("unknown workflow state: %v", state),
@@ -77,18 +83,22 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateCloseStatus(
 		switch state {
 		case WorkflowStateCreated:
 			return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
+
 		case WorkflowStateRunning:
 			if closeStatus != WorkflowCloseStatusNone {
 				return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
 			}
+
 		case WorkflowStateCompleted:
 			if closeStatus == WorkflowCloseStatusNone {
 				return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
 			}
+
 		case WorkflowStateZombie:
 			if closeStatus != WorkflowCloseStatusNone {
 				return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
 			}
+
 		default:
 			return &workflow.InternalServiceError{
 				Message: fmt.Sprintf("unknown workflow state: %v", state),
@@ -98,14 +108,18 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateCloseStatus(
 		switch state {
 		case WorkflowStateCreated:
 			return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
+
 		case WorkflowStateRunning:
 			return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
+
 		case WorkflowStateCompleted:
 			if closeStatus != e.CloseStatus {
 				return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
+
 			}
 		case WorkflowStateZombie:
 			return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
+
 		default:
 			return &workflow.InternalServiceError{
 				Message: fmt.Sprintf("unknown workflow state: %v", state),
@@ -117,18 +131,22 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateCloseStatus(
 			if closeStatus != WorkflowCloseStatusNone {
 				return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
 			}
+
 		case WorkflowStateRunning:
 			if closeStatus != WorkflowCloseStatusNone {
 				return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
 			}
+
 		case WorkflowStateCompleted:
 			if closeStatus == WorkflowCloseStatusNone {
 				return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
 			}
+
 		case WorkflowStateZombie:
 			if closeStatus == WorkflowCloseStatusNone {
 				return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
 			}
+
 		default:
 			return &workflow.InternalServiceError{
 				Message: fmt.Sprintf("unknown workflow state: %v", state),

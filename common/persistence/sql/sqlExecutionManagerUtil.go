@@ -889,18 +889,20 @@ func createReplicationTasks(
 		}
 
 		blob, err := replicationTaskInfoToBlob(&sqlblobs.ReplicationTaskInfo{
-			DomainID:            domainID,
-			WorkflowID:          &workflowID,
-			RunID:               runID,
-			TaskType:            common.Int16Ptr(int16(task.GetType())),
-			FirstEventID:        &firstEventID,
-			NextEventID:         &nextEventID,
-			Version:             &version,
-			LastReplicationInfo: lastReplicationInfo,
-			ScheduledID:         &activityScheduleID,
-			BranchToken:         branchToken,
-			NewRunBranchToken:   newRunBranchToken,
-			ResetWorkflow:       &resetWorkflow,
+			DomainID:                domainID,
+			WorkflowID:              &workflowID,
+			RunID:                   runID,
+			TaskType:                common.Int16Ptr(int16(task.GetType())),
+			FirstEventID:            &firstEventID,
+			NextEventID:             &nextEventID,
+			Version:                 &version,
+			LastReplicationInfo:     lastReplicationInfo,
+			ScheduledID:             &activityScheduleID,
+			EventStoreVersion:       common.Int32Ptr(p.EventStoreVersion),
+			NewRunEventStoreVersion: common.Int32Ptr(p.EventStoreVersion),
+			BranchToken:             branchToken,
+			NewRunBranchToken:       newRunBranchToken,
+			ResetWorkflow:           &resetWorkflow,
 		})
 		if err != nil {
 			return err
@@ -1034,10 +1036,7 @@ func assertNotCurrentExecution(
 	assertFn := func(currentRow *sqldb.CurrentExecutionsRow) error {
 		return assertRunIDMismatch(runID, currentRow.RunID)
 	}
-	if err := assertCurrentExecution(tx, shardID, domainID, workflowID, assertFn); err != nil {
-		return err
-	}
-	return nil
+	return assertCurrentExecution(tx, shardID, domainID, workflowID, assertFn)
 }
 
 func assertRunIDAndUpdateCurrentExecution(
@@ -1208,7 +1207,7 @@ func buildExecutionRow(
 		TaskList:                                &executionInfo.TaskList,
 		WorkflowTypeName:                        &executionInfo.WorkflowTypeName,
 		WorkflowTimeoutSeconds:                  &executionInfo.WorkflowTimeout,
-		DecisionTaskTimeoutSeconds:              &executionInfo.DecisionTimeoutValue,
+		DecisionTaskTimeoutSeconds:              &executionInfo.DecisionStartToCloseTimeout,
 		ExecutionContext:                        executionInfo.ExecutionContext,
 		State:                                   common.Int32Ptr(int32(executionInfo.State)),
 		CloseStatus:                             common.Int32Ptr(int32(executionInfo.CloseStatus)),
@@ -1245,6 +1244,7 @@ func buildExecutionRow(
 		RetryExpirationSeconds:                  &executionInfo.ExpirationSeconds,
 		RetryExpirationTimeNanos:                common.Int64Ptr(executionInfo.ExpirationTime.UnixNano()),
 		RetryNonRetryableErrors:                 executionInfo.NonRetriableErrors,
+		EventStoreVersion:                       common.Int32Ptr(p.EventStoreVersion),
 		EventBranchToken:                        executionInfo.BranchToken,
 		AutoResetPoints:                         executionInfo.AutoResetPoints.Data,
 		AutoResetPointsEncoding:                 common.StringPtr(string(executionInfo.AutoResetPoints.GetEncoding())),

@@ -24,13 +24,14 @@ import (
 	"context"
 	"errors"
 
+	"go.temporal.io/temporal"
+	"go.temporal.io/temporal/activity"
+
 	"github.com/temporalio/temporal/common"
 	carchiver "github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
-	"go.temporal.io/temporal"
-	"go.temporal.io/temporal/activity"
 )
 
 const (

@@ -34,7 +34,7 @@ CREATE TYPE workflow_execution (
   task_list                        text,
   workflow_type_name               text,
   workflow_timeout                 int,  -- Workflow ExecutionStartToCloseTimeoutSeconds
-  decision_task_timeout            int,
+  decision_task_timeout            int,  -- decision start to close timeout
   execution_context                blob,
   state                            int,  -- enum WorkflowState {Created, Running, Completed}
   close_status                     int,  -- enum WorkflowCloseStatus {None, Completed, Failed, Canceled, Terminated, ContinuedAsNew, TimedOut}
@@ -188,7 +188,10 @@ CREATE TYPE timer_info (
   timer_id      text,      -- User defined timer ID
   started_id    bigint,    -- The event ID corresponding to timer started.
   expiry_time   timestamp, -- Timestamp at which this timer expires or fires
-  task_id       bigint,    -- The task ID if we have one created for this timer
+  -- task_id is a misleading variable, it actually serves
+  -- the purpose of indicating whether a timer task is
+  -- generated for this timer info
+  task_id       bigint,
 );
 
 -- Child execution in progress mutable state

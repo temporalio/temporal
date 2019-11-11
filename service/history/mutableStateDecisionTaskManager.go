@@ -125,6 +125,19 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskScheduledEven
 	scheduleTimestamp int64,
 	originalScheduledTimestamp int64,
 ) (*decisionInfo, error) {
+
+	// set workflow state to running, since decision is scheduled
+	// NOTE: for zombie workflow, should not change the state
+	state, _ := m.msb.GetWorkflowStateCloseStatus()
+	if state != persistence.WorkflowStateZombie {
+		if err := m.msb.UpdateWorkflowStateCloseStatus(
+			persistence.WorkflowStateRunning,
+			persistence.WorkflowCloseStatusNone,
+		); err != nil {
+			return nil, err
+		}
+	}
+
 	decision := &decisionInfo{
 		Version:                    version,
 		ScheduleID:                 scheduleID,
@@ -162,7 +175,7 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateTransientDecisionTaskSche
 		ScheduleID:         m.msb.GetNextEventID(),
 		StartedID:          common.EmptyEventID,
 		RequestID:          emptyUUID,
-		DecisionTimeout:    m.msb.GetExecutionInfo().DecisionTimeoutValue,
+		DecisionTimeout:    m.msb.GetExecutionInfo().DecisionStartToCloseTimeout,
 		TaskList:           m.msb.GetExecutionInfo().TaskList,
 		Attempt:            m.msb.GetExecutionInfo().DecisionAttempt,
 		ScheduledTimestamp: m.msb.timeSource.Now().UnixNano(),
@@ -198,16 +211,6 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskStartedEvent(
 		// certain "magic" needs to be done, i.e. setting attempt to 0 so
 		// if first batch is replicated, but not the second one, decision can be correctly timed out
 		decision.Attempt = 0
-	}
-
-	// set workflow state to running, since decision is scheduled
-	if state, _ := m.msb.GetWorkflowStateCloseStatus(); state == persistence.WorkflowStateCreated {
-		if err := m.msb.UpdateWorkflowStateCloseStatus(
-			persistence.WorkflowStateRunning,
-			persistence.WorkflowCloseStatusNone,
-		); err != nil {
-			return nil, err
-		}
 	}
 
 	// Update mutable decision state
@@ -291,10 +294,6 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskScheduledEventAsHea
 		return nil, m.msb.createInternalServerError(opTag)
 	}
 
-	// set workflow state to running
-	// since decision is scheduled
-	m.msb.executionInfo.State = persistence.WorkflowStateRunning
-
 	// Tasklist and decision timeout should already be set from workflow execution started event
 	taskList := m.msb.executionInfo.TaskList
 	if m.msb.IsStickyTaskListEnabled() {
@@ -307,7 +306,7 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskScheduledEventAsHea
 		//  if we can use a new field(LastDecisionUpdateTimestamp), then we could get rid of it.
 		m.msb.ClearStickyness()
 	}
-	startToCloseTimeoutSeconds := m.msb.executionInfo.DecisionTimeoutValue
+	startToCloseTimeoutSeconds := m.msb.executionInfo.DecisionStartToCloseTimeout
 
 	// Flush any buffered events before creating the decision, otherwise it will result in invalid IDs for transient
 	// decision and will cause in timeout processing to not work for transient decisions

@@ -33,6 +33,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
@@ -90,7 +91,7 @@ func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
 		},
 		TransactionSizeLimit: dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit),
 	}
-	s.NoError(VerifyCompatibleVersion(cfg, root))
+	s.NoError(VerifyCompatibleVersion(cfg))
 }
 
 func (s *VersionTestSuite) TestCheckCompatibleVersion() {
@@ -104,7 +105,6 @@ func (s *VersionTestSuite) TestCheckCompatibleVersion() {
 		{"1.0", "1.0", "", false},
 		{"1.0", "2.0", "", false},
 		{"1.0", "abc", "unable to read cassandra schema version", false},
-		{"abc", "1.0", "unable to read expected schema version", true},
 	}
 	for _, flag := range flags {
 		s.runCheckCompatibleVersion(flag.expectedVersion, flag.actualVersion, flag.errStr, flag.expectedFail)
@@ -167,7 +167,7 @@ func (s *VersionTestSuite) runCheckCompatibleVersion(
 		Password: "",
 		Keyspace: keyspace,
 	}
-	err = checkCompatibleVersion(cfg, subdir)
+	err = checkCompatibleVersion(cfg, expected)
 	if len(errStr) > 0 {
 		s.Error(err)
 		s.Contains(err.Error(), errStr)

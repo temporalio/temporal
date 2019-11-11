@@ -24,6 +24,9 @@ import (
 	"io/ioutil"
 	"os"
 
+	"github.com/uber-go/tally"
+	"go.uber.org/zap"
+
 	"github.com/temporalio/temporal/client"
 	frontendclient "github.com/temporalio/temporal/client/frontend"
 	"github.com/temporalio/temporal/common"
@@ -42,8 +45,6 @@ import (
 	persistencetests "github.com/temporalio/temporal/common/persistence/persistence-tests"
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
-	"github.com/uber-go/tally"
-	"go.uber.org/zap"
 )
 
 type (
@@ -271,4 +272,9 @@ func (tc *TestCluster) GetAdminClient() AdminClient {
 // GetHistoryClient returns a history client from the test cluster
 func (tc *TestCluster) GetHistoryClient() HistoryClient {
 	return tc.host.GetHistoryClient()
+}
+
+// GetExecutionManagerFactory returns an execution manager factory from the test cluster
+func (tc *TestCluster) GetExecutionManagerFactory() persistence.ExecutionManagerFactory {
+	return tc.host.GetExecutionManagerFactory()
 }

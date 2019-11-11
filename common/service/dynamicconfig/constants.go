@@ -78,23 +78,26 @@ var keys = map[Key]string{
 	MaxIDLengthLimit:       "limit.maxIDLength",
 
 	// frontend settings
-	FrontendPersistenceMaxQPS:         "frontend.persistenceMaxQPS",
-	FrontendVisibilityMaxPageSize:     "frontend.visibilityMaxPageSize",
-	FrontendVisibilityListMaxQPS:      "frontend.visibilityListMaxQPS",
-	FrontendESVisibilityListMaxQPS:    "frontend.esVisibilityListMaxQPS",
-	FrontendMaxBadBinaries:            "frontend.maxBadBinaries",
-	FrontendESIndexMaxResultWindow:    "frontend.esIndexMaxResultWindow",
-	FrontendHistoryMaxPageSize:        "frontend.historyMaxPageSize",
-	FrontendRPS:                       "frontend.rps",
-	FrontendDomainRPS:                 "frontend.domainrps",
-	FrontendHistoryMgrNumConns:        "frontend.historyMgrNumConns",
-	DisableListVisibilityByFilter:     "frontend.disableListVisibilityByFilter",
-	FrontendThrottledLogRPS:           "frontend.throttledLogRPS",
-	EnableClientVersionCheck:          "frontend.enableClientVersionCheck",
-	ValidSearchAttributes:             "frontend.validSearchAttributes",
-	SearchAttributesNumberOfKeysLimit: "frontend.searchAttributesNumberOfKeysLimit",
-	SearchAttributesSizeOfValueLimit:  "frontend.searchAttributesSizeOfValueLimit",
-	SearchAttributesTotalSizeLimit:    "frontend.searchAttributesTotalSizeLimit",
+	FrontendPersistenceMaxQPS:             "frontend.persistenceMaxQPS",
+	FrontendVisibilityMaxPageSize:         "frontend.visibilityMaxPageSize",
+	FrontendVisibilityListMaxQPS:          "frontend.visibilityListMaxQPS",
+	FrontendESVisibilityListMaxQPS:        "frontend.esVisibilityListMaxQPS",
+	FrontendMaxBadBinaries:                "frontend.maxBadBinaries",
+	FrontendESIndexMaxResultWindow:        "frontend.esIndexMaxResultWindow",
+	FrontendHistoryMaxPageSize:            "frontend.historyMaxPageSize",
+	FrontendRPS:                           "frontend.rps",
+	FrontendDomainRPS:                     "frontend.domainrps",
+	FrontendHistoryMgrNumConns:            "frontend.historyMgrNumConns",
+	DisableListVisibilityByFilter:         "frontend.disableListVisibilityByFilter",
+	FrontendThrottledLogRPS:               "frontend.throttledLogRPS",
+	EnableClientVersionCheck:              "frontend.enableClientVersionCheck",
+	ValidSearchAttributes:                 "frontend.validSearchAttributes",
+	SearchAttributesNumberOfKeysLimit:     "frontend.searchAttributesNumberOfKeysLimit",
+	SearchAttributesSizeOfValueLimit:      "frontend.searchAttributesSizeOfValueLimit",
+	SearchAttributesTotalSizeLimit:        "frontend.searchAttributesTotalSizeLimit",
+	VisibilityArchivalQueryMaxPageSize:    "frontend.visibilityArchivalQueryMaxPageSize",
+	VisibilityArchivalQueryMaxRangeInDays: "frontend.visibilityArchivalQueryMaxRangeInDays",
+	VisibilityArchivalQueryMaxQPS:         "frontend.visibilityArchivalQueryMaxQPS",
 
 	// matching settings
 	MatchingRPS:                             "matching.rps",
@@ -190,6 +193,13 @@ var keys = map[Key]string{
 	DecisionHeartbeatTimeout:                              "history.decisionHeartbeatTimeout",
 	ParentClosePolicyThreshold:                            "history.parentClosePolicyThreshold",
 	NumParentClosePolicySystemWorkflows:                   "history.numParentClosePolicySystemWorkflows",
+	ReplicationTaskFetcherParallelism:                     "history.ReplicationTaskFetcherParallelism",
+	ReplicationTaskFetcherAggregationInterval:             "history.ReplicationTaskFetcherAggregationInterval",
+	ReplicationTaskFetcherTimerJitterCoefficient:          "history.ReplicationTaskFetcherTimerJitterCoefficient",
+	ReplicationTaskFetcherErrorRetryWait:                  "history.ReplicationTaskFetcherErrorRetryWait",
+	ReplicationTaskProcessorErrorRetryWait:                "history.ReplicationTaskProcessorErrorRetryWait",
+	ReplicationTaskProcessorErrorRetryMaxAttempts:         "history.ReplicationTaskProcessorErrorRetryMaxAttempts",
+	ReplicationTaskProcessorNoTaskInitialWait:             "history.ReplicationTaskProcessorNoTaskInitialWait",
 
 	WorkerPersistenceMaxQPS:                         "worker.persistenceMaxQPS",
 	WorkerReplicatorMetaTaskConcurrency:             "worker.replicatorMetaTaskConcurrency",
@@ -320,6 +330,12 @@ const (
 	SearchAttributesSizeOfValueLimit
 	// SearchAttributesTotalSizeLimit is the size limit of the whole map
 	SearchAttributesTotalSizeLimit
+	// VisibilityArchivalQueryMaxPageSize is the maximum page size for a visibility archival query
+	VisibilityArchivalQueryMaxPageSize
+	// VisibilityArchivalQueryMaxRangeInDays is the maximum number of days for a visibility archival query
+	VisibilityArchivalQueryMaxRangeInDays
+	// VisibilityArchivalQueryMaxQPS is the timeout for a visibility archival query
+	VisibilityArchivalQueryMaxQPS
 
 	// key for matching
 
@@ -565,6 +581,21 @@ const (
 	EnableBatcher
 	// EnableParentClosePolicyWorker decides whether or not enable system workers for processing parent close policy task
 	EnableParentClosePolicyWorker
+
+	//ReplicationTaskFetcherParallelism determines how many go routines we spin up for fetching tasks
+	ReplicationTaskFetcherParallelism
+	// ReplicationTaskFetcherAggregationInterval determines how frequently the fetch requests are sent
+	ReplicationTaskFetcherAggregationInterval
+	// ReplicationTaskFetcherTimerJitterCoefficient is the jitter for fetcher timer
+	ReplicationTaskFetcherTimerJitterCoefficient
+	// ReplicationTaskFetcherErrorRetryWait is the wait time when fetcher encounters error
+	ReplicationTaskFetcherErrorRetryWait
+	// ReplicationTaskProcessorErrorRetryWait is the initial retry wait when we see errors in applying replication tasks
+	ReplicationTaskProcessorErrorRetryWait
+	// ReplicationTaskProcessorErrorRetryMaxAttempts is the max retry attempts for applying replication tasks
+	ReplicationTaskProcessorErrorRetryMaxAttempts
+	// ReplicationTaskProcessorNoTaskInitialWait is the wait time when not ask is returned
+	ReplicationTaskProcessorNoTaskInitialWait
 
 	// lastKeyForTest must be the last one in this const group for testing purpose
 	lastKeyForTest

@@ -24,11 +24,12 @@ import (
 	"bytes"
 	"fmt"
 
+	"go.uber.org/thriftrw/protocol"
+	"go.uber.org/thriftrw/wire"
+
 	"github.com/temporalio/temporal/.gen/go/sqlblobs"
 	"github.com/temporalio/temporal/common"
 	p "github.com/temporalio/temporal/common/persistence"
-	"go.uber.org/thriftrw/protocol"
-	"go.uber.org/thriftrw/wire"
 )
 
 // thriftRWType represents an thrift auto generated type

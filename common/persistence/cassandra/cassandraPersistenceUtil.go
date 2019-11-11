@@ -25,14 +25,11 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	p "github.com/temporalio/temporal/common/persistence"
 )
-
-// eventStoreVersion is already deprecated, this is just a constant for place holder.
-// TODO we can remove it after fixing all the query templates
-const defaultEventStoreVersionValue = -1
 
 func applyWorkflowMutationBatch(
 	batch *gocql.Batch,
@@ -416,7 +413,7 @@ func createExecution(
 			executionInfo.TaskList,
 			executionInfo.WorkflowTypeName,
 			executionInfo.WorkflowTimeout,
-			executionInfo.DecisionTimeoutValue,
+			executionInfo.DecisionStartToCloseTimeout,
 			executionInfo.ExecutionContext,
 			executionInfo.State,
 			executionInfo.CloseStatus,
@@ -455,7 +452,7 @@ func createExecution(
 			executionInfo.ExpirationTime,
 			executionInfo.MaximumAttempts,
 			executionInfo.NonRetriableErrors,
-			defaultEventStoreVersionValue,
+			p.EventStoreVersion,
 			executionInfo.BranchToken,
 			executionInfo.CronSchedule,
 			executionInfo.ExpirationSeconds,
@@ -486,7 +483,7 @@ func createExecution(
 			executionInfo.TaskList,
 			executionInfo.WorkflowTypeName,
 			executionInfo.WorkflowTimeout,
-			executionInfo.DecisionTimeoutValue,
+			executionInfo.DecisionStartToCloseTimeout,
 			executionInfo.ExecutionContext,
 			executionInfo.State,
 			executionInfo.CloseStatus,
@@ -525,7 +522,7 @@ func createExecution(
 			executionInfo.ExpirationTime,
 			executionInfo.MaximumAttempts,
 			executionInfo.NonRetriableErrors,
-			defaultEventStoreVersionValue,
+			p.EventStoreVersion,
 			executionInfo.BranchToken,
 			executionInfo.CronSchedule,
 			executionInfo.ExpirationSeconds,
@@ -561,7 +558,7 @@ func createExecution(
 			executionInfo.TaskList,
 			executionInfo.WorkflowTypeName,
 			executionInfo.WorkflowTimeout,
-			executionInfo.DecisionTimeoutValue,
+			executionInfo.DecisionStartToCloseTimeout,
 			executionInfo.ExecutionContext,
 			executionInfo.State,
 			executionInfo.CloseStatus,
@@ -600,7 +597,7 @@ func createExecution(
 			executionInfo.ExpirationTime,
 			executionInfo.MaximumAttempts,
 			executionInfo.NonRetriableErrors,
-			defaultEventStoreVersionValue,
+			p.EventStoreVersion,
 			executionInfo.BranchToken,
 			executionInfo.CronSchedule,
 			executionInfo.ExpirationSeconds,
@@ -674,7 +671,7 @@ func updateExecution(
 			executionInfo.TaskList,
 			executionInfo.WorkflowTypeName,
 			executionInfo.WorkflowTimeout,
-			executionInfo.DecisionTimeoutValue,
+			executionInfo.DecisionStartToCloseTimeout,
 			executionInfo.ExecutionContext,
 			executionInfo.State,
 			executionInfo.CloseStatus,
@@ -713,7 +710,7 @@ func updateExecution(
 			executionInfo.ExpirationTime,
 			executionInfo.MaximumAttempts,
 			executionInfo.NonRetriableErrors,
-			defaultEventStoreVersionValue,
+			p.EventStoreVersion,
 			executionInfo.BranchToken,
 			executionInfo.CronSchedule,
 			executionInfo.ExpirationSeconds,
@@ -745,7 +742,7 @@ func updateExecution(
 			executionInfo.TaskList,
 			executionInfo.WorkflowTypeName,
 			executionInfo.WorkflowTimeout,
-			executionInfo.DecisionTimeoutValue,
+			executionInfo.DecisionStartToCloseTimeout,
 			executionInfo.ExecutionContext,
 			executionInfo.State,
 			executionInfo.CloseStatus,
@@ -784,7 +781,7 @@ func updateExecution(
 			executionInfo.ExpirationTime,
 			executionInfo.MaximumAttempts,
 			executionInfo.NonRetriableErrors,
-			defaultEventStoreVersionValue,
+			p.EventStoreVersion,
 			executionInfo.BranchToken,
 			executionInfo.CronSchedule,
 			executionInfo.ExpirationSeconds,
@@ -821,7 +818,7 @@ func updateExecution(
 			executionInfo.TaskList,
 			executionInfo.WorkflowTypeName,
 			executionInfo.WorkflowTimeout,
-			executionInfo.DecisionTimeoutValue,
+			executionInfo.DecisionStartToCloseTimeout,
 			executionInfo.ExecutionContext,
 			executionInfo.State,
 			executionInfo.CloseStatus,
@@ -860,7 +857,7 @@ func updateExecution(
 			executionInfo.ExpirationTime,
 			executionInfo.MaximumAttempts,
 			executionInfo.NonRetriableErrors,
-			defaultEventStoreVersionValue,
+			p.EventStoreVersion,
 			executionInfo.BranchToken,
 			executionInfo.CronSchedule,
 			executionInfo.ExpirationSeconds,
@@ -1087,10 +1084,10 @@ func createReplicationTasks(
 			version,
 			lastReplicationInfo,
 			activityScheduleID,
-			defaultEventStoreVersionValue,
+			p.EventStoreVersion,
 			branchToken,
 			resetWorkflow,
-			defaultEventStoreVersionValue,
+			p.EventStoreVersion,
 			newRunBranchToken,
 			defaultVisibilityTimestamp,
 			task.GetTaskID())
@@ -1398,7 +1395,7 @@ func updateTimerInfos(
 			a.TimerID,
 			a.StartedID,
 			a.ExpiryTime,
-			a.TaskID,
+			a.TaskStatus,
 			shardID,
 			rowTypeExecution,
 			domainID,
@@ -1844,7 +1841,7 @@ func createWorkflowExecutionInfo(
 		case "workflow_timeout":
 			info.WorkflowTimeout = int32(v.(int))
 		case "decision_task_timeout":
-			info.DecisionTimeoutValue = int32(v.(int))
+			info.DecisionStartToCloseTimeout = int32(v.(int))
 		case "execution_context":
 			info.ExecutionContext = v.([]byte)
 		case "state":
@@ -2153,7 +2150,10 @@ func createTimerInfo(
 		case "expiry_time":
 			info.ExpiryTime = v.(time.Time)
 		case "task_id":
-			info.TaskID = v.(int64)
+			// task_id is a misleading variable, it actually serves
+			// the purpose of indicating whether a timer task is
+			// generated for this timer info
+			info.TaskStatus = v.(int64)
 		}
 	}
 	return info
@@ -2313,7 +2313,10 @@ func resetTimerInfoMap(
 		tInfo["timer_id"] = t.TimerID
 		tInfo["started_id"] = t.StartedID
 		tInfo["expiry_time"] = t.ExpiryTime
-		tInfo["task_id"] = t.TaskID
+		// task_id is a misleading variable, it actually serves
+		// the purpose of indicating whether a timer task is
+		// generated for this timer info
+		tInfo["task_id"] = t.TaskStatus
 
 		tMap[t.TimerID] = tInfo
 	}

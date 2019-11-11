@@ -54,12 +54,12 @@ type (
 		controller        *gomock.Controller
 		mockEventsCache   *MockeventsCache
 		mockTaskRefresher *MockmutableStateTaskRefresher
+		mockDomainCache   *cache.MockDomainCache
 
 		mockService         service.Service
 		mockShard           *shardContextImpl
 		mockHistoryV2Mgr    *mocks.HistoryV2Manager
 		mockClusterMetadata *mocks.ClusterMetadata
-		mockDomainCache     *cache.DomainCacheMock
 		logger              log.Logger
 
 		domainID   string
@@ -82,6 +82,7 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockEventsCache = NewMockeventsCache(s.controller)
 	s.mockTaskRefresher = NewMockmutableStateTaskRefresher(s.controller)
+	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
 	s.mockEventsCache.EXPECT().putEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
@@ -96,7 +97,6 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 		nil,
 		nil,
 		nil)
-	s.mockDomainCache = &cache.DomainCacheMock{}
 
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
@@ -124,7 +124,6 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 
 func (s *nDCStateRebuilderSuite) TearDownTest() {
 	s.mockHistoryV2Mgr.AssertExpectations(s.T())
-	s.mockDomainCache.AssertExpectations(s.T())
 	s.controller.Finish()
 }
 
@@ -164,7 +163,7 @@ func (s *nDCStateRebuilderSuite) TestApplyEvents() {
 		events,
 		[]*shared.HistoryEvent(nil),
 		true,
-	).Return(nil, nil, nil, nil).Times(1)
+	).Return(nil, nil).Times(1)
 
 	err := s.nDCStateRebuilder.applyEvents(workflowIdentifier, mockStateBuilder, events, requestID)
 	s.NoError(err)
@@ -308,7 +307,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		Size:          historySize2,
 	}, nil).Once()
 
-	s.mockDomainCache.On("GetDomainByID", targetDomainID).Return(cache.NewGlobalDomainCacheEntryForTest(
+	s.mockDomainCache.EXPECT().GetDomainByID(targetDomainID).Return(cache.NewGlobalDomainCacheEntryForTest(
 		&persistence.DomainInfo{ID: targetDomainID, Name: targetDomainName},
 		&persistence.DomainConfig{},
 		&persistence.DomainReplicationConfig{
@@ -320,7 +319,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		},
 		1234,
 		s.mockClusterMetadata,
-	), nil)
+	), nil).AnyTimes()
 	s.mockTaskRefresher.EXPECT().refreshTasks(now, gomock.Any()).Return(nil).Times(1)
 
 	rebuildMutableState, rebuiltHistorySize, err := s.nDCStateRebuilder.rebuild(

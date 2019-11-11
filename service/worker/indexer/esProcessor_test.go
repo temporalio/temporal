@@ -30,6 +30,8 @@ import (
 	"github.com/olivere/elastic"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/zap"
+
 	"github.com/temporalio/temporal/common/collection"
 	es "github.com/temporalio/temporal/common/elasticsearch"
 	esMocks "github.com/temporalio/temporal/common/elasticsearch/mocks"
@@ -39,7 +41,6 @@ import (
 	mmocks "github.com/temporalio/temporal/common/metrics/mocks"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 	"github.com/temporalio/temporal/service/worker/indexer/mocks"
-	"go.uber.org/zap"
 )
 
 type esProcessorSuite struct {

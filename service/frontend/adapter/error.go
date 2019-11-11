@@ -23,10 +23,11 @@ package adapter
 import (
 	"fmt"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/tpb"
 	"go.uber.org/yarpc/encoding/protobuf"
 	"go.uber.org/yarpc/yarpcerrors"
+
+	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/tpb"
 )
 
 // ToProtoError converts Thrift error to gRPC error.

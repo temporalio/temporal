@@ -21,10 +21,11 @@
 package gob
 
 import (
-	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/require"
 	"testing"
 	"time"
+
+	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/require"
 )
 
 type testStruct struct {

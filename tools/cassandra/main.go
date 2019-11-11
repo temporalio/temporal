@@ -23,8 +23,9 @@ package cassandra
 import (
 	"os"
 
-	"github.com/temporalio/temporal/tools/common/schema"
 	"github.com/urfave/cli"
+
+	"github.com/temporalio/temporal/tools/common/schema"
 )
 
 // RunTool runs the cadence-cassandra-tool command line tool
@@ -101,6 +102,32 @@ func buildCLIOptions() *cli.App {
 		cli.BoolFlag{
 			Name:  schema.CLIFlagQuiet,
 			Usage: "Don't set exit status to 1 on error",
+		},
+
+		cli.BoolFlag{
+			Name:   schema.CLIFlagEnableTLS,
+			Usage:  "enable TLS",
+			EnvVar: "CASSANDRA_ENABLE_TLS",
+		},
+		cli.StringFlag{
+			Name:   schema.CLIFlagTLSCertFile,
+			Usage:  "TLS cert file",
+			EnvVar: "CASSANDRA_TLS_CERT",
+		},
+		cli.StringFlag{
+			Name:   schema.CLIFlagTLSKeyFile,
+			Usage:  "TLS key file",
+			EnvVar: "CASSANDRA_TLS_KEY",
+		},
+		cli.StringFlag{
+			Name:   schema.CLIFlagTLSCaFile,
+			Usage:  "TLS CA file",
+			EnvVar: "CASSANDRA_TLS_CA",
+		},
+		cli.BoolFlag{
+			Name:   schema.CLIFlagTLSEnableHostVerification,
+			Usage:  "TLS host verification",
+			EnvVar: "CASSANDRA_TLS_VERIFY_HOST",
 		},
 	}
 

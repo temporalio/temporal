@@ -35,8 +35,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/log/tag"
 	"go.temporal.io/temporal/.gen/go/shared"
 	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
 	"go.temporal.io/temporal/activity"
@@ -47,6 +45,9 @@ import (
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/transport/tchannel"
 	"go.uber.org/zap"
+
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/log/tag"
 )
 
 func init() {

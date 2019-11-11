@@ -23,9 +23,10 @@ package matching
 import (
 	"sync"
 
+	"go.uber.org/atomic"
+
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
-	"go.uber.org/atomic"
 )
 
 // Used to convert out of order acks into ackLevel movement.

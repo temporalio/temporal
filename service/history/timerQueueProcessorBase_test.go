@@ -29,8 +29,9 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/uber-go/tally"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
@@ -44,7 +45,6 @@ import (
 	"github.com/temporalio/temporal/common/service"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 	"github.com/temporalio/temporal/service/worker/archiver"
-	"github.com/uber-go/tally"
 )
 
 type (
@@ -64,7 +64,6 @@ type (
 		mockClusterMetadata   *mocks.ClusterMetadata
 		mockMessagingClient   messaging.Client
 		mockQueueAckMgr       *MockTimerQueueAckMgr
-		mockClientBean        *client.MockClientBean
 		mockExecutionManager  *mocks.ExecutionManager
 		mockVisibilityManager *mocks.VisibilityManager
 		mockHistoryV2Manager  *mocks.HistoryV2Manager
@@ -103,8 +102,7 @@ func (s *timerQueueProcessorBaseSuite) SetupTest() {
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.mockQueueAckMgr = &MockTimerQueueAckMgr{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
-	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, s.mockClientBean, nil, nil, nil)
+	s.mockService = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, nil, nil, nil, nil)
 	s.mockExecutionManager = &mocks.ExecutionManager{}
 	s.mockVisibilityManager = &mocks.VisibilityManager{}
 	s.mockHistoryV2Manager = &mocks.HistoryV2Manager{}
@@ -148,7 +146,6 @@ func (s *timerQueueProcessorBaseSuite) SetupTest() {
 
 func (s *timerQueueProcessorBaseSuite) TearDownTest() {
 	s.mockQueueAckMgr.AssertExpectations(s.T())
-	s.mockClientBean.AssertExpectations(s.T())
 	s.mockExecutionManager.AssertExpectations(s.T())
 	s.mockHistoryV2Manager.AssertExpectations(s.T())
 	s.mockVisibilityManager.AssertExpectations(s.T())

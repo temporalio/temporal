@@ -26,8 +26,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"go.uber.org/yarpc"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -65,11 +68,13 @@ type (
 		serializer persistence.PayloadSerializer
 		logger     log.Logger
 
-		domainName         string
-		domainID           string
-		version            int64
-		versionIncrement   int64
-		mockFrontendClient map[string]frontend.Client
+		domainName                  string
+		domainID                    string
+		version                     int64
+		versionIncrement            int64
+		mockFrontendClient          map[string]frontend.Client
+		standByReplicationTasksChan chan *replicator.ReplicationTask
+		standByTaskID               int64
 	}
 )
 
@@ -110,16 +115,18 @@ func (s *nDCIntegrationTestSuite) SetupSuite() {
 	clusterConfigs[0].WorkerConfig = &host.WorkerConfig{}
 	clusterConfigs[1].WorkerConfig = &host.WorkerConfig{}
 
+	s.standByReplicationTasksChan = make(chan *replicator.ReplicationTask, 100)
+
+	s.standByTaskID = 0
 	s.mockFrontendClient = make(map[string]frontend.Client)
 	controller := gomock.NewController(s.T())
 	mockStandbyClient := workflowservicetest.NewMockClient(controller)
-	mockStandbyClient.EXPECT().GetReplicationMessages(gomock.Any(), gomock.Any()).Return(&replicator.GetReplicationMessagesResponse{
-		MessagesByShard: make(map[int32]*replicator.ReplicationMessages),
-	}, nil).AnyTimes()
+	mockStandbyClient.EXPECT().GetReplicationMessages(gomock.Any(), gomock.Any()).DoAndReturn(s.GetReplicationMessagesMock).AnyTimes()
 	mockOtherClient := workflowservicetest.NewMockClient(controller)
-	mockOtherClient.EXPECT().GetReplicationMessages(gomock.Any(), gomock.Any()).Return(&replicator.GetReplicationMessagesResponse{
-		MessagesByShard: make(map[int32]*replicator.ReplicationMessages),
-	}, nil).AnyTimes()
+	mockOtherClient.EXPECT().GetReplicationMessages(gomock.Any(), gomock.Any()).Return(
+		&replicator.GetReplicationMessagesResponse{
+			MessagesByShard: make(map[int32]*replicator.ReplicationMessages),
+		}, nil).AnyTimes()
 	s.mockFrontendClient["standby"] = mockStandbyClient
 	s.mockFrontendClient["other"] = mockOtherClient
 	clusterConfigs[0].MockFrontendClient = s.mockFrontendClient
@@ -133,6 +140,39 @@ func (s *nDCIntegrationTestSuite) SetupSuite() {
 	s.version = clusterConfigs[1].ClusterMetadata.ClusterInformation[clusterConfigs[1].ClusterMetadata.CurrentClusterName].InitialFailoverVersion
 	s.versionIncrement = clusterConfigs[0].ClusterMetadata.FailoverVersionIncrement
 	s.generator = test.InitializeHistoryEventGenerator(s.domainName, s.version)
+}
+
+func (s *nDCIntegrationTestSuite) GetReplicationMessagesMock(
+	ctx context.Context,
+	request *replicator.GetReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (*replicator.GetReplicationMessagesResponse, error) {
+	select {
+	case task := <-s.standByReplicationTasksChan:
+		taskID := atomic.AddInt64(&s.standByTaskID, 1)
+		task.SourceTaskId = common.Int64Ptr(taskID)
+		tasks := []*replicator.ReplicationTask{task}
+		for len(s.standByReplicationTasksChan) > 0 {
+			task = <-s.standByReplicationTasksChan
+			taskID := atomic.AddInt64(&s.standByTaskID, 1)
+			task.SourceTaskId = common.Int64Ptr(taskID)
+			tasks = append(tasks, task)
+		}
+
+		replicationMessage := &replicator.ReplicationMessages{
+			ReplicationTasks:      tasks,
+			LastRetrivedMessageId: tasks[len(tasks)-1].SourceTaskId,
+			HasMore:               common.BoolPtr(true),
+		}
+
+		return &replicator.GetReplicationMessagesResponse{
+			MessagesByShard: map[int32]*replicator.ReplicationMessages{0: replicationMessage},
+		}, nil
+	default:
+		return &replicator.GetReplicationMessagesResponse{
+			MessagesByShard: make(map[int32]*replicator.ReplicationMessages),
+		}, nil
+	}
 }
 
 func (s *nDCIntegrationTestSuite) SetupTest() {
@@ -185,39 +225,56 @@ func (s *nDCIntegrationTestSuite) TestSingleBranch() {
 			historyClient,
 		)
 
-		// get replicated history events from passive side
-		passiveClient := s.active.GetFrontendClient()
-		replicatedHistory, err := passiveClient.GetWorkflowExecutionHistory(
-			s.createContext(),
-			&shared.GetWorkflowExecutionHistoryRequest{
-				Domain: common.StringPtr(s.domainName),
-				Execution: &shared.WorkflowExecution{
-					WorkflowId: common.StringPtr(workflowID),
-					RunId:      common.StringPtr(runID),
-				},
-				MaximumPageSize:        common.Int32Ptr(1000),
-				NextPageToken:          nil,
-				WaitForNewEvent:        common.BoolPtr(false),
-				HistoryEventFilterType: shared.HistoryEventFilterTypeAllEvent.Ptr(),
-			},
-		)
-		s.Nil(err, "Failed to get history event from passive side")
+		err := s.verifyEventHistory(workflowID, runID, historyBatch)
+		s.Require().NoError(err)
+	}
+}
 
-		// compare origin events with replicated events
-		batchIndex := 0
-		batch := historyBatch[batchIndex].Events
-		eventIndex := 0
-		for _, event := range replicatedHistory.GetHistory().GetEvents() {
-			if eventIndex >= len(batch) {
-				batchIndex++
-				batch = historyBatch[batchIndex].Events
-				eventIndex = 0
-			}
-			originEvent := batch[eventIndex]
-			eventIndex++
-			s.Equal(originEvent.GetEventType().String(), event.GetEventType().String(), "The replicated event and the origin event are not the same")
+func (s *nDCIntegrationTestSuite) verifyEventHistory(
+	workflowID string,
+	runID string,
+	historyBatch []*workflow.History,
+) error {
+	// get replicated history events from passive side
+	passiveClient := s.active.GetFrontendClient()
+	replicatedHistory, err := passiveClient.GetWorkflowExecutionHistory(
+		s.createContext(),
+		&shared.GetWorkflowExecutionHistoryRequest{
+			Domain: common.StringPtr(s.domainName),
+			Execution: &shared.WorkflowExecution{
+				WorkflowId: common.StringPtr(workflowID),
+				RunId:      common.StringPtr(runID),
+			},
+			MaximumPageSize:        common.Int32Ptr(1000),
+			NextPageToken:          nil,
+			WaitForNewEvent:        common.BoolPtr(false),
+			HistoryEventFilterType: shared.HistoryEventFilterTypeAllEvent.Ptr(),
+		},
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to get history event from passive side: %v", err)
+	}
+
+	// compare origin events with replicated events
+	batchIndex := 0
+	batch := historyBatch[batchIndex].Events
+	eventIndex := 0
+	for _, event := range replicatedHistory.GetHistory().GetEvents() {
+		if eventIndex >= len(batch) {
+			batchIndex++
+			batch = historyBatch[batchIndex].Events
+			eventIndex = 0
+		}
+		originEvent := batch[eventIndex]
+		eventIndex++
+		if originEvent.GetEventType() != event.GetEventType() {
+			return fmt.Errorf("the replicated event (%v) and the origin event (%v) are not the same",
+				originEvent.GetEventType().String(), event.GetEventType().String())
 		}
 	}
+
+	return nil
 }
 
 func (s *nDCIntegrationTestSuite) TestMultipleBranches() {
@@ -1356,6 +1413,26 @@ func (s *nDCIntegrationTestSuite) toThriftDataBlob(
 	}
 }
 
+func (s *nDCIntegrationTestSuite) generateEventBlobs(
+	workflowID string,
+	runID string,
+	workflowType string,
+	tasklist string,
+	batch *shared.History,
+) (*persistence.DataBlob, *persistence.DataBlob) {
+	// TODO temporary code to generate next run first event
+	//  we should generate these as part of modeled based testing
+	lastEvent := batch.Events[len(batch.Events)-1]
+	newRunEventBlob := s.generateNewRunHistory(
+		lastEvent, s.domainName, workflowID, runID, lastEvent.GetVersion(), workflowType, tasklist,
+	)
+	// must serialize events batch after attempt on continue as new as generateNewRunHistory will
+	// modify the NewExecutionRunId attr
+	eventBlob, err := s.serializer.SerializeBatchEvents(batch.Events, common.EncodingTypeThriftRW)
+	s.NoError(err)
+	return eventBlob, newRunEventBlob
+}
+
 func (s *nDCIntegrationTestSuite) applyEvents(
 	workflowID string,
 	runID string,
@@ -1365,22 +1442,10 @@ func (s *nDCIntegrationTestSuite) applyEvents(
 	eventBatches []*shared.History,
 	historyClient host.HistoryClient,
 ) {
-
 	for _, batch := range eventBatches {
+		eventBlob, newRunEventBlob := s.generateEventBlobs(workflowID, runID, workflowType, tasklist, batch)
 
-		// TODO temporary code to generate next run first event
-		//  we should generate these as part of modeled based testing
-		lastEvent := batch.Events[len(batch.Events)-1]
-		newRunEventBlob := s.generateNewRunHistory(
-			lastEvent, s.domainName, workflowID, runID, lastEvent.GetVersion(), workflowType, tasklist,
-		)
-
-		// must serialize events batch after attempt on continue as new as generateNewRunHistory will
-		// modify the NewExecutionRunId attr
-		eventBlob, err := s.serializer.SerializeBatchEvents(batch.Events, common.EncodingTypeThriftRW)
-		s.NoError(err)
-
-		err = historyClient.ReplicateEventsV2(s.createContext(), &history.ReplicateEventsV2Request{
+		err := historyClient.ReplicateEventsV2(s.createContext(), &history.ReplicateEventsV2Request{
 			DomainUUID: common.StringPtr(s.domainID),
 			WorkflowExecution: &shared.WorkflowExecution{
 				WorkflowId: common.StringPtr(workflowID),
@@ -1391,6 +1456,38 @@ func (s *nDCIntegrationTestSuite) applyEvents(
 			NewRunEvents:        s.toThriftDataBlob(newRunEventBlob),
 		})
 		s.Nil(err, "Failed to replicate history event")
+	}
+}
+
+func (s *nDCIntegrationTestSuite) applyEventsThroughFetcher(
+	workflowID string,
+	runID string,
+	workflowType string,
+	tasklist string,
+	versionHistory *persistence.VersionHistory,
+	eventBatches []*shared.History,
+	historyClient host.HistoryClient,
+	frontend *workflowservicetest.MockClient,
+) {
+	for _, batch := range eventBatches {
+		eventBlob, newRunEventBlob := s.generateEventBlobs(workflowID, runID, workflowType, tasklist, batch)
+
+		taskType := replicator.ReplicationTaskTypeHistoryV2
+		replicationTask := &replicator.ReplicationTask{
+			TaskType:     &taskType,
+			SourceTaskId: common.Int64Ptr(1),
+			HistoryTaskV2Attributes: &replicator.HistoryTaskV2Attributes{
+				TaskId:              common.Int64Ptr(1),
+				DomainId:            common.StringPtr(s.domainID),
+				WorkflowId:          common.StringPtr(workflowID),
+				RunId:               common.StringPtr(runID),
+				VersionHistoryItems: s.toThriftVersionHistoryItems(versionHistory),
+				Events:              s.toThriftDataBlob(eventBlob),
+				NewRunEvents:        s.toThriftDataBlob(newRunEventBlob),
+			},
+		}
+
+		s.standByReplicationTasksChan <- replicationTask
 	}
 }
 

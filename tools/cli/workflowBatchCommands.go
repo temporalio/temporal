@@ -27,11 +27,13 @@ import (
 	"os"
 	"strings"
 
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/service/worker/batcher"
 	"github.com/urfave/cli"
+
 	"go.temporal.io/temporal/.gen/go/shared"
 	cclient "go.temporal.io/temporal/client"
+
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/service/worker/batcher"
 )
 
 // TerminateBatchJob stops abatch job

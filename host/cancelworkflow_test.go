@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log/tag"

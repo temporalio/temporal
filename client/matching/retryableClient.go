@@ -23,10 +23,11 @@ package matching
 import (
 	"context"
 
+	"go.uber.org/yarpc"
+
 	m "github.com/temporalio/temporal/.gen/go/matching"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/backoff"
-	"go.uber.org/yarpc"
 )
 
 var _ Client = (*retryableClient)(nil)

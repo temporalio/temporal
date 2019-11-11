@@ -22,8 +22,9 @@ package elasticsearch
 
 import (
 	"context"
-	"github.com/olivere/elastic"
 	"time"
+
+	"github.com/olivere/elastic"
 )
 
 type (

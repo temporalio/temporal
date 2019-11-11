@@ -22,6 +22,7 @@ package indexer
 
 import (
 	"fmt"
+
 	"github.com/temporalio/temporal/common"
 	es "github.com/temporalio/temporal/common/elasticsearch"
 	"github.com/temporalio/temporal/common/log"

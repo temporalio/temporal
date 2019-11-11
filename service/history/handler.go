@@ -26,6 +26,10 @@ import (
 	"sync"
 
 	"github.com/pborman/uuid"
+	"go.uber.org/yarpc/yarpcerrors"
+
+	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
+
 	"github.com/temporalio/temporal/.gen/go/health"
 	"github.com/temporalio/temporal/.gen/go/health/metaserver"
 	hist "github.com/temporalio/temporal/.gen/go/history"
@@ -44,9 +48,6 @@ import (
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/quotas"
 	"github.com/temporalio/temporal/common/service"
-	"github.com/temporalio/temporal/service/worker/replicator"
-	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
-	"go.uber.org/yarpc/yarpcerrors"
 )
 
 // Handler - Thrift handler interface for history service
@@ -72,7 +73,6 @@ type (
 		publisher               messaging.Producer
 		rateLimiter             quotas.Limiter
 		replicationTaskFetchers *ReplicationTaskFetchers
-		domainReplicator        replicator.DomainReplicator
 		service.Service
 	}
 )
@@ -104,8 +104,6 @@ func NewHandler(
 	domainCache cache.DomainCache,
 	publicClient workflowserviceclient.Interface,
 ) *Handler {
-	domainReplicator := replicator.NewDomainReplicator(metadataMgr, sVice.GetLogger())
-
 	handler := &Handler{
 		Service:             sVice,
 		config:              config,
@@ -121,8 +119,7 @@ func NewHandler(
 				return float64(config.RPS())
 			},
 		),
-		publicClient:     publicClient,
-		domainReplicator: domainReplicator,
+		publicClient: publicClient,
 	}
 
 	// prevent us from trying to serve requests before shard controller is started and ready
@@ -176,6 +173,7 @@ func (h *Handler) Start() error {
 
 	h.replicationTaskFetchers = NewReplicationTaskFetchers(
 		h.GetLogger(),
+		h.config,
 		h.GetClusterMetadata().GetReplicationConsumerConfig(),
 		h.Service.GetClusterMetadata(),
 		h.Service.GetClientBean())
@@ -213,7 +211,7 @@ func (h *Handler) Stop() {
 // CreateEngine is implementation for HistoryEngineFactory used for creating the engine instance for shard
 func (h *Handler) CreateEngine(context ShardContext) Engine {
 	return NewEngineWithShardContext(context, h.visibilityMgr, h.matchingServiceClient, h.historyServiceClient,
-		h.publicClient, h.historyEventNotifier, h.publisher, h.config, h.replicationTaskFetchers, h.domainReplicator, h.rawMatchingClient)
+		h.publicClient, h.historyEventNotifier, h.publisher, h.config, h.replicationTaskFetchers, h.rawMatchingClient)
 }
 
 // Health is for health check
