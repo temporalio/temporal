@@ -137,6 +137,17 @@ const (
 	CLIFlagReplicationFactor = CLIOptReplicationFactor + ", rf"
 	// CLIFlagQuiet is the cli flag for quiet mode
 	CLIFlagQuiet = CLIOptQuiet + ", q"
+
+	// CLIFlagEnableTLS enables cassandra client TLS
+	CLIFlagEnableTLS = "tls"
+	// CLIFlagTLSCertFile is the optional tls cert file (tls must be enabled)
+	CLIFlagTLSCertFile = "tls-cert-file"
+	// CLIFlagTLSKeyFile is the optional tls key file (tls must be enabled)
+	CLIFlagTLSKeyFile = "tls-key-file"
+	// CLIFlagTLSCaFile is the optional tls CA file (tls must be enabled)
+	CLIFlagTLSCaFile = "tls-ca-file"
+	// CLIFlagTLSEnableHostVerification enables tls host verification (tls must be enabled)
+	CLIFlagTLSEnableHostVerification = "tls-enable-host-verification"
 )
 
 // DryrunDBName is the db name used for dryrun

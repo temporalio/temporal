@@ -24,6 +24,10 @@ import (
 	"log"
 	"time"
 
+	"go.uber.org/zap"
+
+	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
+
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
@@ -41,8 +45,6 @@ import (
 	"github.com/temporalio/temporal/service/history"
 	"github.com/temporalio/temporal/service/matching"
 	"github.com/temporalio/temporal/service/worker"
-	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
-	"go.uber.org/zap"
 )
 
 type (

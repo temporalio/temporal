@@ -24,6 +24,11 @@ import (
 	"context"
 
 	"github.com/opentracing/opentracing-go"
+	"github.com/uber-go/tally"
+
+	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
+	"go.temporal.io/temporal/worker"
+
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cluster"
@@ -31,9 +36,6 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
-	"github.com/uber-go/tally"
-	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
-	"go.temporal.io/temporal/worker"
 )
 
 type (

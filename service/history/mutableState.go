@@ -92,7 +92,7 @@ type (
 		AddStartChildWorkflowExecutionInitiatedEvent(int64, string, *workflow.StartChildWorkflowExecutionDecisionAttributes) (*workflow.HistoryEvent, *persistence.ChildExecutionInfo, error)
 		AddTimeoutWorkflowEvent(int64) (*workflow.HistoryEvent, error)
 		AddTimerCanceledEvent(int64, *workflow.CancelTimerDecisionAttributes, string) (*workflow.HistoryEvent, error)
-		AddTimerFiredEvent(int64, string) (*workflow.HistoryEvent, error)
+		AddTimerFiredEvent(string) (*workflow.HistoryEvent, error)
 		AddTimerStartedEvent(int64, *workflow.StartTimerDecisionAttributes) (*workflow.HistoryEvent, *persistence.TimerInfo, error)
 		AddUpsertWorkflowSearchAttributesEvent(int64, *workflow.UpsertWorkflowSearchAttributesDecisionAttributes) (*workflow.HistoryEvent, error)
 		AddWorkflowExecutionCancelRequestedEvent(string, *h.RequestCancelWorkflowExecutionRequest) (*workflow.HistoryEvent, error)
@@ -140,10 +140,10 @@ type (
 		GetRequestCancelInfo(int64) (*persistence.RequestCancelInfo, bool)
 		GetRetryBackoffDuration(errReason string) time.Duration
 		GetCronBackoffDuration() (time.Duration, error)
-		GetScheduleIDByActivityID(string) (int64, error)
 		GetSignalInfo(int64) (*persistence.SignalInfo, bool)
 		GetStartVersion() (int64, error)
-		GetUserTimer(string) (*persistence.TimerInfo, bool)
+		GetUserTimerInfoByEventID(int64) (*persistence.TimerInfo, bool)
+		GetUserTimerInfo(string) (*persistence.TimerInfo, bool)
 		GetWorkflowType() *workflow.WorkflowType
 		GetWorkflowStateCloseStatus() (int, int)
 		GetQueryRegistry() queryRegistry
@@ -208,7 +208,7 @@ type (
 		UpdateDecision(*decisionInfo)
 		UpdateReplicationStateVersion(int64, bool)
 		UpdateReplicationStateLastEventID(int64, int64)
-		UpdateUserTimer(string, *persistence.TimerInfo) error
+		UpdateUserTimer(*persistence.TimerInfo) error
 		UpdateCurrentVersion(version int64, forceUpdate bool) error
 		UpdateWorkflowStateCloseStatus(state int, closeStatus int) error
 

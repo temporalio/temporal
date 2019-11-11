@@ -27,9 +27,10 @@ import (
 	"strings"
 
 	"github.com/olekukonko/tablewriter"
+	"github.com/urfave/cli"
+
 	s "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
-	"github.com/urfave/cli"
 )
 
 // AdminDescribeTaskList displays poller and status information of task list.

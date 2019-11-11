@@ -26,6 +26,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
+	"go.uber.org/yarpc"
+
+	"github.com/uber-go/tally"
+
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
@@ -41,9 +46,6 @@ import (
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
-	"github.com/uber-go/tally"
-	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
-	"go.uber.org/yarpc"
 )
 
 var cadenceServices = []string{
@@ -102,7 +104,7 @@ type (
 		clientBean            client.Bean
 		timeSource            clock.TimeSource
 		numberOfHistoryShards int
-		// New logger we are in favor of
+
 		logger          log.Logger
 		throttledLogger log.Logger
 

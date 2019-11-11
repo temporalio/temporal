@@ -22,6 +22,7 @@ package mysql
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/iancoleman/strcase"
 	"github.com/jmoiron/sqlx"
@@ -37,6 +38,9 @@ const DriverName = "mysql"
 // NewConnection returns a new connection to mysql database
 func NewConnection(host string, port int, user string, passwd string, database string) (*sqlx.DB, error) {
 	addr := fmt.Sprintf("%v:%v", host, port)
+	if strings.Contains(host, ":") && port == 0 {
+		addr = host
+	}
 	db, err := sqlx.Connect(DriverName, fmt.Sprintf(dataSourceName, user, passwd, "tcp", addr, database))
 	if err != nil {
 		return nil, err

@@ -400,18 +400,50 @@ func (p *workflowExecutionPersistenceClient) CompleteReplicationTask(request *Co
 	return err
 }
 
+func (p *workflowExecutionPersistenceClient) PutReplicationTaskToDLQ(
+	request *PutReplicationTaskToDLQRequest,
+) error {
+	p.metricClient.IncCounter(metrics.PersistencePutReplicationTaskToDLQScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistencePutReplicationTaskToDLQScope, metrics.PersistenceLatency)
+	err := p.persistence.PutReplicationTaskToDLQ(request)
+	sw.Stop()
+
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistencePutReplicationTaskToDLQScope, err)
+	}
+
+	return err
+}
+
+func (p *workflowExecutionPersistenceClient) GetReplicationTasksFromDLQ(
+	request *GetReplicationTasksFromDLQRequest,
+) (*GetReplicationTasksFromDLQResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceGetReplicationTasksFromDLQScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceGetReplicationTasksFromDLQScope, metrics.PersistenceLatency)
+	response, err := p.persistence.GetReplicationTasksFromDLQ(request)
+	sw.Stop()
+
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceGetReplicationTasksFromDLQScope, err)
+	}
+
+	return response, err
+}
+
 func (p *workflowExecutionPersistenceClient) GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceGetTimerIndexTasksScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceGetTimerIndexTasksScope, metrics.PersistenceLatency)
-	resonse, err := p.persistence.GetTimerIndexTasks(request)
+	response, err := p.persistence.GetTimerIndexTasks(request)
 	sw.Stop()
 
 	if err != nil {
 		p.updateErrorMetric(metrics.PersistenceGetTimerIndexTasksScope, err)
 	}
 
-	return resonse, err
+	return response, err
 }
 
 func (p *workflowExecutionPersistenceClient) CompleteTimerTask(request *CompleteTimerTaskRequest) error {

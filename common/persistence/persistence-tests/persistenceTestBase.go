@@ -28,6 +28,7 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
+
 	"github.com/temporalio/temporal/.gen/go/replicator"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
@@ -38,7 +39,7 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/cassandra"
-	pfactory "github.com/temporalio/temporal/common/persistence/persistence-factory"
+	"github.com/temporalio/temporal/common/persistence/client"
 	"github.com/temporalio/temporal/common/persistence/sql"
 	"github.com/temporalio/temporal/common/service/config"
 )
@@ -62,7 +63,7 @@ type (
 	TestBase struct {
 		suite.Suite
 		ShardMgr               p.ShardManager
-		ExecutionMgrFactory    pfactory.Factory
+		ExecutionMgrFactory    client.Factory
 		ExecutionManager       p.ExecutionManager
 		TaskMgr                p.TaskManager
 		HistoryV2Mgr           p.HistoryManager
@@ -174,7 +175,7 @@ func (s *TestBase) Setup() {
 	}
 
 	cfg := s.DefaultTestCluster.Config()
-	factory := pfactory.New(&cfg, clusterName, nil, s.logger)
+	factory := client.NewFactory(&cfg, clusterName, nil, s.logger)
 
 	s.TaskMgr, err = factory.NewTaskManager()
 	s.fatalOnError("NewTaskManager", err)
@@ -182,8 +183,8 @@ func (s *TestBase) Setup() {
 	s.MetadataManager, err = factory.NewMetadataManager()
 	s.fatalOnError("NewMetadataManager", err)
 
-	s.HistoryV2Mgr, err = factory.NewHistoryV2Manager()
-	s.fatalOnError("NewHistoryV2Manager", err)
+	s.HistoryV2Mgr, err = factory.NewHistoryManager()
+	s.fatalOnError("NewHistoryManager", err)
 
 	s.ShardMgr, err = factory.NewShardManager()
 	s.fatalOnError("NewShardManager", err)
@@ -195,7 +196,7 @@ func (s *TestBase) Setup() {
 	visibilityFactory := factory
 	if s.VisibilityTestCluster != s.DefaultTestCluster {
 		vCfg := s.VisibilityTestCluster.Config()
-		visibilityFactory = pfactory.New(&vCfg, clusterName, nil, s.logger)
+		visibilityFactory = client.NewFactory(&vCfg, clusterName, nil, s.logger)
 	}
 	// SQL currently doesn't have support for visibility manager
 	s.VisibilityMgr, err = visibilityFactory.NewVisibilityManager()
@@ -271,24 +272,24 @@ func (s *TestBase) CreateWorkflowExecutionWithBranchToken(domainID string, workf
 	response, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &p.WorkflowExecutionInfo{
-				CreateRequestID:      uuid.New(),
-				DomainID:             domainID,
-				WorkflowID:           workflowExecution.GetWorkflowId(),
-				RunID:                workflowExecution.GetRunId(),
-				TaskList:             taskList,
-				WorkflowTypeName:     wType,
-				WorkflowTimeout:      wTimeout,
-				DecisionTimeoutValue: decisionTimeout,
-				ExecutionContext:     executionContext,
-				State:                p.WorkflowStateRunning,
-				CloseStatus:          p.WorkflowCloseStatusNone,
-				LastFirstEventID:     common.FirstEventID,
-				NextEventID:          nextEventID,
-				LastProcessedEvent:   lastProcessedEventID,
-				DecisionScheduleID:   decisionScheduleID,
-				DecisionStartedID:    common.EmptyEventID,
-				DecisionTimeout:      1,
-				BranchToken:          branchToken,
+				CreateRequestID:             uuid.New(),
+				DomainID:                    domainID,
+				WorkflowID:                  workflowExecution.GetWorkflowId(),
+				RunID:                       workflowExecution.GetRunId(),
+				TaskList:                    taskList,
+				WorkflowTypeName:            wType,
+				WorkflowTimeout:             wTimeout,
+				DecisionStartToCloseTimeout: decisionTimeout,
+				ExecutionContext:            executionContext,
+				State:                       p.WorkflowStateRunning,
+				CloseStatus:                 p.WorkflowCloseStatusNone,
+				LastFirstEventID:            common.FirstEventID,
+				NextEventID:                 nextEventID,
+				LastProcessedEvent:          lastProcessedEventID,
+				DecisionScheduleID:          decisionScheduleID,
+				DecisionStartedID:           common.EmptyEventID,
+				DecisionTimeout:             1,
+				BranchToken:                 branchToken,
 			},
 			ExecutionStats: &p.ExecutionStats{},
 			TransferTasks: []p.Task{
@@ -342,22 +343,22 @@ func (s *TestBase) CreateWorkflowExecutionWithReplication(domainID string, workf
 	response, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &p.WorkflowExecutionInfo{
-				CreateRequestID:      uuid.New(),
-				DomainID:             domainID,
-				WorkflowID:           workflowExecution.GetWorkflowId(),
-				RunID:                workflowExecution.GetRunId(),
-				TaskList:             taskList,
-				WorkflowTypeName:     wType,
-				WorkflowTimeout:      wTimeout,
-				DecisionTimeoutValue: decisionTimeout,
-				State:                p.WorkflowStateRunning,
-				CloseStatus:          p.WorkflowCloseStatusNone,
-				LastFirstEventID:     common.FirstEventID,
-				NextEventID:          nextEventID,
-				LastProcessedEvent:   lastProcessedEventID,
-				DecisionScheduleID:   decisionScheduleID,
-				DecisionStartedID:    common.EmptyEventID,
-				DecisionTimeout:      1,
+				CreateRequestID:             uuid.New(),
+				DomainID:                    domainID,
+				WorkflowID:                  workflowExecution.GetWorkflowId(),
+				RunID:                       workflowExecution.GetRunId(),
+				TaskList:                    taskList,
+				WorkflowTypeName:            wType,
+				WorkflowTimeout:             wTimeout,
+				DecisionStartToCloseTimeout: decisionTimeout,
+				State:                       p.WorkflowStateRunning,
+				CloseStatus:                 p.WorkflowCloseStatusNone,
+				LastFirstEventID:            common.FirstEventID,
+				NextEventID:                 nextEventID,
+				LastProcessedEvent:          lastProcessedEventID,
+				DecisionScheduleID:          decisionScheduleID,
+				DecisionStartedID:           common.EmptyEventID,
+				DecisionTimeout:             1,
 			},
 			ExecutionStats:   &p.ExecutionStats{},
 			ReplicationState: state,
@@ -431,27 +432,27 @@ func (s *TestBase) CreateChildWorkflowExecution(domainID string, workflowExecuti
 	response, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &p.WorkflowExecutionInfo{
-				CreateRequestID:      uuid.New(),
-				DomainID:             domainID,
-				WorkflowID:           workflowExecution.GetWorkflowId(),
-				RunID:                workflowExecution.GetRunId(),
-				ParentDomainID:       parentDomainID,
-				ParentWorkflowID:     parentExecution.GetWorkflowId(),
-				ParentRunID:          parentExecution.GetRunId(),
-				InitiatedID:          initiatedID,
-				TaskList:             taskList,
-				WorkflowTypeName:     wType,
-				WorkflowTimeout:      wTimeout,
-				DecisionTimeoutValue: decisionTimeout,
-				ExecutionContext:     executionContext,
-				State:                p.WorkflowStateCreated,
-				CloseStatus:          p.WorkflowCloseStatusNone,
-				LastFirstEventID:     common.FirstEventID,
-				NextEventID:          nextEventID,
-				LastProcessedEvent:   lastProcessedEventID,
-				DecisionScheduleID:   decisionScheduleID,
-				DecisionStartedID:    common.EmptyEventID,
-				DecisionTimeout:      1,
+				CreateRequestID:             uuid.New(),
+				DomainID:                    domainID,
+				WorkflowID:                  workflowExecution.GetWorkflowId(),
+				RunID:                       workflowExecution.GetRunId(),
+				ParentDomainID:              parentDomainID,
+				ParentWorkflowID:            parentExecution.GetWorkflowId(),
+				ParentRunID:                 parentExecution.GetRunId(),
+				InitiatedID:                 initiatedID,
+				TaskList:                    taskList,
+				WorkflowTypeName:            wType,
+				WorkflowTimeout:             wTimeout,
+				DecisionStartToCloseTimeout: decisionTimeout,
+				ExecutionContext:            executionContext,
+				State:                       p.WorkflowStateCreated,
+				CloseStatus:                 p.WorkflowCloseStatusNone,
+				LastFirstEventID:            common.FirstEventID,
+				NextEventID:                 nextEventID,
+				LastProcessedEvent:          lastProcessedEventID,
+				DecisionScheduleID:          decisionScheduleID,
+				DecisionStartedID:           common.EmptyEventID,
+				DecisionTimeout:             1,
 			},
 			ExecutionStats: &p.ExecutionStats{},
 			TransferTasks: []p.Task{
@@ -546,24 +547,24 @@ func (s *TestBase) ContinueAsNewExecutionWithReplication(updatedInfo *p.Workflow
 		},
 		NewWorkflowSnapshot: &p.WorkflowSnapshot{
 			ExecutionInfo: &p.WorkflowExecutionInfo{
-				CreateRequestID:      uuid.New(),
-				DomainID:             updatedInfo.DomainID,
-				WorkflowID:           newExecution.GetWorkflowId(),
-				RunID:                newExecution.GetRunId(),
-				TaskList:             updatedInfo.TaskList,
-				WorkflowTypeName:     updatedInfo.WorkflowTypeName,
-				WorkflowTimeout:      updatedInfo.WorkflowTimeout,
-				DecisionTimeoutValue: updatedInfo.DecisionTimeoutValue,
-				ExecutionContext:     nil,
-				State:                updatedInfo.State,
-				CloseStatus:          updatedInfo.CloseStatus,
-				LastFirstEventID:     common.FirstEventID,
-				NextEventID:          nextEventID,
-				LastProcessedEvent:   common.EmptyEventID,
-				DecisionScheduleID:   decisionScheduleID,
-				DecisionStartedID:    common.EmptyEventID,
-				DecisionTimeout:      1,
-				AutoResetPoints:      prevResetPoints,
+				CreateRequestID:             uuid.New(),
+				DomainID:                    updatedInfo.DomainID,
+				WorkflowID:                  newExecution.GetWorkflowId(),
+				RunID:                       newExecution.GetRunId(),
+				TaskList:                    updatedInfo.TaskList,
+				WorkflowTypeName:            updatedInfo.WorkflowTypeName,
+				WorkflowTimeout:             updatedInfo.WorkflowTimeout,
+				DecisionStartToCloseTimeout: updatedInfo.DecisionStartToCloseTimeout,
+				ExecutionContext:            nil,
+				State:                       updatedInfo.State,
+				CloseStatus:                 updatedInfo.CloseStatus,
+				LastFirstEventID:            common.FirstEventID,
+				NextEventID:                 nextEventID,
+				LastProcessedEvent:          common.EmptyEventID,
+				DecisionScheduleID:          decisionScheduleID,
+				DecisionStartedID:           common.EmptyEventID,
+				DecisionTimeout:             1,
+				AutoResetPoints:             prevResetPoints,
 			},
 			ExecutionStats:   updatedStats,
 			ReplicationState: afterState,

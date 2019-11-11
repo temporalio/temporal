@@ -31,6 +31,7 @@ import (
 	"strings"
 
 	"github.com/dgryski/go-farm"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/archiver"
 )

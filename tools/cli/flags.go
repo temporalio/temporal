@@ -24,13 +24,14 @@ import "github.com/urfave/cli"
 
 // Flags used to specify cli command line arguments
 const (
-	FlagPort                              = "port"
 	FlagUsername                          = "username"
 	FlagPassword                          = "password"
 	FlagKeyspace                          = "keyspace"
 	FlagAddress                           = "address"
 	FlagAddressWithAlias                  = FlagAddress + ", ad"
 	FlagHistoryAddress                    = "history_address"
+	FlagDBAddress                         = "db_address"
+	FlagDBPort                            = "db_port"
 	FlagHistoryAddressWithAlias           = FlagHistoryAddress + ", had"
 	FlagDomainID                          = "domain_id"
 	FlagDomain                            = "domain"
@@ -136,6 +137,8 @@ const (
 	FlagQueryTypeWithAlias                = FlagQueryType + ", qt"
 	FlagQueryRejectCondition              = "query_reject_condition"
 	FlagQueryRejectConditionWithAlias     = FlagQueryRejectCondition + ", qrc"
+	FlagQueryConsistencyLevel             = "query_consistency_level"
+	FlagQueryConsistencyLevelWithAlias    = FlagQueryConsistencyLevel + ", qcl"
 	FlagShowDetail                        = "show_detail"
 	FlagShowDetailWithAlias               = FlagShowDetail + ", sd"
 	FlagActiveClusterName                 = "active_cluster"
@@ -195,6 +198,11 @@ const (
 	FlagServiceEnvWithAlias               = FlagServiceEnv + ", se"
 	FlagServiceZone                       = "service_zone"
 	FlagServiceZoneWithAlias              = FlagServiceZone + ", sz"
+	FlagEnableTLS                         = "tls"
+	FlagTLSCertPath                       = "tls_cert_path"
+	FlagTLSKeyPath                        = "tls_key_path"
+	FlagTLSCaPath                         = "tls_ca_path"
+	FlagTLSEnableHostVerification         = "tls_enable_host_verification"
 )
 
 var flagsForExecution = []cli.Flag{
@@ -493,6 +501,10 @@ func getFlagsForQuery() []cli.Flag {
 		cli.StringFlag{
 			Name:  FlagQueryRejectConditionWithAlias,
 			Usage: "Optional flag to reject queries based on workflow state. Valid values are \"not_open\" and \"not_completed_cleanly\"",
+		},
+		cli.StringFlag{
+			Name:  FlagQueryConsistencyLevelWithAlias,
+			Usage: "Optional flag to set query consistency level. Valid values are \"eventual\" and \"strong\"",
 		},
 	}
 }

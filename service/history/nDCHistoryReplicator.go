@@ -46,7 +46,7 @@ var (
 
 type (
 	stateBuilderProvider func(
-		msBuilder mutableState,
+		mutableState mutableState,
 		logger log.Logger) stateBuilder
 
 	mutableStateProvider func(
@@ -149,10 +149,18 @@ func newNDCHistoryReplicator(
 			return newNDCWorkflowResetter(shard, transactionMgr, domainID, workflowID, baseRunID, newContext, newRunID, logger)
 		},
 		newStateBuilder: func(
-			msBuilder mutableState,
+			state mutableState,
 			logger log.Logger,
 		) stateBuilder {
-			return newStateBuilder(shard, msBuilder, logger)
+
+			return newStateBuilder(
+				shard,
+				logger,
+				state,
+				func(mutableState mutableState) mutableStateTaskGenerator {
+					return newMutableStateTaskGenerator(shard.GetDomainCache(), logger, mutableState)
+				},
+			)
 		},
 		newMutableState: func(
 			domainEntry *cache.DomainCacheEntry,
@@ -274,7 +282,7 @@ func (r *nDCHistoryReplicatorImpl) applyStartEvents(
 	stateBuilder := r.newStateBuilder(mutableState, task.getLogger())
 
 	// use state builder for workflow mutable state mutation
-	_, _, _, err = stateBuilder.applyEvents(
+	_, err = stateBuilder.applyEvents(
 		task.getDomainID(),
 		requestID,
 		*task.getExecution(),
@@ -354,7 +362,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 
 	requestID := uuid.New() // requestID used for start workflow execution request.  This is not on the history event.
 	stateBuilder := r.newStateBuilder(mutableState, task.getLogger())
-	_, _, newMutableState, err := stateBuilder.applyEvents(
+	newMutableState, err := stateBuilder.applyEvents(
 		task.getDomainID(),
 		requestID,
 		*task.getExecution(),
@@ -523,7 +531,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsResetWorkflow(
 
 	requestID := uuid.New() // requestID used for start workflow execution request.  This is not on the history event.
 	stateBuilder := r.newStateBuilder(mutableState, task.getLogger())
-	_, _, _, err := stateBuilder.applyEvents(
+	_, err := stateBuilder.applyEvents(
 		task.getDomainID(),
 		requestID,
 		*task.getExecution(),

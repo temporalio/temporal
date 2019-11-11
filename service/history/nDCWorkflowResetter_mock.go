@@ -59,16 +59,16 @@ func (m *MocknDCWorkflowResetter) EXPECT() *MocknDCWorkflowResetterMockRecorder 
 }
 
 // resetWorkflow mocks base method
-func (m *MocknDCWorkflowResetter) resetWorkflow(ctx context.Context, now time.Time, baseEventID, baseVersion, incomingFirstEventID, incomingVersion int64) (mutableState, error) {
+func (m *MocknDCWorkflowResetter) resetWorkflow(ctx context.Context, now time.Time, baseLastEventID, baseLastEventVersion, incomingFirstEventID, incomingFirstEventVersion int64) (mutableState, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "resetWorkflow", ctx, now, baseEventID, baseVersion, incomingFirstEventID, incomingVersion)
+	ret := m.ctrl.Call(m, "resetWorkflow", ctx, now, baseLastEventID, baseLastEventVersion, incomingFirstEventID, incomingFirstEventVersion)
 	ret0, _ := ret[0].(mutableState)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // resetWorkflow indicates an expected call of resetWorkflow
-func (mr *MocknDCWorkflowResetterMockRecorder) resetWorkflow(ctx, now, baseEventID, baseVersion, incomingFirstEventID, incomingFirstEventVersion interface{}) *gomock.Call {
+func (mr *MocknDCWorkflowResetterMockRecorder) resetWorkflow(ctx, now, baseLastEventID, baseLastEventVersion, incomingFirstEventID, incomingFirstEventVersion interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "resetWorkflow", reflect.TypeOf((*MocknDCWorkflowResetter)(nil).resetWorkflow), ctx, now, baseEventID, baseVersion, incomingFirstEventID, incomingFirstEventVersion)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "resetWorkflow", reflect.TypeOf((*MocknDCWorkflowResetter)(nil).resetWorkflow), ctx, now, baseLastEventID, baseLastEventVersion, incomingFirstEventID, incomingFirstEventVersion)
 }

@@ -21,11 +21,12 @@
 package host
 
 import (
+	"go.uber.org/yarpc"
+
 	"github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"
 	"github.com/temporalio/temporal/.gen/go/history/historyserviceclient"
 	"github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
 	"github.com/temporalio/temporal/common"
-	"go.uber.org/yarpc"
 )
 
 // AdminClient is the interface exposed by admin service client

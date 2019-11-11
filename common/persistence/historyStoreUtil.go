@@ -22,6 +22,7 @@ package persistence
 
 import (
 	"fmt"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 )
 

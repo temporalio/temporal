@@ -25,11 +25,12 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"go.uber.org/yarpc"
+
 	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
 	"github.com/temporalio/temporal/common"
-	"go.uber.org/yarpc"
 )
 
 var _ Client = (*clientImpl)(nil)
@@ -151,7 +152,7 @@ func (c *clientImpl) ListArchivedWorkflowExecutions(
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := c.createContext(ctx)
+	ctx, cancel := c.createLongPollContext(ctx)
 	defer cancel()
 	return client.ListArchivedWorkflowExecutions(ctx, request, opts...)
 }

@@ -24,10 +24,11 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/transport/tchannel"
+
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/log/tag"
 )
 
 // RPCFactory is an implementation of service.RPCFactory interface

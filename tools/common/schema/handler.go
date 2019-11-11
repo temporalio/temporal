@@ -27,14 +27,15 @@ import (
 )
 
 // VerifyCompatibleVersion ensures that the installed version is greater than or equal to the expected version.
-func VerifyCompatibleVersion(db DB, dirPath string, dbName string) error {
+func VerifyCompatibleVersion(
+	db DB,
+	dbName string,
+	expectedVersion string,
+) error {
+
 	version, err := db.ReadSchemaVersion()
 	if err != nil {
 		return fmt.Errorf("unable to read cassandra schema version keyspace/database: %s error: %v", dbName, err.Error())
-	}
-	expectedVersion, err := getExpectedVersion(dirPath)
-	if err != nil {
-		return fmt.Errorf("unable to read expected schema version: %v", err.Error())
 	}
 	// In most cases, the versions should match. However if after a schema upgrade there is a code
 	// rollback, the code version (expected version) would fall lower than the actual version in

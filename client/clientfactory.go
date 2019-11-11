@@ -23,6 +23,8 @@ package client
 import (
 	"time"
 
+	"go.uber.org/yarpc"
+
 	"github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"
 	"github.com/temporalio/temporal/.gen/go/history/historyserviceclient"
 	"github.com/temporalio/temporal/.gen/go/matching/matchingserviceclient"
@@ -36,7 +38,6 @@ import (
 	"github.com/temporalio/temporal/common/membership"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
-	"go.uber.org/yarpc"
 )
 
 const (

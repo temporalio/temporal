@@ -141,6 +141,11 @@ func WorkflowDecisionTimeoutSeconds(s int32) Tag {
 	return newInt32("wf-decision-timeout", s)
 }
 
+// QueryID returns tag for QueryID
+func QueryID(queryID string) Tag {
+	return newStringTag("query-id", queryID)
+}
+
 // domain related
 
 // WorkflowDomainID returns tag for WorkflowDomainID
@@ -716,6 +721,11 @@ func ArchivalArchiveFailReason(archiveFailReason string) Tag {
 // ArchivalDeleteHistoryFailReason returns tag for ArchivalDeleteHistoryFailReason
 func ArchivalDeleteHistoryFailReason(deleteHistoryFailReason string) Tag {
 	return newStringTag("archival-delete-history-fail-reason", deleteHistoryFailReason)
+}
+
+// ArchivalVisibilityQuery returns tag for the query for getting archived visibility record
+func ArchivalVisibilityQuery(query string) Tag {
+	return newStringTag("archival-visibility-query", query)
 }
 
 // The following logger tags are only used by internal archiver implemention.

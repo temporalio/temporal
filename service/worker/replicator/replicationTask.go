@@ -298,7 +298,9 @@ func (t *activityReplicationTask) Execute() error {
 	return t.historyClient.SyncActivity(ctx, t.req)
 }
 
-func (t *activityReplicationTask) HandleErr(err error) error {
+func (t *activityReplicationTask) HandleErr(
+	err error,
+) error {
 	if t.attempt < t.config.ReplicatorActivityBufferRetryCount() {
 		return err
 	}
@@ -342,7 +344,7 @@ func (t *activityReplicationTask) HandleErr(err error) error {
 			retryV2Err.EndEventId,
 			retryV2Err.EndEventVersion,
 		); resendErr != nil {
-			t.logger.Error("error resend history", tag.Error(err))
+			t.logger.Error("error resend history", tag.Error(resendErr))
 			// should return the replication error, not the resending error
 			return err
 		}
@@ -360,7 +362,9 @@ func (t *historyReplicationTask) Execute() error {
 	return t.historyClient.ReplicateEvents(ctx, t.req)
 }
 
-func (t *historyReplicationTask) HandleErr(err error) error {
+func (t *historyReplicationTask) HandleErr(
+	err error,
+) error {
 	if t.attempt < t.config.ReplicatorHistoryBufferRetryCount() {
 		return err
 	}
@@ -404,7 +408,9 @@ func (t *historyMetadataReplicationTask) Execute() error {
 	)
 }
 
-func (t *historyMetadataReplicationTask) HandleErr(err error) error {
+func (t *historyMetadataReplicationTask) HandleErr(
+	err error,
+) error {
 	retryErr, ok := t.convertRetryTaskError(err)
 	if !ok || retryErr.GetRunId() == "" {
 		return err

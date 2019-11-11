@@ -178,6 +178,10 @@ func startBatchWorkflow(ctx context.Context, domain, startTime string) error {
 		ExecutionStartToCloseTimeout:    childWorkflowTimeout,
 		DecisionTaskStartToCloseTimeout: decisionTaskTimeout,
 		TaskList:                        systemBatcherTaskListName,
+		SearchAttributes: map[string]interface{}{
+			"CustomDomain": domain,
+			"Operator":     "admin",
+		},
 	}
 
 	run, err := sdkClient.ExecuteWorkflow(ctx, options, sysBatchWFTypeName, params)

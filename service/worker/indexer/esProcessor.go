@@ -26,6 +26,8 @@ import (
 	"time"
 
 	"github.com/olivere/elastic"
+	"github.com/uber-go/tally"
+
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/collection"
 	es "github.com/temporalio/temporal/common/elasticsearch"
@@ -33,7 +35,6 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/messaging"
 	"github.com/temporalio/temporal/common/metrics"
-	"github.com/uber-go/tally"
 )
 
 type (

@@ -21,8 +21,9 @@
 package main
 
 import (
-	"github.com/temporalio/temporal/tools/cassandra"
 	"os"
+
+	"github.com/temporalio/temporal/tools/cassandra"
 )
 
 func main() {

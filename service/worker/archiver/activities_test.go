@@ -27,6 +27,11 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/zap"
+
+	"go.temporal.io/temporal/testsuite"
+	"go.temporal.io/temporal/worker"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	carchiver "github.com/temporalio/temporal/common/archiver"
@@ -36,9 +41,6 @@ import (
 	"github.com/temporalio/temporal/common/metrics"
 	mmocks "github.com/temporalio/temporal/common/metrics/mocks"
 	"github.com/temporalio/temporal/common/mocks"
-	"go.temporal.io/temporal/testsuite"
-	"go.temporal.io/temporal/worker"
-	"go.uber.org/zap"
 )
 
 const (

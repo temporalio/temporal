@@ -28,15 +28,18 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
+	"github.com/urfave/cli"
+
 	"github.com/temporalio/temporal/.gen/go/admin"
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/auth"
 	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/persistence"
 	cassp "github.com/temporalio/temporal/common/persistence/cassandra"
+	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/tools/cassandra"
-	"github.com/urfave/cli"
 )
 
 const maxEventID = 9999
@@ -262,16 +265,29 @@ func readOneRow(query *gocql.Query) (map[string]interface{}, error) {
 }
 
 func connectToCassandra(c *cli.Context) *gocql.Session {
-	host := getRequiredOption(c, FlagAddress)
-	if !c.IsSet(FlagPort) {
-		ErrorAndExit("port is required", nil)
+	host := getRequiredOption(c, FlagDBAddress)
+	if !c.IsSet(FlagDBPort) {
+		ErrorAndExit("cassandra port is required", nil)
 	}
-	port := c.Int(FlagPort)
-	user := c.String(FlagUsername)
-	pw := c.String(FlagPassword)
-	ksp := getRequiredOption(c, FlagKeyspace)
 
-	clusterCfg, err := cassandra.NewCassandraCluster(host, port, user, pw, ksp, 10)
+	cassandraConfig := &config.Cassandra{
+		Hosts:    host,
+		Port:     c.Int(FlagDBPort),
+		User:     c.String(FlagUsername),
+		Password: c.String(FlagPassword),
+		Keyspace: getRequiredOption(c, FlagKeyspace),
+	}
+	if c.Bool(FlagEnableTLS) {
+		cassandraConfig.TLS = &auth.TLS{
+			Enabled:                true,
+			CertFile:               c.String(FlagTLSCertPath),
+			KeyFile:                c.String(FlagTLSKeyPath),
+			CaFile:                 c.String(FlagTLSCaPath),
+			EnableHostVerification: c.Bool(FlagTLSEnableHostVerification),
+		}
+	}
+
+	clusterCfg, err := cassandra.NewCassandraCluster(cassandraConfig, 10)
 	clusterCfg.SerialConsistency = gocql.LocalSerial
 	clusterCfg.NumConns = 20
 	if err != nil {

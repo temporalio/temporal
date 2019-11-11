@@ -21,14 +21,8 @@
 package worker
 
 import (
-	"context"
-	"fmt"
-	"strings"
 	"sync/atomic"
 	"time"
-
-	cshared "go.temporal.io/temporal/.gen/go/shared"
-	cclient "go.temporal.io/temporal/client"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
@@ -40,7 +34,7 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
-	persistencefactory "github.com/temporalio/temporal/common/persistence/persistence-factory"
+	"github.com/temporalio/temporal/common/persistence/client"
 	"github.com/temporalio/temporal/common/service"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 	"github.com/temporalio/temporal/service/worker/archiver"
@@ -154,7 +148,7 @@ func (s *Service) Start() {
 
 	pConfig := s.params.PersistenceConfig
 	pConfig.SetMaxQPS(pConfig.DefaultStore, s.config.ReplicationCfg.PersistenceMaxQPS())
-	pFactory := persistencefactory.New(&pConfig, s.params.ClusterMetadata.GetCurrentClusterName(), s.metricsClient, s.logger)
+	pFactory := client.NewFactory(&pConfig, s.params.ClusterMetadata.GetCurrentClusterName(), s.metricsClient, s.logger)
 	s.ensureSystemDomainExists(pFactory, base.GetClusterMetadata().GetCurrentClusterName())
 	s.metricsClient = base.GetMetricsClient()
 
@@ -289,10 +283,10 @@ func (s *Service) startIndexer(base service.Service) {
 	}
 }
 
-func (s *Service) startArchiver(base service.Service, pFactory persistencefactory.Factory) {
+func (s *Service) startArchiver(base service.Service, pFactory client.Factory) {
 	publicClient := s.params.PublicClient
 
-	historyV2Manager, err := pFactory.NewHistoryV2Manager()
+	historyV2Manager, err := pFactory.NewHistoryManager()
 	if err != nil {
 		s.logger.Fatal("failed to start archiver, could not create HistoryManager", tag.Error(err))
 	}
@@ -332,47 +326,25 @@ func (s *Service) startArchiver(base service.Service, pFactory persistencefactor
 	}
 }
 
-func (s *Service) ensureSystemDomainExists(pFactory persistencefactory.Factory, clusterName string) {
+func (s *Service) ensureSystemDomainExists(pFactory client.Factory, clusterName string) {
 	metadataProxy, err := pFactory.NewMetadataManager()
 	if err != nil {
 		s.logger.Fatal("error creating metadataMgr proxy", tag.Error(err))
 	}
 	defer metadataProxy.Close()
 	_, err = metadataProxy.GetDomain(&persistence.GetDomainRequest{Name: common.SystemLocalDomainName})
-	if err == nil {
-		s.ensureDomainAvailable()
-	} else {
-		if _, ok := err.(*shared.EntityNotExistsError); ok {
-			s.logger.Info("cadence-system domain does not exist, attempting to register domain")
-			s.registerSystemDomain(pFactory, clusterName)
-		}
+	switch err.(type) {
+	case nil:
+		// noop
+	case *shared.EntityNotExistsError:
+		s.logger.Info("cadence-system domain does not exist, attempting to register domain")
+		s.registerSystemDomain(pFactory, clusterName)
+	default:
 		s.logger.Fatal("failed to verify if cadence system domain exists", tag.Error(err))
 	}
 }
 
-func (s *Service) ensureDomainAvailable() {
-	client := cclient.NewClient(s.params.PublicClient, common.SystemLocalDomainName, &cclient.Options{})
-	// Use TerminateWorkflow to check whether domain is refreshed in cache or not
-	err := client.TerminateWorkflow(context.Background(), "wid-not-exist", "", "test reason", nil)
-	retryCount := 0
-	for err != nil && retryCount <= 10 {
-		nonExistErr, ok := err.(*cshared.EntityNotExistsError)
-		if ok && isErrSystemDomainNotExist(nonExistErr) {
-			s.logger.Info(fmt.Sprintf("cadence-system domain is not ready, waiting %v for domain refresh", domainRefreshInterval), tag.Attempt(int32(retryCount)))
-			time.Sleep(domainRefreshInterval)
-			err = client.TerminateWorkflow(context.Background(), "wid-not-exist", "", "test reason", nil)
-			retryCount++
-		} else {
-			break
-		}
-	}
-}
-
-func isErrSystemDomainNotExist(err *cshared.EntityNotExistsError) bool {
-	return strings.Contains(err.Message, common.SystemLocalDomainName)
-}
-
-func (s *Service) registerSystemDomain(pFactory persistencefactory.Factory, clusterName string) {
+func (s *Service) registerSystemDomain(pFactory client.Factory, clusterName string) {
 	metadataV2, err := pFactory.NewMetadataManager()
 	if err != nil {
 		s.logger.Fatal("error creating metadataV2Mgr", tag.Error(err))
@@ -401,8 +373,4 @@ func (s *Service) registerSystemDomain(pFactory persistencefactory.Factory, clus
 		}
 		s.logger.Fatal("failed to register system domain", tag.Error(err))
 	}
-	// this is needed because frontend domainCache will take about 10s to load the
-	// domain after its created first time. Archiver/Scanner cannot start their cadence
-	// workers until this refresh happens
-	time.Sleep(domainRefreshInterval)
 }

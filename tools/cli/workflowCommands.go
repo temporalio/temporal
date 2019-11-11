@@ -38,15 +38,17 @@ import (
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/pborman/uuid"
+	"github.com/urfave/cli"
+	"github.com/valyala/fastjson"
+
+	s "go.temporal.io/temporal/.gen/go/shared"
+	"go.temporal.io/temporal/client"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/service/history"
-	"github.com/urfave/cli"
-	"github.com/valyala/fastjson"
-	s "go.temporal.io/temporal/.gen/go/shared"
-	"go.temporal.io/temporal/client"
 )
 
 // ShowHistory shows the history of given workflow execution based on workflowID and runID.
@@ -515,6 +517,18 @@ func queryWorkflowHelper(c *cli.Context, queryType string) {
 		}
 		queryRequest.QueryRejectCondition = &rejectCondition
 	}
+	if c.IsSet(FlagQueryConsistencyLevel) {
+		var consistencyLevel s.QueryConsistencyLevel
+		switch c.String(FlagQueryConsistencyLevel) {
+		case "eventual":
+			consistencyLevel = s.QueryConsistencyLevelEventual
+		case "strong":
+			consistencyLevel = s.QueryConsistencyLevelStrong
+		default:
+			ErrorAndExit(fmt.Sprintf("invalid query consistency level %v, valid values are \"eventual\" and \"strong\"", c.String(FlagQueryConsistencyLevel)), nil)
+		}
+		queryRequest.QueryConsistencyLevel = &consistencyLevel
+	}
 	queryResponse, err := serviceClient.QueryWorkflow(tcCtx, queryRequest)
 	if err != nil {
 		ErrorAndExit("Query workflow failed.", err)
@@ -849,6 +863,7 @@ type workflowExecutionInfo struct {
 	HistoryLength    *int64
 	ParentDomainID   *string
 	ParentExecution  *shared.WorkflowExecution
+	Memo             *shared.Memo
 	SearchAttributes map[string]interface{}
 	AutoResetPoints  *shared.ResetPoints
 }
@@ -883,6 +898,7 @@ func convertDescribeWorkflowExecutionResponse(resp *shared.DescribeWorkflowExecu
 		HistoryLength:    info.HistoryLength,
 		ParentDomainID:   info.ParentDomainId,
 		ParentExecution:  info.ParentExecution,
+		Memo:             info.Memo,
 		SearchAttributes: convertSearchAttributesToMapOfInterface(info.SearchAttributes, wfClient, c),
 		AutoResetPoints:  info.AutoResetPoints,
 	}

@@ -25,13 +25,14 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/uber/ringpop-go"
 	"github.com/uber/ringpop-go/events"
 	"github.com/uber/ringpop-go/hashring"
 	"github.com/uber/ringpop-go/swim"
+
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/log/tag"
 )
 
 const (

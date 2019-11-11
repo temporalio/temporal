@@ -26,12 +26,13 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/temporalio/temporal/common/metrics"
 	"github.com/uber-go/tally"
 
 	"github.com/stretchr/testify/suite"
+
 	"github.com/temporalio/temporal/common/collection"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
+	"github.com/temporalio/temporal/common/metrics"
 )
 
 type (

@@ -34,6 +34,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/valyala/fastjson"
+
 	"github.com/temporalio/temporal/.gen/go/indexer"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
@@ -45,7 +47,6 @@ import (
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
-	"github.com/valyala/fastjson"
 )
 
 type ESVisibilitySuite struct {

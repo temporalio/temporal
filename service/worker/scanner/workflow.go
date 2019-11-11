@@ -24,13 +24,14 @@ import (
 	"context"
 	"time"
 
-	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/service/worker/scanner/history"
-	"github.com/temporalio/temporal/service/worker/scanner/tasklist"
 	"go.temporal.io/temporal"
 	"go.temporal.io/temporal/activity"
 	cclient "go.temporal.io/temporal/client"
 	"go.temporal.io/temporal/workflow"
+
+	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/service/worker/scanner/history"
+	"github.com/temporalio/temporal/service/worker/scanner/tasklist"
 )
 
 type (
@@ -82,6 +83,7 @@ var (
 		TaskList:                     historyScannerTaskListName,
 		ExecutionStartToCloseTimeout: infiniteDuration,
 		WorkflowIDReusePolicy:        cclient.WorkflowIDReusePolicyAllowDuplicate,
+		CronSchedule:                 "0 */12 * * *",
 	}
 )
 

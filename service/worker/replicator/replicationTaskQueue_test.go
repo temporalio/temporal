@@ -27,6 +27,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/suite"
+
 	"github.com/temporalio/temporal/common/definition"
 )
 

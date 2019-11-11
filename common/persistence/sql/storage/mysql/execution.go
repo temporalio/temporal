@@ -111,6 +111,13 @@ ORDER BY task_id LIMIT ?`
 
 	deleteReplicationTaskQry = `DELETE FROM replication_tasks WHERE shard_id = ? AND task_id = ?`
 
+	getReplicationTasksDLQQry = `SELECT task_id, data, data_encoding FROM replication_tasks_dlq WHERE 
+source_cluster_name = ? AND
+shard_id = ? AND
+task_id > ? AND
+task_id <= ?
+ORDER BY task_id LIMIT ?`
+
 	bufferedEventsColumns    = `shard_id, domain_id, workflow_id, run_id, data, data_encoding`
 	createBufferedEventsQury = `INSERT INTO buffered_events(` + bufferedEventsColumns + `)
 VALUES (:shard_id, :domain_id, :workflow_id, :run_id, :data, :data_encoding)`
@@ -118,6 +125,20 @@ VALUES (:shard_id, :domain_id, :workflow_id, :run_id, :data, :data_encoding)`
 	deleteBufferedEventsQury = `DELETE FROM buffered_events WHERE shard_id=? AND domain_id=? AND workflow_id=? AND run_id=?`
 	getBufferedEventsQury    = `SELECT data, data_encoding FROM buffered_events WHERE
 shard_id=? AND domain_id=? AND workflow_id=? AND run_id=?`
+
+	insertReplicationTaskDLQQry = `
+INSERT INTO replication_tasks_dlq 
+            (source_cluster_name, 
+             shard_id, 
+             task_id, 
+             data, 
+             data_encoding) 
+VALUES     (:source_cluster_name, 
+            :shard_id, 
+            :task_id, 
+            :data, 
+            :data_encoding)
+`
 )
 
 // InsertIntoExecutions inserts a row into executions table
@@ -285,11 +306,29 @@ func (mdb *DB) InsertIntoReplicationTasks(rows []sqldb.ReplicationTasksRow) (sql
 // SelectFromReplicationTasks reads one or more rows from replication_tasks table
 func (mdb *DB) SelectFromReplicationTasks(filter *sqldb.ReplicationTasksFilter) ([]sqldb.ReplicationTasksRow, error) {
 	var rows []sqldb.ReplicationTasksRow
-	err := mdb.conn.Select(&rows, getReplicationTasksQry, filter.ShardID, *filter.MinTaskID, *filter.MaxTaskID, *filter.PageSize)
+	err := mdb.conn.Select(&rows, getReplicationTasksQry, filter.ShardID, filter.MinTaskID, filter.MaxTaskID, filter.PageSize)
 	return rows, err
 }
 
 // DeleteFromReplicationTasks deletes one or more rows from replication_tasks table
-func (mdb *DB) DeleteFromReplicationTasks(filter *sqldb.ReplicationTasksFilter) (sql.Result, error) {
-	return mdb.conn.Exec(deleteReplicationTaskQry, filter.ShardID, *filter.TaskID)
+func (mdb *DB) DeleteFromReplicationTasks(shardID, taskID int) (sql.Result, error) {
+	return mdb.conn.Exec(deleteReplicationTaskQry, shardID, taskID)
+}
+
+// InsertIntoReplicationTasksDLQ inserts one or more rows into replication_tasks_dlq table
+func (mdb *DB) InsertIntoReplicationTasksDLQ(row *sqldb.ReplicationTaskDLQRow) (sql.Result, error) {
+	return mdb.conn.NamedExec(insertReplicationTaskDLQQry, row)
+}
+
+// SelectFromReplicationTasksDLQ reads one or more rows from replication_tasks_dlq table
+func (mdb *DB) SelectFromReplicationTasksDLQ(filter *sqldb.ReplicationTasksDLQFilter) ([]sqldb.ReplicationTasksRow, error) {
+	var rows []sqldb.ReplicationTasksRow
+	err := mdb.conn.Select(
+		&rows, getReplicationTasksDLQQry,
+		filter.SourceClusterName,
+		filter.ShardID,
+		filter.MinTaskID,
+		filter.MaxTaskID,
+		filter.PageSize)
+	return rows, err
 }

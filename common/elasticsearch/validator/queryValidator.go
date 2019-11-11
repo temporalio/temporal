@@ -25,11 +25,12 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/xwb1989/sqlparser"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
-	"github.com/xwb1989/sqlparser"
 )
 
 // VisibilityQueryValidator for sql query validation

@@ -29,13 +29,15 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/metrics"
-	mmocks "github.com/temporalio/temporal/common/metrics/mocks"
+
 	"go.temporal.io/temporal"
 	"go.temporal.io/temporal/.gen/go/shared"
 	"go.temporal.io/temporal/testsuite"
 	"go.temporal.io/temporal/workflow"
+
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/metrics"
+	mmocks "github.com/temporalio/temporal/common/metrics/mocks"
 )
 
 var (

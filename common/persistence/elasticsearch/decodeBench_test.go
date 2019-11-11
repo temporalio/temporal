@@ -23,12 +23,13 @@ package elasticsearch
 import (
 	"bytes"
 	"encoding/json"
+	"testing"
+	"time"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
 	p "github.com/temporalio/temporal/common/persistence"
-	"testing"
-	"time"
 )
 
 var (

@@ -25,9 +25,11 @@ import (
 	"os"
 	"strings"
 
+	"github.com/urfave/cli"
+
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/tools/cassandra"
-	"github.com/urfave/cli"
+	"github.com/temporalio/temporal/tools/sql"
 )
 
 // validServices is the list of all valid cadence services
@@ -59,13 +61,13 @@ func startHandler(c *cli.Context) {
 	if err := cfg.Validate(); err != nil {
 		log.Fatalf("config validation failed: %v", err)
 	}
-
-	dir, err := os.Getwd()
-	if err != nil {
-		log.Fatal("Unable to get current directory")
+	// cassandra schema version validation
+	if err := cassandra.VerifyCompatibleVersion(cfg.Persistence); err != nil {
+		log.Fatal("Incompatible cassandra versions: ", err)
 	}
-	if err := cassandra.VerifyCompatibleVersion(cfg.Persistence, dir); err != nil {
-		log.Fatal("Incompatible versions: ", err)
+	// sql schema version validation
+	if err := sql.VerifyCompatibleVersion(cfg.Persistence); err != nil {
+		log.Fatal("Incompatible sql versions: ", err)
 	}
 
 	services := getServices(c)

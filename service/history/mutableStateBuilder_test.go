@@ -251,22 +251,22 @@ func (s *mutableStateSuite) TestReorderEvents() {
 	activityResult := []byte("activity_result")
 
 	info := &persistence.WorkflowExecutionInfo{
-		DomainID:             domainID,
-		WorkflowID:           we.GetWorkflowId(),
-		RunID:                we.GetRunId(),
-		TaskList:             tl,
-		WorkflowTypeName:     "wType",
-		WorkflowTimeout:      200,
-		DecisionTimeoutValue: 100,
-		State:                persistence.WorkflowStateRunning,
-		CloseStatus:          persistence.WorkflowCloseStatusNone,
-		NextEventID:          int64(8),
-		LastProcessedEvent:   int64(3),
-		LastUpdatedTimestamp: time.Now(),
-		DecisionVersion:      common.EmptyVersion,
-		DecisionScheduleID:   common.EmptyEventID,
-		DecisionStartedID:    common.EmptyEventID,
-		DecisionTimeout:      100,
+		DomainID:                    domainID,
+		WorkflowID:                  we.GetWorkflowId(),
+		RunID:                       we.GetRunId(),
+		TaskList:                    tl,
+		WorkflowTypeName:            "wType",
+		WorkflowTimeout:             200,
+		DecisionStartToCloseTimeout: 100,
+		State:                       persistence.WorkflowStateRunning,
+		CloseStatus:                 persistence.WorkflowCloseStatusNone,
+		NextEventID:                 int64(8),
+		LastProcessedEvent:          int64(3),
+		LastUpdatedTimestamp:        time.Now(),
+		DecisionVersion:             common.EmptyVersion,
+		DecisionScheduleID:          common.EmptyEventID,
+		DecisionStartedID:           common.EmptyEventID,
+		DecisionTimeout:             100,
 	}
 
 	activityInfos := map[int64]*persistence.ActivityInfo{

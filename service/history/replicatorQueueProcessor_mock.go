@@ -26,9 +26,11 @@ package history
 
 import (
 	"context"
-	gomock "github.com/golang/mock/gomock"
-	replicator "github.com/temporalio/temporal/.gen/go/replicator"
 	reflect "reflect"
+
+	gomock "github.com/golang/mock/gomock"
+
+	replicator "github.com/temporalio/temporal/.gen/go/replicator"
 )
 
 // MockReplicatorQueueProcessor is a mock of ReplicatorQueueProcessor interface

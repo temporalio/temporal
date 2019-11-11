@@ -30,6 +30,7 @@ import (
 	"github.com/temporalio/temporal/common/persistence"
 
 	"github.com/stretchr/testify/suite"
+
 	"github.com/temporalio/temporal/common/mocks"
 )
 

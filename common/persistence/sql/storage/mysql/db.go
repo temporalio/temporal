@@ -22,6 +22,7 @@ package mysql
 
 import (
 	"github.com/jmoiron/sqlx"
+
 	"github.com/temporalio/temporal/common/persistence/sql/storage/sqldb"
 )
 

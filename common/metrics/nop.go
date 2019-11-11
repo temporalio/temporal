@@ -21,8 +21,9 @@
 package metrics
 
 import (
-	"github.com/uber-go/tally"
 	"time"
+
+	"github.com/uber-go/tally"
 )
 
 type nopStopwatchRecorder struct{}
