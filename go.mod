@@ -22,7 +22,7 @@ require (
 	github.com/go-sql-driver/mysql v1.4.1
 	github.com/gocql/gocql v0.0.0-20171220143535-56a164ee9f31
 	github.com/gogo/googleapis v1.2.0 // indirect
-	github.com/gogo/protobuf v1.3.1
+	github.com/gogo/protobuf v1.3.1 // indirect
 	github.com/gogo/status v1.1.0 // indirect
 	github.com/golang/mock v1.3.1
 	github.com/google/uuid v1.1.1
@@ -52,6 +52,7 @@ require (
 	github.com/robfig/cron v1.2.0
 	github.com/sirupsen/logrus v1.4.2
 	github.com/stretchr/testify v1.4.0
+	github.com/temporalio/temporal-proto v0.0.0
 	github.com/uber-common/bark v1.2.1 // indirect
 	github.com/uber-go/kafka-client v0.2.3-0.20191018205945-8b3555b395f9
 	github.com/uber-go/tally v3.3.12+incompatible
@@ -63,7 +64,6 @@ require (
 	go.temporal.io/temporal v0.9.4
 	go.uber.org/atomic v1.5.0
 	go.uber.org/config v1.3.1
-	go.uber.org/fx v1.9.0
 	go.uber.org/multierr v1.3.0
 	go.uber.org/net/metrics v1.2.0 // indirect
 	go.uber.org/thriftrw v1.20.2
@@ -84,3 +84,5 @@ require (
 )
 
 replace github.com/jmoiron/sqlx v1.2.0 => github.com/mfateev/sqlx v0.0.0-20180910213730-fa49b1cf03f7
+
+replace github.com/temporalio/temporal-proto => ./proto
