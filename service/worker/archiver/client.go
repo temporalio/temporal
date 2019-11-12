@@ -80,7 +80,7 @@ type (
 		VisibilityURI      string
 
 		// archival targets: history and/or visibility
-		Targets []archivalTarget
+		Targets []ArchivalTarget
 	}
 
 	// Client is used to archive workflow histories
@@ -97,7 +97,8 @@ type (
 		archiverProvider provider.ArchiverProvider
 	}
 
-	archivalTarget int
+	// ArchivalTarget is either history or visibility
+	ArchivalTarget int
 )
 
 const (
@@ -108,7 +109,7 @@ const (
 
 const (
 	// ArchiveTargetHistory is the archive target for workflow history
-	ArchiveTargetHistory archivalTarget = iota
+	ArchiveTargetHistory ArchivalTarget = iota
 	// ArchiveTargetVisibility is the archive target for workflow visibility record
 	ArchiveTargetVisibility
 )
@@ -168,7 +169,7 @@ func (c *client) Archive(ctx context.Context, request *ClientRequest) (*ClientRe
 			}
 		}
 
-		targets := []archivalTarget{}
+		targets := []ArchivalTarget{}
 		for i, target := range request.ArchiveRequest.Targets {
 			if <-results[i] != nil {
 				targets = append(targets, target)

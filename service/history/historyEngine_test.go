@@ -110,7 +110,11 @@ var testLocalDomainEntry = cache.NewLocalDomainCacheEntryForTest(
 
 var testGlobalDomainEntry = cache.NewGlobalDomainCacheEntryForTest(
 	&persistence.DomainInfo{ID: testDomainID, Name: testDomainName},
-	&p.DomainConfig{Retention: 1},
+	&p.DomainConfig{
+		Retention:                1,
+		VisibilityArchivalStatus: workflow.ArchivalStatusEnabled,
+		VisibilityArchivalURI:    "test:///visibility/archival",
+	},
 	&persistence.DomainReplicationConfig{
 		ActiveClusterName: cluster.TestCurrentClusterName,
 		Clusters: []*persistence.ClusterReplicationConfig{

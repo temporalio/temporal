@@ -110,6 +110,8 @@ func newTransferQueueStandbyProcessor(
 		metricsClient:      historyService.metricsClient,
 		transferQueueProcessorBase: newTransferQueueProcessorBase(
 			shard,
+			config,
+			historyService,
 			options,
 			visibilityMgr,
 			matchingClient,

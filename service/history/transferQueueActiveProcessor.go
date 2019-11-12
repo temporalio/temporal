@@ -128,6 +128,8 @@ func newTransferQueueActiveProcessor(
 		transferTaskFilter: transferTaskFilter,
 		transferQueueProcessorBase: newTransferQueueProcessorBase(
 			shard,
+			config,
+			historyService,
 			options,
 			visibilityMgr,
 			matchingClient,
@@ -219,8 +221,16 @@ func newTransferQueueFailoverProcessor(
 		cache:              historyService.historyCache,
 		transferTaskFilter: transferTaskFilter,
 		transferQueueProcessorBase: newTransferQueueProcessorBase(
-			shard, options, visibilityMgr, matchingClient,
-			maxReadAckLevel, updateTransferAckLevel, transferQueueShutdown, logger,
+			shard,
+			config,
+			historyService,
+			options,
+			visibilityMgr,
+			matchingClient,
+			maxReadAckLevel,
+			updateTransferAckLevel,
+			transferQueueShutdown,
+			logger,
 		),
 	}
 

@@ -430,14 +430,10 @@ func (t *timerQueueProcessorBase) processDeleteHistoryEvent(
 	domainConfiguredForHistoryArchival := domainCacheEntry.GetConfig().HistoryArchivalStatus == workflow.ArchivalStatusEnabled
 	archiveHistory := clusterConfiguredForHistoryArchival && domainConfiguredForHistoryArchival
 
-	clusterConfiguredForVisibilityArchival := t.shard.GetService().GetArchivalMetadata().GetVisibilityConfig().ClusterConfiguredForArchival()
-	domainConfiguredForVisibilityArchival := domainCacheEntry.GetConfig().VisibilityArchivalStatus == workflow.ArchivalStatusEnabled
-	archiveVisibility := clusterConfiguredForVisibilityArchival && domainConfiguredForVisibilityArchival
-
 	// TODO: @ycyang once archival backfill is in place cluster:paused && domain:enabled should be a nop rather than a delete
-	if archiveHistory || archiveVisibility {
+	if archiveHistory {
 		t.metricsClient.IncCounter(metrics.HistoryProcessDeleteHistoryEventScope, metrics.WorkflowCleanupArchiveCount)
-		return t.archiveWorkflow(task, context, mutableState, domainCacheEntry, archiveHistory, archiveVisibility)
+		return t.archiveWorkflow(task, context, mutableState, domainCacheEntry)
 	}
 
 	t.metricsClient.IncCounter(metrics.HistoryProcessDeleteHistoryEventScope, metrics.WorkflowCleanupDeleteCount)
@@ -476,59 +472,35 @@ func (t *timerQueueProcessorBase) archiveWorkflow(
 	workflowContext workflowExecutionContext,
 	msBuilder mutableState,
 	domainCacheEntry *cache.DomainCacheEntry,
-	archiveHistory bool,
-	archiveVisibility bool,
 ) error {
-	req := &archiver.ClientRequest{
-		ArchiveRequest: &archiver.ArchiveRequest{
-			DomainID:   task.DomainID,
-			WorkflowID: task.WorkflowID,
-			RunID:      task.RunID,
-			DomainName: domainCacheEntry.GetInfo().Name,
-		},
-		CallerService:        common.HistoryServiceName,
-		AttemptArchiveInline: true, // archive inline by default
+	branchToken, err := msBuilder.GetCurrentBranchToken()
+	if err != nil {
+		return err
 	}
-	if archiveHistory {
-		executionStats, err := workflowContext.loadExecutionStats()
-		if err != nil {
-			return err
-		}
-		req.AttemptArchiveInline = executionStats.HistorySize < int64(t.config.TimerProcessorHistoryArchivalSizeLimit())
-		req.ArchiveRequest.ShardID = t.shard.GetShardID()
-		req.ArchiveRequest.BranchToken, err = msBuilder.GetCurrentBranchToken()
-		if err != nil {
-			return err
-		}
-		req.ArchiveRequest.NextEventID = msBuilder.GetNextEventID()
-		req.ArchiveRequest.CloseFailoverVersion, err = msBuilder.GetLastWriteVersion()
-		if err != nil {
-			return err
-		}
-		req.ArchiveRequest.URI = domainCacheEntry.GetConfig().HistoryArchivalURI
-		req.ArchiveRequest.Targets = append(req.ArchiveRequest.Targets, archiver.ArchiveTargetHistory)
+	closeFailoverVersion, err := msBuilder.GetLastWriteVersion()
+	if err != nil {
+		return err
 	}
 
-	if archiveVisibility {
-		executionInfo := msBuilder.GetExecutionInfo()
-		startEvent, err := msBuilder.GetStartEvent()
-		if err != nil {
-			return err
-		}
-		completionEvent, err := msBuilder.GetCompletionEvent()
-		if err != nil {
-			return err
-		}
-		req.ArchiveRequest.WorkflowTypeName = executionInfo.WorkflowTypeName
-		req.ArchiveRequest.StartTimestamp = executionInfo.StartTimestamp.UnixNano()
-		req.ArchiveRequest.ExecutionTimestamp = getWorkflowExecutionTimestamp(msBuilder, startEvent).UnixNano()
-		req.ArchiveRequest.CloseTimestamp = completionEvent.GetTimestamp()
-		req.ArchiveRequest.CloseStatus = persistence.ToThriftWorkflowExecutionCloseStatus(executionInfo.CloseStatus)
-		req.ArchiveRequest.HistoryLength = msBuilder.GetNextEventID() - 1
-		req.ArchiveRequest.VisibilityURI = domainCacheEntry.GetConfig().VisibilityArchivalURI
-		req.ArchiveRequest.Memo = getWorkflowMemo(executionInfo.Memo)
-		req.ArchiveRequest.SearchAttributes = executionInfo.SearchAttributes
-		req.ArchiveRequest.Targets = append(req.ArchiveRequest.Targets, archiver.ArchiveTargetVisibility)
+	req := &archiver.ClientRequest{
+		ArchiveRequest: &archiver.ArchiveRequest{
+			DomainID:             task.DomainID,
+			WorkflowID:           task.WorkflowID,
+			RunID:                task.RunID,
+			DomainName:           domainCacheEntry.GetInfo().Name,
+			ShardID:              t.shard.GetShardID(),
+			Targets:              []archiver.ArchivalTarget{archiver.ArchiveTargetHistory},
+			URI:                  domainCacheEntry.GetConfig().HistoryArchivalURI,
+			NextEventID:          msBuilder.GetNextEventID(),
+			BranchToken:          branchToken,
+			CloseFailoverVersion: closeFailoverVersion,
+		},
+		CallerService:        common.HistoryServiceName,
+		AttemptArchiveInline: false, // archive in workflow by default
+	}
+	executionStats, err := workflowContext.loadExecutionStats()
+	if err == nil && executionStats.HistorySize < int64(t.config.TimerProcessorHistoryArchivalSizeLimit()) {
+		req.AttemptArchiveInline = true
 	}
 
 	ctx, cancel := ctx.WithTimeout(ctx.Background(), t.config.TimerProcessorArchivalTimeLimit())
@@ -545,10 +517,8 @@ func (t *timerQueueProcessorBase) archiveWorkflow(
 		return err
 	}
 	// delete workflow history if history archival is not needed or history as been archived inline
-	if !archiveHistory || resp.HistoryArchivedInline {
-		if archiveHistory {
-			t.metricsClient.IncCounter(metrics.HistoryProcessDeleteHistoryEventScope, metrics.WorkflowCleanupDeleteHistoryInlineCount)
-		}
+	if resp.HistoryArchivedInline {
+		t.metricsClient.IncCounter(metrics.HistoryProcessDeleteHistoryEventScope, metrics.WorkflowCleanupDeleteHistoryInlineCount)
 		if err := t.deleteWorkflowHistory(task, msBuilder); err != nil {
 			return err
 		}
