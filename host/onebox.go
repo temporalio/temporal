@@ -45,6 +45,7 @@ import (
 	carchiver "github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
 	"github.com/temporalio/temporal/common/cache"
+	cc "github.com/temporalio/temporal/common/client"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/elasticsearch"
 	"github.com/temporalio/temporal/common/log"
@@ -944,7 +945,7 @@ type versionMiddleware struct {
 }
 
 func (vm *versionMiddleware) Handle(ctx context.Context, req *transport.Request, resw transport.ResponseWriter, h transport.UnaryHandler) error {
-	req.Headers = req.Headers.With(common.LibraryVersionHeaderName, "1.0.0").With(common.FeatureVersionHeaderName, "1.0.0").With(common.ClientImplHeaderName, "uber-go")
+	req.Headers = req.Headers.With(common.LibraryVersionHeaderName, "1.0.0").With(common.FeatureVersionHeaderName, cc.GoWorkerConsistentQueryVersion).With(common.ClientImplHeaderName, cc.GoSDK)
 	return h.Handle(ctx, req, resw)
 }
 
