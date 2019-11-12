@@ -133,18 +133,6 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 			runID,
 			historyBatch.rawEventBatch,
 			historyBatch.versionHistory.GetItems())
-		// This is the last batch and handle continue as new case
-		if !historyIterator.HasNext() {
-			newRunHistory, err := n.handleContinueAsNew(
-				domainID,
-				workflowID,
-				historyBatch.rawEventBatch,
-			)
-			if err != nil {
-				return err
-			}
-			replicationRequest.NewRunEvents = newRunHistory
-		}
 
 		err = n.sendReplicationRawRequest(replicationRequest)
 		if err != nil {
@@ -270,60 +258,4 @@ func (n *NDCHistoryResenderImpl) getHistory(
 	}
 
 	return response, nil
-}
-
-func (n *NDCHistoryResenderImpl) getLastEvent(blob *shared.DataBlob) (*shared.HistoryEvent, error) {
-
-	historyEvents, err := n.deserializeBlob(blob)
-	if err != nil {
-		return nil, err
-	}
-
-	return historyEvents[len(historyEvents)-1], nil
-}
-
-func (n *NDCHistoryResenderImpl) deserializeBlob(blob *shared.DataBlob) ([]*shared.HistoryEvent, error) {
-
-	switch blob.GetEncodingType() {
-	case shared.EncodingTypeThriftRW:
-		return n.serializer.DeserializeBatchEvents(&persistence.DataBlob{
-			Encoding: common.EncodingTypeThriftRW,
-			Data:     blob.Data,
-		})
-	default:
-		return nil, ErrUnknownEncodingType
-	}
-}
-
-func (n *NDCHistoryResenderImpl) handleContinueAsNew(
-	domainID string,
-	workflowID string,
-	eventBatch *shared.DataBlob,
-) (*shared.DataBlob, error) {
-	lastEvent, err := n.getLastEvent(eventBatch)
-	if err != nil {
-		return nil, err
-	}
-	continueAsNewAttribute := lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
-	if continueAsNewAttribute != nil {
-		newRunID := continueAsNewAttribute.GetNewExecutionRunId()
-		resp, err := n.getHistory(
-			domainID,
-			workflowID,
-			newRunID,
-			common.Int64Ptr(common.FirstEventID-1),
-			common.Int64Ptr(lastEvent.GetVersion()),
-			nil,
-			nil,
-			nil,
-			continueAsNewPageSize)
-		if err != nil {
-			return nil, err
-		}
-		if len(resp.HistoryBatches) == 0 {
-			return nil, &shared.InternalServiceError{Message: "new run history size cannot be zero."}
-		}
-		return resp.HistoryBatches[0], nil
-	}
-	return nil, nil
 }
