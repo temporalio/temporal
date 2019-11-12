@@ -68,6 +68,7 @@ var keys = map[Key]string{
 	DisallowQuery:                       "system.disallowQuery",
 	EnableBatcher:                       "worker.enableBatcher",
 	EnableParentClosePolicyWorker:       "system.enableParentClosePolicyWorker",
+	EnablePollForMutableState:           "system.enablePollForMutableState",
 
 	// size limit
 	BlobSizeLimitError:     "limit.blobSize.error",
@@ -271,6 +272,8 @@ const (
 	MaxDecisionStartToCloseSeconds
 	// DisallowQuery is the key to disallow query for a domain
 	DisallowQuery
+	// EnablePollForMutableState is the key for enable API poll mutable state
+	EnablePollForMutableState
 
 	// BlobSizeLimitError is the per event blob size limit
 	BlobSizeLimitError

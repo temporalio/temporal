@@ -1785,30 +1785,61 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 	// 3. the next event ID
 	// 4. whether the workflow is closed
 	// 5. error if any
-	queryHistory := func(
+	var queryHistory func(
 		domainUUID string,
 		execution *gen.WorkflowExecution,
 		expectedNextEventID int64,
 		currentBranchToken []byte,
-	) ([]byte, string, int64, int64, bool, error) {
-		response, err := wh.history.PollMutableState(ctx, &h.PollMutableStateRequest{
-			DomainUUID:          common.StringPtr(domainUUID),
-			Execution:           execution,
-			ExpectedNextEventId: common.Int64Ptr(expectedNextEventID),
-			CurrentBranchToken:  currentBranchToken,
-		})
+	) ([]byte, string, int64, int64, bool, error)
 
-		if err != nil {
-			return nil, "", 0, 0, false, err
+	if wh.config.EnablePollForMutableState() {
+		queryHistory = func(
+			domainUUID string,
+			execution *gen.WorkflowExecution,
+			expectedNextEventID int64,
+			currentBranchToken []byte,
+		) ([]byte, string, int64, int64, bool, error) {
+
+			response, err := wh.history.PollMutableState(ctx, &h.PollMutableStateRequest{
+				DomainUUID:          common.StringPtr(domainUUID),
+				Execution:           execution,
+				ExpectedNextEventId: common.Int64Ptr(expectedNextEventID),
+				CurrentBranchToken:  currentBranchToken,
+			})
+			if err != nil {
+				return nil, "", 0, 0, false, err
+			}
+			isWorkflowRunning := response.GetWorkflowCloseState() == persistence.WorkflowCloseStatusNone
+			return response.CurrentBranchToken,
+				response.Execution.GetRunId(),
+				response.GetLastFirstEventId(),
+				response.GetNextEventId(),
+				isWorkflowRunning,
+				nil
 		}
-		isWorkflowRunning := response.GetWorkflowCloseState() == persistence.WorkflowCloseStatusNone
+	} else {
+		queryHistory = func(
+			domainUUID string,
+			execution *gen.WorkflowExecution,
+			expectedNextEventID int64,
+			currentBranchToken []byte,
+		) ([]byte, string, int64, int64, bool, error) {
+			response, err := wh.history.GetMutableState(ctx, &h.GetMutableStateRequest{
+				DomainUUID:          common.StringPtr(domainUUID),
+				Execution:           execution,
+				ExpectedNextEventId: common.Int64Ptr(expectedNextEventID),
+			})
+			if err != nil {
+				return nil, "", 0, 0, false, err
+			}
 
-		return response.CurrentBranchToken,
-			response.Execution.GetRunId(),
-			response.GetLastFirstEventId(),
-			response.GetNextEventId(),
-			isWorkflowRunning,
-			nil
+			return response.GetCurrentBranchToken(),
+				response.Execution.GetRunId(),
+				response.GetLastFirstEventId(),
+				response.GetNextEventId(),
+				response.GetIsWorkflowRunning(),
+				nil
+		}
 	}
 
 	isLongPoll := getRequest.GetWaitForNewEvent()
