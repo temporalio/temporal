@@ -276,9 +276,29 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 			}
 		}
 
-		newContext = newWorkflow.getContext()
-		newMutableState = newWorkflow.getMutableState()
-		newTransactionPolicy = transactionPolicyPassive.ptr()
+		// sanity check if new workflow is already created
+		// since workflow resend can have already created the new workflow
+		newExecutionInfo := newWorkflow.getMutableState().GetExecutionInfo()
+		newWorkflowExists, err := r.transactionMgr.checkWorkflowExists(
+			ctx,
+			newExecutionInfo.DomainID,
+			newExecutionInfo.WorkflowID,
+			newExecutionInfo.RunID,
+		)
+		if err != nil {
+			return err
+		}
+		if newWorkflowExists {
+			// new workflow already exists, do not create again
+			newContext = nil
+			newMutableState = nil
+			newTransactionPolicy = nil
+		} else {
+			// new workflow does not exists, continue
+			newContext = newWorkflow.getContext()
+			newMutableState = newWorkflow.getMutableState()
+			newTransactionPolicy = transactionPolicyPassive.ptr()
+		}
 	}
 
 	// release lock on current workflow, since current cluster maybe the active cluster
@@ -403,8 +423,28 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 				Message: "nDCTransactionMgrForExistingWorkflow conflictResolveAsZombie encounter new workflow policy not being passive",
 			}
 		}
-		newContext = newWorkflow.getContext()
-		newMutableState = newWorkflow.getMutableState()
+
+		// sanity check if new workflow is already created
+		// since workflow resend can have already created the new workflow
+		newExecutionInfo := newWorkflow.getMutableState().GetExecutionInfo()
+		newWorkflowExists, err := r.transactionMgr.checkWorkflowExists(
+			ctx,
+			newExecutionInfo.DomainID,
+			newExecutionInfo.WorkflowID,
+			newExecutionInfo.RunID,
+		)
+		if err != nil {
+			return err
+		}
+		if newWorkflowExists {
+			// new workflow already exists, do not create again
+			newContext = nil
+			newMutableState = nil
+		} else {
+			// new workflow does not exists, continue
+			newContext = newWorkflow.getContext()
+			newMutableState = newWorkflow.getMutableState()
+		}
 	}
 
 	// release lock on current workflow, since current cluster maybe the active cluster

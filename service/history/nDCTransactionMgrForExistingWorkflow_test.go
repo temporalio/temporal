@@ -302,13 +302,14 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	s.True(currentReleaseCalled)
 }
 
-func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow_NoRebuild_CurrentWorkflowNotGuaranteed_NotCurrent_UpdateAsZombie() {
+func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow_NoRebuild_CurrentWorkflowNotGuaranteed_NotCurrent_UpdateAsZombie_NewRunDoesNotExists() {
 	ctx := ctx.Background()
 	now := time.Now()
 
 	domainID := "some random domain ID"
 	workflowID := "some random workflow ID"
 	targetRunID := "some random run ID"
+	newRunID := "some random new run ID"
 	currentRunID := "other random runID"
 
 	isWorkflowRebuilt := false
@@ -343,8 +344,14 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 		WorkflowID: workflowID,
 		RunID:      targetRunID,
 	}).AnyTimes()
+	newMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
+		DomainID:   domainID,
+		WorkflowID: workflowID,
+		RunID:      newRunID,
+	}).AnyTimes()
 	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, domainID, workflowID).Return(currentRunID, nil).Times(1)
 	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, domainID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().checkWorkflowExists(ctx, domainID, workflowID, newRunID).Return(false, nil).Times(1)
 
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(false, nil)
 	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil).Times(1)
@@ -357,6 +364,77 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 		newMutableState,
 		transactionPolicyPassive,
 		transactionPolicyPassive.ptr(),
+	).Return(nil).Times(1)
+
+	err := s.updateMgr.dispatchForExistingWorkflow(ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow)
+	s.NoError(err)
+	s.True(targetReleaseCalled)
+	s.True(newReleaseCalled)
+	s.True(currentReleaseCalled)
+}
+
+func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow_NoRebuild_CurrentWorkflowNotGuaranteed_NotCurrent_UpdateAsZombie_NewRunDoesExists() {
+	ctx := ctx.Background()
+	now := time.Now()
+
+	domainID := "some random domain ID"
+	workflowID := "some random workflow ID"
+	targetRunID := "some random run ID"
+	newRunID := "some random new run ID"
+	currentRunID := "other random runID"
+
+	isWorkflowRebuilt := false
+
+	targetReleaseCalled := false
+	newReleaseCalled := false
+	currentReleaseCalled := false
+
+	targetWorkflow := NewMocknDCWorkflow(s.controller)
+	targetContext := NewMockworkflowExecutionContext(s.controller)
+	targetMutableState := NewMockmutableState(s.controller)
+	var targetReleaseFn releaseWorkflowExecutionFunc = func(error) { targetReleaseCalled = true }
+	targetWorkflow.EXPECT().getContext().Return(targetContext).AnyTimes()
+	targetWorkflow.EXPECT().getMutableState().Return(targetMutableState).AnyTimes()
+	targetWorkflow.EXPECT().getReleaseFn().Return(targetReleaseFn).AnyTimes()
+
+	newWorkflow := NewMocknDCWorkflow(s.controller)
+	newContext := NewMockworkflowExecutionContext(s.controller)
+	newMutableState := NewMockmutableState(s.controller)
+	var newReleaseFn releaseWorkflowExecutionFunc = func(error) { newReleaseCalled = true }
+	newWorkflow.EXPECT().getContext().Return(newContext).AnyTimes()
+	newWorkflow.EXPECT().getMutableState().Return(newMutableState).AnyTimes()
+	newWorkflow.EXPECT().getReleaseFn().Return(newReleaseFn).AnyTimes()
+
+	currentWorkflow := NewMocknDCWorkflow(s.controller)
+	var currentReleaseFn releaseWorkflowExecutionFunc = func(error) { currentReleaseCalled = true }
+	currentWorkflow.EXPECT().getReleaseFn().Return(currentReleaseFn).AnyTimes()
+
+	targetMutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
+	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
+		DomainID:   domainID,
+		WorkflowID: workflowID,
+		RunID:      targetRunID,
+	}).AnyTimes()
+	newMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
+		DomainID:   domainID,
+		WorkflowID: workflowID,
+		RunID:      newRunID,
+	}).AnyTimes()
+	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, domainID, workflowID).Return(currentRunID, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, domainID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().checkWorkflowExists(ctx, domainID, workflowID, newRunID).Return(true, nil).Times(1)
+
+	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(false, nil)
+	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil).Times(1)
+	newWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil).Times(1)
+
+	targetContext.EXPECT().updateWorkflowExecutionWithNew(
+		now,
+		persistence.UpdateWorkflowModeBypassCurrent,
+		(workflowExecutionContext)(nil),
+		(mutableState)(nil),
+		transactionPolicyPassive,
+		(*transactionPolicy)(nil),
 	).Return(nil).Times(1)
 
 	err := s.updateMgr.dispatchForExistingWorkflow(ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow)
@@ -493,13 +571,14 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	s.True(currentReleaseCalled)
 }
 
-func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow_Rebuild_NotCurrent_UpdateAsZombie() {
+func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow_Rebuild_NotCurrent_UpdateAsZombie_NewRunDoesNotExists() {
 	ctx := ctx.Background()
 	now := time.Now()
 
 	domainID := "some random domain ID"
 	workflowID := "some random workflow ID"
 	targetRunID := "some random run ID"
+	newRunID := "some random new run ID"
 	currentRunID := "other random runID"
 
 	isWorkflowRebuilt := true
@@ -533,8 +612,14 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 		WorkflowID: workflowID,
 		RunID:      targetRunID,
 	}).AnyTimes()
+	newMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
+		DomainID:   domainID,
+		WorkflowID: workflowID,
+		RunID:      newRunID,
+	}).AnyTimes()
 	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, domainID, workflowID).Return(currentRunID, nil).Times(1)
 	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, domainID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().checkWorkflowExists(ctx, domainID, workflowID, newRunID).Return(false, nil).Times(1)
 
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(false, nil)
 	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil).Times(1)
@@ -546,6 +631,79 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 		targetMutableState,
 		newContext,
 		newMutableState,
+		(workflowExecutionContext)(nil),
+		(mutableState)(nil),
+		(*transactionPolicy)(nil),
+		(*persistence.CurrentWorkflowCAS)(nil),
+	).Return(nil).Times(1)
+
+	err := s.updateMgr.dispatchForExistingWorkflow(ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow)
+	s.NoError(err)
+	s.True(targetReleaseCalled)
+	s.True(newReleaseCalled)
+	s.True(currentReleaseCalled)
+}
+
+func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow_Rebuild_NotCurrent_UpdateAsZombie_NewRunDoesExists() {
+	ctx := ctx.Background()
+	now := time.Now()
+
+	domainID := "some random domain ID"
+	workflowID := "some random workflow ID"
+	targetRunID := "some random run ID"
+	newRunID := "some random new run ID"
+	currentRunID := "other random runID"
+
+	isWorkflowRebuilt := true
+
+	targetReleaseCalled := false
+	newReleaseCalled := false
+	currentReleaseCalled := false
+
+	targetWorkflow := NewMocknDCWorkflow(s.controller)
+	targetContext := NewMockworkflowExecutionContext(s.controller)
+	targetMutableState := NewMockmutableState(s.controller)
+	var targetReleaseFn releaseWorkflowExecutionFunc = func(error) { targetReleaseCalled = true }
+	targetWorkflow.EXPECT().getContext().Return(targetContext).AnyTimes()
+	targetWorkflow.EXPECT().getMutableState().Return(targetMutableState).AnyTimes()
+	targetWorkflow.EXPECT().getReleaseFn().Return(targetReleaseFn).AnyTimes()
+
+	newWorkflow := NewMocknDCWorkflow(s.controller)
+	newContext := NewMockworkflowExecutionContext(s.controller)
+	newMutableState := NewMockmutableState(s.controller)
+	var newReleaseFn releaseWorkflowExecutionFunc = func(error) { newReleaseCalled = true }
+	newWorkflow.EXPECT().getContext().Return(newContext).AnyTimes()
+	newWorkflow.EXPECT().getMutableState().Return(newMutableState).AnyTimes()
+	newWorkflow.EXPECT().getReleaseFn().Return(newReleaseFn).AnyTimes()
+
+	currentWorkflow := NewMocknDCWorkflow(s.controller)
+	var currentReleaseFn releaseWorkflowExecutionFunc = func(error) { currentReleaseCalled = true }
+	currentWorkflow.EXPECT().getReleaseFn().Return(currentReleaseFn).AnyTimes()
+
+	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
+		DomainID:   domainID,
+		WorkflowID: workflowID,
+		RunID:      targetRunID,
+	}).AnyTimes()
+	newMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
+		DomainID:   domainID,
+		WorkflowID: workflowID,
+		RunID:      newRunID,
+	}).AnyTimes()
+	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, domainID, workflowID).Return(currentRunID, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, domainID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().checkWorkflowExists(ctx, domainID, workflowID, newRunID).Return(true, nil).Times(1)
+
+	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(false, nil)
+	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil).Times(1)
+	newWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil).Times(1)
+
+	targetContext.EXPECT().conflictResolveWorkflowExecution(
+		now,
+		persistence.ConflictResolveWorkflowModeBypassCurrent,
+		targetMutableState,
+		(workflowExecutionContext)(nil),
+		(mutableState)(nil),
 		(workflowExecutionContext)(nil),
 		(mutableState)(nil),
 		(*transactionPolicy)(nil),
