@@ -25,6 +25,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/uber/cadence/common/client"
+
 	"go.uber.org/yarpc"
 
 	h "github.com/uber/cadence/.gen/go/history"
@@ -66,6 +68,7 @@ type (
 		logger                log.Logger
 		throttledLogger       log.Logger
 		decisionAttrValidator *decisionAttrValidator
+		versionChecker        client.VersionChecker
 	}
 )
 
@@ -89,6 +92,7 @@ func newDecisionHandler(historyEngine *historyEngineImpl) *decisionHandlerImpl {
 			historyEngine.config,
 			historyEngine.logger,
 		),
+		versionChecker: client.NewVersionChecker(),
 	}
 }
 
@@ -546,26 +550,7 @@ Update_History_Loop:
 			return nil, updateErr
 		}
 
-		// at this point the update is successful, so answer all the queries which we have answers for
-		qr := msBuilder.GetQueryRegistry()
-		for id, result := range req.GetCompleteRequest().GetQueryResults() {
-			if err := qr.completeQuery(id, result); err != nil {
-				handler.logger.Error("failed to complete query", tag.QueryID(id), tag.Error(err))
-				handler.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.CompleteQueryFailedCount)
-			}
-		}
-
-		// if no decision task was created then it means no buffered events came in during this decision task's handling
-		// this means all buffered queries can be dispatched directly through matching at this point
-		if !createNewDecisionTask {
-			buffered := qr.getBufferedIDs()
-			for _, id := range buffered {
-				if err := qr.unblockQuery(id); err != nil {
-					handler.logger.Error("failed to unblock query", tag.QueryID(id), tag.Error(err))
-					handler.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.UnblockQueryFailedCount)
-				}
-			}
-		}
+		handler.handleBufferedQueries(msBuilder, clientImpl, clientFeatureVersion, req.GetCompleteRequest().GetQueryResults(), createNewDecisionTask)
 
 		if decisionHeartbeatTimeout {
 			// at this point, update is successful, but we still return an error to client so that the worker will give up this workflow
@@ -637,12 +622,68 @@ func (handler *decisionHandlerImpl) createRecordDecisionTaskStartedResponse(
 	buffered := qr.getBufferedIDs()
 	queries := make(map[string]*workflow.WorkflowQuery)
 	for _, id := range buffered {
-		state, err := qr.getQueryInternalState(id)
+		input, err := qr.getQueryInput(id)
 		if err != nil {
 			continue
 		}
-		queries[state.id] = state.queryInput
+		queries[id] = input
 	}
 	response.Queries = queries
 	return response, nil
+}
+
+func (handler *decisionHandlerImpl) handleBufferedQueries(
+	msBuilder mutableState,
+	clientImpl string,
+	clientFeatureVersion string,
+	queryResults map[string]*workflow.WorkflowQueryResult,
+	createNewDecisionTask bool,
+) {
+	queryRegistry := msBuilder.GetQueryRegistry()
+	if !queryRegistry.hasBufferedQuery() {
+		return
+	}
+
+	// Consistent query requires both server and client worker support. If a consistent query was requested (meaning there are
+	// buffered queries) but worker does not support consistent query then query should terminate with an error.
+	if versionErr := handler.versionChecker.SupportsConsistentQuery(clientImpl, clientFeatureVersion); versionErr != nil {
+		failedTerminationState := &queryTerminationState{
+			queryTerminationType: queryTerminationTypeFailed,
+			failure:              versionErr,
+		}
+		buffered := queryRegistry.getBufferedIDs()
+		for _, id := range buffered {
+			if err := queryRegistry.setTerminationState(id, failedTerminationState); err != nil {
+				handler.logger.Error("failed to fail query", tag.QueryID(id), tag.Error(err))
+				handler.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.FailQueryFailedCount)
+			}
+		}
+		return
+	}
+
+	// Complete all queries for which answers have been received.
+	for id, result := range queryResults {
+		completeTerminationState := &queryTerminationState{
+			queryTerminationType: queryTerminationTypeCompleted,
+			queryResult:          result,
+		}
+		if err := queryRegistry.setTerminationState(id, completeTerminationState); err != nil {
+			handler.logger.Error("failed to complete query", tag.QueryID(id), tag.Error(err))
+			handler.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.CompleteQueryFailedCount)
+		}
+	}
+	// If no decision task was created then it means no buffered events came in during this decision task's handling.
+	// This means all unanswered buffered queries can be dispatched directly through matching at this point.
+	if !createNewDecisionTask {
+		buffered := queryRegistry.getBufferedIDs()
+		for _, id := range buffered {
+			unblockTerminationState := &queryTerminationState{
+				queryTerminationType: queryTerminationTypeUnblocked,
+			}
+			if err := queryRegistry.setTerminationState(id, unblockTerminationState); err != nil {
+				handler.logger.Error("failed to unblock query", tag.QueryID(id), tag.Error(err))
+				handler.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.UnblockQueryFailedCount)
+			}
+		}
+	}
 }

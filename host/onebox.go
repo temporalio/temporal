@@ -45,6 +45,7 @@ import (
 	carchiver "github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/archiver/provider"
 	"github.com/uber/cadence/common/cache"
+	cc "github.com/uber/cadence/common/client"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/elasticsearch"
 	"github.com/uber/cadence/common/log"
@@ -854,7 +855,7 @@ type versionMiddleware struct {
 }
 
 func (vm *versionMiddleware) Handle(ctx context.Context, req *transport.Request, resw transport.ResponseWriter, h transport.UnaryHandler) error {
-	req.Headers = req.Headers.With(common.LibraryVersionHeaderName, "1.0.0").With(common.FeatureVersionHeaderName, "1.0.0").With(common.ClientImplHeaderName, "uber-go")
+	req.Headers = req.Headers.With(common.LibraryVersionHeaderName, "1.0.0").With(common.FeatureVersionHeaderName, cc.GoWorkerConsistentQueryVersion).With(common.ClientImplHeaderName, cc.GoSDK)
 	return h.Handle(ctx, req, resw)
 }
 

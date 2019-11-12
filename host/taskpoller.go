@@ -25,6 +25,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/uber/cadence/common/client"
+
 	"github.com/stretchr/testify/require"
 	"go.uber.org/yarpc"
 
@@ -274,8 +276,8 @@ Loop:
 				QueryResults:               getQueryResults(response.GetQueries(), queryResult),
 			},
 			yarpc.WithHeader(common.LibraryVersionHeaderName, "0.0.1"),
-			yarpc.WithHeader(common.FeatureVersionHeaderName, "1.0.0"),
-			yarpc.WithHeader(common.ClientImplHeaderName, "go"),
+			yarpc.WithHeader(common.FeatureVersionHeaderName, client.GoWorkerConsistentQueryVersion),
+			yarpc.WithHeader(common.ClientImplHeaderName, client.GoSDK),
 		)
 
 		return false, newTask, err
@@ -349,8 +351,8 @@ func (p *TaskPoller) HandlePartialDecision(response *workflow.PollForDecisionTas
 			ForceCreateNewDecisionTask: common.BoolPtr(true),
 		},
 		yarpc.WithHeader(common.LibraryVersionHeaderName, "0.0.1"),
-		yarpc.WithHeader(common.FeatureVersionHeaderName, "1.0.0"),
-		yarpc.WithHeader(common.ClientImplHeaderName, "go"),
+		yarpc.WithHeader(common.FeatureVersionHeaderName, client.GoWorkerConsistentQueryVersion),
+		yarpc.WithHeader(common.ClientImplHeaderName, client.GoSDK),
 	)
 
 	return newTask, err
