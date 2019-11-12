@@ -405,6 +405,44 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CheckDB_Current_Passive() 
 	s.True(releaseCalled)
 }
 
+func (s *nDCTransactionMgrSuite) TestCheckWorkflowExists_DoesNotExists() {
+	ctx := ctx.Background()
+	domainID := "some random domain ID"
+	workflowID := "some random workflow ID"
+	runID := "some random run ID"
+
+	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
+		DomainID: domainID,
+		Execution: shared.WorkflowExecution{
+			WorkflowId: common.StringPtr(workflowID),
+			RunId:      common.StringPtr(runID),
+		},
+	}).Return(nil, &shared.EntityNotExistsError{}).Once()
+
+	exists, err := s.transactionMgr.checkWorkflowExists(ctx, domainID, workflowID, runID)
+	s.NoError(err)
+	s.False(exists)
+}
+
+func (s *nDCTransactionMgrSuite) TestCheckWorkflowExists_DoesExists() {
+	ctx := ctx.Background()
+	domainID := "some random domain ID"
+	workflowID := "some random workflow ID"
+	runID := "some random run ID"
+
+	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
+		DomainID: domainID,
+		Execution: shared.WorkflowExecution{
+			WorkflowId: common.StringPtr(workflowID),
+			RunId:      common.StringPtr(runID),
+		},
+	}).Return(&persistence.GetWorkflowExecutionResponse{}, nil).Once()
+
+	exists, err := s.transactionMgr.checkWorkflowExists(ctx, domainID, workflowID, runID)
+	s.NoError(err)
+	s.True(exists)
+}
+
 func (s *nDCTransactionMgrSuite) TestGetWorkflowCurrentRunID_Missing() {
 	ctx := ctx.Background()
 	domainID := "some random domain ID"
