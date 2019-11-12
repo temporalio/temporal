@@ -110,7 +110,7 @@ func (d *RPCFactory) createInboundTChannelDispatcher(serviceName string, port in
 	if err != nil {
 		d.logger.Fatal("Failed to create transport channel", tag.Error(err), tag.Address(hostAddress))
 	}
-	d.logger.Info("Created TChannel RPC dispatcher and listening", tag.Service(serviceName), tag.Address(hostAddress))
+	d.logger.Info("Created RPC dispatcher and listening", tag.Service(serviceName), tag.Address(hostAddress))
 	return yarpc.NewDispatcher(yarpc.Config{
 		Name:     serviceName,
 		Inbounds: yarpc.Inbounds{d.ch.NewInbound()},
@@ -124,13 +124,14 @@ func (d *RPCFactory) createInboundGRPCDispatcher(serviceName string, port int) *
 		d.logger.Fatal("Failed create a gRPC listener", tag.Error(err), tag.Address(hostAddress))
 	}
 
-	inbound := grpc.NewTransport().NewInbound(l)
-	d.logger.Info("Created gRPC dispatcher and listening", tag.Service(serviceName), tag.Address(hostAddress))
-
-	return yarpc.NewDispatcher(yarpc.Config{
+	dispatcher := yarpc.NewDispatcher(yarpc.Config{
 		Name:     serviceName,
-		Inbounds: yarpc.Inbounds{inbound},
+		Inbounds: yarpc.Inbounds{grpc.NewTransport().NewInbound(l)},
 	})
+
+	d.logger.Info("Created gRPC dispatcher", tag.Service(serviceName), tag.Address(hostAddress))
+
+	return dispatcher
 }
 
 func (d *RPCFactory) getListenIP() net.IP {
