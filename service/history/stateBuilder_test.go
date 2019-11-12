@@ -523,6 +523,50 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	s.NotNil(newRunStateBuilder)
 }
 
+func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedAsNew_EmptyNewRunHistory() {
+	version := int64(1)
+	requestID := uuid.New()
+	execution := shared.WorkflowExecution{
+		WorkflowId: common.StringPtr("some random workflow ID"),
+		RunId:      common.StringPtr(testRunID),
+	}
+
+	now := time.Now()
+	newRunID := uuid.New()
+
+	continueAsNewEvent := &shared.HistoryEvent{
+		Version:   common.Int64Ptr(version),
+		EventId:   common.Int64Ptr(130),
+		Timestamp: common.Int64Ptr(now.UnixNano()),
+		EventType: shared.EventTypeWorkflowExecutionContinuedAsNew.Ptr(),
+		WorkflowExecutionContinuedAsNewEventAttributes: &shared.WorkflowExecutionContinuedAsNewEventAttributes{
+			NewExecutionRunId: common.StringPtr(newRunID),
+		},
+	}
+
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", continueAsNewEvent.GetVersion()).Return(s.sourceCluster)
+	s.mockMutableState.EXPECT().ReplicateWorkflowExecutionContinuedAsNewEvent(
+		continueAsNewEvent.GetEventId(),
+		testDomainID,
+		continueAsNewEvent,
+	).Return(nil).Times(1)
+	s.mockMutableState.EXPECT().GetDomainEntry().Return(testGlobalDomainEntry).AnyTimes()
+	s.mockUpdateVersion(continueAsNewEvent)
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{}).AnyTimes()
+	s.mockTaskGenerator.EXPECT().generateWorkflowCloseTasks(
+		s.stateBuilder.unixNanoToTime(continueAsNewEvent.GetTimestamp()),
+	).Return(nil).Times(1)
+	s.mockMutableState.EXPECT().ClearStickyness().Times(1)
+
+	// new workflow domain
+	s.mockDomainCache.EXPECT().GetDomain(testParentDomainName).Return(testGlobalParentDomainEntry, nil).AnyTimes()
+	newRunStateBuilder, err := s.stateBuilder.applyEvents(
+		testDomainID, requestID, execution, s.toHistory(continueAsNewEvent), nil, false,
+	)
+	s.Nil(err)
+	s.Nil(newRunStateBuilder)
+}
+
 func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionSignaled() {
 	version := int64(1)
 	requestID := uuid.New()

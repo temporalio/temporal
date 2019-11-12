@@ -64,8 +64,6 @@ type (
 const (
 	// ErrMessageHistorySizeZero indicate that history is empty
 	ErrMessageHistorySizeZero = "encounter history size being zero"
-	// ErrMessageNewRunHistorySizeZero indicate that new run history is empty
-	ErrMessageNewRunHistorySizeZero = "encounter new run history size being zero"
 )
 
 var _ stateBuilder = (*stateBuilderImpl)(nil)
@@ -604,45 +602,44 @@ func (b *stateBuilderImpl) applyEvents(
 
 		case shared.EventTypeWorkflowExecutionContinuedAsNew:
 
-			if len(newRunHistory) == 0 {
-				return nil, errors.NewInternalFailureError(ErrMessageNewRunHistorySizeZero)
-			}
+			// The length of newRunHistory can be zero in resend case
+			if len(newRunHistory) != 0 {
+				if newRunNDC {
+					newRunMutableStateBuilder = newMutableStateBuilderWithVersionHistories(
+						b.shard,
+						b.shard.GetEventsCache(),
+						b.logger,
+						b.mutableState.GetDomainEntry(),
+					)
+				} else {
+					newRunMutableStateBuilder = newMutableStateBuilderWithReplicationState(
+						b.shard,
+						b.shard.GetEventsCache(),
+						b.logger,
+						b.mutableState.GetDomainEntry(),
+					)
+				}
+				newRunStateBuilder := newStateBuilder(b.shard, b.logger, newRunMutableStateBuilder, b.taskGeneratorProvider)
 
-			if newRunNDC {
-				newRunMutableStateBuilder = newMutableStateBuilderWithVersionHistories(
-					b.shard,
-					b.shard.GetEventsCache(),
-					b.logger,
-					b.mutableState.GetDomainEntry(),
+				newRunID := event.WorkflowExecutionContinuedAsNewEventAttributes.GetNewExecutionRunId()
+				newExecution := shared.WorkflowExecution{
+					WorkflowId: execution.WorkflowId,
+					RunId:      common.StringPtr(newRunID),
+				}
+				_, err := newRunStateBuilder.applyEvents(
+					domainID,
+					uuid.New(),
+					newExecution,
+					newRunHistory,
+					nil,
+					false,
 				)
-			} else {
-				newRunMutableStateBuilder = newMutableStateBuilderWithReplicationState(
-					b.shard,
-					b.shard.GetEventsCache(),
-					b.logger,
-					b.mutableState.GetDomainEntry(),
-				)
-			}
-			newRunStateBuilder := newStateBuilder(b.shard, b.logger, newRunMutableStateBuilder, b.taskGeneratorProvider)
-
-			newRunID := event.WorkflowExecutionContinuedAsNewEventAttributes.GetNewExecutionRunId()
-			newExecution := shared.WorkflowExecution{
-				WorkflowId: execution.WorkflowId,
-				RunId:      common.StringPtr(newRunID),
-			}
-			_, err := newRunStateBuilder.applyEvents(
-				domainID,
-				uuid.New(),
-				newExecution,
-				newRunHistory,
-				nil,
-				false,
-			)
-			if err != nil {
-				return nil, err
+				if err != nil {
+					return nil, err
+				}
 			}
 
-			err = b.mutableState.ReplicateWorkflowExecutionContinuedAsNewEvent(
+			err := b.mutableState.ReplicateWorkflowExecutionContinuedAsNewEvent(
 				firstEvent.GetEventId(),
 				domainID,
 				event,
