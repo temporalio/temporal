@@ -23,12 +23,14 @@ package host
 import (
 	"context"
 	"fmt"
+	"net"
 	"sync"
 	"time"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/uber-go/tally"
+	"go.uber.org/yarpc/transport/grpc"
 
 	cwsc "go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
 	"go.uber.org/yarpc"
@@ -906,8 +908,12 @@ func newRPCFactoryImpl(sName string, hostPort string, ringpopAddress string,
 	}
 }
 
-func (c *rpcFactoryImpl) CreateDispatcher() *yarpc.Dispatcher {
+func (c *rpcFactoryImpl) CreateTChannelDispatcher() *yarpc.Dispatcher {
 	return c.createTChannelDispatcher(c.serviceName, c.hostPort, true)
+}
+
+func (c *rpcFactoryImpl) CreateGRPCDispatcher() *yarpc.Dispatcher {
+	return c.createGRPCDispatcher(c.serviceName, c.hostPort, true)
 }
 
 func (c *rpcFactoryImpl) CreateRingpopDispatcher() *yarpc.Dispatcher {
@@ -941,6 +947,32 @@ func (c *rpcFactoryImpl) createTChannelDispatcher(serviceName string, hostPort s
 	})
 }
 
+func (c *rpcFactoryImpl) createGRPCDispatcher(serviceName string, hostPort string, createOutbound bool) *yarpc.Dispatcher {
+	l, err := net.Listen("tcp", hostPort)
+	if err != nil {
+		c.logger.Fatal("Failed create a gRPC listener", tag.Error(err), tag.Address(hostPort))
+	}
+
+	t := grpc.NewTransport()
+	inbound := t.NewInbound(l)
+
+	var outbounds yarpc.Outbounds
+	if createOutbound {
+		outbounds = yarpc.Outbounds{
+			c.serviceName: {Unary: t.NewSingleOutbound(hostPort)},
+		}
+	}
+
+	return yarpc.NewDispatcher(yarpc.Config{
+		Name:      serviceName,
+		Inbounds:  yarpc.Inbounds{inbound},
+		Outbounds: outbounds,
+		InboundMiddleware: yarpc.InboundMiddleware{
+			Unary: &versionMiddleware{},
+		},
+	})
+}
+
 type versionMiddleware struct {
 }
 
@@ -960,6 +992,22 @@ func (c *rpcFactoryImpl) CreateDispatcherForOutbound(
 	})
 	if err := d.Start(); err != nil {
 		c.logger.Fatal("Failed to create outbound transport channel", tag.Error(err))
+	}
+	return d
+}
+
+// CreateDispatcherForGRPCOutbound creates a dispatcher for outbound connection
+func (c *rpcFactoryImpl) CreateDispatcherForGRPCOutbound(callerName, serviceName, hostName string) *yarpc.Dispatcher {
+	t := grpc.NewTransport()
+	d := yarpc.NewDispatcher(yarpc.Config{
+		Name: callerName,
+		Outbounds: yarpc.Outbounds{
+			serviceName: {Unary: t.NewSingleOutbound(hostName)},
+		},
+	})
+
+	if err := d.Start(); err != nil {
+		c.logger.Fatal("Failed to start gRPC outbound dispatcher", tag.Error(err))
 	}
 	return d
 }

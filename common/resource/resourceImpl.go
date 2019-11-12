@@ -146,7 +146,7 @@ func New(
 
 	dynamicCollection := dynamicconfig.NewCollection(params.DynamicConfig, logger)
 
-	dispatcher := params.RPCFactory.CreateDispatcher()
+	dispatcher := params.RPCFactory.CreateTChannelDispatcher()
 	membershipMonitor, err := params.MembershipFactory.Create(dispatcher)
 	if err != nil {
 		return nil, err

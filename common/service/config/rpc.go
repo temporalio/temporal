@@ -25,6 +25,7 @@ import (
 	"net"
 
 	"go.uber.org/yarpc"
+	"go.uber.org/yarpc/transport/grpc"
 	"go.uber.org/yarpc/transport/tchannel"
 
 	"github.com/temporalio/temporal/common/log"
@@ -50,9 +51,14 @@ func newRPCFactory(cfg *RPC, sName string, logger log.Logger) *RPCFactory {
 	return factory
 }
 
-// CreateDispatcher creates a dispatcher for inbound
-func (d *RPCFactory) CreateDispatcher() *yarpc.Dispatcher {
+// CreateTChannelDispatcher creates a dispatcher for TChannel inbound
+func (d *RPCFactory) CreateTChannelDispatcher() *yarpc.Dispatcher {
 	return d.createInboundTChannelDispatcher(d.serviceName, d.config.Port)
+}
+
+// CreateGRPCDispatcher creates a dispatcher for gRPC inbound
+func (d *RPCFactory) CreateGRPCDispatcher() *yarpc.Dispatcher {
+	return d.createInboundGRPCDispatcher(d.serviceName, d.config.GRPCPort)
 }
 
 // CreateRingpopDispatcher creates a dispatcher for ringpop
@@ -78,6 +84,22 @@ func (d *RPCFactory) CreateDispatcherForOutbound(
 	return dispatcher
 }
 
+// CreateDispatcherForGRPCOutbound creates a dispatcher for outbound connection
+func (d *RPCFactory) CreateDispatcherForGRPCOutbound(callerName, serviceName, hostName string) *yarpc.Dispatcher {
+	t := grpc.NewTransport()
+	dispatcher := yarpc.NewDispatcher(yarpc.Config{
+		Name: callerName,
+		Outbounds: yarpc.Outbounds{
+			serviceName: {Unary: t.NewSingleOutbound(hostName)},
+		},
+	})
+	d.logger.Info("Created gRPC outbound dispatcher", tag.Service(d.serviceName), tag.Address(hostName))
+	if err := dispatcher.Start(); err != nil {
+		d.logger.Fatal("Failed to start gRPC outbound dispatcher", tag.Error(err))
+	}
+	return dispatcher
+}
+
 func (d *RPCFactory) createInboundTChannelDispatcher(serviceName string, port int) *yarpc.Dispatcher {
 	// Setup dispatcher for onebox
 	var err error
@@ -88,10 +110,26 @@ func (d *RPCFactory) createInboundTChannelDispatcher(serviceName string, port in
 	if err != nil {
 		d.logger.Fatal("Failed to create transport channel", tag.Error(err), tag.Address(hostAddress))
 	}
-	d.logger.Info("Created RPC dispatcher and listening", tag.Service(serviceName), tag.Address(hostAddress))
+	d.logger.Info("Created TChannel RPC dispatcher and listening", tag.Service(serviceName), tag.Address(hostAddress))
 	return yarpc.NewDispatcher(yarpc.Config{
 		Name:     serviceName,
 		Inbounds: yarpc.Inbounds{d.ch.NewInbound()},
+	})
+}
+
+func (d *RPCFactory) createInboundGRPCDispatcher(serviceName string, port int) *yarpc.Dispatcher {
+	hostAddress := fmt.Sprintf("%v:%v", d.getListenIP(), port)
+	l, err := net.Listen("tcp", hostAddress)
+	if err != nil {
+		d.logger.Fatal("Failed create a gRPC listener", tag.Error(err), tag.Address(hostAddress))
+	}
+
+	inbound := grpc.NewTransport().NewInbound(l)
+	d.logger.Info("Created gRPC dispatcher and listening", tag.Service(serviceName), tag.Address(hostAddress))
+
+	return yarpc.NewDispatcher(yarpc.Config{
+		Name:     serviceName,
+		Inbounds: yarpc.Inbounds{inbound},
 	})
 }
 

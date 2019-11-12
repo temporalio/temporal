@@ -59,6 +59,8 @@ type (
 
 		GetDispatcher() *yarpc.Dispatcher
 
+		GetGRPCDispatcher() *yarpc.Dispatcher
+
 		GetMembershipMonitor() membership.Monitor
 
 		GetHostInfo() *membership.HostInfo
