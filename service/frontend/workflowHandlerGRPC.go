@@ -51,7 +51,7 @@ func NewWorkflowHandlerGRPC(
 // RegisterHandler register this handler, must be called before Start()
 // if DCRedirectionHandler is also used, use RegisterHandler in DCRedirectionHandler instead
 func (wh *WorkflowHandlerGRPC) RegisterHandler() {
-	wh.workflowHandlerThrift.Service.GetGRPCDispatcher().Register(tpb.BuildWorkflowServiceYARPCProcedures(wh))
+	wh.workflowHandlerThrift.Service.GetGRPCDispatcher().Register(workflowservice.BuildWorkflowServiceYARPCProcedures(wh))
 }
 
 // RegisterDomain creates a new domain which can be used as a container for all resources.  Domain is a top level
