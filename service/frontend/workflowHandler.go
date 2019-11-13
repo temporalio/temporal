@@ -2388,7 +2388,7 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(
 ) (resp *gen.ListArchivedWorkflowExecutionsResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendClientListArchivedWorkflowExecutionsScope, listRequest)
+	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendListArchivedWorkflowExecutionsScope, listRequest)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {

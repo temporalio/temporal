@@ -293,7 +293,7 @@ func (handler *DCRedirectionHandlerImpl) ListArchivedWorkflowExecutions(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionListArchviedWorkflowExecutionsScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionListArchivedWorkflowExecutionsScope)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()

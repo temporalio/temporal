@@ -195,7 +195,7 @@ func (c *metricClient) ListOpenWorkflowExecutions(
 	opts ...yarpc.CallOption,
 ) (*shared.ListOpenWorkflowExecutionsResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendListOpenWorkflowExecutionsScope, metrics.CadenceClientRequests)
+	c.metricsClient.IncCounter(metrics.FrontendClientListOpenWorkflowExecutionsScope, metrics.CadenceClientRequests)
 
 	sw := c.metricsClient.StartTimer(metrics.FrontendClientListOpenWorkflowExecutionsScope, metrics.CadenceClientLatency)
 	resp, err := c.client.ListOpenWorkflowExecutions(ctx, request, opts...)
