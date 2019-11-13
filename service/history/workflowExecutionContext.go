@@ -634,6 +634,7 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 	}
 
 	if err := c.mergeContinueAsNewReplicationTasks(
+		updateMode,
 		currentWorkflow,
 		newWorkflow,
 	); err != nil {
@@ -730,11 +731,16 @@ func (c *workflowExecutionContextImpl) notifyTasks(
 }
 
 func (c *workflowExecutionContextImpl) mergeContinueAsNewReplicationTasks(
+	updateMode persistence.UpdateWorkflowMode,
 	currentWorkflowMutation *persistence.WorkflowMutation,
 	newWorkflowSnapshot *persistence.WorkflowSnapshot,
 ) error {
 
 	if currentWorkflowMutation.ExecutionInfo.CloseStatus != persistence.WorkflowCloseStatusContinuedAsNew {
+		return nil
+	} else if updateMode == persistence.UpdateWorkflowModeBypassCurrent && newWorkflowSnapshot == nil {
+		// update current workflow as zombie & continue as new without new zombie workflow
+		// this case can be valid if new workflow is already created by resend
 		return nil
 	}
 

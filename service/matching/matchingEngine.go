@@ -339,14 +339,9 @@ pollLoop:
 				return emptyPollForDecisionTaskResponse, nil
 			}
 
-			clientFeature := client.NewFeatureImpl(
-				mutableStateResp.GetClientLibraryVersion(),
-				mutableStateResp.GetClientFeatureVersion(),
-				mutableStateResp.GetClientImpl(),
-			)
-
 			isStickyEnabled := false
-			if len(mutableStateResp.StickyTaskList.GetName()) != 0 && clientFeature.SupportStickyQuery() {
+			supportsSticky := client.NewVersionChecker().SupportsStickyQuery(mutableStateResp.GetClientImpl(), mutableStateResp.GetClientFeatureVersion()) == nil
+			if len(mutableStateResp.StickyTaskList.GetName()) != 0 && supportsSticky {
 				isStickyEnabled = true
 			}
 			resp := &h.RecordDecisionTaskStartedResponse{

@@ -270,7 +270,7 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 			}
 		}
 
-		if !mutableState.IsWorkflowExecutionRunning() {
+		if state, _ := mutableState.GetWorkflowStateCloseStatus(); state == persistence.WorkflowStateCompleted {
 			return false, nil
 		}
 	} else if mutableState.GetReplicationState() != nil {

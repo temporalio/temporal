@@ -102,6 +102,21 @@ func (mr *MocknDCTransactionMgrMockRecorder) backfillWorkflow(ctx, now, targetWo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "backfillWorkflow", reflect.TypeOf((*MocknDCTransactionMgr)(nil).backfillWorkflow), ctx, now, targetWorkflow, targetWorkflowEvents)
 }
 
+// checkWorkflowExists mocks base method
+func (m *MocknDCTransactionMgr) checkWorkflowExists(ctx context.Context, domainID, workflowID, runID string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "checkWorkflowExists", ctx, domainID, workflowID, runID)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// checkWorkflowExists indicates an expected call of checkWorkflowExists
+func (mr *MocknDCTransactionMgrMockRecorder) checkWorkflowExists(ctx, domainID, workflowID, runID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "checkWorkflowExists", reflect.TypeOf((*MocknDCTransactionMgr)(nil).checkWorkflowExists), ctx, domainID, workflowID, runID)
+}
+
 // getCurrentWorkflowRunID mocks base method
 func (m *MocknDCTransactionMgr) getCurrentWorkflowRunID(ctx context.Context, domainID, workflowID string) (string, error) {
 	m.ctrl.T.Helper()

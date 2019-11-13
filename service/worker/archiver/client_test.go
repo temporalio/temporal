@@ -92,7 +92,7 @@ func (s *clientSuite) TestArchiveVisibilityInlineSuccess() {
 	resp, err := s.client.Archive(context.Background(), &ClientRequest{
 		ArchiveRequest: &ArchiveRequest{
 			VisibilityURI: "test:///visibility/archival",
-			Targets:       []archivalTarget{ArchiveTargetVisibility},
+			Targets:       []ArchivalTarget{ArchiveTargetVisibility},
 		},
 		AttemptArchiveInline: true,
 	})
@@ -107,6 +107,7 @@ func (s *clientSuite) TestArchiveVisibilityInlineFail_SendSignalSuccess() {
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientVisibilityRequestCount).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientVisibilityInlineArchiveAttemptCount).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientVisibilityInlineArchiveFailureCount).Once()
+	s.metricsScope.On("IncCounter", metrics.ArchiverClientSendSignalCount).Once()
 	s.cadenceClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
 		return len(v.Targets) == 1 && v.Targets[0] == ArchiveTargetVisibility
 	}), mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
@@ -114,7 +115,7 @@ func (s *clientSuite) TestArchiveVisibilityInlineFail_SendSignalSuccess() {
 	resp, err := s.client.Archive(context.Background(), &ClientRequest{
 		ArchiveRequest: &ArchiveRequest{
 			VisibilityURI: "test:///visibility/archival",
-			Targets:       []archivalTarget{ArchiveTargetVisibility},
+			Targets:       []ArchivalTarget{ArchiveTargetVisibility},
 		},
 		AttemptArchiveInline: true,
 	})
@@ -129,6 +130,7 @@ func (s *clientSuite) TestArchiveVisibilityInlineFail_SendSignalFail() {
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientVisibilityRequestCount).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientVisibilityInlineArchiveAttemptCount).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientVisibilityInlineArchiveFailureCount).Once()
+	s.metricsScope.On("IncCounter", metrics.ArchiverClientSendSignalCount).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientSendSignalFailureCount).Once()
 	s.cadenceClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
 		return len(v.Targets) == 1 && v.Targets[0] == ArchiveTargetVisibility
@@ -137,7 +139,7 @@ func (s *clientSuite) TestArchiveVisibilityInlineFail_SendSignalFail() {
 	resp, err := s.client.Archive(context.Background(), &ClientRequest{
 		ArchiveRequest: &ArchiveRequest{
 			VisibilityURI: "test:///visibility/archival",
-			Targets:       []archivalTarget{ArchiveTargetVisibility},
+			Targets:       []ArchivalTarget{ArchiveTargetVisibility},
 		},
 		AttemptArchiveInline: true,
 	})
@@ -154,7 +156,7 @@ func (s *clientSuite) TestArchiveHistoryInlineSuccess() {
 	resp, err := s.client.Archive(context.Background(), &ClientRequest{
 		ArchiveRequest: &ArchiveRequest{
 			URI:     "test:///history/archival",
-			Targets: []archivalTarget{ArchiveTargetHistory},
+			Targets: []ArchivalTarget{ArchiveTargetHistory},
 		},
 		AttemptArchiveInline: true,
 	})
@@ -169,6 +171,7 @@ func (s *clientSuite) TestArchiveHistoryInlineFail_SendSignalSuccess() {
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientHistoryRequestCount).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientHistoryInlineArchiveAttemptCount).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientHistoryInlineArchiveFailureCount).Once()
+	s.metricsScope.On("IncCounter", metrics.ArchiverClientSendSignalCount).Once()
 	s.cadenceClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
 		return len(v.Targets) == 1 && v.Targets[0] == ArchiveTargetHistory
 	}), mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
@@ -176,7 +179,7 @@ func (s *clientSuite) TestArchiveHistoryInlineFail_SendSignalSuccess() {
 	resp, err := s.client.Archive(context.Background(), &ClientRequest{
 		ArchiveRequest: &ArchiveRequest{
 			URI:     "test:///history/archival",
-			Targets: []archivalTarget{ArchiveTargetHistory},
+			Targets: []ArchivalTarget{ArchiveTargetHistory},
 		},
 		AttemptArchiveInline: true,
 	})
@@ -191,6 +194,7 @@ func (s *clientSuite) TestArchiveHistoryInlineFail_SendSignalFail() {
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientHistoryRequestCount).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientHistoryInlineArchiveAttemptCount).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientHistoryInlineArchiveFailureCount).Once()
+	s.metricsScope.On("IncCounter", metrics.ArchiverClientSendSignalCount).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientSendSignalFailureCount).Once()
 	s.cadenceClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
 		return len(v.Targets) == 1 && v.Targets[0] == ArchiveTargetHistory
@@ -199,7 +203,7 @@ func (s *clientSuite) TestArchiveHistoryInlineFail_SendSignalFail() {
 	resp, err := s.client.Archive(context.Background(), &ClientRequest{
 		ArchiveRequest: &ArchiveRequest{
 			URI:     "test:///history/archival",
-			Targets: []archivalTarget{ArchiveTargetHistory},
+			Targets: []ArchivalTarget{ArchiveTargetHistory},
 		},
 		AttemptArchiveInline: true,
 	})
@@ -217,6 +221,7 @@ func (s *clientSuite) TestArchiveInline_HistoryFail_VisibilitySuccess() {
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientHistoryInlineArchiveFailureCount).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientVisibilityRequestCount).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientVisibilityInlineArchiveAttemptCount).Once()
+	s.metricsScope.On("IncCounter", metrics.ArchiverClientSendSignalCount).Once()
 	s.cadenceClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
 		return len(v.Targets) == 1 && v.Targets[0] == ArchiveTargetHistory
 	}), mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
@@ -225,7 +230,7 @@ func (s *clientSuite) TestArchiveInline_HistoryFail_VisibilitySuccess() {
 		ArchiveRequest: &ArchiveRequest{
 			URI:           "test:///history/archival",
 			VisibilityURI: "test:///visibility/archival",
-			Targets:       []archivalTarget{ArchiveTargetHistory, ArchiveTargetVisibility},
+			Targets:       []ArchivalTarget{ArchiveTargetHistory, ArchiveTargetVisibility},
 		},
 		AttemptArchiveInline: true,
 	})
@@ -244,6 +249,7 @@ func (s *clientSuite) TestArchiveInline_VisibilityFail_HistorySuccess() {
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientVisibilityRequestCount).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientVisibilityInlineArchiveAttemptCount).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientVisibilityInlineArchiveFailureCount).Once()
+	s.metricsScope.On("IncCounter", metrics.ArchiverClientSendSignalCount).Once()
 	s.cadenceClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
 		return len(v.Targets) == 1 && v.Targets[0] == ArchiveTargetVisibility
 	}), mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
@@ -252,7 +258,7 @@ func (s *clientSuite) TestArchiveInline_VisibilityFail_HistorySuccess() {
 		ArchiveRequest: &ArchiveRequest{
 			URI:           "test:///history/archival",
 			VisibilityURI: "test:///visibility/archival",
-			Targets:       []archivalTarget{ArchiveTargetHistory, ArchiveTargetVisibility},
+			Targets:       []ArchivalTarget{ArchiveTargetHistory, ArchiveTargetVisibility},
 		},
 		AttemptArchiveInline: true,
 	})
@@ -272,6 +278,7 @@ func (s *clientSuite) TestArchiveInline_VisibilityFail_HistoryFail() {
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientVisibilityRequestCount).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientVisibilityInlineArchiveAttemptCount).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientVisibilityInlineArchiveFailureCount).Once()
+	s.metricsScope.On("IncCounter", metrics.ArchiverClientSendSignalCount).Once()
 	s.cadenceClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
 		return len(v.Targets) == 2
 	}), mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
@@ -280,7 +287,7 @@ func (s *clientSuite) TestArchiveInline_VisibilityFail_HistoryFail() {
 		ArchiveRequest: &ArchiveRequest{
 			URI:           "test:///history/archival",
 			VisibilityURI: "test:///visibility/archival",
-			Targets:       []archivalTarget{ArchiveTargetHistory, ArchiveTargetVisibility},
+			Targets:       []ArchivalTarget{ArchiveTargetHistory, ArchiveTargetVisibility},
 		},
 		AttemptArchiveInline: true,
 	})
@@ -303,7 +310,7 @@ func (s *clientSuite) TestArchiveInline_VisibilitySuccess_HistorySuccess() {
 		ArchiveRequest: &ArchiveRequest{
 			URI:           "test:///history/archival",
 			VisibilityURI: "test:///visibility/archival",
-			Targets:       []archivalTarget{ArchiveTargetHistory, ArchiveTargetVisibility},
+			Targets:       []ArchivalTarget{ArchiveTargetHistory, ArchiveTargetVisibility},
 		},
 		AttemptArchiveInline: true,
 	})
@@ -318,12 +325,13 @@ func (s *clientSuite) TestArchiveSendSignal_Success() {
 	}), mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientHistoryRequestCount).Once()
 	s.metricsScope.On("IncCounter", metrics.ArchiverClientVisibilityRequestCount).Once()
+	s.metricsScope.On("IncCounter", metrics.ArchiverClientSendSignalCount).Once()
 
 	resp, err := s.client.Archive(context.Background(), &ClientRequest{
 		ArchiveRequest: &ArchiveRequest{
 			URI:           "test:///history/archival",
 			VisibilityURI: "test:///visibility/archival",
-			Targets:       []archivalTarget{ArchiveTargetHistory, ArchiveTargetVisibility},
+			Targets:       []ArchivalTarget{ArchiveTargetHistory, ArchiveTargetVisibility},
 		},
 		AttemptArchiveInline: false,
 	})
@@ -335,7 +343,7 @@ func (s *clientSuite) TestArchiveSendSignal_Success() {
 func (s *clientSuite) TestArchiveUnknownTarget() {
 	resp, err := s.client.Archive(context.Background(), &ClientRequest{
 		ArchiveRequest: &ArchiveRequest{
-			Targets: []archivalTarget{3},
+			Targets: []ArchivalTarget{3},
 		},
 		AttemptArchiveInline: true,
 	})

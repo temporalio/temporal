@@ -39,7 +39,8 @@ import (
 )
 
 const (
-	resendContextTimeout = 30 * time.Second
+	resendContextTimeout  = 30 * time.Second
+	continueAsNewPageSize = 1
 )
 
 type (
@@ -126,15 +127,13 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 		}
 		historyBatch := result.(*historyBatch)
 
-		// we don't need to handle continue as new here
-		// because we only care about the current run
-		// TODO: revisit to evaluate if we need to handle continue as new
 		replicationRequest := n.createReplicationRawRequest(
 			domainID,
 			workflowID,
 			runID,
 			historyBatch.rawEventBatch,
 			historyBatch.versionHistory.GetItems())
+
 		err = n.sendReplicationRawRequest(replicationRequest)
 		if err != nil {
 			n.logger.Error("failed to replicate events",
@@ -205,7 +204,6 @@ func (n *NDCHistoryResenderImpl) createReplicationRawRequest(
 		Events:              historyBlob,
 		VersionHistoryItems: versionHistoryItems,
 	}
-
 	return request
 }
 
