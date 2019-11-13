@@ -327,7 +327,6 @@ func (t *transferQueueStandbyProcessorImpl) processCloseExecution(
 
 		executionInfo := mutableState.GetExecutionInfo()
 		workflowTypeName := executionInfo.WorkflowTypeName
-		workflowStartTimestamp := executionInfo.StartTimestamp.UnixNano()
 		workflowCloseTimestamp := wfCloseTime
 		workflowCloseStatus := persistence.ToThriftWorkflowExecutionCloseStatus(executionInfo.CloseStatus)
 		workflowHistoryLength := mutableState.GetNextEventID() - 1
@@ -335,6 +334,7 @@ func (t *transferQueueStandbyProcessorImpl) processCloseExecution(
 		if err != nil {
 			return nil, err
 		}
+		workflowStartTimestamp := startEvent.GetTimestamp()
 		workflowExecutionTimestamp := getWorkflowExecutionTimestamp(mutableState, startEvent)
 		visibilityMemo := getWorkflowMemo(executionInfo.Memo)
 		searchAttr := executionInfo.SearchAttributes
@@ -546,11 +546,11 @@ func (t *transferQueueStandbyProcessorImpl) processRecordWorkflowStartedOrUpsert
 	executionInfo := mutableState.GetExecutionInfo()
 	workflowTimeout := executionInfo.WorkflowTimeout
 	wfTypeName := executionInfo.WorkflowTypeName
-	startTimestamp := executionInfo.StartTimestamp.UnixNano()
 	startEvent, err := mutableState.GetStartEvent()
 	if err != nil {
 		return err
 	}
+	startTimestamp := startEvent.GetTimestamp()
 	executionTimestamp := getWorkflowExecutionTimestamp(mutableState, startEvent)
 	visibilityMemo := getWorkflowMemo(executionInfo.Memo)
 	searchAttr := copySearchAttributes(executionInfo.SearchAttributes)

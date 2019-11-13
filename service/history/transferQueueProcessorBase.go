@@ -381,7 +381,7 @@ func getWorkflowExecutionTimestamp(
 	}
 
 	if backoffSeconds := startEvent.WorkflowExecutionStartedEventAttributes.GetFirstDecisionTaskBackoffSeconds(); backoffSeconds != 0 {
-		startTimestamp := msBuilder.GetExecutionInfo().StartTimestamp
+		startTimestamp := time.Unix(0, startEvent.GetTimestamp())
 		executionTimestamp = startTimestamp.Add(time.Duration(backoffSeconds) * time.Second)
 	}
 	return executionTimestamp
