@@ -260,6 +260,7 @@ func (c *client) archiveVisibilityInline(ctx context.Context, request *ClientReq
 }
 
 func (c *client) sendArchiveSignal(ctx context.Context, request *ArchiveRequest, taggedLogger log.Logger) error {
+	c.metricsScope.IncCounter(metrics.ArchiverClientSendSignalCount)
 	if ok := c.rateLimiter.Allow(); !ok {
 		c.logger.Error(tooManyRequestsErrMsg)
 		c.metricsScope.IncCounter(metrics.CadenceErrServiceBusyCounter)
