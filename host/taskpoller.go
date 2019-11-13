@@ -25,7 +25,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/uber/cadence/common/client"
+	"github.com/temporalio/temporal/common/client"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/yarpc"

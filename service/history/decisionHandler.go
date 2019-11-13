@@ -25,7 +25,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/uber/cadence/common/client"
+	"github.com/temporalio/temporal/common/client"
 
 	"go.uber.org/yarpc"
 

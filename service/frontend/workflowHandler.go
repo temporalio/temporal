@@ -30,7 +30,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/uber/cadence/common/client"
+	"github.com/temporalio/temporal/common/client"
 
 	"github.com/pborman/uuid"
 	"go.uber.org/yarpc/yarpcerrors"

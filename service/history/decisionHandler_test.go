@@ -27,9 +27,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/client"
+	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/client"
 )
 
 type (

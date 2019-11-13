@@ -27,8 +27,8 @@ import (
 	"github.com/hashicorp/go-version"
 	"go.uber.org/yarpc"
 
-	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
+	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common"
 )
 
 const (

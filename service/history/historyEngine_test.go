@@ -31,7 +31,7 @@ import (
 	"go.uber.org/yarpc/api/encoding"
 	"go.uber.org/yarpc/api/transport"
 
-	cc "github.com/uber/cadence/common/client"
+	cc "github.com/temporalio/temporal/common/client"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
