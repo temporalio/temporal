@@ -118,20 +118,22 @@ thriftc: yarpc-install $(THRIFTRW_GEN_SRC)
 
 # List only subdirectories with *.proto files.
 # sort to remove duplicates.
-PROTO_DIRS := $(sort $(dir $(wildcard proto/*/*.proto)))
+PROTO_ROOT = .gen/proto
+PROTO_DIRS := $(sort $(dir $(wildcard ${PROTO_ROOT}/*/*.proto)))
 
 clean-proto:
 	$(foreach PROTO_DIR,$(PROTO_DIRS),rm -f ${PROTO_DIR}*.go;)
 
 update-proto:
-	git submodule update --remote
+	git submodule update --remote $(PROTO_ROOT)
 
 install-proto:
-	git submodule update --init
+	git submodule update --init $(PROTO_ROOT)
 
 proto: yarpc-install clean-proto install-proto
-	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=proto --gogoslick_out=paths=source_relative:proto ${PROTO_DIR}*.proto;)
-	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=proto --yarpc-go_out=proto ${PROTO_DIR}*.proto;)
+	# run protoc separately for each directory because of different package names
+	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=${PROTO_ROOT} --gogoslick_out=paths=source_relative:proto ${PROTO_DIR}*.proto;)
+	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=${PROTO_ROOT} --yarpc-go_out=proto ${PROTO_DIR}*.proto;)
 
 copyright: cmd/tools/copyright/licensegen.go
 	GOOS= GOARCH= go run ./cmd/tools/copyright/licensegen.go --verifyOnly
