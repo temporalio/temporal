@@ -892,7 +892,8 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 			tag.WorkflowRunID(queryRequest.Execution.GetRunId()),
 			tag.WorkflowQueryType(queryRequest.Query.GetQueryType()),
 			tag.WorkflowTaskListName(msResp.GetStickyTaskList().GetName()),
-			tag.WorkflowNextEventID(msResp.GetNextEventId()))
+			tag.WorkflowNextEventID(msResp.GetNextEventId()),
+			tag.Error(err))
 
 		resetContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		_, err = e.ResetStickyTaskList(resetContext, &h.ResetStickyTaskListRequest{
