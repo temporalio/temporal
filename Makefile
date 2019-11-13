@@ -132,8 +132,8 @@ install-proto:
 
 proto: yarpc-install clean-proto install-proto
 	# run protoc separately for each directory because of different package names
-	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=${PROTO_ROOT} --gogoslick_out=paths=source_relative:proto ${PROTO_DIR}*.proto;)
-	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=${PROTO_ROOT} --yarpc-go_out=proto ${PROTO_DIR}*.proto;)
+	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=${PROTO_ROOT} --gogoslick_out=paths=source_relative:${PROTO_ROOT} ${PROTO_DIR}*.proto;)
+	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=${PROTO_ROOT} --yarpc-go_out=${PROTO_ROOT} ${PROTO_DIR}*.proto;)
 
 copyright: cmd/tools/copyright/licensegen.go
 	GOOS= GOARCH= go run ./cmd/tools/copyright/licensegen.go --verifyOnly
