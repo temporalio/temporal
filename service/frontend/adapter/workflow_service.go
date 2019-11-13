@@ -21,12 +21,12 @@
 package adapter
 
 import (
+	"github.com/temporalio/temporal-proto/workflowservice"
 	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/tpb"
 )
 
 // ToThriftRegisterDomainRequest converts gRPC to Thrift
-func ToThriftRegisterDomainRequest(registerRequest *tpb.RegisterDomainRequest) *shared.RegisterDomainRequest {
+func ToThriftRegisterDomainRequest(registerRequest *workflowservice.RegisterDomainRequest) *shared.RegisterDomainRequest {
 	var clusters []*shared.ClusterReplicationConfiguration
 	for _, cluster := range registerRequest.Clusters {
 		clusters = append(clusters, &shared.ClusterReplicationConfiguration{ClusterName: &cluster.ClusterName})

@@ -116,18 +116,24 @@ clean_thrift:
 
 thriftc: yarpc-install $(THRIFTRW_GEN_SRC)
 
-clean_proto:
-	rm -rf tpb/*.go
+# List only subdirectories with *.proto files.
+# sort to remove duplicates.
+PROTO_ROOT = .gen/proto
+PROTO_DIRS := $(sort $(dir $(wildcard ${PROTO_ROOT}/*/*.proto)))
 
-update_proto:
-	git submodule update --remote
+clean-proto:
+	$(foreach PROTO_DIR,$(PROTO_DIRS),rm -f ${PROTO_DIR}*.go;)
 
-install_proto:
-	git submodule update --init
+update-proto:
+	git submodule update --remote $(PROTO_ROOT)
 
-protoc: yarpc-install clean_proto install_proto
-	protoc --proto_path=tpb --gogoslick_out=paths=source_relative:tpb tpb/*.proto 
-	protoc --proto_path=tpb --yarpc-go_out=tpb tpb/*.proto 
+install-proto:
+	git submodule update --init $(PROTO_ROOT)
+
+proto: yarpc-install clean-proto install-proto
+	# run protoc separately for each directory because of different package names
+	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=${PROTO_ROOT} --gogoslick_out=paths=source_relative:${PROTO_ROOT} ${PROTO_DIR}*.proto;)
+	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=${PROTO_ROOT} --yarpc-go_out=${PROTO_ROOT} ${PROTO_DIR}*.proto;)
 
 copyright: cmd/tools/copyright/licensegen.go
 	GOOS= GOARCH= go run ./cmd/tools/copyright/licensegen.go --verifyOnly
@@ -176,7 +182,7 @@ fmt:
 
 bins_nothrift: go-generate fmt lint copyright cadence-cassandra-tool cadence-sql-tool cadence cadence-server
 
-bins: thriftc protoc bins_nothrift
+bins: thriftc proto bins_nothrift
 
 test: bins
 	@rm -f test

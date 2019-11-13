@@ -21,18 +21,18 @@
 package adapter
 
 import (
+	"github.com/temporalio/temporal-proto/enums"
 	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/tpb"
 )
 
-func toThriftArchivalStatus(archivalStatus tpb.ArchivalStatus) *shared.ArchivalStatus {
+func toThriftArchivalStatus(archivalStatus enums.ArchivalStatus) *shared.ArchivalStatus {
 	switch archivalStatus {
-	case tpb.ArchivalStatusDefault:
+	case enums.ArchivalStatusDefault:
 		return nil
-	case tpb.ArchivalStatusDisabled:
+	case enums.ArchivalStatusDisabled:
 		asd := shared.ArchivalStatusDisabled
 		return &asd
-	case tpb.ArchivalStatusEnabled:
+	case enums.ArchivalStatusEnabled:
 		ase := shared.ArchivalStatusEnabled
 		return &ase
 	}
