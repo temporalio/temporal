@@ -33,7 +33,7 @@ import (
 )
 
 // validServices is the list of all valid cadence services
-var validServices = []string{historyService, matchingService, frontendService, workerService}
+var validServices = []string{frontendService, historyService, matchingService, workerService}
 
 // main entry point for the cadence server
 func main() {

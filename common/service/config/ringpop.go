@@ -27,6 +27,7 @@ import (
 	"net"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/uber/ringpop-go"
@@ -73,14 +74,24 @@ var CadenceServices = []string{
 // RingpopFactory implements the RingpopFactory interface
 type RingpopFactory struct {
 	config      *Ringpop
-	logger      log.Logger
+	dispatcher  *yarpc.Dispatcher
 	serviceName string
+	logger      log.Logger
+
+	sync.Mutex
+	ringPop           *membership.RingPop
+	membershipMonitor membership.Monitor
 }
 
 // NewFactory builds a ringpop factory conforming
 // to the underlying configuration
-func (rpConfig *Ringpop) NewFactory(logger log.Logger, serviceName string) (*RingpopFactory, error) {
-	return newRingpopFactory(rpConfig, logger, serviceName)
+func (rpConfig *Ringpop) NewFactory(
+	dispatcher *yarpc.Dispatcher,
+	serviceName string,
+	logger log.Logger,
+) (*RingpopFactory, error) {
+
+	return newRingpopFactory(rpConfig, dispatcher, serviceName, logger)
 }
 
 func (rpConfig *Ringpop) validate() error {
@@ -92,7 +103,10 @@ func (rpConfig *Ringpop) validate() error {
 
 // UnmarshalYAML is called by the yaml package to convert
 // the config YAML into a BootstrapMode.
-func (m *BootstrapMode) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (m *BootstrapMode) UnmarshalYAML(
+	unmarshal func(interface{}) error,
+) error {
+
 	var s string
 	if err := unmarshal(&s); err != nil {
 		return err
@@ -103,8 +117,11 @@ func (m *BootstrapMode) UnmarshalYAML(unmarshal func(interface{}) error) error {
 }
 
 // parseBootstrapMode reads a string value and returns a bootstrap mode.
-func parseBootstrapMode(s string) (BootstrapMode, error) {
-	switch strings.ToLower(s) {
+func parseBootstrapMode(
+	mode string,
+) (BootstrapMode, error) {
+
+	switch strings.ToLower(mode) {
 	case "hosts":
 		return BootstrapModeHosts, nil
 	case "file":
@@ -117,7 +134,10 @@ func parseBootstrapMode(s string) (BootstrapMode, error) {
 	return BootstrapModeNone, errors.New("invalid or no ringpop bootstrap mode")
 }
 
-func validateBootstrapMode(rpConfig *Ringpop) error {
+func validateBootstrapMode(
+	rpConfig *Ringpop,
+) error {
+
 	switch rpConfig.BootstrapMode {
 	case BootstrapModeFile:
 		if len(rpConfig.BootstrapFile) == 0 {
@@ -137,44 +157,77 @@ func validateBootstrapMode(rpConfig *Ringpop) error {
 	return nil
 }
 
-func newRingpopFactory(rpConfig *Ringpop, logger log.Logger, serviceName string) (*RingpopFactory, error) {
+func newRingpopFactory(
+	rpConfig *Ringpop,
+	dispatcher *yarpc.Dispatcher,
+	serviceName string,
+	logger log.Logger,
+) (*RingpopFactory, error) {
+
 	if err := rpConfig.validate(); err != nil {
 		return nil, err
 	}
 	if rpConfig.MaxJoinDuration == 0 {
 		rpConfig.MaxJoinDuration = defaultMaxJoinDuration
 	}
-	return &RingpopFactory{config: rpConfig, logger: logger, serviceName: serviceName}, nil
+	return &RingpopFactory{
+		config:      rpConfig,
+		dispatcher:  dispatcher,
+		serviceName: serviceName,
+		logger:      logger,
+	}, nil
 }
 
-// Create is the implementation for MembershipMonitorFactory.Create
-func (factory *RingpopFactory) Create(dispatcher *yarpc.Dispatcher) (membership.Monitor, error) {
+// GetMembershipMonitor return a membership monitor
+func (factory *RingpopFactory) GetMembershipMonitor() (membership.Monitor, error) {
+	factory.Lock()
+	defer factory.Unlock()
+
+	return factory.getMembership()
+}
+
+func (factory *RingpopFactory) getMembership() (membership.Monitor, error) {
+	if factory.membershipMonitor != nil {
+		return factory.membershipMonitor, nil
+	}
+
+	membershipMonitor, err := factory.createMembership()
+	if err != nil {
+		return nil, err
+	}
+	factory.membershipMonitor = membershipMonitor
+	return membershipMonitor, nil
+}
+
+func (factory *RingpopFactory) createMembership() (membership.Monitor, error) {
 	// use actual listen port (in case service is bound to :0 or 0.0.0.0:0)
-	rp, err := factory.createRingpop(dispatcher)
+	rp, err := factory.getRingpop()
 	if err != nil {
 		return nil, fmt.Errorf("ringpop creation failed: %v", err)
 	}
 
-	labels, err := rp.Labels()
-	if err != nil {
-		return nil, fmt.Errorf("ringpop get node labels failed: %v", err)
-	}
-
-	if err = labels.Set(membership.RoleKey, factory.serviceName); err != nil {
-		return nil, fmt.Errorf("ringpop setting role label failed: %v", err)
-	}
-
-	membershipMonitor := membership.NewRingpopMonitor(CadenceServices, rp, factory.logger)
-	if err = membershipMonitor.Start(); err != nil {
-		return nil, err
-	}
+	membershipMonitor := membership.NewRingpopMonitor(factory.serviceName, CadenceServices, rp, factory.logger)
 	return membershipMonitor, nil
 }
 
-func (factory *RingpopFactory) createRingpop(dispatcher *yarpc.Dispatcher) (*ringpop.Ringpop, error) {
+func (factory *RingpopFactory) getRingpop() (*membership.RingPop, error) {
+	if factory.ringPop != nil {
+		return factory.ringPop, nil
+	}
+
+	ringPop, err := factory.createRingpop()
+	if err != nil {
+		return nil, err
+	}
+	factory.ringPop = ringPop
+	return ringPop, nil
+}
+
+func (factory *RingpopFactory) createRingpop() (*membership.RingPop, error) {
+
 	var ch *tcg.Channel
 	var err error
-	if ch, err = factory.getChannel(dispatcher); err != nil {
+	if ch, err = factory.getChannel(factory.dispatcher); err != nil {
 		return nil, err
 	}
 
@@ -187,26 +240,23 @@ func (factory *RingpopFactory) createRingpop(dispatcher *yarpc.Dispatcher) (*rin
 	if err != nil {
 		return nil, err
 	}
-
 	bootstrapOpts := &swim.BootstrapOptions{
 		MaxJoinDuration:  factory.config.MaxJoinDuration,
 		DiscoverProvider: discoveryProvider,
 	}
-
-	_, err = rp.Bootstrap(bootstrapOpts)
-	if err != nil {
-		return nil, err
-	}
-	return rp, nil
+	return membership.NewRingPop(rp, bootstrapOpts, factory.logger), nil
 }
 
-func (factory *RingpopFactory) getChannel(dispatcher *yarpc.Dispatcher) (*tcg.Channel, error) {
+func (factory *RingpopFactory) getChannel(
+	dispatcher *yarpc.Dispatcher,
+) (*tcg.Channel, error) {
+
 	t := dispatcher.Inbounds()[0].Transports()[0].(*tchannel.ChannelTransport)
 	ty := reflect.ValueOf(t.Channel())
 	var ch *tcg.Channel
 	var ok bool
 	if ch, ok = ty.Interface().(*tcg.Channel); !ok {
-		return nil, errors.New("Unable to get tchannel out of the dispatcher")
+		return nil, errors.New("unable to get tchannel out of the dispatcher")
 	}
 	return ch, nil
 }
@@ -221,13 +271,18 @@ type dnsProvider struct {
 	Logger          log.Logger
 }
 
-func newDNSProvider(hosts []string, resolver dnsHostResolver, logger log.Logger) *dnsProvider {
+func newDNSProvider(
+	hosts []string,
+	resolver dnsHostResolver,
+	logger log.Logger,
+) *dnsProvider {
+
 	set := map[string]struct{}{}
 	for _, hostport := range hosts {
 		set[hostport] = struct{}{}
 	}
 
-	keys := []string{}
+	var keys []string
 	for key := range set {
 		keys = append(keys, key)
 	}
@@ -239,12 +294,12 @@ func newDNSProvider(hosts []string, resolver dnsHostResolver, logger log.Logger)
 }
 
 func (provider *dnsProvider) Hosts() ([]string, error) {
-	results := []string{}
+	var results []string
 	resolvedHosts := map[string][]string{}
-	for _, hostport := range provider.UnresolvedHosts {
-		host, port, err := net.SplitHostPort(hostport)
+	for _, hostPort := range provider.UnresolvedHosts {
+		host, port, err := net.SplitHostPort(hostPort)
 		if err != nil {
-			provider.Logger.Warn("Could not split host and port", tag.Address(hostport), tag.Error(err))
+			provider.Logger.Warn("could not split host and port", tag.Address(hostPort), tag.Error(err))
 			continue
 		}
 
@@ -252,7 +307,7 @@ func (provider *dnsProvider) Hosts() ([]string, error) {
 		if !exists {
 			resolved, err = provider.Resolver.LookupHost(context.Background(), host)
 			if err != nil {
-				provider.Logger.Warn("Could not resolve host", tag.Address(host), tag.Error(err))
+				provider.Logger.Warn("could not resolve host", tag.Address(host), tag.Error(err))
 				continue
 			}
 			resolvedHosts[host] = resolved
@@ -262,12 +317,15 @@ func (provider *dnsProvider) Hosts() ([]string, error) {
 		}
 	}
 	if len(results) == 0 {
-		return nil, errors.New("No hosts found, and bootstrap requires at least one")
+		return nil, errors.New("no hosts found, and bootstrap requires at least one")
 	}
 	return results, nil
 }
 
-func newDiscoveryProvider(cfg *Ringpop, logger log.Logger) (discovery.DiscoverProvider, error) {
+func newDiscoveryProvider(
+	cfg *Ringpop,
+	logger log.Logger,
+) (discovery.DiscoverProvider, error) {
 
 	if cfg.DiscoveryProvider != nil {
 		// custom discovery provider takes first precedence

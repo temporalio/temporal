@@ -23,6 +23,7 @@ package config
 import (
 	"fmt"
 	"net"
+	"sync"
 
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/transport/tchannel"
@@ -37,6 +38,9 @@ type RPCFactory struct {
 	serviceName string
 	ch          *tchannel.ChannelTransport
 	logger      log.Logger
+
+	sync.Mutex
+	dispatcher *yarpc.Dispatcher
 }
 
 // NewFactory builds a new RPCFactory
@@ -50,8 +54,21 @@ func newRPCFactory(cfg *RPC, sName string, logger log.Logger) *RPCFactory {
 	return factory
 }
 
-// CreateDispatcher creates a dispatcher for inbound
-func (d *RPCFactory) CreateDispatcher() *yarpc.Dispatcher {
+// GetDispatcher return a cached dispatcher
+func (d *RPCFactory) GetDispatcher() *yarpc.Dispatcher {
+	d.Lock()
+	defer d.Unlock()
+
+	if d.dispatcher != nil {
+		return d.dispatcher
+	}
+
+	d.dispatcher = d.createDispatcher()
+	return d.dispatcher
+}
+
+// createDispatcher creates a dispatcher for inbound
+func (d *RPCFactory) createDispatcher() *yarpc.Dispatcher {
 	// Setup dispatcher for onebox
 	var err error
 	hostAddress := fmt.Sprintf("%v:%v", d.getListenIP(), d.config.Port)
@@ -70,7 +87,11 @@ func (d *RPCFactory) CreateDispatcher() *yarpc.Dispatcher {
 
 // CreateDispatcherForOutbound creates a dispatcher for outbound connection
 func (d *RPCFactory) CreateDispatcherForOutbound(
-	callerName, serviceName, hostName string) *yarpc.Dispatcher {
+	callerName string,
+	serviceName string,
+	hostName string,
+) *yarpc.Dispatcher {
+
 	// Setup dispatcher(outbound) for onebox
 	d.logger.Info("Created RPC dispatcher outbound", tag.Service(d.serviceName), tag.Address(hostName))
 	dispatcher := yarpc.NewDispatcher(yarpc.Config{

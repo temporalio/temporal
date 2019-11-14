@@ -76,7 +76,7 @@ type (
 
 		// internal services clients
 
-		GetPublicClient() workflowserviceclient.Interface
+		GetSDKClient() workflowserviceclient.Interface
 		GetFrontendRawClient() frontend.Client
 		GetFrontendClient() frontend.Client
 		GetMatchingRawClient() matching.Client

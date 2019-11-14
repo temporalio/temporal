@@ -94,7 +94,7 @@ type (
 
 		// internal services clients
 
-		publicClient      workflowserviceclient.Interface
+		sdkClient         workflowserviceclient.Interface
 		frontendRawClient frontend.Client
 		frontendClient    frontend.Client
 		matchingRawClient matching.Client
@@ -133,7 +133,7 @@ func New(
 	serviceName string,
 	throttledLoggerMaxRPS dynamicconfig.IntPropertyFn,
 	visibilityManagerInitializer VisibilityManagerInitializer,
-) (*Impl, error) {
+) (impl *Impl, retError error) {
 
 	logger := params.Logger.WithTags(tag.Service(serviceName))
 	throttledLogger := loggerimpl.NewThrottledLogger(logger, throttledLoggerMaxRPS)
@@ -144,14 +144,14 @@ func New(
 		return nil, err
 	}
 
-	dynamicCollection := dynamicconfig.NewCollection(params.DynamicConfig, logger)
+	dispatcher := params.RPCFactory.GetDispatcher()
 
-	dispatcher := params.RPCFactory.CreateDispatcher()
-	membershipMonitor, err := params.MembershipFactory.Create(dispatcher)
+	membershipMonitor, err := params.MembershipFactory.GetMembershipMonitor()
 	if err != nil {
 		return nil, err
 	}
 
+	dynamicCollection := dynamicconfig.NewCollection(params.DynamicConfig, logger)
 	clientBean, err := client.NewClientBean(
 		client.NewRPCClientFactory(
 			params.RPCFactory,
@@ -163,23 +163,6 @@ func New(
 		),
 		params.DispatcherProvider,
 		params.ClusterMetadata,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	persistenceBean, err := persistenceClient.NewBeanFromFactory(persistenceClient.NewFactory(
-		&params.PersistenceConfig,
-		params.ClusterMetadata.GetCurrentClusterName(),
-		params.MetricsClient,
-		logger,
-	))
-	if err != nil {
-		return nil, err
-	}
-	visibilityMgr, err := visibilityManagerInitializer(
-		persistenceBean,
-		logger,
 	)
 	if err != nil {
 		return nil, err
@@ -201,6 +184,23 @@ func New(
 	}
 
 	workerServiceResolver, err := membershipMonitor.GetResolver(common.WorkerServiceName)
+	if err != nil {
+		return nil, err
+	}
+
+	persistenceBean, err := persistenceClient.NewBeanFromFactory(persistenceClient.NewFactory(
+		&params.PersistenceConfig,
+		params.ClusterMetadata.GetCurrentClusterName(),
+		params.MetricsClient,
+		logger,
+	))
+	if err != nil {
+		return nil, err
+	}
+	visibilityMgr, err := visibilityManagerInitializer(
+		persistenceBean,
+		logger,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -236,7 +236,7 @@ func New(
 		common.IsWhitelistServiceTransientError,
 	)
 
-	return &Impl{
+	impl = &Impl{
 		status: common.DaemonStatusInitialized,
 
 		// static infos
@@ -267,7 +267,7 @@ func New(
 
 		// internal services clients
 
-		publicClient:      params.PublicClient,
+		sdkClient:         params.PublicClient,
 		frontendRawClient: frontendRawClient,
 		frontendClient:    frontendClient,
 		matchingRawClient: matchingRawClient,
@@ -299,7 +299,8 @@ func New(
 		),
 		membershipFactory: params.MembershipFactory,
 		rpcFactory:        params.RPCFactory,
-	}, nil
+	}
+	return impl, nil
 }
 
 // Start start all resources
@@ -319,15 +320,10 @@ func (h *Impl) Start() {
 	if err := h.pprofInitializer.Start(); err != nil {
 		h.logger.WithTags(tag.Error(err)).Fatal("fail to start PProf")
 	}
-
 	if err := h.dispatcher.Start(); err != nil {
-		h.logger.WithTags(tag.Error(err)).Fatal("fail to start yarpc dispatcher")
+		h.logger.WithTags(tag.Error(err)).Fatal("fail to start dispatcher")
 	}
-
-	if err := h.membershipMonitor.Start(); err != nil {
-		h.logger.WithTags(tag.Error(err)).Fatal("fail to start membership monitor")
-	}
-
+	h.membershipMonitor.Start()
 	h.domainCache.Start()
 
 	// The service is now started up
@@ -442,9 +438,9 @@ func (h *Impl) GetWorkerServiceResolver() membership.ServiceResolver {
 
 // internal services clients
 
-// GetPublicClient return public lib client
-func (h *Impl) GetPublicClient() workflowserviceclient.Interface {
-	return h.publicClient
+// GetSDKClient return sdk client
+func (h *Impl) GetSDKClient() workflowserviceclient.Interface {
+	return h.sdkClient
 }
 
 // GetFrontendRawClient return frontend client without retry policy

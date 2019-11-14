@@ -25,21 +25,16 @@ import (
 	"time"
 
 	"github.com/uber-go/tally"
-	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 	"go.uber.org/cadence/.gen/go/shared"
 	cclient "go.uber.org/cadence/client"
 	"go.uber.org/cadence/worker"
 	"go.uber.org/zap"
 
-	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cluster"
-	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/common/metrics"
-	p "github.com/uber/cadence/common/persistence"
-	client2 "github.com/uber/cadence/common/persistence/client"
+	"github.com/uber/cadence/common/resource"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
@@ -60,13 +55,6 @@ type (
 	BootstrapParams struct {
 		// Config contains the configuration for scanner
 		Config Config
-		// SDKClient is an instance of cadence sdk client
-		SDKClient workflowserviceclient.Interface
-		// clientBean is an instance of ClientBean
-		ClientBean client.Bean
-		// MetricsClient is an instance of metrics object for emitting stats
-		MetricsClient metrics.Client
-		Logger        log.Logger
 		// TallyScope is an instance of tally metrics scope
 		TallyScope tally.Scope
 	}
@@ -74,16 +62,10 @@ type (
 	// scannerContext is the context object that get's
 	// passed around within the scanner workflows / activities
 	scannerContext struct {
-		taskDB        p.TaskManager
-		domainDB      p.MetadataManager
-		historyDB     p.HistoryManager
-		cfg           Config
-		sdkClient     workflowserviceclient.Interface
-		clientBean    client.Bean
-		metricsClient metrics.Client
-		tallyScope    tally.Scope
-		logger        log.Logger
-		zapLogger     *zap.Logger
+		resource.Resource
+		cfg        Config
+		tallyScope tally.Scope
+		zapLogger  *zap.Logger
 	}
 
 	// Scanner is the background sub-system that does full scans
@@ -99,31 +81,29 @@ type (
 // scans of database tables in an attempt to cleanup
 // resources, monitor system anamolies and emit stats
 // for analysis and alerting
-func New(params *BootstrapParams) *Scanner {
+func New(
+	resource resource.Resource,
+	params *BootstrapParams,
+) *Scanner {
+
 	cfg := params.Config
 	cfg.Persistence.SetMaxQPS(cfg.Persistence.DefaultStore, cfg.PersistenceMaxQPS())
 	zapLogger, err := zap.NewProduction()
 	if err != nil {
-		params.Logger.Fatal("failed to initialize zap logger", tag.Error(err))
+		resource.GetLogger().Fatal("failed to initialize zap logger", tag.Error(err))
 	}
 	return &Scanner{
 		context: scannerContext{
-			cfg:           cfg,
-			sdkClient:     params.SDKClient,
-			clientBean:    params.ClientBean,
-			metricsClient: params.MetricsClient,
-			tallyScope:    params.TallyScope,
-			zapLogger:     zapLogger,
-			logger:        params.Logger,
+			Resource:   resource,
+			cfg:        cfg,
+			tallyScope: params.TallyScope,
+			zapLogger:  zapLogger,
 		},
 	}
 }
 
 // Start starts the scanner
 func (s *Scanner) Start() error {
-	if err := s.buildContext(); err != nil {
-		return err
-	}
 	workerOpts := worker.Options{
 		Logger:                                 s.context.zapLogger,
 		MetricsScope:                           s.context.tallyScope,
@@ -141,54 +121,41 @@ func (s *Scanner) Start() error {
 		workerTaskListName = historyScannerTaskListName
 	}
 
-	worker := worker.New(s.context.sdkClient, common.SystemLocalDomainName, workerTaskListName, workerOpts)
-	return worker.Start()
+	return worker.New(s.context.GetSDKClient(), common.SystemLocalDomainName, workerTaskListName, workerOpts).Start()
 }
 
-func (s *Scanner) startWorkflowWithRetry(options cclient.StartWorkflowOptions, wfType string) error {
-	client := cclient.NewClient(s.context.sdkClient, common.SystemLocalDomainName, &cclient.Options{})
+func (s *Scanner) startWorkflowWithRetry(
+	options cclient.StartWorkflowOptions,
+	workflowType string,
+) error {
+
+	sdkClient := cclient.NewClient(s.context.GetSDKClient(), common.SystemLocalDomainName, &cclient.Options{})
 	policy := backoff.NewExponentialRetryPolicy(time.Second)
 	policy.SetMaximumInterval(time.Minute)
 	policy.SetExpirationInterval(backoff.NoInterval)
 	return backoff.Retry(func() error {
-		return s.startWorkflow(client, options, wfType)
+		return s.startWorkflow(sdkClient, options, workflowType)
 	}, policy, func(err error) bool {
 		return true
 	})
 }
 
-func (s *Scanner) startWorkflow(client cclient.Client, options cclient.StartWorkflowOptions, wfType string) error {
+func (s *Scanner) startWorkflow(
+	client cclient.Client,
+	options cclient.StartWorkflowOptions,
+	workflowType string,
+) error {
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	_, err := client.StartWorkflow(ctx, options, wfType)
+	_, err := client.StartWorkflow(ctx, options, workflowType)
 	cancel()
 	if err != nil {
 		if _, ok := err.(*shared.WorkflowExecutionAlreadyStartedError); ok {
 			return nil
 		}
-		s.context.logger.Error("error starting "+wfType+" workflow", tag.Error(err))
+		s.context.GetLogger().Error("error starting "+workflowType+" workflow", tag.Error(err))
 		return err
 	}
-	s.context.logger.Info(wfType + " workflow successfully started")
-	return nil
-}
-
-func (s *Scanner) buildContext() error {
-	cfg := &s.context.cfg
-	pFactory := client2.NewFactory(cfg.Persistence, cfg.ClusterMetadata.GetCurrentClusterName(), s.context.metricsClient, s.context.logger)
-	domainDB, err := pFactory.NewMetadataManager()
-	if err != nil {
-		return err
-	}
-	taskDB, err := pFactory.NewTaskManager()
-	if err != nil {
-		return err
-	}
-	historyDB, err := pFactory.NewHistoryManager()
-	if err != nil {
-		return err
-	}
-	s.context.taskDB = taskDB
-	s.context.domainDB = domainDB
-	s.context.historyDB = historyDB
+	s.context.GetLogger().Info(workflowType + " workflow successfully started")
 	return nil
 }

@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
-	"github.com/uber/ringpop-go"
 	"github.com/uber/ringpop-go/events"
 	"github.com/uber/ringpop-go/hashring"
 	"github.com/uber/ringpop-go/swim"
@@ -47,7 +46,7 @@ type ringpopServiceResolver struct {
 	service    string
 	isStarted  bool
 	isStopped  bool
-	rp         *ringpop.Ringpop
+	rp         *RingPop
 	shutdownCh chan struct{}
 	shutdownWG sync.WaitGroup
 	logger     log.Logger
@@ -61,7 +60,12 @@ type ringpopServiceResolver struct {
 
 var _ ServiceResolver = (*ringpopServiceResolver)(nil)
 
-func newRingpopServiceResolver(service string, rp *ringpop.Ringpop, logger log.Logger) *ringpopServiceResolver {
+func newRingpopServiceResolver(
+	service string,
+	rp *RingPop,
+	logger log.Logger,
+) *ringpopServiceResolver {
+
 	return &ringpopServiceResolver{
 		service:    service,
 		rp:         rp,
@@ -82,14 +86,8 @@ func (r *ringpopServiceResolver) Start() error {
 	}
 
 	r.rp.AddListener(r)
-	addrs, err := r.rp.GetReachableMembers(swim.MemberWithLabelAndValue(RoleKey, r.service))
-	if err != nil {
+	if err := r.doRefresh(); err != nil {
 		return err
-	}
-
-	for _, addr := range addrs {
-		labels := r.getLabelsMap()
-		r.ring.AddMembers(NewHostInfo(addr, labels))
 	}
 
 	r.shutdownWG.Add(1)
@@ -126,7 +124,10 @@ func (r *ringpopServiceResolver) Stop() error {
 }
 
 // Lookup finds the host in the ring responsible for serving the given key
-func (r *ringpopServiceResolver) Lookup(key string) (*HostInfo, error) {
+func (r *ringpopServiceResolver) Lookup(
+	key string,
+) (*HostInfo, error) {
+
 	r.ringLock.RLock()
 	defer r.ringLock.RUnlock()
 	addr, found := r.ring.Lookup(key)
@@ -136,7 +137,11 @@ func (r *ringpopServiceResolver) Lookup(key string) (*HostInfo, error) {
 	return NewHostInfo(addr, r.getLabelsMap()), nil
 }
 
-func (r *ringpopServiceResolver) AddListener(name string, notifyChannel chan<- *ChangedEvent) error {
+func (r *ringpopServiceResolver) AddListener(
+	name string,
+	notifyChannel chan<- *ChangedEvent,
+) error {
+
 	r.listenerLock.Lock()
 	defer r.listenerLock.Unlock()
 	_, ok := r.listeners[name]
@@ -147,7 +152,10 @@ func (r *ringpopServiceResolver) AddListener(name string, notifyChannel chan<- *
 	return nil
 }
 
-func (r *ringpopServiceResolver) RemoveListener(name string) error {
+func (r *ringpopServiceResolver) RemoveListener(
+	name string,
+) error {
+
 	r.listenerLock.Lock()
 	defer r.listenerLock.Unlock()
 	_, ok := r.listeners[name]
@@ -159,7 +167,10 @@ func (r *ringpopServiceResolver) RemoveListener(name string) error {
 }
 
 // HandleEvent handles updates from ringpop
-func (r *ringpopServiceResolver) HandleEvent(event events.Event) {
+func (r *ringpopServiceResolver) HandleEvent(
+	event events.Event,
+) {
+
 	// We only care about RingChangedEvent
 	e, ok := event.(events.RingChangedEvent)
 	if ok {
@@ -167,22 +178,26 @@ func (r *ringpopServiceResolver) HandleEvent(event events.Event) {
 		// Note that we receive events asynchronously, possibly out of order.
 		// We cannot rely on the content of the event, rather we load everything
 		// from ringpop when we get a notification that something changed.
-		r.refresh()
+		if err := r.refresh(); err != nil {
+			r.logger.Error("error refreshing ring when receiving a ring changed event", tag.Error(err))
+		}
 		r.emitEvent(e)
 	}
 }
 
-func (r *ringpopServiceResolver) refresh() {
+func (r *ringpopServiceResolver) refresh() error {
 	r.ringLock.Lock()
 	defer r.ringLock.Unlock()
 
+	return r.doRefresh()
+}
+
+func (r *ringpopServiceResolver) doRefresh() error {
 	r.ring = hashring.New(farm.Fingerprint32, replicaPoints)
 
 	addrs, err := r.rp.GetReachableMembers(swim.MemberWithLabelAndValue(RoleKey, r.service))
 	if err != nil {
-		// This will happen when service stop and destroy ringpop while there are go-routines pending to call this.
-		r.logger.Warn("Error during ringpop refresh.", tag.Error(err))
-		return
+		return err
 	}
 
 	for _, addr := range addrs {
@@ -191,9 +206,13 @@ func (r *ringpopServiceResolver) refresh() {
 	}
 
 	r.logger.Debug("Current reachable members", tag.Addresses(addrs))
+	return nil
 }
 
-func (r *ringpopServiceResolver) emitEvent(rpEvent events.RingChangedEvent) {
+func (r *ringpopServiceResolver) emitEvent(
+	rpEvent events.RingChangedEvent,
+) {
+
 	// Marshall the event object into the required type
 	event := &ChangedEvent{}
 	for _, addr := range rpEvent.ServersAdded {
@@ -230,7 +249,9 @@ func (r *ringpopServiceResolver) refreshRingWorker() {
 		case <-r.shutdownCh:
 			return
 		case <-refreshTicker.C:
-			r.refresh()
+			if err := r.refresh(); err != nil {
+				r.logger.Error("error periodically refreshing ring", tag.Error(err))
+			}
 		}
 	}
 }

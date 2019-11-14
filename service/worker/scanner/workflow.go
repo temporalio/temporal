@@ -95,46 +95,67 @@ func init() {
 }
 
 // TaskListScannerWorkflow is the workflow that runs the task-list scanner background daemon
-func TaskListScannerWorkflow(ctx workflow.Context) error {
+func TaskListScannerWorkflow(
+	ctx workflow.Context,
+) error {
 
 	future := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, activityOptions), taskListScavengerActivityName)
 	return future.Get(ctx, nil)
 }
 
 // HistoryScannerWorkflow is the workflow that runs the history scanner background daemon
-func HistoryScannerWorkflow(ctx workflow.Context) error {
-	future := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, activityOptions), historyScavengerActivityName)
+func HistoryScannerWorkflow(
+	ctx workflow.Context,
+) error {
+
+	future := workflow.ExecuteActivity(
+		workflow.WithActivityOptions(ctx, activityOptions),
+		historyScavengerActivityName,
+	)
 	return future.Get(ctx, nil)
 }
 
 // HistoryScavengerActivity is the activity that runs history scavenger
-func HistoryScavengerActivity(aCtx context.Context) (history.ScavengerHeartbeatDetails, error) {
-	ctx := aCtx.Value(scannerContextKey).(scannerContext)
+func HistoryScavengerActivity(
+	activityCtx context.Context,
+) (history.ScavengerHeartbeatDetails, error) {
+
+	ctx := activityCtx.Value(scannerContextKey).(scannerContext)
 	rps := ctx.cfg.PersistenceMaxQPS()
 
 	hbd := history.ScavengerHeartbeatDetails{}
-	if activity.HasHeartbeatDetails(aCtx) {
-		if err := activity.GetHeartbeatDetails(aCtx, &hbd); err != nil {
-			ctx.logger.Error("Failed to recover from last heartbeat, start over from beginning", tag.Error(err))
+	if activity.HasHeartbeatDetails(activityCtx) {
+		if err := activity.GetHeartbeatDetails(activityCtx, &hbd); err != nil {
+			ctx.GetLogger().Error("Failed to recover from last heartbeat, start over from beginning", tag.Error(err))
 		}
 	}
 
-	scavenger := history.NewScavenger(ctx.historyDB, rps, ctx.clientBean.GetHistoryClient(), hbd, ctx.metricsClient, ctx.logger)
-	return scavenger.Run(aCtx)
+	scavenger := history.NewScavenger(
+		ctx.GetHistoryManager(),
+		rps,
+		ctx.GetHistoryClient(),
+		hbd,
+		ctx.GetMetricsClient(),
+		ctx.GetLogger(),
+	)
+	return scavenger.Run(activityCtx)
 }
 
 // TaskListScavengerActivity is the activity that runs task list scavenger
-func TaskListScavengerActivity(aCtx context.Context) error {
-	ctx := aCtx.Value(scannerContextKey).(scannerContext)
-	scavenger := tasklist.NewScavenger(ctx.taskDB, ctx.metricsClient, ctx.logger)
-	ctx.logger.Info("Starting task list scavenger")
+func TaskListScavengerActivity(
+	activityCtx context.Context,
+) error {
+
+	ctx := activityCtx.Value(scannerContextKey).(scannerContext)
+	scavenger := tasklist.NewScavenger(ctx.GetTaskManager(), ctx.GetMetricsClient(), ctx.GetLogger())
+	ctx.GetLogger().Info("Starting task list scavenger")
 	scavenger.Start()
 	for scavenger.Alive() {
-		activity.RecordHeartbeat(aCtx)
-		if aCtx.Err() != nil {
-			ctx.logger.Info("activity context error, stopping scavenger", tag.Error(aCtx.Err()))
+		activity.RecordHeartbeat(activityCtx)
+		if activityCtx.Err() != nil {
+			ctx.GetLogger().Info("activity context error, stopping scavenger", tag.Error(activityCtx.Err()))
 			scavenger.Stop()
-			return aCtx.Err()
+			return activityCtx.Err()
 		}
 		time.Sleep(tlScavengerHBInterval)
 	}

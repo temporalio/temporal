@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+
 	p "github.com/uber/cadence/common/persistence"
 )
 

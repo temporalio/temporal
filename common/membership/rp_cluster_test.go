@@ -21,15 +21,18 @@
 package membership
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/pborman/uuid"
-	log "github.com/sirupsen/logrus"
 	"github.com/uber/ringpop-go"
 	"github.com/uber/ringpop-go/discovery/statichosts"
 	"github.com/uber/ringpop-go/swim"
 	"github.com/uber/tchannel-go"
+
+	"github.com/uber/cadence/common/log/loggerimpl"
+	"github.com/uber/cadence/common/log/tag"
 )
 
 // TagErr is the tag for error object message
@@ -41,7 +44,7 @@ type TestRingpopCluster struct {
 	hostUUIDs    []string
 	hostAddrs    []string
 	hostInfoList []HostInfo
-	rings        []*ringpop.Ringpop
+	rings        []Monitor
 	channels     []*tchannel.Channel
 	seedNode     string
 }
@@ -49,62 +52,59 @@ type TestRingpopCluster struct {
 // NewTestRingpopCluster creates a new test cluster with the given name and cluster size
 // All the nodes in the test cluster will register themselves in Ringpop
 // with the specified name. This is only intended for unit tests.
-func NewTestRingpopCluster(name string, size int, ipAddr string, seed string, sName string) *TestRingpopCluster {
+func NewTestRingpopCluster(ringPopApp string, size int, ipAddr string, seed string, serviceName string) *TestRingpopCluster {
 
+	logger := loggerimpl.NewNopLogger()
 	cluster := &TestRingpopCluster{
 		hostUUIDs:    make([]string, size),
 		hostAddrs:    make([]string, size),
 		hostInfoList: make([]HostInfo, size),
-		rings:        make([]*ringpop.Ringpop, size),
+		rings:        make([]Monitor, size),
 		channels:     make([]*tchannel.Channel, size),
 		seedNode:     seed,
 	}
 
 	for i := 0; i < size; i++ {
 		var err error
-		cluster.channels[i], err = tchannel.NewChannel(name, nil)
+		cluster.channels[i], err = tchannel.NewChannel(ringPopApp, nil)
 		if err != nil {
-			log.WithField(TagErr, err).Error("Failed to create tchannel")
+			logger.Error("Failed to create tchannel", tag.Error(err))
 			return nil
 		}
 		listenAddr := ipAddr + ":0"
 		err = cluster.channels[i].ListenAndServe(listenAddr)
 		if err != nil {
-			log.WithField(TagErr, err).Error("tchannel listen failed")
+			logger.Error("tchannel listen failed", tag.Error(err))
 			return nil
 		}
 		cluster.hostUUIDs[i] = uuid.New()
 		cluster.hostAddrs[i] = cluster.channels[i].PeerInfo().HostPort
 		cluster.hostInfoList[i] = HostInfo{addr: cluster.hostAddrs[i]}
-		cluster.rings[i], err = ringpop.New(name, ringpop.Channel(cluster.channels[i]))
-		if err != nil {
-			log.WithField(TagErr, err).Error("failed to create ringpop instance")
-			return nil
-		}
 	}
 
 	// if seed node is already supplied, use it; if not, set it
 	if cluster.seedNode == "" {
 		cluster.seedNode = cluster.hostAddrs[0]
 	}
-	log.Infof("seedNode: %v", cluster.seedNode)
+	logger.Info(fmt.Sprintf("seedNode: %v", cluster.seedNode))
 	bOptions := new(swim.BootstrapOptions)
 	bOptions.DiscoverProvider = statichosts.New(cluster.seedNode) // just use the first addr as the seed
-	bOptions.MaxJoinDuration = time.Duration(time.Second * 10)
+	bOptions.MaxJoinDuration = time.Duration(time.Second * 2)
 	bOptions.JoinSize = 1
 
 	for i := 0; i < size; i++ {
-		_, err := cluster.rings[i].Bootstrap(bOptions)
+		ringPop, err := ringpop.New(ringPopApp, ringpop.Channel(cluster.channels[i]))
 		if err != nil {
-			log.WithField(TagErr, err).Error("failed to bootstrap ringpop")
+			logger.Error("failed to create ringpop instance", tag.Error(err))
 			return nil
 		}
-		labels, err := cluster.rings[i].Labels()
-		if err != nil {
-			log.Errorf("labels failed: %v", err)
-		} else {
-			labels.Set("serviceName", sName)
-		}
+		cluster.rings[i] = NewRingpopMonitor(
+			serviceName,
+			[]string{serviceName},
+			NewRingPop(ringPop, bOptions, logger),
+			logger,
+		)
+		cluster.rings[i].Start()
 	}
 	return cluster
 }
@@ -118,7 +118,7 @@ func (c *TestRingpopCluster) GetSeedNode() string {
 func (c *TestRingpopCluster) KillHost(uuid string) {
 	for i := 0; i < len(c.hostUUIDs); i++ {
 		if 0 == strings.Compare(c.hostUUIDs[i], uuid) {
-			c.rings[i].Destroy()
+			c.rings[i].Stop()
 			c.channels[i].Close()
 			c.rings[i] = nil
 			c.channels[i] = nil
@@ -130,7 +130,7 @@ func (c *TestRingpopCluster) KillHost(uuid string) {
 func (c *TestRingpopCluster) Stop() {
 	for i := 0; i < len(c.hostAddrs); i++ {
 		if c.rings[i] != nil {
-			c.rings[i].Destroy()
+			c.rings[i].Stop()
 			c.channels[i].Close()
 		}
 	}

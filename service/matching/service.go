@@ -22,76 +22,71 @@ package matching
 
 import (
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/log/loggerimpl"
+	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/common/persistence/client"
+	"github.com/uber/cadence/common/persistence"
+	persistenceClient "github.com/uber/cadence/common/persistence/client"
+	"github.com/uber/cadence/common/resource"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
 // Service represents the cadence-matching service
 type Service struct {
-	stopC  chan struct{}
-	params *service.BootstrapParams
+	resource.Resource
 	config *Config
+
+	stopC chan struct{}
 }
 
 // NewService builds a new cadence-matching service
-func NewService(params *service.BootstrapParams) common.Daemon {
-	config := NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger))
-	params.ThrottledLogger = loggerimpl.NewThrottledLogger(params.Logger, config.ThrottledLogRPS)
-	params.UpdateLoggerWithServiceName(common.MatchingServiceName)
-	return &Service{
-		params: params,
-		config: config,
-		stopC:  make(chan struct{}),
+func NewService(
+	params *service.BootstrapParams,
+) (resource.Resource, error) {
+
+	serviceConfig := NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger))
+	serviceResource, err := resource.New(
+		params,
+		common.MatchingServiceName,
+		serviceConfig.ThrottledLogRPS,
+		func(
+			persistenceBean persistenceClient.Bean,
+			logger log.Logger,
+		) (persistence.VisibilityManager, error) {
+			return persistenceBean.GetVisibilityManager(), nil
+		},
+	)
+	if err != nil {
+		return nil, err
 	}
+
+	return &Service{
+		Resource: serviceResource,
+		config:   serviceConfig,
+		stopC:    make(chan struct{}),
+	}, nil
 }
 
 // Start starts the service
 func (s *Service) Start() {
 
-	var params = s.params
-	var log = params.Logger
+	logger := s.GetLogger()
+	logger.Info("matching starting", tag.Service(common.MatchingServiceName))
 
-	log.Info("starting", tag.Service(common.MatchingServiceName))
-
-	base := service.New(params)
-
-	pConfig := params.PersistenceConfig
-	pConfig.SetMaxQPS(pConfig.DefaultStore, s.config.PersistenceMaxQPS())
-	pFactory := client.NewFactory(&pConfig, params.ClusterMetadata.GetCurrentClusterName(), base.GetMetricsClient(), log)
-
-	taskPersistence, err := pFactory.NewTaskManager()
-	if err != nil {
-		log.Fatal("failed to create task persistence", tag.Error(err))
-	}
-
-	metadata, err := pFactory.NewMetadataManager()
-	if err != nil {
-		log.Fatal("failed to create metadata manager", tag.Error(err))
-	}
-
-	handler := NewHandler(base, s.config, taskPersistence, metadata)
+	handler := NewHandler(s, s.config)
 	handler.RegisterHandler()
 
 	// must start base service first
-	base.Start()
-	err = handler.Start()
-	if err != nil {
-		log.Fatal("Matching handler failed to start", tag.Error(err))
-	}
+	s.Resource.Start()
+	handler.Start()
 
-	log.Info("started", tag.Service(common.MatchingServiceName))
+	logger.Info("matching started", tag.Service(common.MatchingServiceName))
 	<-s.stopC
-	base.Stop()
+	s.Resource.Stop()
 }
 
 // Stop stops the service
 func (s *Service) Stop() {
-	select {
-	case s.stopC <- struct{}{}:
-	default:
-	}
-	s.params.Logger.Info("stopped", tag.Service(common.MatchingServiceName))
+	close(s.stopC)
+	s.GetLogger().Info("matching stopped", tag.Service(common.MatchingServiceName))
 }

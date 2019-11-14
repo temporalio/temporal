@@ -57,7 +57,7 @@ func (s *RingpopSuite) TestHostsMode() {
 	s.Equal(time.Second*30, cfg.MaxJoinDuration)
 	cfg.validate()
 	s.Nil(err)
-	f, err := cfg.NewFactory(loggerimpl.NewNopLogger(), "test")
+	f, err := cfg.NewFactory(nil, "test", loggerimpl.NewNopLogger())
 	s.Nil(err)
 	s.NotNil(f)
 }
@@ -72,7 +72,7 @@ func (s *RingpopSuite) TestFileMode() {
 	s.Equal(time.Second*30, cfg.MaxJoinDuration)
 	err = cfg.validate()
 	s.Nil(err)
-	f, err := cfg.NewFactory(loggerimpl.NewNopLogger(), "test")
+	f, err := cfg.NewFactory(nil, "test", loggerimpl.NewNopLogger())
 	s.Nil(err)
 	s.NotNil(f)
 }
@@ -86,7 +86,7 @@ func (s *RingpopSuite) TestCustomMode() {
 	s.NotNil(cfg.validate())
 	cfg.DiscoveryProvider = statichosts.New("127.0.0.1")
 	s.Nil(cfg.validate())
-	f, err := cfg.NewFactory(loggerimpl.NewNopLogger(), "test")
+	f, err := cfg.NewFactory(nil, "test", loggerimpl.NewNopLogger())
 	s.Nil(err)
 	s.NotNil(f)
 }
@@ -111,7 +111,7 @@ func (s *RingpopSuite) TestDNSMode() {
 	s.Equal(BootstrapModeDNS, cfg.BootstrapMode)
 	s.Nil(cfg.validate())
 	logger := loggerimpl.NewNopLogger()
-	f, err := cfg.NewFactory(logger, "test")
+	f, err := cfg.NewFactory(nil, "test", logger)
 	s.Nil(err)
 	s.NotNil(f)
 
