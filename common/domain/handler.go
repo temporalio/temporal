@@ -410,11 +410,11 @@ func (d *HandlerImpl) UpdateDomain(
 
 	if updateRequest.UpdatedInfo != nil {
 		updatedInfo := updateRequest.UpdatedInfo
-		if updatedInfo.Description != nil {
+		if updatedInfo.GetDescription() != info.Description {
 			configurationChanged = true
 			info.Description = updatedInfo.GetDescription()
 		}
-		if updatedInfo.OwnerEmail != nil {
+		if updatedInfo.GetOwnerEmail() != info.OwnerEmail {
 			configurationChanged = true
 			info.OwnerEmail = updatedInfo.GetOwnerEmail()
 		}
@@ -426,11 +426,11 @@ func (d *HandlerImpl) UpdateDomain(
 	}
 	if updateRequest.Configuration != nil {
 		updatedConfig := updateRequest.Configuration
-		if updatedConfig.EmitMetric != nil {
+		if updatedConfig.GetEmitMetric() != config.EmitMetric {
 			configurationChanged = true
 			config.EmitMetric = updatedConfig.GetEmitMetric()
 		}
-		if updatedConfig.WorkflowExecutionRetentionPeriodInDays != nil {
+		if updatedConfig.GetWorkflowExecutionRetentionPeriodInDays() != config.Retention {
 			configurationChanged = true
 			config.Retention = updatedConfig.GetWorkflowExecutionRetentionPeriodInDays()
 		}
@@ -456,7 +456,7 @@ func (d *HandlerImpl) UpdateDomain(
 		}
 	}
 
-	if updateRequest.DeleteBadBinary != nil {
+	if updateRequest.GetDeleteBadBinary() != "" {
 		binChecksum := updateRequest.GetDeleteBadBinary()
 		_, ok := config.BadBinaries.Binaries[binChecksum]
 		if !ok {
@@ -472,7 +472,7 @@ func (d *HandlerImpl) UpdateDomain(
 		updateReplicationConfig := updateRequest.ReplicationConfiguration
 		if len(updateReplicationConfig.Clusters) != 0 {
 			configurationChanged = true
-			clustersNew := []*persistence.ClusterReplicationConfig{}
+			var clustersNew []*persistence.ClusterReplicationConfig
 			for _, clusterConfig := range updateReplicationConfig.Clusters {
 				clustersNew = append(clustersNew, &persistence.ClusterReplicationConfig{
 					ClusterName: clusterConfig.GetClusterName(),
@@ -488,7 +488,7 @@ func (d *HandlerImpl) UpdateDomain(
 			replicationConfig.Clusters = clustersNew
 		}
 
-		if updateReplicationConfig.ActiveClusterName != nil {
+		if updateReplicationConfig.GetActiveClusterName() != replicationConfig.ActiveClusterName {
 			activeClusterChanged = true
 			replicationConfig.ActiveClusterName = updateReplicationConfig.GetActiveClusterName()
 		}
