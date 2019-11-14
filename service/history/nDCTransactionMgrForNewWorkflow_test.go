@@ -297,6 +297,72 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	s.True(currentReleaseCalled)
 }
 
+func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZombie_Dedup() {
+	ctx := ctx.Background()
+	now := time.Now()
+
+	domainID := "some random domain ID"
+	workflowID := "some random workflow ID"
+	targetRunID := "some random run ID"
+	currentRunID := "other random runID"
+
+	targetReleaseCalled := false
+	currentReleaseCalled := false
+
+	targetWorkflow := NewMocknDCWorkflow(s.controller)
+	targetContext := NewMockworkflowExecutionContext(s.controller)
+	targetMutableState := NewMockmutableState(s.controller)
+	var targetReleaseFn releaseWorkflowExecutionFunc = func(error) { targetReleaseCalled = true }
+	targetWorkflow.EXPECT().getContext().Return(targetContext).AnyTimes()
+	targetWorkflow.EXPECT().getMutableState().Return(targetMutableState).AnyTimes()
+	targetWorkflow.EXPECT().getReleaseFn().Return(targetReleaseFn).AnyTimes()
+
+	currentWorkflow := NewMocknDCWorkflow(s.controller)
+	var currentReleaseFn releaseWorkflowExecutionFunc = func(error) { currentReleaseCalled = true }
+	currentWorkflow.EXPECT().getReleaseFn().Return(currentReleaseFn).AnyTimes()
+
+	targetWorkflowSnapshot := &persistence.WorkflowSnapshot{
+		ExecutionInfo: &persistence.WorkflowExecutionInfo{
+			DomainID:   domainID,
+			WorkflowID: workflowID,
+		},
+	}
+	targetWorkflowEventsSeq := []*persistence.WorkflowEvents{&persistence.WorkflowEvents{}}
+	targetWorkflowHistorySize := int64(12345)
+	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
+		DomainID:   domainID,
+		WorkflowID: workflowID,
+		RunID:      targetRunID,
+	}).AnyTimes()
+	targetMutableState.EXPECT().CloseTransactionAsSnapshot(now, transactionPolicyPassive).Return(
+		targetWorkflowSnapshot, targetWorkflowEventsSeq, nil,
+	).Times(1)
+
+	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, domainID, workflowID).Return(currentRunID, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, domainID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
+
+	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(false, nil)
+	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil).Times(1)
+
+	targetContext.EXPECT().persistFirstWorkflowEvents(
+		targetWorkflowEventsSeq[0],
+	).Return(targetWorkflowHistorySize, nil).Times(1)
+	targetContext.EXPECT().createWorkflowExecution(
+		targetWorkflowSnapshot,
+		targetWorkflowHistorySize,
+		now,
+		persistence.CreateWorkflowModeZombie,
+		"",
+		int64(0),
+	).Return(&persistence.WorkflowExecutionAlreadyStartedError{}).Times(1)
+	targetContext.EXPECT().reapplyEvents(targetWorkflowEventsSeq).Return(nil).Times(1)
+
+	err := s.createMgr.dispatchForNewWorkflow(ctx, now, targetWorkflow)
+	s.NoError(err)
+	s.True(targetReleaseCalled)
+	s.True(currentReleaseCalled)
+}
+
 func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_SuppressCurrentAndCreateAsCurrent() {
 	ctx := ctx.Background()
 	now := time.Now()

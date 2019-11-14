@@ -22,6 +22,7 @@ package ndc
 
 import (
 	"math"
+	"reflect"
 	"time"
 
 	"github.com/uber/cadence/common/persistence"
@@ -126,14 +127,37 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageDLQ() {
 	executionManager, err := execMgrFactory.NewExecutionManager(0)
 	s.NoError(err)
 
+	expectedDLQMsgs := map[int64]bool{}
+	for _, batch := range historyBatch {
+		firstEventID := batch.Events[0].GetEventId()
+		expectedDLQMsgs[firstEventID] = true
+	}
+
 	// Applying replication messages through fetcher is Async.
 	// So we need to retry a couple of times.
-	for i := 0; i < 10; i++ {
+Loop:
+	for i := 0; i < 60; i++ {
 		time.Sleep(time.Second)
+
+		actualDLQMsgs := map[int64]bool{}
 		request := persistence.NewGetReplicationTasksFromDLQRequest(
-			"standby", -1, math.MaxInt64, math.MaxInt64, nil)
-		response, err := executionManager.GetReplicationTasksFromDLQ(request)
-		if err == nil && len(response.Tasks) == len(historyBatch) {
+			"standby", -1, math.MaxInt64, math.MaxInt64, nil,
+		)
+		var token []byte
+		for doPaging := true; doPaging; doPaging = len(token) > 0 {
+			request.NextPageToken = token
+			response, err := executionManager.GetReplicationTasksFromDLQ(request)
+			if err != nil {
+				continue Loop
+			}
+			token = response.NextPageToken
+
+			for _, task := range response.Tasks {
+				firstEventID := task.FirstEventID
+				actualDLQMsgs[firstEventID] = true
+			}
+		}
+		if reflect.DeepEqual(expectedDLQMsgs, actualDLQMsgs) {
 			return
 		}
 	}

@@ -1444,8 +1444,7 @@ func (s *nDCIntegrationTestSuite) applyEvents(
 ) {
 	for _, batch := range eventBatches {
 		eventBlob, newRunEventBlob := s.generateEventBlobs(workflowID, runID, workflowType, tasklist, batch)
-
-		err := historyClient.ReplicateEventsV2(s.createContext(), &history.ReplicateEventsV2Request{
+		req := &history.ReplicateEventsV2Request{
 			DomainUUID: common.StringPtr(s.domainID),
 			WorkflowExecution: &shared.WorkflowExecution{
 				WorkflowId: common.StringPtr(workflowID),
@@ -1454,8 +1453,12 @@ func (s *nDCIntegrationTestSuite) applyEvents(
 			VersionHistoryItems: s.toThriftVersionHistoryItems(versionHistory),
 			Events:              s.toThriftDataBlob(eventBlob),
 			NewRunEvents:        s.toThriftDataBlob(newRunEventBlob),
-		})
+		}
+
+		err := historyClient.ReplicateEventsV2(s.createContext(), req)
 		s.Nil(err, "Failed to replicate history event")
+		err = historyClient.ReplicateEventsV2(s.createContext(), req)
+		s.Nil(err, "Failed to dedup replicate history event")
 	}
 }
 
@@ -1487,6 +1490,8 @@ func (s *nDCIntegrationTestSuite) applyEventsThroughFetcher(
 			},
 		}
 
+		s.standByReplicationTasksChan <- replicationTask
+		// this is to test whether dedup works
 		s.standByReplicationTasksChan <- replicationTask
 	}
 }

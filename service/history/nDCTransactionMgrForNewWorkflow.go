@@ -239,7 +239,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	createMode := persistence.CreateWorkflowModeZombie
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
-	return targetWorkflow.getContext().createWorkflowExecution(
+	err = targetWorkflow.getContext().createWorkflowExecution(
 		targetWorkflowSnapshot,
 		targetWorkflowHistorySize,
 		now,
@@ -247,6 +247,15 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 		prevRunID,
 		prevLastWriteVersion,
 	)
+	switch err.(type) {
+	case nil:
+		return nil
+	case *persistence.WorkflowExecutionAlreadyStartedError:
+		// workflow already created
+		return nil
+	default:
+		return err
+	}
 }
 
 func (r *nDCTransactionMgrForNewWorkflowImpl) suppressCurrentAndCreateAsCurrent(

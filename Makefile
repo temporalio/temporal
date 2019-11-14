@@ -29,7 +29,7 @@ THRIFTRW_SRCS = \
   idl/github.com/uber/cadence/sqlblobs.thrift \
 
 PROGS = cadence
-TEST_TIMEOUT = 15m
+TEST_TIMEOUT = 20m
 TEST_ARG ?= -race -v -timeout $(TEST_TIMEOUT)
 BUILD := ./build
 TOOLS_CMD_ROOT=./cmd/tools
