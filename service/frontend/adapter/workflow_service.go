@@ -26,26 +26,40 @@ import (
 )
 
 // ToThriftRegisterDomainRequest converts gRPC to Thrift
-func ToThriftRegisterDomainRequest(registerRequest *workflowservice.RegisterDomainRequest) *shared.RegisterDomainRequest {
-	var clusters []*shared.ClusterReplicationConfiguration
-	for _, cluster := range registerRequest.Clusters {
-		clusters = append(clusters, &shared.ClusterReplicationConfiguration{ClusterName: &cluster.ClusterName})
-	}
-
+func ToThriftRegisterDomainRequest(request *workflowservice.RegisterDomainRequest) *shared.RegisterDomainRequest {
 	return &shared.RegisterDomainRequest{
-		Name:                                   &registerRequest.Name,
-		Description:                            &registerRequest.Description,
-		OwnerEmail:                             &registerRequest.OwnerEmail,
-		WorkflowExecutionRetentionPeriodInDays: &registerRequest.WorkflowExecutionRetentionPeriodInDays,
-		EmitMetric:                             &registerRequest.EmitMetric,
-		Clusters:                               clusters,
-		ActiveClusterName:                      &registerRequest.ActiveClusterName,
-		Data:                                   registerRequest.Data,
-		SecurityToken:                          &registerRequest.SecurityToken,
-		IsGlobalDomain:                         &registerRequest.IsGlobalDomain,
-		HistoryArchivalStatus:                  toThriftArchivalStatus(registerRequest.HistoryArchivalStatus),
-		HistoryArchivalURI:                     &registerRequest.HistoryArchivalURI,
-		VisibilityArchivalStatus:               toThriftArchivalStatus(registerRequest.VisibilityArchivalStatus),
-		VisibilityArchivalURI:                  &registerRequest.VisibilityArchivalURI,
+		Name:                                   &request.Name,
+		Description:                            &request.Description,
+		OwnerEmail:                             &request.OwnerEmail,
+		WorkflowExecutionRetentionPeriodInDays: &request.WorkflowExecutionRetentionPeriodInDays,
+		EmitMetric:                             &request.EmitMetric,
+		Clusters:                               toThriftClusterReplicationConfigurations(request.Clusters),
+		ActiveClusterName:                      &request.ActiveClusterName,
+		Data:                                   request.Data,
+		SecurityToken:                          &request.SecurityToken,
+		IsGlobalDomain:                         &request.IsGlobalDomain,
+		HistoryArchivalStatus:                  toThriftArchivalStatus(request.HistoryArchivalStatus),
+		HistoryArchivalURI:                     &request.HistoryArchivalURI,
+		VisibilityArchivalStatus:               toThriftArchivalStatus(request.VisibilityArchivalStatus),
+		VisibilityArchivalURI:                  &request.VisibilityArchivalURI,
+	}
+}
+
+// ToThriftDescribeDomainRequest ...
+func ToThriftDescribeDomainRequest(in *workflowservice.DescribeDomainRequest) *shared.DescribeDomainRequest {
+	return &shared.DescribeDomainRequest{
+		Name: &in.Name,
+		UUID: &in.Uuid,
+	}
+}
+
+// ToProtoDescribeDomainResponse ...
+func ToProtoDescribeDomainResponse(in *shared.DescribeDomainResponse) *workflowservice.DescribeDomainResponse {
+	return &workflowservice.DescribeDomainResponse{
+		DomainInfo:               toProtoDomainInfo(in.DomainInfo),
+		Configuration:            toProtoDomainConfiguration(in.Configuration),
+		ReplicationConfiguration: toProtoDomainReplicationConfiguration(in.ReplicationConfiguration),
+		FailoverVersion:          *in.FailoverVersion,
+		IsGlobalDomain:           *in.IsGlobalDomain,
 	}
 }

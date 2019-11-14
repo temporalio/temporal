@@ -69,8 +69,14 @@ func (wh *WorkflowHandlerGRPC) RegisterDomain(ctx context.Context, registerReque
 }
 
 // DescribeDomain returns the information and configuration for a registered domain.
-func (wh *WorkflowHandlerGRPC) DescribeDomain(context.Context, *workflowservice.DescribeDomainRequest) (*workflowservice.DescribeDomainResponse, error) {
-	panic("implement me")
+func (wh *WorkflowHandlerGRPC) DescribeDomain(ctx context.Context, describeRequest *workflowservice.DescribeDomainRequest) (_ *workflowservice.DescribeDomainResponse, retError error) {
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	describeResponse, err := wh.workflowHandlerThrift.DescribeDomain(ctx, adapter.ToThriftDescribeDomainRequest(describeRequest))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return adapter.ToProtoDescribeDomainResponse(describeResponse), nil
 }
 
 // ListDomains returns the information and configuration for all domains.
