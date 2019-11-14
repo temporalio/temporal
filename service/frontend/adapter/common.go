@@ -21,9 +21,27 @@
 package adapter
 
 import (
+	"github.com/golang/protobuf/ptypes/wrappers"
+
 	"github.com/temporalio/temporal-proto/common"
 	"github.com/temporalio/temporal/.gen/go/shared"
 )
+
+func toProtoBool(in *bool) *wrappers.BoolValue {
+	if in == nil {
+		return nil
+	}
+
+	return &wrappers.BoolValue{Value: *in}
+}
+
+func toThriftBool(in *wrappers.BoolValue) *bool {
+	if in == nil {
+		return nil
+	}
+
+	return &in.Value
+}
 
 func toProtoDomainInfo(in *shared.DomainInfo) *common.DomainInfo {
 	return &common.DomainInfo{
@@ -46,7 +64,7 @@ func toProtoDomainReplicationConfiguration(in *shared.DomainReplicationConfigura
 func toProtoDomainConfiguration(in *shared.DomainConfiguration) *common.DomainConfiguration {
 	return &common.DomainConfiguration{
 		WorkflowExecutionRetentionPeriodInDays: *in.WorkflowExecutionRetentionPeriodInDays,
-		EmitMetric:                             *in.EmitMetric,
+		EmitMetric:                             toProtoBool(in.EmitMetric),
 		BadBinaries:                            toProtoBadBinaries(in.BadBinaries),
 		HistoryArchivalStatus:                  toProtoArchivalStatus(in.HistoryArchivalStatus),
 		HistoryArchivalURI:                     *in.VisibilityArchivalURI,
@@ -103,7 +121,7 @@ func toThriftUpdateDomainInfo(in *common.UpdateDomainInfo) *shared.UpdateDomainI
 func toThriftDomainConfiguration(in *common.DomainConfiguration) *shared.DomainConfiguration {
 	return &shared.DomainConfiguration{
 		WorkflowExecutionRetentionPeriodInDays: &in.WorkflowExecutionRetentionPeriodInDays,
-		EmitMetric:                             &in.EmitMetric,
+		EmitMetric:                             toThriftBool(in.EmitMetric),
 		BadBinaries:                            toThriftBadBinaries(in.BadBinaries),
 		HistoryArchivalStatus:                  toThriftArchivalStatus(in.HistoryArchivalStatus),
 		HistoryArchivalURI:                     &in.HistoryArchivalURI,

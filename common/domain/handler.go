@@ -426,7 +426,7 @@ func (d *HandlerImpl) UpdateDomain(
 	}
 	if updateRequest.Configuration != nil {
 		updatedConfig := updateRequest.Configuration
-		if updatedConfig.GetEmitMetric() != config.EmitMetric {
+		if updatedConfig.EmitMetric != nil {
 			configurationChanged = true
 			config.EmitMetric = updatedConfig.GetEmitMetric()
 		}
