@@ -410,11 +410,11 @@ func (d *HandlerImpl) UpdateDomain(
 
 	if updateRequest.UpdatedInfo != nil {
 		updatedInfo := updateRequest.UpdatedInfo
-		if updatedInfo.GetDescription() != info.Description {
+		if updatedInfo.GetDescription() != "" {
 			configurationChanged = true
 			info.Description = updatedInfo.GetDescription()
 		}
-		if updatedInfo.GetOwnerEmail() != info.OwnerEmail {
+		if updatedInfo.GetOwnerEmail() != "" {
 			configurationChanged = true
 			info.OwnerEmail = updatedInfo.GetOwnerEmail()
 		}
@@ -430,7 +430,7 @@ func (d *HandlerImpl) UpdateDomain(
 			configurationChanged = true
 			config.EmitMetric = updatedConfig.GetEmitMetric()
 		}
-		if updatedConfig.GetWorkflowExecutionRetentionPeriodInDays() != config.Retention {
+		if updatedConfig.GetWorkflowExecutionRetentionPeriodInDays() != 0 {
 			configurationChanged = true
 			config.Retention = updatedConfig.GetWorkflowExecutionRetentionPeriodInDays()
 		}
@@ -488,7 +488,7 @@ func (d *HandlerImpl) UpdateDomain(
 			replicationConfig.Clusters = clustersNew
 		}
 
-		if updateReplicationConfig.GetActiveClusterName() != replicationConfig.ActiveClusterName {
+		if updateReplicationConfig.GetActiveClusterName() != "" {
 			activeClusterChanged = true
 			replicationConfig.ActiveClusterName = updateReplicationConfig.GetActiveClusterName()
 		}
