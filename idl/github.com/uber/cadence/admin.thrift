@@ -110,7 +110,7 @@ struct GetWorkflowExecutionRawHistoryResponse {
   10: optional binary nextPageToken
   20: optional list<shared.DataBlob> historyBatches
   30: optional map<string, shared.ReplicationInfo> replicationInfo
-  40: optional i32 eventStoreVersion
+  40: optional i32 eventStoreVersion = 2
 }
 
 struct AddSearchAttributeRequest {

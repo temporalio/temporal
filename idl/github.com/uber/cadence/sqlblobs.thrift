@@ -253,8 +253,8 @@ struct ReplicationTaskInfo {
   20: optional i64 (js.type = "Long") firstEventID
   22: optional i64 (js.type = "Long") nextEventID
   24: optional i64 (js.type = "Long") scheduledID
-  26: optional i32 eventStoreVersion
-  28: optional i32 newRunEventStoreVersion
+  26: optional i32 eventStoreVersion = 2
+  28: optional i32 newRunEventStoreVersion = 2
   30: optional binary branch_token
   32: optional map<string, ReplicationInfo> lastReplicationInfo
   34: optional binary newRunBranchToken

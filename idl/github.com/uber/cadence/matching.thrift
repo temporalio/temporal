@@ -42,7 +42,7 @@ struct PollForDecisionTaskResponse {
   80: optional shared.WorkflowQuery query
   90: optional shared.TransientDecisionInfo decisionInfo
   100: optional shared.TaskList WorkflowExecutionTaskList
-  110: optional i32 eventStoreVersion
+  110: optional i32 eventStoreVersion = 2
   120: optional binary branchToken
   130:  optional i64 (js.type = "Long") scheduledTimestamp
   140:  optional i64 (js.type = "Long") startedTimestamp

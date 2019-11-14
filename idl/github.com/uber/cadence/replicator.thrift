@@ -56,8 +56,8 @@ struct HistoryTaskAttributes {
   70: optional map<string, shared.ReplicationInfo> replicationInfo
   80: optional shared.History history
   90: optional shared.History newRunHistory
-  100: optional i32 eventStoreVersion
-  110: optional i32 newRunEventStoreVersion
+  100: optional i32 eventStoreVersion = 2
+  110: optional i32 newRunEventStoreVersion = 2
   120: optional bool resetWorkflow
 }
 
