@@ -92,3 +92,48 @@ func toProtoClusterReplicationConfigurations(in []*shared.ClusterReplicationConf
 
 	return ret
 }
+
+func toThriftUpdateDomainInfo(in *common.UpdateDomainInfo) *shared.UpdateDomainInfo {
+	return &shared.UpdateDomainInfo{
+		Description: &in.Description,
+		OwnerEmail:  &in.OwnerEmail,
+		Data:        in.Data,
+	}
+}
+func toThriftDomainConfiguration(in *common.DomainConfiguration) *shared.DomainConfiguration {
+	return &shared.DomainConfiguration{
+		WorkflowExecutionRetentionPeriodInDays: &in.WorkflowExecutionRetentionPeriodInDays,
+		EmitMetric:                             &in.EmitMetric,
+		BadBinaries:                            toThriftBadBinaries(in.BadBinaries),
+		HistoryArchivalStatus:                  toThriftArchivalStatus(in.HistoryArchivalStatus),
+		HistoryArchivalURI:                     &in.HistoryArchivalURI,
+		VisibilityArchivalStatus:               toThriftArchivalStatus(in.VisibilityArchivalStatus),
+		VisibilityArchivalURI:                  &in.VisibilityArchivalURI,
+	}
+}
+func toThriftDomainReplicationConfiguration(in *common.DomainReplicationConfiguration) *shared.DomainReplicationConfiguration {
+	return &shared.DomainReplicationConfiguration{
+		ActiveClusterName: &in.ActiveClusterName,
+		Clusters:          toThriftClusterReplicationConfigurations(in.Clusters),
+	}
+}
+
+func toThriftBadBinaries(in *common.BadBinaries) *shared.BadBinaries {
+	ret := make(map[string]*shared.BadBinaryInfo, len(in.Binaries))
+
+	for key, value := range in.Binaries {
+		ret[key] = toThriftBadBinaryInfo(value)
+	}
+
+	return &shared.BadBinaries{
+		Binaries: ret,
+	}
+}
+
+func toThriftBadBinaryInfo(in *common.BadBinaryInfo) *shared.BadBinaryInfo {
+	return &shared.BadBinaryInfo{
+		Reason:          &in.Reason,
+		Operator:        &in.Operator,
+		CreatedTimeNano: &in.CreatedTimeNano,
+	}
+}

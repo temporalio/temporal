@@ -80,20 +80,38 @@ func (wh *WorkflowHandlerGRPC) DescribeDomain(ctx context.Context, describeReque
 }
 
 // ListDomains returns the information and configuration for all domains.
-func (wh *WorkflowHandlerGRPC) ListDomains(context.Context, *workflowservice.ListDomainsRequest) (*workflowservice.ListDomainsResponse, error) {
-	panic("implement me")
+func (wh *WorkflowHandlerGRPC) ListDomains(ctx context.Context, listDomainRequest *workflowservice.ListDomainsRequest) (_ *workflowservice.ListDomainsResponse, retError error) {
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	listDomainsResponse, err := wh.workflowHandlerThrift.ListDomains(ctx, adapter.ToThriftListDomainRequest(listDomainRequest))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return adapter.ToProtoListDomainResponse(listDomainsResponse), nil
 }
 
 // UpdateDomain is used to update the information and configuration for a registered domain.
-func (wh *WorkflowHandlerGRPC) UpdateDomain(context.Context, *workflowservice.UpdateDomainRequest) (*workflowservice.UpdateDomainResponse, error) {
-	panic("implement me")
+func (wh *WorkflowHandlerGRPC) UpdateDomain(ctx context.Context, updateDomainRequest *workflowservice.UpdateDomainRequest) (_ *workflowservice.UpdateDomainResponse, retError error) {
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	updateDomainResponse, err := wh.workflowHandlerThrift.UpdateDomain(ctx, adapter.ToThriftUpdateDomainRequest(updateDomainRequest))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return adapter.ToProtoUpdateDomainResponse(updateDomainResponse), nil
 }
 
 // DeprecateDomain us used to update status of a registered domain to DEPRECATED.  Once the domain is deprecated
 // it cannot be used to start new workflow executions.  Existing workflow executions will continue to run on
 // deprecated domains.
-func (wh *WorkflowHandlerGRPC) DeprecateDomain(context.Context, *workflowservice.DeprecateDomainRequest) (*workflowservice.DeprecateDomainResponse, error) {
-	panic("implement me")
+func (wh *WorkflowHandlerGRPC) DeprecateDomain(ctx context.Context, deprecateDomainRequest *workflowservice.DeprecateDomainRequest) (_ *workflowservice.DeprecateDomainResponse, retError error) {
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	err := wh.workflowHandlerThrift.DeprecateDomain(ctx, adapter.ToThriftDeprecateDomainRequest(deprecateDomainRequest))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return &workflowservice.DeprecateDomainResponse{}, nil
 }
 
 // StartWorkflowExecution starts a new long running workflow instance.  It will create the instance with
