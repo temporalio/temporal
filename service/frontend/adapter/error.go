@@ -31,8 +31,12 @@ import (
 )
 
 // ToProtoError converts Thrift error to gRPC error.
-func ToProtoError(thriftError error) error {
-	switch thriftError := thriftError.(type) {
+func ToProtoError(in error) error {
+	if in == nil {
+		return nil
+	}
+
+	switch thriftError := in.(type) {
 	case *shared.InternalServiceError:
 		return protobuf.NewError(yarpcerrors.CodeInternal, thriftError.Message)
 	case *shared.BadRequestError:
@@ -85,5 +89,5 @@ func ToProtoError(thriftError error) error {
 		}
 	}
 
-	return protobuf.NewError(yarpcerrors.CodeInternal, fmt.Sprintf("temporal internal uncategorized error, msg: %s", thriftError.Error()))
+	return protobuf.NewError(yarpcerrors.CodeInternal, fmt.Sprintf("temporal internal uncategorized error, msg: %s", in.Error()))
 }
