@@ -981,33 +981,26 @@ func (vm *versionMiddleware) Handle(ctx context.Context, req *transport.Request,
 	return h.Handle(ctx, req, resw)
 }
 
-func (c *rpcFactoryImpl) CreateDispatcherForOutbound(
-	callerName, serviceName, hostName string) *yarpc.Dispatcher {
+func (c *rpcFactoryImpl) CreateTChannelDispatcherForOutbound(callerName, serviceName, hostName string) *yarpc.Dispatcher {
 	// Setup dispatcher(outbound) for onebox
-	d := yarpc.NewDispatcher(yarpc.Config{
-		Name: callerName,
-		Outbounds: yarpc.Outbounds{
-			serviceName: {Unary: c.ch.NewSingleOutbound(hostName)},
-		},
-	})
-	if err := d.Start(); err != nil {
-		c.logger.Fatal("Failed to create outbound transport channel", tag.Error(err))
-	}
-	return d
+	return c.createDispatcherForOutbound(c.ch.NewSingleOutbound(hostName), callerName, serviceName, "TChannel")
 }
 
-// CreateDispatcherForGRPCOutbound creates a dispatcher for outbound connection
-func (c *rpcFactoryImpl) CreateDispatcherForGRPCOutbound(callerName, serviceName, hostName string) *yarpc.Dispatcher {
-	t := grpc.NewTransport()
+// CreateGRPCDispatcherForOutbound creates a dispatcher for outbound connection
+func (c *rpcFactoryImpl) CreateGRPCDispatcherForOutbound(callerName, serviceName, hostName string) *yarpc.Dispatcher {
+	return c.createDispatcherForOutbound(grpc.NewTransport().NewSingleOutbound(hostName), callerName, serviceName, "gRPC")
+}
+
+func (c *rpcFactoryImpl) createDispatcherForOutbound(unaryOutbound transport.UnaryOutbound, callerName, serviceName, transportType string) *yarpc.Dispatcher {
 	d := yarpc.NewDispatcher(yarpc.Config{
 		Name: callerName,
 		Outbounds: yarpc.Outbounds{
-			serviceName: {Unary: t.NewSingleOutbound(hostName)},
+			serviceName: {Unary: unaryOutbound},
 		},
 	})
 
 	if err := d.Start(); err != nil {
-		c.logger.Fatal("Failed to start gRPC outbound dispatcher", tag.Error(err))
+		c.logger.Fatal("Failed to start outbound dispatcher", tag.Error(err), tag.TransportType(transportType))
 	}
 	return d
 }

@@ -750,3 +750,8 @@ func ArchivalNonDeterministicBlobKey(nondeterministicBlobKey string) Tag {
 func ArchivalBlobIntegrityCheckFailReason(blobIntegrityCheckFailReason string) Tag {
 	return newStringTag("archival-blob-integrity-check-fail-reason", blobIntegrityCheckFailReason)
 }
+
+// TransportType returns tag for transportType
+func TransportType(transportType string) Tag {
+	return newStringTag("transport-type", transportType)
+}

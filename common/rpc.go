@@ -55,8 +55,8 @@ type (
 		CreateTChannelDispatcher() *yarpc.Dispatcher
 		CreateGRPCDispatcher() *yarpc.Dispatcher
 		CreateRingpopDispatcher() *yarpc.Dispatcher
-		CreateDispatcherForOutbound(callerName, serviceName, hostName string) *yarpc.Dispatcher
-		CreateDispatcherForGRPCOutbound(callerName, serviceName, hostName string) *yarpc.Dispatcher
+		CreateTChannelDispatcherForOutbound(callerName, serviceName, hostName string) *yarpc.Dispatcher
+		CreateGRPCDispatcherForOutbound(callerName, serviceName, hostName string) *yarpc.Dispatcher
 	}
 )
 

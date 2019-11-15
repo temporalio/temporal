@@ -25,6 +25,7 @@ import (
 	"net"
 
 	"go.uber.org/yarpc"
+	"go.uber.org/yarpc/api/transport"
 	"go.uber.org/yarpc/transport/grpc"
 	"go.uber.org/yarpc/transport/tchannel"
 
@@ -58,7 +59,20 @@ func (d *RPCFactory) CreateTChannelDispatcher() *yarpc.Dispatcher {
 
 // CreateGRPCDispatcher creates a dispatcher for gRPC inbound
 func (d *RPCFactory) CreateGRPCDispatcher() *yarpc.Dispatcher {
-	return d.createInboundGRPCDispatcher(d.serviceName, d.config.GRPCPort)
+	hostAddress := fmt.Sprintf("%v:%v", d.getListenIP(), d.config.GRPCPort)
+	l, err := net.Listen("tcp", hostAddress)
+	if err != nil {
+		d.logger.Fatal("Failed create a gRPC listener", tag.Error(err), tag.Address(hostAddress))
+	}
+
+	dispatcher := yarpc.NewDispatcher(yarpc.Config{
+		Name:     d.serviceName,
+		Inbounds: yarpc.Inbounds{grpc.NewTransport().NewInbound(l)},
+	})
+
+	d.logger.Info("Created gRPC dispatcher", tag.Service(d.serviceName), tag.Address(hostAddress))
+
+	return dispatcher
 }
 
 // CreateRingpopDispatcher creates a dispatcher for ringpop
@@ -67,37 +81,30 @@ func (d *RPCFactory) CreateRingpopDispatcher() *yarpc.Dispatcher {
 	return d.createInboundTChannelDispatcher(ringpopServiceName, d.config.RingpopPort)
 }
 
-// CreateDispatcherForOutbound creates a dispatcher for outbound connection
-func (d *RPCFactory) CreateDispatcherForOutbound(
-	callerName, serviceName, hostName string) *yarpc.Dispatcher {
-	// Setup dispatcher(outbound) for onebox
-	d.logger.Info("Created RPC dispatcher outbound", tag.Service(d.serviceName), tag.Address(hostName))
-	dispatcher := yarpc.NewDispatcher(yarpc.Config{
-		Name: callerName,
-		Outbounds: yarpc.Outbounds{
-			serviceName: {Unary: d.ch.NewSingleOutbound(hostName)},
-		},
-	})
-	if err := dispatcher.Start(); err != nil {
-		d.logger.Fatal("Failed to create outbound transport channel", tag.Error(err))
-	}
-	return dispatcher
+// CreateTChannelDispatcherForOutbound creates a dispatcher for outbound connection
+func (d *RPCFactory) CreateTChannelDispatcherForOutbound(callerName, serviceName, hostName string) *yarpc.Dispatcher {
+	return d.createDispatcherForOutbound(d.ch.NewSingleOutbound(hostName), callerName, serviceName, "TChannel")
 }
 
-// CreateDispatcherForGRPCOutbound creates a dispatcher for outbound connection
-func (d *RPCFactory) CreateDispatcherForGRPCOutbound(callerName, serviceName, hostName string) *yarpc.Dispatcher {
-	t := grpc.NewTransport()
-	dispatcher := yarpc.NewDispatcher(yarpc.Config{
+// CreateGRPCDispatcherForOutbound creates a dispatcher for outbound connection
+func (d *RPCFactory) CreateGRPCDispatcherForOutbound(callerName, serviceName, hostName string) *yarpc.Dispatcher {
+	return d.createDispatcherForOutbound(grpc.NewTransport().NewSingleOutbound(hostName), callerName, serviceName, "gRPC")
+}
+
+func (d *RPCFactory) createDispatcherForOutbound(unaryOutbound transport.UnaryOutbound, callerName, serviceName, transportType string) *yarpc.Dispatcher {
+	dsp := yarpc.NewDispatcher(yarpc.Config{
 		Name: callerName,
 		Outbounds: yarpc.Outbounds{
-			serviceName: {Unary: t.NewSingleOutbound(hostName)},
+			serviceName: {Unary: unaryOutbound},
 		},
 	})
-	d.logger.Info("Created gRPC outbound dispatcher", tag.Service(d.serviceName), tag.Address(hostName))
-	if err := dispatcher.Start(); err != nil {
-		d.logger.Fatal("Failed to start gRPC outbound dispatcher", tag.Error(err))
+
+	d.logger.Info("Created RPC dispatcher outbound", tag.Service(d.serviceName), tag.TransportType(transportType))
+
+	if err := dsp.Start(); err != nil {
+		d.logger.Fatal("Failed to start outbound dispatcher", tag.Error(err), tag.TransportType(transportType))
 	}
-	return dispatcher
+	return dsp
 }
 
 func (d *RPCFactory) createInboundTChannelDispatcher(serviceName string, port int) *yarpc.Dispatcher {
@@ -115,23 +122,6 @@ func (d *RPCFactory) createInboundTChannelDispatcher(serviceName string, port in
 		Name:     serviceName,
 		Inbounds: yarpc.Inbounds{d.ch.NewInbound()},
 	})
-}
-
-func (d *RPCFactory) createInboundGRPCDispatcher(serviceName string, port int) *yarpc.Dispatcher {
-	hostAddress := fmt.Sprintf("%v:%v", d.getListenIP(), port)
-	l, err := net.Listen("tcp", hostAddress)
-	if err != nil {
-		d.logger.Fatal("Failed create a gRPC listener", tag.Error(err), tag.Address(hostAddress))
-	}
-
-	dispatcher := yarpc.NewDispatcher(yarpc.Config{
-		Name:     serviceName,
-		Inbounds: yarpc.Inbounds{grpc.NewTransport().NewInbound(l)},
-	})
-
-	d.logger.Info("Created gRPC dispatcher", tag.Service(serviceName), tag.Address(hostAddress))
-
-	return dispatcher
 }
 
 func (d *RPCFactory) getListenIP() net.IP {
