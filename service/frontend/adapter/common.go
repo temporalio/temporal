@@ -21,21 +21,19 @@
 package adapter
 
 import (
-	"github.com/golang/protobuf/ptypes/wrappers"
-
 	"github.com/temporalio/temporal-proto/common"
 	"github.com/temporalio/temporal/.gen/go/shared"
 )
 
-func toProtoBool(in *bool) *wrappers.BoolValue {
+func toProtoBool(in *bool) *common.BoolValue {
 	if in == nil {
 		return nil
 	}
 
-	return &wrappers.BoolValue{Value: *in}
+	return &common.BoolValue{Value: *in}
 }
 
-func toThriftBool(in *wrappers.BoolValue) *bool {
+func toThriftBool(in *common.BoolValue) *bool {
 	if in == nil {
 		return nil
 	}
