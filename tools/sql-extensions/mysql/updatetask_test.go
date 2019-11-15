@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package sql
+package mysql
 
 import (
 	"log"
@@ -30,6 +30,7 @@ import (
 	"github.com/uber/cadence/environment"
 	"github.com/uber/cadence/schema/mysql"
 	"github.com/uber/cadence/tools/common/schema/test"
+	"github.com/uber/cadence/tools/sql"
 )
 
 type UpdateSchemaTestSuite struct {
@@ -59,21 +60,21 @@ func (s *UpdateSchemaTestSuite) TestUpdateSchema() {
 	conn, err := newTestConn(s.DBName)
 	s.Nil(err)
 	defer conn.Close()
-	s.RunUpdateSchemaTest(buildCLIOptions(), conn, "--db", createTestSQLFileContent(), []string{"task_maps", "tasks"})
+	s.RunUpdateSchemaTest(sql.BuildCLIOptions(), conn, "--db", createTestSQLFileContent(), []string{"task_maps", "tasks"})
 }
 
 func (s *UpdateSchemaTestSuite) TestDryrun() {
 	conn, err := newTestConn(s.DBName)
 	s.Nil(err)
 	defer conn.Close()
-	dir := "../../schema/mysql/v57/cadence/versioned"
-	s.RunDryrunTest(buildCLIOptions(), conn, "--db", dir, mysql.Version)
+	dir := "../../../schema/mysql/v57/cadence/versioned"
+	s.RunDryrunTest(sql.BuildCLIOptions(), conn, "--db", dir, mysql.Version)
 }
 
 func (s *UpdateSchemaTestSuite) TestVisibilityDryrun() {
 	conn, err := newTestConn(s.DBName)
 	s.Nil(err)
 	defer conn.Close()
-	dir := "../../schema/mysql/v57/visibility/versioned"
-	s.RunDryrunTest(buildCLIOptions(), conn, "--db", dir, mysql.VisibilityVersion)
+	dir := "../../../schema/mysql/v57/visibility/versioned"
+	s.RunDryrunTest(sql.BuildCLIOptions(), conn, "--db", dir, mysql.VisibilityVersion)
 }

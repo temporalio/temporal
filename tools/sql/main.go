@@ -23,15 +23,16 @@ package sql
 import (
 	"os"
 
-	_ "github.com/go-sql-driver/mysql" // needed to load the mysql driver
 	"github.com/urfave/cli"
 
 	"github.com/uber/cadence/tools/common/schema"
 )
 
+const defaultSQLPort = 3306
+
 // RunTool runs the cadence-cassandra-tool command line tool
 func RunTool(args []string) error {
-	app := buildCLIOptions()
+	app := BuildCLIOptions()
 	return app.Run(args)
 }
 
@@ -44,7 +45,8 @@ func cliHandler(c *cli.Context, handler func(c *cli.Context) error) {
 	}
 }
 
-func buildCLIOptions() *cli.App {
+// BuildCLIOptions builds the options for cli
+func BuildCLIOptions() *cli.App {
 
 	app := cli.NewApp()
 	app.Name = "cadence-sql-tool"

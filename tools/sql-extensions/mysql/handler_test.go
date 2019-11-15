@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package sql
+package mysql
 
 import (
 	"testing"
@@ -28,6 +28,7 @@ import (
 
 	"github.com/uber/cadence/environment"
 	"github.com/uber/cadence/tools/common/schema"
+	"github.com/uber/cadence/tools/sql"
 )
 
 type (
@@ -46,16 +47,16 @@ func (s *HandlerTestSuite) SetupTest() {
 }
 
 func (s *HandlerTestSuite) TestValidateConnectParams() {
-	p := new(sqlConnectParams)
-	s.NotNil(validateConnectParams(p, false))
-	s.NotNil(validateConnectParams(p, true))
+	p := new(sql.ConnectParams)
+	s.NotNil(sql.ValidateConnectParams(p, false))
+	s.NotNil(sql.ValidateConnectParams(p, true))
 
-	p.host = environment.GetMySQLAddress()
-	s.NotNil(validateConnectParams(p, false))
-	s.Nil(validateConnectParams(p, true))
-	s.Equal(schema.DryrunDBName, p.database)
+	p.Host = environment.GetMySQLAddress()
+	s.NotNil(sql.ValidateConnectParams(p, false))
+	s.Nil(sql.ValidateConnectParams(p, true))
+	s.Equal(schema.DryrunDBName, p.Database)
 
-	p.database = "foobar"
-	s.Nil(validateConnectParams(p, false))
-	s.Nil(validateConnectParams(p, true))
+	p.Database = "foobar"
+	s.Nil(sql.ValidateConnectParams(p, false))
+	s.Nil(sql.ValidateConnectParams(p, true))
 }

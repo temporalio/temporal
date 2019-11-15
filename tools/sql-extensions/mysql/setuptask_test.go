@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package sql
+package mysql
 
 import (
 	"os"
@@ -29,12 +29,13 @@ import (
 
 	"github.com/uber/cadence/environment"
 	"github.com/uber/cadence/tools/common/schema/test"
+	"github.com/uber/cadence/tools/sql"
 )
 
 type (
 	SetupSchemaTestSuite struct {
 		test.SetupSchemaTestBase
-		conn *sqlConn
+		conn *sql.Connection
 	}
 )
 
@@ -59,7 +60,7 @@ func (s *SetupSchemaTestSuite) TearDownSuite() {
 }
 
 func (s *SetupSchemaTestSuite) TestCreateDatabase() {
-	RunTool([]string{"./tool", "-u", testUser, "--pw", testPassword, "create", "--db", "foobar123"})
+	sql.RunTool([]string{"./tool", "-u", testUser, "--pw", testPassword, "create", "--db", "foobar123"})
 	err := s.conn.DropDatabase("foobar123")
 	s.Nil(err)
 }
@@ -67,5 +68,5 @@ func (s *SetupSchemaTestSuite) TestCreateDatabase() {
 func (s *SetupSchemaTestSuite) TestSetupSchema() {
 	conn, err := newTestConn(s.DBName)
 	s.Nil(err)
-	s.RunSetupTest(buildCLIOptions(), conn, "--db", createTestSQLFileContent(), []string{"task_maps", "tasks"})
+	s.RunSetupTest(sql.BuildCLIOptions(), conn, "--db", createTestSQLFileContent(), []string{"task_maps", "tasks"})
 }

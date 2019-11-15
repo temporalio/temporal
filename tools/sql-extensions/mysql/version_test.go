@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package sql
+package mysql
 
 import (
 	"fmt"
@@ -38,7 +38,7 @@ import (
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/environment"
-	"github.com/uber/cadence/tools/sql/mysql"
+	"github.com/uber/cadence/tools/sql"
 )
 
 type (
@@ -61,20 +61,20 @@ func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
 	visDatabase := "cadence_visibility_test"
 	_, filename, _, ok := runtime.Caller(0)
 	s.True(ok)
-	root := path.Dir(path.Dir(path.Dir(filename)))
+	root := path.Dir(path.Dir(path.Dir(path.Dir(filename))))
 	sqlFile := path.Join(root, "schema/mysql/v57/cadence/schema.sql")
 	visSQLFile := path.Join(root, "schema/mysql/v57/visibility/schema.sql")
 
 	defer s.createDatabase(database)()
 	defer s.createDatabase(visDatabase)()
-	err := RunTool([]string{
+	err := sql.RunTool([]string{
 		"./tool",
 		"-ep", environment.GetMySQLAddress(),
 		"-p", strconv.Itoa(environment.GetMySQLPort()),
 		"-u", testUser,
 		"-pw", testPassword,
 		"-db", database,
-		"-dr", mysql.DriverName,
+		"-dr", driverName,
 		"-q",
 		"setup-schema",
 		"-f", sqlFile,
@@ -82,14 +82,14 @@ func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
 		"-o",
 	})
 	s.NoError(err)
-	err = RunTool([]string{
+	err = sql.RunTool([]string{
 		"./tool",
 		"-ep", environment.GetMySQLAddress(),
 		"-p", strconv.Itoa(environment.GetMySQLPort()),
 		"-u", testUser,
 		"-pw", testPassword,
 		"-db", visDatabase,
-		"-dr", mysql.DriverName,
+		"-dr", driverName,
 		"-q",
 		"setup-schema",
 		"-f", visSQLFile,
@@ -102,7 +102,7 @@ func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
 		ConnectAddr:  fmt.Sprintf("%v:%v", environment.GetMySQLAddress(), environment.GetMySQLPort()),
 		User:         testUser,
 		Password:     testPassword,
-		DriverName:   mysql.DriverName,
+		DriverName:   driverName,
 		DatabaseName: database,
 	}
 	visibilityCfg := defaultCfg
@@ -116,7 +116,7 @@ func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
 		},
 		TransactionSizeLimit: dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit),
 	}
-	s.NoError(VerifyCompatibleVersion(cfg))
+	s.NoError(sql.VerifyCompatibleVersion(cfg))
 }
 
 func (s *VersionTestSuite) TestCheckCompatibleVersion() {
@@ -168,14 +168,14 @@ func (s *VersionTestSuite) runCheckCompatibleVersion(
 	}
 
 	sqlFile := subdir + "/v" + actual + "/tmp.sql"
-	RunTool([]string{
+	sql.RunTool([]string{
 		"./tool",
 		"-ep", environment.GetMySQLAddress(),
 		"-p", strconv.Itoa(environment.GetMySQLPort()),
 		"-u", testUser,
 		"-pw", testPassword,
 		"-db", database,
-		"-dr", mysql.DriverName,
+		"-dr", driverName,
 		"-q",
 		"setup-schema",
 		"-f", sqlFile,
@@ -190,10 +190,10 @@ func (s *VersionTestSuite) runCheckCompatibleVersion(
 		ConnectAddr:  fmt.Sprintf("%v:%v", environment.GetMySQLAddress(), environment.GetMySQLPort()),
 		User:         testUser,
 		Password:     testPassword,
-		DriverName:   mysql.DriverName,
+		DriverName:   driverName,
 		DatabaseName: database,
 	}
-	err = checkCompatibleVersion(cfg, expected)
+	err = sql.CheckCompatibleVersion(cfg, expected)
 	if len(errStr) > 0 {
 		s.Error(err)
 		s.Contains(err.Error(), errStr)

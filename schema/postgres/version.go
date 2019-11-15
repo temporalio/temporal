@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2019 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,32 +20,14 @@
 
 package mysql
 
-import (
-	"fmt"
-	"strings"
+import "github.com/uber/cadence/schema/mysql"
 
-	"github.com/iancoleman/strcase"
-	"github.com/jmoiron/sqlx"
-)
+// NOTE: whenever there is a new data base schema update, plz update the following versions
 
-const (
-	dataSourceName = "%s:%s@%v(%v)/%s?multiStatements=true&parseTime=true&clientFoundRows=true"
-)
+// Version is the Postgres database release version
+// Cadence supports both MySQL and Postgres officially, so upgrade should be perform for both MySQL and Postgres
+const Version = mysql.Version
 
-// DriverName refers to the name of the mysql driver
-const DriverName = "mysql"
-
-// NewConnection returns a new connection to mysql database
-func NewConnection(host string, port int, user string, passwd string, database string) (*sqlx.DB, error) {
-	addr := fmt.Sprintf("%v:%v", host, port)
-	if strings.Contains(host, ":") && port == 0 {
-		addr = host
-	}
-	db, err := sqlx.Connect(DriverName, fmt.Sprintf(dataSourceName, user, passwd, "tcp", addr, database))
-	if err != nil {
-		return nil, err
-	}
-	// Maps struct names in CamelCase to snake without need for db struct tags.
-	db.MapperFunc(strcase.ToSnake)
-	return db, nil
-}
+// VisibilityVersion is the Postgres visibility database release version
+// Cadence supports both MySQL and Postgres officially, so upgrade should be perform for both MySQL and Postgres
+const VisibilityVersion = mysql.VisibilityVersion

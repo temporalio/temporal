@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package sql
+package mysql
 
 import (
 	"testing"
@@ -29,7 +29,7 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/environment"
 	"github.com/uber/cadence/tools/common/schema/test"
-	"github.com/uber/cadence/tools/sql/mysql"
+	"github.com/uber/cadence/tools/sql"
 )
 
 type (
@@ -38,7 +38,7 @@ type (
 	}
 )
 
-var _ test.DB = (*sqlConn)(nil)
+var _ test.DB = (*sql.Connection)(nil)
 
 const (
 	testUser     = "uber"
@@ -70,13 +70,13 @@ func (s *SQLConnTestSuite) TestParseCQLFile() {
 }
 
 func (s *SQLConnTestSuite) TestSQLConn() {
-	conn, err := newConn(&sqlConnectParams{
-		host:       environment.GetMySQLAddress(),
-		port:       environment.GetMySQLPort(),
-		user:       testUser,
-		password:   testPassword,
-		driverName: mysql.DriverName,
-		database:   s.DBName,
+	conn, err := sql.NewConnection(&sql.ConnectParams{
+		Host:       environment.GetMySQLAddress(),
+		Port:       environment.GetMySQLPort(),
+		User:       testUser,
+		Password:   testPassword,
+		DriverName: driverName,
+		Database:   s.DBName,
 	})
 	s.Nil(err)
 	s.RunCreateTest(conn)
@@ -85,14 +85,14 @@ func (s *SQLConnTestSuite) TestSQLConn() {
 	conn.Close()
 }
 
-func newTestConn(database string) (*sqlConn, error) {
-	return newConn(&sqlConnectParams{
-		host:       environment.GetMySQLAddress(),
-		port:       environment.GetMySQLPort(),
-		user:       testUser,
-		password:   testPassword,
-		driverName: mysql.DriverName,
-		database:   database,
+func newTestConn(database string) (*sql.Connection, error) {
+	return sql.NewConnection(&sql.ConnectParams{
+		Host:       environment.GetMySQLAddress(),
+		Port:       environment.GetMySQLPort(),
+		User:       testUser,
+		Password:   testPassword,
+		DriverName: driverName,
+		Database:   database,
 	})
 }
 
