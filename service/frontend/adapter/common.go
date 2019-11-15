@@ -44,36 +44,49 @@ func toThriftBool(in *wrappers.BoolValue) *bool {
 }
 
 func toProtoDomainInfo(in *shared.DomainInfo) *common.DomainInfo {
+	if in == nil {
+		return nil
+	}
 	return &common.DomainInfo{
-		Name:        *in.Name,
-		Status:      toProtoDomainStatus(*in.Status),
-		Description: *in.Description,
-		OwnerEmail:  *in.OwnerEmail,
-		Data:        in.Data,
-		Uuid:        *in.UUID,
+		Name:        in.GetName(),
+		Status:      toProtoDomainStatus(in.GetStatus()),
+		Description: in.GetDescription(),
+		OwnerEmail:  in.GetOwnerEmail(),
+		Data:        in.GetData(),
+		Uuid:        in.GetUUID(),
 	}
 }
 
 func toProtoDomainReplicationConfiguration(in *shared.DomainReplicationConfiguration) *common.DomainReplicationConfiguration {
+	if in == nil {
+		return nil
+	}
 	return &common.DomainReplicationConfiguration{
-		ActiveClusterName: *in.ActiveClusterName,
+		ActiveClusterName: in.GetActiveClusterName(),
 		Clusters:          toProtoClusterReplicationConfigurations(in.Clusters),
 	}
 }
 
 func toProtoDomainConfiguration(in *shared.DomainConfiguration) *common.DomainConfiguration {
+	if in == nil {
+		return nil
+	}
 	return &common.DomainConfiguration{
-		WorkflowExecutionRetentionPeriodInDays: *in.WorkflowExecutionRetentionPeriodInDays,
+		WorkflowExecutionRetentionPeriodInDays: in.GetWorkflowExecutionRetentionPeriodInDays(),
 		EmitMetric:                             toProtoBool(in.EmitMetric),
 		BadBinaries:                            toProtoBadBinaries(in.BadBinaries),
 		HistoryArchivalStatus:                  toProtoArchivalStatus(in.HistoryArchivalStatus),
-		HistoryArchivalURI:                     *in.VisibilityArchivalURI,
+		HistoryArchivalURI:                     in.GetVisibilityArchivalURI(),
 		VisibilityArchivalStatus:               toProtoArchivalStatus(in.VisibilityArchivalStatus),
-		VisibilityArchivalURI:                  *in.VisibilityArchivalURI,
+		VisibilityArchivalURI:                  in.GetVisibilityArchivalURI(),
 	}
 }
 
 func toProtoBadBinaries(in *shared.BadBinaries) *common.BadBinaries {
+	if in == nil {
+		return nil
+	}
+
 	ret := make(map[string]*common.BadBinaryInfo, len(in.Binaries))
 
 	for key, value := range in.Binaries {
@@ -86,10 +99,13 @@ func toProtoBadBinaries(in *shared.BadBinaries) *common.BadBinaries {
 }
 
 func toProtoBadBinaryInfo(in *shared.BadBinaryInfo) *common.BadBinaryInfo {
+	if in == nil {
+		return nil
+	}
 	return &common.BadBinaryInfo{
-		Reason:          *in.Reason,
-		Operator:        *in.Operator,
-		CreatedTimeNano: *in.CreatedTimeNano,
+		Reason:          in.GetReason(),
+		Operator:        in.GetOperator(),
+		CreatedTimeNano: in.GetCreatedTimeNano(),
 	}
 }
 
@@ -112,6 +128,9 @@ func toProtoClusterReplicationConfigurations(in []*shared.ClusterReplicationConf
 }
 
 func toThriftUpdateDomainInfo(in *common.UpdateDomainInfo) *shared.UpdateDomainInfo {
+	if in == nil {
+		return nil
+	}
 	return &shared.UpdateDomainInfo{
 		Description: &in.Description,
 		OwnerEmail:  &in.OwnerEmail,
@@ -119,6 +138,9 @@ func toThriftUpdateDomainInfo(in *common.UpdateDomainInfo) *shared.UpdateDomainI
 	}
 }
 func toThriftDomainConfiguration(in *common.DomainConfiguration) *shared.DomainConfiguration {
+	if in == nil {
+		return nil
+	}
 	return &shared.DomainConfiguration{
 		WorkflowExecutionRetentionPeriodInDays: &in.WorkflowExecutionRetentionPeriodInDays,
 		EmitMetric:                             toThriftBool(in.EmitMetric),
@@ -130,6 +152,9 @@ func toThriftDomainConfiguration(in *common.DomainConfiguration) *shared.DomainC
 	}
 }
 func toThriftDomainReplicationConfiguration(in *common.DomainReplicationConfiguration) *shared.DomainReplicationConfiguration {
+	if in == nil {
+		return nil
+	}
 	return &shared.DomainReplicationConfiguration{
 		ActiveClusterName: &in.ActiveClusterName,
 		Clusters:          toThriftClusterReplicationConfigurations(in.Clusters),
@@ -137,6 +162,9 @@ func toThriftDomainReplicationConfiguration(in *common.DomainReplicationConfigur
 }
 
 func toThriftBadBinaries(in *common.BadBinaries) *shared.BadBinaries {
+	if in == nil {
+		return nil
+	}
 	ret := make(map[string]*shared.BadBinaryInfo, len(in.Binaries))
 
 	for key, value := range in.Binaries {
@@ -149,6 +177,9 @@ func toThriftBadBinaries(in *common.BadBinaries) *shared.BadBinaries {
 }
 
 func toThriftBadBinaryInfo(in *common.BadBinaryInfo) *shared.BadBinaryInfo {
+	if in == nil {
+		return nil
+	}
 	return &shared.BadBinaryInfo{
 		Reason:          &in.Reason,
 		Operator:        &in.Operator,

@@ -26,27 +26,33 @@ import (
 )
 
 // ToThriftRegisterDomainRequest converts gRPC to Thrift
-func ToThriftRegisterDomainRequest(request *workflowservice.RegisterDomainRequest) *shared.RegisterDomainRequest {
+func ToThriftRegisterDomainRequest(in *workflowservice.RegisterDomainRequest) *shared.RegisterDomainRequest {
+	if in == nil {
+		return nil
+	}
 	return &shared.RegisterDomainRequest{
-		Name:                                   &request.Name,
-		Description:                            &request.Description,
-		OwnerEmail:                             &request.OwnerEmail,
-		WorkflowExecutionRetentionPeriodInDays: &request.WorkflowExecutionRetentionPeriodInDays,
-		EmitMetric:                             &request.EmitMetric,
-		Clusters:                               toThriftClusterReplicationConfigurations(request.Clusters),
-		ActiveClusterName:                      &request.ActiveClusterName,
-		Data:                                   request.Data,
-		SecurityToken:                          &request.SecurityToken,
-		IsGlobalDomain:                         &request.IsGlobalDomain,
-		HistoryArchivalStatus:                  toThriftArchivalStatus(request.HistoryArchivalStatus),
-		HistoryArchivalURI:                     &request.HistoryArchivalURI,
-		VisibilityArchivalStatus:               toThriftArchivalStatus(request.VisibilityArchivalStatus),
-		VisibilityArchivalURI:                  &request.VisibilityArchivalURI,
+		Name:                                   &in.Name,
+		Description:                            &in.Description,
+		OwnerEmail:                             &in.OwnerEmail,
+		WorkflowExecutionRetentionPeriodInDays: &in.WorkflowExecutionRetentionPeriodInDays,
+		EmitMetric:                             &in.EmitMetric,
+		Clusters:                               toThriftClusterReplicationConfigurations(in.Clusters),
+		ActiveClusterName:                      &in.ActiveClusterName,
+		Data:                                   in.Data,
+		SecurityToken:                          &in.SecurityToken,
+		IsGlobalDomain:                         &in.IsGlobalDomain,
+		HistoryArchivalStatus:                  toThriftArchivalStatus(in.HistoryArchivalStatus),
+		HistoryArchivalURI:                     &in.HistoryArchivalURI,
+		VisibilityArchivalStatus:               toThriftArchivalStatus(in.VisibilityArchivalStatus),
+		VisibilityArchivalURI:                  &in.VisibilityArchivalURI,
 	}
 }
 
 // ToThriftDescribeDomainRequest ...
 func ToThriftDescribeDomainRequest(in *workflowservice.DescribeDomainRequest) *shared.DescribeDomainRequest {
+	if in == nil {
+		return nil
+	}
 	return &shared.DescribeDomainRequest{
 		Name: &in.Name,
 		UUID: &in.Uuid,
@@ -55,17 +61,23 @@ func ToThriftDescribeDomainRequest(in *workflowservice.DescribeDomainRequest) *s
 
 // ToProtoDescribeDomainResponse ...
 func ToProtoDescribeDomainResponse(in *shared.DescribeDomainResponse) *workflowservice.DescribeDomainResponse {
+	if in == nil {
+		return nil
+	}
 	return &workflowservice.DescribeDomainResponse{
 		DomainInfo:               toProtoDomainInfo(in.DomainInfo),
 		Configuration:            toProtoDomainConfiguration(in.Configuration),
 		ReplicationConfiguration: toProtoDomainReplicationConfiguration(in.ReplicationConfiguration),
-		FailoverVersion:          *in.FailoverVersion,
-		IsGlobalDomain:           *in.IsGlobalDomain,
+		FailoverVersion:          in.GetFailoverVersion(),
+		IsGlobalDomain:           in.GetIsGlobalDomain(),
 	}
 }
 
 // ToThriftListDomainRequest ...
 func ToThriftListDomainRequest(in *workflowservice.ListDomainsRequest) *shared.ListDomainsRequest {
+	if in == nil {
+		return nil
+	}
 	return &shared.ListDomainsRequest{
 		PageSize:      &in.PageSize,
 		NextPageToken: in.NextPageToken,
@@ -74,6 +86,9 @@ func ToThriftListDomainRequest(in *workflowservice.ListDomainsRequest) *shared.L
 
 // ToProtoListDomainResponse ...
 func ToProtoListDomainResponse(in *shared.ListDomainsResponse) *workflowservice.ListDomainsResponse {
+	if in == nil {
+		return nil
+	}
 	var ret []*workflowservice.DescribeDomainResponse
 	for _, domain := range in.Domains {
 		ret = append(ret, ToProtoDescribeDomainResponse(domain))
@@ -86,6 +101,9 @@ func ToProtoListDomainResponse(in *shared.ListDomainsResponse) *workflowservice.
 }
 
 func ToThriftUpdateDomainRequest(in *workflowservice.UpdateDomainRequest) *shared.UpdateDomainRequest {
+	if in == nil {
+		return nil
+	}
 	return &shared.UpdateDomainRequest{
 		Name:                     &in.Name,
 		UpdatedInfo:              toThriftUpdateDomainInfo(in.UpdatedInfo),
@@ -97,16 +115,22 @@ func ToThriftUpdateDomainRequest(in *workflowservice.UpdateDomainRequest) *share
 }
 
 func ToProtoUpdateDomainResponse(in *shared.UpdateDomainResponse) *workflowservice.UpdateDomainResponse {
+	if in == nil {
+		return nil
+	}
 	return &workflowservice.UpdateDomainResponse{
 		DomainInfo:               toProtoDomainInfo(in.DomainInfo),
 		Configuration:            toProtoDomainConfiguration(in.Configuration),
 		ReplicationConfiguration: toProtoDomainReplicationConfiguration(in.ReplicationConfiguration),
-		FailoverVersion:          *in.FailoverVersion,
-		IsGlobalDomain:           *in.IsGlobalDomain,
+		FailoverVersion:          in.GetFailoverVersion(),
+		IsGlobalDomain:           in.GetIsGlobalDomain(),
 	}
 }
 
 func ToThriftDeprecateDomainRequest(in *workflowservice.DeprecateDomainRequest) *shared.DeprecateDomainRequest {
+	if in == nil {
+		return nil
+	}
 	return &shared.DeprecateDomainRequest{
 		Name:          &in.Name,
 		SecurityToken: &in.SecurityToken,
