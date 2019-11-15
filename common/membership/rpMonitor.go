@@ -82,11 +82,8 @@ func (rpo *ringpopMonitor) Start() {
 		rpo.logger.Fatal("unable to set ring pop labels", tag.Error(err))
 	}
 
-	for service, ring := range rpo.rings {
-		err := ring.Start()
-		if err != nil {
-			rpo.logger.Fatal("unable to start ring pop monitor", tag.Service(service), tag.Error(err))
-		}
+	for _, ring := range rpo.rings {
+		ring.Start()
 	}
 }
 
@@ -99,10 +96,8 @@ func (rpo *ringpopMonitor) Stop() {
 		return
 	}
 
-	for service, ring := range rpo.rings {
-		if err := ring.Stop(); err != nil {
-			rpo.logger.Error("unable to stop ring pop monitor", tag.Service(service), tag.Error(err))
-		}
+	for _, ring := range rpo.rings {
+		ring.Stop()
 	}
 
 	rpo.rp.Stop()

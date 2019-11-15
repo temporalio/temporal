@@ -163,12 +163,14 @@ bins_nothrift: fmt lint copyright cadence-cassandra-tool cadence-sql-tool cadenc
 
 bins: thriftc bins_nothrift
 
-test: go-generate bins
+test: bins
 	@rm -f test
 	@rm -f test.log
 	@for dir in $(TEST_DIRS); do \
 		go test -timeout $(TEST_TIMEOUT) -race -coverprofile=$@ "$$dir" $(TEST_TAG) | tee -a test.log; \
 	done;
+
+release: go-generate test
 
 # need to run xdc tests with race detector off because of ringpop bug causing data race issue
 test_xdc: bins

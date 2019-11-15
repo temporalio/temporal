@@ -22,6 +22,7 @@ package membership
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dgryski/go-farm"
@@ -38,21 +39,23 @@ const (
 	// RoleKey label is set by every single service as soon as it bootstraps its
 	// ringpop instance. The data for this key is the service name
 	RoleKey                = "serviceName"
+	minRefreshInternal     = time.Second * 4
 	defaultRefreshInterval = time.Second * 10
 	replicaPoints          = 100
 )
 
 type ringpopServiceResolver struct {
-	service    string
-	isStarted  bool
-	isStopped  bool
-	rp         *RingPop
-	shutdownCh chan struct{}
-	shutdownWG sync.WaitGroup
-	logger     log.Logger
+	status      int32
+	service     string
+	rp          *RingPop
+	refreshChan chan struct{}
+	shutdownCh  chan struct{}
+	shutdownWG  sync.WaitGroup
+	logger      log.Logger
 
-	ringLock sync.RWMutex
-	ring     *hashring.HashRing
+	ringLock            sync.RWMutex
+	ringLastRefreshTime time.Time
+	ring                *hashring.HashRing
 
 	listenerLock sync.RWMutex
 	listeners    map[string]chan<- *ChangedEvent
@@ -67,60 +70,60 @@ func newRingpopServiceResolver(
 ) *ringpopServiceResolver {
 
 	return &ringpopServiceResolver{
-		service:    service,
-		rp:         rp,
-		logger:     logger.WithTags(tag.ComponentServiceResolver, tag.Service(service)),
-		ring:       hashring.New(farm.Fingerprint32, replicaPoints),
-		listeners:  make(map[string]chan<- *ChangedEvent),
-		shutdownCh: make(chan struct{}),
+		status:      common.DaemonStatusInitialized,
+		service:     service,
+		rp:          rp,
+		refreshChan: make(chan struct{}),
+		shutdownCh:  make(chan struct{}),
+		logger:      logger.WithTags(tag.ComponentServiceResolver, tag.Service(service)),
+
+		ring: hashring.New(farm.Fingerprint32, replicaPoints),
+
+		listeners: make(map[string]chan<- *ChangedEvent),
 	}
 }
 
 // Start starts the oracle
-func (r *ringpopServiceResolver) Start() error {
-	r.ringLock.Lock()
-	defer r.ringLock.Unlock()
-
-	if r.isStarted {
-		return nil
+func (r *ringpopServiceResolver) Start() {
+	if !atomic.CompareAndSwapInt32(
+		&r.status,
+		common.DaemonStatusInitialized,
+		common.DaemonStatusStarted,
+	) {
+		return
 	}
 
 	r.rp.AddListener(r)
-	if err := r.doRefresh(); err != nil {
-		return err
+	if err := r.refresh(); err != nil {
+		r.logger.Fatal("unable to start ring pop service resolver", tag.Error(err))
 	}
 
 	r.shutdownWG.Add(1)
 	go r.refreshRingWorker()
-
-	r.isStarted = true
-	return nil
 }
 
 // Stop stops the resolver
-func (r *ringpopServiceResolver) Stop() error {
+func (r *ringpopServiceResolver) Stop() {
+	if !atomic.CompareAndSwapInt32(
+		&r.status,
+		common.DaemonStatusStarted,
+		common.DaemonStatusStopped,
+	) {
+		return
+	}
+
 	r.ringLock.Lock()
 	defer r.ringLock.Unlock()
 	r.listenerLock.Lock()
 	defer r.listenerLock.Unlock()
-
-	if r.isStopped {
-		return nil
-	}
-
-	if r.isStarted {
-		r.rp.RemoveListener(r)
-		r.ring = hashring.New(farm.Fingerprint32, replicaPoints)
-		r.listeners = make(map[string]chan<- *ChangedEvent)
-		close(r.shutdownCh)
-	}
+	r.rp.RemoveListener(r)
+	r.ring = hashring.New(farm.Fingerprint32, replicaPoints)
+	r.listeners = make(map[string]chan<- *ChangedEvent)
+	close(r.shutdownCh)
 
 	if success := common.AwaitWaitGroup(&r.shutdownWG, time.Minute); !success {
 		r.logger.Warn("service resolver timed out on shutdown.")
 	}
-
-	r.isStopped = true
-	return nil
 }
 
 // Lookup finds the host in the ring responsible for serving the given key
@@ -132,6 +135,10 @@ func (r *ringpopServiceResolver) Lookup(
 	defer r.ringLock.RUnlock()
 	addr, found := r.ring.Lookup(key)
 	if !found {
+		select {
+		case r.refreshChan <- struct{}{}:
+		default:
+		}
 		return nil, ErrInsufficientHosts
 	}
 	return NewHostInfo(addr, r.getLabelsMap()), nil
@@ -189,10 +196,11 @@ func (r *ringpopServiceResolver) refresh() error {
 	r.ringLock.Lock()
 	defer r.ringLock.Unlock()
 
-	return r.doRefresh()
-}
+	if r.ringLastRefreshTime.After(time.Now().Add(-minRefreshInternal)) {
+		// refresh too frequently
+		return nil
+	}
 
-func (r *ringpopServiceResolver) doRefresh() error {
 	r.ring = hashring.New(farm.Fingerprint32, replicaPoints)
 
 	addrs, err := r.rp.GetReachableMembers(swim.MemberWithLabelAndValue(RoleKey, r.service))
@@ -205,6 +213,7 @@ func (r *ringpopServiceResolver) doRefresh() error {
 		r.ring.AddMembers(host)
 	}
 
+	r.ringLastRefreshTime = time.Now()
 	r.logger.Debug("Current reachable members", tag.Addresses(addrs))
 	return nil
 }
@@ -248,6 +257,10 @@ func (r *ringpopServiceResolver) refreshRingWorker() {
 		select {
 		case <-r.shutdownCh:
 			return
+		case <-r.refreshChan:
+			if err := r.refresh(); err != nil {
+				r.logger.Error("error periodically refreshing ring", tag.Error(err))
+			}
 		case <-refreshTicker.C:
 			if err := r.refresh(); err != nil {
 				r.logger.Error("error periodically refreshing ring", tag.Error(err))

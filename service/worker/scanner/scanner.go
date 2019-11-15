@@ -39,6 +39,11 @@ import (
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
+const (
+	// scannerStartUpDelay is to let services warm up
+	scannerStartUpDelay = time.Second * 4
+)
+
 type (
 	// Config defines the configuration for scanner
 	Config struct {
@@ -127,17 +132,23 @@ func (s *Scanner) Start() error {
 func (s *Scanner) startWorkflowWithRetry(
 	options cclient.StartWorkflowOptions,
 	workflowType string,
-) error {
+) {
+
+	// let history / matching service warm up
+	time.Sleep(scannerStartUpDelay)
 
 	sdkClient := cclient.NewClient(s.context.GetSDKClient(), common.SystemLocalDomainName, &cclient.Options{})
 	policy := backoff.NewExponentialRetryPolicy(time.Second)
 	policy.SetMaximumInterval(time.Minute)
 	policy.SetExpirationInterval(backoff.NoInterval)
-	return backoff.Retry(func() error {
+	err := backoff.Retry(func() error {
 		return s.startWorkflow(sdkClient, options, workflowType)
 	}, policy, func(err error) bool {
 		return true
 	})
+	if err != nil {
+		s.context.GetLogger().Fatal("unable to start scanner", tag.Error(err))
+	}
 }
 
 func (s *Scanner) startWorkflow(
