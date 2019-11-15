@@ -24,10 +24,11 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/transport/tchannel"
+
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/log/tag"
 )
 
 // RPCFactory is an implementation of service.RPCFactory interface
@@ -51,20 +52,13 @@ func newRPCFactory(cfg *RPC, sName string, logger log.Logger) *RPCFactory {
 
 // CreateDispatcher creates a dispatcher for inbound
 func (d *RPCFactory) CreateDispatcher() *yarpc.Dispatcher {
-	// Setup dispatcher for onebox
-	var err error
-	hostAddress := fmt.Sprintf("%v:%v", d.getListenIP(), d.config.Port)
-	d.ch, err = tchannel.NewChannelTransport(
-		tchannel.ServiceName(d.serviceName),
-		tchannel.ListenAddr(hostAddress))
-	if err != nil {
-		d.logger.Fatal("Failed to create transport channel", tag.Error(err))
-	}
-	d.logger.Info("Created RPC dispatcher and listening", tag.Service(d.serviceName), tag.Address(hostAddress))
-	return yarpc.NewDispatcher(yarpc.Config{
-		Name:     d.serviceName,
-		Inbounds: yarpc.Inbounds{d.ch.NewInbound()},
-	})
+	return d.createInboundTChannelDispatcher(d.serviceName, d.config.Port)
+}
+
+// CreateRingpopDispatcher creates a dispatcher for ringpop
+func (d *RPCFactory) CreateRingpopDispatcher() *yarpc.Dispatcher {
+	ringpopServiceName := fmt.Sprintf("%v-ringpop", d.serviceName)
+	return d.createInboundTChannelDispatcher(ringpopServiceName, d.config.RingpopPort)
 }
 
 // CreateDispatcherForOutbound creates a dispatcher for outbound connection
@@ -82,6 +76,23 @@ func (d *RPCFactory) CreateDispatcherForOutbound(
 		d.logger.Fatal("Failed to create outbound transport channel", tag.Error(err))
 	}
 	return dispatcher
+}
+
+func (d *RPCFactory) createInboundTChannelDispatcher(serviceName string, port int) *yarpc.Dispatcher {
+	// Setup dispatcher for onebox
+	var err error
+	hostAddress := fmt.Sprintf("%v:%v", d.getListenIP(), port)
+	d.ch, err = tchannel.NewChannelTransport(
+		tchannel.ServiceName(serviceName),
+		tchannel.ListenAddr(hostAddress))
+	if err != nil {
+		d.logger.Fatal("Failed to create transport channel", tag.Error(err), tag.Address(hostAddress))
+	}
+	d.logger.Info("Created RPC dispatcher and listening", tag.Service(serviceName), tag.Address(hostAddress))
+	return yarpc.NewDispatcher(yarpc.Config{
+		Name:     serviceName,
+		Inbounds: yarpc.Inbounds{d.ch.NewInbound()},
+	})
 }
 
 func (d *RPCFactory) getListenIP() net.IP {

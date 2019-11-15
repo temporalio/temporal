@@ -25,6 +25,7 @@ import (
 	"sync/atomic"
 
 	"github.com/pborman/uuid"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
@@ -180,7 +181,7 @@ func (c *historyCache) getOrCreateWorkflowExecutionInternal(
 	domainID string,
 	execution workflow.WorkflowExecution,
 	scope int,
-	forceClearCache bool,
+	forceClearContext bool,
 ) (workflowExecutionContext, releaseWorkflowExecutionFunc, error) {
 
 	// Test hook for disabling the cache
@@ -204,7 +205,7 @@ func (c *historyCache) getOrCreateWorkflowExecutionInternal(
 
 	// TODO This will create a closure on every request.
 	//  Consider revisiting this if it causes too much GC activity
-	releaseFunc := c.makeReleaseFunc(key, workflowCtx, forceClearCache)
+	releaseFunc := c.makeReleaseFunc(key, workflowCtx, forceClearContext)
 
 	if err := workflowCtx.lock(ctx); err != nil {
 		// ctx is done before lock can be acquired
@@ -246,7 +247,7 @@ func (c *historyCache) validateWorkflowExecutionInfo(
 func (c *historyCache) makeReleaseFunc(
 	key definition.WorkflowIdentifier,
 	context workflowExecutionContext,
-	forceClearCache bool,
+	forceClearContext bool,
 ) func(error) {
 
 	status := cacheNotReleased
@@ -258,7 +259,7 @@ func (c *historyCache) makeReleaseFunc(
 				c.Release(key)
 				panic(rec)
 			} else {
-				if err != nil || forceClearCache {
+				if err != nil || forceClearContext {
 					// TODO see issue #668, there are certain type or errors which can bypass the clear
 					context.clear()
 				}

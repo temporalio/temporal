@@ -22,6 +22,7 @@ package history
 
 import (
 	"github.com/stretchr/testify/mock"
+
 	"github.com/temporalio/temporal/common/persistence"
 )
 

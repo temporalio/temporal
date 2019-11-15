@@ -22,10 +22,12 @@ package config
 
 import (
 	"fmt"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
 	"net/http"
 	"sync/atomic"
+
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/log/tag"
+
 	// DO NOT REMOVE THE LINE BELOW
 	_ "net/http/pprof"
 )

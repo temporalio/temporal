@@ -43,7 +43,7 @@ const (
 	defaultContextTimeoutInSeconds               = 5
 	defaultContextTimeout                        = defaultContextTimeoutInSeconds * time.Second
 	defaultContextTimeoutForLongPoll             = 2 * time.Minute
-	defaultContextTimeoutForListArchivedWorkflow = 5 * time.Minute
+	defaultContextTimeoutForListArchivedWorkflow = 3 * time.Minute
 
 	defaultDecisionTimeoutInSeconds = 10
 	defaultPageSizeForList          = 500

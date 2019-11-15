@@ -76,7 +76,6 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	// 2. activity heart beat
 	// no sync activity task will be sent when active side fail / timeout activity,
 	// since standby side does not have activity retry timer
-
 	domainID := request.GetDomainId()
 	execution := workflow.WorkflowExecution{
 		WorkflowId: request.WorkflowId,
@@ -91,7 +90,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	}
 	defer func() { release(retError) }()
 
-	msBuilder, err := context.loadWorkflowExecution()
+	mutableState, err := context.loadWorkflowExecution()
 	if err != nil {
 		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
 			return err
@@ -112,7 +111,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 		execution.GetRunId(),
 		scheduleID,
 		version,
-		msBuilder,
+		mutableState,
 		request.GetVersionHistory(),
 	)
 	if err != nil {
@@ -122,7 +121,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 		return nil
 	}
 
-	ai, ok := msBuilder.GetActivityInfo(scheduleID)
+	ai, ok := mutableState.GetActivityInfo(scheduleID)
 	if !ok {
 		// this should not retry, can be caused by out of order delivery
 		// since the activity is already finished
@@ -162,7 +161,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	} else if ai.Attempt < request.GetAttempt() {
 		resetActivityTimerTaskStatus = true
 	}
-	err = msBuilder.ReplicateActivityInfo(request, resetActivityTimerTaskStatus)
+	err = mutableState.ReplicateActivityInfo(request, resetActivityTimerTaskStatus)
 	if err != nil {
 		return err
 	}
@@ -175,18 +174,29 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	if eventTime < request.GetLastHeartbeatTime() {
 		eventTime = request.GetLastHeartbeatTime()
 	}
+
+	// passive logic need to explicitly call create timer
 	now := time.Unix(0, eventTime)
-	timerTasks := []persistence.Task{}
-	timeSource := clock.NewEventTimeSource()
-	timeSource.Update(now)
-	timerBuilder := newTimerBuilder(timeSource)
-	tt, err := timerBuilder.GetActivityTimerTaskIfNeeded(msBuilder)
-	if err != nil {
-		timerTasks = append(timerTasks, tt)
+	if _, err := newTimerSequence(
+		clock.NewEventTimeSource().Update(now),
+		mutableState,
+	).createNextActivityTimer(); err != nil {
+		return err
 	}
 
-	msBuilder.AddTimerTasks(timerTasks...)
-	return context.updateWorkflowExecutionAsPassive(now)
+	updateMode := persistence.UpdateWorkflowModeUpdateCurrent
+	if state, _ := mutableState.GetWorkflowStateCloseStatus(); state == persistence.WorkflowStateZombie {
+		updateMode = persistence.UpdateWorkflowModeBypassCurrent
+	}
+
+	return context.updateWorkflowExecutionWithNew(
+		now,
+		updateMode,
+		nil, // no new workflow
+		nil, // no new workflow
+		transactionPolicyPassive,
+		nil,
+	)
 }
 
 func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
@@ -195,28 +205,25 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 	runID string,
 	scheduleID int64,
 	activityVersion int64,
-	msBuilder mutableState,
+	mutableState mutableState,
 	incomingRawVersionHistory *workflow.VersionHistory,
 ) (bool, error) {
 
-	if msBuilder.GetVersionHistories() != nil {
-		currentVersionHistory, err := msBuilder.GetVersionHistories().GetCurrentVersionHistory()
+	if mutableState.GetVersionHistories() != nil {
+		currentVersionHistory, err := mutableState.GetVersionHistories().GetCurrentVersionHistory()
 		if err != nil {
 			return false, err
 		}
+
 		lastLocalItem, err := currentVersionHistory.GetLastItem()
 		if err != nil {
 			return false, err
 		}
+
 		incomingVersionHistory := persistence.NewVersionHistoryFromThrift(incomingRawVersionHistory)
 		lastIncomingItem, err := incomingVersionHistory.GetLastItem()
 		if err != nil {
 			return false, err
-		}
-		if lastIncomingItem.GetVersion() < lastLocalItem.GetVersion() {
-			// the incoming branch will lose to the local branch
-			// discard this task
-			return false, nil
 		}
 
 		lcaItem, err := currentVersionHistory.FindLCAItem(incomingVersionHistory)
@@ -224,52 +231,57 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 			return false, err
 		}
 
-		// version history matches and activity schedule ID appears in local version history
-		if currentVersionHistory.IsLCAAppendable(lcaItem) && scheduleID <= lastLocalItem.GetEventID() {
-			return true, nil
-		}
+		// case 1: local version history is superset of incoming version history
+		// or incoming version history is superset of local version history
+		// resend the missing event if local version history doesn't have the schedule event
 
-		// incoming branch will win the local branch
-		// resend the events with higher version
-		if scheduleID+1 <= lastIncomingItem.GetEventID() {
-			// according to the incoming version history, we can calculate the
-			// the end event ID & version to fetch from remote
-			endEventID := scheduleID + 1
-			endEventVersion, err := incomingVersionHistory.GetEventVersion(scheduleID + 1)
-			if err != nil {
-				return false, err
+		// case 2: local version history and incoming version history diverged
+		// case 2-1: local version history has the higher version and discard the incoming event
+		// case 2-2: incoming version history has the higher version and resend the missing incoming events
+		if currentVersionHistory.IsLCAAppendable(lcaItem) || incomingVersionHistory.IsLCAAppendable(lcaItem) {
+			// case 1
+			if scheduleID > lcaItem.GetEventID() {
+				return false, newNDCRetryTaskErrorWithHint(
+					domainID,
+					workflowID,
+					runID,
+					common.Int64Ptr(lcaItem.GetEventID()),
+					common.Int64Ptr(lcaItem.GetVersion()),
+					nil,
+					nil,
+				)
 			}
-			return false, newNDCRetryTaskErrorWithHint(
-				domainID,
-				workflowID,
-				runID,
-				common.Int64Ptr(lcaItem.GetEventID()),
-				common.Int64Ptr(lcaItem.GetVersion()),
-				common.Int64Ptr(endEventID),
-				common.Int64Ptr(endEventVersion),
-			)
+		} else {
+			// case 2
+			if lastIncomingItem.GetVersion() < lastLocalItem.GetVersion() {
+				// case 2-1
+				return false, nil
+			} else if lastIncomingItem.GetVersion() > lastLocalItem.GetVersion() {
+				// case 2-2
+				return false, newNDCRetryTaskErrorWithHint(
+					domainID,
+					workflowID,
+					runID,
+					common.Int64Ptr(lcaItem.GetEventID()),
+					common.Int64Ptr(lcaItem.GetVersion()),
+					nil,
+					nil,
+				)
+			}
 		}
 
-		// activity schedule event is the last event
-		// use nil event ID & version indicating re-send to end
-		return false, newNDCRetryTaskErrorWithHint(
-			domainID,
-			workflowID,
-			runID,
-			common.Int64Ptr(lcaItem.GetEventID()),
-			common.Int64Ptr(lcaItem.GetVersion()),
-			nil,
-			nil,
-		)
-	} else if msBuilder.GetReplicationState() != nil {
+		if state, _ := mutableState.GetWorkflowStateCloseStatus(); state == persistence.WorkflowStateCompleted {
+			return false, nil
+		}
+	} else if mutableState.GetReplicationState() != nil {
 		// TODO when 2DC is deprecated, remove this block
-		if !msBuilder.IsWorkflowExecutionRunning() {
+		if !mutableState.IsWorkflowExecutionRunning() {
 			// perhaps conflict resolution force termination
 			return false, nil
 		}
 
-		if scheduleID >= msBuilder.GetNextEventID() {
-			lastWriteVersion, err := msBuilder.GetLastWriteVersion()
+		if scheduleID >= mutableState.GetNextEventID() {
+			lastWriteVersion, err := mutableState.GetLastWriteVersion()
 			if err != nil {
 				return false, err
 			}
@@ -284,11 +296,12 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 				domainID,
 				workflowID,
 				runID,
-				msBuilder.GetNextEventID(),
+				mutableState.GetNextEventID(),
 			)
 		}
 	} else {
 		return false, &shared.InternalServiceError{Message: "The workflow is neither 2DC or 3DC enabled."}
 	}
+
 	return true, nil
 }

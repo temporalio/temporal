@@ -24,6 +24,14 @@ import (
 	"context"
 	"time"
 
+	"github.com/uber-go/tally"
+	"go.uber.org/zap"
+
+	"go.temporal.io/temporal/.gen/go/shared"
+	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
+	cclient "go.temporal.io/temporal/client"
+	"go.temporal.io/temporal/worker"
+
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
@@ -32,15 +40,9 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	p "github.com/temporalio/temporal/common/persistence"
-	pfactory "github.com/temporalio/temporal/common/persistence/persistence-factory"
+	client2 "github.com/temporalio/temporal/common/persistence/client"
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
-	"github.com/uber-go/tally"
-	"go.temporal.io/temporal/.gen/go/shared"
-	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
-	cclient "go.temporal.io/temporal/client"
-	"go.temporal.io/temporal/worker"
-	"go.uber.org/zap"
 )
 
 type (
@@ -131,13 +133,16 @@ func (s *Scanner) Start() error {
 		BackgroundActivityContext:              context.WithValue(context.Background(), scannerContextKey, s.context),
 	}
 
+	var workerTaskListName string
 	if s.context.cfg.Persistence.DefaultStoreType() == config.StoreTypeSQL {
 		go s.startWorkflowWithRetry(tlScannerWFStartOptions, tlScannerWFTypeName)
+		workerTaskListName = tlScannerTaskListName
 	} else if s.context.cfg.Persistence.DefaultStoreType() == config.StoreTypeCassandra {
 		go s.startWorkflowWithRetry(historyScannerWFStartOptions, historyScannerWFTypeName)
+		workerTaskListName = historyScannerTaskListName
 	}
 
-	worker := worker.New(s.context.sdkClient, common.SystemLocalDomainName, tlScannerTaskListName, workerOpts)
+	worker := worker.New(s.context.sdkClient, common.SystemLocalDomainName, workerTaskListName, workerOpts)
 	return worker.Start()
 }
 
@@ -170,7 +175,7 @@ func (s *Scanner) startWorkflow(client cclient.Client, options cclient.StartWork
 
 func (s *Scanner) buildContext() error {
 	cfg := &s.context.cfg
-	pFactory := pfactory.New(cfg.Persistence, cfg.ClusterMetadata.GetCurrentClusterName(), s.context.metricsClient, s.context.logger)
+	pFactory := client2.NewFactory(cfg.Persistence, cfg.ClusterMetadata.GetCurrentClusterName(), s.context.metricsClient, s.context.logger)
 	domainDB, err := pFactory.NewMetadataManager()
 	if err != nil {
 		return err
@@ -179,7 +184,7 @@ func (s *Scanner) buildContext() error {
 	if err != nil {
 		return err
 	}
-	historyDB, err := pFactory.NewHistoryV2Manager()
+	historyDB, err := pFactory.NewHistoryManager()
 	if err != nil {
 		return err
 	}

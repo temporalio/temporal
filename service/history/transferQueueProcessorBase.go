@@ -21,6 +21,7 @@
 package history
 
 import (
+	ctx "context"
 	"time"
 
 	m "github.com/temporalio/temporal/.gen/go/matching"
@@ -30,6 +31,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/service/worker/archiver"
 )
 
 type (
@@ -40,6 +42,8 @@ type (
 
 	transferQueueProcessorBase struct {
 		shard                  ShardContext
+		config                 *Config
+		historyService         *historyEngineImpl
 		options                *QueueProcessorOptions
 		executionManager       persistence.ExecutionManager
 		visibilityMgr          persistence.VisibilityManager
@@ -59,6 +63,8 @@ const (
 
 func newTransferQueueProcessorBase(
 	shard ShardContext,
+	config *Config,
+	historyService *historyEngineImpl,
 	options *QueueProcessorOptions,
 	visibilityMgr persistence.VisibilityManager,
 	matchingClient matching.Client,
@@ -70,6 +76,8 @@ func newTransferQueueProcessorBase(
 
 	return &transferQueueProcessorBase{
 		shard:                  shard,
+		config:                 config,
+		historyService:         historyService,
 		options:                options,
 		executionManager:       shard.GetExecutionManager(),
 		visibilityMgr:          visibilityMgr,
@@ -114,16 +122,29 @@ func (t *transferQueueProcessorBase) queueShutdown() error {
 	return t.transferQueueShutdown()
 }
 
+func (t *transferQueueProcessorBase) getDomainIDAndWorkflowExecution(
+	task *persistence.TransferTaskInfo,
+) (string, workflow.WorkflowExecution) {
+
+	return task.DomainID, workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(task.WorkflowID),
+		RunId:      common.StringPtr(task.RunID),
+	}
+}
+
 func (t *transferQueueProcessorBase) pushActivity(
 	task *persistence.TransferTaskInfo,
 	activityScheduleToStartTimeout int32,
 ) error {
 
+	ctx, cancel := ctx.WithTimeout(ctx.Background(), transferActiveTaskDefaultTimeout)
+	defer cancel()
+
 	if task.TaskType != persistence.TransferTaskTypeActivityTask {
 		t.logger.Fatal("Cannot process non activity task", tag.TaskType(task.GetTaskType()))
 	}
 
-	err := t.matchingClient.AddActivityTask(nil, &m.AddActivityTaskRequest{
+	err := t.matchingClient.AddActivityTask(ctx, &m.AddActivityTaskRequest{
 		DomainUUID:       common.StringPtr(task.TargetDomainID),
 		SourceDomainUUID: common.StringPtr(task.DomainID),
 		Execution: &workflow.WorkflowExecution{
@@ -144,11 +165,14 @@ func (t *transferQueueProcessorBase) pushDecision(
 	decisionScheduleToStartTimeout int32,
 ) error {
 
+	ctx, cancel := ctx.WithTimeout(ctx.Background(), transferActiveTaskDefaultTimeout)
+	defer cancel()
+
 	if task.TaskType != persistence.TransferTaskTypeDecisionTask {
 		t.logger.Fatal("Cannot process non decision task", tag.TaskType(task.GetTaskType()))
 	}
 
-	err := t.matchingClient.AddDecisionTask(nil, &m.AddDecisionTaskRequest{
+	err := t.matchingClient.AddDecisionTask(ctx, &m.AddDecisionTaskRequest{
 		DomainUUID: common.StringPtr(task.DomainID),
 		Execution: &workflow.WorkflowExecution{
 			WorkflowId: common.StringPtr(task.WorkflowID),
@@ -163,7 +187,8 @@ func (t *transferQueueProcessorBase) pushDecision(
 
 func (t *transferQueueProcessorBase) recordWorkflowStarted(
 	domainID string,
-	execution workflow.WorkflowExecution,
+	workflowID string,
+	runID string,
 	workflowTypeName string,
 	startTimeUnixNano int64,
 	executionTimeUnixNano int64,
@@ -174,28 +199,27 @@ func (t *transferQueueProcessorBase) recordWorkflowStarted(
 ) error {
 
 	domain := defaultDomainName
-	isSampledEnabled := false
-	wid := execution.GetWorkflowId()
 
-	domainEntry, err := t.shard.GetDomainCache().GetDomainByID(domainID)
-	if err != nil {
+	if domainEntry, err := t.shard.GetDomainCache().GetDomainByID(domainID); err != nil {
 		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
 			return err
 		}
 	} else {
 		domain = domainEntry.GetInfo().Name
-		isSampledEnabled = domainEntry.IsSampledForLongerRetentionEnabled(wid)
-	}
-
-	// if sampled for longer retention is enabled, only record those sampled events
-	if isSampledEnabled && !domainEntry.IsSampledForLongerRetention(wid) {
-		return nil
+		// if sampled for longer retention is enabled, only record those sampled events
+		if domainEntry.IsSampledForLongerRetentionEnabled(workflowID) &&
+			!domainEntry.IsSampledForLongerRetention(workflowID) {
+			return nil
+		}
 	}
 
 	request := &persistence.RecordWorkflowExecutionStartedRequest{
-		DomainUUID:         domainID,
-		Domain:             domain,
-		Execution:          execution,
+		DomainUUID: domainID,
+		Domain:     domain,
+		Execution: workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(workflowID),
+			RunId:      common.StringPtr(runID),
+		},
 		WorkflowTypeName:   workflowTypeName,
 		StartTimestamp:     startTimeUnixNano,
 		ExecutionTimestamp: executionTimeUnixNano,
@@ -210,7 +234,8 @@ func (t *transferQueueProcessorBase) recordWorkflowStarted(
 
 func (t *transferQueueProcessorBase) upsertWorkflowExecution(
 	domainID string,
-	execution workflow.WorkflowExecution,
+	workflowID string,
+	runID string,
 	workflowTypeName string,
 	startTimeUnixNano int64,
 	executionTimeUnixNano int64,
@@ -231,9 +256,12 @@ func (t *transferQueueProcessorBase) upsertWorkflowExecution(
 	}
 
 	request := &persistence.UpsertWorkflowExecutionRequest{
-		DomainUUID:         domainID,
-		Domain:             domain,
-		Execution:          execution,
+		DomainUUID: domainID,
+		Domain:     domain,
+		Execution: workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(workflowID),
+			RunId:      common.StringPtr(runID),
+		},
 		WorkflowTypeName:   workflowTypeName,
 		StartTimestamp:     startTimeUnixNano,
 		ExecutionTimestamp: executionTimeUnixNano,
@@ -248,7 +276,8 @@ func (t *transferQueueProcessorBase) upsertWorkflowExecution(
 
 func (t *transferQueueProcessorBase) recordWorkflowClosed(
 	domainID string,
-	execution workflow.WorkflowExecution,
+	workflowID string,
+	runID string,
 	workflowTypeName string,
 	startTimeUnixNano int64,
 	executionTimeUnixNano int64,
@@ -263,42 +292,79 @@ func (t *transferQueueProcessorBase) recordWorkflowClosed(
 	// Record closing in visibility store
 	retentionSeconds := int64(0)
 	domain := defaultDomainName
-	isSampledEnabled := false
-	wid := execution.GetWorkflowId()
+	recordWorkflowClose := true
+	archiveVisibility := false
 
 	domainEntry, err := t.shard.GetDomainCache().GetDomainByID(domainID)
-	if err != nil {
-		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
+	if err != nil && !isWorkflowNotExistError(err) {
+		return err
+	}
+
+	if err == nil {
+		// retention in domain config is in days, convert to seconds
+		retentionSeconds = int64(domainEntry.GetRetentionDays(workflowID)) * int64(secondsInDay)
+		domain = domainEntry.GetInfo().Name
+		// if sampled for longer retention is enabled, only record those sampled events
+		if domainEntry.IsSampledForLongerRetentionEnabled(workflowID) &&
+			!domainEntry.IsSampledForLongerRetention(workflowID) {
+			recordWorkflowClose = false
+		}
+
+		clusterConfiguredForVisibilityArchival := t.shard.GetService().GetArchivalMetadata().GetVisibilityConfig().ClusterConfiguredForArchival()
+		domainConfiguredForVisibilityArchival := domainEntry.GetConfig().VisibilityArchivalStatus == workflow.ArchivalStatusEnabled
+		archiveVisibility = clusterConfiguredForVisibilityArchival && domainConfiguredForVisibilityArchival
+	}
+
+	if recordWorkflowClose {
+		if err := t.visibilityMgr.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{
+			DomainUUID: domainID,
+			Domain:     domain,
+			Execution: workflow.WorkflowExecution{
+				WorkflowId: common.StringPtr(workflowID),
+				RunId:      common.StringPtr(runID),
+			},
+			WorkflowTypeName:   workflowTypeName,
+			StartTimestamp:     startTimeUnixNano,
+			ExecutionTimestamp: executionTimeUnixNano,
+			CloseTimestamp:     endTimeUnixNano,
+			Status:             closeStatus,
+			HistoryLength:      historyLength,
+			RetentionSeconds:   retentionSeconds,
+			TaskID:             taskID,
+			Memo:               visibilityMemo,
+			SearchAttributes:   searchAttributes,
+		}); err != nil {
 			return err
 		}
-		// it is possible that the domain got deleted. Use default retention.
-	} else {
-		// retention in domain config is in days, convert to seconds
-		retentionSeconds = int64(domainEntry.GetRetentionDays(execution.GetWorkflowId())) * int64(secondsInDay)
-		domain = domainEntry.GetInfo().Name
-		isSampledEnabled = domainEntry.IsSampledForLongerRetentionEnabled(wid)
 	}
 
-	// if sampled for longer retention is enabled, only record those sampled events
-	if isSampledEnabled && !domainEntry.IsSampledForLongerRetention(wid) {
-		return nil
+	if archiveVisibility {
+		ctx, cancel := ctx.WithTimeout(ctx.Background(), t.config.TransferProcessorVisibilityArchivalTimeLimit())
+		defer cancel()
+		_, err := t.historyService.archivalClient.Archive(ctx, &archiver.ClientRequest{
+			ArchiveRequest: &archiver.ArchiveRequest{
+				DomainID:           domainID,
+				DomainName:         domain,
+				WorkflowID:         workflowID,
+				RunID:              runID,
+				WorkflowTypeName:   workflowTypeName,
+				StartTimestamp:     startTimeUnixNano,
+				ExecutionTimestamp: executionTimeUnixNano,
+				CloseTimestamp:     endTimeUnixNano,
+				CloseStatus:        closeStatus,
+				HistoryLength:      historyLength,
+				Memo:               visibilityMemo,
+				SearchAttributes:   searchAttributes,
+				VisibilityURI:      domainEntry.GetConfig().VisibilityArchivalURI,
+				URI:                domainEntry.GetConfig().HistoryArchivalURI,
+				Targets:            []archiver.ArchivalTarget{archiver.ArchiveTargetVisibility},
+			},
+			CallerService:        common.HistoryServiceName,
+			AttemptArchiveInline: true, // archive visibility inline by default
+		})
+		return err
 	}
-
-	return t.visibilityMgr.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{
-		DomainUUID:         domainID,
-		Domain:             domain,
-		Execution:          execution,
-		WorkflowTypeName:   workflowTypeName,
-		StartTimestamp:     startTimeUnixNano,
-		ExecutionTimestamp: executionTimeUnixNano,
-		CloseTimestamp:     endTimeUnixNano,
-		Status:             closeStatus,
-		HistoryLength:      historyLength,
-		RetentionSeconds:   retentionSeconds,
-		TaskID:             taskID,
-		Memo:               visibilityMemo,
-		SearchAttributes:   searchAttributes,
-	})
+	return nil
 }
 
 // Argument startEvent is to save additional call of msBuilder.GetStartEvent
@@ -329,4 +395,26 @@ func getWorkflowMemo(
 		return nil
 	}
 	return &workflow.Memo{Fields: memo}
+}
+
+func copySearchAttributes(
+	input map[string][]byte,
+) map[string][]byte {
+
+	if input == nil {
+		return nil
+	}
+
+	result := make(map[string][]byte)
+	for k, v := range input {
+		val := make([]byte, len(v))
+		copy(val, v)
+		result[k] = val
+	}
+	return result
+}
+
+func isWorkflowNotExistError(err error) bool {
+	_, ok := err.(*workflow.EntityNotExistsError)
+	return ok
 }

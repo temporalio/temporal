@@ -665,6 +665,10 @@ struct ActivityTaskTimedOutEventAttributes {
   10: optional i64 (js.type = "Long") scheduledEventId
   20: optional i64 (js.type = "Long") startedEventId
   30: optional TimeoutType timeoutType
+  // For retry activity, it may have a failure before timeout. It's important to keep those information for debug.
+  // Client can also provide the info for making next decision
+  40: optional string lastFailureReason
+  50: optional binary lastFailureDetails
 }
 
 struct ActivityTaskCancelRequestedEventAttributes {
@@ -1405,8 +1409,7 @@ struct RespondQueryTaskCompletedRequest {
 struct WorkflowQueryResult {
   10: optional QueryResultType resultType
   20: optional binary answer
-  30: optional string errorReason
-  40: optional binary errorDetails
+  30: optional string errorMessage
 }
 
 struct DescribeWorkflowExecutionRequest {

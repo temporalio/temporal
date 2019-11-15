@@ -23,10 +23,11 @@ package admin
 import (
 	"context"
 
+	"go.uber.org/yarpc"
+
 	"github.com/temporalio/temporal/.gen/go/admin"
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/backoff"
-	"go.uber.org/yarpc"
 )
 
 var _ Client = (*retryableClient)(nil)

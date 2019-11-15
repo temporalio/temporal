@@ -27,13 +27,16 @@ import (
 	"io/ioutil"
 	"strings"
 
+	"github.com/temporalio/temporal/common/auth"
+
 	"github.com/Shopify/sarama"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/metrics"
 	uberKafkaClient "github.com/uber-go/kafka-client"
 	uberKafka "github.com/uber-go/kafka-client/kafka"
 	"github.com/uber-go/tally"
 	"go.uber.org/zap"
+
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/metrics"
 )
 
 type (
@@ -172,7 +175,7 @@ func (c *kafkaClient) newProducerHelper(topic string) (Producer, error) {
 }
 
 // CreateTLSConfig return tls config
-func CreateTLSConfig(tlsConfig TLS) (*tls.Config, error) {
+func CreateTLSConfig(tlsConfig auth.TLS) (*tls.Config, error) {
 	if !tlsConfig.Enabled {
 		return nil, nil
 	}
@@ -182,7 +185,7 @@ func CreateTLSConfig(tlsConfig TLS) (*tls.Config, error) {
 		return nil, err
 	}
 	caCertPool := x509.NewCertPool()
-	pemData, err := ioutil.ReadFile(tlsConfig.BundleFile)
+	pemData, err := ioutil.ReadFile(tlsConfig.CaFile)
 	if err != nil {
 		return nil, err
 	}

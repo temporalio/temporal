@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -x
+
 DB="${DB:-cassandra}"
 ENABLE_ES="${ENABLE_ES:-false}"
 ES_PORT="${ES_PORT:-9200}"
@@ -47,8 +49,10 @@ setup_es_template() {
 
 setup_schema() {
     if [ "$DB" == "mysql" ]; then
+        echo 'setup mysql schema'
         setup_mysql_schema
     else
+        echo 'setup cassandra schema'
         setup_cassandra_schema
     fi
 

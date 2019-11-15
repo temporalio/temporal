@@ -55,7 +55,7 @@ const licenseHeaderPrefix = "// The MIT License (MIT)"
 
 var (
 	// directories to be excluded
-	dirBlacklist = []string{"vendor/", "tpb/"}
+	dirBlacklist = []string{"vendor/", "proto/"}
 	// default perms for the newly created files
 	defaultFilePerms = os.FileMode(0644)
 )

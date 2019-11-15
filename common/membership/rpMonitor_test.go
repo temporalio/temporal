@@ -26,6 +26,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 )
 
@@ -46,10 +47,10 @@ func (s *RpoSuite) TestRingpopMonitor() {
 	testService := NewTestRingpopCluster("rpm-test", 3, "127.0.0.1", "", "rpm-test")
 	s.NotNil(testService, "Failed to create test service")
 
-	services := []string{"rpm-test"}
+	services := map[string]int{"rpm-test": 29}
 
 	logger := loggerimpl.NewNopLogger()
-	rpm := NewRingpopMonitor(services, testService.rings[0], logger)
+	rpm := NewRingpopMonitor("rpm-test", services, testService.rings[0], logger)
 	err := rpm.Start()
 	s.Nil(err, "Failed to start ringpop monitor")
 

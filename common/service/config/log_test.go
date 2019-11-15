@@ -21,12 +21,13 @@
 package config
 
 import (
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-	"go.uber.org/zap"
 	"io/ioutil"
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	"go.uber.org/zap"
 )
 
 type LogSuite struct {

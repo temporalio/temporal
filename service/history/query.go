@@ -23,30 +23,34 @@
 package history
 
 import (
-	"sync"
+	"sync/atomic"
 
 	"github.com/pborman/uuid"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 )
 
 const (
-	queryStateBuffered queryState = iota
-	queryStateCompleted
+	queryTerminationTypeCompleted queryTerminationType = iota
+	queryTerminationTypeUnblocked
+	queryTerminationTypeFailed
 )
 
 var (
-	errQueryResultIsNil      = &shared.InternalServiceError{Message: "query result is nil"}
-	errQueryResultIsInvalid  = &shared.InternalServiceError{Message: "query result is invalid"}
-	errQueryAlreadyCompleted = &shared.InternalServiceError{Message: "query already completed"}
+	errTerminationStateInvalid = &shared.InternalServiceError{Message: "query termination state invalid"}
+	errAlreadyInTerminalState  = &shared.InternalServiceError{Message: "query already in terminal state"}
+	errQueryNotInTerminalState = &shared.InternalServiceError{Message: "query not in terminal state"}
 )
 
 type (
-	queryState int
+	queryTerminationType int
 
 	query interface {
-		getQueryInternalState() *queryInternalState
+		getQueryID() string
 		getQueryTermCh() <-chan struct{}
-		completeQuery(*shared.WorkflowQueryResult) error
+		getQueryInput() *shared.WorkflowQuery
+		getTerminationState() (*queryTerminationState, error)
+		setTerminationState(*queryTerminationState) error
 	}
 
 	queryImpl struct {
@@ -54,83 +58,90 @@ type (
 		queryInput *shared.WorkflowQuery
 		termCh     chan struct{}
 
-		sync.RWMutex
-		queryResult *shared.WorkflowQueryResult
-		state       queryState
+		terminationState atomic.Value
 	}
 
-	queryInternalState struct {
-		id          string
-		queryInput  *shared.WorkflowQuery
-		queryResult *shared.WorkflowQueryResult
-		state       queryState
+	queryTerminationState struct {
+		queryTerminationType queryTerminationType
+		queryResult          *shared.WorkflowQueryResult
+		failure              error
 	}
 )
 
 func newQuery(queryInput *shared.WorkflowQuery) query {
 	return &queryImpl{
-		id:          uuid.New(),
-		queryInput:  queryInput,
-		queryResult: nil,
-		termCh:      make(chan struct{}),
-		state:       queryStateBuffered,
+		id:         uuid.New(),
+		queryInput: queryInput,
+		termCh:     make(chan struct{}),
 	}
 }
 
-func (q *queryImpl) getQueryInternalState() *queryInternalState {
-	q.RLock()
-	defer q.RUnlock()
-
-	return &queryInternalState{
-		id:          q.id,
-		queryInput:  q.queryInput,
-		queryResult: q.queryResult,
-		state:       q.state,
-	}
+func (q *queryImpl) getQueryID() string {
+	return q.id
 }
 
 func (q *queryImpl) getQueryTermCh() <-chan struct{} {
 	return q.termCh
 }
 
-func (q *queryImpl) completeQuery(
-	queryResult *shared.WorkflowQueryResult,
-) error {
+func (q *queryImpl) getQueryInput() *shared.WorkflowQuery {
+	return q.queryInput
+}
 
-	q.Lock()
-	defer q.Unlock()
-
-	if q.state == queryStateCompleted {
-		return errQueryAlreadyCompleted
+func (q *queryImpl) getTerminationState() (*queryTerminationState, error) {
+	ts := q.terminationState.Load()
+	if ts == nil {
+		return nil, errQueryNotInTerminalState
 	}
-	if err := validateQueryResult(queryResult); err != nil {
+	return ts.(*queryTerminationState), nil
+}
+
+func (q *queryImpl) setTerminationState(terminationState *queryTerminationState) error {
+	if err := q.validateTerminationState(terminationState); err != nil {
 		return err
 	}
-	q.state = queryStateCompleted
-	q.queryResult = queryResult
+	currTerminationState, _ := q.getTerminationState()
+	if currTerminationState != nil {
+		return errAlreadyInTerminalState
+	}
+	q.terminationState.Store(terminationState)
 	close(q.termCh)
 	return nil
 }
 
-func validateQueryResult(
-	queryResult *shared.WorkflowQueryResult,
+func (q *queryImpl) validateTerminationState(
+	terminationState *queryTerminationState,
 ) error {
-
-	if queryResult == nil {
-		return errQueryResultIsNil
+	if terminationState == nil {
+		return errTerminationStateInvalid
 	}
-	validAnswered := queryResult.GetResultType().Equals(shared.QueryResultTypeAnswered) &&
-		queryResult.Answer != nil &&
-		queryResult.ErrorDetails == nil &&
-		queryResult.ErrorReason == nil
-
-	validFailed := queryResult.GetResultType().Equals(shared.QueryResultTypeFailed) &&
-		queryResult.Answer == nil &&
-		queryResult.ErrorDetails != nil &&
-		queryResult.ErrorReason != nil
-
-	if !validAnswered && !validFailed {
-		return errQueryResultIsInvalid
+	switch terminationState.queryTerminationType {
+	case queryTerminationTypeCompleted:
+		if terminationState.queryResult == nil || terminationState.failure != nil {
+			return errTerminationStateInvalid
+		}
+		queryResult := terminationState.queryResult
+		validAnswered := queryResult.GetResultType().Equals(shared.QueryResultTypeAnswered) &&
+			queryResult.Answer != nil &&
+			queryResult.ErrorMessage == nil
+		validFailed := queryResult.GetResultType().Equals(shared.QueryResultTypeFailed) &&
+			queryResult.Answer == nil &&
+			queryResult.ErrorMessage != nil
+		if !validAnswered && !validFailed {
+			return errTerminationStateInvalid
+		}
+		return nil
+	case queryTerminationTypeUnblocked:
+		if terminationState.queryResult != nil || terminationState.failure != nil {
+			return errTerminationStateInvalid
+		}
+		return nil
+	case queryTerminationTypeFailed:
+		if terminationState.queryResult != nil || terminationState.failure == nil {
+			return errTerminationStateInvalid
+		}
+		return nil
+	default:
+		return errTerminationStateInvalid
 	}
-	return nil
 }

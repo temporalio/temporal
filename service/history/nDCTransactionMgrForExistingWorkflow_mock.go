@@ -28,11 +28,11 @@
 package history
 
 import (
-	"context"
-	"reflect"
-	"time"
+	context "context"
+	reflect "reflect"
+	time "time"
 
-	"github.com/golang/mock/gomock"
+	gomock "github.com/golang/mock/gomock"
 )
 
 // MocknDCTransactionMgrForExistingWorkflow is a mock of nDCTransactionMgrForExistingWorkflow interface

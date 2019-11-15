@@ -21,11 +21,12 @@
 package config
 
 import (
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	"io/ioutil"
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 type (

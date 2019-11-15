@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source ../../.gen/go/cadence/workflowserviceserver/server.go -destination workflowHandler_mock.go -mock_names Interface=MockWorkflowHandler
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source ../../.gen/go/temporal/workflowserviceserver/server.go -destination workflowHandler_mock.go -mock_names Interface=MockWorkflowHandler
 
 package frontend
 
@@ -30,6 +30,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/temporalio/temporal/common/client"
+
 	"github.com/pborman/uuid"
 	"go.uber.org/yarpc/yarpcerrors"
 
@@ -38,7 +40,6 @@ import (
 	h "github.com/temporalio/temporal/.gen/go/history"
 	m "github.com/temporalio/temporal/.gen/go/matching"
 	"github.com/temporalio/temporal/.gen/go/replicator"
-	"github.com/temporalio/temporal/.gen/go/shared"
 	gen "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/go/temporal/workflowserviceserver"
 	"github.com/temporalio/temporal/client/history"
@@ -80,7 +81,7 @@ type (
 		startWG                   sync.WaitGroup
 		rateLimiter               quotas.Policy
 		config                    *Config
-		versionChecker            *versionChecker
+		versionChecker            client.VersionChecker
 		domainHandler             domain.Handler
 		visibilityQueryValidator  *validator.VisibilityQueryValidator
 		searchAttributesValidator *validator.SearchAttributesValidator
@@ -124,14 +125,14 @@ var (
 	errNoPermission                               = &gen.BadRequestError{Message: "No permission to do this operation."}
 	errRequestIDNotSet                            = &gen.BadRequestError{Message: "RequestId is not set on request."}
 	errWorkflowTypeNotSet                         = &gen.BadRequestError{Message: "WorkflowType is not set on request."}
+	errInvalidRetention                           = &gen.BadRequestError{Message: "RetentionDays is invalid."}
 	errInvalidExecutionStartToCloseTimeoutSeconds = &gen.BadRequestError{Message: "A valid ExecutionStartToCloseTimeoutSeconds is not set on request."}
 	errInvalidTaskStartToCloseTimeoutSeconds      = &gen.BadRequestError{Message: "A valid TaskStartToCloseTimeoutSeconds is not set on request."}
 	errClientVersionNotSet                        = &gen.BadRequestError{Message: "Client version is not set on request."}
 
 	// err for archival
-	errHistoryHasPassedRetentionPeriod = &gen.BadRequestError{Message: "Requested workflow history has passed retention period."}
-	// the following errors represents bad user input
-	errURIUpdate = &shared.BadRequestError{Message: "Cannot update existing archival URI"}
+	errHistoryNotFound = &gen.BadRequestError{Message: "Requested workflow history not found, may have passed retention period."}
+	errURIUpdate       = &gen.BadRequestError{Message: "Cannot update existing archival URI"}
 
 	// err for string too long
 	errDomainTooLong       = &gen.BadRequestError{Message: "Domain length exceeds limit."}
@@ -173,7 +174,7 @@ func NewWorkflowHandler(
 				return float64(config.DomainRPS(domain))
 			},
 		),
-		versionChecker: &versionChecker{checkVersion: config.EnableClientVersionCheck()},
+		versionChecker: client.NewVersionChecker(),
 		domainHandler: domain.NewHandler(
 			config.MinRetentionDays(),
 			config.MaxBadBinaries,
@@ -249,7 +250,7 @@ func (wh *WorkflowHandler) RegisterDomain(ctx context.Context, registerRequest *
 	scope, sw := wh.startRequestProfile(metrics.FrontendRegisterDomainScope)
 	defer sw.Stop()
 
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return wh.error(err, scope)
 	}
 
@@ -257,7 +258,11 @@ func (wh *WorkflowHandler) RegisterDomain(ctx context.Context, registerRequest *
 		return errRequestNotSet
 	}
 
-	if err := wh.checkPermission(registerRequest.SecurityToken); err != nil {
+	if registerRequest.GetWorkflowExecutionRetentionPeriodInDays() > common.MaxWorkflowRetentionPeriodInDays {
+		return errInvalidRetention
+	}
+
+	if err := checkPermission(wh.config, registerRequest.SecurityToken); err != nil {
 		return err
 	}
 
@@ -282,7 +287,7 @@ func (wh *WorkflowHandler) ListDomains(
 	scope, sw := wh.startRequestProfile(metrics.FrontendListDomainsScope)
 	defer sw.Stop()
 
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -307,7 +312,7 @@ func (wh *WorkflowHandler) DescribeDomain(
 	scope, sw := wh.startRequestProfile(metrics.FrontendDescribeDomainScope)
 	defer sw.Stop()
 
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -336,7 +341,7 @@ func (wh *WorkflowHandler) UpdateDomain(
 	scope, sw := wh.startRequestProfile(metrics.FrontendUpdateDomainScope)
 	defer sw.Stop()
 
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -346,7 +351,7 @@ func (wh *WorkflowHandler) UpdateDomain(
 
 	// don't require permission for failover request
 	if !isFailoverRequest(updateRequest) {
-		if err := wh.checkPermission(updateRequest.SecurityToken); err != nil {
+		if err := checkPermission(wh.config, updateRequest.SecurityToken); err != nil {
 			return nil, err
 		}
 	}
@@ -371,7 +376,7 @@ func (wh *WorkflowHandler) DeprecateDomain(ctx context.Context, deprecateRequest
 	scope, sw := wh.startRequestProfile(metrics.FrontendDeprecateDomainScope)
 	defer sw.Stop()
 
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return wh.error(err, scope)
 	}
 
@@ -379,7 +384,7 @@ func (wh *WorkflowHandler) DeprecateDomain(ctx context.Context, deprecateRequest
 		return errRequestNotSet
 	}
 
-	if err := wh.checkPermission(deprecateRequest.SecurityToken); err != nil {
+	if err := checkPermission(wh.config, deprecateRequest.SecurityToken); err != nil {
 		return err
 	}
 
@@ -406,7 +411,7 @@ func (wh *WorkflowHandler) PollForActivityTask(
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendPollForActivityTaskScope, pollRequest)
 	defer sw.Stop()
 
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -486,7 +491,7 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendPollForDecisionTaskScope, pollRequest)
 	defer sw.Stop()
 
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -618,7 +623,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(
 
 	scope := wh.getDefaultScope(metrics.FrontendRecordActivityTaskHeartbeatScope)
 
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -705,7 +710,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatByID(
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendRecordActivityTaskHeartbeatByIDScope, heartbeatRequest)
 	defer sw.Stop()
 
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -810,7 +815,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope := wh.getDefaultScope(metrics.FrontendRespondActivityTaskCompletedScope)
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return wh.error(err, scope)
 	}
 
@@ -898,7 +903,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedByID(
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendRespondActivityTaskCompletedByIDScope, completeRequest)
 	defer sw.Stop()
 
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return wh.error(err, scope)
 	}
 
@@ -1005,7 +1010,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope := wh.getDefaultScope(metrics.FrontendRespondActivityTaskFailedScope)
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return wh.error(err, scope)
 	}
 
@@ -1082,7 +1087,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedByID(
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendRespondActivityTaskFailedByIDScope, failedRequest)
 	defer sw.Stop()
 
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return wh.error(err, scope)
 	}
 
@@ -1177,7 +1182,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope := wh.getDefaultScope(metrics.FrontendRespondActivityTaskCanceledScope)
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return wh.error(err, scope)
 	}
 
@@ -1266,7 +1271,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledByID(
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendRespondActivityTaskCanceledScope, cancelRequest)
 	defer sw.Stop()
 
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return wh.error(err, scope)
 	}
 
@@ -1372,7 +1377,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope := wh.getDefaultScope(metrics.FrontendRespondDecisionTaskCompletedScope)
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -1453,7 +1458,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskFailed(
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope := wh.getDefaultScope(metrics.FrontendRespondDecisionTaskFailedScope)
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return wh.error(err, scope)
 	}
 
@@ -1527,7 +1532,7 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope := wh.getDefaultScope(metrics.FrontendRespondQueryTaskCompletedScope)
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return wh.error(err, scope)
 	}
 
@@ -1586,7 +1591,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendStartWorkflowExecutionScope, startRequest)
 	defer sw.Stop()
 
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -1706,7 +1711,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendGetWorkflowExecutionHistoryScope, getRequest)
 	defer sw.Stop()
 
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -1921,7 +1926,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendSignalWorkflowExecutionScope, signalRequest)
 	defer sw.Stop()
 
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return wh.error(err, scope)
 	}
 
@@ -1970,7 +1975,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(
 		sizeLimitError,
 		domainID,
 		signalRequest.GetWorkflowExecution().GetWorkflowId(),
-		signalRequest.GetWorkflowExecution().GetWorkflowId(),
+		signalRequest.GetWorkflowExecution().GetRunId(),
 		scope,
 		wh.GetThrottledLogger(),
 	); err != nil {
@@ -2002,7 +2007,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendSignalWithStartWorkflowExecutionScope, signalWithStartRequest)
 	defer sw.Stop()
 
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -2138,7 +2143,7 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendTerminateWorkflowExecutionScope, terminateRequest)
 	defer sw.Stop()
 
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return wh.error(err, scope)
 	}
 
@@ -2185,7 +2190,7 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendResetWorkflowExecutionScope, resetRequest)
 	defer sw.Stop()
 
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -2231,7 +2236,7 @@ func (wh *WorkflowHandler) RequestCancelWorkflowExecution(
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendRequestCancelWorkflowExecutionScope, cancelRequest)
 	defer sw.Stop()
 
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return wh.error(err, scope)
 	}
 
@@ -2277,7 +2282,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendListOpenWorkflowExecutionsScope, listRequest)
 	defer sw.Stop()
 
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -2383,10 +2388,10 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(
 ) (resp *gen.ListArchivedWorkflowExecutionsResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendClientListArchivedWorkflowExecutionsScope, listRequest)
+	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendListArchivedWorkflowExecutionsScope, listRequest)
 	defer sw.Stop()
 
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -2406,6 +2411,12 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(
 		listRequest.PageSize = common.Int32Ptr(int32(wh.config.VisibilityMaxPageSize(listRequest.GetDomain())))
 	}
 
+	maxPageSize := wh.config.VisibilityArchivalQueryMaxPageSize()
+	if int(listRequest.GetPageSize()) > maxPageSize {
+		return nil, wh.error(&gen.BadRequestError{
+			Message: fmt.Sprintf("Pagesize is larger than allowed %d", maxPageSize)}, scope)
+	}
+
 	if !wh.GetArchivalMetadata().GetVisibilityConfig().ClusterConfiguredForArchival() {
 		return nil, wh.error(&gen.BadRequestError{Message: "Cluster is not configured for visibility archival"}, scope)
 	}
@@ -2419,7 +2430,7 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(
 		return nil, wh.error(err, scope)
 	}
 
-	if entry.GetConfig().VisibilityArchivalStatus != shared.ArchivalStatusEnabled {
+	if entry.GetConfig().VisibilityArchivalStatus != gen.ArchivalStatusEnabled {
 		return nil, wh.error(&gen.BadRequestError{Message: "Domain is not configured for visibility archival"}, scope)
 	}
 
@@ -2468,7 +2479,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendListClosedWorkflowExecutionsScope, listRequest)
 	defer sw.Stop()
 
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -2596,7 +2607,7 @@ func (wh *WorkflowHandler) ListWorkflowExecutions(
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendListWorkflowExecutionsScope, listRequest)
 	defer sw.Stop()
 
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -2659,7 +2670,7 @@ func (wh *WorkflowHandler) ScanWorkflowExecutions(
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendScanWorkflowExecutionsScope, listRequest)
 	defer sw.Stop()
 
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -2722,7 +2733,7 @@ func (wh *WorkflowHandler) CountWorkflowExecutions(
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendCountWorkflowExecutionsScope, countRequest)
 	defer sw.Stop()
 
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -2771,7 +2782,7 @@ func (wh *WorkflowHandler) GetSearchAttributes(ctx context.Context) (resp *gen.G
 	scope, sw := wh.startRequestProfile(metrics.FrontendGetSearchAttributesScope)
 	defer sw.Stop()
 
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -2792,7 +2803,7 @@ func (wh *WorkflowHandler) ResetStickyTaskList(
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendResetStickyTaskListScope, resetRequest)
 	defer sw.Stop()
 
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -2833,7 +2844,7 @@ func (wh *WorkflowHandler) QueryWorkflow(
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendQueryWorkflowScope, queryRequest)
 	defer sw.Stop()
 
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -2882,7 +2893,7 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendDescribeWorkflowExecutionScope, request)
 	defer sw.Stop()
 
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -2930,7 +2941,7 @@ func (wh *WorkflowHandler) DescribeTaskList(
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendDescribeTaskListScope, request)
 	defer sw.Stop()
 
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -3262,7 +3273,7 @@ func createServiceBusyError() *gen.ServiceBusyError {
 }
 
 func isFailoverRequest(updateRequest *gen.UpdateDomainRequest) bool {
-	return updateRequest.ReplicationConfiguration != nil && updateRequest.ReplicationConfiguration.ActiveClusterName != nil
+	return updateRequest.ReplicationConfiguration != nil && updateRequest.ReplicationConfiguration.GetActiveClusterName() != ""
 }
 
 func (wh *WorkflowHandler) historyArchived(ctx context.Context, request *gen.GetWorkflowExecutionHistoryRequest, domainID string) bool {
@@ -3278,7 +3289,7 @@ func (wh *WorkflowHandler) historyArchived(ctx context.Context, request *gen.Get
 		return false
 	}
 	switch err.(type) {
-	case *shared.EntityNotExistsError:
+	case *gen.EntityNotExistsError:
 		// the only case in which history is assumed to be archived is if getting mutable state returns entity not found error
 		return true
 	}
@@ -3298,7 +3309,10 @@ func (wh *WorkflowHandler) getArchivedHistory(
 
 	URIString := entry.GetConfig().HistoryArchivalURI
 	if URIString == "" {
-		return nil, wh.error(errHistoryHasPassedRetentionPeriod, scope)
+		// if URI is empty, it means the domain has never enabled for archival.
+		// the error is not "workflow has passed retention period", because
+		// we have no way to tell if the requested workflow exists or not.
+		return nil, wh.error(errHistoryNotFound, scope)
 	}
 
 	URI, err := archiver.NewURI(URIString)
@@ -3322,7 +3336,7 @@ func (wh *WorkflowHandler) getArchivedHistory(
 		return nil, wh.error(err, scope)
 	}
 
-	history := &shared.History{}
+	history := &gen.History{}
 	for _, batch := range resp.HistoryBatches {
 		history.Events = append(history.Events, batch.Events...)
 	}
@@ -3364,7 +3378,7 @@ func (wh *WorkflowHandler) GetReplicationMessages(
 	scope, sw := wh.startRequestProfile(metrics.FrontendGetReplicationMessagesScope)
 	defer sw.Stop()
 
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -3389,7 +3403,7 @@ func (wh *WorkflowHandler) GetDomainReplicationMessages(
 	scope, sw := wh.startRequestProfile(metrics.FrontendGetDomainReplicationMessagesScope)
 	defer sw.Stop()
 
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope)
 	}
 
@@ -3446,14 +3460,14 @@ func (wh *WorkflowHandler) GetDomainReplicationMessages(
 // ReapplyEvents applies stale events to the current workflow and the current run
 func (wh *WorkflowHandler) ReapplyEvents(
 	ctx context.Context,
-	request *shared.ReapplyEventsRequest,
+	request *gen.ReapplyEventsRequest,
 ) (err error) {
 	defer log.CapturePanic(wh.GetLogger(), &err)
 
 	scope, sw := wh.startRequestProfile(metrics.FrontendReapplyEventsScope)
 	defer sw.Stop()
 
-	if err := wh.versionChecker.checkClientVersion(ctx); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return wh.error(err, scope)
 	}
 
@@ -3487,15 +3501,15 @@ func (wh *WorkflowHandler) ReapplyEvents(
 	return nil
 }
 
-func (wh *WorkflowHandler) checkPermission(
+func checkPermission(
+	config *Config,
 	securityToken *string,
 ) error {
-
-	if wh.config.EnableAdminProtection() {
-		if securityToken == nil {
+	if config.EnableAdminProtection() {
+		if securityToken == nil || *securityToken == "" {
 			return errNoPermission
 		}
-		requiredToken := wh.config.AdminOperationToken()
+		requiredToken := config.AdminOperationToken()
 		if *securityToken != requiredToken {
 			return errNoPermission
 		}

@@ -123,10 +123,17 @@ func (r *conflictResolverImpl) reset(
 				domainEntry,
 			)
 
-			sBuilder = newStateBuilder(r.shard, resetMutableStateBuilder, r.logger)
+			sBuilder = newStateBuilder(
+				r.shard,
+				r.logger,
+				resetMutableStateBuilder,
+				func(mutableState mutableState) mutableStateTaskGenerator {
+					return newMutableStateTaskGenerator(r.shard.GetDomainCache(), r.logger, mutableState)
+				},
+			)
 		}
 
-		_, _, _, err = sBuilder.applyEvents(domainID, requestID, execution, history, nil, false)
+		_, err = sBuilder.applyEvents(domainID, requestID, execution, history, nil, false)
 		if err != nil {
 			r.logError("Conflict resolution err applying events.", err)
 			return nil, err

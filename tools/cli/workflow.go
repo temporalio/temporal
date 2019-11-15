@@ -23,8 +23,9 @@ package cli
 import (
 	"strings"
 
-	"github.com/temporalio/temporal/service/worker/batcher"
 	"github.com/urfave/cli"
+
+	"github.com/temporalio/temporal/service/worker/batcher"
 )
 
 func newWorkflowCommands() []cli.Command {

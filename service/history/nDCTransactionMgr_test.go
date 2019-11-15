@@ -31,9 +31,7 @@ import (
 	"github.com/uber-go/tally"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
@@ -57,8 +55,6 @@ type (
 		mockService         service.Service
 		mockShard           *shardContextImpl
 		mockExecutionMgr    *mocks.ExecutionManager
-		mockClientBean      *client.MockClientBean
-		mockDomainCache     *cache.DomainCacheMock
 		mockClusterMetadata *mocks.ClusterMetadata
 
 		logger log.Logger
@@ -75,12 +71,15 @@ func TestNDCTransactionMgrSuite(t *testing.T) {
 func (s *nDCTransactionMgrSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
+	s.controller = gomock.NewController(s.T())
+	s.mockCreateMgr = NewMocknDCTransactionMgrForNewWorkflow(s.controller)
+	s.mockUpdateMgr = NewMocknDCTransactionMgrForExistingWorkflow(s.controller)
+	s.mockEventsReapplier = NewMocknDCEventsReapplier(s.controller)
+
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
-	s.mockClientBean = &client.MockClientBean{}
-	s.mockService = service.NewTestService(nil, nil, metricsClient, s.mockClientBean, nil, nil, nil)
-	s.mockDomainCache = &cache.DomainCacheMock{}
+	s.mockService = service.NewTestService(nil, nil, metricsClient, nil, nil, nil, nil)
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
@@ -93,14 +92,9 @@ func (s *nDCTransactionMgrSuite) SetupTest() {
 		logger:                    s.logger,
 		metricsClient:             metricsClient,
 		timeSource:                clock.NewRealTimeSource(),
-		domainCache:               s.mockDomainCache,
 		clusterMetadata:           s.mockClusterMetadata,
 	}
 
-	s.controller = gomock.NewController(s.T())
-	s.mockCreateMgr = NewMocknDCTransactionMgrForNewWorkflow(s.controller)
-	s.mockUpdateMgr = NewMocknDCTransactionMgrForExistingWorkflow(s.controller)
-	s.mockEventsReapplier = NewMocknDCEventsReapplier(s.controller)
 	s.transactionMgr = newNDCTransactionMgr(s.mockShard, newHistoryCache(s.mockShard), s.mockEventsReapplier, s.logger)
 	s.transactionMgr.createMgr = s.mockCreateMgr
 	s.transactionMgr.updateMgr = s.mockUpdateMgr
@@ -409,6 +403,44 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CheckDB_Current_Passive() 
 	err := s.transactionMgr.backfillWorkflow(ctx, now, workflow, workflowEvents)
 	s.NoError(err)
 	s.True(releaseCalled)
+}
+
+func (s *nDCTransactionMgrSuite) TestCheckWorkflowExists_DoesNotExists() {
+	ctx := ctx.Background()
+	domainID := "some random domain ID"
+	workflowID := "some random workflow ID"
+	runID := "some random run ID"
+
+	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
+		DomainID: domainID,
+		Execution: shared.WorkflowExecution{
+			WorkflowId: common.StringPtr(workflowID),
+			RunId:      common.StringPtr(runID),
+		},
+	}).Return(nil, &shared.EntityNotExistsError{}).Once()
+
+	exists, err := s.transactionMgr.checkWorkflowExists(ctx, domainID, workflowID, runID)
+	s.NoError(err)
+	s.False(exists)
+}
+
+func (s *nDCTransactionMgrSuite) TestCheckWorkflowExists_DoesExists() {
+	ctx := ctx.Background()
+	domainID := "some random domain ID"
+	workflowID := "some random workflow ID"
+	runID := "some random run ID"
+
+	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
+		DomainID: domainID,
+		Execution: shared.WorkflowExecution{
+			WorkflowId: common.StringPtr(workflowID),
+			RunId:      common.StringPtr(runID),
+		},
+	}).Return(&persistence.GetWorkflowExecutionResponse{}, nil).Once()
+
+	exists, err := s.transactionMgr.checkWorkflowExists(ctx, domainID, workflowID, runID)
+	s.NoError(err)
+	s.True(exists)
 }
 
 func (s *nDCTransactionMgrSuite) TestGetWorkflowCurrentRunID_Missing() {

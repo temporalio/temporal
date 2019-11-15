@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+
 	"github.com/temporalio/temporal/tools/common/schema"
 	"github.com/temporalio/temporal/tools/sql/mysql"
 )

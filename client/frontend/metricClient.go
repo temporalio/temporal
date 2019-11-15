@@ -23,10 +23,11 @@ package frontend
 import (
 	"context"
 
+	"go.uber.org/yarpc"
+
 	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/metrics"
-	"go.uber.org/yarpc"
 )
 
 var _ Client = (*metricClient)(nil)
@@ -194,7 +195,7 @@ func (c *metricClient) ListOpenWorkflowExecutions(
 	opts ...yarpc.CallOption,
 ) (*shared.ListOpenWorkflowExecutionsResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendListOpenWorkflowExecutionsScope, metrics.CadenceClientRequests)
+	c.metricsClient.IncCounter(metrics.FrontendClientListOpenWorkflowExecutionsScope, metrics.CadenceClientRequests)
 
 	sw := c.metricsClient.StartTimer(metrics.FrontendClientListOpenWorkflowExecutionsScope, metrics.CadenceClientLatency)
 	resp, err := c.client.ListOpenWorkflowExecutions(ctx, request, opts...)

@@ -22,6 +22,7 @@ package validator
 
 import (
 	"fmt"
+
 	gen "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"

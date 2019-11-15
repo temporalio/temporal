@@ -31,8 +31,8 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/persistence/client"
 	espersistence "github.com/temporalio/temporal/common/persistence/elasticsearch"
-	persistencefactory "github.com/temporalio/temporal/common/persistence/persistence-factory"
 	"github.com/temporalio/temporal/common/service"
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
@@ -174,6 +174,15 @@ type Config struct {
 	DecisionHeartbeatTimeout dynamicconfig.DurationPropertyFnWithDomainFilter
 	// MaxDecisionStartToCloseSeconds is the StartToCloseSeconds for decision
 	MaxDecisionStartToCloseSeconds dynamicconfig.IntPropertyFnWithDomainFilter
+
+	// The following is used by the new RPC replication stack
+	ReplicationTaskFetcherParallelism             dynamicconfig.IntPropertyFn
+	ReplicationTaskFetcherAggregationInterval     dynamicconfig.DurationPropertyFn
+	ReplicationTaskFetcherTimerJitterCoefficient  dynamicconfig.FloatPropertyFn
+	ReplicationTaskFetcherErrorRetryWait          dynamicconfig.DurationPropertyFn
+	ReplicationTaskProcessorErrorRetryWait        dynamicconfig.DurationPropertyFn
+	ReplicationTaskProcessorErrorRetryMaxAttempts dynamicconfig.IntPropertyFn
+	ReplicationTaskProcessorNoTaskRetryWait       dynamicconfig.DurationPropertyFn
 }
 
 const (
@@ -233,7 +242,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		TransferProcessorUpdateAckInterval:                    dc.GetDurationProperty(dynamicconfig.TransferProcessorUpdateAckInterval, 30*time.Second),
 		TransferProcessorUpdateAckIntervalJitterCoefficient:   dc.GetFloat64Property(dynamicconfig.TransferProcessorUpdateAckIntervalJitterCoefficient, 0.15),
 		TransferProcessorCompleteTransferInterval:             dc.GetDurationProperty(dynamicconfig.TransferProcessorCompleteTransferInterval, 60*time.Second),
-		TransferProcessorVisibilityArchivalTimeLimit:          dc.GetDurationProperty(dynamicconfig.TransferProcessorVisibilityArchivalTimeLimit, 1*time.Second),
+		TransferProcessorVisibilityArchivalTimeLimit:          dc.GetDurationProperty(dynamicconfig.TransferProcessorVisibilityArchivalTimeLimit, 200*time.Millisecond),
 		ReplicatorTaskBatchSize:                               dc.GetIntProperty(dynamicconfig.ReplicatorTaskBatchSize, 100),
 		ReplicatorTaskWorkerCount:                             dc.GetIntProperty(dynamicconfig.ReplicatorTaskWorkerCount, 10),
 		ReplicatorTaskMaxRetryCount:                           dc.GetIntProperty(dynamicconfig.ReplicatorTaskMaxRetryCount, 100),
@@ -276,6 +285,14 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		SearchAttributesTotalSizeLimit:    dc.GetIntPropertyFilteredByDomain(dynamicconfig.SearchAttributesTotalSizeLimit, 40*1024),
 		StickyTTL:                         dc.GetDurationPropertyFilteredByDomain(dynamicconfig.StickyTTL, time.Hour*24*365),
 		DecisionHeartbeatTimeout:          dc.GetDurationPropertyFilteredByDomain(dynamicconfig.DecisionHeartbeatTimeout, time.Minute*30),
+
+		ReplicationTaskFetcherParallelism:             dc.GetIntProperty(dynamicconfig.ReplicationTaskFetcherParallelism, 1),
+		ReplicationTaskFetcherAggregationInterval:     dc.GetDurationProperty(dynamicconfig.ReplicationTaskFetcherAggregationInterval, 2*time.Second),
+		ReplicationTaskFetcherTimerJitterCoefficient:  dc.GetFloat64Property(dynamicconfig.ReplicationTaskFetcherTimerJitterCoefficient, 0.15),
+		ReplicationTaskFetcherErrorRetryWait:          dc.GetDurationProperty(dynamicconfig.ReplicationTaskFetcherErrorRetryWait, time.Second),
+		ReplicationTaskProcessorErrorRetryWait:        dc.GetDurationProperty(dynamicconfig.ReplicationTaskProcessorErrorRetryWait, time.Second),
+		ReplicationTaskProcessorErrorRetryMaxAttempts: dc.GetIntProperty(dynamicconfig.ReplicationTaskProcessorErrorRetryMaxAttempts, 20),
+		ReplicationTaskProcessorNoTaskRetryWait:       dc.GetDurationProperty(dynamicconfig.ReplicationTaskProcessorNoTaskInitialWait, 2*time.Second),
 	}
 
 	return cfg
@@ -331,7 +348,7 @@ func (s *Service) Start() {
 		EnableSampling:                  s.config.EnableVisibilitySampling,
 		EnableReadFromClosedExecutionV2: s.config.EnableReadFromClosedExecutionV2,
 	}
-	pFactory := persistencefactory.New(&pConfig, params.ClusterMetadata.GetCurrentClusterName(), s.metricsClient, log)
+	pFactory := client.NewFactory(&pConfig, params.ClusterMetadata.GetCurrentClusterName(), s.metricsClient, log)
 
 	shardMgr, err := pFactory.NewShardManager()
 	if err != nil {
@@ -364,7 +381,7 @@ func (s *Service) Start() {
 		s.config.AdvancedVisibilityWritingMode,
 	)
 
-	historyV2, err := pFactory.NewHistoryV2Manager()
+	historyV2, err := pFactory.NewHistoryManager()
 	if err != nil {
 		log.Fatal("Creating historyV2 manager persistence failed", tag.Error(err))
 	}

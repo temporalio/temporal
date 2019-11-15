@@ -33,6 +33,7 @@ import (
 	time "time"
 
 	gomock "github.com/golang/mock/gomock"
+
 	persistence "github.com/temporalio/temporal/common/persistence"
 )
 
@@ -101,6 +102,21 @@ func (mr *MocknDCTransactionMgrMockRecorder) backfillWorkflow(ctx, now, targetWo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "backfillWorkflow", reflect.TypeOf((*MocknDCTransactionMgr)(nil).backfillWorkflow), ctx, now, targetWorkflow, targetWorkflowEvents)
 }
 
+// checkWorkflowExists mocks base method
+func (m *MocknDCTransactionMgr) checkWorkflowExists(ctx context.Context, domainID, workflowID, runID string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "checkWorkflowExists", ctx, domainID, workflowID, runID)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// checkWorkflowExists indicates an expected call of checkWorkflowExists
+func (mr *MocknDCTransactionMgrMockRecorder) checkWorkflowExists(ctx, domainID, workflowID, runID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "checkWorkflowExists", reflect.TypeOf((*MocknDCTransactionMgr)(nil).checkWorkflowExists), ctx, domainID, workflowID, runID)
+}
+
 // getCurrentWorkflowRunID mocks base method
 func (m *MocknDCTransactionMgr) getCurrentWorkflowRunID(ctx context.Context, domainID, workflowID string) (string, error) {
 	m.ctrl.T.Helper()
@@ -129,12 +145,4 @@ func (m *MocknDCTransactionMgr) loadNDCWorkflow(ctx context.Context, domainID, w
 func (mr *MocknDCTransactionMgrMockRecorder) loadNDCWorkflow(ctx, domainID, workflowID, runID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "loadNDCWorkflow", reflect.TypeOf((*MocknDCTransactionMgr)(nil).loadNDCWorkflow), ctx, domainID, workflowID, runID)
-}
-
-// reapplyEvents mocks base method
-func (m *MocknDCTransactionMgr) reapplyEvents(ctx context.Context, reapplyEvents *persistence.WorkflowEvents) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "reapplyEvents", ctx, reapplyEvents)
-	ret0, _ := ret[0].(error)
-	return ret0
 }

@@ -26,6 +26,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
+	"go.uber.org/yarpc"
+
+	"github.com/uber-go/tally"
+
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
@@ -41,9 +46,6 @@ import (
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
-	"github.com/uber-go/tally"
-	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
-	"go.uber.org/yarpc"
 )
 
 var cadenceServices = []string{
@@ -94,6 +96,7 @@ type (
 		hostName              string
 		hostInfo              *membership.HostInfo
 		dispatcher            *yarpc.Dispatcher
+		ringpopDispatcher     *yarpc.Dispatcher
 		membershipFactory     MembershipMonitorFactory
 		membershipMonitor     membership.Monitor
 		rpcFactory            common.RPCFactory
@@ -101,7 +104,7 @@ type (
 		clientBean            client.Bean
 		timeSource            clock.TimeSource
 		numberOfHistoryShards int
-		// New logger we are in favor of
+
 		logger          log.Logger
 		throttledLogger log.Logger
 
@@ -150,6 +153,11 @@ func New(params *BootstrapParams) Service {
 		sVice.logger.Fatal("Unable to create yarpc dispatcher")
 	}
 
+	sVice.ringpopDispatcher = sVice.rpcFactory.CreateRingpopDispatcher()
+	if sVice.ringpopDispatcher == nil {
+		sVice.logger.Fatal("Unable to create yarpc dispatcher for ringpop")
+	}
+
 	// Get the host name and set it on the service.  This is used for emitting metric with a tag for hostname
 	if hostName, err := os.Hostname(); err != nil {
 		sVice.logger.WithTags(tag.Error(err)).Fatal("Error getting hostname")
@@ -189,7 +197,11 @@ func (h *serviceImpl) Start() {
 		h.logger.WithTags(tag.Error(err)).Fatal("Failed to start yarpc dispatcher")
 	}
 
-	h.membershipMonitor, err = h.membershipFactory.Create(h.dispatcher)
+	if err := h.ringpopDispatcher.Start(); err != nil {
+		h.logger.WithTags(tag.Error(err)).Fatal("Failed to start yarpc dispatcher for ringpop")
+	}
+
+	h.membershipMonitor, err = h.membershipFactory.Create(h.ringpopDispatcher)
 	if err != nil {
 		h.logger.WithTags(tag.Error(err)).Fatal("Membership monitor creation failed")
 	}
@@ -228,6 +240,10 @@ func (h *serviceImpl) Stop() {
 
 	if h.membershipMonitor != nil {
 		h.membershipMonitor.Stop()
+	}
+
+	if h.ringpopDispatcher != nil {
+		h.ringpopDispatcher.Stop()
 	}
 
 	if h.dispatcher != nil {

@@ -29,6 +29,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/log/tag"

@@ -24,12 +24,13 @@ import (
 	"context"
 	"fmt"
 
+	"go.uber.org/yarpc"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/service/config"
-	"go.uber.org/yarpc"
 )
 
 const (

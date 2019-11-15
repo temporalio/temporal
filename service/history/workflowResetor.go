@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+
 	h "github.com/temporalio/temporal/.gen/go/history"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
@@ -253,7 +254,7 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 	if retError != nil {
 		return
 	}
-	newMutableState = newStateBuilder.getMutableState()
+	newMutableState = newStateBuilder.(*stateBuilderImpl).mutableState
 
 	// before this, the mutable state is in replay mode
 	// need to close / flush the mutable state for new changes
@@ -273,15 +274,11 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 	}
 
 	// set the new mutable state with the version in domain
-	if newMutableState.GetReplicationState() != nil {
-		newMutableState.UpdateReplicationStateVersion(domainEntry.GetFailoverVersion(), false)
-	} else if newMutableState.GetVersionHistories() != nil {
-		if retError = newMutableState.UpdateCurrentVersion(
-			domainEntry.GetFailoverVersion(),
-			false,
-		); retError != nil {
-			return
-		}
+	if retError = newMutableState.UpdateCurrentVersion(
+		domainEntry.GetFailoverVersion(),
+		false,
+	); retError != nil {
+		return
 	}
 
 	// failed the in-flight decision(started).
@@ -378,10 +375,7 @@ func (w *workflowResetorImpl) terminateIfCurrIsRunning(
 			w.eng.shard.GetDomainCache(),
 			currMutableState.GetExecutionInfo().DomainID,
 			currMutableState.GetExecutionInfo().WorkflowID,
-			w.eng.getTimerBuilder(&workflow.WorkflowExecution{
-				WorkflowId: common.StringPtr(currMutableState.GetExecutionInfo().WorkflowID),
-				RunId:      common.StringPtr(currMutableState.GetExecutionInfo().RunID),
-			}))
+		)
 		if retError != nil {
 			return
 		}
@@ -567,23 +561,39 @@ func (w *workflowResetorImpl) generateTimerTasksForReset(
 	}
 	timerTasks = append(timerTasks, wfTimeoutTask)
 
-	we := &workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(msBuilder.GetExecutionInfo().WorkflowID),
-		RunId:      common.StringPtr(msBuilder.GetExecutionInfo().RunID),
-	}
-	tb := w.eng.getTimerBuilder(we)
+	timerSequence := newTimerSequence(clock.NewRealTimeSource(), msBuilder)
 	// user timer task
 	if len(msBuilder.GetPendingTimerInfos()) > 0 {
-		tb.loadUserTimers(msBuilder)
-		tt := tb.firstTimerTaskWithoutChecking()
-		timerTasks = append(timerTasks, tt)
+		for _, timerInfo := range msBuilder.GetPendingTimerInfos() {
+			timerInfo.TaskStatus = timerTaskStatusNone
+			if err := msBuilder.UpdateUserTimer(timerInfo); err != nil {
+				return nil, err
+			}
+		}
+		if _, err := timerSequence.createNextUserTimer(); err != nil {
+			return nil, err
+		}
+		// temporary hack to make the logic as is
+		// this workflow resetor should be deleted once 2DC is deprecated
+		timerTasks = append(timerTasks, msBuilder.(*mutableStateBuilder).insertTimerTasks...)
+		msBuilder.(*mutableStateBuilder).insertTimerTasks = nil
 	}
 
 	// activity timer
 	if needActivityTimer {
-		tb.loadActivityTimers(msBuilder)
-		tt := tb.firstActivityTimerTaskWithoutChecking()
-		timerTasks = append(timerTasks, tt)
+		for _, activityInfo := range msBuilder.GetPendingActivityInfos() {
+			activityInfo.TimerTaskStatus = timerTaskStatusNone
+			if err := msBuilder.UpdateActivity(activityInfo); err != nil {
+				return nil, err
+			}
+		}
+		if _, err := timerSequence.createNextActivityTimer(); err != nil {
+			return nil, err
+		}
+		// temporary hack to make the logic as is
+		// this workflow resetor should be deleted once 2DC is deprecated
+		timerTasks = append(timerTasks, msBuilder.(*mutableStateBuilder).insertTimerTasks...)
+		msBuilder.(*mutableStateBuilder).insertTimerTasks = nil
 	}
 
 	return timerTasks, nil
@@ -681,7 +691,14 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 					resetMutableState = newMutableStateBuilder(w.eng.shard, w.eng.shard.GetEventsCache(), w.eng.logger, domainEntry)
 				}
 
-				sBuilder = newStateBuilder(w.eng.shard, resetMutableState, w.eng.logger)
+				sBuilder = newStateBuilder(
+					w.eng.shard,
+					w.eng.logger,
+					resetMutableState,
+					func(mutableState mutableState) mutableStateTaskGenerator {
+						return newMutableStateTaskGenerator(w.eng.shard.GetDomainCache(), w.eng.logger, mutableState)
+					},
+				)
 			}
 
 			// avoid replay this event in stateBuilder which will run into NPE if WF doesn't enable XDC
@@ -692,7 +709,7 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 				return
 			}
 
-			_, _, _, retError = sBuilder.applyEvents(domainID, requestID, prevExecution, history, nil, false)
+			_, retError = sBuilder.applyEvents(domainID, requestID, prevExecution, history, nil, false)
 			if retError != nil {
 				return
 			}
@@ -919,10 +936,23 @@ func (w *workflowResetorImpl) replicateResetEvent(
 					w.eng.logger,
 					domainEntry,
 				)
-				newMsBuilder.UpdateReplicationStateVersion(firstEvent.GetVersion(), true)
-				sBuilder = newStateBuilder(w.eng.shard, newMsBuilder, w.eng.logger)
+				if err := newMsBuilder.UpdateCurrentVersion(
+					firstEvent.GetVersion(),
+					true,
+				); err != nil {
+					return nil, 0, nil, nil, err
+				}
+
+				sBuilder = newStateBuilder(
+					w.eng.shard,
+					w.eng.logger,
+					newMsBuilder,
+					func(mutableState mutableState) mutableStateTaskGenerator {
+						return newMutableStateTaskGenerator(w.eng.shard.GetDomainCache(), w.eng.logger, mutableState)
+					},
+				)
 			}
-			_, _, _, retError = sBuilder.applyEvents(domainID, requestID, *baseExecution, events, nil, false)
+			_, retError = sBuilder.applyEvents(domainID, requestID, *baseExecution, events, nil, false)
 			if retError != nil {
 				return
 			}
@@ -945,14 +975,34 @@ func (w *workflowResetorImpl) replicateResetEvent(
 	newMsBuilder.GetExecutionInfo().LastUpdatedTimestamp = startTime
 	newMsBuilder.ClearStickyness()
 
+	// before this, the mutable state is in replay mode
+	// need to close / flush the mutable state for new changes
+	_, _, retError = newMsBuilder.CloseTransactionAsSnapshot(
+		time.Unix(0, lastEvent.GetTimestamp()),
+		transactionPolicyPassive,
+	)
+	if retError != nil {
+		return
+	}
+
 	// always enforce the attempt to zero so that we can always schedule a new decision(skip trasientDecision logic)
 	decision, _ := newMsBuilder.GetInFlightDecision()
 	decision.Attempt = 0
 	newMsBuilder.UpdateDecision(decision)
 
+	// before this, the mutable state is in replay mode
+	// need to close / flush the mutable state for new changes
+	_, _, retError = newMsBuilder.CloseTransactionAsSnapshot(
+		time.Unix(0, lastEvent.GetTimestamp()),
+		transactionPolicyPassive,
+	)
+	if retError != nil {
+		return
+	}
+
 	lastEvent = newRunHistory[len(newRunHistory)-1]
 	// replay new history (including decisionTaskScheduled)
-	_, _, _, retError = sBuilder.applyEvents(domainID, requestID, *baseExecution, newRunHistory, nil, false)
+	_, retError = sBuilder.applyEvents(domainID, requestID, *baseExecution, newRunHistory, nil, false)
 	if retError != nil {
 		return
 	}
@@ -1004,4 +1054,34 @@ func FindAutoResetPoint(
 		}
 	}
 	return "", nil
+}
+
+func getWorkflowCleanupTasks(
+	domainCache cache.DomainCache,
+	domainID string,
+	workflowID string,
+) (persistence.Task, persistence.Task, error) {
+
+	var retentionInDays int32
+	domainEntry, err := domainCache.GetDomainByID(domainID)
+	if err != nil {
+		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
+			return nil, nil, err
+		}
+	} else {
+		retentionInDays = domainEntry.GetRetentionDays(workflowID)
+	}
+	deleteTask := createDeleteHistoryEventTimerTask(retentionInDays)
+	return &persistence.CloseExecutionTask{}, deleteTask, nil
+}
+
+func createDeleteHistoryEventTimerTask(
+	retentionInDays int32,
+) *persistence.DeleteHistoryEventTask {
+
+	retention := time.Duration(retentionInDays) * time.Hour * 24
+	expiryTime := clock.NewRealTimeSource().Now().Add(retention)
+	return &persistence.DeleteHistoryEventTask{
+		VisibilityTimestamp: expiryTime,
+	}
 }

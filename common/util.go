@@ -29,6 +29,9 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
+	"go.uber.org/yarpc/yarpcerrors"
+	"golang.org/x/net/context"
+
 	h "github.com/temporalio/temporal/.gen/go/history"
 	m "github.com/temporalio/temporal/.gen/go/matching"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
@@ -36,8 +39,6 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
-	"go.uber.org/yarpc/yarpcerrors"
-	"golang.org/x/net/context"
 )
 
 const (

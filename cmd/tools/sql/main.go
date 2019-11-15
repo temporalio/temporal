@@ -21,8 +21,9 @@
 package main
 
 import (
-	"github.com/temporalio/temporal/tools/sql"
 	"os"
+
+	"github.com/temporalio/temporal/tools/sql"
 )
 
 func main() {

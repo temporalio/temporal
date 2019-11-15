@@ -23,15 +23,20 @@ package adapter
 import (
 	"fmt"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/tpb"
 	"go.uber.org/yarpc/encoding/protobuf"
 	"go.uber.org/yarpc/yarpcerrors"
+
+	"github.com/temporalio/temporal-proto/errordetails"
+	"github.com/temporalio/temporal/.gen/go/shared"
 )
 
 // ToProtoError converts Thrift error to gRPC error.
-func ToProtoError(thriftError error) error {
-	switch thriftError := thriftError.(type) {
+func ToProtoError(in error) error {
+	if in == nil {
+		return nil
+	}
+
+	switch thriftError := in.(type) {
 	case *shared.InternalServiceError:
 		return protobuf.NewError(yarpcerrors.CodeInternal, thriftError.Message)
 	case *shared.BadRequestError:
@@ -45,7 +50,7 @@ func ToProtoError(thriftError error) error {
 		}
 	case *shared.DomainNotActiveError:
 		return protobuf.NewError(yarpcerrors.CodeInvalidArgument, thriftError.Message, protobuf.WithErrorDetails(
-			&tpb.DomainNotActiveFailure{
+			&errordetails.DomainNotActiveFailure{
 				Message:        thriftError.Message,
 				DomainName:     thriftError.DomainName,
 				CurrentCluster: thriftError.CurrentCluster,
@@ -58,7 +63,7 @@ func ToProtoError(thriftError error) error {
 		return protobuf.NewError(yarpcerrors.CodeNotFound, thriftError.Message)
 	case *shared.WorkflowExecutionAlreadyStartedError:
 		return protobuf.NewError(yarpcerrors.CodeAlreadyExists, *thriftError.Message, protobuf.WithErrorDetails(
-			&tpb.WorkflowExecutionAlreadyStartedFailure{
+			&errordetails.WorkflowExecutionAlreadyStartedFailure{
 				Message:        *thriftError.Message,
 				StartRequestId: *thriftError.StartRequestId,
 				RunId:          *thriftError.RunId,
@@ -74,7 +79,7 @@ func ToProtoError(thriftError error) error {
 		return protobuf.NewError(yarpcerrors.CodeResourceExhausted, thriftError.Message)
 	case *shared.ClientVersionNotSupportedError:
 		return protobuf.NewError(yarpcerrors.CodeFailedPrecondition, "Client version is not supported.", protobuf.WithErrorDetails(
-			&tpb.ClientVersionNotSupportedFailure{
+			&errordetails.ClientVersionNotSupportedFailure{
 				FeatureVersion: thriftError.FeatureVersion, ClientImpl: thriftError.ClientImpl, SupportedVersions: thriftError.SupportedVersions,
 			},
 		))
@@ -84,5 +89,5 @@ func ToProtoError(thriftError error) error {
 		}
 	}
 
-	return protobuf.NewError(yarpcerrors.CodeInternal, fmt.Sprintf("temporal internal uncategorized error, msg: %s", thriftError.Error()))
+	return protobuf.NewError(yarpcerrors.CodeInternal, fmt.Sprintf("temporal internal uncategorized error, msg: %s", in.Error()))
 }

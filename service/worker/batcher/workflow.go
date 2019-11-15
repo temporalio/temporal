@@ -26,17 +26,19 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/yarpc"
+	"golang.org/x/time/rate"
+
+	"go.temporal.io/temporal"
+	"go.temporal.io/temporal/activity"
+	"go.temporal.io/temporal/workflow"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/client/frontend"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
-	"go.temporal.io/temporal"
-	"go.temporal.io/temporal/activity"
-	"go.temporal.io/temporal/workflow"
-	"go.uber.org/yarpc"
-	"golang.org/x/time/rate"
 )
 
 const (

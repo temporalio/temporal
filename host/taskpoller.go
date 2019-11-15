@@ -25,14 +25,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/temporalio/temporal/common/client"
+
 	"github.com/stretchr/testify/require"
+	"go.uber.org/yarpc"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/service/history"
 	"github.com/temporalio/temporal/service/matching"
-	"go.uber.org/yarpc"
 )
 
 type (
@@ -273,8 +276,8 @@ Loop:
 				QueryResults:               getQueryResults(response.GetQueries(), queryResult),
 			},
 			yarpc.WithHeader(common.LibraryVersionHeaderName, "0.0.1"),
-			yarpc.WithHeader(common.FeatureVersionHeaderName, "1.0.0"),
-			yarpc.WithHeader(common.ClientImplHeaderName, "go"),
+			yarpc.WithHeader(common.FeatureVersionHeaderName, client.GoWorkerConsistentQueryVersion),
+			yarpc.WithHeader(common.ClientImplHeaderName, client.GoSDK),
 		)
 
 		return false, newTask, err
@@ -348,8 +351,8 @@ func (p *TaskPoller) HandlePartialDecision(response *workflow.PollForDecisionTas
 			ForceCreateNewDecisionTask: common.BoolPtr(true),
 		},
 		yarpc.WithHeader(common.LibraryVersionHeaderName, "0.0.1"),
-		yarpc.WithHeader(common.FeatureVersionHeaderName, "1.0.0"),
-		yarpc.WithHeader(common.ClientImplHeaderName, "go"),
+		yarpc.WithHeader(common.FeatureVersionHeaderName, client.GoWorkerConsistentQueryVersion),
+		yarpc.WithHeader(common.ClientImplHeaderName, client.GoSDK),
 	)
 
 	return newTask, err

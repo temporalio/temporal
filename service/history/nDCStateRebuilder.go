@@ -185,7 +185,14 @@ func (r *nDCStateRebuilderImpl) initializeBuilders(
 		r.logger,
 		domainEntry,
 	)
-	stateBuilder := newStateBuilder(r.shard, resetMutableStateBuilder, r.logger)
+	stateBuilder := newStateBuilder(
+		r.shard,
+		r.logger,
+		resetMutableStateBuilder,
+		func(mutableState mutableState) mutableStateTaskGenerator {
+			return newMutableStateTaskGenerator(r.shard.GetDomainCache(), r.logger, mutableState)
+		},
+	)
 	return resetMutableStateBuilder, stateBuilder
 }
 
@@ -196,7 +203,7 @@ func (r *nDCStateRebuilderImpl) applyEvents(
 	requestID string,
 ) error {
 
-	_, _, _, err := stateBuilder.applyEvents(
+	_, err := stateBuilder.applyEvents(
 		workflowIdentifier.DomainID,
 		requestID,
 		shared.WorkflowExecution{

@@ -24,12 +24,14 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/temporalio/temporal/common/elasticsearch"
-	"github.com/temporalio/temporal/common/messaging"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
 	"github.com/uber-go/tally/m3"
 	"github.com/uber-go/tally/prometheus"
 	"github.com/uber/ringpop-go/discovery"
+
+	"github.com/temporalio/temporal/common/auth"
+	"github.com/temporalio/temporal/common/elasticsearch"
+	"github.com/temporalio/temporal/common/messaging"
+	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
 const (
@@ -87,6 +89,8 @@ type (
 	RPC struct {
 		// Port is the port  on which the channel will bind to
 		Port int `yaml:"port"`
+		// Port used for ringpop listener
+		RingpopPort int `yaml:"ringpopPort"`
 		// BindOnLocalHost is true if localhost is the bind address
 		BindOnLocalHost bool `yaml:"bindOnLocalHost"`
 		// BindOnIP can be used to bind service on specific ip (eg. `0.0.0.0`) -
@@ -187,6 +191,8 @@ type (
 		MaxQPS int `yaml:"maxQPS"`
 		// MaxConns is the max number of connections to this datastore for a single keyspace
 		MaxConns int `yaml:"maxConns"`
+		// TLS configuration
+		TLS *auth.TLS `yaml:"tls"`
 	}
 
 	// SQL is the configuration for connecting to a SQL backed datastore
@@ -261,18 +267,6 @@ type (
 	ReplicationConsumerConfig struct {
 		// Type determines how we consume replication tasks. It can be either kafka(default) or rpc.
 		Type string `yaml:"type"`
-		// FetcherConfig is the config for replication task fetcher.
-		FetcherConfig *FetcherConfig `yaml:"fetcher"`
-		// ProcessorConfig is the config for replication task processor.
-		ProcessorConfig *ReplicationTaskProcessorConfig `yaml:"processor"`
-	}
-
-	// FetcherConfig is the config for replication task fetcher.
-	FetcherConfig struct {
-		RPCParallelism          int     `yaml:"rpcParallelism"`
-		AggregationIntervalSecs int     `yaml:"aggregationIntervalSecs"`
-		ErrorRetryWaitSecs      int     `yaml:"errorRetryWaitSecs"`
-		TimerJitterCoefficient  float64 `yaml:"timerJitterCoefficient"`
 	}
 
 	// ReplicationTaskProcessorConfig is the config for replication task processor.

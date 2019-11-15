@@ -25,6 +25,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/uber-go/tally"
+
 	"github.com/temporalio/temporal/.gen/go/health"
 	m "github.com/temporalio/temporal/.gen/go/matching"
 	"github.com/temporalio/temporal/.gen/go/matching/matchingserviceserver"
@@ -36,7 +38,6 @@ import (
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/quotas"
 	"github.com/temporalio/temporal/common/service"
-	"github.com/uber-go/tally"
 )
 
 var _ matchingserviceserver.Interface = (*Handler)(nil)

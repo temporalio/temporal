@@ -25,8 +25,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/temporalio/temporal/common/clock"
-	"github.com/temporalio/temporal/common/tokenbucket"
 	"math"
 	"net/http"
 	"os"
@@ -36,10 +34,13 @@ import (
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/olivere/elastic"
+	"github.com/urfave/cli"
+
 	"github.com/temporalio/temporal/.gen/go/indexer"
+	"github.com/temporalio/temporal/common/clock"
 	es "github.com/temporalio/temporal/common/elasticsearch"
 	"github.com/temporalio/temporal/common/elasticsearch/esql"
-	"github.com/urfave/cli"
+	"github.com/temporalio/temporal/common/tokenbucket"
 )
 
 const (

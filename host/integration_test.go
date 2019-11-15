@@ -37,6 +37,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log/tag"

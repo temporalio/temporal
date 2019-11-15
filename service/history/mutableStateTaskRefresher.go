@@ -278,7 +278,14 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForActivity(
 Loop:
 	for _, activityInfo := range pendingActivityInfos {
 		// clear all activity timer task mask for later activity timer task re-generation
-		activityInfo.TimerTaskStatus = TimerTaskStatusNone
+		activityInfo.TimerTaskStatus = timerTaskStatusNone
+
+		// need to update activity timer task mask for which task is generated
+		if err := mutableState.UpdateActivity(
+			activityInfo,
+		); err != nil {
+			return err
+		}
 
 		if activityInfo.StartedID != common.EmptyEventID {
 			continue Loop
@@ -304,15 +311,11 @@ Loop:
 		}
 	}
 
-	tBuilder := newTimerBuilder(r.getTimeSource(now))
-	timerTask, err := tBuilder.GetActivityTimerTaskIfNeeded(mutableState)
-	if err != nil {
+	if _, err := newTimerSequence(
+		r.getTimeSource(now),
+		mutableState,
+	).createNextActivityTimer(); err != nil {
 		return err
-	}
-	if timerTask != nil {
-		// no need to set the version, since activity timer task
-		// is just a trigger to check all activities
-		mutableState.AddTimerTasks(timerTask)
 	}
 
 	return nil
@@ -328,20 +331,21 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForTimer(
 
 	for _, timerInfo := range pendingTimerInfos {
 		// clear all timer task mask for later timer task re-generation
-		timerInfo.TaskID = TimerTaskStatusNone
+		timerInfo.TaskStatus = timerTaskStatusNone
+
+		// need to update user timer task mask for which task is generated
+		if err := mutableState.UpdateUserTimer(
+			timerInfo,
+		); err != nil {
+			return err
+		}
 	}
 
-	tBuilder := newTimerBuilder(r.getTimeSource(now))
-	timerTask, err := tBuilder.GetUserTimerTaskIfNeeded(
+	if _, err := newTimerSequence(
+		r.getTimeSource(now),
 		mutableState,
-	)
-	if err != nil {
+	).createNextUserTimer(); err != nil {
 		return err
-	}
-	if timerTask != nil {
-		// no need to set the version, since activity timer task
-		// is just a trigger to check all activities
-		mutableState.AddTimerTasks(timerTask)
 	}
 
 	return nil

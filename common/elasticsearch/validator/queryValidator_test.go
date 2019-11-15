@@ -21,12 +21,14 @@
 package validator
 
 import (
+	"testing"
+
 	"github.com/stretchr/testify/suite"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
-	"testing"
 )
 
 type queryValidatorSuite struct {

@@ -49,7 +49,6 @@ type (
 		logger          log.Logger
 		mockService     service.Service
 		mockShard       ShardContext
-		mockDomainCache *cache.DomainCacheMock
 		mockProcessor   *MockTimerProcessor
 		mockQueueAckMgr *MockTimerQueueAckMgr
 
@@ -81,7 +80,6 @@ func (s *taskProcessorSuite) SetupTest() {
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.mockProcessor = &MockTimerProcessor{}
 	s.mockQueueAckMgr = &MockTimerQueueAckMgr{}
-	s.mockDomainCache = &cache.DomainCacheMock{}
 	s.mockService = service.NewTestService(nil, nil, metricsClient, nil, nil, nil, nil)
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
@@ -91,7 +89,6 @@ func (s *taskProcessorSuite) SetupTest() {
 		closeCh:                   make(chan int, 100),
 		config:                    NewDynamicConfigForTest(),
 		logger:                    s.logger,
-		domainCache:               s.mockDomainCache,
 		metricsClient:             metricsClient,
 		standbyClusterCurrentTime: make(map[string]time.Time),
 		timeSource:                clock.NewRealTimeSource(),
@@ -112,7 +109,6 @@ func (s *taskProcessorSuite) SetupTest() {
 }
 
 func (s *taskProcessorSuite) TearDownTest() {
-	s.mockDomainCache.AssertExpectations(s.T())
 	s.mockProcessor.AssertExpectations(s.T())
 	s.mockQueueAckMgr.AssertExpectations(s.T())
 }

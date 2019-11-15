@@ -26,6 +26,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 )
 

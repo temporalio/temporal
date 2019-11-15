@@ -29,6 +29,11 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/yarpc"
+	"go.uber.org/yarpc/transport/tchannel"
+	"go.uber.org/zap"
+	"gopkg.in/yaml.v2"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -37,10 +42,6 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/environment"
-	"go.uber.org/yarpc"
-	"go.uber.org/yarpc/transport/tchannel"
-	"go.uber.org/zap"
-	"gopkg.in/yaml.v2"
 )
 
 type (

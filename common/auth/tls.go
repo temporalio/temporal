@@ -18,40 +18,23 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package client
-
-import (
-	"testing"
-
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-)
+package auth
 
 type (
-	FeatureSuite struct {
-		*require.Assertions // override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test, not merely log an error
-		suite.Suite
+	// TLS describe TLS configuration (for Kafka, Cassandra)
+	TLS struct {
+		Enabled bool `yaml:"enabled"`
+
+		// CertPath and KeyPath are optional depending on server
+		// config, but both fields must be omitted to avoid using a
+		// client certificate
+		CertFile string `yaml:"certFile"`
+		KeyFile  string `yaml:"keyFile"`
+
+		CaFile string `yaml:"caFile"` //optional depending on server config
+		// If you want to verify the hostname and server cert (like a wildcard for cass cluster) then you should turn this on
+		// This option is basically the inverse of InSecureSkipVerify
+		// See InSecureSkipVerify in http://golang.org/pkg/crypto/tls/ for more info
+		EnableHostVerification bool `yaml:"enableHostVerification"`
 	}
 )
-
-func TestFeatureSuiteSuite(t *testing.T) {
-	suite.Run(t, new(FeatureSuite))
-}
-
-func (s *FeatureSuite) SetupTest() {
-	s.Assertions = require.New(s.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-}
-
-func (s *FeatureSuite) TestSupportStickyQuery() {
-	libVersion := "0.5.0"
-	featureVersion := "1.0.0"
-	lang := "go"
-	feature := NewFeatureImpl(libVersion, featureVersion, lang)
-	s.True(feature.SupportStickyQuery(), "Should support sticky query")
-
-	libVersion = ""
-	featureVersion = ""
-	lang = ""
-	feature = NewFeatureImpl(libVersion, featureVersion, lang)
-	s.False(feature.SupportStickyQuery(), "Should not support sticky query")
-}

@@ -153,14 +153,18 @@ const (
 	PersistenceGetCurrentExecutionScope
 	// PersistenceGetTransferTasksScope tracks GetTransferTasks calls made by service to persistence layer
 	PersistenceGetTransferTasksScope
-	// PersistenceGetReplicationTasksScope tracks GetReplicationTasks calls made by service to persistence layer
-	PersistenceGetReplicationTasksScope
 	// PersistenceCompleteTransferTaskScope tracks CompleteTransferTasks calls made by service to persistence layer
 	PersistenceCompleteTransferTaskScope
 	// PersistenceRangeCompleteTransferTaskScope tracks CompleteTransferTasks calls made by service to persistence layer
 	PersistenceRangeCompleteTransferTaskScope
+	// PersistenceGetReplicationTasksScope tracks GetReplicationTasks calls made by service to persistence layer
+	PersistenceGetReplicationTasksScope
 	// PersistenceCompleteReplicationTaskScope tracks CompleteReplicationTasks calls made by service to persistence layer
 	PersistenceCompleteReplicationTaskScope
+	// PersistencePutReplicationTaskToDLQScope tracks PersistencePutReplicationTaskToDLQScope calls made by service to persistence layer
+	PersistencePutReplicationTaskToDLQScope
+	// PersistenceGetReplicationTasksFromDLQScope tracks PersistenceGetReplicationTasksFromDLQScope calls made by service to persistence layer
+	PersistenceGetReplicationTasksFromDLQScope
 	// PersistenceGetTimerIndexTasksScope tracks GetTimerIndexTasks calls made by service to persistence layer
 	PersistenceGetTimerIndexTasksScope
 	// PersistenceCompleteTimerTaskScope tracks CompleteTimerTasks calls made by service to persistence layer
@@ -417,8 +421,8 @@ const (
 	DCRedirectionDescribeWorkflowExecutionScope
 	// DCRedirectionGetWorkflowExecutionHistoryScope tracks RPC calls for dc redirection
 	DCRedirectionGetWorkflowExecutionHistoryScope
-	// DCRedirectionListArchviedWorkflowExecutionsScope tracks RPC calls for dc redirection
-	DCRedirectionListArchviedWorkflowExecutionsScope
+	// DCRedirectionListArchivedWorkflowExecutionsScope tracks RPC calls for dc redirection
+	DCRedirectionListArchivedWorkflowExecutionsScope
 	// DCRedirectionListClosedWorkflowExecutionsScope tracks RPC calls for dc redirection
 	DCRedirectionListClosedWorkflowExecutionsScope
 	// DCRedirectionListDomainsScope tracks RPC calls for dc redirection
@@ -632,6 +636,8 @@ const (
 	FrontendTerminateWorkflowExecutionScope
 	// FrontendRequestCancelWorkflowExecutionScope is the metric scope for frontend.RequestCancelWorkflowExecution
 	FrontendRequestCancelWorkflowExecutionScope
+	// FrontendListArchivedWorkflowExecutionsScope is the metric scope for frontend.ListArchivedWorkflowExecutions
+	FrontendListArchivedWorkflowExecutionsScope
 	// FrontendListOpenWorkflowExecutionsScope is the metric scope for frontend.ListOpenWorkflowExecutions
 	FrontendListOpenWorkflowExecutionsScope
 	// FrontendListClosedWorkflowExecutionsScope is the metric scope for frontend.ListClosedWorkflowExecutions
@@ -949,10 +955,12 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceDeleteTaskScope:                               {operation: "PersistenceDelete"},
 		PersistenceGetCurrentExecutionScope:                      {operation: "GetCurrentExecution"},
 		PersistenceGetTransferTasksScope:                         {operation: "GetTransferTasks"},
-		PersistenceGetReplicationTasksScope:                      {operation: "GetReplicationTasks"},
 		PersistenceCompleteTransferTaskScope:                     {operation: "CompleteTransferTask"},
 		PersistenceRangeCompleteTransferTaskScope:                {operation: "RangeCompleteTransferTask"},
+		PersistenceGetReplicationTasksScope:                      {operation: "GetReplicationTasks"},
 		PersistenceCompleteReplicationTaskScope:                  {operation: "CompleteReplicationTask"},
+		PersistencePutReplicationTaskToDLQScope:                  {operation: "PersistencePutReplicationTaskToDLQ"},
+		PersistenceGetReplicationTasksFromDLQScope:               {operation: "PersistenceGetReplicationTasksFromDLQ"},
 		PersistenceGetTimerIndexTasksScope:                       {operation: "GetTimerIndexTasks"},
 		PersistenceCompleteTimerTaskScope:                        {operation: "CompleteTimerTask"},
 		PersistenceRangeCompleteTimerTaskScope:                   {operation: "RangeCompleteTimerTask"},
@@ -1091,7 +1099,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		DCRedirectionDescribeTaskListScope:                  {operation: "DCRedirectionDescribeTaskList", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionDescribeWorkflowExecutionScope:         {operation: "DCRedirectionDescribeWorkflowExecution", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionGetWorkflowExecutionHistoryScope:       {operation: "DCRedirectionGetWorkflowExecutionHistory", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
-		DCRedirectionListArchviedWorkflowExecutionsScope:    {operation: "DCRedirectionListArchivedWorkflowExecutions", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionListArchivedWorkflowExecutionsScope:    {operation: "DCRedirectionListArchivedWorkflowExecutions", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionListClosedWorkflowExecutionsScope:      {operation: "DCRedirectionListClosedWorkflowExecutions", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionListDomainsScope:                       {operation: "DCRedirectionListDomains", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionListOpenWorkflowExecutionsScope:        {operation: "DCRedirectionListOpenWorkflowExecutions", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
@@ -1190,6 +1198,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendTerminateWorkflowExecutionScope:       {operation: "TerminateWorkflowExecution"},
 		FrontendResetWorkflowExecutionScope:           {operation: "ResetWorkflowExecution"},
 		FrontendRequestCancelWorkflowExecutionScope:   {operation: "RequestCancelWorkflowExecution"},
+		FrontendListArchivedWorkflowExecutionsScope:   {operation: "ListArchivedWorkflowExecutions"},
 		FrontendListOpenWorkflowExecutionsScope:       {operation: "ListOpenWorkflowExecutions"},
 		FrontendListClosedWorkflowExecutionsScope:     {operation: "ListClosedWorkflowExecutions"},
 		FrontendListWorkflowExecutionsScope:           {operation: "ListWorkflowExecutions"},
@@ -1468,6 +1477,7 @@ const (
 	DecisionTypeContinueAsNewCounter
 	DecisionTypeSignalExternalWorkflowCounter
 	DecisionTypeUpsertWorkflowSearchAttributesCounter
+	EmptyCompletionDecisionsCounter
 	MultipleCompletionDecisionsCounter
 	FailedDecisionsCounter
 	StaleMutableStateCounter
@@ -1556,9 +1566,12 @@ const (
 	WorkflowFailedCount
 	WorkflowTimeoutCount
 	WorkflowTerminateCount
+	ArchiverClientSendSignalCount
 	ArchiverClientSendSignalFailureCount
+	ArchiverClientHistoryRequestCount
 	ArchiverClientHistoryInlineArchiveAttemptCount
 	ArchiverClientHistoryInlineArchiveFailureCount
+	ArchiverClientVisibilityRequestCount
 	ArchiverClientVisibilityInlineArchiveAttemptCount
 	ArchiverClientVisibilityInlineArchiveFailureCount
 	LastRetrievedMessageID
@@ -1573,8 +1586,9 @@ const (
 	DirectQueryDispatchLatency
 	DecisionTaskQueryLatency
 	CompleteQueryFailedCount
+	UnblockQueryFailedCount
+	FailQueryFailedCount
 	ConsistentQueryTimeoutCount
-	DecisionTaskCreatedForBufferedQueriesCount
 
 	NumHistoryMetrics
 )
@@ -1778,6 +1792,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		DecisionTypeSignalExternalWorkflowCounter:         {metricName: "signal_external_workflow_decision", metricType: Counter},
 		DecisionTypeUpsertWorkflowSearchAttributesCounter: {metricName: "upsert_workflow_search_attributes_decision", metricType: Counter},
 		DecisionTypeChildWorkflowCounter:                  {metricName: "child_workflow_decision", metricType: Counter},
+		EmptyCompletionDecisionsCounter:                   {metricName: "empty_completion_decisions", metricType: Counter},
 		MultipleCompletionDecisionsCounter:                {metricName: "multiple_completion_decisions", metricType: Counter},
 		FailedDecisionsCounter:                            {metricName: "failed_decisions", metricType: Counter},
 		StaleMutableStateCounter:                          {metricName: "stale_mutable_state", metricType: Counter},
@@ -1866,11 +1881,14 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		WorkflowFailedCount:                               {metricName: "workflow_failed", metricType: Counter},
 		WorkflowTimeoutCount:                              {metricName: "workflow_timeout", metricType: Counter},
 		WorkflowTerminateCount:                            {metricName: "workflow_terminate", metricType: Counter},
+		ArchiverClientSendSignalCount:                     {metricName: "archiver_client_sent_signal", metricType: Counter},
 		ArchiverClientSendSignalFailureCount:              {metricName: "archiver_client_send_signal_error", metricType: Counter},
+		ArchiverClientHistoryRequestCount:                 {metricName: "archiver_client_history_request", metricType: Counter},
 		ArchiverClientHistoryInlineArchiveAttemptCount:    {metricName: "archiver_client_history_inline_archive_attempt", metricType: Counter},
 		ArchiverClientHistoryInlineArchiveFailureCount:    {metricName: "archiver_client_history_inline_archive_failure", metricType: Counter},
+		ArchiverClientVisibilityRequestCount:              {metricName: "archiver_client_visibility_request", metricType: Counter},
 		ArchiverClientVisibilityInlineArchiveAttemptCount: {metricName: "archiver_client_visibility_inline_archive_attempt", metricType: Counter},
-		ArchiverClientVisibilityInlineArchiveFailureCount: {metricName: "archiver_client_visibility_inline_archive_attempt", metricType: Counter},
+		ArchiverClientVisibilityInlineArchiveFailureCount: {metricName: "archiver_client_visibility_inline_archive_failure", metricType: Counter},
 		LastRetrievedMessageID:                            {metricName: "last_retrieved_message_id", metricType: Gauge},
 		LastProcessedMessageID:                            {metricName: "last_processed_message_id", metricType: Gauge},
 		ReplicationTasksApplied:                           {metricName: "replication_tasks_applied", metricType: Counter},
@@ -1883,8 +1901,9 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		DirectQueryDispatchLatency:                        {metricName: "direct_query_dispatch_latency", metricType: Timer},
 		DecisionTaskQueryLatency:                          {metricName: "decision_task_query_latency", metricType: Timer},
 		CompleteQueryFailedCount:                          {metricName: "complete_query_failed", metricType: Counter},
+		UnblockQueryFailedCount:                           {metricName: "unblock_query_failed", metricType: Counter},
+		FailQueryFailedCount:                              {metricName: "fail_query_failed", metricType: Counter},
 		ConsistentQueryTimeoutCount:                       {metricName: "consistent_query_timeout", metricType: Counter},
-		DecisionTaskCreatedForBufferedQueriesCount:        {metricName: "decision_task_created_for_buffered_queries", metricType: Counter},
 	},
 	Matching: {
 		PollSuccessCounter:            {metricName: "poll_success"},

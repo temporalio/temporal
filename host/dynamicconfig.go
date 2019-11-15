@@ -21,8 +21,9 @@
 package host
 
 import (
-	"github.com/temporalio/temporal/common"
 	"time"
+
+	"github.com/temporalio/temporal/common"
 
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )

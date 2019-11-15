@@ -21,11 +21,9 @@
 package history
 
 import (
-	"fmt"
 	"math"
 	"time"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 )
@@ -89,11 +87,4 @@ func getBackoffInterval(
 	}
 
 	return backoffInterval
-}
-
-func getTimeoutErrorReason(
-	timeoutType shared.TimeoutType,
-) string {
-
-	return fmt.Sprintf("cadenceInternal:Timeout %v", timeoutType)
 }

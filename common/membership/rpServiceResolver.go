@@ -25,13 +25,14 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/uber/ringpop-go"
 	"github.com/uber/ringpop-go/events"
 	"github.com/uber/ringpop-go/hashring"
 	"github.com/uber/ringpop-go/swim"
+
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/log/tag"
 )
 
 const (
@@ -44,6 +45,7 @@ const (
 
 type ringpopServiceResolver struct {
 	service    string
+	port       int
 	isStarted  bool
 	isStopped  bool
 	rp         *ringpop.Ringpop
@@ -60,9 +62,10 @@ type ringpopServiceResolver struct {
 
 var _ ServiceResolver = (*ringpopServiceResolver)(nil)
 
-func newRingpopServiceResolver(service string, rp *ringpop.Ringpop, logger log.Logger) *ringpopServiceResolver {
+func newRingpopServiceResolver(service string, port int, rp *ringpop.Ringpop, logger log.Logger) *ringpopServiceResolver {
 	return &ringpopServiceResolver{
 		service:    service,
+		port:       port,
 		rp:         rp,
 		logger:     logger.WithTags(tag.ComponentServiceResolver, tag.Service(service)),
 		ring:       hashring.New(farm.Fingerprint32, replicaPoints),
@@ -132,7 +135,12 @@ func (r *ringpopServiceResolver) Lookup(key string) (*HostInfo, error) {
 	if !found {
 		return nil, ErrInsufficientHosts
 	}
-	return NewHostInfo(addr, r.getLabelsMap()), nil
+
+	serviceAddress, err := replaceServicePort(addr, r.port)
+	if err != nil {
+		return nil, err
+	}
+	return NewHostInfo(serviceAddress, r.getLabelsMap()), nil
 }
 
 func (r *ringpopServiceResolver) AddListener(name string, notifyChannel chan<- *ChangedEvent) error {

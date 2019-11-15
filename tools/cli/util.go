@@ -36,11 +36,13 @@ import (
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/temporalio/temporal/common"
 	"github.com/urfave/cli"
 	"github.com/valyala/fastjson"
+
 	s "go.temporal.io/temporal/.gen/go/shared"
 	"go.temporal.io/temporal/client"
+
+	"github.com/temporalio/temporal/common"
 )
 
 // JSONHistorySerializer is used to encode history event in JSON

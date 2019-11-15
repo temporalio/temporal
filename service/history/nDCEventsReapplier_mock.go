@@ -29,9 +29,11 @@ package history
 
 import (
 	context "context"
-	gomock "github.com/golang/mock/gomock"
-	shared "github.com/temporalio/temporal/.gen/go/shared"
 	reflect "reflect"
+
+	gomock "github.com/golang/mock/gomock"
+
+	shared "github.com/temporalio/temporal/.gen/go/shared"
 )
 
 // MocknDCEventsReapplier is a mock of nDCEventsReapplier interface

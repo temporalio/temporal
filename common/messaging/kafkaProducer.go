@@ -24,6 +24,7 @@ import (
 	"errors"
 
 	"github.com/Shopify/sarama"
+
 	"github.com/temporalio/temporal/.gen/go/indexer"
 	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/common/codec"

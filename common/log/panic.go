@@ -24,9 +24,10 @@ import (
 	"fmt"
 	"runtime/debug"
 
-	"github.com/temporalio/temporal/common/log/tag"
 	"go.uber.org/yarpc/encoding/protobuf"
 	"go.uber.org/yarpc/yarpcerrors"
+
+	"github.com/temporalio/temporal/common/log/tag"
 )
 
 var errDefaultPanic = fmt.Errorf("panic object is not error")

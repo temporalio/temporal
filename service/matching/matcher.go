@@ -25,9 +25,10 @@ import (
 	"errors"
 	"time"
 
+	"golang.org/x/time/rate"
+
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/quotas"
-	"golang.org/x/time/rate"
 )
 
 // TaskMatcher matches a task producer with a task consumer

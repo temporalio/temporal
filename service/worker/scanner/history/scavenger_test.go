@@ -28,6 +28,9 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
+	"github.com/uber-go/tally"
+	"go.uber.org/zap"
+
 	"github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/history/historyservicetest"
 	"github.com/temporalio/temporal/.gen/go/shared"
@@ -37,8 +40,6 @@ import (
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/mocks"
 	p "github.com/temporalio/temporal/common/persistence"
-	"github.com/uber-go/tally"
-	"go.uber.org/zap"
 )
 
 type (
