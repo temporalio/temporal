@@ -100,6 +100,7 @@ func ToProtoListDomainResponse(in *shared.ListDomainsResponse) *workflowservice.
 	}
 }
 
+// ToThriftUpdateDomainRequest ...
 func ToThriftUpdateDomainRequest(in *workflowservice.UpdateDomainRequest) *shared.UpdateDomainRequest {
 	if in == nil {
 		return nil
@@ -114,6 +115,7 @@ func ToThriftUpdateDomainRequest(in *workflowservice.UpdateDomainRequest) *share
 	}
 }
 
+// ToProtoUpdateDomainResponse ...
 func ToProtoUpdateDomainResponse(in *shared.UpdateDomainResponse) *workflowservice.UpdateDomainResponse {
 	if in == nil {
 		return nil
@@ -127,6 +129,7 @@ func ToProtoUpdateDomainResponse(in *shared.UpdateDomainResponse) *workflowservi
 	}
 }
 
+// ToThriftDeprecateDomainRequest ...
 func ToThriftDeprecateDomainRequest(in *workflowservice.DeprecateDomainRequest) *shared.DeprecateDomainRequest {
 	if in == nil {
 		return nil
