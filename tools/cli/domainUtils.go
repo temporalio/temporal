@@ -27,6 +27,7 @@ import (
 	"github.com/uber-go/tally"
 	"github.com/urfave/cli"
 
+	"github.com/temporalio/temporal-proto/workflowservice"
 	sericeFrontend "github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
@@ -214,6 +215,12 @@ func initializeFrontendClient(
 	context *cli.Context,
 ) sericeFrontend.Interface {
 	return cFactory.ServerFrontendClient(context)
+}
+
+func initializeFrontendClientGRPC(
+	context *cli.Context,
+) workflowservice.WorkflowServiceYARPCClient {
+	return cFactory.ServerFrontendClientGRPC(context)
 }
 
 func initializeAdminDomainHandler(

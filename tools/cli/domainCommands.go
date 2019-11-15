@@ -33,6 +33,9 @@ import (
 
 	s "go.temporal.io/temporal/.gen/go/shared"
 
+	pbCommon "github.com/temporalio/temporal-proto/common"
+	"github.com/temporalio/temporal-proto/enums"
+	"github.com/temporalio/temporal-proto/workflowservice"
 	"github.com/temporalio/temporal/.gen/go/shared"
 	serviceFrontend "github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
 	"github.com/temporalio/temporal/common"
@@ -43,6 +46,8 @@ type (
 	domainCLIImpl struct {
 		// used when making RPC call to frontend service
 		frontendClient serviceFrontend.Interface
+
+		frontendClientGRPC workflowservice.WorkflowServiceYARPCClient
 
 		// act as admin to modify domain in DB directly
 		domainHandler domain.Handler
@@ -56,15 +61,18 @@ func newDomainCLI(
 ) *domainCLIImpl {
 
 	var frontendClient serviceFrontend.Interface
+	var frontendClientGRPC workflowservice.WorkflowServiceYARPCClient
 	var domainHandler domain.Handler
 	if !isAdminMode {
 		frontendClient = initializeFrontendClient(c)
+		frontendClientGRPC = initializeFrontendClientGRPC(c)
 	} else {
 		domainHandler = initializeAdminDomainHandler(c)
 	}
 	return &domainCLIImpl{
-		frontendClient: frontendClient,
-		domainHandler:  domainHandler,
+		frontendClient:     frontendClient,
+		frontendClientGRPC: frontendClientGRPC,
+		domainHandler:      domainHandler,
 	}
 }
 
@@ -88,13 +96,12 @@ func (d *domainCLIImpl) RegisterDomain(c *cli.Context) {
 			ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", FlagEmitMetric), err)
 		}
 	}
-	var isGlobalDomainPtr *bool
+	var isGlobalDomain bool
 	if c.IsSet(FlagIsGlobalDomain) {
-		isGlobalDomain, err := strconv.ParseBool(c.String(FlagIsGlobalDomain))
+		isGlobalDomain, err = strconv.ParseBool(c.String(FlagIsGlobalDomain))
 		if err != nil {
 			ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", FlagIsGlobalDomain), err)
 		}
-		isGlobalDomainPtr = common.BoolPtr(isGlobalDomain)
 	}
 
 	domainData := map[string]string{}
@@ -112,20 +119,27 @@ func (d *domainCLIImpl) RegisterDomain(c *cli.Context) {
 		}
 	}
 
-	var activeClusterName *string
+	var activeClusterName string
 	if c.IsSet(FlagActiveClusterName) {
-		activeClusterName = common.StringPtr(c.String(FlagActiveClusterName))
+		activeClusterName = c.String(FlagActiveClusterName)
 	}
 
 	var clusters []*shared.ClusterReplicationConfiguration
+	var clustersGRPC []*pbCommon.ClusterReplicationConfiguration
 	if c.IsSet(FlagClusters) {
 		clusterStr := c.String(FlagClusters)
 		clusters = append(clusters, &shared.ClusterReplicationConfiguration{
 			ClusterName: common.StringPtr(clusterStr),
 		})
+		clustersGRPC = append(clustersGRPC, &pbCommon.ClusterReplicationConfiguration{
+			ClusterName: clusterStr,
+		})
 		for _, clusterStr := range c.Args() {
 			clusters = append(clusters, &shared.ClusterReplicationConfiguration{
 				ClusterName: common.StringPtr(clusterStr),
+			})
+			clustersGRPC = append(clustersGRPC, &pbCommon.ClusterReplicationConfiguration{
+				ClusterName: clusterStr,
 			})
 		}
 	}
@@ -138,18 +152,35 @@ func (d *domainCLIImpl) RegisterDomain(c *cli.Context) {
 		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(int32(retentionDays)),
 		EmitMetric:                             common.BoolPtr(emitMetric),
 		Clusters:                               clusters,
-		ActiveClusterName:                      activeClusterName,
+		ActiveClusterName:                      common.StringPtr(activeClusterName),
 		SecurityToken:                          common.StringPtr(securityToken),
 		HistoryArchivalStatus:                  archivalStatus(c, FlagHistoryArchivalStatus),
 		HistoryArchivalURI:                     common.StringPtr(c.String(FlagHistoryArchivalURI)),
 		VisibilityArchivalStatus:               archivalStatus(c, FlagVisibilityArchivalStatus),
 		VisibilityArchivalURI:                  common.StringPtr(c.String(FlagVisibilityArchivalURI)),
-		IsGlobalDomain:                         isGlobalDomainPtr,
+		IsGlobalDomain:                         common.BoolPtr(isGlobalDomain),
+	}
+
+	requestGRPC := &workflowservice.RegisterDomainRequest{
+		Name:                                   domainName,
+		Description:                            description,
+		OwnerEmail:                             ownerEmail,
+		Data:                                   domainData,
+		WorkflowExecutionRetentionPeriodInDays: int32(retentionDays),
+		EmitMetric:                             emitMetric,
+		Clusters:                               clustersGRPC,
+		ActiveClusterName:                      activeClusterName,
+		SecurityToken:                          securityToken,
+		HistoryArchivalStatus:                  archivalStatusGRPC(c, FlagHistoryArchivalStatus),
+		HistoryArchivalURI:                     c.String(FlagHistoryArchivalURI),
+		VisibilityArchivalStatus:               archivalStatusGRPC(c, FlagVisibilityArchivalStatus),
+		VisibilityArchivalURI:                  c.String(FlagVisibilityArchivalURI),
+		IsGlobalDomain:                         isGlobalDomain,
 	}
 
 	ctx, cancel := newContext(c)
 	defer cancel()
-	err = d.registerDomain(ctx, request)
+	err = d.registerDomain(ctx, request, requestGRPC)
 	if err != nil {
 		if _, ok := err.(*s.DomainAlreadyExistsError); !ok {
 			ErrorAndExit("Register Domain operation failed.", err)
@@ -366,7 +397,13 @@ func (d *domainCLIImpl) DescribeDomain(c *cli.Context) {
 func (d *domainCLIImpl) registerDomain(
 	ctx context.Context,
 	request *shared.RegisterDomainRequest,
+	requestGRPC *workflowservice.RegisterDomainRequest,
 ) error {
+
+	if d.frontendClientGRPC != nil {
+		_, err := d.frontendClientGRPC.RegisterDomain(ctx, requestGRPC)
+		return err
+	}
 
 	if d.frontendClient != nil {
 		return d.frontendClient.RegisterDomain(ctx, request)
@@ -423,4 +460,18 @@ func clustersToString(clusters []*shared.ClusterReplicationConfiguration) string
 		}
 	}
 	return res
+}
+
+func archivalStatusGRPC(c *cli.Context, statusFlagName string) enums.ArchivalStatus {
+	if c.IsSet(statusFlagName) {
+		switch c.String(statusFlagName) {
+		case "disabled":
+			return enums.ArchivalStatusDisabled
+		case "enabled":
+			return enums.ArchivalStatusEnabled
+		default:
+			ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", statusFlagName), errors.New("invalid status, valid values are \"disabled\" and \"enabled\""))
+		}
+	}
+	return enums.ArchivalStatusDefault
 }

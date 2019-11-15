@@ -31,6 +31,7 @@ import (
 
 	clientFrontend "go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
 
+	"github.com/temporalio/temporal-proto/workflowservice"
 	serverAdmin "github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"
 	serverFrontend "github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
 	"github.com/temporalio/temporal/common"
@@ -45,6 +46,7 @@ const (
 type ClientFactory interface {
 	ClientFrontendClient(c *cli.Context) clientFrontend.Interface
 	ServerFrontendClient(c *cli.Context) serverFrontend.Interface
+	ServerFrontendClientGRPC(c *cli.Context) workflowservice.WorkflowServiceYARPCClient
 	ServerAdminClient(c *cli.Context) serverAdmin.Interface
 }
 
@@ -76,6 +78,12 @@ func (b *clientFactory) ClientFrontendClient(c *cli.Context) clientFrontend.Inte
 func (b *clientFactory) ServerFrontendClient(c *cli.Context) serverFrontend.Interface {
 	b.ensureDispatcher(c)
 	return serverFrontend.New(b.dispatcher.ClientConfig(cadenceFrontendService))
+}
+
+// ServerFrontendClient builds a frontend client (based on server side thrift interface)
+func (b *clientFactory) ServerFrontendClientGRPC(c *cli.Context) workflowservice.WorkflowServiceYARPCClient {
+	b.ensureDispatcher(c)
+	return workflowservice.NewWorkflowServiceYARPCClient(b.dispatcher.ClientConfig(cadenceFrontendService))
 }
 
 // ServerAdminClient builds an admin client (based on server side thrift interface)
