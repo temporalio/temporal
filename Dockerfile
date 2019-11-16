@@ -26,7 +26,7 @@ RUN go install
 # Build Cadence binaries
 FROM golang:1.13.3-alpine AS builder
 
-RUN apk add --update --no-cache ca-certificates make curl git mercurial bzr openssh
+RUN apk add --update --no-cache ca-certificates make curl git mercurial bzr openssh protobuf
 
 # add credentials to builder
 ARG SSH_PRIVATE_KEY
@@ -45,11 +45,16 @@ RUN git config --global url."git@github.com:".insteadOf "https://github.com/"
 ENV GOFLAGS="-mod=readonly"
 
 WORKDIR /temporal
+
 # Copy go mod dependencies and build cache
 COPY go.* ./
+#COPY .gen/proto/go.* ./.gen/proto/
+COPY . .
+
 RUN go mod download
 
-COPY . .
+
+
 # need to make clean first in case binaries to be built are stale
 RUN make clean && CGO_ENABLED=0 make copyright cadence-cassandra-tool cadence-sql-tool cadence cadence-server
 
@@ -114,7 +119,6 @@ RUN pip install cqlsh
 COPY docker/start.sh /start.sh
 
 CMD /start.sh
-
 
 # Cadence CLI
 FROM alpine AS cadence-cli
