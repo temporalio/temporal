@@ -30,6 +30,8 @@ import (
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/tools/cassandra"
 	"github.com/uber/cadence/tools/sql"
+	_ "github.com/uber/cadence/tools/sql-extensions/mysql"    // needed to load mysql extensions
+	_ "github.com/uber/cadence/tools/sql-extensions/postgres" // needed to load postgres extensions
 )
 
 // validServices is the list of all valid cadence services
