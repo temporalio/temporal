@@ -23,17 +23,28 @@ RUN glide install
 
 RUN go install
 
-
 # Build Cadence binaries
 FROM golang:1.13.3-alpine AS builder
 
-RUN apk add --update --no-cache ca-certificates make git curl mercurial bzr
+RUN apk add --update --no-cache ca-certificates make curl git mercurial bzr openssh
 
-WORKDIR /cadence
+# add credentials to builder
+ARG SSH_PRIVATE_KEY
+RUN mkdir /root/.ssh/
+RUN echo "${SSH_PRIVATE_KEY}" > /root/.ssh/id_rsa
+
+RUN chmod 600 /root/.ssh/id_rsa
+
+# make sure domain is accepted
+RUN touch /root/.ssh/known_hosts
+RUN ssh-keyscan github.com >> /root/.ssh/known_hosts
+
+RUN git config --global url."git@github.com:".insteadOf "https://github.com/"
 
 # Making sure that dependency is not touched
 ENV GOFLAGS="-mod=readonly"
 
+WORKDIR /temporal
 # Copy go mod dependencies and build cache
 COPY go.* ./
 RUN go mod download
@@ -41,7 +52,6 @@ RUN go mod download
 COPY . .
 # need to make clean first in case binaries to be built are stale
 RUN make clean && CGO_ENABLED=0 make copyright cadence-cassandra-tool cadence-sql-tool cadence cadence-server
-
 
 # Download dockerize
 FROM alpine:3.10 AS dockerize
@@ -75,11 +85,11 @@ RUN mkdir -p /etc/cadence
 
 COPY --from=tcheck /go/bin/tcheck /usr/local/bin
 COPY --from=dockerize /usr/local/bin/dockerize /usr/local/bin
-COPY --from=builder /cadence/cadence-cassandra-tool /usr/local/bin
-COPY --from=builder /cadence/cadence-sql-tool /usr/local/bin
-COPY --from=builder /cadence/cadence /usr/local/bin
-COPY --from=builder /cadence/cadence-server /usr/local/bin
-COPY --from=builder /cadence/schema /etc/cadence/schema
+COPY --from=builder /temporal/cadence-cassandra-tool /usr/local/bin
+COPY --from=builder /temporal/cadence-sql-tool /usr/local/bin
+COPY --from=builder /temporal/cadence /usr/local/bin
+COPY --from=builder /temporal/cadence-server /usr/local/bin
+COPY --from=builder /temporal/schema /etc/cadence/schema
 
 COPY docker/entrypoint.sh /docker-entrypoint.sh
 COPY config/dynamicconfig /etc/cadence/config/dynamicconfig
@@ -110,7 +120,7 @@ CMD /start.sh
 FROM alpine AS cadence-cli
 
 COPY --from=tcheck /go/bin/tcheck /usr/local/bin
-COPY --from=builder /cadence/cadence /usr/local/bin
+COPY --from=builder /temporal/cadence /usr/local/bin
 
 ENTRYPOINT ["cadence"]
 
