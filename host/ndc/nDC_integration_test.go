@@ -668,6 +668,275 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 	)
 }
 
+func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieContinueAsNew() {
+
+	s.setupRemoteFrontendClients()
+	workflowID := "ndc-handcrafted-multiple-branches-with-continue-as-new-test" + uuid.New()
+	runID := uuid.New()
+
+	workflowType := "event-generator-workflow-type"
+	tasklist := "event-generator-taskList"
+	identity := "worker-identity"
+
+	// active has initial version 0
+	historyClient := s.active.GetHistoryClient()
+
+	eventsBatch1 := []*shared.History{
+		{Events: []*shared.HistoryEvent{
+			{
+				EventId:   common.Int64Ptr(1),
+				Version:   common.Int64Ptr(21),
+				EventType: shared.EventTypeWorkflowExecutionStarted.Ptr(),
+				WorkflowExecutionStartedEventAttributes: &shared.WorkflowExecutionStartedEventAttributes{
+					WorkflowType:                        &shared.WorkflowType{Name: common.StringPtr(workflowType)},
+					TaskList:                            &shared.TaskList{Name: common.StringPtr(tasklist)},
+					Input:                               nil,
+					ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1000),
+					TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1000),
+					FirstDecisionTaskBackoffSeconds:     common.Int32Ptr(100),
+				},
+			},
+			{
+				EventId:   common.Int64Ptr(2),
+				Version:   common.Int64Ptr(21),
+				EventType: shared.EventTypeDecisionTaskScheduled.Ptr(),
+				DecisionTaskScheduledEventAttributes: &shared.DecisionTaskScheduledEventAttributes{
+					TaskList:                   &shared.TaskList{Name: common.StringPtr(tasklist)},
+					StartToCloseTimeoutSeconds: common.Int32Ptr(1000),
+					Attempt:                    common.Int64Ptr(0),
+				},
+			},
+		}},
+		{Events: []*shared.HistoryEvent{
+			{
+				EventId:   common.Int64Ptr(3),
+				Version:   common.Int64Ptr(21),
+				EventType: shared.EventTypeDecisionTaskStarted.Ptr(),
+				DecisionTaskStartedEventAttributes: &shared.DecisionTaskStartedEventAttributes{
+					ScheduledEventId: common.Int64Ptr(2),
+					Identity:         common.StringPtr(identity),
+					RequestId:        common.StringPtr(uuid.New()),
+				},
+			},
+		}},
+		{Events: []*shared.HistoryEvent{
+			{
+				EventId:   common.Int64Ptr(4),
+				Version:   common.Int64Ptr(21),
+				EventType: shared.EventTypeDecisionTaskCompleted.Ptr(),
+				DecisionTaskCompletedEventAttributes: &shared.DecisionTaskCompletedEventAttributes{
+					ScheduledEventId: common.Int64Ptr(2),
+					StartedEventId:   common.Int64Ptr(3),
+					Identity:         common.StringPtr(identity),
+				},
+			},
+			{
+				EventId:   common.Int64Ptr(5),
+				Version:   common.Int64Ptr(21),
+				EventType: shared.EventTypeMarkerRecorded.Ptr(),
+				MarkerRecordedEventAttributes: &shared.MarkerRecordedEventAttributes{
+					MarkerName:                   common.StringPtr("some marker name"),
+					Details:                      []byte("some marker details"),
+					DecisionTaskCompletedEventId: common.Int64Ptr(4),
+				},
+			},
+			{
+				EventId:   common.Int64Ptr(6),
+				Version:   common.Int64Ptr(21),
+				EventType: shared.EventTypeActivityTaskScheduled.Ptr(),
+				ActivityTaskScheduledEventAttributes: &shared.ActivityTaskScheduledEventAttributes{
+					DecisionTaskCompletedEventId:  common.Int64Ptr(4),
+					ActivityId:                    common.StringPtr("0"),
+					ActivityType:                  &shared.ActivityType{Name: common.StringPtr("activity-type")},
+					TaskList:                      &shared.TaskList{Name: common.StringPtr(tasklist)},
+					Input:                         nil,
+					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(20),
+					ScheduleToStartTimeoutSeconds: common.Int32Ptr(20),
+					StartToCloseTimeoutSeconds:    common.Int32Ptr(20),
+					HeartbeatTimeoutSeconds:       common.Int32Ptr(20),
+				},
+			},
+		}},
+		{Events: []*shared.HistoryEvent{
+			{
+				EventId:   common.Int64Ptr(7),
+				Version:   common.Int64Ptr(21),
+				EventType: shared.EventTypeActivityTaskStarted.Ptr(),
+				ActivityTaskStartedEventAttributes: &shared.ActivityTaskStartedEventAttributes{
+					ScheduledEventId: common.Int64Ptr(6),
+					Identity:         common.StringPtr(identity),
+					RequestId:        common.StringPtr(uuid.New()),
+					Attempt:          common.Int32Ptr(0),
+				},
+			},
+		}},
+		{Events: []*shared.HistoryEvent{
+			{
+				EventId:   common.Int64Ptr(8),
+				Version:   common.Int64Ptr(21),
+				EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
+				WorkflowExecutionSignaledEventAttributes: &shared.WorkflowExecutionSignaledEventAttributes{
+					SignalName: common.StringPtr("some signal name 1"),
+					Input:      []byte("some signal details 1"),
+					Identity:   common.StringPtr(identity),
+				},
+			},
+			{
+				EventId:   common.Int64Ptr(9),
+				Version:   common.Int64Ptr(21),
+				EventType: shared.EventTypeDecisionTaskScheduled.Ptr(),
+				DecisionTaskScheduledEventAttributes: &shared.DecisionTaskScheduledEventAttributes{
+					TaskList:                   &shared.TaskList{Name: common.StringPtr(tasklist)},
+					StartToCloseTimeoutSeconds: common.Int32Ptr(1000),
+					Attempt:                    common.Int64Ptr(0),
+				},
+			},
+		}},
+		{Events: []*shared.HistoryEvent{
+			{
+				EventId:   common.Int64Ptr(10),
+				Version:   common.Int64Ptr(21),
+				EventType: shared.EventTypeDecisionTaskStarted.Ptr(),
+				DecisionTaskStartedEventAttributes: &shared.DecisionTaskStartedEventAttributes{
+					ScheduledEventId: common.Int64Ptr(9),
+					Identity:         common.StringPtr(identity),
+					RequestId:        common.StringPtr(uuid.New()),
+				},
+			},
+		}},
+		{Events: []*shared.HistoryEvent{
+			{
+				EventId:   common.Int64Ptr(11),
+				Version:   common.Int64Ptr(21),
+				EventType: shared.EventTypeDecisionTaskCompleted.Ptr(),
+				DecisionTaskCompletedEventAttributes: &shared.DecisionTaskCompletedEventAttributes{
+					ScheduledEventId: common.Int64Ptr(9),
+					StartedEventId:   common.Int64Ptr(10),
+					Identity:         common.StringPtr(identity),
+				},
+			},
+			{
+				EventId:   common.Int64Ptr(12),
+				Version:   common.Int64Ptr(21),
+				EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
+				WorkflowExecutionSignaledEventAttributes: &shared.WorkflowExecutionSignaledEventAttributes{
+					SignalName: common.StringPtr("some signal name 2"),
+					Input:      []byte("some signal details 2"),
+					Identity:   common.StringPtr(identity),
+				},
+			},
+			{
+				EventId:   common.Int64Ptr(13),
+				Version:   common.Int64Ptr(21),
+				EventType: shared.EventTypeDecisionTaskScheduled.Ptr(),
+				DecisionTaskScheduledEventAttributes: &shared.DecisionTaskScheduledEventAttributes{
+					TaskList:                   &shared.TaskList{Name: common.StringPtr(tasklist)},
+					StartToCloseTimeoutSeconds: common.Int32Ptr(1000),
+					Attempt:                    common.Int64Ptr(0),
+				},
+			},
+			{
+				EventId:   common.Int64Ptr(14),
+				Version:   common.Int64Ptr(21),
+				EventType: shared.EventTypeDecisionTaskStarted.Ptr(),
+				DecisionTaskStartedEventAttributes: &shared.DecisionTaskStartedEventAttributes{
+					ScheduledEventId: common.Int64Ptr(13),
+					Identity:         common.StringPtr(identity),
+					RequestId:        common.StringPtr(uuid.New()),
+				},
+			},
+		}},
+	}
+
+	eventsBatch2 := []*shared.History{
+		{Events: []*shared.HistoryEvent{
+			{
+				EventId:   common.Int64Ptr(15),
+				Version:   common.Int64Ptr(32),
+				EventType: shared.EventTypeDecisionTaskCompleted.Ptr(),
+				DecisionTaskCompletedEventAttributes: &shared.DecisionTaskCompletedEventAttributes{
+					ScheduledEventId: common.Int64Ptr(8),
+					StartedEventId:   common.Int64Ptr(9),
+					Identity:         common.StringPtr(identity),
+				},
+			},
+		}},
+		// need to keep the workflow open for testing
+	}
+
+	eventsBatch3 := []*shared.History{
+		{Events: []*shared.HistoryEvent{
+			{
+				EventId:   common.Int64Ptr(15),
+				Version:   common.Int64Ptr(21),
+				EventType: shared.EventTypeDecisionTaskCompleted.Ptr(),
+				DecisionTaskCompletedEventAttributes: &shared.DecisionTaskCompletedEventAttributes{
+					ScheduledEventId: common.Int64Ptr(8),
+					StartedEventId:   common.Int64Ptr(9),
+					Identity:         common.StringPtr(identity),
+				},
+			},
+			{
+				EventId:   common.Int64Ptr(16),
+				Version:   common.Int64Ptr(21),
+				EventType: shared.EventTypeWorkflowExecutionContinuedAsNew.Ptr(),
+				WorkflowExecutionContinuedAsNewEventAttributes: &shared.WorkflowExecutionContinuedAsNewEventAttributes{
+					NewExecutionRunId:                   common.StringPtr(uuid.New()),
+					WorkflowType:                        &shared.WorkflowType{Name: common.StringPtr(workflowType)},
+					TaskList:                            &shared.TaskList{Name: common.StringPtr(tasklist)},
+					Input:                               nil,
+					ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1000),
+					TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1000),
+					DecisionTaskCompletedEventId:        common.Int64Ptr(19),
+					Initiator:                           shared.ContinueAsNewInitiatorDecider.Ptr(),
+				},
+			},
+		}},
+	}
+
+	versionHistory1 := s.eventBatchesToVersionHistory(nil, eventsBatch1)
+
+	versionHistory2, err := versionHistory1.DuplicateUntilLCAItem(
+		persistence.NewVersionHistoryItem(14, 21),
+	)
+	s.NoError(err)
+	versionHistory2 = s.eventBatchesToVersionHistory(versionHistory2, eventsBatch2)
+
+	versionHistory3, err := versionHistory1.DuplicateUntilLCAItem(
+		persistence.NewVersionHistoryItem(14, 21),
+	)
+	s.NoError(err)
+	versionHistory3 = s.eventBatchesToVersionHistory(versionHistory3, eventsBatch3)
+
+	s.applyEvents(
+		workflowID,
+		runID,
+		workflowType,
+		tasklist,
+		versionHistory1,
+		eventsBatch1,
+		historyClient,
+	)
+	s.applyEvents(
+		workflowID,
+		runID,
+		workflowType,
+		tasklist,
+		versionHistory2,
+		eventsBatch2,
+		historyClient,
+	)
+	s.applyEvents(
+		workflowID,
+		runID,
+		workflowType,
+		tasklist,
+		versionHistory3,
+		eventsBatch3,
+		historyClient,
+	)
+}
+
 func (s *nDCIntegrationTestSuite) TestEventsReapply_ZombieWorkflow() {
 
 	workflowID := "ndc-single-branch-test" + uuid.New()

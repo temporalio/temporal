@@ -463,23 +463,35 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranch(
 	task nDCReplicationTask,
 ) error {
 
-	// workflow backfill to non current branch
-	// if encounter backfill with continue as new
-	// first, create the new workflow as zombie
 	if len(task.getNewEvents()) != 0 {
-		startTime := time.Now()
-		newTask, err := task.generateNewRunTask(startTime)
-		if err != nil {
-			return err
-		}
-		if err := r.applyEvents(ctx, newTask); err != nil {
-			newTask.getLogger().Error(
-				"nDCHistoryReplicator unable to create new workflow when applyNonStartEventsToNoneCurrentBranch",
-				tag.Error(err),
-			)
-			return err
-		}
+		return r.applyNonStartEventsToNoneCurrentBranchWithContinueAsNew(
+			ctx,
+			context,
+			mutableState,
+			branchIndex,
+			releaseFn,
+			task,
+		)
 	}
+
+	return r.applyNonStartEventsToNoneCurrentBranchWithoutContinueAsNew(
+		ctx,
+		context,
+		mutableState,
+		branchIndex,
+		releaseFn,
+		task,
+	)
+}
+
+func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithoutContinueAsNew(
+	ctx ctx.Context,
+	context workflowExecutionContext,
+	mutableState mutableState,
+	branchIndex int,
+	releaseFn releaseWorkflowExecutionFunc,
+	task nDCReplicationTask,
+) error {
 
 	versionHistoryItem := persistence.NewVersionHistoryItem(
 		task.getLastEvent().GetEventId(),
@@ -515,6 +527,56 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranch(
 	if err != nil {
 		task.getLogger().Error(
 			"nDCHistoryReplicator unable to backfill workflow when applyNonStartEventsToNoneCurrentBranch",
+			tag.Error(err),
+		)
+		return err
+	}
+	return nil
+}
+
+func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithContinueAsNew(
+	ctx ctx.Context,
+	context workflowExecutionContext,
+	mutableState mutableState,
+	branchIndex int,
+	releaseFn releaseWorkflowExecutionFunc,
+	task nDCReplicationTask,
+) error {
+
+	// workflow backfill to non current branch with continue as new
+	// first, release target workflow lock & create the new workflow as zombie
+	// NOTE: need to release target workflow due to target workflow
+	//  can potentially be the current workflow causing deadlock
+
+	// 1. clear all in memory changes & release target workflow lock
+	// 2. apply new workflow first
+	// 3. apply target workflow
+
+	// step 1
+	context.clear()
+	releaseFn(nil)
+	context = nil
+	mutableState = nil
+	releaseFn = nil
+
+	// step 2
+	startTime := time.Now()
+	task, newTask, err := task.splitTask(startTime)
+	if err != nil {
+		return err
+	}
+	if err := r.applyEvents(ctx, newTask); err != nil {
+		newTask.getLogger().Error(
+			"nDCHistoryReplicator unable to create new workflow when applyNonStartEventsToNoneCurrentBranchWithContinueAsNew",
+			tag.Error(err),
+		)
+		return err
+	}
+
+	// step 3
+	if err := r.applyEvents(ctx, task); err != nil {
+		newTask.getLogger().Error(
+			"nDCHistoryReplicator unable to create target workflow when applyNonStartEventsToNoneCurrentBranchWithContinueAsNew",
 			tag.Error(err),
 		)
 		return err

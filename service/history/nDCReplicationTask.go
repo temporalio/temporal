@@ -51,7 +51,7 @@ type (
 		getVersionHistory() *persistence.VersionHistory
 		isWorkflowReset() bool
 
-		generateNewRunTask(taskStartTime time.Time) (nDCReplicationTask, error)
+		splitTask(taskStartTime time.Time) (nDCReplicationTask, nDCReplicationTask, error)
 	}
 
 	nDCReplicationTaskImpl struct {
@@ -223,18 +223,18 @@ func (t *nDCReplicationTaskImpl) isWorkflowReset() bool {
 	}
 }
 
-func (t *nDCReplicationTaskImpl) generateNewRunTask(
+func (t *nDCReplicationTaskImpl) splitTask(
 	taskStartTime time.Time,
-) (nDCReplicationTask, error) {
+) (nDCReplicationTask, nDCReplicationTask, error) {
 
 	if len(t.newEvents) == 0 {
-		return nil, ErrNoNewRunHistory
+		return nil, nil, ErrNoNewRunHistory
 	}
 	newHistoryEvents := t.newEvents
 
 	if t.getLastEvent().GetEventType() != shared.EventTypeWorkflowExecutionContinuedAsNew ||
 		t.getLastEvent().WorkflowExecutionContinuedAsNewEventAttributes == nil {
-		return nil, ErrLastEventIsNotContinueAsNew
+		return nil, nil, ErrLastEventIsNotContinueAsNew
 	}
 	newRunID := t.getLastEvent().WorkflowExecutionContinuedAsNewEventAttributes.GetNewExecutionRunId()
 
@@ -265,7 +265,7 @@ func (t *nDCReplicationTaskImpl) generateNewRunTask(
 		tag.WorkflowNextEventID(newLastEvent.GetEventId()+1),
 	)
 
-	return &nDCReplicationTaskImpl{
+	newRunTask := &nDCReplicationTaskImpl{
 		sourceCluster: t.sourceCluster,
 		domainID:      t.domainID,
 		execution: &shared.WorkflowExecution{
@@ -282,7 +282,10 @@ func (t *nDCReplicationTaskImpl) generateNewRunTask(
 
 		startTime: taskStartTime,
 		logger:    logger,
-	}, nil
+	}
+	t.newEvents = nil
+
+	return t, newRunTask, nil
 }
 
 func validateReplicateEventsRequest(
