@@ -3273,7 +3273,7 @@ func createServiceBusyError() *gen.ServiceBusyError {
 }
 
 func isFailoverRequest(updateRequest *gen.UpdateDomainRequest) bool {
-	return updateRequest.ReplicationConfiguration != nil && updateRequest.ReplicationConfiguration.ActiveClusterName != nil
+	return updateRequest.ReplicationConfiguration != nil && updateRequest.ReplicationConfiguration.GetActiveClusterName() != ""
 }
 
 func (wh *WorkflowHandler) historyArchived(ctx context.Context, request *gen.GetWorkflowExecutionHistoryRequest, domainID string) bool {
@@ -3506,7 +3506,7 @@ func checkPermission(
 	securityToken *string,
 ) error {
 	if config.EnableAdminProtection() {
-		if securityToken == nil {
+		if securityToken == nil || *securityToken == "" {
 			return errNoPermission
 		}
 		requiredToken := config.AdminOperationToken()

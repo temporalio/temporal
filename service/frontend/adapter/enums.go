@@ -25,17 +25,45 @@ import (
 	"github.com/temporalio/temporal/.gen/go/shared"
 )
 
-func toThriftArchivalStatus(archivalStatus enums.ArchivalStatus) *shared.ArchivalStatus {
-	switch archivalStatus {
+func toThriftArchivalStatus(in enums.ArchivalStatus) *shared.ArchivalStatus {
+	switch in {
 	case enums.ArchivalStatusDefault:
 		return nil
 	case enums.ArchivalStatusDisabled:
-		asd := shared.ArchivalStatusDisabled
-		return &asd
+		ret := shared.ArchivalStatusDisabled
+		return &ret
 	case enums.ArchivalStatusEnabled:
-		ase := shared.ArchivalStatusEnabled
-		return &ase
+		ret := shared.ArchivalStatusEnabled
+		return &ret
 	}
 
 	return nil
+}
+
+func toProtoArchivalStatus(in *shared.ArchivalStatus) enums.ArchivalStatus {
+	if in == nil {
+		return enums.ArchivalStatusDefault
+	}
+
+	switch *in {
+	case shared.ArchivalStatusDisabled:
+		return enums.ArchivalStatusDisabled
+	case shared.ArchivalStatusEnabled:
+		return enums.ArchivalStatusEnabled
+	}
+
+	return enums.ArchivalStatusDefault
+}
+
+func toProtoDomainStatus(in shared.DomainStatus) enums.DomainStatus {
+	switch in {
+	case shared.DomainStatusRegistered:
+		return enums.DomainStatusRegistered
+	case shared.DomainStatusDeprecated:
+		return enums.DomainStatusDeprecated
+	case shared.DomainStatusDeleted:
+		return enums.DomainStatusDeleted
+	}
+
+	return enums.DomainStatusRegistered
 }

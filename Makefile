@@ -118,8 +118,8 @@ thriftc: yarpc-install $(THRIFTRW_GEN_SRC)
 
 # List only subdirectories with *.proto files.
 # sort to remove duplicates.
-PROTO_ROOT = .gen/proto
-PROTO_DIRS := $(sort $(dir $(wildcard ${PROTO_ROOT}/*/*.proto)))
+PROTO_ROOT := .gen/proto
+PROTO_DIRS = $(sort $(dir $(wildcard ${PROTO_ROOT}/*/*.proto)))
 
 clean-proto:
 	$(foreach PROTO_DIR,$(PROTO_DIRS),rm -f ${PROTO_DIR}*.go;)
@@ -130,8 +130,8 @@ update-proto:
 install-proto:
 	git submodule update --init $(PROTO_ROOT)
 
-proto: yarpc-install clean-proto install-proto
-	# run protoc separately for each directory because of different package names
+proto: clean-proto install-proto yarpc-install
+#   run protoc separately for each directory because of different package names
 	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=${PROTO_ROOT} --gogoslick_out=paths=source_relative:${PROTO_ROOT} ${PROTO_DIR}*.proto;)
 	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=${PROTO_ROOT} --yarpc-go_out=${PROTO_ROOT} ${PROTO_DIR}*.proto;)
 
@@ -182,7 +182,7 @@ fmt:
 
 bins_nothrift: go-generate fmt lint copyright cadence-cassandra-tool cadence-sql-tool cadence cadence-server
 
-bins: thriftc proto bins_nothrift
+bins: proto thriftc bins_nothrift
 
 test: bins
 	@rm -f test
