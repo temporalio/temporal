@@ -66,10 +66,9 @@ type (
 		// DispatchTask dispatches a task to a poller. When there are no pollers to pick
 		// up the task, this method will return error. Task will not be persisted to db
 		DispatchTask(ctx context.Context, task *internalTask) error
-		// DispatchQueryTask dispatches a query task to a poller. When there are no pollers
-		// to pick up the task, this method will return error. Task will not be persisted to
-		// db and no ratelimits are applied for this call
-		DispatchQueryTask(ctx context.Context, taskID string, request *matching.QueryWorkflowRequest) ([]byte, error)
+		// DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
+		// if dispatched to local poller then nil and nil is returned.
+		DispatchQueryTask(ctx context.Context, taskID string, request *matching.QueryWorkflowRequest) (*s.QueryWorkflowResponse, error)
 		CancelPoller(pollerID string)
 		GetAllPollerInfo() []*s.PollerInfo
 		// DescribeTaskList returns information about the target tasklist
@@ -237,28 +236,16 @@ func (c *taskListManagerImpl) DispatchTask(ctx context.Context, task *internalTa
 	return c.matcher.MustOffer(ctx, task)
 }
 
-// DispatchQueryTask dispatches a query task to a poller. When there are no pollers
-// to pick up the task, this method will return error. Task will not be persisted to
-// db and no ratelimits will be applied for this call
+// DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
+// if dispatched to local poller then nil and nil is returned.
 func (c *taskListManagerImpl) DispatchQueryTask(
 	ctx context.Context,
 	taskID string,
 	request *matching.QueryWorkflowRequest,
-) ([]byte, error) {
+) (*s.QueryWorkflowResponse, error) {
 	c.startWG.Wait()
 	task := newInternalQueryTask(taskID, request)
-	resp, err := c.matcher.OfferQuery(ctx, task)
-	if err != nil {
-		if err == context.DeadlineExceeded {
-			return nil, &s.QueryFailedError{Message: "timeout: no workflow worker polling for given tasklist"}
-		}
-		if _, ok := err.(*s.QueryFailedError); ok {
-			// this can happen when the query is forwarded to a parent partition
-			return nil, err
-		}
-		return nil, &s.QueryFailedError{Message: err.Error()}
-	}
-	return resp, nil
+	return c.matcher.OfferQuery(ctx, task)
 }
 
 // GetTask blocks waiting for a task.

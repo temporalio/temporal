@@ -355,6 +355,11 @@ struct SearchAttributes {
   10: optional map<string,binary> indexedFields
 }
 
+struct WorkerVersionInfo {
+  10: optional string impl
+  20: optional string featureVersion
+}
+
 struct WorkflowExecutionInfo {
   10: optional WorkflowExecution execution
   20: optional WorkflowType type
@@ -1404,6 +1409,7 @@ struct RespondQueryTaskCompletedRequest {
   20: optional QueryTaskCompletedType completedType
   30: optional binary queryResult
   40: optional string errorMessage
+  50: optional WorkerVersionInfo workerVersionInfo
 }
 
 struct WorkflowQueryResult {

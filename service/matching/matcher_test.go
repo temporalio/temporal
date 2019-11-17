@@ -228,7 +228,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 	t.NotNil(req)
 	t.NoError(err)
 	t.NotNil(result)
-	t.Equal("answer", string(result))
+	t.Equal("answer", string(result.QueryResult))
 	t.Equal(t.taskList.name, req.GetForwardedFrom())
 	t.Equal(t.taskList.Parent(20), req.GetTaskList().GetName())
 }
