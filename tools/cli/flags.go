@@ -402,11 +402,11 @@ func getFlagsForListAll() []cli.Flag {
 		},
 		cli.StringFlag{
 			Name:  FlagEarliestTimeWithAlias,
-			Usage: "EarliestTime of start time, supported formats are '2006-01-02T15:04:05Z07:00' and raw UnixNano",
+			Usage: "EarliestTime of start time, supported formats are '2006-01-02T15:04:05+07:00' and raw UnixNano",
 		},
 		cli.StringFlag{
 			Name:  FlagLatestTimeWithAlias,
-			Usage: "LatestTime of start time, supported formats are '2006-01-02T15:04:05Z07:00' and raw UnixNano",
+			Usage: "LatestTime of start time, supported formats are '2006-01-02T15:04:05+07:00' and raw UnixNano",
 		},
 		cli.StringFlag{
 			Name:  FlagWorkflowIDWithAlias,

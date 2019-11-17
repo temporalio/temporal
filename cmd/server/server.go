@@ -110,19 +110,6 @@ func (s *server) startService() common.Daemon {
 	params.Logger = loggerimpl.NewLogger(s.cfg.Log.NewZapLogger())
 	params.PersistenceConfig = s.cfg.Persistence
 
-	// Ringpop uses a different port to register handlers, this map is needed to resolve
-	// services to correct addresses used by clients through ServiceResolver lookup API
-	servicePortMap := make(map[string]int)
-	for roleName, svcCfg := range s.cfg.Services {
-		serviceName := getServiceName(roleName)
-		servicePortMap[serviceName] = svcCfg.RPC.Port
-	}
-
-	params.MembershipFactory, err = s.cfg.Ringpop.NewFactory(params.Logger, params.Name, servicePortMap)
-	if err != nil {
-		log.Fatalf("error creating ringpop factory: %v", err)
-	}
-
 	params.DynamicConfig, err = dynamicconfig.NewFileBasedClient(&s.cfg.DynamicConfigClient, params.Logger.WithTags(tag.Service(params.Name)), s.doneC)
 	if err != nil {
 		log.Printf("error creating file based dynamic config client, use no-op config client instead. error: %v", err)
@@ -133,6 +120,26 @@ func (s *server) startService() common.Daemon {
 	svcCfg := s.cfg.Services[s.name]
 	params.MetricScope = svcCfg.Metrics.NewScope(params.Logger)
 	params.RPCFactory = svcCfg.RPC.NewFactory(params.Name, params.Logger)
+
+	// Ringpop uses a different port to register handlers, this map is needed to resolve
+	// services to correct addresses used by clients through ServiceResolver lookup API
+	servicePortMap := make(map[string]int)
+	for roleName, svcCfg := range s.cfg.Services {
+		serviceName := getServiceName(roleName)
+		servicePortMap[serviceName] = svcCfg.RPC.Port
+	}
+
+	params.MembershipFactory, err = s.cfg.Ringpop.NewFactory(
+		params.RPCFactory.GetRingpopDispatcher(),
+		params.Name,
+		servicePortMap,
+		params.Logger,
+	)
+
+	if err != nil {
+		log.Fatalf("error creating ringpop factory: %v", err)
+	}
+
 	params.PProfInitializer = svcCfg.PProf.NewInitializer(params.Logger)
 
 	params.DCRedirectionPolicy = s.cfg.DCRedirectionPolicy
@@ -220,9 +227,12 @@ func (s *server) startService() common.Daemon {
 	case historyService:
 		daemon = history.NewService(&params)
 	case matchingService:
-		daemon = matching.NewService(&params)
+		daemon, err = matching.NewService(&params)
 	case workerService:
-		daemon = worker.NewService(&params)
+		daemon, err = worker.NewService(&params)
+	}
+	if err != nil {
+		params.Logger.Fatal("Fail to start "+s.name+" service ", tag.Error(err))
 	}
 
 	go execute(daemon, s.doneC)

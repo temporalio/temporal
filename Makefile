@@ -29,7 +29,7 @@ THRIFTRW_SRCS = \
   idl/github.com/temporalio/temporal/sqlblobs.thrift \
 
 PROGS = cadence
-TEST_TIMEOUT = 15m
+TEST_TIMEOUT = 20m
 TEST_ARG ?= -race -v -timeout $(TEST_TIMEOUT)
 BUILD := ./build
 TOOLS_CMD_ROOT=./cmd/tools
@@ -180,7 +180,7 @@ fmt:
 	@echo "running goimports"
 	@goimports -local "github.com/temporalio/temporal" -w $(ALL_SRC)
 
-bins_nothrift: go-generate fmt lint copyright cadence-cassandra-tool cadence-sql-tool cadence cadence-server
+bins_nothrift: fmt lint copyright cadence-cassandra-tool cadence-sql-tool cadence cadence-server
 
 bins: proto thriftc bins_nothrift
 
@@ -190,6 +190,8 @@ test: bins
 	@for dir in $(TEST_DIRS); do \
 		go test -timeout $(TEST_TIMEOUT) -race -coverprofile=$@ "$$dir" $(TEST_TAG) | tee -a test.log; \
 	done;
+
+release: go-generate test
 
 # need to run xdc tests with race detector off because of ringpop bug causing data race issue
 test_xdc: bins
@@ -277,6 +279,14 @@ install-schema-mysql: bins
 	./cadence-sql-tool --ep 127.0.0.1 create --db cadence_visibility
 	./cadence-sql-tool --ep 127.0.0.1 --db cadence_visibility setup-schema -v 0.0
 	./cadence-sql-tool --ep 127.0.0.1 --db cadence_visibility update-schema -d ./schema/mysql/v57/visibility/versioned
+
+install-schema-postgres: bins
+	./cadence-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw cadence --dr postgres create --db cadence
+	./cadence-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw cadence --dr postgres --db cadence setup -v 0.0
+	./cadence-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw cadence --dr postgres --db cadence update-schema -d ./schema/postgres/cadence/versioned
+	./cadence-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw cadence --dr postgres create --db cadence_visibility
+	./cadence-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw cadence --dr postgres --db cadence_visibility setup-schema -v 0.0
+	./cadence-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw cadence --dr postgres --db cadence_visibility update-schema -d ./schema/postgres/visibility/versioned
 
 start: bins
 	./cadence-server start

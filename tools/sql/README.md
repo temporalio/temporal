@@ -13,8 +13,11 @@ SQL_USER=$USERNAME SQL_PASSWORD=$PASSWD make install-schema-mysql
 ### Create the binaries
 - Run `make bins`
 - You should see an executable `cadence-sql-tool`
+- Cadence officially support MySQL and Postgres for SQL. 
+- For other SQL database, you can add it easily as we do for MySQL/Postgres following our code in sql-extensions  
 
 ### Do one time database creation and schema setup for a new cluster
+- All command below are taking MySQL as example. For postgres, simply use with "--driver postgres"
 
 ```
 cadence-sql-tool --ep $SQL_HOST_ADDR -p $port create --driver mysql --db cadence
@@ -34,7 +37,7 @@ You can only upgrade to a new version after the initial setup done above.
 
 ```
 ./cadence-sql-tool --ep $SQL_HOST_ADDR -p $port --driver mysql --db cadence update-schema -d ./schema/mysql/v57/cadence/versioned -v x.x -y -- executes a dryrun of upgrade to version x.x
-./cadence-cassandra-tool --ep $SQL_HOST_ADDR -p $port --driver mysql --db cadence update-schema -d ./schema/mysql/v57/cadence/versioned -v x.x    -- actually executes the upgrade to version x.x
+./cadence-sql-tool --ep $SQL_HOST_ADDR -p $port --driver mysql --db cadence update-schema -d ./schema/mysql/v57/cadence/versioned -v x.x    -- actually executes the upgrade to version x.x
 
 ./cadence-sql-tool --ep $SQL_HOST_ADDR -p $port --driver mysql --db cadence_visibility update-schema -d ./schema/mysql/v57/cadence/versioned -v x.x -y -- executes a dryrun of upgrade to version x.x
 ./cadence-sql-tool --ep $SQL_HOST_ADDR -p $port --driver mysql --db cadence_visibility update-schema -d ./schema/mysql/v57/cadence/versioned -v x.x    -- actually executes the upgrade to version x.x
