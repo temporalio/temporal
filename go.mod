@@ -22,7 +22,7 @@ require (
 	github.com/go-sql-driver/mysql v1.4.1
 	github.com/gocql/gocql v0.0.0-20171220143535-56a164ee9f31
 	github.com/gogo/googleapis v1.2.0 // indirect
-	github.com/gogo/protobuf v1.3.1
+	github.com/gogo/protobuf v1.3.1 // indirect
 	github.com/gogo/status v1.1.0 // indirect
 	github.com/golang/mock v1.3.1
 	github.com/google/uuid v1.1.1
@@ -64,7 +64,6 @@ require (
 	go.temporal.io/temporal v0.9.4
 	go.uber.org/atomic v1.5.0
 	go.uber.org/config v1.3.1
-	go.uber.org/fx v1.9.0
 	go.uber.org/multierr v1.3.0
 	go.uber.org/net/metrics v1.2.0 // indirect
 	go.uber.org/thriftrw v1.20.2
