@@ -41,8 +41,7 @@ func newSimpleMonitor(serviceName string, hosts map[string][]string) membership.
 	return &simpleMonitor{hostInfo, resolvers}
 }
 
-func (s *simpleMonitor) Start() error {
-	return nil
+func (s *simpleMonitor) Start() {
 }
 
 func (s *simpleMonitor) Stop() {

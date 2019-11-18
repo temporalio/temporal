@@ -24,6 +24,7 @@ import (
 	"errors"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common"
 )
 
 // ErrUnknownService is thrown for a service that is not tracked by this instance
@@ -50,8 +51,8 @@ type (
 	// Monitor provides membership information for all cadence services.
 	// It can be used to query which member host of a service is responsible for serving a given key.
 	Monitor interface {
-		Start() error
-		Stop()
+		common.Daemon
+
 		WhoAmI() (*HostInfo, error)
 		Lookup(service string, key string) (*HostInfo, error)
 		GetResolver(service string) (ServiceResolver, error)

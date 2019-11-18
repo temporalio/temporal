@@ -65,6 +65,7 @@ var keys = map[Key]string{
 	TransactionSizeLimit:                "system.transactionSizeLimit",
 	MinRetentionDays:                    "system.minRetentionDays",
 	MaxDecisionStartToCloseSeconds:      "system.maxDecisionStartToCloseSeconds",
+	DisallowQuery:                       "system.disallowQuery",
 	EnableBatcher:                       "worker.enableBatcher",
 	EnableParentClosePolicyWorker:       "system.enableParentClosePolicyWorker",
 
@@ -278,6 +279,8 @@ const (
 	MinRetentionDays
 	// MaxDecisionStartToCloseSeconds is the minimal allowed decision start to close timeout in seconds
 	MaxDecisionStartToCloseSeconds
+	// DisallowQuery is the key to disallow query for a domain
+	DisallowQuery
 
 	// BlobSizeLimitError is the per event blob size limit
 	BlobSizeLimitError

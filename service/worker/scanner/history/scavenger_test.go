@@ -371,7 +371,7 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 		NextPageToken: []byte("page1"),
 		Branches: []p.HistoryBranchDetail{
 			{
-				//skip
+				// skip
 				TreeID:   "treeID1",
 				BranchID: "branchID1",
 				ForkTime: time.Now(),
@@ -392,7 +392,7 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 	}).Return(&p.GetAllHistoryTreeBranchesResponse{
 		Branches: []p.HistoryBranchDetail{
 			{
-				//delete succ
+				// delete succ
 				TreeID:   "treeID3",
 				BranchID: "branchID3",
 				ForkTime: time.Now().Add(-cleanUpThreshold * 2),
@@ -406,7 +406,7 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 				Info:     p.BuildHistoryGarbageCleanupInfo("domainID4", "workflowID4", "runID4"),
 			},
 			{
-				//not delete
+				// not delete
 				TreeID:   "treeID5",
 				BranchID: "branchID5",
 				ForkTime: time.Now().Add(-cleanUpThreshold * 2),

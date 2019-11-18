@@ -1123,7 +1123,7 @@ func (s *transferQueueStandbyProcessorSuite) TestProcessRecordWorkflowStartedTas
 			RunId:      common.StringPtr(executionInfo.RunID),
 		},
 		WorkflowTypeName: executionInfo.WorkflowTypeName,
-		StartTimestamp:   executionInfo.StartTimestamp.UnixNano(),
+		StartTimestamp:   event.GetTimestamp(),
 		WorkflowTimeout:  int64(executionInfo.WorkflowTimeout),
 		TaskID:           taskID,
 	}).Return(nil).Once()
@@ -1185,7 +1185,7 @@ func (s *transferQueueStandbyProcessorSuite) TestProcessUpsertWorkflowSearchAttr
 			RunId:      common.StringPtr(executionInfo.RunID),
 		},
 		WorkflowTypeName: executionInfo.WorkflowTypeName,
-		StartTimestamp:   executionInfo.StartTimestamp.UnixNano(),
+		StartTimestamp:   event.GetTimestamp(),
 		WorkflowTimeout:  int64(executionInfo.WorkflowTimeout),
 		TaskID:           taskID,
 	}).Return(nil).Once()
