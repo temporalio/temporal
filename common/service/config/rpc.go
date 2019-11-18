@@ -26,6 +26,8 @@ import (
 	"sync"
 
 	"go.uber.org/yarpc"
+	"go.uber.org/yarpc/api/transport"
+	"go.uber.org/yarpc/transport/grpc"
 	"go.uber.org/yarpc/transport/tchannel"
 
 	"github.com/temporalio/temporal/common/log"
@@ -41,6 +43,7 @@ type RPCFactory struct {
 
 	sync.Mutex
 	dispatcher        *yarpc.Dispatcher
+	grpcDispatcher    *yarpc.Dispatcher
 	ringpopDispatcher *yarpc.Dispatcher
 }
 
@@ -55,8 +58,35 @@ func newRPCFactory(cfg *RPC, sName string, logger log.Logger) *RPCFactory {
 	return factory
 }
 
-// GetDispatcher return a cached dispatcher
-func (d *RPCFactory) GetDispatcher() *yarpc.Dispatcher {
+// GetGRPCDispatcher returns cached dispatcher for gRPC inbound or creates one
+func (d *RPCFactory) GetGRPCDispatcher() *yarpc.Dispatcher {
+	if d.grpcDispatcher != nil {
+		return d.grpcDispatcher
+	}
+
+	d.Lock()
+	defer d.Unlock()
+
+	if d.grpcDispatcher == nil {
+		hostAddress := fmt.Sprintf("%v:%v", d.getListenIP(), d.config.GRPCPort)
+		l, err := net.Listen("tcp", hostAddress)
+		if err != nil {
+			d.logger.Fatal("Failed create a gRPC listener", tag.Error(err), tag.Address(hostAddress))
+		}
+
+		d.grpcDispatcher = yarpc.NewDispatcher(yarpc.Config{
+			Name:     d.serviceName,
+			Inbounds: yarpc.Inbounds{grpc.NewTransport().NewInbound(l)},
+		})
+
+		d.logger.Info("Created gRPC dispatcher", tag.Service(d.serviceName), tag.Address(hostAddress))
+	}
+
+	return d.grpcDispatcher
+}
+
+// GetTChannelDispatcher return a cached dispatcher
+func (d *RPCFactory) GetTChannelDispatcher() *yarpc.Dispatcher {
 	d.Lock()
 	defer d.Unlock()
 
@@ -82,29 +112,7 @@ func (d *RPCFactory) GetRingpopDispatcher() *yarpc.Dispatcher {
 	return d.ringpopDispatcher
 }
 
-// CreateDispatcherForOutbound creates a dispatcher for outbound connection
-func (d *RPCFactory) CreateDispatcherForOutbound(
-	callerName string,
-	serviceName string,
-	hostName string,
-) *yarpc.Dispatcher {
-
-	// Setup dispatcher(outbound) for onebox
-	d.logger.Info("Created RPC dispatcher outbound", tag.Service(d.serviceName), tag.Address(hostName))
-	dispatcher := yarpc.NewDispatcher(yarpc.Config{
-		Name: callerName,
-		Outbounds: yarpc.Outbounds{
-			serviceName: {Unary: d.ch.NewSingleOutbound(hostName)},
-		},
-	})
-	if err := dispatcher.Start(); err != nil {
-		d.logger.Fatal("Failed to create outbound transport channel", tag.Error(err))
-	}
-	return dispatcher
-}
-
 func (d *RPCFactory) createInboundTChannelDispatcher(serviceName string, port int) *yarpc.Dispatcher {
-	// Setup dispatcher for onebox
 	var err error
 	hostAddress := fmt.Sprintf("%v:%v", d.getListenIP(), port)
 	d.ch, err = tchannel.NewChannelTransport(
@@ -118,6 +126,33 @@ func (d *RPCFactory) createInboundTChannelDispatcher(serviceName string, port in
 		Name:     serviceName,
 		Inbounds: yarpc.Inbounds{d.ch.NewInbound()},
 	})
+}
+
+// CreateTChannelDispatcherForOutbound creates a dispatcher for outbound connection
+func (d *RPCFactory) CreateTChannelDispatcherForOutbound(callerName, serviceName, hostName string) *yarpc.Dispatcher {
+	return d.createDispatcherForOutbound(d.ch.NewSingleOutbound(hostName), callerName, serviceName, hostName, "TChannel")
+}
+
+// CreateGRPCDispatcherForOutbound creates a dispatcher for outbound connection
+func (d *RPCFactory) CreateGRPCDispatcherForOutbound(callerName, serviceName, hostName string) *yarpc.Dispatcher {
+	return d.createDispatcherForOutbound(grpc.NewTransport().NewSingleOutbound(hostName), callerName, serviceName, hostName, "gRPC")
+}
+
+func (d *RPCFactory) createDispatcherForOutbound(unaryOutbound transport.UnaryOutbound, callerName, serviceName, hostName, transportType string) *yarpc.Dispatcher {
+	d.logger.Info("Created RPC dispatcher outbound", tag.Service(d.serviceName))
+	dsp := yarpc.NewDispatcher(yarpc.Config{
+		Name: callerName,
+		Outbounds: yarpc.Outbounds{
+			serviceName: {Unary: unaryOutbound},
+		},
+	})
+
+	d.logger.Info("Created RPC dispatcher outbound", tag.Service(d.serviceName), tag.Address(hostName), tag.TransportType(transportType))
+
+	if err := dsp.Start(); err != nil {
+		d.logger.Fatal("Failed to start outbound dispatcher", tag.Error(err), tag.TransportType(transportType))
+	}
+	return dsp
 }
 
 func (d *RPCFactory) getListenIP() net.IP {

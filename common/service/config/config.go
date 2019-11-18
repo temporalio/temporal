@@ -89,6 +89,8 @@ type (
 	RPC struct {
 		// Port is the port  on which the channel will bind to
 		Port int `yaml:"port"`
+		// GRPCPort is the port  on which gRPC will listen
+		GRPCPort int `yaml:"grpcPort"`
 		// Port used for ringpop listener
 		RingpopPort int `yaml:"ringpopPort"`
 		// BindOnLocalHost is true if localhost is the bind address

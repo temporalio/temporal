@@ -755,3 +755,8 @@ func ArchivalBlobIntegrityCheckFailReason(blobIntegrityCheckFailReason string) T
 func ArchivalBlobstoreContextTimeout(blobstoreContextTimeout time.Duration) Tag {
 	return newDurationTag("archival-blobstore-context-timeout", blobstoreContextTimeout)
 }
+
+// TransportType returns tag for transportType
+func TransportType(transportType string) Tag {
+	return newStringTag("transport-type", transportType)
+}

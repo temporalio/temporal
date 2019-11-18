@@ -125,7 +125,7 @@ func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (
 	}
 
 	clientProvider := func(clientKey string) (interface{}, error) {
-		dispatcher := cf.rpcFactory.CreateDispatcherForOutbound(historyCaller, common.HistoryServiceName, clientKey)
+		dispatcher := cf.rpcFactory.CreateTChannelDispatcherForOutbound(historyCaller, common.HistoryServiceName, clientKey)
 		return historyserviceclient.New(dispatcher.ClientConfig(common.HistoryServiceName)), nil
 	}
 
@@ -155,7 +155,7 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 	}
 
 	clientProvider := func(clientKey string) (interface{}, error) {
-		dispatcher := cf.rpcFactory.CreateDispatcherForOutbound(matchingCaller, common.MatchingServiceName, clientKey)
+		dispatcher := cf.rpcFactory.CreateTChannelDispatcherForOutbound(matchingCaller, common.MatchingServiceName, clientKey)
 		return matchingserviceclient.New(dispatcher.ClientConfig(common.MatchingServiceName)), nil
 	}
 
@@ -192,7 +192,7 @@ func (cf *rpcClientFactory) NewFrontendClientWithTimeout(
 	}
 
 	clientProvider := func(clientKey string) (interface{}, error) {
-		dispatcher := cf.rpcFactory.CreateDispatcherForOutbound(frontendCaller, common.FrontendServiceName, clientKey)
+		dispatcher := cf.rpcFactory.CreateTChannelDispatcherForOutbound(frontendCaller, common.FrontendServiceName, clientKey)
 		return workflowserviceclient.New(dispatcher.ClientConfig(common.FrontendServiceName)), nil
 	}
 

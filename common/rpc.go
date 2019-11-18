@@ -52,9 +52,11 @@ const (
 type (
 	// RPCFactory Creates a dispatcher that knows how to transport requests.
 	RPCFactory interface {
-		GetDispatcher() *yarpc.Dispatcher
+		GetTChannelDispatcher() *yarpc.Dispatcher
+		GetGRPCDispatcher() *yarpc.Dispatcher
 		GetRingpopDispatcher() *yarpc.Dispatcher
-		CreateDispatcherForOutbound(callerName, serviceName, hostName string) *yarpc.Dispatcher
+		CreateTChannelDispatcherForOutbound(callerName, serviceName, hostName string) *yarpc.Dispatcher
+		CreateGRPCDispatcherForOutbound(callerName, serviceName, hostName string) *yarpc.Dispatcher
 	}
 )
 

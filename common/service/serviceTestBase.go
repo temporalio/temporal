@@ -133,8 +133,13 @@ func (s *serviceTestBase) GetTimeSource() clock.TimeSource {
 	return s.timeSource
 }
 
-// GetDispatcher returns the dispatcher used by service
+// GetDispatcher returns the TChannel dispatcher used by service
 func (s *serviceTestBase) GetDispatcher() *yarpc.Dispatcher {
+	return nil
+}
+
+// GetDispatcher returns the gRPC dispatcher used by service
+func (s *serviceTestBase) GetGRPCDispatcher() *yarpc.Dispatcher {
 	return nil
 }
 

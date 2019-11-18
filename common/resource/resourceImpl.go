@@ -147,7 +147,7 @@ func New(
 		return nil, err
 	}
 
-	dispatcher := params.RPCFactory.GetDispatcher()
+	dispatcher := params.RPCFactory.GetTChannelDispatcher()
 	ringpopDispatcher := params.RPCFactory.GetRingpopDispatcher()
 
 	membershipMonitor, err := params.MembershipFactory.GetMembershipMonitor()

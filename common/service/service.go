@@ -95,7 +95,8 @@ type (
 		sName                 string
 		hostName              string
 		hostInfo              *membership.HostInfo
-		dispatcher            *yarpc.Dispatcher
+		tchannelDispatcher    *yarpc.Dispatcher
+		grpcDispatcher        *yarpc.Dispatcher
 		ringpopDispatcher     *yarpc.Dispatcher
 		membershipFactory     MembershipMonitorFactory
 		membershipMonitor     membership.Monitor
@@ -148,9 +149,14 @@ func New(params *BootstrapParams) Service {
 	}
 
 	sVice.runtimeMetricsReporter = metrics.NewRuntimeMetricsReporter(params.MetricScope, time.Minute, sVice.GetLogger(), params.InstanceID)
-	sVice.dispatcher = sVice.rpcFactory.GetDispatcher()
-	if sVice.dispatcher == nil {
-		sVice.logger.Fatal("Unable to create yarpc dispatcher")
+	sVice.tchannelDispatcher = sVice.rpcFactory.GetTChannelDispatcher()
+	if sVice.tchannelDispatcher == nil {
+		sVice.logger.Fatal("Unable to create yarpc TChannel dispatcher")
+	}
+
+	sVice.grpcDispatcher = sVice.rpcFactory.GetGRPCDispatcher()
+	if sVice.grpcDispatcher == nil {
+		sVice.logger.Fatal("Unable to create yarpc gRPC dispatcher")
 	}
 
 	sVice.ringpopDispatcher = sVice.rpcFactory.GetRingpopDispatcher()
@@ -193,8 +199,12 @@ func (h *serviceImpl) Start() {
 		h.logger.WithTags(tag.Error(err)).Fatal("Failed to start pprof")
 	}
 
-	if err := h.dispatcher.Start(); err != nil {
-		h.logger.WithTags(tag.Error(err)).Fatal("Failed to start yarpc dispatcher")
+	if err := h.tchannelDispatcher.Start(); err != nil {
+		h.logger.WithTags(tag.Error(err)).Fatal("Failed to start yarpc TChannel dispatcher")
+	}
+
+	if err := h.grpcDispatcher.Start(); err != nil {
+		h.logger.WithTags(tag.Error(err)).Fatal("Failed to start yarpc gRPC dispatcher")
 	}
 
 	if err := h.ringpopDispatcher.Start(); err != nil {
@@ -243,8 +253,12 @@ func (h *serviceImpl) Stop() {
 		h.ringpopDispatcher.Stop()
 	}
 
-	if h.dispatcher != nil {
-		h.dispatcher.Stop()
+	if h.tchannelDispatcher != nil {
+		h.tchannelDispatcher.Stop()
+	}
+
+	if h.grpcDispatcher != nil {
+		h.grpcDispatcher.Stop()
 	}
 
 	h.runtimeMetricsReporter.Stop()
@@ -279,7 +293,11 @@ func (h *serviceImpl) GetHostInfo() *membership.HostInfo {
 }
 
 func (h *serviceImpl) GetDispatcher() *yarpc.Dispatcher {
-	return h.dispatcher
+	return h.tchannelDispatcher
+}
+
+func (h *serviceImpl) GetGRPCDispatcher() *yarpc.Dispatcher {
+	return h.grpcDispatcher
 }
 
 // GetClusterMetadata returns the service cluster metadata
