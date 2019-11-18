@@ -78,7 +78,7 @@ type (
 
 		// internal services clients
 
-		PublicClient   *publicservicetest.MockClient
+		SDKClient      *publicservicetest.MockClient
 		FrontendClient *workflowservicetest.MockClient
 		MatchingClient *matchingservicetest.MockClient
 		HistoryClient  *historyservicetest.MockClient
@@ -166,7 +166,7 @@ func NewTest(
 
 		// internal services clients
 
-		PublicClient:   publicservicetest.NewMockClient(controller),
+		SDKClient:      publicservicetest.NewMockClient(controller),
 		FrontendClient: frontendClient,
 		MatchingClient: matchingClient,
 		HistoryClient:  historyClient,
@@ -287,9 +287,9 @@ func (s *Test) GetWorkerServiceResolver() membership.ServiceResolver {
 
 // internal services clients
 
-// GetPublicClient for testing
-func (s *Test) GetPublicClient() workflowserviceclient.Interface {
-	return s.PublicClient
+// GetSDKClient for testing
+func (s *Test) GetSDKClient() workflowserviceclient.Interface {
+	return s.SDKClient
 }
 
 // GetFrontendRawClient for testing

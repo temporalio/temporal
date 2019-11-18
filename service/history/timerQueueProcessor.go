@@ -209,8 +209,8 @@ func (t *timerQueueProcessorImpl) FailoverDomain(
 	maxLevel := t.activeTimerProcessor.getReadLevel().VisibilityTimestamp.Add(1 * time.Millisecond)
 	t.logger.Info("Timer Failover Triggered",
 		tag.WorkflowDomainIDs(domainIDs),
-		tag.MinLevel(int64(minLevel.Nanosecond())),
-		tag.MaxLevel(int64(maxLevel.Nanosecond())))
+		tag.MinLevel(minLevel.UnixNano()),
+		tag.MaxLevel(maxLevel.UnixNano()))
 	// we should consider make the failover idempotent
 	updateShardAckLevel, failoverTimerProcessor := newTimerQueueFailoverProcessor(
 		t.shard,

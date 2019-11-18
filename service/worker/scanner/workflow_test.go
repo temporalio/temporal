@@ -25,18 +25,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally"
 	"go.uber.org/zap"
 
 	"go.temporal.io/temporal/testsuite"
 	"go.temporal.io/temporal/worker"
 
-	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/mocks"
 	p "github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/resource"
 )
 
 type scannerWorkflowTestSuite struct {
@@ -57,14 +56,15 @@ func (s *scannerWorkflowTestSuite) TestWorkflow() {
 
 func (s *scannerWorkflowTestSuite) TestScavengerActivity() {
 	env := s.NewTestActivityEnvironment()
-	taskDB := &mocks.TaskManager{}
-	taskDB.On("ListTaskList", mock.Anything).Return(&p.ListTaskListResponse{}, nil)
+	controller := gomock.NewController(s.T())
+	defer controller.Finish()
+	mockResource := resource.NewTest(controller, metrics.Worker)
+	defer mockResource.Finish(s.T())
+
+	mockResource.TaskMgr.On("ListTaskList", mock.Anything).Return(&p.ListTaskListResponse{}, nil)
 	ctx := scannerContext{
-		taskDB:        taskDB,
-		domainDB:      &mocks.MetadataManager{},
-		metricsClient: metrics.NewClient(tally.NoopScope, metrics.Worker),
-		zapLogger:     zap.NewNop(),
-		logger:        loggerimpl.NewLogger(zap.NewNop()),
+		Resource:  mockResource,
+		zapLogger: zap.NewNop(),
 	}
 	env.SetTestTimeout(time.Second * 5)
 	env.SetWorkerOptions(worker.Options{

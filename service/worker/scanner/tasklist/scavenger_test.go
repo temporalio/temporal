@@ -64,7 +64,6 @@ func (s *ScavengerTestSuite) SetupTest() {
 	logger := loggerimpl.NewLogger(zapLogger)
 	s.scvgr = NewScavenger(s.taskMgr, metrics.NewClient(tally.NoopScope, metrics.Worker), logger)
 	maxTasksPerJob = 4
-	nWorkers = 4
 	executorPollInterval = time.Millisecond * 50
 }
 

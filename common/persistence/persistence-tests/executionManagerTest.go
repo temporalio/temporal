@@ -70,6 +70,72 @@ func (s *ExecutionManagerSuite) SetupTest() {
 	s.ClearTasks()
 }
 
+// TestCreateWorkflowExecutionDeDup test
+func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionDeDup() {
+	domainID := uuid.New()
+	workflowID := "create-workflow-test-dedup"
+	runID := "3969fae6-6b75-4c2a-b74b-4054edd296a6"
+	workflowExecution := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr(workflowID),
+		RunId:      common.StringPtr(runID),
+	}
+	tasklist := "some random tasklist"
+	workflowType := "some random workflow type"
+	workflowTimeout := int32(10)
+	decisionTimeout := int32(14)
+	lastProcessedEventID := int64(0)
+	nextEventID := int64(3)
+
+	req := &p.CreateWorkflowExecutionRequest{
+		NewWorkflowSnapshot: p.WorkflowSnapshot{
+			ExecutionInfo: &p.WorkflowExecutionInfo{
+				CreateRequestID:             uuid.New(),
+				DomainID:                    domainID,
+				WorkflowID:                  workflowID,
+				RunID:                       runID,
+				TaskList:                    tasklist,
+				WorkflowTypeName:            workflowType,
+				WorkflowTimeout:             workflowTimeout,
+				DecisionStartToCloseTimeout: decisionTimeout,
+				LastFirstEventID:            common.FirstEventID,
+				NextEventID:                 nextEventID,
+				LastProcessedEvent:          lastProcessedEventID,
+				State:                       p.WorkflowStateCreated,
+				CloseStatus:                 p.WorkflowCloseStatusNone,
+			},
+			ExecutionStats: &p.ExecutionStats{},
+		},
+		RangeID: s.ShardInfo.RangeID,
+		Mode:    p.CreateWorkflowModeBrandNew,
+	}
+
+	_, err := s.ExecutionManager.CreateWorkflowExecution(req)
+	s.Nil(err)
+	info, err := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err)
+	updatedInfo := copyWorkflowExecutionInfo(info.ExecutionInfo)
+	updatedStats := copyExecutionStats(info.ExecutionStats)
+	updatedInfo.State = p.WorkflowStateCompleted
+	updatedInfo.CloseStatus = p.WorkflowCloseStatusCompleted
+	_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
+		UpdateWorkflowMutation: p.WorkflowMutation{
+			ExecutionInfo:  updatedInfo,
+			ExecutionStats: updatedStats,
+			Condition:      nextEventID,
+		},
+		RangeID: s.ShardInfo.RangeID,
+		Mode:    p.UpdateWorkflowModeUpdateCurrent,
+	})
+	s.NoError(err)
+
+	req.Mode = p.CreateWorkflowModeWorkflowIDReuse
+	req.PreviousRunID = runID
+	req.PreviousLastWriteVersion = common.EmptyVersion
+	_, err = s.ExecutionManager.CreateWorkflowExecution(req)
+	s.Error(err)
+	s.IsType(&p.WorkflowExecutionAlreadyStartedError{}, err)
+}
+
 // TestCreateWorkflowExecutionStateCloseStatus test
 func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateCloseStatus() {
 	domainID := uuid.New()

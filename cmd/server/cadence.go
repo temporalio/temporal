@@ -30,10 +30,12 @@ import (
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/tools/cassandra"
 	"github.com/temporalio/temporal/tools/sql"
+	_ "github.com/temporalio/temporal/tools/sql-extensions/mysql"    // needed to load mysql extensions
+	_ "github.com/temporalio/temporal/tools/sql-extensions/postgres" // needed to load postgres extensions
 )
 
 // validServices is the list of all valid cadence services
-var validServices = []string{historyService, matchingService, frontendService, workerService}
+var validServices = []string{frontendService, historyService, matchingService, workerService}
 
 // main entry point for the cadence server
 func main() {

@@ -751,6 +751,11 @@ func ArchivalBlobIntegrityCheckFailReason(blobIntegrityCheckFailReason string) T
 	return newStringTag("archival-blob-integrity-check-fail-reason", blobIntegrityCheckFailReason)
 }
 
+// ArchivalBlobstoreContextTimeout returns tag for ArchivalBlobstoreContextTimeout
+func ArchivalBlobstoreContextTimeout(blobstoreContextTimeout time.Duration) Tag {
+	return newDurationTag("archival-blobstore-context-timeout", blobstoreContextTimeout)
+}
+
 // TransportType returns tag for transportType
 func TransportType(transportType string) Tag {
 	return newStringTag("transport-type", transportType)
