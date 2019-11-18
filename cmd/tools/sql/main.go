@@ -24,6 +24,8 @@ import (
 	"os"
 
 	"github.com/temporalio/temporal/tools/sql"
+	_ "github.com/temporalio/temporal/tools/sql-extensions/mysql"    // needed to load mysql extensions
+	_ "github.com/temporalio/temporal/tools/sql-extensions/postgres" // needed to load postgres extensions
 )
 
 func main() {

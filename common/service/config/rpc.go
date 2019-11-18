@@ -23,6 +23,7 @@ package config
 import (
 	"fmt"
 	"net"
+	"sync"
 
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/transport/tchannel"
@@ -37,6 +38,10 @@ type RPCFactory struct {
 	serviceName string
 	ch          *tchannel.ChannelTransport
 	logger      log.Logger
+
+	sync.Mutex
+	dispatcher        *yarpc.Dispatcher
+	ringpopDispatcher *yarpc.Dispatcher
 }
 
 // NewFactory builds a new RPCFactory
@@ -50,20 +55,40 @@ func newRPCFactory(cfg *RPC, sName string, logger log.Logger) *RPCFactory {
 	return factory
 }
 
-// CreateDispatcher creates a dispatcher for inbound
-func (d *RPCFactory) CreateDispatcher() *yarpc.Dispatcher {
-	return d.createInboundTChannelDispatcher(d.serviceName, d.config.Port)
+// GetDispatcher return a cached dispatcher
+func (d *RPCFactory) GetDispatcher() *yarpc.Dispatcher {
+	d.Lock()
+	defer d.Unlock()
+
+	if d.dispatcher != nil {
+		return d.dispatcher
+	}
+
+	d.dispatcher = d.createInboundTChannelDispatcher(d.serviceName, d.config.Port)
+	return d.dispatcher
 }
 
-// CreateRingpopDispatcher creates a dispatcher for ringpop
-func (d *RPCFactory) CreateRingpopDispatcher() *yarpc.Dispatcher {
+// GetRingpopDispatcher return a cached ringpop dispatcher
+func (d *RPCFactory) GetRingpopDispatcher() *yarpc.Dispatcher {
+	d.Lock()
+	defer d.Unlock()
+
+	if d.ringpopDispatcher != nil {
+		return d.ringpopDispatcher
+	}
+
 	ringpopServiceName := fmt.Sprintf("%v-ringpop", d.serviceName)
-	return d.createInboundTChannelDispatcher(ringpopServiceName, d.config.RingpopPort)
+	d.ringpopDispatcher = d.createInboundTChannelDispatcher(ringpopServiceName, d.config.RingpopPort)
+	return d.ringpopDispatcher
 }
 
 // CreateDispatcherForOutbound creates a dispatcher for outbound connection
 func (d *RPCFactory) CreateDispatcherForOutbound(
-	callerName, serviceName, hostName string) *yarpc.Dispatcher {
+	callerName string,
+	serviceName string,
+	hostName string,
+) *yarpc.Dispatcher {
+
 	// Setup dispatcher(outbound) for onebox
 	d.logger.Info("Created RPC dispatcher outbound", tag.Service(d.serviceName), tag.Address(hostName))
 	dispatcher := yarpc.NewDispatcher(yarpc.Config{

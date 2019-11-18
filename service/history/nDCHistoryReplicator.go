@@ -291,6 +291,10 @@ func (r *nDCHistoryReplicatorImpl) applyStartEvents(
 		true,
 	)
 	if err != nil {
+		task.getLogger().Error(
+			"nDCHistoryReplicator unable to apply events when applyStartEvents",
+			tag.Error(err),
+		)
 		return err
 	}
 
@@ -306,7 +310,12 @@ func (r *nDCHistoryReplicatorImpl) applyStartEvents(
 			releaseFn,
 		),
 	)
-	if err == nil {
+	if err != nil {
+		task.getLogger().Error(
+			"nDCHistoryReplicator unable to create workflow when applyStartEvents",
+			tag.Error(err),
+		)
+	} else {
 		r.notify(task.getSourceCluster(), task.getEventTime())
 	}
 	return err
@@ -327,11 +336,20 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsPrepareBranch(
 		task.getFirstEvent().GetEventId(),
 		task.getFirstEvent().GetVersion(),
 	)
-	if err != nil {
+	switch err.(type) {
+	case nil:
+		return doContinue, versionHistoryIndex, nil
+	case *shared.RetryTaskV2Error:
+		// replication message can arrive out of order
+		// do not log
+		return false, 0, err
+	default:
+		task.getLogger().Error(
+			"nDCHistoryReplicator unable to prepare version history when applyNonStartEventsPrepareBranch",
+			tag.Error(err),
+		)
 		return false, 0, err
 	}
-	return doContinue, versionHistoryIndex, nil
-
 }
 
 func (r *nDCHistoryReplicatorImpl) applyNonStartEventsPrepareMutableState(
@@ -344,11 +362,18 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsPrepareMutableState(
 
 	incomingVersion := task.getVersion()
 	conflictResolver := r.newConflictResolver(context, mutableState, task.getLogger())
-	return conflictResolver.prepareMutableState(
+	mutableState, isRebuilt, err := conflictResolver.prepareMutableState(
 		ctx,
 		branchIndex,
 		incomingVersion,
 	)
+	if err != nil {
+		task.getLogger().Error(
+			"nDCHistoryReplicator unable to prepare mutable state when applyNonStartEventsPrepareMutableState",
+			tag.Error(err),
+		)
+	}
+	return mutableState, isRebuilt, err
 }
 
 func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
@@ -371,6 +396,10 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 		true,
 	)
 	if err != nil {
+		task.getLogger().Error(
+			"nDCHistoryReplicator unable to apply events when applyNonStartEventsToCurrentBranch",
+			tag.Error(err),
+		)
 		return err
 	}
 
@@ -414,7 +443,12 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 		targetWorkflow,
 		newWorkflow,
 	)
-	if err == nil {
+	if err != nil {
+		task.getLogger().Error(
+			"nDCHistoryReplicator unable to update workflow when applyNonStartEventsToCurrentBranch",
+			tag.Error(err),
+		)
+	} else {
 		r.notify(task.getSourceCluster(), task.getEventTime())
 	}
 	return err
@@ -429,19 +463,35 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranch(
 	task nDCReplicationTask,
 ) error {
 
-	// workflow backfill to non current branch
-	// if encounter backfill with continue as new
-	// first, create the new workflow as zombie
 	if len(task.getNewEvents()) != 0 {
-		startTime := time.Now()
-		newTask, err := task.generateNewRunTask(startTime)
-		if err != nil {
-			return err
-		}
-		if err := r.applyEvents(ctx, newTask); err != nil {
-			return err
-		}
+		return r.applyNonStartEventsToNoneCurrentBranchWithContinueAsNew(
+			ctx,
+			context,
+			mutableState,
+			branchIndex,
+			releaseFn,
+			task,
+		)
 	}
+
+	return r.applyNonStartEventsToNoneCurrentBranchWithoutContinueAsNew(
+		ctx,
+		context,
+		mutableState,
+		branchIndex,
+		releaseFn,
+		task,
+	)
+}
+
+func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithoutContinueAsNew(
+	ctx ctx.Context,
+	context workflowExecutionContext,
+	mutableState mutableState,
+	branchIndex int,
+	releaseFn releaseWorkflowExecutionFunc,
+	task nDCReplicationTask,
+) error {
 
 	versionHistoryItem := persistence.NewVersionHistoryItem(
 		task.getLastEvent().GetEventId(),
@@ -455,7 +505,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranch(
 		return err
 	}
 
-	return r.transactionMgr.backfillWorkflow(
+	err = r.transactionMgr.backfillWorkflow(
 		ctx,
 		task.getEventTime(),
 		newNDCWorkflow(
@@ -474,6 +524,64 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranch(
 			Events:      task.getEvents(),
 		},
 	)
+	if err != nil {
+		task.getLogger().Error(
+			"nDCHistoryReplicator unable to backfill workflow when applyNonStartEventsToNoneCurrentBranch",
+			tag.Error(err),
+		)
+		return err
+	}
+	return nil
+}
+
+func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithContinueAsNew(
+	ctx ctx.Context,
+	context workflowExecutionContext,
+	mutableState mutableState,
+	branchIndex int,
+	releaseFn releaseWorkflowExecutionFunc,
+	task nDCReplicationTask,
+) error {
+
+	// workflow backfill to non current branch with continue as new
+	// first, release target workflow lock & create the new workflow as zombie
+	// NOTE: need to release target workflow due to target workflow
+	//  can potentially be the current workflow causing deadlock
+
+	// 1. clear all in memory changes & release target workflow lock
+	// 2. apply new workflow first
+	// 3. apply target workflow
+
+	// step 1
+	context.clear()
+	releaseFn(nil)
+	context = nil
+	mutableState = nil
+	releaseFn = nil
+
+	// step 2
+	startTime := time.Now()
+	task, newTask, err := task.splitTask(startTime)
+	if err != nil {
+		return err
+	}
+	if err := r.applyEvents(ctx, newTask); err != nil {
+		newTask.getLogger().Error(
+			"nDCHistoryReplicator unable to create new workflow when applyNonStartEventsToNoneCurrentBranchWithContinueAsNew",
+			tag.Error(err),
+		)
+		return err
+	}
+
+	// step 3
+	if err := r.applyEvents(ctx, task); err != nil {
+		newTask.getLogger().Error(
+			"nDCHistoryReplicator unable to create target workflow when applyNonStartEventsToNoneCurrentBranchWithContinueAsNew",
+			tag.Error(err),
+		)
+		return err
+	}
+	return nil
 }
 
 func (r *nDCHistoryReplicatorImpl) applyNonStartEventsMissingMutableState(
@@ -512,7 +620,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsMissingMutableState(
 		task.getLogger(),
 	)
 
-	return workflowResetter.resetWorkflow(
+	resetMutableState, err := workflowResetter.resetWorkflow(
 		ctx,
 		task.getEventTime(),
 		baseEventID,
@@ -520,6 +628,14 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsMissingMutableState(
 		task.getFirstEvent().GetEventId(),
 		task.getVersion(),
 	)
+	if err != nil {
+		task.getLogger().Error(
+			"nDCHistoryReplicator unable to reset workflow when applyNonStartEventsMissingMutableState",
+			tag.Error(err),
+		)
+		return nil, err
+	}
+	return resetMutableState, nil
 }
 
 func (r *nDCHistoryReplicatorImpl) applyNonStartEventsResetWorkflow(
@@ -540,6 +656,10 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsResetWorkflow(
 		true,
 	)
 	if err != nil {
+		task.getLogger().Error(
+			"nDCHistoryReplicator unable to apply events when applyNonStartEventsResetWorkflow",
+			tag.Error(err),
+		)
 		return err
 	}
 
@@ -557,7 +677,12 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsResetWorkflow(
 		task.getEventTime(),
 		targetWorkflow,
 	)
-	if err == nil {
+	if err != nil {
+		task.getLogger().Error(
+			"nDCHistoryReplicator unable to create workflow when applyNonStartEventsResetWorkflow",
+			tag.Error(err),
+		)
+	} else {
 		r.notify(task.getSourceCluster(), task.getEventTime())
 	}
 	return err

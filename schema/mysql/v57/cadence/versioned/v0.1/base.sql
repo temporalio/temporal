@@ -3,9 +3,9 @@ CREATE TABLE domains(
   id BINARY(16) NOT NULL,
   name VARCHAR(255) UNIQUE NOT NULL,
   --
-	data BLOB NOT NULL,
-	data_encoding VARCHAR(16) NOT NULL,
-	is_global TINYINT(1) NOT NULL,
+  data BLOB NOT NULL,
+  data_encoding VARCHAR(16) NOT NULL,
+  is_global TINYINT(1) NOT NULL,
   PRIMARY KEY(shard_id, id)
 );
 

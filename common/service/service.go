@@ -85,8 +85,8 @@ type (
 
 	// MembershipMonitorFactory provides a bootstrapped membership monitor
 	MembershipMonitorFactory interface {
-		// Create vends a bootstrapped membership monitor
-		Create(d *yarpc.Dispatcher) (membership.Monitor, error)
+		// GetMembershipMonitor return a membership monitor
+		GetMembershipMonitor() (membership.Monitor, error)
 	}
 
 	// Service contains the objects specific to this service
@@ -148,12 +148,12 @@ func New(params *BootstrapParams) Service {
 	}
 
 	sVice.runtimeMetricsReporter = metrics.NewRuntimeMetricsReporter(params.MetricScope, time.Minute, sVice.GetLogger(), params.InstanceID)
-	sVice.dispatcher = sVice.rpcFactory.CreateDispatcher()
+	sVice.dispatcher = sVice.rpcFactory.GetDispatcher()
 	if sVice.dispatcher == nil {
 		sVice.logger.Fatal("Unable to create yarpc dispatcher")
 	}
 
-	sVice.ringpopDispatcher = sVice.rpcFactory.CreateRingpopDispatcher()
+	sVice.ringpopDispatcher = sVice.rpcFactory.GetRingpopDispatcher()
 	if sVice.ringpopDispatcher == nil {
 		sVice.logger.Fatal("Unable to create yarpc dispatcher for ringpop")
 	}
@@ -201,15 +201,12 @@ func (h *serviceImpl) Start() {
 		h.logger.WithTags(tag.Error(err)).Fatal("Failed to start yarpc dispatcher for ringpop")
 	}
 
-	h.membershipMonitor, err = h.membershipFactory.Create(h.ringpopDispatcher)
+	h.membershipMonitor, err = h.membershipFactory.GetMembershipMonitor()
 	if err != nil {
 		h.logger.WithTags(tag.Error(err)).Fatal("Membership monitor creation failed")
 	}
 
-	err = h.membershipMonitor.Start()
-	if err != nil {
-		h.logger.WithTags(tag.Error(err)).Fatal("starting membership monitor failed")
-	}
+	h.membershipMonitor.Start()
 
 	hostInfo, err := h.membershipMonitor.WhoAmI()
 	if err != nil {
