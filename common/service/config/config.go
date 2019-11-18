@@ -182,8 +182,6 @@ type (
 		Password string `yaml:"password"`
 		// keyspace is the cassandra keyspace
 		Keyspace string `yaml:"keyspace" validate:"nonzero"`
-		// Consistency is the default cassandra consistency level
-		Consistency string `yaml:"consistency"`
 		// Datacenter is the data center filter arg for cassandra
 		Datacenter string `yaml:"datacenter"`
 		// MaxQPS is the max request rate to this datastore
