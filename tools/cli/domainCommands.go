@@ -40,6 +40,7 @@ import (
 	serviceFrontend "github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/domain"
+	"github.com/temporalio/temporal/tools/cli/adapter"
 )
 
 type (
@@ -124,63 +125,39 @@ func (d *domainCLIImpl) RegisterDomain(c *cli.Context) {
 		activeClusterName = c.String(FlagActiveClusterName)
 	}
 
-	var clusters []*shared.ClusterReplicationConfiguration
-	var clustersGRPC []*pbCommon.ClusterReplicationConfiguration
+	var clusters []*pbCommon.ClusterReplicationConfiguration
 	if c.IsSet(FlagClusters) {
 		clusterStr := c.String(FlagClusters)
-		clusters = append(clusters, &shared.ClusterReplicationConfiguration{
-			ClusterName: common.StringPtr(clusterStr),
-		})
-		clustersGRPC = append(clustersGRPC, &pbCommon.ClusterReplicationConfiguration{
+		clusters = append(clusters, &pbCommon.ClusterReplicationConfiguration{
 			ClusterName: clusterStr,
 		})
 		for _, clusterStr := range c.Args() {
-			clusters = append(clusters, &shared.ClusterReplicationConfiguration{
-				ClusterName: common.StringPtr(clusterStr),
-			})
-			clustersGRPC = append(clustersGRPC, &pbCommon.ClusterReplicationConfiguration{
+			clusters = append(clusters, &pbCommon.ClusterReplicationConfiguration{
 				ClusterName: clusterStr,
 			})
 		}
 	}
 
-	request := &shared.RegisterDomainRequest{
-		Name:                                   common.StringPtr(domainName),
-		Description:                            common.StringPtr(description),
-		OwnerEmail:                             common.StringPtr(ownerEmail),
-		Data:                                   domainData,
-		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(int32(retentionDays)),
-		EmitMetric:                             common.BoolPtr(emitMetric),
-		Clusters:                               clusters,
-		ActiveClusterName:                      common.StringPtr(activeClusterName),
-		SecurityToken:                          common.StringPtr(securityToken),
-		HistoryArchivalStatus:                  archivalStatus(c, FlagHistoryArchivalStatus),
-		HistoryArchivalURI:                     common.StringPtr(c.String(FlagHistoryArchivalURI)),
-		VisibilityArchivalStatus:               archivalStatus(c, FlagVisibilityArchivalStatus),
-		VisibilityArchivalURI:                  common.StringPtr(c.String(FlagVisibilityArchivalURI)),
-		IsGlobalDomain:                         common.BoolPtr(isGlobalDomain),
-	}
-
-	requestGRPC := &workflowservice.RegisterDomainRequest{
+	request := &workflowservice.RegisterDomainRequest{
 		Name:                                   domainName,
 		Description:                            description,
 		OwnerEmail:                             ownerEmail,
 		Data:                                   domainData,
 		WorkflowExecutionRetentionPeriodInDays: int32(retentionDays),
 		EmitMetric:                             emitMetric,
-		Clusters:                               clustersGRPC,
+		Clusters:                               clusters,
 		ActiveClusterName:                      activeClusterName,
 		SecurityToken:                          securityToken,
-		HistoryArchivalStatus:                  archivalStatusGRPC(c, FlagHistoryArchivalStatus),
+		HistoryArchivalStatus:                  archivalStatus(c, FlagHistoryArchivalStatus),
 		HistoryArchivalURI:                     c.String(FlagHistoryArchivalURI),
-		VisibilityArchivalStatus:               archivalStatusGRPC(c, FlagVisibilityArchivalStatus),
+		VisibilityArchivalStatus:               archivalStatus(c, FlagVisibilityArchivalStatus),
 		VisibilityArchivalURI:                  c.String(FlagVisibilityArchivalURI),
 		IsGlobalDomain:                         isGlobalDomain,
 	}
 
 	ctx, cancel := newContext(c)
 	defer cancel()
-	err = d.registerDomain(ctx, request, requestGRPC)
+	err = d.registerDomain(ctx, request, c.IsSet(FlagGRPC))
 	if err != nil {
 		if _, ok := err.(*s.DomainAlreadyExistsError); !ok {
 			ErrorAndExit("Register Domain operation failed.", err)
@@ -396,20 +373,20 @@ func (d *domainCLIImpl) DescribeDomain(c *cli.Context) {
 
 func (d *domainCLIImpl) registerDomain(
 	ctx context.Context,
-	request *shared.RegisterDomainRequest,
-	requestGRPC *workflowservice.RegisterDomainRequest,
+	request *workflowservice.RegisterDomainRequest,
+	useGRPC bool,
 ) error {
 
-	if d.frontendClientGRPC != nil {
-		_, err := d.frontendClientGRPC.RegisterDomain(ctx, requestGRPC)
+	if useGRPC && d.frontendClientGRPC != nil {
+		_, err := d.frontendClientGRPC.RegisterDomain(ctx, request)
 		return err
 	}
 
-	if d.frontendClient != nil {
-		return d.frontendClient.RegisterDomain(ctx, request)
+	if !useGRPC && d.frontendClient != nil {
+		return d.frontendClient.RegisterDomain(ctx, adapter.ToThriftRegisterDomainRequest(request))
 	}
 
-	return d.domainHandler.RegisterDomain(ctx, request)
+	return d.domainHandler.RegisterDomain(ctx, adapter.ToThriftRegisterDomainRequest(request))
 }
 
 func (d *domainCLIImpl) updateDomain(
@@ -436,20 +413,6 @@ func (d *domainCLIImpl) describeDomain(
 	return d.domainHandler.DescribeDomain(ctx, request)
 }
 
-func archivalStatus(c *cli.Context, statusFlagName string) *shared.ArchivalStatus {
-	if c.IsSet(statusFlagName) {
-		switch c.String(statusFlagName) {
-		case "disabled":
-			return common.ArchivalStatusPtr(shared.ArchivalStatusDisabled)
-		case "enabled":
-			return common.ArchivalStatusPtr(shared.ArchivalStatusEnabled)
-		default:
-			ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", statusFlagName), errors.New("invalid status, valid values are \"disabled\" and \"enabled\""))
-		}
-	}
-	return nil
-}
-
 func clustersToString(clusters []*shared.ClusterReplicationConfiguration) string {
 	var res string
 	for i, cluster := range clusters {
@@ -462,7 +425,7 @@ func clustersToString(clusters []*shared.ClusterReplicationConfiguration) string
 	return res
 }
 
-func archivalStatusGRPC(c *cli.Context, statusFlagName string) enums.ArchivalStatus {
+func archivalStatus(c *cli.Context, statusFlagName string) enums.ArchivalStatus {
 	if c.IsSet(statusFlagName) {
 		switch c.String(statusFlagName) {
 		case "disabled":
