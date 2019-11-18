@@ -47,13 +47,10 @@ ENV GOFLAGS="-mod=readonly"
 WORKDIR /temporal
 
 # Copy go mod dependencies and build cache
-COPY go.* ./
-#COPY .gen/proto/go.* ./.gen/proto/
+#COPY go.* ./
 COPY . .
 
 RUN go mod download
-
-
 
 # need to make clean first in case binaries to be built are stale
 RUN make clean && CGO_ENABLED=0 make copyright cadence-cassandra-tool cadence-sql-tool cadence cadence-server
