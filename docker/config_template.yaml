@@ -69,10 +69,10 @@ ringpop:
     {{- end }}
     {{- else }}
     bootstrapHosts:
-        - {{ .Env.HOST_IP }}:7933
-        - {{ .Env.HOST_IP }}:7934
-        - {{ .Env.HOST_IP }}:7935
-        - {{ .Env.HOST_IP }}:7939
+        - {{ .Env.HOST_IP }}:6933
+        - {{ .Env.HOST_IP }}:6934
+        - {{ .Env.HOST_IP }}:6935
+        - {{ .Env.HOST_IP }}:6939
     {{- end }}
     maxJoinDuration: 30s
 
@@ -80,6 +80,8 @@ services:
     frontend:
         rpc:
             port: 7933
+            grpcPort: 7233
+            ringpopPort: 6933
             bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
         {{- if .Env.STATSD_ENDPOINT }}
         metrics:
@@ -96,6 +98,8 @@ services:
     matching:
         rpc:
             port: 7935
+            grpcPort: 7235
+            ringpopPort: 6935
             bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
         {{- if .Env.STATSD_ENDPOINT }}
         metrics:
@@ -112,6 +116,8 @@ services:
     history:
         rpc:
             port: 7934
+            grpcPort: 7234
+            ringpopPort: 6934
             bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
         {{- if .Env.STATSD_ENDPOINT }}
         metrics:
@@ -128,6 +134,8 @@ services:
     worker:
         rpc:
             port: 7939
+            grpcPort: 7239
+            ringpopPort: 6939
             bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
         {{- if .Env.STATSD_ENDPOINT }}
         metrics:
