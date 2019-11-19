@@ -90,6 +90,8 @@ const (
 	FlagOpenWithAlias                     = FlagOpen + ", op"
 	FlagMore                              = "more"
 	FlagMoreWithAlias                     = FlagMore + ", m"
+	FlagAll                               = "all"
+	FlagAllWithAlias                      = FlagAll + ", a"
 	FlagPageSize                          = "pagesize"
 	FlagPageSizeWithAlias                 = FlagPageSize + ", ps"
 	FlagEarliestTime                      = "earliest_time"
@@ -455,11 +457,11 @@ func getFlagsForListArchived() []cli.Flag {
 		cli.IntFlag{
 			Name:  FlagPageSizeWithAlias,
 			Value: 100,
-			Usage: "Count of visibility records included in a single page",
+			Usage: "Count of visibility records included in a single page, default to 100",
 		},
 		cli.BoolFlag{
-			Name:  FlagMoreWithAlias,
-			Usage: "List more pages, default is to list one page of default page size 10",
+			Name:  FlagAllWithAlias,
+			Usage: "List all pages",
 		},
 	}
 	flagsForListArchived = append(getCommonFlagsForVisibility(), flagsForListArchived...)
