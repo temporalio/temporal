@@ -26,6 +26,7 @@ import (
 	"github.com/urfave/cli"
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/api/transport"
+	"go.uber.org/yarpc/transport/grpc"
 	"go.uber.org/yarpc/transport/tchannel"
 	"go.uber.org/zap"
 
@@ -97,20 +98,31 @@ func (b *clientFactory) ensureDispatcher(c *cli.Context) {
 		return
 	}
 
-	b.hostPort = localHostPort
+	if c.IsSet(FlagGRPC) {
+		b.hostPort = localHostPortGRCP
+	} else {
+		b.hostPort = localHostPort
+	}
+
 	if addr := c.GlobalString(FlagAddress); addr != "" {
 		b.hostPort = addr
 	}
 
-	ch, err := tchannel.NewChannelTransport(tchannel.ServiceName(cadenceClientName), tchannel.ListenAddr("127.0.0.1:0"))
-	if err != nil {
-		b.logger.Fatal("Failed to create transport channel", zap.Error(err))
+	var unaryOutbound transport.UnaryOutbound
+	if c.IsSet(FlagGRPC) {
+		unaryOutbound = grpc.NewTransport().NewSingleOutbound(b.hostPort)
+	} else {
+		ch, err := tchannel.NewChannelTransport(tchannel.ServiceName(cadenceClientName), tchannel.ListenAddr("127.0.0.1:0"))
+		if err != nil {
+			b.logger.Fatal("Failed to create transport channel", zap.Error(err))
+		}
+		unaryOutbound = ch.NewSingleOutbound(b.hostPort)
 	}
 
 	b.dispatcher = yarpc.NewDispatcher(yarpc.Config{
 		Name: cadenceClientName,
 		Outbounds: yarpc.Outbounds{
-			cadenceFrontendService: {Unary: ch.NewSingleOutbound(b.hostPort)},
+			cadenceFrontendService: {Unary: unaryOutbound},
 		},
 		OutboundMiddleware: yarpc.OutboundMiddleware{
 			Unary: &versionMiddleware{},

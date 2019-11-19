@@ -30,6 +30,7 @@ import (
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
+	"go.uber.org/yarpc/yarpcerrors"
 
 	pbCommon "github.com/temporalio/temporal-proto/common"
 	"github.com/temporalio/temporal-proto/enums"
@@ -42,7 +43,7 @@ import (
 
 type (
 	domainCLIImpl struct {
-		// used when making RPC call to frontend service
+		// used when making RPC call to frontend service``
 		frontendClient serviceFrontend.Interface
 
 		frontendClientGRPC workflowservice.WorkflowServiceYARPCClient
@@ -156,11 +157,15 @@ func (d *domainCLIImpl) RegisterDomain(c *cli.Context) {
 	defer cancel()
 	err = d.registerDomain(ctx, request, c.IsSet(FlagGRPC))
 	if err != nil {
-		if _, ok := err.(*shared.DomainAlreadyExistsError); !ok {
-			ErrorAndExit("Register Domain operation failed.", err)
-		} else {
-			ErrorAndExit(fmt.Sprintf("Domain %s already registered.", domainName), err)
+		switch er := err.(type) {
+		case *shared.DomainAlreadyExistsError:
+			ErrorAndExit(fmt.Sprintf("Domain %s already registered.", domainName), er)
+		case *yarpcerrors.Status:
+			ErrorAndExit(er.Message(), er)
+		default:
+			ErrorAndExit("Operation RegisterDomain failed.", er)
 		}
+		return
 	} else {
 		fmt.Printf("Domain %s successfully registered.\n", domainName)
 	}
@@ -189,10 +194,13 @@ func (d *domainCLIImpl) UpdateDomain(c *cli.Context) {
 			Name: domainName,
 		}, c.IsSet(FlagGRPC))
 		if err != nil {
-			if _, ok := err.(*shared.EntityNotExistsError); !ok {
+			switch er := err.(type) {
+			case *shared.EntityNotExistsError:
+				ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domainName), er)
+			case *yarpcerrors.Status:
+				ErrorAndExit(er.Message(), er)
+			default:
 				ErrorAndExit("Operation UpdateDomain failed.", err)
-			} else {
-				ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domainName), err)
 			}
 			return
 		}
@@ -291,11 +299,15 @@ func (d *domainCLIImpl) UpdateDomain(c *cli.Context) {
 	updateRequest.SecurityToken = securityToken
 	err := d.updateDomain(ctx, updateRequest, c.IsSet(FlagGRPC))
 	if err != nil {
-		if _, ok := err.(*shared.EntityNotExistsError); !ok {
+		switch er := err.(type) {
+		case *shared.EntityNotExistsError:
+			ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domainName), er)
+		case *yarpcerrors.Status:
+			ErrorAndExit(er.Message(), er)
+		default:
 			ErrorAndExit("Operation UpdateDomain failed.", err)
-		} else {
-			ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domainName), err)
 		}
+		return
 	} else {
 		fmt.Printf("Domain %s successfully updated.\n", domainName)
 	}
@@ -316,13 +328,18 @@ func (d *domainCLIImpl) DescribeDomain(c *cli.Context) {
 		Uuid: domainID,
 	}, c.IsSet(FlagGRPC))
 	if err != nil {
-		if _, ok := err.(*shared.EntityNotExistsError); !ok {
+		switch er := err.(type) {
+		case *shared.EntityNotExistsError:
+			ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domainName), er)
+		case *yarpcerrors.Status:
+			ErrorAndExit(er.Message(), er)
+		default:
 			ErrorAndExit("Operation DescribeDomain failed.", err)
 		}
-		ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domainName), err)
+		return
 	}
 
-	var formatStr = "Name: %v\nUUID: %v\nDescription: %v\nOwnerEmail: %v\nDomainData: %v\nStatus: %v\nRetentionInDays: %v\n" +
+	var formatStr = "Name: %v\nUUID: %v\nDescription: %v\nOwnerEmail: %v\nDomainData: %#v\nStatus: %v\nRetentionInDays: %v\n" +
 		"EmitMetrics: %v\nActiveClusterName: %v\nClusters: %v\nHistoryArchivalStatus: %v\n"
 	descValues := []interface{}{
 		resp.DomainInfo.GetName(),
