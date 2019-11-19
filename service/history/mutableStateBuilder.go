@@ -2381,7 +2381,9 @@ func (e *mutableStateBuilder) ReplicateActivityTaskCancelRequestedEvent(
 	activityID := attributes.GetActivityId()
 	ai, ok := e.GetActivityByActivityID(activityID)
 	if !ok {
-		return ErrMissingActivityInfo
+		// On active side, if the ActivityTaskCancelRequested is invalid, it will created a RequestCancelActivityTaskFailed
+		// Passive will rely on active side logic
+		return nil
 	}
 
 	ai.Version = event.GetVersion()
