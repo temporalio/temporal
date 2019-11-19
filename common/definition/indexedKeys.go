@@ -24,17 +24,18 @@ import "github.com/uber/cadence/.gen/go/shared"
 
 // valid indexed fields on ES
 const (
-	DomainID      = "DomainID"
-	WorkflowID    = "WorkflowID"
-	RunID         = "RunID"
-	WorkflowType  = "WorkflowType"
-	StartTime     = "StartTime"
-	ExecutionTime = "ExecutionTime"
-	CloseTime     = "CloseTime"
-	CloseStatus   = "CloseStatus"
-	HistoryLength = "HistoryLength"
-	Encoding      = "Encoding"
-	KafkaKey      = "KafkaKey"
+	DomainID        = "DomainID"
+	WorkflowID      = "WorkflowID"
+	RunID           = "RunID"
+	WorkflowType    = "WorkflowType"
+	StartTime       = "StartTime"
+	ExecutionTime   = "ExecutionTime"
+	CloseTime       = "CloseTime"
+	CloseStatus     = "CloseStatus"
+	HistoryLength   = "HistoryLength"
+	Encoding        = "Encoding"
+	KafkaKey        = "KafkaKey"
+	BinaryChecksums = "BinaryChecksums"
 
 	CustomStringField    = "CustomStringField"
 	CustomKeywordField   = "CustomKeywordField"
@@ -65,6 +66,7 @@ func createDefaultIndexedKeys() map[string]interface{} {
 		CustomDoubleField:    shared.IndexedValueTypeDouble,
 		CustomDatetimeField:  shared.IndexedValueTypeDatetime,
 		CadenceChangeVersion: shared.IndexedValueTypeKeyword,
+		BinaryChecksums:      shared.IndexedValueTypeKeyword,
 	}
 	for k, v := range systemIndexedKeys {
 		defaultIndexedKeys[k] = v

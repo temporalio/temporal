@@ -235,8 +235,7 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskCompletedEven
 	event *workflow.HistoryEvent,
 ) error {
 	m.beforeAddDecisionTaskCompletedEvent()
-	m.afterAddDecisionTaskCompletedEvent(event, math.MaxInt32)
-	return nil
+	return m.afterAddDecisionTaskCompletedEvent(event, math.MaxInt32)
 }
 
 func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskFailedEvent() error {
@@ -477,7 +476,10 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskCompletedEvent(
 	// Now write the completed event
 	event := m.msb.hBuilder.AddDecisionTaskCompletedEvent(scheduleEventID, startedEventID, request)
 
-	m.afterAddDecisionTaskCompletedEvent(event, maxResetPoints)
+	err := m.afterAddDecisionTaskCompletedEvent(event, maxResetPoints)
+	if err != nil {
+		return nil, err
+	}
 	return event, nil
 }
 
@@ -721,7 +723,7 @@ func (m *mutableStateDecisionTaskManagerImpl) beforeAddDecisionTaskCompletedEven
 func (m *mutableStateDecisionTaskManagerImpl) afterAddDecisionTaskCompletedEvent(
 	event *workflow.HistoryEvent,
 	maxResetPoints int,
-) {
+) error {
 	m.msb.executionInfo.LastProcessedEvent = event.GetDecisionTaskCompletedEventAttributes().GetStartedEventId()
-	m.msb.addBinaryCheckSumIfNotExists(event, maxResetPoints)
+	return m.msb.addBinaryCheckSumIfNotExists(event, maxResetPoints)
 }

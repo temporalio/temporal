@@ -226,7 +226,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 	listRequest := &workflow.ListWorkflowExecutionsRequest{
 		Domain:   common.StringPtr(s.domainName),
 		PageSize: common.Int32Ptr(int32(2)),
-		Query:    common.StringPtr(fmt.Sprintf(`WorkflowType = '%s' and CloseTime = missing`, wt)),
+		Query:    common.StringPtr(fmt.Sprintf(`WorkflowType = '%s' and CloseTime = missing and BinaryChecksums = 'binary-v1'`, wt)),
 	}
 	// verify upsert data is on ES
 	s.testListResultForUpsertSearchAttributes(listRequest)
@@ -970,17 +970,25 @@ func (s *elasticsearchIntegrationSuite) testListResultForUpsertSearchAttributes(
 		if len(resp.GetExecutions()) == 1 {
 			execution := resp.GetExecutions()[0]
 			retrievedSearchAttr := execution.SearchAttributes
-			if retrievedSearchAttr != nil && len(retrievedSearchAttr.GetIndexedFields()) == 2 {
+			if retrievedSearchAttr != nil && len(retrievedSearchAttr.GetIndexedFields()) == 3 {
 				fields := retrievedSearchAttr.GetIndexedFields()
 				searchValBytes := fields[s.testSearchAttributeKey]
 				var searchVal string
-				json.Unmarshal(searchValBytes, &searchVal)
+				err := json.Unmarshal(searchValBytes, &searchVal)
+				s.Nil(err)
 				s.Equal("another string", searchVal)
 
 				searchValBytes2 := fields[definition.CustomIntField]
 				var searchVal2 int
-				json.Unmarshal(searchValBytes2, &searchVal2)
+				err = json.Unmarshal(searchValBytes2, &searchVal2)
+				s.Nil(err)
 				s.Equal(123, searchVal2)
+
+				binaryChecksumsBytes := fields[definition.BinaryChecksums]
+				var binaryChecksums []string
+				err = json.Unmarshal(binaryChecksumsBytes, &binaryChecksums)
+				s.Nil(err)
+				s.Equal([]string{"binary-v1", "binary-v2"}, binaryChecksums)
 
 				verified = true
 				break
@@ -994,10 +1002,12 @@ func (s *elasticsearchIntegrationSuite) testListResultForUpsertSearchAttributes(
 func getUpsertSearchAttributes() *workflow.SearchAttributes {
 	attrValBytes1, _ := json.Marshal("another string")
 	attrValBytes2, _ := json.Marshal(123)
+	binaryChecksums, _ := json.Marshal([]string{"binary-v1", "binary-v2"})
 	upsertSearchAttr := &workflow.SearchAttributes{
 		IndexedFields: map[string][]byte{
 			definition.CustomStringField: attrValBytes1,
 			definition.CustomIntField:    attrValBytes2,
+			definition.BinaryChecksums:   binaryChecksums,
 		},
 	}
 	return upsertSearchAttr

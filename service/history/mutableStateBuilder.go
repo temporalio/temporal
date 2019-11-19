@@ -21,6 +21,7 @@
 package history
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -33,6 +34,7 @@ import (
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/errors"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
@@ -1880,10 +1882,10 @@ func (e *mutableStateBuilder) CreateTransientDecisionEvents(
 func (e *mutableStateBuilder) addBinaryCheckSumIfNotExists(
 	event *workflow.HistoryEvent,
 	maxResetPoints int,
-) {
+) error {
 	binChecksum := event.GetDecisionTaskCompletedEventAttributes().GetBinaryChecksum()
 	if len(binChecksum) == 0 {
-		return
+		return nil
 	}
 	exeInfo := e.executionInfo
 	var currResetPoints []*workflow.ResetPointInfo
@@ -1893,17 +1895,24 @@ func (e *mutableStateBuilder) addBinaryCheckSumIfNotExists(
 		currResetPoints = make([]*workflow.ResetPointInfo, 0, 1)
 	}
 
+	// List of all recent binary checksums associated with the workflow.
+	var recentBinaryChecksums []string
+
 	for _, rp := range currResetPoints {
+		recentBinaryChecksums = append(recentBinaryChecksums, rp.GetBinaryChecksum())
 		if rp.GetBinaryChecksum() == binChecksum {
 			// this checksum already exists
-			return
+			return nil
 		}
 	}
 
 	if len(currResetPoints) == maxResetPoints {
-		// if exceeding the max limit, do rotation by taking the oldest one out
+		// If exceeding the max limit, do rotation by taking the oldest one out.
 		currResetPoints = currResetPoints[1:]
+		recentBinaryChecksums = recentBinaryChecksums[1:]
 	}
+	// Adding current version of the binary checksum.
+	recentBinaryChecksums = append(recentBinaryChecksums, binChecksum)
 
 	resettable := true
 	err := e.CheckResettable()
@@ -1921,6 +1930,18 @@ func (e *mutableStateBuilder) addBinaryCheckSumIfNotExists(
 	exeInfo.AutoResetPoints = &workflow.ResetPoints{
 		Points: currResetPoints,
 	}
+	bytes, err := json.Marshal(recentBinaryChecksums)
+	if err != nil {
+		return err
+	}
+	if exeInfo.SearchAttributes == nil {
+		exeInfo.SearchAttributes = make(map[string][]byte)
+	}
+	exeInfo.SearchAttributes[definition.BinaryChecksums] = bytes
+	if e.shard.GetConfig().AdvancedVisibilityWritingMode() != common.AdvancedVisibilityWritingModeOff {
+		return e.taskGenerator.generateWorkflowSearchAttrTasks(e.unixNanoToTime(event.GetTimestamp()))
+	}
+	return nil
 }
 
 // TODO: we will release the restriction when reset API allow those pending
