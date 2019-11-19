@@ -105,6 +105,10 @@ var (
 			Name:  FlagVisibilityArchivalURIWithAlias,
 			Usage: "Optionally specify visibility archival URI (cannot be changed after first time archival is enabled)",
 		},
+		cli.BoolFlag{
+			Name:  FlagGRPC,
+			Usage: "Use gRPC to make an RPC call",
+		},
 	}
 
 	updateDomainFlags = []cli.Flag{
@@ -171,12 +175,20 @@ var (
 			Name:  FlagReason,
 			Usage: "Reason for the operation",
 		},
+		cli.BoolFlag{
+			Name:  FlagGRPC,
+			Usage: "Use gRPC to make an RPC call",
+		},
 	}
 
 	describeDomainFlags = []cli.Flag{
 		cli.StringFlag{
 			Name:  FlagDomainID,
 			Usage: "Domain UUID (required if not specify domainName)",
+		},
+		cli.BoolFlag{
+			Name:  FlagGRPC,
+			Usage: "Use gRPC to make an RPC call",
 		},
 	}
 
