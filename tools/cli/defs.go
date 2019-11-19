@@ -31,7 +31,7 @@ import (
 
 const (
 	localHostPort     = "127.0.0.1:7933"
-	localHostPortGRCP = "127.0.0.1:7233"
+	localHostPortGRPC = "127.0.0.1:7233"
 
 	maxOutputStringLength = 200 // max length for output string
 	maxWorkflowTypeLength = 32  // max item length for output workflow type in table

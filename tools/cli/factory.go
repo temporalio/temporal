@@ -99,7 +99,7 @@ func (b *clientFactory) ensureDispatcher(c *cli.Context) {
 	}
 
 	if c.IsSet(FlagGRPC) {
-		b.hostPort = localHostPortGRCP
+		b.hostPort = localHostPortGRPC
 	} else {
 		b.hostPort = localHostPort
 	}
