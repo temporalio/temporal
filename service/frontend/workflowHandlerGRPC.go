@@ -118,14 +118,26 @@ func (wh *WorkflowHandlerGRPC) DeprecateDomain(ctx context.Context, deprecateDom
 // 'WorkflowExecutionStarted' event in history and also schedule the first DecisionTask for the worker to make the
 // first decision for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already
 // exists with same workflowId.
-func (wh *WorkflowHandlerGRPC) StartWorkflowExecution(context.Context, *workflowservice.StartWorkflowExecutionRequest) (*workflowservice.StartWorkflowExecutionResponse, error) {
-	panic("implement me")
+func (wh *WorkflowHandlerGRPC) StartWorkflowExecution(ctx context.Context, startRequest *workflowservice.StartWorkflowExecutionRequest) (_ *workflowservice.StartWorkflowExecutionResponse, retError error) {
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	startResponse, err := wh.workflowHandlerThrift.StartWorkflowExecution(ctx, adapter.ToThriftStartWorkflowExecutionRequest(startRequest))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return adapter.ToProtoStartWorkflowExecutionResponse(startResponse), nil
 }
 
 // GetWorkflowExecutionHistory returns the history of specified workflow execution.  It fails with 'EntityNotExistError' if speficied workflow
 // execution in unknown to the service.
-func (wh *WorkflowHandlerGRPC) GetWorkflowExecutionHistory(context.Context, *workflowservice.GetWorkflowExecutionHistoryRequest) (*workflowservice.GetWorkflowExecutionHistoryResponse, error) {
-	panic("implement me")
+func (wh *WorkflowHandlerGRPC) GetWorkflowExecutionHistory(ctx context.Context, getRequest *workflowservice.GetWorkflowExecutionHistoryRequest) (_ *workflowservice.GetWorkflowExecutionHistoryResponse, retError error) {
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	getResponse, err := wh.workflowHandlerThrift.GetWorkflowExecutionHistory(ctx, adapter.ToThriftGetWorkflowExecutionHistoryRequest(getRequest))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return adapter.ToProtoGetWorkflowExecutionHistoryResponse(getResponse), nil
 }
 
 // PollForDecisionTask is called by application worker to process DecisionTask from a specific taskList.  A

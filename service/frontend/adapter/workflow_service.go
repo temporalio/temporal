@@ -139,3 +139,64 @@ func ToThriftDeprecateDomainRequest(in *workflowservice.DeprecateDomainRequest) 
 		SecurityToken: &in.SecurityToken,
 	}
 }
+
+// ToThriftStartWorkflowExecutionRequest ...
+func ToThriftStartWorkflowExecutionRequest(in *workflowservice.StartWorkflowExecutionRequest) *shared.StartWorkflowExecutionRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.StartWorkflowExecutionRequest{
+		Domain:                              &in.Domain,
+		WorkflowId:                          &in.WorkflowId,
+		WorkflowType:                        toThriftWorkflowType(in.WorkflowType),
+		TaskList:                            toThriftTaskList(in.TaskList),
+		Input:                               in.Input,
+		ExecutionStartToCloseTimeoutSeconds: &in.ExecutionStartToCloseTimeoutSeconds,
+		TaskStartToCloseTimeoutSeconds:      &in.TaskStartToCloseTimeoutSeconds,
+		Identity:                            &in.Identity,
+		RequestId:                           &in.RequestId,
+		WorkflowIdReusePolicy:               toThriftTWorkflowIdReusePolicy(in.WorkflowIdReusePolicy),
+		RetryPolicy:                         toThriftRetryPolicy(in.RetryPolicy),
+		CronSchedule:                        &in.CronSchedule,
+		Memo:                                toThriftMemo(in.Memo),
+		SearchAttributes:                    toThriftSearchAttributes(in.SearchAttributes),
+		Header:                              toThriftHeader(in.Header),
+	}
+}
+
+// ToProtoStartWorkflowExecutionResponse ...
+func ToProtoStartWorkflowExecutionResponse(in *shared.StartWorkflowExecutionResponse) *workflowservice.StartWorkflowExecutionResponse {
+	if in == nil {
+		return nil
+	}
+	return &workflowservice.StartWorkflowExecutionResponse{
+		RunId: in.GetRunId(),
+	}
+}
+
+// ToThriftGetWorkflowExecutionHistoryRequest ...
+func ToThriftGetWorkflowExecutionHistoryRequest(in *workflowservice.GetWorkflowExecutionHistoryRequest) *shared.GetWorkflowExecutionHistoryRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.GetWorkflowExecutionHistoryRequest{
+		Domain:                 &in.Domain,
+		Execution:              toThriftWorkflowExecution(in.Execution),
+		MaximumPageSize:        &in.MaximumPageSize,
+		NextPageToken:          in.NextPageToken,
+		WaitForNewEvent:        &in.WaitForNewEvent,
+		HistoryEventFilterType: toThriftHistoryEventFilterType(in.HistoryEventFilterType),
+	}
+}
+
+// ToProtoGetWorkflowExecutionHistoryResponse ...
+func ToProtoGetWorkflowExecutionHistoryResponse(in *shared.GetWorkflowExecutionHistoryResponse) *workflowservice.GetWorkflowExecutionHistoryResponse {
+	if in == nil {
+		return nil
+	}
+	return &workflowservice.GetWorkflowExecutionHistoryResponse{
+		History:       toProtoHistory(in.History),
+		NextPageToken: in.NextPageToken,
+		Archived:      in.GetArchived(),
+	}
+}

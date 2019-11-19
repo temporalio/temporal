@@ -67,3 +67,42 @@ func toProtoDomainStatus(in shared.DomainStatus) enums.DomainStatus {
 
 	return enums.DomainStatusRegistered
 }
+func toThriftTaskListKind(in enums.TaskListKind) *shared.TaskListKind {
+	switch in {
+	case enums.TaskListKindNormal:
+		ret := shared.TaskListKindNormal
+		return &ret
+	case enums.TaskListKindSticky:
+		ret := shared.TaskListKindNormal
+		return &ret
+	}
+
+	return nil
+}
+func toThriftTWorkflowIdReusePolicy(in enums.WorkflowIdReusePolicy) *shared.WorkflowIdReusePolicy {
+	switch in {
+	case enums.AllowDuplicateFailedOnly:
+		ret := shared.WorkflowIdReusePolicyAllowDuplicateFailedOnly
+		return &ret
+	case enums.AllowDuplicate:
+		ret := shared.WorkflowIdReusePolicyAllowDuplicate
+		return &ret
+	case enums.RejectDuplicate:
+		ret := shared.WorkflowIdReusePolicyRejectDuplicate
+		return &ret
+	}
+
+	return nil
+}
+func toThriftHistoryEventFilterType(in enums.HistoryEventFilterType) *shared.HistoryEventFilterType {
+	switch in {
+	case enums.HistoryEventFilterTypeAllEvent:
+		ret := shared.HistoryEventFilterTypeAllEvent
+		return &ret
+	case enums.HistoryEventFilterTypeCloseEvent:
+		ret := shared.HistoryEventFilterTypeCloseEvent
+		return &ret
+	}
+
+	return nil
+}

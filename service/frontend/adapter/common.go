@@ -22,6 +22,7 @@ package adapter
 
 import (
 	"github.com/temporalio/temporal-proto/common"
+	"github.com/temporalio/temporal-proto/enums"
 	"github.com/temporalio/temporal/.gen/go/shared"
 )
 
@@ -182,5 +183,139 @@ func toThriftBadBinaryInfo(in *common.BadBinaryInfo) *shared.BadBinaryInfo {
 		Reason:          &in.Reason,
 		Operator:        &in.Operator,
 		CreatedTimeNano: &in.CreatedTimeNano,
+	}
+}
+
+func toThriftWorkflowType(in *common.WorkflowType) *shared.WorkflowType {
+	if in == nil {
+		return nil
+	}
+	return &shared.WorkflowType{
+		Name: &in.Name,
+	}
+}
+
+func toThriftTaskList(in *common.TaskList) *shared.TaskList {
+	if in == nil {
+		return nil
+	}
+	return &shared.TaskList{
+		Name: &in.Name,
+		Kind: toThriftTaskListKind(in.Kind),
+	}
+}
+func toThriftRetryPolicy(in *common.RetryPolicy) *shared.RetryPolicy {
+	if in == nil {
+		return nil
+	}
+	return &shared.RetryPolicy{
+		InitialIntervalInSeconds:    &in.InitialIntervalInSeconds,
+		BackoffCoefficient:          &in.BackoffCoefficient,
+		MaximumIntervalInSeconds:    &in.MaximumIntervalInSeconds,
+		MaximumAttempts:             &in.MaximumAttempts,
+		NonRetriableErrorReasons:    in.NonRetriableErrorReasons,
+		ExpirationIntervalInSeconds: &in.ExpirationIntervalInSeconds,
+	}
+}
+func toThriftMemo(in *common.Memo) *shared.Memo {
+	if in == nil {
+		return nil
+	}
+	return &shared.Memo{
+		Fields: in.Fields,
+	}
+}
+func toThriftHeader(in *common.Header) *shared.Header {
+	if in == nil {
+		return nil
+	}
+	return &shared.Header{
+		Fields: in.Fields,
+	}
+}
+func toThriftSearchAttributes(in *common.SearchAttributes) *shared.SearchAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.SearchAttributes{
+		IndexedFields: in.IndexedFields,
+	}
+}
+
+func toThriftWorkflowExecution(in *common.WorkflowExecution) *shared.WorkflowExecution {
+	if in == nil {
+		return nil
+	}
+	return &shared.WorkflowExecution{
+		WorkflowId: &in.WorkflowId,
+		RunId:      &in.RunId,
+	}
+}
+
+func toProtoHistory(in *shared.History) *common.History {
+	if in == nil {
+		return nil
+	}
+	var events []*common.HistoryEvent
+	for _, event := range in.Events {
+		events = append(events, toProtoHistoryEvent(event))
+	}
+	return &common.History{
+		Events: events,
+	}
+}
+
+func toProtoHistoryEvent(in *shared.HistoryEvent) *common.HistoryEvent {
+	if in == nil {
+		return nil
+	}
+	return &common.HistoryEvent{
+		EventId:                                 in.GetEventId(),
+		Timestamp:                               in.GetTimestamp(),
+		EventType:                               enums.EventType(in.GetEventType()),
+		Version:                                 in.GetVersion(),
+		TaskId:                                  in.GetTaskId(),
+		WorkflowExecutionStartedEventAttributes: nil,
+		WorkflowExecutionCompletedEventAttributes:                      nil,
+		WorkflowExecutionFailedEventAttributes:                         nil,
+		WorkflowExecutionTimedOutEventAttributes:                       nil,
+		DecisionTaskScheduledEventAttributes:                           nil,
+		DecisionTaskStartedEventAttributes:                             nil,
+		DecisionTaskCompletedEventAttributes:                           nil,
+		DecisionTaskTimedOutEventAttributes:                            nil,
+		DecisionTaskFailedEventAttributes:                              nil,
+		ActivityTaskScheduledEventAttributes:                           nil,
+		ActivityTaskStartedEventAttributes:                             nil,
+		ActivityTaskCompletedEventAttributes:                           nil,
+		ActivityTaskFailedEventAttributes:                              nil,
+		ActivityTaskTimedOutEventAttributes:                            nil,
+		TimerStartedEventAttributes:                                    nil,
+		TimerFiredEventAttributes:                                      nil,
+		ActivityTaskCancelRequestedEventAttributes:                     nil,
+		RequestCancelActivityTaskFailedEventAttributes:                 nil,
+		ActivityTaskCanceledEventAttributes:                            nil,
+		TimerCanceledEventAttributes:                                   nil,
+		CancelTimerFailedEventAttributes:                               nil,
+		MarkerRecordedEventAttributes:                                  nil,
+		WorkflowExecutionSignaledEventAttributes:                       nil,
+		WorkflowExecutionTerminatedEventAttributes:                     nil,
+		WorkflowExecutionCancelRequestedEventAttributes:                nil,
+		WorkflowExecutionCanceledEventAttributes:                       nil,
+		RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: nil,
+		RequestCancelExternalWorkflowExecutionFailedEventAttributes:    nil,
+		ExternalWorkflowExecutionCancelRequestedEventAttributes:        nil,
+		WorkflowExecutionContinuedAsNewEventAttributes:                 nil,
+		StartChildWorkflowExecutionInitiatedEventAttributes:            nil,
+		StartChildWorkflowExecutionFailedEventAttributes:               nil,
+		ChildWorkflowExecutionStartedEventAttributes:                   nil,
+		ChildWorkflowExecutionCompletedEventAttributes:                 nil,
+		ChildWorkflowExecutionFailedEventAttributes:                    nil,
+		ChildWorkflowExecutionCanceledEventAttributes:                  nil,
+		ChildWorkflowExecutionTimedOutEventAttributes:                  nil,
+		ChildWorkflowExecutionTerminatedEventAttributes:                nil,
+		SignalExternalWorkflowExecutionInitiatedEventAttributes:        nil,
+		SignalExternalWorkflowExecutionFailedEventAttributes:           nil,
+		ExternalWorkflowExecutionSignaledEventAttributes:               nil,
+		UpsertWorkflowSearchAttributesEventAttributes:                  nil,
 	}
 }
