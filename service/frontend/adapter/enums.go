@@ -26,83 +26,30 @@ import (
 )
 
 func toThriftArchivalStatus(in enums.ArchivalStatus) *shared.ArchivalStatus {
-	switch in {
-	case enums.ArchivalStatusDefault:
+	if in == enums.ArchivalStatusDefault {
 		return nil
-	case enums.ArchivalStatusDisabled:
-		ret := shared.ArchivalStatusDisabled
-		return &ret
-	case enums.ArchivalStatusEnabled:
-		ret := shared.ArchivalStatusEnabled
-		return &ret
 	}
 
-	return nil
+	ret := shared.ArchivalStatus(in)
+	return &ret
 }
 
 func toProtoArchivalStatus(in *shared.ArchivalStatus) enums.ArchivalStatus {
 	if in == nil {
 		return enums.ArchivalStatusDefault
 	}
-
-	switch *in {
-	case shared.ArchivalStatusDisabled:
-		return enums.ArchivalStatusDisabled
-	case shared.ArchivalStatusEnabled:
-		return enums.ArchivalStatusEnabled
-	}
-
-	return enums.ArchivalStatusDefault
+	return enums.ArchivalStatus(*in)
 }
 
-func toProtoDomainStatus(in shared.DomainStatus) enums.DomainStatus {
-	switch in {
-	case shared.DomainStatusRegistered:
-		return enums.DomainStatusRegistered
-	case shared.DomainStatusDeprecated:
-		return enums.DomainStatusDeprecated
-	case shared.DomainStatusDeleted:
-		return enums.DomainStatusDeleted
-	}
-
-	return enums.DomainStatusRegistered
-}
 func toThriftTaskListKind(in enums.TaskListKind) *shared.TaskListKind {
-	switch in {
-	case enums.TaskListKindNormal:
-		ret := shared.TaskListKindNormal
-		return &ret
-	case enums.TaskListKindSticky:
-		ret := shared.TaskListKindNormal
-		return &ret
-	}
-
-	return nil
+	ret := shared.TaskListKind(in)
+	return &ret
 }
 func toThriftTWorkflowIdReusePolicy(in enums.WorkflowIdReusePolicy) *shared.WorkflowIdReusePolicy {
-	switch in {
-	case enums.AllowDuplicateFailedOnly:
-		ret := shared.WorkflowIdReusePolicyAllowDuplicateFailedOnly
-		return &ret
-	case enums.AllowDuplicate:
-		ret := shared.WorkflowIdReusePolicyAllowDuplicate
-		return &ret
-	case enums.RejectDuplicate:
-		ret := shared.WorkflowIdReusePolicyRejectDuplicate
-		return &ret
-	}
-
-	return nil
+	ret := shared.WorkflowIdReusePolicy(in)
+	return &ret
 }
 func toThriftHistoryEventFilterType(in enums.HistoryEventFilterType) *shared.HistoryEventFilterType {
-	switch in {
-	case enums.HistoryEventFilterTypeAllEvent:
-		ret := shared.HistoryEventFilterTypeAllEvent
-		return &ret
-	case enums.HistoryEventFilterTypeCloseEvent:
-		ret := shared.HistoryEventFilterTypeCloseEvent
-		return &ret
-	}
-
-	return nil
+	ret := shared.HistoryEventFilterType(in)
+	return &ret
 }

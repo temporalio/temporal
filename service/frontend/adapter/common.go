@@ -48,7 +48,7 @@ func toProtoDomainInfo(in *shared.DomainInfo) *common.DomainInfo {
 	}
 	return &common.DomainInfo{
 		Name:        in.GetName(),
-		Status:      toProtoDomainStatus(in.GetStatus()),
+		Status:      enums.DomainStatus(in.GetStatus()),
 		Description: in.GetDescription(),
 		OwnerEmail:  in.GetOwnerEmail(),
 		Data:        in.GetData(),
@@ -270,12 +270,13 @@ func toProtoHistoryEvent(in *shared.HistoryEvent) *common.HistoryEvent {
 		return nil
 	}
 	return &common.HistoryEvent{
-		EventId:                                 in.GetEventId(),
-		Timestamp:                               in.GetTimestamp(),
-		EventType:                               enums.EventType(in.GetEventType()),
-		Version:                                 in.GetVersion(),
-		TaskId:                                  in.GetTaskId(),
-		WorkflowExecutionStartedEventAttributes: nil,
+		EventId:   in.GetEventId(),
+		Timestamp: in.GetTimestamp(),
+		EventType: enums.EventType(in.GetEventType()),
+		Version:   in.GetVersion(),
+		TaskId:    in.GetTaskId(),
+
+		WorkflowExecutionStartedEventAttributes:                        nil,
 		WorkflowExecutionCompletedEventAttributes:                      nil,
 		WorkflowExecutionFailedEventAttributes:                         nil,
 		WorkflowExecutionTimedOutEventAttributes:                       nil,
