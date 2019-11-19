@@ -155,7 +155,7 @@ func ToThriftStartWorkflowExecutionRequest(in *workflowservice.StartWorkflowExec
 		TaskStartToCloseTimeoutSeconds:      &in.TaskStartToCloseTimeoutSeconds,
 		Identity:                            &in.Identity,
 		RequestId:                           &in.RequestId,
-		WorkflowIdReusePolicy:               toThriftTWorkflowIdReusePolicy(in.WorkflowIdReusePolicy),
+		WorkflowIdReusePolicy:               toThriftWorkflowIDReusePolicy(in.WorkflowIdReusePolicy),
 		RetryPolicy:                         toThriftRetryPolicy(in.RetryPolicy),
 		CronSchedule:                        &in.CronSchedule,
 		Memo:                                toThriftMemo(in.Memo),

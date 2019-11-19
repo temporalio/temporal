@@ -45,7 +45,7 @@ func toThriftTaskListKind(in enums.TaskListKind) *shared.TaskListKind {
 	ret := shared.TaskListKind(in)
 	return &ret
 }
-func toThriftTWorkflowIdReusePolicy(in enums.WorkflowIdReusePolicy) *shared.WorkflowIdReusePolicy {
+func toThriftWorkflowIDReusePolicy(in enums.WorkflowIdReusePolicy) *shared.WorkflowIdReusePolicy {
 	ret := shared.WorkflowIdReusePolicy(in)
 	return &ret
 }

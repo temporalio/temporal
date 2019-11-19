@@ -252,71 +252,109 @@ func toThriftWorkflowExecution(in *common.WorkflowExecution) *shared.WorkflowExe
 	}
 }
 
-func toProtoHistory(in *shared.History) *common.History {
+func toProtoWorkflowType(in *shared.WorkflowType) *common.WorkflowType {
 	if in == nil {
 		return nil
 	}
-	var events []*common.HistoryEvent
-	for _, event := range in.Events {
-		events = append(events, toProtoHistoryEvent(event))
-	}
-	return &common.History{
-		Events: events,
+	return &common.WorkflowType{
+		Name: in.GetName(),
 	}
 }
 
-func toProtoHistoryEvent(in *shared.HistoryEvent) *common.HistoryEvent {
+func toProtoWorkflowExecution(in *shared.WorkflowExecution) *common.WorkflowExecution {
 	if in == nil {
 		return nil
 	}
-	return &common.HistoryEvent{
-		EventId:   in.GetEventId(),
-		Timestamp: in.GetTimestamp(),
-		EventType: enums.EventType(in.GetEventType()),
-		Version:   in.GetVersion(),
-		TaskId:    in.GetTaskId(),
+	return &common.WorkflowExecution{
+		WorkflowId: in.GetWorkflowId(),
+		RunId:      in.GetRunId(),
+	}
+}
 
-		WorkflowExecutionStartedEventAttributes:                        nil,
-		WorkflowExecutionCompletedEventAttributes:                      nil,
-		WorkflowExecutionFailedEventAttributes:                         nil,
-		WorkflowExecutionTimedOutEventAttributes:                       nil,
-		DecisionTaskScheduledEventAttributes:                           nil,
-		DecisionTaskStartedEventAttributes:                             nil,
-		DecisionTaskCompletedEventAttributes:                           nil,
-		DecisionTaskTimedOutEventAttributes:                            nil,
-		DecisionTaskFailedEventAttributes:                              nil,
-		ActivityTaskScheduledEventAttributes:                           nil,
-		ActivityTaskStartedEventAttributes:                             nil,
-		ActivityTaskCompletedEventAttributes:                           nil,
-		ActivityTaskFailedEventAttributes:                              nil,
-		ActivityTaskTimedOutEventAttributes:                            nil,
-		TimerStartedEventAttributes:                                    nil,
-		TimerFiredEventAttributes:                                      nil,
-		ActivityTaskCancelRequestedEventAttributes:                     nil,
-		RequestCancelActivityTaskFailedEventAttributes:                 nil,
-		ActivityTaskCanceledEventAttributes:                            nil,
-		TimerCanceledEventAttributes:                                   nil,
-		CancelTimerFailedEventAttributes:                               nil,
-		MarkerRecordedEventAttributes:                                  nil,
-		WorkflowExecutionSignaledEventAttributes:                       nil,
-		WorkflowExecutionTerminatedEventAttributes:                     nil,
-		WorkflowExecutionCancelRequestedEventAttributes:                nil,
-		WorkflowExecutionCanceledEventAttributes:                       nil,
-		RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: nil,
-		RequestCancelExternalWorkflowExecutionFailedEventAttributes:    nil,
-		ExternalWorkflowExecutionCancelRequestedEventAttributes:        nil,
-		WorkflowExecutionContinuedAsNewEventAttributes:                 nil,
-		StartChildWorkflowExecutionInitiatedEventAttributes:            nil,
-		StartChildWorkflowExecutionFailedEventAttributes:               nil,
-		ChildWorkflowExecutionStartedEventAttributes:                   nil,
-		ChildWorkflowExecutionCompletedEventAttributes:                 nil,
-		ChildWorkflowExecutionFailedEventAttributes:                    nil,
-		ChildWorkflowExecutionCanceledEventAttributes:                  nil,
-		ChildWorkflowExecutionTimedOutEventAttributes:                  nil,
-		ChildWorkflowExecutionTerminatedEventAttributes:                nil,
-		SignalExternalWorkflowExecutionInitiatedEventAttributes:        nil,
-		SignalExternalWorkflowExecutionFailedEventAttributes:           nil,
-		ExternalWorkflowExecutionSignaledEventAttributes:               nil,
-		UpsertWorkflowSearchAttributesEventAttributes:                  nil,
+func toProtoTaskList(in *shared.TaskList) *common.TaskList {
+	if in == nil {
+		return nil
+	}
+	return &common.TaskList{
+		Name: in.GetName(),
+		Kind: enums.TaskListKind(in.GetKind()),
+	}
+}
+
+func toProtoRetryPolicy(in *shared.RetryPolicy) *common.RetryPolicy {
+	if in == nil {
+		return nil
+	}
+	return &common.RetryPolicy{
+		InitialIntervalInSeconds:    in.GetInitialIntervalInSeconds(),
+		BackoffCoefficient:          in.GetBackoffCoefficient(),
+		MaximumIntervalInSeconds:    in.GetMaximumIntervalInSeconds(),
+		MaximumAttempts:             in.GetMaximumAttempts(),
+		NonRetriableErrorReasons:    in.GetNonRetriableErrorReasons(),
+		ExpirationIntervalInSeconds: in.GetExpirationIntervalInSeconds(),
+	}
+}
+
+func toProtoMemo(in *shared.Memo) *common.Memo {
+	if in == nil {
+		return nil
+	}
+	return &common.Memo{
+		Fields: in.GetFields(),
+	}
+}
+
+func toProtoSearchAttributes(in *shared.SearchAttributes) *common.SearchAttributes {
+	if in == nil {
+		return nil
+	}
+	return &common.SearchAttributes{
+		IndexedFields: in.GetIndexedFields(),
+	}
+}
+
+func toProtoResetPoints(in *shared.ResetPoints) *common.ResetPoints {
+	if in == nil {
+		return nil
+	}
+	var points []*common.ResetPointInfo
+	for _, point := range in.GetPoints() {
+		points = append(points, toProtoResetPointInfo(point))
+	}
+
+	return &common.ResetPoints{
+		Points: points,
+	}
+}
+
+func toProtoHeader(in *shared.Header) *common.Header {
+	if in == nil {
+		return nil
+	}
+	return &common.Header{
+		Fields: in.GetFields(),
+	}
+}
+
+func toProtoActivityType(in *shared.ActivityType) *common.ActivityType {
+	if in == nil {
+		return nil
+	}
+	return &common.ActivityType{
+		Name: in.GetName(),
+	}
+}
+
+func toProtoResetPointInfo(in *shared.ResetPointInfo) *common.ResetPointInfo {
+	if in == nil {
+		return nil
+	}
+	return &common.ResetPointInfo{
+		BinaryChecksum:           in.GetBinaryChecksum(),
+		RunId:                    in.GetRunId(),
+		FirstDecisionCompletedId: in.GetFirstDecisionCompletedId(),
+		CreatedTimeNano:          in.GetCreatedTimeNano(),
+		ExpiringTimeNano:         in.GetExpiringTimeNano(),
+		Resettable:               in.GetResettable(),
 	}
 }
