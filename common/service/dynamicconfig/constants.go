@@ -201,6 +201,9 @@ var keys = map[Key]string{
 	ReplicationTaskProcessorErrorRetryWait:                "history.ReplicationTaskProcessorErrorRetryWait",
 	ReplicationTaskProcessorErrorRetryMaxAttempts:         "history.ReplicationTaskProcessorErrorRetryMaxAttempts",
 	ReplicationTaskProcessorNoTaskInitialWait:             "history.ReplicationTaskProcessorNoTaskInitialWait",
+	EnableConsistentQuery:                                 "history.EnableConsistentQuery",
+	EnableConsistentQueryByDomain:                         "history.EnableConsistentQueryByDomain",
+	MaxBufferedQueryCount:                                 "history.MaxBufferedQueryCount",
 
 	WorkerPersistenceMaxQPS:                         "worker.persistenceMaxQPS",
 	WorkerReplicatorMetaTaskConcurrency:             "worker.replicatorMetaTaskConcurrency",
@@ -599,6 +602,13 @@ const (
 	ReplicationTaskProcessorErrorRetryMaxAttempts
 	// ReplicationTaskProcessorNoTaskInitialWait is the wait time when not ask is returned
 	ReplicationTaskProcessorNoTaskInitialWait
+
+	// EnableConsistentQuery indicates if consistent query is enabled for the cluster
+	EnableConsistentQuery
+	// EnableConsistentQueryByDomain indicates if consistent query is enabled for a domain
+	EnableConsistentQueryByDomain
+	// MaxBufferedQueryCount indicates the maximum number of queries which can be buffered at a given time for a single workflow
+	MaxBufferedQueryCount
 
 	// lastKeyForTest must be the last one in this const group for testing purpose
 	lastKeyForTest

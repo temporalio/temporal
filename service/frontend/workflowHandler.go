@@ -1568,6 +1568,27 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 	)
 	defer sw.Stop()
 
+	sizeLimitError := wh.config.BlobSizeLimitError(domainEntry.GetInfo().Name)
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(domainEntry.GetInfo().Name)
+
+	if err := common.CheckEventBlobSizeLimit(
+		len(completeRequest.GetQueryResult()),
+		sizeLimitWarn,
+		sizeLimitError,
+		queryTaskToken.DomainID,
+		"",
+		"",
+		scope,
+		wh.GetThrottledLogger(),
+	); err != nil {
+		completeRequest = &gen.RespondQueryTaskCompletedRequest{
+			TaskToken:     completeRequest.TaskToken,
+			CompletedType: common.QueryTaskCompletedTypePtr(gen.QueryTaskCompletedTypeFailed),
+			QueryResult:   nil,
+			ErrorMessage:  common.StringPtr(err.Error()),
+		}
+	}
+
 	call := yarpc.CallFromContext(ctx)
 
 	completeRequest.WorkerVersionInfo = &gen.WorkerVersionInfo{
@@ -2880,6 +2901,21 @@ func (wh *WorkflowHandler) QueryWorkflow(
 
 	domainID, err := wh.domainCache.GetDomainID(queryRequest.GetDomain())
 	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	sizeLimitError := wh.config.BlobSizeLimitError(queryRequest.GetDomain())
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(queryRequest.GetDomain())
+
+	if err := common.CheckEventBlobSizeLimit(
+		len(queryRequest.GetQuery().GetQueryArgs()),
+		sizeLimitWarn,
+		sizeLimitError,
+		domainID,
+		queryRequest.GetExecution().GetWorkflowId(),
+		queryRequest.GetExecution().GetRunId(),
+		scope,
+		wh.GetThrottledLogger()); err != nil {
 		return nil, wh.error(err, scope)
 	}
 

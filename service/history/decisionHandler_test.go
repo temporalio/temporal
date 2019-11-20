@@ -23,6 +23,12 @@ package history
 import (
 	"testing"
 
+	"github.com/uber-go/tally"
+
+	"github.com/uber/cadence/common/log/loggerimpl"
+	"github.com/uber/cadence/common/metrics"
+	"github.com/uber/cadence/common/persistence"
+
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -38,6 +44,10 @@ type (
 		suite.Suite
 
 		controller *gomock.Controller
+
+		decisionHandler  *decisionHandlerImpl
+		queryRegistry    queryRegistry
+		mockMutableState *MockmutableState
 	}
 )
 
@@ -48,6 +58,21 @@ func TestDecisionHandlerSuite(t *testing.T) {
 func (s *DecisionHandlerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
+
+	s.decisionHandler = &decisionHandlerImpl{
+		versionChecker: client.NewVersionChecker(),
+		metricsClient:  metrics.NewClient(tally.NoopScope, metrics.History),
+		config:         NewDynamicConfigForTest(),
+		logger:         loggerimpl.NewNopLogger(),
+	}
+	s.queryRegistry = s.constructQueryRegistry(10)
+	s.mockMutableState = NewMockmutableState(s.controller)
+	s.mockMutableState.EXPECT().GetQueryRegistry().Return(s.queryRegistry)
+	workflowInfo := &persistence.WorkflowExecutionInfo{
+		WorkflowID: testWorkflowID,
+		RunID:      testRunID,
+	}
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(workflowInfo).AnyTimes()
 }
 
 func (s *DecisionHandlerSuite) TearDownTest() {
@@ -55,52 +80,43 @@ func (s *DecisionHandlerSuite) TearDownTest() {
 }
 
 func (s *DecisionHandlerSuite) TestHandleBufferedQueries_ClientNotSupports() {
-	decisionHandler := &decisionHandlerImpl{
-		versionChecker: client.NewVersionChecker(),
-	}
-	queryRegistry := s.constructQueryRegistry(10)
-	mutableStateMock := NewMockmutableState(s.controller)
-	mutableStateMock.EXPECT().GetQueryRegistry().Return(queryRegistry)
-
-	s.assertQueryCounts(queryRegistry, 10, 0, 0, 0)
-	decisionHandler.handleBufferedQueries(mutableStateMock, client.GoSDK, "0.0.0", nil, false)
-	s.assertQueryCounts(queryRegistry, 0, 0, 0, 10)
+	s.assertQueryCounts(s.queryRegistry, 10, 0, 0, 0)
+	s.decisionHandler.handleBufferedQueries(s.mockMutableState, client.GoSDK, "0.0.0", nil, false, testGlobalDomainEntry)
+	s.assertQueryCounts(s.queryRegistry, 0, 0, 0, 10)
 }
 
 func (s *DecisionHandlerSuite) TestHandleBufferedQueries_NewDecisionTask() {
-	decisionHandler := &decisionHandlerImpl{
-		versionChecker: client.NewVersionChecker(),
-	}
-	queryRegistry := s.constructQueryRegistry(10)
-	mutableStateMock := NewMockmutableState(s.controller)
-	mutableStateMock.EXPECT().GetQueryRegistry().Return(queryRegistry)
-
-	s.assertQueryCounts(queryRegistry, 10, 0, 0, 0)
-	queryResults := s.constructQueryResults(queryRegistry.getBufferedIDs()[0:5])
-	decisionHandler.handleBufferedQueries(mutableStateMock, client.GoSDK, client.GoWorkerConsistentQueryVersion, queryResults, true)
-	s.assertQueryCounts(queryRegistry, 5, 5, 0, 0)
+	s.assertQueryCounts(s.queryRegistry, 10, 0, 0, 0)
+	queryResults := s.constructQueryResults(s.queryRegistry.getBufferedIDs()[0:5], 10)
+	s.decisionHandler.handleBufferedQueries(s.mockMutableState, client.GoSDK, client.GoWorkerConsistentQueryVersion, queryResults, true, testGlobalDomainEntry)
+	s.assertQueryCounts(s.queryRegistry, 5, 5, 0, 0)
 }
 
 func (s *DecisionHandlerSuite) TestHandleBufferedQueries_NoNewDecisionTask() {
-	decisionHandler := &decisionHandlerImpl{
-		versionChecker: client.NewVersionChecker(),
-	}
-	queryRegistry := s.constructQueryRegistry(10)
-	mutableStateMock := NewMockmutableState(s.controller)
-	mutableStateMock.EXPECT().GetQueryRegistry().Return(queryRegistry)
-
-	s.assertQueryCounts(queryRegistry, 10, 0, 0, 0)
-	queryResults := s.constructQueryResults(queryRegistry.getBufferedIDs()[0:5])
-	decisionHandler.handleBufferedQueries(mutableStateMock, client.GoSDK, client.GoWorkerConsistentQueryVersion, queryResults, false)
-	s.assertQueryCounts(queryRegistry, 0, 5, 5, 0)
+	s.assertQueryCounts(s.queryRegistry, 10, 0, 0, 0)
+	queryResults := s.constructQueryResults(s.queryRegistry.getBufferedIDs()[0:5], 10)
+	s.decisionHandler.handleBufferedQueries(s.mockMutableState, client.GoSDK, client.GoWorkerConsistentQueryVersion, queryResults, false, testGlobalDomainEntry)
+	s.assertQueryCounts(s.queryRegistry, 0, 5, 5, 0)
 }
 
-func (s *DecisionHandlerSuite) constructQueryResults(ids []string) map[string]*shared.WorkflowQueryResult {
+func (s *DecisionHandlerSuite) TestHandleBufferedQueries_QueryTooLarge() {
+	s.assertQueryCounts(s.queryRegistry, 10, 0, 0, 0)
+	bufferedIDs := s.queryRegistry.getBufferedIDs()
+	queryResults := s.constructQueryResults(bufferedIDs[0:5], 10)
+	largeQueryResults := s.constructQueryResults(bufferedIDs[5:10], 10*1024*1024)
+	for k, v := range largeQueryResults {
+		queryResults[k] = v
+	}
+	s.decisionHandler.handleBufferedQueries(s.mockMutableState, client.GoSDK, client.GoWorkerConsistentQueryVersion, queryResults, false, testGlobalDomainEntry)
+	s.assertQueryCounts(s.queryRegistry, 0, 5, 0, 5)
+}
+
+func (s *DecisionHandlerSuite) constructQueryResults(ids []string, resultSize int) map[string]*shared.WorkflowQueryResult {
 	results := make(map[string]*shared.WorkflowQueryResult)
 	for _, id := range ids {
 		results[id] = &shared.WorkflowQueryResult{
 			ResultType: common.QueryResultTypePtr(shared.QueryResultTypeAnswered),
-			Answer:     []byte{1, 2, 3},
+			Answer:     make([]byte, resultSize, resultSize),
 		}
 	}
 	return results

@@ -183,6 +183,11 @@ type Config struct {
 	ReplicationTaskProcessorErrorRetryWait        dynamicconfig.DurationPropertyFn
 	ReplicationTaskProcessorErrorRetryMaxAttempts dynamicconfig.IntPropertyFn
 	ReplicationTaskProcessorNoTaskRetryWait       dynamicconfig.DurationPropertyFn
+
+	// The following are used by consistent query
+	EnableConsistentQuery         dynamicconfig.BoolPropertyFn
+	EnableConsistentQueryByDomain dynamicconfig.BoolPropertyFnWithDomainFilter
+	MaxBufferedQueryCount         dynamicconfig.IntPropertyFn
 }
 
 const (
@@ -293,6 +298,10 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		ReplicationTaskProcessorErrorRetryWait:        dc.GetDurationProperty(dynamicconfig.ReplicationTaskProcessorErrorRetryWait, time.Second),
 		ReplicationTaskProcessorErrorRetryMaxAttempts: dc.GetIntProperty(dynamicconfig.ReplicationTaskProcessorErrorRetryMaxAttempts, 20),
 		ReplicationTaskProcessorNoTaskRetryWait:       dc.GetDurationProperty(dynamicconfig.ReplicationTaskProcessorNoTaskInitialWait, 2*time.Second),
+
+		EnableConsistentQuery:         dc.GetBoolProperty(dynamicconfig.EnableConsistentQuery, true),
+		EnableConsistentQueryByDomain: dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableConsistentQueryByDomain, false),
+		MaxBufferedQueryCount:         dc.GetIntProperty(dynamicconfig.MaxBufferedQueryCount, 1),
 	}
 
 	return cfg

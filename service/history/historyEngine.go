@@ -174,6 +174,10 @@ var (
 	ErrQueryEnteredInvalidState = &workflow.InternalServiceError{Message: "query entered invalid state, this should be impossible"}
 	// ErrQueryWorkflowBeforeFirstDecision is error indicating that query was attempted before first decision task completed
 	ErrQueryWorkflowBeforeFirstDecision = &workflow.BadRequestError{Message: "workflow must handle at least one decision task before it can be queried"}
+	// ErrConsistentQueryNotEnabled is error indicating that consistent query was requested but either cluster or domain does not enable consistent query
+	ErrConsistentQueryNotEnabled = &workflow.BadRequestError{Message: "cluster or domain does not enable strongly consistent query but strongly consistent query was requested"}
+	// ErrConsistentQueryBufferExceeded is error indicating that too many consistent queries have been buffered and until buffered queries are finished new consistent queries cannot be buffered
+	ErrConsistentQueryBufferExceeded = &workflow.InternalServiceError{Message: "consistent query buffer is full, cannot accept new consistent queries"}
 
 	// FailedWorkflowCloseState is a set of failed workflow close states, used for start workflow policy
 	// for start workflow execution API
@@ -747,6 +751,11 @@ func (e *historyEngineImpl) QueryWorkflow(
 	request *h.QueryWorkflowRequest,
 ) (retResp *h.QueryWorkflowResponse, retErr error) {
 
+	consistentQueryEnabled := e.config.EnableConsistentQuery() && e.config.EnableConsistentQueryByDomain(request.GetRequest().GetDomain())
+	if request.GetRequest().GetQueryConsistencyLevel() == workflow.QueryConsistencyLevelStrong && !consistentQueryEnabled {
+		return nil, ErrConsistentQueryNotEnabled
+	}
+
 	mutableStateResp, err := e.getMutableState(ctx, request.GetDomainUUID(), *request.GetRequest().GetExecution())
 	if err != nil {
 		return nil, err
@@ -830,6 +839,9 @@ func (e *historyEngineImpl) QueryWorkflow(
 	// until either an result has been obtained on a decision task response or until it is safe to dispatch directly through matching.
 	sw := scope.StartTimer(metrics.DecisionTaskQueryLatency)
 	queryReg := mutableState.GetQueryRegistry()
+	if len(queryReg.getBufferedIDs()) >= e.config.MaxBufferedQueryCount() {
+		return nil, ErrConsistentQueryBufferExceeded
+	}
 	queryID, termCh := queryReg.bufferQuery(req.GetQuery())
 	defer func() {
 		queryReg.removeQuery(queryID)

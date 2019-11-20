@@ -540,6 +540,7 @@ func (c *cadenceImpl) startHistory(
 		historyConfig.ReplicationTaskFetcherErrorRetryWait = dynamicconfig.GetDurationPropertyFn(50 * time.Millisecond)
 		historyConfig.ReplicationTaskProcessorErrorRetryWait = dynamicconfig.GetDurationPropertyFn(time.Millisecond)
 		historyConfig.ReplicationTaskProcessorErrorRetryMaxAttempts = dynamicconfig.GetIntPropertyFn(1)
+		historyConfig.EnableConsistentQueryByDomain = dynamicconfig.GetBoolPropertyFnFilteredByDomain(true)
 
 		if c.workerConfig.EnableIndexer {
 			historyConfig.AdvancedVisibilityWritingMode = dynamicconfig.GetStringPropertyFn(common.AdvancedVisibilityWritingModeDual)
