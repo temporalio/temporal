@@ -200,3 +200,254 @@ func ToProtoGetWorkflowExecutionHistoryResponse(in *shared.GetWorkflowExecutionH
 		Archived:      in.GetArchived(),
 	}
 }
+
+// ToThriftRequestCancelWorkflowExecutionRequest ...
+func ToThriftRequestCancelWorkflowExecutionRequest(in *workflowservice.RequestCancelWorkflowExecutionRequest) *shared.RequestCancelWorkflowExecutionRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.RequestCancelWorkflowExecutionRequest{
+		Domain:            &in.Domain,
+		WorkflowExecution: toThriftWorkflowExecution(in.WorkflowExecution),
+		Identity:          &in.Identity,
+		RequestId:         &in.RequestId,
+	}
+}
+
+// ToThriftSignalWorkflowExecutionRequest ...
+func ToThriftSignalWorkflowExecutionRequest(in *workflowservice.SignalWorkflowExecutionRequest) *shared.SignalWorkflowExecutionRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.SignalWorkflowExecutionRequest{
+		Domain:            &in.Domain,
+		WorkflowExecution: toThriftWorkflowExecution(in.WorkflowExecution),
+		SignalName:        &in.SignalName,
+		Input:             in.Input,
+		Identity:          &in.Identity,
+		RequestId:         &in.RequestId,
+		Control:           in.Control,
+	}
+}
+
+// ToProtoSignalWithStartWorkflowExecutionResponse ...
+func ToProtoSignalWithStartWorkflowExecutionResponse(in *shared.StartWorkflowExecutionResponse) *workflowservice.StartWorkflowExecutionResponse {
+	if in == nil {
+		return nil
+	}
+	return &workflowservice.StartWorkflowExecutionResponse{
+		RunId: in.GetRunId(),
+	}
+}
+
+// ToThriftSignalWithStartWorkflowExecutionRequest ...
+func ToThriftSignalWithStartWorkflowExecutionRequest(in *workflowservice.SignalWithStartWorkflowExecutionRequest) *shared.SignalWithStartWorkflowExecutionRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.SignalWithStartWorkflowExecutionRequest{
+		Domain:                              &in.Domain,
+		WorkflowId:                          &in.WorkflowId,
+		WorkflowType:                        toThriftWorkflowType(in.WorkflowType),
+		TaskList:                            toThriftTaskList(in.TaskList),
+		Input:                               in.Input,
+		ExecutionStartToCloseTimeoutSeconds: &in.ExecutionStartToCloseTimeoutSeconds,
+		TaskStartToCloseTimeoutSeconds:      &in.TaskStartToCloseTimeoutSeconds,
+		Identity:                            &in.Identity,
+		RequestId:                           &in.RequestId,
+		WorkflowIdReusePolicy:               toThriftWorkflowIDReusePolicy(in.WorkflowIdReusePolicy),
+		SignalName:                          &in.SignalName,
+		SignalInput:                         in.SignalInput,
+		Control:                             in.Control,
+		RetryPolicy:                         toThriftRetryPolicy(in.RetryPolicy),
+		CronSchedule:                        &in.CronSchedule,
+		Memo:                                toThriftMemo(in.Memo),
+		SearchAttributes:                    toThriftSearchAttributes(in.SearchAttributes),
+		Header:                              toThriftHeader(in.Header),
+	}
+}
+
+// ToProtoResetWorkflowExecutionResponse ...
+func ToProtoResetWorkflowExecutionResponse(in *shared.ResetWorkflowExecutionResponse) *workflowservice.ResetWorkflowExecutionResponse {
+	if in == nil {
+		return nil
+	}
+	return &workflowservice.ResetWorkflowExecutionResponse{
+		RunId: in.GetRunId(),
+	}
+}
+
+// ToThriftResetWorkflowExecutionRequest ...
+func ToThriftResetWorkflowExecutionRequest(in *workflowservice.ResetWorkflowExecutionRequest) *shared.ResetWorkflowExecutionRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.ResetWorkflowExecutionRequest{
+		Domain:                &in.Domain,
+		WorkflowExecution:     toThriftWorkflowExecution(in.WorkflowExecution),
+		Reason:                &in.Reason,
+		DecisionFinishEventId: &in.DecisionFinishEventId,
+		RequestId:             &in.RequestId,
+	}
+}
+
+// ToThriftTerminateWorkflowExecutionRequest ...
+func ToThriftTerminateWorkflowExecutionRequest(in *workflowservice.TerminateWorkflowExecutionRequest) *shared.TerminateWorkflowExecutionRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.TerminateWorkflowExecutionRequest{
+		Domain:            &in.Domain,
+		WorkflowExecution: toThriftWorkflowExecution(in.WorkflowExecution),
+		Reason:            &in.Reason,
+		Details:           in.Details,
+		Identity:          &in.Identity,
+	}
+}
+
+// ToProtoListOpenWorkflowExecutionsResponse ...
+func ToProtoListOpenWorkflowExecutionsResponse(in *shared.ListOpenWorkflowExecutionsResponse) *workflowservice.ListOpenWorkflowExecutionsResponse {
+	if in == nil {
+		return nil
+	}
+
+	return &workflowservice.ListOpenWorkflowExecutionsResponse{
+		Executions:    toProtoWorkflowExecutionInfos(in.GetExecutions()),
+		NextPageToken: in.GetNextPageToken(),
+	}
+}
+
+// ToThriftListOpenWorkflowExecutionsRequest ...
+func ToThriftListOpenWorkflowExecutionsRequest(in *workflowservice.ListOpenWorkflowExecutionsRequest) *shared.ListOpenWorkflowExecutionsRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.ListOpenWorkflowExecutionsRequest{
+		Domain:          &in.Domain,
+		MaximumPageSize: &in.MaximumPageSize,
+		NextPageToken:   in.NextPageToken,
+		StartTimeFilter: toThriftStartTimeFilter(in.StartTimeFilter),
+		ExecutionFilter: toThriftWorkflowExecutionFilter(in.ExecutionFilter),
+		TypeFilter:      toThriftWorkflowTypeFilter(in.TypeFilter),
+	}
+}
+
+// ToProtoListClosedWorkflowExecutionsResponse ...
+func ToProtoListClosedWorkflowExecutionsResponse(in *shared.ListClosedWorkflowExecutionsResponse) *workflowservice.ListClosedWorkflowExecutionsResponse {
+	if in == nil {
+		return nil
+	}
+	return &workflowservice.ListClosedWorkflowExecutionsResponse{
+		Executions:    toProtoWorkflowExecutionInfos(in.GetExecutions()),
+		NextPageToken: in.GetNextPageToken(),
+	}
+}
+
+// ToThriftListClosedWorkflowExecutionsRequest ...
+func ToThriftListClosedWorkflowExecutionsRequest(in *workflowservice.ListClosedWorkflowExecutionsRequest) *shared.ListClosedWorkflowExecutionsRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.ListClosedWorkflowExecutionsRequest{
+		Domain:          &in.Domain,
+		MaximumPageSize: &in.MaximumPageSize,
+		NextPageToken:   in.NextPageToken,
+		StartTimeFilter: toThriftStartTimeFilter(in.StartTimeFilter),
+		ExecutionFilter: toThriftWorkflowExecutionFilter(in.ExecutionFilter),
+		TypeFilter:      toThriftWorkflowTypeFilter(in.TypeFilter),
+		StatusFilter:    toThriftWorkflowExecutionCloseStatus(in.StatusFilter),
+	}
+}
+
+// ToProtoListWorkflowExecutionsResponse ...
+func ToProtoListWorkflowExecutionsResponse(in *shared.ListWorkflowExecutionsResponse) *workflowservice.ListWorkflowExecutionsResponse {
+	if in == nil {
+		return nil
+	}
+	return &workflowservice.ListWorkflowExecutionsResponse{
+		Executions:    toProtoWorkflowExecutionInfos(in.GetExecutions()),
+		NextPageToken: in.GetNextPageToken(),
+	}
+}
+
+// ToThriftListWorkflowExecutionsRequest ...
+func ToThriftListWorkflowExecutionsRequest(in *workflowservice.ListWorkflowExecutionsRequest) *shared.ListWorkflowExecutionsRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.ListWorkflowExecutionsRequest{
+		Domain:        &in.Domain,
+		PageSize:      &in.PageSize,
+		NextPageToken: in.NextPageToken,
+		Query:         &in.Query,
+	}
+}
+
+// ToProtoArchivedWorkflowExecutionsResponse ...
+func ToProtoArchivedWorkflowExecutionsResponse(in *shared.ListArchivedWorkflowExecutionsResponse) *workflowservice.ListArchivedWorkflowExecutionsResponse {
+	if in == nil {
+		return nil
+	}
+	return &workflowservice.ListArchivedWorkflowExecutionsResponse{
+		Executions:    toProtoWorkflowExecutionInfos(in.GetExecutions()),
+		NextPageToken: in.GetNextPageToken(),
+	}
+}
+
+// ToThriftArchivedWorkflowExecutionsRequest ...
+func ToThriftArchivedWorkflowExecutionsRequest(in *workflowservice.ListArchivedWorkflowExecutionsRequest) *shared.ListArchivedWorkflowExecutionsRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.ListArchivedWorkflowExecutionsRequest{
+		Domain:        &in.Domain,
+		PageSize:      &in.PageSize,
+		NextPageToken: in.NextPageToken,
+		Query:         &in.Query,
+	}
+}
+
+// ToProtoCountWorkflowExecutionsResponse ...
+func ToProtoCountWorkflowExecutionsResponse(in *shared.CountWorkflowExecutionsResponse) *workflowservice.CountWorkflowExecutionsResponse {
+	if in == nil {
+		return nil
+	}
+	return &workflowservice.CountWorkflowExecutionsResponse{
+		Count: in.GetCount(),
+	}
+}
+
+// ToThriftCountWorkflowExecutionsRequest ...
+func ToThriftCountWorkflowExecutionsRequest(in *workflowservice.CountWorkflowExecutionsRequest) *shared.CountWorkflowExecutionsRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.CountWorkflowExecutionsRequest{
+		Domain: &in.Domain,
+		Query:  &in.Query,
+	}
+}
+
+// ToProtoDescribeWorkflowExecutionResponse ...
+func ToProtoDescribeWorkflowExecutionResponse(in *shared.DescribeWorkflowExecutionResponse) *workflowservice.DescribeWorkflowExecutionResponse {
+	if in == nil {
+		return nil
+	}
+	return &workflowservice.DescribeWorkflowExecutionResponse{
+		ExecutionConfiguration: toProtoWorkflowExecutionConfiguration(in.GetExecutionConfiguration()),
+		WorkflowExecutionInfo:  toProtoWorkflowExecutionInfo(in.GetWorkflowExecutionInfo()),
+		PendingActivities:      toProtoPendingActivityInfos(in.GetPendingActivities()),
+		PendingChildren:        toProtoPendingChildExecutionInfos(in.GetPendingChildren()),
+	}
+}
+
+// ToThriftDescribeWorkflowExecutionRequest ...
+func ToThriftDescribeWorkflowExecutionRequest(in *workflowservice.DescribeWorkflowExecutionRequest) *shared.DescribeWorkflowExecutionRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.DescribeWorkflowExecutionRequest{
+		Domain:    &in.Domain,
+		Execution: toThriftWorkflowExecution(in.Execution),
+	}
+}

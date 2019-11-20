@@ -358,3 +358,133 @@ func toProtoResetPointInfo(in *shared.ResetPointInfo) *common.ResetPointInfo {
 		Resettable:               in.GetResettable(),
 	}
 }
+
+func toProtoWorkflowExecutionInfo(in *shared.WorkflowExecutionInfo) *common.WorkflowExecutionInfo {
+	if in == nil {
+		return nil
+	}
+	return &common.WorkflowExecutionInfo{
+		Execution:        toProtoWorkflowExecution(in.GetExecution()),
+		Type:             toProtoWorkflowType(in.GetType()),
+		StartTime:        in.GetStartTime(),
+		CloseTime:        in.GetCloseTime(),
+		CloseStatus:      enums.WorkflowExecutionCloseStatus(in.GetCloseStatus()),
+		HistoryLength:    in.GetHistoryLength(),
+		ParentDomainId:   in.GetParentDomainId(),
+		ParentExecution:  toProtoWorkflowExecution(in.GetParentExecution()),
+		ExecutionTime:    in.GetExecutionTime(),
+		Memo:             toProtoMemo(in.GetMemo()),
+		SearchAttributes: toProtoSearchAttributes(in.GetSearchAttributes()),
+		AutoResetPoints:  toProtoResetPoints(in.GetAutoResetPoints()),
+	}
+}
+
+func toThriftStartTimeFilter(in *common.StartTimeFilter) *shared.StartTimeFilter {
+	if in == nil {
+		return nil
+	}
+	return &shared.StartTimeFilter{
+		EarliestTime: &in.EarliestTime,
+		LatestTime:   &in.LatestTime,
+	}
+}
+
+func toThriftWorkflowExecutionFilter(in *common.WorkflowExecutionFilter) *shared.WorkflowExecutionFilter {
+	if in == nil {
+		return nil
+	}
+	return &shared.WorkflowExecutionFilter{
+		WorkflowId: &in.WorkflowId,
+		RunId:      &in.RunId,
+	}
+}
+
+func toThriftWorkflowTypeFilter(in *common.WorkflowTypeFilter) *shared.WorkflowTypeFilter {
+	if in == nil {
+		return nil
+	}
+	return &shared.WorkflowTypeFilter{
+		Name: &in.Name,
+	}
+}
+
+func toProtoWorkflowExecutionInfos(in []*shared.WorkflowExecutionInfo) []*common.WorkflowExecutionInfo {
+	if in == nil {
+		return nil
+	}
+
+	var executions []*common.WorkflowExecutionInfo
+	for _, execution := range in {
+		executions = append(executions, toProtoWorkflowExecutionInfo(execution))
+	}
+	return executions
+}
+
+func toProtoWorkflowExecutionConfiguration(in *shared.WorkflowExecutionConfiguration) *common.WorkflowExecutionConfiguration {
+	if in == nil {
+		return nil
+	}
+	return &common.WorkflowExecutionConfiguration{
+		TaskList:                            toProtoTaskList(in.GetTaskList()),
+		ExecutionStartToCloseTimeoutSeconds: in.GetExecutionStartToCloseTimeoutSeconds(),
+		TaskStartToCloseTimeoutSeconds:      in.GetTaskStartToCloseTimeoutSeconds(),
+	}
+}
+
+func toProtoPendingActivityInfos(in []*shared.PendingActivityInfo) []*common.PendingActivityInfo {
+	if in == nil {
+		return nil
+	}
+
+	var infos []*common.PendingActivityInfo
+	for _, info := range in {
+		infos = append(infos, toProtoPendingActivityInfo(info))
+	}
+	return infos
+}
+
+func toProtoPendingChildExecutionInfos(in []*shared.PendingChildExecutionInfo) []*common.PendingChildExecutionInfo {
+	if in == nil {
+		return nil
+	}
+
+	var infos []*common.PendingChildExecutionInfo
+	for _, info := range in {
+		infos = append(infos, toProtoPendingChildExecutionInfo(info))
+	}
+	return infos
+}
+
+func toProtoPendingActivityInfo(in *shared.PendingActivityInfo) *common.PendingActivityInfo {
+	if in == nil {
+		return nil
+	}
+	return &common.PendingActivityInfo{
+		ActivityID:             in.GetActivityID(),
+		ActivityType:           toProtoActivityType(in.GetActivityType()),
+		State:                  enums.PendingActivityState(in.GetState()),
+		HeartbeatDetails:       in.GetHeartbeatDetails(),
+		LastHeartbeatTimestamp: in.GetLastHeartbeatTimestamp(),
+		LastStartedTimestamp:   in.GetLastStartedTimestamp(),
+		Attempt:                in.GetAttempt(),
+		MaximumAttempts:        in.GetMaximumAttempts(),
+		ScheduledTimestamp:     in.GetScheduledTimestamp(),
+		ExpirationTimestamp:    in.GetExpirationTimestamp(),
+		LastFailureReason:      in.GetLastFailureReason(),
+		LastWorkerIdentity:     in.GetLastWorkerIdentity(),
+		LastFailureDetails:     in.GetLastFailureDetails(),
+	}
+}
+
+func toProtoPendingChildExecutionInfo(in *shared.PendingChildExecutionInfo) *common.PendingChildExecutionInfo {
+	if in == nil {
+		return nil
+	}
+	return &common.PendingChildExecutionInfo{
+		WorkflowID:        in.GetWorkflowID(),
+		RunID:             in.GetRunID(),
+		WorkflowTypName:   in.GetWorkflowTypName(),
+		InitiatedID:       in.GetInitiatedID(),
+		ParentClosePolicy: enums.ParentClosePolicy(in.GetParentClosePolicy()),
+	}
+}

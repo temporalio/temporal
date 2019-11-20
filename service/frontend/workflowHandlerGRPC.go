@@ -254,14 +254,26 @@ func (wh *WorkflowHandlerGRPC) RespondActivityTaskCanceledByID(context.Context, 
 // It will result in a new 'WorkflowExecutionCancelRequested' event being written to the workflow history and a new DecisionTask
 // created for the workflow instance so new decisions could be made. It fails with 'EntityNotExistsError' if the workflow is not valid
 // anymore due to completion or doesn't exist.
-func (wh *WorkflowHandlerGRPC) RequestCancelWorkflowExecution(context.Context, *workflowservice.RequestCancelWorkflowExecutionRequest) (*workflowservice.RequestCancelWorkflowExecutionResponse, error) {
-	panic("implement me")
+func (wh *WorkflowHandlerGRPC) RequestCancelWorkflowExecution(ctx context.Context, cancelRequest *workflowservice.RequestCancelWorkflowExecutionRequest) (_ *workflowservice.RequestCancelWorkflowExecutionResponse, retError error) {
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	err := wh.workflowHandlerThrift.RequestCancelWorkflowExecution(ctx, adapter.ToThriftRequestCancelWorkflowExecutionRequest(cancelRequest))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return &workflowservice.RequestCancelWorkflowExecutionResponse{}, nil
 }
 
 // SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in
 // WorkflowExecutionSignaled event recorded in the history and a decision task being created for the execution.
-func (wh *WorkflowHandlerGRPC) SignalWorkflowExecution(context.Context, *workflowservice.SignalWorkflowExecutionRequest) (*workflowservice.SignalWorkflowExecutionResponse, error) {
-	panic("implement me")
+func (wh *WorkflowHandlerGRPC) SignalWorkflowExecution(ctx context.Context, signalRequest *workflowservice.SignalWorkflowExecutionRequest) (_ *workflowservice.SignalWorkflowExecutionResponse, retError error) {
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	err := wh.workflowHandlerThrift.SignalWorkflowExecution(ctx, adapter.ToThriftSignalWorkflowExecutionRequest(signalRequest))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return &workflowservice.SignalWorkflowExecutionResponse{}, nil
 }
 
 // SignalWithStartWorkflowExecution is used to ensure sending signal to a workflow.
@@ -269,50 +281,104 @@ func (wh *WorkflowHandlerGRPC) SignalWorkflowExecution(context.Context, *workflo
 // and a decision task being created for the execution.
 // If the workflow is not running or not found, this results in WorkflowExecutionStarted and WorkflowExecutionSignaled
 // events being recorded in history, and a decision task being created for the execution
-func (wh *WorkflowHandlerGRPC) SignalWithStartWorkflowExecution(context.Context, *workflowservice.SignalWithStartWorkflowExecutionRequest) (*workflowservice.StartWorkflowExecutionResponse, error) {
-	panic("implement me")
+func (wh *WorkflowHandlerGRPC) SignalWithStartWorkflowExecution(ctx context.Context, signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest) (_ *workflowservice.StartWorkflowExecutionResponse, retError error) {
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	signalWithStartResponse, err := wh.workflowHandlerThrift.SignalWithStartWorkflowExecution(ctx, adapter.ToThriftSignalWithStartWorkflowExecutionRequest(signalWithStartRequest))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return adapter.ToProtoSignalWithStartWorkflowExecutionResponse(signalWithStartResponse), nil
 }
 
 // ResetWorkflowExecution reset an existing workflow execution to DecisionTaskCompleted event(exclusive).
 // And it will immediately terminating the current execution instance.
-func (wh *WorkflowHandlerGRPC) ResetWorkflowExecution(context.Context, *workflowservice.ResetWorkflowExecutionRequest) (*workflowservice.ResetWorkflowExecutionResponse, error) {
-	panic("implement me")
+func (wh *WorkflowHandlerGRPC) ResetWorkflowExecution(ctx context.Context, resetRequest *workflowservice.ResetWorkflowExecutionRequest) (_ *workflowservice.ResetWorkflowExecutionResponse, retError error) {
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	resetResponse, err := wh.workflowHandlerThrift.ResetWorkflowExecution(ctx, adapter.ToThriftResetWorkflowExecutionRequest(resetRequest))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return adapter.ToProtoResetWorkflowExecutionResponse(resetResponse), nil
 }
 
 // TerminateWorkflowExecution terminates an existing workflow execution by recording WorkflowExecutionTerminated event
 // in the history and immediately terminating the execution instance.
-func (wh *WorkflowHandlerGRPC) TerminateWorkflowExecution(context.Context, *workflowservice.TerminateWorkflowExecutionRequest) (*workflowservice.TerminateWorkflowExecutionResponse, error) {
-	panic("implement me")
+func (wh *WorkflowHandlerGRPC) TerminateWorkflowExecution(ctx context.Context, terminateRequest *workflowservice.TerminateWorkflowExecutionRequest) (_ *workflowservice.TerminateWorkflowExecutionResponse, retError error) {
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	err := wh.workflowHandlerThrift.TerminateWorkflowExecution(ctx, adapter.ToThriftTerminateWorkflowExecutionRequest(terminateRequest))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return &workflowservice.TerminateWorkflowExecutionResponse{}, nil
 }
 
 // ListOpenWorkflowExecutions is a visibility API to list the open executions in a specific domain.
-func (wh *WorkflowHandlerGRPC) ListOpenWorkflowExecutions(context.Context, *workflowservice.ListOpenWorkflowExecutionsRequest) (*workflowservice.ListOpenWorkflowExecutionsResponse, error) {
-	panic("implement me")
+func (wh *WorkflowHandlerGRPC) ListOpenWorkflowExecutions(ctx context.Context, listRequest *workflowservice.ListOpenWorkflowExecutionsRequest) (_ *workflowservice.ListOpenWorkflowExecutionsResponse, retError error) {
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	listResponse, err := wh.workflowHandlerThrift.ListOpenWorkflowExecutions(ctx, adapter.ToThriftListOpenWorkflowExecutionsRequest(listRequest))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return adapter.ToProtoListOpenWorkflowExecutionsResponse(listResponse), nil
 }
 
 // ListClosedWorkflowExecutions is a visibility API to list the closed executions in a specific domain.
-func (wh *WorkflowHandlerGRPC) ListClosedWorkflowExecutions(context.Context, *workflowservice.ListClosedWorkflowExecutionsRequest) (*workflowservice.ListClosedWorkflowExecutionsResponse, error) {
-	panic("implement me")
+func (wh *WorkflowHandlerGRPC) ListClosedWorkflowExecutions(ctx context.Context, listRequest *workflowservice.ListClosedWorkflowExecutionsRequest) (_ *workflowservice.ListClosedWorkflowExecutionsResponse, retError error) {
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	lisrResponse, err := wh.workflowHandlerThrift.ListClosedWorkflowExecutions(ctx, adapter.ToThriftListClosedWorkflowExecutionsRequest(listRequest))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return adapter.ToProtoListClosedWorkflowExecutionsResponse(lisrResponse), nil
 }
 
 // ListWorkflowExecutions is a visibility API to list workflow executions in a specific domain.
-func (wh *WorkflowHandlerGRPC) ListWorkflowExecutions(context.Context, *workflowservice.ListWorkflowExecutionsRequest) (*workflowservice.ListWorkflowExecutionsResponse, error) {
-	panic("implement me")
+func (wh *WorkflowHandlerGRPC) ListWorkflowExecutions(ctx context.Context, listRequest *workflowservice.ListWorkflowExecutionsRequest) (_ *workflowservice.ListWorkflowExecutionsResponse, retError error) {
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	listResponse, err := wh.workflowHandlerThrift.ListWorkflowExecutions(ctx, adapter.ToThriftListWorkflowExecutionsRequest(listRequest))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return adapter.ToProtoListWorkflowExecutionsResponse(listResponse), nil
 }
 
 // ListArchivedWorkflowExecutions is a visibility API to list archived workflow executions in a specific domain.
-func (wh *WorkflowHandlerGRPC) ListArchivedWorkflowExecutions(context.Context, *workflowservice.ListArchivedWorkflowExecutionsRequest) (*workflowservice.ListArchivedWorkflowExecutionsResponse, error) {
-	panic("implement me")
+func (wh *WorkflowHandlerGRPC) ListArchivedWorkflowExecutions(ctx context.Context, listRequest *workflowservice.ListArchivedWorkflowExecutionsRequest) (_ *workflowservice.ListArchivedWorkflowExecutionsResponse, retError error) {
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	listResponse, err := wh.workflowHandlerThrift.ListArchivedWorkflowExecutions(ctx, adapter.ToThriftArchivedWorkflowExecutionsRequest(listRequest))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return adapter.ToProtoArchivedWorkflowExecutionsResponse(listResponse), nil
 }
 
 // ScanWorkflowExecutions is a visibility API to list large amount of workflow executions in a specific domain without order.
-func (wh *WorkflowHandlerGRPC) ScanWorkflowExecutions(context.Context, *workflowservice.ListWorkflowExecutionsRequest) (*workflowservice.ListWorkflowExecutionsResponse, error) {
-	panic("implement me")
+func (wh *WorkflowHandlerGRPC) ScanWorkflowExecutions(ctx context.Context, listRequest *workflowservice.ListWorkflowExecutionsRequest) (_ *workflowservice.ListWorkflowExecutionsResponse, retError error) {
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	listResponse, err := wh.workflowHandlerThrift.ScanWorkflowExecutions(ctx, adapter.ToThriftListWorkflowExecutionsRequest(listRequest))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return adapter.ToProtoListWorkflowExecutionsResponse(listResponse), nil
 }
 
 // CountWorkflowExecutions is a visibility API to count of workflow executions in a specific domain.
-func (wh *WorkflowHandlerGRPC) CountWorkflowExecutions(context.Context, *workflowservice.CountWorkflowExecutionsRequest) (*workflowservice.CountWorkflowExecutionsResponse, error) {
-	panic("implement me")
+func (wh *WorkflowHandlerGRPC) CountWorkflowExecutions(ctx context.Context, countRequest *workflowservice.CountWorkflowExecutionsRequest) (_ *workflowservice.CountWorkflowExecutionsResponse, retError error) {
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	countResponse, err := wh.workflowHandlerThrift.CountWorkflowExecutions(ctx, adapter.ToThriftCountWorkflowExecutionsRequest(countRequest))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return adapter.ToProtoCountWorkflowExecutionsResponse(countResponse), nil
 }
 
 // GetSearchAttributes is a visibility API to get all legal keys that could be used in list APIs
@@ -344,8 +410,14 @@ func (wh *WorkflowHandlerGRPC) QueryWorkflow(context.Context, *workflowservice.Q
 }
 
 // DescribeWorkflowExecution returns information about the specified workflow execution.
-func (wh *WorkflowHandlerGRPC) DescribeWorkflowExecution(context.Context, *workflowservice.DescribeWorkflowExecutionRequest) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
-	panic("implement me")
+func (wh *WorkflowHandlerGRPC) DescribeWorkflowExecution(ctx context.Context, request *workflowservice.DescribeWorkflowExecutionRequest) (_ *workflowservice.DescribeWorkflowExecutionResponse, retError error) {
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	response, err := wh.workflowHandlerThrift.DescribeWorkflowExecution(ctx, adapter.ToThriftDescribeWorkflowExecutionRequest(request))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return adapter.ToProtoDescribeWorkflowExecutionResponse(response), nil
 }
 
 // DescribeTaskList returns information about the target tasklist, right now this API returns the

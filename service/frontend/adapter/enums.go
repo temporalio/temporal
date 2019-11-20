@@ -53,3 +53,8 @@ func toThriftHistoryEventFilterType(in enums.HistoryEventFilterType) *shared.His
 	ret := shared.HistoryEventFilterType(in)
 	return &ret
 }
+
+func toThriftWorkflowExecutionCloseStatus(in enums.WorkflowExecutionCloseStatus) *shared.WorkflowExecutionCloseStatus {
+	ret := shared.WorkflowExecutionCloseStatus(in)
+	return &ret
+}
