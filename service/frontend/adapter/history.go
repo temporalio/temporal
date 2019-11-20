@@ -43,56 +43,101 @@ func toProtoHistoryEvent(in *shared.HistoryEvent) *common.HistoryEvent {
 	if in == nil {
 		return nil
 	}
-	return &common.HistoryEvent{
+
+	ret := &common.HistoryEvent{
 		EventId:   in.GetEventId(),
 		Timestamp: in.GetTimestamp(),
 		EventType: enums.EventType(in.GetEventType()),
 		Version:   in.GetVersion(),
 		TaskId:    in.GetTaskId(),
-
-		WorkflowExecutionStartedEventAttributes:                        toProtoWorkflowExecutionStartedEventAttributes(in.GetWorkflowExecutionStartedEventAttributes()),
-		WorkflowExecutionCompletedEventAttributes:                      toProtoWorkflowExecutionCompletedEventAttributes(in.GetWorkflowExecutionCompletedEventAttributes()),
-		WorkflowExecutionFailedEventAttributes:                         toProtoWorkflowExecutionFailedEventAttributes(in.GetWorkflowExecutionFailedEventAttributes()),
-		WorkflowExecutionTimedOutEventAttributes:                       toProtoWorkflowExecutionTimedOutEventAttributes(in.GetWorkflowExecutionTimedOutEventAttributes()),
-		DecisionTaskScheduledEventAttributes:                           toProtoDecisionTaskScheduledEventAttributes(in.GetDecisionTaskScheduledEventAttributes()),
-		DecisionTaskStartedEventAttributes:                             toProtoDecisionTaskStartedEventAttributes(in.GetDecisionTaskStartedEventAttributes()),
-		DecisionTaskCompletedEventAttributes:                           toProtoDecisionTaskCompletedEventAttributes(in.GetDecisionTaskCompletedEventAttributes()),
-		DecisionTaskTimedOutEventAttributes:                            toProtoDecisionTaskTimedOutEventAttributes(in.GetDecisionTaskTimedOutEventAttributes()),
-		DecisionTaskFailedEventAttributes:                              toProtoDecisionTaskFailedEventAttributes(in.GetDecisionTaskFailedEventAttributes()),
-		ActivityTaskScheduledEventAttributes:                           toProtoActivityTaskScheduledEventAttributes(in.GetActivityTaskScheduledEventAttributes()),
-		ActivityTaskStartedEventAttributes:                             toProtoActivityTaskStartedEventAttributes(in.GetActivityTaskStartedEventAttributes()),
-		ActivityTaskCompletedEventAttributes:                           toProtoActivityTaskCompletedEventAttributes(in.GetActivityTaskCompletedEventAttributes()),
-		ActivityTaskFailedEventAttributes:                              toProtoActivityTaskFailedEventAttributes(in.GetActivityTaskFailedEventAttributes()),
-		ActivityTaskTimedOutEventAttributes:                            toProtoActivityTaskTimedOutEventAttributes(in.GetActivityTaskTimedOutEventAttributes()),
-		TimerStartedEventAttributes:                                    toProtoTimerStartedEventAttributes(in.GetTimerStartedEventAttributes()),
-		TimerFiredEventAttributes:                                      toProtoTimerFiredEventAttributes(in.GetTimerFiredEventAttributes()),
-		ActivityTaskCancelRequestedEventAttributes:                     toProtoActivityTaskCancelRequestedEventAttributes(in.GetActivityTaskCancelRequestedEventAttributes()),
-		RequestCancelActivityTaskFailedEventAttributes:                 toProtoRequestCancelActivityTaskFailedEventAttributes(in.GetRequestCancelActivityTaskFailedEventAttributes()),
-		ActivityTaskCanceledEventAttributes:                            toProtoActivityTaskCanceledEventAttributes(in.GetActivityTaskCanceledEventAttributes()),
-		TimerCanceledEventAttributes:                                   toProtoTimerCanceledEventAttributes(in.GetTimerCanceledEventAttributes()),
-		CancelTimerFailedEventAttributes:                               toProtoCancelTimerFailedEventAttributes(in.GetCancelTimerFailedEventAttributes()),
-		MarkerRecordedEventAttributes:                                  toProtoMarkerRecordedEventAttributes(in.GetMarkerRecordedEventAttributes()),
-		WorkflowExecutionSignaledEventAttributes:                       toProtoWorkflowExecutionSignaledEventAttributes(in.GetWorkflowExecutionSignaledEventAttributes()),
-		WorkflowExecutionTerminatedEventAttributes:                     toProtoWorkflowExecutionTerminatedEventAttributes(in.GetWorkflowExecutionTerminatedEventAttributes()),
-		WorkflowExecutionCancelRequestedEventAttributes:                toProtoWorkflowExecutionCancelRequestedEventAttributes(in.GetWorkflowExecutionCancelRequestedEventAttributes()),
-		WorkflowExecutionCanceledEventAttributes:                       toProtoWorkflowExecutionCanceledEventAttributes(in.GetWorkflowExecutionCanceledEventAttributes()),
-		RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: toProtoRequestCancelExternalWorkflowExecutionInitiatedEventAttributes(in.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes()),
-		RequestCancelExternalWorkflowExecutionFailedEventAttributes:    toProtoRequestCancelExternalWorkflowExecutionFailedEventAttributes(in.GetRequestCancelExternalWorkflowExecutionFailedEventAttributes()),
-		ExternalWorkflowExecutionCancelRequestedEventAttributes:        toProtoExternalWorkflowExecutionCancelRequestedEventAttributes(in.GetExternalWorkflowExecutionCancelRequestedEventAttributes()),
-		WorkflowExecutionContinuedAsNewEventAttributes:                 toProtoWorkflowExecutionContinuedAsNewEventAttributes(in.GetWorkflowExecutionContinuedAsNewEventAttributes()),
-		StartChildWorkflowExecutionInitiatedEventAttributes:            toProtoStartChildWorkflowExecutionInitiatedEventAttributes(in.GetStartChildWorkflowExecutionInitiatedEventAttributes()),
-		StartChildWorkflowExecutionFailedEventAttributes:               toProtoStartChildWorkflowExecutionFailedEventAttributes(in.GetStartChildWorkflowExecutionFailedEventAttributes()),
-		ChildWorkflowExecutionStartedEventAttributes:                   toProtoChildWorkflowExecutionStartedEventAttributes(in.GetChildWorkflowExecutionStartedEventAttributes()),
-		ChildWorkflowExecutionCompletedEventAttributes:                 toProtoChildWorkflowExecutionCompletedEventAttributes(in.GetChildWorkflowExecutionCompletedEventAttributes()),
-		ChildWorkflowExecutionFailedEventAttributes:                    toProtoChildWorkflowExecutionFailedEventAttributes(in.GetChildWorkflowExecutionFailedEventAttributes()),
-		ChildWorkflowExecutionCanceledEventAttributes:                  toProtoChildWorkflowExecutionCanceledEventAttributes(in.GetChildWorkflowExecutionCanceledEventAttributes()),
-		ChildWorkflowExecutionTimedOutEventAttributes:                  toProtoChildWorkflowExecutionTimedOutEventAttributes(in.GetChildWorkflowExecutionTimedOutEventAttributes()),
-		ChildWorkflowExecutionTerminatedEventAttributes:                toProtoChildWorkflowExecutionTerminatedEventAttributes(in.GetChildWorkflowExecutionTerminatedEventAttributes()),
-		SignalExternalWorkflowExecutionInitiatedEventAttributes:        toProtoSignalExternalWorkflowExecutionInitiatedEventAttributes(in.GetSignalExternalWorkflowExecutionInitiatedEventAttributes()),
-		SignalExternalWorkflowExecutionFailedEventAttributes:           toProtoSignalExternalWorkflowExecutionFailedEventAttributes(in.GetSignalExternalWorkflowExecutionFailedEventAttributes()),
-		ExternalWorkflowExecutionSignaledEventAttributes:               toProtoExternalWorkflowExecutionSignaledEventAttributes(in.GetExternalWorkflowExecutionSignaledEventAttributes()),
-		UpsertWorkflowSearchAttributesEventAttributes:                  toProtoUpsertWorkflowSearchAttributesEventAttributes(in.GetUpsertWorkflowSearchAttributesEventAttributes()),
 	}
+
+	if in.GetWorkflowExecutionStartedEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: toProtoWorkflowExecutionStartedEventAttributes(in.GetWorkflowExecutionStartedEventAttributes())}
+	} else if in.GetWorkflowExecutionCompletedEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_WorkflowExecutionCompletedEventAttributes{WorkflowExecutionCompletedEventAttributes: toProtoWorkflowExecutionCompletedEventAttributes(in.GetWorkflowExecutionCompletedEventAttributes())}
+	} else if in.GetWorkflowExecutionFailedEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_WorkflowExecutionFailedEventAttributes{WorkflowExecutionFailedEventAttributes: toProtoWorkflowExecutionFailedEventAttributes(in.GetWorkflowExecutionFailedEventAttributes())}
+	} else if in.GetWorkflowExecutionTimedOutEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{WorkflowExecutionTimedOutEventAttributes: toProtoWorkflowExecutionTimedOutEventAttributes(in.GetWorkflowExecutionTimedOutEventAttributes())}
+	} else if in.GetDecisionTaskScheduledEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: toProtoDecisionTaskScheduledEventAttributes(in.GetDecisionTaskScheduledEventAttributes())}
+	} else if in.GetDecisionTaskStartedEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: toProtoDecisionTaskStartedEventAttributes(in.GetDecisionTaskStartedEventAttributes())}
+	} else if in.GetDecisionTaskCompletedEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: toProtoDecisionTaskCompletedEventAttributes(in.GetDecisionTaskCompletedEventAttributes())}
+	} else if in.GetDecisionTaskTimedOutEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_DecisionTaskTimedOutEventAttributes{DecisionTaskTimedOutEventAttributes: toProtoDecisionTaskTimedOutEventAttributes(in.GetDecisionTaskTimedOutEventAttributes())}
+	} else if in.GetDecisionTaskFailedEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_DecisionTaskFailedEventAttributes{DecisionTaskFailedEventAttributes: toProtoDecisionTaskFailedEventAttributes(in.GetDecisionTaskFailedEventAttributes())}
+	} else if in.GetActivityTaskScheduledEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: toProtoActivityTaskScheduledEventAttributes(in.GetActivityTaskScheduledEventAttributes())}
+	} else if in.GetActivityTaskStartedEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: toProtoActivityTaskStartedEventAttributes(in.GetActivityTaskStartedEventAttributes())}
+	} else if in.GetActivityTaskCompletedEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: toProtoActivityTaskCompletedEventAttributes(in.GetActivityTaskCompletedEventAttributes())}
+	} else if in.GetActivityTaskFailedEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_ActivityTaskFailedEventAttributes{ActivityTaskFailedEventAttributes: toProtoActivityTaskFailedEventAttributes(in.GetActivityTaskFailedEventAttributes())}
+	} else if in.GetActivityTaskTimedOutEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_ActivityTaskTimedOutEventAttributes{ActivityTaskTimedOutEventAttributes: toProtoActivityTaskTimedOutEventAttributes(in.GetActivityTaskTimedOutEventAttributes())}
+	} else if in.GetTimerStartedEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: toProtoTimerStartedEventAttributes(in.GetTimerStartedEventAttributes())}
+	} else if in.GetTimerFiredEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_TimerFiredEventAttributes{TimerFiredEventAttributes: toProtoTimerFiredEventAttributes(in.GetTimerFiredEventAttributes())}
+	} else if in.GetActivityTaskCancelRequestedEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_ActivityTaskCancelRequestedEventAttributes{ActivityTaskCancelRequestedEventAttributes: toProtoActivityTaskCancelRequestedEventAttributes(in.GetActivityTaskCancelRequestedEventAttributes())}
+	} else if in.GetRequestCancelActivityTaskFailedEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_RequestCancelActivityTaskFailedEventAttributes{RequestCancelActivityTaskFailedEventAttributes: toProtoRequestCancelActivityTaskFailedEventAttributes(in.GetRequestCancelActivityTaskFailedEventAttributes())}
+	} else if in.GetActivityTaskCanceledEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_ActivityTaskCanceledEventAttributes{ActivityTaskCanceledEventAttributes: toProtoActivityTaskCanceledEventAttributes(in.GetActivityTaskCanceledEventAttributes())}
+	} else if in.GetTimerCanceledEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_TimerCanceledEventAttributes{TimerCanceledEventAttributes: toProtoTimerCanceledEventAttributes(in.GetTimerCanceledEventAttributes())}
+	} else if in.GetCancelTimerFailedEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_CancelTimerFailedEventAttributes{CancelTimerFailedEventAttributes: toProtoCancelTimerFailedEventAttributes(in.GetCancelTimerFailedEventAttributes())}
+	} else if in.GetMarkerRecordedEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: toProtoMarkerRecordedEventAttributes(in.GetMarkerRecordedEventAttributes())}
+	} else if in.GetWorkflowExecutionSignaledEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: toProtoWorkflowExecutionSignaledEventAttributes(in.GetWorkflowExecutionSignaledEventAttributes())}
+	} else if in.GetWorkflowExecutionTerminatedEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_WorkflowExecutionTerminatedEventAttributes{WorkflowExecutionTerminatedEventAttributes: toProtoWorkflowExecutionTerminatedEventAttributes(in.GetWorkflowExecutionTerminatedEventAttributes())}
+	} else if in.GetWorkflowExecutionCancelRequestedEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_WorkflowExecutionCancelRequestedEventAttributes{WorkflowExecutionCancelRequestedEventAttributes: toProtoWorkflowExecutionCancelRequestedEventAttributes(in.GetWorkflowExecutionCancelRequestedEventAttributes())}
+	} else if in.GetWorkflowExecutionCanceledEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_WorkflowExecutionCanceledEventAttributes{WorkflowExecutionCanceledEventAttributes: toProtoWorkflowExecutionCanceledEventAttributes(in.GetWorkflowExecutionCanceledEventAttributes())}
+	} else if in.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: toProtoRequestCancelExternalWorkflowExecutionInitiatedEventAttributes(in.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes())}
+	} else if in.GetRequestCancelExternalWorkflowExecutionFailedEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_RequestCancelExternalWorkflowExecutionFailedEventAttributes{RequestCancelExternalWorkflowExecutionFailedEventAttributes: toProtoRequestCancelExternalWorkflowExecutionFailedEventAttributes(in.GetRequestCancelExternalWorkflowExecutionFailedEventAttributes())}
+	} else if in.GetExternalWorkflowExecutionCancelRequestedEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_ExternalWorkflowExecutionCancelRequestedEventAttributes{ExternalWorkflowExecutionCancelRequestedEventAttributes: toProtoExternalWorkflowExecutionCancelRequestedEventAttributes(in.GetExternalWorkflowExecutionCancelRequestedEventAttributes())}
+	} else if in.GetWorkflowExecutionContinuedAsNewEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: toProtoWorkflowExecutionContinuedAsNewEventAttributes(in.GetWorkflowExecutionContinuedAsNewEventAttributes())}
+	} else if in.GetStartChildWorkflowExecutionInitiatedEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_StartChildWorkflowExecutionInitiatedEventAttributes{StartChildWorkflowExecutionInitiatedEventAttributes: toProtoStartChildWorkflowExecutionInitiatedEventAttributes(in.GetStartChildWorkflowExecutionInitiatedEventAttributes())}
+	} else if in.GetStartChildWorkflowExecutionFailedEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_StartChildWorkflowExecutionFailedEventAttributes{StartChildWorkflowExecutionFailedEventAttributes: toProtoStartChildWorkflowExecutionFailedEventAttributes(in.GetStartChildWorkflowExecutionFailedEventAttributes())}
+	} else if in.GetChildWorkflowExecutionStartedEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_ChildWorkflowExecutionStartedEventAttributes{ChildWorkflowExecutionStartedEventAttributes: toProtoChildWorkflowExecutionStartedEventAttributes(in.GetChildWorkflowExecutionStartedEventAttributes())}
+	} else if in.GetChildWorkflowExecutionCompletedEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_ChildWorkflowExecutionCompletedEventAttributes{ChildWorkflowExecutionCompletedEventAttributes: toProtoChildWorkflowExecutionCompletedEventAttributes(in.GetChildWorkflowExecutionCompletedEventAttributes())}
+	} else if in.GetChildWorkflowExecutionFailedEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_ChildWorkflowExecutionFailedEventAttributes{ChildWorkflowExecutionFailedEventAttributes: toProtoChildWorkflowExecutionFailedEventAttributes(in.GetChildWorkflowExecutionFailedEventAttributes())}
+	} else if in.GetChildWorkflowExecutionCanceledEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_ChildWorkflowExecutionCanceledEventAttributes{ChildWorkflowExecutionCanceledEventAttributes: toProtoChildWorkflowExecutionCanceledEventAttributes(in.GetChildWorkflowExecutionCanceledEventAttributes())}
+	} else if in.GetChildWorkflowExecutionTimedOutEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_ChildWorkflowExecutionTimedOutEventAttributes{ChildWorkflowExecutionTimedOutEventAttributes: toProtoChildWorkflowExecutionTimedOutEventAttributes(in.GetChildWorkflowExecutionTimedOutEventAttributes())}
+	} else if in.GetChildWorkflowExecutionTerminatedEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_ChildWorkflowExecutionTerminatedEventAttributes{ChildWorkflowExecutionTerminatedEventAttributes: toProtoChildWorkflowExecutionTerminatedEventAttributes(in.GetChildWorkflowExecutionTerminatedEventAttributes())}
+	} else if in.GetSignalExternalWorkflowExecutionInitiatedEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_SignalExternalWorkflowExecutionInitiatedEventAttributes{SignalExternalWorkflowExecutionInitiatedEventAttributes: toProtoSignalExternalWorkflowExecutionInitiatedEventAttributes(in.GetSignalExternalWorkflowExecutionInitiatedEventAttributes())}
+	} else if in.GetSignalExternalWorkflowExecutionFailedEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_SignalExternalWorkflowExecutionFailedEventAttributes{SignalExternalWorkflowExecutionFailedEventAttributes: toProtoSignalExternalWorkflowExecutionFailedEventAttributes(in.GetSignalExternalWorkflowExecutionFailedEventAttributes())}
+	} else if in.GetExternalWorkflowExecutionSignaledEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_ExternalWorkflowExecutionSignaledEventAttributes{ExternalWorkflowExecutionSignaledEventAttributes: toProtoExternalWorkflowExecutionSignaledEventAttributes(in.GetExternalWorkflowExecutionSignaledEventAttributes())}
+	} else if in.GetUpsertWorkflowSearchAttributesEventAttributes() != nil {
+		ret.Attributes = &common.HistoryEvent_UpsertWorkflowSearchAttributesEventAttributes{UpsertWorkflowSearchAttributesEventAttributes: toProtoUpsertWorkflowSearchAttributesEventAttributes(in.GetUpsertWorkflowSearchAttributesEventAttributes())}
+	}
+	return ret
 }
 
 func toProtoWorkflowExecutionStartedEventAttributes(in *shared.WorkflowExecutionStartedEventAttributes) *common.WorkflowExecutionStartedEventAttributes {
