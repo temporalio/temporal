@@ -46,14 +46,9 @@ const (
 	// SupportedCLIVersion indicates the highest cli version server will accept requests from
 	SupportedCLIVersion = "1.4.0"
 
-	// GoWorkerStickyQueryVersion indicates the minimum client version of go worker which supports StickyQuery
-	GoWorkerStickyQueryVersion = "1.0.0"
-	// JavaWorkerStickyQueryVersion indicates the minimum client version of the java worker which supports StickyQuery
-	JavaWorkerStickyQueryVersion = "1.0.0"
 	// GoWorkerConsistentQueryVersion indicates the minimum client version of the go worker which supports ConsistentQuery
 	GoWorkerConsistentQueryVersion = "1.5.0"
 
-	stickyQuery     = "sticky-query"
 	consistentQuery = "consistent-query"
 )
 
@@ -62,7 +57,6 @@ type (
 	VersionChecker interface {
 		ClientSupported(ctx context.Context, enableClientVersionCheck bool) error
 
-		SupportsStickyQuery(clientImpl string, clientFeatureVersion string) error
 		SupportsConsistentQuery(clientImpl string, clientFeatureVersion string) error
 	}
 
@@ -76,12 +70,9 @@ type (
 func NewVersionChecker() VersionChecker {
 	supportedFeatures := map[string]map[string]version.Constraints{
 		GoSDK: {
-			stickyQuery:     mustNewConstraint(fmt.Sprintf(">=%v", GoWorkerStickyQueryVersion)),
 			consistentQuery: mustNewConstraint(fmt.Sprintf(">=%v", GoWorkerConsistentQueryVersion)),
 		},
-		JavaSDK: {
-			stickyQuery: mustNewConstraint(fmt.Sprintf(">=%v", JavaWorkerStickyQueryVersion)),
-		},
+		JavaSDK: {},
 	}
 	supportedClients := map[string]version.Constraints{
 		GoSDK:   mustNewConstraint(fmt.Sprintf("<=%v", SupportedGoSDKVersion)),
@@ -120,12 +111,6 @@ func (vc *versionChecker) ClientSupported(ctx context.Context, enableClientVersi
 		return &shared.ClientVersionNotSupportedError{FeatureVersion: clientFeatureVersion, ClientImpl: clientImpl, SupportedVersions: supportedVersions.String()}
 	}
 	return nil
-}
-
-// SupportsStickyQuery returns error if sticky query is not supported otherwise nil.
-// In case client version lookup fails assume the client does not support feature.
-func (vc *versionChecker) SupportsStickyQuery(clientImpl string, clientFeatureVersion string) error {
-	return vc.featureSupported(clientImpl, clientFeatureVersion, stickyQuery)
 }
 
 // SupportsConsistentQuery returns error if consistent query is not supported otherwise nil.

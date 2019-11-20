@@ -336,16 +336,11 @@ pollLoop:
 				return emptyPollForDecisionTaskResponse, nil
 			}
 
-			isStickyEnabled := false
-			supportsSticky := client.NewVersionChecker().SupportsStickyQuery(mutableStateResp.GetClientImpl(), mutableStateResp.GetClientFeatureVersion()) == nil
-			if len(mutableStateResp.StickyTaskList.GetName()) != 0 && supportsSticky {
-				isStickyEnabled = true
-			}
 			resp := &h.RecordDecisionTaskStartedResponse{
 				PreviousStartedEventId:    mutableStateResp.PreviousStartedEventId,
 				NextEventId:               mutableStateResp.NextEventId,
 				WorkflowType:              mutableStateResp.WorkflowType,
-				StickyExecutionEnabled:    common.BoolPtr(isStickyEnabled),
+				StickyExecutionEnabled:    common.BoolPtr(false),
 				WorkflowExecutionTaskList: mutableStateResp.TaskList,
 				BranchToken:               mutableStateResp.CurrentBranchToken,
 			}

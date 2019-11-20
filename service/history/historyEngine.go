@@ -32,8 +32,6 @@ import (
 
 	"github.com/pborman/uuid"
 	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
-	"go.uber.org/yarpc/yarpcerrors"
-	"golang.org/x/net/context"
 
 	h "github.com/uber/cadence/.gen/go/history"
 	m "github.com/uber/cadence/.gen/go/matching"
@@ -43,7 +41,6 @@ import (
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
-	"github.com/uber/cadence/common/client"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/definition"
@@ -887,60 +884,9 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 	matchingRequest := &m.QueryWorkflowRequest{
 		DomainUUID:   common.StringPtr(domainID),
 		QueryRequest: queryRequest,
+		TaskList:     msResp.TaskList,
 	}
 
-	supportsStickyQuery := client.NewVersionChecker().SupportsStickyQuery(msResp.GetClientImpl(), msResp.GetClientFeatureVersion()) == nil
-	if len(msResp.GetStickyTaskList().GetName()) != 0 && supportsStickyQuery {
-		matchingRequest.TaskList = msResp.StickyTaskList
-		// using a clean new context in case customer provide a context which has
-		// a really short deadline, causing we clear the stickyness
-		stickyContext, cancel := context.WithTimeout(context.Background(), time.Duration(msResp.GetStickyTaskListScheduleToStartTimeout())*time.Second)
-		matchingResp, err := e.rawMatchingClient.QueryWorkflow(stickyContext, matchingRequest)
-		cancel()
-		if err == nil {
-			return &h.QueryWorkflowResponse{Response: matchingResp}, nil
-		}
-		if yarpcError, ok := err.(*yarpcerrors.Status); !ok || yarpcError.Code() != yarpcerrors.CodeDeadlineExceeded {
-			e.logger.Error("Query directly though matching on sticky failed",
-				tag.WorkflowDomainName(queryRequest.GetDomain()),
-				tag.WorkflowID(queryRequest.Execution.GetWorkflowId()),
-				tag.WorkflowRunID(queryRequest.Execution.GetRunId()),
-				tag.WorkflowQueryType(queryRequest.Query.GetQueryType()),
-				tag.Error(err))
-			return nil, err
-		}
-		// this means sticky timeout, should try using the normal tasklist
-		// we should clear the stickyness of this workflow
-		e.logger.Info("QueryWorkflow timed-out with stickyTaskList, will try nonSticky one",
-			tag.WorkflowDomainName(queryRequest.GetDomain()),
-			tag.WorkflowID(queryRequest.Execution.GetWorkflowId()),
-			tag.WorkflowRunID(queryRequest.Execution.GetRunId()),
-			tag.WorkflowQueryType(queryRequest.Query.GetQueryType()),
-			tag.WorkflowTaskListName(msResp.GetStickyTaskList().GetName()),
-			tag.WorkflowNextEventID(msResp.GetNextEventId()),
-			tag.Error(err))
-
-		resetContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		_, err = e.ResetStickyTaskList(resetContext, &h.ResetStickyTaskListRequest{
-			DomainUUID: common.StringPtr(domainID),
-			Execution:  queryRequest.Execution,
-		})
-		cancel()
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	matchingRequest.TaskList = msResp.TaskList
-	if err := common.IsValidContext(ctx); err != nil {
-		e.logger.Error("Context expired before query could be attempted on nonSticky",
-			tag.WorkflowDomainName(queryRequest.GetDomain()),
-			tag.WorkflowID(queryRequest.Execution.GetWorkflowId()),
-			tag.WorkflowRunID(queryRequest.Execution.GetRunId()),
-			tag.WorkflowQueryType(queryRequest.Query.GetQueryType()),
-			tag.Error(err))
-		return nil, err
-	}
 	matchingResp, err := e.matchingClient.QueryWorkflow(ctx, matchingRequest)
 	if err != nil {
 		e.logger.Error("Query directly though matching on non-sticky failed",
