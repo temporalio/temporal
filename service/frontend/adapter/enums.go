@@ -74,11 +74,6 @@ func toThriftParentClosePolicy(in enums.ParentClosePolicy) *shared.ParentClosePo
 	return &ret
 }
 
-func toThriftWorkflowIdReusePolicy(in enums.WorkflowIdReusePolicy) *shared.WorkflowIdReusePolicy {
-	ret := shared.WorkflowIdReusePolicy(in)
-	return &ret
-}
-
 func toThriftQueryResultType(in enums.QueryResultType) *shared.QueryResultType {
 	ret := shared.QueryResultType(in)
 	return &ret

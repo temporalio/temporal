@@ -233,7 +233,7 @@ func toThriftStartChildWorkflowExecutionDecisionAttributes(in *common.StartChild
 		TaskStartToCloseTimeoutSeconds:      &in.TaskStartToCloseTimeoutSeconds,
 		ParentClosePolicy:                   toThriftParentClosePolicy(in.ParentClosePolicy),
 		Control:                             in.Control,
-		WorkflowIdReusePolicy:               toThriftWorkflowIdReusePolicy(in.WorkflowIdReusePolicy),
+		WorkflowIdReusePolicy:               toThriftWorkflowIDReusePolicy(in.WorkflowIdReusePolicy),
 		RetryPolicy:                         toThriftRetryPolicy(in.RetryPolicy),
 		CronSchedule:                        &in.CronSchedule,
 		Header:                              toThriftHeader(in.Header),
