@@ -52,89 +52,90 @@ func toProtoHistoryEvent(in *shared.HistoryEvent) *common.HistoryEvent {
 		TaskId:    in.GetTaskId(),
 	}
 
-	if in.GetWorkflowExecutionStartedEventAttributes() != nil {
+	switch ret.EventType {
+	case enums.EventTypeWorkflowExecutionStarted:
 		ret.Attributes = &common.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: toProtoWorkflowExecutionStartedEventAttributes(in.GetWorkflowExecutionStartedEventAttributes())}
-	} else if in.GetWorkflowExecutionCompletedEventAttributes() != nil {
+	case enums.EventTypeWorkflowExecutionCompleted:
 		ret.Attributes = &common.HistoryEvent_WorkflowExecutionCompletedEventAttributes{WorkflowExecutionCompletedEventAttributes: toProtoWorkflowExecutionCompletedEventAttributes(in.GetWorkflowExecutionCompletedEventAttributes())}
-	} else if in.GetWorkflowExecutionFailedEventAttributes() != nil {
+	case enums.EventTypeWorkflowExecutionFailed:
 		ret.Attributes = &common.HistoryEvent_WorkflowExecutionFailedEventAttributes{WorkflowExecutionFailedEventAttributes: toProtoWorkflowExecutionFailedEventAttributes(in.GetWorkflowExecutionFailedEventAttributes())}
-	} else if in.GetWorkflowExecutionTimedOutEventAttributes() != nil {
+	case enums.EventTypeWorkflowExecutionTimedOut:
 		ret.Attributes = &common.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{WorkflowExecutionTimedOutEventAttributes: toProtoWorkflowExecutionTimedOutEventAttributes(in.GetWorkflowExecutionTimedOutEventAttributes())}
-	} else if in.GetDecisionTaskScheduledEventAttributes() != nil {
+	case enums.EventTypeDecisionTaskScheduled:
 		ret.Attributes = &common.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: toProtoDecisionTaskScheduledEventAttributes(in.GetDecisionTaskScheduledEventAttributes())}
-	} else if in.GetDecisionTaskStartedEventAttributes() != nil {
+	case enums.EventTypeDecisionTaskStarted:
 		ret.Attributes = &common.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: toProtoDecisionTaskStartedEventAttributes(in.GetDecisionTaskStartedEventAttributes())}
-	} else if in.GetDecisionTaskCompletedEventAttributes() != nil {
+	case enums.EventTypeDecisionTaskCompleted:
 		ret.Attributes = &common.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: toProtoDecisionTaskCompletedEventAttributes(in.GetDecisionTaskCompletedEventAttributes())}
-	} else if in.GetDecisionTaskTimedOutEventAttributes() != nil {
+	case enums.EventTypeDecisionTaskTimedOut:
 		ret.Attributes = &common.HistoryEvent_DecisionTaskTimedOutEventAttributes{DecisionTaskTimedOutEventAttributes: toProtoDecisionTaskTimedOutEventAttributes(in.GetDecisionTaskTimedOutEventAttributes())}
-	} else if in.GetDecisionTaskFailedEventAttributes() != nil {
+	case enums.EventTypeDecisionTaskFailed:
 		ret.Attributes = &common.HistoryEvent_DecisionTaskFailedEventAttributes{DecisionTaskFailedEventAttributes: toProtoDecisionTaskFailedEventAttributes(in.GetDecisionTaskFailedEventAttributes())}
-	} else if in.GetActivityTaskScheduledEventAttributes() != nil {
+	case enums.EventTypeActivityTaskScheduled:
 		ret.Attributes = &common.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: toProtoActivityTaskScheduledEventAttributes(in.GetActivityTaskScheduledEventAttributes())}
-	} else if in.GetActivityTaskStartedEventAttributes() != nil {
+	case enums.EventTypeActivityTaskStarted:
 		ret.Attributes = &common.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: toProtoActivityTaskStartedEventAttributes(in.GetActivityTaskStartedEventAttributes())}
-	} else if in.GetActivityTaskCompletedEventAttributes() != nil {
+	case enums.EventTypeActivityTaskCompleted:
 		ret.Attributes = &common.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: toProtoActivityTaskCompletedEventAttributes(in.GetActivityTaskCompletedEventAttributes())}
-	} else if in.GetActivityTaskFailedEventAttributes() != nil {
+	case enums.EventTypeActivityTaskFailed:
 		ret.Attributes = &common.HistoryEvent_ActivityTaskFailedEventAttributes{ActivityTaskFailedEventAttributes: toProtoActivityTaskFailedEventAttributes(in.GetActivityTaskFailedEventAttributes())}
-	} else if in.GetActivityTaskTimedOutEventAttributes() != nil {
+	case enums.EventTypeActivityTaskTimedOut:
 		ret.Attributes = &common.HistoryEvent_ActivityTaskTimedOutEventAttributes{ActivityTaskTimedOutEventAttributes: toProtoActivityTaskTimedOutEventAttributes(in.GetActivityTaskTimedOutEventAttributes())}
-	} else if in.GetTimerStartedEventAttributes() != nil {
+	case enums.EventTypeTimerStarted:
 		ret.Attributes = &common.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: toProtoTimerStartedEventAttributes(in.GetTimerStartedEventAttributes())}
-	} else if in.GetTimerFiredEventAttributes() != nil {
+	case enums.EventTypeTimerFired:
 		ret.Attributes = &common.HistoryEvent_TimerFiredEventAttributes{TimerFiredEventAttributes: toProtoTimerFiredEventAttributes(in.GetTimerFiredEventAttributes())}
-	} else if in.GetActivityTaskCancelRequestedEventAttributes() != nil {
+	case enums.EventTypeActivityTaskCancelRequested:
 		ret.Attributes = &common.HistoryEvent_ActivityTaskCancelRequestedEventAttributes{ActivityTaskCancelRequestedEventAttributes: toProtoActivityTaskCancelRequestedEventAttributes(in.GetActivityTaskCancelRequestedEventAttributes())}
-	} else if in.GetRequestCancelActivityTaskFailedEventAttributes() != nil {
+	case enums.EventTypeRequestCancelActivityTaskFailed:
 		ret.Attributes = &common.HistoryEvent_RequestCancelActivityTaskFailedEventAttributes{RequestCancelActivityTaskFailedEventAttributes: toProtoRequestCancelActivityTaskFailedEventAttributes(in.GetRequestCancelActivityTaskFailedEventAttributes())}
-	} else if in.GetActivityTaskCanceledEventAttributes() != nil {
+	case enums.EventTypeActivityTaskCanceled:
 		ret.Attributes = &common.HistoryEvent_ActivityTaskCanceledEventAttributes{ActivityTaskCanceledEventAttributes: toProtoActivityTaskCanceledEventAttributes(in.GetActivityTaskCanceledEventAttributes())}
-	} else if in.GetTimerCanceledEventAttributes() != nil {
+	case enums.EventTypeTimerCanceled:
 		ret.Attributes = &common.HistoryEvent_TimerCanceledEventAttributes{TimerCanceledEventAttributes: toProtoTimerCanceledEventAttributes(in.GetTimerCanceledEventAttributes())}
-	} else if in.GetCancelTimerFailedEventAttributes() != nil {
+	case enums.EventTypeCancelTimerFailed:
 		ret.Attributes = &common.HistoryEvent_CancelTimerFailedEventAttributes{CancelTimerFailedEventAttributes: toProtoCancelTimerFailedEventAttributes(in.GetCancelTimerFailedEventAttributes())}
-	} else if in.GetMarkerRecordedEventAttributes() != nil {
+	case enums.EventTypeMarkerRecorded:
 		ret.Attributes = &common.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: toProtoMarkerRecordedEventAttributes(in.GetMarkerRecordedEventAttributes())}
-	} else if in.GetWorkflowExecutionSignaledEventAttributes() != nil {
+	case enums.EventTypeWorkflowExecutionSignaled:
 		ret.Attributes = &common.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: toProtoWorkflowExecutionSignaledEventAttributes(in.GetWorkflowExecutionSignaledEventAttributes())}
-	} else if in.GetWorkflowExecutionTerminatedEventAttributes() != nil {
+	case enums.EventTypeWorkflowExecutionTerminated:
 		ret.Attributes = &common.HistoryEvent_WorkflowExecutionTerminatedEventAttributes{WorkflowExecutionTerminatedEventAttributes: toProtoWorkflowExecutionTerminatedEventAttributes(in.GetWorkflowExecutionTerminatedEventAttributes())}
-	} else if in.GetWorkflowExecutionCancelRequestedEventAttributes() != nil {
+	case enums.EventTypeWorkflowExecutionCancelRequested:
 		ret.Attributes = &common.HistoryEvent_WorkflowExecutionCancelRequestedEventAttributes{WorkflowExecutionCancelRequestedEventAttributes: toProtoWorkflowExecutionCancelRequestedEventAttributes(in.GetWorkflowExecutionCancelRequestedEventAttributes())}
-	} else if in.GetWorkflowExecutionCanceledEventAttributes() != nil {
+	case enums.EventTypeWorkflowExecutionCanceled:
 		ret.Attributes = &common.HistoryEvent_WorkflowExecutionCanceledEventAttributes{WorkflowExecutionCanceledEventAttributes: toProtoWorkflowExecutionCanceledEventAttributes(in.GetWorkflowExecutionCanceledEventAttributes())}
-	} else if in.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes() != nil {
+	case enums.EventTypeRequestCancelExternalWorkflowExecutionInitiated:
 		ret.Attributes = &common.HistoryEvent_RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: toProtoRequestCancelExternalWorkflowExecutionInitiatedEventAttributes(in.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes())}
-	} else if in.GetRequestCancelExternalWorkflowExecutionFailedEventAttributes() != nil {
+	case enums.EventTypeRequestCancelExternalWorkflowExecutionFailed:
 		ret.Attributes = &common.HistoryEvent_RequestCancelExternalWorkflowExecutionFailedEventAttributes{RequestCancelExternalWorkflowExecutionFailedEventAttributes: toProtoRequestCancelExternalWorkflowExecutionFailedEventAttributes(in.GetRequestCancelExternalWorkflowExecutionFailedEventAttributes())}
-	} else if in.GetExternalWorkflowExecutionCancelRequestedEventAttributes() != nil {
+	case enums.EventTypeExternalWorkflowExecutionCancelRequested:
 		ret.Attributes = &common.HistoryEvent_ExternalWorkflowExecutionCancelRequestedEventAttributes{ExternalWorkflowExecutionCancelRequestedEventAttributes: toProtoExternalWorkflowExecutionCancelRequestedEventAttributes(in.GetExternalWorkflowExecutionCancelRequestedEventAttributes())}
-	} else if in.GetWorkflowExecutionContinuedAsNewEventAttributes() != nil {
+	case enums.EventTypeWorkflowExecutionContinuedAsNew:
 		ret.Attributes = &common.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: toProtoWorkflowExecutionContinuedAsNewEventAttributes(in.GetWorkflowExecutionContinuedAsNewEventAttributes())}
-	} else if in.GetStartChildWorkflowExecutionInitiatedEventAttributes() != nil {
+	case enums.EventTypeStartChildWorkflowExecutionInitiated:
 		ret.Attributes = &common.HistoryEvent_StartChildWorkflowExecutionInitiatedEventAttributes{StartChildWorkflowExecutionInitiatedEventAttributes: toProtoStartChildWorkflowExecutionInitiatedEventAttributes(in.GetStartChildWorkflowExecutionInitiatedEventAttributes())}
-	} else if in.GetStartChildWorkflowExecutionFailedEventAttributes() != nil {
+	case enums.EventTypeStartChildWorkflowExecutionFailed:
 		ret.Attributes = &common.HistoryEvent_StartChildWorkflowExecutionFailedEventAttributes{StartChildWorkflowExecutionFailedEventAttributes: toProtoStartChildWorkflowExecutionFailedEventAttributes(in.GetStartChildWorkflowExecutionFailedEventAttributes())}
-	} else if in.GetChildWorkflowExecutionStartedEventAttributes() != nil {
+	case enums.EventTypeChildWorkflowExecutionStarted:
 		ret.Attributes = &common.HistoryEvent_ChildWorkflowExecutionStartedEventAttributes{ChildWorkflowExecutionStartedEventAttributes: toProtoChildWorkflowExecutionStartedEventAttributes(in.GetChildWorkflowExecutionStartedEventAttributes())}
-	} else if in.GetChildWorkflowExecutionCompletedEventAttributes() != nil {
+	case enums.EventTypeChildWorkflowExecutionCompleted:
 		ret.Attributes = &common.HistoryEvent_ChildWorkflowExecutionCompletedEventAttributes{ChildWorkflowExecutionCompletedEventAttributes: toProtoChildWorkflowExecutionCompletedEventAttributes(in.GetChildWorkflowExecutionCompletedEventAttributes())}
-	} else if in.GetChildWorkflowExecutionFailedEventAttributes() != nil {
+	case enums.EventTypeChildWorkflowExecutionFailed:
 		ret.Attributes = &common.HistoryEvent_ChildWorkflowExecutionFailedEventAttributes{ChildWorkflowExecutionFailedEventAttributes: toProtoChildWorkflowExecutionFailedEventAttributes(in.GetChildWorkflowExecutionFailedEventAttributes())}
-	} else if in.GetChildWorkflowExecutionCanceledEventAttributes() != nil {
+	case enums.EventTypeChildWorkflowExecutionCanceled:
 		ret.Attributes = &common.HistoryEvent_ChildWorkflowExecutionCanceledEventAttributes{ChildWorkflowExecutionCanceledEventAttributes: toProtoChildWorkflowExecutionCanceledEventAttributes(in.GetChildWorkflowExecutionCanceledEventAttributes())}
-	} else if in.GetChildWorkflowExecutionTimedOutEventAttributes() != nil {
+	case enums.EventTypeChildWorkflowExecutionTimedOut:
 		ret.Attributes = &common.HistoryEvent_ChildWorkflowExecutionTimedOutEventAttributes{ChildWorkflowExecutionTimedOutEventAttributes: toProtoChildWorkflowExecutionTimedOutEventAttributes(in.GetChildWorkflowExecutionTimedOutEventAttributes())}
-	} else if in.GetChildWorkflowExecutionTerminatedEventAttributes() != nil {
+	case enums.EventTypeChildWorkflowExecutionTerminated:
 		ret.Attributes = &common.HistoryEvent_ChildWorkflowExecutionTerminatedEventAttributes{ChildWorkflowExecutionTerminatedEventAttributes: toProtoChildWorkflowExecutionTerminatedEventAttributes(in.GetChildWorkflowExecutionTerminatedEventAttributes())}
-	} else if in.GetSignalExternalWorkflowExecutionInitiatedEventAttributes() != nil {
+	case enums.EventTypeSignalExternalWorkflowExecutionInitiated:
 		ret.Attributes = &common.HistoryEvent_SignalExternalWorkflowExecutionInitiatedEventAttributes{SignalExternalWorkflowExecutionInitiatedEventAttributes: toProtoSignalExternalWorkflowExecutionInitiatedEventAttributes(in.GetSignalExternalWorkflowExecutionInitiatedEventAttributes())}
-	} else if in.GetSignalExternalWorkflowExecutionFailedEventAttributes() != nil {
+	case enums.EventTypeSignalExternalWorkflowExecutionFailed:
 		ret.Attributes = &common.HistoryEvent_SignalExternalWorkflowExecutionFailedEventAttributes{SignalExternalWorkflowExecutionFailedEventAttributes: toProtoSignalExternalWorkflowExecutionFailedEventAttributes(in.GetSignalExternalWorkflowExecutionFailedEventAttributes())}
-	} else if in.GetExternalWorkflowExecutionSignaledEventAttributes() != nil {
+	case enums.EventTypeExternalWorkflowExecutionSignaled:
 		ret.Attributes = &common.HistoryEvent_ExternalWorkflowExecutionSignaledEventAttributes{ExternalWorkflowExecutionSignaledEventAttributes: toProtoExternalWorkflowExecutionSignaledEventAttributes(in.GetExternalWorkflowExecutionSignaledEventAttributes())}
-	} else if in.GetUpsertWorkflowSearchAttributesEventAttributes() != nil {
+	case enums.EventTypeUpsertWorkflowSearchAttributes:
 		ret.Attributes = &common.HistoryEvent_UpsertWorkflowSearchAttributesEventAttributes{UpsertWorkflowSearchAttributesEventAttributes: toProtoUpsertWorkflowSearchAttributesEventAttributes(in.GetUpsertWorkflowSearchAttributesEventAttributes())}
 	}
 	return ret
