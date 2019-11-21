@@ -122,6 +122,9 @@ type (
 		// domain entry contains a snapshot of domain
 		// NOTE: do not use the failover version inside, use currentVersion above
 		domainEntry *cache.DomainCacheEntry
+		// record if a event has been applied to mutable state
+		// TODO: persist this to db
+		appliedEvents map[string]struct{}
 
 		insertTransferTasks    []persistence.Task
 		insertReplicationTasks []persistence.Task
@@ -181,6 +184,7 @@ func newMutableStateBuilder(
 		stateInDB:             persistence.WorkflowStateVoid,
 		nextEventIDInDB:       0,
 		domainEntry:           domainEntry,
+		appliedEvents:         make(map[string]struct{}),
 
 		queryRegistry: newQueryRegistry(),
 
@@ -3960,6 +3964,21 @@ func (e *mutableStateBuilder) CloseTransactionAsSnapshot(
 		return nil, nil, err
 	}
 	return workflowSnapshot, workflowEventsSeq, nil
+}
+
+func (e *mutableStateBuilder) IsResourceDuplicated(
+	resourceDedupKey definition.DeduplicationID,
+) bool {
+	id := definition.GenerateDeduplicationKey(resourceDedupKey)
+	_, duplicated := e.appliedEvents[id]
+	return duplicated
+}
+
+func (e *mutableStateBuilder) UpdateDuplicatedResource(
+	resourceDedupKey definition.DeduplicationID,
+) {
+	id := definition.GenerateDeduplicationKey(resourceDedupKey)
+	e.appliedEvents[id] = struct{}{}
 }
 
 func (e *mutableStateBuilder) prepareCloseTransaction(

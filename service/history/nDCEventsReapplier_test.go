@@ -22,6 +22,7 @@ package history
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -32,6 +33,7 @@ import (
 
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
@@ -70,7 +72,8 @@ func (s *nDCEventReapplicationSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *nDCEventReapplicationSuite) TestReapplyEvents() {
+func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent() {
+	runID := uuid.New()
 	execution := &persistence.WorkflowExecutionInfo{
 		DomainID: uuid.New(),
 	}
@@ -90,13 +93,127 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents() {
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(int64(1), nil).AnyTimes()
 	msBuilderCurrent.EXPECT().GetExecutionInfo().Return(execution).AnyTimes()
 	msBuilderCurrent.EXPECT().AddWorkflowExecutionSignaled(
-		attr.GetSignalName(), attr.GetInput(), attr.GetIdentity(),
+		attr.GetSignalName(),
+		attr.GetInput(),
+		attr.GetIdentity(),
 	).Return(event, nil).Times(1)
-
+	dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
+	msBuilderCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(false).Times(1)
+	msBuilderCurrent.EXPECT().UpdateDuplicatedResource(dedupResource).Times(1)
 	events := []*shared.HistoryEvent{
 		{EventType: common.EventTypePtr(shared.EventTypeWorkflowExecutionStarted)},
 		event,
 	}
-	err := s.nDCReapplication.reapplyEvents(context.Background(), msBuilderCurrent, events)
+	appliedEvent, err := s.nDCReapplication.reapplyEvents(context.Background(), msBuilderCurrent, events, runID)
 	s.NoError(err)
+	s.Equal(1, len(appliedEvent))
+}
+
+func (s *nDCEventReapplicationSuite) TestReapplyEvents_Noop() {
+	runID := uuid.New()
+	event := &shared.HistoryEvent{
+		EventId:   common.Int64Ptr(1),
+		EventType: common.EventTypePtr(shared.EventTypeWorkflowExecutionSignaled),
+		WorkflowExecutionSignaledEventAttributes: &shared.WorkflowExecutionSignaledEventAttributes{
+			Identity:   common.StringPtr("test"),
+			SignalName: common.StringPtr("signal"),
+			Input:      []byte{},
+		},
+	}
+
+	msBuilderCurrent := NewMockmutableState(s.controller)
+	dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
+	msBuilderCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(true).Times(1)
+	events := []*shared.HistoryEvent{
+		{EventType: common.EventTypePtr(shared.EventTypeWorkflowExecutionStarted)},
+		event,
+	}
+	appliedEvent, err := s.nDCReapplication.reapplyEvents(context.Background(), msBuilderCurrent, events, runID)
+	s.NoError(err)
+	s.Equal(0, len(appliedEvent))
+}
+
+func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
+	runID := uuid.New()
+	execution := &persistence.WorkflowExecutionInfo{
+		DomainID: uuid.New(),
+	}
+	event1 := &shared.HistoryEvent{
+		EventId:   common.Int64Ptr(1),
+		EventType: common.EventTypePtr(shared.EventTypeWorkflowExecutionSignaled),
+		WorkflowExecutionSignaledEventAttributes: &shared.WorkflowExecutionSignaledEventAttributes{
+			Identity:   common.StringPtr("test"),
+			SignalName: common.StringPtr("signal"),
+			Input:      []byte{},
+		},
+	}
+	event2 := &shared.HistoryEvent{
+		EventId:   common.Int64Ptr(2),
+		EventType: common.EventTypePtr(shared.EventTypeWorkflowExecutionSignaled),
+		WorkflowExecutionSignaledEventAttributes: &shared.WorkflowExecutionSignaledEventAttributes{
+			Identity:   common.StringPtr("test"),
+			SignalName: common.StringPtr("signal"),
+			Input:      []byte{},
+		},
+	}
+	attr1 := event1.WorkflowExecutionSignaledEventAttributes
+
+	msBuilderCurrent := NewMockmutableState(s.controller)
+	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(int64(1), nil).AnyTimes()
+	msBuilderCurrent.EXPECT().GetExecutionInfo().Return(execution).AnyTimes()
+	msBuilderCurrent.EXPECT().AddWorkflowExecutionSignaled(
+		attr1.GetSignalName(),
+		attr1.GetInput(),
+		attr1.GetIdentity(),
+	).Return(event1, nil).Times(1)
+	dedupResource1 := definition.NewEventReappliedID(runID, event1.GetEventId(), event1.GetVersion())
+	msBuilderCurrent.EXPECT().IsResourceDuplicated(dedupResource1).Return(false).Times(1)
+	dedupResource2 := definition.NewEventReappliedID(runID, event2.GetEventId(), event2.GetVersion())
+	msBuilderCurrent.EXPECT().IsResourceDuplicated(dedupResource2).Return(true).Times(1)
+	msBuilderCurrent.EXPECT().UpdateDuplicatedResource(dedupResource1).Times(1)
+	events := []*shared.HistoryEvent{
+		{EventType: common.EventTypePtr(shared.EventTypeWorkflowExecutionStarted)},
+		event1,
+		event2,
+	}
+	appliedEvent, err := s.nDCReapplication.reapplyEvents(context.Background(), msBuilderCurrent, events, runID)
+	s.NoError(err)
+	s.Equal(1, len(appliedEvent))
+}
+
+func (s *nDCEventReapplicationSuite) TestReapplyEvents_Error() {
+	runID := uuid.New()
+	execution := &persistence.WorkflowExecutionInfo{
+		DomainID: uuid.New(),
+	}
+	event := &shared.HistoryEvent{
+		EventId:   common.Int64Ptr(1),
+		EventType: common.EventTypePtr(shared.EventTypeWorkflowExecutionSignaled),
+		WorkflowExecutionSignaledEventAttributes: &shared.WorkflowExecutionSignaledEventAttributes{
+			Identity:   common.StringPtr("test"),
+			SignalName: common.StringPtr("signal"),
+			Input:      []byte{},
+		},
+	}
+	attr := event.WorkflowExecutionSignaledEventAttributes
+
+	msBuilderCurrent := NewMockmutableState(s.controller)
+	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(int64(1), nil).AnyTimes()
+	msBuilderCurrent.EXPECT().GetExecutionInfo().Return(execution).AnyTimes()
+	msBuilderCurrent.EXPECT().AddWorkflowExecutionSignaled(
+		attr.GetSignalName(),
+		attr.GetInput(),
+		attr.GetIdentity(),
+	).Return(nil, fmt.Errorf("test")).Times(1)
+	dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
+	msBuilderCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(false).Times(1)
+	events := []*shared.HistoryEvent{
+		{EventType: common.EventTypePtr(shared.EventTypeWorkflowExecutionStarted)},
+		event,
+	}
+	appliedEvent, err := s.nDCReapplication.reapplyEvents(context.Background(), msBuilderCurrent, events, runID)
+	s.Error(err)
+	s.Equal(0, len(appliedEvent))
 }

@@ -1184,6 +1184,7 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 
 	domainID := eventBatches[0].DomainID
 	workflowID := eventBatches[0].WorkflowID
+	runID := eventBatches[0].RunID
 	var reapplyEvents []*workflow.HistoryEvent
 	for _, events := range eventBatches {
 		if events.DomainID != domainID ||
@@ -1205,9 +1206,10 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 	}
 
 	// Reapply events only reapply to the current run.
-	// Leave the run id empty will reapply events to the current run.
+	// The run id is only used for reapply event de-duplication
 	execution := &workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(workflowID),
+		RunId:      common.StringPtr(runID),
 	}
 	domainCache := c.shard.GetDomainCache()
 	clientBean := c.shard.GetService().GetClientBean()
@@ -1226,6 +1228,7 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 			ctx,
 			domainID,
 			workflowID,
+			runID,
 			reapplyEvents,
 		)
 	}

@@ -28,6 +28,7 @@ import (
 	h "github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/persistence"
 )
 
@@ -157,6 +158,8 @@ type (
 		IsSignalRequested(requestID string) bool
 		IsStickyTaskListEnabled() bool
 		IsWorkflowExecutionRunning() bool
+		IsResourceDuplicated(resourceDedupKey definition.DeduplicationID) bool
+		UpdateDuplicatedResource(resourceDedupKey definition.DeduplicationID)
 		Load(*persistence.WorkflowMutableState)
 		ReplicateActivityInfo(*h.SyncActivityRequest, bool) error
 		ReplicateActivityTaskCancelRequestedEvent(*workflow.HistoryEvent) error

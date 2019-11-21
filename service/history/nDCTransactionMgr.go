@@ -272,13 +272,15 @@ func (r *nDCTransactionMgrImpl) backfillWorkflow(
 		// target workflow is active && target workflow is current workflow
 		// we need to reapply events here, rather than using reapplyEvents
 		// within workflow execution context, or otherwise deadlock will appear
-		if targetWorkflow.getMutableState().IsCurrentWorkflowGuaranteed() {
+		targetMutableState := targetWorkflow.getMutableState()
+		if targetMutableState.IsCurrentWorkflowGuaranteed() {
 			// case 1
 			transactionPolicy = transactionPolicyActive
-			if err := r.eventsReapplier.reapplyEvents(
+			if _, err := r.eventsReapplier.reapplyEvents(
 				ctx,
 				targetWorkflow.getMutableState(),
 				targetWorkflowEvents.Events,
+				targetMutableState.GetExecutionInfo().RunID,
 			); err != nil {
 				return err
 			}

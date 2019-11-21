@@ -507,17 +507,17 @@ func (mr *MockEngineMockRecorder) QueryWorkflow(ctx, request interface{}) *gomoc
 }
 
 // ReapplyEvents mocks base method
-func (m *MockEngine) ReapplyEvents(ctx context.Context, domainUUID, workflowID string, events []*shared.HistoryEvent) error {
+func (m *MockEngine) ReapplyEvents(ctx context.Context, domainUUID, workflowID, runID string, events []*shared.HistoryEvent) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReapplyEvents", ctx, domainUUID, workflowID, events)
+	ret := m.ctrl.Call(m, "ReapplyEvents", ctx, domainUUID, workflowID, runID, events)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ReapplyEvents indicates an expected call of ReapplyEvents
-func (mr *MockEngineMockRecorder) ReapplyEvents(ctx, domainUUID, workflowID, events interface{}) *gomock.Call {
+func (mr *MockEngineMockRecorder) ReapplyEvents(ctx, domainUUID, workflowID, runID, events interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReapplyEvents", reflect.TypeOf((*MockEngine)(nil).ReapplyEvents), ctx, domainUUID, workflowID, events)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReapplyEvents", reflect.TypeOf((*MockEngine)(nil).ReapplyEvents), ctx, domainUUID, workflowID, runID, events)
 }
 
 // NotifyNewHistoryEvent mocks base method

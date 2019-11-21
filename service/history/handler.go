@@ -1564,10 +1564,13 @@ func (h *Handler) ReapplyEvents(
 	if err != nil {
 		return h.error(err, scope, domainID, workflowID)
 	}
+
+	execution := request.GetRequest().GetWorkflowExecution()
 	if err := engine.ReapplyEvents(
 		ctx,
 		request.GetDomainUUID(),
-		request.GetRequest().GetWorkflowExecution().GetWorkflowId(),
+		execution.GetWorkflowId(),
+		execution.GetRunId(),
 		historyEvents,
 	); err != nil {
 		return h.error(err, scope, domainID, workflowID)

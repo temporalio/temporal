@@ -26,6 +26,7 @@ import (
 	ctx "context"
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/metrics"
 )
@@ -36,7 +37,8 @@ type (
 			ctx ctx.Context,
 			msBuilder mutableState,
 			historyEvents []*workflow.HistoryEvent,
-		) error
+			runID string,
+		) ([]*workflow.HistoryEvent, error)
 	}
 
 	nDCEventsReapplierImpl struct {
@@ -60,38 +62,46 @@ func (r *nDCEventsReapplierImpl) reapplyEvents(
 	ctx ctx.Context,
 	msBuilder mutableState,
 	historyEvents []*workflow.HistoryEvent,
-) error {
+	runID string,
+) ([]*workflow.HistoryEvent, error) {
 
-	var reapplyEvents []*workflow.HistoryEvent
-	// TODO: need to implement Reapply policy
+	var toReapplyEvents []*workflow.HistoryEvent
 	for _, event := range historyEvents {
 		switch event.GetEventType() {
 		case workflow.EventTypeWorkflowExecutionSignaled:
-			reapplyEvents = append(reapplyEvents, event)
+			dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
+			if msBuilder.IsResourceDuplicated(dedupResource) {
+				// skip already applied event
+				continue
+			}
+			toReapplyEvents = append(toReapplyEvents, event)
 		}
 	}
 
-	if len(reapplyEvents) == 0 {
-		return nil
+	if len(toReapplyEvents) == 0 {
+		return nil, nil
 	}
 
 	if !msBuilder.IsWorkflowExecutionRunning() {
 		// TODO when https://github.com/uber/cadence/issues/2420 is finished
 		//  reset to workflow finish event
 		//  ignore this case for now
-		return nil
+		return nil, nil
 	}
 
-	// TODO: need to have signal deduplicate logic
-	for _, event := range reapplyEvents {
+	var reappliedEvents []*workflow.HistoryEvent
+	for _, event := range toReapplyEvents {
 		signal := event.GetWorkflowExecutionSignaledEventAttributes()
 		if _, err := msBuilder.AddWorkflowExecutionSignaled(
 			signal.GetSignalName(),
 			signal.GetInput(),
 			signal.GetIdentity(),
 		); err != nil {
-			return err
+			return nil, err
 		}
+		deDupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
+		msBuilder.UpdateDuplicatedResource(deDupResource)
+		reappliedEvents = append(reappliedEvents, event)
 	}
-	return nil
+	return reappliedEvents, nil
 }

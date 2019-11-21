@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
@@ -139,6 +140,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentGuaranteed_Active_R
 	now := time.Now()
 	currentVersion := int64(1234)
 	releaseCalled := false
+	runID := uuid.New()
 
 	workflow := NewMocknDCWorkflow(s.controller)
 	context := NewMockworkflowExecutionContext(s.controller)
@@ -155,10 +157,11 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentGuaranteed_Active_R
 
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", currentVersion).Return(cluster.TestCurrentClusterName)
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
-	s.mockEventsReapplier.EXPECT().reapplyEvents(ctx, mutableState, workflowEvents.Events).Return(nil).Times(1)
+	s.mockEventsReapplier.EXPECT().reapplyEvents(ctx, mutableState, workflowEvents.Events, runID).Return(workflowEvents.Events, nil).Times(1)
 
 	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(true).AnyTimes()
 	mutableState.EXPECT().GetCurrentVersion().Return(currentVersion).AnyTimes()
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{RunID: runID}).Times(1)
 	context.EXPECT().persistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil).Times(1)
 	context.EXPECT().updateWorkflowExecutionWithNew(
 		now, persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, transactionPolicyActive, (*transactionPolicy)(nil),

@@ -36,6 +36,7 @@ import (
 	history "github.com/uber/cadence/.gen/go/history"
 	shared "github.com/uber/cadence/.gen/go/shared"
 	cache "github.com/uber/cadence/common/cache"
+	definition "github.com/uber/cadence/common/definition"
 	persistence "github.com/uber/cadence/common/persistence"
 )
 
@@ -1566,6 +1567,32 @@ func (m *MockmutableState) IsWorkflowExecutionRunning() bool {
 func (mr *MockmutableStateMockRecorder) IsWorkflowExecutionRunning() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsWorkflowExecutionRunning", reflect.TypeOf((*MockmutableState)(nil).IsWorkflowExecutionRunning))
+}
+
+// IsResourceDuplicated mocks base method
+func (m *MockmutableState) IsResourceDuplicated(resourceDedupKey definition.DeduplicationID) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsResourceDuplicated", resourceDedupKey)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsResourceDuplicated indicates an expected call of IsResourceDuplicated
+func (mr *MockmutableStateMockRecorder) IsResourceDuplicated(resourceDedupKey interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsResourceDuplicated", reflect.TypeOf((*MockmutableState)(nil).IsResourceDuplicated), resourceDedupKey)
+}
+
+// UpdateDuplicatedResource mocks base method
+func (m *MockmutableState) UpdateDuplicatedResource(resourceDedupKey definition.DeduplicationID) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "UpdateDuplicatedResource", resourceDedupKey)
+}
+
+// UpdateDuplicatedResource indicates an expected call of UpdateDuplicatedResource
+func (mr *MockmutableStateMockRecorder) UpdateDuplicatedResource(resourceDedupKey interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDuplicatedResource", reflect.TypeOf((*MockmutableState)(nil).UpdateDuplicatedResource), resourceDedupKey)
 }
 
 // Load mocks base method

@@ -60,15 +60,16 @@ func (m *MocknDCEventsReapplier) EXPECT() *MocknDCEventsReapplierMockRecorder {
 }
 
 // reapplyEvents mocks base method
-func (m *MocknDCEventsReapplier) reapplyEvents(ctx context.Context, msBuilder mutableState, historyEvents []*shared.HistoryEvent) error {
+func (m *MocknDCEventsReapplier) reapplyEvents(ctx context.Context, msBuilder mutableState, historyEvents []*shared.HistoryEvent, runID string) ([]*shared.HistoryEvent, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "reapplyEvents", ctx, msBuilder, historyEvents)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "reapplyEvents", ctx, msBuilder, historyEvents, runID)
+	ret0, _ := ret[0].([]*shared.HistoryEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // reapplyEvents indicates an expected call of reapplyEvents
-func (mr *MocknDCEventsReapplierMockRecorder) reapplyEvents(ctx, msBuilder, historyEvents interface{}) *gomock.Call {
+func (mr *MocknDCEventsReapplierMockRecorder) reapplyEvents(ctx, msBuilder, historyEvents, runID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "reapplyEvents", reflect.TypeOf((*MocknDCEventsReapplier)(nil).reapplyEvents), ctx, msBuilder, historyEvents)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "reapplyEvents", reflect.TypeOf((*MocknDCEventsReapplier)(nil).reapplyEvents), ctx, msBuilder, historyEvents, runID)
 }
