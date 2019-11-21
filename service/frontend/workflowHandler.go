@@ -1806,7 +1806,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 		if err != nil {
 			return nil, wh.error(errInvalidNextPageToken, scope)
 		}
-		if execution.RunId != nil && execution.GetRunId() != token.RunID {
+		if (execution.RunId != nil || execution.GetRunId() != "") && execution.GetRunId() != token.RunID {
 			return nil, wh.error(errNextPageTokenRunIDMismatch, scope)
 		}
 
@@ -2303,11 +2303,11 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(
 		return nil, wh.error(&gen.BadRequestError{Message: "StartTimeFilter is required"}, scope)
 	}
 
-	if listRequest.StartTimeFilter.EarliestTime == nil {
+	if listRequest.StartTimeFilter.EarliestTime == nil || listRequest.StartTimeFilter.GetEarliestTime() == 0 {
 		return nil, wh.error(&gen.BadRequestError{Message: "EarliestTime in StartTimeFilter is required"}, scope)
 	}
 
-	if listRequest.StartTimeFilter.LatestTime == nil {
+	if listRequest.StartTimeFilter.LatestTime == nil || listRequest.StartTimeFilter.GetLatestTime() == 0 {
 		return nil, wh.error(&gen.BadRequestError{Message: "LatestTime in StartTimeFilter is required"}, scope)
 	}
 
@@ -2500,11 +2500,11 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(
 		return nil, wh.error(&gen.BadRequestError{Message: "StartTimeFilter is required"}, scope)
 	}
 
-	if listRequest.StartTimeFilter.EarliestTime == nil {
+	if listRequest.StartTimeFilter.EarliestTime == nil || listRequest.StartTimeFilter.GetEarliestTime() == 0 {
 		return nil, wh.error(&gen.BadRequestError{Message: "EarliestTime in StartTimeFilter is required"}, scope)
 	}
 
-	if listRequest.StartTimeFilter.LatestTime == nil {
+	if listRequest.StartTimeFilter.LatestTime == nil || listRequest.StartTimeFilter.GetLatestTime() == 0 {
 		return nil, wh.error(&gen.BadRequestError{Message: "LatestTime in StartTimeFilter is required"}, scope)
 	}
 
@@ -3421,7 +3421,7 @@ func (wh *WorkflowHandler) GetDomainReplicationMessages(
 	}
 
 	lastMessageID := defaultLastMessageID
-	if request.IsSetLastRetrivedMessageId() {
+	if request.IsSetLastRetrivedMessageId() && request.GetLastRetrivedMessageId() > 0 {
 		lastMessageID = int(request.GetLastRetrivedMessageId())
 	}
 
@@ -3441,7 +3441,7 @@ func (wh *WorkflowHandler) GetDomainReplicationMessages(
 	}
 
 	lastProcessedMessageID := defaultLastMessageID
-	if request.IsSetLastProcessedMessageId() {
+	if request.IsSetLastProcessedMessageId() && request.GetLastProcessedMessageId() > 0 {
 		lastProcessedMessageID = int(request.GetLastProcessedMessageId())
 	}
 
