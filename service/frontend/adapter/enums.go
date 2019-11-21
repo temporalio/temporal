@@ -58,3 +58,52 @@ func toThriftWorkflowExecutionCloseStatus(in enums.WorkflowExecutionCloseStatus)
 	ret := shared.WorkflowExecutionCloseStatus(in)
 	return &ret
 }
+
+func toThriftDecisionType(in enums.DecisionType) *shared.DecisionType {
+	ret := shared.DecisionType(in)
+	return &ret
+}
+
+func toThriftContinueAsNewInitiator(in enums.ContinueAsNewInitiator) *shared.ContinueAsNewInitiator {
+	ret := shared.ContinueAsNewInitiator(in)
+	return &ret
+}
+
+func toThriftParentClosePolicy(in enums.ParentClosePolicy) *shared.ParentClosePolicy {
+	ret := shared.ParentClosePolicy(in)
+	return &ret
+}
+
+func toThriftQueryResultType(in enums.QueryResultType) *shared.QueryResultType {
+	ret := shared.QueryResultType(in)
+	return &ret
+}
+func toThriftDecisionTaskFailedCause(in enums.DecisionTaskFailedCause) *shared.DecisionTaskFailedCause {
+	ret := shared.DecisionTaskFailedCause(in)
+	return &ret
+}
+
+func toThriftQueryTaskCompletedType(in enums.QueryTaskCompletedType) *shared.QueryTaskCompletedType {
+	ret := shared.QueryTaskCompletedType(in)
+	return &ret
+}
+
+func toThriftQueryRejectCondition(in enums.QueryRejectCondition) *shared.QueryRejectCondition {
+	ret := shared.QueryRejectCondition(in)
+	return &ret
+}
+
+func toThriftQueryConsistencyLevel(in enums.QueryConsistencyLevel) *shared.QueryConsistencyLevel {
+	ret := shared.QueryConsistencyLevel(in)
+	return &ret
+}
+
+func toThriftTaskListType(in enums.TaskListType) *shared.TaskListType {
+	ret := shared.TaskListType(in)
+	return &ret
+}
+
+func toThriftEncodingType(in enums.EncodingType) *shared.EncodingType {
+	ret := shared.EncodingType(in)
+	return &ret
+}

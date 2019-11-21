@@ -124,13 +124,17 @@ PROTO_DIRS = $(sort $(dir $(wildcard ${PROTO_ROOT}/*/*.proto)))
 clean-proto:
 	$(foreach PROTO_DIR,$(PROTO_DIRS),rm -f ${PROTO_DIR}*.go;)
 
-update-proto:
+update-proto-submodule:
 	git submodule update --remote $(PROTO_ROOT)
 
-install-proto:
+update-proto: clean-proto update-proto-submodule yarpc-install protoc
+
+install-proto-submodule:
 	git submodule update --init $(PROTO_ROOT)
 
-proto: clean-proto install-proto yarpc-install
+proto: clean-proto install-proto-submodule yarpc-install protoc
+
+protoc:
 #   run protoc separately for each directory because of different package names
 	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=${PROTO_ROOT} --gogoslick_out=paths=source_relative:${PROTO_ROOT} ${PROTO_DIR}*.proto;)
 	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=${PROTO_ROOT} --yarpc-go_out=${PROTO_ROOT} ${PROTO_DIR}*.proto;)

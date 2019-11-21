@@ -165,7 +165,6 @@ func (d *domainCLIImpl) RegisterDomain(c *cli.Context) {
 		default:
 			ErrorAndExit("Operation RegisterDomain failed.", er)
 		}
-		return
 	} else {
 		fmt.Printf("Domain %s successfully registered.\n", domainName)
 	}
@@ -307,7 +306,6 @@ func (d *domainCLIImpl) UpdateDomain(c *cli.Context) {
 		default:
 			ErrorAndExit("Operation UpdateDomain failed.", err)
 		}
-		return
 	} else {
 		fmt.Printf("Domain %s successfully updated.\n", domainName)
 	}

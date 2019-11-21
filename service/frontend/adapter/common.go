@@ -23,6 +23,7 @@ package adapter
 import (
 	"github.com/temporalio/temporal-proto/common"
 	"github.com/temporalio/temporal-proto/enums"
+	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/go/shared"
 )
 
@@ -487,4 +488,440 @@ func toProtoPendingChildExecutionInfo(in *shared.PendingChildExecutionInfo) *com
 		InitiatedID:       in.GetInitiatedID(),
 		ParentClosePolicy: enums.ParentClosePolicy(in.GetParentClosePolicy()),
 	}
+}
+
+func toProtoWorkflowQuery(in *shared.WorkflowQuery) *common.WorkflowQuery {
+	if in == nil {
+		return nil
+	}
+	return &common.WorkflowQuery{
+		QueryType: in.GetQueryType(),
+		QueryArgs: in.GetQueryArgs(),
+	}
+}
+
+func toProtoWorkflowQueries(in map[string]*shared.WorkflowQuery) map[string]*common.WorkflowQuery {
+	if in == nil {
+		return nil
+	}
+
+	ret := make(map[string]*common.WorkflowQuery, len(in))
+	for k, v := range in {
+		ret[k] = toProtoWorkflowQuery(v)
+	}
+
+	return ret
+}
+
+// toThriftActivityType ...
+func toThriftActivityType(in *common.ActivityType) *shared.ActivityType {
+	if in == nil {
+		return nil
+	}
+	return &shared.ActivityType{
+		Name: &in.Name,
+	}
+}
+
+// toThriftStickyExecutionAttributes ...
+func toThriftStickyExecutionAttributes(in *common.StickyExecutionAttributes) *shared.StickyExecutionAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.StickyExecutionAttributes{
+		WorkerTaskList:                toThriftTaskList(in.WorkerTaskList),
+		ScheduleToStartTimeoutSeconds: &in.ScheduleToStartTimeoutSeconds,
+	}
+}
+
+func toThriftWorkflowQueryResults(in map[string]*common.WorkflowQueryResult) map[string]*shared.WorkflowQueryResult {
+	if in == nil {
+		return nil
+	}
+
+	ret := make(map[string]*shared.WorkflowQueryResult, len(in))
+	for k, v := range in {
+		ret[k] = toThriftWorkflowQueryResult(v)
+	}
+
+	return ret
+}
+
+// toThriftWorkflowQueryResult ...
+func toThriftWorkflowQueryResult(in *common.WorkflowQueryResult) *shared.WorkflowQueryResult {
+	if in == nil {
+		return nil
+	}
+	return &shared.WorkflowQueryResult{
+		ResultType:   toThriftQueryResultType(in.ResultType),
+		Answer:       in.Answer,
+		ErrorMessage: &in.ErrorMessage,
+	}
+}
+
+// toThriftTaskListMetadata ...
+func toThriftTaskListMetadata(in *common.TaskListMetadata) *shared.TaskListMetadata {
+	if in == nil {
+		return nil
+	}
+	return &shared.TaskListMetadata{
+		MaxTasksPerSecond: &in.MaxTasksPerSecond,
+	}
+}
+
+// toThriftWorkflowQuery ...
+func toThriftWorkflowQuery(in *common.WorkflowQuery) *shared.WorkflowQuery {
+	if in == nil {
+		return nil
+	}
+	return &shared.WorkflowQuery{
+		QueryType: &in.QueryType,
+		QueryArgs: in.QueryArgs,
+	}
+}
+
+// toThriftReplicationToken ...
+func toThriftReplicationToken(in *common.ReplicationToken) *replicator.ReplicationToken {
+	if in == nil {
+		return nil
+	}
+	return &replicator.ReplicationToken{
+		ShardID:                &in.ShardID,
+		LastRetrivedMessageId:  &in.LastRetrivedMessageId,
+		LastProcessedMessageId: &in.LastProcessedMessageId,
+	}
+}
+func toThriftReplicationTokens(in []*common.ReplicationToken) []*replicator.ReplicationToken {
+	if in == nil {
+		return nil
+	}
+
+	var ret []*replicator.ReplicationToken
+	for _, item := range in {
+		ret = append(ret, toThriftReplicationToken(item))
+	}
+	return ret
+}
+
+// toThriftDataBlob ...
+func toThriftDataBlob(in *common.DataBlob) *shared.DataBlob {
+	if in == nil {
+		return nil
+	}
+	return &shared.DataBlob{
+		EncodingType: toThriftEncodingType(in.EncodingType),
+		Data:         in.Data,
+	}
+}
+
+// toProtoQueryRejected ...
+func toProtoQueryRejected(in *shared.QueryRejected) *common.QueryRejected {
+	if in == nil {
+		return nil
+	}
+	return &common.QueryRejected{
+		CloseStatus: enums.WorkflowExecutionCloseStatus(in.GetCloseStatus()),
+	}
+}
+
+// toProtoPollerInfo ...
+func toProtoPollerInfo(in *shared.PollerInfo) *common.PollerInfo {
+	if in == nil {
+		return nil
+	}
+	return &common.PollerInfo{
+		LastAccessTime: in.GetLastAccessTime(),
+		Identity:       in.GetIdentity(),
+		RatePerSecond:  in.GetRatePerSecond(),
+	}
+}
+
+func toProtoPollerInfos(in []*shared.PollerInfo) []*common.PollerInfo {
+	if in == nil {
+		return nil
+	}
+
+	var ret []*common.PollerInfo
+	for _, item := range in {
+		ret = append(ret, toProtoPollerInfo(item))
+	}
+	return ret
+}
+
+// toProtoTaskListStatus ...
+func toProtoTaskListStatus(in *shared.TaskListStatus) *common.TaskListStatus {
+	if in == nil {
+		return nil
+	}
+	return &common.TaskListStatus{
+		BacklogCountHint: in.GetBacklogCountHint(),
+		ReadLevel:        in.GetReadLevel(),
+		AckLevel:         in.GetAckLevel(),
+		RatePerSecond:    in.GetRatePerSecond(),
+		TaskIDBlock:      toProtoTaskIDBlock(in.GetTaskIDBlock()),
+	}
+}
+
+// toProtoTaskIDBlock ...
+func toProtoTaskIDBlock(in *shared.TaskIDBlock) *common.TaskIDBlock {
+	if in == nil {
+		return nil
+	}
+	return &common.TaskIDBlock{
+		StartID: in.GetStartID(),
+		EndID:   in.GetEndID(),
+	}
+}
+
+// toProtoReplicationMessages ...
+func toProtoReplicationMessages(in *replicator.ReplicationMessages) *common.ReplicationMessages {
+	if in == nil {
+		return nil
+	}
+	return &common.ReplicationMessages{
+		ReplicationTasks:      toProtoReplicationTasks(in.GetReplicationTasks()),
+		LastRetrivedMessageId: in.GetLastRetrivedMessageId(),
+		HasMore:               in.GetHasMore(),
+	}
+}
+
+func toProtoReplicationTasks(in []*replicator.ReplicationTask) []*common.ReplicationTask {
+	if in == nil {
+		return nil
+	}
+
+	var ret []*common.ReplicationTask
+	for _, item := range in {
+		ret = append(ret, toProtoReplicationTask(item))
+	}
+	return ret
+}
+
+// toProtoReplicationTask ...
+func toProtoReplicationTask(in *replicator.ReplicationTask) *common.ReplicationTask {
+	if in == nil {
+		return nil
+	}
+
+	ret := &common.ReplicationTask{
+		TaskType:     enums.ReplicationTaskType(in.GetTaskType()),
+		SourceTaskId: in.GetSourceTaskId(),
+	}
+
+	switch ret.TaskType {
+	case enums.ReplicationTaskTypeDomain:
+		ret.Attributes = &common.ReplicationTask_DomainTaskAttributes{DomainTaskAttributes: toProtoDomainTaskAttributes(in.GetDomainTaskAttributes())}
+	case enums.ReplicationTaskTypeHistory:
+		ret.Attributes = &common.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: toProtoHistoryTaskAttributes(in.GetHistoryTaskAttributes())}
+	case enums.ReplicationTaskTypeSyncShardStatus:
+		ret.Attributes = &common.ReplicationTask_SyncShardStatusTaskAttributes{SyncShardStatusTaskAttributes: toProtoSyncShardStatusTaskAttributes(in.GetSyncShardStatusTaskAttributes())}
+	case enums.ReplicationTaskTypeSyncActivity:
+		ret.Attributes = &common.ReplicationTask_SyncActicvityTaskAttributes{SyncActicvityTaskAttributes: toProtoSyncActicvityTaskAttributes(in.GetSyncActicvityTaskAttributes())}
+	case enums.ReplicationTaskTypeHistoryMetadata:
+		ret.Attributes = &common.ReplicationTask_HistoryMetadataTaskAttributes{HistoryMetadataTaskAttributes: toProtoHistoryMetadataTaskAttributes(in.GetHistoryMetadataTaskAttributes())}
+	case enums.ReplicationTaskTypeHistoryV2:
+		ret.Attributes = &common.ReplicationTask_HistoryTaskV2Attributes{HistoryTaskV2Attributes: toProtoHistoryTaskV2Attributes(in.GetHistoryTaskV2Attributes())}
+	}
+
+	return ret
+}
+
+// toProtoDomainTaskAttributes ...
+func toProtoDomainTaskAttributes(in *replicator.DomainTaskAttributes) *common.DomainTaskAttributes {
+	if in == nil {
+		return nil
+	}
+	return &common.DomainTaskAttributes{
+		DomainOperation:   enums.DomainOperation(in.GetDomainOperation()),
+		Id:                in.GetID(),
+		Info:              toProtoDomainInfo(in.GetInfo()),
+		Config:            toProtoDomainConfiguration(in.GetConfig()),
+		ReplicationConfig: toProtoDomainReplicationConfiguration(in.GetReplicationConfig()),
+		ConfigVersion:     in.GetConfigVersion(),
+		FailoverVersion:   in.GetFailoverVersion(),
+	}
+}
+
+// toProtoHistoryTaskAttributes ...
+func toProtoHistoryTaskAttributes(in *replicator.HistoryTaskAttributes) *common.HistoryTaskAttributes {
+	if in == nil {
+		return nil
+	}
+	return &common.HistoryTaskAttributes{
+		TargetClusters:          in.GetTargetClusters(),
+		DomainId:                in.GetDomainId(),
+		WorkflowId:              in.GetWorkflowId(),
+		RunId:                   in.GetRunId(),
+		FirstEventId:            in.GetFirstEventId(),
+		NextEventId:             in.GetNextEventId(),
+		Version:                 in.GetVersion(),
+		ReplicationInfo:         toProtoReplicationInfos(in.GetReplicationInfo()),
+		History:                 toProtoHistory(in.GetHistory()),
+		NewRunHistory:           toProtoHistory(in.GetNewRunHistory()),
+		EventStoreVersion:       in.GetEventStoreVersion(),
+		NewRunEventStoreVersion: in.GetNewRunEventStoreVersion(),
+		ResetWorkflow:           in.GetResetWorkflow(),
+		NewRunNDC:               in.GetNewRunNDC(),
+	}
+}
+
+func toProtoReplicationInfos(in map[string]*shared.ReplicationInfo) map[string]*common.ReplicationInfo {
+	if in == nil {
+		return nil
+	}
+
+	ret := make(map[string]*common.ReplicationInfo, len(in))
+	for k, v := range in {
+		ret[k] = toProtoReplicationInfo(v)
+	}
+
+	return ret
+}
+
+// toProtoReplicationInfo ...
+func toProtoReplicationInfo(in *shared.ReplicationInfo) *common.ReplicationInfo {
+	if in == nil {
+		return nil
+	}
+	return &common.ReplicationInfo{
+		Version:     in.GetVersion(),
+		LastEventId: in.GetLastEventId(),
+	}
+}
+
+// toProtoHistoryMetadataTaskAttributes ...
+func toProtoHistoryMetadataTaskAttributes(in *replicator.HistoryMetadataTaskAttributes) *common.HistoryMetadataTaskAttributes {
+	if in == nil {
+		return nil
+	}
+	return &common.HistoryMetadataTaskAttributes{
+		TargetClusters: in.GetTargetClusters(),
+		DomainId:       in.GetDomainId(),
+		WorkflowId:     in.GetWorkflowId(),
+		RunId:          in.GetRunId(),
+		FirstEventId:   in.GetFirstEventId(),
+		NextEventId:    in.GetNextEventId(),
+	}
+}
+
+// toProtoSyncShardStatusTaskAttributes ...
+func toProtoSyncShardStatusTaskAttributes(in *replicator.SyncShardStatusTaskAttributes) *common.SyncShardStatusTaskAttributes {
+	if in == nil {
+		return nil
+	}
+	return &common.SyncShardStatusTaskAttributes{
+		SourceCluster: in.GetSourceCluster(),
+		ShardId:       in.GetShardId(),
+		Timestamp:     in.GetTimestamp(),
+	}
+}
+
+// toProtoSyncActicvityTaskAttributes ...
+func toProtoSyncActicvityTaskAttributes(in *replicator.SyncActicvityTaskAttributes) *common.SyncActicvityTaskAttributes {
+	if in == nil {
+		return nil
+	}
+	return &common.SyncActicvityTaskAttributes{
+		DomainId:           in.GetDomainId(),
+		WorkflowId:         in.GetWorkflowId(),
+		RunId:              in.GetRunId(),
+		Version:            in.GetVersion(),
+		ScheduledId:        in.GetScheduledId(),
+		ScheduledTime:      in.GetScheduledTime(),
+		StartedId:          in.GetStartedId(),
+		StartedTime:        in.GetStartedTime(),
+		LastHeartbeatTime:  in.GetLastHeartbeatTime(),
+		Details:            in.GetDetails(),
+		Attempt:            in.GetAttempt(),
+		LastFailureReason:  in.GetLastFailureReason(),
+		LastWorkerIdentity: in.GetLastWorkerIdentity(),
+		LastFailureDetails: in.GetLastFailureDetails(),
+		VersionHistory:     toProtoVersionHistory(in.GetVersionHistory()),
+	}
+}
+
+// toProtoVersionHistoryItem ...
+func toProtoVersionHistoryItem(in *shared.VersionHistoryItem) *common.VersionHistoryItem {
+	if in == nil {
+		return nil
+	}
+	return &common.VersionHistoryItem{
+		EventID: in.GetEventID(),
+		Version: in.GetVersion(),
+	}
+}
+
+// toProtoVersionHistory ...
+func toProtoVersionHistory(in *shared.VersionHistory) *common.VersionHistory {
+	if in == nil {
+		return nil
+	}
+	return &common.VersionHistory{
+		BranchToken: in.GetBranchToken(),
+		Items:       toProtoVersionHistoryItems(in.GetItems()),
+	}
+}
+
+func toProtoVersionHistoryItems(in []*shared.VersionHistoryItem) []*common.VersionHistoryItem {
+	if in == nil {
+		return nil
+	}
+
+	var ret []*common.VersionHistoryItem
+	for _, item := range in {
+		ret = append(ret, toProtoVersionHistoryItem(item))
+	}
+	return ret
+}
+
+// toProtoHistoryTaskV2Attributes ...
+func toProtoHistoryTaskV2Attributes(in *replicator.HistoryTaskV2Attributes) *common.HistoryTaskV2Attributes {
+	if in == nil {
+		return nil
+	}
+	return &common.HistoryTaskV2Attributes{
+		TaskId:              in.GetTaskId(),
+		DomainId:            in.GetDomainId(),
+		WorkflowId:          in.GetWorkflowId(),
+		RunId:               in.GetRunId(),
+		VersionHistoryItems: toProtoVersionHistoryItems(in.GetVersionHistoryItems()),
+		Events:              toProtoDataBlob(in.GetEvents()),
+		NewRunEvents:        toProtoDataBlob(in.GetNewRunEvents()),
+	}
+}
+
+func toProtoDataBlob(in *shared.DataBlob) *common.DataBlob {
+	if in == nil {
+		return nil
+	}
+	return &common.DataBlob{
+		EncodingType: enums.EncodingType(in.GetEncodingType()),
+		Data:         in.GetData(),
+	}
+}
+
+func toProtoIndexedValueTypes(in map[string]shared.IndexedValueType) map[string]enums.IndexedValueType {
+	if in == nil {
+		return nil
+	}
+
+	ret := make(map[string]enums.IndexedValueType, len(in))
+	for k, v := range in {
+		ret[k] = enums.IndexedValueType(v)
+	}
+
+	return ret
+}
+
+func toProtoReplicationMessagess(in map[int32]*replicator.ReplicationMessages) map[int32]*common.ReplicationMessages {
+	if in == nil {
+		return nil
+	}
+
+	ret := make(map[int32]*common.ReplicationMessages, len(in))
+	for k, v := range in {
+		ret[k] = toProtoReplicationMessages(v)
+	}
+
+	return ret
 }

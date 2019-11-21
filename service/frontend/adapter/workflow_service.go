@@ -22,6 +22,7 @@ package adapter
 
 import (
 	"github.com/temporalio/temporal-proto/workflowservice"
+	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/go/shared"
 )
 
@@ -231,11 +232,11 @@ func ToThriftSignalWorkflowExecutionRequest(in *workflowservice.SignalWorkflowEx
 }
 
 // ToProtoSignalWithStartWorkflowExecutionResponse ...
-func ToProtoSignalWithStartWorkflowExecutionResponse(in *shared.StartWorkflowExecutionResponse) *workflowservice.StartWorkflowExecutionResponse {
+func ToProtoSignalWithStartWorkflowExecutionResponse(in *shared.StartWorkflowExecutionResponse) *workflowservice.SignalWithStartWorkflowExecutionResponse {
 	if in == nil {
 		return nil
 	}
-	return &workflowservice.StartWorkflowExecutionResponse{
+	return &workflowservice.SignalWithStartWorkflowExecutionResponse{
 		RunId: in.GetRunId(),
 	}
 }
@@ -327,8 +328,8 @@ func ToThriftListOpenWorkflowExecutionsRequest(in *workflowservice.ListOpenWorkf
 		MaximumPageSize: &in.MaximumPageSize,
 		NextPageToken:   in.NextPageToken,
 		StartTimeFilter: toThriftStartTimeFilter(in.StartTimeFilter),
-		ExecutionFilter: toThriftWorkflowExecutionFilter(in.ExecutionFilter),
-		TypeFilter:      toThriftWorkflowTypeFilter(in.TypeFilter),
+		ExecutionFilter: toThriftWorkflowExecutionFilter(in.GetExecutionFilter()),
+		TypeFilter:      toThriftWorkflowTypeFilter(in.GetTypeFilter()),
 	}
 }
 
@@ -353,9 +354,9 @@ func ToThriftListClosedWorkflowExecutionsRequest(in *workflowservice.ListClosedW
 		MaximumPageSize: &in.MaximumPageSize,
 		NextPageToken:   in.NextPageToken,
 		StartTimeFilter: toThriftStartTimeFilter(in.StartTimeFilter),
-		ExecutionFilter: toThriftWorkflowExecutionFilter(in.ExecutionFilter),
-		TypeFilter:      toThriftWorkflowTypeFilter(in.TypeFilter),
-		StatusFilter:    toThriftWorkflowExecutionCloseStatus(in.StatusFilter),
+		ExecutionFilter: toThriftWorkflowExecutionFilter(in.GetExecutionFilter()),
+		TypeFilter:      toThriftWorkflowTypeFilter(in.GetTypeFilter()),
+		StatusFilter:    toThriftWorkflowExecutionCloseStatus(in.GetStatusFilter()),
 	}
 }
 
@@ -380,6 +381,30 @@ func ToThriftListWorkflowExecutionsRequest(in *workflowservice.ListWorkflowExecu
 		PageSize:      &in.PageSize,
 		NextPageToken: in.NextPageToken,
 		Query:         &in.Query,
+	}
+}
+
+// ToThriftScanWorkflowExecutionsRequest ...
+func ToThriftScanWorkflowExecutionsRequest(in *workflowservice.ScanWorkflowExecutionsRequest) *shared.ListWorkflowExecutionsRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.ListWorkflowExecutionsRequest{
+		Domain:        &in.Domain,
+		PageSize:      &in.PageSize,
+		NextPageToken: in.NextPageToken,
+		Query:         &in.Query,
+	}
+}
+
+// ToProtoScanWorkflowExecutionsResponse ...
+func ToProtoScanWorkflowExecutionsResponse(in *shared.ListWorkflowExecutionsResponse) *workflowservice.ScanWorkflowExecutionsResponse {
+	if in == nil {
+		return nil
+	}
+	return &workflowservice.ScanWorkflowExecutionsResponse{
+		Executions:    toProtoWorkflowExecutionInfos(in.GetExecutions()),
+		NextPageToken: in.GetNextPageToken(),
 	}
 }
 
@@ -449,5 +474,387 @@ func ToThriftDescribeWorkflowExecutionRequest(in *workflowservice.DescribeWorkfl
 	return &shared.DescribeWorkflowExecutionRequest{
 		Domain:    &in.Domain,
 		Execution: toThriftWorkflowExecution(in.Execution),
+	}
+}
+
+// ToThriftPollForDecisionTaskRequest ...
+func ToThriftPollForDecisionTaskRequest(in *workflowservice.PollForDecisionTaskRequest) *shared.PollForDecisionTaskRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.PollForDecisionTaskRequest{
+		Domain:         &in.Domain,
+		TaskList:       toThriftTaskList(in.TaskList),
+		Identity:       &in.Identity,
+		BinaryChecksum: &in.BinaryChecksum,
+	}
+}
+
+// ToProtoPollForDecisionTaskResponse ...
+func ToProtoPollForDecisionTaskResponse(in *shared.PollForDecisionTaskResponse) *workflowservice.PollForDecisionTaskResponse {
+	if in == nil {
+		return nil
+	}
+	return &workflowservice.PollForDecisionTaskResponse{
+		TaskToken:                 in.GetTaskToken(),
+		WorkflowExecution:         toProtoWorkflowExecution(in.GetWorkflowExecution()),
+		WorkflowType:              toProtoWorkflowType(in.GetWorkflowType()),
+		PreviousStartedEventId:    in.GetPreviousStartedEventId(),
+		StartedEventId:            in.GetStartedEventId(),
+		Attempt:                   in.GetAttempt(),
+		BacklogCountHint:          in.GetBacklogCountHint(),
+		History:                   toProtoHistory(in.GetHistory()),
+		NextPageToken:             in.GetNextPageToken(),
+		Query:                     toProtoWorkflowQuery(in.GetQuery()),
+		WorkflowExecutionTaskList: toProtoTaskList(in.GetWorkflowExecutionTaskList()),
+		ScheduledTimestamp:        in.GetScheduledTimestamp(),
+		StartedTimestamp:          in.GetStartedTimestamp(),
+		Queries:                   toProtoWorkflowQueries(in.GetQueries()),
+	}
+}
+
+// ToProtoRespondDecisionTaskCompletedResponse ...
+func ToProtoRespondDecisionTaskCompletedResponse(in *shared.RespondDecisionTaskCompletedResponse) *workflowservice.RespondDecisionTaskCompletedResponse {
+	if in == nil {
+		return nil
+	}
+	return &workflowservice.RespondDecisionTaskCompletedResponse{
+		DecisionTask: ToProtoPollForDecisionTaskResponse(in.GetDecisionTask()),
+	}
+}
+
+// ToProtoPollForActivityTaskResponse ...
+func ToProtoPollForActivityTaskResponse(in *shared.PollForActivityTaskResponse) *workflowservice.PollForActivityTaskResponse {
+	if in == nil {
+		return nil
+	}
+	return &workflowservice.PollForActivityTaskResponse{
+		TaskToken:                       in.GetTaskToken(),
+		WorkflowExecution:               toProtoWorkflowExecution(in.GetWorkflowExecution()),
+		ActivityId:                      in.GetActivityId(),
+		ActivityType:                    toProtoActivityType(in.GetActivityType()),
+		Input:                           in.GetInput(),
+		ScheduledTimestamp:              in.GetScheduledTimestamp(),
+		ScheduleToCloseTimeoutSeconds:   in.GetScheduleToCloseTimeoutSeconds(),
+		StartedTimestamp:                in.GetStartedTimestamp(),
+		StartToCloseTimeoutSeconds:      in.GetStartToCloseTimeoutSeconds(),
+		HeartbeatTimeoutSeconds:         in.GetHeartbeatTimeoutSeconds(),
+		Attempt:                         in.GetAttempt(),
+		ScheduledTimestampOfThisAttempt: in.GetScheduledTimestampOfThisAttempt(),
+		HeartbeatDetails:                in.GetHeartbeatDetails(),
+		WorkflowType:                    toProtoWorkflowType(in.GetWorkflowType()),
+		WorkflowDomain:                  in.GetWorkflowDomain(),
+		Header:                          toProtoHeader(in.GetHeader()),
+	}
+}
+
+// ToProtoRecordActivityTaskHeartbeatResponse ...
+func ToProtoRecordActivityTaskHeartbeatResponse(in *shared.RecordActivityTaskHeartbeatResponse) *workflowservice.RecordActivityTaskHeartbeatResponse {
+	if in == nil {
+		return nil
+	}
+	return &workflowservice.RecordActivityTaskHeartbeatResponse{
+		CancelRequested: in.GetCancelRequested(),
+	}
+}
+
+// ToProtoRecordActivityTaskHeartbeatByIDResponse ...
+func ToProtoRecordActivityTaskHeartbeatByIDResponse(in *shared.RecordActivityTaskHeartbeatResponse) *workflowservice.RecordActivityTaskHeartbeatByIDResponse {
+	if in == nil {
+		return nil
+	}
+	return &workflowservice.RecordActivityTaskHeartbeatByIDResponse{
+		CancelRequested: in.GetCancelRequested(),
+	}
+}
+
+// ToThriftRespondDecisionTaskCompletedRequest ...
+func ToThriftRespondDecisionTaskCompletedRequest(in *workflowservice.RespondDecisionTaskCompletedRequest) *shared.RespondDecisionTaskCompletedRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.RespondDecisionTaskCompletedRequest{
+		TaskToken:                  in.TaskToken,
+		Decisions:                  toThriftDecisions(in.Decisions),
+		ExecutionContext:           in.ExecutionContext,
+		Identity:                   &in.Identity,
+		StickyAttributes:           toThriftStickyExecutionAttributes(in.StickyAttributes),
+		ReturnNewDecisionTask:      &in.ReturnNewDecisionTask,
+		ForceCreateNewDecisionTask: &in.ForceCreateNewDecisionTask,
+		BinaryChecksum:             &in.BinaryChecksum,
+		QueryResults:               toThriftWorkflowQueryResults(in.QueryResults),
+	}
+}
+
+// ToThriftRespondDecisionTaskFailedRequest ...
+func ToThriftRespondDecisionTaskFailedRequest(in *workflowservice.RespondDecisionTaskFailedRequest) *shared.RespondDecisionTaskFailedRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.RespondDecisionTaskFailedRequest{
+		TaskToken: in.TaskToken,
+		Cause:     toThriftDecisionTaskFailedCause(in.Cause),
+		Details:   in.Details,
+		Identity:  &in.Identity,
+	}
+}
+
+// ToThriftPollForActivityTaskRequest ...
+func ToThriftPollForActivityTaskRequest(in *workflowservice.PollForActivityTaskRequest) *shared.PollForActivityTaskRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.PollForActivityTaskRequest{
+		Domain:           &in.Domain,
+		TaskList:         toThriftTaskList(in.TaskList),
+		Identity:         &in.Identity,
+		TaskListMetadata: toThriftTaskListMetadata(in.TaskListMetadata),
+	}
+}
+
+// ToThriftRecordActivityTaskHeartbeatRequest ...
+func ToThriftRecordActivityTaskHeartbeatRequest(in *workflowservice.RecordActivityTaskHeartbeatRequest) *shared.RecordActivityTaskHeartbeatRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.RecordActivityTaskHeartbeatRequest{
+		TaskToken: in.TaskToken,
+		Details:   in.Details,
+		Identity:  &in.Identity,
+	}
+}
+
+// ToThriftRecordActivityTaskHeartbeatByIDRequest ...
+func ToThriftRecordActivityTaskHeartbeatByIDRequest(in *workflowservice.RecordActivityTaskHeartbeatByIDRequest) *shared.RecordActivityTaskHeartbeatByIDRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.RecordActivityTaskHeartbeatByIDRequest{
+		Domain:     &in.Domain,
+		WorkflowID: &in.WorkflowID,
+		RunID:      &in.RunID,
+		ActivityID: &in.ActivityID,
+		Details:    in.Details,
+		Identity:   &in.Identity,
+	}
+}
+
+// ToThriftRespondActivityTaskCompletedRequest ...
+func ToThriftRespondActivityTaskCompletedRequest(in *workflowservice.RespondActivityTaskCompletedRequest) *shared.RespondActivityTaskCompletedRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.RespondActivityTaskCompletedRequest{
+		TaskToken: in.TaskToken,
+		Result:    in.Result,
+		Identity:  &in.Identity,
+	}
+}
+
+// ToThriftRespondActivityTaskCompletedByIDRequest ...
+func ToThriftRespondActivityTaskCompletedByIDRequest(in *workflowservice.RespondActivityTaskCompletedByIDRequest) *shared.RespondActivityTaskCompletedByIDRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.RespondActivityTaskCompletedByIDRequest{
+		Domain:     &in.Domain,
+		WorkflowID: &in.WorkflowID,
+		RunID:      &in.RunID,
+		ActivityID: &in.ActivityID,
+		Result:     in.Result,
+		Identity:   &in.Identity,
+	}
+}
+
+// ToThriftRespondActivityTaskFailedRequest ...
+func ToThriftRespondActivityTaskFailedRequest(in *workflowservice.RespondActivityTaskFailedRequest) *shared.RespondActivityTaskFailedRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.RespondActivityTaskFailedRequest{
+		TaskToken: in.TaskToken,
+		Reason:    &in.Reason,
+		Details:   in.Details,
+		Identity:  &in.Identity,
+	}
+}
+
+// ToThriftRespondActivityTaskFailedByIDRequest ...
+func ToThriftRespondActivityTaskFailedByIDRequest(in *workflowservice.RespondActivityTaskFailedByIDRequest) *shared.RespondActivityTaskFailedByIDRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.RespondActivityTaskFailedByIDRequest{
+		Domain:     &in.Domain,
+		WorkflowID: &in.WorkflowID,
+		RunID:      &in.RunID,
+		ActivityID: &in.ActivityID,
+		Reason:     &in.Reason,
+		Details:    in.Details,
+		Identity:   &in.Identity,
+	}
+}
+
+// ToThriftRespondActivityTaskCanceledRequest ...
+func ToThriftRespondActivityTaskCanceledRequest(in *workflowservice.RespondActivityTaskCanceledRequest) *shared.RespondActivityTaskCanceledRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.RespondActivityTaskCanceledRequest{
+		TaskToken: in.TaskToken,
+		Details:   in.Details,
+		Identity:  &in.Identity,
+	}
+}
+
+// ToThriftRespondActivityTaskCanceledByIDRequest ...
+func ToThriftRespondActivityTaskCanceledByIDRequest(in *workflowservice.RespondActivityTaskCanceledByIDRequest) *shared.RespondActivityTaskCanceledByIDRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.RespondActivityTaskCanceledByIDRequest{
+		Domain:     &in.Domain,
+		WorkflowID: &in.WorkflowID,
+		RunID:      &in.RunID,
+		ActivityID: &in.ActivityID,
+		Details:    in.Details,
+		Identity:   &in.Identity,
+	}
+}
+
+// ToThriftRespondQueryTaskCompletedRequest ...
+func ToThriftRespondQueryTaskCompletedRequest(in *workflowservice.RespondQueryTaskCompletedRequest) *shared.RespondQueryTaskCompletedRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.RespondQueryTaskCompletedRequest{
+		TaskToken:     in.TaskToken,
+		CompletedType: toThriftQueryTaskCompletedType(in.CompletedType),
+		QueryResult:   in.QueryResult,
+		ErrorMessage:  &in.ErrorMessage,
+	}
+}
+
+// ToThriftResetStickyTaskListRequest ...
+func ToThriftResetStickyTaskListRequest(in *workflowservice.ResetStickyTaskListRequest) *shared.ResetStickyTaskListRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.ResetStickyTaskListRequest{
+		Domain:    &in.Domain,
+		Execution: toThriftWorkflowExecution(in.Execution),
+	}
+}
+
+// ToThriftQueryWorkflowRequest ...
+func ToThriftQueryWorkflowRequest(in *workflowservice.QueryWorkflowRequest) *shared.QueryWorkflowRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.QueryWorkflowRequest{
+		Domain:                &in.Domain,
+		Execution:             toThriftWorkflowExecution(in.Execution),
+		Query:                 toThriftWorkflowQuery(in.Query),
+		QueryRejectCondition:  toThriftQueryRejectCondition(in.QueryRejectCondition),
+		QueryConsistencyLevel: toThriftQueryConsistencyLevel(in.QueryConsistencyLevel),
+	}
+}
+
+// ToThriftDescribeTaskListRequest ...
+func ToThriftDescribeTaskListRequest(in *workflowservice.DescribeTaskListRequest) *shared.DescribeTaskListRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.DescribeTaskListRequest{
+		Domain:                &in.Domain,
+		TaskList:              toThriftTaskList(in.TaskList),
+		TaskListType:          toThriftTaskListType(in.TaskListType),
+		IncludeTaskListStatus: &in.IncludeTaskListStatus,
+	}
+}
+
+// ToThriftGetReplicationMessagesRequest ...
+func ToThriftGetReplicationMessagesRequest(in *workflowservice.GetReplicationMessagesRequest) *replicator.GetReplicationMessagesRequest {
+	if in == nil {
+		return nil
+	}
+	return &replicator.GetReplicationMessagesRequest{
+		Tokens: toThriftReplicationTokens(in.Tokens),
+	}
+}
+
+// ToThriftGetDomainReplicationMessagesRequest ...
+func ToThriftGetDomainReplicationMessagesRequest(in *workflowservice.GetDomainReplicationMessagesRequest) *replicator.GetDomainReplicationMessagesRequest {
+	if in == nil {
+		return nil
+	}
+	return &replicator.GetDomainReplicationMessagesRequest{
+		LastRetrivedMessageId:  &in.LastRetrivedMessageId,
+		LastProcessedMessageId: &in.LastProcessedMessageId,
+		ClusterName:            &in.ClusterName,
+	}
+}
+
+// ToThriftReapplyEventsRequest ...
+func ToThriftReapplyEventsRequest(in *workflowservice.ReapplyEventsRequest) *shared.ReapplyEventsRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.ReapplyEventsRequest{
+		DomainName:        &in.DomainName,
+		WorkflowExecution: toThriftWorkflowExecution(in.WorkflowExecution),
+		Events:            toThriftDataBlob(in.Events),
+	}
+}
+
+// ToProtoGetSearchAttributesResponse ...
+func ToProtoGetSearchAttributesResponse(in *shared.GetSearchAttributesResponse) *workflowservice.GetSearchAttributesResponse {
+	if in == nil {
+		return nil
+	}
+	return &workflowservice.GetSearchAttributesResponse{
+		Keys: toProtoIndexedValueTypes(in.GetKeys()),
+	}
+}
+
+// ToProtoQueryWorkflowResponse ...
+func ToProtoQueryWorkflowResponse(in *shared.QueryWorkflowResponse) *workflowservice.QueryWorkflowResponse {
+	if in == nil {
+		return nil
+	}
+	return &workflowservice.QueryWorkflowResponse{
+		QueryResult:   in.GetQueryResult(),
+		QueryRejected: toProtoQueryRejected(in.GetQueryRejected()),
+	}
+}
+
+// ToProtoDescribeTaskListResponse ...
+func ToProtoDescribeTaskListResponse(in *shared.DescribeTaskListResponse) *workflowservice.DescribeTaskListResponse {
+	if in == nil {
+		return nil
+	}
+	return &workflowservice.DescribeTaskListResponse{
+		Pollers:        toProtoPollerInfos(in.GetPollers()),
+		TaskListStatus: toProtoTaskListStatus(in.GetTaskListStatus()),
+	}
+}
+
+// ToProtoGetReplicationMessagesResponse ...
+func ToProtoGetReplicationMessagesResponse(in *replicator.GetReplicationMessagesResponse) *workflowservice.GetReplicationMessagesResponse {
+	if in == nil {
+		return nil
+	}
+	return &workflowservice.GetReplicationMessagesResponse{
+		MessagesByShard: toProtoReplicationMessagess(in.GetMessagesByShard()),
+	}
+}
+
+// ToProtoGetDomainReplicationMessagesResponse ...
+func ToProtoGetDomainReplicationMessagesResponse(in *replicator.GetDomainReplicationMessagesResponse) *workflowservice.GetDomainReplicationMessagesResponse {
+	if in == nil {
+		return nil
+	}
+	return &workflowservice.GetDomainReplicationMessagesResponse{
+		Messages: toProtoReplicationMessages(in.GetMessages()),
 	}
 }
