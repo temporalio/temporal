@@ -1,1 +1,9 @@
 vendor/
+.gobincache/
+.idea/
+.buildkite/
+# exclude binaries from the build context sent to docker
+cadence
+cadence-server
+cadence-cassandra-tool
+cadence-sql-tool
