@@ -488,3 +488,51 @@ func toProtoPendingChildExecutionInfo(in *shared.PendingChildExecutionInfo) *com
 		ParentClosePolicy: enums.ParentClosePolicy(in.GetParentClosePolicy()),
 	}
 }
+
+func toProtoWorkflowQuery(in *shared.WorkflowQuery) *common.WorkflowQuery {
+	if in == nil {
+		return nil
+	}
+	return &common.WorkflowQuery{
+		QueryType: in.GetQueryType(),
+		QueryArgs: in.GetQueryArgs(),
+	}
+}
+
+func toProtoWorkflowQueries(in map[string]*shared.WorkflowQuery) map[string]*common.WorkflowQuery {
+	if in == nil {
+		return nil
+	}
+
+	ret := make(map[string]*common.WorkflowQuery, len(in))
+	for k, v := range in {
+		ret[k] = toProtoWorkflowQuery(v)
+	}
+
+	return ret
+}
+
+// toProtoWorkflowQueryResult ...
+func toProtoWorkflowQueryResult(in *shared.WorkflowQueryResult) *common.WorkflowQueryResult {
+	if in == nil {
+		return nil
+	}
+	return &common.WorkflowQueryResult{
+		ResultType:   enums.QueryResultType(in.GetResultType()),
+		Answer:       in.GetAnswer(),
+		ErrorMessage: in.GetErrorMessage(),
+	}
+}
+
+func toProtoWorkflowQueryResults(in map[string]*shared.WorkflowQueryResult) map[string]*common.WorkflowQueryResult {
+	if in == nil {
+		return nil
+	}
+
+	ret := make(map[string]*common.WorkflowQueryResult, len(in))
+	for k, v := range in {
+		ret[k] = toProtoWorkflowQueryResult(v)
+	}
+
+	return ret
+}
