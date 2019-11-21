@@ -22,6 +22,7 @@ package adapter
 
 import (
 	"github.com/temporalio/temporal-proto/workflowservice"
+	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/go/shared"
 )
 
@@ -684,5 +685,142 @@ func ToThriftRespondActivityTaskCanceledByIDRequest(in *workflowservice.RespondA
 		ActivityID: &in.ActivityID,
 		Details:    in.Details,
 		Identity:   &in.Identity,
+	}
+}
+
+// ToThriftRespondQueryTaskCompletedRequest ...
+func ToThriftRespondQueryTaskCompletedRequest(in *workflowservice.RespondQueryTaskCompletedRequest) *shared.RespondQueryTaskCompletedRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.RespondQueryTaskCompletedRequest{
+		TaskToken:     in.TaskToken,
+		CompletedType: toThriftQueryTaskCompletedType(in.CompletedType),
+		QueryResult:   in.QueryResult,
+		ErrorMessage:  &in.ErrorMessage,
+	}
+}
+
+// ToThriftResetStickyTaskListRequest ...
+func ToThriftResetStickyTaskListRequest(in *workflowservice.ResetStickyTaskListRequest) *shared.ResetStickyTaskListRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.ResetStickyTaskListRequest{
+		Domain:    &in.Domain,
+		Execution: toThriftWorkflowExecution(in.Execution),
+	}
+}
+
+// ToThriftQueryWorkflowRequest ...
+func ToThriftQueryWorkflowRequest(in *workflowservice.QueryWorkflowRequest) *shared.QueryWorkflowRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.QueryWorkflowRequest{
+		Domain:                &in.Domain,
+		Execution:             toThriftWorkflowExecution(in.Execution),
+		Query:                 toThriftWorkflowQuery(in.Query),
+		QueryRejectCondition:  toThriftQueryRejectCondition(in.QueryRejectCondition),
+		QueryConsistencyLevel: toThriftQueryConsistencyLevel(in.QueryConsistencyLevel),
+	}
+}
+
+// ToThriftDescribeTaskListRequest ...
+func ToThriftDescribeTaskListRequest(in *workflowservice.DescribeTaskListRequest) *shared.DescribeTaskListRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.DescribeTaskListRequest{
+		Domain:                &in.Domain,
+		TaskList:              toThriftTaskList(in.TaskList),
+		TaskListType:          toThriftTaskListType(in.TaskListType),
+		IncludeTaskListStatus: &in.IncludeTaskListStatus,
+	}
+}
+
+// ToThriftGetReplicationMessagesRequest ...
+func ToThriftGetReplicationMessagesRequest(in *workflowservice.GetReplicationMessagesRequest) *replicator.GetReplicationMessagesRequest {
+	if in == nil {
+		return nil
+	}
+	return &replicator.GetReplicationMessagesRequest{
+		Tokens: toThriftReplicationTokens(in.Tokens),
+	}
+}
+
+// ToThriftGetDomainReplicationMessagesRequest ...
+func ToThriftGetDomainReplicationMessagesRequest(in *workflowservice.GetDomainReplicationMessagesRequest) *replicator.GetDomainReplicationMessagesRequest {
+	if in == nil {
+		return nil
+	}
+	return &replicator.GetDomainReplicationMessagesRequest{
+		LastRetrivedMessageId:  &in.LastRetrivedMessageId,
+		LastProcessedMessageId: &in.LastProcessedMessageId,
+		ClusterName:            &in.ClusterName,
+	}
+}
+
+// ToThriftReapplyEventsRequest ...
+func ToThriftReapplyEventsRequest(in *workflowservice.ReapplyEventsRequest) *shared.ReapplyEventsRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.ReapplyEventsRequest{
+		DomainName:        &in.DomainName,
+		WorkflowExecution: toThriftWorkflowExecution(in.WorkflowExecution),
+		Events:            toThriftDataBlob(in.Events),
+	}
+}
+
+// ToProtoGetSearchAttributesResponse ...
+func ToProtoGetSearchAttributesResponse(in *shared.GetSearchAttributesResponse) *workflowservice.GetSearchAttributesResponse {
+	if in == nil {
+		return nil
+	}
+	return &workflowservice.GetSearchAttributesResponse{
+		Keys: toProtoIndexedValueTypes(in.GetKeys()),
+	}
+}
+
+// ToProtoQueryWorkflowResponse ...
+func ToProtoQueryWorkflowResponse(in *shared.QueryWorkflowResponse) *workflowservice.QueryWorkflowResponse {
+	if in == nil {
+		return nil
+	}
+	return &workflowservice.QueryWorkflowResponse{
+		QueryResult:   in.GetQueryResult(),
+		QueryRejected: toProtoQueryRejected(in.GetQueryRejected()),
+	}
+}
+
+// ToProtoDescribeTaskListResponse ...
+func ToProtoDescribeTaskListResponse(in *shared.DescribeTaskListResponse) *workflowservice.DescribeTaskListResponse {
+	if in == nil {
+		return nil
+	}
+	return &workflowservice.DescribeTaskListResponse{
+		Pollers:        toProtoPollerInfos(in.GetPollers()),
+		TaskListStatus: toProtoTaskListStatus(in.GetTaskListStatus()),
+	}
+}
+
+// ToProtoGetReplicationMessagesResponse ...
+func ToProtoGetReplicationMessagesResponse(in *replicator.GetReplicationMessagesResponse) *workflowservice.GetReplicationMessagesResponse {
+	if in == nil {
+		return nil
+	}
+	return &workflowservice.GetReplicationMessagesResponse{
+		MessagesByShard: toProtoReplicationMessagess(in.GetMessagesByShard()),
+	}
+}
+
+// ToProtoGetDomainReplicationMessagesResponse ...
+func ToProtoGetDomainReplicationMessagesResponse(in *replicator.GetDomainReplicationMessagesResponse) *workflowservice.GetDomainReplicationMessagesResponse {
+	if in == nil {
+		return nil
+	}
+	return &workflowservice.GetDomainReplicationMessagesResponse{
+		Messages: toProtoReplicationMessages(in.GetMessages()),
 	}
 }

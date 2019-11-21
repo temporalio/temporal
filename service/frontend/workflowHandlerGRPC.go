@@ -455,14 +455,26 @@ func (wh *WorkflowHandlerGRPC) CountWorkflowExecutions(ctx context.Context, requ
 
 // GetSearchAttributes is a visibility API to get all legal keys that could be used in list APIs
 func (wh *WorkflowHandlerGRPC) GetSearchAttributes(ctx context.Context, request *workflowservice.GetSearchAttributesRequest) (_ *workflowservice.GetSearchAttributesResponse, retError error) {
-	panic("implement me")
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	response, err := wh.workflowHandlerThrift.GetSearchAttributes(ctx)
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return adapter.ToProtoGetSearchAttributesResponse(response), nil
 }
 
 // RespondQueryTaskCompleted is called by application worker to complete a QueryTask (which is a DecisionTask for query)
 // as a result of 'PollForDecisionTask' API call. Completing a QueryTask will unblock the client call to 'QueryWorkflow'
 // API and return the query result to client as a response to 'QueryWorkflow' API call.
 func (wh *WorkflowHandlerGRPC) RespondQueryTaskCompleted(ctx context.Context, request *workflowservice.RespondQueryTaskCompletedRequest) (_ *workflowservice.RespondQueryTaskCompletedResponse, retError error) {
-	panic("implement me")
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	err := wh.workflowHandlerThrift.RespondQueryTaskCompleted(ctx, adapter.ToThriftRespondQueryTaskCompletedRequest(request))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return &workflowservice.RespondQueryTaskCompletedResponse{}, nil
 }
 
 // ResetStickyTaskList resets the sticky tasklist related information in mutable state of a given workflow.
@@ -473,12 +485,24 @@ func (wh *WorkflowHandlerGRPC) RespondQueryTaskCompleted(ctx context.Context, re
 // 4. ClientFeatureVersion
 // 5. ClientImpl
 func (wh *WorkflowHandlerGRPC) ResetStickyTaskList(ctx context.Context, request *workflowservice.ResetStickyTaskListRequest) (_ *workflowservice.ResetStickyTaskListResponse, retError error) {
-	panic("implement me")
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	_, err := wh.workflowHandlerThrift.ResetStickyTaskList(ctx, adapter.ToThriftResetStickyTaskListRequest(request))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return &workflowservice.ResetStickyTaskListResponse{}, nil
 }
 
 // QueryWorkflow returns query result for a specified workflow execution
 func (wh *WorkflowHandlerGRPC) QueryWorkflow(ctx context.Context, request *workflowservice.QueryWorkflowRequest) (_ *workflowservice.QueryWorkflowResponse, retError error) {
-	panic("implement me")
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	response, err := wh.workflowHandlerThrift.QueryWorkflow(ctx, adapter.ToThriftQueryWorkflowRequest(request))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return adapter.ToProtoQueryWorkflowResponse(response), nil
 }
 
 // DescribeWorkflowExecution returns information about the specified workflow execution.
@@ -495,20 +519,44 @@ func (wh *WorkflowHandlerGRPC) DescribeWorkflowExecution(ctx context.Context, re
 // DescribeTaskList returns information about the target tasklist, right now this API returns the
 // pollers which polled this tasklist in last few minutes.
 func (wh *WorkflowHandlerGRPC) DescribeTaskList(ctx context.Context, request *workflowservice.DescribeTaskListRequest) (_ *workflowservice.DescribeTaskListResponse, retError error) {
-	panic("implement me")
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	response, err := wh.workflowHandlerThrift.DescribeTaskList(ctx, adapter.ToThriftDescribeTaskListRequest(request))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return adapter.ToProtoDescribeTaskListResponse(response), nil
 }
 
 // GetReplicationMessages returns new replication tasks since the read level provided in the token.
 func (wh *WorkflowHandlerGRPC) GetReplicationMessages(ctx context.Context, request *workflowservice.GetReplicationMessagesRequest) (_ *workflowservice.GetReplicationMessagesResponse, retError error) {
-	panic("implement me")
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	response, err := wh.workflowHandlerThrift.GetReplicationMessages(ctx, adapter.ToThriftGetReplicationMessagesRequest(request))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return adapter.ToProtoGetReplicationMessagesResponse(response), nil
 }
 
 // GetDomainReplicationMessages returns new domain replication tasks since last retrieved task ID.
 func (wh *WorkflowHandlerGRPC) GetDomainReplicationMessages(ctx context.Context, request *workflowservice.GetDomainReplicationMessagesRequest) (_ *workflowservice.GetDomainReplicationMessagesResponse, retError error) {
-	panic("implement me")
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	response, err := wh.workflowHandlerThrift.GetDomainReplicationMessages(ctx, adapter.ToThriftGetDomainReplicationMessagesRequest(request))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return adapter.ToProtoGetDomainReplicationMessagesResponse(response), nil
 }
 
 // ReapplyEvents applies stale events to the current workflow and current run
 func (wh *WorkflowHandlerGRPC) ReapplyEvents(ctx context.Context, request *workflowservice.ReapplyEventsRequest) (_ *workflowservice.ReapplyEventsResponse, retError error) {
-	panic("implement me")
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	err := wh.workflowHandlerThrift.ReapplyEvents(ctx, adapter.ToThriftReapplyEventsRequest(request))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return &workflowservice.ReapplyEventsResponse{}, nil
 }

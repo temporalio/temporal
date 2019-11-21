@@ -82,3 +82,28 @@ func toThriftDecisionTaskFailedCause(in enums.DecisionTaskFailedCause) *shared.D
 	ret := shared.DecisionTaskFailedCause(in)
 	return &ret
 }
+
+func toThriftQueryTaskCompletedType(in enums.QueryTaskCompletedType) *shared.QueryTaskCompletedType {
+	ret := shared.QueryTaskCompletedType(in)
+	return &ret
+}
+
+func toThriftQueryRejectCondition(in enums.QueryRejectCondition) *shared.QueryRejectCondition {
+	ret := shared.QueryRejectCondition(in)
+	return &ret
+}
+
+func toThriftQueryConsistencyLevel(in enums.QueryConsistencyLevel) *shared.QueryConsistencyLevel {
+	ret := shared.QueryConsistencyLevel(in)
+	return &ret
+}
+
+func toThriftTaskListType(in enums.TaskListType) *shared.TaskListType {
+	ret := shared.TaskListType(in)
+	return &ret
+}
+
+func toThriftEncodingType(in enums.EncodingType) *shared.EncodingType {
+	ret := shared.EncodingType(in)
+	return &ret
+}
