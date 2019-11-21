@@ -26,44 +26,35 @@ import (
 )
 
 func toThriftArchivalStatus(in enums.ArchivalStatus) *shared.ArchivalStatus {
-	switch in {
-	case enums.ArchivalStatusDefault:
+	if in == enums.ArchivalStatusDefault {
 		return nil
-	case enums.ArchivalStatusDisabled:
-		ret := shared.ArchivalStatusDisabled
-		return &ret
-	case enums.ArchivalStatusEnabled:
-		ret := shared.ArchivalStatusEnabled
-		return &ret
 	}
 
-	return nil
+	ret := shared.ArchivalStatus(in)
+	return &ret
 }
 
 func toProtoArchivalStatus(in *shared.ArchivalStatus) enums.ArchivalStatus {
 	if in == nil {
 		return enums.ArchivalStatusDefault
 	}
-
-	switch *in {
-	case shared.ArchivalStatusDisabled:
-		return enums.ArchivalStatusDisabled
-	case shared.ArchivalStatusEnabled:
-		return enums.ArchivalStatusEnabled
-	}
-
-	return enums.ArchivalStatusDefault
+	return enums.ArchivalStatus(*in)
 }
 
-func toProtoDomainStatus(in shared.DomainStatus) enums.DomainStatus {
-	switch in {
-	case shared.DomainStatusRegistered:
-		return enums.DomainStatusRegistered
-	case shared.DomainStatusDeprecated:
-		return enums.DomainStatusDeprecated
-	case shared.DomainStatusDeleted:
-		return enums.DomainStatusDeleted
-	}
+func toThriftTaskListKind(in enums.TaskListKind) *shared.TaskListKind {
+	ret := shared.TaskListKind(in)
+	return &ret
+}
+func toThriftWorkflowIDReusePolicy(in enums.WorkflowIdReusePolicy) *shared.WorkflowIdReusePolicy {
+	ret := shared.WorkflowIdReusePolicy(in)
+	return &ret
+}
+func toThriftHistoryEventFilterType(in enums.HistoryEventFilterType) *shared.HistoryEventFilterType {
+	ret := shared.HistoryEventFilterType(in)
+	return &ret
+}
 
-	return enums.DomainStatusRegistered
+func toThriftWorkflowExecutionCloseStatus(in enums.WorkflowExecutionCloseStatus) *shared.WorkflowExecutionCloseStatus {
+	ret := shared.WorkflowExecutionCloseStatus(in)
+	return &ret
 }
