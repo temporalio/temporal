@@ -63,7 +63,7 @@ $(THRIFT_GENDIR)/go/$1/$1.go:: $2
 	thriftrw --plugin=yarpc --pkg-prefix=$(PROJECT_ROOT)/$(THRIFT_GENDIR)/go/ --out=$(THRIFT_GENDIR)/go $2
 endef
 
-$(foreach tsrc,$(THRIFTRW_SRCS),$(eval $(call
+$(foreach tsrc,$(THRIFTRW_SRCS),$(eval $(call \
 	thriftrwrule,$(basename $(notdir \
 	$(shell echo $(tsrc) | tr A-Z a-z))),$(tsrc))))
 
