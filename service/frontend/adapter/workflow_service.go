@@ -232,11 +232,11 @@ func ToThriftSignalWorkflowExecutionRequest(in *workflowservice.SignalWorkflowEx
 }
 
 // ToProtoSignalWithStartWorkflowExecutionResponse ...
-func ToProtoSignalWithStartWorkflowExecutionResponse(in *shared.StartWorkflowExecutionResponse) *workflowservice.StartWorkflowExecutionResponse {
+func ToProtoSignalWithStartWorkflowExecutionResponse(in *shared.StartWorkflowExecutionResponse) *workflowservice.SignalWithStartWorkflowExecutionResponse {
 	if in == nil {
 		return nil
 	}
-	return &workflowservice.StartWorkflowExecutionResponse{
+	return &workflowservice.SignalWithStartWorkflowExecutionResponse{
 		RunId: in.GetRunId(),
 	}
 }
@@ -328,8 +328,8 @@ func ToThriftListOpenWorkflowExecutionsRequest(in *workflowservice.ListOpenWorkf
 		MaximumPageSize: &in.MaximumPageSize,
 		NextPageToken:   in.NextPageToken,
 		StartTimeFilter: toThriftStartTimeFilter(in.StartTimeFilter),
-		ExecutionFilter: toThriftWorkflowExecutionFilter(in.ExecutionFilter),
-		TypeFilter:      toThriftWorkflowTypeFilter(in.TypeFilter),
+		ExecutionFilter: toThriftWorkflowExecutionFilter(in.GetExecutionFilter()),
+		TypeFilter:      toThriftWorkflowTypeFilter(in.GetTypeFilter()),
 	}
 }
 
@@ -354,9 +354,9 @@ func ToThriftListClosedWorkflowExecutionsRequest(in *workflowservice.ListClosedW
 		MaximumPageSize: &in.MaximumPageSize,
 		NextPageToken:   in.NextPageToken,
 		StartTimeFilter: toThriftStartTimeFilter(in.StartTimeFilter),
-		ExecutionFilter: toThriftWorkflowExecutionFilter(in.ExecutionFilter),
-		TypeFilter:      toThriftWorkflowTypeFilter(in.TypeFilter),
-		StatusFilter:    toThriftWorkflowExecutionCloseStatus(in.StatusFilter),
+		ExecutionFilter: toThriftWorkflowExecutionFilter(in.GetExecutionFilter()),
+		TypeFilter:      toThriftWorkflowTypeFilter(in.GetTypeFilter()),
+		StatusFilter:    toThriftWorkflowExecutionCloseStatus(in.GetStatusFilter()),
 	}
 }
 
@@ -381,6 +381,30 @@ func ToThriftListWorkflowExecutionsRequest(in *workflowservice.ListWorkflowExecu
 		PageSize:      &in.PageSize,
 		NextPageToken: in.NextPageToken,
 		Query:         &in.Query,
+	}
+}
+
+// ToThriftScanWorkflowExecutionsRequest ...
+func ToThriftScanWorkflowExecutionsRequest(in *workflowservice.ScanWorkflowExecutionsRequest) *shared.ListWorkflowExecutionsRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.ListWorkflowExecutionsRequest{
+		Domain:        &in.Domain,
+		PageSize:      &in.PageSize,
+		NextPageToken: in.NextPageToken,
+		Query:         &in.Query,
+	}
+}
+
+// ToProtoScanWorkflowExecutionsResponse ...
+func ToProtoScanWorkflowExecutionsResponse(in *shared.ListWorkflowExecutionsResponse) *workflowservice.ScanWorkflowExecutionsResponse {
+	if in == nil {
+		return nil
+	}
+	return &workflowservice.ScanWorkflowExecutionsResponse{
+		Executions:    toProtoWorkflowExecutionInfos(in.GetExecutions()),
+		NextPageToken: in.GetNextPageToken(),
 	}
 }
 
@@ -530,6 +554,16 @@ func ToProtoRecordActivityTaskHeartbeatResponse(in *shared.RecordActivityTaskHea
 		return nil
 	}
 	return &workflowservice.RecordActivityTaskHeartbeatResponse{
+		CancelRequested: in.GetCancelRequested(),
+	}
+}
+
+// ToProtoRecordActivityTaskHeartbeatByIDResponse ...
+func ToProtoRecordActivityTaskHeartbeatByIDResponse(in *shared.RecordActivityTaskHeartbeatResponse) *workflowservice.RecordActivityTaskHeartbeatByIDResponse {
+	if in == nil {
+		return nil
+	}
+	return &workflowservice.RecordActivityTaskHeartbeatByIDResponse{
 		CancelRequested: in.GetCancelRequested(),
 	}
 }

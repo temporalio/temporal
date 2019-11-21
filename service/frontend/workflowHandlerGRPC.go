@@ -222,14 +222,14 @@ func (wh *WorkflowHandlerGRPC) RecordActivityTaskHeartbeat(ctx context.Context, 
 // 'ActivityTaskTimedOut' event will be written to the workflow history.  Calling 'RecordActivityTaskHeartbeatByID' will
 // fail with 'EntityNotExistsError' in such situations.  Instead of using 'taskToken' like in RecordActivityTaskHeartbeat,
 // use Domain, WorkflowID and ActivityID
-func (wh *WorkflowHandlerGRPC) RecordActivityTaskHeartbeatByID(ctx context.Context, request *workflowservice.RecordActivityTaskHeartbeatByIDRequest) (_ *workflowservice.RecordActivityTaskHeartbeatResponse, retError error) {
+func (wh *WorkflowHandlerGRPC) RecordActivityTaskHeartbeatByID(ctx context.Context, request *workflowservice.RecordActivityTaskHeartbeatByIDRequest) (_ *workflowservice.RecordActivityTaskHeartbeatByIDResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
 	response, err := wh.workflowHandlerThrift.RecordActivityTaskHeartbeatByID(ctx, adapter.ToThriftRecordActivityTaskHeartbeatByIDRequest(request))
 	if err != nil {
 		return nil, adapter.ToProtoError(err)
 	}
-	return adapter.ToProtoRecordActivityTaskHeartbeatResponse(response), nil
+	return adapter.ToProtoRecordActivityTaskHeartbeatByIDResponse(response), nil
 }
 
 // RespondActivityTaskCompleted is called by application worker when it is done processing an ActivityTask.  It will
@@ -353,7 +353,7 @@ func (wh *WorkflowHandlerGRPC) SignalWorkflowExecution(ctx context.Context, requ
 // and a decision task being created for the execution.
 // If the workflow is not running or not found, this results in WorkflowExecutionStarted and WorkflowExecutionSignaled
 // events being recorded in history, and a decision task being created for the execution
-func (wh *WorkflowHandlerGRPC) SignalWithStartWorkflowExecution(ctx context.Context, request *workflowservice.SignalWithStartWorkflowExecutionRequest) (_ *workflowservice.StartWorkflowExecutionResponse, retError error) {
+func (wh *WorkflowHandlerGRPC) SignalWithStartWorkflowExecution(ctx context.Context, request *workflowservice.SignalWithStartWorkflowExecutionRequest) (_ *workflowservice.SignalWithStartWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
 	response, err := wh.workflowHandlerThrift.SignalWithStartWorkflowExecution(ctx, adapter.ToThriftSignalWithStartWorkflowExecutionRequest(request))
@@ -432,14 +432,14 @@ func (wh *WorkflowHandlerGRPC) ListArchivedWorkflowExecutions(ctx context.Contex
 }
 
 // ScanWorkflowExecutions is a visibility API to list large amount of workflow executions in a specific domain without order.
-func (wh *WorkflowHandlerGRPC) ScanWorkflowExecutions(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (_ *workflowservice.ListWorkflowExecutionsResponse, retError error) {
+func (wh *WorkflowHandlerGRPC) ScanWorkflowExecutions(ctx context.Context, request *workflowservice.ScanWorkflowExecutionsRequest) (_ *workflowservice.ScanWorkflowExecutionsResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
-	response, err := wh.workflowHandlerThrift.ScanWorkflowExecutions(ctx, adapter.ToThriftListWorkflowExecutionsRequest(request))
+	response, err := wh.workflowHandlerThrift.ScanWorkflowExecutions(ctx, adapter.ToThriftScanWorkflowExecutionsRequest(request))
 	if err != nil {
 		return nil, adapter.ToProtoError(err)
 	}
-	return adapter.ToProtoListWorkflowExecutionsResponse(response), nil
+	return adapter.ToProtoScanWorkflowExecutionsResponse(response), nil
 }
 
 // CountWorkflowExecutions is a visibility API to count of workflow executions in a specific domain.
