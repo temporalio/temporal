@@ -21,7 +21,6 @@
 package adapter
 
 import (
-	"github.com/temporalio/temporal-proto/enums"
 	"github.com/temporalio/temporal-proto/workflowservice"
 	"github.com/temporalio/temporal/.gen/go/shared"
 )
@@ -489,156 +488,201 @@ func ToProtoPollForDecisionTaskResponse(in *shared.PollForDecisionTaskResponse) 
 	}
 }
 
-// ToProtoRespondDecisionTaskCompletedRequest ...
-func ToProtoRespondDecisionTaskCompletedRequest(in *shared.RespondDecisionTaskCompletedRequest) *workflowservice.RespondDecisionTaskCompletedRequest {
+// ToProtoRespondDecisionTaskCompletedResponse ...
+func ToProtoRespondDecisionTaskCompletedResponse(in *shared.RespondDecisionTaskCompletedResponse) *workflowservice.RespondDecisionTaskCompletedResponse {
 	if in == nil {
 		return nil
 	}
-	return &workflowservice.RespondDecisionTaskCompletedRequest{
-		TaskToken:                  in.GetTaskToken(),
-		Decisions:                  toProtoDecisions(in.GetDecisions()),
-		ExecutionContext:           in.GetExecutionContext(),
-		Identity:                   in.GetIdentity(),
-		StickyAttributes:           toProtoStickyExecutionAttributes(in.GetStickyAttributes()),
-		ReturnNewDecisionTask:      in.GetReturnNewDecisionTask(),
-		ForceCreateNewDecisionTask: in.GetForceCreateNewDecisionTask(),
-		BinaryChecksum:             in.GetBinaryChecksum(),
-		QueryResults:               toProtoWorkflowQueryResults(in.GetQueryResults()),
+	return &workflowservice.RespondDecisionTaskCompletedResponse{
+		DecisionTask: ToProtoPollForDecisionTaskResponse(in.GetDecisionTask()),
 	}
 }
 
-// ToProtoRespondDecisionTaskFailedRequest ...
-func ToProtoRespondDecisionTaskFailedRequest(in *shared.RespondDecisionTaskFailedRequest) *workflowservice.RespondDecisionTaskFailedRequest {
+// ToProtoPollForActivityTaskResponse ...
+func ToProtoPollForActivityTaskResponse(in *shared.PollForActivityTaskResponse) *workflowservice.PollForActivityTaskResponse {
 	if in == nil {
 		return nil
 	}
-	return &workflowservice.RespondDecisionTaskFailedRequest{
-		TaskToken: in.GetTaskToken(),
-		Cause:     enums.DecisionTaskFailedCause(in.GetCause()),
-		Details:   in.GetDetails(),
-		Identity:  in.GetIdentity(),
+	return &workflowservice.PollForActivityTaskResponse{
+		TaskToken:                       in.GetTaskToken(),
+		WorkflowExecution:               toProtoWorkflowExecution(in.GetWorkflowExecution()),
+		ActivityId:                      in.GetActivityId(),
+		ActivityType:                    toProtoActivityType(in.GetActivityType()),
+		Input:                           in.GetInput(),
+		ScheduledTimestamp:              in.GetScheduledTimestamp(),
+		ScheduleToCloseTimeoutSeconds:   in.GetScheduleToCloseTimeoutSeconds(),
+		StartedTimestamp:                in.GetStartedTimestamp(),
+		StartToCloseTimeoutSeconds:      in.GetStartToCloseTimeoutSeconds(),
+		HeartbeatTimeoutSeconds:         in.GetHeartbeatTimeoutSeconds(),
+		Attempt:                         in.GetAttempt(),
+		ScheduledTimestampOfThisAttempt: in.GetScheduledTimestampOfThisAttempt(),
+		HeartbeatDetails:                in.GetHeartbeatDetails(),
+		WorkflowType:                    toProtoWorkflowType(in.GetWorkflowType()),
+		WorkflowDomain:                  in.GetWorkflowDomain(),
+		Header:                          toProtoHeader(in.GetHeader()),
 	}
 }
 
-// ToProtoPollForActivityTaskRequest ...
-func ToProtoPollForActivityTaskRequest(in *shared.PollForActivityTaskRequest) *workflowservice.PollForActivityTaskRequest {
+// ToProtoRecordActivityTaskHeartbeatResponse ...
+func ToProtoRecordActivityTaskHeartbeatResponse(in *shared.RecordActivityTaskHeartbeatResponse) *workflowservice.RecordActivityTaskHeartbeatResponse {
 	if in == nil {
 		return nil
 	}
-	return &workflowservice.PollForActivityTaskRequest{
-		Domain:           in.GetDomain(),
-		TaskList:         toProtoTaskList(in.GetTaskList()),
-		Identity:         in.GetIdentity(),
-		TaskListMetadata: toProtoTaskListMetadata(in.GetTaskListMetadata()),
+	return &workflowservice.RecordActivityTaskHeartbeatResponse{
+		CancelRequested: in.GetCancelRequested(),
 	}
 }
 
-// ToProtoRecordActivityTaskHeartbeatRequest ...
-func ToProtoRecordActivityTaskHeartbeatRequest(in *shared.RecordActivityTaskHeartbeatRequest) *workflowservice.RecordActivityTaskHeartbeatRequest {
+// ToThriftRespondDecisionTaskCompletedRequest ...
+func ToThriftRespondDecisionTaskCompletedRequest(in *workflowservice.RespondDecisionTaskCompletedRequest) *shared.RespondDecisionTaskCompletedRequest {
 	if in == nil {
 		return nil
 	}
-	return &workflowservice.RecordActivityTaskHeartbeatRequest{
-		TaskToken: in.GetTaskToken(),
-		Details:   in.GetDetails(),
-		Identity:  in.GetIdentity(),
+	return &shared.RespondDecisionTaskCompletedRequest{
+		TaskToken:                  in.TaskToken,
+		Decisions:                  toThriftDecisions(in.Decisions),
+		ExecutionContext:           in.ExecutionContext,
+		Identity:                   &in.Identity,
+		StickyAttributes:           toThriftStickyExecutionAttributes(in.StickyAttributes),
+		ReturnNewDecisionTask:      &in.ReturnNewDecisionTask,
+		ForceCreateNewDecisionTask: &in.ForceCreateNewDecisionTask,
+		BinaryChecksum:             &in.BinaryChecksum,
+		QueryResults:               toThriftWorkflowQueryResults(in.QueryResults),
 	}
 }
 
-// ToProtoRecordActivityTaskHeartbeatByIDRequest ...
-func ToProtoRecordActivityTaskHeartbeatByIDRequest(in *shared.RecordActivityTaskHeartbeatByIDRequest) *workflowservice.RecordActivityTaskHeartbeatByIDRequest {
+// ToThriftRespondDecisionTaskFailedRequest ...
+func ToThriftRespondDecisionTaskFailedRequest(in *workflowservice.RespondDecisionTaskFailedRequest) *shared.RespondDecisionTaskFailedRequest {
 	if in == nil {
 		return nil
 	}
-	return &workflowservice.RecordActivityTaskHeartbeatByIDRequest{
-		Domain:     in.GetDomain(),
-		WorkflowID: in.GetWorkflowID(),
-		RunID:      in.GetRunID(),
-		ActivityID: in.GetActivityID(),
-		Details:    in.GetDetails(),
-		Identity:   in.GetIdentity(),
+	return &shared.RespondDecisionTaskFailedRequest{
+		TaskToken: in.TaskToken,
+		Cause:     toThriftDecisionTaskFailedCause(in.Cause),
+		Details:   in.Details,
+		Identity:  &in.Identity,
 	}
 }
 
-// ToProtoRespondActivityTaskCompletedRequest ...
-func ToProtoRespondActivityTaskCompletedRequest(in *shared.RespondActivityTaskCompletedRequest) *workflowservice.RespondActivityTaskCompletedRequest {
+// ToThriftPollForActivityTaskRequest ...
+func ToThriftPollForActivityTaskRequest(in *workflowservice.PollForActivityTaskRequest) *shared.PollForActivityTaskRequest {
 	if in == nil {
 		return nil
 	}
-	return &workflowservice.RespondActivityTaskCompletedRequest{
-		TaskToken: in.GetTaskToken(),
-		Result:    in.GetResult(),
-		Identity:  in.GetIdentity(),
+	return &shared.PollForActivityTaskRequest{
+		Domain:           &in.Domain,
+		TaskList:         toThriftTaskList(in.TaskList),
+		Identity:         &in.Identity,
+		TaskListMetadata: toThriftTaskListMetadata(in.TaskListMetadata),
 	}
 }
 
-// ToProtoRespondActivityTaskCompletedByIDRequest ...
-func ToProtoRespondActivityTaskCompletedByIDRequest(in *shared.RespondActivityTaskCompletedByIDRequest) *workflowservice.RespondActivityTaskCompletedByIDRequest {
+// ToThriftRecordActivityTaskHeartbeatRequest ...
+func ToThriftRecordActivityTaskHeartbeatRequest(in *workflowservice.RecordActivityTaskHeartbeatRequest) *shared.RecordActivityTaskHeartbeatRequest {
 	if in == nil {
 		return nil
 	}
-	return &workflowservice.RespondActivityTaskCompletedByIDRequest{
-		Domain:     in.GetDomain(),
-		WorkflowID: in.GetWorkflowID(),
-		RunID:      in.GetRunID(),
-		ActivityID: in.GetActivityID(),
-		Result:     in.GetResult(),
-		Identity:   in.GetIdentity(),
+	return &shared.RecordActivityTaskHeartbeatRequest{
+		TaskToken: in.TaskToken,
+		Details:   in.Details,
+		Identity:  &in.Identity,
 	}
 }
 
-// ToProtoRespondActivityTaskFailedRequest ...
-func ToProtoRespondActivityTaskFailedRequest(in *shared.RespondActivityTaskFailedRequest) *workflowservice.RespondActivityTaskFailedRequest {
+// ToThriftRecordActivityTaskHeartbeatByIDRequest ...
+func ToThriftRecordActivityTaskHeartbeatByIDRequest(in *workflowservice.RecordActivityTaskHeartbeatByIDRequest) *shared.RecordActivityTaskHeartbeatByIDRequest {
 	if in == nil {
 		return nil
 	}
-	return &workflowservice.RespondActivityTaskFailedRequest{
-		TaskToken: in.GetTaskToken(),
-		Reason:    in.GetReason(),
-		Details:   in.GetDetails(),
-		Identity:  in.GetIdentity(),
+	return &shared.RecordActivityTaskHeartbeatByIDRequest{
+		Domain:     &in.Domain,
+		WorkflowID: &in.WorkflowID,
+		RunID:      &in.RunID,
+		ActivityID: &in.ActivityID,
+		Details:    in.Details,
+		Identity:   &in.Identity,
 	}
 }
 
-// ToProtoRespondActivityTaskFailedByIDRequest ...
-func ToProtoRespondActivityTaskFailedByIDRequest(in *shared.RespondActivityTaskFailedByIDRequest) *workflowservice.RespondActivityTaskFailedByIDRequest {
+// ToThriftRespondActivityTaskCompletedRequest ...
+func ToThriftRespondActivityTaskCompletedRequest(in *workflowservice.RespondActivityTaskCompletedRequest) *shared.RespondActivityTaskCompletedRequest {
 	if in == nil {
 		return nil
 	}
-	return &workflowservice.RespondActivityTaskFailedByIDRequest{
-		Domain:     in.GetDomain(),
-		WorkflowID: in.GetWorkflowID(),
-		RunID:      in.GetRunID(),
-		ActivityID: in.GetActivityID(),
-		Reason:     in.GetReason(),
-		Details:    in.GetDetails(),
-		Identity:   in.GetIdentity(),
+	return &shared.RespondActivityTaskCompletedRequest{
+		TaskToken: in.TaskToken,
+		Result:    in.Result,
+		Identity:  &in.Identity,
 	}
 }
 
-// ToProtoRespondActivityTaskCanceledRequest ...
-func ToProtoRespondActivityTaskCanceledRequest(in *shared.RespondActivityTaskCanceledRequest) *workflowservice.RespondActivityTaskCanceledRequest {
+// ToThriftRespondActivityTaskCompletedByIDRequest ...
+func ToThriftRespondActivityTaskCompletedByIDRequest(in *workflowservice.RespondActivityTaskCompletedByIDRequest) *shared.RespondActivityTaskCompletedByIDRequest {
 	if in == nil {
 		return nil
 	}
-	return &workflowservice.RespondActivityTaskCanceledRequest{
-		TaskToken: in.GetTaskToken(),
-		Details:   in.GetDetails(),
-		Identity:  in.GetIdentity(),
+	return &shared.RespondActivityTaskCompletedByIDRequest{
+		Domain:     &in.Domain,
+		WorkflowID: &in.WorkflowID,
+		RunID:      &in.RunID,
+		ActivityID: &in.ActivityID,
+		Result:     in.Result,
+		Identity:   &in.Identity,
 	}
 }
 
-// ToProtoRespondActivityTaskCanceledByIDRequest ...
-func ToProtoRespondActivityTaskCanceledByIDRequest(in *shared.RespondActivityTaskCanceledByIDRequest) *workflowservice.RespondActivityTaskCanceledByIDRequest {
+// ToThriftRespondActivityTaskFailedRequest ...
+func ToThriftRespondActivityTaskFailedRequest(in *workflowservice.RespondActivityTaskFailedRequest) *shared.RespondActivityTaskFailedRequest {
 	if in == nil {
 		return nil
 	}
-	return &workflowservice.RespondActivityTaskCanceledByIDRequest{
-		Domain:     in.GetDomain(),
-		WorkflowID: in.GetWorkflowID(),
-		RunID:      in.GetRunID(),
-		ActivityID: in.GetActivityID(),
-		Details:    in.GetDetails(),
-		Identity:   in.GetIdentity(),
+	return &shared.RespondActivityTaskFailedRequest{
+		TaskToken: in.TaskToken,
+		Reason:    &in.Reason,
+		Details:   in.Details,
+		Identity:  &in.Identity,
+	}
+}
+
+// ToThriftRespondActivityTaskFailedByIDRequest ...
+func ToThriftRespondActivityTaskFailedByIDRequest(in *workflowservice.RespondActivityTaskFailedByIDRequest) *shared.RespondActivityTaskFailedByIDRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.RespondActivityTaskFailedByIDRequest{
+		Domain:     &in.Domain,
+		WorkflowID: &in.WorkflowID,
+		RunID:      &in.RunID,
+		ActivityID: &in.ActivityID,
+		Reason:     &in.Reason,
+		Details:    in.Details,
+		Identity:   &in.Identity,
+	}
+}
+
+// ToThriftRespondActivityTaskCanceledRequest ...
+func ToThriftRespondActivityTaskCanceledRequest(in *workflowservice.RespondActivityTaskCanceledRequest) *shared.RespondActivityTaskCanceledRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.RespondActivityTaskCanceledRequest{
+		TaskToken: in.TaskToken,
+		Details:   in.Details,
+		Identity:  &in.Identity,
+	}
+}
+
+// ToThriftRespondActivityTaskCanceledByIDRequest ...
+func ToThriftRespondActivityTaskCanceledByIDRequest(in *workflowservice.RespondActivityTaskCanceledByIDRequest) *shared.RespondActivityTaskCanceledByIDRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.RespondActivityTaskCanceledByIDRequest{
+		Domain:     &in.Domain,
+		WorkflowID: &in.WorkflowID,
+		RunID:      &in.RunID,
+		ActivityID: &in.ActivityID,
+		Details:    in.Details,
+		Identity:   &in.Identity,
 	}
 }

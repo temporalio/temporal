@@ -58,3 +58,32 @@ func toThriftWorkflowExecutionCloseStatus(in enums.WorkflowExecutionCloseStatus)
 	ret := shared.WorkflowExecutionCloseStatus(in)
 	return &ret
 }
+
+func toThriftDecisionType(in enums.DecisionType) *shared.DecisionType {
+	ret := shared.DecisionType(in)
+	return &ret
+}
+
+func toThriftContinueAsNewInitiator(in enums.ContinueAsNewInitiator) *shared.ContinueAsNewInitiator {
+	ret := shared.ContinueAsNewInitiator(in)
+	return &ret
+}
+
+func toThriftParentClosePolicy(in enums.ParentClosePolicy) *shared.ParentClosePolicy {
+	ret := shared.ParentClosePolicy(in)
+	return &ret
+}
+
+func toThriftWorkflowIdReusePolicy(in enums.WorkflowIdReusePolicy) *shared.WorkflowIdReusePolicy {
+	ret := shared.WorkflowIdReusePolicy(in)
+	return &ret
+}
+
+func toThriftQueryResultType(in enums.QueryResultType) *shared.QueryResultType {
+	ret := shared.QueryResultType(in)
+	return &ret
+}
+func toThriftDecisionTaskFailedCause(in enums.DecisionTaskFailedCause) *shared.DecisionTaskFailedCause {
+	ret := shared.DecisionTaskFailedCause(in)
+	return &ret
+}

@@ -512,27 +512,58 @@ func toProtoWorkflowQueries(in map[string]*shared.WorkflowQuery) map[string]*com
 	return ret
 }
 
-// toProtoWorkflowQueryResult ...
-func toProtoWorkflowQueryResult(in *shared.WorkflowQueryResult) *common.WorkflowQueryResult {
+// toThriftActivityType ...
+func toThriftActivityType(in *common.ActivityType) *shared.ActivityType {
 	if in == nil {
 		return nil
 	}
-	return &common.WorkflowQueryResult{
-		ResultType:   enums.QueryResultType(in.GetResultType()),
-		Answer:       in.GetAnswer(),
-		ErrorMessage: in.GetErrorMessage(),
+	return &shared.ActivityType{
+		Name: &in.Name,
 	}
 }
 
-func toProtoWorkflowQueryResults(in map[string]*shared.WorkflowQueryResult) map[string]*common.WorkflowQueryResult {
+// toThriftStickyExecutionAttributes ...
+func toThriftStickyExecutionAttributes(in *common.StickyExecutionAttributes) *shared.StickyExecutionAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.StickyExecutionAttributes{
+		WorkerTaskList:                toThriftTaskList(in.WorkerTaskList),
+		ScheduleToStartTimeoutSeconds: &in.ScheduleToStartTimeoutSeconds,
+	}
+}
+
+func toThriftWorkflowQueryResults(in map[string]*common.WorkflowQueryResult) map[string]*shared.WorkflowQueryResult {
 	if in == nil {
 		return nil
 	}
 
-	ret := make(map[string]*common.WorkflowQueryResult, len(in))
+	ret := make(map[string]*shared.WorkflowQueryResult, len(in))
 	for k, v := range in {
-		ret[k] = toProtoWorkflowQueryResult(v)
+		ret[k] = toThriftWorkflowQueryResult(v)
 	}
 
 	return ret
+}
+
+// toThriftWorkflowQueryResult ...
+func toThriftWorkflowQueryResult(in *common.WorkflowQueryResult) *shared.WorkflowQueryResult {
+	if in == nil {
+		return nil
+	}
+	return &shared.WorkflowQueryResult{
+		ResultType:   toThriftQueryResultType(in.ResultType),
+		Answer:       in.Answer,
+		ErrorMessage: &in.ErrorMessage,
+	}
+}
+
+// toThriftTaskListMetadata ...
+func toThriftTaskListMetadata(in *common.TaskListMetadata) *shared.TaskListMetadata {
+	if in == nil {
+		return nil
+	}
+	return &shared.TaskListMetadata{
+		MaxTasksPerSecond: &in.MaxTasksPerSecond,
+	}
 }

@@ -176,7 +176,13 @@ func (wh *WorkflowHandlerGRPC) RespondDecisionTaskCompleted(ctx context.Context,
 // either clear sticky tasklist or report any panics during DecisionTask processing.  Cadence will only append first
 // DecisionTaskFailed event to the history of workflow execution for consecutive failures.
 func (wh *WorkflowHandlerGRPC) RespondDecisionTaskFailed(ctx context.Context, request *workflowservice.RespondDecisionTaskFailedRequest) (_ *workflowservice.RespondDecisionTaskFailedResponse, retError error) {
-	panic("implement me")
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	err := wh.workflowHandlerThrift.RespondDecisionTaskFailed(ctx, adapter.ToThriftRespondDecisionTaskFailedRequest(request))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return &workflowservice.RespondDecisionTaskFailedResponse{}, nil
 }
 
 // PollForActivityTask is called by application worker to process ActivityTask from a specific taskList.  ActivityTask
@@ -187,7 +193,13 @@ func (wh *WorkflowHandlerGRPC) RespondDecisionTaskFailed(ctx context.Context, re
 // prevent the task from getting timed out.  An event 'ActivityTaskStarted' event is also written to workflow execution
 // history before the ActivityTask is dispatched to application worker.
 func (wh *WorkflowHandlerGRPC) PollForActivityTask(ctx context.Context, request *workflowservice.PollForActivityTaskRequest) (_ *workflowservice.PollForActivityTaskResponse, retError error) {
-	panic("implement me")
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	response, err := wh.workflowHandlerThrift.PollForActivityTask(ctx, adapter.ToThriftPollForActivityTaskRequest(request))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return adapter.ToProtoPollForActivityTaskResponse(response), nil
 }
 
 // RecordActivityTaskHeartbeat is called by application worker while it is processing an ActivityTask.  If worker fails
@@ -196,7 +208,13 @@ func (wh *WorkflowHandlerGRPC) PollForActivityTask(ctx context.Context, request 
 // fail with 'EntityNotExistsError' in such situations.  Use the 'taskToken' provided as response of
 // PollForActivityTask API call for heartbeating.
 func (wh *WorkflowHandlerGRPC) RecordActivityTaskHeartbeat(ctx context.Context, request *workflowservice.RecordActivityTaskHeartbeatRequest) (_ *workflowservice.RecordActivityTaskHeartbeatResponse, retError error) {
-	panic("implement me")
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	response, err := wh.workflowHandlerThrift.RecordActivityTaskHeartbeat(ctx, adapter.ToThriftRecordActivityTaskHeartbeatRequest(request))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return adapter.ToProtoRecordActivityTaskHeartbeatResponse(response), nil
 }
 
 // RecordActivityTaskHeartbeatByID is called by application worker while it is processing an ActivityTask.  If worker fails
@@ -205,7 +223,13 @@ func (wh *WorkflowHandlerGRPC) RecordActivityTaskHeartbeat(ctx context.Context, 
 // fail with 'EntityNotExistsError' in such situations.  Instead of using 'taskToken' like in RecordActivityTaskHeartbeat,
 // use Domain, WorkflowID and ActivityID
 func (wh *WorkflowHandlerGRPC) RecordActivityTaskHeartbeatByID(ctx context.Context, request *workflowservice.RecordActivityTaskHeartbeatByIDRequest) (_ *workflowservice.RecordActivityTaskHeartbeatResponse, retError error) {
-	panic("implement me")
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	response, err := wh.workflowHandlerThrift.RecordActivityTaskHeartbeatByID(ctx, adapter.ToThriftRecordActivityTaskHeartbeatByIDRequest(request))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return adapter.ToProtoRecordActivityTaskHeartbeatResponse(response), nil
 }
 
 // RespondActivityTaskCompleted is called by application worker when it is done processing an ActivityTask.  It will
@@ -214,7 +238,13 @@ func (wh *WorkflowHandlerGRPC) RecordActivityTaskHeartbeatByID(ctx context.Conte
 // PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
 // anymore due to activity timeout.
 func (wh *WorkflowHandlerGRPC) RespondActivityTaskCompleted(ctx context.Context, request *workflowservice.RespondActivityTaskCompletedRequest) (_ *workflowservice.RespondActivityTaskCompletedResponse, retError error) {
-	panic("implement me")
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	err := wh.workflowHandlerThrift.RespondActivityTaskCompleted(ctx, adapter.ToThriftRespondActivityTaskCompletedRequest(request))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return &workflowservice.RespondActivityTaskCompletedResponse{}, nil
 }
 
 // RespondActivityTaskCompletedByID is called by application worker when it is done processing an ActivityTask.
@@ -223,7 +253,13 @@ func (wh *WorkflowHandlerGRPC) RespondActivityTaskCompleted(ctx context.Context,
 // WorkflowID and ActivityID instead of 'taskToken' for completion. It fails with 'EntityNotExistsError'
 // if the these IDs are not valid anymore due to activity timeout.
 func (wh *WorkflowHandlerGRPC) RespondActivityTaskCompletedByID(ctx context.Context, request *workflowservice.RespondActivityTaskCompletedByIDRequest) (_ *workflowservice.RespondActivityTaskCompletedByIDResponse, retError error) {
-	panic("implement me")
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	err := wh.workflowHandlerThrift.RespondActivityTaskCompletedByID(ctx, adapter.ToThriftRespondActivityTaskCompletedByIDRequest(request))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return &workflowservice.RespondActivityTaskCompletedByIDResponse{}, nil
 }
 
 // RespondActivityTaskFailed is called by application worker when it is done processing an ActivityTask.  It will
@@ -232,7 +268,13 @@ func (wh *WorkflowHandlerGRPC) RespondActivityTaskCompletedByID(ctx context.Cont
 // PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
 // anymore due to activity timeout.
 func (wh *WorkflowHandlerGRPC) RespondActivityTaskFailed(ctx context.Context, request *workflowservice.RespondActivityTaskFailedRequest) (_ *workflowservice.RespondActivityTaskFailedResponse, retError error) {
-	panic("implement me")
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	err := wh.workflowHandlerThrift.RespondActivityTaskFailed(ctx, adapter.ToThriftRespondActivityTaskFailedRequest(request))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return &workflowservice.RespondActivityTaskFailedResponse{}, nil
 }
 
 // RespondActivityTaskFailedByID is called by application worker when it is done processing an ActivityTask.
@@ -241,7 +283,13 @@ func (wh *WorkflowHandlerGRPC) RespondActivityTaskFailed(ctx context.Context, re
 // Domain, WorkflowID and ActivityID instead of 'taskToken' for completion. It fails with 'EntityNotExistsError'
 // if the these IDs are not valid anymore due to activity timeout.
 func (wh *WorkflowHandlerGRPC) RespondActivityTaskFailedByID(ctx context.Context, request *workflowservice.RespondActivityTaskFailedByIDRequest) (_ *workflowservice.RespondActivityTaskFailedByIDResponse, retError error) {
-	panic("implement me")
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	err := wh.workflowHandlerThrift.RespondActivityTaskFailedByID(ctx, adapter.ToThriftRespondActivityTaskFailedByIDRequest(request))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return &workflowservice.RespondActivityTaskFailedByIDResponse{}, nil
 }
 
 // RespondActivityTaskCanceled is called by application worker when it is successfully canceled an ActivityTask.  It will
@@ -250,7 +298,13 @@ func (wh *WorkflowHandlerGRPC) RespondActivityTaskFailedByID(ctx context.Context
 // PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
 // anymore due to activity timeout.
 func (wh *WorkflowHandlerGRPC) RespondActivityTaskCanceled(ctx context.Context, request *workflowservice.RespondActivityTaskCanceledRequest) (_ *workflowservice.RespondActivityTaskCanceledResponse, retError error) {
-	panic("implement me")
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	err := wh.workflowHandlerThrift.RespondActivityTaskCanceled(ctx, adapter.ToThriftRespondActivityTaskCanceledRequest(request))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return &workflowservice.RespondActivityTaskCanceledResponse{}, nil
 }
 
 // RespondActivityTaskCanceledByID is called by application worker when it is successfully canceled an ActivityTask.
@@ -259,7 +313,13 @@ func (wh *WorkflowHandlerGRPC) RespondActivityTaskCanceled(ctx context.Context, 
 // Domain, WorkflowID and ActivityID instead of 'taskToken' for completion. It fails with 'EntityNotExistsError'
 // if the these IDs are not valid anymore due to activity timeout.
 func (wh *WorkflowHandlerGRPC) RespondActivityTaskCanceledByID(ctx context.Context, request *workflowservice.RespondActivityTaskCanceledByIDRequest) (_ *workflowservice.RespondActivityTaskCanceledByIDResponse, retError error) {
-	panic("implement me")
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	err := wh.workflowHandlerThrift.RespondActivityTaskCanceledByID(ctx, adapter.ToThriftRespondActivityTaskCanceledByIDRequest(request))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return &workflowservice.RespondActivityTaskCanceledByIDResponse{}, nil
 }
 
 // RequestCancelWorkflowExecution is called by application worker when it wants to request cancellation of a workflow instance.
