@@ -104,16 +104,7 @@ INTEG_NDC_SQL_COVER_FILE   := $(COVER_ROOT)/integ_ndc_sql_cover.out
 #   Packages are specified as import paths.
 GOCOVERPKG_ARG := -coverpkg="$(PROJECT_ROOT)/common/...,$(PROJECT_ROOT)/service/...,$(PROJECT_ROOT)/client/...,$(PROJECT_ROOT)/tools/..."
 
-PROTO_ROOT := .gen/proto
-PROTO_REPO := github.com/temporalio/temporal-proto
-# List only subdirectories with *.proto files (sort to remove duplicates).
-PROTO_DIRS = $(sort $(dir $(wildcard $(PROTO_ROOT)/*/*.proto)))
-
-# Everything that deals with go modules (go.mod) needs to take dependency on this target.
-$(PROTO_ROOT)/go.mod:
-	cd $(PROTO_ROOT) && go mod init $(PROTO_REPO)
-
-yarpc-install: $(PROTO_ROOT)/go.mod
+yarpc-install:
 	GO111MODULE=off go get -u github.com/myitcv/gobin
 	GO111MODULE=off go get -u github.com/gogo/protobuf/protoc-gen-gogoslick
 	GO111MODULE=off go get -u go.uber.org/yarpc/encoding/protobuf/protoc-gen-yarpc-go
@@ -126,6 +117,15 @@ clean_thrift:
 thriftc: yarpc-install $(THRIFTRW_GEN_SRC)
 
 #================================= protobuf ===================================
+PROTO_ROOT := .gen/proto
+PROTO_REPO := github.com/temporalio/temporal-proto
+# List only subdirectories with *.proto files (sort to remove duplicates).
+PROTO_DIRS = $(sort $(dir $(wildcard $(PROTO_ROOT)/*/*.proto)))
+
+# Everything that deals with go modules (go.mod) needs to take dependency on this target.
+$(PROTO_ROOT)/go.mod:
+	cd $(PROTO_ROOT) && go mod init $(PROTO_REPO)
+
 clean-proto:
 	$(foreach PROTO_DIR,$(PROTO_DIRS),rm -f $(PROTO_DIR)*.go;)
 	$(foreach PROTO_MOCK_DIR,$(wildcard $(PROTO_ROOT)/*mock),rm -rf $(PROTO_MOCK_DIR);)
@@ -133,7 +133,7 @@ clean-proto:
 update-proto-submodule:
 	git submodule update --remote $(PROTO_ROOT)
 
-install-proto-submodule:
+install-proto-submodule: $(PROTO_ROOT)/go.mod
 	git submodule update --init $(PROTO_ROOT)
 
 protoc:
@@ -146,7 +146,7 @@ PROTO_YARPC_FILES = $(patsubst $(PROTO_ROOT)/%,%,$(wildcard $(PROTO_ROOT)/*/*.pb
 dir_no_slash = $(patsubst %/,%,$(dir $(1)))
 dirname = $(notdir $(call dir_no_slash,$(1)))
 
-proto-mock: $(PROTO_ROOT)/go.mod
+proto-mock:
 	GO111MODULE=off go get -u github.com/myitcv/gobin
 	GOOS= GOARCH= gobin -mod=readonly github.com/golang/mock/mockgen
 	@echo "generate proto mocks..."
@@ -177,7 +177,7 @@ cadence-server: $(ALL_SRC)
 	@echo "compiling cadence-server with OS: $(GOOS), ARCH: $(GOARCH)"
 	go build -ldflags '$(GO_BUILD_LDFLAGS)' -i -o cadence-server cmd/server/cadence.go cmd/server/server.go
 
-go-generate: $(PROTO_ROOT)/go.mod
+go-generate:
 	GO111MODULE=off go get -u github.com/myitcv/gobin
 	GOOS= GOARCH= gobin -mod=readonly github.com/golang/mock/mockgen
 	@echo "running go generate ./..."
@@ -197,7 +197,7 @@ lint:
 		exit 1; \
 	fi
 
-fmt: $(PROTO_ROOT)/go.mod
+fmt:
 	GO111MODULE=off go get -u github.com/myitcv/gobin
 	GOOS= GOARCH= gobin -mod=readonly golang.org/x/tools/cmd/goimports
 	@echo "running goimports"
