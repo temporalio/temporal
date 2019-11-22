@@ -63,7 +63,9 @@ $(THRIFT_GENDIR)/go/$1/$1.go:: $2
 	thriftrw --plugin=yarpc --pkg-prefix=$(PROJECT_ROOT)/$(THRIFT_GENDIR)/go/ --out=$(THRIFT_GENDIR)/go $2
 endef
 
-#$(foreach tsrc,$(THRIFTRW_SRCS),$(eval $(call thriftrwrule,$(basename $(notdir $(shell echo $(tsrc) | tr A-Z a-z))),$(tsrc))))
+#$(foreach tsrc,$(THRIFTRW_SRCS),$(eval $(call \
+#	thriftrwrule,$(basename $(notdir \
+#	$(shell echo $(tsrc) | tr A-Z a-z))),$(tsrc))))
 
 # Automatically gather all srcs
 ALL_SRC := $(shell find . -name "*.go" | grep -v -e Godeps -e vendor \
@@ -119,6 +121,7 @@ thriftc: yarpc-install $(THRIFTRW_GEN_SRC)
 # List only subdirectories with *.proto files.
 # sort to remove duplicates.
 PROTO_ROOT := .gen/proto
+PROTO_REPO := github.com/temporalio/temporal-proto
 PROTO_DIRS = $(sort $(dir $(wildcard $(PROTO_ROOT)/*/*.proto)))
 
 clean-proto:
@@ -139,11 +142,14 @@ PROTO_YARPC_FILES = $(wildcard $(PROTO_ROOT)/*/*.pb.yarpc.go)))
 dir_no_slash = $(patsubst %/,%,$(dir $(1)))
 dirname = $(notdir $(call dir_no_slash,$(1)))
 
-proto-mock:
+proto-mock: $(PROTO_ROOT)/go.mod
 	GO111MODULE=off go get -u github.com/myitcv/gobin
 	GOOS= GOARCH= gobin -mod=readonly github.com/golang/mock/mockgen
 	@echo "generate proto mocks..."
-	$(foreach PROTO_YARPC_FILE,$(PROTO_YARPC_FILES),mockgen -package workflowservice -source .gen/proto/workflowservice/service.pb.yarpc.go -destination .gen/proto/workflowservice/service.pb.yarpc.mock.go -self_package github.com/temporalio/temporal-proto/workflowservice)
+	cd $(PROTO_ROOT) && $(foreach PROTO_YARPC_FILE,$(PROTO_YARPC_FILES),echo -package $(call dirname,$(PROTO_YARPC_FILE)) -source $(PROTO_YARPC_FILE) -destination $(PROTO_YARPC_FILE:go=mock.go) -self_package $(PROTO_REPO)/$(call dirname,$(PROTO_YARPC_FILE)))
+
+$(PROTO_ROOT)/go.mod:
+	cd $(PROTO_ROOT) && go mod init $(PROTO_REPO)
 
 update-proto: clean-proto update-proto-submodule yarpc-install protoc proto-mock
 
