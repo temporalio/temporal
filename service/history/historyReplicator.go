@@ -284,6 +284,11 @@ func (r *historyReplicator) ApplyEvents(
 				request.WorkflowExecution.GetRunId(), request, logger)
 		}
 
+		// Sanity check to make only 2DC mutable state here
+		if msBuilder.GetReplicationState() == nil {
+			return &workflow.InternalServiceError{Message: "The mutable state does not support 2DC."}
+		}
+
 		logger.WithTags(tag.CurrentVersion(msBuilder.GetReplicationState().LastWriteVersion))
 		msBuilder, err = r.ApplyOtherEventsVersionChecking(ctx, context, msBuilder, request, logger)
 		if err != nil || msBuilder == nil {
