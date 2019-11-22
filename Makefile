@@ -118,11 +118,13 @@ thriftc: yarpc-install $(THRIFTRW_GEN_SRC)
 
 #================================= protobuf ===================================
 
-# List only subdirectories with *.proto files.
-# sort to remove duplicates.
 PROTO_ROOT := .gen/proto
 PROTO_REPO := github.com/temporalio/temporal-proto
+# List only subdirectories with *.proto files (sort to remove duplicates).
 PROTO_DIRS = $(sort $(dir $(wildcard $(PROTO_ROOT)/*/*.proto)))
+
+$(PROTO_ROOT)/go.mod:
+	cd $(PROTO_ROOT) && go mod init $(PROTO_REPO)
 
 clean-proto:
 	$(foreach PROTO_DIR,$(PROTO_DIRS),rm -f $(PROTO_DIR)*.go;)
@@ -138,7 +140,8 @@ protoc:
 	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_ROOT) --gogoslick_out=paths=source_relative:$(PROTO_ROOT) $(PROTO_DIR)*.proto;)
 	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_ROOT) --yarpc-go_out=$(PROTO_ROOT) $(PROTO_DIR)*.proto;)
 
-PROTO_YARPC_FILES = $(wildcard $(PROTO_ROOT)/*/*.pb.yarpc.go)))
+# All YARPC generated file pathes relative to PROTO_ROOT
+PROTO_YARPC_FILES = $(patsubst $(PROTO_ROOT)/%,%,$(wildcard $(PROTO_ROOT)/*/*.pb.yarpc.go))
 dir_no_slash = $(patsubst %/,%,$(dir $(1)))
 dirname = $(notdir $(call dir_no_slash,$(1)))
 
@@ -146,10 +149,8 @@ proto-mock: $(PROTO_ROOT)/go.mod
 	GO111MODULE=off go get -u github.com/myitcv/gobin
 	GOOS= GOARCH= gobin -mod=readonly github.com/golang/mock/mockgen
 	@echo "generate proto mocks..."
-	cd $(PROTO_ROOT) && $(foreach PROTO_YARPC_FILE,$(PROTO_YARPC_FILES),echo -package $(call dirname,$(PROTO_YARPC_FILE)) -source $(PROTO_YARPC_FILE) -destination $(PROTO_YARPC_FILE:go=mock.go) -self_package $(PROTO_REPO)/$(call dirname,$(PROTO_YARPC_FILE)))
-
-$(PROTO_ROOT)/go.mod:
-	cd $(PROTO_ROOT) && go mod init $(PROTO_REPO)
+#	$(foreach PROTO_YARPC_FILE,$(PROTO_YARPC_FILES),cd $(PROTO_ROOT) && mockgen -package $(call dirname,$(PROTO_YARPC_FILE)) -source $(PROTO_YARPC_FILE) -destination $(PROTO_YARPC_FILE:go=mock.go) -self_package $(PROTO_REPO)/$(call dirname,$(PROTO_YARPC_FILE)))
+	@$(foreach PROTO_YARPC_FILE,$(PROTO_YARPC_FILES),cd $(PROTO_ROOT) && mockgen -package $(call dirname,$(PROTO_YARPC_FILE))mock -source $(PROTO_YARPC_FILE) -destination $(call dir_no_slash,$(PROTO_YARPC_FILE))mock/$(notdir $(PROTO_YARPC_FILE:go=mock.go)) )
 
 update-proto: clean-proto update-proto-submodule yarpc-install protoc proto-mock
 
