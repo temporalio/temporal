@@ -63,9 +63,7 @@ $(THRIFT_GENDIR)/go/$1/$1.go:: $2
 	thriftrw --plugin=yarpc --pkg-prefix=$(PROJECT_ROOT)/$(THRIFT_GENDIR)/go/ --out=$(THRIFT_GENDIR)/go $2
 endef
 
-$(foreach tsrc,$(THRIFTRW_SRCS),$(eval $(call \
-	thriftrwrule,$(basename $(notdir \
-	$(shell echo $(tsrc) | tr A-Z a-z))),$(tsrc))))
+#$(foreach tsrc,$(THRIFTRW_SRCS),$(eval $(call thriftrwrule,$(basename $(notdir $(shell echo $(tsrc) | tr A-Z a-z))),$(tsrc))))
 
 # Automatically gather all srcs
 ALL_SRC := $(shell find . -name "*.go" | grep -v -e Godeps -e vendor \
@@ -116,28 +114,42 @@ clean_thrift:
 
 thriftc: yarpc-install $(THRIFTRW_GEN_SRC)
 
+#================================= protobuf ===================================
+
 # List only subdirectories with *.proto files.
 # sort to remove duplicates.
 PROTO_ROOT := .gen/proto
-PROTO_DIRS = $(sort $(dir $(wildcard ${PROTO_ROOT}/*/*.proto)))
+PROTO_DIRS = $(sort $(dir $(wildcard $(PROTO_ROOT)/*/*.proto)))
 
 clean-proto:
-	$(foreach PROTO_DIR,$(PROTO_DIRS),rm -f ${PROTO_DIR}*.go;)
+	$(foreach PROTO_DIR,$(PROTO_DIRS),rm -f $(PROTO_DIR)*.go;)
 
 update-proto-submodule:
 	git submodule update --remote $(PROTO_ROOT)
 
-update-proto: clean-proto update-proto-submodule yarpc-install protoc
-
 install-proto-submodule:
 	git submodule update --init $(PROTO_ROOT)
 
-proto: clean-proto install-proto-submodule yarpc-install protoc
-
 protoc:
 #   run protoc separately for each directory because of different package names
-	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=${PROTO_ROOT} --gogoslick_out=paths=source_relative:${PROTO_ROOT} ${PROTO_DIR}*.proto;)
-	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=${PROTO_ROOT} --yarpc-go_out=${PROTO_ROOT} ${PROTO_DIR}*.proto;)
+	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_ROOT) --gogoslick_out=paths=source_relative:$(PROTO_ROOT) $(PROTO_DIR)*.proto;)
+	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_ROOT) --yarpc-go_out=$(PROTO_ROOT) $(PROTO_DIR)*.proto;)
+
+PROTO_YARPC_FILES = $(wildcard $(PROTO_ROOT)/*/*.pb.yarpc.go)))
+dir_no_slash = $(patsubst %/,%,$(dir $(1)))
+dirname = $(notdir $(call dir_no_slash,$(1)))
+
+proto-mock:
+	GO111MODULE=off go get -u github.com/myitcv/gobin
+	GOOS= GOARCH= gobin -mod=readonly github.com/golang/mock/mockgen
+	@echo "generate proto mocks..."
+	$(foreach PROTO_YARPC_FILE,$(PROTO_YARPC_FILES),mockgen -package workflowservice -source .gen/proto/workflowservice/service.pb.yarpc.go -destination .gen/proto/workflowservice/service.pb.yarpc.mock.go -self_package github.com/temporalio/temporal-proto/workflowservice)
+
+update-proto: clean-proto update-proto-submodule yarpc-install protoc proto-mock
+
+proto: clean-proto install-proto-submodule yarpc-install protoc proto-mock
+
+#==============================================================================
 
 copyright: cmd/tools/copyright/licensegen.go
 	GOOS= GOARCH= go run ./cmd/tools/copyright/licensegen.go --verifyOnly
