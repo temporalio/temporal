@@ -1366,6 +1366,16 @@ func (e *mutableStateBuilder) DeleteUserTimer(
 			fmt.Sprintf("Unable to find timer: %v in mutable state", timerID),
 			tag.ErrorTypeInvalidMutableStateAction,
 		)
+
+		// DeleteUserTimer only called by Replicate Timer Cancel and Timer Fired events
+		// Ignore timer double fired issue on domain cb026e4f-a3af-4a5a-8036-6b53f2f8cab5
+		if e.executionInfo != nil && e.executionInfo.DomainID == "cb026e4f-a3af-4a5a-8036-6b53f2f8cab5" {
+
+			e.logger.Warn("passive_timer_double_fire_issue",
+				tag.WorkflowID(e.executionInfo.WorkflowID),
+				tag.WorkflowRunID(e.executionInfo.RunID))
+			return nil
+		}
 		return ErrMissingTimerInfo
 	}
 
