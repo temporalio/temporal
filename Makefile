@@ -128,6 +128,7 @@ $(PROTO_ROOT)/go.mod:
 
 clean-proto:
 	$(foreach PROTO_DIR,$(PROTO_DIRS),rm -f $(PROTO_DIR)*.go;)
+	$(foreach PROTO_MOCK_DIR,$(wildcard $(PROTO_ROOT)/*mock),rm -rf $(PROTO_MOCK_DIR);)
 
 update-proto-submodule:
 	git submodule update --remote $(PROTO_ROOT)
@@ -149,7 +150,7 @@ proto-mock: $(PROTO_ROOT)/go.mod
 	GO111MODULE=off go get -u github.com/myitcv/gobin
 	GOOS= GOARCH= gobin -mod=readonly github.com/golang/mock/mockgen
 	@echo "generate proto mocks..."
-	@$(foreach PROTO_YARPC_FILE,$(PROTO_YARPC_FILES),cd $(PROTO_ROOT) && mockgen -package $(call dirname,$(PROTO_YARPC_FILE))mock -source $(PROTO_YARPC_FILE) -destination $(call dir_no_slash,$(PROTO_YARPC_FILE))mock/$(notdir $(PROTO_YARPC_FILE:go=mock.go)) )
+	@$(foreach PROTO_YARPC_FILE,$(PROTO_YARPC_FILES),cd $(PROTO_ROOT) && mockgen -package $(call dirname,$(PROTO_YARPC_FILE))mock -source $(PROTO_YARPC_FILE) -destination $(call dir_no_slash,$(PROTO_YARPC_FILE))mock/$(notdir $(PROTO_YARPC_FILE:go=mock.go)); )
 
 update-proto: clean-proto update-proto-submodule yarpc-install protoc proto-mock
 
