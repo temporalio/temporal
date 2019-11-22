@@ -3004,7 +3004,11 @@ func (wh *WorkflowHandler) queryDirectlyThroughMatching(
 		DomainUUID:   common.StringPtr(domainID),
 		QueryRequest: queryRequest,
 	}
-	if len(getMutableStateResponse.StickyTaskList.GetName()) != 0 && clientFeature.SupportStickyQuery() {
+	if getMutableStateResponse.GetIsStickyTaskListEnabled() &&
+		len(getMutableStateResponse.StickyTaskList.GetName()) != 0 &&
+		clientFeature.SupportStickyQuery() &&
+		wh.config.EnableStickyQuery(queryRequest.GetDomain()) {
+
 		matchingRequest.TaskList = getMutableStateResponse.StickyTaskList
 		stickyDecisionTimeout := getMutableStateResponse.GetStickyTaskListScheduleToStartTimeout()
 		// using a clean new context in case customer provide a context which has

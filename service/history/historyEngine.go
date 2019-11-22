@@ -833,6 +833,7 @@ func (e *historyEngineImpl) getMutableState(
 		CurrentBranchToken:                   currentBranchToken,
 		WorkflowState:                        common.Int32Ptr(int32(workflowState)),
 		WorkflowCloseState:                   common.Int32Ptr(int32(workflowCloseState)),
+		IsStickyTaskListEnabled:              common.BoolPtr(msBuilder.IsStickyTaskListEnabled()),
 	}
 	replicationState := msBuilder.GetReplicationState()
 	if replicationState != nil {

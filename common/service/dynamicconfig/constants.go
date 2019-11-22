@@ -62,6 +62,7 @@ var keys = map[Key]string{
 	VisibilityArchivalStatus:            "system.visibilityArchivalStatus",
 	EnableReadFromVisibilityArchival:    "system.enableReadFromVisibilityArchival",
 	EnableDomainNotActiveAutoForwarding: "system.enableDomainNotActiveAutoForwarding",
+	EnableStickyQuery:                   "system.enableStickyQuery",
 	TransactionSizeLimit:                "system.transactionSizeLimit",
 	MinRetentionDays:                    "system.minRetentionDays",
 	MaxDecisionStartToCloseSeconds:      "system.maxDecisionStartToCloseSeconds",
@@ -264,6 +265,8 @@ const (
 	// EnableDomainNotActiveAutoForwarding whether enabling DC auto forwarding to active cluster
 	// for signal / start / signal with start API if domain is not active
 	EnableDomainNotActiveAutoForwarding
+	// EnableStickyQuery indicates if sticky query should be enabled per domain
+	EnableStickyQuery
 	// TransactionSizeLimit is the largest allowed transaction size to persistence
 	TransactionSizeLimit
 	// MinRetentionDays is the minimal allowed retention days for domain
