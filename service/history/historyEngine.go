@@ -498,7 +498,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	e.overrideStartWorkflowExecutionRequest(domainEntry, request)
+	e.overrideStartWorkflowExecutionRequest(domainEntry, request, metrics.HistoryStartWorkflowExecutionScope)
 
 	workflowID := request.GetWorkflowId()
 	// grab the current context as a lock, nothing more
@@ -1801,7 +1801,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	e.overrideStartWorkflowExecutionRequest(domainEntry, request)
+	e.overrideStartWorkflowExecutionRequest(domainEntry, request, metrics.HistorySignalWorkflowExecutionScope)
 
 	workflowID := request.GetWorkflowId()
 	// grab the current context as a lock, nothing more
@@ -2466,28 +2466,22 @@ func validateStartWorkflowExecutionRequest(
 func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
 	domainEntry *cache.DomainCacheEntry,
 	request *workflow.StartWorkflowExecutionRequest,
+	metricsScope int,
 ) {
 
-	maxDecisionStartToCloseTimeoutSeconds := int32(e.config.MaxDecisionStartToCloseSeconds(
-		domainEntry.GetInfo().Name,
-	))
+	domainName := domainEntry.GetInfo().Name
+	maxDecisionStartToCloseTimeoutSeconds := int32(e.config.MaxDecisionStartToCloseSeconds(domainName))
 
-	if request.GetTaskStartToCloseTimeoutSeconds() > maxDecisionStartToCloseTimeoutSeconds {
-		e.throttledLogger.WithTags(
-			tag.WorkflowDomainID(domainEntry.GetInfo().ID),
-			tag.WorkflowID(request.GetWorkflowId()),
-			tag.WorkflowDecisionTimeoutSeconds(request.GetTaskStartToCloseTimeoutSeconds()),
-		).Info("force override decision start to close timeout due to decision timout too large")
-		request.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(maxDecisionStartToCloseTimeoutSeconds)
-	}
+	taskStartToCloseTimeoutSecs := request.GetTaskStartToCloseTimeoutSeconds()
+	taskStartToCloseTimeoutSecs = common.MinInt32(taskStartToCloseTimeoutSecs, maxDecisionStartToCloseTimeoutSeconds)
+	taskStartToCloseTimeoutSecs = common.MinInt32(taskStartToCloseTimeoutSecs, request.GetExecutionStartToCloseTimeoutSeconds())
 
-	if request.GetTaskStartToCloseTimeoutSeconds() > request.GetExecutionStartToCloseTimeoutSeconds() {
-		e.throttledLogger.WithTags(
-			tag.WorkflowDomainID(domainEntry.GetInfo().ID),
-			tag.WorkflowID(request.GetWorkflowId()),
-			tag.WorkflowDecisionTimeoutSeconds(request.GetTaskStartToCloseTimeoutSeconds()),
-		).Info("force override decision start to close timeout due to decision timeout larger than workflow timeout")
-		request.TaskStartToCloseTimeoutSeconds = request.ExecutionStartToCloseTimeoutSeconds
+	if taskStartToCloseTimeoutSecs != request.GetTaskStartToCloseTimeoutSeconds() {
+		request.TaskStartToCloseTimeoutSeconds = &taskStartToCloseTimeoutSecs
+		e.metricsClient.Scope(
+			metricsScope,
+			metrics.DomainTag(domainName),
+		).IncCounter(metrics.DecisionStartToCloseTimeoutOverrideCount)
 	}
 }
 

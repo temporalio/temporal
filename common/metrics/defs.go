@@ -1589,6 +1589,7 @@ const (
 	UnblockQueryFailedCount
 	FailQueryFailedCount
 	ConsistentQueryTimeoutCount
+	DecisionStartToCloseTimeoutOverrideCount
 
 	NumHistoryMetrics
 )
@@ -1904,6 +1905,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		UnblockQueryFailedCount:                           {metricName: "unblock_query_failed", metricType: Counter},
 		FailQueryFailedCount:                              {metricName: "fail_query_failed", metricType: Counter},
 		ConsistentQueryTimeoutCount:                       {metricName: "consistent_query_timeout", metricType: Counter},
+		DecisionStartToCloseTimeoutOverrideCount:          {metricName: "decision_start_to_close_timeout_overrides", metricType: Counter},
 	},
 	Matching: {
 		PollSuccessCounter:            {metricName: "poll_success"},
