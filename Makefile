@@ -141,8 +141,8 @@ protoc:
 	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_ROOT) --gogoslick_out=paths=source_relative:$(PROTO_ROOT) $(PROTO_DIR)*.proto;)
 	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_ROOT) --yarpc-go_out=$(PROTO_ROOT) $(PROTO_DIR)*.proto;)
 
-# All YARPC generated file pathes relative to PROTO_ROOT
-PROTO_YARPC_FILES = $(patsubst $(PROTO_ROOT)/%,%,$(wildcard $(PROTO_ROOT)/*/*.pb.yarpc.go))
+# All YARPC generated service files pathes relative to PROTO_ROOT
+PROTO_YARPC_SERVICES = $(patsubst $(PROTO_ROOT)/%,%,$(wildcard $(PROTO_ROOT)/*/service.pb.yarpc.go))
 dir_no_slash = $(patsubst %/,%,$(dir $(1)))
 dirname = $(notdir $(call dir_no_slash,$(1)))
 
@@ -150,7 +150,7 @@ proto-mock:
 	GO111MODULE=off go get -u github.com/myitcv/gobin
 	GOOS= GOARCH= gobin -mod=readonly github.com/golang/mock/mockgen
 	@echo "Generate proto mocks..."
-	@$(foreach PROTO_YARPC_FILE,$(PROTO_YARPC_FILES),cd $(PROTO_ROOT) && mockgen -package $(call dirname,$(PROTO_YARPC_FILE))mock -source $(PROTO_YARPC_FILE) -destination $(call dir_no_slash,$(PROTO_YARPC_FILE))mock/$(notdir $(PROTO_YARPC_FILE:go=mock.go)) )
+	@$(foreach PROTO_YARPC_SERVICE,$(PROTO_YARPC_SERVICES),cd $(PROTO_ROOT) && mockgen -package $(call dirname,$(PROTO_YARPC_SERVICE))mock -source $(PROTO_YARPC_SERVICE) -destination $(call dir_no_slash,$(PROTO_YARPC_SERVICE))mock/$(notdir $(PROTO_YARPC_SERVICE:go=mock.go)) )
 
 update-proto: clean-proto update-proto-submodule yarpc-install protoc proto-mock
 
