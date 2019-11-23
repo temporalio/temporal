@@ -35,6 +35,7 @@ import (
 	clientFrontendTest "go.temporal.io/temporal/.gen/go/temporal/workflowservicetest"
 
 	"github.com/temporalio/temporal-proto/workflowservice"
+	"github.com/temporalio/temporal-proto/workflowservicemock"
 	"github.com/temporalio/temporal/.gen/go/admin"
 	serverAdmin "github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"
 	serverAdminTest "github.com/temporalio/temporal/.gen/go/admin/adminservicetest"
@@ -50,7 +51,7 @@ type cliAppSuite struct {
 	mockCtrl                 *gomock.Controller
 	clientFrontendClient     *clientFrontendTest.MockClient
 	serverFrontendClient     *serverFrontendTest.MockClient
-	serverFrontendClientGRPC *workflowservice.MockWorkflowServiceYARPCClient
+	serverFrontendClientGRPC *workflowservicemock.MockWorkflowServiceYARPCClient
 	serverAdminClient        *serverAdminTest.MockClient
 }
 
@@ -102,7 +103,7 @@ func (s *cliAppSuite) SetupTest() {
 
 	s.clientFrontendClient = clientFrontendTest.NewMockClient(s.mockCtrl)
 	s.serverFrontendClient = serverFrontendTest.NewMockClient(s.mockCtrl)
-	s.serverFrontendClientGRPC = workflowservice.NewMockWorkflowServiceYARPCClient(s.mockCtrl)
+	s.serverFrontendClientGRPC = workflowservicemock.NewMockWorkflowServiceYARPCClient(s.mockCtrl)
 	s.serverAdminClient = serverAdminTest.NewMockClient(s.mockCtrl)
 	SetFactory(&clientFactoryMock{
 		clientFrontendClient:     s.clientFrontendClient,
