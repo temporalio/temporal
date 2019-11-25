@@ -112,32 +112,51 @@ yarpc-install:
 	GOOS= GOARCH= gobin -mod=readonly go.uber.org/yarpc/encoding/thrift/thriftrw-plugin-yarpc
 
 clean_thrift:
-	rm -rf .gen
+	rm -rf .gen/go
 
 thriftc: yarpc-install $(THRIFTRW_GEN_SRC)
 
-# List only subdirectories with *.proto files.
-# sort to remove duplicates.
+#================================= protobuf ===================================
 PROTO_ROOT := .gen/proto
-PROTO_DIRS = $(sort $(dir $(wildcard ${PROTO_ROOT}/*/*.proto)))
+PROTO_REPO := github.com/temporalio/temporal-proto
+# List only subdirectories with *.proto files (sort to remove duplicates).
+PROTO_DIRS = $(sort $(dir $(wildcard $(PROTO_ROOT)/*/*.proto)))
+
+# Everything that deals with go modules (go.mod) needs to take dependency on this target.
+$(PROTO_ROOT)/go.mod:
+	cd $(PROTO_ROOT) && go mod init $(PROTO_REPO)
 
 clean-proto:
-	$(foreach PROTO_DIR,$(PROTO_DIRS),rm -f ${PROTO_DIR}*.go;)
+	$(foreach PROTO_DIR,$(PROTO_DIRS),rm -f $(PROTO_DIR)*.go;)
+	$(foreach PROTO_MOCK_DIR,$(wildcard $(PROTO_ROOT)/*mock),rm -rf $(PROTO_MOCK_DIR);)
 
 update-proto-submodule:
 	git submodule update --remote $(PROTO_ROOT)
 
-update-proto: clean-proto update-proto-submodule yarpc-install protoc
-
-install-proto-submodule:
+install-proto-submodule: $(PROTO_ROOT)/go.mod
 	git submodule update --init $(PROTO_ROOT)
-
-proto: clean-proto install-proto-submodule yarpc-install protoc
 
 protoc:
 #   run protoc separately for each directory because of different package names
-	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=${PROTO_ROOT} --gogoslick_out=paths=source_relative:${PROTO_ROOT} ${PROTO_DIR}*.proto;)
-	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=${PROTO_ROOT} --yarpc-go_out=${PROTO_ROOT} ${PROTO_DIR}*.proto;)
+	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_ROOT) --gogoslick_out=paths=source_relative:$(PROTO_ROOT) $(PROTO_DIR)*.proto;)
+	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_ROOT) --yarpc-go_out=$(PROTO_ROOT) $(PROTO_DIR)*.proto;)
+
+# All YARPC generated service files pathes relative to PROTO_ROOT
+PROTO_YARPC_SERVICES = $(patsubst $(PROTO_ROOT)/%,%,$(wildcard $(PROTO_ROOT)/*/service.pb.yarpc.go))
+dir_no_slash = $(patsubst %/,%,$(dir $(1)))
+dirname = $(notdir $(call dir_no_slash,$(1)))
+
+proto-mock:
+	GO111MODULE=off go get -u github.com/myitcv/gobin
+	GOOS= GOARCH= gobin -mod=readonly github.com/golang/mock/mockgen
+	@echo "Generate proto mocks..."
+	@$(foreach PROTO_YARPC_SERVICE,$(PROTO_YARPC_SERVICES),cd $(PROTO_ROOT) && mockgen -package $(call dirname,$(PROTO_YARPC_SERVICE))mock -source $(PROTO_YARPC_SERVICE) -destination $(call dir_no_slash,$(PROTO_YARPC_SERVICE))mock/$(notdir $(PROTO_YARPC_SERVICE:go=mock.go)) )
+
+update-proto: clean-proto update-proto-submodule yarpc-install protoc proto-mock
+
+proto: clean-proto install-proto-submodule yarpc-install protoc proto-mock
+
+#==============================================================================
 
 copyright: cmd/tools/copyright/licensegen.go
 	GOOS= GOARCH= go run ./cmd/tools/copyright/licensegen.go --verifyOnly

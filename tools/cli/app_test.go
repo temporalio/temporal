@@ -34,6 +34,8 @@ import (
 	clientFrontend "go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
 	clientFrontendTest "go.temporal.io/temporal/.gen/go/temporal/workflowservicetest"
 
+	"github.com/temporalio/temporal-proto/workflowservice"
+	"github.com/temporalio/temporal-proto/workflowservicemock"
 	"github.com/temporalio/temporal/.gen/go/admin"
 	serverAdmin "github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"
 	serverAdminTest "github.com/temporalio/temporal/.gen/go/admin/adminservicetest"
@@ -45,17 +47,19 @@ import (
 
 type cliAppSuite struct {
 	suite.Suite
-	app                  *cli.App
-	mockCtrl             *gomock.Controller
-	clientFrontendClient *clientFrontendTest.MockClient
-	serverFrontendClient *serverFrontendTest.MockClient
-	serverAdminClient    *serverAdminTest.MockClient
+	app                      *cli.App
+	mockCtrl                 *gomock.Controller
+	clientFrontendClient     *clientFrontendTest.MockClient
+	serverFrontendClient     *serverFrontendTest.MockClient
+	serverFrontendClientGRPC *workflowservicemock.MockWorkflowServiceYARPCClient
+	serverAdminClient        *serverAdminTest.MockClient
 }
 
 type clientFactoryMock struct {
-	clientFrontendClient clientFrontend.Interface
-	serverFrontendClient serverFrontend.Interface
-	serverAdminClient    serverAdmin.Interface
+	clientFrontendClient     clientFrontend.Interface
+	serverFrontendClient     serverFrontend.Interface
+	serverFrontendClientGRPC workflowservice.WorkflowServiceYARPCClient
+	serverAdminClient        serverAdmin.Interface
 }
 
 func (m *clientFactoryMock) ClientFrontendClient(c *cli.Context) clientFrontend.Interface {
@@ -64,6 +68,10 @@ func (m *clientFactoryMock) ClientFrontendClient(c *cli.Context) clientFrontend.
 
 func (m *clientFactoryMock) ServerFrontendClient(c *cli.Context) serverFrontend.Interface {
 	return m.serverFrontendClient
+}
+
+func (m *clientFactoryMock) ServerFrontendClientGRPC(c *cli.Context) workflowservice.WorkflowServiceYARPCClient {
+	return m.serverFrontendClientGRPC
 }
 
 func (m *clientFactoryMock) ServerAdminClient(c *cli.Context) serverAdmin.Interface {
@@ -95,11 +103,13 @@ func (s *cliAppSuite) SetupTest() {
 
 	s.clientFrontendClient = clientFrontendTest.NewMockClient(s.mockCtrl)
 	s.serverFrontendClient = serverFrontendTest.NewMockClient(s.mockCtrl)
+	s.serverFrontendClientGRPC = workflowservicemock.NewMockWorkflowServiceYARPCClient(s.mockCtrl)
 	s.serverAdminClient = serverAdminTest.NewMockClient(s.mockCtrl)
 	SetFactory(&clientFactoryMock{
-		clientFrontendClient: s.clientFrontendClient,
-		serverFrontendClient: s.serverFrontendClient,
-		serverAdminClient:    s.serverAdminClient,
+		clientFrontendClient:     s.clientFrontendClient,
+		serverFrontendClient:     s.serverFrontendClient,
+		serverFrontendClientGRPC: s.serverFrontendClientGRPC,
+		serverAdminClient:        s.serverAdminClient,
 	})
 }
 
