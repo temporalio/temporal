@@ -25,7 +25,6 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/persistence"
 )
 
@@ -34,7 +33,6 @@ type (
 		transientHistory []*workflow.HistoryEvent
 		history          []*workflow.HistoryEvent
 		msBuilder        mutableState
-		logger           log.Logger
 	}
 )
 
@@ -43,14 +41,12 @@ func newHistoryBuilder(msBuilder mutableState, logger log.Logger) *historyBuilde
 		transientHistory: []*workflow.HistoryEvent{},
 		history:          []*workflow.HistoryEvent{},
 		msBuilder:        msBuilder,
-		logger:           logger.WithTags(tag.ComponentHistoryBuilder),
 	}
 }
 
 func newHistoryBuilderFromEvents(history []*workflow.HistoryEvent, logger log.Logger) *historyBuilder {
 	return &historyBuilder{
 		history: history,
-		logger:  logger.WithTags(tag.ComponentHistoryBuilder),
 	}
 }
 
