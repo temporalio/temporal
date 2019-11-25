@@ -1366,6 +1366,7 @@ func (e *mutableStateBuilder) DeleteUserTimer(
 			fmt.Sprintf("unable to find timer ID: %v in mutable state", timerID),
 			tag.ErrorTypeInvalidMutableStateAction,
 		)
+		return ErrMissingTimerInfo
 	}
 
 	delete(e.pendingTimerInfoIDs, timerID)
