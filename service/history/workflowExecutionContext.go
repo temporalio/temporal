@@ -47,7 +47,6 @@ type (
 		getDomainName() string
 		getDomainID() string
 		getExecution() *workflow.WorkflowExecution
-		getLogger() log.Logger
 
 		loadWorkflowExecution() (mutableState, error)
 		loadExecutionStats() (*persistence.ExecutionStats, error)
@@ -162,19 +161,13 @@ func newWorkflowExecutionContext(
 	executionManager persistence.ExecutionManager,
 	logger log.Logger,
 ) *workflowExecutionContextImpl {
-	lg := logger.WithTags(
-		tag.WorkflowID(execution.GetWorkflowId()),
-		tag.WorkflowRunID(execution.GetRunId()),
-		tag.WorkflowDomainID(domainID),
-	)
-
 	return &workflowExecutionContextImpl{
 		domainID:          domainID,
 		workflowExecution: execution,
 		shard:             shard,
 		engine:            shard.GetEngine(),
 		executionManager:  executionManager,
-		logger:            lg,
+		logger:            logger,
 		metricsClient:     shard.GetMetricsClient(),
 		timeSource:        shard.GetTimeSource(),
 		mutex:             locks.NewMutex(),
@@ -206,10 +199,6 @@ func (c *workflowExecutionContextImpl) getDomainID() string {
 
 func (c *workflowExecutionContextImpl) getExecution() *workflow.WorkflowExecution {
 	return &c.workflowExecution
-}
-
-func (c *workflowExecutionContextImpl) getLogger() log.Logger {
-	return c.logger
 }
 
 func (c *workflowExecutionContextImpl) getDomainName() string {
@@ -888,6 +877,9 @@ func (c *workflowExecutionContextImpl) createWorkflowExecutionWithRetry(
 	default:
 		c.logger.Error(
 			"Persistent store operation failure",
+			tag.WorkflowID(c.workflowExecution.GetWorkflowId()),
+			tag.WorkflowRunID(c.workflowExecution.GetRunId()),
+			tag.WorkflowDomainID(c.domainID),
 			tag.StoreOperationCreateWorkflowExecution,
 			tag.Error(err),
 		)
@@ -921,6 +913,9 @@ func (c *workflowExecutionContextImpl) getWorkflowExecutionWithRetry(
 	default:
 		c.logger.Error(
 			"Persistent fetch operation failure",
+			tag.WorkflowID(c.workflowExecution.GetWorkflowId()),
+			tag.WorkflowRunID(c.workflowExecution.GetRunId()),
+			tag.WorkflowDomainID(c.domainID),
 			tag.StoreOperationGetWorkflowExecution,
 			tag.Error(err),
 		)
@@ -952,6 +947,9 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithRetry(
 	default:
 		c.logger.Error(
 			"Persistent store operation failure",
+			tag.WorkflowID(c.workflowExecution.GetWorkflowId()),
+			tag.WorkflowRunID(c.workflowExecution.GetRunId()),
+			tag.WorkflowDomainID(c.domainID),
 			tag.StoreOperationUpdateWorkflowExecution,
 			tag.Error(err),
 			tag.Number(c.updateCondition),

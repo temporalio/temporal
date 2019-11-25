@@ -482,7 +482,7 @@ func (e *mutableStateBuilder) UpdateCurrentVersion(
 		err := &workflow.InternalServiceError{
 			Message: "cannot update current version of local domain workflow to version other than empty version",
 		}
-		e.logger.Error(err.Error())
+		e.logError(err.Error())
 		return err
 	}
 	e.currentVersion = common.EmptyVersion
@@ -1048,7 +1048,7 @@ func (e *mutableStateBuilder) GetCronBackoffDuration() (time.Duration, error) {
 	// This only call when doing ContinueAsNew. At this point, the workflow should have a start event
 	workflowStartEvent, err := e.GetStartEvent()
 	if err != nil {
-		e.logger.Error("unable to find workflow start event", tag.ErrorTypeInvalidHistoryAction)
+		e.logError("unable to find workflow start event", tag.ErrorTypeInvalidHistoryAction)
 		return backoff.NoBackoff, err
 	}
 	firstDecisionTaskBackoff :=
@@ -1139,7 +1139,7 @@ func (e *mutableStateBuilder) DeletePendingChildExecution(
 ) error {
 
 	if _, ok := e.pendingChildExecutionInfoIDs[initiatedEventID]; !ok {
-		e.logger.Error(
+		e.logError(
 			fmt.Sprintf("unable to find child workflow: %v in mutable state", initiatedEventID),
 			tag.ErrorTypeInvalidMutableStateAction,
 		)
@@ -1157,7 +1157,7 @@ func (e *mutableStateBuilder) DeletePendingRequestCancel(
 ) error {
 
 	if _, ok := e.pendingRequestCancelInfoIDs[initiatedEventID]; !ok {
-		e.logger.Error(
+		e.logError(
 			fmt.Sprintf("unable to find request cancel info: %v in mutable state", initiatedEventID),
 			tag.ErrorTypeInvalidMutableStateAction,
 		)
@@ -1175,7 +1175,7 @@ func (e *mutableStateBuilder) DeletePendingSignal(
 ) error {
 
 	if _, ok := e.pendingSignalInfoIDs[initiatedEventID]; !ok {
-		e.logger.Error(
+		e.logError(
 			fmt.Sprintf("unable to find signal info: %v in mutable state", initiatedEventID),
 			tag.ErrorTypeInvalidMutableStateAction,
 		)
@@ -1230,7 +1230,7 @@ func (e *mutableStateBuilder) ReplicateActivityInfo(
 ) error {
 	ai, ok := e.pendingActivityInfoIDs[request.GetScheduledId()]
 	if !ok {
-		e.logger.Error(
+		e.logError(
 			fmt.Sprintf("unable to find activity event ID: %v in mutable state", request.GetScheduledId()),
 			tag.ErrorTypeInvalidMutableStateAction,
 		)
@@ -1266,7 +1266,7 @@ func (e *mutableStateBuilder) UpdateActivity(
 ) error {
 
 	if _, ok := e.pendingActivityInfoIDs[ai.ScheduleID]; !ok {
-		e.logger.Error(
+		e.logError(
 			fmt.Sprintf("unable to find activity ID: %v in mutable state", ai.ActivityID),
 			tag.ErrorTypeInvalidMutableStateAction,
 		)
@@ -1285,7 +1285,7 @@ func (e *mutableStateBuilder) DeleteActivity(
 
 	activityInfo, ok := e.pendingActivityInfoIDs[scheduleEventID]
 	if !ok {
-		e.logger.Error(
+		e.logError(
 			fmt.Sprintf("unable to find activity event id: %v in mutable state", scheduleEventID),
 			tag.ErrorTypeInvalidMutableStateAction,
 		)
@@ -1294,7 +1294,7 @@ func (e *mutableStateBuilder) DeleteActivity(
 
 	_, ok = e.pendingActivityIDToEventID[activityInfo.ActivityID]
 	if !ok {
-		e.logger.Error(
+		e.logError(
 			fmt.Sprintf("unable to find activity ID: %v in mutable state", activityInfo.ActivityID),
 			tag.ErrorTypeInvalidMutableStateAction,
 		)
@@ -1335,7 +1335,7 @@ func (e *mutableStateBuilder) UpdateUserTimer(
 
 	timerID, ok := e.pendingTimerEventIDToID[ti.StartedID]
 	if !ok {
-		e.logger.Error(
+		e.logError(
 			fmt.Sprintf("unable to find timer event ID: %v in mutable state", ti.StartedID),
 			tag.ErrorTypeInvalidMutableStateAction,
 		)
@@ -1343,7 +1343,7 @@ func (e *mutableStateBuilder) UpdateUserTimer(
 	}
 
 	if _, ok := e.pendingTimerInfoIDs[timerID]; !ok {
-		e.logger.Error(
+		e.logError(
 			fmt.Sprintf("unable to find timer ID: %v in mutable state", timerID),
 			tag.ErrorTypeInvalidMutableStateAction,
 		)
@@ -1362,7 +1362,7 @@ func (e *mutableStateBuilder) DeleteUserTimer(
 
 	timerInfo, ok := e.pendingTimerInfoIDs[timerID]
 	if !ok {
-		e.logger.Error(
+		e.logError(
 			fmt.Sprintf("unable to find timer ID: %v in mutable state", timerID),
 			tag.ErrorTypeInvalidMutableStateAction,
 		)
@@ -1371,7 +1371,7 @@ func (e *mutableStateBuilder) DeleteUserTimer(
 
 	_, ok = e.pendingTimerEventIDToID[timerInfo.StartedID]
 	if !ok {
-		e.logger.Error(
+		e.logError(
 			fmt.Sprintf("unable to find timer event ID: %v in mutable state", timerID),
 			tag.ErrorTypeInvalidMutableStateAction,
 		)
@@ -2361,7 +2361,7 @@ func (e *mutableStateBuilder) AddActivityTaskCancelRequestedEvent(
 
 	ai, ok := e.GetActivityByActivityID(activityID)
 	if !ok || ai.CancelRequested {
-		e.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
+		e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.Bool(ok),
@@ -2431,7 +2431,7 @@ func (e *mutableStateBuilder) AddActivityTaskCanceledEvent(
 
 	ai, ok := e.GetActivityInfo(scheduleEventID)
 	if !ok || ai.StartedID != startedEventID {
-		e.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
+		e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowScheduleID(scheduleEventID))
@@ -2440,7 +2440,7 @@ func (e *mutableStateBuilder) AddActivityTaskCanceledEvent(
 
 	// Verify cancel request as well.
 	if !ai.CancelRequested {
-		e.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
+		e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowScheduleID(scheduleEventID),
@@ -2601,7 +2601,7 @@ func (e *mutableStateBuilder) AddWorkflowExecutionCancelRequestedEvent(
 	}
 
 	if e.executionInfo.CancelRequested {
-		e.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
+		e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowState(e.executionInfo.State),
@@ -2729,7 +2729,7 @@ func (e *mutableStateBuilder) AddExternalWorkflowExecutionCancelRequested(
 
 	_, ok := e.GetRequestCancelInfo(initiatedID)
 	if !ok {
-		e.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
+		e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowInitiatedID(initiatedID))
@@ -2768,7 +2768,7 @@ func (e *mutableStateBuilder) AddRequestCancelExternalWorkflowExecutionFailedEve
 
 	_, ok := e.GetRequestCancelInfo(initiatedID)
 	if !ok {
-		e.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
+		e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowInitiatedID(initiatedID))
@@ -2902,7 +2902,7 @@ func (e *mutableStateBuilder) AddExternalWorkflowExecutionSignaled(
 
 	_, ok := e.GetSignalInfo(initiatedID)
 	if !ok {
-		e.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
+		e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowInitiatedID(initiatedID))
@@ -2942,7 +2942,7 @@ func (e *mutableStateBuilder) AddSignalExternalWorkflowExecutionFailedEvent(
 
 	_, ok := e.GetSignalInfo(initiatedID)
 	if !ok {
-		e.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
+		e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowInitiatedID(initiatedID))
@@ -2979,7 +2979,7 @@ func (e *mutableStateBuilder) AddTimerStartedEvent(
 	timerID := request.GetTimerId()
 	ti, ok := e.GetUserTimerInfo(timerID)
 	if ok {
-		e.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
+		e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowTimerID(timerID))
@@ -3031,7 +3031,7 @@ func (e *mutableStateBuilder) AddTimerFiredEvent(
 
 	timerInfo, ok := e.GetUserTimerInfo(timerID)
 	if !ok {
-		e.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
+		e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowTimerID(timerID))
@@ -3076,7 +3076,7 @@ func (e *mutableStateBuilder) AddTimerCanceledEvent(
 		// bufferedEvents and the history builder
 		timerFiredEvent := e.checkAndClearTimerFiredEvent(timerID)
 		if timerFiredEvent == nil {
-			e.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
+			e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 				tag.WorkflowEventID(e.GetNextEventID()),
 				tag.ErrorTypeInvalidHistoryAction,
 				tag.WorkflowTimerID(timerID))
@@ -3412,7 +3412,7 @@ func (e *mutableStateBuilder) AddChildWorkflowExecutionStartedEvent(
 
 	ci, ok := e.GetChildExecutionInfo(initiatedID)
 	if !ok || ci.StartedID != common.EmptyEventID {
-		e.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
+		e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.Bool(ok),
@@ -3455,7 +3455,7 @@ func (e *mutableStateBuilder) AddStartChildWorkflowExecutionFailedEvent(
 
 	ci, ok := e.GetChildExecutionInfo(initiatedID)
 	if !ok || ci.StartedID != common.EmptyEventID {
-		e.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
+		e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.Bool(ok),
@@ -3493,7 +3493,7 @@ func (e *mutableStateBuilder) AddChildWorkflowExecutionCompletedEvent(
 
 	ci, ok := e.GetChildExecutionInfo(initiatedID)
 	if !ok || ci.StartedID == common.EmptyEventID {
-		e.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
+		e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.Bool(ok),
@@ -3540,7 +3540,7 @@ func (e *mutableStateBuilder) AddChildWorkflowExecutionFailedEvent(
 
 	ci, ok := e.GetChildExecutionInfo(initiatedID)
 	if !ok || ci.StartedID == common.EmptyEventID {
-		e.logger.Warn(mutableStateInvalidHistoryActionMsg,
+		e.logWarn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.Bool(!ok),
@@ -3587,7 +3587,7 @@ func (e *mutableStateBuilder) AddChildWorkflowExecutionCanceledEvent(
 
 	ci, ok := e.GetChildExecutionInfo(initiatedID)
 	if !ok || ci.StartedID == common.EmptyEventID {
-		e.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
+		e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.Bool(ok),
@@ -3634,7 +3634,7 @@ func (e *mutableStateBuilder) AddChildWorkflowExecutionTerminatedEvent(
 
 	ci, ok := e.GetChildExecutionInfo(initiatedID)
 	if !ok || ci.StartedID == common.EmptyEventID {
-		e.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
+		e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.Bool(ok),
@@ -3681,7 +3681,7 @@ func (e *mutableStateBuilder) AddChildWorkflowExecutionTimedOutEvent(
 
 	ci, ok := e.GetChildExecutionInfo(initiatedID)
 	if !ok || ci.StartedID == common.EmptyEventID {
-		e.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
+		e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.Bool(ok),
@@ -4262,7 +4262,7 @@ func (e *mutableStateBuilder) validateNoEventsAfterWorkflowFinish(
 
 	default:
 		executionInfo := e.GetExecutionInfo()
-		e.logger.Error(
+		e.logError(
 			"encounter case where events appears after workflow finish.",
 			tag.WorkflowDomainID(executionInfo.DomainID),
 			tag.WorkflowID(executionInfo.WorkflowID),
@@ -4449,7 +4449,7 @@ func (e *mutableStateBuilder) closeTransactionHandleWorkflowReset(
 		); err != nil {
 			return err
 		}
-		e.logger.Info("Auto-Reset task is scheduled",
+		e.logInfo("Auto-Reset task is scheduled",
 			tag.WorkflowDomainName(domainEntry.GetInfo().Name),
 			tag.WorkflowID(executionInfo.WorkflowID),
 			tag.WorkflowRunID(executionInfo.RunID),
@@ -4487,7 +4487,7 @@ func (e *mutableStateBuilder) checkMutability(
 ) error {
 
 	if !e.IsWorkflowExecutionRunning() {
-		e.logger.Warn(
+		e.logWarn(
 			mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
@@ -4520,4 +4520,24 @@ func (e *mutableStateBuilder) unixNanoToTime(
 ) time.Time {
 
 	return time.Unix(0, timestampNanos)
+}
+
+func (e *mutableStateBuilder) logInfo(msg string, tags ...tag.Tag) {
+	tags = append(tags, tag.WorkflowID(e.executionInfo.WorkflowID))
+	tags = append(tags, tag.WorkflowRunID(e.executionInfo.RunID))
+	tags = append(tags, tag.WorkflowDomainID(e.executionInfo.DomainID))
+	e.logger.Info(msg, tags...)
+}
+
+func (e *mutableStateBuilder) logWarn(msg string, tags ...tag.Tag) {
+	tags = append(tags, tag.WorkflowID(e.executionInfo.WorkflowID))
+	tags = append(tags, tag.WorkflowRunID(e.executionInfo.RunID))
+	tags = append(tags, tag.WorkflowDomainID(e.executionInfo.DomainID))
+	e.logger.Warn(msg, tags...)
+}
+func (e *mutableStateBuilder) logError(msg string, tags ...tag.Tag) {
+	tags = append(tags, tag.WorkflowID(e.executionInfo.WorkflowID))
+	tags = append(tags, tag.WorkflowRunID(e.executionInfo.RunID))
+	tags = append(tags, tag.WorkflowDomainID(e.executionInfo.DomainID))
+	e.logger.Error(msg, tags...)
 }
