@@ -35,6 +35,8 @@ import (
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
+	commong "github.com/temporalio/temporal-proto/common"
+	workflowg "github.com/temporalio/temporal-proto/workflowservice"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -222,6 +224,28 @@ func (s *IntegrationBase) getHistory(domain string, execution *workflow.Workflow
 	for historyResponse.NextPageToken != nil {
 		historyResponse, err = s.engine.GetWorkflowExecutionHistory(createContext(), &workflow.GetWorkflowExecutionHistoryRequest{
 			Domain:        common.StringPtr(domain),
+			Execution:     execution,
+			NextPageToken: historyResponse.NextPageToken,
+		})
+		s.Require().NoError(err)
+		events = append(events, historyResponse.History.Events...)
+	}
+
+	return events
+}
+
+func (s *IntegrationBase) getHistoryGRPC(domain string, execution *commong.WorkflowExecution) []*commong.HistoryEvent {
+	historyResponse, err := s.engineGRPC.GetWorkflowExecutionHistory(createContextGRPC(), &workflowg.GetWorkflowExecutionHistoryRequest{
+		Domain:          domain,
+		Execution:       execution,
+		MaximumPageSize: 5, // Use small page size to force pagination code path
+	})
+	s.Require().NoError(err)
+
+	events := historyResponse.History.Events
+	for historyResponse.NextPageToken != nil {
+		historyResponse, err = s.engineGRPC.GetWorkflowExecutionHistory(createContextGRPC(), &workflowg.GetWorkflowExecutionHistoryRequest{
+			Domain:        domain,
 			Execution:     execution,
 			NextPageToken: historyResponse.NextPageToken,
 		})
