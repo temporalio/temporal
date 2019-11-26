@@ -1742,16 +1742,11 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 	targetBackoffDuration := time.Second * 3
 	backoffDurationTolerance := time.Second
 
-	parentWorkflowType := &commonproto.WorkflowType{}
-	parentWorkflowType.Name = wtParent
+	parentWorkflowType := &commonproto.WorkflowType{Name: wtParent}
+	childWorkflowType := &commonproto.WorkflowType{Name: wtChild}
 
-	childWorkflowType := &commonproto.WorkflowType{}
-	childWorkflowType.Name = wtChild
-
-	taskListParent := &commonproto.TaskList{}
-	taskListParent.Name = tlParent
-	taskListChild := &commonproto.TaskList{}
-	taskListChild.Name = tlChild
+	taskListParent := &commonproto.TaskList{Name: tlParent}
+	taskListChild := &commonproto.TaskList{Name: tlChild}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
