@@ -21,18 +21,19 @@
 package frontend
 
 import (
+	mock "github.com/stretchr/testify/mock"
+
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/archiver"
-	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/domain"
-	"github.com/uber/cadence/common/log/loggerimpl"
+	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/persistence/client"
+	persistenceClient "github.com/uber/cadence/common/persistence/client"
 	espersistence "github.com/uber/cadence/common/persistence/elasticsearch"
+	"github.com/uber/cadence/common/resource"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
@@ -124,153 +125,117 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int, enableReadFro
 
 // Service represents the cadence-frontend service
 type Service struct {
+	resource.Resource
+
 	stopC  chan struct{}
 	config *Config
 	params *service.BootstrapParams
 }
 
 // NewService builds a new cadence-frontend service
-func NewService(params *service.BootstrapParams) common.Daemon {
+func NewService(
+	params *service.BootstrapParams,
+) (resource.Resource, error) {
+
 	isAdvancedVisExistInConfig := len(params.PersistenceConfig.AdvancedVisibilityStore) != 0
-	config := NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger), params.PersistenceConfig.NumHistoryShards, isAdvancedVisExistInConfig)
-	params.ThrottledLogger = loggerimpl.NewThrottledLogger(params.Logger, config.ThrottledLogRPS)
-	params.UpdateLoggerWithServiceName(common.FrontendServiceName)
-	return &Service{
-		params: params,
-		config: config,
-		stopC:  make(chan struct{}),
+	serviceConfig := NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger), params.PersistenceConfig.NumHistoryShards, isAdvancedVisExistInConfig)
+
+	params.PersistenceConfig.HistoryMaxConns = serviceConfig.HistoryMgrNumConns()
+	params.PersistenceConfig.SetMaxQPS(params.PersistenceConfig.DefaultStore, serviceConfig.PersistenceMaxQPS())
+	params.PersistenceConfig.VisibilityConfig = &config.VisibilityConfig{
+		VisibilityListMaxQPS:            serviceConfig.VisibilityListMaxQPS,
+		EnableSampling:                  serviceConfig.EnableVisibilitySampling,
+		EnableReadFromClosedExecutionV2: serviceConfig.EnableReadFromClosedExecutionV2,
 	}
+
+	visibilityManagerInitializer := func(
+		persistenceBean persistenceClient.Bean,
+		logger log.Logger,
+	) (persistence.VisibilityManager, error) {
+		visibilityFromDB := persistenceBean.GetVisibilityManager()
+
+		var visibilityFromES persistence.VisibilityManager
+		if params.ESConfig != nil {
+			visibilityIndexName := params.ESConfig.Indices[common.VisibilityAppName]
+			visibilityConfigForES := &config.VisibilityConfig{
+				MaxQPS:                 serviceConfig.PersistenceMaxQPS,
+				VisibilityListMaxQPS:   serviceConfig.ESVisibilityListMaxQPS,
+				ESIndexMaxResultWindow: serviceConfig.ESIndexMaxResultWindow,
+				ValidSearchAttributes:  serviceConfig.ValidSearchAttributes,
+			}
+			visibilityFromES = espersistence.NewESVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES,
+				nil, params.MetricsClient, logger)
+		}
+		return persistence.NewVisibilityManagerWrapper(
+			visibilityFromDB,
+			visibilityFromES,
+			serviceConfig.EnableReadVisibilityFromES,
+			dynamicconfig.GetStringPropertyFn(common.AdvancedVisibilityWritingModeOff), // frontend visibility never write
+		), nil
+	}
+
+	serviceResource, err := resource.New(
+		params,
+		common.FrontendServiceName,
+		serviceConfig.ThrottledLogRPS,
+		visibilityManagerInitializer,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Service{
+		Resource: serviceResource,
+		config:   serviceConfig,
+		stopC:    make(chan struct{}),
+		params:   params,
+	}, nil
 }
 
 // Start starts the service
 func (s *Service) Start() {
 
-	var params = s.params
-	var log = params.Logger
-
-	log.Info("starting", tag.Service(common.FrontendServiceName))
-
-	base := service.New(params)
-
-	pConfig := params.PersistenceConfig
-	pConfig.HistoryMaxConns = s.config.HistoryMgrNumConns()
-	pConfig.SetMaxQPS(pConfig.DefaultStore, s.config.PersistenceMaxQPS())
-	pConfig.VisibilityConfig = &config.VisibilityConfig{
-		VisibilityListMaxQPS:            s.config.VisibilityListMaxQPS,
-		EnableSampling:                  s.config.EnableVisibilitySampling,
-		EnableReadFromClosedExecutionV2: s.config.EnableReadFromClosedExecutionV2,
-	}
-	pFactory := client.NewFactory(&pConfig, params.ClusterMetadata.GetCurrentClusterName(), base.GetMetricsClient(), log)
-
-	metadata, err := pFactory.NewMetadataManager()
-	if err != nil {
-		log.Fatal("failed to create metadata manager", tag.Error(err))
-	}
-
-	visibilityFromDB, err := pFactory.NewVisibilityManager()
-	if err != nil {
-		log.Fatal("failed to create visibility manager", tag.Error(err))
-	}
-
-	var visibilityFromES persistence.VisibilityManager
-	if params.ESConfig != nil {
-		visibilityIndexName := params.ESConfig.Indices[common.VisibilityAppName]
-		visibilityConfigForES := &config.VisibilityConfig{
-			MaxQPS:                 s.config.PersistenceMaxQPS,
-			VisibilityListMaxQPS:   s.config.ESVisibilityListMaxQPS,
-			ESIndexMaxResultWindow: s.config.ESIndexMaxResultWindow,
-			ValidSearchAttributes:  s.config.ValidSearchAttributes,
-		}
-		visibilityFromES = espersistence.NewESVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES,
-			nil, base.GetMetricsClient(), log)
-	}
-	visibility := persistence.NewVisibilityManagerWrapper(
-		visibilityFromDB,
-		visibilityFromES,
-		s.config.EnableReadVisibilityFromES,
-		dynamicconfig.GetStringPropertyFn(common.AdvancedVisibilityWritingModeOff), // frontend visibility never write
-	)
-
-	historyV2, err := pFactory.NewHistoryManager()
-	if err != nil {
-		log.Fatal("Creating historyV2 manager persistence failed", tag.Error(err))
-	}
-
-	domainCache := cache.NewDomainCache(metadata, base.GetClusterMetadata(), base.GetMetricsClient(), base.GetLogger())
-
-	historyArchiverBootstrapContainer := &archiver.HistoryBootstrapContainer{
-		HistoryV2Manager: historyV2,
-		Logger:           base.GetLogger(),
-		MetricsClient:    base.GetMetricsClient(),
-		ClusterMetadata:  base.GetClusterMetadata(),
-		DomainCache:      domainCache,
-	}
-	visibilityArchiverBootstrapContainer := &archiver.VisibilityBootstrapContainer{
-		Logger:          base.GetLogger(),
-		MetricsClient:   base.GetMetricsClient(),
-		ClusterMetadata: base.GetClusterMetadata(),
-		DomainCache:     domainCache,
-	}
-	err = params.ArchiverProvider.RegisterBootstrapContainer(common.FrontendServiceName, historyArchiverBootstrapContainer, visibilityArchiverBootstrapContainer)
-	if err != nil {
-		log.Fatal("Failed to register archiver bootstrap container", tag.Error(err))
-	}
+	logger := s.GetLogger()
+	logger.Info("frontend starting", tag.Service(common.FrontendServiceName))
 
 	var replicationMessageSink messaging.Producer
-	var domainReplicationQueue persistence.DomainReplicationQueue
-	clusterMetadata := base.GetClusterMetadata()
+	clusterMetadata := s.GetClusterMetadata()
 	if clusterMetadata.IsGlobalDomainEnabled() {
 		consumerConfig := clusterMetadata.GetReplicationConsumerConfig()
 		if consumerConfig != nil && consumerConfig.Type == config.ReplicationConsumerTypeRPC {
-			domainReplicationQueue, err = pFactory.NewDomainReplicationQueue()
-			if err != nil {
-				log.Fatal("Failed to create domain replication queue", tag.Error(err))
-			}
-			replicationMessageSink = domainReplicationQueue
+			replicationMessageSink = s.GetDomainReplicationQueue()
 		} else {
-			replicationMessageSink, err = base.GetMessagingClient().NewProducerWithClusterName(
-				base.GetClusterMetadata().GetCurrentClusterName())
+			var err error
+			replicationMessageSink, err = s.GetMessagingClient().NewProducerWithClusterName(
+				s.GetClusterMetadata().GetCurrentClusterName())
 			if err != nil {
-				log.Fatal("Creating replicationMessageSink producer failed", tag.Error(err))
+				logger.Fatal("Creating replicationMessageSink producer failed", tag.Error(err))
 			}
 		}
 	} else {
 		replicationMessageSink = &mocks.KafkaProducer{}
+		replicationMessageSink.(*mocks.KafkaProducer).On("Publish", mock.Anything).Return(nil)
 	}
 
-	wfHandler := NewWorkflowHandler(
-		base,
-		s.config,
-		metadata,
-		historyV2,
-		visibility,
-		replicationMessageSink,
-		domainReplicationQueue,
-		domainCache)
-	dcRedirectionHandler := NewDCRedirectionHandler(wfHandler, params.DCRedirectionPolicy)
+	wfHandler := NewWorkflowHandler(s, s.config, replicationMessageSink)
+	dcRedirectionHandler := NewDCRedirectionHandler(wfHandler, s.params.DCRedirectionPolicy)
 	dcRedirectionHandler.RegisterHandler()
 
-	adminHandler := NewAdminHandler(base, pConfig.NumHistoryShards, domainCache, historyV2, s.params, s.config)
+	adminHandler := NewAdminHandler(s, s.params, s.config)
 	adminHandler.RegisterHandler()
 
-	// must start base service first
-	base.Start()
-	err = dcRedirectionHandler.Start()
-	if err != nil {
-		log.Fatal("DC redirection handler failed to start", tag.Error(err))
-	}
-	err = adminHandler.Start()
-	if err != nil {
-		log.Fatal("Admin handler failed to start", tag.Error(err))
-	}
+	// must start resource first
+	s.Resource.Start()
+	dcRedirectionHandler.Start()
+	adminHandler.Start()
 
 	// base (service is not started in frontend or admin handler) in case of race condition in yarpc registration function
 
-	log.Info("started", tag.Service(common.FrontendServiceName))
+	logger.Info("started", tag.Service(common.FrontendServiceName))
 
 	<-s.stopC
 
-	base.Stop()
+	s.Resource.Stop()
 }
 
 // Stop stops the service

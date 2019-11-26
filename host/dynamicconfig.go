@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/uber/cadence/common"
-
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
@@ -32,6 +31,8 @@ var (
 	// Override value for integer keys for dynamic config
 	intKeys = map[dynamicconfig.Key]int{
 		dynamicconfig.FrontendRPS:                        3000,
+		dynamicconfig.FrontendVisibilityListMaxQPS:       100,
+		dynamicconfig.FrontendESIndexMaxResultWindow:     defaultTestValueOfESIndexMaxResultWindow,
 		dynamicconfig.MatchingNumTasklistWritePartitions: 3,
 		dynamicconfig.MatchingNumTasklistReadPartitions:  3,
 	}

@@ -25,7 +25,6 @@ import (
 
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
-	carchiver "github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
@@ -77,6 +76,11 @@ func NewService(
 ) (resource.Resource, error) {
 
 	serviceConfig := NewConfig(params)
+
+	params.PersistenceConfig.SetMaxQPS(
+		params.PersistenceConfig.DefaultStore,
+		serviceConfig.ReplicationCfg.PersistenceMaxQPS(),
+	)
 
 	serviceResource, err := resource.New(
 		params,
@@ -266,29 +270,6 @@ func (s *Service) startIndexer() {
 }
 
 func (s *Service) startArchiver() {
-	historyArchiverBootstrapContainer := &carchiver.HistoryBootstrapContainer{
-		HistoryV2Manager: s.GetHistoryManager(),
-		Logger:           s.GetLogger(),
-		MetricsClient:    s.GetMetricsClient(),
-		ClusterMetadata:  s.GetClusterMetadata(),
-		DomainCache:      s.GetDomainCache(),
-	}
-	visibilityArchiverBootstrapContainer := &carchiver.VisibilityBootstrapContainer{
-		Logger:          s.GetLogger(),
-		MetricsClient:   s.GetMetricsClient(),
-		ClusterMetadata: s.GetClusterMetadata(),
-		DomainCache:     s.GetDomainCache(),
-	}
-	archiverProvider := s.GetArchiverProvider()
-	err := archiverProvider.RegisterBootstrapContainer(
-		common.WorkerServiceName,
-		historyArchiverBootstrapContainer,
-		visibilityArchiverBootstrapContainer,
-	)
-	if err != nil {
-		s.GetLogger().Fatal("failed to register archiver bootstrap container", tag.Error(err))
-	}
-
 	bc := &archiver.BootstrapContainer{
 		PublicClient:     s.GetSDKClient(),
 		MetricsClient:    s.GetMetricsClient(),
@@ -296,7 +277,7 @@ func (s *Service) startArchiver() {
 		HistoryV2Manager: s.GetHistoryManager(),
 		DomainCache:      s.GetDomainCache(),
 		Config:           s.config.ArchiverConfig,
-		ArchiverProvider: archiverProvider,
+		ArchiverProvider: s.GetArchiverProvider(),
 	}
 	clientWorker := archiver.NewClientWorker(bc)
 	if err := clientWorker.Start(); err != nil {

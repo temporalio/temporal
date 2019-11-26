@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/mock"
 	"github.com/uber-go/tally"
 
 	cwsc "go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
@@ -53,7 +52,6 @@ import (
 	"github.com/uber/cadence/common/membership"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
-	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/common/service/config"
@@ -74,47 +72,45 @@ type Cadence interface {
 	GetAdminClient() adminserviceclient.Interface
 	GetFrontendClient() workflowserviceclient.Interface
 	FrontendAddress() string
-	GetFrontendService() service.Service
 	GetHistoryClient() historyserviceclient.Interface
 	GetExecutionManagerFactory() persistence.ExecutionManagerFactory
 }
 
 type (
 	cadenceImpl struct {
+		frontendService common.Daemon
 		matchingService common.Daemon
 		workerService   common.Daemon
 
-		adminHandler           *frontend.AdminHandler
-		frontendHandler        *frontend.WorkflowHandler
-		historyHandlers        []*history.Handler
-		logger                 log.Logger
-		clusterMetadata        cluster.Metadata
-		persistenceConfig      config.Persistence
-		dispatcherProvider     client.DispatcherProvider
-		messagingClient        messaging.Client
-		metadataMgr            persistence.MetadataManager
-		shardMgr               persistence.ShardManager
-		historyV2Mgr           persistence.HistoryManager
-		taskMgr                persistence.TaskManager
-		visibilityMgr          persistence.VisibilityManager
-		executionMgrFactory    persistence.ExecutionManagerFactory
-		domainReplicationQueue persistence.DomainReplicationQueue
-		shutdownCh             chan struct{}
-		shutdownWG             sync.WaitGroup
-		frontEndService        service.Service
-		historyService         service.Service
-		clusterNo              int // cluster number
-		replicator             *replicator.Replicator
-		clientWorker           archiver.ClientWorker
-		indexer                *indexer.Indexer
-		enbaleNDC              bool
-		archiverMetadata       carchiver.ArchivalMetadata
-		archiverProvider       provider.ArchiverProvider
-		historyConfig          *HistoryConfig
-		esConfig               *elasticsearch.Config
-		esClient               elasticsearch.Client
-		workerConfig           *WorkerConfig
-		mockFrontendClient     map[string]frontendclient.Client
+		adminClient         adminserviceclient.Interface
+		frontendClient      workflowserviceclient.Interface
+		historyHandlers     []*history.Handler
+		logger              log.Logger
+		clusterMetadata     cluster.Metadata
+		persistenceConfig   config.Persistence
+		dispatcherProvider  client.DispatcherProvider
+		messagingClient     messaging.Client
+		metadataMgr         persistence.MetadataManager
+		shardMgr            persistence.ShardManager
+		historyV2Mgr        persistence.HistoryManager
+		taskMgr             persistence.TaskManager
+		visibilityMgr       persistence.VisibilityManager
+		executionMgrFactory persistence.ExecutionManagerFactory
+		shutdownCh          chan struct{}
+		shutdownWG          sync.WaitGroup
+		historyService      service.Service
+		clusterNo           int // cluster number
+		replicator          *replicator.Replicator
+		clientWorker        archiver.ClientWorker
+		indexer             *indexer.Indexer
+		enbaleNDC           bool
+		archiverMetadata    carchiver.ArchivalMetadata
+		archiverProvider    provider.ArchiverProvider
+		historyConfig       *HistoryConfig
+		esConfig            *elasticsearch.Config
+		esClient            elasticsearch.Client
+		workerConfig        *WorkerConfig
+		mockFrontendClient  map[string]frontendclient.Client
 	}
 
 	// HistoryConfig contains configs for history service
@@ -148,7 +144,6 @@ type (
 		ESClient                      elasticsearch.Client
 		WorkerConfig                  *WorkerConfig
 		MockFrontendClient            map[string]frontendclient.Client
-		DomainReplicationQueue        persistence.DomainReplicationQueue
 	}
 
 	membershipFactoryImpl struct {
@@ -160,28 +155,27 @@ type (
 // NewCadence returns an instance that hosts full cadence in one process
 func NewCadence(params *CadenceParams) Cadence {
 	return &cadenceImpl{
-		logger:                 params.Logger,
-		clusterMetadata:        params.ClusterMetadata,
-		persistenceConfig:      params.PersistenceConfig,
-		dispatcherProvider:     params.DispatcherProvider,
-		messagingClient:        params.MessagingClient,
-		metadataMgr:            params.MetadataMgr,
-		visibilityMgr:          params.VisibilityMgr,
-		shardMgr:               params.ShardMgr,
-		historyV2Mgr:           params.HistoryV2Mgr,
-		taskMgr:                params.TaskMgr,
-		executionMgrFactory:    params.ExecutionMgrFactory,
-		domainReplicationQueue: params.DomainReplicationQueue,
-		shutdownCh:             make(chan struct{}),
-		clusterNo:              params.ClusterNo,
-		enbaleNDC:              params.EnableNDC,
-		esConfig:               params.ESConfig,
-		esClient:               params.ESClient,
-		archiverMetadata:       params.ArchiverMetadata,
-		archiverProvider:       params.ArchiverProvider,
-		historyConfig:          params.HistoryConfig,
-		workerConfig:           params.WorkerConfig,
-		mockFrontendClient:     params.MockFrontendClient,
+		logger:              params.Logger,
+		clusterMetadata:     params.ClusterMetadata,
+		persistenceConfig:   params.PersistenceConfig,
+		dispatcherProvider:  params.DispatcherProvider,
+		messagingClient:     params.MessagingClient,
+		metadataMgr:         params.MetadataMgr,
+		visibilityMgr:       params.VisibilityMgr,
+		shardMgr:            params.ShardMgr,
+		historyV2Mgr:        params.HistoryV2Mgr,
+		taskMgr:             params.TaskMgr,
+		executionMgrFactory: params.ExecutionMgrFactory,
+		shutdownCh:          make(chan struct{}),
+		clusterNo:           params.ClusterNo,
+		enbaleNDC:           params.EnableNDC,
+		esConfig:            params.ESConfig,
+		esClient:            params.ESClient,
+		archiverMetadata:    params.ArchiverMetadata,
+		archiverProvider:    params.ArchiverProvider,
+		historyConfig:       params.HistoryConfig,
+		workerConfig:        params.WorkerConfig,
+		mockFrontendClient:  params.MockFrontendClient,
 	}
 }
 
@@ -229,8 +223,7 @@ func (c *cadenceImpl) Stop() {
 	} else {
 		c.shutdownWG.Add(3)
 	}
-	c.frontendHandler.Stop()
-	c.adminHandler.Stop()
+	c.frontendService.Stop()
 	for _, historyHandler := range c.historyHandlers {
 		historyHandler.Stop()
 	}
@@ -384,16 +377,11 @@ func (c *cadenceImpl) WorkerPProfPort() int {
 }
 
 func (c *cadenceImpl) GetAdminClient() adminserviceclient.Interface {
-	return NewAdminClient(c.frontEndService.GetDispatcher())
+	return c.adminClient
 }
 
 func (c *cadenceImpl) GetFrontendClient() workflowserviceclient.Interface {
-	return NewFrontendClient(c.frontEndService.GetDispatcher())
-}
-
-// For integration tests to get hold of FE instance.
-func (c *cadenceImpl) GetFrontendService() service.Service {
-	return c.frontEndService
+	return c.frontendClient
 }
 
 func (c *cadenceImpl) GetHistoryClient() historyserviceclient.Interface {
@@ -418,59 +406,23 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 	params.DynamicConfig = newIntegrationConfigClient(dynamicconfig.NewNopClient())
 	params.ArchivalMetadata = c.archiverMetadata
 	params.ArchiverProvider = c.archiverProvider
-
-	var replicationMessageSink messaging.Producer
-	var err error
-	if c.workerConfig.EnableReplicator {
-		replicationMessageSink = c.domainReplicationQueue
-	} else {
-		replicationMessageSink = &mocks.KafkaProducer{}
-		replicationMessageSink.(*mocks.KafkaProducer).On("Publish", mock.Anything).Return(nil)
+	params.ESConfig = c.esConfig
+	params.ESClient = c.esClient
+	if c.esConfig != nil {
+		esDataStoreName := "es-visibility"
+		params.PersistenceConfig.AdvancedVisibilityStore = esDataStoreName
+		params.PersistenceConfig.DataStores[esDataStoreName] = config.DataStore{
+			ElasticSearch: c.esConfig,
+		}
 	}
 
-	c.frontEndService = service.New(params)
-
-	dc := dynamicconfig.NewCollection(params.DynamicConfig, c.logger)
-	frontendConfig := frontend.NewConfig(dc, c.historyConfig.NumHistoryShards, c.esConfig != nil)
-	domainCache := cache.NewDomainCache(c.metadataMgr, c.clusterMetadata, c.frontEndService.GetMetricsClient(), c.logger)
-	c.adminHandler = frontend.NewAdminHandler(
-		c.frontEndService, c.historyConfig.NumHistoryShards, domainCache, c.historyV2Mgr, params, frontendConfig)
-	c.adminHandler.RegisterHandler()
-
-	historyArchiverBootstrapContainer := &carchiver.HistoryBootstrapContainer{
-		HistoryV2Manager: c.historyV2Mgr,
-		Logger:           c.logger,
-		MetricsClient:    c.frontEndService.GetMetricsClient(),
-		ClusterMetadata:  c.clusterMetadata,
-		DomainCache:      domainCache,
-	}
-	visibilityArchiverBootstrapContainer := &carchiver.VisibilityBootstrapContainer{
-		Logger:          c.logger,
-		MetricsClient:   c.frontEndService.GetMetricsClient(),
-		ClusterMetadata: c.clusterMetadata,
-		DomainCache:     domainCache,
-	}
-	err = c.archiverProvider.RegisterBootstrapContainer(common.FrontendServiceName, historyArchiverBootstrapContainer, visibilityArchiverBootstrapContainer)
+	frontendService, err := frontend.NewService(params)
 	if err != nil {
-		c.logger.Fatal("Failed to register archiver bootstrap container for frontend service", tag.Error(err))
+		params.Logger.Fatal("unable to start frontend service", tag.Error(err))
 	}
 
-	c.frontendHandler = frontend.NewWorkflowHandler(
-		c.frontEndService,
-		frontendConfig,
-		c.metadataMgr,
-		c.historyV2Mgr,
-		c.visibilityMgr,
-		replicationMessageSink,
-		c.domainReplicationQueue,
-		domainCache)
-	dcRedirectionHandler := frontend.NewDCRedirectionHandler(c.frontendHandler, params.DCRedirectionPolicy)
-	dcRedirectionHandler.RegisterHandler()
-
-	// must start base service first
-	c.frontEndService.Start()
 	if c.mockFrontendClient != nil {
-		clientBean := c.frontEndService.GetClientBean()
+		clientBean := frontendService.GetClientBean()
 		if clientBean != nil {
 			for serviceName, frontendClient := range c.mockFrontendClient {
 				clientBean.SetRemoteFrontendClient(serviceName, frontendClient)
@@ -478,14 +430,10 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 		}
 	}
 
-	err = c.adminHandler.Start()
-	if err != nil {
-		c.logger.Fatal("Failed to start admin", tag.Error(err))
-	}
-	err = dcRedirectionHandler.Start()
-	if err != nil {
-		c.logger.Fatal("Failed to start frontend", tag.Error(err))
-	}
+	c.frontendService = frontendService
+	c.frontendClient = NewFrontendClient(frontendService.GetDispatcher())
+	c.adminClient = NewAdminClient(frontendService.GetDispatcher())
+	go frontendService.Start()
 
 	startWG.Done()
 	<-c.shutdownCh
@@ -612,6 +560,8 @@ func (c *cadenceImpl) startMatching(hosts map[string][]string, startWG *sync.Wai
 	params.PersistenceConfig = c.persistenceConfig
 	params.MetricsClient = metrics.NewClient(params.MetricScope, service.GetMetricsServiceIdx(params.Name, c.logger))
 	params.DynamicConfig = newIntegrationConfigClient(dynamicconfig.NewNopClient())
+	params.ArchivalMetadata = c.archiverMetadata
+	params.ArchiverProvider = c.archiverProvider
 
 	matchingService, err := matching.NewService(params)
 	if err != nil {

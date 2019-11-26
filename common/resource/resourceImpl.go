@@ -236,6 +236,27 @@ func New(
 		common.IsWhitelistServiceTransientError,
 	)
 
+	historyArchiverBootstrapContainer := &archiver.HistoryBootstrapContainer{
+		HistoryV2Manager: persistenceBean.GetHistoryManager(),
+		Logger:           logger,
+		MetricsClient:    params.MetricsClient,
+		ClusterMetadata:  params.ClusterMetadata,
+		DomainCache:      domainCache,
+	}
+	visibilityArchiverBootstrapContainer := &archiver.VisibilityBootstrapContainer{
+		Logger:          logger,
+		MetricsClient:   params.MetricsClient,
+		ClusterMetadata: params.ClusterMetadata,
+		DomainCache:     domainCache,
+	}
+	if err := params.ArchiverProvider.RegisterBootstrapContainer(
+		serviceName,
+		historyArchiverBootstrapContainer,
+		visibilityArchiverBootstrapContainer,
+	); err != nil {
+		return nil, err
+	}
+
 	impl = &Impl{
 		status: common.DaemonStatusInitialized,
 
@@ -350,6 +371,7 @@ func (h *Impl) Stop() {
 	}
 	h.runtimeMetricsReporter.Stop()
 	h.persistenceBean.Close()
+	h.visibilityMgr.Close()
 }
 
 // GetServiceName return service name

@@ -27,6 +27,7 @@ import (
 	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 	publicservicetest "go.uber.org/cadence/.gen/go/cadence/workflowservicetest"
 
+	"github.com/uber/cadence/.gen/go/admin/adminservicetest"
 	"github.com/uber/cadence/.gen/go/cadence/workflowservicetest"
 	"github.com/uber/cadence/.gen/go/history/historyservicetest"
 	"github.com/uber/cadence/.gen/go/matching/matchingservicetest"
@@ -78,11 +79,13 @@ type (
 
 		// internal services clients
 
-		SDKClient      *publicservicetest.MockClient
-		FrontendClient *workflowservicetest.MockClient
-		MatchingClient *matchingservicetest.MockClient
-		HistoryClient  *historyservicetest.MockClient
-		ClientBean     *client.MockBean
+		SDKClient            *publicservicetest.MockClient
+		FrontendClient       *workflowservicetest.MockClient
+		MatchingClient       *matchingservicetest.MockClient
+		HistoryClient        *historyservicetest.MockClient
+		RemoteAdminClient    *adminservicetest.MockClient
+		RemoteFrontendClient *workflowservicetest.MockClient
+		ClientBean           *client.MockBean
 
 		// persistence clients
 
@@ -124,10 +127,14 @@ func NewTest(
 	frontendClient := workflowservicetest.NewMockClient(controller)
 	matchingClient := matchingservicetest.NewMockClient(controller)
 	historyClient := historyservicetest.NewMockClient(controller)
+	remoteFrontendClient := workflowservicetest.NewMockClient(controller)
+	remoteAdminClient := adminservicetest.NewMockClient(controller)
 	clientBean := client.NewMockBean(controller)
 	clientBean.EXPECT().GetFrontendClient().Return(frontendClient).AnyTimes()
 	clientBean.EXPECT().GetMatchingClient(gomock.Any()).Return(matchingClient, nil).AnyTimes()
 	clientBean.EXPECT().GetHistoryClient().Return(historyClient).AnyTimes()
+	clientBean.EXPECT().GetRemoteAdminClient(gomock.Any()).Return(remoteAdminClient).AnyTimes()
+	clientBean.EXPECT().GetRemoteFrontendClient(gomock.Any()).Return(remoteFrontendClient).AnyTimes()
 
 	metadataMgr := &mocks.MetadataManager{}
 	taskMgr := &mocks.TaskManager{}
@@ -166,11 +173,13 @@ func NewTest(
 
 		// internal services clients
 
-		SDKClient:      publicservicetest.NewMockClient(controller),
-		FrontendClient: frontendClient,
-		MatchingClient: matchingClient,
-		HistoryClient:  historyClient,
-		ClientBean:     clientBean,
+		SDKClient:            publicservicetest.NewMockClient(controller),
+		FrontendClient:       frontendClient,
+		MatchingClient:       matchingClient,
+		HistoryClient:        historyClient,
+		RemoteAdminClient:    remoteAdminClient,
+		RemoteFrontendClient: remoteFrontendClient,
+		ClientBean:           clientBean,
 
 		// persistence clients
 
@@ -314,12 +323,12 @@ func (s *Test) GetMatchingClient() matching.Client {
 
 // GetHistoryRawClient for testing
 func (s *Test) GetHistoryRawClient() history.Client {
-	return s.ClientBean.GetHistoryClient()
+	return s.HistoryClient
 }
 
 // GetHistoryClient for testing
 func (s *Test) GetHistoryClient() history.Client {
-	return s.ClientBean.GetHistoryClient()
+	return s.HistoryClient
 }
 
 // GetRemoteAdminClient for testing
@@ -327,7 +336,7 @@ func (s *Test) GetRemoteAdminClient(
 	cluster string,
 ) admin.Client {
 
-	return s.ClientBean.GetRemoteAdminClient(cluster)
+	return s.RemoteAdminClient
 }
 
 // GetRemoteFrontendClient for testing
@@ -335,7 +344,7 @@ func (s *Test) GetRemoteFrontendClient(
 	cluster string,
 ) frontend.Client {
 
-	return s.ClientBean.GetRemoteFrontendClient(cluster)
+	return s.RemoteFrontendClient
 }
 
 // GetClientBean for testing
