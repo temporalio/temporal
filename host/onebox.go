@@ -37,6 +37,7 @@ import (
 	"go.uber.org/yarpc/api/transport"
 	"go.uber.org/yarpc/transport/tchannel"
 
+	workflowserviceg "github.com/temporalio/temporal-proto/workflowservice"
 	"github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"
 	"github.com/temporalio/temporal/.gen/go/history/historyserviceclient"
 	"github.com/temporalio/temporal/.gen/go/shared"
@@ -75,6 +76,7 @@ type Cadence interface {
 	Stop()
 	GetAdminClient() adminserviceclient.Interface
 	GetFrontendClient() workflowserviceclient.Interface
+	GetFrontendClientGRPC() workflowserviceg.WorkflowServiceYARPCClient
 	FrontendAddress() string
 	GetFrontendService() service.Service
 	GetHistoryClient() historyserviceclient.Interface
@@ -88,6 +90,7 @@ type (
 
 		adminHandler           *frontend.AdminHandler
 		frontendHandler        *frontend.WorkflowHandler
+		frontendHandlerGRPC    *frontend.WorkflowHandlerGRPC
 		historyHandlers        []*history.Handler
 		logger                 log.Logger
 		clusterMetadata        cluster.Metadata
@@ -483,6 +486,10 @@ func (c *cadenceImpl) GetFrontendClient() workflowserviceclient.Interface {
 	return NewFrontendClient(c.frontEndService.GetDispatcher())
 }
 
+func (c *cadenceImpl) GetFrontendClientGRPC() workflowserviceg.WorkflowServiceYARPCClient {
+	return NewFrontendClientGRPC(c.frontEndService.GetGRPCDispatcher())
+}
+
 // For integration tests to get hold of FE instance.
 func (c *cadenceImpl) GetFrontendService() service.Service {
 	return c.frontEndService
@@ -559,6 +566,9 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 		domainCache)
 	dcRedirectionHandler := frontend.NewDCRedirectionHandler(c.frontendHandler, params.DCRedirectionPolicy)
 	dcRedirectionHandler.RegisterHandler()
+
+	c.frontendHandlerGRPC = frontend.NewWorkflowHandlerGRPC(c.frontendHandler)
+	c.frontendHandlerGRPC.RegisterHandler()
 
 	// must start base service first
 	c.frontEndService.Start()

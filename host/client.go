@@ -23,6 +23,7 @@ package host
 import (
 	"go.uber.org/yarpc"
 
+	"github.com/temporalio/temporal-proto/workflowservice"
 	"github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"
 	"github.com/temporalio/temporal/.gen/go/history/historyserviceclient"
 	"github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
@@ -39,6 +40,11 @@ type FrontendClient interface {
 	workflowserviceclient.Interface
 }
 
+// FrontendClient is the interface exposed by frontend service client
+type FrontendClientGRPC interface {
+	workflowservice.WorkflowServiceYARPCClient
+}
+
 // HistoryClient is the interface exposed by history service client
 type HistoryClient interface {
 	historyserviceclient.Interface
@@ -52,6 +58,11 @@ func NewAdminClient(d *yarpc.Dispatcher) AdminClient {
 // NewFrontendClient creates a client to cadence frontend client
 func NewFrontendClient(d *yarpc.Dispatcher) FrontendClient {
 	return workflowserviceclient.New(d.ClientConfig(common.FrontendServiceName))
+}
+
+// NewFrontendClient creates a client to cadence frontend client
+func NewFrontendClientGRPC(d *yarpc.Dispatcher) workflowservice.WorkflowServiceYARPCClient {
+	return workflowservice.NewWorkflowServiceYARPCClient(d.ClientConfig(common.FrontendServiceName))
 }
 
 // NewHistoryClient creates a client to cadence history service client

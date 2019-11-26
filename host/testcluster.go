@@ -264,6 +264,11 @@ func (tc *TestCluster) GetFrontendClient() FrontendClient {
 	return tc.host.GetFrontendClient()
 }
 
+// GetFrontendClient returns a frontend client from the test cluster
+func (tc *TestCluster) GetFrontendClientGRPC() FrontendClientGRPC {
+	return tc.host.GetFrontendClientGRPC()
+}
+
 // GetAdminClient returns an admin client from the test cluster
 func (tc *TestCluster) GetAdminClient() AdminClient {
 	return tc.host.GetAdminClient()

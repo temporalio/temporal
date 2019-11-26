@@ -51,7 +51,6 @@ func ToProtoError(in error) error {
 	case *shared.DomainNotActiveError:
 		return protobuf.NewError(yarpcerrors.CodeInvalidArgument, thriftError.Message, protobuf.WithErrorDetails(
 			&errordetails.DomainNotActiveFailure{
-				Message:        thriftError.Message,
 				DomainName:     thriftError.DomainName,
 				CurrentCluster: thriftError.CurrentCluster,
 				ActiveCluster:  thriftError.ActiveCluster,
@@ -64,7 +63,6 @@ func ToProtoError(in error) error {
 	case *shared.WorkflowExecutionAlreadyStartedError:
 		return protobuf.NewError(yarpcerrors.CodeAlreadyExists, *thriftError.Message, protobuf.WithErrorDetails(
 			&errordetails.WorkflowExecutionAlreadyStartedFailure{
-				Message:        *thriftError.Message,
 				StartRequestId: *thriftError.StartRequestId,
 				RunId:          *thriftError.RunId,
 			},
