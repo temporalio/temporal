@@ -1983,9 +1983,10 @@ GetHistoryLoop:
 	}
 	s.True(workflowComplete)
 
-	startFilter := &commonproto.StartTimeFilter{}
-	startFilter.EarliestTime = startTime
-	startFilter.LatestTime = time.Now().UnixNano()
+	startFilter := &commonproto.StartTimeFilter{
+		EarliestTime: startTime,
+		LatestTime:   time.Now().UnixNano(),
+	}
 
 	closedCount := 0
 ListClosedLoop:
