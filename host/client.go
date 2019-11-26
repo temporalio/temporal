@@ -40,7 +40,7 @@ type FrontendClient interface {
 	workflowserviceclient.Interface
 }
 
-// FrontendClient is the interface exposed by frontend service client
+// FrontendClientGRPC is the interface exposed by frontend service client
 type FrontendClientGRPC interface {
 	workflowservice.WorkflowServiceYARPCClient
 }
@@ -60,7 +60,7 @@ func NewFrontendClient(d *yarpc.Dispatcher) FrontendClient {
 	return workflowserviceclient.New(d.ClientConfig(common.FrontendServiceName))
 }
 
-// NewFrontendClient creates a client to cadence frontend client
+// NewFrontendClientGRPC creates a client to cadence frontend client
 func NewFrontendClientGRPC(d *yarpc.Dispatcher) workflowservice.WorkflowServiceYARPCClient {
 	return workflowservice.NewWorkflowServiceYARPCClient(d.ClientConfig(common.FrontendServiceName))
 }

@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
+	"github.com/gogo/protobuf/proto"
 	"go.uber.org/yarpc/yarpcerrors"
 	"golang.org/x/net/context"
 
@@ -266,16 +267,10 @@ func PrettyPrintHistory(history *workflow.History, logger log.Logger) {
 	fmt.Println("******************************************")
 }
 
-// PrettyPrintHistory prints history in human readable format
+// PrettyPrintHistoryGRPC prints history in human readable format
 func PrettyPrintHistoryGRPC(history *commong.History, logger log.Logger) {
-	data, err := json.MarshalIndent(history, "", "    ")
-
-	if err != nil {
-		logger.Error("Error serializing history: %v\n", tag.Error(err))
-	}
-
 	fmt.Println("******************************************")
-	fmt.Println("History", tag.DetailInfo(string(data)))
+	fmt.Println("History", proto.MarshalTextString(history))
 	fmt.Println("******************************************")
 }
 
