@@ -1161,7 +1161,10 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 	// first decision to send 101 signals, the last signal will force fail decision and flush buffered events.
 	_, err := poller.PollAndProcessDecisionTask(false, false)
 	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
-	s.EqualError(err, "EntityNotExistsError{Message: Decision task not found.}")
+	s.NotNil(err)
+	st := yarpcerrors.FromError(err)
+	s.Equal(yarpcerrors.CodeNotFound, st.Code())
+	s.Equal("Decision task not found.", st.Message())
 
 	// Process signal in decider
 	_, err = poller.PollAndProcessDecisionTask(true, false)
@@ -1324,7 +1327,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 	}
 	dweResponse, err := describeWorkflowExecution()
 	s.Nil(err)
-	s.Equal(0, dweResponse.WorkflowExecutionInfo.CloseTime)
+	s.Equal(int64(0), dweResponse.WorkflowExecutionInfo.CloseTime)
 	s.Equal(int64(2), dweResponse.WorkflowExecutionInfo.HistoryLength) // WorkflowStarted, DecisionScheduled
 	s.Equal(dweResponse.WorkflowExecutionInfo.GetStartTime(), dweResponse.WorkflowExecutionInfo.GetExecutionTime())
 
@@ -1720,7 +1723,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.Nil(err)
 	s.NotNil(completedEvent)
 	completedAttributes := completedEvent.GetChildWorkflowExecutionCompletedEventAttributes()
-	s.Nil(completedAttributes.Domain)
+	s.Empty(completedAttributes.Domain)
 	s.Equal(childID, completedAttributes.WorkflowExecution.WorkflowId)
 	s.Equal(wtChild, completedAttributes.WorkflowType.Name)
 	s.Equal([]byte("Child Done."), completedAttributes.Result)
@@ -1891,7 +1894,7 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 	s.Nil(err)
 	s.NotNil(terminatedEvent)
 	terminatedAttributes := terminatedEvent.GetChildWorkflowExecutionTerminatedEventAttributes()
-	s.Nil(terminatedAttributes.Domain)
+	s.Empty(terminatedAttributes.Domain)
 	s.Equal(childID, terminatedAttributes.WorkflowExecution.WorkflowId)
 	s.Equal(wtChild, terminatedAttributes.WorkflowType.Name)
 
