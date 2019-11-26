@@ -63,7 +63,7 @@ func toProtoDomainReplicationConfiguration(in *shared.DomainReplicationConfigura
 	}
 	return &common.DomainReplicationConfiguration{
 		ActiveClusterName: in.GetActiveClusterName(),
-		Clusters:          toProtoClusterReplicationConfigurations(in.Clusters),
+		Clusters:          toProtoClusterReplicationConfigurations(in.GetClusters()),
 	}
 }
 
@@ -74,7 +74,7 @@ func toProtoDomainConfiguration(in *shared.DomainConfiguration) *common.DomainCo
 	return &common.DomainConfiguration{
 		WorkflowExecutionRetentionPeriodInDays: in.GetWorkflowExecutionRetentionPeriodInDays(),
 		EmitMetric:                             toProtoBool(in.EmitMetric),
-		BadBinaries:                            toProtoBadBinaries(in.BadBinaries),
+		BadBinaries:                            toProtoBadBinaries(in.GetBadBinaries()),
 		HistoryArchivalStatus:                  toProtoArchivalStatus(in.HistoryArchivalStatus),
 		HistoryArchivalURI:                     in.GetVisibilityArchivalURI(),
 		VisibilityArchivalStatus:               toProtoArchivalStatus(in.VisibilityArchivalStatus),
@@ -87,9 +87,9 @@ func toProtoBadBinaries(in *shared.BadBinaries) *common.BadBinaries {
 		return nil
 	}
 
-	ret := make(map[string]*common.BadBinaryInfo, len(in.Binaries))
+	ret := make(map[string]*common.BadBinaryInfo, len(in.GetBinaries()))
 
-	for key, value := range in.Binaries {
+	for key, value := range in.GetBinaries() {
 		ret[key] = toProtoBadBinaryInfo(value)
 	}
 
@@ -369,7 +369,7 @@ func toProtoWorkflowExecutionInfo(in *shared.WorkflowExecutionInfo) *common.Work
 		Type:             toProtoWorkflowType(in.GetType()),
 		StartTime:        in.GetStartTime(),
 		CloseTime:        in.GetCloseTime(),
-		CloseStatus:      enums.WorkflowExecutionCloseStatus(in.GetCloseStatus()),
+		CloseStatus:      toProtoWorkflowExecutionCloseStatus(in.CloseStatus),
 		HistoryLength:    in.GetHistoryLength(),
 		ParentDomainId:   in.GetParentDomainId(),
 		ParentExecution:  toProtoWorkflowExecution(in.GetParentExecution()),
