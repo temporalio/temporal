@@ -400,6 +400,13 @@ func toThriftWorkflowExecutionFilter(in *common.WorkflowExecutionFilter) *shared
 	}
 }
 
+func toThriftWorkflowStatusFilter(in *common.StatusFilter) *shared.WorkflowExecutionCloseStatus {
+	if in == nil {
+		return nil
+	}
+	return toThriftWorkflowExecutionCloseStatus(in.CloseStatus)
+}
+
 func toThriftWorkflowTypeFilter(in *common.WorkflowTypeFilter) *shared.WorkflowTypeFilter {
 	if in == nil {
 		return nil

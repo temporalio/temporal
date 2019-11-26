@@ -356,7 +356,7 @@ func ToThriftListClosedWorkflowExecutionsRequest(in *workflowservice.ListClosedW
 		StartTimeFilter: toThriftStartTimeFilter(in.StartTimeFilter),
 		ExecutionFilter: toThriftWorkflowExecutionFilter(in.GetExecutionFilter()),
 		TypeFilter:      toThriftWorkflowTypeFilter(in.GetTypeFilter()),
-		StatusFilter:    toThriftWorkflowExecutionCloseStatus(in.GetStatusFilter()),
+		StatusFilter:    toThriftWorkflowStatusFilter(in.GetStatusFilter()),
 	}
 }
 
