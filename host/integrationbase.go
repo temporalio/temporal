@@ -30,6 +30,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/yarpc"
+	"go.uber.org/yarpc/transport/grpc"
 	"go.uber.org/yarpc/transport/tchannel"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
@@ -52,6 +53,7 @@ type (
 		testCluster        *TestCluster
 		testClusterConfig  *TestClusterConfig
 		engine             FrontendClient
+		engineGRPC         FrontendClientGRPC
 		adminClient        AdminClient
 		Logger             log.Logger
 		domainName         string
@@ -84,7 +86,21 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 			s.Logger.Fatal("Failed to create outbound transport channel", tag.Error(err))
 		}
 
+		dispatcherGRPC := yarpc.NewDispatcher(yarpc.Config{
+			Name: "unittest",
+			Outbounds: yarpc.Outbounds{
+				"cadence-frontend": {Unary: grpc.NewTransport().NewSingleOutbound(TestFlags.FrontendAddrGRPC)},
+			},
+			InboundMiddleware: yarpc.InboundMiddleware{
+				Unary: &versionMiddleware{},
+			},
+		})
+		if err := dispatcherGRPC.Start(); err != nil {
+			s.Logger.Fatal("Failed to start gRPC dispatcher", tag.Error(err))
+		}
+
 		s.engine = NewFrontendClient(dispatcher)
+		s.engineGRPC = NewFrontendClientGRPC(dispatcherGRPC)
 		s.adminClient = NewAdminClient(dispatcher)
 	} else {
 		s.Logger.Info("Running integration test against test cluster")
@@ -92,6 +108,7 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 		s.Require().NoError(err)
 		s.testCluster = cluster
 		s.engine = s.testCluster.GetFrontendClient()
+		s.engineGRPC = s.testCluster.GetFrontendClientGRPC()
 		s.adminClient = s.testCluster.GetAdminClient()
 	}
 

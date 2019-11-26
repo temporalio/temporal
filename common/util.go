@@ -29,9 +29,11 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
+	"github.com/gogo/protobuf/proto"
 	"go.uber.org/yarpc/yarpcerrors"
 	"golang.org/x/net/context"
 
+	commong "github.com/temporalio/temporal-proto/common"
 	h "github.com/temporalio/temporal/.gen/go/history"
 	m "github.com/temporalio/temporal/.gen/go/matching"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
@@ -262,6 +264,13 @@ func PrettyPrintHistory(history *workflow.History, logger log.Logger) {
 
 	fmt.Println("******************************************")
 	fmt.Println("History", tag.DetailInfo(string(data)))
+	fmt.Println("******************************************")
+}
+
+// PrettyPrintHistoryGRPC prints history in human readable format
+func PrettyPrintHistoryGRPC(history *commong.History, logger log.Logger) {
+	fmt.Println("******************************************")
+	fmt.Println("History", proto.MarshalTextString(history))
 	fmt.Println("******************************************")
 }
 
