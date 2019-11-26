@@ -1386,7 +1386,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 
 	dweResponse, err = describeWorkflowExecution()
 	s.Nil(err)
-	s.True(nil == dweResponse.WorkflowExecutionInfo.CloseStatus)
+	s.Equal(enums.WorkflowExecutionCloseStatusRunning, dweResponse.WorkflowExecutionInfo.CloseStatus)
 	s.Equal(int64(5), dweResponse.WorkflowExecutionInfo.HistoryLength) // DecisionStarted, DecisionCompleted, ActivityScheduled
 	s.Equal(1, len(dweResponse.PendingActivities))
 	s.Equal("test-activity-type", dweResponse.PendingActivities[0].ActivityType.GetName())
@@ -1397,7 +1397,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 
 	dweResponse, err = describeWorkflowExecution()
 	s.Nil(err)
-	s.True(nil == dweResponse.WorkflowExecutionInfo.CloseStatus)
+	s.Equal(enums.WorkflowExecutionCloseStatusRunning, dweResponse.WorkflowExecutionInfo.CloseStatus)
 	s.Equal(int64(8), dweResponse.WorkflowExecutionInfo.HistoryLength) // ActivityTaskStarted, ActivityTaskCompleted, DecisionTaskScheduled
 	s.Equal(0, len(dweResponse.PendingActivities))
 
@@ -1408,7 +1408,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 
 	dweResponse, err = describeWorkflowExecution()
 	s.Nil(err)
-	s.Equal(workflow.WorkflowExecutionCloseStatusCompleted, *dweResponse.WorkflowExecutionInfo.CloseStatus)
+	s.Equal(workflow.WorkflowExecutionCloseStatusCompleted, dweResponse.WorkflowExecutionInfo.CloseStatus)
 	s.Equal(int64(11), dweResponse.WorkflowExecutionInfo.HistoryLength) // DecisionStarted, DecisionCompleted, WorkflowCompleted
 }
 
@@ -3199,7 +3199,10 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 	s.True(workflowComplete)
 }
 
-type startFunc func() (*workflowg.StartWorkflowExecutionResponse, error)
+type RunIdGetter interface {
+	GetRunId() string
+}
+type startFunc func() (RunIdGetter, error)
 
 func (s *integrationSuite) TestStartWithMemo() {
 	id := "integration-start-with-memo-test"
@@ -3227,7 +3230,7 @@ func (s *integrationSuite) TestStartWithMemo() {
 		Memo:                                memo,
 	}
 
-	fn := func() (*workflowg.StartWorkflowExecutionResponse, error) {
+	fn := func() (RunIdGetter, error) {
 		return s.engineGRPC.StartWorkflowExecution(createContextGRPC(), request)
 	}
 	s.startWithMemoHelper(fn, id, &commong.TaskList{Name: tl}, memo)
@@ -3263,7 +3266,7 @@ func (s *integrationSuite) TestSignalWithStartWithMemo() {
 		Memo:                                memo,
 	}
 
-	fn := func() (*workflowg.SignalWithStartWorkflowExecutionResponse, error) {
+	fn := func() (RunIdGetter, error) {
 		return s.engineGRPC.SignalWithStartWorkflowExecution(createContextGRPC(), request)
 	}
 	s.startWithMemoHelper(fn, id, &commong.TaskList{Name: tl}, memo)
@@ -3539,7 +3542,7 @@ func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, tas
 	we, err0 := startFn()
 	s.Nil(err0)
 
-	s.Logger.Info("StartWorkflowExecution: response", tag.WorkflowRunID(we.RunId))
+	s.Logger.Info("StartWorkflowExecution: response", tag.WorkflowRunID(we.GetRunId()))
 
 	dtHandler := func(execution *commong.WorkflowExecution, workflowType *commong.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *commong.History) ([]byte, []*commong.Decision, error) {
@@ -3594,7 +3597,7 @@ func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, tas
 	// verify history
 	execution := &commong.WorkflowExecution{
 		WorkflowId: id,
-		RunId:      we.RunId,
+		RunId:      we.GetRunId(),
 	}
 	historyResponse, historyErr := s.engineGRPC.GetWorkflowExecutionHistory(createContextGRPC(), &workflowg.GetWorkflowExecutionHistoryRequest{
 		Domain:    s.domainName,
