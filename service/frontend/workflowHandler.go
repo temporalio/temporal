@@ -2303,11 +2303,11 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(
 		return nil, wh.error(&gen.BadRequestError{Message: "StartTimeFilter is required"}, scope)
 	}
 
-	if listRequest.StartTimeFilter.EarliestTime == nil || listRequest.StartTimeFilter.GetEarliestTime() == 0 {
+	if listRequest.StartTimeFilter.EarliestTime == nil {
 		return nil, wh.error(&gen.BadRequestError{Message: "EarliestTime in StartTimeFilter is required"}, scope)
 	}
 
-	if listRequest.StartTimeFilter.LatestTime == nil || listRequest.StartTimeFilter.GetLatestTime() == 0 {
+	if listRequest.StartTimeFilter.LatestTime == nil {
 		return nil, wh.error(&gen.BadRequestError{Message: "LatestTime in StartTimeFilter is required"}, scope)
 	}
 
@@ -2500,11 +2500,11 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(
 		return nil, wh.error(&gen.BadRequestError{Message: "StartTimeFilter is required"}, scope)
 	}
 
-	if listRequest.StartTimeFilter.EarliestTime == nil || listRequest.StartTimeFilter.GetEarliestTime() == 0 {
+	if listRequest.StartTimeFilter.EarliestTime == nil {
 		return nil, wh.error(&gen.BadRequestError{Message: "EarliestTime in StartTimeFilter is required"}, scope)
 	}
 
-	if listRequest.StartTimeFilter.LatestTime == nil || listRequest.StartTimeFilter.GetLatestTime() == 0 {
+	if listRequest.StartTimeFilter.LatestTime == nil {
 		return nil, wh.error(&gen.BadRequestError{Message: "LatestTime in StartTimeFilter is required"}, scope)
 	}
 
