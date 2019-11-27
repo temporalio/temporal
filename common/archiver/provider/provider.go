@@ -94,6 +94,9 @@ func (p *archiverProvider) RegisterBootstrapContainer(
 	historyContainer *archiver.HistoryBootstrapContainer,
 	visibilityContainter *archiver.VisibilityBootstrapContainer,
 ) error {
+	p.Lock()
+	defer p.Unlock()
+
 	if _, ok := p.historyContainers[serviceName]; ok && historyContainer != nil {
 		return ErrBootstrapContainerAlreadyRegistered
 	}
