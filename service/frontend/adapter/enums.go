@@ -97,6 +97,10 @@ func toThriftQueryTaskCompletedType(in enums.QueryTaskCompletedType) *shared.Que
 }
 
 func toThriftQueryRejectCondition(in enums.QueryRejectCondition) *shared.QueryRejectCondition {
+	if in == enums.ArchivalStatusDefault {
+		return nil
+	}
+
 	ret := shared.QueryRejectCondition(in)
 	return &ret
 }
