@@ -662,7 +662,7 @@ func (v *DomainTaskAttributes) IsSetFailoverVersion() bool {
 }
 
 type GetDomainReplicationMessagesRequest struct {
-	LastRetrivedMessageId  *int64  `json:"lastRetrivedMessageId,omitempty"`
+	LastRetrievedMessageId *int64  `json:"lastRetrievedMessageId,omitempty"`
 	LastProcessedMessageId *int64  `json:"lastProcessedMessageId,omitempty"`
 	ClusterName            *string `json:"clusterName,omitempty"`
 }
@@ -690,8 +690,8 @@ func (v *GetDomainReplicationMessagesRequest) ToWire() (wire.Value, error) {
 		err    error
 	)
 
-	if v.LastRetrivedMessageId != nil {
-		w, err = wire.NewValueI64(*(v.LastRetrivedMessageId)), error(nil)
+	if v.LastRetrievedMessageId != nil {
+		w, err = wire.NewValueI64(*(v.LastRetrievedMessageId)), error(nil)
 		if err != nil {
 			return w, err
 		}
@@ -744,7 +744,7 @@ func (v *GetDomainReplicationMessagesRequest) FromWire(w wire.Value) error {
 			if field.Value.Type() == wire.TI64 {
 				var x int64
 				x, err = field.Value.GetI64(), error(nil)
-				v.LastRetrivedMessageId = &x
+				v.LastRetrievedMessageId = &x
 				if err != nil {
 					return err
 				}
@@ -785,8 +785,8 @@ func (v *GetDomainReplicationMessagesRequest) String() string {
 
 	var fields [3]string
 	i := 0
-	if v.LastRetrivedMessageId != nil {
-		fields[i] = fmt.Sprintf("LastRetrivedMessageId: %v", *(v.LastRetrivedMessageId))
+	if v.LastRetrievedMessageId != nil {
+		fields[i] = fmt.Sprintf("LastRetrievedMessageId: %v", *(v.LastRetrievedMessageId))
 		i++
 	}
 	if v.LastProcessedMessageId != nil {
@@ -811,7 +811,7 @@ func (v *GetDomainReplicationMessagesRequest) Equals(rhs *GetDomainReplicationMe
 	} else if rhs == nil {
 		return false
 	}
-	if !_I64_EqualsPtr(v.LastRetrivedMessageId, rhs.LastRetrivedMessageId) {
+	if !_I64_EqualsPtr(v.LastRetrievedMessageId, rhs.LastRetrievedMessageId) {
 		return false
 	}
 	if !_I64_EqualsPtr(v.LastProcessedMessageId, rhs.LastProcessedMessageId) {
@@ -830,8 +830,8 @@ func (v *GetDomainReplicationMessagesRequest) MarshalLogObject(enc zapcore.Objec
 	if v == nil {
 		return nil
 	}
-	if v.LastRetrivedMessageId != nil {
-		enc.AddInt64("lastRetrivedMessageId", *v.LastRetrivedMessageId)
+	if v.LastRetrievedMessageId != nil {
+		enc.AddInt64("lastRetrievedMessageId", *v.LastRetrievedMessageId)
 	}
 	if v.LastProcessedMessageId != nil {
 		enc.AddInt64("lastProcessedMessageId", *v.LastProcessedMessageId)
@@ -842,19 +842,19 @@ func (v *GetDomainReplicationMessagesRequest) MarshalLogObject(enc zapcore.Objec
 	return err
 }
 
-// GetLastRetrivedMessageId returns the value of LastRetrivedMessageId if it is set or its
+// GetLastRetrievedMessageId returns the value of LastRetrievedMessageId if it is set or its
 // zero value if it is unset.
-func (v *GetDomainReplicationMessagesRequest) GetLastRetrivedMessageId() (o int64) {
-	if v != nil && v.LastRetrivedMessageId != nil {
-		return *v.LastRetrivedMessageId
+func (v *GetDomainReplicationMessagesRequest) GetLastRetrievedMessageId() (o int64) {
+	if v != nil && v.LastRetrievedMessageId != nil {
+		return *v.LastRetrievedMessageId
 	}
 
 	return
 }
 
-// IsSetLastRetrivedMessageId returns true if LastRetrivedMessageId is not nil.
-func (v *GetDomainReplicationMessagesRequest) IsSetLastRetrivedMessageId() bool {
-	return v != nil && v.LastRetrivedMessageId != nil
+// IsSetLastRetrievedMessageId returns true if LastRetrievedMessageId is not nil.
+func (v *GetDomainReplicationMessagesRequest) IsSetLastRetrievedMessageId() bool {
+	return v != nil && v.LastRetrievedMessageId != nil
 }
 
 // GetLastProcessedMessageId returns the value of LastProcessedMessageId if it is set or its
@@ -3223,9 +3223,9 @@ func (v *HistoryTaskV2Attributes) IsSetNewRunEvents() bool {
 }
 
 type ReplicationMessages struct {
-	ReplicationTasks      []*ReplicationTask `json:"replicationTasks,omitempty"`
-	LastRetrivedMessageId *int64             `json:"lastRetrivedMessageId,omitempty"`
-	HasMore               *bool              `json:"hasMore,omitempty"`
+	ReplicationTasks       []*ReplicationTask `json:"replicationTasks,omitempty"`
+	LastRetrievedMessageId *int64             `json:"lastRetrievedMessageId,omitempty"`
+	HasMore                *bool              `json:"hasMore,omitempty"`
 }
 
 type _List_ReplicationTask_ValueList []*ReplicationTask
@@ -3288,8 +3288,8 @@ func (v *ReplicationMessages) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 10, Value: w}
 		i++
 	}
-	if v.LastRetrivedMessageId != nil {
-		w, err = wire.NewValueI64(*(v.LastRetrivedMessageId)), error(nil)
+	if v.LastRetrievedMessageId != nil {
+		w, err = wire.NewValueI64(*(v.LastRetrievedMessageId)), error(nil)
 		if err != nil {
 			return w, err
 		}
@@ -3366,7 +3366,7 @@ func (v *ReplicationMessages) FromWire(w wire.Value) error {
 			if field.Value.Type() == wire.TI64 {
 				var x int64
 				x, err = field.Value.GetI64(), error(nil)
-				v.LastRetrivedMessageId = &x
+				v.LastRetrievedMessageId = &x
 				if err != nil {
 					return err
 				}
@@ -3401,8 +3401,8 @@ func (v *ReplicationMessages) String() string {
 		fields[i] = fmt.Sprintf("ReplicationTasks: %v", v.ReplicationTasks)
 		i++
 	}
-	if v.LastRetrivedMessageId != nil {
-		fields[i] = fmt.Sprintf("LastRetrivedMessageId: %v", *(v.LastRetrivedMessageId))
+	if v.LastRetrievedMessageId != nil {
+		fields[i] = fmt.Sprintf("LastRetrievedMessageId: %v", *(v.LastRetrievedMessageId))
 		i++
 	}
 	if v.HasMore != nil {
@@ -3441,7 +3441,7 @@ func (v *ReplicationMessages) Equals(rhs *ReplicationMessages) bool {
 	if !((v.ReplicationTasks == nil && rhs.ReplicationTasks == nil) || (v.ReplicationTasks != nil && rhs.ReplicationTasks != nil && _List_ReplicationTask_Equals(v.ReplicationTasks, rhs.ReplicationTasks))) {
 		return false
 	}
-	if !_I64_EqualsPtr(v.LastRetrivedMessageId, rhs.LastRetrivedMessageId) {
+	if !_I64_EqualsPtr(v.LastRetrievedMessageId, rhs.LastRetrievedMessageId) {
 		return false
 	}
 	if !_Bool_EqualsPtr(v.HasMore, rhs.HasMore) {
@@ -3471,8 +3471,8 @@ func (v *ReplicationMessages) MarshalLogObject(enc zapcore.ObjectEncoder) (err e
 	if v.ReplicationTasks != nil {
 		err = multierr.Append(err, enc.AddArray("replicationTasks", (_List_ReplicationTask_Zapper)(v.ReplicationTasks)))
 	}
-	if v.LastRetrivedMessageId != nil {
-		enc.AddInt64("lastRetrivedMessageId", *v.LastRetrivedMessageId)
+	if v.LastRetrievedMessageId != nil {
+		enc.AddInt64("lastRetrievedMessageId", *v.LastRetrievedMessageId)
 	}
 	if v.HasMore != nil {
 		enc.AddBool("hasMore", *v.HasMore)
@@ -3495,19 +3495,19 @@ func (v *ReplicationMessages) IsSetReplicationTasks() bool {
 	return v != nil && v.ReplicationTasks != nil
 }
 
-// GetLastRetrivedMessageId returns the value of LastRetrivedMessageId if it is set or its
+// GetLastRetrievedMessageId returns the value of LastRetrievedMessageId if it is set or its
 // zero value if it is unset.
-func (v *ReplicationMessages) GetLastRetrivedMessageId() (o int64) {
-	if v != nil && v.LastRetrivedMessageId != nil {
-		return *v.LastRetrivedMessageId
+func (v *ReplicationMessages) GetLastRetrievedMessageId() (o int64) {
+	if v != nil && v.LastRetrievedMessageId != nil {
+		return *v.LastRetrievedMessageId
 	}
 
 	return
 }
 
-// IsSetLastRetrivedMessageId returns true if LastRetrivedMessageId is not nil.
-func (v *ReplicationMessages) IsSetLastRetrivedMessageId() bool {
-	return v != nil && v.LastRetrivedMessageId != nil
+// IsSetLastRetrievedMessageId returns true if LastRetrievedMessageId is not nil.
+func (v *ReplicationMessages) IsSetLastRetrievedMessageId() bool {
+	return v != nil && v.LastRetrievedMessageId != nil
 }
 
 // GetHasMore returns the value of HasMore if it is set or its
@@ -3531,7 +3531,7 @@ type ReplicationTask struct {
 	DomainTaskAttributes          *DomainTaskAttributes          `json:"domainTaskAttributes,omitempty"`
 	HistoryTaskAttributes         *HistoryTaskAttributes         `json:"historyTaskAttributes,omitempty"`
 	SyncShardStatusTaskAttributes *SyncShardStatusTaskAttributes `json:"syncShardStatusTaskAttributes,omitempty"`
-	SyncActicvityTaskAttributes   *SyncActicvityTaskAttributes   `json:"syncActicvityTaskAttributes,omitempty"`
+	SyncActivityTaskAttributes    *SyncActivityTaskAttributes    `json:"syncActivityTaskAttributes,omitempty"`
 	HistoryMetadataTaskAttributes *HistoryMetadataTaskAttributes `json:"historyMetadataTaskAttributes,omitempty"`
 	HistoryTaskV2Attributes       *HistoryTaskV2Attributes       `json:"historyTaskV2Attributes,omitempty"`
 }
@@ -3599,8 +3599,8 @@ func (v *ReplicationTask) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 40, Value: w}
 		i++
 	}
-	if v.SyncActicvityTaskAttributes != nil {
-		w, err = v.SyncActicvityTaskAttributes.ToWire()
+	if v.SyncActivityTaskAttributes != nil {
+		w, err = v.SyncActivityTaskAttributes.ToWire()
 		if err != nil {
 			return w, err
 		}
@@ -3651,8 +3651,8 @@ func _SyncShardStatusTaskAttributes_Read(w wire.Value) (*SyncShardStatusTaskAttr
 	return &v, err
 }
 
-func _SyncActicvityTaskAttributes_Read(w wire.Value) (*SyncActicvityTaskAttributes, error) {
-	var v SyncActicvityTaskAttributes
+func _SyncActivityTaskAttributes_Read(w wire.Value) (*SyncActivityTaskAttributes, error) {
+	var v SyncActivityTaskAttributes
 	err := v.FromWire(w)
 	return &v, err
 }
@@ -3737,7 +3737,7 @@ func (v *ReplicationTask) FromWire(w wire.Value) error {
 			}
 		case 50:
 			if field.Value.Type() == wire.TStruct {
-				v.SyncActicvityTaskAttributes, err = _SyncActicvityTaskAttributes_Read(field.Value)
+				v.SyncActivityTaskAttributes, err = _SyncActivityTaskAttributes_Read(field.Value)
 				if err != nil {
 					return err
 				}
@@ -3794,8 +3794,8 @@ func (v *ReplicationTask) String() string {
 		fields[i] = fmt.Sprintf("SyncShardStatusTaskAttributes: %v", v.SyncShardStatusTaskAttributes)
 		i++
 	}
-	if v.SyncActicvityTaskAttributes != nil {
-		fields[i] = fmt.Sprintf("SyncActicvityTaskAttributes: %v", v.SyncActicvityTaskAttributes)
+	if v.SyncActivityTaskAttributes != nil {
+		fields[i] = fmt.Sprintf("SyncActivityTaskAttributes: %v", v.SyncActivityTaskAttributes)
 		i++
 	}
 	if v.HistoryMetadataTaskAttributes != nil {
@@ -3845,7 +3845,7 @@ func (v *ReplicationTask) Equals(rhs *ReplicationTask) bool {
 	if !((v.SyncShardStatusTaskAttributes == nil && rhs.SyncShardStatusTaskAttributes == nil) || (v.SyncShardStatusTaskAttributes != nil && rhs.SyncShardStatusTaskAttributes != nil && v.SyncShardStatusTaskAttributes.Equals(rhs.SyncShardStatusTaskAttributes))) {
 		return false
 	}
-	if !((v.SyncActicvityTaskAttributes == nil && rhs.SyncActicvityTaskAttributes == nil) || (v.SyncActicvityTaskAttributes != nil && rhs.SyncActicvityTaskAttributes != nil && v.SyncActicvityTaskAttributes.Equals(rhs.SyncActicvityTaskAttributes))) {
+	if !((v.SyncActivityTaskAttributes == nil && rhs.SyncActivityTaskAttributes == nil) || (v.SyncActivityTaskAttributes != nil && rhs.SyncActivityTaskAttributes != nil && v.SyncActivityTaskAttributes.Equals(rhs.SyncActivityTaskAttributes))) {
 		return false
 	}
 	if !((v.HistoryMetadataTaskAttributes == nil && rhs.HistoryMetadataTaskAttributes == nil) || (v.HistoryMetadataTaskAttributes != nil && rhs.HistoryMetadataTaskAttributes != nil && v.HistoryMetadataTaskAttributes.Equals(rhs.HistoryMetadataTaskAttributes))) {
@@ -3879,8 +3879,8 @@ func (v *ReplicationTask) MarshalLogObject(enc zapcore.ObjectEncoder) (err error
 	if v.SyncShardStatusTaskAttributes != nil {
 		err = multierr.Append(err, enc.AddObject("syncShardStatusTaskAttributes", v.SyncShardStatusTaskAttributes))
 	}
-	if v.SyncActicvityTaskAttributes != nil {
-		err = multierr.Append(err, enc.AddObject("syncActicvityTaskAttributes", v.SyncActicvityTaskAttributes))
+	if v.SyncActivityTaskAttributes != nil {
+		err = multierr.Append(err, enc.AddObject("syncActivityTaskAttributes", v.SyncActivityTaskAttributes))
 	}
 	if v.HistoryMetadataTaskAttributes != nil {
 		err = multierr.Append(err, enc.AddObject("historyMetadataTaskAttributes", v.HistoryMetadataTaskAttributes))
@@ -3966,19 +3966,19 @@ func (v *ReplicationTask) IsSetSyncShardStatusTaskAttributes() bool {
 	return v != nil && v.SyncShardStatusTaskAttributes != nil
 }
 
-// GetSyncActicvityTaskAttributes returns the value of SyncActicvityTaskAttributes if it is set or its
+// GetSyncActivityTaskAttributes returns the value of SyncActivityTaskAttributes if it is set or its
 // zero value if it is unset.
-func (v *ReplicationTask) GetSyncActicvityTaskAttributes() (o *SyncActicvityTaskAttributes) {
-	if v != nil && v.SyncActicvityTaskAttributes != nil {
-		return v.SyncActicvityTaskAttributes
+func (v *ReplicationTask) GetSyncActivityTaskAttributes() (o *SyncActivityTaskAttributes) {
+	if v != nil && v.SyncActivityTaskAttributes != nil {
+		return v.SyncActivityTaskAttributes
 	}
 
 	return
 }
 
-// IsSetSyncActicvityTaskAttributes returns true if SyncActicvityTaskAttributes is not nil.
-func (v *ReplicationTask) IsSetSyncActicvityTaskAttributes() bool {
-	return v != nil && v.SyncActicvityTaskAttributes != nil
+// IsSetSyncActivityTaskAttributes returns true if SyncActivityTaskAttributes is not nil.
+func (v *ReplicationTask) IsSetSyncActivityTaskAttributes() bool {
+	return v != nil && v.SyncActivityTaskAttributes != nil
 }
 
 // GetHistoryMetadataTaskAttributes returns the value of HistoryMetadataTaskAttributes if it is set or its
@@ -4236,7 +4236,7 @@ func (v *ReplicationTaskType) UnmarshalJSON(text []byte) error {
 
 type ReplicationToken struct {
 	ShardID                *int32 `json:"shardID,omitempty"`
-	LastRetrivedMessageId  *int64 `json:"lastRetrivedMessageId,omitempty"`
+	LastRetrievedMessageId *int64 `json:"lastRetrievedMessageId,omitempty"`
 	LastProcessedMessageId *int64 `json:"lastProcessedMessageId,omitempty"`
 }
 
@@ -4271,8 +4271,8 @@ func (v *ReplicationToken) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 10, Value: w}
 		i++
 	}
-	if v.LastRetrivedMessageId != nil {
-		w, err = wire.NewValueI64(*(v.LastRetrivedMessageId)), error(nil)
+	if v.LastRetrievedMessageId != nil {
+		w, err = wire.NewValueI64(*(v.LastRetrievedMessageId)), error(nil)
 		if err != nil {
 			return w, err
 		}
@@ -4327,7 +4327,7 @@ func (v *ReplicationToken) FromWire(w wire.Value) error {
 			if field.Value.Type() == wire.TI64 {
 				var x int64
 				x, err = field.Value.GetI64(), error(nil)
-				v.LastRetrivedMessageId = &x
+				v.LastRetrievedMessageId = &x
 				if err != nil {
 					return err
 				}
@@ -4362,8 +4362,8 @@ func (v *ReplicationToken) String() string {
 		fields[i] = fmt.Sprintf("ShardID: %v", *(v.ShardID))
 		i++
 	}
-	if v.LastRetrivedMessageId != nil {
-		fields[i] = fmt.Sprintf("LastRetrivedMessageId: %v", *(v.LastRetrivedMessageId))
+	if v.LastRetrievedMessageId != nil {
+		fields[i] = fmt.Sprintf("LastRetrievedMessageId: %v", *(v.LastRetrievedMessageId))
 		i++
 	}
 	if v.LastProcessedMessageId != nil {
@@ -4387,7 +4387,7 @@ func (v *ReplicationToken) Equals(rhs *ReplicationToken) bool {
 	if !_I32_EqualsPtr(v.ShardID, rhs.ShardID) {
 		return false
 	}
-	if !_I64_EqualsPtr(v.LastRetrivedMessageId, rhs.LastRetrivedMessageId) {
+	if !_I64_EqualsPtr(v.LastRetrievedMessageId, rhs.LastRetrievedMessageId) {
 		return false
 	}
 	if !_I64_EqualsPtr(v.LastProcessedMessageId, rhs.LastProcessedMessageId) {
@@ -4406,8 +4406,8 @@ func (v *ReplicationToken) MarshalLogObject(enc zapcore.ObjectEncoder) (err erro
 	if v.ShardID != nil {
 		enc.AddInt32("shardID", *v.ShardID)
 	}
-	if v.LastRetrivedMessageId != nil {
-		enc.AddInt64("lastRetrivedMessageId", *v.LastRetrivedMessageId)
+	if v.LastRetrievedMessageId != nil {
+		enc.AddInt64("lastRetrievedMessageId", *v.LastRetrievedMessageId)
 	}
 	if v.LastProcessedMessageId != nil {
 		enc.AddInt64("lastProcessedMessageId", *v.LastProcessedMessageId)
@@ -4430,19 +4430,19 @@ func (v *ReplicationToken) IsSetShardID() bool {
 	return v != nil && v.ShardID != nil
 }
 
-// GetLastRetrivedMessageId returns the value of LastRetrivedMessageId if it is set or its
+// GetLastRetrievedMessageId returns the value of LastRetrievedMessageId if it is set or its
 // zero value if it is unset.
-func (v *ReplicationToken) GetLastRetrivedMessageId() (o int64) {
-	if v != nil && v.LastRetrivedMessageId != nil {
-		return *v.LastRetrivedMessageId
+func (v *ReplicationToken) GetLastRetrievedMessageId() (o int64) {
+	if v != nil && v.LastRetrievedMessageId != nil {
+		return *v.LastRetrievedMessageId
 	}
 
 	return
 }
 
-// IsSetLastRetrivedMessageId returns true if LastRetrivedMessageId is not nil.
-func (v *ReplicationToken) IsSetLastRetrivedMessageId() bool {
-	return v != nil && v.LastRetrivedMessageId != nil
+// IsSetLastRetrievedMessageId returns true if LastRetrievedMessageId is not nil.
+func (v *ReplicationToken) IsSetLastRetrievedMessageId() bool {
+	return v != nil && v.LastRetrievedMessageId != nil
 }
 
 // GetLastProcessedMessageId returns the value of LastProcessedMessageId if it is set or its
@@ -4460,7 +4460,7 @@ func (v *ReplicationToken) IsSetLastProcessedMessageId() bool {
 	return v != nil && v.LastProcessedMessageId != nil
 }
 
-type SyncActicvityTaskAttributes struct {
+type SyncActivityTaskAttributes struct {
 	DomainId           *string                `json:"domainId,omitempty"`
 	WorkflowId         *string                `json:"workflowId,omitempty"`
 	RunId              *string                `json:"runId,omitempty"`
@@ -4478,7 +4478,7 @@ type SyncActicvityTaskAttributes struct {
 	VersionHistory     *shared.VersionHistory `json:"versionHistory,omitempty"`
 }
 
-// ToWire translates a SyncActicvityTaskAttributes struct into a Thrift-level intermediate
+// ToWire translates a SyncActivityTaskAttributes struct into a Thrift-level intermediate
 // representation. This intermediate representation may be serialized
 // into bytes using a ThriftRW protocol implementation.
 //
@@ -4493,7 +4493,7 @@ type SyncActicvityTaskAttributes struct {
 //   if err := binaryProtocol.Encode(x, writer); err != nil {
 //     return err
 //   }
-func (v *SyncActicvityTaskAttributes) ToWire() (wire.Value, error) {
+func (v *SyncActivityTaskAttributes) ToWire() (wire.Value, error) {
 	var (
 		fields [15]wire.Field
 		i      int = 0
@@ -4631,11 +4631,11 @@ func _VersionHistory_Read(w wire.Value) (*shared.VersionHistory, error) {
 	return &v, err
 }
 
-// FromWire deserializes a SyncActicvityTaskAttributes struct from its Thrift-level
+// FromWire deserializes a SyncActivityTaskAttributes struct from its Thrift-level
 // representation. The Thrift-level representation may be obtained
 // from a ThriftRW protocol implementation.
 //
-// An error is returned if we were unable to build a SyncActicvityTaskAttributes struct
+// An error is returned if we were unable to build a SyncActivityTaskAttributes struct
 // from the provided intermediate representation.
 //
 //   x, err := binaryProtocol.Decode(reader, wire.TStruct)
@@ -4643,12 +4643,12 @@ func _VersionHistory_Read(w wire.Value) (*shared.VersionHistory, error) {
 //     return nil, err
 //   }
 //
-//   var v SyncActicvityTaskAttributes
+//   var v SyncActivityTaskAttributes
 //   if err := v.FromWire(x); err != nil {
 //     return nil, err
 //   }
 //   return &v, nil
-func (v *SyncActicvityTaskAttributes) FromWire(w wire.Value) error {
+func (v *SyncActivityTaskAttributes) FromWire(w wire.Value) error {
 	var err error
 
 	for _, field := range w.GetStruct().Fields {
@@ -4803,9 +4803,9 @@ func (v *SyncActicvityTaskAttributes) FromWire(w wire.Value) error {
 	return nil
 }
 
-// String returns a readable string representation of a SyncActicvityTaskAttributes
+// String returns a readable string representation of a SyncActivityTaskAttributes
 // struct.
-func (v *SyncActicvityTaskAttributes) String() string {
+func (v *SyncActivityTaskAttributes) String() string {
 	if v == nil {
 		return "<nil>"
 	}
@@ -4873,14 +4873,14 @@ func (v *SyncActicvityTaskAttributes) String() string {
 		i++
 	}
 
-	return fmt.Sprintf("SyncActicvityTaskAttributes{%v}", strings.Join(fields[:i], ", "))
+	return fmt.Sprintf("SyncActivityTaskAttributes{%v}", strings.Join(fields[:i], ", "))
 }
 
-// Equals returns true if all the fields of this SyncActicvityTaskAttributes match the
-// provided SyncActicvityTaskAttributes.
+// Equals returns true if all the fields of this SyncActivityTaskAttributes match the
+// provided SyncActivityTaskAttributes.
 //
 // This function performs a deep comparison.
-func (v *SyncActicvityTaskAttributes) Equals(rhs *SyncActicvityTaskAttributes) bool {
+func (v *SyncActivityTaskAttributes) Equals(rhs *SyncActivityTaskAttributes) bool {
 	if v == nil {
 		return rhs == nil
 	} else if rhs == nil {
@@ -4936,8 +4936,8 @@ func (v *SyncActicvityTaskAttributes) Equals(rhs *SyncActicvityTaskAttributes) b
 }
 
 // MarshalLogObject implements zapcore.ObjectMarshaler, enabling
-// fast logging of SyncActicvityTaskAttributes.
-func (v *SyncActicvityTaskAttributes) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+// fast logging of SyncActivityTaskAttributes.
+func (v *SyncActivityTaskAttributes) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
 	if v == nil {
 		return nil
 	}
@@ -4991,7 +4991,7 @@ func (v *SyncActicvityTaskAttributes) MarshalLogObject(enc zapcore.ObjectEncoder
 
 // GetDomainId returns the value of DomainId if it is set or its
 // zero value if it is unset.
-func (v *SyncActicvityTaskAttributes) GetDomainId() (o string) {
+func (v *SyncActivityTaskAttributes) GetDomainId() (o string) {
 	if v != nil && v.DomainId != nil {
 		return *v.DomainId
 	}
@@ -5000,13 +5000,13 @@ func (v *SyncActicvityTaskAttributes) GetDomainId() (o string) {
 }
 
 // IsSetDomainId returns true if DomainId is not nil.
-func (v *SyncActicvityTaskAttributes) IsSetDomainId() bool {
+func (v *SyncActivityTaskAttributes) IsSetDomainId() bool {
 	return v != nil && v.DomainId != nil
 }
 
 // GetWorkflowId returns the value of WorkflowId if it is set or its
 // zero value if it is unset.
-func (v *SyncActicvityTaskAttributes) GetWorkflowId() (o string) {
+func (v *SyncActivityTaskAttributes) GetWorkflowId() (o string) {
 	if v != nil && v.WorkflowId != nil {
 		return *v.WorkflowId
 	}
@@ -5015,13 +5015,13 @@ func (v *SyncActicvityTaskAttributes) GetWorkflowId() (o string) {
 }
 
 // IsSetWorkflowId returns true if WorkflowId is not nil.
-func (v *SyncActicvityTaskAttributes) IsSetWorkflowId() bool {
+func (v *SyncActivityTaskAttributes) IsSetWorkflowId() bool {
 	return v != nil && v.WorkflowId != nil
 }
 
 // GetRunId returns the value of RunId if it is set or its
 // zero value if it is unset.
-func (v *SyncActicvityTaskAttributes) GetRunId() (o string) {
+func (v *SyncActivityTaskAttributes) GetRunId() (o string) {
 	if v != nil && v.RunId != nil {
 		return *v.RunId
 	}
@@ -5030,13 +5030,13 @@ func (v *SyncActicvityTaskAttributes) GetRunId() (o string) {
 }
 
 // IsSetRunId returns true if RunId is not nil.
-func (v *SyncActicvityTaskAttributes) IsSetRunId() bool {
+func (v *SyncActivityTaskAttributes) IsSetRunId() bool {
 	return v != nil && v.RunId != nil
 }
 
 // GetVersion returns the value of Version if it is set or its
 // zero value if it is unset.
-func (v *SyncActicvityTaskAttributes) GetVersion() (o int64) {
+func (v *SyncActivityTaskAttributes) GetVersion() (o int64) {
 	if v != nil && v.Version != nil {
 		return *v.Version
 	}
@@ -5045,13 +5045,13 @@ func (v *SyncActicvityTaskAttributes) GetVersion() (o int64) {
 }
 
 // IsSetVersion returns true if Version is not nil.
-func (v *SyncActicvityTaskAttributes) IsSetVersion() bool {
+func (v *SyncActivityTaskAttributes) IsSetVersion() bool {
 	return v != nil && v.Version != nil
 }
 
 // GetScheduledId returns the value of ScheduledId if it is set or its
 // zero value if it is unset.
-func (v *SyncActicvityTaskAttributes) GetScheduledId() (o int64) {
+func (v *SyncActivityTaskAttributes) GetScheduledId() (o int64) {
 	if v != nil && v.ScheduledId != nil {
 		return *v.ScheduledId
 	}
@@ -5060,13 +5060,13 @@ func (v *SyncActicvityTaskAttributes) GetScheduledId() (o int64) {
 }
 
 // IsSetScheduledId returns true if ScheduledId is not nil.
-func (v *SyncActicvityTaskAttributes) IsSetScheduledId() bool {
+func (v *SyncActivityTaskAttributes) IsSetScheduledId() bool {
 	return v != nil && v.ScheduledId != nil
 }
 
 // GetScheduledTime returns the value of ScheduledTime if it is set or its
 // zero value if it is unset.
-func (v *SyncActicvityTaskAttributes) GetScheduledTime() (o int64) {
+func (v *SyncActivityTaskAttributes) GetScheduledTime() (o int64) {
 	if v != nil && v.ScheduledTime != nil {
 		return *v.ScheduledTime
 	}
@@ -5075,13 +5075,13 @@ func (v *SyncActicvityTaskAttributes) GetScheduledTime() (o int64) {
 }
 
 // IsSetScheduledTime returns true if ScheduledTime is not nil.
-func (v *SyncActicvityTaskAttributes) IsSetScheduledTime() bool {
+func (v *SyncActivityTaskAttributes) IsSetScheduledTime() bool {
 	return v != nil && v.ScheduledTime != nil
 }
 
 // GetStartedId returns the value of StartedId if it is set or its
 // zero value if it is unset.
-func (v *SyncActicvityTaskAttributes) GetStartedId() (o int64) {
+func (v *SyncActivityTaskAttributes) GetStartedId() (o int64) {
 	if v != nil && v.StartedId != nil {
 		return *v.StartedId
 	}
@@ -5090,13 +5090,13 @@ func (v *SyncActicvityTaskAttributes) GetStartedId() (o int64) {
 }
 
 // IsSetStartedId returns true if StartedId is not nil.
-func (v *SyncActicvityTaskAttributes) IsSetStartedId() bool {
+func (v *SyncActivityTaskAttributes) IsSetStartedId() bool {
 	return v != nil && v.StartedId != nil
 }
 
 // GetStartedTime returns the value of StartedTime if it is set or its
 // zero value if it is unset.
-func (v *SyncActicvityTaskAttributes) GetStartedTime() (o int64) {
+func (v *SyncActivityTaskAttributes) GetStartedTime() (o int64) {
 	if v != nil && v.StartedTime != nil {
 		return *v.StartedTime
 	}
@@ -5105,13 +5105,13 @@ func (v *SyncActicvityTaskAttributes) GetStartedTime() (o int64) {
 }
 
 // IsSetStartedTime returns true if StartedTime is not nil.
-func (v *SyncActicvityTaskAttributes) IsSetStartedTime() bool {
+func (v *SyncActivityTaskAttributes) IsSetStartedTime() bool {
 	return v != nil && v.StartedTime != nil
 }
 
 // GetLastHeartbeatTime returns the value of LastHeartbeatTime if it is set or its
 // zero value if it is unset.
-func (v *SyncActicvityTaskAttributes) GetLastHeartbeatTime() (o int64) {
+func (v *SyncActivityTaskAttributes) GetLastHeartbeatTime() (o int64) {
 	if v != nil && v.LastHeartbeatTime != nil {
 		return *v.LastHeartbeatTime
 	}
@@ -5120,13 +5120,13 @@ func (v *SyncActicvityTaskAttributes) GetLastHeartbeatTime() (o int64) {
 }
 
 // IsSetLastHeartbeatTime returns true if LastHeartbeatTime is not nil.
-func (v *SyncActicvityTaskAttributes) IsSetLastHeartbeatTime() bool {
+func (v *SyncActivityTaskAttributes) IsSetLastHeartbeatTime() bool {
 	return v != nil && v.LastHeartbeatTime != nil
 }
 
 // GetDetails returns the value of Details if it is set or its
 // zero value if it is unset.
-func (v *SyncActicvityTaskAttributes) GetDetails() (o []byte) {
+func (v *SyncActivityTaskAttributes) GetDetails() (o []byte) {
 	if v != nil && v.Details != nil {
 		return v.Details
 	}
@@ -5135,13 +5135,13 @@ func (v *SyncActicvityTaskAttributes) GetDetails() (o []byte) {
 }
 
 // IsSetDetails returns true if Details is not nil.
-func (v *SyncActicvityTaskAttributes) IsSetDetails() bool {
+func (v *SyncActivityTaskAttributes) IsSetDetails() bool {
 	return v != nil && v.Details != nil
 }
 
 // GetAttempt returns the value of Attempt if it is set or its
 // zero value if it is unset.
-func (v *SyncActicvityTaskAttributes) GetAttempt() (o int32) {
+func (v *SyncActivityTaskAttributes) GetAttempt() (o int32) {
 	if v != nil && v.Attempt != nil {
 		return *v.Attempt
 	}
@@ -5150,13 +5150,13 @@ func (v *SyncActicvityTaskAttributes) GetAttempt() (o int32) {
 }
 
 // IsSetAttempt returns true if Attempt is not nil.
-func (v *SyncActicvityTaskAttributes) IsSetAttempt() bool {
+func (v *SyncActivityTaskAttributes) IsSetAttempt() bool {
 	return v != nil && v.Attempt != nil
 }
 
 // GetLastFailureReason returns the value of LastFailureReason if it is set or its
 // zero value if it is unset.
-func (v *SyncActicvityTaskAttributes) GetLastFailureReason() (o string) {
+func (v *SyncActivityTaskAttributes) GetLastFailureReason() (o string) {
 	if v != nil && v.LastFailureReason != nil {
 		return *v.LastFailureReason
 	}
@@ -5165,13 +5165,13 @@ func (v *SyncActicvityTaskAttributes) GetLastFailureReason() (o string) {
 }
 
 // IsSetLastFailureReason returns true if LastFailureReason is not nil.
-func (v *SyncActicvityTaskAttributes) IsSetLastFailureReason() bool {
+func (v *SyncActivityTaskAttributes) IsSetLastFailureReason() bool {
 	return v != nil && v.LastFailureReason != nil
 }
 
 // GetLastWorkerIdentity returns the value of LastWorkerIdentity if it is set or its
 // zero value if it is unset.
-func (v *SyncActicvityTaskAttributes) GetLastWorkerIdentity() (o string) {
+func (v *SyncActivityTaskAttributes) GetLastWorkerIdentity() (o string) {
 	if v != nil && v.LastWorkerIdentity != nil {
 		return *v.LastWorkerIdentity
 	}
@@ -5180,13 +5180,13 @@ func (v *SyncActicvityTaskAttributes) GetLastWorkerIdentity() (o string) {
 }
 
 // IsSetLastWorkerIdentity returns true if LastWorkerIdentity is not nil.
-func (v *SyncActicvityTaskAttributes) IsSetLastWorkerIdentity() bool {
+func (v *SyncActivityTaskAttributes) IsSetLastWorkerIdentity() bool {
 	return v != nil && v.LastWorkerIdentity != nil
 }
 
 // GetLastFailureDetails returns the value of LastFailureDetails if it is set or its
 // zero value if it is unset.
-func (v *SyncActicvityTaskAttributes) GetLastFailureDetails() (o []byte) {
+func (v *SyncActivityTaskAttributes) GetLastFailureDetails() (o []byte) {
 	if v != nil && v.LastFailureDetails != nil {
 		return v.LastFailureDetails
 	}
@@ -5195,13 +5195,13 @@ func (v *SyncActicvityTaskAttributes) GetLastFailureDetails() (o []byte) {
 }
 
 // IsSetLastFailureDetails returns true if LastFailureDetails is not nil.
-func (v *SyncActicvityTaskAttributes) IsSetLastFailureDetails() bool {
+func (v *SyncActivityTaskAttributes) IsSetLastFailureDetails() bool {
 	return v != nil && v.LastFailureDetails != nil
 }
 
 // GetVersionHistory returns the value of VersionHistory if it is set or its
 // zero value if it is unset.
-func (v *SyncActicvityTaskAttributes) GetVersionHistory() (o *shared.VersionHistory) {
+func (v *SyncActivityTaskAttributes) GetVersionHistory() (o *shared.VersionHistory) {
 	if v != nil && v.VersionHistory != nil {
 		return v.VersionHistory
 	}
@@ -5210,7 +5210,7 @@ func (v *SyncActicvityTaskAttributes) GetVersionHistory() (o *shared.VersionHist
 }
 
 // IsSetVersionHistory returns true if VersionHistory is not nil.
-func (v *SyncActicvityTaskAttributes) IsSetVersionHistory() bool {
+func (v *SyncActivityTaskAttributes) IsSetVersionHistory() bool {
 	return v != nil && v.VersionHistory != nil
 }
 
@@ -5445,11 +5445,11 @@ var ThriftModule = &thriftreflect.ThriftModule{
 	Name:     "replicator",
 	Package:  "github.com/uber/cadence/.gen/go/replicator",
 	FilePath: "replicator.thrift",
-	SHA1:     "9a2a9509660f415205bc72802d2a850a2a438a1b",
+	SHA1:     "92866390e100b86b10e966d6ae2f931deb59e13b",
 	Includes: []*thriftreflect.ThriftModule{
 		shared.ThriftModule,
 	},
 	Raw: rawIDL,
 }
 
-const rawIDL = "// Copyright (c) 2017 Uber Technologies, Inc.\n//\n// Permission is hereby granted, free of charge, to any person obtaining a copy\n// of this software and associated documentation files (the \"Software\"), to deal\n// in the Software without restriction, including without limitation the rights\n// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n// copies of the Software, and to permit persons to whom the Software is\n// furnished to do so, subject to the following conditions:\n//\n// The above copyright notice and this permission notice shall be included in\n// all copies or substantial portions of the Software.\n//\n// THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n// THE SOFTWARE.\n\nnamespace java com.uber.cadence.replicator\n\ninclude \"shared.thrift\"\n\nenum ReplicationTaskType {\n  Domain\n  History\n  SyncShardStatus\n  SyncActivity\n  HistoryMetadata\n  HistoryV2\n}\n\nenum DomainOperation {\n  Create\n  Update\n}\n\nstruct DomainTaskAttributes {\n  05: optional DomainOperation domainOperation\n  10: optional string id\n  20: optional shared.DomainInfo info\n  30: optional shared.DomainConfiguration config\n  40: optional shared.DomainReplicationConfiguration replicationConfig\n  50: optional i64 (js.type = \"Long\") configVersion\n  60: optional i64 (js.type = \"Long\") failoverVersion\n}\n\nstruct HistoryTaskAttributes {\n  05: optional list<string> targetClusters\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") firstEventId\n  50: optional i64 (js.type = \"Long\") nextEventId\n  60: optional i64 (js.type = \"Long\") version\n  70: optional map<string, shared.ReplicationInfo> replicationInfo\n  80: optional shared.History history\n  90: optional shared.History newRunHistory\n  100: optional i32 eventStoreVersion\n  110: optional i32 newRunEventStoreVersion\n  120: optional bool resetWorkflow\n  130: optional bool newRunNDC\n}\n\nstruct HistoryMetadataTaskAttributes {\n  05: optional list<string> targetClusters\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") firstEventId\n  50: optional i64 (js.type = \"Long\") nextEventId\n}\n\nstruct SyncShardStatusTaskAttributes {\n  10: optional string sourceCluster\n  20: optional i64 (js.type = \"Long\") shardId\n  30: optional i64 (js.type = \"Long\") timestamp\n}\n\nstruct SyncActicvityTaskAttributes {\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") version\n  50: optional i64 (js.type = \"Long\") scheduledId\n  60: optional i64 (js.type = \"Long\") scheduledTime\n  70: optional i64 (js.type = \"Long\") startedId\n  80: optional i64 (js.type = \"Long\") startedTime\n  90: optional i64 (js.type = \"Long\") lastHeartbeatTime\n  100: optional binary details\n  110: optional i32 attempt\n  120: optional string lastFailureReason\n  130: optional string lastWorkerIdentity\n  140: optional binary lastFailureDetails\n  150: optional shared.VersionHistory versionHistory\n}\n\nstruct HistoryTaskV2Attributes {\n  05: optional i64 (js.type = \"Long\") taskId\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional list<shared.VersionHistoryItem> versionHistoryItems\n  50: optional shared.DataBlob events\n  // new run events does not need version history since there is no prior events\n  70: optional shared.DataBlob newRunEvents\n}\n\nstruct ReplicationTask {\n  10: optional ReplicationTaskType taskType\n  11: optional i64 (js.type = \"Long\") sourceTaskId\n  20: optional DomainTaskAttributes domainTaskAttributes\n  30: optional HistoryTaskAttributes historyTaskAttributes  // TODO deprecate once NDC migration is done\n  40: optional SyncShardStatusTaskAttributes syncShardStatusTaskAttributes\n  50: optional SyncActicvityTaskAttributes syncActicvityTaskAttributes\n  60: optional HistoryMetadataTaskAttributes historyMetadataTaskAttributes // TODO deprecate once kafka deprecation is done\n  70: optional HistoryTaskV2Attributes historyTaskV2Attributes\n}\n\nstruct ReplicationToken {\n  10: optional i32 shardID\n  // lastRetrivedMessageId is where the next fetch should begin with\n  20: optional i64 (js.type = \"Long\") lastRetrivedMessageId\n  // lastProcessedMessageId is the last messageId that is processed on the passive side.\n  // This can be different than lastRetrivedMessageId if passive side supports prefetching messages.\n  30: optional i64 (js.type = \"Long\") lastProcessedMessageId\n}\n\nstruct ReplicationMessages {\n  10: optional list<ReplicationTask> replicationTasks\n  // This can be different than the last taskId in the above list, because sender can decide to skip tasks (e.g. for completed workflows).\n  20: optional i64 (js.type = \"Long\") lastRetrivedMessageId\n  30: optional bool hasMore // Hint for flow control\n}\n\nstruct GetReplicationMessagesRequest {\n  10: optional list<ReplicationToken> tokens\n}\n\nstruct GetReplicationMessagesResponse {\n  10: optional map<i32, ReplicationMessages> messagesByShard\n}\n\nstruct GetDomainReplicationMessagesRequest {\n  // lastRetrivedMessageId is where the next fetch should begin with\n  10: optional i64 (js.type = \"Long\") lastRetrivedMessageId\n  // lastProcessedMessageId is the last messageId that is processed on the passive side.\n  // This can be different than lastRetrivedMessageId if passive side supports prefetching messages.\n  20: optional i64 (js.type = \"Long\") lastProcessedMessageId\n  // clusterName is the name of the pulling cluster\n  30: optional string clusterName\n}\n\nstruct GetDomainReplicationMessagesResponse {\n  10: optional ReplicationMessages messages\n}"
+const rawIDL = "// Copyright (c) 2017 Uber Technologies, Inc.\n//\n// Permission is hereby granted, free of charge, to any person obtaining a copy\n// of this software and associated documentation files (the \"Software\"), to deal\n// in the Software without restriction, including without limitation the rights\n// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n// copies of the Software, and to permit persons to whom the Software is\n// furnished to do so, subject to the following conditions:\n//\n// The above copyright notice and this permission notice shall be included in\n// all copies or substantial portions of the Software.\n//\n// THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n// THE SOFTWARE.\n\nnamespace java com.uber.cadence.replicator\n\ninclude \"shared.thrift\"\n\nenum ReplicationTaskType {\n  Domain\n  History\n  SyncShardStatus\n  SyncActivity\n  HistoryMetadata\n  HistoryV2\n}\n\nenum DomainOperation {\n  Create\n  Update\n}\n\nstruct DomainTaskAttributes {\n  05: optional DomainOperation domainOperation\n  10: optional string id\n  20: optional shared.DomainInfo info\n  30: optional shared.DomainConfiguration config\n  40: optional shared.DomainReplicationConfiguration replicationConfig\n  50: optional i64 (js.type = \"Long\") configVersion\n  60: optional i64 (js.type = \"Long\") failoverVersion\n}\n\nstruct HistoryTaskAttributes {\n  05: optional list<string> targetClusters\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") firstEventId\n  50: optional i64 (js.type = \"Long\") nextEventId\n  60: optional i64 (js.type = \"Long\") version\n  70: optional map<string, shared.ReplicationInfo> replicationInfo\n  80: optional shared.History history\n  90: optional shared.History newRunHistory\n  100: optional i32 eventStoreVersion\n  110: optional i32 newRunEventStoreVersion\n  120: optional bool resetWorkflow\n  130: optional bool newRunNDC\n}\n\nstruct HistoryMetadataTaskAttributes {\n  05: optional list<string> targetClusters\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") firstEventId\n  50: optional i64 (js.type = \"Long\") nextEventId\n}\n\nstruct SyncShardStatusTaskAttributes {\n  10: optional string sourceCluster\n  20: optional i64 (js.type = \"Long\") shardId\n  30: optional i64 (js.type = \"Long\") timestamp\n}\n\nstruct SyncActivityTaskAttributes {\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") version\n  50: optional i64 (js.type = \"Long\") scheduledId\n  60: optional i64 (js.type = \"Long\") scheduledTime\n  70: optional i64 (js.type = \"Long\") startedId\n  80: optional i64 (js.type = \"Long\") startedTime\n  90: optional i64 (js.type = \"Long\") lastHeartbeatTime\n  100: optional binary details\n  110: optional i32 attempt\n  120: optional string lastFailureReason\n  130: optional string lastWorkerIdentity\n  140: optional binary lastFailureDetails\n  150: optional shared.VersionHistory versionHistory\n}\n\nstruct HistoryTaskV2Attributes {\n  05: optional i64 (js.type = \"Long\") taskId\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional list<shared.VersionHistoryItem> versionHistoryItems\n  50: optional shared.DataBlob events\n  // new run events does not need version history since there is no prior events\n  70: optional shared.DataBlob newRunEvents\n}\n\nstruct ReplicationTask {\n  10: optional ReplicationTaskType taskType\n  11: optional i64 (js.type = \"Long\") sourceTaskId\n  20: optional DomainTaskAttributes domainTaskAttributes\n  30: optional HistoryTaskAttributes historyTaskAttributes  // TODO deprecate once NDC migration is done\n  40: optional SyncShardStatusTaskAttributes syncShardStatusTaskAttributes\n  50: optional SyncActivityTaskAttributes syncActivityTaskAttributes\n  60: optional HistoryMetadataTaskAttributes historyMetadataTaskAttributes // TODO deprecate once kafka deprecation is done\n  70: optional HistoryTaskV2Attributes historyTaskV2Attributes\n}\n\nstruct ReplicationToken {\n  10: optional i32 shardID\n  // lastRetrivedMessageId is where the next fetch should begin with\n  20: optional i64 (js.type = \"Long\") lastRetrievedMessageId\n  // lastProcessedMessageId is the last messageId that is processed on the passive side.\n  // This can be different than lastRetrievedMessageId if passive side supports prefetching messages.\n  30: optional i64 (js.type = \"Long\") lastProcessedMessageId\n}\n\nstruct ReplicationMessages {\n  10: optional list<ReplicationTask> replicationTasks\n  // This can be different than the last taskId in the above list, because sender can decide to skip tasks (e.g. for completed workflows).\n  20: optional i64 (js.type = \"Long\") lastRetrievedMessageId\n  30: optional bool hasMore // Hint for flow control\n}\n\nstruct GetReplicationMessagesRequest {\n  10: optional list<ReplicationToken> tokens\n}\n\nstruct GetReplicationMessagesResponse {\n  10: optional map<i32, ReplicationMessages> messagesByShard\n}\n\nstruct GetDomainReplicationMessagesRequest {\n  // lastRetrievedMessageId is where the next fetch should begin with\n  10: optional i64 (js.type = \"Long\") lastRetrievedMessageId\n  // lastProcessedMessageId is the last messageId that is processed on the passive side.\n  // This can be different than lastRetrievedMessageId if passive side supports prefetching messages.\n  20: optional i64 (js.type = \"Long\") lastProcessedMessageId\n  // clusterName is the name of the pulling cluster\n  30: optional string clusterName\n}\n\nstruct GetDomainReplicationMessagesResponse {\n  10: optional ReplicationMessages messages\n}"

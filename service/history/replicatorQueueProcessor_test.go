@@ -352,7 +352,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 
 	s.mockProducer.On("Publish", &replicator.ReplicationTask{
 		TaskType: replicator.ReplicationTaskType.Ptr(replicator.ReplicationTaskTypeSyncActivity),
-		SyncActicvityTaskAttributes: &replicator.SyncActicvityTaskAttributes{
+		SyncActivityTaskAttributes: &replicator.SyncActivityTaskAttributes{
 			DomainId:           common.StringPtr(domainID),
 			WorkflowId:         common.StringPtr(workflowID),
 			RunId:              common.StringPtr(runID),
@@ -461,7 +461,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	), nil).AnyTimes()
 	s.mockProducer.On("Publish", &replicator.ReplicationTask{
 		TaskType: replicator.ReplicationTaskType.Ptr(replicator.ReplicationTaskTypeSyncActivity),
-		SyncActicvityTaskAttributes: &replicator.SyncActicvityTaskAttributes{
+		SyncActivityTaskAttributes: &replicator.SyncActivityTaskAttributes{
 			DomainId:           common.StringPtr(domainID),
 			WorkflowId:         common.StringPtr(workflowID),
 			RunId:              common.StringPtr(runID),

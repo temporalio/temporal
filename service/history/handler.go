@@ -1511,7 +1511,7 @@ func (h *Handler) GetReplicationMessages(
 				return
 			}
 
-			tasks, err := engine.GetReplicationMessages(ctx, token.GetLastRetrivedMessageId())
+			tasks, err := engine.GetReplicationMessages(ctx, token.GetLastRetrievedMessageId())
 			if err != nil {
 				h.GetLogger().Warn("Failed to get replication tasks for shard", tag.Error(err))
 				return

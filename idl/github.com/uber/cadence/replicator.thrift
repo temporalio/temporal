@@ -78,7 +78,7 @@ struct SyncShardStatusTaskAttributes {
   30: optional i64 (js.type = "Long") timestamp
 }
 
-struct SyncActicvityTaskAttributes {
+struct SyncActivityTaskAttributes {
   10: optional string domainId
   20: optional string workflowId
   30: optional string runId
@@ -113,7 +113,7 @@ struct ReplicationTask {
   20: optional DomainTaskAttributes domainTaskAttributes
   30: optional HistoryTaskAttributes historyTaskAttributes  // TODO deprecate once NDC migration is done
   40: optional SyncShardStatusTaskAttributes syncShardStatusTaskAttributes
-  50: optional SyncActicvityTaskAttributes syncActicvityTaskAttributes
+  50: optional SyncActivityTaskAttributes syncActivityTaskAttributes
   60: optional HistoryMetadataTaskAttributes historyMetadataTaskAttributes // TODO deprecate once kafka deprecation is done
   70: optional HistoryTaskV2Attributes historyTaskV2Attributes
 }
@@ -121,16 +121,16 @@ struct ReplicationTask {
 struct ReplicationToken {
   10: optional i32 shardID
   // lastRetrivedMessageId is where the next fetch should begin with
-  20: optional i64 (js.type = "Long") lastRetrivedMessageId
+  20: optional i64 (js.type = "Long") lastRetrievedMessageId
   // lastProcessedMessageId is the last messageId that is processed on the passive side.
-  // This can be different than lastRetrivedMessageId if passive side supports prefetching messages.
+  // This can be different than lastRetrievedMessageId if passive side supports prefetching messages.
   30: optional i64 (js.type = "Long") lastProcessedMessageId
 }
 
 struct ReplicationMessages {
   10: optional list<ReplicationTask> replicationTasks
   // This can be different than the last taskId in the above list, because sender can decide to skip tasks (e.g. for completed workflows).
-  20: optional i64 (js.type = "Long") lastRetrivedMessageId
+  20: optional i64 (js.type = "Long") lastRetrievedMessageId
   30: optional bool hasMore // Hint for flow control
 }
 
@@ -143,10 +143,10 @@ struct GetReplicationMessagesResponse {
 }
 
 struct GetDomainReplicationMessagesRequest {
-  // lastRetrivedMessageId is where the next fetch should begin with
-  10: optional i64 (js.type = "Long") lastRetrivedMessageId
+  // lastRetrievedMessageId is where the next fetch should begin with
+  10: optional i64 (js.type = "Long") lastRetrievedMessageId
   // lastProcessedMessageId is the last messageId that is processed on the passive side.
-  // This can be different than lastRetrivedMessageId if passive side supports prefetching messages.
+  // This can be different than lastRetrievedMessageId if passive side supports prefetching messages.
   20: optional i64 (js.type = "Long") lastProcessedMessageId
   // clusterName is the name of the pulling cluster
   30: optional string clusterName

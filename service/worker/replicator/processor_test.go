@@ -272,7 +272,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_FailedT
 }
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncActivity_Success() {
-	replicationAttr := &replicator.SyncActicvityTaskAttributes{
+	replicationAttr := &replicator.SyncActivityTaskAttributes{
 		DomainId:          common.StringPtr("some random domain ID"),
 		WorkflowId:        common.StringPtr("some random workflow ID"),
 		RunId:             common.StringPtr("some random run ID"),
@@ -286,8 +286,8 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncActivity_Succ
 		Attempt:           common.Int32Ptr(1048576),
 	}
 	replicationTask := &replicator.ReplicationTask{
-		TaskType:                    replicator.ReplicationTaskTypeSyncActivity.Ptr(),
-		SyncActicvityTaskAttributes: replicationAttr,
+		TaskType:                   replicator.ReplicationTaskTypeSyncActivity.Ptr(),
+		SyncActivityTaskAttributes: replicationAttr,
 	}
 	replicationTaskBinary, err := s.msgEncoder.Encode(replicationTask)
 	s.Nil(err)
@@ -298,7 +298,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncActivity_Succ
 }
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncActivity_FailedThenSuccess() {
-	replicationAttr := &replicator.SyncActicvityTaskAttributes{
+	replicationAttr := &replicator.SyncActivityTaskAttributes{
 		DomainId:          common.StringPtr("some random domain ID"),
 		WorkflowId:        common.StringPtr("some random workflow ID"),
 		RunId:             common.StringPtr("some random run ID"),
@@ -312,8 +312,8 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncActivity_Fail
 		Attempt:           common.Int32Ptr(1048576),
 	}
 	replicationTask := &replicator.ReplicationTask{
-		TaskType:                    replicator.ReplicationTaskTypeSyncActivity.Ptr(),
-		SyncActicvityTaskAttributes: replicationAttr,
+		TaskType:                   replicator.ReplicationTaskTypeSyncActivity.Ptr(),
+		SyncActivityTaskAttributes: replicationAttr,
 	}
 	replicationTaskBinary, err := s.msgEncoder.Encode(replicationTask)
 	s.Nil(err)

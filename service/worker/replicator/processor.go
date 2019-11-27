@@ -344,7 +344,7 @@ func (p *replicationTaskProcessor) handleActivityTask(
 	logger log.Logger,
 ) error {
 
-	doContinue, err := p.filterTask(task.SyncActicvityTaskAttributes.GetDomainId())
+	doContinue, err := p.filterTask(task.SyncActivityTaskAttributes.GetDomainId())
 	if err != nil || !doContinue {
 		return err
 	}

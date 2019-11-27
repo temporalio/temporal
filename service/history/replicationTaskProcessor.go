@@ -166,7 +166,7 @@ Loop:
 			}
 
 			p.logger.Debug("Got fetch replication messages response.",
-				tag.ReadLevel(response.GetLastRetrivedMessageId()),
+				tag.ReadLevel(response.GetLastRetrievedMessageId()),
 				tag.Bool(response.GetHasMore()),
 				tag.Counter(len(response.GetReplicationTasks())),
 			)
@@ -185,7 +185,7 @@ func (p *ReplicationTaskProcessor) sendFetchMessageRequest() <-chan *r.Replicati
 	p.requestChan <- &request{
 		token: &r.ReplicationToken{
 			ShardID:                common.Int32Ptr(int32(p.shard.GetShardID())),
-			LastRetrivedMessageId:  common.Int64Ptr(p.lastRetrievedMessageID),
+			LastRetrievedMessageId: common.Int64Ptr(p.lastRetrievedMessageID),
 			LastProcessedMessageId: common.Int64Ptr(p.lastProcessedMessageID),
 		},
 		respChan: respChan,
@@ -211,8 +211,8 @@ func (p *ReplicationTaskProcessor) processResponse(response *r.ReplicationMessag
 		}
 	}
 
-	p.lastProcessedMessageID = response.GetLastRetrivedMessageId()
-	p.lastRetrievedMessageID = response.GetLastRetrivedMessageId()
+	p.lastProcessedMessageID = response.GetLastRetrievedMessageId()
+	p.lastRetrievedMessageID = response.GetLastRetrievedMessageId()
 	err := p.shard.UpdateClusterReplicationLevel(p.sourceCluster, p.lastRetrievedMessageID)
 	if err != nil {
 		p.logger.Error("Error updating replication level for shard", tag.Error(err), tag.OperationFailed)
@@ -304,7 +304,7 @@ func (p *ReplicationTaskProcessor) generateDLQRequest(
 ) (*persistence.PutReplicationTaskToDLQRequest, error) {
 	switch *replicationTask.TaskType {
 	case r.ReplicationTaskTypeSyncActivity:
-		taskAttributes := replicationTask.GetSyncActicvityTaskAttributes()
+		taskAttributes := replicationTask.GetSyncActivityTaskAttributes()
 		return &persistence.PutReplicationTaskToDLQRequest{
 			SourceClusterName: p.sourceCluster,
 			TaskInfo: &persistence.ReplicationTaskInfo{
@@ -434,7 +434,7 @@ func (p *ReplicationTaskProcessor) handleActivityTask(
 	task *r.ReplicationTask,
 ) error {
 
-	attr := task.SyncActicvityTaskAttributes
+	attr := task.SyncActivityTaskAttributes
 	doContinue, err := p.filterTask(attr.GetDomainId())
 	if err != nil || !doContinue {
 		return err

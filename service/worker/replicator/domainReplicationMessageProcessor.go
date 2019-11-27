@@ -133,7 +133,7 @@ func (p *domainReplicationMessageProcessor) getAndHandleDomainReplicationTasks()
 
 	ctx, cancel := context.WithTimeout(context.Background(), fetchTaskRequestTimeout)
 	request := &replicator.GetDomainReplicationMessagesRequest{
-		LastRetrivedMessageId:  common.Int64Ptr(p.lastRetrievedMessageID),
+		LastRetrievedMessageId: common.Int64Ptr(p.lastRetrievedMessageID),
 		LastProcessedMessageId: common.Int64Ptr(p.lastProcessedMessageID),
 	}
 	response, err := p.remotePeer.GetDomainReplicationMessages(ctx, request)
@@ -157,8 +157,8 @@ func (p *domainReplicationMessageProcessor) getAndHandleDomainReplicationTasks()
 		}
 	}
 
-	p.lastProcessedMessageID = response.Messages.GetLastRetrivedMessageId()
-	p.lastRetrievedMessageID = response.Messages.GetLastRetrivedMessageId()
+	p.lastProcessedMessageID = response.Messages.GetLastRetrievedMessageId()
+	p.lastRetrievedMessageID = response.Messages.GetLastRetrievedMessageId()
 }
 
 func (p *domainReplicationMessageProcessor) handleDomainReplicationTask(task *replicator.ReplicationTask) error {

@@ -104,7 +104,7 @@ func newActivityReplicationTask(
 	nDCHistoryResender xdc.NDCHistoryResender,
 ) *activityReplicationTask {
 
-	attr := task.SyncActicvityTaskAttributes
+	attr := task.SyncActivityTaskAttributes
 
 	logger = logger.WithTags(tag.WorkflowDomainID(attr.GetDomainId()),
 		tag.WorkflowID(attr.GetWorkflowId()),

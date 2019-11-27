@@ -3415,8 +3415,8 @@ func (wh *WorkflowHandler) GetDomainReplicationMessages(
 	}
 
 	lastMessageID := defaultLastMessageID
-	if request.IsSetLastRetrivedMessageId() {
-		lastMessageID = int(request.GetLastRetrivedMessageId())
+	if request.IsSetLastRetrievedMessageId() {
+		lastMessageID = int(request.GetLastRetrievedMessageId())
 	}
 
 	if lastMessageID == defaultLastMessageID {
@@ -3450,8 +3450,8 @@ func (wh *WorkflowHandler) GetDomainReplicationMessages(
 
 	return &replicator.GetDomainReplicationMessagesResponse{
 		Messages: &replicator.ReplicationMessages{
-			ReplicationTasks:      replicationTasks,
-			LastRetrivedMessageId: common.Int64Ptr(int64(lastMessageID)),
+			ReplicationTasks:       replicationTasks,
+			LastRetrievedMessageId: common.Int64Ptr(int64(lastMessageID)),
 		},
 	}, nil
 }
