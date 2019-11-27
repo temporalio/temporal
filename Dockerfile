@@ -129,6 +129,31 @@ COPY --from=builder /temporal/cadence /usr/local/bin
 
 ENTRYPOINT ["cadence"]
 
+# All candence tool binaries 
+FROM alpine AS cadence-admin-tools
+
+ENV CADENCE_HOME /etc/cadence
+RUN mkdir -p /etc/cadence
+
+COPY --from=tcheck /go/bin/tcheck /usr/local/bin
+COPY --from=dockerize /usr/local/bin/dockerize /usr/local/bin
+COPY --from=builder /temporal/cadence-cassandra-tool /usr/local/bin
+COPY --from=builder /temporal/cadence-sql-tool /usr/local/bin
+COPY --from=builder /temporal/cadence /usr/local/bin
+COPY --from=builder /temporal/cadence-server /usr/local/bin
+COPY --from=builder /temporal/schema /etc/cadence/schema
+COPY --from=tcheck /go/bin/tcheck /usr/local/bin
+COPY --from=builder /temporal/cadence /usr/local/bin
+
+COPY docker/entrypoint.sh /docker-entrypoint.sh
+COPY config/dynamicconfig /etc/cadence/config/dynamicconfig
+COPY docker/config_template.yaml /etc/cadence/config
+COPY docker/start-cadence.sh /start-cadence.sh
+
+WORKDIR /usr/local/bin
+
+# keep the container running
+ENTRYPOINT ["tail", "-f", "/dev/null"]
 
 # Final image
 FROM cadence-${TARGET}
