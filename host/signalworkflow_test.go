@@ -36,7 +36,6 @@ import (
 	"github.com/temporalio/temporal-proto/enums"
 	"github.com/temporalio/temporal-proto/errordetails"
 	"github.com/temporalio/temporal-proto/workflowservice"
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/log/tag"
 )
 
@@ -63,7 +62,8 @@ func (s *integrationSuite) TestSignalWorkflow() {
 		Identity:   identity,
 	})
 	s.NotNil(err0)
-	s.IsType(&workflow.EntityNotExistsError{}, err0)
+	st0 := yarpcerrors.FromError(err0)
+	s.Equal(yarpcerrors.CodeNotFound, st0.Code())
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -225,7 +225,8 @@ func (s *integrationSuite) TestSignalWorkflow() {
 		Identity:   identity,
 	})
 	s.NotNil(err)
-	s.IsType(&workflow.EntityNotExistsError{}, err)
+	st := yarpcerrors.FromError(err)
+	s.Equal(yarpcerrors.CodeNotFound, st.Code())
 }
 
 func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
@@ -1485,7 +1486,6 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	// test policy WorkflowIdReusePolicyRejectDuplicate
 	signalName := "my signal"
 	signalInput := []byte("my signal input.")
-	wfIDReusePolicy := enums.WorkflowIdReusePolicyRejectDuplicate
 	sRequest := &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
 		Domain:                              s.domainName,
@@ -1498,11 +1498,11 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 		SignalName:                          signalName,
 		SignalInput:                         signalInput,
 		Identity:                            identity,
-		WorkflowIdReusePolicy:               wfIDReusePolicy,
+		WorkflowIdReusePolicy:               enums.WorkflowIdReusePolicyRejectDuplicate,
 	}
 	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 	resp, err := s.engineGRPC.SignalWithStartWorkflowExecution(ctx, sRequest)
-	s.Nil(resp)
+	s.Equal(&workflowservice.SignalWithStartWorkflowExecutionResponse{RunId: ""}, resp)
 	s.Error(err)
 	st := yarpcerrors.FromError(err)
 	s.Equal(yarpcerrors.CodeAlreadyExists, st.Code())
@@ -1510,10 +1510,10 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	s.IsType(&errordetails.WorkflowExecutionAlreadyStartedFailure{}, protobuf.GetErrorDetails(err)[0])
 
 	// test policy WorkflowIdReusePolicyAllowDuplicateFailedOnly
-	wfIDReusePolicy = enums.WorkflowIdReusePolicyAllowDuplicateFailedOnly
+	sRequest.WorkflowIdReusePolicy = enums.WorkflowIdReusePolicyAllowDuplicateFailedOnly
 	ctx, _ = context.WithTimeout(context.Background(), 5*time.Second)
 	resp, err = s.engineGRPC.SignalWithStartWorkflowExecution(ctx, sRequest)
-	s.Nil(resp)
+	s.Equal(&workflowservice.SignalWithStartWorkflowExecutionResponse{RunId: ""}, resp)
 	s.Error(err)
 	st = yarpcerrors.FromError(err)
 	s.Equal(yarpcerrors.CodeAlreadyExists, st.Code())
@@ -1521,7 +1521,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	s.IsType(&errordetails.WorkflowExecutionAlreadyStartedFailure{}, protobuf.GetErrorDetails(err)[0])
 
 	// test policy WorkflowIdReusePolicyAllowDuplicate
-	wfIDReusePolicy = enums.WorkflowIdReusePolicyAllowDuplicate
+	sRequest.WorkflowIdReusePolicy = enums.WorkflowIdReusePolicyAllowDuplicate
 	ctx, _ = context.WithTimeout(context.Background(), 5*time.Second)
 	resp, err = s.engineGRPC.SignalWithStartWorkflowExecution(ctx, sRequest)
 	s.Nil(err)
@@ -1540,7 +1540,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	s.Nil(err)
 
 	// test policy WorkflowIdReusePolicyAllowDuplicateFailedOnly success start
-	wfIDReusePolicy = enums.WorkflowIdReusePolicyAllowDuplicateFailedOnly
+	sRequest.WorkflowIdReusePolicy = enums.WorkflowIdReusePolicyAllowDuplicateFailedOnly
 	resp, err = s.engineGRPC.SignalWithStartWorkflowExecution(createContext(), sRequest)
 	s.Nil(err)
 	s.NotEmpty(resp.GetRunId())
