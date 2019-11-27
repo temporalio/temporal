@@ -99,7 +99,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 			return nil, []*commonproto.Decision{{
 				DecisionType: enums.DecisionTypeScheduleActivityTask,
 				Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    strconv.Itoa(int(1)),
+					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonproto.ActivityType{Name: activityName},
 					TaskList:                      &commonproto.TaskList{Name: tl},
 					Input:                         buf.Bytes(),
@@ -273,7 +273,7 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 			return nil, []*commonproto.Decision{{
 				DecisionType: enums.DecisionTypeScheduleActivityTask,
 				Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    strconv.Itoa(int(1)),
+					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonproto.ActivityType{Name: activityName},
 					TaskList:                      &commonproto.TaskList{Name: tl},
 					Input:                         buf.Bytes(),
@@ -1179,7 +1179,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 			return nil, []*commonproto.Decision{{
 				DecisionType: enums.DecisionTypeScheduleActivityTask,
 				Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    strconv.Itoa(int(1)),
+					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonproto.ActivityType{Name: activityName},
 					TaskList:                      &commonproto.TaskList{Name: tl},
 					Input:                         buf.Bytes(),
