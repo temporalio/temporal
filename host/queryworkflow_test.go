@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"go.uber.org/yarpc/yarpcerrors"
 
 	commonproto "github.com/temporalio/temporal-proto/common"
 	"github.com/temporalio/temporal-proto/enums"
@@ -85,7 +86,7 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 			return nil, []*commonproto.Decision{{
 				DecisionType: enums.DecisionTypeScheduleActivityTask,
 				Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    strconv.Itoa(int(1)),
+					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonproto.ActivityType{Name: activityName},
 					TaskList:                      &commonproto.TaskList{Name: tl},
 					Input:                         buf.Bytes(),
@@ -192,9 +193,9 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 	}
 	queryResult = <-queryResultCh
 	s.NotNil(queryResult.Err)
-	queryFailError, ok := queryResult.Err.(*enums.QueryFailedError)
-	s.True(ok)
-	s.Equal("unknown-query-type", queryFailError.Message)
+	st := yarpcerrors.FromError(queryResult.Err)
+	s.Equal(yarpcerrors.CodeInternal, st.Code())
+	s.Equal("unknown-query-type", st.Message())
 }
 
 func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
@@ -246,7 +247,7 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 			return nil, []*commonproto.Decision{{
 				DecisionType: enums.DecisionTypeScheduleActivityTask,
 				Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    strconv.Itoa(int(1)),
+					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonproto.ActivityType{Name: activityName},
 					TaskList:                      &commonproto.TaskList{Name: tl},
 					Input:                         buf.Bytes(),
@@ -388,7 +389,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 			return nil, []*commonproto.Decision{{
 				DecisionType: enums.DecisionTypeScheduleActivityTask,
 				Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    strconv.Itoa(int(1)),
+					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonproto.ActivityType{Name: activityName},
 					TaskList:                      &commonproto.TaskList{Name: tl},
 					Input:                         buf.Bytes(),
@@ -462,7 +463,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	}
 
 	// call QueryWorkflow in separate goroutinue (because it is blocking). That will generate a query task
-	go queryWorkflowFn(queryType, nil)
+	go queryWorkflowFn(queryType, enums.QueryRejectConditionNone)
 	// process that query task, which should respond via RespondQueryTaskCompleted
 	for {
 		// loop until process the query task
@@ -481,7 +482,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	queryResultString := string(queryResult.Resp.QueryResult)
 	s.Equal("query-result", queryResultString)
 
-	go queryWorkflowFn("invalid-query-type", nil)
+	go queryWorkflowFn("invalid-query-type", enums.QueryRejectConditionNone)
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller.PollAndProcessDecisionTask(false, false)
@@ -493,15 +494,15 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	}
 	queryResult = <-queryResultCh
 	s.NotNil(queryResult.Err)
-	queryFailError, ok := queryResult.Err.(*enums.QueryFailedError)
-	s.True(ok)
-	s.Equal("unknown-query-type", queryFailError.Message)
+	st := yarpcerrors.FromError(queryResult.Err)
+	s.Equal(yarpcerrors.CodeInternal, st.Code())
+	s.Equal("unknown-query-type", st.Message())
 
 	// advance the state of the decider
 	_, err = poller.PollAndProcessDecisionTask(false, false)
 	s.NoError(err)
 
-	go queryWorkflowFn(queryType, nil)
+	go queryWorkflowFn(queryType, enums.QueryRejectConditionNone)
 	// process that query task, which should respond via RespondQueryTaskCompleted
 	for {
 		// loop until process the query task
@@ -594,7 +595,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 			return nil, []*commonproto.Decision{{
 				DecisionType: enums.DecisionTypeScheduleActivityTask,
 				Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    strconv.Itoa(int(1)),
+					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonproto.ActivityType{Name: activityName},
 					TaskList:                      &commonproto.TaskList{Name: tl},
 					Input:                         buf.Bytes(),
@@ -699,7 +700,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 
 	// call QueryWorkflow in separate goroutine (because it is blocking). That will generate a query task
 	// notice that the query comes after signal here but is consistent so it should reflect the state of the signal having been applied
-	go queryWorkflowFn(queryType, nil)
+	go queryWorkflowFn(queryType, enums.QueryRejectConditionNone)
 	// ensure query has had enough time to at least start before a decision task is polled
 	// if the decision task containing the signal is polled before query is started it will not impact
 	// correctness but it will mean query will be able to be dispatched directly after signal
@@ -776,7 +777,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 			return nil, []*commonproto.Decision{{
 				DecisionType: enums.DecisionTypeScheduleActivityTask,
 				Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    strconv.Itoa(int(1)),
+					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonproto.ActivityType{Name: activityName},
 					TaskList:                      &commonproto.TaskList{Name: tl},
 					Input:                         buf.Bytes(),
@@ -875,7 +876,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 
 	// call QueryWorkflow in separate goroutine (because it is blocking). That will generate a query task
 	// notice that the query comes after signal here but is consistent so it should reflect the state of the signal having been applied
-	go queryWorkflowFn(queryType, nil)
+	go queryWorkflowFn(queryType, enums.QueryRejectConditionNone)
 	// ensure query has had enough time to at least start before a decision task is polled
 	// if the decision task containing the signal is polled before query is started it will not impact
 	// correctness but it will mean query will be able to be dispatched directly after signal
@@ -888,7 +889,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 	// wait for query to timeout
 	queryResult := <-queryResultCh
 	s.Error(queryResult.Err) // got a timeout error
-	s.Nil(queryResult.Resp)
+	s.Equal(&workflowservice.QueryWorkflowResponse{}, queryResult.Resp)
 }
 
 func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonSticky() {
@@ -936,7 +937,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 			return nil, []*commonproto.Decision{{
 				DecisionType: enums.DecisionTypeScheduleActivityTask,
 				Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    strconv.Itoa(int(1)),
+					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonproto.ActivityType{Name: activityName},
 					TaskList:                      &commonproto.TaskList{Name: tl},
 					Input:                         buf.Bytes(),
@@ -1043,7 +1044,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 		// at the time the query comes in there will be a started decision task
 		// only once signal completes can queryWorkflow unblock
 		<-time.After(time.Second)
-		queryWorkflowFn(queryType, nil)
+		queryWorkflowFn(queryType, enums.QueryRejectConditionNone)
 	}()
 
 	_, err = poller.PollAndProcessDecisionTask(false, false)
@@ -1122,7 +1123,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 			return nil, []*commonproto.Decision{{
 				DecisionType: enums.DecisionTypeScheduleActivityTask,
 				Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    strconv.Itoa(int(1)),
+					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonproto.ActivityType{Name: activityName},
 					TaskList:                      &commonproto.TaskList{Name: tl},
 					Input:                         buf.Bytes(),
@@ -1247,7 +1248,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 		})
 		s.Nil(err)
 
-		queryWorkflowFn(queryType, nil)
+		queryWorkflowFn(queryType, enums.QueryRejectConditionNone)
 	}()
 
 	_, err = poller.PollAndProcessDecisionTaskWithSticky(false, false)
@@ -1332,7 +1333,7 @@ func (s *integrationSuite) TestQueryWorkflow_BeforeFirstDecision() {
 			return nil, []*commonproto.Decision{{
 				DecisionType: enums.DecisionTypeScheduleActivityTask,
 				Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    strconv.Itoa(int(1)),
+					ActivityId:                    strconv.Itoa(1),
 					ActivityType:                  &commonproto.ActivityType{Name: activityName},
 					TaskList:                      &commonproto.TaskList{Name: tl},
 					Input:                         buf.Bytes(),
@@ -1398,7 +1399,8 @@ func (s *integrationSuite) TestQueryWorkflow_BeforeFirstDecision() {
 	}
 
 	// drop first decision task
-	poller.PollAndProcessDecisionTask(false, true /* drop first decision task */)
+	_, err := poller.PollAndProcessDecisionTask(false, true /* drop first decision task */)
+	s.NoError(err)
 
 	// call QueryWorkflow before first decision task completed
 	go queryWorkflowFn(queryType)
