@@ -1806,7 +1806,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 		if err != nil {
 			return nil, wh.error(errInvalidNextPageToken, scope)
 		}
-		if execution.RunId != nil && execution.GetRunId() != token.RunID {
+		if (execution.RunId != nil || execution.GetRunId() != "") && execution.GetRunId() != token.RunID {
 			return nil, wh.error(errNextPageTokenRunIDMismatch, scope)
 		}
 
@@ -3421,7 +3421,7 @@ func (wh *WorkflowHandler) GetDomainReplicationMessages(
 	}
 
 	lastMessageID := defaultLastMessageID
-	if request.IsSetLastRetrivedMessageId() {
+	if request.IsSetLastRetrivedMessageId() && request.GetLastRetrivedMessageId() > 0 {
 		lastMessageID = int(request.GetLastRetrivedMessageId())
 	}
 
@@ -3441,7 +3441,7 @@ func (wh *WorkflowHandler) GetDomainReplicationMessages(
 	}
 
 	lastProcessedMessageID := defaultLastMessageID
-	if request.IsSetLastProcessedMessageId() {
+	if request.IsSetLastProcessedMessageId() && request.GetLastProcessedMessageId() > 0 {
 		lastProcessedMessageID = int(request.GetLastProcessedMessageId())
 	}
 

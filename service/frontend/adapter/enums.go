@@ -41,10 +41,18 @@ func toProtoArchivalStatus(in *shared.ArchivalStatus) enums.ArchivalStatus {
 	return enums.ArchivalStatus(*in)
 }
 
+func toProtoWorkflowExecutionCloseStatus(in *shared.WorkflowExecutionCloseStatus) enums.WorkflowExecutionCloseStatus {
+	if in == nil {
+		return enums.WorkflowExecutionCloseStatusRunning
+	}
+	return enums.WorkflowExecutionCloseStatus(*in + 1)
+}
+
 func toThriftTaskListKind(in enums.TaskListKind) *shared.TaskListKind {
 	ret := shared.TaskListKind(in)
 	return &ret
 }
+
 func toThriftWorkflowIDReusePolicy(in enums.WorkflowIdReusePolicy) *shared.WorkflowIdReusePolicy {
 	ret := shared.WorkflowIdReusePolicy(in)
 	return &ret
