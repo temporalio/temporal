@@ -31,7 +31,7 @@ import (
 
 	"github.com/pborman/uuid"
 
-	"github.com/temporalio/temporal-proto/common"
+	commonproto "github.com/temporalio/temporal-proto/common"
 	"github.com/temporalio/temporal-proto/enums"
 	"github.com/temporalio/temporal-proto/workflowservice"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -45,11 +45,11 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 	identity := "worker1"
 	activityName := "activity_timer"
 
-	workflowType := &common.WorkflowType{Name: wt}
+	workflowType := &commonproto.WorkflowType{Name: wt}
 
-	taskList := &common.TaskList{Name: tl}
+	taskList := &commonproto.TaskList{Name: tl}
 
-	header := &common.Header{
+	header := &commonproto.Header{
 		Fields: map[string][]byte{"tracing": []byte("sample data")},
 	}
 
@@ -75,19 +75,19 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 	activityCount := int32(1)
 	activityCounter := int32(0)
 
-	dtHandler := func(execution *common.WorkflowExecution, wt *common.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *common.History) ([]byte, []*common.Decision, error) {
+	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []byte(strconv.Itoa(int(activityCounter))), []*common.Decision{{
+			return []byte(strconv.Itoa(int(activityCounter))), []*commonproto.Decision{{
 				DecisionType: enums.DecisionTypeScheduleActivityTask,
-				Attributes: &common.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &common.ScheduleActivityTaskDecisionAttributes{
+				Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
-					ActivityType:                  &common.ActivityType{Name: activityName},
-					TaskList:                      &common.TaskList{Name: tl},
+					ActivityType:                  &commonproto.ActivityType{Name: activityName},
+					TaskList:                      &commonproto.TaskList{Name: tl},
 					Input:                         buf.Bytes(),
 					Header:                        header,
 					ScheduleToCloseTimeoutSeconds: 15,
@@ -101,16 +101,16 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 		s.Logger.Info("Completing Workflow.")
 
 		workflowComplete = true
-		return []byte(strconv.Itoa(int(activityCounter))), []*common.Decision{{
+		return []byte(strconv.Itoa(int(activityCounter))), []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
-			Attributes: &common.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &common.CompleteWorkflowExecutionDecisionAttributes{
+			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done."),
 			}},
 		}}, nil
 	}
 
 	activityExecutedCount := 0
-	atHandler := func(execution *common.WorkflowExecution, activityType *common.ActivityType,
+	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 		s.Equal(id, execution.GetWorkflowId())
 		s.Equal(activityName, activityType.GetName())
@@ -151,7 +151,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 	s.True(activityExecutedCount == 1)
 
 	// go over history and verify that the activity task scheduled event has header on it
-	events := s.getHistory(s.domainName, &common.WorkflowExecution{
+	events := s.getHistoryGRPC(s.domainName, &commonproto.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.GetRunId(),
 	})
@@ -169,9 +169,9 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 	identity := "worker1"
 	activityName := "activity_heartbeat_retry"
 
-	workflowType := &common.WorkflowType{Name: wt}
+	workflowType := &commonproto.WorkflowType{Name: wt}
 
-	taskList := &common.TaskList{Name: tl}
+	taskList := &commonproto.TaskList{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
@@ -193,23 +193,23 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 	workflowComplete := false
 	activitiesScheduled := false
 
-	dtHandler := func(execution *common.WorkflowExecution, wt *common.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *common.History) ([]byte, []*common.Decision, error) {
+	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
 		if !activitiesScheduled {
 			activitiesScheduled = true
-			return nil, []*common.Decision{
+			return nil, []*commonproto.Decision{
 				{
 					DecisionType: enums.DecisionTypeScheduleActivityTask,
-					Attributes: &common.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &common.ScheduleActivityTaskDecisionAttributes{
+					Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
 						ActivityId:                    "0",
-						ActivityType:                  &common.ActivityType{Name: activityName},
-						TaskList:                      &common.TaskList{Name: tl},
+						ActivityType:                  &commonproto.ActivityType{Name: activityName},
+						TaskList:                      &commonproto.TaskList{Name: tl},
 						Input:                         nil,
 						ScheduleToCloseTimeoutSeconds: 4,
 						ScheduleToStartTimeoutSeconds: 4,
 						StartToCloseTimeoutSeconds:    4,
 						HeartbeatTimeoutSeconds:       1,
-						RetryPolicy: &common.RetryPolicy{
+						RetryPolicy: &commonproto.RetryPolicy{
 							InitialIntervalInSeconds:    1,
 							MaximumAttempts:             3,
 							MaximumIntervalInSeconds:    1,
@@ -223,9 +223,9 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 
 		workflowComplete = true
 		s.Logger.Info("Completing Workflow.")
-		return nil, []*common.Decision{{
+		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
-			Attributes: &common.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &common.CompleteWorkflowExecutionDecisionAttributes{
+			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done."),
 			}},
 		}}, nil
@@ -233,7 +233,7 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 
 	activityExecutedCount := 0
 	heartbeatDetails := []byte("details")
-	atHandler := func(execution *common.WorkflowExecution, activityType *common.ActivityType,
+	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 		s.Equal(id, execution.GetWorkflowId())
 		s.Equal(activityName, activityType.GetName())
@@ -269,7 +269,7 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 	describeWorkflowExecution := func() (*workflowservice.DescribeWorkflowExecutionResponse, error) {
 		return s.engineGRPC.DescribeWorkflowExecution(createContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Domain: s.domainName,
-			Execution: &common.WorkflowExecution{
+			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
 			},
@@ -343,9 +343,9 @@ func (s *integrationSuite) TestActivityRetry() {
 	activityName := "activity_retry"
 	timeoutActivityName := "timeout_activity"
 
-	workflowType := &common.WorkflowType{Name: wt}
+	workflowType := &commonproto.WorkflowType{Name: wt}
 
-	taskList := &common.TaskList{Name: tl}
+	taskList := &commonproto.TaskList{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
@@ -366,26 +366,26 @@ func (s *integrationSuite) TestActivityRetry() {
 
 	workflowComplete := false
 	activitiesScheduled := false
-	var activityAScheduled, activityAFailed, activityBScheduled, activityBTimeout *common.HistoryEvent
+	var activityAScheduled, activityAFailed, activityBScheduled, activityBTimeout *commonproto.HistoryEvent
 
-	dtHandler := func(execution *common.WorkflowExecution, wt *common.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *common.History) ([]byte, []*common.Decision, error) {
+	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
 		if !activitiesScheduled {
 			activitiesScheduled = true
 
-			return nil, []*common.Decision{
+			return nil, []*commonproto.Decision{
 				{
 					DecisionType: enums.DecisionTypeScheduleActivityTask,
-					Attributes: &common.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &common.ScheduleActivityTaskDecisionAttributes{
+					Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
 						ActivityId:                    "A",
-						ActivityType:                  &common.ActivityType{Name: activityName},
-						TaskList:                      &common.TaskList{Name: tl},
+						ActivityType:                  &commonproto.ActivityType{Name: activityName},
+						TaskList:                      &commonproto.TaskList{Name: tl},
 						Input:                         []byte("1"),
 						ScheduleToCloseTimeoutSeconds: 4,
 						ScheduleToStartTimeoutSeconds: 4,
 						StartToCloseTimeoutSeconds:    4,
 						HeartbeatTimeoutSeconds:       1,
-						RetryPolicy: &common.RetryPolicy{
+						RetryPolicy: &commonproto.RetryPolicy{
 							InitialIntervalInSeconds:    1,
 							MaximumAttempts:             3,
 							MaximumIntervalInSeconds:    1,
@@ -396,10 +396,10 @@ func (s *integrationSuite) TestActivityRetry() {
 					}}},
 				{
 					DecisionType: enums.DecisionTypeScheduleActivityTask,
-					Attributes: &common.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &common.ScheduleActivityTaskDecisionAttributes{
+					Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
 						ActivityId:                    "B",
-						ActivityType:                  &common.ActivityType{Name: timeoutActivityName},
-						TaskList:                      &common.TaskList{Name: "no_worker_tasklist"},
+						ActivityType:                  &commonproto.ActivityType{Name: timeoutActivityName},
+						TaskList:                      &commonproto.TaskList{Name: "no_worker_tasklist"},
 						Input:                         []byte("2"),
 						ScheduleToCloseTimeoutSeconds: 5,
 						ScheduleToStartTimeoutSeconds: 5,
@@ -434,19 +434,19 @@ func (s *integrationSuite) TestActivityRetry() {
 		if activityAFailed != nil && activityBTimeout != nil {
 			s.Logger.Info("Completing Workflow.")
 			workflowComplete = true
-			return nil, []*common.Decision{{
+			return nil, []*commonproto.Decision{{
 				DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
-				Attributes: &common.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &common.CompleteWorkflowExecutionDecisionAttributes{
+				Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
 					Result: []byte("Done."),
 				}},
 			}}, nil
 		}
 
-		return nil, []*common.Decision{}, nil
+		return nil, []*commonproto.Decision{}, nil
 	}
 
 	activityExecutedCount := 0
-	atHandler := func(execution *common.WorkflowExecution, activityType *common.ActivityType,
+	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 		s.Equal(id, execution.GetWorkflowId())
 		s.Equal(activityName, activityType.GetName())
@@ -485,7 +485,7 @@ func (s *integrationSuite) TestActivityRetry() {
 	describeWorkflowExecution := func() (*workflowservice.DescribeWorkflowExecutionResponse, error) {
 		return s.engineGRPC.DescribeWorkflowExecution(createContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Domain: s.domainName,
-			Execution: &common.WorkflowExecution{
+			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
 			},
@@ -530,7 +530,7 @@ func (s *integrationSuite) TestActivityRetry() {
 		s.Logger.Info("Processing decision task:", tag.Counter(i))
 		_, err := poller.PollAndProcessDecisionTaskWithoutRetry(false, false)
 		if err != nil {
-			s.printWorkflowHistory(s.domainName, &common.WorkflowExecution{
+			s.printWorkflowHistoryGRPC(s.domainName, &commonproto.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.GetRunId(),
 			})
@@ -553,9 +553,9 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	identity := "worker1"
 	activityName := "activity_timer"
 
-	workflowType := &common.WorkflowType{Name: wt}
+	workflowType := &commonproto.WorkflowType{Name: wt}
 
-	taskList := &common.TaskList{Name: tl}
+	taskList := &commonproto.TaskList{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
@@ -578,8 +578,8 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	activityCount := int32(1)
 	activityCounter := int32(0)
 
-	dtHandler := func(execution *common.WorkflowExecution, wt *common.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *common.History) ([]byte, []*common.Decision, error) {
+	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
 
 		s.Logger.Info("Calling DecisionTask Handler: %d, %d.", tag.Counter(int(activityCounter)), tag.Number(int64(activityCount)))
 
@@ -588,12 +588,12 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []byte(strconv.Itoa(int(activityCounter))), []*common.Decision{{
+			return []byte(strconv.Itoa(int(activityCounter))), []*commonproto.Decision{{
 				DecisionType: enums.DecisionTypeScheduleActivityTask,
-				Attributes: &common.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &common.ScheduleActivityTaskDecisionAttributes{
+				Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
-					ActivityType:                  &common.ActivityType{Name: activityName},
-					TaskList:                      &common.TaskList{Name: tl},
+					ActivityType:                  &commonproto.ActivityType{Name: activityName},
+					TaskList:                      &commonproto.TaskList{Name: tl},
 					Input:                         buf.Bytes(),
 					ScheduleToCloseTimeoutSeconds: 15,
 					ScheduleToStartTimeoutSeconds: 1,
@@ -604,16 +604,16 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 		}
 
 		workflowComplete = true
-		return []byte(strconv.Itoa(int(activityCounter))), []*common.Decision{{
+		return []byte(strconv.Itoa(int(activityCounter))), []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
-			Attributes: &common.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &common.CompleteWorkflowExecutionDecisionAttributes{
+			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done."),
 			}},
 		}}, nil
 	}
 
 	activityExecutedCount := 0
-	atHandler := func(execution *common.WorkflowExecution, activityType *common.ActivityType,
+	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 		s.Equal(id, execution.GetWorkflowId())
 		s.Equal(activityName, activityType.GetName())
@@ -654,9 +654,9 @@ func (s *integrationSuite) TestActivityTimeouts() {
 	identity := "worker1"
 	activityName := "timeout_activity"
 
-	workflowType := &common.WorkflowType{Name: wt}
+	workflowType := &commonproto.WorkflowType{Name: wt}
 
-	taskList := &common.TaskList{Name: tl}
+	taskList := &commonproto.TaskList{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
@@ -677,20 +677,20 @@ func (s *integrationSuite) TestActivityTimeouts() {
 
 	workflowComplete := false
 	activitiesScheduled := false
-	activitiesMap := map[int64]*common.HistoryEvent{}
+	activitiesMap := map[int64]*commonproto.HistoryEvent{}
 	failWorkflow := false
 	failReason := ""
 	var activityATimedout, activityBTimedout, activityCTimedout, activityDTimedout bool
-	dtHandler := func(execution *common.WorkflowExecution, wt *common.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *common.History) ([]byte, []*common.Decision, error) {
+	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
 		if !activitiesScheduled {
 			activitiesScheduled = true
-			return nil, []*common.Decision{{
+			return nil, []*commonproto.Decision{{
 				DecisionType: enums.DecisionTypeScheduleActivityTask,
-				Attributes: &common.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &common.ScheduleActivityTaskDecisionAttributes{
+				Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    "A",
-					ActivityType:                  &common.ActivityType{Name: activityName},
-					TaskList:                      &common.TaskList{Name: "NoWorker"},
+					ActivityType:                  &commonproto.ActivityType{Name: activityName},
+					TaskList:                      &commonproto.TaskList{Name: "NoWorker"},
 					Input:                         []byte("ScheduleToStart"),
 					ScheduleToCloseTimeoutSeconds: 35,
 					ScheduleToStartTimeoutSeconds: 3, // ActivityID A is expected to timeout using ScheduleToStart
@@ -699,10 +699,10 @@ func (s *integrationSuite) TestActivityTimeouts() {
 				},
 				}}, {
 				DecisionType: enums.DecisionTypeScheduleActivityTask,
-				Attributes: &common.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &common.ScheduleActivityTaskDecisionAttributes{
+				Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    "B",
-					ActivityType:                  &common.ActivityType{Name: activityName},
-					TaskList:                      &common.TaskList{Name: tl},
+					ActivityType:                  &commonproto.ActivityType{Name: activityName},
+					TaskList:                      &commonproto.TaskList{Name: tl},
 					Input:                         []byte("ScheduleClose"),
 					ScheduleToCloseTimeoutSeconds: 7, // ActivityID B is expected to timeout using ScheduleClose
 					ScheduleToStartTimeoutSeconds: 5,
@@ -711,10 +711,10 @@ func (s *integrationSuite) TestActivityTimeouts() {
 				},
 				}}, {
 				DecisionType: enums.DecisionTypeScheduleActivityTask,
-				Attributes: &common.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &common.ScheduleActivityTaskDecisionAttributes{
+				Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    "C",
-					ActivityType:                  &common.ActivityType{Name: activityName},
-					TaskList:                      &common.TaskList{Name: tl},
+					ActivityType:                  &commonproto.ActivityType{Name: activityName},
+					TaskList:                      &commonproto.TaskList{Name: tl},
 					Input:                         []byte("StartToClose"),
 					ScheduleToCloseTimeoutSeconds: 15,
 					ScheduleToStartTimeoutSeconds: 1,
@@ -723,10 +723,10 @@ func (s *integrationSuite) TestActivityTimeouts() {
 				},
 				}}, {
 				DecisionType: enums.DecisionTypeScheduleActivityTask,
-				Attributes: &common.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &common.ScheduleActivityTaskDecisionAttributes{
+				Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    "D",
-					ActivityType:                  &common.ActivityType{Name: activityName},
-					TaskList:                      &common.TaskList{Name: tl},
+					ActivityType:                  &commonproto.ActivityType{Name: activityName},
+					TaskList:                      &commonproto.TaskList{Name: tl},
 					Input:                         []byte("Heartbeat"),
 					ScheduleToCloseTimeoutSeconds: 35,
 					ScheduleToStartTimeoutSeconds: 20,
@@ -744,9 +744,9 @@ func (s *integrationSuite) TestActivityTimeouts() {
 					timeoutEvent := event.GetActivityTaskTimedOutEventAttributes()
 					scheduledEvent, ok := activitiesMap[timeoutEvent.GetScheduledEventId()]
 					if !ok {
-						return nil, []*common.Decision{{
+						return nil, []*commonproto.Decision{{
 							DecisionType: enums.DecisionTypeFailWorkflowExecution,
-							Attributes: &common.Decision_FailWorkflowExecutionDecisionAttributes{FailWorkflowExecutionDecisionAttributes: &common.FailWorkflowExecutionDecisionAttributes{
+							Attributes: &commonproto.Decision_FailWorkflowExecutionDecisionAttributes{FailWorkflowExecutionDecisionAttributes: &commonproto.FailWorkflowExecutionDecisionAttributes{
 								Reason: "ScheduledEvent not found.",
 							}},
 						}}, nil
@@ -789,9 +789,9 @@ func (s *integrationSuite) TestActivityTimeouts() {
 		if failWorkflow {
 			s.Logger.Error("Failing workflow.")
 			workflowComplete = true
-			return nil, []*common.Decision{{
+			return nil, []*commonproto.Decision{{
 				DecisionType: enums.DecisionTypeFailWorkflowExecution,
-				Attributes: &common.Decision_FailWorkflowExecutionDecisionAttributes{FailWorkflowExecutionDecisionAttributes: &common.FailWorkflowExecutionDecisionAttributes{
+				Attributes: &commonproto.Decision_FailWorkflowExecutionDecisionAttributes{FailWorkflowExecutionDecisionAttributes: &commonproto.FailWorkflowExecutionDecisionAttributes{
 					Reason: failReason,
 				}},
 			}}, nil
@@ -800,18 +800,18 @@ func (s *integrationSuite) TestActivityTimeouts() {
 		if activityATimedout && activityBTimedout && activityCTimedout && activityDTimedout {
 			s.Logger.Info("Completing Workflow.")
 			workflowComplete = true
-			return nil, []*common.Decision{{
+			return nil, []*commonproto.Decision{{
 				DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
-				Attributes: &common.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &common.CompleteWorkflowExecutionDecisionAttributes{
+				Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
 					Result: []byte("Done."),
 				}},
 			}}, nil
 		}
 
-		return nil, []*common.Decision{}, nil
+		return nil, []*commonproto.Decision{}, nil
 	}
 
-	atHandler := func(execution *common.WorkflowExecution, activityType *common.ActivityType,
+	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 		s.Equal(id, execution.GetWorkflowId())
 		s.Equal(activityName, activityType.GetName())
@@ -886,9 +886,9 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 	identity := "worker1"
 	activityName := "timeout_activity"
 
-	workflowType := &common.WorkflowType{Name: wt}
+	workflowType := &commonproto.WorkflowType{Name: wt}
 
-	taskList := &common.TaskList{Name: tl}
+	taskList := &commonproto.TaskList{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
@@ -914,19 +914,19 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 	failReason := ""
 	activityCount := 10
 	activitiesTimedout := 0
-	dtHandler := func(execution *common.WorkflowExecution, wt *common.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *common.History) ([]byte, []*common.Decision, error) {
+	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
 		if !activitiesScheduled {
 			activitiesScheduled = true
-			decisions := []*common.Decision{}
+			var decisions []*commonproto.Decision
 			for i := 0; i < activityCount; i++ {
 				aID := fmt.Sprintf("activity_%v", i)
-				d := &common.Decision{
+				d := &commonproto.Decision{
 					DecisionType: enums.DecisionTypeScheduleActivityTask,
-					Attributes: &common.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &common.ScheduleActivityTaskDecisionAttributes{
+					Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
 						ActivityId:                    aID,
-						ActivityType:                  &common.ActivityType{Name: activityName},
-						TaskList:                      &common.TaskList{Name: tl},
+						ActivityType:                  &commonproto.ActivityType{Name: activityName},
+						TaskList:                      &commonproto.TaskList{Name: tl},
 						Input:                         []byte("Heartbeat"),
 						ScheduleToCloseTimeoutSeconds: 60,
 						ScheduleToStartTimeoutSeconds: 5,
@@ -979,9 +979,9 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 		if failWorkflow {
 			s.Logger.Error("Failing workflow. Reason: %v", tag.Value(failReason))
 			workflowComplete = true
-			return nil, []*common.Decision{{
+			return nil, []*commonproto.Decision{{
 				DecisionType: enums.DecisionTypeFailWorkflowExecution,
-				Attributes: &common.Decision_FailWorkflowExecutionDecisionAttributes{FailWorkflowExecutionDecisionAttributes: &common.FailWorkflowExecutionDecisionAttributes{
+				Attributes: &commonproto.Decision_FailWorkflowExecutionDecisionAttributes{FailWorkflowExecutionDecisionAttributes: &commonproto.FailWorkflowExecutionDecisionAttributes{
 					Reason: failReason,
 				}},
 			}}, nil
@@ -990,18 +990,18 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 		if activitiesTimedout == activityCount {
 			s.Logger.Info("Completing Workflow.")
 			workflowComplete = true
-			return nil, []*common.Decision{{
+			return nil, []*commonproto.Decision{{
 				DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
-				Attributes: &common.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &common.CompleteWorkflowExecutionDecisionAttributes{
+				Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
 					Result: []byte("Done."),
 				}},
 			}}, nil
 		}
 
-		return nil, []*common.Decision{}, nil
+		return nil, []*commonproto.Decision{}, nil
 	}
 
-	atHandler := func(execution *common.WorkflowExecution, activityType *common.ActivityType,
+	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 		s.Logger.Info("Starting heartbeat activity. ID", tag.WorkflowActivityID(activityID))
 		for i := 0; i < 10; i++ {
@@ -1075,9 +1075,9 @@ func (s *integrationSuite) TestActivityCancellation() {
 	identity := "worker1"
 	activityName := "activity_timer"
 
-	workflowType := &common.WorkflowType{Name: wt}
+	workflowType := &commonproto.WorkflowType{Name: wt}
 
-	taskList := &common.TaskList{Name: tl}
+	taskList := &commonproto.TaskList{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
@@ -1100,19 +1100,19 @@ func (s *integrationSuite) TestActivityCancellation() {
 	scheduleActivity := true
 	requestCancellation := false
 
-	dtHandler := func(execution *common.WorkflowExecution, wt *common.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *common.History) ([]byte, []*common.Decision, error) {
+	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
 		if scheduleActivity {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []byte(strconv.Itoa(int(activityCounter))), []*common.Decision{{
+			return []byte(strconv.Itoa(int(activityCounter))), []*commonproto.Decision{{
 				DecisionType: enums.DecisionTypeScheduleActivityTask,
-				Attributes: &common.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &common.ScheduleActivityTaskDecisionAttributes{
+				Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
-					ActivityType:                  &common.ActivityType{Name: activityName},
-					TaskList:                      &common.TaskList{Name: tl},
+					ActivityType:                  &commonproto.ActivityType{Name: activityName},
+					TaskList:                      &commonproto.TaskList{Name: tl},
 					Input:                         buf.Bytes(),
 					ScheduleToCloseTimeoutSeconds: 15,
 					ScheduleToStartTimeoutSeconds: 10,
@@ -1123,9 +1123,9 @@ func (s *integrationSuite) TestActivityCancellation() {
 		}
 
 		if requestCancellation {
-			return []byte(strconv.Itoa(int(activityCounter))), []*common.Decision{{
+			return []byte(strconv.Itoa(int(activityCounter))), []*commonproto.Decision{{
 				DecisionType: enums.DecisionTypeRequestCancelActivityTask,
-				Attributes: &common.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &common.RequestCancelActivityTaskDecisionAttributes{
+				Attributes: &commonproto.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &commonproto.RequestCancelActivityTaskDecisionAttributes{
 					ActivityId: strconv.Itoa(int(activityCounter)),
 				}},
 			}}, nil
@@ -1133,16 +1133,16 @@ func (s *integrationSuite) TestActivityCancellation() {
 
 		s.Logger.Info("Completing Workflow.")
 
-		return []byte(strconv.Itoa(int(activityCounter))), []*common.Decision{{
+		return []byte(strconv.Itoa(int(activityCounter))), []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
-			Attributes: &common.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &common.CompleteWorkflowExecutionDecisionAttributes{
+			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done."),
 			}},
 		}}, nil
 	}
 
 	activityExecutedCount := 0
-	atHandler := func(execution *common.WorkflowExecution, activityType *common.ActivityType,
+	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 		s.Equal(id, execution.GetWorkflowId())
 		s.Equal(activityName, activityType.GetName())
@@ -1151,7 +1151,7 @@ func (s *integrationSuite) TestActivityCancellation() {
 			response, err := s.engineGRPC.RecordActivityTaskHeartbeat(createContext(),
 				&workflowservice.RecordActivityTaskHeartbeatRequest{
 					TaskToken: taskToken, Details: []byte("details")})
-			if response.CancelRequested {
+			if response != nil && response.CancelRequested {
 				return []byte("Activity Cancelled."), true, nil
 			}
 			s.Nil(err)
@@ -1200,9 +1200,9 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 	identity := "worker1"
 	activityName := "activity_notstarted"
 
-	workflowType := &common.WorkflowType{Name: wt}
+	workflowType := &commonproto.WorkflowType{Name: wt}
 
-	taskList := &common.TaskList{Name: tl}
+	taskList := &commonproto.TaskList{Name: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
@@ -1225,19 +1225,19 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 	scheduleActivity := true
 	requestCancellation := false
 
-	dtHandler := func(execution *common.WorkflowExecution, wt *common.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *common.History) ([]byte, []*common.Decision, error) {
+	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
 		if scheduleActivity {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 			s.Logger.Info("Scheduling activity.")
-			return []byte(strconv.Itoa(int(activityCounter))), []*common.Decision{{
+			return []byte(strconv.Itoa(int(activityCounter))), []*commonproto.Decision{{
 				DecisionType: enums.DecisionTypeScheduleActivityTask,
-				Attributes: &common.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &common.ScheduleActivityTaskDecisionAttributes{
+				Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
 					ActivityId:                    strconv.Itoa(int(activityCounter)),
-					ActivityType:                  &common.ActivityType{Name: activityName},
-					TaskList:                      &common.TaskList{Name: tl},
+					ActivityType:                  &commonproto.ActivityType{Name: activityName},
+					TaskList:                      &commonproto.TaskList{Name: tl},
 					Input:                         buf.Bytes(),
 					ScheduleToCloseTimeoutSeconds: 15,
 					ScheduleToStartTimeoutSeconds: 2,
@@ -1249,25 +1249,25 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 
 		if requestCancellation {
 			s.Logger.Info("Requesting cancellation.")
-			return []byte(strconv.Itoa(int(activityCounter))), []*common.Decision{{
+			return []byte(strconv.Itoa(int(activityCounter))), []*commonproto.Decision{{
 				DecisionType: enums.DecisionTypeRequestCancelActivityTask,
-				Attributes: &common.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &common.RequestCancelActivityTaskDecisionAttributes{
+				Attributes: &commonproto.Decision_RequestCancelActivityTaskDecisionAttributes{RequestCancelActivityTaskDecisionAttributes: &commonproto.RequestCancelActivityTaskDecisionAttributes{
 					ActivityId: strconv.Itoa(int(activityCounter)),
 				}},
 			}}, nil
 		}
 
 		s.Logger.Info("Completing Workflow.")
-		return []byte(strconv.Itoa(int(activityCounter))), []*common.Decision{{
+		return []byte(strconv.Itoa(int(activityCounter))), []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
-			Attributes: &common.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &common.CompleteWorkflowExecutionDecisionAttributes{
+			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done."),
 			}},
 		}}, nil
 	}
 
 	// dummy activity handler
-	atHandler := func(execution *common.WorkflowExecution, activityType *common.ActivityType,
+	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 		s.Fail("activity should not run")
 		return nil, false, nil
@@ -1292,7 +1292,7 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 	signalInput := []byte("my signal input.")
 	_, err = s.engineGRPC.SignalWorkflowExecution(createContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Domain: s.domainName,
-		WorkflowExecution: &common.WorkflowExecution{
+		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
 		},

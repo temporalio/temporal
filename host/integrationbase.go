@@ -35,8 +35,8 @@ import (
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
-	commong "github.com/temporalio/temporal-proto/common"
-	workflowg "github.com/temporalio/temporal-proto/workflowservice"
+	commonproto "github.com/temporalio/temporal-proto/common"
+	"github.com/temporalio/temporal-proto/workflowservice"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -212,6 +212,14 @@ func (s *IntegrationBase) printWorkflowHistory(domain string, execution *workflo
 	common.PrettyPrintHistory(history, s.Logger)
 }
 
+func (s *IntegrationBase) printWorkflowHistoryGRPC(domain string, execution *commonproto.WorkflowExecution) {
+	events := s.getHistoryGRPC(domain, execution)
+	history := &commonproto.History{
+		Events: events,
+	}
+	common.PrettyPrintHistoryGRPC(history, s.Logger)
+}
+
 func (s *IntegrationBase) getHistory(domain string, execution *workflow.WorkflowExecution) []*workflow.HistoryEvent {
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(createContext(), &workflow.GetWorkflowExecutionHistoryRequest{
 		Domain:          common.StringPtr(domain),
@@ -234,8 +242,8 @@ func (s *IntegrationBase) getHistory(domain string, execution *workflow.Workflow
 	return events
 }
 
-func (s *IntegrationBase) getHistoryGRPC(domain string, execution *commong.WorkflowExecution) []*commong.HistoryEvent {
-	historyResponse, err := s.engineGRPC.GetWorkflowExecutionHistory(createContextGRPC(), &workflowg.GetWorkflowExecutionHistoryRequest{
+func (s *IntegrationBase) getHistoryGRPC(domain string, execution *commonproto.WorkflowExecution) []*commonproto.HistoryEvent {
+	historyResponse, err := s.engineGRPC.GetWorkflowExecutionHistory(createContextGRPC(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Domain:          domain,
 		Execution:       execution,
 		MaximumPageSize: 5, // Use small page size to force pagination code path
@@ -244,7 +252,7 @@ func (s *IntegrationBase) getHistoryGRPC(domain string, execution *commong.Workf
 
 	events := historyResponse.History.Events
 	for historyResponse.NextPageToken != nil {
-		historyResponse, err = s.engineGRPC.GetWorkflowExecutionHistory(createContextGRPC(), &workflowg.GetWorkflowExecutionHistoryRequest{
+		historyResponse, err = s.engineGRPC.GetWorkflowExecutionHistory(createContextGRPC(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Domain:        domain,
 			Execution:     execution,
 			NextPageToken: historyResponse.NextPageToken,
