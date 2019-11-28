@@ -157,7 +157,7 @@ var (
 	// ErrStaleState is the error returned during state update indicating that cached mutable state could be stale
 	ErrStaleState = errors.New("cache mutable state could potentially be stale")
 	// ErrActivityTaskNotFound is the error to indicate activity task could be duplicate and activity already completed
-	ErrActivityTaskNotFound = &workflow.EntityNotExistsError{Message: "activity task not found"}
+	ErrActivityTaskNotFound = &workflow.EntityNotExistsError{Message: "invalid activityID or activity already timed out or invoking workflow is completed"}
 	// ErrWorkflowCompleted is the error to indicate workflow execution already completed
 	ErrWorkflowCompleted = &workflow.EntityNotExistsError{Message: "workflow execution already completed"}
 	// ErrWorkflowParent is the error to parent execution is given and mismatch
