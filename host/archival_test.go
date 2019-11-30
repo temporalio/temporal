@@ -29,6 +29,10 @@ import (
 
 	"github.com/pborman/uuid"
 
+	commonproto "github.com/temporalio/temporal-proto/common"
+	"github.com/temporalio/temporal-proto/enums"
+	"github.com/temporalio/temporal-proto/workflowservice"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -51,9 +55,9 @@ func (s *integrationSuite) TestArchival_TimerQueueProcessor() {
 	numRuns := 1
 	runID := s.startAndFinishWorkflow(workflowID, workflowType, taskList, s.archivalDomainName, domainID, numActivities, numRuns)[0]
 
-	execution := &workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(runID),
+	execution := &commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      runID,
 	}
 	s.True(s.isHistoryArchived(s.archivalDomainName, execution))
 	s.True(s.isHistoryDeleted(domainID, execution))
@@ -72,9 +76,9 @@ func (s *integrationSuite) TestArchival_ContinueAsNew() {
 	runIDs := s.startAndFinishWorkflow(workflowID, workflowType, taskList, s.archivalDomainName, domainID, numActivities, numRuns)
 
 	for _, runID := range runIDs {
-		execution := &workflow.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
+		execution := &commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
 		}
 		s.True(s.isHistoryArchived(s.archivalDomainName, execution))
 		s.True(s.isHistoryDeleted(domainID, execution))
@@ -92,9 +96,9 @@ func (s *integrationSuite) TestArchival_ArchiverWorker() {
 	numActivities := 10
 	runID := s.startAndFinishWorkflow(workflowID, workflowType, taskList, s.archivalDomainName, domainID, numActivities, 1)[0]
 
-	execution := &workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(runID),
+	execution := &commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      runID,
 	}
 	s.True(s.isHistoryArchived(s.archivalDomainName, execution))
 	s.True(s.isHistoryDeleted(domainID, execution))
@@ -115,17 +119,17 @@ func (s *integrationSuite) TestVisibilityArchival() {
 	s.startAndFinishWorkflow("some other workflowID", "some other workflow type", taskList, s.archivalDomainName, domainID, numActivities, numRuns)
 	endTime := time.Now().UnixNano()
 
-	var executions []*workflow.WorkflowExecutionInfo
+	var executions []*commonproto.WorkflowExecutionInfo
 
 	for i := 0; i != retryLimit; i++ {
-		executions = []*workflow.WorkflowExecutionInfo{}
-		request := &workflow.ListArchivedWorkflowExecutionsRequest{
-			Domain:   common.StringPtr(s.archivalDomainName),
-			PageSize: common.Int32Ptr(2),
-			Query:    common.StringPtr(fmt.Sprintf("CloseTime >= %v and CloseTime <= %v and WorkflowType = '%s'", startTime, endTime, workflowType)),
+		executions = []*commonproto.WorkflowExecutionInfo{}
+		request := &workflowservice.ListArchivedWorkflowExecutionsRequest{
+			Domain:   s.archivalDomainName,
+			PageSize: 2,
+			Query:    fmt.Sprintf("CloseTime >= %v and CloseTime <= %v and WorkflowType = '%s'", startTime, endTime, workflowType),
 		}
 		for len(executions) == 0 || request.NextPageToken != nil {
-			response, err := s.engine.ListArchivedWorkflowExecutions(createContext(), request)
+			response, err := s.engineGRPC.ListArchivedWorkflowExecutions(createContext(), request)
 			s.NoError(err)
 			s.NotNil(response)
 			executions = append(executions, response.GetExecutions()...)
@@ -147,21 +151,21 @@ func (s *integrationSuite) TestVisibilityArchival() {
 }
 
 func (s *integrationSuite) getDomainID(domain string) string {
-	domainResp, err := s.engine.DescribeDomain(createContext(), &workflow.DescribeDomainRequest{
-		Name: common.StringPtr(s.archivalDomainName),
+	domainResp, err := s.engineGRPC.DescribeDomain(createContext(), &workflowservice.DescribeDomainRequest{
+		Name: s.archivalDomainName,
 	})
 	s.Nil(err)
-	return domainResp.DomainInfo.GetUUID()
+	return domainResp.DomainInfo.GetUuid()
 }
 
-func (s *integrationSuite) isHistoryArchived(domain string, execution *workflow.WorkflowExecution) bool {
-	request := &workflow.GetWorkflowExecutionHistoryRequest{
-		Domain:    common.StringPtr(s.archivalDomainName),
+func (s *integrationSuite) isHistoryArchived(domain string, execution *commonproto.WorkflowExecution) bool {
+	request := &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Domain:    s.archivalDomainName,
 		Execution: execution,
 	}
 
 	for i := 0; i < retryLimit; i++ {
-		getHistoryResp, err := s.engine.GetWorkflowExecutionHistory(createContext(), request)
+		getHistoryResp, err := s.engineGRPC.GetWorkflowExecutionHistory(createContext(), request)
 		if err == nil && getHistoryResp != nil && getHistoryResp.GetArchived() {
 			return true
 		}
@@ -170,8 +174,8 @@ func (s *integrationSuite) isHistoryArchived(domain string, execution *workflow.
 	return false
 }
 
-func (s *integrationSuite) isHistoryDeleted(domainID string, execution *workflow.WorkflowExecution) bool {
-	shardID := common.WorkflowIDToHistoryShard(*execution.WorkflowId, s.testClusterConfig.HistoryConfig.NumHistoryShards)
+func (s *integrationSuite) isHistoryDeleted(domainID string, execution *commonproto.WorkflowExecution) bool {
+	shardID := common.WorkflowIDToHistoryShard(execution.GetWorkflowId(), s.testClusterConfig.HistoryConfig.NumHistoryShards)
 	request := &persistence.GetHistoryTreeRequest{
 		TreeID:  execution.GetRunId(),
 		ShardID: common.IntPtr(shardID),
@@ -187,10 +191,13 @@ func (s *integrationSuite) isHistoryDeleted(domainID string, execution *workflow
 	return false
 }
 
-func (s *integrationSuite) isMutableStateDeleted(domainID string, execution *workflow.WorkflowExecution) bool {
+func (s *integrationSuite) isMutableStateDeleted(domainID string, execution *commonproto.WorkflowExecution) bool {
 	request := &persistence.GetWorkflowExecutionRequest{
-		DomainID:  domainID,
-		Execution: *execution,
+		DomainID: domainID,
+		Execution: workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(execution.WorkflowId),
+			RunId:      common.StringPtr(execution.RunId),
+		},
 	}
 
 	for i := 0; i < retryLimit; i++ {
@@ -206,26 +213,26 @@ func (s *integrationSuite) isMutableStateDeleted(domainID string, execution *wor
 func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, domain, domainID string, numActivities, numRuns int) []string {
 	identity := "worker1"
 	activityName := "activity_type1"
-	workflowType := &workflow.WorkflowType{
-		Name: common.StringPtr(wt),
+	workflowType := &commonproto.WorkflowType{
+		Name: wt,
 	}
-	taskList := &workflow.TaskList{
-		Name: common.StringPtr(tl),
+	taskList := &commonproto.TaskList{
+		Name: tl,
 	}
-	request := &workflow.StartWorkflowExecutionRequest{
-		RequestId:                           common.StringPtr(uuid.New()),
-		Domain:                              common.StringPtr(domain),
-		WorkflowId:                          common.StringPtr(id),
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:                           uuid.New(),
+		Domain:                              domain,
+		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
-		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
-		Identity:                            common.StringPtr(identity),
+		ExecutionStartToCloseTimeoutSeconds: 100,
+		TaskStartToCloseTimeoutSeconds:      1,
+		Identity:                            identity,
 	}
-	we, err := s.engine.StartWorkflowExecution(createContext(), request)
+	we, err := s.engineGRPC.StartWorkflowExecution(createContext(), request)
 	s.Nil(err)
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(*we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 	runIDs := make([]string, numRuns)
 
 	workflowComplete := false
@@ -235,29 +242,29 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, domain, domainID s
 	runCounter := 1
 
 	dtHandler := func(
-		execution *workflow.WorkflowExecution,
-		wt *workflow.WorkflowType,
+		execution *commonproto.WorkflowExecution,
+		wt *commonproto.WorkflowType,
 		previousStartedEventID int64,
 		startedEventID int64,
-		history *workflow.History,
-	) ([]byte, []*workflow.Decision, error) {
+		history *commonproto.History,
+	) ([]byte, []*commonproto.Decision, error) {
 		runIDs[runCounter-1] = execution.GetRunId()
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
-			return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
-				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeScheduleActivityTask),
-				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    common.StringPtr(strconv.Itoa(int(activityCounter))),
-					ActivityType:                  &workflow.ActivityType{Name: common.StringPtr(activityName)},
-					TaskList:                      &workflow.TaskList{Name: &tl},
+			return []byte(strconv.Itoa(int(activityCounter))), []*commonproto.Decision{{
+				DecisionType: enums.DecisionTypeScheduleActivityTask,
+				Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
+					ActivityId:                    strconv.Itoa(int(activityCounter)),
+					ActivityType:                  &commonproto.ActivityType{Name: activityName},
+					TaskList:                      &commonproto.TaskList{Name: tl},
 					Input:                         buf.Bytes(),
-					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
-					ScheduleToStartTimeoutSeconds: common.Int32Ptr(10),
-					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
-					HeartbeatTimeoutSeconds:       common.Int32Ptr(5),
-				},
+					ScheduleToCloseTimeoutSeconds: 100,
+					ScheduleToStartTimeoutSeconds: 10,
+					StartToCloseTimeoutSeconds:    50,
+					HeartbeatTimeoutSeconds:       5,
+				}},
 			}}, nil
 		}
 
@@ -265,36 +272,36 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, domain, domainID s
 			activityCounter = int32(0)
 			expectedActivityID = int32(1)
 			runCounter++
-			return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
-				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeContinueAsNewWorkflowExecution),
-				ContinueAsNewWorkflowExecutionDecisionAttributes: &workflow.ContinueAsNewWorkflowExecutionDecisionAttributes{
+			return []byte(strconv.Itoa(int(activityCounter))), []*commonproto.Decision{{
+				DecisionType: enums.DecisionTypeContinueAsNewWorkflowExecution,
+				Attributes: &commonproto.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &commonproto.ContinueAsNewWorkflowExecutionDecisionAttributes{
 					WorkflowType:                        workflowType,
-					TaskList:                            &workflow.TaskList{Name: &tl},
+					TaskList:                            &commonproto.TaskList{Name: tl},
 					Input:                               nil,
-					ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
-					TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
-				},
+					ExecutionStartToCloseTimeoutSeconds: 100,
+					TaskStartToCloseTimeoutSeconds:      1,
+				}},
 			}}, nil
 		}
 
 		workflowComplete = true
-		return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
-			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
-			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+		return []byte(strconv.Itoa(int(activityCounter))), []*commonproto.Decision{{
+			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
+			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done."),
-			},
+			}},
 		}}, nil
 	}
 
 	atHandler := func(
-		execution *workflow.WorkflowExecution,
-		activityType *workflow.ActivityType,
+		execution *commonproto.WorkflowExecution,
+		activityType *commonproto.ActivityType,
 		activityID string,
 		input []byte,
 		taskToken []byte,
 	) ([]byte, bool, error) {
-		s.Equal(id, *execution.WorkflowId)
-		s.Equal(activityName, *activityType.Name)
+		s.Equal(id, execution.GetWorkflowId())
+		s.Equal(activityName, activityType.Name)
 		id, _ := strconv.Atoi(activityID)
 		s.Equal(int(expectedActivityID), id)
 		buf := bytes.NewReader(input)
@@ -305,8 +312,8 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, domain, domainID s
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &TaskPoller{
-		Engine:          s.engine,
+	poller := &TaskPollerGRPC{
+		Engine:          s.engineGRPC,
 		Domain:          domain,
 		TaskList:        taskList,
 		Identity:        identity,
