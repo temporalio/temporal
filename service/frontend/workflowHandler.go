@@ -443,17 +443,18 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 ) (resp *gen.PollForDecisionTaskResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
+	tagsForErrorLog := []tag.Tag{tag.WorkflowDomainName(pollRequest.GetDomain())}
 	callTime := time.Now()
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendPollForDecisionTaskScope, pollRequest)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, wh.error(err, scope)
+		return nil, wh.error(err, scope, tagsForErrorLog...)
 	}
 
 	if pollRequest == nil {
-		return nil, wh.error(errRequestNotSet, scope)
+		return nil, wh.error(errRequestNotSet, scope, tagsForErrorLog...)
 	}
 
 	wh.GetLogger().Debug("Received PollForDecisionTask")
@@ -462,18 +463,18 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 		"PollForDecisionTask",
 		wh.GetThrottledLogger(),
 	); err != nil {
-		return nil, wh.error(err, scope)
+		return nil, wh.error(err, scope, tagsForErrorLog...)
 	}
 
 	if pollRequest.Domain == nil || pollRequest.GetDomain() == "" {
-		return nil, wh.error(errDomainNotSet, scope)
+		return nil, wh.error(errDomainNotSet, scope, tagsForErrorLog...)
 	}
 	if len(pollRequest.GetDomain()) > wh.config.MaxIDLengthLimit() {
-		return nil, wh.error(errDomainTooLong, scope)
+		return nil, wh.error(errDomainTooLong, scope, tagsForErrorLog...)
 	}
 
 	if len(pollRequest.GetIdentity()) > wh.config.MaxIDLengthLimit() {
-		return nil, wh.error(errIdentityTooLong, scope)
+		return nil, wh.error(errIdentityTooLong, scope, tagsForErrorLog...)
 	}
 
 	if err := wh.validateTaskList(pollRequest.TaskList, scope); err != nil {
@@ -483,13 +484,13 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 	domainName := pollRequest.GetDomain()
 	domainEntry, err := wh.GetDomainCache().GetDomain(domainName)
 	if err != nil {
-		return nil, wh.error(err, scope)
+		return nil, wh.error(err, scope, tagsForErrorLog...)
 	}
 	domainID := domainEntry.GetInfo().ID
 
 	wh.GetLogger().Debug("Poll for decision.", tag.WorkflowDomainName(domainName), tag.WorkflowDomainID(domainID))
 	if err := wh.checkBadBinary(domainEntry, pollRequest.GetBinaryChecksum()); err != nil {
-		return nil, wh.error(err, scope)
+		return nil, wh.error(err, scope, tagsForErrorLog...)
 	}
 
 	pollerID := uuid.New()
@@ -525,9 +526,12 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 		return nil, nil
 	}
 
+	tagsForErrorLog = append(tagsForErrorLog, []tag.Tag{tag.WorkflowID(
+		matchingResp.GetWorkflowExecution().GetWorkflowId()),
+		tag.WorkflowRunID(matchingResp.GetWorkflowExecution().GetRunId())}...)
 	resp, err = wh.createPollForDecisionTaskResponse(ctx, scope, domainID, matchingResp, matchingResp.GetBranchToken())
 	if err != nil {
-		return nil, wh.error(err, scope)
+		return nil, wh.error(err, scope, tagsForErrorLog...)
 	}
 	return resp, nil
 }
@@ -3068,10 +3072,10 @@ func (wh *WorkflowHandler) getDefaultScope(scope int) metrics.Scope {
 	return wh.GetMetricsClient().Scope(scope).Tagged(metrics.DomainUnknownTag())
 }
 
-func (wh *WorkflowHandler) error(err error, scope metrics.Scope) error {
+func (wh *WorkflowHandler) error(err error, scope metrics.Scope, tagsForErrorLog ... tag.Tag) error {
 	switch err := err.(type) {
 	case *gen.InternalServiceError:
-		wh.GetLogger().Error("Internal service error", tag.Error(err))
+		wh.GetLogger().WithTags(tagsForErrorLog...).Error("Internal service error", tag.Error(err))
 		scope.IncCounter(metrics.CadenceFailures)
 		// NOTE: For internal error, we won't return thrift error from cadence-frontend.
 		// Because in uber internal metrics, thrift errors are counted as user errors
@@ -3113,7 +3117,7 @@ func (wh *WorkflowHandler) error(err error, scope metrics.Scope) error {
 		}
 	}
 
-	wh.GetLogger().Error("Uncategorized error",
+	wh.GetLogger().WithTags(tagsForErrorLog...).Error("Uncategorized error",
 		tag.Error(err))
 	scope.IncCounter(metrics.CadenceFailures)
 	return fmt.Errorf("cadence internal uncategorized error, msg: %v", err.Error())
