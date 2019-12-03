@@ -749,15 +749,17 @@ func (t *timerQueueActiveProcessorImpl) processWorkflowTimeout(
 	continueAsnewAttributes := &workflow.ContinueAsNewWorkflowExecutionDecisionAttributes{
 		WorkflowType:                        startAttributes.WorkflowType,
 		TaskList:                            startAttributes.TaskList,
-		RetryPolicy:                         startAttributes.RetryPolicy,
 		Input:                               startAttributes.Input,
-		Header:                              startAttributes.Header,
 		ExecutionStartToCloseTimeoutSeconds: startAttributes.ExecutionStartToCloseTimeoutSeconds,
 		TaskStartToCloseTimeoutSeconds:      startAttributes.TaskStartToCloseTimeoutSeconds,
 		BackoffStartIntervalInSeconds:       common.Int32Ptr(int32(backoffInterval.Seconds())),
+		RetryPolicy:                         startAttributes.RetryPolicy,
 		Initiator:                           continueAsNewInitiator.Ptr(),
 		FailureReason:                       common.StringPtr(timeoutReason),
 		CronSchedule:                        common.StringPtr(msBuilder.GetExecutionInfo().CronSchedule),
+		Header:                              startAttributes.Header,
+		Memo:                                startAttributes.Memo,
+		SearchAttributes:                    startAttributes.SearchAttributes,
 	}
 	newMutableState, err := retryWorkflow(
 		msBuilder,
