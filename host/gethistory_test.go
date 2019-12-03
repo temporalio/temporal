@@ -36,9 +36,9 @@ import (
 )
 
 func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
-	workflowID := "interation-get-workflow-history-events-long-poll-test-all"
-	workflowTypeName := "interation-get-workflow-history-events-long-poll-test-all-type"
-	tasklistName := "interation-get-workflow-history-events-long-poll-test-all-tasklist"
+	workflowID := "integration-get-workflow-history-events-long-poll-test-all"
+	workflowTypeName := "integration-get-workflow-history-events-long-poll-test-all-type"
+	tasklistName := "integration-get-workflow-history-events-long-poll-test-all-tasklist"
 	identity := "worker1"
 	activityName := "activity_type1"
 
@@ -204,9 +204,9 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 }
 
 func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
-	workflowID := "interation-get-workflow-history-events-long-poll-test-close"
-	workflowTypeName := "interation-get-workflow-history-events-long-poll-test-close-type"
-	tasklistName := "interation-get-workflow-history-events-long-poll-test-close-tasklist"
+	workflowID := "integration-get-workflow-history-events-long-poll-test-close"
+	workflowTypeName := "integration-get-workflow-history-events-long-poll-test-close-type"
+	tasklistName := "integration-get-workflow-history-events-long-poll-test-close-tasklist"
 	identity := "worker1"
 	activityName := "activity_type1"
 
@@ -363,9 +363,9 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 }
 
 func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
-	workflowID := "interation-get-workflow-history-raw-events-all"
-	workflowTypeName := "interation-get-workflow-history-raw-events-all-type"
-	tasklistName := "interation-get-workflow-history-raw-events-all-tasklist"
+	workflowID := "integration-get-workflow-history-raw-events-all"
+	workflowTypeName := "integration-get-workflow-history-raw-events-all-type"
+	tasklistName := "integration-get-workflow-history-raw-events-all-tasklist"
 	identity := "worker1"
 	activityName := "activity_type1"
 

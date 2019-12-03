@@ -37,9 +37,9 @@ import (
 )
 
 func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
-	id := "interation-query-workflow-test-non-sticky"
-	wt := "interation-query-workflow-test-non-sticky-type"
-	tl := "interation-query-workflow-test-non-sticky-tasklist"
+	id := "integration-query-workflow-test-non-sticky"
+	wt := "integration-query-workflow-test-non-sticky-type"
+	tl := "integration-query-workflow-test-non-sticky-tasklist"
 	identity := "worker1"
 	activityName := "activity_type1"
 	queryType := "test-query"
@@ -244,9 +244,9 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 }
 
 func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
-	id := "interation-query-workflow-test-consistent-piggyback-query"
-	wt := "interation-query-workflow-test-consistent-piggyback-query-type"
-	tl := "interation-query-workflow-test-consistent-piggyback-query-tasklist"
+	id := "integration-query-workflow-test-consistent-piggyback-query"
+	wt := "integration-query-workflow-test-consistent-piggyback-query-type"
+	tl := "integration-query-workflow-test-consistent-piggyback-query-tasklist"
 	identity := "worker1"
 	activityName := "activity_type1"
 	queryType := "test-query"
@@ -429,9 +429,9 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 }
 
 func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
-	id := "interation-query-workflow-test-consistent-timeout"
-	wt := "interation-query-workflow-test-consistent-timeout-type"
-	tl := "interation-query-workflow-test-consistent-timeout-tasklist"
+	id := "integration-query-workflow-test-consistent-timeout"
+	wt := "integration-query-workflow-test-consistent-timeout-type"
+	tl := "integration-query-workflow-test-consistent-timeout-tasklist"
 	identity := "worker1"
 	activityName := "activity_type1"
 	queryType := "test-query"
@@ -590,9 +590,9 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 }
 
 func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonSticky() {
-	id := "interation-query-workflow-test-consistent-blocked-by-started-non-sticky"
-	wt := "interation-query-workflow-test-consistent-blocked-by-started-non-sticky-type"
-	tl := "interation-query-workflow-test-consistent-blocked-by-started-non-sticky-tasklist"
+	id := "integration-query-workflow-test-consistent-blocked-by-started-non-sticky"
+	wt := "integration-query-workflow-test-consistent-blocked-by-started-non-sticky-type"
+	tl := "integration-query-workflow-test-consistent-blocked-by-started-non-sticky-tasklist"
 	identity := "worker1"
 	activityName := "activity_type1"
 	queryType := "test-query"
@@ -774,10 +774,10 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 }
 
 func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky() {
-	id := "interation-query-workflow-test-consistent-new-decision-task-sticky"
-	wt := "interation-query-workflow-test-consistent-new-decision-task-sticky-type"
-	tl := "interation-query-workflow-test-consistent-new-decision-task-sticky-tasklist"
-	stl := "interation-query-workflow-test-consistent-new-decision-task-sticky-tasklist-sticky"
+	id := "integration-query-workflow-test-consistent-new-decision-task-sticky"
+	wt := "integration-query-workflow-test-consistent-new-decision-task-sticky-type"
+	tl := "integration-query-workflow-test-consistent-new-decision-task-sticky-tasklist"
+	stl := "integration-query-workflow-test-consistent-new-decision-task-sticky-tasklist-sticky"
 	identity := "worker1"
 	activityName := "activity_type1"
 	queryType := "test-query"
@@ -993,9 +993,9 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 }
 
 func (s *integrationSuite) TestQueryWorkflow_BeforeFirstDecision() {
-	id := "interation-test-query-workflow-before-first-decision"
-	wt := "interation-test-query-workflow-before-first-decision-type"
-	tl := "interation-test-query-workflow-before-first-decision-tasklist"
+	id := "integration-test-query-workflow-before-first-decision"
+	wt := "integration-test-query-workflow-before-first-decision-type"
+	tl := "integration-test-query-workflow-before-first-decision-tasklist"
 	identity := "worker1"
 	queryType := "test-query"
 

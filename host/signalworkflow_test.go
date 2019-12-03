@@ -226,9 +226,9 @@ func (s *integrationSuite) TestSignalWorkflow() {
 }
 
 func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
-	id := "interation-signal-workflow-test-duplicate"
-	wt := "interation-signal-workflow-test-duplicate-type"
-	tl := "interation-signal-workflow-test-duplicate-tasklist"
+	id := "integration-signal-workflow-test-duplicate"
+	wt := "integration-signal-workflow-test-duplicate-type"
+	tl := "integration-signal-workflow-test-duplicate-tasklist"
 	identity := "worker1"
 	activityName := "activity_type1"
 
