@@ -243,7 +243,8 @@ func toThriftSearchAttributes(in *common.SearchAttributes) *shared.SearchAttribu
 	}
 }
 
-func toThriftWorkflowExecution(in *common.WorkflowExecution) *shared.WorkflowExecution {
+// ToThriftWorkflowExecution ...
+func ToThriftWorkflowExecution(in *common.WorkflowExecution) *shared.WorkflowExecution {
 	if in == nil {
 		return nil
 	}
@@ -902,7 +903,7 @@ func toProtoDataBlob(in *shared.DataBlob) *common.DataBlob {
 		return nil
 	}
 	return &common.DataBlob{
-		EncodingType: enums.EncodingType(in.GetEncodingType()),
+		EncodingType: toProtoEncodingType(in.GetEncodingType()),
 		Data:         in.GetData(),
 	}
 }

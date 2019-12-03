@@ -112,6 +112,27 @@ func toThriftTaskListType(in enums.TaskListType) *shared.TaskListType {
 }
 
 func toThriftEncodingType(in enums.EncodingType) *shared.EncodingType {
-	ret := shared.EncodingType(in)
+	switch in {
+	case enums.EncodingTypeThriftRW:
+		ret := shared.EncodingTypeThriftRW
+		return &ret
+	case enums.EncodingTypeJSON:
+		ret := shared.EncodingTypeJSON
+		return &ret
+	case enums.EncodingTypeProto:
+		panic("EncodingTypeProto is not supported")
+	}
+
+	ret := shared.EncodingTypeThriftRW
 	return &ret
+}
+func toProtoEncodingType(in shared.EncodingType) enums.EncodingType {
+	switch in {
+	case shared.EncodingTypeThriftRW:
+		return enums.EncodingTypeThriftRW
+	case shared.EncodingTypeJSON:
+		return enums.EncodingTypeJSON
+	}
+
+	return enums.EncodingTypeThriftRW
 }

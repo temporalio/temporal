@@ -28,11 +28,15 @@ import (
 
 	"github.com/pborman/uuid"
 
+	commonproto "github.com/temporalio/temporal-proto/common"
+	"github.com/temporalio/temporal-proto/enums"
+	"github.com/temporalio/temporal-proto/workflowservice"
 	"github.com/temporalio/temporal/.gen/go/admin"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/service/frontend/adapter"
 )
 
 func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
@@ -42,74 +46,72 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	identity := "worker1"
 	activityName := "activity_type1"
 
-	workflowType := &workflow.WorkflowType{}
-	workflowType.Name = common.StringPtr(workflowTypeName)
+	workflowType := &commonproto.WorkflowType{Name: workflowTypeName}
 
-	taskList := &workflow.TaskList{}
-	taskList.Name = common.StringPtr(tasklistName)
+	taskList := &commonproto.TaskList{Name: tasklistName}
 
 	// Start workflow execution
-	request := &workflow.StartWorkflowExecutionRequest{
-		RequestId:                           common.StringPtr(uuid.New()),
-		Domain:                              common.StringPtr(s.domainName),
-		WorkflowId:                          common.StringPtr(workflowID),
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:                           uuid.New(),
+		Domain:                              s.domainName,
+		WorkflowId:                          workflowID,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
-		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
-		Identity:                            common.StringPtr(identity),
+		ExecutionStartToCloseTimeoutSeconds: 100,
+		TaskStartToCloseTimeoutSeconds:      1,
+		Identity:                            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
+	we, err0 := s.engineGRPC.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(*we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	// decider logic
 	activityScheduled := false
 	activityData := int32(1)
-	// var signalEvent *workflow.HistoryEvent
-	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+	// var signalEvent *commonproto.HistoryEvent
+	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return nil, []*workflow.Decision{{
-				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeScheduleActivityTask),
-				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    common.StringPtr(strconv.Itoa(int(1))),
-					ActivityType:                  &workflow.ActivityType{Name: common.StringPtr(activityName)},
+			return nil, []*commonproto.Decision{{
+				DecisionType: enums.DecisionTypeScheduleActivityTask,
+				Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
+					ActivityId:                    strconv.Itoa(int(1)),
+					ActivityType:                  &commonproto.ActivityType{Name: activityName},
 					TaskList:                      taskList,
 					Input:                         buf.Bytes(),
-					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
-					ScheduleToStartTimeoutSeconds: common.Int32Ptr(25),
-					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
-					HeartbeatTimeoutSeconds:       common.Int32Ptr(25),
-				},
+					ScheduleToCloseTimeoutSeconds: 100,
+					ScheduleToStartTimeoutSeconds: 25,
+					StartToCloseTimeoutSeconds:    50,
+					HeartbeatTimeoutSeconds:       25,
+				}},
 			}}, nil
 		}
 
-		return nil, []*workflow.Decision{{
-			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
-			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+		return nil, []*commonproto.Decision{{
+			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
+			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done."),
-			},
+			}},
 		}}, nil
 	}
 
 	// activity handler
-	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
+	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &TaskPoller{
-		Engine:          s.engine,
+	poller := &TaskPollerGRPC{
+		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
 		Identity:        identity,
@@ -120,16 +122,16 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	}
 
 	// this function poll events from history side
-	getHistory := func(domain string, workflowID string, token []byte, isLongPoll bool) ([]*workflow.HistoryEvent, []byte) {
-		responseInner, err := s.engine.GetWorkflowExecutionHistory(createContext(), &workflow.GetWorkflowExecutionHistoryRequest{
-			Domain: common.StringPtr(domain),
-			Execution: &workflow.WorkflowExecution{
-				WorkflowId: common.StringPtr(workflowID),
+	getHistory := func(domain string, workflowID string, token []byte, isLongPoll bool) ([]*commonproto.HistoryEvent, []byte) {
+		responseInner, err := s.engineGRPC.GetWorkflowExecutionHistory(createContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+			Domain: domain,
+			Execution: &commonproto.WorkflowExecution{
+				WorkflowId: workflowID,
 			},
 			// since the page size have essential no relation with number of events..
 			// so just use a really larger number, to test whether long poll works
-			MaximumPageSize: common.Int32Ptr(100),
-			WaitForNewEvent: common.BoolPtr(isLongPoll),
+			MaximumPageSize: 100,
+			WaitForNewEvent: isLongPoll,
 			NextPageToken:   token,
 		})
 		s.Nil(err)
@@ -137,8 +139,8 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 		return responseInner.History.Events, responseInner.NextPageToken
 	}
 
-	var allEvents []*workflow.HistoryEvent
-	var events []*workflow.HistoryEvent
+	var allEvents []*commonproto.HistoryEvent
+	var events []*commonproto.HistoryEvent
 	var token []byte
 
 	// here do a long pull (which return immediately with at least the WorkflowExecutionStarted)
@@ -210,74 +212,72 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	identity := "worker1"
 	activityName := "activity_type1"
 
-	workflowType := &workflow.WorkflowType{}
-	workflowType.Name = common.StringPtr(workflowTypeName)
+	workflowType := &commonproto.WorkflowType{Name: workflowTypeName}
 
-	taskList := &workflow.TaskList{}
-	taskList.Name = common.StringPtr(tasklistName)
+	taskList := &commonproto.TaskList{Name: tasklistName}
 
 	// Start workflow execution
-	request := &workflow.StartWorkflowExecutionRequest{
-		RequestId:                           common.StringPtr(uuid.New()),
-		Domain:                              common.StringPtr(s.domainName),
-		WorkflowId:                          common.StringPtr(workflowID),
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:                           uuid.New(),
+		Domain:                              s.domainName,
+		WorkflowId:                          workflowID,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
-		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
-		Identity:                            common.StringPtr(identity),
+		ExecutionStartToCloseTimeoutSeconds: 100,
+		TaskStartToCloseTimeoutSeconds:      1,
+		Identity:                            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
+	we, err0 := s.engineGRPC.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(*we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	// decider logic
 	activityScheduled := false
 	activityData := int32(1)
-	// var signalEvent *workflow.HistoryEvent
-	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+	// var signalEvent *commonproto.HistoryEvent
+	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return nil, []*workflow.Decision{{
-				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeScheduleActivityTask),
-				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    common.StringPtr(strconv.Itoa(int(1))),
-					ActivityType:                  &workflow.ActivityType{Name: common.StringPtr(activityName)},
+			return nil, []*commonproto.Decision{{
+				DecisionType: enums.DecisionTypeScheduleActivityTask,
+				Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
+					ActivityId:                    strconv.Itoa(int(1)),
+					ActivityType:                  &commonproto.ActivityType{Name: activityName},
 					TaskList:                      taskList,
 					Input:                         buf.Bytes(),
-					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
-					ScheduleToStartTimeoutSeconds: common.Int32Ptr(25),
-					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
-					HeartbeatTimeoutSeconds:       common.Int32Ptr(25),
-				},
+					ScheduleToCloseTimeoutSeconds: 100,
+					ScheduleToStartTimeoutSeconds: 25,
+					StartToCloseTimeoutSeconds:    50,
+					HeartbeatTimeoutSeconds:       25,
+				}},
 			}}, nil
 		}
 
-		return nil, []*workflow.Decision{{
-			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
-			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+		return nil, []*commonproto.Decision{{
+			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
+			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done."),
-			},
+			}},
 		}}, nil
 	}
 
 	// activity handler
-	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
+	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &TaskPoller{
-		Engine:          s.engine,
+	poller := &TaskPollerGRPC{
+		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
 		Identity:        identity,
@@ -288,25 +288,25 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	}
 
 	// this function poll events from history side
-	getHistory := func(domain string, workflowID string, token []byte, isLongPoll bool) ([]*workflow.HistoryEvent, []byte) {
-		closeEventOnly := workflow.HistoryEventFilterTypeCloseEvent
-		responseInner, _ := s.engine.GetWorkflowExecutionHistory(createContext(), &workflow.GetWorkflowExecutionHistoryRequest{
-			Domain: common.StringPtr(domain),
-			Execution: &workflow.WorkflowExecution{
-				WorkflowId: common.StringPtr(workflowID),
+	getHistory := func(domain string, workflowID string, token []byte, isLongPoll bool) ([]*commonproto.HistoryEvent, []byte) {
+		closeEventOnly := enums.HistoryEventFilterTypeCloseEvent
+		responseInner, _ := s.engineGRPC.GetWorkflowExecutionHistory(createContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+			Domain: domain,
+			Execution: &commonproto.WorkflowExecution{
+				WorkflowId: workflowID,
 			},
 			// since the page size have essential no relation with number of events..
 			// so just use a really larger number, to test whether long poll works
-			MaximumPageSize:        common.Int32Ptr(100),
-			WaitForNewEvent:        common.BoolPtr(isLongPoll),
+			MaximumPageSize:        100,
+			WaitForNewEvent:        isLongPoll,
 			NextPageToken:          token,
-			HistoryEventFilterType: &closeEventOnly,
+			HistoryEventFilterType: closeEventOnly,
 		})
 
 		return responseInner.History.Events, responseInner.NextPageToken
 	}
 
-	var events []*workflow.HistoryEvent
+	var events []*commonproto.HistoryEvent
 	var token []byte
 
 	// here do a long pull (which return immediately with at least the WorkflowExecutionStarted)
@@ -345,7 +345,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 		// since we are only interested in close event
 		if token == nil {
 			s.Equal(1, len(events))
-			s.Equal(workflow.EventTypeWorkflowExecutionCompleted, *events[0].EventType)
+			s.Equal(enums.EventTypeWorkflowExecutionCompleted, events[0].EventType)
 		} else {
 			s.Empty(events)
 		}
@@ -369,78 +369,76 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 	identity := "worker1"
 	activityName := "activity_type1"
 
-	workflowType := &workflow.WorkflowType{}
-	workflowType.Name = common.StringPtr(workflowTypeName)
+	workflowType := &commonproto.WorkflowType{Name: workflowTypeName}
 
-	taskList := &workflow.TaskList{}
-	taskList.Name = common.StringPtr(tasklistName)
+	taskList := &commonproto.TaskList{Name: tasklistName}
 
 	// Start workflow execution
-	request := &workflow.StartWorkflowExecutionRequest{
-		RequestId:                           common.StringPtr(uuid.New()),
-		Domain:                              common.StringPtr(s.domainName),
-		WorkflowId:                          common.StringPtr(workflowID),
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:                           uuid.New(),
+		Domain:                              s.domainName,
+		WorkflowId:                          workflowID,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
-		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
-		Identity:                            common.StringPtr(identity),
+		ExecutionStartToCloseTimeoutSeconds: 100,
+		TaskStartToCloseTimeoutSeconds:      1,
+		Identity:                            identity,
 	}
 
-	we, err := s.engine.StartWorkflowExecution(createContext(), request)
+	we, err := s.engineGRPC.StartWorkflowExecution(createContext(), request)
 	s.Nil(err)
-	execution := &workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(we.GetRunId()),
+	execution := &commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      we.GetRunId(),
 	}
 
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(*we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	// decider logic
 	activityScheduled := false
 	activityData := int32(1)
-	// var signalEvent *workflow.HistoryEvent
-	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+	// var signalEvent *commonproto.HistoryEvent
+	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return nil, []*workflow.Decision{{
-				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeScheduleActivityTask),
-				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    common.StringPtr(strconv.Itoa(int(1))),
-					ActivityType:                  &workflow.ActivityType{Name: common.StringPtr(activityName)},
+			return nil, []*commonproto.Decision{{
+				DecisionType: enums.DecisionTypeScheduleActivityTask,
+				Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
+					ActivityId:                    strconv.Itoa(int(1)),
+					ActivityType:                  &commonproto.ActivityType{Name: activityName},
 					TaskList:                      taskList,
 					Input:                         buf.Bytes(),
-					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
-					ScheduleToStartTimeoutSeconds: common.Int32Ptr(25),
-					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
-					HeartbeatTimeoutSeconds:       common.Int32Ptr(25),
-				},
+					ScheduleToCloseTimeoutSeconds: 100,
+					ScheduleToStartTimeoutSeconds: 25,
+					StartToCloseTimeoutSeconds:    50,
+					HeartbeatTimeoutSeconds:       25,
+				}},
 			}}, nil
 		}
 
-		return nil, []*workflow.Decision{{
-			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
-			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+		return nil, []*commonproto.Decision{{
+			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
+			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done."),
-			},
+			}},
 		}}, nil
 	}
 
 	// activity handler
-	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
+	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &TaskPoller{
-		Engine:          s.engine,
+	poller := &TaskPollerGRPC{
+		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
 		Identity:        identity,
@@ -452,12 +450,12 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 
 	// this function poll events from history side
 	pageSize := 1
-	getHistory := func(domain string, execution *workflow.WorkflowExecution, firstEventID int64, nextEventID int64,
+	getHistory := func(domain string, execution *commonproto.WorkflowExecution, firstEventID int64, nextEventID int64,
 		token []byte) (*admin.GetWorkflowExecutionRawHistoryResponse, error) {
 
 		return s.adminClient.GetWorkflowExecutionRawHistory(createContext(), &admin.GetWorkflowExecutionRawHistoryRequest{
 			Domain:          common.StringPtr(domain),
-			Execution:       execution,
+			Execution:       adapter.ToThriftWorkflowExecution(execution),
 			FirstEventId:    common.Int64Ptr(firstEventID),
 			NextEventId:     common.Int64Ptr(nextEventID),
 			MaximumPageSize: common.Int32Ptr(int32(pageSize)),
@@ -467,7 +465,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 
 	serializer := persistence.NewPayloadSerializer()
 	convertBlob := func(blobs []*workflow.DataBlob) []*workflow.HistoryEvent {
-		events := []*workflow.HistoryEvent{}
+		var events []*workflow.HistoryEvent
 		for _, blob := range blobs {
 			s.True(blob.GetEncodingType() == workflow.EncodingTypeThriftRW)
 			blobEvents, err := serializer.DeserializeBatchEvents(&persistence.DataBlob{
@@ -588,78 +586,76 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_InTheMiddle() {
 	identity := "worker1"
 	activityName := "activity_type1"
 
-	workflowType := &workflow.WorkflowType{}
-	workflowType.Name = common.StringPtr(workflowTypeName)
+	workflowType := &commonproto.WorkflowType{Name: workflowTypeName}
 
-	taskList := &workflow.TaskList{}
-	taskList.Name = common.StringPtr(tasklistName)
+	taskList := &commonproto.TaskList{Name: tasklistName}
 
 	// Start workflow execution
-	request := &workflow.StartWorkflowExecutionRequest{
-		RequestId:                           common.StringPtr(uuid.New()),
-		Domain:                              common.StringPtr(s.domainName),
-		WorkflowId:                          common.StringPtr(workflowID),
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:                           uuid.New(),
+		Domain:                              s.domainName,
+		WorkflowId:                          workflowID,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
-		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
-		Identity:                            common.StringPtr(identity),
+		ExecutionStartToCloseTimeoutSeconds: 100,
+		TaskStartToCloseTimeoutSeconds:      1,
+		Identity:                            identity,
 	}
 
-	we, err := s.engine.StartWorkflowExecution(createContext(), request)
+	we, err := s.engineGRPC.StartWorkflowExecution(createContext(), request)
 	s.Nil(err)
-	execution := &workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(we.GetRunId()),
+	execution := &commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      we.GetRunId(),
 	}
 
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(*we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	// decider logic
 	activityScheduled := false
 	activityData := int32(1)
-	// var signalEvent *workflow.HistoryEvent
-	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+	// var signalEvent *commonproto.HistoryEvent
+	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return nil, []*workflow.Decision{{
-				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeScheduleActivityTask),
-				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    common.StringPtr(strconv.Itoa(int(1))),
-					ActivityType:                  &workflow.ActivityType{Name: common.StringPtr(activityName)},
+			return nil, []*commonproto.Decision{{
+				DecisionType: enums.DecisionTypeScheduleActivityTask,
+				Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
+					ActivityId:                    strconv.Itoa(int(1)),
+					ActivityType:                  &commonproto.ActivityType{Name: activityName},
 					TaskList:                      taskList,
 					Input:                         buf.Bytes(),
-					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
-					ScheduleToStartTimeoutSeconds: common.Int32Ptr(25),
-					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
-					HeartbeatTimeoutSeconds:       common.Int32Ptr(25),
-				},
+					ScheduleToCloseTimeoutSeconds: 100,
+					ScheduleToStartTimeoutSeconds: 25,
+					StartToCloseTimeoutSeconds:    50,
+					HeartbeatTimeoutSeconds:       25,
+				}},
 			}}, nil
 		}
 
-		return nil, []*workflow.Decision{{
-			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
-			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+		return nil, []*commonproto.Decision{{
+			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
+			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done."),
-			},
+			}},
 		}}, nil
 	}
 
 	// activity handler
-	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
+	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &TaskPoller{
-		Engine:          s.engine,
+	poller := &TaskPollerGRPC{
+		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
 		Identity:        identity,
@@ -669,12 +665,12 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_InTheMiddle() {
 		T:               s.T(),
 	}
 
-	getHistory := func(domain string, execution *workflow.WorkflowExecution, firstEventID int64, nextEventID int64,
+	getHistory := func(domain string, execution *commonproto.WorkflowExecution, firstEventID int64, nextEventID int64,
 		token []byte) (*admin.GetWorkflowExecutionRawHistoryResponse, error) {
 
 		return s.adminClient.GetWorkflowExecutionRawHistory(createContext(), &admin.GetWorkflowExecutionRawHistoryRequest{
 			Domain:          common.StringPtr(domain),
-			Execution:       execution,
+			Execution:       adapter.ToThriftWorkflowExecution(execution),
 			FirstEventId:    common.Int64Ptr(firstEventID),
 			NextEventId:     common.Int64Ptr(nextEventID),
 			MaximumPageSize: common.Int32Ptr(1),
