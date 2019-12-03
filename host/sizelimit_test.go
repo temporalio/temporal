@@ -32,7 +32,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	commonproto "github.com/temporalio/temporal-proto/common"
+	"github.com/temporalio/temporal-proto/enums"
+	"github.com/temporalio/temporal-proto/workflowservice"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log/tag"
 )
@@ -70,69 +72,67 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 	identity := "worker1"
 	activityName := "activity_type1"
 
-	workflowType := &workflow.WorkflowType{}
-	workflowType.Name = common.StringPtr(wt)
+	workflowType := &commonproto.WorkflowType{Name: wt}
 
-	taskList := &workflow.TaskList{}
-	taskList.Name = common.StringPtr(tl)
+	taskList := &commonproto.TaskList{Name: tl}
 
-	request := &workflow.StartWorkflowExecutionRequest{
-		RequestId:                           common.StringPtr(uuid.New()),
-		Domain:                              common.StringPtr(s.domainName),
-		WorkflowId:                          common.StringPtr(id),
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:                           uuid.New(),
+		Domain:                              s.domainName,
+		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
-		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
-		Identity:                            common.StringPtr(identity),
+		ExecutionStartToCloseTimeoutSeconds: 100,
+		TaskStartToCloseTimeoutSeconds:      1,
+		Identity:                            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
+	we, err0 := s.engineGRPC.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(*we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	activityCount := int32(4)
 	activityCounter := int32(0)
-	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
-				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeScheduleActivityTask),
-				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    common.StringPtr(strconv.Itoa(int(activityCounter))),
-					ActivityType:                  &workflow.ActivityType{Name: common.StringPtr(activityName)},
-					TaskList:                      &workflow.TaskList{Name: &tl},
+			return []byte(strconv.Itoa(int(activityCounter))), []*commonproto.Decision{{
+				DecisionType: enums.DecisionTypeScheduleActivityTask,
+				Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
+					ActivityId:                    strconv.Itoa(int(activityCounter)),
+					ActivityType:                  &commonproto.ActivityType{Name: activityName},
+					TaskList:                      &commonproto.TaskList{Name: tl},
 					Input:                         buf.Bytes(),
-					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
-					ScheduleToStartTimeoutSeconds: common.Int32Ptr(10),
-					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
-					HeartbeatTimeoutSeconds:       common.Int32Ptr(5),
-				},
+					ScheduleToCloseTimeoutSeconds: 100,
+					ScheduleToStartTimeoutSeconds: 10,
+					StartToCloseTimeoutSeconds:    50,
+					HeartbeatTimeoutSeconds:       5,
+				}},
 			}}, nil
 		}
 
-		return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
-			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
-			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+		return []byte(strconv.Itoa(int(activityCounter))), []*commonproto.Decision{{
+			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
+			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done."),
-			},
+			}},
 		}}, nil
 	}
 
-	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
+	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &TaskPoller{
-		Engine:          s.engine,
+	poller := &TaskPollerGRPC{
+		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
 		Identity:        identity,
@@ -158,33 +158,33 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 	s.Nil(err)
 
 	// verify last event is terminated event
-	historyResponse, err := s.engine.GetWorkflowExecutionHistory(createContext(), &workflow.GetWorkflowExecutionHistoryRequest{
-		Domain: common.StringPtr(s.domainName),
-		Execution: &workflow.WorkflowExecution{
-			WorkflowId: common.StringPtr(id),
-			RunId:      common.StringPtr(we.GetRunId()),
+	historyResponse, err := s.engineGRPC.GetWorkflowExecutionHistory(createContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Domain: s.domainName,
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we.GetRunId(),
 		},
 	})
 	s.Nil(err)
 	history := historyResponse.History
 	lastEvent := history.Events[len(history.Events)-1]
-	s.Equal(workflow.EventTypeWorkflowExecutionFailed, lastEvent.GetEventType())
-	failedEventAttributes := lastEvent.WorkflowExecutionFailedEventAttributes
+	s.Equal(enums.EventTypeWorkflowExecutionFailed, lastEvent.GetEventType())
+	failedEventAttributes := lastEvent.GetWorkflowExecutionFailedEventAttributes()
 	s.Equal(common.FailureReasonSizeExceedsLimit, failedEventAttributes.GetReason())
 
 	// verify visibility is correctly processed from open to close
 	isCloseCorrect := false
 	for i := 0; i < 10; i++ {
-		resp, err1 := s.engine.ListClosedWorkflowExecutions(createContext(), &workflow.ListClosedWorkflowExecutionsRequest{
-			Domain:          common.StringPtr(s.domainName),
-			MaximumPageSize: common.Int32Ptr(100),
-			StartTimeFilter: &workflow.StartTimeFilter{
-				EarliestTime: common.Int64Ptr(0),
-				LatestTime:   common.Int64Ptr(time.Now().UnixNano()),
+		resp, err1 := s.engineGRPC.ListClosedWorkflowExecutions(createContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
+			Domain:          s.domainName,
+			MaximumPageSize: 100,
+			StartTimeFilter: &commonproto.StartTimeFilter{
+				EarliestTime: 0,
+				LatestTime:   time.Now().UnixNano(),
 			},
-			ExecutionFilter: &workflow.WorkflowExecutionFilter{
-				WorkflowId: common.StringPtr(id),
-			},
+			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &commonproto.WorkflowExecutionFilter{
+				WorkflowId: id,
+			}},
 		})
 		s.Nil(err1)
 		if len(resp.Executions) == 1 {
