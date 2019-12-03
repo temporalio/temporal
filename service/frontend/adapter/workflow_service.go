@@ -182,7 +182,7 @@ func ToThriftGetWorkflowExecutionHistoryRequest(in *workflowservice.GetWorkflowE
 	}
 	return &shared.GetWorkflowExecutionHistoryRequest{
 		Domain:                 &in.Domain,
-		Execution:              toThriftWorkflowExecution(in.Execution),
+		Execution:              ToThriftWorkflowExecution(in.Execution),
 		MaximumPageSize:        &in.MaximumPageSize,
 		NextPageToken:          in.NextPageToken,
 		WaitForNewEvent:        &in.WaitForNewEvent,
@@ -209,7 +209,7 @@ func ToThriftRequestCancelWorkflowExecutionRequest(in *workflowservice.RequestCa
 	}
 	return &shared.RequestCancelWorkflowExecutionRequest{
 		Domain:            &in.Domain,
-		WorkflowExecution: toThriftWorkflowExecution(in.WorkflowExecution),
+		WorkflowExecution: ToThriftWorkflowExecution(in.WorkflowExecution),
 		Identity:          &in.Identity,
 		RequestId:         &in.RequestId,
 	}
@@ -222,7 +222,7 @@ func ToThriftSignalWorkflowExecutionRequest(in *workflowservice.SignalWorkflowEx
 	}
 	return &shared.SignalWorkflowExecutionRequest{
 		Domain:            &in.Domain,
-		WorkflowExecution: toThriftWorkflowExecution(in.WorkflowExecution),
+		WorkflowExecution: ToThriftWorkflowExecution(in.WorkflowExecution),
 		SignalName:        &in.SignalName,
 		Input:             in.Input,
 		Identity:          &in.Identity,
@@ -285,7 +285,7 @@ func ToThriftResetWorkflowExecutionRequest(in *workflowservice.ResetWorkflowExec
 	}
 	return &shared.ResetWorkflowExecutionRequest{
 		Domain:                &in.Domain,
-		WorkflowExecution:     toThriftWorkflowExecution(in.WorkflowExecution),
+		WorkflowExecution:     ToThriftWorkflowExecution(in.WorkflowExecution),
 		Reason:                &in.Reason,
 		DecisionFinishEventId: &in.DecisionFinishEventId,
 		RequestId:             &in.RequestId,
@@ -299,7 +299,7 @@ func ToThriftTerminateWorkflowExecutionRequest(in *workflowservice.TerminateWork
 	}
 	return &shared.TerminateWorkflowExecutionRequest{
 		Domain:            &in.Domain,
-		WorkflowExecution: toThriftWorkflowExecution(in.WorkflowExecution),
+		WorkflowExecution: ToThriftWorkflowExecution(in.WorkflowExecution),
 		Reason:            &in.Reason,
 		Details:           in.Details,
 		Identity:          &in.Identity,
@@ -473,7 +473,7 @@ func ToThriftDescribeWorkflowExecutionRequest(in *workflowservice.DescribeWorkfl
 	}
 	return &shared.DescribeWorkflowExecutionRequest{
 		Domain:    &in.Domain,
-		Execution: toThriftWorkflowExecution(in.Execution),
+		Execution: ToThriftWorkflowExecution(in.Execution),
 	}
 }
 
@@ -742,7 +742,7 @@ func ToThriftResetStickyTaskListRequest(in *workflowservice.ResetStickyTaskListR
 	}
 	return &shared.ResetStickyTaskListRequest{
 		Domain:    &in.Domain,
-		Execution: toThriftWorkflowExecution(in.Execution),
+		Execution: ToThriftWorkflowExecution(in.Execution),
 	}
 }
 
@@ -753,7 +753,7 @@ func ToThriftQueryWorkflowRequest(in *workflowservice.QueryWorkflowRequest) *sha
 	}
 	return &shared.QueryWorkflowRequest{
 		Domain:                &in.Domain,
-		Execution:             toThriftWorkflowExecution(in.Execution),
+		Execution:             ToThriftWorkflowExecution(in.Execution),
 		Query:                 toThriftWorkflowQuery(in.Query),
 		QueryRejectCondition:  toThriftQueryRejectCondition(in.QueryRejectCondition),
 		QueryConsistencyLevel: toThriftQueryConsistencyLevel(in.QueryConsistencyLevel),
@@ -802,7 +802,7 @@ func ToThriftReapplyEventsRequest(in *workflowservice.ReapplyEventsRequest) *sha
 	}
 	return &shared.ReapplyEventsRequest{
 		DomainName:        &in.DomainName,
-		WorkflowExecution: toThriftWorkflowExecution(in.WorkflowExecution),
+		WorkflowExecution: ToThriftWorkflowExecution(in.WorkflowExecution),
 		Events:            toThriftDataBlob(in.Events),
 	}
 }

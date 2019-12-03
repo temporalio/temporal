@@ -164,7 +164,7 @@ func toThriftSignalExternalWorkflowExecutionDecisionAttributes(in *common.Signal
 	}
 	return &shared.SignalExternalWorkflowExecutionDecisionAttributes{
 		Domain:            &in.Domain,
-		Execution:         toThriftWorkflowExecution(in.Execution),
+		Execution:         ToThriftWorkflowExecution(in.Execution),
 		SignalName:        &in.SignalName,
 		Input:             in.Input,
 		Control:           in.Control,
