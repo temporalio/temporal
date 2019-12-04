@@ -86,6 +86,7 @@ func (s *Service) Start() {
 
 	logger.Info("matching started", tag.Service(common.MatchingServiceName))
 	<-s.stopC
+	handler.Stop()
 	s.Resource.Stop()
 }
 

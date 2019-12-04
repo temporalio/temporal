@@ -428,6 +428,7 @@ func (s *Service) Start() {
 	log.Info("started", tag.Service(common.HistoryServiceName))
 
 	<-s.stopC
+	handler.Stop()
 	base.Stop()
 }
 

@@ -21,17 +21,20 @@
 package main
 
 import (
+	"github.com/uber/cadence/common"
 	"log"
 	"os"
+	"os/signal"
 	"strings"
-
-	"github.com/urfave/cli"
+	"syscall"
 
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/tools/cassandra"
 	"github.com/uber/cadence/tools/sql"
 	_ "github.com/uber/cadence/tools/sql-extensions/mysql"    // needed to load mysql extensions
 	_ "github.com/uber/cadence/tools/sql-extensions/postgres" // needed to load postgres extensions
+
+	"github.com/urfave/cli"
 )
 
 // validServices is the list of all valid cadence services
@@ -72,16 +75,29 @@ func startHandler(c *cli.Context) {
 		log.Fatal("Incompatible sql versions: ", err)
 	}
 
+	var daemons []common.Daemon
 	services := getServices(c)
+	sigc := make(chan os.Signal, 1)
+	signal.Notify(sigc, syscall.SIGTERM)
 	for _, svc := range services {
 		if _, ok := cfg.Services[svc]; !ok {
 			log.Fatalf("`%v` service missing config", svc)
 		}
 		server := newServer(svc, &cfg)
+		daemons = append(daemons, server)
 		server.Start()
 	}
 
-	select {}
+	select {
+	case <-sigc:
+		{
+			log.Println("Received SIGTERM signal, initiating shutdown.")
+			for _, daemon := range daemons {
+				daemon.Stop()
+			}
+			os.Exit(0)
+		}
+	}
 }
 
 func getEnvironment(c *cli.Context) string {
