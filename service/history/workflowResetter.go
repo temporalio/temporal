@@ -219,6 +219,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 		nil,
 		identityHistoryService,
 		resetReason,
+		"",
 		baseRunID,
 		resetRunID,
 		baseLastEventVersion,

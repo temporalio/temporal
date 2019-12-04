@@ -236,6 +236,7 @@ func (r *nDCWorkflowImpl) failDecision(
 		"",
 		"",
 		"",
+		"",
 		0,
 	); err != nil {
 		return err

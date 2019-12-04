@@ -345,6 +345,7 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 		"",
 		"",
 		"",
+		"",
 		int64(0),
 	).Return(&shared.HistoryEvent{}, nil).Times(1)
 	mutableState.EXPECT().FlushBufferedEvents().Return(nil).Times(1)

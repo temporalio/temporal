@@ -255,7 +255,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskFailed(
 			}
 
 			_, err := msBuilder.AddDecisionTaskFailedEvent(decision.ScheduleID, decision.StartedID, request.GetCause(), request.Details,
-				request.GetIdentity(), "", "", "", 0)
+				request.GetIdentity(), "", request.GetBinaryChecksum(), "", "", 0)
 			return err
 		})
 }
