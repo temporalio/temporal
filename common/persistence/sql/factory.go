@@ -21,13 +21,13 @@
 package sql
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
 	p "github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/persistence/sql/storage"
-	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
+	"github.com/uber/cadence/common/persistence/sql/sqlplugin"
 	"github.com/uber/cadence/common/service/config"
 )
 
@@ -45,7 +45,7 @@ type (
 	// additional reference counting
 	dbConn struct {
 		sync.Mutex
-		sqldb.Interface
+		sqlplugin.DB
 		refCnt int
 		cfg    *config.SQL
 	}
@@ -138,15 +138,15 @@ func newRefCountedDBConn(cfg *config.SQL) dbConn {
 // get returns a mysql db connection and increments a reference count
 // this method will create a new connection, if an existing connection
 // does not exist
-func (c *dbConn) get() (sqldb.Interface, error) {
+func (c *dbConn) get() (sqlplugin.DB, error) {
 	c.Lock()
 	defer c.Unlock()
 	if c.refCnt == 0 {
-		conn, err := storage.NewSQLDB(c.cfg)
+		conn, err := NewSQLDB(c.cfg)
 		if err != nil {
 			return nil, err
 		}
-		c.Interface = conn
+		c.DB = conn
 	}
 	c.refCnt++
 	return c, nil
@@ -156,8 +156,12 @@ func (c *dbConn) get() (sqldb.Interface, error) {
 func (c *dbConn) forceClose() {
 	c.Lock()
 	defer c.Unlock()
-	if c.Interface != nil {
-		c.Interface.Close()
+	if c.DB != nil {
+		err := c.DB.Close()
+		if err != nil {
+			fmt.Println("failed to close database connection, may leak some connection", err)
+		}
+
 	}
 	c.refCnt = 0
 }
@@ -168,8 +172,8 @@ func (c *dbConn) Close() error {
 	defer c.Unlock()
 	c.refCnt--
 	if c.refCnt == 0 {
-		err := c.Interface.Close()
-		c.Interface = nil
+		err := c.DB.Close()
+		c.DB = nil
 		return err
 	}
 	return nil

@@ -198,8 +198,8 @@ type (
 		User string `yaml:"user"`
 		// Password is the password corresponding to the user name
 		Password string `yaml:"password"`
-		// DriverName is the name of SQL driver
-		DriverName string `yaml:"driverName" validate:"nonzero"`
+		// PluginName is the name of SQL plugin
+		PluginName string `yaml:"pluginName" validate:"nonzero"`
 		// DatabaseName is the name of SQL database to connect to
 		DatabaseName string `yaml:"databaseName" validate:"nonzero"`
 		// ConnectAddr is the remote addr of the database

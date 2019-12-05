@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2019 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package storage
+package mysql
 
 import (
 	"bytes"
@@ -29,12 +29,16 @@ import (
 	"github.com/iancoleman/strcase"
 	"github.com/jmoiron/sqlx"
 
-	"github.com/uber/cadence/common/persistence/sql/storage/mysql"
-	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
+	pt "github.com/uber/cadence/common/persistence/persistence-tests"
+	"github.com/uber/cadence/common/persistence/sql"
+	"github.com/uber/cadence/common/persistence/sql/sqlplugin"
 	"github.com/uber/cadence/common/service/config"
+	"github.com/uber/cadence/environment"
 )
 
 const (
+	// PluginName is the name of the plugin
+	PluginName                   = "mysql"
 	dsnFmt                       = "%s:%s@%v(%v)/%s"
 	isolationLevelAttrName       = "transaction_isolation"
 	isolationLevelAttrNameLegacy = "tx_isolation"
@@ -47,12 +51,40 @@ var dsnAttrOverrides = map[string]string{
 	"multiStatements": "true",
 }
 
-// NewSQLDB creates a returns a reference to a logical connection to the
+type plugin struct{}
+
+var _ sqlplugin.Plugin = (*plugin)(nil)
+
+func init() {
+	sql.RegisterPlugin(PluginName, &plugin{})
+}
+
+// CreateDB initialize the db object
+func (p *plugin) CreateDB(cfg *config.SQL) (sqlplugin.DB, error) {
+	conn, err := p.createDBConnection(cfg)
+	if err != nil {
+		return nil, err
+	}
+	db := NewDB(conn, nil)
+	return db, nil
+}
+
+// CreateAdminDB initialize the db object
+func (p *plugin) CreateAdminDB(cfg *config.SQL) (sqlplugin.AdminDB, error) {
+	conn, err := p.createDBConnection(cfg)
+	if err != nil {
+		return nil, err
+	}
+	db := NewDB(conn, nil)
+	return db, nil
+}
+
+// CreateDBConnection creates a returns a reference to a logical connection to the
 // underlying SQL database. The returned object is to tied to a single
 // SQL database and the object can be used to perform CRUD operations on
 // the tables in the database
-func NewSQLDB(cfg *config.SQL) (sqldb.Interface, error) {
-	db, err := sqlx.Connect(cfg.DriverName, buildDSN(cfg))
+func (p *plugin) createDBConnection(cfg *config.SQL) (*sqlx.DB, error) {
+	db, err := sqlx.Connect(PluginName, buildDSN(cfg))
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +99,7 @@ func NewSQLDB(cfg *config.SQL) (sqldb.Interface, error) {
 	}
 	// Maps struct names in CamelCase to snake without need for db struct tags.
 	db.MapperFunc(strcase.ToSnake)
-	return mysql.NewDB(db, nil), nil
+	return db, nil
 }
 
 func buildDSN(cfg *config.SQL) string {
@@ -127,5 +159,24 @@ func sanitizeAttr(inkey string, invalue string) (string, string) {
 		return key, value
 	default:
 		return inkey, invalue
+	}
+}
+
+const (
+	testUser      = "uber"
+	testPassword  = "uber"
+	testSchemaDir = "schema/mysql/v57"
+)
+
+// GetTestClusterOption return test options
+func GetTestClusterOption() *pt.TestBaseOptions {
+	return &pt.TestBaseOptions{
+		SQLDBPluginName: PluginName,
+		DBUsername:      testUser,
+		DBPassword:      testPassword,
+		DBHost:          environment.GetMySQLAddress(),
+		DBPort:          environment.GetMySQLPort(),
+		SchemaDir:       testSchemaDir,
+		StoreType:       config.StoreTypeSQL,
 	}
 }

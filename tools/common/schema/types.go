@@ -82,8 +82,8 @@ const (
 	CLIOptKeyspace = "keyspace"
 	// CLIOptDatabase is the cli option for database
 	CLIOptDatabase = "database"
-	// CLIOptDriverName is the cli option for driver name
-	CLIOptDriverName = "driver"
+	// CLIOptPluginName is the cli option for plugin name
+	CLIOptPluginName = "plugin"
 	// CLIOptVersion is the cli option for version
 	CLIOptVersion = "version"
 	// CLIOptSchemaFile is the cli option for schema file
@@ -117,8 +117,8 @@ const (
 	CLIFlagKeyspace = CLIOptKeyspace + ", k"
 	// CLIFlagDatabase is the cli flag for database
 	CLIFlagDatabase = CLIOptDatabase + ", db"
-	// CLIFlagDriverName is the cli flag for driver name
-	CLIFlagDriverName = CLIOptDriverName + ", dr"
+	// CLIFlagPluginName is the cli flag for plugin name
+	CLIFlagPluginName = CLIOptPluginName + ", pl"
 	// CLIFlagVersion is the cli flag for version
 	CLIFlagVersion = CLIOptVersion + ", v"
 	// CLIFlagSchemaFile is the cli flag for schema file

@@ -30,7 +30,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
+	"github.com/uber/cadence/common/persistence/sql/sqlplugin"
 )
 
 type sqlShardManager struct {
@@ -39,7 +39,7 @@ type sqlShardManager struct {
 }
 
 // newShardPersistence creates an instance of ShardManager
-func newShardPersistence(db sqldb.Interface, currentClusterName string, log log.Logger) (persistence.ShardManager, error) {
+func newShardPersistence(db sqlplugin.DB, currentClusterName string, log log.Logger) (persistence.ShardManager, error) {
 	return &sqlShardManager{
 		sqlStore: sqlStore{
 			db:     db,
@@ -75,7 +75,7 @@ func (m *sqlShardManager) CreateShard(request *persistence.CreateShardRequest) e
 }
 
 func (m *sqlShardManager) GetShard(request *persistence.GetShardRequest) (*persistence.GetShardResponse, error) {
-	row, err := m.db.SelectFromShards(&sqldb.ShardsFilter{ShardID: int64(request.ShardID)})
+	row, err := m.db.SelectFromShards(&sqlplugin.ShardsFilter{ShardID: int64(request.ShardID)})
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, &workflow.EntityNotExistsError{
@@ -138,7 +138,7 @@ func (m *sqlShardManager) UpdateShard(request *persistence.UpdateShardRequest) e
 			Message: fmt.Sprintf("UpdateShard operation failed. Error: %v", err),
 		}
 	}
-	return m.txExecute("UpdateShard", func(tx sqldb.Tx) error {
+	return m.txExecute("UpdateShard", func(tx sqlplugin.Tx) error {
 		if err := lockShard(tx, request.ShardInfo.ShardID, request.PreviousRangeID); err != nil {
 			return err
 		}
@@ -158,8 +158,8 @@ func (m *sqlShardManager) UpdateShard(request *persistence.UpdateShardRequest) e
 }
 
 // initiated by the owning shard
-func lockShard(tx sqldb.Tx, shardID int, oldRangeID int64) error {
-	rangeID, err := tx.WriteLockShards(&sqldb.ShardsFilter{ShardID: int64(shardID)})
+func lockShard(tx sqlplugin.Tx, shardID int, oldRangeID int64) error {
+	rangeID, err := tx.WriteLockShards(&sqlplugin.ShardsFilter{ShardID: int64(shardID)})
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return &workflow.InternalServiceError{
@@ -182,8 +182,8 @@ func lockShard(tx sqldb.Tx, shardID int, oldRangeID int64) error {
 }
 
 // initiated by the owning shard
-func readLockShard(tx sqldb.Tx, shardID int, oldRangeID int64) error {
-	rangeID, err := tx.ReadLockShards(&sqldb.ShardsFilter{ShardID: int64(shardID)})
+func readLockShard(tx sqlplugin.Tx, shardID int, oldRangeID int64) error {
+	rangeID, err := tx.ReadLockShards(&sqlplugin.ShardsFilter{ShardID: int64(shardID)})
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return &workflow.InternalServiceError{
@@ -204,7 +204,7 @@ func readLockShard(tx sqldb.Tx, shardID int, oldRangeID int64) error {
 	return nil
 }
 
-func shardInfoToShardsRow(s persistence.ShardInfo) (*sqldb.ShardsRow, error) {
+func shardInfoToShardsRow(s persistence.ShardInfo) (*sqlplugin.ShardsRow, error) {
 	timerAckLevels := make(map[string]int64, len(s.ClusterTimerAckLevel))
 	for k, v := range s.ClusterTimerAckLevel {
 		timerAckLevels[k] = v.UnixNano()
@@ -227,7 +227,7 @@ func shardInfoToShardsRow(s persistence.ShardInfo) (*sqldb.ShardsRow, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &sqldb.ShardsRow{
+	return &sqlplugin.ShardsRow{
 		ShardID:      int64(s.ShardID),
 		RangeID:      s.RangeID,
 		Data:         blob.Data,

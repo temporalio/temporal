@@ -29,7 +29,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
+	"github.com/uber/cadence/common/persistence/sql/sqlplugin"
 )
 
 type (
@@ -41,7 +41,7 @@ type (
 )
 
 func newQueue(
-	db sqldb.Interface,
+	db sqlplugin.DB,
 	logger log.Logger,
 	queueType common.QueueType,
 ) (persistence.Queue, error) {
@@ -56,7 +56,7 @@ func newQueue(
 }
 
 func (q *sqlQueue) EnqueueMessage(messagePayload []byte) error {
-	err := q.txExecute("EnqueueMessage", func(tx sqldb.Tx) error {
+	err := q.txExecute("EnqueueMessage", func(tx sqlplugin.Tx) error {
 		lastMessageID, err := tx.GetLastEnqueuedMessageIDForUpdate(q.queueType)
 		if err != nil {
 			if err == sql.ErrNoRows {
@@ -88,8 +88,8 @@ func (q *sqlQueue) ReadMessages(lastMessageID, maxCount int) ([]*persistence.Que
 	return messages, nil
 }
 
-func newQueueRow(queueType common.QueueType, messageID int, payload []byte) *sqldb.QueueRow {
-	return &sqldb.QueueRow{QueueType: queueType, MessageID: messageID, MessagePayload: payload}
+func newQueueRow(queueType common.QueueType, messageID int, payload []byte) *sqlplugin.QueueRow {
+	return &sqlplugin.QueueRow{QueueType: queueType, MessageID: messageID, MessagePayload: payload}
 }
 
 func (q *sqlQueue) DeleteMessagesBefore(messageID int) error {
@@ -103,7 +103,7 @@ func (q *sqlQueue) DeleteMessagesBefore(messageID int) error {
 }
 
 func (q *sqlQueue) UpdateAckLevel(messageID int, clusterName string) error {
-	err := q.txExecute("UpdateAckLevel", func(tx sqldb.Tx) error {
+	err := q.txExecute("UpdateAckLevel", func(tx sqlplugin.Tx) error {
 		clusterAckLevels, err := tx.GetAckLevels(q.queueType, true)
 		if err != nil {
 			return &workflow.InternalServiceError{

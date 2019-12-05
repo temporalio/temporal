@@ -18,16 +18,23 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package sqldb
+package sqlplugin
 
 import (
 	"database/sql"
 	"time"
 
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/service/config"
 )
 
 type (
+	// Plugin defines the interface for any SQL database that needs to implement
+	Plugin interface {
+		CreateDB(cfg *config.SQL) (DB, error)
+		CreateAdminDB(cfg *config.SQL) (AdminDB, error)
+	}
+
 	// DomainRow represents a row in domain table
 	DomainRow struct {
 		ID           UUID
@@ -681,6 +688,20 @@ type (
 		GetAckLevels(queueType common.QueueType, forUpdate bool) (map[string]int, error)
 	}
 
+	// adminCRUD defines admin operations for CLI and test suites
+	adminCRUD interface {
+		CreateSchemaVersionTables() error
+		ReadSchemaVersion(database string) (string, error)
+		UpdateSchemaVersion(database string, newVersion string, minCompatibleVersion string) error
+		WriteSchemaUpdateLog(oldVersion string, newVersion string, manifestMD5 string, desc string) error
+		ListTables(database string) ([]string, error)
+		DropTable(table string) error
+		DropAllTables(database string) error
+		CreateDatabase(database string) error
+		DropDatabase(database string) error
+		Exec(stmt string, args ...interface{}) error
+	}
+
 	// Tx defines the API for a SQL transaction
 	Tx interface {
 		tableCRUD
@@ -688,14 +709,22 @@ type (
 		Rollback() error
 	}
 
-	// Interface defines the API for a SQL database
-	Interface interface {
+	// DB defines the API for regular SQL operations of a Cadence server
+	DB interface {
 		tableCRUD
+
 		BeginTx() (Tx, error)
-		DriverName() string
+		PluginName() string
+		IsDupEntryError(err error) bool
 		Close() error
 	}
 
+	// AdminDB defines the API for admin SQL operations for CLI and testing suites
+	AdminDB interface {
+		adminCRUD
+		PluginName() string
+		Close() error
+	}
 	// Conn defines the API for a single database connection
 	Conn interface {
 		Exec(query string, args ...interface{}) (sql.Result, error)

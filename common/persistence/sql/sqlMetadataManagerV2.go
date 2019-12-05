@@ -24,14 +24,12 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/go-sql-driver/mysql"
-
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/.gen/go/sqlblobs"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
+	"github.com/uber/cadence/common/persistence/sql/sqlplugin"
 )
 
 type sqlMetadataManagerV2 struct {
@@ -40,7 +38,7 @@ type sqlMetadataManagerV2 struct {
 }
 
 // newMetadataPersistenceV2 creates an instance of sqlMetadataManagerV2
-func newMetadataPersistenceV2(db sqldb.Interface, currentClusterName string,
+func newMetadataPersistenceV2(db sqlplugin.DB, currentClusterName string,
 	logger log.Logger) (persistence.MetadataStore, error) {
 	return &sqlMetadataManagerV2{
 		sqlStore: sqlStore{
@@ -51,8 +49,8 @@ func newMetadataPersistenceV2(db sqldb.Interface, currentClusterName string,
 	}, nil
 }
 
-func updateMetadata(tx sqldb.Tx, oldNotificationVersion int64) error {
-	result, err := tx.UpdateDomainMetadata(&sqldb.DomainMetadataRow{NotificationVersion: oldNotificationVersion})
+func updateMetadata(tx sqlplugin.Tx, oldNotificationVersion int64) error {
+	result, err := tx.UpdateDomainMetadata(&sqlplugin.DomainMetadataRow{NotificationVersion: oldNotificationVersion})
 	if err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("Failed to update domain metadata. Error: %v", err),
@@ -73,7 +71,7 @@ func updateMetadata(tx sqldb.Tx, oldNotificationVersion int64) error {
 	return nil
 }
 
-func lockMetadata(tx sqldb.Tx) error {
+func lockMetadata(tx sqlplugin.Tx) error {
 	err := tx.LockDomainMetadata()
 	if err != nil {
 		return &workflow.InternalServiceError{
@@ -129,15 +127,15 @@ func (m *sqlMetadataManagerV2) CreateDomain(request *persistence.InternalCreateD
 	}
 
 	var resp *persistence.CreateDomainResponse
-	err = m.txExecute("CreateDomain", func(tx sqldb.Tx) error {
-		if _, err1 := tx.InsertIntoDomain(&sqldb.DomainRow{
+	err = m.txExecute("CreateDomain", func(tx sqlplugin.Tx) error {
+		if _, err1 := tx.InsertIntoDomain(&sqlplugin.DomainRow{
 			Name:         request.Info.Name,
-			ID:           sqldb.MustParseUUID(request.Info.ID),
+			ID:           sqlplugin.MustParseUUID(request.Info.ID),
 			Data:         blob.Data,
 			DataEncoding: string(blob.Encoding),
 			IsGlobal:     request.IsGlobalDomain,
 		}); err1 != nil {
-			if sqlErr, ok := err1.(*mysql.MySQLError); ok && sqlErr.Number == ErrDupEntry {
+			if m.db.IsDupEntryError(err1) {
 				return &workflow.DomainAlreadyExistsError{
 					Message: fmt.Sprintf("name: %v", request.Info.Name),
 				}
@@ -157,7 +155,7 @@ func (m *sqlMetadataManagerV2) CreateDomain(request *persistence.InternalCreateD
 }
 
 func (m *sqlMetadataManagerV2) GetDomain(request *persistence.GetDomainRequest) (*persistence.InternalGetDomainResponse, error) {
-	filter := &sqldb.DomainFilter{}
+	filter := &sqlplugin.DomainFilter{}
 	switch {
 	case request.Name != "" && request.ID != "":
 		return nil, &workflow.BadRequestError{
@@ -166,7 +164,7 @@ func (m *sqlMetadataManagerV2) GetDomain(request *persistence.GetDomainRequest) 
 	case request.Name != "":
 		filter.Name = &request.Name
 	case request.ID != "":
-		filter.ID = sqldb.UUIDPtr(sqldb.MustParseUUID(request.ID))
+		filter.ID = sqlplugin.UUIDPtr(sqlplugin.MustParseUUID(request.ID))
 	default:
 		return nil, &workflow.BadRequestError{
 			Message: "GetDomain operation failed.  Both ID and Name are empty.",
@@ -201,7 +199,7 @@ func (m *sqlMetadataManagerV2) GetDomain(request *persistence.GetDomainRequest) 
 	return response, nil
 }
 
-func (m *sqlMetadataManagerV2) domainRowToGetDomainResponse(row *sqldb.DomainRow) (*persistence.InternalGetDomainResponse, error) {
+func (m *sqlMetadataManagerV2) domainRowToGetDomainResponse(row *sqlplugin.DomainRow) (*persistence.InternalGetDomainResponse, error) {
 	domainInfo, err := domainInfoFromBlob(row.Data, row.DataEncoding)
 	if err != nil {
 		return nil, err
@@ -289,10 +287,10 @@ func (m *sqlMetadataManagerV2) UpdateDomain(request *persistence.InternalUpdateD
 		return err
 	}
 
-	return m.txExecute("UpdateDomain", func(tx sqldb.Tx) error {
-		result, err := tx.UpdateDomain(&sqldb.DomainRow{
+	return m.txExecute("UpdateDomain", func(tx sqlplugin.Tx) error {
+		result, err := tx.UpdateDomain(&sqlplugin.DomainRow{
 			Name:         request.Info.Name,
-			ID:           sqldb.MustParseUUID(request.Info.ID),
+			ID:           sqlplugin.MustParseUUID(request.Info.ID),
 			Data:         blob.Data,
 			DataEncoding: string(blob.Encoding),
 		})
@@ -314,15 +312,15 @@ func (m *sqlMetadataManagerV2) UpdateDomain(request *persistence.InternalUpdateD
 }
 
 func (m *sqlMetadataManagerV2) DeleteDomain(request *persistence.DeleteDomainRequest) error {
-	return m.txExecute("DeleteDomain", func(tx sqldb.Tx) error {
-		_, err := tx.DeleteFromDomain(&sqldb.DomainFilter{ID: sqldb.UUIDPtr(sqldb.MustParseUUID(request.ID))})
+	return m.txExecute("DeleteDomain", func(tx sqlplugin.Tx) error {
+		_, err := tx.DeleteFromDomain(&sqlplugin.DomainFilter{ID: sqlplugin.UUIDPtr(sqlplugin.MustParseUUID(request.ID))})
 		return err
 	})
 }
 
 func (m *sqlMetadataManagerV2) DeleteDomainByName(request *persistence.DeleteDomainByNameRequest) error {
-	return m.txExecute("DeleteDomainByName", func(tx sqldb.Tx) error {
-		_, err := tx.DeleteFromDomain(&sqldb.DomainFilter{Name: &request.Name})
+	return m.txExecute("DeleteDomainByName", func(tx sqlplugin.Tx) error {
+		_, err := tx.DeleteFromDomain(&sqlplugin.DomainFilter{Name: &request.Name})
 		return err
 	})
 }
@@ -338,12 +336,12 @@ func (m *sqlMetadataManagerV2) GetMetadata() (*persistence.GetMetadataResponse, 
 }
 
 func (m *sqlMetadataManagerV2) ListDomains(request *persistence.ListDomainsRequest) (*persistence.InternalListDomainsResponse, error) {
-	var pageToken *sqldb.UUID
+	var pageToken *sqlplugin.UUID
 	if request.NextPageToken != nil {
-		token := sqldb.UUID(request.NextPageToken)
+		token := sqlplugin.UUID(request.NextPageToken)
 		pageToken = &token
 	}
-	rows, err := m.db.SelectFromDomain(&sqldb.DomainFilter{
+	rows, err := m.db.SelectFromDomain(&sqlplugin.DomainFilter{
 		GreaterThanID: pageToken,
 		PageSize:      &request.PageSize,
 	})

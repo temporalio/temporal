@@ -18,63 +18,62 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package mysql
+package clitest
 
 import (
-	"log"
-	"os"
-	"testing"
+	log "github.com/sirupsen/logrus"
 
-	"github.com/stretchr/testify/suite"
+	"os"
 
 	"github.com/uber/cadence/environment"
-	"github.com/uber/cadence/schema/mysql"
 	"github.com/uber/cadence/tools/common/schema/test"
 	"github.com/uber/cadence/tools/sql"
 )
 
-type UpdateSchemaTestSuite struct {
-	test.UpdateSchemaTestBase
+type (
+	// SetupSchemaTestSuite defines a test suite
+	SetupSchemaTestSuite struct {
+		test.SetupSchemaTestBase
+		conn       *sql.Connection
+		pluginName string
+	}
+)
+
+// NewSetupSchemaTestSuite returns a test suite
+func NewSetupSchemaTestSuite(pluginName string) *SetupSchemaTestSuite {
+	return &SetupSchemaTestSuite{
+		pluginName: pluginName,
+	}
 }
 
-func TestUpdateSchemaTestSuite(t *testing.T) {
-	suite.Run(t, new(UpdateSchemaTestSuite))
-}
-
-func (s *UpdateSchemaTestSuite) SetupSuite() {
+// SetupSuite setup test suite
+func (s *SetupSchemaTestSuite) SetupSuite() {
 	os.Setenv("SQL_HOST", environment.GetMySQLAddress())
 	os.Setenv("SQL_USER", testUser)
 	os.Setenv("SQL_PASSWORD", testPassword)
-	conn, err := newTestConn("")
+	conn, err := newTestConn("", s.pluginName)
 	if err != nil {
-		log.Fatal("Error creating CQLClient")
+		log.Fatalf("error creating sql connection:%v", err)
 	}
+	s.conn = conn
 	s.SetupSuiteBase(conn)
 }
 
-func (s *UpdateSchemaTestSuite) TearDownSuite() {
+// TearDownSuite tear down test suite
+func (s *SetupSchemaTestSuite) TearDownSuite() {
 	s.TearDownSuiteBase()
 }
 
-func (s *UpdateSchemaTestSuite) TestUpdateSchema() {
-	conn, err := newTestConn(s.DBName)
+// TestCreateDatabase test
+func (s *SetupSchemaTestSuite) TestCreateDatabase() {
+	sql.RunTool([]string{"./tool", "-u", testUser, "--pw", testPassword, "create", "--db", "foobar123"})
+	err := s.conn.DropDatabase("foobar123")
 	s.Nil(err)
-	defer conn.Close()
-	s.RunUpdateSchemaTest(sql.BuildCLIOptions(), conn, "--db", createTestSQLFileContent(), []string{"task_maps", "tasks"})
 }
 
-func (s *UpdateSchemaTestSuite) TestDryrun() {
-	conn, err := newTestConn(s.DBName)
+// TestSetupSchema test
+func (s *SetupSchemaTestSuite) TestSetupSchema() {
+	conn, err := newTestConn(s.DBName, s.pluginName)
 	s.Nil(err)
-	defer conn.Close()
-	dir := "../../../schema/mysql/v57/cadence/versioned"
-	s.RunDryrunTest(sql.BuildCLIOptions(), conn, "--db", dir, mysql.Version)
-}
-
-func (s *UpdateSchemaTestSuite) TestVisibilityDryrun() {
-	conn, err := newTestConn(s.DBName)
-	s.Nil(err)
-	defer conn.Close()
-	dir := "../../../schema/mysql/v57/visibility/versioned"
-	s.RunDryrunTest(sql.BuildCLIOptions(), conn, "--db", dir, mysql.VisibilityVersion)
+	s.RunSetupTest(sql.BuildCLIOptions(), conn, "--db", createTestSQLFileContent(), []string{"task_maps", "tasks"})
 }

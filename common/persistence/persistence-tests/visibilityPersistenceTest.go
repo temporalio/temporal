@@ -237,8 +237,8 @@ func (s *VisibilityPersistenceSuite) TestVisibilityPagination() {
 	s.Equal(1, len(resp.Executions))
 	s.assertOpenExecutionEquals(startReq1, resp.Executions[0])
 
-	// TODO: See if it is possible in Cassandra to not return non empty token which is going to return empty result
-	if s.ExecutionManager.GetName() == "cassandra" {
+	// It is possible to not return non empty token which is going to return empty result
+	if len(resp.NextPageToken) != 0 {
 		// Now should get empty result by using token
 		resp, err4 := s.VisibilityMgr.ListOpenWorkflowExecutions(&p.ListWorkflowExecutionsRequest{
 			DomainUUID:        testDomainUUID,
@@ -249,8 +249,6 @@ func (s *VisibilityPersistenceSuite) TestVisibilityPagination() {
 		})
 		s.Nil(err4)
 		s.Equal(0, len(resp.Executions))
-	} else {
-		s.Equal(0, len(resp.NextPageToken))
 	}
 }
 
@@ -684,7 +682,7 @@ func (s *VisibilityPersistenceSuite) assertClosedExecutionEquals(
 
 func (s *VisibilityPersistenceSuite) assertOpenExecutionEquals(
 	req *p.RecordWorkflowExecutionStartedRequest, resp *gen.WorkflowExecutionInfo) {
-	s.Equal(req.Execution.RunId, resp.Execution.RunId)
+	s.Equal(req.Execution.GetRunId(), resp.Execution.GetRunId())
 	s.Equal(req.Execution.WorkflowId, resp.Execution.WorkflowId)
 	s.Equal(req.WorkflowTypeName, resp.GetType().GetName())
 	s.Equal(s.nanosToMillis(req.StartTimestamp), s.nanosToMillis(resp.GetStartTime()))

@@ -18,11 +18,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package mysql
+package clitest
 
 import (
-	"testing"
-
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
@@ -32,20 +30,27 @@ import (
 )
 
 type (
+	// HandlerTestSuite defines a test suite
 	HandlerTestSuite struct {
 		*require.Assertions // override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test, not merely log an error
 		suite.Suite
+		pluginName string
 	}
 )
 
-func TestHandlerTestSuite(t *testing.T) {
-	suite.Run(t, new(HandlerTestSuite))
+// NewHandlerTestSuite returns a test suite
+func NewHandlerTestSuite(pluginName string) *HandlerTestSuite {
+	return &HandlerTestSuite{
+		pluginName: pluginName,
+	}
 }
 
+// SetupTest setups test
 func (s *HandlerTestSuite) SetupTest() {
 	s.Assertions = require.New(s.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 }
 
+// TestValidateConnectParams test
 func (s *HandlerTestSuite) TestValidateConnectParams() {
 	p := new(sql.ConnectParams)
 	s.NotNil(sql.ValidateConnectParams(p, false))

@@ -85,10 +85,10 @@ func BuildCLIOptions() *cli.App {
 			EnvVar: "SQL_DATABASE",
 		},
 		cli.StringFlag{
-			Name:   schema.CLIFlagDriverName,
+			Name:   schema.CLIFlagPluginName,
 			Value:  "mysql",
-			Usage:  "name of the sql driver",
-			EnvVar: "SQL_DRIVER",
+			Usage:  "name of the sql plugin",
+			EnvVar: "SQL_PLUGIN",
 		},
 		cli.BoolFlag{
 			Name:  schema.CLIFlagQuiet,

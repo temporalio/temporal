@@ -130,6 +130,6 @@ interface, implementing this interface is the only way to make it work with cade
 If your database supports SQL interface, there is a simpler low level API interface that can be implemented to make it
 work with cadence. This interface is tied to a specific schema i.e. the way data is laid out across tables and the table
 names themselves are fixed. However, you get the flexibility wrt how you store the data within a table (i.e. column names and
-types are not fixed). The API interface can be found [here](https://github.com/uber/cadence/blob/master/common/persistence/sql/storage/sqldb/interfaces.go).
+types are not fixed). The API interface can be found [here](https://github.com/uber/cadence/blob/master/common/persistence/sql/plugins/interfaces.go).
 It's basically a CRUD API for every table in the schema. A sample schema definition for mysql that uses this interface
 can be found [here](https://github.com/uber/cadence/blob/master/schema/mysql/v57/cadence/schema.sql)

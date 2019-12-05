@@ -25,7 +25,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
+	"github.com/uber/cadence/common/persistence/sql/sqlplugin"
 )
 
 const (
@@ -77,7 +77,7 @@ var errCloseParams = errors.New("missing one of {closeStatus, closeTime, history
 
 // InsertIntoVisibility inserts a row into visibility table. If an row already exist,
 // its left as such and no update will be made
-func (mdb *DB) InsertIntoVisibility(row *sqldb.VisibilityRow) (sql.Result, error) {
+func (mdb *db) InsertIntoVisibility(row *sqlplugin.VisibilityRow) (sql.Result, error) {
 	row.StartTime = mdb.converter.ToMySQLDateTime(row.StartTime)
 	return mdb.conn.Exec(templateCreateWorkflowExecutionStarted,
 		row.DomainID,
@@ -91,7 +91,7 @@ func (mdb *DB) InsertIntoVisibility(row *sqldb.VisibilityRow) (sql.Result, error
 }
 
 // ReplaceIntoVisibility replaces an existing row if it exist or creates a new row in visibility table
-func (mdb *DB) ReplaceIntoVisibility(row *sqldb.VisibilityRow) (sql.Result, error) {
+func (mdb *db) ReplaceIntoVisibility(row *sqlplugin.VisibilityRow) (sql.Result, error) {
 	switch {
 	case row.CloseStatus != nil && row.CloseTime != nil && row.HistoryLength != nil:
 		row.StartTime = mdb.converter.ToMySQLDateTime(row.StartTime)
@@ -114,14 +114,14 @@ func (mdb *DB) ReplaceIntoVisibility(row *sqldb.VisibilityRow) (sql.Result, erro
 }
 
 // DeleteFromVisibility deletes a row from visibility table if it exist
-func (mdb *DB) DeleteFromVisibility(filter *sqldb.VisibilityFilter) (sql.Result, error) {
+func (mdb *db) DeleteFromVisibility(filter *sqlplugin.VisibilityFilter) (sql.Result, error) {
 	return mdb.conn.Exec(templateDeleteWorkflowExecution, filter.DomainID, filter.RunID)
 }
 
 // SelectFromVisibility reads one or more rows from visibility table
-func (mdb *DB) SelectFromVisibility(filter *sqldb.VisibilityFilter) ([]sqldb.VisibilityRow, error) {
+func (mdb *db) SelectFromVisibility(filter *sqlplugin.VisibilityFilter) ([]sqlplugin.VisibilityRow, error) {
 	var err error
-	var rows []sqldb.VisibilityRow
+	var rows []sqlplugin.VisibilityRow
 	if filter.MinStartTime != nil {
 		*filter.MinStartTime = mdb.converter.ToMySQLDateTime(*filter.MinStartTime)
 	}
@@ -130,7 +130,7 @@ func (mdb *DB) SelectFromVisibility(filter *sqldb.VisibilityFilter) ([]sqldb.Vis
 	}
 	switch {
 	case filter.MinStartTime == nil && filter.RunID != nil && filter.Closed:
-		var row sqldb.VisibilityRow
+		var row sqlplugin.VisibilityRow
 		err = mdb.conn.Get(&row, templateGetClosedWorkflowExecution, filter.DomainID, *filter.RunID)
 		if err == nil {
 			rows = append(rows, row)

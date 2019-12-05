@@ -26,17 +26,15 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/go-sql-driver/mysql"
-
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/.gen/go/sqlblobs"
 	"github.com/uber/cadence/common"
 	p "github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
+	"github.com/uber/cadence/common/persistence/sql/sqlplugin"
 )
 
 func applyWorkflowMutationTx(
-	tx sqldb.Tx,
+	tx sqlplugin.Tx,
 	shardID int,
 	workflowMutation *p.InternalWorkflowMutation,
 ) error {
@@ -46,9 +44,9 @@ func applyWorkflowMutationTx(
 	versionHistories := workflowMutation.VersionHistories
 	startVersion := workflowMutation.StartVersion
 	lastWriteVersion := workflowMutation.LastWriteVersion
-	domainID := sqldb.MustParseUUID(executionInfo.DomainID)
+	domainID := sqlplugin.MustParseUUID(executionInfo.DomainID)
 	workflowID := executionInfo.WorkflowID
-	runID := sqldb.MustParseUUID(executionInfo.RunID)
+	runID := sqlplugin.MustParseUUID(executionInfo.RunID)
 
 	// TODO remove once 2DC is deprecated
 	//  since current version is only used by 2DC
@@ -196,7 +194,7 @@ func applyWorkflowMutationTx(
 }
 
 func applyWorkflowSnapshotTxAsReset(
-	tx sqldb.Tx,
+	tx sqlplugin.Tx,
 	shardID int,
 	workflowSnapshot *p.InternalWorkflowSnapshot,
 ) error {
@@ -206,9 +204,9 @@ func applyWorkflowSnapshotTxAsReset(
 	versionHistories := workflowSnapshot.VersionHistories
 	startVersion := workflowSnapshot.StartVersion
 	lastWriteVersion := workflowSnapshot.LastWriteVersion
-	domainID := sqldb.MustParseUUID(executionInfo.DomainID)
+	domainID := sqlplugin.MustParseUUID(executionInfo.DomainID)
 	workflowID := executionInfo.WorkflowID
-	runID := sqldb.MustParseUUID(executionInfo.RunID)
+	runID := sqlplugin.MustParseUUID(executionInfo.RunID)
 
 	// TODO remove once 2DC is deprecated
 	//  since current version is only used by 2DC
@@ -402,8 +400,8 @@ func applyWorkflowSnapshotTxAsReset(
 	return nil
 }
 
-func applyWorkflowSnapshotTxAsNew(
-	tx sqldb.Tx,
+func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
+	tx sqlplugin.Tx,
 	shardID int,
 	workflowSnapshot *p.InternalWorkflowSnapshot,
 ) error {
@@ -413,9 +411,9 @@ func applyWorkflowSnapshotTxAsNew(
 	versionHistories := workflowSnapshot.VersionHistories
 	startVersion := workflowSnapshot.StartVersion
 	lastWriteVersion := workflowSnapshot.LastWriteVersion
-	domainID := sqldb.MustParseUUID(executionInfo.DomainID)
+	domainID := sqlplugin.MustParseUUID(executionInfo.DomainID)
 	workflowID := executionInfo.WorkflowID
-	runID := sqldb.MustParseUUID(executionInfo.RunID)
+	runID := sqlplugin.MustParseUUID(executionInfo.RunID)
 
 	// TODO remove once 2DC is deprecated
 	//  since current version is only used by 2DC
@@ -424,7 +422,7 @@ func applyWorkflowSnapshotTxAsNew(
 		currentVersion = replicationState.CurrentVersion
 	}
 
-	if err := createExecution(tx,
+	if err := m.createExecution(tx,
 		executionInfo,
 		replicationState,
 		versionHistories,
@@ -522,11 +520,11 @@ func applyWorkflowSnapshotTxAsNew(
 }
 
 func applyTasks(
-	tx sqldb.Tx,
+	tx sqlplugin.Tx,
 	shardID int,
-	domainID sqldb.UUID,
+	domainID sqlplugin.UUID,
 	workflowID string,
-	runID sqldb.UUID,
+	runID sqlplugin.UUID,
 	transferTasks []p.Task,
 	replicationTasks []p.Task,
 	timerTasks []p.Task,
@@ -571,13 +569,13 @@ func applyTasks(
 // lockCurrentExecutionIfExists returns current execution or nil if none is found for the workflowID
 // locking it in the DB
 func lockCurrentExecutionIfExists(
-	tx sqldb.Tx,
+	tx sqlplugin.Tx,
 	shardID int,
-	domainID sqldb.UUID,
+	domainID sqlplugin.UUID,
 	workflowID string,
-) (*sqldb.CurrentExecutionsRow, error) {
+) (*sqlplugin.CurrentExecutionsRow, error) {
 
-	rows, err := tx.LockCurrentExecutionsJoinExecutions(&sqldb.CurrentExecutionsFilter{
+	rows, err := tx.LockCurrentExecutionsJoinExecutions(&sqlplugin.CurrentExecutionsFilter{
 		ShardID: int64(shardID), DomainID: domainID, WorkflowID: workflowID})
 	if err != nil {
 		if err != sql.ErrNoRows {
@@ -599,12 +597,12 @@ func lockCurrentExecutionIfExists(
 }
 
 func createOrUpdateCurrentExecution(
-	tx sqldb.Tx,
+	tx sqlplugin.Tx,
 	createMode p.CreateWorkflowMode,
 	shardID int,
-	domainID sqldb.UUID,
+	domainID sqlplugin.UUID,
 	workflowID string,
-	runID sqldb.UUID,
+	runID sqlplugin.UUID,
 	state int,
 	closeStatus int,
 	createRequestID string,
@@ -612,7 +610,7 @@ func createOrUpdateCurrentExecution(
 	lastWriteVersion int64,
 ) error {
 
-	row := sqldb.CurrentExecutionsRow{
+	row := sqlplugin.CurrentExecutionsRow{
 		ShardID:          int64(shardID),
 		DomainID:         domainID,
 		WorkflowID:       workflowID,
@@ -671,11 +669,11 @@ func createOrUpdateCurrentExecution(
 }
 
 func lockAndCheckNextEventID(
-	tx sqldb.Tx,
+	tx sqlplugin.Tx,
 	shardID int,
-	domainID sqldb.UUID,
+	domainID sqlplugin.UUID,
 	workflowID string,
-	runID sqldb.UUID,
+	runID sqlplugin.UUID,
 	condition int64,
 ) error {
 
@@ -692,14 +690,14 @@ func lockAndCheckNextEventID(
 }
 
 func lockNextEventID(
-	tx sqldb.Tx,
+	tx sqlplugin.Tx,
 	shardID int,
-	domainID sqldb.UUID,
+	domainID sqlplugin.UUID,
 	workflowID string,
-	runID sqldb.UUID,
+	runID sqlplugin.UUID,
 ) (*int64, error) {
 
-	nextEventID, err := tx.WriteLockExecutions(&sqldb.ExecutionsFilter{
+	nextEventID, err := tx.WriteLockExecutions(&sqlplugin.ExecutionsFilter{
 		ShardID:    shardID,
 		DomainID:   domainID,
 		WorkflowID: workflowID,
@@ -726,19 +724,19 @@ func lockNextEventID(
 }
 
 func createTransferTasks(
-	tx sqldb.Tx,
+	tx sqlplugin.Tx,
 	transferTasks []p.Task,
 	shardID int,
-	domainID sqldb.UUID,
+	domainID sqlplugin.UUID,
 	workflowID string,
-	runID sqldb.UUID,
+	runID sqlplugin.UUID,
 ) error {
 
 	if len(transferTasks) == 0 {
 		return nil
 	}
 
-	transferTasksRows := make([]sqldb.TransferTasksRow, len(transferTasks))
+	transferTasksRows := make([]sqlplugin.TransferTasksRow, len(transferTasks))
 	for i, task := range transferTasks {
 		info := &sqlblobs.TransferTaskInfo{
 			DomainID:         domainID,
@@ -754,35 +752,35 @@ func createTransferTasks(
 
 		switch task.GetType() {
 		case p.TransferTaskTypeActivityTask:
-			info.TargetDomainID = sqldb.MustParseUUID(task.(*p.ActivityTask).DomainID)
+			info.TargetDomainID = sqlplugin.MustParseUUID(task.(*p.ActivityTask).DomainID)
 			info.TaskList = &task.(*p.ActivityTask).TaskList
 			info.ScheduleID = &task.(*p.ActivityTask).ScheduleID
 
 		case p.TransferTaskTypeDecisionTask:
-			info.TargetDomainID = sqldb.MustParseUUID(task.(*p.DecisionTask).DomainID)
+			info.TargetDomainID = sqlplugin.MustParseUUID(task.(*p.DecisionTask).DomainID)
 			info.TaskList = &task.(*p.DecisionTask).TaskList
 			info.ScheduleID = &task.(*p.DecisionTask).ScheduleID
 
 		case p.TransferTaskTypeCancelExecution:
-			info.TargetDomainID = sqldb.MustParseUUID(task.(*p.CancelExecutionTask).TargetDomainID)
+			info.TargetDomainID = sqlplugin.MustParseUUID(task.(*p.CancelExecutionTask).TargetDomainID)
 			info.TargetWorkflowID = &task.(*p.CancelExecutionTask).TargetWorkflowID
 			if task.(*p.CancelExecutionTask).TargetRunID != "" {
-				info.TargetRunID = sqldb.MustParseUUID(task.(*p.CancelExecutionTask).TargetRunID)
+				info.TargetRunID = sqlplugin.MustParseUUID(task.(*p.CancelExecutionTask).TargetRunID)
 			}
 			info.TargetChildWorkflowOnly = &task.(*p.CancelExecutionTask).TargetChildWorkflowOnly
 			info.ScheduleID = &task.(*p.CancelExecutionTask).InitiatedID
 
 		case p.TransferTaskTypeSignalExecution:
-			info.TargetDomainID = sqldb.MustParseUUID(task.(*p.SignalExecutionTask).TargetDomainID)
+			info.TargetDomainID = sqlplugin.MustParseUUID(task.(*p.SignalExecutionTask).TargetDomainID)
 			info.TargetWorkflowID = &task.(*p.SignalExecutionTask).TargetWorkflowID
 			if task.(*p.SignalExecutionTask).TargetRunID != "" {
-				info.TargetRunID = sqldb.MustParseUUID(task.(*p.SignalExecutionTask).TargetRunID)
+				info.TargetRunID = sqlplugin.MustParseUUID(task.(*p.SignalExecutionTask).TargetRunID)
 			}
 			info.TargetChildWorkflowOnly = &task.(*p.SignalExecutionTask).TargetChildWorkflowOnly
 			info.ScheduleID = &task.(*p.SignalExecutionTask).InitiatedID
 
 		case p.TransferTaskTypeStartChildExecution:
-			info.TargetDomainID = sqldb.MustParseUUID(task.(*p.StartChildExecutionTask).TargetDomainID)
+			info.TargetDomainID = sqlplugin.MustParseUUID(task.(*p.StartChildExecutionTask).TargetDomainID)
 			info.TargetWorkflowID = &task.(*p.StartChildExecutionTask).TargetWorkflowID
 			info.ScheduleID = &task.(*p.StartChildExecutionTask).InitiatedID
 
@@ -834,18 +832,18 @@ func createTransferTasks(
 }
 
 func createReplicationTasks(
-	tx sqldb.Tx,
+	tx sqlplugin.Tx,
 	replicationTasks []p.Task,
 	shardID int,
-	domainID sqldb.UUID,
+	domainID sqlplugin.UUID,
 	workflowID string,
-	runID sqldb.UUID,
+	runID sqlplugin.UUID,
 ) error {
 
 	if len(replicationTasks) == 0 {
 		return nil
 	}
-	replicationTasksRows := make([]sqldb.ReplicationTasksRow, len(replicationTasks))
+	replicationTasksRows := make([]sqlplugin.ReplicationTasksRow, len(replicationTasks))
 
 	for i, task := range replicationTasks {
 
@@ -937,16 +935,16 @@ func createReplicationTasks(
 }
 
 func createTimerTasks(
-	tx sqldb.Tx,
+	tx sqlplugin.Tx,
 	timerTasks []p.Task,
 	shardID int,
-	domainID sqldb.UUID,
+	domainID sqlplugin.UUID,
 	workflowID string,
-	runID sqldb.UUID,
+	runID sqlplugin.UUID,
 ) error {
 
 	if len(timerTasks) > 0 {
-		timerTasksRows := make([]sqldb.TimerTasksRow, len(timerTasks))
+		timerTasksRows := make([]sqlplugin.TimerTasksRow, len(timerTasks))
 
 		for i, task := range timerTasks {
 			info := &sqlblobs.TimerTaskInfo{}
@@ -1026,26 +1024,26 @@ func createTimerTasks(
 }
 
 func assertNotCurrentExecution(
-	tx sqldb.Tx,
+	tx sqlplugin.Tx,
 	shardID int,
-	domainID sqldb.UUID,
+	domainID sqlplugin.UUID,
 	workflowID string,
-	runID sqldb.UUID,
+	runID sqlplugin.UUID,
 ) error {
 
-	assertFn := func(currentRow *sqldb.CurrentExecutionsRow) error {
+	assertFn := func(currentRow *sqlplugin.CurrentExecutionsRow) error {
 		return assertRunIDMismatch(runID, currentRow.RunID)
 	}
 	return assertCurrentExecution(tx, shardID, domainID, workflowID, assertFn)
 }
 
 func assertRunIDAndUpdateCurrentExecution(
-	tx sqldb.Tx,
+	tx sqlplugin.Tx,
 	shardID int,
-	domainID sqldb.UUID,
+	domainID sqlplugin.UUID,
 	workflowID string,
-	newRunID sqldb.UUID,
-	previousRunID sqldb.UUID,
+	newRunID sqlplugin.UUID,
+	previousRunID sqlplugin.UUID,
 	createRequestID string,
 	state int,
 	closeStatus int,
@@ -1053,7 +1051,7 @@ func assertRunIDAndUpdateCurrentExecution(
 	lastWriteVersion int64,
 ) error {
 
-	assertFn := func(currentRow *sqldb.CurrentExecutionsRow) error {
+	assertFn := func(currentRow *sqlplugin.CurrentExecutionsRow) error {
 		if !bytes.Equal(currentRow.RunID, previousRunID) {
 			return &p.ConditionFailedError{Msg: fmt.Sprintf(
 				"assertRunIDAndUpdateCurrentExecution failed. Current run ID was %v, expected %v",
@@ -1071,12 +1069,12 @@ func assertRunIDAndUpdateCurrentExecution(
 }
 
 func assertAndUpdateCurrentExecution(
-	tx sqldb.Tx,
+	tx sqlplugin.Tx,
 	shardID int,
-	domainID sqldb.UUID,
+	domainID sqlplugin.UUID,
 	workflowID string,
-	newRunID sqldb.UUID,
-	previousRunID sqldb.UUID,
+	newRunID sqlplugin.UUID,
+	previousRunID sqlplugin.UUID,
 	previousLastWriteVersion int64,
 	previousState int,
 	createRequestID string,
@@ -1086,7 +1084,7 @@ func assertAndUpdateCurrentExecution(
 	lastWriteVersion int64,
 ) error {
 
-	assertFn := func(currentRow *sqldb.CurrentExecutionsRow) error {
+	assertFn := func(currentRow *sqlplugin.CurrentExecutionsRow) error {
 		if !bytes.Equal(currentRow.RunID, previousRunID) {
 			return &p.ConditionFailedError{Msg: fmt.Sprintf(
 				"assertAndUpdateCurrentExecution failed. Current run ID was %v, expected %v",
@@ -1118,14 +1116,14 @@ func assertAndUpdateCurrentExecution(
 }
 
 func assertCurrentExecution(
-	tx sqldb.Tx,
+	tx sqlplugin.Tx,
 	shardID int,
-	domainID sqldb.UUID,
+	domainID sqlplugin.UUID,
 	workflowID string,
-	assertFn func(currentRow *sqldb.CurrentExecutionsRow) error,
+	assertFn func(currentRow *sqlplugin.CurrentExecutionsRow) error,
 ) error {
 
-	currentRow, err := tx.LockCurrentExecutions(&sqldb.CurrentExecutionsFilter{
+	currentRow, err := tx.LockCurrentExecutions(&sqlplugin.CurrentExecutionsFilter{
 		ShardID:    int64(shardID),
 		DomainID:   domainID,
 		WorkflowID: workflowID,
@@ -1138,7 +1136,7 @@ func assertCurrentExecution(
 	return assertFn(currentRow)
 }
 
-func assertRunIDMismatch(runID sqldb.UUID, currentRunID sqldb.UUID) error {
+func assertRunIDMismatch(runID sqlplugin.UUID, currentRunID sqlplugin.UUID) error {
 	// zombie workflow creation with existence of current record, this is a noop
 	if bytes.Equal(currentRunID, runID) {
 		return &p.ConditionFailedError{Msg: fmt.Sprintf(
@@ -1151,11 +1149,11 @@ func assertRunIDMismatch(runID sqldb.UUID, currentRunID sqldb.UUID) error {
 }
 
 func updateCurrentExecution(
-	tx sqldb.Tx,
+	tx sqlplugin.Tx,
 	shardID int,
-	domainID sqldb.UUID,
+	domainID sqlplugin.UUID,
 	workflowID string,
-	runID sqldb.UUID,
+	runID sqlplugin.UUID,
 	createRequestID string,
 	state int,
 	closeStatus int,
@@ -1163,7 +1161,7 @@ func updateCurrentExecution(
 	lastWriteVersion int64,
 ) error {
 
-	result, err := tx.UpdateCurrentExecutions(&sqldb.CurrentExecutionsRow{
+	result, err := tx.UpdateCurrentExecutions(&sqlplugin.CurrentExecutionsRow{
 		ShardID:          int64(shardID),
 		DomainID:         domainID,
 		WorkflowID:       workflowID,
@@ -1201,7 +1199,7 @@ func buildExecutionRow(
 	lastWriteVersion int64,
 	currentVersion int64,
 	shardID int,
-) (row *sqldb.ExecutionsRow, err error) {
+) (row *sqlplugin.ExecutionsRow, err error) {
 
 	info := &sqlblobs.WorkflowExecutionInfo{
 		TaskList:                                &executionInfo.TaskList,
@@ -1278,9 +1276,9 @@ func buildExecutionRow(
 	}
 
 	if executionInfo.ParentDomainID != "" {
-		info.ParentDomainID = sqldb.MustParseUUID(executionInfo.ParentDomainID)
+		info.ParentDomainID = sqlplugin.MustParseUUID(executionInfo.ParentDomainID)
 		info.ParentWorkflowID = &executionInfo.ParentWorkflowID
-		info.ParentRunID = sqldb.MustParseUUID(executionInfo.ParentRunID)
+		info.ParentRunID = sqlplugin.MustParseUUID(executionInfo.ParentRunID)
 		info.InitiatedID = &executionInfo.InitiatedID
 		info.CompletionEvent = nil
 	}
@@ -1295,11 +1293,11 @@ func buildExecutionRow(
 		return nil, err
 	}
 
-	return &sqldb.ExecutionsRow{
+	return &sqlplugin.ExecutionsRow{
 		ShardID:          shardID,
-		DomainID:         sqldb.MustParseUUID(executionInfo.DomainID),
+		DomainID:         sqlplugin.MustParseUUID(executionInfo.DomainID),
 		WorkflowID:       executionInfo.WorkflowID,
-		RunID:            sqldb.MustParseUUID(executionInfo.RunID),
+		RunID:            sqlplugin.MustParseUUID(executionInfo.RunID),
 		NextEventID:      int64(executionInfo.NextEventID),
 		LastWriteVersion: lastWriteVersion,
 		Data:             blob.Data,
@@ -1307,8 +1305,8 @@ func buildExecutionRow(
 	}, nil
 }
 
-func createExecution(
-	tx sqldb.Tx,
+func (m *sqlExecutionManager) createExecution(
+	tx sqlplugin.Tx,
 	executionInfo *p.InternalWorkflowExecutionInfo,
 	replicationState *p.ReplicationState,
 	versionHistories *p.DataBlob,
@@ -1343,28 +1341,18 @@ func createExecution(
 	}
 	result, err := tx.InsertIntoExecutions(row)
 	if err != nil {
-		switch mysqlErr := err.(type) {
-		case *mysql.MySQLError:
-			switch mysqlErr.Number {
-			case uint16(1062):
-				// mysql error `Duplicate entry`
-				return &p.WorkflowExecutionAlreadyStartedError{
-					Msg:              fmt.Sprintf("Workflow execution already running. WorkflowId: %v", executionInfo.WorkflowID),
-					StartRequestID:   executionInfo.CreateRequestID,
-					RunID:            executionInfo.RunID,
-					State:            executionInfo.State,
-					CloseStatus:      executionInfo.CloseStatus,
-					LastWriteVersion: row.LastWriteVersion,
-				}
-			default:
-				return &workflow.InternalServiceError{
-					Message: fmt.Sprintf("createExecution failed. Erorr: %v, Code: %v", err, mysqlErr.Number),
-				}
+		if m.db.IsDupEntryError(err) {
+			return &p.WorkflowExecutionAlreadyStartedError{
+				Msg:              fmt.Sprintf("Workflow execution already running. WorkflowId: %v", executionInfo.WorkflowID),
+				StartRequestID:   executionInfo.CreateRequestID,
+				RunID:            executionInfo.RunID,
+				State:            executionInfo.State,
+				CloseStatus:      executionInfo.CloseStatus,
+				LastWriteVersion: row.LastWriteVersion,
 			}
-		default:
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("createExecution failed. Erorr: %v", err),
-			}
+		}
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("createExecution failed. Erorr: %v", err),
 		}
 	}
 	rowsAffected, err := result.RowsAffected()
@@ -1383,7 +1371,7 @@ func createExecution(
 }
 
 func updateExecution(
-	tx sqldb.Tx,
+	tx sqlplugin.Tx,
 	executionInfo *p.InternalWorkflowExecutionInfo,
 	replicationState *p.ReplicationState,
 	versionHistories *p.DataBlob,

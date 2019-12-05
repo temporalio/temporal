@@ -25,7 +25,7 @@ import (
 	"encoding/json"
 
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
+	"github.com/uber/cadence/common/persistence/sql/sqlplugin"
 )
 
 const (
@@ -40,44 +40,44 @@ const (
 )
 
 // InsertIntoQueue inserts a new row into queue table
-func (mdb *DB) InsertIntoQueue(row *sqldb.QueueRow) (sql.Result, error) {
+func (mdb *db) InsertIntoQueue(row *sqlplugin.QueueRow) (sql.Result, error) {
 	return mdb.conn.NamedExec(templateEnqueueMessageQuery, row)
 }
 
 // GetLastEnqueuedMessageIDForUpdate returns the last enqueued message ID
-func (mdb *DB) GetLastEnqueuedMessageIDForUpdate(queueType common.QueueType) (int, error) {
+func (mdb *db) GetLastEnqueuedMessageIDForUpdate(queueType common.QueueType) (int, error) {
 	var lastMessageID int
 	err := mdb.conn.Get(&lastMessageID, templateGetLastMessageIDQuery, queueType)
 	return lastMessageID, err
 }
 
 // GetMessagesFromQueue retrieves messages from the queue
-func (mdb *DB) GetMessagesFromQueue(queueType common.QueueType, lastMessageID, maxRows int) ([]sqldb.QueueRow, error) {
-	var rows []sqldb.QueueRow
+func (mdb *db) GetMessagesFromQueue(queueType common.QueueType, lastMessageID, maxRows int) ([]sqlplugin.QueueRow, error) {
+	var rows []sqlplugin.QueueRow
 	err := mdb.conn.Select(&rows, templateGetMessagesQuery, queueType, lastMessageID, maxRows)
 	return rows, err
 }
 
 // DeleteMessagesBefore deletes messages before messageID from the queue
-func (mdb *DB) DeleteMessagesBefore(queueType common.QueueType, messageID int) (sql.Result, error) {
+func (mdb *db) DeleteMessagesBefore(queueType common.QueueType, messageID int) (sql.Result, error) {
 	return mdb.conn.Exec(templateDeleteMessagesQuery, queueType, messageID)
 }
 
 // InsertAckLevel inserts ack level
-func (mdb *DB) InsertAckLevel(queueType common.QueueType, messageID int, clusterName string) error {
+func (mdb *db) InsertAckLevel(queueType common.QueueType, messageID int, clusterName string) error {
 	clusterAckLevels := map[string]int{clusterName: messageID}
 	data, err := json.Marshal(clusterAckLevels)
 	if err != nil {
 		return err
 	}
 
-	_, err = mdb.conn.NamedExec(templateInsertQueueMetadataQuery, sqldb.QueueMetadataRow{QueueType: queueType, Data: data})
+	_, err = mdb.conn.NamedExec(templateInsertQueueMetadataQuery, sqlplugin.QueueMetadataRow{QueueType: queueType, Data: data})
 	return err
 
 }
 
 // UpdateAckLevels updates cluster ack levels
-func (mdb *DB) UpdateAckLevels(queueType common.QueueType, clusterAckLevels map[string]int) error {
+func (mdb *db) UpdateAckLevels(queueType common.QueueType, clusterAckLevels map[string]int) error {
 	data, err := json.Marshal(clusterAckLevels)
 	if err != nil {
 		return err
@@ -88,7 +88,7 @@ func (mdb *DB) UpdateAckLevels(queueType common.QueueType, clusterAckLevels map[
 }
 
 // GetAckLevels returns ack levels for pulling clusters
-func (mdb *DB) GetAckLevels(queueType common.QueueType, forUpdate bool) (map[string]int, error) {
+func (mdb *db) GetAckLevels(queueType common.QueueType, forUpdate bool) (map[string]int, error) {
 	queryStr := templateGetQueueMetadataQuery
 	if forUpdate {
 		queryStr = templateGetQueueMetadataForUpdateQuery

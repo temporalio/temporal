@@ -260,12 +260,12 @@ install-schema-mysql: bins
 	./cadence-sql-tool --ep 127.0.0.1 --db cadence_visibility update-schema -d ./schema/mysql/v57/visibility/versioned
 
 install-schema-postgres: bins
-	./cadence-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw cadence --dr postgres create --db cadence
-	./cadence-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw cadence --dr postgres --db cadence setup -v 0.0
-	./cadence-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw cadence --dr postgres --db cadence update-schema -d ./schema/postgres/cadence/versioned
-	./cadence-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw cadence --dr postgres create --db cadence_visibility
-	./cadence-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw cadence --dr postgres --db cadence_visibility setup-schema -v 0.0
-	./cadence-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw cadence --dr postgres --db cadence_visibility update-schema -d ./schema/postgres/visibility/versioned
+	./cadence-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw cadence --pl postgres create --db cadence
+	./cadence-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw cadence --pl postgres --db cadence setup -v 0.0
+	./cadence-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw cadence --pl postgres --db cadence update-schema -d ./schema/postgres/cadence/versioned
+	./cadence-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw cadence --pl postgres create --db cadence_visibility
+	./cadence-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw cadence --pl postgres --db cadence_visibility setup-schema -v 0.0
+	./cadence-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw cadence --pl postgres --db cadence_visibility update-schema -d ./schema/postgres/visibility/versioned
 
 start: bins
 	./cadence-server start

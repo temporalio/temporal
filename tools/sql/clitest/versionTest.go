@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package mysql
+package clitest
 
 import (
 	"fmt"
@@ -28,7 +28,6 @@ import (
 	"path"
 	"runtime"
 	"strconv"
-	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -42,20 +41,27 @@ import (
 )
 
 type (
+	// VersionTestSuite defines a test suite
 	VersionTestSuite struct {
 		*require.Assertions // override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test, not merely log an error
 		suite.Suite
+		pluginName string
 	}
 )
 
-func TestVersionTestSuite(t *testing.T) {
-	suite.Run(t, new(VersionTestSuite))
+// NewVersionTestSuite returns a test suite
+func NewVersionTestSuite(pluginName string) *VersionTestSuite {
+	return &VersionTestSuite{
+		pluginName: pluginName,
+	}
 }
 
+// SetupTest setups test suite
 func (s *VersionTestSuite) SetupTest() {
 	s.Assertions = require.New(s.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 }
 
+// TestVerifyCompatibleVersion test
 func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
 	database := "cadence_test"
 	visDatabase := "cadence_visibility_test"
@@ -74,7 +80,7 @@ func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
 		"-u", testUser,
 		"-pw", testPassword,
 		"-db", database,
-		"-dr", driverName,
+		"-pl", s.pluginName,
 		"-q",
 		"setup-schema",
 		"-f", sqlFile,
@@ -89,7 +95,7 @@ func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
 		"-u", testUser,
 		"-pw", testPassword,
 		"-db", visDatabase,
-		"-dr", driverName,
+		"-pl", s.pluginName,
 		"-q",
 		"setup-schema",
 		"-f", visSQLFile,
@@ -102,7 +108,7 @@ func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
 		ConnectAddr:  fmt.Sprintf("%v:%v", environment.GetMySQLAddress(), environment.GetMySQLPort()),
 		User:         testUser,
 		Password:     testPassword,
-		DriverName:   driverName,
+		PluginName:   s.pluginName,
 		DatabaseName: database,
 	}
 	visibilityCfg := defaultCfg
@@ -119,6 +125,7 @@ func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
 	s.NoError(sql.VerifyCompatibleVersion(cfg))
 }
 
+// TestCheckCompatibleVersion test
 func (s *VersionTestSuite) TestCheckCompatibleVersion() {
 	flags := []struct {
 		expectedVersion string
@@ -137,7 +144,7 @@ func (s *VersionTestSuite) TestCheckCompatibleVersion() {
 }
 
 func (s *VersionTestSuite) createDatabase(database string) func() {
-	connection, err := newTestConn("")
+	connection, err := newTestConn("", s.pluginName)
 	s.NoError(err)
 	err = connection.CreateDatabase(database)
 	s.NoError(err)
@@ -175,7 +182,7 @@ func (s *VersionTestSuite) runCheckCompatibleVersion(
 		"-u", testUser,
 		"-pw", testPassword,
 		"-db", database,
-		"-dr", driverName,
+		"-pl", s.pluginName,
 		"-q",
 		"setup-schema",
 		"-f", sqlFile,
@@ -190,7 +197,7 @@ func (s *VersionTestSuite) runCheckCompatibleVersion(
 		ConnectAddr:  fmt.Sprintf("%v:%v", environment.GetMySQLAddress(), environment.GetMySQLPort()),
 		User:         testUser,
 		Password:     testPassword,
-		DriverName:   driverName,
+		PluginName:   s.pluginName,
 		DatabaseName: database,
 	}
 	err = sql.CheckCompatibleVersion(cfg, expected)

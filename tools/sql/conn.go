@@ -22,10 +22,10 @@ package sql
 
 import (
 	"fmt"
-	"time"
 
-	"github.com/jmoiron/sqlx"
-
+	"github.com/uber/cadence/common/persistence/sql"
+	"github.com/uber/cadence/common/persistence/sql/sqlplugin"
+	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/tools/common/schema"
 )
 
@@ -37,105 +37,72 @@ type (
 		User       string
 		Password   string
 		Database   string
-		DriverName string
+		PluginName string
 	}
 
 	// Connection is the connection to database
 	Connection struct {
-		driver   Driver
-		database string
-		db       *sqlx.DB
-	}
-
-	// Driver is the driver interface that each SQL database needs to implement
-	Driver interface {
-		GetDriverName() string
-		CreateDBConnection(driverName, host string, port int, user string, passwd string, database string) (*sqlx.DB, error)
-		GetReadSchemaVersionSQL() string
-		GetWriteSchemaVersionSQL() string
-		GetWriteSchemaUpdateHistorySQL() string
-		GetCreateSchemaVersionTableSQL() string
-		GetCreateSchemaUpdateHistoryTableSQL() string
-		GetCreateDatabaseSQL() string
-		GetDropDatabaseSQL() string
-		GetListTablesSQL() string
-		GetDropTableSQL() string
+		dbName  string
+		adminDb sqlplugin.AdminDB
 	}
 )
 
-var supportedSQLDrivers = map[string]Driver{}
-
 var _ schema.DB = (*Connection)(nil)
-
-// RegisterDriver will register a SQL driver for SQL client CLI
-func RegisterDriver(driverName string, driver Driver) {
-	if _, ok := supportedSQLDrivers[driverName]; ok {
-		panic("driver " + driverName + " already registered")
-	}
-	supportedSQLDrivers[driverName] = driver
-}
 
 // NewConnection creates a new connection to database
 func NewConnection(params *ConnectParams) (*Connection, error) {
-	driver, ok := supportedSQLDrivers[params.DriverName]
 
-	if !ok {
-		return nil, fmt.Errorf("not supported driver %v, only supported: %v", params.DriverName, supportedSQLDrivers)
-	}
-
-	db, err := driver.CreateDBConnection(params.DriverName, params.Host, params.Port, params.User, params.Password, params.Database)
+	db, err := sql.NewSQLAdminDB(&config.SQL{
+		PluginName:   params.PluginName,
+		User:         params.User,
+		Password:     params.Password,
+		DatabaseName: params.Database,
+		ConnectAddr:  fmt.Sprintf("%v:%v", params.Host, params.Port),
+	})
 	if err != nil {
 		return nil, err
 	}
+
 	return &Connection{
-		db:       db,
-		database: params.Database,
-		driver:   driver,
+		adminDb: db,
+		dbName:  params.Database,
 	}, nil
 }
 
 // CreateSchemaVersionTables sets up the schema version tables
 func (c *Connection) CreateSchemaVersionTables() error {
-	if err := c.Exec(c.driver.GetCreateSchemaVersionTableSQL()); err != nil {
-		return err
-	}
-	return c.Exec(c.driver.GetCreateSchemaUpdateHistoryTableSQL())
+	return c.adminDb.CreateSchemaVersionTables()
 }
 
 // ReadSchemaVersion returns the current schema version for the keyspace
 func (c *Connection) ReadSchemaVersion() (string, error) {
-	var version string
-	err := c.db.Get(&version, c.driver.GetReadSchemaVersionSQL(), c.database)
-	return version, err
+	return c.adminDb.ReadSchemaVersion(c.dbName)
 }
 
 // UpdateSchemaVersion updates the schema version for the keyspace
 func (c *Connection) UpdateSchemaVersion(newVersion string, minCompatibleVersion string) error {
-	return c.Exec(c.driver.GetWriteSchemaVersionSQL(), c.database, time.Now(), newVersion, minCompatibleVersion)
+	return c.adminDb.UpdateSchemaVersion(c.dbName, newVersion, minCompatibleVersion)
 }
 
 // WriteSchemaUpdateLog adds an entry to the schema update history table
 func (c *Connection) WriteSchemaUpdateLog(oldVersion string, newVersion string, manifestMD5 string, desc string) error {
-	now := time.Now().UTC()
-	return c.Exec(c.driver.GetWriteSchemaUpdateHistorySQL(), now.Year(), int(now.Month()), now, oldVersion, newVersion, manifestMD5, desc)
+	return c.adminDb.WriteSchemaUpdateLog(oldVersion, newVersion, manifestMD5, desc)
 }
 
 // Exec executes a sql statement
 func (c *Connection) Exec(stmt string, args ...interface{}) error {
-	_, err := c.db.Exec(stmt, args...)
+	err := c.adminDb.Exec(stmt, args...)
 	return err
 }
 
 // ListTables returns a list of tables in this database
 func (c *Connection) ListTables() ([]string, error) {
-	var tables []string
-	err := c.db.Select(&tables, fmt.Sprintf(c.driver.GetListTablesSQL(), c.database))
-	return tables, err
+	return c.adminDb.ListTables(c.dbName)
 }
 
 // DropTable drops a given table from the database
 func (c *Connection) DropTable(name string) error {
-	return c.Exec(fmt.Sprintf(c.driver.GetDropTableSQL(), name))
+	return c.adminDb.DropTable(name)
 }
 
 // DropAllTables drops all tables from this database
@@ -154,17 +121,20 @@ func (c *Connection) DropAllTables() error {
 
 // CreateDatabase creates a database if it doesn't exist
 func (c *Connection) CreateDatabase(name string) error {
-	return c.Exec(fmt.Sprintf(c.driver.GetCreateDatabaseSQL(), name))
+	return c.adminDb.CreateDatabase(name)
 }
 
 // DropDatabase drops a database
 func (c *Connection) DropDatabase(name string) error {
-	return c.Exec(fmt.Sprintf(c.driver.GetDropDatabaseSQL(), name))
+	return c.adminDb.DropDatabase(name)
 }
 
 // Close closes the sql client
 func (c *Connection) Close() {
-	if c.db != nil {
-		c.db.Close()
+	if c.adminDb != nil {
+		err := c.adminDb.Close()
+		if err != nil {
+			panic("cannot close connection")
+		}
 	}
 }

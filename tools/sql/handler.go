@@ -84,7 +84,7 @@ func CheckCompatibleVersion(
 		Port:       port,
 		User:       cfg.User,
 		Password:   cfg.Password,
-		DriverName: cfg.DriverName,
+		PluginName: cfg.PluginName,
 		Database:   cfg.DatabaseName,
 	})
 	if err != nil {
@@ -184,7 +184,7 @@ func parseConnectParams(cli *cli.Context) (*ConnectParams, error) {
 	params.User = cli.GlobalString(schema.CLIOptUser)
 	params.Password = cli.GlobalString(schema.CLIOptPassword)
 	params.Database = cli.GlobalString(schema.CLIOptDatabase)
-	params.DriverName = cli.GlobalString(schema.CLIOptDriverName)
+	params.PluginName = cli.GlobalString(schema.CLIOptPluginName)
 	isDryRun := cli.Bool(schema.CLIOptDryrun)
 	if err := ValidateConnectParams(params, isDryRun); err != nil {
 		return nil, err

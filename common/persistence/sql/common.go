@@ -26,22 +26,20 @@ import (
 	"encoding/gob"
 	"fmt"
 
-	"github.com/go-sql-driver/mysql"
-
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
+	"github.com/uber/cadence/common/persistence/sql/sqlplugin"
 )
 
 // TODO: Rename all SQL Managers to Stores
 type sqlStore struct {
-	db     sqldb.Interface
+	db     sqlplugin.DB
 	logger log.Logger
 }
 
 func (m *sqlStore) GetName() string {
-	return m.db.DriverName()
+	return m.db.PluginName()
 }
 
 func (m *sqlStore) Close() {
@@ -50,7 +48,7 @@ func (m *sqlStore) Close() {
 	}
 }
 
-func (m *sqlStore) txExecute(operation string, f func(tx sqldb.Tx) error) error {
+func (m *sqlStore) txExecute(operation string, f func(tx sqlplugin.Tx) error) error {
 	tx, err := m.db.BeginTx()
 	if err != nil {
 		return &workflow.InternalServiceError{
@@ -80,15 +78,6 @@ func (m *sqlStore) txExecute(operation string, f func(tx sqldb.Tx) error) error 
 		}
 	}
 	return nil
-}
-
-// ErrDupEntry MySQL Error 1062 indicates a duplicate primary key i.e. the row already exists,
-// so we don't do the insert and return a ConditionalUpdate error.
-const ErrDupEntry = 1062
-
-func isDupEntry(err error) bool {
-	sqlErr, ok := err.(*mysql.MySQLError)
-	return ok && sqlErr.Number == ErrDupEntry
 }
 
 func gobSerialize(x interface{}) ([]byte, error) {

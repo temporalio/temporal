@@ -28,23 +28,23 @@ import (
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	p "github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/persistence/sql/storage/sqldb"
+	"github.com/uber/cadence/common/persistence/sql/sqlplugin"
 )
 
 func updateSignalsRequested(
-	tx sqldb.Tx,
+	tx sqlplugin.Tx,
 	signalRequestedIDs []string,
 	deleteSignalRequestID string,
 	shardID int,
-	domainID sqldb.UUID,
+	domainID sqlplugin.UUID,
 	workflowID string,
-	runID sqldb.UUID,
+	runID sqlplugin.UUID,
 ) error {
 
 	if len(signalRequestedIDs) > 0 {
-		rows := make([]sqldb.SignalsRequestedSetsRow, len(signalRequestedIDs))
+		rows := make([]sqlplugin.SignalsRequestedSetsRow, len(signalRequestedIDs))
 		for i, v := range signalRequestedIDs {
-			rows[i] = sqldb.SignalsRequestedSetsRow{
+			rows[i] = sqlplugin.SignalsRequestedSetsRow{
 				ShardID:    int64(shardID),
 				DomainID:   domainID,
 				WorkflowID: workflowID,
@@ -60,7 +60,7 @@ func updateSignalsRequested(
 	}
 
 	if deleteSignalRequestID != "" {
-		if _, err := tx.DeleteFromSignalsRequestedSets(&sqldb.SignalsRequestedSetsFilter{
+		if _, err := tx.DeleteFromSignalsRequestedSets(&sqlplugin.SignalsRequestedSetsFilter{
 			ShardID:    int64(shardID),
 			DomainID:   domainID,
 			WorkflowID: workflowID,
@@ -77,14 +77,14 @@ func updateSignalsRequested(
 }
 
 func getSignalsRequested(
-	db sqldb.Interface,
+	db sqlplugin.DB,
 	shardID int,
-	domainID sqldb.UUID,
+	domainID sqlplugin.UUID,
 	workflowID string,
-	runID sqldb.UUID,
+	runID sqlplugin.UUID,
 ) (map[string]struct{}, error) {
 
-	rows, err := db.SelectFromSignalsRequestedSets(&sqldb.SignalsRequestedSetsFilter{
+	rows, err := db.SelectFromSignalsRequestedSets(&sqlplugin.SignalsRequestedSetsFilter{
 		ShardID:    int64(shardID),
 		DomainID:   domainID,
 		WorkflowID: workflowID,
@@ -103,14 +103,14 @@ func getSignalsRequested(
 }
 
 func deleteSignalsRequestedSet(
-	tx sqldb.Tx,
+	tx sqlplugin.Tx,
 	shardID int,
-	domainID sqldb.UUID,
+	domainID sqlplugin.UUID,
 	workflowID string,
-	runID sqldb.UUID,
+	runID sqlplugin.UUID,
 ) error {
 
-	if _, err := tx.DeleteFromSignalsRequestedSets(&sqldb.SignalsRequestedSetsFilter{
+	if _, err := tx.DeleteFromSignalsRequestedSets(&sqlplugin.SignalsRequestedSetsFilter{
 		ShardID:    int64(shardID),
 		DomainID:   domainID,
 		WorkflowID: workflowID,
@@ -124,18 +124,18 @@ func deleteSignalsRequestedSet(
 }
 
 func updateBufferedEvents(
-	tx sqldb.Tx,
+	tx sqlplugin.Tx,
 	batch *p.DataBlob,
 	shardID int,
-	domainID sqldb.UUID,
+	domainID sqlplugin.UUID,
 	workflowID string,
-	runID sqldb.UUID,
+	runID sqlplugin.UUID,
 ) error {
 
 	if batch == nil {
 		return nil
 	}
-	row := sqldb.BufferedEventsRow{
+	row := sqlplugin.BufferedEventsRow{
 		ShardID:      shardID,
 		DomainID:     domainID,
 		WorkflowID:   workflowID,
@@ -144,7 +144,7 @@ func updateBufferedEvents(
 		DataEncoding: string(batch.Encoding),
 	}
 
-	if _, err := tx.InsertIntoBufferedEvents([]sqldb.BufferedEventsRow{row}); err != nil {
+	if _, err := tx.InsertIntoBufferedEvents([]sqlplugin.BufferedEventsRow{row}); err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("updateBufferedEvents operation failed. Error: %v", err),
 		}
@@ -153,14 +153,14 @@ func updateBufferedEvents(
 }
 
 func getBufferedEvents(
-	db sqldb.Interface,
+	db sqlplugin.DB,
 	shardID int,
-	domainID sqldb.UUID,
+	domainID sqlplugin.UUID,
 	workflowID string,
-	runID sqldb.UUID,
+	runID sqlplugin.UUID,
 ) ([]*p.DataBlob, error) {
 
-	rows, err := db.SelectFromBufferedEvents(&sqldb.BufferedEventsFilter{
+	rows, err := db.SelectFromBufferedEvents(&sqlplugin.BufferedEventsFilter{
 		ShardID:    shardID,
 		DomainID:   domainID,
 		WorkflowID: workflowID,
@@ -179,14 +179,14 @@ func getBufferedEvents(
 }
 
 func deleteBufferedEvents(
-	tx sqldb.Tx,
+	tx sqlplugin.Tx,
 	shardID int,
-	domainID sqldb.UUID,
+	domainID sqlplugin.UUID,
 	workflowID string,
-	runID sqldb.UUID,
+	runID sqlplugin.UUID,
 ) error {
 
-	if _, err := tx.DeleteFromBufferedEvents(&sqldb.BufferedEventsFilter{
+	if _, err := tx.DeleteFromBufferedEvents(&sqlplugin.BufferedEventsFilter{
 		ShardID:    shardID,
 		DomainID:   domainID,
 		WorkflowID: workflowID,

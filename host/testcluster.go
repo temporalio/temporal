@@ -43,6 +43,7 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	pes "github.com/uber/cadence/common/persistence/elasticsearch"
 	persistencetests "github.com/uber/cadence/common/persistence/persistence-tests"
+	"github.com/uber/cadence/common/persistence/sql/sqlplugin/mysql"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
@@ -117,6 +118,20 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	}
 
 	options.Persistence.StoreType = TestFlags.PersistenceType
+	if TestFlags.PersistenceType == config.StoreTypeSQL {
+		var ops *persistencetests.TestBaseOptions
+		if TestFlags.SQLPluginName == mysql.PluginName {
+			ops = mysql.GetTestClusterOption()
+		} else {
+			panic("not supported plugin " + TestFlags.SQLPluginName)
+		}
+		options.Persistence.SQLDBPluginName = TestFlags.SQLPluginName
+		options.Persistence.DBUsername = ops.DBUsername
+		options.Persistence.DBPassword = ops.DBPassword
+		options.Persistence.DBHost = ops.DBHost
+		options.Persistence.DBPort = ops.DBPort
+		options.Persistence.SchemaDir = ops.SchemaDir
+	}
 	options.Persistence.ClusterMetadata = clusterMetadata
 	testBase := persistencetests.NewTestBase(&options.Persistence)
 	testBase.Setup()

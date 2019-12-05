@@ -18,13 +18,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package mysql
+package clitest
 
 import (
-	"testing"
-
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/environment"
@@ -33,8 +30,10 @@ import (
 )
 
 type (
+	// SQLConnTestSuite defines a test suite
 	SQLConnTestSuite struct {
 		test.DBTestBase
+		pluginName string
 	}
 )
 
@@ -45,37 +44,47 @@ const (
 	testPassword = "uber"
 )
 
-func TestSQLConnTestSuite(t *testing.T) {
-	suite.Run(t, new(SQLConnTestSuite))
+// NewSQLConnTestSuite returns the test suite
+func NewSQLConnTestSuite(pluginName string) *SQLConnTestSuite {
+	return &SQLConnTestSuite{
+		pluginName: pluginName,
+	}
 }
 
+// SetupTest setups test
 func (s *SQLConnTestSuite) SetupTest() {
 	s.Assertions = require.New(s.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 }
 
+// SetupSuite setups test suite
 func (s *SQLConnTestSuite) SetupSuite() {
-	conn, err := newTestConn("")
+	conn, err := newTestConn("", s.pluginName)
 	if err != nil {
 		s.Log.Fatal("error creating sql conn, ", tag.Error(err))
 	}
 	s.SetupSuiteBase(conn)
 }
 
+// TearDownSuite tear down test suite
 func (s *SQLConnTestSuite) TearDownSuite() {
 	s.TearDownSuiteBase()
 }
 
+// TestParseCQLFile test
 func (s *SQLConnTestSuite) TestParseCQLFile() {
 	s.RunParseFileTest(createTestSQLFileContent())
 }
 
+// TestSQLConn test
+// TODO refactor the whole package to support testing against Postgres
+// https://github.com/uber/cadence/issues/2856
 func (s *SQLConnTestSuite) TestSQLConn() {
 	conn, err := sql.NewConnection(&sql.ConnectParams{
 		Host:       environment.GetMySQLAddress(),
 		Port:       environment.GetMySQLPort(),
 		User:       testUser,
 		Password:   testPassword,
-		DriverName: driverName,
+		PluginName: s.pluginName,
 		Database:   s.DBName,
 	})
 	s.Nil(err)
@@ -85,13 +94,13 @@ func (s *SQLConnTestSuite) TestSQLConn() {
 	conn.Close()
 }
 
-func newTestConn(database string) (*sql.Connection, error) {
+func newTestConn(database, pluginName string) (*sql.Connection, error) {
 	return sql.NewConnection(&sql.ConnectParams{
 		Host:       environment.GetMySQLAddress(),
 		Port:       environment.GetMySQLPort(),
 		User:       testUser,
 		Password:   testPassword,
-		DriverName: driverName,
+		PluginName: pluginName,
 		Database:   database,
 	})
 }
