@@ -28,14 +28,8 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally"
 
-	"github.com/uber/cadence/common/clock"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/loggerimpl"
-	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/service"
 )
 
 type (
@@ -45,10 +39,6 @@ type (
 
 		controller         *gomock.Controller
 		mockTransactionMgr *MocknDCTransactionMgr
-
-		mockService service.Service
-		mockShard   *shardContextImpl
-		logger      log.Logger
 
 		updateMgr *nDCTransactionMgrForExistingWorkflowImpl
 	}
@@ -62,24 +52,9 @@ func TestNDCTransactionMgrForExistingWorkflowSuite(t *testing.T) {
 func (s *nDCTransactionMgrForExistingWorkflowSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
-	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
-	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
-	s.mockService = service.NewTestService(nil, nil, metricsClient, nil, nil, nil, nil)
-
-	s.mockShard = &shardContextImpl{
-		service:                   s.mockService,
-		shardInfo:                 &persistence.ShardInfo{ShardID: 10, RangeID: 1, TransferAckLevel: 0},
-		transferSequenceNumber:    1,
-		maxTransferSequenceNumber: 100000,
-		closeCh:                   make(chan int, 100),
-		config:                    NewDynamicConfigForTest(),
-		logger:                    s.logger,
-		metricsClient:             metricsClient,
-		timeSource:                clock.NewRealTimeSource(),
-	}
-
 	s.controller = gomock.NewController(s.T())
 	s.mockTransactionMgr = NewMocknDCTransactionMgr(s.controller)
+
 	s.updateMgr = newNDCTransactionMgrForExistingWorkflow(s.mockTransactionMgr)
 }
 

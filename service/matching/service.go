@@ -21,9 +21,10 @@
 package matching
 
 import (
+	"sync/atomic"
+
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/persistence"
 	persistenceClient "github.com/uber/cadence/common/persistence/client"
 	"github.com/uber/cadence/common/resource"
@@ -34,9 +35,11 @@ import (
 // Service represents the cadence-matching service
 type Service struct {
 	resource.Resource
-	config *Config
 
-	stopC chan struct{}
+	status  int32
+	handler *Handler
+	stopC   chan struct{}
+	config  *Config
 }
 
 // NewService builds a new cadence-matching service
@@ -66,6 +69,7 @@ func NewService(
 
 	return &Service{
 		Resource: serviceResource,
+		status:   common.DaemonStatusInitialized,
 		config:   serviceConfig,
 		stopC:    make(chan struct{}),
 	}, nil
@@ -73,25 +77,35 @@ func NewService(
 
 // Start starts the service
 func (s *Service) Start() {
+	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
+		return
+	}
 
 	logger := s.GetLogger()
-	logger.Info("matching starting", tag.Service(common.MatchingServiceName))
+	logger.Info("matching starting")
 
-	handler := NewHandler(s, s.config)
-	handler.RegisterHandler()
+	s.handler = NewHandler(s, s.config)
+	s.handler.RegisterHandler()
 
 	// must start base service first
 	s.Resource.Start()
-	handler.Start()
+	s.handler.Start()
 
-	logger.Info("matching started", tag.Service(common.MatchingServiceName))
+	logger.Info("matching started")
+
 	<-s.stopC
-	handler.Stop()
-	s.Resource.Stop()
 }
 
 // Stop stops the service
 func (s *Service) Stop() {
+	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
+		return
+	}
+
 	close(s.stopC)
-	s.GetLogger().Info("matching stopped", tag.Service(common.MatchingServiceName))
+
+	s.handler.Stop()
+	s.Resource.Stop()
+
+	s.GetLogger().Info("matching stopped")
 }

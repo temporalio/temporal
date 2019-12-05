@@ -1738,7 +1738,6 @@ func (s *nDCIntegrationTestSuite) applyEventsThroughFetcher(
 	tasklist string,
 	versionHistory *persistence.VersionHistory,
 	eventBatches []*shared.History,
-	historyClient host.HistoryClient,
 	frontend *workflowservicetest.MockClient,
 ) {
 	for _, batch := range eventBatches {

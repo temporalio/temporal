@@ -30,18 +30,11 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally"
 
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/cache"
-	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/loggerimpl"
-	"github.com/uber/cadence/common/metrics"
-	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/service"
 )
 
 type (
@@ -49,15 +42,11 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller       *gomock.Controller
-		mockDomainCache  *cache.MockDomainCache
-		mockContext      *MockworkflowExecutionContext
-		mockMutableState *MockmutableState
-
-		mockService         service.Service
-		mockShard           *shardContextImpl
-		mockClusterMetadata *mocks.ClusterMetadata
-		logger              log.Logger
+		controller          *gomock.Controller
+		mockDomainCache     *cache.MockDomainCache
+		mockContext         *MockworkflowExecutionContext
+		mockMutableState    *MockmutableState
+		mockClusterMetadata *cluster.MockMetadata
 
 		domainID   string
 		workflowID string
@@ -77,25 +66,8 @@ func (s *nDCWorkflowSuite) SetupTest() {
 	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
 	s.mockContext = NewMockworkflowExecutionContext(s.controller)
 	s.mockMutableState = NewMockmutableState(s.controller)
-
-	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
-	s.mockClusterMetadata = &mocks.ClusterMetadata{}
-	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
-	s.mockService = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, nil, nil, nil, nil)
-
-	s.mockShard = &shardContextImpl{
-		service:                   s.mockService,
-		shardInfo:                 &persistence.ShardInfo{ShardID: 10, RangeID: 1, TransferAckLevel: 0},
-		transferSequenceNumber:    1,
-		maxTransferSequenceNumber: 100000,
-		closeCh:                   make(chan int, 100),
-		config:                    NewDynamicConfigForTest(),
-		logger:                    s.logger,
-		domainCache:               s.mockDomainCache,
-		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
-		timeSource:                clock.NewRealTimeSource(),
-	}
-	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
+	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.domainID = uuid.New()
 	s.workflowID = "some random workflow ID"
@@ -285,8 +257,8 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Terminate() {
 		LastEventTaskID: incomingLastEventTaskID,
 	}).AnyTimes()
 
-	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", lastEventVersion).Return(cluster.TestCurrentClusterName)
-	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(lastEventVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.mockMutableState.EXPECT().UpdateCurrentVersion(lastEventVersion, true).Return(nil).AnyTimes()
 	inFlightDecision := &decisionInfo{
@@ -368,8 +340,8 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 		LastEventTaskID: incomingLastEventTaskID,
 	}).AnyTimes()
 
-	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", lastEventVersion).Return(cluster.TestAlternativeClusterName)
-	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(lastEventVersion).Return(cluster.TestAlternativeClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	// if workflow is in zombie or finished state, keep as is
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).Times(1)

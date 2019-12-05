@@ -28,20 +28,16 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally"
 
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cache"
-	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/metrics"
-	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/service"
+	"github.com/uber/cadence/common/resource"
 )
 
 type (
@@ -49,22 +45,21 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller        *gomock.Controller
-		mockEventsCache   *MockeventsCache
-		mockDomainCache   *cache.MockDomainCache
-		mockTaskGenerator *MockmutableStateTaskGenerator
-		mockMutableState  *MockmutableState
+		controller          *gomock.Controller
+		mockResource        *resource.Test
+		mockEventsCache     *MockeventsCache
+		mockDomainCache     *cache.MockDomainCache
+		mockTaskGenerator   *MockmutableStateTaskGenerator
+		mockMutableState    *MockmutableState
+		mockClusterMetadata *cluster.MockMetadata
 
+		mockShard               *shardContextImpl
 		mockTaskGeneratorForNew *MockmutableStateTaskGenerator
 
-		logger              log.Logger
-		mockClusterMetadata *mocks.ClusterMetadata
-		mockService         service.Service
-		mockShard           *shardContextImpl
+		logger log.Logger
 
 		sourceCluster string
-
-		stateBuilder *stateBuilderImpl
+		stateBuilder  *stateBuilderImpl
 	}
 )
 
@@ -85,31 +80,28 @@ func (s *stateBuilderSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
+	s.mockResource = resource.NewTest(s.controller, metrics.History)
 	s.mockEventsCache = NewMockeventsCache(s.controller)
 	s.mockTaskGenerator = NewMockmutableStateTaskGenerator(s.controller)
 	s.mockMutableState = NewMockmutableState(s.controller)
-	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
 	s.mockTaskGeneratorForNew = NewMockmutableStateTaskGenerator(s.controller)
 	s.mockEventsCache.EXPECT().putEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
-	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
-	s.mockClusterMetadata = &mocks.ClusterMetadata{}
-	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
-	s.mockService = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, nil, nil, nil, nil)
+	s.mockDomainCache = s.mockResource.DomainCache
+	s.mockClusterMetadata = s.mockResource.ClusterMetadata
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().IsGlobalDomainEnabled().Return(true).AnyTimes()
 
+	s.logger = s.mockResource.Logger
 	s.mockShard = &shardContextImpl{
-		service:                   s.mockService,
+		Resource:                  s.mockResource,
 		shardInfo:                 &persistence.ShardInfo{ShardID: 0, RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber:    1,
-		clusterMetadata:           s.mockClusterMetadata,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   make(chan int, 100),
 		config:                    NewDynamicConfigForTest(),
 		logger:                    s.logger,
-		domainCache:               s.mockDomainCache,
 		eventsCache:               s.mockEventsCache,
-		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
-		timeSource:                clock.NewRealTimeSource(),
 	}
 	s.mockMutableState.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes()
 	s.stateBuilder = newStateBuilder(
@@ -123,20 +115,18 @@ func (s *stateBuilderSuite) SetupTest() {
 			return s.mockTaskGeneratorForNew
 		},
 	)
-	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
-	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
 	s.sourceCluster = "some random source cluster"
 }
 
 func (s *stateBuilderSuite) TearDownTest() {
 	s.stateBuilder = nil
 	s.controller.Finish()
+	s.mockResource.Finish(s.T())
 }
 
 func (s *stateBuilderSuite) mockUpdateVersion(events ...*shared.HistoryEvent) {
 	for _, event := range events {
 		s.mockMutableState.EXPECT().UpdateReplicationStateVersion(event.GetVersion(), true).Times(1)
-		s.mockClusterMetadata.On("ClusterNameForFailoverVersion", event.GetVersion()).Return(s.sourceCluster).Once()
 		s.mockMutableState.EXPECT().UpdateReplicationStateLastEventID(event.GetVersion(), event.GetEventId()).Times(1)
 	}
 	s.mockTaskGenerator.EXPECT().generateActivityTimerTasks(
@@ -480,7 +470,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		newRunStartedEvent, newRunSignalEvent, newRunDecisionEvent,
 	}
 
-	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", continueAsNewEvent.GetVersion()).Return(s.sourceCluster)
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(continueAsNewEvent.GetVersion()).Return(s.sourceCluster).AnyTimes()
 	s.mockMutableState.EXPECT().ReplicateWorkflowExecutionContinuedAsNewEvent(
 		continueAsNewEvent.GetEventId(),
 		testDomainID,
@@ -544,7 +534,6 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		},
 	}
 
-	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", continueAsNewEvent.GetVersion()).Return(s.sourceCluster)
 	s.mockMutableState.EXPECT().ReplicateWorkflowExecutionContinuedAsNewEvent(
 		continueAsNewEvent.GetEventId(),
 		testDomainID,

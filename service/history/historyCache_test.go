@@ -29,18 +29,12 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally"
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/clock"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/loggerimpl"
-	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
-	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/service"
+	"github.com/uber/cadence/common/resource"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
@@ -49,16 +43,11 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller *gomock.Controller
+		controller   *gomock.Controller
+		mockResource *resource.Test
 
-		logger              log.Logger
-		mockExecutionMgr    *mocks.ExecutionManager
-		mockClusterMetadata *mocks.ClusterMetadata
-		mockProducer        *mocks.KafkaProducer
-		mockMessagingClient messaging.Client
-		mockService         service.Service
-		mockShard           *shardContextImpl
-		cache               *historyCache
+		mockShard *shardContextImpl
+		cache     *historyCache
 	}
 )
 
@@ -68,57 +57,34 @@ func TestHistoryCacheSuite(t *testing.T) {
 }
 
 func (s *historyCacheSuite) SetupSuite() {
-
 }
 
 func (s *historyCacheSuite) TearDownSuite() {
-
 }
 
 func (s *historyCacheSuite) SetupTest() {
+	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
+	s.mockResource = resource.NewTest(s.controller, metrics.History)
+	s.mockResource.ClusterMetadata.EXPECT().IsGlobalDomainEnabled().Return(false).AnyTimes()
 
-	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
-	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-	s.Assertions = require.New(s.T())
-	s.mockExecutionMgr = &mocks.ExecutionManager{}
-	s.mockClusterMetadata = &mocks.ClusterMetadata{}
-	s.mockProducer = &mocks.KafkaProducer{}
-	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
-	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
-	s.mockService = service.NewTestService(
-		s.mockClusterMetadata,
-		s.mockMessagingClient,
-		metricsClient,
-		nil,
-		nil,
-		nil,
-		nil)
 	s.mockShard = &shardContextImpl{
-		service:                   s.mockService,
+		Resource:                  s.mockResource,
 		shardInfo:                 &persistence.ShardInfo{ShardID: 0, RangeID: 1, TransferAckLevel: 0},
-		clusterMetadata:           s.mockClusterMetadata,
 		transferSequenceNumber:    1,
-		executionManager:          s.mockExecutionMgr,
-		shardManager:              &mocks.ShardManager{},
+		executionManager:          s.mockResource.ExecutionMgr,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   make(chan int, 100),
 		config:                    NewDynamicConfigForTest(),
-		logger:                    s.logger,
-		metricsClient:             metricsClient,
-		timeSource:                clock.NewRealTimeSource(),
+		logger:                    s.mockResource.Logger,
 	}
-	s.cache = newHistoryCache(s.mockShard)
-
-	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false)
 }
 
 func (s *historyCacheSuite) TearDownTest() {
-	s.mockExecutionMgr.AssertExpectations(s.T())
-	s.mockProducer.AssertExpectations(s.T())
 	s.controller.Finish()
+	s.mockResource.Finish(s.T())
 }
 
 func (s *historyCacheSuite) TestHistoryCacheBasic() {

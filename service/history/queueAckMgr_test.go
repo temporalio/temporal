@@ -24,20 +24,16 @@ import (
 	"testing"
 	"time"
 
+	gomock "github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally"
 
-	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/loggerimpl"
-	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
-	"github.com/uber/cadence/common/mocks"
 	p "github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/service"
+	"github.com/uber/cadence/common/resource"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
@@ -46,34 +42,27 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		mockExecutionMgr    *mocks.ExecutionManager
-		mockShardMgr        *mocks.ShardManager
-		mockShard           *shardContextImpl
-		mockService         service.Service
-		mockMessagingClient messaging.Client
-		mockProducer        *mocks.KafkaProducer
-		mockClusterMetadata *mocks.ClusterMetadata
-		mockProcessor       *MockProcessor
-		metricsClient       metrics.Client
-		logger              log.Logger
-		queueAckMgr         *queueAckMgrImpl
+		controller   *gomock.Controller
+		mockResource *resource.Test
+
+		mockShard     *shardContextImpl
+		mockProcessor *MockProcessor
+
+		logger      log.Logger
+		queueAckMgr *queueAckMgrImpl
 	}
 
 	queueFailoverAckMgrSuite struct {
 		suite.Suite
 		*require.Assertions
 
-		mockExecutionMgr    *mocks.ExecutionManager
-		mockShardMgr        *mocks.ShardManager
-		mockShard           *shardContextImpl
-		mockService         service.Service
-		mockMessagingClient messaging.Client
-		mockProducer        *mocks.KafkaProducer
-		mockClusterMetadata *mocks.ClusterMetadata
-		mockProcessor       *MockProcessor
-		metricsClient       metrics.Client
+		controller   *gomock.Controller
+		mockResource *resource.Test
+
+		mockShard     *shardContextImpl
+		mockProcessor *MockProcessor
+
 		logger              log.Logger
-		domainID            string
 		queueFailoverAckMgr *queueAckMgrImpl
 	}
 )
@@ -99,18 +88,14 @@ func (s *queueAckMgrSuite) TearDownSuite() {
 func (s *queueAckMgrSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
-	s.mockExecutionMgr = &mocks.ExecutionManager{}
-	s.mockShardMgr = &mocks.ShardManager{}
-	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
-	s.metricsClient = metrics.NewClient(tally.NoopScope, metrics.History)
-	s.mockClusterMetadata = &mocks.ClusterMetadata{}
-	s.mockProducer = &mocks.KafkaProducer{}
+	s.controller = gomock.NewController(s.T())
+	s.mockResource = resource.NewTest(s.controller, metrics.History)
+
 	s.mockProcessor = &MockProcessor{}
-	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, s.metricsClient, nil, nil, nil, nil)
+
+	s.logger = s.mockResource.Logger
 	s.mockShard = &shardContextImpl{
-		service:         s.mockService,
-		clusterMetadata: s.mockClusterMetadata,
+		Resource: s.mockResource,
 		shardInfo: copyShardInfo(&p.ShardInfo{
 			ShardID: 0,
 			RangeID: 1,
@@ -120,14 +105,10 @@ func (s *queueAckMgrSuite) SetupTest() {
 			},
 		}),
 		transferSequenceNumber:    1,
-		executionManager:          s.mockExecutionMgr,
-		shardManager:              s.mockShardMgr,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   make(chan int, 100),
 		config:                    NewDynamicConfigForTest(),
 		logger:                    s.logger,
-		metricsClient:             s.metricsClient,
-		timeSource:                clock.NewRealTimeSource(),
 	}
 	s.mockShard.config.ShardUpdateMinInterval = dynamicconfig.GetDurationPropertyFn(0 * time.Second)
 
@@ -137,9 +118,9 @@ func (s *queueAckMgrSuite) SetupTest() {
 }
 
 func (s *queueAckMgrSuite) TearDownTest() {
-	s.mockExecutionMgr.AssertExpectations(s.T())
-	s.mockShardMgr.AssertExpectations(s.T())
-	s.mockProducer.AssertExpectations(s.T())
+	s.controller.Finish()
+	s.mockResource.Finish(s.T())
+	s.mockProcessor.AssertExpectations(s.T())
 }
 
 func (s *queueAckMgrSuite) TestReadTimerTasks() {
@@ -219,7 +200,6 @@ func (s *queueAckMgrSuite) TestReadCompleteTimerTasks() {
 	s.Equal(moreOutput, moreInput)
 	s.Equal(map[int64]bool{taskID: false}, s.queueAckMgr.outstandingTasks)
 
-	s.mockProcessor.On("completeTask", taskID).Return(nil).Once()
 	s.queueAckMgr.completeQueueTask(taskID)
 	s.Equal(map[int64]bool{taskID: true}, s.queueAckMgr.outstandingTasks)
 }
@@ -272,19 +252,16 @@ func (s *queueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	s.Equal(map[int64]bool{taskID1: false, taskID2: false, taskID3: false}, s.queueAckMgr.outstandingTasks)
 
 	s.mockProcessor.On("updateAckLevel", taskID1).Return(nil).Once()
-	s.mockProcessor.On("completeTask", taskID1).Return(nil).Once()
 	s.queueAckMgr.completeQueueTask(taskID1)
 	s.queueAckMgr.updateQueueAckLevel()
 	s.Equal(taskID1, s.queueAckMgr.getQueueAckLevel())
 
 	s.mockProcessor.On("updateAckLevel", taskID1).Return(nil).Once()
-	s.mockProcessor.On("completeTask", taskID3).Return(nil).Once()
 	s.queueAckMgr.completeQueueTask(taskID3)
 	s.queueAckMgr.updateQueueAckLevel()
 	s.Equal(taskID1, s.queueAckMgr.getQueueAckLevel())
 
 	s.mockProcessor.On("updateAckLevel", taskID3).Return(nil).Once()
-	s.mockProcessor.On("completeTask", taskID2).Return(nil).Once()
 	s.queueAckMgr.completeQueueTask(taskID2)
 	s.queueAckMgr.updateQueueAckLevel()
 	s.Equal(taskID3, s.queueAckMgr.getQueueAckLevel())
@@ -302,18 +279,14 @@ func (s *queueFailoverAckMgrSuite) TearDownSuite() {
 func (s *queueFailoverAckMgrSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
-	s.mockExecutionMgr = &mocks.ExecutionManager{}
-	s.mockShardMgr = &mocks.ShardManager{}
-	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
-	s.metricsClient = metrics.NewClient(tally.NoopScope, metrics.History)
-	s.mockClusterMetadata = &mocks.ClusterMetadata{}
-	s.mockProducer = &mocks.KafkaProducer{}
+	s.controller = gomock.NewController(s.T())
+	s.mockResource = resource.NewTest(s.controller, metrics.History)
+
 	s.mockProcessor = &MockProcessor{}
-	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, s.metricsClient, nil, nil, nil, nil)
+
+	s.logger = s.mockResource.Logger
 	s.mockShard = &shardContextImpl{
-		service:         s.mockService,
-		clusterMetadata: s.mockClusterMetadata,
+		Resource: s.mockResource,
 		shardInfo: copyShardInfo(&p.ShardInfo{
 			ShardID: 0,
 			RangeID: 1,
@@ -323,14 +296,10 @@ func (s *queueFailoverAckMgrSuite) SetupTest() {
 			},
 		}),
 		transferSequenceNumber:    1,
-		executionManager:          s.mockExecutionMgr,
-		shardManager:              s.mockShardMgr,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   make(chan int, 100),
 		config:                    NewDynamicConfigForTest(),
 		logger:                    s.logger,
-		metricsClient:             s.metricsClient,
-		timeSource:                clock.NewRealTimeSource(),
 	}
 	s.mockShard.config.ShardUpdateMinInterval = dynamicconfig.GetDurationPropertyFn(0 * time.Second)
 
@@ -340,9 +309,9 @@ func (s *queueFailoverAckMgrSuite) SetupTest() {
 }
 
 func (s *queueFailoverAckMgrSuite) TearDownTest() {
-	s.mockExecutionMgr.AssertExpectations(s.T())
-	s.mockShardMgr.AssertExpectations(s.T())
-	s.mockProducer.AssertExpectations(s.T())
+	s.controller.Finish()
+	s.mockResource.Finish(s.T())
+	s.mockProcessor.AssertExpectations(s.T())
 }
 
 func (s *queueFailoverAckMgrSuite) TestReadQueueTasks() {
@@ -434,7 +403,6 @@ func (s *queueFailoverAckMgrSuite) TestReadCompleteQueueTasks() {
 	s.Equal(moreOutput, moreInput)
 	s.Equal(map[int64]bool{taskID1: false, taskID2: false}, s.queueFailoverAckMgr.outstandingTasks)
 
-	s.mockProcessor.On("completeTask", taskID2).Return(nil).Once()
 	s.queueFailoverAckMgr.completeQueueTask(taskID2)
 	s.Equal(map[int64]bool{taskID1: false, taskID2: true}, s.queueFailoverAckMgr.outstandingTasks)
 	s.mockProcessor.On("updateAckLevel", s.queueFailoverAckMgr.getQueueAckLevel()).Return(nil)
@@ -445,7 +413,6 @@ func (s *queueFailoverAckMgrSuite) TestReadCompleteQueueTasks() {
 	default:
 	}
 
-	s.mockProcessor.On("completeTask", taskID1).Return(nil).Once()
 	s.queueFailoverAckMgr.completeQueueTask(taskID1)
 	s.Equal(map[int64]bool{taskID1: true, taskID2: true}, s.queueFailoverAckMgr.outstandingTasks)
 	s.mockProcessor.On("queueShutdown").Return(nil)

@@ -42,9 +42,6 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageApplication() {
 	workflowType := "event-generator-workflow-type"
 	tasklist := "event-generator-taskList"
 
-	// active has initial version 0
-	historyClient := s.active.GetHistoryClient()
-
 	var historyBatch []*shared.History
 	s.generator = test.InitializeHistoryEventGenerator(s.domainName, 1)
 
@@ -67,7 +64,6 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageApplication() {
 		tasklist,
 		versionHistory,
 		historyBatch,
-		historyClient,
 		standbyClient,
 	)
 
@@ -90,9 +86,6 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageDLQ() {
 	runID := uuid.New()
 	workflowType := "event-generator-workflow-type"
 	tasklist := "event-generator-taskList"
-
-	// active has initial version 0
-	historyClient := s.active.GetHistoryClient()
 
 	var historyBatch []*shared.History
 	s.generator = test.InitializeHistoryEventGenerator(s.domainName, 1)
@@ -117,7 +110,6 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageDLQ() {
 		tasklist,
 		versionHistory,
 		historyBatch,
-		historyClient,
 		standbyClient,
 	)
 

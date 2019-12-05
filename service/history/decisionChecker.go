@@ -607,7 +607,7 @@ func (v *decisionAttrValidator) validatedTaskList(
 
 	if taskList.GetName() == "" {
 		if defaultVal == "" {
-			return taskList, &workflow.BadRequestError{"missing task list name"}
+			return taskList, &workflow.BadRequestError{Message: "missing task list name"}
 		}
 		taskList.Name = &defaultVal
 		return taskList, nil

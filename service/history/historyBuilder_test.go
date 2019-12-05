@@ -32,10 +32,10 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
-	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/loggerimpl"
+	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/resource"
 )
 
 type (
@@ -44,6 +44,7 @@ type (
 		*require.Assertions
 
 		controller      *gomock.Controller
+		mockResource    *resource.Test
 		mockEventsCache *MockeventsCache
 		mockDomainCache *cache.MockDomainCache
 
@@ -65,36 +66,36 @@ func (s *historyBuilderSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
+	s.mockResource = resource.NewTest(s.controller, metrics.History)
 	s.mockEventsCache = NewMockeventsCache(s.controller)
-	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
 	s.mockEventsCache.EXPECT().putEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	s.mockDomainCache = s.mockResource.DomainCache
 	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(s.domainEntry, nil).AnyTimes()
 
-	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
+	s.logger = s.mockResource.Logger
 
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-	s.Assertions = require.New(s.T())
 	s.domainID = testDomainID
 	s.domainEntry = cache.NewLocalDomainCacheEntryForTest(&persistence.DomainInfo{ID: s.domainID}, &persistence.DomainConfig{}, "", nil)
 	s.mockShard = &shardContextImpl{
+		Resource:                  s.mockResource,
 		shardInfo:                 &persistence.ShardInfo{ShardID: 0, RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber:    1,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   make(chan int, 100),
 		config:                    NewDynamicConfigForTest(),
 		logger:                    s.logger,
-		timeSource:                clock.NewRealTimeSource(),
-		domainCache:               s.mockDomainCache,
 	}
 
 	s.msBuilder = newMutableStateBuilder(s.mockShard, s.mockEventsCache,
 		s.logger, testLocalDomainEntry)
 	s.builder = newHistoryBuilder(s.msBuilder, s.logger)
-
 }
 
 func (s *historyBuilderSuite) TearDownTest() {
 	s.controller.Finish()
+	s.mockResource.Finish(s.T())
 }
 
 func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {

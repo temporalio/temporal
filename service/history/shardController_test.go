@@ -31,19 +31,15 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally"
 
-	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/membership"
-	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	mmocks "github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/service"
+	"github.com/uber/cadence/common/resource"
 )
 
 type (
@@ -51,24 +47,19 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller        *gomock.Controller
-		mockHistoryEngine *MockEngine
+		controller          *gomock.Controller
+		mockResource        *resource.Test
+		mockHistoryEngine   *MockEngine
+		mockClusterMetadata *cluster.MockMetadata
+		mockServiceResolver *membership.MockServiceResolver
 
-		hostInfo                *membership.HostInfo
-		mockShardManager        *mmocks.ShardManager
-		mockExecutionMgrFactory *mmocks.ExecutionManagerFactory
-		mockHistoryV2Mgr        *mmocks.HistoryV2Manager
-		mockServiceResolver     *mmocks.ServiceResolver
-		mockMessaging           *mmocks.KafkaProducer
-		mockClusterMetadata     *mmocks.ClusterMetadata
-		mockEngineFactory       *MockHistoryEngineFactory
-		mockMessagingClient     messaging.Client
-		mockService             service.Service
-		domainCache             cache.DomainCache
-		config                  *Config
-		logger                  log.Logger
-		metricsClient           metrics.Client
-		shardController         *shardController
+		hostInfo          *membership.HostInfo
+		mockShardManager  *mmocks.ShardManager
+		mockEngineFactory *MockHistoryEngineFactory
+
+		config          *Config
+		logger          log.Logger
+		shardController *shardController
 	}
 )
 
@@ -81,32 +72,25 @@ func (s *shardControllerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
+	s.mockResource = resource.NewTest(s.controller, metrics.History)
 	s.mockHistoryEngine = NewMockEngine(s.controller)
 
-	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
-	s.config = NewDynamicConfigForTest()
-	s.metricsClient = metrics.NewClient(tally.NoopScope, metrics.History)
-	s.hostInfo = membership.NewHostInfo("shardController-host-test", nil)
-	s.mockShardManager = &mmocks.ShardManager{}
-	s.mockExecutionMgrFactory = &mmocks.ExecutionManagerFactory{}
-	s.mockHistoryV2Mgr = &mmocks.HistoryV2Manager{}
-	s.mockServiceResolver = &mmocks.ServiceResolver{}
 	s.mockEngineFactory = &MockHistoryEngineFactory{}
-	s.mockMessaging = &mmocks.KafkaProducer{}
-	s.mockClusterMetadata = &mmocks.ClusterMetadata{}
-	s.mockMessagingClient = mmocks.NewMockMessagingClient(s.mockMessaging, nil)
-	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, s.metricsClient, nil, nil, nil, nil)
-	s.shardController = newShardController(s.mockService, s.hostInfo, s.mockServiceResolver, s.mockShardManager,
-		s.mockHistoryV2Mgr, nil, s.mockExecutionMgrFactory, s.mockEngineFactory, s.config, s.logger, s.metricsClient)
+	s.mockShardManager = s.mockResource.ShardMgr
+	s.mockServiceResolver = s.mockResource.HistoryServiceResolver
+	s.mockClusterMetadata = s.mockResource.ClusterMetadata
+	s.hostInfo = s.mockResource.GetHostInfo()
+
+	s.logger = s.mockResource.Logger
+	s.config = NewDynamicConfigForTest()
+
+	s.shardController = newShardController(s.mockResource, s.mockEngineFactory, s.config)
 }
 
 func (s *shardControllerSuite) TearDownTest() {
-	s.mockExecutionMgrFactory.AssertExpectations(s.T())
-	s.mockShardManager.AssertExpectations(s.T())
-	s.mockServiceResolver.AssertExpectations(s.T())
-	s.mockEngineFactory.AssertExpectations(s.T())
-	s.mockMessaging.AssertExpectations(s.T())
 	s.controller.Finish()
+	s.mockResource.Finish(s.T())
+	s.mockEngineFactory.AssertExpectations(s.T())
 }
 
 func (s *shardControllerSuite) TestAcquireShardSuccess() {
@@ -124,10 +108,8 @@ func (s *shardControllerSuite) TestAcquireShardSuccess() {
 		hostID := shardID % 4
 		if hostID == 0 {
 			myShards = append(myShards, shardID)
-			mockExecutionMgr := &mmocks.ExecutionManager{}
-			s.mockExecutionMgrFactory.On("NewExecutionManager", mock.Anything).Return(mockExecutionMgr, nil).Once()
 			s.mockHistoryEngine.EXPECT().Start().Return().Times(1)
-			s.mockServiceResolver.On("Lookup", string(shardID)).Return(s.hostInfo, nil).Twice()
+			s.mockServiceResolver.EXPECT().Lookup(string(shardID)).Return(s.hostInfo, nil).Times(2)
 			s.mockEngineFactory.On("CreateEngine", mock.Anything).Return(s.mockHistoryEngine).Once()
 			s.mockShardManager.On("GetShard", &persistence.GetShardRequest{ShardID: shardID}).Return(
 				&persistence.GetShardResponse{
@@ -174,13 +156,13 @@ func (s *shardControllerSuite) TestAcquireShardSuccess() {
 			}).Return(nil).Once()
 		} else {
 			ownerHost := fmt.Sprintf("test-acquire-shard-host-%v", hostID)
-			s.mockServiceResolver.On("Lookup", string(shardID)).Return(membership.NewHostInfo(ownerHost, nil), nil).Once()
+			s.mockServiceResolver.EXPECT().Lookup(string(shardID)).Return(membership.NewHostInfo(ownerHost, nil), nil).Times(1)
 		}
 	}
 
 	// when shard is initialized, it will use the 2 mock function below to initialize the "current" time of each cluster
-	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
-	s.mockClusterMetadata.On("GetAllClusterInfo").Return(cluster.TestSingleDCClusterInfo)
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
 	s.shardController.acquireShards()
 	count := 0
 	for _, shardID := range myShards {
@@ -194,12 +176,12 @@ func (s *shardControllerSuite) TestAcquireShardLookupFailure() {
 	numShards := 2
 	s.config.NumberOfShards = numShards
 	for shardID := 0; shardID < numShards; shardID++ {
-		s.mockServiceResolver.On("Lookup", string(shardID)).Return(nil, errors.New("ring failure")).Once()
+		s.mockServiceResolver.EXPECT().Lookup(string(shardID)).Return(nil, errors.New("ring failure")).Times(1)
 	}
 
 	s.shardController.acquireShards()
 	for shardID := 0; shardID < numShards; shardID++ {
-		s.mockServiceResolver.On("Lookup", string(shardID)).Return(nil, errors.New("ring failure")).Once()
+		s.mockServiceResolver.EXPECT().Lookup(string(shardID)).Return(nil, errors.New("ring failure")).Times(1)
 		s.Nil(s.shardController.getEngineForShard(shardID))
 	}
 }
@@ -215,10 +197,8 @@ func (s *shardControllerSuite) TestAcquireShardRenewSuccess() {
 	alternativeClusterTimerAck := time.Now().Add(-200 * time.Second)
 
 	for shardID := 0; shardID < numShards; shardID++ {
-		mockExecutionMgr := &mmocks.ExecutionManager{}
-		s.mockExecutionMgrFactory.On("NewExecutionManager", mock.Anything).Return(mockExecutionMgr, nil).Once()
 		s.mockHistoryEngine.EXPECT().Start().Return().Times(1)
-		s.mockServiceResolver.On("Lookup", string(shardID)).Return(s.hostInfo, nil).Twice()
+		s.mockServiceResolver.EXPECT().Lookup(string(shardID)).Return(s.hostInfo, nil).Times(2)
 		s.mockEngineFactory.On("CreateEngine", mock.Anything).Return(s.mockHistoryEngine).Once()
 		s.mockShardManager.On("GetShard", &persistence.GetShardRequest{ShardID: shardID}).Return(
 			&persistence.GetShardResponse{
@@ -266,12 +246,12 @@ func (s *shardControllerSuite) TestAcquireShardRenewSuccess() {
 	}
 
 	// when shard is initialized, it will use the 2 mock function below to initialize the "current" time of each cluster
-	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
-	s.mockClusterMetadata.On("GetAllClusterInfo").Return(cluster.TestSingleDCClusterInfo)
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
 	s.shardController.acquireShards()
 
 	for shardID := 0; shardID < numShards; shardID++ {
-		s.mockServiceResolver.On("Lookup", string(shardID)).Return(s.hostInfo, nil).Once()
+		s.mockServiceResolver.EXPECT().Lookup(string(shardID)).Return(s.hostInfo, nil).Times(1)
 	}
 	s.shardController.acquireShards()
 
@@ -291,10 +271,8 @@ func (s *shardControllerSuite) TestAcquireShardRenewLookupFailed() {
 	alternativeClusterTimerAck := time.Now().Add(-200 * time.Second)
 
 	for shardID := 0; shardID < numShards; shardID++ {
-		mockExecutionMgr := &mmocks.ExecutionManager{}
-		s.mockExecutionMgrFactory.On("NewExecutionManager", mock.Anything).Return(mockExecutionMgr, nil).Once()
 		s.mockHistoryEngine.EXPECT().Start().Return().Times(1)
-		s.mockServiceResolver.On("Lookup", string(shardID)).Return(s.hostInfo, nil).Twice()
+		s.mockServiceResolver.EXPECT().Lookup(string(shardID)).Return(s.hostInfo, nil).Times(2)
 		s.mockEngineFactory.On("CreateEngine", mock.Anything).Return(s.mockHistoryEngine).Once()
 		s.mockShardManager.On("GetShard", &persistence.GetShardRequest{ShardID: shardID}).Return(
 			&persistence.GetShardResponse{
@@ -342,12 +320,12 @@ func (s *shardControllerSuite) TestAcquireShardRenewLookupFailed() {
 	}
 
 	// when shard is initialized, it will use the 2 mock function below to initialize the "current" time of each cluster
-	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
-	s.mockClusterMetadata.On("GetAllClusterInfo").Return(cluster.TestSingleDCClusterInfo)
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
 	s.shardController.acquireShards()
 
 	for shardID := 0; shardID < numShards; shardID++ {
-		s.mockServiceResolver.On("Lookup", string(shardID)).Return(nil, errors.New("ring failure")).Once()
+		s.mockServiceResolver.EXPECT().Lookup(string(shardID)).Return(nil, errors.New("ring failure")).Times(1)
 	}
 	s.shardController.acquireShards()
 
@@ -359,8 +337,7 @@ func (s *shardControllerSuite) TestAcquireShardRenewLookupFailed() {
 func (s *shardControllerSuite) TestHistoryEngineClosed() {
 	numShards := 4
 	s.config.NumberOfShards = numShards
-	s.shardController = newShardController(s.mockService, s.hostInfo, s.mockServiceResolver, s.mockShardManager, s.mockHistoryV2Mgr,
-		s.domainCache, s.mockExecutionMgrFactory, s.mockEngineFactory, s.config, s.logger, s.metricsClient)
+	s.shardController = newShardController(s.mockResource, s.mockEngineFactory, s.config)
 	historyEngines := make(map[int]*MockEngine)
 	for shardID := 0; shardID < numShards; shardID++ {
 		mockEngine := NewMockEngine(s.controller)
@@ -368,11 +345,11 @@ func (s *shardControllerSuite) TestHistoryEngineClosed() {
 		s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6)
 	}
 
-	s.mockServiceResolver.On("AddListener", shardControllerMembershipUpdateListenerName,
-		mock.Anything).Return(nil)
+	s.mockServiceResolver.EXPECT().AddListener(shardControllerMembershipUpdateListenerName,
+		gomock.Any()).Return(nil).AnyTimes()
 	// when shard is initialized, it will use the 2 mock function below to initialize the "current" time of each cluster
-	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
-	s.mockClusterMetadata.On("GetAllClusterInfo").Return(cluster.TestSingleDCClusterInfo)
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
 	s.shardController.Start()
 	var workerWG sync.WaitGroup
 	for w := 0; w < 10; w++ {
@@ -395,7 +372,7 @@ func (s *shardControllerSuite) TestHistoryEngineClosed() {
 	for shardID := 0; shardID < 2; shardID++ {
 		mockEngine := historyEngines[shardID]
 		mockEngine.EXPECT().Stop().Return().Times(1)
-		s.mockServiceResolver.On("Lookup", string(shardID)).Return(differentHostInfo, nil)
+		s.mockServiceResolver.EXPECT().Lookup(string(shardID)).Return(differentHostInfo, nil).AnyTimes()
 		s.shardController.shardClosedCh <- shardID
 	}
 
@@ -436,11 +413,11 @@ func (s *shardControllerSuite) TestHistoryEngineClosed() {
 
 	workerWG.Wait()
 
-	s.mockServiceResolver.On("RemoveListener", shardControllerMembershipUpdateListenerName).Return(nil)
+	s.mockServiceResolver.EXPECT().RemoveListener(shardControllerMembershipUpdateListenerName).Return(nil).AnyTimes()
 	for shardID := 2; shardID < numShards; shardID++ {
 		mockEngine := historyEngines[shardID]
 		mockEngine.EXPECT().Stop().Return().Times(1)
-		s.mockServiceResolver.On("Lookup", string(shardID)).Return(s.hostInfo, nil)
+		s.mockServiceResolver.EXPECT().Lookup(string(shardID)).Return(s.hostInfo, nil).AnyTimes()
 	}
 	s.shardController.Stop()
 }
@@ -448,8 +425,7 @@ func (s *shardControllerSuite) TestHistoryEngineClosed() {
 func (s *shardControllerSuite) TestRingUpdated() {
 	numShards := 4
 	s.config.NumberOfShards = numShards
-	s.shardController = newShardController(s.mockService, s.hostInfo, s.mockServiceResolver, s.mockShardManager, s.mockHistoryV2Mgr,
-		s.domainCache, s.mockExecutionMgrFactory, s.mockEngineFactory, s.config, s.logger, s.metricsClient)
+	s.shardController = newShardController(s.mockResource, s.mockEngineFactory, s.config)
 	historyEngines := make(map[int]*MockEngine)
 	for shardID := 0; shardID < numShards; shardID++ {
 		mockEngine := NewMockEngine(s.controller)
@@ -457,21 +433,20 @@ func (s *shardControllerSuite) TestRingUpdated() {
 		s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6)
 	}
 
-	s.mockServiceResolver.On("AddListener", shardControllerMembershipUpdateListenerName,
-		mock.Anything).Return(nil)
+	s.mockServiceResolver.EXPECT().AddListener(shardControllerMembershipUpdateListenerName, gomock.Any()).Return(nil).AnyTimes()
 	// when shard is initialized, it will use the 2 mock function below to initialize the "current" time of each cluster
-	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
-	s.mockClusterMetadata.On("GetAllClusterInfo").Return(cluster.TestSingleDCClusterInfo)
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
 	s.shardController.Start()
 
 	differentHostInfo := membership.NewHostInfo("another-host", nil)
 	for shardID := 0; shardID < 2; shardID++ {
 		mockEngine := historyEngines[shardID]
 		mockEngine.EXPECT().Stop().Times(1)
-		s.mockServiceResolver.On("Lookup", string(shardID)).Return(differentHostInfo, nil)
+		s.mockServiceResolver.EXPECT().Lookup(string(shardID)).Return(differentHostInfo, nil).AnyTimes()
 	}
-	s.mockServiceResolver.On("Lookup", string(2)).Return(s.hostInfo, nil)
-	s.mockServiceResolver.On("Lookup", string(3)).Return(s.hostInfo, nil)
+	s.mockServiceResolver.EXPECT().Lookup(string(2)).Return(s.hostInfo, nil).AnyTimes()
+	s.mockServiceResolver.EXPECT().Lookup(string(3)).Return(s.hostInfo, nil).AnyTimes()
 	s.shardController.membershipUpdateCh <- &membership.ChangedEvent{}
 
 	var workerWG sync.WaitGroup
@@ -512,11 +487,11 @@ func (s *shardControllerSuite) TestRingUpdated() {
 
 	workerWG.Wait()
 
-	s.mockServiceResolver.On("RemoveListener", shardControllerMembershipUpdateListenerName).Return(nil)
+	s.mockServiceResolver.EXPECT().RemoveListener(shardControllerMembershipUpdateListenerName).Return(nil).AnyTimes()
 	for shardID := 2; shardID < numShards; shardID++ {
 		mockEngine := historyEngines[shardID]
 		mockEngine.EXPECT().Stop().Times(1)
-		s.mockServiceResolver.On("Lookup", string(shardID)).Return(s.hostInfo, nil)
+		s.mockServiceResolver.EXPECT().Lookup(string(shardID)).Return(s.hostInfo, nil).AnyTimes()
 	}
 	s.shardController.Stop()
 }
@@ -524,8 +499,7 @@ func (s *shardControllerSuite) TestRingUpdated() {
 func (s *shardControllerSuite) TestShardControllerClosed() {
 	numShards := 4
 	s.config.NumberOfShards = numShards
-	s.shardController = newShardController(s.mockService, s.hostInfo, s.mockServiceResolver, s.mockShardManager, s.mockHistoryV2Mgr,
-		s.domainCache, s.mockExecutionMgrFactory, s.mockEngineFactory, s.config, s.logger, s.metricsClient)
+	s.shardController = newShardController(s.mockResource, s.mockEngineFactory, s.config)
 	historyEngines := make(map[int]*MockEngine)
 	for shardID := 0; shardID < numShards; shardID++ {
 		mockEngine := NewMockEngine(s.controller)
@@ -533,11 +507,10 @@ func (s *shardControllerSuite) TestShardControllerClosed() {
 		s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6)
 	}
 
-	s.mockServiceResolver.On("AddListener", shardControllerMembershipUpdateListenerName,
-		mock.Anything).Return(nil)
+	s.mockServiceResolver.EXPECT().AddListener(shardControllerMembershipUpdateListenerName, gomock.Any()).Return(nil).AnyTimes()
 	// when shard is initialized, it will use the 2 mock function below to initialize the "current" time of each cluster
-	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
-	s.mockClusterMetadata.On("GetAllClusterInfo").Return(cluster.TestSingleDCClusterInfo)
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
 	s.shardController.Start()
 
 	var workerWG sync.WaitGroup
@@ -561,11 +534,11 @@ func (s *shardControllerSuite) TestShardControllerClosed() {
 		}()
 	}
 
-	s.mockServiceResolver.On("RemoveListener", shardControllerMembershipUpdateListenerName).Return(nil)
+	s.mockServiceResolver.EXPECT().RemoveListener(shardControllerMembershipUpdateListenerName).Return(nil).AnyTimes()
 	for shardID := 0; shardID < numShards; shardID++ {
 		mockEngine := historyEngines[shardID]
 		mockEngine.EXPECT().Stop().Times(1)
-		s.mockServiceResolver.On("Lookup", string(shardID)).Return(s.hostInfo, nil)
+		s.mockServiceResolver.EXPECT().Lookup(string(shardID)).Return(s.hostInfo, nil).AnyTimes()
 	}
 	s.shardController.Stop()
 	workerWG.Wait()
@@ -580,11 +553,9 @@ func (s *shardControllerSuite) setupMocksForAcquireShard(shardID int, mockEngine
 	currentClusterTimerAck := time.Now().Add(-100 * time.Second)
 	alternativeClusterTimerAck := time.Now().Add(-200 * time.Second)
 
-	mockExecutionMgr := &mmocks.ExecutionManager{}
-	mockExecutionMgr.On("Close").Return()
-	s.mockExecutionMgrFactory.On("NewExecutionManager", shardID).Return(mockExecutionMgr, nil).Once()
+	// s.mockResource.ExecutionMgr.On("Close").Return()
 	mockEngine.EXPECT().Start().Times(1)
-	s.mockServiceResolver.On("Lookup", string(shardID)).Return(s.hostInfo, nil).Twice()
+	s.mockServiceResolver.EXPECT().Lookup(string(shardID)).Return(s.hostInfo, nil).Times(2)
 	s.mockEngineFactory.On("CreateEngine", mock.Anything).Return(mockEngine).Once()
 	s.mockShardManager.On("GetShard", &persistence.GetShardRequest{ShardID: shardID}).Return(
 		&persistence.GetShardResponse{

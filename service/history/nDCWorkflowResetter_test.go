@@ -29,18 +29,15 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally"
 
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/service"
+	"github.com/uber/cadence/common/resource"
 )
 
 type (
@@ -49,6 +46,7 @@ type (
 		*require.Assertions
 
 		controller              *gomock.Controller
+		mockResource            *resource.Test
 		mockBaseMutableState    *MockmutableState
 		mockRebuiltMutableState *MockmutableState
 		mockTransactionMgr      *MocknDCTransactionMgr
@@ -56,7 +54,6 @@ type (
 
 		logger           log.Logger
 		mockHistoryV2Mgr *mocks.HistoryV2Manager
-		mockService      service.Service
 		mockShard        *shardContextImpl
 
 		domainID   string
@@ -79,27 +76,23 @@ func (s *nDCWorkflowResetterSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
+	s.mockResource = resource.NewTest(s.controller, metrics.History)
 	s.mockBaseMutableState = NewMockmutableState(s.controller)
 	s.mockRebuiltMutableState = NewMockmutableState(s.controller)
 	s.mockTransactionMgr = NewMocknDCTransactionMgr(s.controller)
 	s.mockStateBuilder = NewMocknDCStateRebuilder(s.controller)
 
-	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
-	s.mockHistoryV2Mgr = &mocks.HistoryV2Manager{}
-	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
-	s.mockService = service.NewTestService(nil, nil, metricsClient, nil, nil, nil, nil)
+	s.mockHistoryV2Mgr = s.mockResource.HistoryMgr
 
+	s.logger = s.mockResource.Logger
 	s.mockShard = &shardContextImpl{
-		service:                   s.mockService,
+		Resource:                  s.mockResource,
 		shardInfo:                 &persistence.ShardInfo{ShardID: 10, RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber:    1,
-		historyV2Mgr:              s.mockHistoryV2Mgr,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   make(chan int, 100),
 		config:                    NewDynamicConfigForTest(),
 		logger:                    s.logger,
-		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
-		timeSource:                clock.NewRealTimeSource(),
 	}
 
 	s.domainID = uuid.New()
@@ -125,8 +118,8 @@ func (s *nDCWorkflowResetterSuite) SetupTest() {
 }
 
 func (s *nDCWorkflowResetterSuite) TearDownTest() {
-	s.mockHistoryV2Mgr.AssertExpectations(s.T())
 	s.controller.Finish()
+	s.mockResource.Finish(s.T())
 }
 
 func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {

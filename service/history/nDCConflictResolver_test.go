@@ -28,15 +28,12 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally"
 
-	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/service"
+	"github.com/uber/cadence/common/resource"
 )
 
 type (
@@ -45,13 +42,13 @@ type (
 		*require.Assertions
 
 		controller       *gomock.Controller
+		mockResource     *resource.Test
 		mockContext      *MockworkflowExecutionContext
 		mockMutableState *MockmutableState
 		mockStateBuilder *MocknDCStateRebuilder
 
-		mockService service.Service
-		mockShard   *shardContextImpl
-		logger      log.Logger
+		mockShard *shardContextImpl
+		logger    log.Logger
 
 		domainID   string
 		domainName string
@@ -70,26 +67,21 @@ func TestNDCConflictResolverSuite(t *testing.T) {
 func (s *nDCConflictResolverSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
-	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
-	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
-	s.mockService = service.NewTestService(
-		nil,
-		nil,
-		metricsClient,
-		nil,
-		nil,
-		nil,
-		nil)
+	s.controller = gomock.NewController(s.T())
+	s.mockResource = resource.NewTest(s.controller, metrics.History)
+	s.mockContext = NewMockworkflowExecutionContext(s.controller)
+	s.mockMutableState = NewMockmutableState(s.controller)
+	s.mockStateBuilder = NewMocknDCStateRebuilder(s.controller)
+
+	s.logger = s.mockResource.Logger
 	s.mockShard = &shardContextImpl{
-		service:                   s.mockService,
+		Resource:                  s.mockResource,
 		shardInfo:                 &persistence.ShardInfo{ShardID: 10, RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber:    1,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   make(chan int, 100),
 		config:                    NewDynamicConfigForTest(),
 		logger:                    s.logger,
-		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
-		timeSource:                clock.NewRealTimeSource(),
 	}
 
 	s.domainID = uuid.New()
@@ -97,10 +89,6 @@ func (s *nDCConflictResolverSuite) SetupTest() {
 	s.workflowID = "some random workflow ID"
 	s.runID = uuid.New()
 
-	s.controller = gomock.NewController(s.T())
-	s.mockContext = NewMockworkflowExecutionContext(s.controller)
-	s.mockMutableState = NewMockmutableState(s.controller)
-	s.mockStateBuilder = NewMocknDCStateRebuilder(s.controller)
 	s.nDCConflictResolver = newNDCConflictResolver(
 		s.mockShard, s.mockContext, s.mockMutableState, s.logger,
 	)
@@ -109,6 +97,7 @@ func (s *nDCConflictResolverSuite) SetupTest() {
 
 func (s *nDCConflictResolverSuite) TearDownTest() {
 	s.controller.Finish()
+	s.mockResource.Finish(s.T())
 }
 
 func (s *nDCConflictResolverSuite) TestRebuild() {

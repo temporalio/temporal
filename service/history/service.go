@@ -21,18 +21,17 @@
 package history
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/archiver"
-	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/definition"
-	"github.com/uber/cadence/common/log/loggerimpl"
+	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/persistence/client"
+	persistenceClient "github.com/uber/cadence/common/persistence/client"
 	espersistence "github.com/uber/cadence/common/persistence/elasticsearch"
+	"github.com/uber/cadence/common/resource"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
@@ -314,129 +313,107 @@ func (config *Config) GetShardID(workflowID string) int {
 
 // Service represents the cadence-history service
 type Service struct {
-	stopC         chan struct{}
-	params        *service.BootstrapParams
-	config        *Config
-	metricsClient metrics.Client
+	resource.Resource
+
+	status  int32
+	handler *Handler
+	stopC   chan struct{}
+	params  *service.BootstrapParams
+	config  *Config
 }
 
 // NewService builds a new cadence-history service
-func NewService(params *service.BootstrapParams) common.Daemon {
-	config := NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger),
+func NewService(
+	params *service.BootstrapParams,
+) (resource.Resource, error) {
+	serviceConfig := NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger),
 		params.PersistenceConfig.NumHistoryShards,
 		params.PersistenceConfig.DefaultStoreType(),
 		params.PersistenceConfig.IsAdvancedVisibilityConfigExist())
-	params.ThrottledLogger = loggerimpl.NewThrottledLogger(params.Logger, config.ThrottledLogRPS)
-	params.UpdateLoggerWithServiceName(common.HistoryServiceName)
-	return &Service{
-		params: params,
-		stopC:  make(chan struct{}),
-		config: config,
+
+	params.PersistenceConfig.HistoryMaxConns = serviceConfig.HistoryMgrNumConns()
+	params.PersistenceConfig.SetMaxQPS(params.PersistenceConfig.DefaultStore, serviceConfig.PersistenceMaxQPS())
+	params.PersistenceConfig.VisibilityConfig = &config.VisibilityConfig{
+		VisibilityOpenMaxQPS:            serviceConfig.VisibilityOpenMaxQPS,
+		VisibilityClosedMaxQPS:          serviceConfig.VisibilityClosedMaxQPS,
+		EnableSampling:                  serviceConfig.EnableVisibilitySampling,
+		EnableReadFromClosedExecutionV2: serviceConfig.EnableReadFromClosedExecutionV2,
 	}
+
+	visibilityManagerInitializer := func(
+		persistenceBean persistenceClient.Bean,
+		logger log.Logger,
+	) (persistence.VisibilityManager, error) {
+		visibilityFromDB := persistenceBean.GetVisibilityManager()
+
+		var visibilityFromES persistence.VisibilityManager
+		if params.ESConfig != nil {
+			visibilityProducer, err := params.MessagingClient.NewProducer(common.VisibilityAppName)
+			if err != nil {
+				logger.Fatal("Creating visibility producer failed", tag.Error(err))
+			}
+			visibilityFromES = espersistence.NewESVisibilityManager("", nil, nil, visibilityProducer,
+				params.MetricsClient, logger)
+		}
+		return persistence.NewVisibilityManagerWrapper(
+			visibilityFromDB,
+			visibilityFromES,
+			dynamicconfig.GetBoolPropertyFnFilteredByDomain(false), // history visibility never read
+			serviceConfig.AdvancedVisibilityWritingMode,
+		), nil
+	}
+
+	serviceResource, err := resource.New(
+		params,
+		common.HistoryServiceName,
+		serviceConfig.ThrottledLogRPS,
+		visibilityManagerInitializer,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Service{
+		Resource: serviceResource,
+		status:   common.DaemonStatusInitialized,
+		stopC:    make(chan struct{}),
+		params:   params,
+		config:   serviceConfig,
+	}, nil
 }
 
 // Start starts the service
 func (s *Service) Start() {
-
-	var params = s.params
-	var log = params.Logger
-
-	log.Info("elastic search config", tag.ESConfig(params.ESConfig))
-	log.Info("starting", tag.Service(common.HistoryServiceName))
-
-	base := service.New(params)
-
-	s.metricsClient = base.GetMetricsClient()
-
-	pConfig := params.PersistenceConfig
-	pConfig.HistoryMaxConns = s.config.HistoryMgrNumConns()
-	pConfig.SetMaxQPS(pConfig.DefaultStore, s.config.PersistenceMaxQPS())
-	pConfig.VisibilityConfig = &config.VisibilityConfig{
-		VisibilityOpenMaxQPS:            s.config.VisibilityOpenMaxQPS,
-		VisibilityClosedMaxQPS:          s.config.VisibilityClosedMaxQPS,
-		EnableSampling:                  s.config.EnableVisibilitySampling,
-		EnableReadFromClosedExecutionV2: s.config.EnableReadFromClosedExecutionV2,
-	}
-	pFactory := client.NewFactory(&pConfig, params.ClusterMetadata.GetCurrentClusterName(), s.metricsClient, log)
-
-	shardMgr, err := pFactory.NewShardManager()
-	if err != nil {
-		log.Fatal("failed to create shard manager", tag.Error(err))
+	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
+		return
 	}
 
-	metadata, err := pFactory.NewMetadataManager()
-	if err != nil {
-		log.Fatal("failed to create metadata manager", tag.Error(err))
-	}
+	logger := s.GetLogger()
+	logger.Info("elastic search config", tag.ESConfig(s.params.ESConfig))
+	logger.Info("history starting")
 
-	visibility, err := pFactory.NewVisibilityManager()
-	if err != nil {
-		log.Fatal("failed to create visibility manager", tag.Error(err))
-	}
+	s.handler = NewHandler(s.Resource, s.config)
+	s.handler.RegisterHandler()
 
-	var esVisibility persistence.VisibilityManager
-	if params.ESConfig != nil {
-		visibilityProducer, err := s.params.MessagingClient.NewProducer(common.VisibilityAppName)
-		if err != nil {
-			log.Fatal("Creating visibility producer failed", tag.Error(err))
-		}
-		esVisibility = espersistence.NewESVisibilityManager("", nil, nil, visibilityProducer,
-			s.metricsClient, log)
-	}
-	visibility = persistence.NewVisibilityManagerWrapper(
-		visibility,
-		esVisibility,
-		dynamicconfig.GetBoolPropertyFnFilteredByDomain(false), // history visibility never read
-		s.config.AdvancedVisibilityWritingMode,
-	)
+	// must start resource first
+	s.Resource.Start()
+	s.handler.Start()
 
-	historyV2, err := pFactory.NewHistoryManager()
-	if err != nil {
-		log.Fatal("Creating historyV2 manager persistence failed", tag.Error(err))
-	}
-
-	domainCache := cache.NewDomainCache(metadata, base.GetClusterMetadata(), base.GetMetricsClient(), base.GetLogger())
-
-	historyArchiverBootstrapContainer := &archiver.HistoryBootstrapContainer{
-		HistoryV2Manager: historyV2,
-		Logger:           base.GetLogger(),
-		MetricsClient:    base.GetMetricsClient(),
-		ClusterMetadata:  base.GetClusterMetadata(),
-		DomainCache:      domainCache,
-	}
-	visibilityArchvierBootstrapContainer := &archiver.VisibilityBootstrapContainer{
-		Logger:          base.GetLogger(),
-		MetricsClient:   base.GetMetricsClient(),
-		ClusterMetadata: base.GetClusterMetadata(),
-		DomainCache:     domainCache,
-	}
-	err = params.ArchiverProvider.RegisterBootstrapContainer(common.HistoryServiceName, historyArchiverBootstrapContainer, visibilityArchvierBootstrapContainer)
-	if err != nil {
-		log.Fatal("Failed to register archiver bootstrap container", tag.Error(err))
-	}
-
-	handler := NewHandler(base, s.config, shardMgr, metadata, visibility, historyV2, pFactory, domainCache, params.PublicClient)
-	handler.RegisterHandler()
-
-	// must start base service first
-	base.Start()
-	err = handler.Start()
-	if err != nil {
-		log.Fatal("History handler failed to start", tag.Error(err))
-	}
-
-	log.Info("started", tag.Service(common.HistoryServiceName))
+	logger.Info("history started")
 
 	<-s.stopC
-	handler.Stop()
-	base.Stop()
 }
 
 // Stop stops the service
 func (s *Service) Stop() {
-	select {
-	case s.stopC <- struct{}{}:
-	default:
+	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
+		return
 	}
-	s.params.Logger.Info("stopped", tag.Service(common.HistoryServiceName))
+
+	close(s.stopC)
+
+	s.handler.Stop()
+	s.Resource.Stop()
+
+	s.GetLogger().Info("history stopped")
 }

@@ -29,7 +29,6 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally"
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
@@ -37,12 +36,10 @@ import (
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/loggerimpl"
-	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/service"
+	"github.com/uber/cadence/common/resource"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/service/worker/archiver"
 )
@@ -56,13 +53,11 @@ type (
 		logger      log.Logger
 
 		controller                   *gomock.Controller
+		mockResource                 *resource.Test
 		mockWorkflowExecutionContext *MockworkflowExecutionContext
 		mockMutableState             *MockmutableState
 
-		mockService           service.Service
 		mockShard             ShardContext
-		mockClusterMetadata   *mocks.ClusterMetadata
-		mockMessagingClient   messaging.Client
 		mockQueueAckMgr       *MockTimerQueueAckMgr
 		mockExecutionManager  *mocks.ExecutionManager
 		mockVisibilityManager *mocks.VisibilityManager
@@ -93,32 +88,28 @@ func (s *timerQueueProcessorBaseSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
+	s.mockResource = resource.NewTest(s.controller, metrics.History)
 	s.mockWorkflowExecutionContext = NewMockworkflowExecutionContext(s.controller)
 	s.mockMutableState = NewMockmutableState(s.controller)
 
-	shardID := 0
-	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
-	s.clusterName = cluster.TestAlternativeClusterName
-	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.mockQueueAckMgr = &MockTimerQueueAckMgr{}
-	s.mockClusterMetadata = &mocks.ClusterMetadata{}
-	s.mockService = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, nil, nil, nil, nil)
-	s.mockExecutionManager = &mocks.ExecutionManager{}
-	s.mockVisibilityManager = &mocks.VisibilityManager{}
-	s.mockHistoryV2Manager = &mocks.HistoryV2Manager{}
+	s.mockExecutionManager = s.mockResource.ExecutionMgr
+	s.mockVisibilityManager = s.mockResource.VisibilityMgr
+	s.mockHistoryV2Manager = s.mockResource.HistoryMgr
 	s.mockArchivalClient = &archiver.ClientMock{}
+
+	shardID := 0
+	s.clusterName = cluster.TestAlternativeClusterName
+	s.logger = s.mockResource.Logger
 	s.mockShard = &shardContextImpl{
-		service:                   s.mockService,
+		Resource:                  s.mockResource,
 		shardInfo:                 &persistence.ShardInfo{ShardID: shardID, RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber:    1,
 		maxTransferSequenceNumber: 100000,
-		clusterMetadata:           s.mockClusterMetadata,
 		closeCh:                   make(chan int, 100),
 		config:                    NewDynamicConfigForTest(),
 		logger:                    s.logger,
-		metricsClient:             metricsClient,
 		standbyClusterCurrentTime: make(map[string]time.Time),
-		timeSource:                clock.NewRealTimeSource(),
 		executionManager:          s.mockExecutionManager,
 	}
 
@@ -127,7 +118,7 @@ func (s *timerQueueProcessorBaseSuite) SetupTest() {
 	h := &historyEngineImpl{
 		shard:          s.mockShard,
 		logger:         s.logger,
-		metricsClient:  metricsClient,
+		metricsClient:  s.mockResource.GetMetricsClient(),
 		visibilityMgr:  s.mockVisibilityManager,
 		historyV2Mgr:   s.mockHistoryV2Manager,
 		archivalClient: s.mockArchivalClient,
@@ -145,12 +136,10 @@ func (s *timerQueueProcessorBaseSuite) SetupTest() {
 }
 
 func (s *timerQueueProcessorBaseSuite) TearDownTest() {
-	s.mockQueueAckMgr.AssertExpectations(s.T())
-	s.mockExecutionManager.AssertExpectations(s.T())
-	s.mockHistoryV2Manager.AssertExpectations(s.T())
-	s.mockVisibilityManager.AssertExpectations(s.T())
-	s.mockArchivalClient.AssertExpectations(s.T())
 	s.controller.Finish()
+	s.mockResource.Finish(s.T())
+	s.mockQueueAckMgr.AssertExpectations(s.T())
+	s.mockArchivalClient.AssertExpectations(s.T())
 }
 
 func (s *timerQueueProcessorBaseSuite) TestDeleteWorkflow_NoErr() {

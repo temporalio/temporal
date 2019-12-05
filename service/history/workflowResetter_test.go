@@ -31,13 +31,14 @@ import (
 
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/collection"
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
+	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/resource"
 )
 
 type (
@@ -45,22 +46,22 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		mockShard           *shardContextImpl
-		mockClusterMetadata *mocks.ClusterMetadata
-		mockHistoryV2Mgr    *mocks.HistoryV2Manager
-		mockStateRebuilder  *MocknDCStateRebuilder
-		logger              log.Logger
-
 		controller         *gomock.Controller
+		mockResource       *resource.Test
 		mockTransactionMgr *MocknDCTransactionMgr
+		mockStateRebuilder *MocknDCStateRebuilder
 
-		workflowResetter *workflowResetterImpl
+		mockShard        *shardContextImpl
+		mockHistoryV2Mgr *mocks.HistoryV2Manager
 
+		logger       log.Logger
 		domainID     string
 		workflowID   string
 		baseRunID    string
 		currentRunID string
 		resetRunID   string
+
+		workflowResetter *workflowResetterImpl
 	}
 )
 
@@ -80,20 +81,18 @@ func (s *workflowResetterSuite) SetupTest() {
 
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.controller = gomock.NewController(s.T())
+	s.mockResource = resource.NewTest(s.controller, metrics.History)
 	s.mockTransactionMgr = NewMocknDCTransactionMgr(s.controller)
 	s.mockStateRebuilder = NewMocknDCStateRebuilder(s.controller)
 
-	s.mockClusterMetadata = &mocks.ClusterMetadata{}
-	s.mockHistoryV2Mgr = &mocks.HistoryV2Manager{}
+	s.mockHistoryV2Mgr = s.mockResource.HistoryMgr
 
 	s.mockShard = &shardContextImpl{
+		Resource:                  s.mockResource,
 		shardInfo:                 &persistence.ShardInfo{ShardID: 0, RangeID: 1, TransferAckLevel: 0},
 		config:                    NewDynamicConfigForTest(),
-		historyV2Mgr:              s.mockHistoryV2Mgr,
-		clusterMetadata:           s.mockClusterMetadata,
 		maxTransferSequenceNumber: 100000,
 		logger:                    s.logger,
-		timeSource:                clock.NewRealTimeSource(),
 	}
 
 	s.workflowResetter = newWorkflowResetter(
@@ -114,9 +113,8 @@ func (s *workflowResetterSuite) SetupTest() {
 }
 
 func (s *workflowResetterSuite) TearDownTest() {
-	s.mockClusterMetadata.AssertExpectations(s.T())
-	s.mockHistoryV2Mgr.AssertExpectations(s.T())
 	s.controller.Finish()
+	s.mockResource.Finish(s.T())
 }
 
 func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
