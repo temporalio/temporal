@@ -71,7 +71,7 @@ const (
 )
 
 const (
-	bufferSize                 = 4096
+	bufferSize                 = 8192
 	preambleVersion0      byte = 0x59
 	malformedMessage           = "Input was malformed"
 	chanBufferSize             = 10000
@@ -79,7 +79,7 @@ const (
 )
 
 var (
-	r = regexp.MustCompile(`Partition: .*?, Offset: .*?, Key: .*?`)
+	r = regexp.MustCompile(`Partition: \d+, Offset: \d+, Key: [^\n]*\n`)
 )
 
 type writerChannel struct {
