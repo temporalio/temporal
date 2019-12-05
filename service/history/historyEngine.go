@@ -290,8 +290,10 @@ func NewEngineWithShardContext(
 			shard,
 			historyEngImpl,
 			config,
+			historyClient,
 			shard.GetMetricsClient(),
-			replicationTaskFetcher)
+			replicationTaskFetcher,
+		)
 		replicationTaskProcessors = append(replicationTaskProcessors, replicationTaskProcessor)
 	}
 	historyEngImpl.replicationTaskProcessors = replicationTaskProcessors

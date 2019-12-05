@@ -97,14 +97,12 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageDLQ() {
 	var historyBatch []*shared.History
 	s.generator = test.InitializeHistoryEventGenerator(s.domainName, 1)
 
-	for s.generator.HasNextVertex() {
-		events := s.generator.GetNextVertices()
-		historyEvents := &shared.History{}
-		for _, event := range events {
-			historyEvents.Events = append(historyEvents.Events, event.GetData().(*shared.HistoryEvent))
-		}
-		historyBatch = append(historyBatch, historyEvents)
+	events := s.generator.GetNextVertices()
+	historyEvents := &shared.History{}
+	for _, event := range events {
+		historyEvents.Events = append(historyEvents.Events, event.GetData().(*shared.HistoryEvent))
 	}
+	historyBatch = append(historyBatch, historyEvents)
 
 	versionHistory := s.eventBatchesToVersionHistory(nil, historyBatch)
 

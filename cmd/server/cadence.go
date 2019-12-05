@@ -21,12 +21,13 @@
 package main
 
 import (
-	"github.com/uber/cadence/common"
 	"log"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
+
+	"github.com/uber/cadence/common"
 
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/tools/cassandra"
