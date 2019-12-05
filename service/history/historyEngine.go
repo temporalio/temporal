@@ -753,6 +753,8 @@ func (e *historyEngineImpl) QueryWorkflow(
 	request *h.QueryWorkflowRequest,
 ) (retResp *h.QueryWorkflowResponse, retErr error) {
 
+	scope := e.metricsClient.Scope(metrics.HistoryQueryWorkflowScope)
+
 	consistentQueryEnabled := e.config.EnableConsistentQuery() && e.config.EnableConsistentQueryByDomain(request.GetRequest().GetDomain())
 	if request.GetRequest().GetQueryConsistencyLevel() == workflow.QueryConsistencyLevelStrong && !consistentQueryEnabled {
 		return nil, ErrConsistentQueryNotEnabled
@@ -790,6 +792,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 	}
 
 	if mutableStateResp.GetPreviousStartedEventId() <= 0 {
+		scope.IncCounter(metrics.QueryBeforeFirstDecisionCount)
 		return nil, ErrQueryWorkflowBeforeFirstDecision
 	}
 
@@ -808,14 +811,12 @@ func (e *historyEngineImpl) QueryWorkflow(
 		return nil, err
 	}
 
-	scope := e.metricsClient.Scope(metrics.HistoryQueryWorkflowScope)
-
 	// There are two ways in which queries get dispatched to decider. First, queries can be dispatched on decision tasks.
 	// These decision tasks potentially contain new events and queries. The events are treated as coming before the query in time.
 	// The second way in which queries are dispatched to decider is directly through matching; in this approach queries can be
 	// dispatched to decider immediately even if there are outstanding events that came before the query. The following logic
 	// is used to determine if a query can be safely dispatched directly through matching or if given the desired consistency
-	// level must be dispatched on a decision task. There are five cases in which a query can be dispatched directly through
+	// level must be dispatched on a decision task. There are four cases in which a query can be dispatched directly through
 	// matching safely, without violating the desired consistency level:
 	// 1. the domain is not active, in this case history is immutable so a query dispatched at any time is consistent
 	// 2. the workflow is not running, whenever a workflow is not running dispatching query directly is consistent
@@ -840,20 +841,20 @@ func (e *historyEngineImpl) QueryWorkflow(
 	// If we get here it means query could not be dispatched through matching directly, so it must block
 	// until either an result has been obtained on a decision task response or until it is safe to dispatch directly through matching.
 	sw := scope.StartTimer(metrics.DecisionTaskQueryLatency)
+	defer sw.Stop()
 	queryReg := mutableState.GetQueryRegistry()
 	if len(queryReg.getBufferedIDs()) >= e.config.MaxBufferedQueryCount() {
+		scope.IncCounter(metrics.QueryBufferExceededCount)
 		return nil, ErrConsistentQueryBufferExceeded
 	}
 	queryID, termCh := queryReg.bufferQuery(req.GetQuery())
-	defer func() {
-		queryReg.removeQuery(queryID)
-		sw.Stop()
-	}()
+	defer queryReg.removeQuery(queryID)
 	release(nil)
 	select {
 	case <-termCh:
 		state, err := queryReg.getTerminationState(queryID)
 		if err != nil {
+			scope.IncCounter(metrics.QueryRegistryInvalidStateCount)
 			return nil, err
 		}
 		switch state.queryTerminationType {
@@ -869,6 +870,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 			case workflow.QueryResultTypeFailed:
 				return nil, &workflow.QueryFailedError{Message: result.GetErrorMessage()}
 			default:
+				scope.IncCounter(metrics.QueryRegistryInvalidStateCount)
 				return nil, ErrQueryEnteredInvalidState
 			}
 		case queryTerminationTypeUnblocked:
@@ -881,6 +883,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 		case queryTerminationTypeFailed:
 			return nil, state.failure
 		default:
+			scope.IncCounter(metrics.QueryRegistryInvalidStateCount)
 			return nil, ErrQueryEnteredInvalidState
 		}
 	case <-ctx.Done():

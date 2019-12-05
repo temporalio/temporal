@@ -28,7 +28,6 @@ import (
 	"syscall"
 
 	"github.com/uber/cadence/common"
-
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/tools/cassandra"
 	"github.com/uber/cadence/tools/sql"

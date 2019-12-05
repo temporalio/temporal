@@ -1585,10 +1585,11 @@ const (
 	EventReapplySkippedCount
 	DirectQueryDispatchLatency
 	DecisionTaskQueryLatency
-	CompleteQueryFailedCount
-	UnblockQueryFailedCount
-	FailQueryFailedCount
 	ConsistentQueryTimeoutCount
+	QueryBeforeFirstDecisionCount
+	QueryBufferExceededCount
+	QueryRegistryInvalidStateCount
+	WorkerNotSupportsConsistentQueryCount
 	DecisionStartToCloseTimeoutOverrideCount
 
 	NumHistoryMetrics
@@ -1901,10 +1902,11 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		EventReapplySkippedCount:                          {metricName: "event_reapply_skipped_count", metricType: Counter},
 		DirectQueryDispatchLatency:                        {metricName: "direct_query_dispatch_latency", metricType: Timer},
 		DecisionTaskQueryLatency:                          {metricName: "decision_task_query_latency", metricType: Timer},
-		CompleteQueryFailedCount:                          {metricName: "complete_query_failed", metricType: Counter},
-		UnblockQueryFailedCount:                           {metricName: "unblock_query_failed", metricType: Counter},
-		FailQueryFailedCount:                              {metricName: "fail_query_failed", metricType: Counter},
 		ConsistentQueryTimeoutCount:                       {metricName: "consistent_query_timeout", metricType: Counter},
+		QueryBeforeFirstDecisionCount:                     {metricName: "query_before_first_decision", metricType: Counter},
+		QueryBufferExceededCount:                          {metricName: "query_buffer_exceeded", metricType: Counter},
+		QueryRegistryInvalidStateCount:                    {metricName: "query_registry_invalid_state", metricType: Counter},
+		WorkerNotSupportsConsistentQueryCount:             {metricName: "worker_not_supports_consistent_query", metricType: Counter},
 		DecisionStartToCloseTimeoutOverrideCount:          {metricName: "decision_start_to_close_timeout_overrides", metricType: Counter},
 	},
 	Matching: {
