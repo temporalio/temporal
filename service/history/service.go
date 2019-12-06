@@ -67,8 +67,9 @@ type Config struct {
 	EventsCacheTTL         dynamicconfig.DurationPropertyFn
 
 	// ShardController settings
-	RangeSizeBits        uint
-	AcquireShardInterval dynamicconfig.DurationPropertyFn
+	RangeSizeBits           uint
+	AcquireShardInterval    dynamicconfig.DurationPropertyFn
+	AcquireShardConcurrency dynamicconfig.IntPropertyFn
 
 	// the artificial delay added to standby cluster's view of active cluster's time
 	StandbyClusterDelay                  dynamicconfig.DurationPropertyFn
@@ -217,6 +218,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		EventsCacheTTL:                                        dc.GetDurationProperty(dynamicconfig.EventsCacheTTL, time.Hour),
 		RangeSizeBits:                                         20, // 20 bits for sequencer, 2^20 sequence number for any range
 		AcquireShardInterval:                                  dc.GetDurationProperty(dynamicconfig.AcquireShardInterval, time.Minute),
+		AcquireShardConcurrency:                               dc.GetIntProperty(dynamicconfig.AcquireShardConcurrency, 1),
 		StandbyClusterDelay:                                   dc.GetDurationProperty(dynamicconfig.StandbyClusterDelay, 5*time.Minute),
 		StandbyTaskMissingEventsResendDelay:                   dc.GetDurationProperty(dynamicconfig.StandbyTaskMissingEventsResendDelay, 15*time.Minute),
 		StandbyTaskMissingEventsDiscardDelay:                  dc.GetDurationProperty(dynamicconfig.StandbyTaskMissingEventsDiscardDelay, 25*time.Minute),

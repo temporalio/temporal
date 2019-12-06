@@ -295,25 +295,39 @@ func (c *shardController) acquireShards() {
 	sw := c.metricsScope.StartTimer(metrics.AcquireShardsLatency)
 	defer sw.Stop()
 
-AcquireLoop:
-	for shardID := 0; shardID < c.config.NumberOfShards; shardID++ {
-		info, err := c.GetHistoryServiceResolver().Lookup(string(shardID))
-		if err != nil {
-			c.logger.Error("Error looking up host for shardID", tag.Error(err), tag.OperationFailed, tag.ShardID(shardID))
-			continue AcquireLoop
-		}
-
-		if info.Identity() == c.GetHostInfo().Identity() {
-			_, err1 := c.getEngineForShard(shardID)
-			if err1 != nil {
-				c.metricsScope.IncCounter(metrics.GetEngineForShardErrorCounter)
-				c.logger.Error("Unable to create history shard engine", tag.Error(err1), tag.OperationFailed, tag.ShardID(shardID))
-				continue AcquireLoop
+	concurrency := common.MaxInt(c.config.AcquireShardConcurrency(), 1)
+	shardActionCh := make(chan int, concurrency)
+	var wg sync.WaitGroup
+	wg.Add(concurrency)
+	// Spawn workers that would lookup and add/remove shards concurrently.
+	for i := 0; i < concurrency; i++ {
+		go func() {
+			defer wg.Done()
+			for shardID := range shardActionCh {
+				info, err := c.GetHistoryServiceResolver().Lookup(string(shardID))
+				if err != nil {
+					c.logger.Error("Error looking up host for shardID", tag.Error(err), tag.OperationFailed, tag.ShardID(shardID))
+				} else {
+					if info.Identity() == c.GetHostInfo().Identity() {
+						_, err1 := c.getEngineForShard(shardID)
+						if err1 != nil {
+							c.metricsScope.IncCounter(metrics.GetEngineForShardErrorCounter)
+							c.logger.Error("Unable to create history shard engine", tag.Error(err1), tag.OperationFailed, tag.ShardID(shardID))
+						}
+					} else {
+						c.removeEngineForShard(shardID)
+					}
+				}
 			}
-		} else {
-			c.removeEngineForShard(shardID)
-		}
+		}()
 	}
+	// Submit tasks to the channel.
+	for shardID := 0; shardID < c.config.NumberOfShards; shardID++ {
+		shardActionCh <- shardID
+	}
+	close(shardActionCh)
+	// Wait until all shards are processed.
+	wg.Wait()
 
 	c.metricsScope.UpdateGauge(metrics.NumShardsGauge, float64(c.numShards()))
 }
