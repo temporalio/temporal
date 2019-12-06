@@ -31,6 +31,7 @@ import (
 
 	"github.com/uber/cadence/common"
 	_ "github.com/uber/cadence/common/persistence/sql/sqlplugin/mysql" // needed to load mysql plugin
+	_ "github.com/uber/cadence/common/persistence/sql/sqlplugin/postgres" // needed to load postgres plugin
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/tools/cassandra"
 	"github.com/uber/cadence/tools/sql"

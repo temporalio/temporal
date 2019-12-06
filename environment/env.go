@@ -57,6 +57,13 @@ const (
 	ESPort = "ES_PORT"
 	// ESDefaultPort ES default port
 	ESDefaultPort = "9200"
+
+	// PostgresSeeds env
+	PostgresSeeds = "POSTGRES_SEEDS"
+	// PostgresPort env
+	PostgresPort = "POSTGRES_PORT"
+	// PostgresDefaultPort Postgres default port
+	PostgresDefaultPort = "5432"
 )
 
 // SetupEnv setup the necessary env
@@ -86,6 +93,20 @@ func SetupEnv() {
 		err := os.Setenv(MySQLPort, MySQLDefaultPort)
 		if err != nil {
 			panic(fmt.Sprintf("error setting env %v", MySQLPort))
+		}
+	}
+
+	if os.Getenv(PostgresSeeds) == "" {
+		err := os.Setenv(PostgresSeeds, Localhost)
+		if err != nil {
+			panic(fmt.Sprintf("error setting env %v", PostgresSeeds))
+		}
+	}
+
+	if os.Getenv(PostgresPort) == "" {
+		err := os.Setenv(PostgresPort, PostgresDefaultPort)
+		if err != nil {
+			panic(fmt.Sprintf("error setting env %v", PostgresPort))
 		}
 	}
 
@@ -158,6 +179,28 @@ func GetMySQLPort() int {
 	p, err := strconv.Atoi(port)
 	if err != nil {
 		panic(fmt.Sprintf("error getting env %v", MySQLPort))
+	}
+	return p
+}
+
+// GetPostgresAddress return the cassandra address
+func GetPostgresAddress() string {
+	addr := os.Getenv(PostgresSeeds)
+	if addr == "" {
+		addr = Localhost
+	}
+	return addr
+}
+
+// GetPostgresPort return the Postgres port
+func GetPostgresPort() int {
+	port := os.Getenv(PostgresPort)
+	if port == "" {
+		port = PostgresDefaultPort
+	}
+	p, err := strconv.Atoi(port)
+	if err != nil {
+		panic(fmt.Sprintf("error getting env %v", PostgresPort))
 	}
 	return p
 }
