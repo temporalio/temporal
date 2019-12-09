@@ -26,7 +26,7 @@ persistence:
         {{- else if eq $db "mysql" }}
         default:
             sql:
-                driverName: "mysql"
+                pluginName: "mysql"
                 databaseName: {{ default .Env.DBNAME "cadence" }}
                 connectAddr: "{{ default .Env.MYSQL_SEEDS "" }}:{{ default .Env.DB_PORT "3306" }}"
                 connectProtocol: "tcp"
@@ -38,7 +38,7 @@ persistence:
                 {{- end }}
         visibility:
             sql:
-                driverName: "mysql"
+                pluginName: "mysql"
                 databaseName: {{ default .Env.VISIBILITY_DBNAME "cadence_visibility" }}
                 connectAddr: "{{ default .Env.MYSQL_SEEDS "" }}:{{ default .Env.DB_PORT "3306" }}"
                 connectProtocol: "tcp"
@@ -48,6 +48,29 @@ persistence:
                 connectAttributes:
                     tx_isolation: 'READ-COMMITTED'
                 {{- end }}
+        {{- else if eq $db "postgres" }}
+        default:
+            sql:
+                pluginName: "postgres"
+                databaseName: {{ default .Env.DBNAME "cadence" }}
+                connectAddr: "{{ default .Env.POSTGRES_SEEDS "" }}:{{ default .Env.DB_PORT "5432" }}"
+                connectProtocol: "tcp"
+                user: {{ default .Env.POSTGRES_USER "" }}
+                password: {{ default .Env.POSTGRES_PWD "" }}
+                maxConns: 20
+                maxIdleConns: 20
+                maxConnLifetime: "1h"
+        visibility:
+            sql:
+                pluginName: "postgres"
+                databaseName: {{ default .Env.VISIBILITY_DBNAME "cadence_visibility" }}
+                connectAddr: "{{ default .Env.POSTGRES_SEEDS "" }}:{{ default .Env.DB_PORT "5432" }}"
+                connectProtocol: "tcp"
+                user: {{ default .Env.POSTGRES_USER "" }}
+                password: {{ default .Env.POSTGRES_PWD "" }}
+                maxConns: 20
+                maxIdleConns: 20
+                maxConnLifetime: "1h"
         {{- end }}
         {{- if eq $es "true" }}
         es-visibility:
