@@ -626,6 +626,7 @@ func (s *elasticsearchIntegrationSuite) testListWorkflowHelper(numOfWorkflows, p
 
 	// test last page
 	listRequest.NextPageToken = nextPageToken
+	scanRequest.NextPageToken = nextPageToken
 	inIf := false
 	for i := 0; i < numOfRetry; i++ {
 		if isScan {
