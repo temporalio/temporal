@@ -3219,6 +3219,25 @@ func (wh *WorkflowHandler) createPollForDecisionTaskResponse(
 			return nil, err
 		}
 
+		// we expect history to contain all events up to the current DecisionStartedEvent
+		lastEventID := matchingResp.GetStartedEventId()
+		if matchingResp.Query != nil {
+			// for query tasks, startedEventID is irrelevant, we expect history to
+			// contain all events upto nextEventID-1
+			lastEventID = nextEventID - 1
+		}
+
+		if err := verifyHistoryIsComplete(history, firstEventID, lastEventID); err != nil {
+			scope.IncCounter(metrics.CadenceErrIncompleteHistoryCounter)
+			wh.GetLogger().Error("PollForDecisionTask: incomplete history",
+				tag.WorkflowDomainID(domainID),
+				tag.WorkflowDomainName(domain.GetInfo().Name),
+				tag.WorkflowID(matchingResp.WorkflowExecution.GetWorkflowId()),
+				tag.WorkflowRunID(matchingResp.WorkflowExecution.GetRunId()),
+				tag.Error(err))
+			return nil, err
+		}
+
 		if len(persistenceToken) != 0 {
 			continuation, err = serializeHistoryToken(&getHistoryContinuationToken{
 				RunID:             matchingResp.WorkflowExecution.GetRunId(),
@@ -3252,6 +3271,38 @@ func (wh *WorkflowHandler) createPollForDecisionTaskResponse(
 	}
 
 	return resp, nil
+}
+
+func verifyHistoryIsComplete(
+	history *gen.History,
+	expectedFirstEventID int64,
+	expectedLastEventID int64,
+) error {
+
+	firstEventID := int64(-1)
+	lastEventID := int64(-1)
+	events := history.GetEvents()
+	nEvents := len(events)
+	if nEvents > 0 {
+		firstEventID = events[0].GetEventId()
+		lastEventID = events[nEvents-1].GetEventId()
+	}
+
+	nExpectedEvents := expectedLastEventID - expectedFirstEventID + 1
+
+	if firstEventID == expectedFirstEventID &&
+		lastEventID == expectedLastEventID &&
+		int64(nEvents) == nExpectedEvents {
+		return nil
+	}
+
+	return fmt.Errorf(
+		"incomplete history: expected events [%v-%v] but got events [%v-%v] of length %v",
+		expectedFirstEventID,
+		expectedLastEventID,
+		firstEventID,
+		lastEventID,
+		nEvents)
 }
 
 func deserializeHistoryToken(bytes []byte) (*getHistoryContinuationToken, error) {

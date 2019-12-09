@@ -1221,6 +1221,42 @@ func (s *workflowHandlerSuite) TestConvertIndexedKeyToThrift() {
 	})
 }
 
+func (s *workflowHandlerSuite) TestVerifyHistoryIsComplete() {
+	events := make([]*shared.HistoryEvent, 50)
+	for i := 0; i < len(events); i++ {
+		events[i] = &shared.HistoryEvent{EventId: common.Int64Ptr(int64(i + 1))}
+	}
+	var eventsWithHoles []*shared.HistoryEvent
+	eventsWithHoles = append(eventsWithHoles, events[9:12]...)
+	eventsWithHoles = append(eventsWithHoles, events[20:31]...)
+
+	testCases := []struct {
+		events       []*shared.HistoryEvent
+		firstEventID int64
+		lastEventID  int64
+		isResultErr  bool
+	}{
+		{events[:1], 1, 1, false},
+		{events[:5], 1, 5, false},
+		{events[9:31], 10, 31, false},
+		{eventsWithHoles, 10, 31, true},
+		{events[9:31], 9, 31, true},
+		{events[9:31], 11, 31, true},
+		{events[9:31], 10, 30, true},
+		{events[9:31], 10, 32, true},
+	}
+
+	for _, tc := range testCases {
+		history := &shared.History{tc.events}
+		err := verifyHistoryIsComplete(history, tc.firstEventID, tc.lastEventID)
+		if tc.isResultErr {
+			s.Error(err)
+		} else {
+			s.NoError(err)
+		}
+	}
+}
+
 func (s *workflowHandlerSuite) newConfig() *Config {
 	return NewConfig(dc.NewCollection(dc.NewNopClient(), s.mockResource.GetLogger()), numHistoryShards, false)
 }

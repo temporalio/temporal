@@ -560,7 +560,7 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 
 	for i := 0; i < 8; i++ {
 		dropDecisionTask := (i%2 == 0)
-		s.Logger.Info("Calling Decision Task: %d", tag.Counter(i))
+		s.Logger.Info("Calling Decision Task", tag.Counter(i))
 		var err error
 		if dropDecisionTask {
 			_, err = poller.PollAndProcessDecisionTask(true, true)
@@ -579,7 +579,7 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 			history := historyResponse.History
 			common.PrettyPrintHistory(history, s.Logger)
 		}
-		s.True(err == nil || err == matching.ErrNoTasks, "Error", tag.Error(err))
+		s.True(err == nil || err == matching.ErrNoTasks, "%v", err)
 		if !dropDecisionTask {
 			s.Logger.Info("Calling Activity Task: %d", tag.Counter(i))
 			err = poller.PollAndProcessActivityTask(i%4 == 0)
