@@ -99,7 +99,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 		st := yarpcerrors.FromError(err2)
 		if st.Code() == yarpcerrors.CodeNotFound {
 			hbTimeout++
-			s.Nil(resp2)
+			s.IsType(&workflowservice.RespondDecisionTaskCompletedResponse{}, resp2)
 
 			resp, err := s.engineGRPC.PollForDecisionTask(createContext(), &workflowservice.PollForDecisionTaskRequest{
 				Domain:   s.domainName,

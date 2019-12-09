@@ -1806,7 +1806,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 		if err != nil {
 			return nil, wh.error(errInvalidNextPageToken, scope)
 		}
-		if (execution.RunId != nil || execution.GetRunId() != "") && execution.GetRunId() != token.RunID {
+		if execution.RunId != nil && execution.GetRunId() != "" && execution.GetRunId() != token.RunID {
 			return nil, wh.error(errNextPageTokenRunIDMismatch, scope)
 		}
 
