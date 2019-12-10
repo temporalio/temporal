@@ -28,6 +28,7 @@ import (
 	"github.com/uber-go/tally"
 
 	"github.com/uber/cadence/.gen/go/health"
+	"github.com/uber/cadence/.gen/go/health/metaserver"
 	m "github.com/uber/cadence/.gen/go/matching"
 	"github.com/uber/cadence/.gen/go/matching/matchingserviceserver"
 	gen "github.com/uber/cadence/.gen/go/shared"
@@ -85,6 +86,7 @@ func NewHandler(
 // RegisterHandler register this handler, must be called before Start()
 func (h *Handler) RegisterHandler() {
 	h.Resource.GetDispatcher().Register(matchingserviceserver.New(h))
+	h.Resource.GetDispatcher().Register(metaserver.New(h))
 }
 
 // Start starts the handler
