@@ -173,7 +173,6 @@ github.com/mattn/go-sqlite3 v1.9.0 h1:pDRiWfl+++eC2FEFRy6jXmQlvp4Yh3z1MJKg4UeYM/
 github.com/mattn/go-sqlite3 v1.9.0/go.mod h1:FPy6KqzDD04eiIsT53CuJW3U88zkxoIYsOqkbpncsNc=
 github.com/matttproud/golang_protobuf_extensions v1.0.1 h1:4hp9jkHxhMHkqkrB3Ix0jegS5sx/RkqARlsWZ6pIwiU=
 github.com/matttproud/golang_protobuf_extensions v1.0.1/go.mod h1:D8He9yQNgCq6Z5Ld7szi9bcBfOoFv/3dc6xSMkL2PC0=
-github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db/go.mod h1:l0dey0ia/Uv7NcFFVbCLtqEBQbrT4OCwCSKTEv6enCw=
 github.com/modern-go/concurrent v0.0.0-20180228061459-e0a39a4cb421/go.mod h1:6dJC0mAP4ikYIbvyc7fijjWJddQyLn8Ig3JB5CqoB9Q=
 github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd/go.mod h1:6dJC0mAP4ikYIbvyc7fijjWJddQyLn8Ig3JB5CqoB9Q=
 github.com/modern-go/reflect2 v0.0.0-20180701023420-4b7aa43c6742/go.mod h1:bx2lNnkwVCuqBIxFjflWJWanXIb3RllmbCylyMrvgv0=
@@ -316,8 +315,6 @@ go.uber.org/tools v0.0.0-20190430173459-422a61c266e1/go.mod h1:vJERXedbb3MVM5f9E
 go.uber.org/tools v0.0.0-20190618225709-2cfd321de3ee h1:0mgffUl7nfd+FpvXMVz4IDEaUSmT1ysygQC7qYo7sG4=
 go.uber.org/tools v0.0.0-20190618225709-2cfd321de3ee/go.mod h1:vJERXedbb3MVM5f9Ejo0C68/HhF8uaILCdgjnY+goOA=
 go.uber.org/yarpc v1.38.0/go.mod h1:5wt+WtAfoQh3yGyup7479I35hUobLqCfb0oewxC58jE=
-go.uber.org/yarpc v1.42.0 h1:nvEGNMLhOL5zHNKL6sSCk/a2cr8HI5aVrmYlP23GPJM=
-go.uber.org/yarpc v1.42.0/go.mod h1:5wt+WtAfoQh3yGyup7479I35hUobLqCfb0oewxC58jE=
 go.uber.org/yarpc v1.42.1 h1:DowzHhyllp/n4oKANH8/+Z8xAeAwLVF7SO57h6ndXM0=
 go.uber.org/yarpc v1.42.1/go.mod h1:5wt+WtAfoQh3yGyup7479I35hUobLqCfb0oewxC58jE=
 go.uber.org/zap v1.8.0/go.mod h1:vwi/ZaCAaUcBkycHslxD9B2zi4UTXhF60s6SWpuDF0Q=
