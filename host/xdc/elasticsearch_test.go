@@ -41,7 +41,9 @@ import (
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	commonproto "github.com/temporalio/temporal-proto/common"
+	"github.com/temporalio/temporal-proto/enums"
+	"github.com/temporalio/temporal-proto/workflowservice"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
@@ -79,12 +81,12 @@ func TestESCrossDCTestSuite(t *testing.T) {
 
 var (
 	clusterNameES              = []string{"active-es", "standby-es"}
-	clusterReplicationConfigES = []*workflow.ClusterReplicationConfiguration{
+	clusterReplicationConfigES = []*commonproto.ClusterReplicationConfiguration{
 		{
-			ClusterName: common.StringPtr(clusterNameES[0]),
+			ClusterName: clusterNameES[0],
 		},
 		{
-			ClusterName: common.StringPtr(clusterNameES[1]),
+			ClusterName: clusterNameES[1],
 		},
 	}
 )
@@ -140,19 +142,19 @@ func (s *esCrossDCTestSuite) TearDownSuite() {
 
 func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	domainName := "test-xdc-search-attr-" + common.GenerateRandomString(5)
-	client1 := s.cluster1.GetFrontendClient() // active
-	regReq := &workflow.RegisterDomainRequest{
-		Name:                                   common.StringPtr(domainName),
+	client1 := s.cluster1.GetFrontendClientGRPC() // active
+	regReq := &workflowservice.RegisterDomainRequest{
+		Name:                                   domainName,
 		Clusters:                               clusterReplicationConfigES,
-		ActiveClusterName:                      common.StringPtr(clusterNameES[0]),
-		IsGlobalDomain:                         common.BoolPtr(true),
-		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(1),
+		ActiveClusterName:                      clusterNameES[0],
+		IsGlobalDomain:                         true,
+		WorkflowExecutionRetentionPeriodInDays: 1,
 	}
-	err := client1.RegisterDomain(createContext(), regReq)
+	_, err := client1.RegisterDomain(createContext(), regReq)
 	s.NoError(err)
 
-	descReq := &workflow.DescribeDomainRequest{
-		Name: common.StringPtr(domainName),
+	descReq := &workflowservice.DescribeDomainRequest{
+		Name: domainName,
 	}
 	resp, err := client1.DescribeDomain(createContext(), descReq)
 	s.NoError(err)
@@ -160,7 +162,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	// Wait for domain cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
-	client2 := s.cluster2.GetFrontendClient() // standby
+	client2 := s.cluster2.GetFrontendClientGRPC() // standby
 	resp2, err := client2.DescribeDomain(createContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp2)
@@ -171,24 +173,24 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	wt := "xdc-search-attr-test-type"
 	tl := "xdc-search-attr-test-tasklist"
 	identity := "worker1"
-	workflowType := &workflow.WorkflowType{Name: common.StringPtr(wt)}
-	taskList := &workflow.TaskList{Name: common.StringPtr(tl)}
+	workflowType := &commonproto.WorkflowType{Name: wt}
+	taskList := &commonproto.TaskList{Name: tl}
 	attrValBytes, _ := json.Marshal(s.testSearchAttributeVal)
-	searchAttr := &workflow.SearchAttributes{
+	searchAttr := &commonproto.SearchAttributes{
 		IndexedFields: map[string][]byte{
 			s.testSearchAttributeKey: attrValBytes,
 		},
 	}
-	startReq := &workflow.StartWorkflowExecutionRequest{
-		RequestId:                           common.StringPtr(uuid.New()),
-		Domain:                              common.StringPtr(domainName),
-		WorkflowId:                          common.StringPtr(id),
+	startReq := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:                           uuid.New(),
+		Domain:                              domainName,
+		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
-		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
-		Identity:                            common.StringPtr(identity),
+		ExecutionStartToCloseTimeoutSeconds: 100,
+		TaskStartToCloseTimeoutSeconds:      1,
+		Identity:                            identity,
 		SearchAttributes:                    searchAttr,
 	}
 	startTime := time.Now().UnixNano()
@@ -198,19 +200,19 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 
 	s.logger.Info("StartWorkflowExecution \n", tag.WorkflowRunID(we.GetRunId()))
 
-	startFilter := &workflow.StartTimeFilter{}
-	startFilter.EarliestTime = common.Int64Ptr(startTime)
+	startFilter := &commonproto.StartTimeFilter{}
+	startFilter.EarliestTime = startTime
 	query := fmt.Sprintf(`WorkflowID = "%s" and %s = "%s"`, id, s.testSearchAttributeKey, s.testSearchAttributeVal)
-	listRequest := &workflow.ListWorkflowExecutionsRequest{
-		Domain:   common.StringPtr(domainName),
-		PageSize: common.Int32Ptr(100),
-		Query:    common.StringPtr(query),
+	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
+		Domain:   domainName,
+		PageSize: 100,
+		Query:    query,
 	}
 
-	testListResult := func(client host.FrontendClient) {
-		var openExecution *workflow.WorkflowExecutionInfo
+	testListResult := func(client host.FrontendClientGRPC) {
+		var openExecution *commonproto.WorkflowExecutionInfo
 		for i := 0; i < numOfRetry; i++ {
-			startFilter.LatestTime = common.Int64Ptr(time.Now().UnixNano())
+			startFilter.LatestTime = time.Now().UnixNano()
 
 			resp, err := client.ListWorkflowExecutions(createContext(), listRequest)
 			s.Nil(err)
@@ -229,27 +231,27 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	}
 
 	// List workflow in active
-	engine1 := s.cluster1.GetFrontendClient()
+	engine1 := s.cluster1.GetFrontendClientGRPC()
 	testListResult(engine1)
 
 	// List workflow in standby
-	engine2 := s.cluster2.GetFrontendClient()
+	engine2 := s.cluster2.GetFrontendClientGRPC()
 	testListResult(engine2)
 
 	// upsert search attributes
-	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
 
-		upsertDecision := &workflow.Decision{
-			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeUpsertWorkflowSearchAttributes),
-			UpsertWorkflowSearchAttributesDecisionAttributes: &workflow.UpsertWorkflowSearchAttributesDecisionAttributes{
+		upsertDecision := &commonproto.Decision{
+			DecisionType: enums.DecisionTypeUpsertWorkflowSearchAttributes,
+			Attributes: &commonproto.Decision_UpsertWorkflowSearchAttributesDecisionAttributes{UpsertWorkflowSearchAttributesDecisionAttributes: &commonproto.UpsertWorkflowSearchAttributesDecisionAttributes{
 				SearchAttributes: getUpsertSearchAttributes(),
-			}}
+			}}}
 
-		return nil, []*workflow.Decision{upsertDecision}, nil
+		return nil, []*commonproto.Decision{upsertDecision}, nil
 	}
 
-	poller := host.TaskPoller{
+	poller := host.TaskPollerGRPC{
 		Engine:          client1,
 		Domain:          domainName,
 		TaskList:        taskList,
@@ -265,13 +267,13 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 
 	time.Sleep(waitForESToSettle)
 
-	listRequest = &workflow.ListWorkflowExecutionsRequest{
-		Domain:   common.StringPtr(domainName),
-		PageSize: common.Int32Ptr(int32(2)),
-		Query:    common.StringPtr(fmt.Sprintf(`WorkflowType = '%s' and CloseTime = missing`, wt)),
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Domain:   domainName,
+		PageSize: int32(2),
+		Query:    fmt.Sprintf(`WorkflowType = '%s' and CloseTime = missing`, wt),
 	}
 
-	testListResult = func(client host.FrontendClient) {
+	testListResult = func(client host.FrontendClientGRPC) {
 		verified := false
 		for i := 0; i < numOfRetry; i++ {
 			resp, err := client.ListWorkflowExecutions(createContext(), listRequest)
@@ -306,23 +308,23 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	// terminate workflow
 	terminateReason := "force terminate to make sure standby process tasks"
 	terminateDetails := []byte("terminate details.")
-	err = client1.TerminateWorkflowExecution(createContext(), &workflow.TerminateWorkflowExecutionRequest{
-		Domain: common.StringPtr(domainName),
-		WorkflowExecution: &workflow.WorkflowExecution{
-			WorkflowId: common.StringPtr(id),
+	_, err = client1.TerminateWorkflowExecution(createContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+		Domain: domainName,
+		WorkflowExecution: &commonproto.WorkflowExecution{
+			WorkflowId: id,
 		},
-		Reason:   common.StringPtr(terminateReason),
+		Reason:   terminateReason,
 		Details:  terminateDetails,
-		Identity: common.StringPtr(identity),
+		Identity: identity,
 	})
 	s.Nil(err)
 
 	// check terminate done
 	executionTerminated := false
-	getHistoryReq := &workflow.GetWorkflowExecutionHistoryRequest{
-		Domain: common.StringPtr(domainName),
-		Execution: &workflow.WorkflowExecution{
-			WorkflowId: common.StringPtr(id),
+	getHistoryReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Domain: domainName,
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: id,
 		},
 	}
 GetHistoryLoop:
@@ -332,23 +334,23 @@ GetHistoryLoop:
 		history := historyResponse.History
 
 		lastEvent := history.Events[len(history.Events)-1]
-		if *lastEvent.EventType != workflow.EventTypeWorkflowExecutionTerminated {
+		if lastEvent.EventType != enums.EventTypeWorkflowExecutionTerminated {
 			s.logger.Warn("Execution not terminated yet.")
 			time.Sleep(100 * time.Millisecond)
 			continue GetHistoryLoop
 		}
 
-		terminateEventAttributes := lastEvent.WorkflowExecutionTerminatedEventAttributes
-		s.Equal(terminateReason, *terminateEventAttributes.Reason)
+		terminateEventAttributes := lastEvent.GetWorkflowExecutionTerminatedEventAttributes()
+		s.Equal(terminateReason, terminateEventAttributes.Reason)
 		s.Equal(terminateDetails, terminateEventAttributes.Details)
-		s.Equal(identity, *terminateEventAttributes.Identity)
+		s.Equal(identity, terminateEventAttributes.Identity)
 		executionTerminated = true
 		break GetHistoryLoop
 	}
 	s.True(executionTerminated)
 
 	// check history replicated to the other cluster
-	var historyResponse *workflow.GetWorkflowExecutionHistoryResponse
+	var historyResponse *workflowservice.GetWorkflowExecutionHistoryResponse
 	eventsReplicated := false
 GetHistoryLoop2:
 	for i := 0; i < numOfRetry; i++ {
@@ -356,11 +358,11 @@ GetHistoryLoop2:
 		if err == nil {
 			history := historyResponse.History
 			lastEvent := history.Events[len(history.Events)-1]
-			if *lastEvent.EventType == workflow.EventTypeWorkflowExecutionTerminated {
-				terminateEventAttributes := lastEvent.WorkflowExecutionTerminatedEventAttributes
-				s.Equal(terminateReason, *terminateEventAttributes.Reason)
+			if lastEvent.EventType == enums.EventTypeWorkflowExecutionTerminated {
+				terminateEventAttributes := lastEvent.GetWorkflowExecutionTerminatedEventAttributes()
+				s.Equal(terminateReason, terminateEventAttributes.Reason)
 				s.Equal(terminateDetails, terminateEventAttributes.Details)
-				s.Equal(identity, *terminateEventAttributes.Identity)
+				s.Equal(identity, terminateEventAttributes.Identity)
 				eventsReplicated = true
 				break GetHistoryLoop2
 			}
@@ -374,10 +376,10 @@ GetHistoryLoop2:
 	testListResult(engine2)
 }
 
-func getUpsertSearchAttributes() *workflow.SearchAttributes {
+func getUpsertSearchAttributes() *commonproto.SearchAttributes {
 	attrValBytes1, _ := json.Marshal("another string")
 	attrValBytes2, _ := json.Marshal(123)
-	upsertSearchAttr := &workflow.SearchAttributes{
+	upsertSearchAttr := &commonproto.SearchAttributes{
 		IndexedFields: map[string][]byte{
 			definition.CustomStringField: attrValBytes1,
 			definition.CustomIntField:    attrValBytes2,
