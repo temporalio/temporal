@@ -45,12 +45,23 @@
         },
         "Attr": {
           "properties": {
+            "CadenceChangeVersion":  { "type": "keyword" },
             "CustomStringField":  { "type": "text" },
             "CustomKeywordField": { "type": "keyword"},
             "CustomIntField": { "type": "long"},
             "CustomBoolField": { "type": "boolean"},
             "CustomDoubleField": { "type": "double"},
-            "CustomDatetimeField": { "type": "date"}
+            "CustomDatetimeField": { "type": "date"},
+            "project": { "type": "keyword"},
+            "service": { "type": "keyword"},
+            "environment": { "type": "keyword"},
+            "addon": { "type": "keyword"},
+            "addon-type": { "type": "keyword"},
+            "user": { "type": "keyword"},
+            "CustomDomain": { "type": "keyword"},
+            "Operator": { "type": "keyword"},
+            "RolloutID": { "type": "keyword"},
+            "BinaryChecksums": { "type": "keyword"}
           }
         }
       }

@@ -98,7 +98,6 @@ var (
 // Pre-defined values for TagSysComponent
 var (
 	ComponentTaskList                 = component("tasklist")
-	ComponentHistoryBuilder           = component("history-builder")
 	ComponentHistoryEngine            = component("history-engine")
 	ComponentHistoryCache             = component("history-cache")
 	ComponentEventsCache              = component("events-cache")

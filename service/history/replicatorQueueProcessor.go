@@ -472,9 +472,9 @@ func (p *replicatorQueueProcessorImpl) getTasks(
 	)
 
 	return &replicator.ReplicationMessages{
-		ReplicationTasks:      replicationTasks,
-		HasMore:               common.BoolPtr(hasMore),
-		LastRetrivedMessageId: common.Int64Ptr(readLevel),
+		ReplicationTasks:       replicationTasks,
+		HasMore:                common.BoolPtr(hasMore),
+		LastRetrievedMessageId: common.Int64Ptr(readLevel),
 	}, nil
 }
 
@@ -562,7 +562,7 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 
 			return &replicator.ReplicationTask{
 				TaskType: replicator.ReplicationTaskType.Ptr(replicator.ReplicationTaskTypeSyncActivity),
-				SyncActicvityTaskAttributes: &replicator.SyncActicvityTaskAttributes{
+				SyncActivityTaskAttributes: &replicator.SyncActivityTaskAttributes{
 					DomainId:           common.StringPtr(task.DomainID),
 					WorkflowId:         common.StringPtr(task.WorkflowID),
 					RunId:              common.StringPtr(task.RunID),

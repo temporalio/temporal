@@ -60,7 +60,7 @@ require (
 	go.uber.org/config v1.3.1
 	go.uber.org/multierr v1.4.0
 	go.uber.org/thriftrw v1.20.2
-	go.uber.org/yarpc v1.42.0
+	go.uber.org/yarpc v1.42.1
 	go.uber.org/zap v1.13.0
 	golang.org/x/net v0.0.0-20191101175033-0deb6923b6d9
 	golang.org/x/sys v0.0.0-20191029155521-f43be2a4598c // indirect
@@ -72,6 +72,7 @@ require (
 	gopkg.in/yaml.v2 v2.2.4
 )
 
-replace github.com/jmoiron/sqlx v1.2.0 => github.com/mfateev/sqlx v0.0.0-20180910213730-fa49b1cf03f7
+// TODO https://github.com/uber/cadence/issues/2863
+replace github.com/jmoiron/sqlx v1.2.0 => github.com/longquanzheng/sqlx v0.0.0-20191125235044-053e6130695c
 
 replace github.com/temporalio/temporal-proto => ./.gen/proto
