@@ -63,7 +63,11 @@ func toThriftHistoryEventFilterType(in enums.HistoryEventFilterType) *shared.His
 }
 
 func toThriftWorkflowExecutionCloseStatus(in enums.WorkflowExecutionCloseStatus) *shared.WorkflowExecutionCloseStatus {
-	ret := shared.WorkflowExecutionCloseStatus(in)
+	if in == enums.WorkflowExecutionCloseStatusRunning {
+		return nil
+	}
+
+	ret := shared.WorkflowExecutionCloseStatus(in - 1)
 	return &ret
 }
 
@@ -97,7 +101,11 @@ func toThriftQueryTaskCompletedType(in enums.QueryTaskCompletedType) *shared.Que
 }
 
 func toThriftQueryRejectCondition(in enums.QueryRejectCondition) *shared.QueryRejectCondition {
-	ret := shared.QueryRejectCondition(in)
+	if in == enums.QueryRejectConditionNone {
+		return nil
+	}
+
+	ret := shared.QueryRejectCondition(in - 1)
 	return &ret
 }
 

@@ -627,7 +627,7 @@ func toProtoQueryRejected(in *shared.QueryRejected) *common.QueryRejected {
 		return nil
 	}
 	return &common.QueryRejected{
-		CloseStatus: enums.WorkflowExecutionCloseStatus(in.GetCloseStatus()),
+		CloseStatus: toProtoWorkflowExecutionCloseStatus(in.CloseStatus),
 	}
 }
 
