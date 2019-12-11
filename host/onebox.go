@@ -80,11 +80,10 @@ type Cadence interface {
 
 type (
 	cadenceImpl struct {
-		frontendService     common.Daemon
-		frontendServiceGRPC common.Daemon
-		matchingService     common.Daemon
-		workerService       common.Daemon
-		historyServices     []common.Daemon
+		frontendService common.Daemon
+		matchingService common.Daemon
+		workerService   common.Daemon
+		historyServices []common.Daemon
 
 		adminClient         adminserviceclient.Interface
 		frontendClient      workflowservice.WorkflowServiceYARPCClient

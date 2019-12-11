@@ -177,7 +177,7 @@ func (s *IntegrationBase) registerDomain(
 	visibilityArchivalStatus enums.ArchivalStatus,
 	visibilityArchivalURI string,
 ) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10000*time.Second)
 	defer cancel()
 	_, err := s.engine.RegisterDomain(ctx, &workflowservice.RegisterDomainRequest{
 		Name:                                   domain,

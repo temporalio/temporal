@@ -30,7 +30,7 @@ func toThriftArchivalStatus(in enums.ArchivalStatus) *shared.ArchivalStatus {
 		return nil
 	}
 
-	ret := shared.ArchivalStatus(in)
+	ret := shared.ArchivalStatus(in - 1)
 	return &ret
 }
 
@@ -38,7 +38,7 @@ func toProtoArchivalStatus(in *shared.ArchivalStatus) enums.ArchivalStatus {
 	if in == nil {
 		return enums.ArchivalStatusDefault
 	}
-	return enums.ArchivalStatus(*in)
+	return enums.ArchivalStatus(*in + 1)
 }
 
 func toProtoWorkflowExecutionCloseStatus(in *shared.WorkflowExecutionCloseStatus) enums.WorkflowExecutionCloseStatus {
