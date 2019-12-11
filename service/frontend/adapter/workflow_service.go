@@ -592,10 +592,11 @@ func ToThriftRespondDecisionTaskFailedRequest(in *workflowservice.RespondDecisio
 		return nil
 	}
 	return &shared.RespondDecisionTaskFailedRequest{
-		TaskToken: in.TaskToken,
-		Cause:     toThriftDecisionTaskFailedCause(in.Cause),
-		Details:   in.Details,
-		Identity:  &in.Identity,
+		TaskToken:      in.TaskToken,
+		Cause:          toThriftDecisionTaskFailedCause(in.Cause),
+		Details:        in.Details,
+		Identity:       &in.Identity,
+		BinaryChecksum: &in.BinaryChecksum,
 	}
 }
 
@@ -728,10 +729,11 @@ func ToThriftRespondQueryTaskCompletedRequest(in *workflowservice.RespondQueryTa
 		return nil
 	}
 	return &shared.RespondQueryTaskCompletedRequest{
-		TaskToken:     in.TaskToken,
-		CompletedType: toThriftQueryTaskCompletedType(in.CompletedType),
-		QueryResult:   in.QueryResult,
-		ErrorMessage:  &in.ErrorMessage,
+		TaskToken:         in.TaskToken,
+		CompletedType:     toThriftQueryTaskCompletedType(in.CompletedType),
+		QueryResult:       in.QueryResult,
+		ErrorMessage:      &in.ErrorMessage,
+		WorkerVersionInfo: toThriftWorkerVersionInfo(in.WorkerVersionInfo),
 	}
 }
 
@@ -789,7 +791,7 @@ func ToThriftGetDomainReplicationMessagesRequest(in *workflowservice.GetDomainRe
 		return nil
 	}
 	return &replicator.GetDomainReplicationMessagesRequest{
-		LastRetrievedMessageId: &in.LastRetrivedMessageId,
+		LastRetrievedMessageId: &in.LastRetrievedMessageId,
 		LastProcessedMessageId: &in.LastProcessedMessageId,
 		ClusterName:            &in.ClusterName,
 	}
