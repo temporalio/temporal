@@ -28,8 +28,9 @@ import (
 
 	"github.com/pborman/uuid"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/common"
+	commonproto "github.com/temporalio/temporal-proto/common"
+	"github.com/temporalio/temporal-proto/enums"
+	"github.com/temporalio/temporal-proto/workflowservice"
 	"github.com/temporalio/temporal/common/log/tag"
 )
 
@@ -39,82 +40,80 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	tl := "integration-continue-as-new-workflow-test-tasklist"
 	identity := "worker1"
 
-	workflowType := &workflow.WorkflowType{}
-	workflowType.Name = common.StringPtr(wt)
+	workflowType := &commonproto.WorkflowType{Name: wt}
 
-	taskList := &workflow.TaskList{}
-	taskList.Name = common.StringPtr(tl)
+	taskList := &commonproto.TaskList{Name: tl}
 
-	header := &workflow.Header{
+	header := &commonproto.Header{
 		Fields: map[string][]byte{"tracing": []byte("sample payload")},
 	}
-	memo := &workflow.Memo{
+	memo := &commonproto.Memo{
 		Fields: map[string][]byte{"memoKey": []byte("memoVal")},
 	}
-	searchAttr := &workflow.SearchAttributes{
+	searchAttr := &commonproto.SearchAttributes{
 		IndexedFields: map[string][]byte{"CustomKeywordField": []byte("1")},
 	}
 
-	request := &workflow.StartWorkflowExecutionRequest{
-		RequestId:                           common.StringPtr(uuid.New()),
-		Domain:                              common.StringPtr(s.domainName),
-		WorkflowId:                          common.StringPtr(id),
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:                           uuid.New(),
+		Domain:                              s.domainName,
+		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
 		Header:                              header,
 		Memo:                                memo,
 		SearchAttributes:                    searchAttr,
-		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
-		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(10),
-		Identity:                            common.StringPtr(identity),
+		ExecutionStartToCloseTimeoutSeconds: 100,
+		TaskStartToCloseTimeoutSeconds:      10,
+		Identity:                            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
+	we, err0 := s.engineGRPC.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(*we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	workflowComplete := false
 	continueAsNewCount := int32(10)
 	continueAsNewCounter := int32(0)
 	var previousRunID string
-	var lastRunStartedEvent *workflow.HistoryEvent
-	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+	var lastRunStartedEvent *commonproto.HistoryEvent
+	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
 		if continueAsNewCounter < continueAsNewCount {
 			previousRunID = execution.GetRunId()
 			continueAsNewCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
 
-			return []byte(strconv.Itoa(int(continueAsNewCounter))), []*workflow.Decision{{
-				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeContinueAsNewWorkflowExecution),
-				ContinueAsNewWorkflowExecutionDecisionAttributes: &workflow.ContinueAsNewWorkflowExecutionDecisionAttributes{
+			return []byte(strconv.Itoa(int(continueAsNewCounter))), []*commonproto.Decision{{
+				DecisionType: enums.DecisionTypeContinueAsNewWorkflowExecution,
+				Attributes: &commonproto.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &commonproto.ContinueAsNewWorkflowExecutionDecisionAttributes{
 					WorkflowType:                        workflowType,
-					TaskList:                            &workflow.TaskList{Name: &tl},
+					TaskList:                            &commonproto.TaskList{Name: tl},
 					Input:                               buf.Bytes(),
 					Header:                              header,
 					Memo:                                memo,
 					SearchAttributes:                    searchAttr,
-					ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
-					TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(10),
-				},
+					ExecutionStartToCloseTimeoutSeconds: 100,
+					TaskStartToCloseTimeoutSeconds:      10,
+				}},
 			}}, nil
 		}
 
 		lastRunStartedEvent = history.Events[0]
 		workflowComplete = true
-		return []byte(strconv.Itoa(int(continueAsNewCounter))), []*workflow.Decision{{
-			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
-			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+		return []byte(strconv.Itoa(int(continueAsNewCounter))), []*commonproto.Decision{{
+			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
+			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done."),
-			},
+			}},
 		}}, nil
 	}
 
-	poller := &TaskPoller{
-		Engine:          s.engine,
+	poller := &TaskPollerGRPC{
+		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
 		Identity:        identity,
@@ -133,10 +132,10 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	_, err := poller.PollAndProcessDecisionTask(true, false)
 	s.Nil(err)
 	s.True(workflowComplete)
-	s.Equal(previousRunID, lastRunStartedEvent.WorkflowExecutionStartedEventAttributes.GetContinuedExecutionRunId())
-	s.Equal(header, lastRunStartedEvent.WorkflowExecutionStartedEventAttributes.Header)
-	s.Equal(memo, lastRunStartedEvent.WorkflowExecutionStartedEventAttributes.Memo)
-	s.Equal(searchAttr, lastRunStartedEvent.WorkflowExecutionStartedEventAttributes.SearchAttributes)
+	s.Equal(previousRunID, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetContinuedExecutionRunId())
+	s.Equal(header, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().Header)
+	s.Equal(memo, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().Memo)
+	s.Equal(searchAttr, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().SearchAttributes)
 }
 
 func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
@@ -145,62 +144,60 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 	tl := "integration-continue-as-new-workflow-timeout-test-tasklist"
 	identity := "worker1"
 
-	workflowType := &workflow.WorkflowType{}
-	workflowType.Name = common.StringPtr(wt)
+	workflowType := &commonproto.WorkflowType{Name: wt}
 
-	taskList := &workflow.TaskList{}
-	taskList.Name = common.StringPtr(tl)
+	taskList := &commonproto.TaskList{Name: tl}
 
-	request := &workflow.StartWorkflowExecutionRequest{
-		RequestId:                           common.StringPtr(uuid.New()),
-		Domain:                              common.StringPtr(s.domainName),
-		WorkflowId:                          common.StringPtr(id),
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:                           uuid.New(),
+		Domain:                              s.domainName,
+		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
-		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(10),
-		Identity:                            common.StringPtr(identity),
+		ExecutionStartToCloseTimeoutSeconds: 100,
+		TaskStartToCloseTimeoutSeconds:      10,
+		Identity:                            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
+	we, err0 := s.engineGRPC.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(*we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	workflowComplete := false
 	continueAsNewCount := int32(1)
 	continueAsNewCounter := int32(0)
-	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
 		if continueAsNewCounter < continueAsNewCount {
 			continueAsNewCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
 
-			return []byte(strconv.Itoa(int(continueAsNewCounter))), []*workflow.Decision{{
-				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeContinueAsNewWorkflowExecution),
-				ContinueAsNewWorkflowExecutionDecisionAttributes: &workflow.ContinueAsNewWorkflowExecutionDecisionAttributes{
+			return []byte(strconv.Itoa(int(continueAsNewCounter))), []*commonproto.Decision{{
+				DecisionType: enums.DecisionTypeContinueAsNewWorkflowExecution,
+				Attributes: &commonproto.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &commonproto.ContinueAsNewWorkflowExecutionDecisionAttributes{
 					WorkflowType:                        workflowType,
-					TaskList:                            &workflow.TaskList{Name: &tl},
+					TaskList:                            &commonproto.TaskList{Name: tl},
 					Input:                               buf.Bytes(),
-					ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1), // set timeout to 1
-					TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
-				},
+					ExecutionStartToCloseTimeoutSeconds: 1, // set timeout to 1
+					TaskStartToCloseTimeoutSeconds:      1,
+				}},
 			}}, nil
 		}
 
 		workflowComplete = true
-		return []byte(strconv.Itoa(int(continueAsNewCounter))), []*workflow.Decision{{
-			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
-			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+		return []byte(strconv.Itoa(int(continueAsNewCounter))), []*commonproto.Decision{{
+			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
+			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done."),
-			},
+			}},
 		}}, nil
 	}
 
-	poller := &TaskPoller{
-		Engine:          s.engine,
+	poller := &TaskPollerGRPC{
+		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
 		Identity:        identity,
@@ -220,24 +217,24 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 
 GetHistoryLoop:
 	for i := 0; i < 20; i++ {
-		historyResponse, err := s.engine.GetWorkflowExecutionHistory(createContext(), &workflow.GetWorkflowExecutionHistoryRequest{
-			Domain: common.StringPtr(s.domainName),
-			Execution: &workflow.WorkflowExecution{
-				WorkflowId: common.StringPtr(id),
+		historyResponse, err := s.engineGRPC.GetWorkflowExecutionHistory(createContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+			Domain: s.domainName,
+			Execution: &commonproto.WorkflowExecution{
+				WorkflowId: id,
 			},
 		})
 		s.Nil(err)
 		history := historyResponse.History
 
 		lastEvent := history.Events[len(history.Events)-1]
-		if *lastEvent.EventType != workflow.EventTypeWorkflowExecutionTimedOut {
+		if lastEvent.GetEventType() != enums.EventTypeWorkflowExecutionTimedOut {
 			s.Logger.Warn("Execution not timedout yet.")
 			time.Sleep(200 * time.Millisecond)
 			continue GetHistoryLoop
 		}
 
-		timeoutEventAttributes := lastEvent.WorkflowExecutionTimedOutEventAttributes
-		s.Equal(workflow.TimeoutTypeStartToClose, *timeoutEventAttributes.TimeoutType)
+		timeoutEventAttributes := lastEvent.GetWorkflowExecutionTimedOutEventAttributes()
+		s.Equal(enums.TimeoutTypeStartToClose, timeoutEventAttributes.TimeoutType)
 		workflowComplete = true
 		break GetHistoryLoop
 	}
@@ -250,62 +247,60 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 	tl := "integration-wf-continue-as-new-task-id-tasklist"
 	identity := "worker1"
 
-	workflowType := &workflow.WorkflowType{}
-	workflowType.Name = common.StringPtr(wt)
+	workflowType := &commonproto.WorkflowType{Name: wt}
 
-	taskList := &workflow.TaskList{}
-	taskList.Name = common.StringPtr(tl)
+	taskList := &commonproto.TaskList{Name: tl}
 
-	request := &workflow.StartWorkflowExecutionRequest{
-		RequestId:                           common.StringPtr(uuid.New()),
-		Domain:                              common.StringPtr(s.domainName),
-		WorkflowId:                          common.StringPtr(id),
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:                           uuid.New(),
+		Domain:                              s.domainName,
+		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
-		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
-		Identity:                            common.StringPtr(identity),
+		ExecutionStartToCloseTimeoutSeconds: 100,
+		TaskStartToCloseTimeoutSeconds:      1,
+		Identity:                            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
+	we, err0 := s.engineGRPC.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(*we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	var executions []*workflow.WorkflowExecution
+	var executions []*commonproto.WorkflowExecution
 
 	continueAsNewed := false
-	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
 
 		executions = append(executions, execution)
 
 		if !continueAsNewed {
 			continueAsNewed = true
-			return nil, []*workflow.Decision{{
-				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeContinueAsNewWorkflowExecution),
-				ContinueAsNewWorkflowExecutionDecisionAttributes: &workflow.ContinueAsNewWorkflowExecutionDecisionAttributes{
+			return nil, []*commonproto.Decision{{
+				DecisionType: enums.DecisionTypeContinueAsNewWorkflowExecution,
+				Attributes: &commonproto.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &commonproto.ContinueAsNewWorkflowExecutionDecisionAttributes{
 					WorkflowType:                        workflowType,
 					TaskList:                            taskList,
 					Input:                               nil,
-					ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
-					TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
-				},
+					ExecutionStartToCloseTimeoutSeconds: 100,
+					TaskStartToCloseTimeoutSeconds:      1,
+				}},
 			}}, nil
 		}
 
-		return nil, []*workflow.Decision{{
-			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
-			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+		return nil, []*commonproto.Decision{{
+			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
+			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("succeed"),
-			},
+			}},
 		}}, nil
 
 	}
 
-	poller := &TaskPoller{
-		Engine:          s.engine,
+	poller := &TaskPollerGRPC{
+		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
 		Identity:        identity,
@@ -317,7 +312,7 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 	minTaskID := int64(0)
 	_, err := poller.PollAndProcessDecisionTask(false, false)
 	s.Nil(err)
-	events := s.getHistory(s.domainName, executions[0])
+	events := s.getHistoryGRPC(s.domainName, executions[0])
 	s.True(len(events) != 0)
 	for _, event := range events {
 		s.True(event.GetTaskId() > minTaskID)
@@ -326,7 +321,7 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 
 	_, err = poller.PollAndProcessDecisionTask(false, false)
 	s.Nil(err)
-	events = s.getHistory(s.domainName, executions[1])
+	events = s.getHistoryGRPC(s.domainName, executions[1])
 	s.True(len(events) != 0)
 	for _, event := range events {
 		s.True(event.GetTaskId() > minTaskID)
@@ -342,30 +337,29 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	tl := "integration-child-workflow-with-continue-as-new-test-tasklist"
 	identity := "worker1"
 
-	parentWorkflowType := &workflow.WorkflowType{}
-	parentWorkflowType.Name = common.StringPtr(wtParent)
+	parentWorkflowType := &commonproto.WorkflowType{}
+	parentWorkflowType.Name = wtParent
 
-	childWorkflowType := &workflow.WorkflowType{}
-	childWorkflowType.Name = common.StringPtr(wtChild)
+	childWorkflowType := &commonproto.WorkflowType{}
+	childWorkflowType.Name = wtChild
 
-	taskList := &workflow.TaskList{}
-	taskList.Name = common.StringPtr(tl)
+	taskList := &commonproto.TaskList{Name: tl}
 
-	request := &workflow.StartWorkflowExecutionRequest{
-		RequestId:                           common.StringPtr(uuid.New()),
-		Domain:                              common.StringPtr(s.domainName),
-		WorkflowId:                          common.StringPtr(parentID),
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:                           uuid.New(),
+		Domain:                              s.domainName,
+		WorkflowId:                          parentID,
 		WorkflowType:                        parentWorkflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
-		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
-		Identity:                            common.StringPtr(identity),
+		ExecutionStartToCloseTimeoutSeconds: 100,
+		TaskStartToCloseTimeoutSeconds:      1,
+		Identity:                            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
+	we, err0 := s.engineGRPC.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(*we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	// decider logic
 	childComplete := false
@@ -373,67 +367,67 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	childData := int32(1)
 	continueAsNewCount := int32(10)
 	continueAsNewCounter := int32(0)
-	var startedEvent *workflow.HistoryEvent
-	var completedEvent *workflow.HistoryEvent
-	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
-		s.Logger.Info("Processing decision task for WorkflowID:", tag.WorkflowID(*execution.WorkflowId))
+	var startedEvent *commonproto.HistoryEvent
+	var completedEvent *commonproto.HistoryEvent
+	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
+		s.Logger.Info("Processing decision task for WorkflowID:", tag.WorkflowID(execution.GetWorkflowId()))
 
 		// Child Decider Logic
-		if *execution.WorkflowId == childID {
+		if execution.GetWorkflowId() == childID {
 			if continueAsNewCounter < continueAsNewCount {
 				continueAsNewCounter++
 				buf := new(bytes.Buffer)
 				s.Nil(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
 
-				return []byte(strconv.Itoa(int(continueAsNewCounter))), []*workflow.Decision{{
-					DecisionType: common.DecisionTypePtr(workflow.DecisionTypeContinueAsNewWorkflowExecution),
-					ContinueAsNewWorkflowExecutionDecisionAttributes: &workflow.ContinueAsNewWorkflowExecutionDecisionAttributes{
+				return []byte(strconv.Itoa(int(continueAsNewCounter))), []*commonproto.Decision{{
+					DecisionType: enums.DecisionTypeContinueAsNewWorkflowExecution,
+					Attributes: &commonproto.Decision_ContinueAsNewWorkflowExecutionDecisionAttributes{ContinueAsNewWorkflowExecutionDecisionAttributes: &commonproto.ContinueAsNewWorkflowExecutionDecisionAttributes{
 						Input: buf.Bytes(),
-					},
+					}},
 				}}, nil
 			}
 
 			childComplete = true
-			return nil, []*workflow.Decision{{
-				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
-				CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+			return nil, []*commonproto.Decision{{
+				DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
+				Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
 					Result: []byte("Child Done."),
-				},
+				}},
 			}}, nil
 		}
 
 		// Parent Decider Logic
-		if *execution.WorkflowId == parentID {
+		if execution.GetWorkflowId() == parentID {
 			if !childExecutionStarted {
 				s.Logger.Info("Starting child execution.")
 				childExecutionStarted = true
 				buf := new(bytes.Buffer)
 				s.Nil(binary.Write(buf, binary.LittleEndian, childData))
 
-				return nil, []*workflow.Decision{{
-					DecisionType: common.DecisionTypePtr(workflow.DecisionTypeStartChildWorkflowExecution),
-					StartChildWorkflowExecutionDecisionAttributes: &workflow.StartChildWorkflowExecutionDecisionAttributes{
-						Domain:       common.StringPtr(s.domainName),
-						WorkflowId:   common.StringPtr(childID),
+				return nil, []*commonproto.Decision{{
+					DecisionType: enums.DecisionTypeStartChildWorkflowExecution,
+					Attributes: &commonproto.Decision_StartChildWorkflowExecutionDecisionAttributes{StartChildWorkflowExecutionDecisionAttributes: &commonproto.StartChildWorkflowExecutionDecisionAttributes{
+						Domain:       s.domainName,
+						WorkflowId:   childID,
 						WorkflowType: childWorkflowType,
 						Input:        buf.Bytes(),
-					},
+					}},
 				}}, nil
 			} else if previousStartedEventID > 0 {
 				for _, event := range history.Events[previousStartedEventID:] {
-					if *event.EventType == workflow.EventTypeChildWorkflowExecutionStarted {
+					if event.GetEventType() == enums.EventTypeChildWorkflowExecutionStarted {
 						startedEvent = event
-						return nil, []*workflow.Decision{}, nil
+						return nil, []*commonproto.Decision{}, nil
 					}
 
-					if *event.EventType == workflow.EventTypeChildWorkflowExecutionCompleted {
+					if event.GetEventType() == enums.EventTypeChildWorkflowExecutionCompleted {
 						completedEvent = event
-						return nil, []*workflow.Decision{{
-							DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
-							CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+						return nil, []*commonproto.Decision{{
+							DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
+							Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
 								Result: []byte("Done."),
-							},
+							}},
 						}}, nil
 					}
 				}
@@ -443,8 +437,8 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 		return nil, nil, nil
 	}
 
-	poller := &TaskPoller{
-		Engine:          s.engine,
+	poller := &TaskPollerGRPC{
+		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
 		Identity:        identity,
@@ -481,12 +475,12 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.Nil(err)
 	s.NotNil(completedEvent)
-	completedAttributes := completedEvent.ChildWorkflowExecutionCompletedEventAttributes
-	s.Equal(s.domainName, *completedAttributes.Domain)
-	s.Equal(childID, *completedAttributes.WorkflowExecution.WorkflowId)
-	s.NotEqual(startedEvent.ChildWorkflowExecutionStartedEventAttributes.WorkflowExecution.RunId,
+	completedAttributes := completedEvent.GetChildWorkflowExecutionCompletedEventAttributes()
+	s.Equal(s.domainName, completedAttributes.Domain)
+	s.Equal(childID, completedAttributes.WorkflowExecution.WorkflowId)
+	s.NotEqual(startedEvent.GetChildWorkflowExecutionStartedEventAttributes().WorkflowExecution.RunId,
 		completedAttributes.WorkflowExecution.RunId)
-	s.Equal(wtChild, *completedAttributes.WorkflowType.Name)
+	s.Equal(wtChild, completedAttributes.WorkflowType.Name)
 	s.Equal([]byte("Child Done."), completedAttributes.Result)
 
 	s.Logger.Info("Parent Workflow Execution History: ")
