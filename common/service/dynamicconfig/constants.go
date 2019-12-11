@@ -135,6 +135,7 @@ var keys = map[Key]string{
 	EventsCacheMaxSize:                                    "history.eventsCacheMaxSize",
 	EventsCacheTTL:                                        "history.eventsCacheTTL",
 	AcquireShardInterval:                                  "history.acquireShardInterval",
+	AcquireShardConcurrency:                               "history.acquireShardConcurrency",
 	StandbyClusterDelay:                                   "history.standbyClusterDelay",
 	StandbyTaskMissingEventsResendDelay:                   "history.standbyTaskMissingEventsResendDelay",
 	StandbyTaskMissingEventsDiscardDelay:                  "history.standbyTaskMissingEventsDiscardDelay",
@@ -201,6 +202,9 @@ var keys = map[Key]string{
 	ReplicationTaskProcessorErrorRetryWait:                "history.ReplicationTaskProcessorErrorRetryWait",
 	ReplicationTaskProcessorErrorRetryMaxAttempts:         "history.ReplicationTaskProcessorErrorRetryMaxAttempts",
 	ReplicationTaskProcessorNoTaskInitialWait:             "history.ReplicationTaskProcessorNoTaskInitialWait",
+	EnableConsistentQuery:                                 "history.EnableConsistentQuery",
+	EnableConsistentQueryByDomain:                         "history.EnableConsistentQueryByDomain",
+	MaxBufferedQueryCount:                                 "history.MaxBufferedQueryCount",
 
 	WorkerPersistenceMaxQPS:                         "worker.persistenceMaxQPS",
 	WorkerReplicatorMetaTaskConcurrency:             "worker.replicatorMetaTaskConcurrency",
@@ -407,6 +411,8 @@ const (
 	EventsCacheTTL
 	// AcquireShardInterval is interval that timer used to acquire shard
 	AcquireShardInterval
+	// AcquireShardConcurrency is number of goroutines that can be used to acquire shards in the shard controller.
+	AcquireShardConcurrency
 	// StandbyClusterDelay is the artificial delay added to standby cluster's view of active cluster's time
 	StandbyClusterDelay
 	// StandbyTaskMissingEventsResendDelay is the amount of time standby cluster's will wait (if events are missing)
@@ -599,6 +605,13 @@ const (
 	ReplicationTaskProcessorErrorRetryMaxAttempts
 	// ReplicationTaskProcessorNoTaskInitialWait is the wait time when not ask is returned
 	ReplicationTaskProcessorNoTaskInitialWait
+
+	// EnableConsistentQuery indicates if consistent query is enabled for the cluster
+	EnableConsistentQuery
+	// EnableConsistentQueryByDomain indicates if consistent query is enabled for a domain
+	EnableConsistentQueryByDomain
+	// MaxBufferedQueryCount indicates the maximum number of queries which can be buffered at a given time for a single workflow
+	MaxBufferedQueryCount
 
 	// lastKeyForTest must be the last one in this const group for testing purpose
 	lastKeyForTest

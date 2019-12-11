@@ -32,10 +32,11 @@ import (
 	"github.com/temporalio/temporal/.gen/go/shared"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/clock"
+	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
+	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/resource"
 )
 
 type (
@@ -44,6 +45,7 @@ type (
 		*require.Assertions
 
 		controller      *gomock.Controller
+		mockResource    *resource.Test
 		mockEventsCache *MockeventsCache
 
 		msBuilder *mutableStateBuilder
@@ -69,17 +71,18 @@ func (s *mutableStateSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
+	s.mockResource = resource.NewTest(s.controller, metrics.History)
 	s.mockEventsCache = NewMockeventsCache(s.controller)
 
-	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
+	s.logger = s.mockResource.Logger
 	s.mockShard = &shardContextImpl{
+		Resource:                  s.mockResource,
 		shardInfo:                 &persistence.ShardInfo{ShardID: 0, RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber:    1,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   make(chan int, 100),
 		config:                    NewDynamicConfigForTest(),
 		logger:                    s.logger,
-		timeSource:                clock.NewRealTimeSource(),
 	}
 
 	s.msBuilder = newMutableStateBuilder(s.mockShard, s.mockEventsCache, s.logger, testLocalDomainEntry)
@@ -87,6 +90,7 @@ func (s *mutableStateSuite) SetupTest() {
 
 func (s *mutableStateSuite) TearDownTest() {
 	s.controller.Finish()
+	s.mockResource.Finish(s.T())
 }
 
 func (s *mutableStateSuite) TestTransientDecisionCompletionFirstBatchReplicated_ReplicateDecisionCompleted() {
@@ -158,7 +162,7 @@ func (s *mutableStateSuite) TestTransientDecisionCompletionFirstBatchReplicated_
 		workflow.DecisionTaskFailedCauseWorkflowWorkerUnhandledFailure,
 		[]byte("some random decision failure details"),
 		"some random decision failure identity",
-		"", "", "", 0,
+		"", "", "", "", 0,
 	))
 	s.Equal(0, len(s.msBuilder.GetHistoryBuilder().transientHistory))
 	s.Equal(1, len(s.msBuilder.GetHistoryBuilder().history))
@@ -396,6 +400,18 @@ func (s *mutableStateSuite) TestMergeMapOfByteArray() {
 	currentMap = map[string][]byte{"number": []byte("1")}
 	resultMap = mergeMapOfByteArray(currentMap, newMap)
 	s.Equal(2, len(resultMap))
+}
+
+func (s *mutableStateSuite) TestEventReapplied() {
+	runID := uuid.New()
+	eventID := int64(1)
+	version := int64(2)
+	dedupResource := definition.NewEventReappliedID(runID, eventID, version)
+	isReapplied := s.msBuilder.IsResourceDuplicated(dedupResource)
+	s.False(isReapplied)
+	s.msBuilder.UpdateDuplicatedResource(dedupResource)
+	isReapplied = s.msBuilder.IsResourceDuplicated(dedupResource)
+	s.True(isReapplied)
 }
 
 func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicated(version int64, runID string) (*shared.HistoryEvent, *shared.HistoryEvent) {

@@ -33,7 +33,7 @@ import (
 
 func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 	id := uuid.New()
-	wt := "interation-workflow-decision-heartbeating-local-activities"
+	wt := "integration-workflow-decision-heartbeating-local-activities"
 	tl := id
 	identity := "worker1"
 
@@ -140,7 +140,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 
 func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 	id := uuid.New()
-	wt := "interation-workflow-decision-heartbeating-local-activities"
+	wt := "integration-workflow-decision-heartbeating-local-activities"
 	tl := id
 	identity := "worker1"
 
@@ -284,7 +284,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 
 func (s *integrationSuite) TestWorkflowTerminationSignalBeforeRegularDecisionStarted() {
 	id := uuid.New()
-	wt := "interation-workflow-transient-decision-test-type"
+	wt := "integration-workflow-transient-decision-test-type"
 	tl := id
 	identity := "worker1"
 
@@ -359,7 +359,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeRegularDecisionSta
 
 func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStarted() {
 	id := uuid.New()
-	wt := "interation-workflow-transient-decision-test-type"
+	wt := "integration-workflow-transient-decision-test-type"
 	tl := id
 	identity := "worker1"
 
@@ -434,7 +434,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 
 func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStartedAndFailDecision() {
 	id := uuid.New()
-	wt := "interation-workflow-transient-decision-test-type"
+	wt := "integration-workflow-transient-decision-test-type"
 	tl := id
 	identity := "worker1"
 
@@ -521,7 +521,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 
 func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientDecisionStarted() {
 	id := uuid.New()
-	wt := "interation-workflow-transient-decision-test-type"
+	wt := "integration-workflow-transient-decision-test-type"
 	tl := id
 	identity := "worker1"
 
@@ -626,7 +626,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientDecisionS
 
 func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionStarted() {
 	id := uuid.New()
-	wt := "interation-workflow-transient-decision-test-type"
+	wt := "integration-workflow-transient-decision-test-type"
 	tl := id
 	identity := "worker1"
 
@@ -728,7 +728,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 
 func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionStartedAndFailDecision() {
 	id := uuid.New()
-	wt := "interation-workflow-transient-decision-test-type"
+	wt := "integration-workflow-transient-decision-test-type"
 	tl := id
 	identity := "worker1"
 

@@ -594,7 +594,7 @@ func toThriftReplicationToken(in *common.ReplicationToken) *replicator.Replicati
 	}
 	return &replicator.ReplicationToken{
 		ShardID:                &in.ShardID,
-		LastRetrivedMessageId:  &in.LastRetrivedMessageId,
+		LastRetrievedMessageId: &in.LastRetrivedMessageId,
 		LastProcessedMessageId: &in.LastProcessedMessageId,
 	}
 }
@@ -687,7 +687,7 @@ func toProtoReplicationMessages(in *replicator.ReplicationMessages) *common.Repl
 	}
 	return &common.ReplicationMessages{
 		ReplicationTasks:      toProtoReplicationTasks(in.GetReplicationTasks()),
-		LastRetrivedMessageId: in.GetLastRetrivedMessageId(),
+		LastRetrivedMessageId: in.GetLastRetrievedMessageId(),
 		HasMore:               in.GetHasMore(),
 	}
 }
@@ -723,7 +723,7 @@ func toProtoReplicationTask(in *replicator.ReplicationTask) *common.ReplicationT
 	case enums.ReplicationTaskTypeSyncShardStatus:
 		ret.Attributes = &common.ReplicationTask_SyncShardStatusTaskAttributes{SyncShardStatusTaskAttributes: toProtoSyncShardStatusTaskAttributes(in.GetSyncShardStatusTaskAttributes())}
 	case enums.ReplicationTaskTypeSyncActivity:
-		ret.Attributes = &common.ReplicationTask_SyncActicvityTaskAttributes{SyncActicvityTaskAttributes: toProtoSyncActicvityTaskAttributes(in.GetSyncActicvityTaskAttributes())}
+		ret.Attributes = &common.ReplicationTask_SyncActicvityTaskAttributes{SyncActicvityTaskAttributes: toProtoSyncActicvityTaskAttributes(in.GetSyncActivityTaskAttributes())}
 	case enums.ReplicationTaskTypeHistoryMetadata:
 		ret.Attributes = &common.ReplicationTask_HistoryMetadataTaskAttributes{HistoryMetadataTaskAttributes: toProtoHistoryMetadataTaskAttributes(in.GetHistoryMetadataTaskAttributes())}
 	case enums.ReplicationTaskTypeHistoryV2:
@@ -824,7 +824,7 @@ func toProtoSyncShardStatusTaskAttributes(in *replicator.SyncShardStatusTaskAttr
 }
 
 // toProtoSyncActicvityTaskAttributes ...
-func toProtoSyncActicvityTaskAttributes(in *replicator.SyncActicvityTaskAttributes) *common.SyncActicvityTaskAttributes {
+func toProtoSyncActicvityTaskAttributes(in *replicator.SyncActivityTaskAttributes) *common.SyncActicvityTaskAttributes {
 	if in == nil {
 		return nil
 	}

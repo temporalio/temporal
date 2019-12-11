@@ -52,7 +52,11 @@ type (
 
 	// TestBaseOptions options to configure workflow test base.
 	TestBaseOptions struct {
+		SQLDBPluginName string
 		DBName          string
+		DBUsername      string
+		DBPassword      string
+		DBHost          string
 		DBPort          int              `yaml:"-"`
 		StoreType       string           `yaml:"-"`
 		SchemaDir       string           `yaml:"-"`
@@ -85,7 +89,6 @@ type (
 		DatabaseName() string
 		SetupTestDatabase()
 		TearDownTestDatabase()
-		CreateSession()
 		DropDatabase()
 		Config() config.Persistence
 		LoadSchema(fileNames []string, schemaDir string)
@@ -107,16 +110,16 @@ func NewTestBaseWithCassandra(options *TestBaseOptions) TestBase {
 	if options.DBName == "" {
 		options.DBName = "test_" + GenerateRandomDBName(10)
 	}
-	testCluster := cassandra.NewTestCluster(options.DBName, options.DBPort, options.SchemaDir)
+	testCluster := cassandra.NewTestCluster(options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SchemaDir)
 	return newTestBase(options, testCluster)
 }
 
 // NewTestBaseWithSQL returns a new persistence test base backed by SQL
 func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 	if options.DBName == "" {
-		options.DBName = GenerateRandomDBName(10)
+		options.DBName = "test_" + GenerateRandomDBName(10)
 	}
-	testCluster := sql.NewTestCluster(options.DBName, options.DBPort, options.SchemaDir)
+	testCluster := sql.NewTestCluster(options.SQLDBPluginName, options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SchemaDir)
 	return newTestBase(options, testCluster)
 }
 
@@ -1261,6 +1264,13 @@ func (s *TestBase) CompleteTask(domainID, taskList string, taskType int, taskID 
 
 // TearDownWorkflowStore to cleanup
 func (s *TestBase) TearDownWorkflowStore() {
+	s.ExecutionMgrFactory.Close()
+	// TODO VisibilityMgr/Store is created with a separated code path, this is incorrect and may cause leaking connection
+	// And Postgres requires all connection to be closed before dropping a database
+	// https://github.com/uber/cadence/issues/2854
+	// Remove the below line after the issue is fix
+	s.VisibilityMgr.Close()
+
 	s.DefaultTestCluster.TearDownTestDatabase()
 }
 

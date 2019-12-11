@@ -23,15 +23,18 @@ package main
 import (
 	"log"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/urfave/cli"
 
+	"github.com/temporalio/temporal/common"
+	_ "github.com/temporalio/temporal/common/persistence/sql/sqlplugin/mysql"    // needed to load mysql plugin
+	_ "github.com/temporalio/temporal/common/persistence/sql/sqlplugin/postgres" // needed to load postgres plugin
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/tools/cassandra"
 	"github.com/temporalio/temporal/tools/sql"
-	_ "github.com/temporalio/temporal/tools/sql-extensions/mysql"    // needed to load mysql extensions
-	_ "github.com/temporalio/temporal/tools/sql-extensions/postgres" // needed to load postgres extensions
 )
 
 // validServices is the list of all valid cadence services
@@ -72,16 +75,29 @@ func startHandler(c *cli.Context) {
 		log.Fatal("Incompatible sql versions: ", err)
 	}
 
+	var daemons []common.Daemon
 	services := getServices(c)
+	sigc := make(chan os.Signal, 1)
+	signal.Notify(sigc, syscall.SIGTERM)
 	for _, svc := range services {
 		if _, ok := cfg.Services[svc]; !ok {
 			log.Fatalf("`%v` service missing config", svc)
 		}
 		server := newServer(svc, &cfg)
+		daemons = append(daemons, server)
 		server.Start()
 	}
 
-	select {}
+	select {
+	case <-sigc:
+		{
+			log.Println("Received SIGTERM signal, initiating shutdown.")
+			for _, daemon := range daemons {
+				daemon.Stop()
+			}
+			os.Exit(0)
+		}
+	}
 }
 
 func getEnvironment(c *cli.Context) string {

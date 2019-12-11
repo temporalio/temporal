@@ -31,8 +31,6 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"go.uber.org/yarpc/yarpcerrors"
-	"golang.org/x/net/context"
 
 	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
 
@@ -44,7 +42,6 @@ import (
 	"github.com/temporalio/temporal/client/matching"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/client"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/definition"
@@ -63,6 +60,8 @@ const (
 	activityCancellationMsgActivityIDUnknown  = "ACTIVITY_ID_UNKNOWN"
 	activityCancellationMsgActivityNotStarted = "ACTIVITY_ID_NOT_STARTED"
 	timerCancellationMsgTimerIDUnknown        = "TIMER_ID_UNKNOWN"
+	queryFirstDecisionTaskWaitTime            = time.Second
+	queryFirstDecisionTaskCheckInterval       = 200 * time.Millisecond
 )
 
 type (
@@ -99,7 +98,7 @@ type (
 		SyncActivity(ctx ctx.Context, request *h.SyncActivityRequest) error
 		GetReplicationMessages(ctx ctx.Context, taskID int64) (*r.ReplicationMessages, error)
 		QueryWorkflow(ctx ctx.Context, request *h.QueryWorkflowRequest) (*h.QueryWorkflowResponse, error)
-		ReapplyEvents(ctx ctx.Context, domainUUID string, workflowID string, events []*workflow.HistoryEvent) error
+		ReapplyEvents(ctx ctx.Context, domainUUID string, workflowID string, runID string, events []*workflow.HistoryEvent) error
 
 		NotifyNewHistoryEvent(event *historyEventNotification)
 		NotifyNewTransferTasks(tasks []persistence.Task)
@@ -174,6 +173,12 @@ var (
 	ErrEventsAterWorkflowFinish = &workflow.InternalServiceError{Message: "error validating last event being workflow finish event"}
 	// ErrQueryEnteredInvalidState is error indicating query entered invalid state
 	ErrQueryEnteredInvalidState = &workflow.InternalServiceError{Message: "query entered invalid state, this should be impossible"}
+	// ErrQueryWorkflowBeforeFirstDecision is error indicating that query was attempted before first decision task completed
+	ErrQueryWorkflowBeforeFirstDecision = &workflow.BadRequestError{Message: "workflow must handle at least one decision task before it can be queried"}
+	// ErrConsistentQueryNotEnabled is error indicating that consistent query was requested but either cluster or domain does not enable consistent query
+	ErrConsistentQueryNotEnabled = &workflow.BadRequestError{Message: "cluster or domain does not enable strongly consistent query but strongly consistent query was requested"}
+	// ErrConsistentQueryBufferExceeded is error indicating that too many consistent queries have been buffered and until buffered queries are finished new consistent queries cannot be buffered
+	ErrConsistentQueryBufferExceeded = &workflow.InternalServiceError{Message: "consistent query buffer is full, cannot accept new consistent queries"}
 
 	// FailedWorkflowCloseState is a set of failed workflow close states, used for start workflow policy
 	// for start workflow execution API
@@ -286,8 +291,10 @@ func NewEngineWithShardContext(
 			shard,
 			historyEngImpl,
 			config,
+			historyClient,
 			shard.GetMetricsClient(),
-			replicationTaskFetcher)
+			replicationTaskFetcher,
+		)
 		replicationTaskProcessors = append(replicationTaskProcessors, replicationTaskProcessor)
 	}
 	historyEngImpl.replicationTaskProcessors = replicationTaskProcessors
@@ -494,7 +501,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	e.overrideStartWorkflowExecutionRequest(domainEntry, request)
+	e.overrideStartWorkflowExecutionRequest(domainEntry, request, metrics.HistoryStartWorkflowExecutionScope)
 
 	workflowID := request.GetWorkflowId()
 	// grab the current context as a lock, nothing more
@@ -746,6 +753,55 @@ func (e *historyEngineImpl) QueryWorkflow(
 	ctx ctx.Context,
 	request *h.QueryWorkflowRequest,
 ) (retResp *h.QueryWorkflowResponse, retErr error) {
+
+	scope := e.metricsClient.Scope(metrics.HistoryQueryWorkflowScope)
+
+	consistentQueryEnabled := e.config.EnableConsistentQuery() && e.config.EnableConsistentQueryByDomain(request.GetRequest().GetDomain())
+	if request.GetRequest().GetQueryConsistencyLevel() == workflow.QueryConsistencyLevelStrong && !consistentQueryEnabled {
+		return nil, ErrConsistentQueryNotEnabled
+	}
+
+	mutableStateResp, err := e.getMutableState(ctx, request.GetDomainUUID(), *request.GetRequest().GetExecution())
+	if err != nil {
+		return nil, err
+	}
+	req := request.GetRequest()
+	if !mutableStateResp.GetIsWorkflowRunning() && req.QueryRejectCondition != nil {
+		notOpenReject := req.GetQueryRejectCondition() == workflow.QueryRejectConditionNotOpen
+		closeStatus := mutableStateResp.GetWorkflowCloseState()
+		notCompletedCleanlyReject := req.GetQueryRejectCondition() == workflow.QueryRejectConditionNotCompletedCleanly && closeStatus != persistence.WorkflowCloseStatusCompleted
+		if notOpenReject || notCompletedCleanlyReject {
+			return &h.QueryWorkflowResponse{
+				Response: &workflow.QueryWorkflowResponse{
+					QueryRejected: &workflow.QueryRejected{
+						CloseStatus: persistence.ToThriftWorkflowExecutionCloseStatus(int(closeStatus)).Ptr(),
+					},
+				},
+			}, nil
+		}
+	}
+
+	// query cannot be processed unless at least one decision task has finished
+	// if first decision task has not finished wait for up to a second for it to complete
+	deadline := time.Now().Add(queryFirstDecisionTaskWaitTime)
+	for mutableStateResp.GetPreviousStartedEventId() <= 0 && time.Now().Before(deadline) {
+		<-time.After(queryFirstDecisionTaskCheckInterval)
+		mutableStateResp, err = e.getMutableState(ctx, request.GetDomainUUID(), *request.GetRequest().GetExecution())
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if mutableStateResp.GetPreviousStartedEventId() <= 0 {
+		scope.IncCounter(metrics.QueryBeforeFirstDecisionCount)
+		return nil, ErrQueryWorkflowBeforeFirstDecision
+	}
+
+	de, err := e.shard.GetDomainCache().GetDomainByID(request.GetDomainUUID())
+	if err != nil {
+		return nil, err
+	}
+
 	context, release, err := e.historyCache.getOrCreateWorkflowExecution(ctx, request.GetDomainUUID(), *request.GetRequest().GetExecution())
 	if err != nil {
 		return nil, err
@@ -755,35 +811,13 @@ func (e *historyEngineImpl) QueryWorkflow(
 	if err != nil {
 		return nil, err
 	}
-	req := request.GetRequest()
-	if !mutableState.IsWorkflowExecutionRunning() && req.QueryRejectCondition != nil {
-		notOpenReject := req.GetQueryRejectCondition() == workflow.QueryRejectConditionNotOpen
-		_, closeStatus := mutableState.GetWorkflowStateCloseStatus()
-		notCompletedCleanlyReject := req.GetQueryRejectCondition() == workflow.QueryRejectConditionNotCompletedCleanly && closeStatus != persistence.WorkflowCloseStatusCompleted
-		if notOpenReject || notCompletedCleanlyReject {
-			return &h.QueryWorkflowResponse{
-				Response: &workflow.QueryWorkflowResponse{
-					QueryRejected: &workflow.QueryRejected{
-						CloseStatus: persistence.ToThriftWorkflowExecutionCloseStatus(closeStatus).Ptr(),
-					},
-				},
-			}, nil
-		}
-	}
-
-	de, err := e.shard.GetDomainCache().GetDomainByID(request.GetDomainUUID())
-	if err != nil {
-		return nil, err
-	}
-
-	scope := e.metricsClient.Scope(metrics.HistoryQueryWorkflowScope)
 
 	// There are two ways in which queries get dispatched to decider. First, queries can be dispatched on decision tasks.
 	// These decision tasks potentially contain new events and queries. The events are treated as coming before the query in time.
 	// The second way in which queries are dispatched to decider is directly through matching; in this approach queries can be
 	// dispatched to decider immediately even if there are outstanding events that came before the query. The following logic
 	// is used to determine if a query can be safely dispatched directly through matching or if given the desired consistency
-	// level must be dispatched on a decision task. There are five cases in which a query can be dispatched directly through
+	// level must be dispatched on a decision task. There are four cases in which a query can be dispatched directly through
 	// matching safely, without violating the desired consistency level:
 	// 1. the domain is not active, in this case history is immutable so a query dispatched at any time is consistent
 	// 2. the workflow is not running, whenever a workflow is not running dispatching query directly is consistent
@@ -808,17 +842,20 @@ func (e *historyEngineImpl) QueryWorkflow(
 	// If we get here it means query could not be dispatched through matching directly, so it must block
 	// until either an result has been obtained on a decision task response or until it is safe to dispatch directly through matching.
 	sw := scope.StartTimer(metrics.DecisionTaskQueryLatency)
+	defer sw.Stop()
 	queryReg := mutableState.GetQueryRegistry()
+	if len(queryReg.getBufferedIDs()) >= e.config.MaxBufferedQueryCount() {
+		scope.IncCounter(metrics.QueryBufferExceededCount)
+		return nil, ErrConsistentQueryBufferExceeded
+	}
 	queryID, termCh := queryReg.bufferQuery(req.GetQuery())
-	defer func() {
-		queryReg.removeQuery(queryID)
-		sw.Stop()
-	}()
+	defer queryReg.removeQuery(queryID)
 	release(nil)
 	select {
 	case <-termCh:
 		state, err := queryReg.getTerminationState(queryID)
 		if err != nil {
+			scope.IncCounter(metrics.QueryRegistryInvalidStateCount)
 			return nil, err
 		}
 		switch state.queryTerminationType {
@@ -834,6 +871,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 			case workflow.QueryResultTypeFailed:
 				return nil, &workflow.QueryFailedError{Message: result.GetErrorMessage()}
 			default:
+				scope.IncCounter(metrics.QueryRegistryInvalidStateCount)
 				return nil, ErrQueryEnteredInvalidState
 			}
 		case queryTerminationTypeUnblocked:
@@ -846,6 +884,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 		case queryTerminationTypeFailed:
 			return nil, state.failure
 		default:
+			scope.IncCounter(metrics.QueryRegistryInvalidStateCount)
 			return nil, ErrQueryEnteredInvalidState
 		}
 	case <-ctx.Done():
@@ -863,60 +902,9 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 	matchingRequest := &m.QueryWorkflowRequest{
 		DomainUUID:   common.StringPtr(domainID),
 		QueryRequest: queryRequest,
+		TaskList:     msResp.TaskList,
 	}
 
-	supportsStickyQuery := client.NewVersionChecker().SupportsStickyQuery(msResp.GetClientImpl(), msResp.GetClientFeatureVersion()) == nil
-	if len(msResp.GetStickyTaskList().GetName()) != 0 && supportsStickyQuery {
-		matchingRequest.TaskList = msResp.StickyTaskList
-		// using a clean new context in case customer provide a context which has
-		// a really short deadline, causing we clear the stickyness
-		stickyContext, cancel := context.WithTimeout(context.Background(), time.Duration(msResp.GetStickyTaskListScheduleToStartTimeout())*time.Second)
-		matchingResp, err := e.rawMatchingClient.QueryWorkflow(stickyContext, matchingRequest)
-		cancel()
-		if err == nil {
-			return &h.QueryWorkflowResponse{Response: matchingResp}, nil
-		}
-		if yarpcError, ok := err.(*yarpcerrors.Status); !ok || yarpcError.Code() != yarpcerrors.CodeDeadlineExceeded {
-			e.logger.Error("Query directly though matching on sticky failed",
-				tag.WorkflowDomainName(queryRequest.GetDomain()),
-				tag.WorkflowID(queryRequest.Execution.GetWorkflowId()),
-				tag.WorkflowRunID(queryRequest.Execution.GetRunId()),
-				tag.WorkflowQueryType(queryRequest.Query.GetQueryType()),
-				tag.Error(err))
-			return nil, err
-		}
-		// this means sticky timeout, should try using the normal tasklist
-		// we should clear the stickyness of this workflow
-		e.logger.Info("QueryWorkflow timed-out with stickyTaskList, will try nonSticky one",
-			tag.WorkflowDomainName(queryRequest.GetDomain()),
-			tag.WorkflowID(queryRequest.Execution.GetWorkflowId()),
-			tag.WorkflowRunID(queryRequest.Execution.GetRunId()),
-			tag.WorkflowQueryType(queryRequest.Query.GetQueryType()),
-			tag.WorkflowTaskListName(msResp.GetStickyTaskList().GetName()),
-			tag.WorkflowNextEventID(msResp.GetNextEventId()),
-			tag.Error(err))
-
-		resetContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		_, err = e.ResetStickyTaskList(resetContext, &h.ResetStickyTaskListRequest{
-			DomainUUID: common.StringPtr(domainID),
-			Execution:  queryRequest.Execution,
-		})
-		cancel()
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	matchingRequest.TaskList = msResp.TaskList
-	if err := common.IsValidContext(ctx); err != nil {
-		e.logger.Error("Context expired before query could be attempted on nonSticky",
-			tag.WorkflowDomainName(queryRequest.GetDomain()),
-			tag.WorkflowID(queryRequest.Execution.GetWorkflowId()),
-			tag.WorkflowRunID(queryRequest.Execution.GetRunId()),
-			tag.WorkflowQueryType(queryRequest.Query.GetQueryType()),
-			tag.Error(err))
-		return nil, err
-	}
 	matchingResp, err := e.matchingClient.QueryWorkflow(ctx, matchingRequest)
 	if err != nil {
 		e.logger.Error("Query directly though matching on non-sticky failed",
@@ -1819,7 +1807,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	e.overrideStartWorkflowExecutionRequest(domainEntry, request)
+	e.overrideStartWorkflowExecutionRequest(domainEntry, request, metrics.HistorySignalWorkflowExecutionScope)
 
 	workflowID := request.GetWorkflowId()
 	// grab the current context as a lock, nothing more
@@ -2398,7 +2386,7 @@ func (e *historyEngineImpl) failDecision(
 	}
 
 	if _, err = mutableState.AddDecisionTaskFailedEvent(
-		scheduleID, startedID, cause, details, request.GetIdentity(), "", "", "", 0,
+		scheduleID, startedID, cause, details, request.GetIdentity(), "", request.GetBinaryChecksum(), "", "", 0,
 	); err != nil {
 		return nil, err
 	}
@@ -2484,28 +2472,22 @@ func validateStartWorkflowExecutionRequest(
 func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
 	domainEntry *cache.DomainCacheEntry,
 	request *workflow.StartWorkflowExecutionRequest,
+	metricsScope int,
 ) {
 
-	maxDecisionStartToCloseTimeoutSeconds := int32(e.config.MaxDecisionStartToCloseSeconds(
-		domainEntry.GetInfo().Name,
-	))
+	domainName := domainEntry.GetInfo().Name
+	maxDecisionStartToCloseTimeoutSeconds := int32(e.config.MaxDecisionStartToCloseSeconds(domainName))
 
-	if request.GetTaskStartToCloseTimeoutSeconds() > maxDecisionStartToCloseTimeoutSeconds {
-		e.throttledLogger.WithTags(
-			tag.WorkflowDomainID(domainEntry.GetInfo().ID),
-			tag.WorkflowID(request.GetWorkflowId()),
-			tag.WorkflowDecisionTimeoutSeconds(request.GetTaskStartToCloseTimeoutSeconds()),
-		).Info("force override decision start to close timeout due to decision timout too large")
-		request.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(maxDecisionStartToCloseTimeoutSeconds)
-	}
+	taskStartToCloseTimeoutSecs := request.GetTaskStartToCloseTimeoutSeconds()
+	taskStartToCloseTimeoutSecs = common.MinInt32(taskStartToCloseTimeoutSecs, maxDecisionStartToCloseTimeoutSeconds)
+	taskStartToCloseTimeoutSecs = common.MinInt32(taskStartToCloseTimeoutSecs, request.GetExecutionStartToCloseTimeoutSeconds())
 
-	if request.GetTaskStartToCloseTimeoutSeconds() > request.GetExecutionStartToCloseTimeoutSeconds() {
-		e.throttledLogger.WithTags(
-			tag.WorkflowDomainID(domainEntry.GetInfo().ID),
-			tag.WorkflowID(request.GetWorkflowId()),
-			tag.WorkflowDecisionTimeoutSeconds(request.GetTaskStartToCloseTimeoutSeconds()),
-		).Info("force override decision start to close timeout due to decision timeout larger than workflow timeout")
-		request.TaskStartToCloseTimeoutSeconds = request.ExecutionStartToCloseTimeoutSeconds
+	if taskStartToCloseTimeoutSecs != request.GetTaskStartToCloseTimeoutSeconds() {
+		request.TaskStartToCloseTimeoutSeconds = &taskStartToCloseTimeoutSecs
+		e.metricsClient.Scope(
+			metricsScope,
+			metrics.DomainTag(domainName),
+		).IncCounter(metrics.DecisionStartToCloseTimeoutOverrideCount)
 	}
 }
 
@@ -2700,6 +2682,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 	ctx ctx.Context,
 	domainUUID string,
 	workflowID string,
+	runID string,
 	reapplyEvents []*workflow.HistoryEvent,
 ) error {
 
@@ -2709,14 +2692,14 @@ func (e *historyEngineImpl) ReapplyEvents(
 	}
 	domainID := domainEntry.GetInfo().ID
 	// remove run id from the execution so that reapply events to the current run
-	execution := workflow.WorkflowExecution{
+	currentExecution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(workflowID),
 	}
 
 	return e.updateWorkflowExecutionWithAction(
 		ctx,
 		domainID,
-		execution,
+		currentExecution,
 		func(mutableState mutableState) (*updateWorkflowAction, error) {
 
 			postActions := &updateWorkflowAction{
@@ -2732,22 +2715,28 @@ func (e *historyEngineImpl) ReapplyEvents(
 			if !mutableState.IsWorkflowExecutionRunning() {
 				e.logger.Warn("cannot reapply event to a finished workflow",
 					tag.WorkflowDomainID(domainID),
-					tag.WorkflowID(workflowID),
+					tag.WorkflowID(currentExecution.GetWorkflowId()),
 				)
 				e.metricsClient.IncCounter(metrics.HistoryReapplyEventsScope, metrics.EventReapplySkippedCount)
 				return &updateWorkflowAction{
 					noop: true,
 				}, nil
 			}
-			if err := e.eventsReapplier.reapplyEvents(
+			reappliedEvents, err := e.eventsReapplier.reapplyEvents(
 				ctx,
 				mutableState,
 				reapplyEvents,
-			); err != nil {
+				runID,
+			)
+			if err != nil {
 				e.logger.Error("failed to re-apply stale events", tag.Error(err))
 				return nil, &workflow.InternalServiceError{Message: "unable to re-apply stale events"}
 			}
-
+			if len(reappliedEvents) == 0 {
+				return &updateWorkflowAction{
+					noop: true,
+				}, nil
+			}
 			return postActions, nil
 		})
 }

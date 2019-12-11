@@ -205,7 +205,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	query := fmt.Sprintf(`WorkflowID = "%s" and %s = "%s"`, id, s.testSearchAttributeKey, s.testSearchAttributeVal)
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
 		Domain:   domainName,
-		PageSize: 100,
+		PageSize: 5,
 		Query:    query,
 	}
 

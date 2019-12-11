@@ -232,6 +232,11 @@ func (r *nDCHistoryReplicatorImpl) applyEvents(
 		mutableState, err := context.loadWorkflowExecution()
 		switch err.(type) {
 		case nil:
+			// Sanity check to make only 3DC mutable state here
+			if mutableState.GetVersionHistories() == nil {
+				return &shared.InternalServiceError{Message: "The mutable state does not support 3DC."}
+			}
+
 			doContinue, branchIndex, err := r.applyNonStartEventsPrepareBranch(ctx, context, mutableState, task)
 			if err != nil {
 				return err
