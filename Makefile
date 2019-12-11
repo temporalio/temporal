@@ -108,7 +108,8 @@ GOCOVERPKG_ARG := -coverpkg="$(PROJECT_ROOT)/common/...,$(PROJECT_ROOT)/service/
 PROTO_ROOT := .gen/proto
 PROTO_REPO := github.com/temporalio/temporal-proto
 # List only subdirectories with *.proto files (sort to remove duplicates).
-PROTO_DIRS = $(sort $(dir $(wildcard $(PROTO_ROOT)/*/*.proto)))
+# Note: using "shell find" instead of "wildcard" because "wildcard" caches directory structure.
+PROTO_DIRS = $(sort $(dir $(shell find $(PROTO_ROOT) -name "*.proto")))
 
 # Everything that deals with go modules (go.mod) needs to take dependency on this target.
 $(PROTO_ROOT)/go.mod:
@@ -116,7 +117,7 @@ $(PROTO_ROOT)/go.mod:
 
 clean-proto:
 	$(foreach PROTO_DIR,$(PROTO_DIRS),rm -f $(PROTO_DIR)*.go;)
-	$(foreach PROTO_MOCK_DIR,$(wildcard $(PROTO_ROOT)/*mock),rm -rf $(PROTO_MOCK_DIR);)
+	rm -rf $(PROTO_ROOT)/*mock
 
 update-proto-submodule:
 	git submodule update --remote $(PROTO_ROOT)
@@ -130,7 +131,7 @@ protoc:
 	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_ROOT) --yarpc-go_out=$(PROTO_ROOT) $(PROTO_DIR)*.proto;)
 
 # All YARPC generated service files pathes relative to PROTO_ROOT
-PROTO_YARPC_SERVICES = $(patsubst $(PROTO_ROOT)/%,%,$(wildcard $(PROTO_ROOT)/*/service.pb.yarpc.go))
+PROTO_YARPC_SERVICES = $(patsubst $(PROTO_ROOT)/%,%,$(shell find $(PROTO_ROOT) -name "service.pb.yarpc.go"))
 dir_no_slash = $(patsubst %/,%,$(dir $(1)))
 dirname = $(notdir $(call dir_no_slash,$(1)))
 
