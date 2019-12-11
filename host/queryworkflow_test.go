@@ -35,7 +35,6 @@ import (
 	"github.com/temporalio/temporal-proto/enums"
 	"github.com/temporalio/temporal-proto/workflowservice"
 	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/service/history"
 )
 
 func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
@@ -1024,6 +1023,8 @@ func (s *integrationSuite) TestQueryWorkflow_BeforeFirstDecision() {
 			QueryType: queryType,
 		},
 	})
-	s.Nil(queryResp)
-	s.Equal(history.ErrQueryWorkflowBeforeFirstDecision, err)
+	s.IsType(&workflowservice.QueryWorkflowResponse{}, queryResp)
+	st := yarpcerrors.FromError(err)
+	s.Equal(yarpcerrors.CodeInvalidArgument, st.Code())
+	s.Equal("workflow must handle at least one decision task before it can be queried", st.Message())
 }
