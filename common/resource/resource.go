@@ -53,7 +53,7 @@ type (
 
 		GetServiceName() string
 		GetHostName() string
-		GetHostInfo() (*membership.HostInfo, error)
+		GetHostInfo() *membership.HostInfo
 		GetArchivalMetadata() archiver.ArchivalMetadata
 		GetClusterMetadata() cluster.Metadata
 
@@ -105,5 +105,6 @@ type (
 
 		// for registering handlers
 		GetDispatcher() *yarpc.Dispatcher
+		GetGRPCDispatcher() *yarpc.Dispatcher
 	}
 )

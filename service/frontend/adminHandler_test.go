@@ -26,32 +26,28 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/temporalio/temporal/common/definition"
-	"github.com/temporalio/temporal/common/elasticsearch"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
-
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally"
 
 	"github.com/temporalio/temporal/.gen/go/admin"
 	"github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/history/historyservicetest"
 	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/cluster"
+	"github.com/temporalio/temporal/common/definition"
+	"github.com/temporalio/temporal/common/elasticsearch"
 	esmock "github.com/temporalio/temporal/common/elasticsearch/mocks"
-	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/resource"
 	"github.com/temporalio/temporal/common/service"
+	"github.com/temporalio/temporal/common/service/config"
+	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
 type (
@@ -60,18 +56,14 @@ type (
 		*require.Assertions
 
 		controller        *gomock.Controller
+		mockResource      *resource.Test
 		mockHistoryClient *historyservicetest.MockClient
 		mockDomainCache   *cache.MockDomainCache
-		mockClientBean    *client.MockBean
 
-		logger                 log.Logger
-		domainName             string
-		domainID               string
-		currentClusterName     string
-		alternativeClusterName string
-		mockClusterMetadata    *mocks.ClusterMetadata
-		mockHistoryV2Mgr       *mocks.HistoryV2Manager
-		service                service.Service
+		mockHistoryV2Mgr *mocks.HistoryV2Manager
+
+		domainName string
+		domainID   string
 
 		handler *AdminHandler
 	}
@@ -85,37 +77,30 @@ func TestAdminHandlerSuite(t *testing.T) {
 func (s *adminHandlerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
-	s.controller = gomock.NewController(s.T())
-	s.mockHistoryClient = historyservicetest.NewMockClient(s.controller)
-	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
-	s.mockClientBean = client.NewMockBean(s.controller)
-	s.mockDomainCache.EXPECT().Start().AnyTimes()
-	s.mockDomainCache.EXPECT().Stop().AnyTimes()
-	s.mockClientBean.EXPECT().GetHistoryClient().Return(s.mockHistoryClient).AnyTimes()
-
-	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.domainName = "some random domain name"
 	s.domainID = "some random domain ID"
-	s.currentClusterName = cluster.TestCurrentClusterName
-	s.alternativeClusterName = cluster.TestAlternativeClusterName
 
-	s.mockClusterMetadata = &mocks.ClusterMetadata{}
-	s.mockClusterMetadata.On("GetCurrentClusterName").Return(s.currentClusterName)
-	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
-	metricsClient := metrics.NewClient(tally.NoopScope, metrics.Frontend)
+	s.controller = gomock.NewController(s.T())
+	s.mockResource = resource.NewTest(s.controller, metrics.Frontend)
+	s.mockDomainCache = s.mockResource.DomainCache
+	s.mockHistoryClient = s.mockResource.HistoryClient
+	s.mockHistoryV2Mgr = s.mockResource.HistoryMgr
 
-	s.service = service.NewTestService(s.mockClusterMetadata, nil, metricsClient, s.mockClientBean, nil, nil, nil)
-	s.mockHistoryV2Mgr = &mocks.HistoryV2Manager{}
-	params := &service.BootstrapParams{}
+	params := &service.BootstrapParams{
+		PersistenceConfig: config.Persistence{
+			NumHistoryShards: 1,
+		},
+	}
 	config := &Config{
 		EnableAdminProtection: dynamicconfig.GetBoolPropertyFn(false),
 	}
-	s.handler = NewAdminHandler(s.service, 1, s.mockDomainCache, s.mockHistoryV2Mgr, params, config)
+	s.handler = NewAdminHandler(s.mockResource, params, config)
 	s.handler.Start()
 }
 
 func (s *adminHandlerSuite) TearDownTest() {
 	s.controller.Finish()
+	s.mockResource.Finish(s.T())
 	s.handler.Stop()
 }
 

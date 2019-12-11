@@ -45,9 +45,6 @@ func NewCassandraCluster(cfg config.Cassandra) *gocql.ClusterConfig {
 	if cfg.Keyspace != "" {
 		cluster.Keyspace = cfg.Keyspace
 	}
-	if cfg.Consistency != "" {
-		cluster.Consistency = gocql.ParseConsistency(cfg.Consistency)
-	}
 	if cfg.Datacenter != "" {
 		cluster.HostFilter = gocql.DataCentreHostFilter(cfg.Datacenter)
 	}

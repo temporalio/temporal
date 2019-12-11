@@ -101,19 +101,6 @@ func (_m *MockProcessor) readTasks(readLevel int64) ([]queueTaskInfo, bool, erro
 	return r0, r1, r2
 }
 
-// completeTask is mock implementation for completeTask of Processor
-func (_m *MockProcessor) completeTask(taskID int64) error {
-	ret := _m.Called(taskID)
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func(int64) error); ok {
-		r0 = rf(taskID)
-	} else {
-		r0 = ret.Error(0)
-	}
-	return r0
-}
-
 // updateAckLevel is mock implementation for updateAckLevel of Processor
 func (_m *MockProcessor) updateAckLevel(taskID int64) error {
 	ret := _m.Called(taskID)

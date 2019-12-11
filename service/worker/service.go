@@ -21,11 +21,11 @@
 package worker
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
-	carchiver "github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -49,11 +49,11 @@ type (
 	// 3. Archiver: Handles archival of workflow histories.
 	Service struct {
 		resource.Resource
-		config *Config
 
+		status int32
+		stopC  chan struct{}
 		params *service.BootstrapParams
-
-		stopC chan struct{}
+		config *Config
 	}
 
 	// Config contains all the service config for worker
@@ -78,6 +78,11 @@ func NewService(
 
 	serviceConfig := NewConfig(params)
 
+	params.PersistenceConfig.SetMaxQPS(
+		params.PersistenceConfig.DefaultStore,
+		serviceConfig.ReplicationCfg.PersistenceMaxQPS(),
+	)
+
 	serviceResource, err := resource.New(
 		params,
 		common.WorkerServiceName,
@@ -95,6 +100,7 @@ func NewService(
 
 	return &Service{
 		Resource: serviceResource,
+		status:   common.DaemonStatusInitialized,
 		config:   serviceConfig,
 		params:   params,
 		stopC:    make(chan struct{}),
@@ -152,9 +158,12 @@ func NewConfig(params *service.BootstrapParams) *Config {
 
 // Start is called to start the service
 func (s *Service) Start() {
+	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
+		return
+	}
 
 	logger := s.GetLogger()
-	logger.Info("worker starting", tag.Service(common.WorkerServiceName))
+	logger.Info("worker starting", tag.ComponentWorker)
 
 	s.Resource.Start()
 
@@ -177,14 +186,20 @@ func (s *Service) Start() {
 		s.startParentClosePolicyProcessor()
 	}
 
-	logger.Info("service started", tag.ComponentWorker)
+	logger.Info("worker started", tag.ComponentWorker)
 	<-s.stopC
-	s.Resource.Stop()
 }
 
 // Stop is called to stop the service
 func (s *Service) Stop() {
+	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
+		return
+	}
+
 	close(s.stopC)
+
+	s.Resource.Stop()
+
 	s.params.Logger.Info("worker stopped", tag.ComponentWorker)
 }
 
@@ -227,11 +242,6 @@ func (s *Service) startScanner() {
 }
 
 func (s *Service) startReplicator() {
-	hostInfo, err := s.GetHostInfo()
-	if err != nil {
-		s.GetLogger().Fatal("failed to get service resolver", tag.Error(err))
-	}
-
 	msgReplicator := replicator.NewReplicator(
 		s.GetClusterMetadata(),
 		s.GetMetadataManager(),
@@ -241,7 +251,7 @@ func (s *Service) startReplicator() {
 		s.GetMessagingClient(),
 		s.GetLogger(),
 		s.GetMetricsClient(),
-		hostInfo,
+		s.GetHostInfo(),
 		s.GetWorkerServiceResolver(),
 	)
 	if err := msgReplicator.Start(); err != nil {
@@ -266,29 +276,6 @@ func (s *Service) startIndexer() {
 }
 
 func (s *Service) startArchiver() {
-	historyArchiverBootstrapContainer := &carchiver.HistoryBootstrapContainer{
-		HistoryV2Manager: s.GetHistoryManager(),
-		Logger:           s.GetLogger(),
-		MetricsClient:    s.GetMetricsClient(),
-		ClusterMetadata:  s.GetClusterMetadata(),
-		DomainCache:      s.GetDomainCache(),
-	}
-	visibilityArchiverBootstrapContainer := &carchiver.VisibilityBootstrapContainer{
-		Logger:          s.GetLogger(),
-		MetricsClient:   s.GetMetricsClient(),
-		ClusterMetadata: s.GetClusterMetadata(),
-		DomainCache:     s.GetDomainCache(),
-	}
-	archiverProvider := s.GetArchiverProvider()
-	err := archiverProvider.RegisterBootstrapContainer(
-		common.WorkerServiceName,
-		historyArchiverBootstrapContainer,
-		visibilityArchiverBootstrapContainer,
-	)
-	if err != nil {
-		s.GetLogger().Fatal("failed to register archiver bootstrap container", tag.Error(err))
-	}
-
 	bc := &archiver.BootstrapContainer{
 		PublicClient:     s.GetSDKClient(),
 		MetricsClient:    s.GetMetricsClient(),
@@ -296,7 +283,7 @@ func (s *Service) startArchiver() {
 		HistoryV2Manager: s.GetHistoryManager(),
 		DomainCache:      s.GetDomainCache(),
 		Config:           s.config.ArchiverConfig,
-		ArchiverProvider: archiverProvider,
+		ArchiverProvider: s.GetArchiverProvider(),
 	}
 	clientWorker := archiver.NewClientWorker(bc)
 	if err := clientWorker.Start(); err != nil {

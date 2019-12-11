@@ -69,7 +69,9 @@ func (s *elasticsearchIntegrationSuite) SetupSuite() {
 	s.setupSuite("testdata/integration_elasticsearch_cluster.yaml")
 	s.esClient = CreateESClient(s.Suite, s.testClusterConfig.ESConfig.URL.String())
 	PutIndexTemplate(s.Suite, s.esClient, "testdata/es_index_template.json", "test-visibility-template")
-	CreateIndex(s.Suite, s.esClient, s.testClusterConfig.ESConfig.Indices[common.VisibilityAppName])
+	indexName := s.testClusterConfig.ESConfig.Indices[common.VisibilityAppName]
+	CreateIndex(s.Suite, s.esClient, indexName)
+	s.putIndexSettings(indexName, defaultTestValueOfESIndexMaxResultWindow)
 }
 
 func (s *elasticsearchIntegrationSuite) TearDownSuite() {
@@ -228,7 +230,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
 		Domain:   s.domainName,
 		PageSize: int32(2),
-		Query:    fmt.Sprintf(`WorkflowType = '%s' and CloseTime = missing`, wt),
+		Query:    fmt.Sprintf(`WorkflowType = '%s' and CloseTime = missing and BinaryChecksums = 'binary-v1'`, wt),
 	}
 	// verify upsert data is on ES
 	s.testListResultForUpsertSearchAttributes(listRequest)
@@ -379,13 +381,6 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrQuery() {
 
 // To test last page search trigger max window size error
 func (s *elasticsearchIntegrationSuite) TestListWorkflow_MaxWindowSize() {
-	// set es index index settings
-	indexName := s.testClusterConfig.ESConfig.Indices[common.VisibilityAppName]
-	_, err := s.esClient.IndexPutSettings(indexName).
-		BodyString(fmt.Sprintf(`{"max_result_window" : %d}`, defaultTestValueOfESIndexMaxResultWindow)).
-		Do(context.Background())
-	s.NoError(err)
-
 	id := "es-integration-list-workflow-max-window-size-test"
 	wt := "es-integration-list-workflow-max-window-size-test-type"
 	tl := "es-integration-list-workflow-max-window-size-test-tasklist"
@@ -428,12 +423,6 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_MaxWindowSize() {
 	s.Nil(err)
 	s.True(len(resp.GetExecutions()) == 0)
 	s.True(len(resp.GetNextPageToken()) == 0)
-
-	// revert es index index settings
-	_, err = s.esClient.IndexPutSettings(indexName).
-		BodyString(fmt.Sprintf(`{"max_result_window" : %d}`, 10000)).
-		Do(context.Background())
-	s.NoError(err)
 }
 
 func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrderBy() {
@@ -985,17 +974,25 @@ func (s *elasticsearchIntegrationSuite) testListResultForUpsertSearchAttributes(
 		if len(resp.GetExecutions()) == 1 {
 			execution := resp.GetExecutions()[0]
 			retrievedSearchAttr := execution.SearchAttributes
-			if retrievedSearchAttr != nil && len(retrievedSearchAttr.GetIndexedFields()) == 2 {
+			if retrievedSearchAttr != nil && len(retrievedSearchAttr.GetIndexedFields()) == 3 {
 				fields := retrievedSearchAttr.GetIndexedFields()
 				searchValBytes := fields[s.testSearchAttributeKey]
 				var searchVal string
-				json.Unmarshal(searchValBytes, &searchVal)
+				err := json.Unmarshal(searchValBytes, &searchVal)
+				s.Nil(err)
 				s.Equal("another string", searchVal)
 
 				searchValBytes2 := fields[definition.CustomIntField]
 				var searchVal2 int
-				json.Unmarshal(searchValBytes2, &searchVal2)
+				err = json.Unmarshal(searchValBytes2, &searchVal2)
+				s.Nil(err)
 				s.Equal(123, searchVal2)
+
+				binaryChecksumsBytes := fields[definition.BinaryChecksums]
+				var binaryChecksums []string
+				err = json.Unmarshal(binaryChecksumsBytes, &binaryChecksums)
+				s.Nil(err)
+				s.Equal([]string{"binary-v1", "binary-v2"}, binaryChecksums)
 
 				verified = true
 				break
@@ -1009,10 +1006,12 @@ func (s *elasticsearchIntegrationSuite) testListResultForUpsertSearchAttributes(
 func getUpsertSearchAttributes() *commonproto.SearchAttributes {
 	attrValBytes1, _ := json.Marshal("another string")
 	attrValBytes2, _ := json.Marshal(123)
+	binaryChecksums, _ := json.Marshal([]string{"binary-v1", "binary-v2"})
 	upsertSearchAttr := &commonproto.SearchAttributes{
 		IndexedFields: map[string][]byte{
 			definition.CustomStringField: attrValBytes1,
 			definition.CustomIntField:    attrValBytes2,
+			definition.BinaryChecksums:   binaryChecksums,
 		},
 	}
 	return upsertSearchAttr
@@ -1088,4 +1087,24 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution_InvalidKey()
 	failedDecisionAttr := decisionFailedEvent.GetDecisionTaskFailedEventAttributes()
 	s.Equal(enums.DecisionTaskFailedCauseBadSearchAttributes, failedDecisionAttr.GetCause())
 	s.True(len(failedDecisionAttr.GetDetails()) > 0)
+}
+
+func (s *elasticsearchIntegrationSuite) putIndexSettings(indexName string, maxResultWindowSize int) {
+	_, err := s.esClient.IndexPutSettings(indexName).
+		BodyString(fmt.Sprintf(`{"max_result_window" : %d}`, defaultTestValueOfESIndexMaxResultWindow)).
+		Do(context.Background())
+	s.Require().NoError(err)
+	s.verifyMaxResultWindowSize(indexName, defaultTestValueOfESIndexMaxResultWindow)
+}
+
+func (s *elasticsearchIntegrationSuite) verifyMaxResultWindowSize(indexName string, targetSize int) {
+	for i := 0; i < numOfRetry; i++ {
+		settings, err := s.esClient.IndexGetSettings(indexName).Do(context.Background())
+		s.Require().NoError(err)
+		if settings[indexName].Settings["index"].(map[string]interface{})["max_result_window"].(string) == strconv.Itoa(targetSize) {
+			return
+		}
+		time.Sleep(waitTimeInMs * time.Millisecond)
+	}
+	s.FailNow(fmt.Sprintf("ES max result window size hasn't reach target size within %v.", (numOfRetry*waitTimeInMs)*time.Millisecond))
 }

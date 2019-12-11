@@ -207,7 +207,7 @@ func (s *historyMetadataReplicationTaskSuite) TearDownTest() {
 
 func (s *activityReplicationTaskSuite) TestNewActivityReplicationTask() {
 	replicationTask := s.getActivityReplicationTask()
-	replicationAttr := replicationTask.SyncActicvityTaskAttributes
+	replicationAttr := replicationTask.SyncActivityTaskAttributes
 
 	task := newActivityReplicationTask(
 		replicationTask,
@@ -745,7 +745,7 @@ func (s *historyMetadataReplicationTaskSuite) TestNack() {
 }
 
 func (s *activityReplicationTaskSuite) getActivityReplicationTask() *replicator.ReplicationTask {
-	replicationAttr := &replicator.SyncActicvityTaskAttributes{
+	replicationAttr := &replicator.SyncActivityTaskAttributes{
 		DomainId:           common.StringPtr("some random domain ID"),
 		WorkflowId:         common.StringPtr("some random workflow ID"),
 		RunId:              common.StringPtr("some random run ID"),
@@ -762,8 +762,8 @@ func (s *activityReplicationTaskSuite) getActivityReplicationTask() *replicator.
 		LastFailureDetails: []byte("some random failure details"),
 	}
 	replicationTask := &replicator.ReplicationTask{
-		TaskType:                    replicator.ReplicationTaskTypeSyncActivity.Ptr(),
-		SyncActicvityTaskAttributes: replicationAttr,
+		TaskType:                   replicator.ReplicationTaskTypeSyncActivity.Ptr(),
+		SyncActivityTaskAttributes: replicationAttr,
 	}
 	return replicationTask
 }
