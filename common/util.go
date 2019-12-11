@@ -21,7 +21,6 @@
 package common
 
 import (
-	"encoding/json"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -255,20 +254,7 @@ func WorkflowIDToHistoryShard(workflowID string, numberOfShards int) int {
 }
 
 // PrettyPrintHistory prints history in human readable format
-func PrettyPrintHistory(history *workflow.History, logger log.Logger) {
-	data, err := json.MarshalIndent(history, "", "    ")
-
-	if err != nil {
-		logger.Error("Error serializing history: %v\n", tag.Error(err))
-	}
-
-	fmt.Println("******************************************")
-	fmt.Println("History", tag.DetailInfo(string(data)))
-	fmt.Println("******************************************")
-}
-
-// PrettyPrintHistoryGRPC prints history in human readable format
-func PrettyPrintHistoryGRPC(history *commong.History, logger log.Logger) {
+func PrettyPrintHistory(history *commong.History, logger log.Logger) {
 	fmt.Println("******************************************")
 	fmt.Println("History", proto.MarshalTextString(history))
 	fmt.Println("******************************************")

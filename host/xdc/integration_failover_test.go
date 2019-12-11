@@ -134,7 +134,7 @@ func (s *integrationClustersTestSuite) TearDownSuite() {
 
 func (s *integrationClustersTestSuite) TestDomainFailover() {
 	domainName := "test-domain-for-fail-over-" + common.GenerateRandomString(5)
-	client1 := s.cluster1.GetFrontendClientGRPC() // active
+	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterDomainRequest{
 		Name:                                   domainName,
 		IsGlobalDomain:                         true,
@@ -154,7 +154,7 @@ func (s *integrationClustersTestSuite) TestDomainFailover() {
 	// Wait for domain cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
-	client2 := s.cluster2.GetFrontendClientGRPC() // standby
+	client2 := s.cluster2.GetFrontendClient() // standby
 	resp2, err := client2.DescribeDomain(createContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp2)
@@ -220,7 +220,7 @@ func (s *integrationClustersTestSuite) TestDomainFailover() {
 
 func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	domainName := "test-simple-workflow-failover-" + common.GenerateRandomString(5)
-	client1 := s.cluster1.GetFrontendClientGRPC() // active
+	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterDomainRequest{
 		Name:                                   domainName,
 		IsGlobalDomain:                         true,
@@ -240,7 +240,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	// Wait for domain cache to pick the change
 	time.Sleep(cache.DomainCacheRefreshInterval)
 
-	client2 := s.cluster2.GetFrontendClientGRPC() // standby
+	client2 := s.cluster2.GetFrontendClient() // standby
 	resp2, err := client2.DescribeDomain(createContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp2)
@@ -518,7 +518,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 
 func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	domainName := "test-sticky-decision-workflow-failover-" + common.GenerateRandomString(5)
-	client1 := s.cluster1.GetFrontendClientGRPC() // active
+	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterDomainRequest{
 		Name:                                   domainName,
 		IsGlobalDomain:                         true,
@@ -538,7 +538,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	// Wait for domain cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
-	client2 := s.cluster2.GetFrontendClientGRPC() // standby
+	client2 := s.cluster2.GetFrontendClient() // standby
 
 	// Start a workflow
 	id := "integration-sticky-decision-workflow-failover-test"
@@ -693,7 +693,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 
 func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_WorkflowIDReusePolicy() {
 	domainName := "test-start-workflow-failover-ID-reuse-policy" + common.GenerateRandomString(5)
-	client1 := s.cluster1.GetFrontendClientGRPC() // active
+	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterDomainRequest{
 		Name:                                   domainName,
 		IsGlobalDomain:                         true,
@@ -713,7 +713,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	// Wait for domain cache to pick the change
 	time.Sleep(cache.DomainCacheRefreshInterval)
 
-	client2 := s.cluster2.GetFrontendClientGRPC() // standby
+	client2 := s.cluster2.GetFrontendClient() // standby
 	resp2, err := client2.DescribeDomain(createContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp2)
@@ -836,7 +836,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 
 func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	domainName := "test-terminate-workflow-failover-" + common.GenerateRandomString(5)
-	client1 := s.cluster1.GetFrontendClientGRPC() // active
+	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterDomainRequest{
 		Name:                                   domainName,
 		IsGlobalDomain:                         true,
@@ -856,7 +856,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	// Wait for domain cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
-	client2 := s.cluster2.GetFrontendClientGRPC() // standby
+	client2 := s.cluster2.GetFrontendClient() // standby
 
 	// start a workflow
 	id := "integration-terminate-workflow-failover-test"
@@ -1021,7 +1021,7 @@ GetHistoryLoop2:
 
 func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 	domainName := "test-continueAsNew-workflow-failover-" + common.GenerateRandomString(5)
-	client1 := s.cluster1.GetFrontendClientGRPC() // active
+	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterDomainRequest{
 		Name:                                   domainName,
 		IsGlobalDomain:                         true,
@@ -1041,7 +1041,7 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 	// Wait for domain cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
-	client2 := s.cluster2.GetFrontendClientGRPC() // standby
+	client2 := s.cluster2.GetFrontendClient() // standby
 
 	// start a workflow
 	id := "integration-continueAsNew-workflow-failover-test"
@@ -1159,7 +1159,7 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 
 func (s *integrationClustersTestSuite) TestSignalFailover() {
 	domainName := "test-signal-workflow-failover-" + common.GenerateRandomString(5)
-	client1 := s.cluster1.GetFrontendClientGRPC() // active
+	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterDomainRequest{
 		Name:                                   domainName,
 		IsGlobalDomain:                         true,
@@ -1179,7 +1179,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	// Wait for domain cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
-	client2 := s.cluster2.GetFrontendClientGRPC() // standby
+	client2 := s.cluster2.GetFrontendClient() // standby
 
 	// Start a workflow
 	id := "integration-signal-workflow-failover-test"
@@ -1340,7 +1340,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 
 func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 	domainName := "test-user-timer-workflow-failover-" + common.GenerateRandomString(5)
-	client1 := s.cluster1.GetFrontendClientGRPC() // active
+	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterDomainRequest{
 		Name:                                   domainName,
 		IsGlobalDomain:                         true,
@@ -1360,7 +1360,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 	// Wait for domain cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
-	client2 := s.cluster2.GetFrontendClientGRPC() // standby
+	client2 := s.cluster2.GetFrontendClient() // standby
 
 	// Start a workflow
 	id := "integration-user-timer-workflow-failover-test"
@@ -1512,7 +1512,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 
 func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	domainName := "test-activity-heartbeat-workflow-failover-" + common.GenerateRandomString(5)
-	client1 := s.cluster1.GetFrontendClientGRPC() // active
+	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterDomainRequest{
 		Name:                                   domainName,
 		IsGlobalDomain:                         true,
@@ -1532,7 +1532,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	// Wait for domain cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
-	client2 := s.cluster2.GetFrontendClientGRPC() // standby
+	client2 := s.cluster2.GetFrontendClient() // standby
 
 	// Start a workflow
 	id := "integration-activity-heartbeat-workflow-failover-test"
@@ -1723,7 +1723,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 
 func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 	domainName := "test-transient-decision-workflow-failover-" + common.GenerateRandomString(5)
-	client1 := s.cluster1.GetFrontendClientGRPC() // active
+	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterDomainRequest{
 		Name:                                   domainName,
 		IsGlobalDomain:                         true,
@@ -1743,7 +1743,7 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 	// Wait for domain cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
-	client2 := s.cluster2.GetFrontendClientGRPC() // standby
+	client2 := s.cluster2.GetFrontendClient() // standby
 
 	// Start a workflow
 	id := "integration-transient-decision-workflow-failover-test"
@@ -1844,7 +1844,7 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 
 func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 	domainName := "test-cron-workflow-failover-" + common.GenerateRandomString(5)
-	client1 := s.cluster1.GetFrontendClientGRPC() // active
+	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterDomainRequest{
 		Name:                                   domainName,
 		IsGlobalDomain:                         true,
@@ -1864,7 +1864,7 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 	// Wait for domain cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
-	client2 := s.cluster2.GetFrontendClientGRPC() // standby
+	client2 := s.cluster2.GetFrontendClient() // standby
 
 	// start a workflow
 	id := "integration-cron-workflow-failover-test"
@@ -1944,7 +1944,7 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 
 func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 	domainName := "test-workflow-retry-failover-" + common.GenerateRandomString(5)
-	client1 := s.cluster1.GetFrontendClientGRPC() // active
+	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterDomainRequest{
 		Name:                                   domainName,
 		IsGlobalDomain:                         true,
@@ -1964,7 +1964,7 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 	// Wait for domain cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
-	client2 := s.cluster2.GetFrontendClientGRPC() // standby
+	client2 := s.cluster2.GetFrontendClient() // standby
 
 	// start a workflow
 	id := "integration-workflow-retry-failover-test"
@@ -2058,7 +2058,7 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 	s.Equal(int32(2), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 }
 
-func (s *integrationClustersTestSuite) getHistory(client host.FrontendClientGRPC, domain string, execution *commonproto.WorkflowExecution) []*commonproto.HistoryEvent {
+func (s *integrationClustersTestSuite) getHistory(client host.FrontendClient, domain string, execution *commonproto.WorkflowExecution) []*commonproto.HistoryEvent {
 	historyResponse, err := client.GetWorkflowExecutionHistory(createContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Domain:          domain,
 		Execution:       execution,

@@ -36,6 +36,7 @@ import (
 	"gopkg.in/yaml.v2"
 
 	commonproto "github.com/temporalio/temporal-proto/common"
+	"github.com/temporalio/temporal-proto/enums"
 	"github.com/temporalio/temporal-proto/workflowservice"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
@@ -55,7 +56,6 @@ type (
 		testCluster        *TestCluster
 		testClusterConfig  *TestClusterConfig
 		engine             FrontendClient
-		engineGRPC         FrontendClientGRPC
 		adminClient        AdminClient
 		Logger             log.Logger
 		domainName         string
@@ -101,8 +101,7 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 			s.Logger.Fatal("Failed to start gRPC dispatcher", tag.Error(err))
 		}
 
-		s.engine = NewFrontendClient(dispatcher)
-		s.engineGRPC = NewFrontendClientGRPC(dispatcherGRPC)
+		s.engine = NewFrontendClient(dispatcherGRPC)
 		s.adminClient = NewAdminClient(dispatcher)
 	} else {
 		s.Logger.Info("Running integration test against test cluster")
@@ -110,17 +109,16 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 		s.Require().NoError(err)
 		s.testCluster = cluster
 		s.engine = s.testCluster.GetFrontendClient()
-		s.engineGRPC = s.testCluster.GetFrontendClientGRPC()
 		s.adminClient = s.testCluster.GetAdminClient()
 	}
 
 	s.domainName = s.randomizeStr("integration-test-domain")
 	s.Require().NoError(
-		s.registerDomain(s.domainName, 1, workflow.ArchivalStatusDisabled, "", workflow.ArchivalStatusDisabled, ""))
+		s.registerDomain(s.domainName, 1, enums.ArchivalStatusDisabled, "", enums.ArchivalStatusDisabled, ""))
 
 	s.foreignDomainName = s.randomizeStr("integration-foreign-test-domain")
 	s.Require().NoError(
-		s.registerDomain(s.foreignDomainName, 1, workflow.ArchivalStatusDisabled, "", workflow.ArchivalStatusDisabled, ""))
+		s.registerDomain(s.foreignDomainName, 1, enums.ArchivalStatusDisabled, "", enums.ArchivalStatusDisabled, ""))
 
 	s.Require().NoError(s.registerArchivalDomain())
 
@@ -174,30 +172,32 @@ func (s *IntegrationBase) tearDownSuite() {
 func (s *IntegrationBase) registerDomain(
 	domain string,
 	retentionDays int,
-	historyArchivalStatus workflow.ArchivalStatus,
+	historyArchivalStatus enums.ArchivalStatus,
 	historyArchivalURI string,
-	visibilityArchivalStatus workflow.ArchivalStatus,
+	visibilityArchivalStatus enums.ArchivalStatus,
 	visibilityArchivalURI string,
 ) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	return s.engine.RegisterDomain(ctx, &workflow.RegisterDomainRequest{
-		Name:                                   &domain,
-		Description:                            &domain,
-		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(int32(retentionDays)),
-		HistoryArchivalStatus:                  &historyArchivalStatus,
-		HistoryArchivalURI:                     &historyArchivalURI,
-		VisibilityArchivalStatus:               &visibilityArchivalStatus,
-		VisibilityArchivalURI:                  &visibilityArchivalURI,
+	_, err := s.engine.RegisterDomain(ctx, &workflowservice.RegisterDomainRequest{
+		Name:                                   domain,
+		Description:                            domain,
+		WorkflowExecutionRetentionPeriodInDays: int32(retentionDays),
+		HistoryArchivalStatus:                  historyArchivalStatus,
+		HistoryArchivalURI:                     historyArchivalURI,
+		VisibilityArchivalStatus:               visibilityArchivalStatus,
+		VisibilityArchivalURI:                  visibilityArchivalURI,
 	})
+
+	return err
 }
 
-func (s *IntegrationBase) describeDomain(domain string) (*workflow.DescribeDomainResponse, error) {
+func (s *IntegrationBase) describeDomain(domain string) (*workflowservice.DescribeDomainResponse, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	return s.engine.DescribeDomain(ctx, &workflow.DescribeDomainRequest{
-		Name: &domain,
+	return s.engine.DescribeDomain(ctx, &workflowservice.DescribeDomainRequest{
+		Name: domain,
 	})
 }
 
@@ -210,11 +210,11 @@ func (s *IntegrationBase) printWorkflowHistory(domain string, execution *commonp
 	history := &commonproto.History{
 		Events: events,
 	}
-	common.PrettyPrintHistoryGRPC(history, s.Logger)
+	common.PrettyPrintHistory(history, s.Logger)
 }
 
 func (s *IntegrationBase) getHistory(domain string, execution *commonproto.WorkflowExecution) []*commonproto.HistoryEvent {
-	historyResponse, err := s.engineGRPC.GetWorkflowExecutionHistory(createContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+	historyResponse, err := s.engine.GetWorkflowExecutionHistory(createContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Domain:          domain,
 		Execution:       execution,
 		MaximumPageSize: 5, // Use small page size to force pagination code path
@@ -223,7 +223,7 @@ func (s *IntegrationBase) getHistory(domain string, execution *commonproto.Workf
 
 	events := historyResponse.History.Events
 	for historyResponse.NextPageToken != nil {
-		historyResponse, err = s.engineGRPC.GetWorkflowExecutionHistory(createContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		historyResponse, err = s.engine.GetWorkflowExecutionHistory(createContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Domain:        domain,
 			Execution:     execution,
 			NextPageToken: historyResponse.NextPageToken,

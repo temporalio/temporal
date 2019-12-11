@@ -66,7 +66,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 		Identity:                            identity,
 	}
 
-	we, err0 := s.engineGRPC.StartWorkflowExecution(createContext(), request)
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -116,7 +116,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 		s.Equal(activityName, activityType.GetName())
 		for i := 0; i < 10; i++ {
 			s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(activityID), tag.Counter(i))
-			_, err := s.engineGRPC.RecordActivityTaskHeartbeat(createContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
+			_, err := s.engine.RecordActivityTaskHeartbeat(createContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
 				TaskToken: taskToken, Details: []byte("details")})
 			s.Nil(err)
 			time.Sleep(10 * time.Millisecond)
@@ -126,7 +126,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engineGRPC,
+		Engine:          s.engine,
 		Domain:          s.domainName,
 		TaskList:        taskList,
 		Identity:        identity,
@@ -185,7 +185,7 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 		Identity:                            identity,
 	}
 
-	we, err0 := s.engineGRPC.StartWorkflowExecution(createContext(), request)
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -241,7 +241,7 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 		var err error
 		if activityExecutedCount == 0 {
 			s.Logger.Info("Heartbeating for activity:", tag.WorkflowActivityID(activityID))
-			_, err = s.engineGRPC.RecordActivityTaskHeartbeat(createContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
+			_, err = s.engine.RecordActivityTaskHeartbeat(createContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
 				TaskToken: taskToken, Details: heartbeatDetails})
 			s.Nil(err)
 			// Trigger heartbeat timeout and retry
@@ -256,7 +256,7 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engineGRPC,
+		Engine:          s.engine,
 		Domain:          s.domainName,
 		TaskList:        taskList,
 		Identity:        identity,
@@ -267,7 +267,7 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 	}
 
 	describeWorkflowExecution := func() (*workflowservice.DescribeWorkflowExecutionResponse, error) {
-		return s.engineGRPC.DescribeWorkflowExecution(createContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		return s.engine.DescribeWorkflowExecution(createContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Domain: s.domainName,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: id,
@@ -359,7 +359,7 @@ func (s *integrationSuite) TestActivityRetry() {
 		Identity:                            identity,
 	}
 
-	we, err0 := s.engineGRPC.StartWorkflowExecution(createContext(), request)
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -461,7 +461,7 @@ func (s *integrationSuite) TestActivityRetry() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engineGRPC,
+		Engine:          s.engine,
 		Domain:          s.domainName,
 		TaskList:        taskList,
 		Identity:        identity,
@@ -472,7 +472,7 @@ func (s *integrationSuite) TestActivityRetry() {
 	}
 
 	poller2 := &TaskPoller{
-		Engine:          s.engineGRPC,
+		Engine:          s.engine,
 		Domain:          s.domainName,
 		TaskList:        taskList,
 		Identity:        identity,
@@ -483,7 +483,7 @@ func (s *integrationSuite) TestActivityRetry() {
 	}
 
 	describeWorkflowExecution := func() (*workflowservice.DescribeWorkflowExecutionResponse, error) {
-		return s.engineGRPC.DescribeWorkflowExecution(createContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		return s.engine.DescribeWorkflowExecution(createContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Domain: s.domainName,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: id,
@@ -569,7 +569,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 		Identity:                            identity,
 	}
 
-	we, err0 := s.engineGRPC.StartWorkflowExecution(createContext(), request)
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -624,7 +624,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engineGRPC,
+		Engine:          s.engine,
 		Domain:          s.domainName,
 		TaskList:        taskList,
 		Identity:        identity,
@@ -670,7 +670,7 @@ func (s *integrationSuite) TestActivityTimeouts() {
 		Identity:                            identity,
 	}
 
-	we, err0 := s.engineGRPC.StartWorkflowExecution(createContext(), request)
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -830,7 +830,7 @@ func (s *integrationSuite) TestActivityTimeouts() {
 			go func() {
 				for i := 0; i < 6; i++ {
 					s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(activityID), tag.Counter(i))
-					_, err := s.engineGRPC.RecordActivityTaskHeartbeat(createContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
+					_, err := s.engine.RecordActivityTaskHeartbeat(createContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
 						TaskToken: taskToken, Details: []byte(string(i))})
 					s.Nil(err)
 					time.Sleep(1 * time.Second)
@@ -845,7 +845,7 @@ func (s *integrationSuite) TestActivityTimeouts() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engineGRPC,
+		Engine:          s.engine,
 		Domain:          s.domainName,
 		TaskList:        taskList,
 		Identity:        identity,
@@ -902,7 +902,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 		Identity:                            identity,
 	}
 
-	we, err0 := s.engineGRPC.StartWorkflowExecution(createContext(), request)
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -1007,7 +1007,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 		for i := 0; i < 10; i++ {
 			if !workflowComplete {
 				s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(activityID), tag.Counter(i))
-				_, err := s.engineGRPC.RecordActivityTaskHeartbeat(createContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
+				_, err := s.engine.RecordActivityTaskHeartbeat(createContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
 					TaskToken: taskToken, Details: []byte(strconv.Itoa(i))})
 				if err != nil {
 					s.Logger.Error("Activity heartbeat failed", tag.WorkflowActivityID(activityID), tag.Counter(i), tag.Error(err))
@@ -1027,7 +1027,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engineGRPC,
+		Engine:          s.engine,
 		Domain:          s.domainName,
 		TaskList:        taskList,
 		Identity:        identity,
@@ -1091,7 +1091,7 @@ func (s *integrationSuite) TestActivityCancellation() {
 		Identity:                            identity,
 	}
 
-	we, err0 := s.engineGRPC.StartWorkflowExecution(createContext(), request)
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
 	s.Logger.Info("StartWorkflowExecution: response", tag.WorkflowRunID(we.GetRunId()))
@@ -1148,7 +1148,7 @@ func (s *integrationSuite) TestActivityCancellation() {
 		s.Equal(activityName, activityType.GetName())
 		for i := 0; i < 10; i++ {
 			s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(activityID), tag.Counter(i))
-			response, err := s.engineGRPC.RecordActivityTaskHeartbeat(createContext(),
+			response, err := s.engine.RecordActivityTaskHeartbeat(createContext(),
 				&workflowservice.RecordActivityTaskHeartbeatRequest{
 					TaskToken: taskToken, Details: []byte("details")})
 			if response != nil && response.CancelRequested {
@@ -1162,7 +1162,7 @@ func (s *integrationSuite) TestActivityCancellation() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engineGRPC,
+		Engine:          s.engine,
 		Domain:          s.domainName,
 		TaskList:        taskList,
 		Identity:        identity,
@@ -1216,7 +1216,7 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 		Identity:                            identity,
 	}
 
-	we, err0 := s.engineGRPC.StartWorkflowExecution(createContext(), request)
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
 	s.Logger.Info("StartWorkflowExecutionn", tag.WorkflowRunID(we.GetRunId()))
@@ -1274,7 +1274,7 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engineGRPC,
+		Engine:          s.engine,
 		Domain:          s.domainName,
 		TaskList:        taskList,
 		Identity:        identity,
@@ -1290,7 +1290,7 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 	// Send signal so that worker can send an activity cancel
 	signalName := "my signal"
 	signalInput := []byte("my signal input.")
-	_, err = s.engineGRPC.SignalWorkflowExecution(createContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err = s.engine.SignalWorkflowExecution(createContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Domain: s.domainName,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: id,

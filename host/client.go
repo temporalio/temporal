@@ -26,7 +26,6 @@ import (
 	"github.com/temporalio/temporal-proto/workflowservice"
 	"github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"
 	"github.com/temporalio/temporal/.gen/go/history/historyserviceclient"
-	"github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
 	"github.com/temporalio/temporal/common"
 )
 
@@ -37,11 +36,6 @@ type AdminClient interface {
 
 // FrontendClient is the interface exposed by frontend service client
 type FrontendClient interface {
-	workflowserviceclient.Interface
-}
-
-// FrontendClientGRPC is the interface exposed by frontend service client
-type FrontendClientGRPC interface {
 	workflowservice.WorkflowServiceYARPCClient
 }
 
@@ -56,12 +50,7 @@ func NewAdminClient(d *yarpc.Dispatcher) AdminClient {
 }
 
 // NewFrontendClient creates a client to cadence frontend client
-func NewFrontendClient(d *yarpc.Dispatcher) FrontendClient {
-	return workflowserviceclient.New(d.ClientConfig(common.FrontendServiceName))
-}
-
-// NewFrontendClientGRPC creates a client to cadence frontend client
-func NewFrontendClientGRPC(d *yarpc.Dispatcher) workflowservice.WorkflowServiceYARPCClient {
+func NewFrontendClient(d *yarpc.Dispatcher) workflowservice.WorkflowServiceYARPCClient {
 	return workflowservice.NewWorkflowServiceYARPCClient(d.ClientConfig(common.FrontendServiceName))
 }
 

@@ -63,7 +63,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 		Identity:                            identity,
 	}
 
-	we, err0 := s.engineGRPC.StartWorkflowExecution(createContext(), request)
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -111,7 +111,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engineGRPC,
+		Engine:          s.engine,
 		Domain:          s.domainName,
 		TaskList:        taskList,
 		Identity:        identity,
@@ -123,7 +123,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 
 	// this function poll events from history side
 	getHistory := func(domain string, workflowID string, token []byte, isLongPoll bool) ([]*commonproto.HistoryEvent, []byte) {
-		responseInner, err := s.engineGRPC.GetWorkflowExecutionHistory(createContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		responseInner, err := s.engine.GetWorkflowExecutionHistory(createContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Domain: domain,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: workflowID,
@@ -229,7 +229,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 		Identity:                            identity,
 	}
 
-	we, err0 := s.engineGRPC.StartWorkflowExecution(createContext(), request)
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -277,7 +277,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engineGRPC,
+		Engine:          s.engine,
 		Domain:          s.domainName,
 		TaskList:        taskList,
 		Identity:        identity,
@@ -290,7 +290,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	// this function poll events from history side
 	getHistory := func(domain string, workflowID string, token []byte, isLongPoll bool) ([]*commonproto.HistoryEvent, []byte) {
 		closeEventOnly := enums.HistoryEventFilterTypeCloseEvent
-		responseInner, _ := s.engineGRPC.GetWorkflowExecutionHistory(createContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		responseInner, _ := s.engine.GetWorkflowExecutionHistory(createContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Domain: domain,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: workflowID,
@@ -386,7 +386,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 		Identity:                            identity,
 	}
 
-	we, err := s.engineGRPC.StartWorkflowExecution(createContext(), request)
+	we, err := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err)
 	execution := &commonproto.WorkflowExecution{
 		WorkflowId: workflowID,
@@ -438,7 +438,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engineGRPC,
+		Engine:          s.engine,
 		Domain:          s.domainName,
 		TaskList:        taskList,
 		Identity:        identity,
@@ -603,7 +603,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_InTheMiddle() {
 		Identity:                            identity,
 	}
 
-	we, err := s.engineGRPC.StartWorkflowExecution(createContext(), request)
+	we, err := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err)
 	execution := &commonproto.WorkflowExecution{
 		WorkflowId: workflowID,
@@ -655,7 +655,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_InTheMiddle() {
 	}
 
 	poller := &TaskPoller{
-		Engine:          s.engineGRPC,
+		Engine:          s.engine,
 		Domain:          s.domainName,
 		TaskList:        taskList,
 		Identity:        identity,

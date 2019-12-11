@@ -238,7 +238,7 @@ func (s *nDCIntegrationTestSuite) verifyEventHistory(
 	historyBatch []*shared.History,
 ) error {
 	// get replicated history events from passive side
-	passiveClient := s.active.GetFrontendClientGRPC()
+	passiveClient := s.active.GetFrontendClient()
 	replicatedHistory, err := passiveClient.GetWorkflowExecutionHistory(
 		s.createContext(),
 		&workflowservice.GetWorkflowExecutionHistoryRequest{
@@ -1578,7 +1578,7 @@ func (s *nDCIntegrationTestSuite) TestGetWorkflowExecutionRawHistoryV2() {
 
 func (s *nDCIntegrationTestSuite) registerDomain() {
 	s.domainName = "test-simple-workflow-ndc-" + common.GenerateRandomString(5)
-	client1 := s.active.GetFrontendClientGRPC() // active
+	client1 := s.active.GetFrontendClient() // active
 	_, err := client1.RegisterDomain(s.createContext(), &workflowservice.RegisterDomainRequest{
 		Name:           s.domainName,
 		IsGlobalDomain: true,
