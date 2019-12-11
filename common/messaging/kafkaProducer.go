@@ -105,7 +105,7 @@ func (p *kafkaProducer) getKeyForReplicationTask(task *replicator.ReplicationTas
 		// Use workflowID as the partition key so all sync activity tasks for a workflow are dispatched to the same
 		// Kafka partition.  This will give us some ordering guarantee for workflow replication tasks atleast at
 		// the messaging layer perspective
-		attributes := task.SyncActicvityTaskAttributes
+		attributes := task.SyncActivityTaskAttributes
 		return sarama.StringEncoder(attributes.GetWorkflowId())
 	}
 

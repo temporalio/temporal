@@ -169,6 +169,11 @@ func QueryConsistencyLevelPtr(t s.QueryConsistencyLevel) *s.QueryConsistencyLeve
 	return &t
 }
 
+// QueryTaskCompletedTypePtr makes a copy and returns the pointer to a QueryTaskCompletedType
+func QueryTaskCompletedTypePtr(t s.QueryTaskCompletedType) *s.QueryTaskCompletedType {
+	return &t
+}
+
 // StringDefault returns value if string pointer is set otherwise default value of string
 func StringDefault(v *string) string {
 	var defaultString string

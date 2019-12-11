@@ -160,9 +160,9 @@ func (s *nDCIntegrationTestSuite) GetReplicationMessagesMock(
 		}
 
 		replicationMessage := &replicator.ReplicationMessages{
-			ReplicationTasks:      tasks,
-			LastRetrivedMessageId: tasks[len(tasks)-1].SourceTaskId,
-			HasMore:               common.BoolPtr(true),
+			ReplicationTasks:       tasks,
+			LastRetrievedMessageId: tasks[len(tasks)-1].SourceTaskId,
+			HasMore:                common.BoolPtr(true),
 		}
 
 		return &replicator.GetReplicationMessagesResponse{
@@ -1738,7 +1738,6 @@ func (s *nDCIntegrationTestSuite) applyEventsThroughFetcher(
 	tasklist string,
 	versionHistory *persistence.VersionHistory,
 	eventBatches []*shared.History,
-	historyClient host.HistoryClient,
 	frontend *workflowservicetest.MockClient,
 ) {
 	for _, batch := range eventBatches {

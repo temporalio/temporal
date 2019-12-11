@@ -223,9 +223,9 @@ func (s *server) startService() common.Daemon {
 
 	switch s.name {
 	case frontendService:
-		daemon = frontend.NewService(&params)
+		daemon, err = frontend.NewService(&params)
 	case historyService:
-		daemon = history.NewService(&params)
+		daemon, err = history.NewService(&params)
 	case matchingService:
 		daemon, err = matching.NewService(&params)
 	case workerService:

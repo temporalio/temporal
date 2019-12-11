@@ -275,9 +275,9 @@ StartNewExecutionLoop:
 }
 
 func (s *integrationSuite) TestSequentialWorkflow() {
-	id := "interation-sequential-workflow-test"
-	wt := "interation-sequential-workflow-test-type"
-	tl := "interation-sequential-workflow-test-tasklist"
+	id := "integration-sequential-workflow-test"
+	wt := "integration-sequential-workflow-test-type"
+	tl := "integration-sequential-workflow-test-tasklist"
 	identity := "worker1"
 	activityName := "activity_type1"
 
@@ -379,9 +379,9 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 }
 
 func (s *integrationSuite) TestCompleteDecisionTaskAndCreateNewOne() {
-	id := "interation-complete-decision-create-new-test"
-	wt := "interation-complete-decision-create-new-test-type"
-	tl := "interation-complete-decision-create-new-test-tasklist"
+	id := "integration-complete-decision-create-new-test"
+	wt := "integration-complete-decision-create-new-test-type"
+	tl := "integration-complete-decision-create-new-test-tasklist"
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -827,6 +827,11 @@ func (s *integrationSuite) TestCronWorkflow() {
 	memo := &commonproto.Memo{
 		Fields: map[string][]byte{"memoKey": []byte("memoVal")},
 	}
+	searchAttr := &commonproto.SearchAttributes{
+		IndexedFields: map[string][]byte{
+			"CustomKeywordField": []byte("1"),
+		},
+	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
@@ -840,6 +845,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 		Identity:                            identity,
 		CronSchedule:                        cronSchedule, //minimum interval by standard spec is 1m (* * * * *, use non-standard descriptor for short interval for test
 		Memo:                                memo,
+		SearchAttributes:                    searchAttr,
 	}
 
 	startWorkflowTS := time.Now()
@@ -937,6 +943,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	s.Equal("cron-test-error", attributes.GetFailureReason())
 	s.Equal(0, len(attributes.GetLastCompletionResult()))
 	s.Equal(memo, attributes.Memo)
+	s.Equal(searchAttr, attributes.SearchAttributes)
 
 	events = s.getHistoryGRPC(s.domainName, executions[1])
 	lastEvent = events[len(events)-1]
@@ -946,6 +953,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	s.Equal("", attributes.GetFailureReason())
 	s.Equal("cron-test-result", string(attributes.GetLastCompletionResult()))
 	s.Equal(memo, attributes.Memo)
+	s.Equal(searchAttr, attributes.SearchAttributes)
 
 	events = s.getHistoryGRPC(s.domainName, executions[2])
 	lastEvent = events[len(events)-1]
@@ -955,6 +963,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	s.Equal("cron-test-error", attributes.GetFailureReason())
 	s.Equal("cron-test-result", string(attributes.GetLastCompletionResult()))
 	s.Equal(memo, attributes.Memo)
+	s.Equal(searchAttr, attributes.SearchAttributes)
 
 	startFilter.LatestTime = time.Now().UnixNano()
 	var closedExecutions []*commonproto.WorkflowExecutionInfo
@@ -1003,6 +1012,106 @@ func (s *integrationSuite) TestCronWorkflow() {
 		s.Equal(int64(0), int64(expectedBackoff-executionTimeDiff)%(targetBackoffDuration.Nanoseconds()/1000000000))
 		lastExecution = executionInfo
 	}
+}
+
+func (s *integrationSuite) TestCronWorkflowTimeout() {
+	id := "integration-wf-cron-timeout-test"
+	wt := "integration-wf-cron-timeout-type"
+	tl := "integration-wf-cron-timeout-tasklist"
+	identity := "worker1"
+	cronSchedule := "@every 3s"
+
+	memo := &commonproto.Memo{
+		Fields: map[string][]byte{
+			"memoKey": []byte("memoVal"),
+		},
+	}
+	searchAttr := &commonproto.SearchAttributes{
+		IndexedFields: map[string][]byte{
+			"CustomKeywordField": []byte("1"),
+		},
+	}
+
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:                           uuid.New(),
+		Domain:                              s.domainName,
+		WorkflowId:                          id,
+		WorkflowType:                        &commonproto.WorkflowType{Name: wt},
+		TaskList:                            &commonproto.TaskList{Name: tl},
+		Input:                               nil,
+		ExecutionStartToCloseTimeoutSeconds: 1, // set workflow timeout to 1s
+		TaskStartToCloseTimeoutSeconds:      1,
+		Identity:                            identity,
+		CronSchedule:                        cronSchedule, //minimum interval by standard spec is 1m (* * * * *), use non-standard descriptor for short interval for test
+		Memo:                                memo,
+		SearchAttributes:                    searchAttr,
+	}
+
+	we, err0 := s.engineGRPC.StartWorkflowExecution(createContext(), request)
+	s.Nil(err0)
+
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+
+	var executions []*commonproto.WorkflowExecution
+	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
+		previousStartedEventID, startedEventID int64, h *commonproto.History) ([]byte, []*commonproto.Decision, error) {
+
+		executions = append(executions, execution)
+		return nil, []*commonproto.Decision{
+			{
+				DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
+
+				Attributes: &commonproto.Decision_StartTimerDecisionAttributes{StartTimerDecisionAttributes: &commonproto.StartTimerDecisionAttributes{
+					TimerId:                   "timer-id",
+					StartToFireTimeoutSeconds: 5,
+				}},
+			}}, nil
+	}
+
+	poller := &TaskPollerGRPC{
+		Engine:          s.engineGRPC,
+		Domain:          s.domainName,
+		TaskList:        &commonproto.TaskList{Name: tl},
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		Logger:          s.Logger,
+		T:               s.T(),
+	}
+
+	_, err := poller.PollAndProcessDecisionTask(false, false)
+	s.True(err == nil, err)
+
+	time.Sleep(1 * time.Second) // wait for workflow timeout
+
+	// check when workflow timeout, continueAsNew event contains expected fields
+	events := s.getHistoryGRPC(s.domainName, executions[0])
+	lastEvent := events[len(events)-1]
+	s.Equal(enums.EventTypeWorkflowExecutionContinuedAsNew, lastEvent.GetEventType())
+	attributes := lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
+	s.Equal(enums.ContinueAsNewInitiatorCronSchedule, attributes.GetInitiator())
+	s.Equal("cadenceInternal:Timeout START_TO_CLOSE", attributes.GetFailureReason())
+	s.Equal(memo, attributes.Memo)
+	s.Equal(searchAttr, attributes.SearchAttributes)
+
+	_, err = poller.PollAndProcessDecisionTask(false, false)
+	s.True(err == nil, err)
+
+	// check new run contains expected fields
+	events = s.getHistoryGRPC(s.domainName, executions[1])
+	firstEvent := events[0]
+	s.Equal(enums.EventTypeWorkflowExecutionStarted, firstEvent.GetEventType())
+	startAttributes := firstEvent.GetWorkflowExecutionStartedEventAttributes()
+	s.Equal(memo, startAttributes.Memo)
+	s.Equal(searchAttr, startAttributes.SearchAttributes)
+
+	// terminate cron
+	_, terminateErr := s.engineGRPC.TerminateWorkflowExecution(createContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+		Domain: s.domainName,
+		WorkflowExecution: &commonproto.WorkflowExecution{
+			WorkflowId: id,
+		},
+	})
+	s.NoError(terminateErr)
 }
 
 func (s *integrationSuite) TestSequential_UserTimers() {

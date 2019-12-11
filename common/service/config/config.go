@@ -185,8 +185,6 @@ type (
 		Password string `yaml:"password"`
 		// keyspace is the cassandra keyspace
 		Keyspace string `yaml:"keyspace" validate:"nonzero"`
-		// Consistency is the default cassandra consistency level
-		Consistency string `yaml:"consistency"`
 		// Datacenter is the data center filter arg for cassandra
 		Datacenter string `yaml:"datacenter"`
 		// MaxQPS is the max request rate to this datastore
@@ -203,8 +201,8 @@ type (
 		User string `yaml:"user"`
 		// Password is the password corresponding to the user name
 		Password string `yaml:"password"`
-		// DriverName is the name of SQL driver
-		DriverName string `yaml:"driverName" validate:"nonzero"`
+		// PluginName is the name of SQL plugin
+		PluginName string `yaml:"pluginName" validate:"nonzero"`
 		// DatabaseName is the name of SQL database to connect to
 		DatabaseName string `yaml:"databaseName" validate:"nonzero"`
 		// ConnectAddr is the remote addr of the database

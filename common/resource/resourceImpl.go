@@ -71,6 +71,7 @@ type (
 		numShards       int
 		serviceName     string
 		hostName        string
+		hostInfo        *membership.HostInfo
 		metricsScope    tally.Scope
 		clusterMetadata cluster.Metadata
 
@@ -114,7 +115,8 @@ type (
 		throttledLogger log.Logger
 
 		// for registering handlers
-		dispatcher *yarpc.Dispatcher
+		dispatcher     *yarpc.Dispatcher
+		grpcDispatcher *yarpc.Dispatcher
 
 		// for ringpop listener
 		ringpopDispatcher *yarpc.Dispatcher
@@ -148,6 +150,10 @@ func New(
 	}
 
 	dispatcher := params.RPCFactory.GetTChannelDispatcher()
+	var grpcDispatcher *yarpc.Dispatcher
+	if serviceName == common.FrontendServiceName {
+		grpcDispatcher = params.RPCFactory.GetGRPCDispatcher()
+	}
 	ringpopDispatcher := params.RPCFactory.GetRingpopDispatcher()
 
 	membershipMonitor, err := params.MembershipFactory.GetMembershipMonitor()
@@ -240,6 +246,27 @@ func New(
 		common.IsWhitelistServiceTransientError,
 	)
 
+	historyArchiverBootstrapContainer := &archiver.HistoryBootstrapContainer{
+		HistoryV2Manager: persistenceBean.GetHistoryManager(),
+		Logger:           logger,
+		MetricsClient:    params.MetricsClient,
+		ClusterMetadata:  params.ClusterMetadata,
+		DomainCache:      domainCache,
+	}
+	visibilityArchiverBootstrapContainer := &archiver.VisibilityBootstrapContainer{
+		Logger:          logger,
+		MetricsClient:   params.MetricsClient,
+		ClusterMetadata: params.ClusterMetadata,
+		DomainCache:     domainCache,
+	}
+	if err := params.ArchiverProvider.RegisterBootstrapContainer(
+		serviceName,
+		historyArchiverBootstrapContainer,
+		visibilityArchiverBootstrapContainer,
+	); err != nil {
+		return nil, err
+	}
+
 	impl = &Impl{
 		status: common.DaemonStatusInitialized,
 
@@ -293,6 +320,9 @@ func New(
 		// for registering handlers
 		dispatcher: dispatcher,
 
+		// for registering grpc handlers
+		grpcDispatcher: grpcDispatcher,
+
 		// for ringpop listener
 		ringpopDispatcher: ringpopDispatcher,
 
@@ -330,11 +360,22 @@ func (h *Impl) Start() {
 	if err := h.dispatcher.Start(); err != nil {
 		h.logger.WithTags(tag.Error(err)).Fatal("fail to start dispatcher")
 	}
+	if h.grpcDispatcher != nil {
+		if err := h.grpcDispatcher.Start(); err != nil {
+			h.logger.WithTags(tag.Error(err)).Fatal("fail to start grpc dispatcher")
+		}
+	}
 	if err := h.ringpopDispatcher.Start(); err != nil {
 		h.logger.WithTags(tag.Error(err)).Fatal("fail to start dispatcher")
 	}
 	h.membershipMonitor.Start()
 	h.domainCache.Start()
+
+	hostInfo, err := h.membershipMonitor.WhoAmI()
+	if err != nil {
+		h.logger.WithTags(tag.Error(err)).Fatal("fail to get host info from membership monitor")
+	}
+	h.hostInfo = hostInfo
 
 	// The service is now started up
 	h.logger.Info("service started")
@@ -358,11 +399,17 @@ func (h *Impl) Stop() {
 	if err := h.ringpopDispatcher.Stop(); err != nil {
 		h.logger.WithTags(tag.Error(err)).Error("failed to stop ringpop dispatcher")
 	}
+	if h.grpcDispatcher != nil {
+		if err := h.grpcDispatcher.Stop(); err != nil {
+			h.logger.WithTags(tag.Error(err)).Error("failed to stop grpc dispatcher")
+		}
+	}
 	if err := h.dispatcher.Stop(); err != nil {
 		h.logger.WithTags(tag.Error(err)).Error("failed to stop dispatcher")
 	}
 	h.runtimeMetricsReporter.Stop()
 	h.persistenceBean.Close()
+	h.visibilityMgr.Close()
 }
 
 // GetServiceName return service name
@@ -376,8 +423,8 @@ func (h *Impl) GetHostName() string {
 }
 
 // GetHostInfo return host info
-func (h *Impl) GetHostInfo() (*membership.HostInfo, error) {
-	return h.membershipMonitor.WhoAmI()
+func (h *Impl) GetHostInfo() *membership.HostInfo {
+	return h.hostInfo
 }
 
 // GetClusterMetadata return cluster metadata
@@ -431,7 +478,7 @@ func (h *Impl) GetMembershipMonitor() membership.Monitor {
 
 // GetFrontendServiceResolver return frontend service resolver
 func (h *Impl) GetFrontendServiceResolver() membership.ServiceResolver {
-	return h.historyServiceResolver
+	return h.frontendServiceResolver
 }
 
 // GetMatchingServiceResolver return matching service resolver
@@ -567,4 +614,9 @@ func (h *Impl) GetThrottledLogger() log.Logger {
 // GetDispatcher return YARPC dispatcher, used for registering handlers
 func (h *Impl) GetDispatcher() *yarpc.Dispatcher {
 	return h.dispatcher
+}
+
+// GetGRPCDispatcher return GRPC dispatcher, used for registering handlers
+func (h *Impl) GetGRPCDispatcher() *yarpc.Dispatcher {
+	return h.grpcDispatcher
 }
