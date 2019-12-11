@@ -789,7 +789,7 @@ func ToThriftGetDomainReplicationMessagesRequest(in *workflowservice.GetDomainRe
 		return nil
 	}
 	return &replicator.GetDomainReplicationMessagesRequest{
-		LastRetrivedMessageId:  &in.LastRetrivedMessageId,
+		LastRetrievedMessageId: &in.LastRetrivedMessageId,
 		LastProcessedMessageId: &in.LastProcessedMessageId,
 		ClusterName:            &in.ClusterName,
 	}

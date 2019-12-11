@@ -35,9 +35,9 @@ import (
 )
 
 func (s *integrationSuite) TestContinueAsNewWorkflow() {
-	id := "interation-continue-as-new-workflow-test"
-	wt := "interation-continue-as-new-workflow-test-type"
-	tl := "interation-continue-as-new-workflow-test-tasklist"
+	id := "integration-continue-as-new-workflow-test"
+	wt := "integration-continue-as-new-workflow-test-type"
+	tl := "integration-continue-as-new-workflow-test-tasklist"
 	identity := "worker1"
 
 	workflowType := &commonproto.WorkflowType{Name: wt}
@@ -139,9 +139,9 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 }
 
 func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
-	id := "interation-continue-as-new-workflow-timeout-test"
-	wt := "interation-continue-as-new-workflow-timeout-test-type"
-	tl := "interation-continue-as-new-workflow-timeout-test-tasklist"
+	id := "integration-continue-as-new-workflow-timeout-test"
+	wt := "integration-continue-as-new-workflow-timeout-test-type"
+	tl := "integration-continue-as-new-workflow-timeout-test-tasklist"
 	identity := "worker1"
 
 	workflowType := &commonproto.WorkflowType{Name: wt}

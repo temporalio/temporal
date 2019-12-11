@@ -29,18 +29,15 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/service"
+	"github.com/temporalio/temporal/common/resource"
 )
 
 type (
@@ -48,14 +45,14 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller       *gomock.Controller
-		mockContext      *MockworkflowExecutionContext
-		mockMutableState *MockmutableState
+		controller          *gomock.Controller
+		mockResource        *resource.Test
+		mockContext         *MockworkflowExecutionContext
+		mockMutableState    *MockmutableState
+		mockClusterMetadata *cluster.MockMetadata
 
-		mockService         service.Service
-		mockShard           *shardContextImpl
-		mockHistoryV2Mgr    *mocks.HistoryV2Manager
-		mockClusterMetadata *mocks.ClusterMetadata
+		mockShard        *shardContextImpl
+		mockHistoryV2Mgr *mocks.HistoryV2Manager
 
 		logger log.Logger
 
@@ -77,34 +74,24 @@ func (s *nDCBranchMgrSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
+	s.mockResource = resource.NewTest(s.controller, metrics.History)
 	s.mockContext = NewMockworkflowExecutionContext(s.controller)
 	s.mockMutableState = NewMockmutableState(s.controller)
 
-	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
-	s.mockHistoryV2Mgr = &mocks.HistoryV2Manager{}
-	s.mockClusterMetadata = &mocks.ClusterMetadata{}
-	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
-	s.mockService = service.NewTestService(
-		s.mockClusterMetadata,
-		nil,
-		metricsClient,
-		nil,
-		nil,
-		nil,
-		nil)
+	s.mockHistoryV2Mgr = s.mockResource.HistoryMgr
+	s.mockClusterMetadata = s.mockResource.ClusterMetadata
+
+	s.logger = s.mockResource.Logger
 	s.mockShard = &shardContextImpl{
-		service:                   s.mockService,
+		Resource:                  s.mockResource,
 		shardInfo:                 &persistence.ShardInfo{ShardID: 10, RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber:    1,
-		historyV2Mgr:              s.mockHistoryV2Mgr,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   make(chan int, 100),
 		config:                    NewDynamicConfigForTest(),
 		logger:                    s.logger,
-		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
-		timeSource:                clock.NewRealTimeSource(),
 	}
-	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.domainID = uuid.New()
 	s.workflowID = "some random workflow ID"
@@ -116,8 +103,8 @@ func (s *nDCBranchMgrSuite) SetupTest() {
 }
 
 func (s *nDCBranchMgrSuite) TearDownTest() {
-	s.mockHistoryV2Mgr.AssertExpectations(s.T())
 	s.controller.Finish()
+	s.mockResource.Finish(s.T())
 }
 
 func (s *nDCBranchMgrSuite) TestCreateNewBranch() {
@@ -212,12 +199,13 @@ func (s *nDCBranchMgrSuite) TestFlushBufferedEvents() {
 		"",
 		"",
 		"",
+		"",
 		int64(0),
 	).Return(&shared.HistoryEvent{}, nil).Times(1)
 	s.mockMutableState.EXPECT().FlushBufferedEvents().Return(nil).Times(1)
 
-	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", lastWriteVersion).Return(cluster.TestCurrentClusterName)
-	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(lastWriteVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.mockContext.EXPECT().updateWorkflowExecutionAsActive(gomock.Any()).Return(nil).Times(1)
 
