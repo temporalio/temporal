@@ -110,7 +110,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
@@ -276,7 +276,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
@@ -437,7 +437,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
@@ -654,7 +654,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_InTheMiddle() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,

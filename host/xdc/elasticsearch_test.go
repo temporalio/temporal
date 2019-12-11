@@ -251,7 +251,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 		return nil, []*commonproto.Decision{upsertDecision}, nil
 	}
 
-	poller := host.TaskPollerGRPC{
+	poller := host.TaskPoller{
 		Engine:          client1,
 		Domain:          domainName,
 		TaskList:        taskList,

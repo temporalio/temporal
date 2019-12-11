@@ -134,7 +134,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
@@ -311,7 +311,7 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
@@ -458,7 +458,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
@@ -511,7 +511,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 		}}, nil
 	}
 
-	foreignPoller := &TaskPollerGRPC{
+	foreignPoller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.foreignDomainName,
 		TaskList:        taskList,
@@ -647,7 +647,7 @@ func (s *integrationSuite) TestSignalWorkflow_Cron_NoDecisionTaskCreated() {
 		}}, nil
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
@@ -751,7 +751,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
@@ -804,7 +804,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 		}}, nil
 	}
 
-	foreignPoller := &TaskPollerGRPC{
+	foreignPoller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.foreignDomainName,
 		TaskList:        taskList,
@@ -950,7 +950,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_UnKnownTarget() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
@@ -1075,7 +1075,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_SignalSelf() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
@@ -1230,7 +1230,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
@@ -1463,7 +1463,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,

@@ -100,7 +100,7 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
@@ -251,7 +251,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
@@ -294,7 +294,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 		}}, nil
 	}
 
-	foreignPoller := &TaskPollerGRPC{
+	foreignPoller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.foreignDomainName,
 		TaskList:        taskList,
@@ -468,7 +468,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution_UnKnownTar
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,

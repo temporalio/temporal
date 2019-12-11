@@ -131,7 +131,7 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,

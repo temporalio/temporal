@@ -112,7 +112,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 		}}, nil
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
@@ -196,7 +196,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 		}}, nil
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
@@ -299,7 +299,7 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
@@ -312,7 +312,7 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 	minTaskID := int64(0)
 	_, err := poller.PollAndProcessDecisionTask(false, false)
 	s.Nil(err)
-	events := s.getHistoryGRPC(s.domainName, executions[0])
+	events := s.getHistory(s.domainName, executions[0])
 	s.True(len(events) != 0)
 	for _, event := range events {
 		s.True(event.GetTaskId() > minTaskID)
@@ -321,7 +321,7 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 
 	_, err = poller.PollAndProcessDecisionTask(false, false)
 	s.Nil(err)
-	events = s.getHistoryGRPC(s.domainName, executions[1])
+	events = s.getHistory(s.domainName, executions[1])
 	s.True(len(events) != 0)
 	for _, event := range events {
 		s.True(event.GetTaskId() > minTaskID)
@@ -437,7 +437,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 		return nil, nil, nil
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,

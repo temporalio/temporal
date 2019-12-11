@@ -312,7 +312,7 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, domain, domainID s
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          domain,
 		TaskList:        taskList,

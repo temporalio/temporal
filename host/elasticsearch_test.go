@@ -202,7 +202,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 		return nil, []*commonproto.Decision{upsertDecision}, nil
 	}
 	taskList := &commonproto.TaskList{Name: tl}
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
@@ -881,7 +881,7 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 		}}, nil
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
@@ -1059,7 +1059,7 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution_InvalidKey()
 		return nil, []*commonproto.Decision{upsertDecision}, nil
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,

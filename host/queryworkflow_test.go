@@ -117,7 +117,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 		return nil, errors.New("unknown-query-type")
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
@@ -330,7 +330,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 		return nil, errors.New("unknown-query-type")
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
@@ -512,7 +512,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 		return nil, errors.New("unknown-query-type")
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
@@ -674,7 +674,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 		return nil, errors.New("unknown-query-type")
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
@@ -860,7 +860,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 		return nil, errors.New("unknown-query-type")
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:                              s.engineGRPC,
 		Domain:                              s.domainName,
 		TaskList:                            taskList,

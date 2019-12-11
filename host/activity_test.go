@@ -125,7 +125,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
@@ -151,7 +151,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 	s.True(activityExecutedCount == 1)
 
 	// go over history and verify that the activity task scheduled event has header on it
-	events := s.getHistoryGRPC(s.domainName, &commonproto.WorkflowExecution{
+	events := s.getHistory(s.domainName, &commonproto.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.GetRunId(),
 	})
@@ -255,7 +255,7 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 		return nil, false, err
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
@@ -460,7 +460,7 @@ func (s *integrationSuite) TestActivityRetry() {
 		return nil, false, err
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
@@ -471,7 +471,7 @@ func (s *integrationSuite) TestActivityRetry() {
 		T:               s.T(),
 	}
 
-	poller2 := &TaskPollerGRPC{
+	poller2 := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
@@ -530,7 +530,7 @@ func (s *integrationSuite) TestActivityRetry() {
 		s.Logger.Info("Processing decision task:", tag.Counter(i))
 		_, err := poller.PollAndProcessDecisionTaskWithoutRetry(false, false)
 		if err != nil {
-			s.printWorkflowHistoryGRPC(s.domainName, &commonproto.WorkflowExecution{
+			s.printWorkflowHistory(s.domainName, &commonproto.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.GetRunId(),
 			})
@@ -623,7 +623,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
@@ -844,7 +844,7 @@ func (s *integrationSuite) TestActivityTimeouts() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
@@ -1026,7 +1026,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
@@ -1161,7 +1161,7 @@ func (s *integrationSuite) TestActivityCancellation() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,
@@ -1273,7 +1273,7 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 		return nil, false, nil
 	}
 
-	poller := &TaskPollerGRPC{
+	poller := &TaskPoller{
 		Engine:          s.engineGRPC,
 		Domain:          s.domainName,
 		TaskList:        taskList,

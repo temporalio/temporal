@@ -205,45 +205,16 @@ func (s *IntegrationBase) randomizeStr(id string) string {
 	return fmt.Sprintf("%v-%v", id, uuid.New())
 }
 
-func (s *IntegrationBase) printWorkflowHistory(domain string, execution *workflow.WorkflowExecution) {
+func (s *IntegrationBase) printWorkflowHistory(domain string, execution *commonproto.WorkflowExecution) {
 	events := s.getHistory(domain, execution)
-	history := &workflow.History{}
-	history.Events = events
-	common.PrettyPrintHistory(history, s.Logger)
-}
-
-func (s *IntegrationBase) printWorkflowHistoryGRPC(domain string, execution *commonproto.WorkflowExecution) {
-	events := s.getHistoryGRPC(domain, execution)
 	history := &commonproto.History{
 		Events: events,
 	}
 	common.PrettyPrintHistoryGRPC(history, s.Logger)
 }
 
-func (s *IntegrationBase) getHistory(domain string, execution *workflow.WorkflowExecution) []*workflow.HistoryEvent {
-	historyResponse, err := s.engine.GetWorkflowExecutionHistory(createContext(), &workflow.GetWorkflowExecutionHistoryRequest{
-		Domain:          common.StringPtr(domain),
-		Execution:       execution,
-		MaximumPageSize: common.Int32Ptr(5), // Use small page size to force pagination code path
-	})
-	s.Require().NoError(err)
-
-	events := historyResponse.History.Events
-	for historyResponse.NextPageToken != nil {
-		historyResponse, err = s.engine.GetWorkflowExecutionHistory(createContext(), &workflow.GetWorkflowExecutionHistoryRequest{
-			Domain:        common.StringPtr(domain),
-			Execution:     execution,
-			NextPageToken: historyResponse.NextPageToken,
-		})
-		s.Require().NoError(err)
-		events = append(events, historyResponse.History.Events...)
-	}
-
-	return events
-}
-
-func (s *IntegrationBase) getHistoryGRPC(domain string, execution *commonproto.WorkflowExecution) []*commonproto.HistoryEvent {
-	historyResponse, err := s.engineGRPC.GetWorkflowExecutionHistory(createContextGRPC(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+func (s *IntegrationBase) getHistory(domain string, execution *commonproto.WorkflowExecution) []*commonproto.HistoryEvent {
+	historyResponse, err := s.engineGRPC.GetWorkflowExecutionHistory(createContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Domain:          domain,
 		Execution:       execution,
 		MaximumPageSize: 5, // Use small page size to force pagination code path
@@ -252,7 +223,7 @@ func (s *IntegrationBase) getHistoryGRPC(domain string, execution *commonproto.W
 
 	events := historyResponse.History.Events
 	for historyResponse.NextPageToken != nil {
-		historyResponse, err = s.engineGRPC.GetWorkflowExecutionHistory(createContextGRPC(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		historyResponse, err = s.engineGRPC.GetWorkflowExecutionHistory(createContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Domain:        domain,
 			Execution:     execution,
 			NextPageToken: historyResponse.NextPageToken,
