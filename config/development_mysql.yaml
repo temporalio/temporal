@@ -5,7 +5,7 @@ persistence:
   datastores:
     mysql-default:
       sql:
-        driverName: "mysql"
+        pluginName: "mysql"
         databaseName: "cadence"
         connectAddr: "127.0.0.1:3306"
         connectProtocol: "tcp"

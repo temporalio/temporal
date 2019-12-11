@@ -355,6 +355,11 @@ struct SearchAttributes {
   10: optional map<string,binary> indexedFields
 }
 
+struct WorkerVersionInfo {
+  10: optional string impl
+  20: optional string featureVersion
+}
+
 struct WorkflowExecutionInfo {
   10: optional WorkflowExecution execution
   20: optional WorkflowType type
@@ -621,6 +626,7 @@ struct DecisionTaskFailedEventAttributes {
   60: optional string baseRunId
   70: optional string newRunId
   80: optional i64 (js.type = "Long") forkEventVersion
+  90: optional string binaryChecksum
 }
 
 struct ActivityTaskScheduledEventAttributes {
@@ -1133,6 +1139,7 @@ struct RespondDecisionTaskFailedRequest {
   20: optional DecisionTaskFailedCause cause
   30: optional binary details
   40: optional string identity
+  50: optional string binaryChecksum
 }
 
 struct PollForActivityTaskRequest {
@@ -1404,6 +1411,7 @@ struct RespondQueryTaskCompletedRequest {
   20: optional QueryTaskCompletedType completedType
   30: optional binary queryResult
   40: optional string errorMessage
+  50: optional WorkerVersionInfo workerVersionInfo
 }
 
 struct WorkflowQueryResult {

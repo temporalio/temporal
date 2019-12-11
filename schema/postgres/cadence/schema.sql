@@ -5,7 +5,7 @@ CREATE TABLE domains(
   --
   data BYTEA NOT NULL,
   data_encoding VARCHAR(16) NOT NULL,
-  is_global SMALLINT NOT NULL,
+  is_global BOOLEAN NOT NULL,
   PRIMARY KEY(shard_id, id)
 );
 
