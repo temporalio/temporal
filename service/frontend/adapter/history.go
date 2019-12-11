@@ -264,6 +264,7 @@ func toProtoDecisionTaskFailedEventAttributes(in *shared.DecisionTaskFailedEvent
 		BaseRunId:        in.GetBaseRunId(),
 		NewRunId:         in.GetNewRunId(),
 		ForkEventVersion: in.GetForkEventVersion(),
+		BinaryChecksum:   in.GetBinaryChecksum(),
 	}
 }
 

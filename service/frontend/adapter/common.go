@@ -595,7 +595,7 @@ func toThriftReplicationToken(in *common.ReplicationToken) *replicator.Replicati
 	}
 	return &replicator.ReplicationToken{
 		ShardID:                &in.ShardID,
-		LastRetrievedMessageId: &in.LastRetrivedMessageId,
+		LastRetrievedMessageId: &in.LastRetrievedMessageId,
 		LastProcessedMessageId: &in.LastProcessedMessageId,
 	}
 }
@@ -687,9 +687,9 @@ func toProtoReplicationMessages(in *replicator.ReplicationMessages) *common.Repl
 		return nil
 	}
 	return &common.ReplicationMessages{
-		ReplicationTasks:      toProtoReplicationTasks(in.GetReplicationTasks()),
-		LastRetrivedMessageId: in.GetLastRetrievedMessageId(),
-		HasMore:               in.GetHasMore(),
+		ReplicationTasks:       toProtoReplicationTasks(in.GetReplicationTasks()),
+		LastRetrievedMessageId: in.GetLastRetrievedMessageId(),
+		HasMore:                in.GetHasMore(),
 	}
 }
 
@@ -724,7 +724,7 @@ func toProtoReplicationTask(in *replicator.ReplicationTask) *common.ReplicationT
 	case enums.ReplicationTaskTypeSyncShardStatus:
 		ret.Attributes = &common.ReplicationTask_SyncShardStatusTaskAttributes{SyncShardStatusTaskAttributes: toProtoSyncShardStatusTaskAttributes(in.GetSyncShardStatusTaskAttributes())}
 	case enums.ReplicationTaskTypeSyncActivity:
-		ret.Attributes = &common.ReplicationTask_SyncActicvityTaskAttributes{SyncActicvityTaskAttributes: toProtoSyncActicvityTaskAttributes(in.GetSyncActivityTaskAttributes())}
+		ret.Attributes = &common.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: toProtoSyncActivityTaskAttributes(in.GetSyncActivityTaskAttributes())}
 	case enums.ReplicationTaskTypeHistoryMetadata:
 		ret.Attributes = &common.ReplicationTask_HistoryMetadataTaskAttributes{HistoryMetadataTaskAttributes: toProtoHistoryMetadataTaskAttributes(in.GetHistoryMetadataTaskAttributes())}
 	case enums.ReplicationTaskTypeHistoryV2:
@@ -824,12 +824,12 @@ func toProtoSyncShardStatusTaskAttributes(in *replicator.SyncShardStatusTaskAttr
 	}
 }
 
-// toProtoSyncActicvityTaskAttributes ...
-func toProtoSyncActicvityTaskAttributes(in *replicator.SyncActivityTaskAttributes) *common.SyncActicvityTaskAttributes {
+// toProtoSyncActivityTaskAttributes ...
+func toProtoSyncActivityTaskAttributes(in *replicator.SyncActivityTaskAttributes) *common.SyncActivityTaskAttributes {
 	if in == nil {
 		return nil
 	}
-	return &common.SyncActicvityTaskAttributes{
+	return &common.SyncActivityTaskAttributes{
 		DomainId:           in.GetDomainId(),
 		WorkflowId:         in.GetWorkflowId(),
 		RunId:              in.GetRunId(),
@@ -932,4 +932,14 @@ func toProtoReplicationMessagess(in map[int32]*replicator.ReplicationMessages) m
 	}
 
 	return ret
+}
+
+func toThriftWorkerVersionInfo(in *common.WorkerVersionInfo) *shared.WorkerVersionInfo {
+	if in == nil {
+		return nil
+	}
+	return &shared.WorkerVersionInfo{
+		Impl:           &in.Impl,
+		FeatureVersion: &in.FeatureVersion,
+	}
 }
