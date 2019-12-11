@@ -104,7 +104,49 @@ INTEG_NDC_SQL_COVER_FILE   := $(COVER_ROOT)/integ_ndc_sql_cover.out
 #   Packages are specified as import paths.
 GOCOVERPKG_ARG := -coverpkg="$(PROJECT_ROOT)/common/...,$(PROJECT_ROOT)/service/...,$(PROJECT_ROOT)/client/...,$(PROJECT_ROOT)/tools/..."
 
-yarpc-install:
+#================================= protobuf ===================================
+PROTO_ROOT := .gen/proto
+PROTO_REPO := github.com/temporalio/temporal-proto
+# List only subdirectories with *.proto files (sort to remove duplicates).
+# Note: using "shell find" instead of "wildcard" because "wildcard" caches directory structure.
+PROTO_DIRS = $(sort $(dir $(shell find $(PROTO_ROOT) -name "*.proto")))
+
+# Everything that deals with go modules (go.mod) needs to take dependency on this target.
+$(PROTO_ROOT)/go.mod:
+	cd $(PROTO_ROOT) && go mod init $(PROTO_REPO)
+
+clean-proto:
+	$(foreach PROTO_DIR,$(PROTO_DIRS),rm -f $(PROTO_DIR)*.go;)
+	rm -rf $(PROTO_ROOT)/*mock
+
+update-proto-submodule:
+	git submodule update --remote $(PROTO_ROOT)
+
+install-proto-submodule:
+	git submodule update --init $(PROTO_ROOT)
+
+protoc:
+#   run protoc separately for each directory because of different package names
+	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_ROOT) --gogoslick_out=paths=source_relative:$(PROTO_ROOT) $(PROTO_DIR)*.proto;)
+	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_ROOT) --yarpc-go_out=$(PROTO_ROOT) $(PROTO_DIR)*.proto;)
+
+# All YARPC generated service files pathes relative to PROTO_ROOT
+PROTO_YARPC_SERVICES = $(patsubst $(PROTO_ROOT)/%,%,$(shell find $(PROTO_ROOT) -name "service.pb.yarpc.go"))
+dir_no_slash = $(patsubst %/,%,$(dir $(1)))
+dirname = $(notdir $(call dir_no_slash,$(1)))
+
+proto-mock: $(PROTO_ROOT)/go.mod
+	GO111MODULE=off go get -u github.com/myitcv/gobin
+	GOOS= GOARCH= gobin -mod=readonly github.com/golang/mock/mockgen
+	@echo "Generate proto mocks..."
+	@$(foreach PROTO_YARPC_SERVICE,$(PROTO_YARPC_SERVICES),cd $(PROTO_ROOT) && mockgen -package $(call dirname,$(PROTO_YARPC_SERVICE))mock -source $(PROTO_YARPC_SERVICE) -destination $(call dir_no_slash,$(PROTO_YARPC_SERVICE))mock/$(notdir $(PROTO_YARPC_SERVICE:go=mock.go)) )
+
+update-proto: clean-proto update-proto-submodule yarpc-install protoc proto-mock
+
+proto: clean-proto install-proto-submodule yarpc-install protoc proto-mock
+#==============================================================================
+
+yarpc-install: $(PROTO_ROOT)/go.mod
 	GO111MODULE=off go get -u github.com/myitcv/gobin
 	GO111MODULE=off go get -u github.com/gogo/protobuf/protoc-gen-gogoslick
 	GO111MODULE=off go get -u go.uber.org/yarpc/encoding/protobuf/protoc-gen-yarpc-go
@@ -115,48 +157,6 @@ clean_thrift:
 	rm -rf .gen/go
 
 thriftc: yarpc-install $(THRIFTRW_GEN_SRC)
-
-#================================= protobuf ===================================
-PROTO_ROOT := .gen/proto
-PROTO_REPO := github.com/temporalio/temporal-proto
-# List only subdirectories with *.proto files (sort to remove duplicates).
-PROTO_DIRS = $(sort $(dir $(wildcard $(PROTO_ROOT)/*/*.proto)))
-
-# Everything that deals with go modules (go.mod) needs to take dependency on this target.
-$(PROTO_ROOT)/go.mod:
-	cd $(PROTO_ROOT) && go mod init $(PROTO_REPO)
-
-clean-proto:
-	$(foreach PROTO_DIR,$(PROTO_DIRS),rm -f $(PROTO_DIR)*.go;)
-	$(foreach PROTO_MOCK_DIR,$(wildcard $(PROTO_ROOT)/*mock),rm -rf $(PROTO_MOCK_DIR);)
-
-update-proto-submodule:
-	git submodule update --remote $(PROTO_ROOT)
-
-install-proto-submodule: $(PROTO_ROOT)/go.mod
-	git submodule update --init $(PROTO_ROOT)
-
-protoc:
-#   run protoc separately for each directory because of different package names
-	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_ROOT) --gogoslick_out=paths=source_relative:$(PROTO_ROOT) $(PROTO_DIR)*.proto;)
-	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_ROOT) --yarpc-go_out=$(PROTO_ROOT) $(PROTO_DIR)*.proto;)
-
-# All YARPC generated service files pathes relative to PROTO_ROOT
-PROTO_YARPC_SERVICES = $(patsubst $(PROTO_ROOT)/%,%,$(wildcard $(PROTO_ROOT)/*/service.pb.yarpc.go))
-dir_no_slash = $(patsubst %/,%,$(dir $(1)))
-dirname = $(notdir $(call dir_no_slash,$(1)))
-
-proto-mock:
-	GO111MODULE=off go get -u github.com/myitcv/gobin
-	GOOS= GOARCH= gobin -mod=readonly github.com/golang/mock/mockgen
-	@echo "Generate proto mocks..."
-	@$(foreach PROTO_YARPC_SERVICE,$(PROTO_YARPC_SERVICES),cd $(PROTO_ROOT) && mockgen -package $(call dirname,$(PROTO_YARPC_SERVICE))mock -source $(PROTO_YARPC_SERVICE) -destination $(call dir_no_slash,$(PROTO_YARPC_SERVICE))mock/$(notdir $(PROTO_YARPC_SERVICE:go=mock.go)) )
-
-update-proto: clean-proto update-proto-submodule yarpc-install protoc proto-mock
-
-proto: clean-proto install-proto-submodule yarpc-install protoc proto-mock
-
-#==============================================================================
 
 copyright: cmd/tools/copyright/licensegen.go
 	GOOS= GOARCH= go run ./cmd/tools/copyright/licensegen.go --verifyOnly
@@ -177,7 +177,7 @@ cadence-server: $(ALL_SRC)
 	@echo "compiling cadence-server with OS: $(GOOS), ARCH: $(GOARCH)"
 	go build -ldflags '$(GO_BUILD_LDFLAGS)' -i -o cadence-server cmd/server/cadence.go cmd/server/server.go
 
-go-generate:
+go-generate: $(PROTO_ROOT)/go.mod
 	GO111MODULE=off go get -u github.com/myitcv/gobin
 	GOOS= GOARCH= gobin -mod=readonly github.com/golang/mock/mockgen
 	@echo "running go generate ./..."
@@ -197,7 +197,7 @@ lint:
 		exit 1; \
 	fi
 
-fmt:
+fmt: $(PROTO_ROOT)/go.mod
 	GO111MODULE=off go get -u github.com/myitcv/gobin
 	GOOS= GOARCH= gobin -mod=readonly golang.org/x/tools/cmd/goimports
 	@echo "running goimports"
