@@ -90,7 +90,6 @@ persistence:
         User: "user-name"
         Password: "password"
         keyspace: "cadence"           -- Name of the cassandra keyspace
-        consistency: "QUORUM"         -- Default consistence, MUST be QUORUM for production (optional)
         datacenter: "us-east-1a"      -- Cassandra datacenter filter to limit queries to a single dc (optional)
         maxQPS: 1000                  -- MaxQPS to cassandra from a single cadence sub-system on one host (optional)
         maxConns: 2                   -- Number of tcp conns to cassandra server (single sub-system on one host) (optional)

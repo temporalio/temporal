@@ -80,8 +80,7 @@ a production setting, use the following command:
 
 
 ```
-docker run -e CASSANDRA_CONSISTENCY=Quorum \            -- Default cassandra consistency level
-    -e CASSANDRA_SEEDS=10.x.x.x                         -- csv of cassandra server ipaddrs
+docker run -e CASSANDRA_SEEDS=10.x.x.x                  -- csv of cassandra server ipaddrs
     -e KEYSPACE=<keyspace>                              -- Cassandra keyspace
     -e VISIBILITY_KEYSPACE=<visibility_keyspace>        -- Cassandra visibility keyspace
     -e SKIP_SCHEMA_SETUP=true                           -- do not setup cassandra schema during startup
