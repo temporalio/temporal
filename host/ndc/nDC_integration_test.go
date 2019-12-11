@@ -39,11 +39,13 @@ import (
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
+	commonproto "github.com/temporalio/temporal-proto/common"
+	"github.com/temporalio/temporal-proto/enums"
+	"github.com/temporalio/temporal-proto/workflowservice"
 	"github.com/temporalio/temporal/.gen/go/admin"
 	"github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/go/shared"
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/go/temporal/workflowservicetest"
 	"github.com/temporalio/temporal/client/frontend"
 	"github.com/temporalio/temporal/common"
@@ -80,10 +82,10 @@ type (
 
 var (
 	clusterName              = []string{"active", "standby", "other"}
-	clusterReplicationConfig = []*workflow.ClusterReplicationConfiguration{
-		{ClusterName: common.StringPtr(clusterName[0])},
-		{ClusterName: common.StringPtr(clusterName[1])},
-		{ClusterName: common.StringPtr(clusterName[2])},
+	clusterReplicationConfig = []*commonproto.ClusterReplicationConfiguration{
+		{ClusterName: clusterName[0]},
+		{ClusterName: clusterName[1]},
+		{ClusterName: clusterName[2]},
 	}
 )
 
@@ -202,7 +204,7 @@ func (s *nDCIntegrationTestSuite) TestSingleBranch() {
 	versions := []int64{101, 1, 201, 301, 401, 601, 501, 801, 1001, 901, 701, 1101}
 	for _, version := range versions {
 		runID := uuid.New()
-		historyBatch := []*shared.History{}
+		var historyBatch []*shared.History
 		s.generator = test.InitializeHistoryEventGenerator(s.domainName, version)
 
 		for s.generator.HasNextVertex() {
@@ -233,22 +235,22 @@ func (s *nDCIntegrationTestSuite) TestSingleBranch() {
 func (s *nDCIntegrationTestSuite) verifyEventHistory(
 	workflowID string,
 	runID string,
-	historyBatch []*workflow.History,
+	historyBatch []*shared.History,
 ) error {
 	// get replicated history events from passive side
-	passiveClient := s.active.GetFrontendClient()
+	passiveClient := s.active.GetFrontendClientGRPC()
 	replicatedHistory, err := passiveClient.GetWorkflowExecutionHistory(
 		s.createContext(),
-		&shared.GetWorkflowExecutionHistoryRequest{
-			Domain: common.StringPtr(s.domainName),
-			Execution: &shared.WorkflowExecution{
-				WorkflowId: common.StringPtr(workflowID),
-				RunId:      common.StringPtr(runID),
+		&workflowservice.GetWorkflowExecutionHistoryRequest{
+			Domain: s.domainName,
+			Execution: &commonproto.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      runID,
 			},
-			MaximumPageSize:        common.Int32Ptr(1000),
+			MaximumPageSize:        1000,
 			NextPageToken:          nil,
-			WaitForNewEvent:        common.BoolPtr(false),
-			HistoryEventFilterType: shared.HistoryEventFilterTypeAllEvent.Ptr(),
+			WaitForNewEvent:        false,
+			HistoryEventFilterType: enums.HistoryEventFilterTypeAllEvent,
 		},
 	)
 
@@ -268,7 +270,7 @@ func (s *nDCIntegrationTestSuite) verifyEventHistory(
 		}
 		originEvent := batch[eventIndex]
 		eventIndex++
-		if originEvent.GetEventType() != event.GetEventType() {
+		if enums.EventType(originEvent.GetEventType()) != event.GetEventType() {
 			return fmt.Errorf("the replicated event (%v) and the origin event (%v) are not the same",
 				originEvent.GetEventType().String(), event.GetEventType().String())
 		}
@@ -1022,12 +1024,12 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
 			taskID = historyEvent.GetTaskId()
 			historyEvents.Events = append(historyEvents.Events, historyEvent)
 			switch historyEvent.GetEventType() {
-			case workflow.EventTypeWorkflowExecutionCompleted,
-				workflow.EventTypeWorkflowExecutionFailed,
-				workflow.EventTypeWorkflowExecutionTimedOut,
-				workflow.EventTypeWorkflowExecutionTerminated,
-				workflow.EventTypeWorkflowExecutionContinuedAsNew,
-				workflow.EventTypeWorkflowExecutionCanceled:
+			case shared.EventTypeWorkflowExecutionCompleted,
+				shared.EventTypeWorkflowExecutionFailed,
+				shared.EventTypeWorkflowExecutionTimedOut,
+				shared.EventTypeWorkflowExecutionTerminated,
+				shared.EventTypeWorkflowExecutionContinuedAsNew,
+				shared.EventTypeWorkflowExecutionCanceled:
 				isWorkflowFinished = true
 			}
 		}
@@ -1576,24 +1578,24 @@ func (s *nDCIntegrationTestSuite) TestGetWorkflowExecutionRawHistoryV2() {
 
 func (s *nDCIntegrationTestSuite) registerDomain() {
 	s.domainName = "test-simple-workflow-ndc-" + common.GenerateRandomString(5)
-	client1 := s.active.GetFrontendClient() // active
-	err := client1.RegisterDomain(s.createContext(), &shared.RegisterDomainRequest{
-		Name:           common.StringPtr(s.domainName),
-		IsGlobalDomain: common.BoolPtr(true),
+	client1 := s.active.GetFrontendClientGRPC() // active
+	_, err := client1.RegisterDomain(s.createContext(), &workflowservice.RegisterDomainRequest{
+		Name:           s.domainName,
+		IsGlobalDomain: true,
 		Clusters:       clusterReplicationConfig,
 		// make the active cluster `standby` and replicate to `active` cluster
-		ActiveClusterName:                      common.StringPtr(clusterName[1]),
-		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(1),
+		ActiveClusterName:                      clusterName[1],
+		WorkflowExecutionRetentionPeriodInDays: 1,
 	})
 	s.Require().NoError(err)
 
-	descReq := &shared.DescribeDomainRequest{
-		Name: common.StringPtr(s.domainName),
+	descReq := &workflowservice.DescribeDomainRequest{
+		Name: s.domainName,
 	}
 	resp, err := client1.DescribeDomain(s.createContext(), descReq)
 	s.Require().NoError(err)
 	s.Require().NotNil(resp)
-	s.domainID = resp.GetDomainInfo().GetUUID()
+	s.domainID = resp.GetDomainInfo().GetUuid()
 	// Wait for domain cache to pick the change
 	time.Sleep(2 * cache.DomainCacheRefreshInterval)
 
