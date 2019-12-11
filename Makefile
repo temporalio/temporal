@@ -104,18 +104,6 @@ INTEG_NDC_SQL_COVER_FILE   := $(COVER_ROOT)/integ_ndc_sql_cover.out
 #   Packages are specified as import paths.
 GOCOVERPKG_ARG := -coverpkg="$(PROJECT_ROOT)/common/...,$(PROJECT_ROOT)/service/...,$(PROJECT_ROOT)/client/...,$(PROJECT_ROOT)/tools/..."
 
-yarpc-install:
-	GO111MODULE=off go get -u github.com/myitcv/gobin
-	GO111MODULE=off go get -u github.com/gogo/protobuf/protoc-gen-gogoslick
-	GO111MODULE=off go get -u go.uber.org/yarpc/encoding/protobuf/protoc-gen-yarpc-go
-	GOOS= GOARCH= gobin -mod=readonly go.uber.org/thriftrw
-	GOOS= GOARCH= gobin -mod=readonly go.uber.org/yarpc/encoding/thrift/thriftrw-plugin-yarpc
-
-clean_thrift:
-	rm -rf .gen/go
-
-thriftc: yarpc-install $(THRIFTRW_GEN_SRC)
-
 #================================= protobuf ===================================
 PROTO_ROOT := .gen/proto
 PROTO_REPO := github.com/temporalio/temporal-proto
@@ -133,7 +121,7 @@ clean-proto:
 update-proto-submodule:
 	git submodule update --remote $(PROTO_ROOT)
 
-install-proto-submodule: $(PROTO_ROOT)/go.mod
+install-proto-submodule:
 	git submodule update --init $(PROTO_ROOT)
 
 protoc:
@@ -146,7 +134,7 @@ PROTO_YARPC_SERVICES = $(patsubst $(PROTO_ROOT)/%,%,$(wildcard $(PROTO_ROOT)/*/s
 dir_no_slash = $(patsubst %/,%,$(dir $(1)))
 dirname = $(notdir $(call dir_no_slash,$(1)))
 
-proto-mock:
+proto-mock: $(PROTO_ROOT)/go.mod
 	GO111MODULE=off go get -u github.com/myitcv/gobin
 	GOOS= GOARCH= gobin -mod=readonly github.com/golang/mock/mockgen
 	@echo "Generate proto mocks..."
@@ -155,8 +143,19 @@ proto-mock:
 update-proto: clean-proto update-proto-submodule yarpc-install protoc proto-mock
 
 proto: clean-proto install-proto-submodule yarpc-install protoc proto-mock
-
 #==============================================================================
+
+yarpc-install: $(PROTO_ROOT)/go.mod
+	GO111MODULE=off go get -u github.com/myitcv/gobin
+	GO111MODULE=off go get -u github.com/gogo/protobuf/protoc-gen-gogoslick
+	GO111MODULE=off go get -u go.uber.org/yarpc/encoding/protobuf/protoc-gen-yarpc-go
+	GOOS= GOARCH= gobin -mod=readonly go.uber.org/thriftrw
+	GOOS= GOARCH= gobin -mod=readonly go.uber.org/yarpc/encoding/thrift/thriftrw-plugin-yarpc
+
+clean_thrift:
+	rm -rf .gen/go
+
+thriftc: yarpc-install $(THRIFTRW_GEN_SRC)
 
 copyright: cmd/tools/copyright/licensegen.go
 	GOOS= GOARCH= go run ./cmd/tools/copyright/licensegen.go --verifyOnly
@@ -177,7 +176,7 @@ cadence-server: $(ALL_SRC)
 	@echo "compiling cadence-server with OS: $(GOOS), ARCH: $(GOARCH)"
 	go build -ldflags '$(GO_BUILD_LDFLAGS)' -i -o cadence-server cmd/server/cadence.go cmd/server/server.go
 
-go-generate:
+go-generate: $(PROTO_ROOT)/go.mod
 	GO111MODULE=off go get -u github.com/myitcv/gobin
 	GOOS= GOARCH= gobin -mod=readonly github.com/golang/mock/mockgen
 	@echo "running go generate ./..."
@@ -197,7 +196,7 @@ lint:
 		exit 1; \
 	fi
 
-fmt:
+fmt: $(PROTO_ROOT)/go.mod
 	GO111MODULE=off go get -u github.com/myitcv/gobin
 	GOOS= GOARCH= gobin -mod=readonly golang.org/x/tools/cmd/goimports
 	@echo "running goimports"
