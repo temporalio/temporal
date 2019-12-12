@@ -3072,14 +3072,18 @@ func (wh *WorkflowHandler) getDefaultScope(scope int) metrics.Scope {
 	return wh.GetMetricsClient().Scope(scope).Tagged(metrics.DomainUnknownTag())
 }
 
+func frontendInternalServiceError(fmtStr string, args... interface{}) error{
+	// NOTE: For internal error, we can't return thrift error from cadence-frontend.
+	// Because in uber internal metrics, thrift errors are counted as user errors.
+	return fmt.Errorf(fmtStr, args...)
+}
+
 func (wh *WorkflowHandler) error(err error, scope metrics.Scope, tagsForErrorLog ...tag.Tag) error {
 	switch err := err.(type) {
 	case *gen.InternalServiceError:
 		wh.GetLogger().WithTags(tagsForErrorLog...).Error("Internal service error", tag.Error(err))
 		scope.IncCounter(metrics.CadenceFailures)
-		// NOTE: For internal error, we won't return thrift error from cadence-frontend.
-		// Because in uber internal metrics, thrift errors are counted as user errors
-		return fmt.Errorf("cadence internal error, msg: %v", err.Message)
+		return frontendInternalServiceError("cadence internal error, msg: %v", err.Message)
 	case *gen.BadRequestError:
 		scope.IncCounter(metrics.CadenceErrBadRequestCounter)
 		return err
@@ -3120,7 +3124,7 @@ func (wh *WorkflowHandler) error(err error, scope metrics.Scope, tagsForErrorLog
 	wh.GetLogger().WithTags(tagsForErrorLog...).Error("Uncategorized error",
 		tag.Error(err))
 	scope.IncCounter(metrics.CadenceFailures)
-	return fmt.Errorf("cadence internal uncategorized error, msg: %v", err.Error())
+	return frontendInternalServiceError("cadence internal uncategorized error, msg: %v", err.Error())
 }
 
 func (wh *WorkflowHandler) validateTaskListType(t *gen.TaskListType, scope metrics.Scope) error {

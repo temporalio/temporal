@@ -41,7 +41,6 @@ service WorkflowService {
   void RegisterDomain(1: shared.RegisterDomainRequest registerRequest)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.DomainAlreadyExistsError domainExistsError,
       4: shared.ServiceBusyError serviceBusyError,
       5: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,
@@ -53,7 +52,6 @@ service WorkflowService {
   shared.DescribeDomainResponse DescribeDomain(1: shared.DescribeDomainRequest describeRequest)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.ServiceBusyError serviceBusyError,
       5: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,
@@ -65,7 +63,6 @@ service WorkflowService {
     shared.ListDomainsResponse ListDomains(1: shared.ListDomainsRequest listRequest)
       throws (
         1: shared.BadRequestError badRequestError,
-        2: shared.InternalServiceError internalServiceError,
         3: shared.EntityNotExistsError entityNotExistError,
         4: shared.ServiceBusyError serviceBusyError,
         5: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,
@@ -77,7 +74,6 @@ service WorkflowService {
   shared.UpdateDomainResponse UpdateDomain(1: shared.UpdateDomainRequest updateRequest)
       throws (
         1: shared.BadRequestError badRequestError,
-        2: shared.InternalServiceError internalServiceError,
         3: shared.EntityNotExistsError entityNotExistError,
         4: shared.ServiceBusyError serviceBusyError,
         5: shared.DomainNotActiveError domainNotActiveError,
@@ -92,7 +88,6 @@ service WorkflowService {
   void DeprecateDomain(1: shared.DeprecateDomainRequest deprecateRequest)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.ServiceBusyError serviceBusyError,
       5: shared.DomainNotActiveError domainNotActiveError,
@@ -108,7 +103,6 @@ service WorkflowService {
   shared.StartWorkflowExecutionResponse StartWorkflowExecution(1: shared.StartWorkflowExecutionRequest startRequest)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.WorkflowExecutionAlreadyStartedError sessionAlreadyExistError,
       4: shared.ServiceBusyError serviceBusyError,
       5: shared.DomainNotActiveError domainNotActiveError,
@@ -124,7 +118,6 @@ service WorkflowService {
   shared.GetWorkflowExecutionHistoryResponse GetWorkflowExecutionHistory(1: shared.GetWorkflowExecutionHistoryRequest getRequest)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.ServiceBusyError serviceBusyError,
       5: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,
@@ -140,7 +133,6 @@ service WorkflowService {
   shared.PollForDecisionTaskResponse PollForDecisionTask(1: shared.PollForDecisionTaskRequest pollRequest)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.ServiceBusyError serviceBusyError,
       4: shared.LimitExceededError limitExceededError,
       5: shared.EntityNotExistsError entityNotExistError,
@@ -159,7 +151,6 @@ service WorkflowService {
   shared.RespondDecisionTaskCompletedResponse RespondDecisionTaskCompleted(1: shared.RespondDecisionTaskCompletedRequest completeRequest)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.DomainNotActiveError domainNotActiveError,
       5: shared.LimitExceededError limitExceededError,
@@ -176,7 +167,6 @@ service WorkflowService {
   void RespondDecisionTaskFailed(1: shared.RespondDecisionTaskFailedRequest failedRequest)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.DomainNotActiveError domainNotActiveError,
       5: shared.LimitExceededError limitExceededError,
@@ -196,7 +186,6 @@ service WorkflowService {
   shared.PollForActivityTaskResponse PollForActivityTask(1: shared.PollForActivityTaskRequest pollRequest)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.ServiceBusyError serviceBusyError,
       4: shared.LimitExceededError limitExceededError,
       5: shared.EntityNotExistsError entityNotExistError,
@@ -214,7 +203,6 @@ service WorkflowService {
   shared.RecordActivityTaskHeartbeatResponse RecordActivityTaskHeartbeat(1: shared.RecordActivityTaskHeartbeatRequest heartbeatRequest)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.DomainNotActiveError domainNotActiveError,
       5: shared.LimitExceededError limitExceededError,
@@ -232,7 +220,6 @@ service WorkflowService {
   shared.RecordActivityTaskHeartbeatResponse RecordActivityTaskHeartbeatByID(1: shared.RecordActivityTaskHeartbeatByIDRequest heartbeatRequest)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.DomainNotActiveError domainNotActiveError,
       5: shared.LimitExceededError limitExceededError,
@@ -250,7 +237,6 @@ service WorkflowService {
   void  RespondActivityTaskCompleted(1: shared.RespondActivityTaskCompletedRequest completeRequest)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.DomainNotActiveError domainNotActiveError,
       5: shared.LimitExceededError limitExceededError,
@@ -268,7 +254,6 @@ service WorkflowService {
   void  RespondActivityTaskCompletedByID(1: shared.RespondActivityTaskCompletedByIDRequest completeRequest)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.DomainNotActiveError domainNotActiveError,
       5: shared.LimitExceededError limitExceededError,
@@ -286,7 +271,6 @@ service WorkflowService {
   void  RespondActivityTaskFailed(1: shared.RespondActivityTaskFailedRequest failRequest)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.DomainNotActiveError domainNotActiveError,
       5: shared.LimitExceededError limitExceededError,
@@ -304,7 +288,6 @@ service WorkflowService {
   void  RespondActivityTaskFailedByID(1: shared.RespondActivityTaskFailedByIDRequest failRequest)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.DomainNotActiveError domainNotActiveError,
       5: shared.LimitExceededError limitExceededError,
@@ -322,7 +305,6 @@ service WorkflowService {
   void RespondActivityTaskCanceled(1: shared.RespondActivityTaskCanceledRequest canceledRequest)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.DomainNotActiveError domainNotActiveError,
       5: shared.LimitExceededError limitExceededError,
@@ -340,7 +322,6 @@ service WorkflowService {
   void RespondActivityTaskCanceledByID(1: shared.RespondActivityTaskCanceledByIDRequest canceledRequest)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.DomainNotActiveError domainNotActiveError,
       5: shared.LimitExceededError limitExceededError,
@@ -357,7 +338,6 @@ service WorkflowService {
   void RequestCancelWorkflowExecution(1: shared.RequestCancelWorkflowExecutionRequest cancelRequest)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.CancellationAlreadyRequestedError cancellationAlreadyRequestedError,
       5: shared.ServiceBusyError serviceBusyError,
@@ -373,7 +353,6 @@ service WorkflowService {
   void SignalWorkflowExecution(1: shared.SignalWorkflowExecutionRequest signalRequest)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.ServiceBusyError serviceBusyError,
       5: shared.DomainNotActiveError domainNotActiveError,
@@ -391,7 +370,6 @@ service WorkflowService {
   shared.StartWorkflowExecutionResponse SignalWithStartWorkflowExecution(1: shared.SignalWithStartWorkflowExecutionRequest signalWithStartRequest)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.ServiceBusyError serviceBusyError,
       5: shared.DomainNotActiveError domainNotActiveError,
@@ -407,7 +385,6 @@ service WorkflowService {
   shared.ResetWorkflowExecutionResponse ResetWorkflowExecution(1: shared.ResetWorkflowExecutionRequest resetRequest)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.ServiceBusyError serviceBusyError,
       5: shared.DomainNotActiveError domainNotActiveError,
@@ -422,7 +399,6 @@ service WorkflowService {
   void TerminateWorkflowExecution(1: shared.TerminateWorkflowExecutionRequest terminateRequest)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.ServiceBusyError serviceBusyError,
       5: shared.DomainNotActiveError domainNotActiveError,
@@ -436,7 +412,6 @@ service WorkflowService {
   shared.ListOpenWorkflowExecutionsResponse ListOpenWorkflowExecutions(1: shared.ListOpenWorkflowExecutionsRequest listRequest)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.ServiceBusyError serviceBusyError,
       5: shared.LimitExceededError limitExceededError,
@@ -449,7 +424,6 @@ service WorkflowService {
   shared.ListClosedWorkflowExecutionsResponse ListClosedWorkflowExecutions(1: shared.ListClosedWorkflowExecutionsRequest listRequest)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.ServiceBusyError serviceBusyError,
       5: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,
@@ -461,7 +435,6 @@ service WorkflowService {
   shared.ListWorkflowExecutionsResponse ListWorkflowExecutions(1: shared.ListWorkflowExecutionsRequest listRequest)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.ServiceBusyError serviceBusyError,
       5: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,
@@ -473,7 +446,6 @@ service WorkflowService {
   shared.ListArchivedWorkflowExecutionsResponse ListArchivedWorkflowExecutions(1: shared.ListArchivedWorkflowExecutionsRequest listRequest)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.ServiceBusyError serviceBusyError,
       5: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,
@@ -485,7 +457,6 @@ service WorkflowService {
   shared.ListWorkflowExecutionsResponse ScanWorkflowExecutions(1: shared.ListWorkflowExecutionsRequest listRequest)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.ServiceBusyError serviceBusyError,
       5: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,
@@ -497,7 +468,6 @@ service WorkflowService {
   shared.CountWorkflowExecutionsResponse CountWorkflowExecutions(1: shared.CountWorkflowExecutionsRequest countRequest)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.ServiceBusyError serviceBusyError,
       5: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,
@@ -508,7 +478,6 @@ service WorkflowService {
   **/
   shared.GetSearchAttributesResponse GetSearchAttributes()
     throws (
-      1: shared.InternalServiceError internalServiceError,
       2: shared.ServiceBusyError serviceBusyError,
       3: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,
     )
@@ -521,7 +490,6 @@ service WorkflowService {
   void RespondQueryTaskCompleted(1: shared.RespondQueryTaskCompletedRequest completeRequest)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.LimitExceededError limitExceededError,
       5: shared.ServiceBusyError serviceBusyError,
@@ -541,7 +509,6 @@ service WorkflowService {
   shared.ResetStickyTaskListResponse ResetStickyTaskList(1: shared.ResetStickyTaskListRequest resetRequest)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.LimitExceededError limitExceededError,
       5: shared.ServiceBusyError serviceBusyError,
@@ -555,7 +522,6 @@ service WorkflowService {
   shared.QueryWorkflowResponse QueryWorkflow(1: shared.QueryWorkflowRequest queryRequest)
 	throws (
 	  1: shared.BadRequestError badRequestError,
-	  2: shared.InternalServiceError internalServiceError,
 	  3: shared.EntityNotExistsError entityNotExistError,
 	  4: shared.QueryFailedError queryFailedError,
 	  5: shared.LimitExceededError limitExceededError,
@@ -569,7 +535,6 @@ service WorkflowService {
   shared.DescribeWorkflowExecutionResponse DescribeWorkflowExecution(1: shared.DescribeWorkflowExecutionRequest describeRequest)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.LimitExceededError limitExceededError,
       5: shared.ServiceBusyError serviceBusyError,
@@ -583,7 +548,6 @@ service WorkflowService {
   shared.DescribeTaskListResponse DescribeTaskList(1: shared.DescribeTaskListRequest request)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.LimitExceededError limitExceededError,
       5: shared.ServiceBusyError serviceBusyError,
@@ -593,7 +557,6 @@ service WorkflowService {
   replicator.GetReplicationMessagesResponse GetReplicationMessages(1: replicator.GetReplicationMessagesRequest request)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.LimitExceededError limitExceededError,
       4: shared.ServiceBusyError serviceBusyError,
       5: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,
@@ -602,7 +565,6 @@ service WorkflowService {
   replicator.GetDomainReplicationMessagesResponse GetDomainReplicationMessages(1: replicator.GetDomainReplicationMessagesRequest request)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.LimitExceededError limitExceededError,
       4: shared.ServiceBusyError serviceBusyError,
       5: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,
@@ -614,7 +576,6 @@ service WorkflowService {
   void ReapplyEvents(1: shared.ReapplyEventsRequest reapplyEventsRequest)
     throws (
       1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
       3: shared.DomainNotActiveError domainNotActiveError,
       4: shared.LimitExceededError limitExceededError,
       5: shared.ServiceBusyError serviceBusyError,
