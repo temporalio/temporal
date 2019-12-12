@@ -36,11 +36,10 @@ import (
 	"go.uber.org/yarpc/api/transport"
 	"go.uber.org/yarpc/transport/tchannel"
 
-	workflowserviceg "github.com/temporalio/temporal-proto/workflowservice"
+	"github.com/temporalio/temporal-proto/workflowservice"
 	"github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"
 	"github.com/temporalio/temporal/.gen/go/history/historyserviceclient"
 	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
 	"github.com/temporalio/temporal/client"
 	frontendclient "github.com/temporalio/temporal/client/frontend"
 	"github.com/temporalio/temporal/common"
@@ -73,8 +72,7 @@ type Cadence interface {
 	Start() error
 	Stop()
 	GetAdminClient() adminserviceclient.Interface
-	GetFrontendClient() workflowserviceclient.Interface
-	GetFrontendClientGRPC() workflowserviceg.WorkflowServiceYARPCClient
+	GetFrontendClient() workflowservice.WorkflowServiceYARPCClient
 	FrontendAddress() string
 	GetHistoryClient() historyserviceclient.Interface
 	GetExecutionManagerFactory() persistence.ExecutionManagerFactory
@@ -82,15 +80,13 @@ type Cadence interface {
 
 type (
 	cadenceImpl struct {
-		frontendService     common.Daemon
-		frontendServiceGRPC common.Daemon
-		matchingService     common.Daemon
-		workerService       common.Daemon
-		historyServices     []common.Daemon
+		frontendService common.Daemon
+		matchingService common.Daemon
+		workerService   common.Daemon
+		historyServices []common.Daemon
 
 		adminClient         adminserviceclient.Interface
-		frontendClient      workflowserviceclient.Interface
-		frontendClientGRPC  workflowserviceg.WorkflowServiceYARPCClient
+		frontendClient      workflowservice.WorkflowServiceYARPCClient
 		historyClient       historyserviceclient.Interface
 		logger              log.Logger
 		clusterMetadata     cluster.Metadata
@@ -476,12 +472,8 @@ func (c *cadenceImpl) GetAdminClient() adminserviceclient.Interface {
 	return c.adminClient
 }
 
-func (c *cadenceImpl) GetFrontendClient() workflowserviceclient.Interface {
+func (c *cadenceImpl) GetFrontendClient() workflowservice.WorkflowServiceYARPCClient {
 	return c.frontendClient
-}
-
-func (c *cadenceImpl) GetFrontendClientGRPC() workflowserviceg.WorkflowServiceYARPCClient {
-	return c.frontendClientGRPC
 }
 
 func (c *cadenceImpl) GetHistoryClient() historyserviceclient.Interface {
@@ -538,8 +530,7 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 	}
 
 	c.frontendService = frontendService
-	c.frontendClient = NewFrontendClient(frontendService.GetDispatcher())
-	c.frontendClientGRPC = NewFrontendClientGRPC(frontendService.GetGRPCDispatcher())
+	c.frontendClient = NewFrontendClient(frontendService.GetGRPCDispatcher())
 	c.adminClient = NewAdminClient(frontendService.GetDispatcher())
 	go frontendService.Start()
 

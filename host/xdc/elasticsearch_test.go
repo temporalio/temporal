@@ -142,7 +142,7 @@ func (s *esCrossDCTestSuite) TearDownSuite() {
 
 func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	domainName := "test-xdc-search-attr-" + common.GenerateRandomString(5)
-	client1 := s.cluster1.GetFrontendClientGRPC() // active
+	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterDomainRequest{
 		Name:                                   domainName,
 		Clusters:                               clusterReplicationConfigES,
@@ -162,7 +162,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	// Wait for domain cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
-	client2 := s.cluster2.GetFrontendClientGRPC() // standby
+	client2 := s.cluster2.GetFrontendClient() // standby
 	resp2, err := client2.DescribeDomain(createContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp2)
@@ -209,7 +209,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 		Query:    query,
 	}
 
-	testListResult := func(client host.FrontendClientGRPC) {
+	testListResult := func(client host.FrontendClient) {
 		var openExecution *commonproto.WorkflowExecutionInfo
 		for i := 0; i < numOfRetry; i++ {
 			startFilter.LatestTime = time.Now().UnixNano()
@@ -231,11 +231,11 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	}
 
 	// List workflow in active
-	engine1 := s.cluster1.GetFrontendClientGRPC()
+	engine1 := s.cluster1.GetFrontendClient()
 	testListResult(engine1)
 
 	// List workflow in standby
-	engine2 := s.cluster2.GetFrontendClientGRPC()
+	engine2 := s.cluster2.GetFrontendClient()
 	testListResult(engine2)
 
 	// upsert search attributes
@@ -251,7 +251,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 		return nil, []*commonproto.Decision{upsertDecision}, nil
 	}
 
-	poller := host.TaskPollerGRPC{
+	poller := host.TaskPoller{
 		Engine:          client1,
 		Domain:          domainName,
 		TaskList:        taskList,
@@ -273,7 +273,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 		Query:    fmt.Sprintf(`WorkflowType = '%s' and CloseTime = missing`, wt),
 	}
 
-	testListResult = func(client host.FrontendClientGRPC) {
+	testListResult = func(client host.FrontendClient) {
 		verified := false
 		for i := 0; i < numOfRetry; i++ {
 			resp, err := client.ListWorkflowExecutions(createContext(), listRequest)

@@ -88,7 +88,7 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 		Identity:                            identity,
 	}
 
-	we, err0 := s.engineGRPC.StartWorkflowExecution(createContext(), request)
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -131,8 +131,8 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &TaskPollerGRPC{
-		Engine:          s.engineGRPC,
+	poller := &TaskPoller{
+		Engine:          s.engine,
 		Domain:          s.domainName,
 		TaskList:        taskList,
 		Identity:        identity,
@@ -158,7 +158,7 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 	s.Nil(err)
 
 	// verify last event is terminated event
-	historyResponse, err := s.engineGRPC.GetWorkflowExecutionHistory(createContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+	historyResponse, err := s.engine.GetWorkflowExecutionHistory(createContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Domain: s.domainName,
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
@@ -175,7 +175,7 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 	// verify visibility is correctly processed from open to close
 	isCloseCorrect := false
 	for i := 0; i < 10; i++ {
-		resp, err1 := s.engineGRPC.ListClosedWorkflowExecutions(createContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
+		resp, err1 := s.engine.ListClosedWorkflowExecutions(createContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
 			Domain:          s.domainName,
 			MaximumPageSize: 100,
 			StartTimeFilter: &commonproto.StartTimeFilter{

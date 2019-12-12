@@ -62,7 +62,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 		Identity:                            identity,
 	}
 
-	we, err0 := s.engineGRPC.StartWorkflowExecution(createContext(), request)
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -117,8 +117,8 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 		return nil, errors.New("unknown-query-type")
 	}
 
-	poller := &TaskPollerGRPC{
-		Engine:          s.engineGRPC,
+	poller := &TaskPoller{
+		Engine:          s.engine,
 		Domain:          s.domainName,
 		TaskList:        taskList,
 		Identity:        identity,
@@ -140,7 +140,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	}
 	queryResultCh := make(chan QueryResult)
 	queryWorkflowFn := func(queryType string, rejectCondition enums.QueryRejectCondition) {
-		queryResp, err := s.engineGRPC.QueryWorkflow(createContext(), &workflowservice.QueryWorkflowRequest{
+		queryResp, err := s.engine.QueryWorkflow(createContext(), &workflowservice.QueryWorkflowRequest{
 			Domain: s.domainName,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: id,
@@ -267,7 +267,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 		Identity:                            identity,
 	}
 
-	we, err0 := s.engineGRPC.StartWorkflowExecution(createContext(), request)
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -330,8 +330,8 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 		return nil, errors.New("unknown-query-type")
 	}
 
-	poller := &TaskPollerGRPC{
-		Engine:          s.engineGRPC,
+	poller := &TaskPoller{
+		Engine:          s.engine,
 		Domain:          s.domainName,
 		TaskList:        taskList,
 		Identity:        identity,
@@ -356,7 +356,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 		// before the query is answer the signal is not handled because the decision task is not dispatched
 		// to the worker yet
 		s.False(handledSignal)
-		queryResp, err := s.engineGRPC.QueryWorkflow(createContext(), &workflowservice.QueryWorkflowRequest{
+		queryResp, err := s.engine.QueryWorkflow(createContext(), &workflowservice.QueryWorkflowRequest{
 			Domain: s.domainName,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: id,
@@ -378,7 +378,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	// otherwise query will just go through matching
 	signalName := "my signal"
 	signalInput := []byte("my signal input.")
-	_, err = s.engineGRPC.SignalWorkflowExecution(createContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err = s.engine.SignalWorkflowExecution(createContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Domain: s.domainName,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
@@ -450,7 +450,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 		Identity:                            identity,
 	}
 
-	we, err0 := s.engineGRPC.StartWorkflowExecution(createContext(), request)
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -512,8 +512,8 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 		return nil, errors.New("unknown-query-type")
 	}
 
-	poller := &TaskPollerGRPC{
-		Engine:          s.engineGRPC,
+	poller := &TaskPoller{
+		Engine:          s.engine,
 		Domain:          s.domainName,
 		TaskList:        taskList,
 		Identity:        identity,
@@ -536,7 +536,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 	queryResultCh := make(chan QueryResult)
 	queryWorkflowFn := func(queryType string, rejectCondition enums.QueryRejectCondition) {
 		shortCtx, cancel := context.WithTimeout(context.Background(), time.Second)
-		queryResp, err := s.engineGRPC.QueryWorkflow(shortCtx, &workflowservice.QueryWorkflowRequest{
+		queryResp, err := s.engine.QueryWorkflow(shortCtx, &workflowservice.QueryWorkflowRequest{
 			Domain: s.domainName,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: id,
@@ -554,7 +554,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 
 	signalName := "my signal"
 	signalInput := []byte("my signal input.")
-	_, err = s.engineGRPC.SignalWorkflowExecution(createContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err = s.engine.SignalWorkflowExecution(createContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Domain: s.domainName,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
@@ -609,7 +609,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 		Identity:                            identity,
 	}
 
-	we, err0 := s.engineGRPC.StartWorkflowExecution(createContext(), request)
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -674,8 +674,8 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 		return nil, errors.New("unknown-query-type")
 	}
 
-	poller := &TaskPollerGRPC{
-		Engine:          s.engineGRPC,
+	poller := &TaskPoller{
+		Engine:          s.engine,
 		Domain:          s.domainName,
 		TaskList:        taskList,
 		Identity:        identity,
@@ -698,7 +698,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 	queryResultCh := make(chan QueryResult)
 	queryWorkflowFn := func(queryType string, rejectCondition enums.QueryRejectCondition) {
 		s.False(handledSignal)
-		queryResp, err := s.engineGRPC.QueryWorkflow(createContext(), &workflowservice.QueryWorkflowRequest{
+		queryResp, err := s.engine.QueryWorkflow(createContext(), &workflowservice.QueryWorkflowRequest{
 			Domain: s.domainName,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: id,
@@ -718,7 +718,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 	// this causes the signal to still be outstanding at the time query arrives
 	signalName := "my signal"
 	signalInput := []byte("my signal input.")
-	_, err = s.engineGRPC.SignalWorkflowExecution(createContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err = s.engine.SignalWorkflowExecution(createContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Domain: s.domainName,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
@@ -796,7 +796,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 		Identity:                            identity,
 	}
 
-	we, err0 := s.engineGRPC.StartWorkflowExecution(createContext(), request)
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -860,8 +860,8 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 		return nil, errors.New("unknown-query-type")
 	}
 
-	poller := &TaskPollerGRPC{
-		Engine:                              s.engineGRPC,
+	poller := &TaskPoller{
+		Engine:                              s.engine,
 		Domain:                              s.domainName,
 		TaskList:                            taskList,
 		Identity:                            identity,
@@ -886,7 +886,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 	queryResultCh := make(chan QueryResult)
 	queryWorkflowFn := func(queryType string, rejectCondition enums.QueryRejectCondition) {
 		s.False(handledSignal)
-		queryResp, err := s.engineGRPC.QueryWorkflow(createContext(), &workflowservice.QueryWorkflowRequest{
+		queryResp, err := s.engine.QueryWorkflow(createContext(), &workflowservice.QueryWorkflowRequest{
 			Domain: s.domainName,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: id,
@@ -906,7 +906,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 	// this causes the signal to still be outstanding at the time query arrives
 	signalName := "my signal"
 	signalInput := []byte("my signal input.")
-	_, err = s.engineGRPC.SignalWorkflowExecution(createContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err = s.engine.SignalWorkflowExecution(createContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Domain: s.domainName,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
@@ -928,7 +928,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 		// at this point there is a decision task started on the worker so this second signal will become buffered
 		signalName := "my signal"
 		signalInput := []byte("my signal input.")
-		_, err = s.engineGRPC.SignalWorkflowExecution(createContext(), &workflowservice.SignalWorkflowExecutionRequest{
+		_, err = s.engine.SignalWorkflowExecution(createContext(), &workflowservice.SignalWorkflowExecutionRequest{
 			Domain: s.domainName,
 			WorkflowExecution: &commonproto.WorkflowExecution{
 				WorkflowId: id,
@@ -1007,7 +1007,7 @@ func (s *integrationSuite) TestQueryWorkflow_BeforeFirstDecision() {
 		Identity:                            identity,
 	}
 
-	we, err0 := s.engineGRPC.StartWorkflowExecution(createContext(), request)
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
 	workflowExecution := &commonproto.WorkflowExecution{
@@ -1016,7 +1016,7 @@ func (s *integrationSuite) TestQueryWorkflow_BeforeFirstDecision() {
 	}
 
 	// query workflow without any decision task should produce an error
-	queryResp, err := s.engineGRPC.QueryWorkflow(createContext(), &workflowservice.QueryWorkflowRequest{
+	queryResp, err := s.engine.QueryWorkflow(createContext(), &workflowservice.QueryWorkflowRequest{
 		Domain:    s.domainName,
 		Execution: workflowExecution,
 		Query: &commonproto.WorkflowQuery{

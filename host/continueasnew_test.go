@@ -69,7 +69,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 		Identity:                            identity,
 	}
 
-	we, err0 := s.engineGRPC.StartWorkflowExecution(createContext(), request)
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -112,8 +112,8 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 		}}, nil
 	}
 
-	poller := &TaskPollerGRPC{
-		Engine:          s.engineGRPC,
+	poller := &TaskPoller{
+		Engine:          s.engine,
 		Domain:          s.domainName,
 		TaskList:        taskList,
 		Identity:        identity,
@@ -160,7 +160,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 		Identity:                            identity,
 	}
 
-	we, err0 := s.engineGRPC.StartWorkflowExecution(createContext(), request)
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -196,8 +196,8 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 		}}, nil
 	}
 
-	poller := &TaskPollerGRPC{
-		Engine:          s.engineGRPC,
+	poller := &TaskPoller{
+		Engine:          s.engine,
 		Domain:          s.domainName,
 		TaskList:        taskList,
 		Identity:        identity,
@@ -217,7 +217,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 
 GetHistoryLoop:
 	for i := 0; i < 20; i++ {
-		historyResponse, err := s.engineGRPC.GetWorkflowExecutionHistory(createContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		historyResponse, err := s.engine.GetWorkflowExecutionHistory(createContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Domain: s.domainName,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: id,
@@ -263,7 +263,7 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 		Identity:                            identity,
 	}
 
-	we, err0 := s.engineGRPC.StartWorkflowExecution(createContext(), request)
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -299,8 +299,8 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 
 	}
 
-	poller := &TaskPollerGRPC{
-		Engine:          s.engineGRPC,
+	poller := &TaskPoller{
+		Engine:          s.engine,
 		Domain:          s.domainName,
 		TaskList:        taskList,
 		Identity:        identity,
@@ -312,7 +312,7 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 	minTaskID := int64(0)
 	_, err := poller.PollAndProcessDecisionTask(false, false)
 	s.Nil(err)
-	events := s.getHistoryGRPC(s.domainName, executions[0])
+	events := s.getHistory(s.domainName, executions[0])
 	s.True(len(events) != 0)
 	for _, event := range events {
 		s.True(event.GetTaskId() > minTaskID)
@@ -321,7 +321,7 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 
 	_, err = poller.PollAndProcessDecisionTask(false, false)
 	s.Nil(err)
-	events = s.getHistoryGRPC(s.domainName, executions[1])
+	events = s.getHistory(s.domainName, executions[1])
 	s.True(len(events) != 0)
 	for _, event := range events {
 		s.True(event.GetTaskId() > minTaskID)
@@ -357,7 +357,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 		Identity:                            identity,
 	}
 
-	we, err0 := s.engineGRPC.StartWorkflowExecution(createContext(), request)
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
@@ -437,8 +437,8 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 		return nil, nil, nil
 	}
 
-	poller := &TaskPollerGRPC{
-		Engine:          s.engineGRPC,
+	poller := &TaskPoller{
+		Engine:          s.engine,
 		Domain:          s.domainName,
 		TaskList:        taskList,
 		Identity:        identity,
