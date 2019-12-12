@@ -68,6 +68,8 @@ const (
 	retryKafkaOperationMaxInterval        = 10 * time.Second
 	retryKafkaOperationExpirationInterval = 30 * time.Second
 
+	contextExpireThreshold = 10 * time.Millisecond
+
 	// FailureReasonCompleteResultExceedsLimit is failureReason for complete result exceeds limit
 	FailureReasonCompleteResultExceedsLimit = "COMPLETE_RESULT_EXCEEDS_LIMIT"
 	// FailureReasonFailureDetailsExceedsLimit is failureReason for failure details exceeds limit
@@ -277,6 +279,10 @@ func IsValidContext(ctx context.Context) error {
 		default:
 			return nil
 		}
+	}
+	deadline, ok := ctx.Deadline()
+	if ok && deadline.Sub(time.Now()) < contextExpireThreshold {
+		return context.DeadlineExceeded
 	}
 	return nil
 }

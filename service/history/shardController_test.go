@@ -23,10 +23,11 @@ package history
 import (
 	"errors"
 	"fmt"
-	"github.com/uber/cadence/common/service/dynamicconfig"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/uber/cadence/common/service/dynamicconfig"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"

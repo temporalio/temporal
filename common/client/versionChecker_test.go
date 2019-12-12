@@ -120,6 +120,74 @@ func (s *VersionCheckerSuite) TestClientSupported() {
 	}
 }
 
+func (s *VersionCheckerSuite) TestSupportsStickyQuery() {
+	testCases := []struct {
+		clientImpl           string
+		clientFeatureVersion string
+		expectErr            bool
+	}{
+		{
+			clientImpl: "",
+			expectErr:  true,
+		},
+		{
+			clientImpl: GoSDK,
+			expectErr:  true,
+		},
+		{
+			clientImpl:           "unknown",
+			clientFeatureVersion: "0.0.0",
+			expectErr:            true,
+		},
+		{
+			clientImpl:           GoSDK,
+			clientFeatureVersion: "malformed-feature-version",
+			expectErr:            true,
+		},
+		{
+			clientImpl:           GoSDK,
+			clientFeatureVersion: GoWorkerStickyQueryVersion,
+			expectErr:            false,
+		},
+		{
+			clientImpl:           JavaSDK,
+			clientFeatureVersion: JavaWorkerStickyQueryVersion,
+			expectErr:            false,
+		},
+		{
+			clientImpl:           GoSDK,
+			clientFeatureVersion: "0.9.0",
+			expectErr:            true,
+		},
+		{
+			clientImpl:           JavaSDK,
+			clientFeatureVersion: "0.9.0",
+			expectErr:            true,
+		},
+		{
+			clientImpl:           GoSDK,
+			clientFeatureVersion: "2.0.0",
+			expectErr:            false,
+		},
+		{
+			clientImpl:           JavaSDK,
+			clientFeatureVersion: "2.0.0",
+			expectErr:            false,
+		},
+	}
+
+	for _, tc := range testCases {
+		vc := NewVersionChecker()
+		if tc.expectErr {
+			err := vc.SupportsStickyQuery(tc.clientImpl, tc.clientFeatureVersion)
+			s.Error(err)
+			s.IsType(&shared.ClientVersionNotSupportedError{}, err)
+		} else {
+			s.NoError(vc.SupportsStickyQuery(tc.clientImpl, tc.clientFeatureVersion))
+		}
+	}
+}
+
 func (s *VersionCheckerSuite) TestSupportsConsistentQuery() {
 	testCases := []struct {
 		clientImpl           string

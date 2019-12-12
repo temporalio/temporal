@@ -68,6 +68,7 @@ var keys = map[Key]string{
 	DisallowQuery:                       "system.disallowQuery",
 	EnableBatcher:                       "worker.enableBatcher",
 	EnableParentClosePolicyWorker:       "system.enableParentClosePolicyWorker",
+	EnableStickyQuery:                   "system.enableStickyQuery",
 
 	// size limit
 	BlobSizeLimitError:     "limit.blobSize.error",
@@ -590,6 +591,8 @@ const (
 	EnableBatcher
 	// EnableParentClosePolicyWorker decides whether or not enable system workers for processing parent close policy task
 	EnableParentClosePolicyWorker
+	// EnableStickyQuery indicates if sticky query should be enabled per domain
+	EnableStickyQuery
 
 	//ReplicationTaskFetcherParallelism determines how many go routines we spin up for fetching tasks
 	ReplicationTaskFetcherParallelism
