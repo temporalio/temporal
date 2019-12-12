@@ -1734,7 +1734,6 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 			tag.WorkflowID(getRequest.Execution.GetWorkflowId()),
 			tag.WorkflowRunID(getRequest.Execution.GetRunId()),
 			tag.WorkflowDomainID(domainID), tag.WorkflowSize(int64(getRequest.GetMaximumPageSize())))
-
 		getRequest.MaximumPageSize = common.Int32Ptr(common.GetHistoryMaxPageSize)
 	}
 
@@ -3008,6 +3007,7 @@ func (wh *WorkflowHandler) getHistory(
 	historyEvents := []*gen.HistoryEvent{}
 	var size int
 
+	isFirstPage := len(nextPageToken) == 0
 	shardID := common.WorkflowIDToHistoryShard(*execution.WorkflowId, wh.config.NumHistoryShards)
 	var err error
 	historyEvents, size, nextPageToken, err = persistence.ReadFullPageV2Events(wh.GetHistoryManager(), &persistence.ReadHistoryBranchRequest{
@@ -3024,7 +3024,32 @@ func (wh *WorkflowHandler) getHistory(
 
 	scope.RecordTimer(metrics.HistorySize, time.Duration(size))
 
+	isLastPage := len(nextPageToken) == 0
+	if err := verifyHistoryIsComplete(
+		historyEvents,
+		firstEventID,
+		nextEventID-1,
+		isFirstPage,
+		isLastPage,
+		int(pageSize)); err != nil {
+		scope.IncCounter(metrics.CadenceErrIncompleteHistoryCounter)
+		wh.GetLogger().Error("getHistory: incomplete history",
+			tag.WorkflowDomainID(domainID),
+			tag.WorkflowID(execution.GetWorkflowId()),
+			tag.WorkflowRunID(execution.GetRunId()),
+			tag.Error(err))
+		return nil, nil, err
+	}
+
 	if len(nextPageToken) == 0 && transientDecision != nil {
+		if err := wh.validateTransientDecisionEvents(nextEventID, transientDecision); err != nil {
+			scope.IncCounter(metrics.CadenceErrIncompleteHistoryCounter)
+			wh.GetLogger().Error("getHistory error",
+				tag.WorkflowDomainID(domainID),
+				tag.WorkflowID(execution.GetWorkflowId()),
+				tag.WorkflowRunID(execution.GetRunId()),
+				tag.Error(err))
+		}
 		// Append the transient decision events once we are done enumerating everything from the events table
 		historyEvents = append(historyEvents, transientDecision.ScheduledEvent, transientDecision.StartedEvent)
 	}
@@ -3032,6 +3057,25 @@ func (wh *WorkflowHandler) getHistory(
 	executionHistory := &gen.History{}
 	executionHistory.Events = historyEvents
 	return executionHistory, nextPageToken, nil
+}
+
+func (wh *WorkflowHandler) validateTransientDecisionEvents(
+	expectedNextEventID int64,
+	decision *gen.TransientDecisionInfo,
+) error {
+
+	if decision.ScheduledEvent.GetEventId() == expectedNextEventID &&
+		decision.StartedEvent.GetEventId() == expectedNextEventID+1 {
+		return nil
+	}
+
+	return fmt.Errorf(
+		"invalid transient decision: "+
+			"expectedScheduledEventID=%v expectedStartedEventID=%v but have scheduledEventID=%v startedEventID=%v",
+		expectedNextEventID,
+		expectedNextEventID+1,
+		decision.ScheduledEvent.GetEventId(),
+		decision.StartedEvent.GetEventId())
 }
 
 func (wh *WorkflowHandler) getLoggerForTask(taskToken []byte) log.Logger {
@@ -3223,25 +3267,6 @@ func (wh *WorkflowHandler) createPollForDecisionTaskResponse(
 			return nil, err
 		}
 
-		// we expect history to contain all events up to the current DecisionStartedEvent
-		lastEventID := matchingResp.GetStartedEventId()
-		if matchingResp.Query != nil {
-			// for query tasks, startedEventID is irrelevant, we expect history to
-			// contain all events upto nextEventID-1
-			lastEventID = nextEventID - 1
-		}
-
-		if err := verifyHistoryIsComplete(history, firstEventID, lastEventID); err != nil {
-			scope.IncCounter(metrics.CadenceErrIncompleteHistoryCounter)
-			wh.GetLogger().Error("PollForDecisionTask: incomplete history",
-				tag.WorkflowDomainID(domainID),
-				tag.WorkflowDomainName(domain.GetInfo().Name),
-				tag.WorkflowID(matchingResp.WorkflowExecution.GetWorkflowId()),
-				tag.WorkflowRunID(matchingResp.WorkflowExecution.GetRunId()),
-				tag.Error(err))
-			return nil, err
-		}
-
 		if len(persistenceToken) != 0 {
 			continuation, err = serializeHistoryToken(&getHistoryContinuationToken{
 				RunID:             matchingResp.WorkflowExecution.GetRunId(),
@@ -3278,35 +3303,67 @@ func (wh *WorkflowHandler) createPollForDecisionTaskResponse(
 }
 
 func verifyHistoryIsComplete(
-	history *gen.History,
+	events []*gen.HistoryEvent,
 	expectedFirstEventID int64,
 	expectedLastEventID int64,
+	isFirstPage bool,
+	isLastPage bool,
+	pageSize int,
 ) error {
 
-	firstEventID := int64(-1)
-	lastEventID := int64(-1)
-	events := history.GetEvents()
 	nEvents := len(events)
-	if nEvents > 0 {
-		firstEventID = events[0].GetEventId()
-		lastEventID = events[nEvents-1].GetEventId()
+	if nEvents == 0 {
+		if isLastPage {
+			// we seem to be returning a non-nil pageToken on the lastPage which
+			// in turn cases the client to call getHistory again - only to find
+			// there are no more events to consume - bail out if this is the case here
+			return nil
+		}
+		return fmt.Errorf("invalid history: contains zero events")
+	}
+
+	firstEventID := events[0].GetEventId()
+	lastEventID := events[nEvents-1].GetEventId()
+
+	if !isFirstPage { // atleast one page of history has been read previously
+		if firstEventID <= expectedFirstEventID {
+			// not first page and no events have been read in the previous pages - not possible
+			return &gen.InternalServiceError{
+				Message: fmt.Sprintf(
+					"invalid history: expected first eventID to be > %v but got %v", expectedFirstEventID, firstEventID),
+			}
+		}
+		expectedFirstEventID = firstEventID
+	}
+
+	if !isLastPage {
+		// estimate lastEventID based on pageSize. This is a lower bound
+		// since the persistence layer counts "batch of events" as a single page
+		expectedLastEventID = expectedFirstEventID + int64(pageSize) - 1
 	}
 
 	nExpectedEvents := expectedLastEventID - expectedFirstEventID + 1
 
 	if firstEventID == expectedFirstEventID &&
-		lastEventID == expectedLastEventID &&
-		int64(nEvents) == nExpectedEvents {
+		((isLastPage && lastEventID == expectedLastEventID && int64(nEvents) == nExpectedEvents) ||
+			(!isLastPage && lastEventID >= expectedLastEventID && int64(nEvents) >= nExpectedEvents)) {
 		return nil
 	}
 
-	return fmt.Errorf(
-		"incomplete history: expected events [%v-%v] but got events [%v-%v] of length %v",
-		expectedFirstEventID,
-		expectedLastEventID,
-		firstEventID,
-		lastEventID,
-		nEvents)
+	return &gen.InternalServiceError{
+		Message: fmt.Sprintf(
+			"incomplete history: "+
+				"expected events [%v-%v] but got events [%v-%v] of length %v:"+
+				"isFirstPage=%v,isLastPage=%v,pageSize=%v",
+			expectedFirstEventID,
+			expectedLastEventID,
+			firstEventID,
+			lastEventID,
+			nEvents,
+			isFirstPage,
+			isLastPage,
+			pageSize),
+	}
 }
 
 func deserializeHistoryToken(bytes []byte) (*getHistoryContinuationToken, error) {
