@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2019 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -21,35 +21,15 @@
 package main
 
 import (
-	"testing"
+    "os"
 
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
+    "github.com/uber/cadence/cmd/server/cadence"
+    _ "github.com/uber/cadence/common/persistence/sql/sqlplugin/mysql" // needed to load mysql plugin
+    _ "github.com/uber/cadence/common/persistence/sql/sqlplugin/postgres" // needed to load postgres plugin
 )
 
-type CadenceSuite struct {
-	*require.Assertions
-	suite.Suite
-}
-
-func TestCadenceSuite(t *testing.T) {
-	suite.Run(t, new(CadenceSuite))
-}
-
-func (s *CadenceSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
-
-func (s *CadenceSuite) TestIsValidService() {
-	s.True(isValidService("history"))
-	s.True(isValidService("matching"))
-	s.True(isValidService("frontend"))
-	s.False(isValidService("cadence-history"))
-	s.False(isValidService("cadence-matching"))
-	s.False(isValidService("cadence-frontend"))
-	s.False(isValidService("foobar"))
-}
-
-func (s *CadenceSuite) TestPath() {
-	s.Equal("foo/bar", constructPath("foo", "bar"))
+// main entry point for the cadence server
+func main() {
+    app := cadence.BuildCLI()
+    app.Run(os.Args)
 }

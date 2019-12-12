@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package main
+package cadence
 
 import (
 	"log"
@@ -30,8 +30,6 @@ import (
 	"github.com/urfave/cli"
 
 	"github.com/uber/cadence/common"
-	_ "github.com/uber/cadence/common/persistence/sql/sqlplugin/mysql"    // needed to load mysql plugin
-	_ "github.com/uber/cadence/common/persistence/sql/sqlplugin/postgres" // needed to load postgres plugin
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/tools/cassandra"
 	"github.com/uber/cadence/tools/sql"
@@ -39,12 +37,6 @@ import (
 
 // validServices is the list of all valid cadence services
 var validServices = []string{frontendService, historyService, matchingService, workerService}
-
-// main entry point for the cadence server
-func main() {
-	app := buildCLI()
-	app.Run(os.Args)
-}
 
 // startHandler is the handler for the cli start command
 func startHandler(c *cli.Context) {
@@ -157,7 +149,8 @@ func constructPath(dir string, file string) string {
 	return dir + "/" + file
 }
 
-func buildCLI() *cli.App {
+// main entry point for the cadence server
+func BuildCLI() *cli.App {
 
 	app := cli.NewApp()
 	app.Name = "cadence"

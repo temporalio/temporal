@@ -131,7 +131,7 @@ cadence: $(TOOLS_SRC)
 
 cadence-server: $(ALL_SRC)
 	@echo "compiling cadence-server with OS: $(GOOS), ARCH: $(GOARCH)"
-	go build -ldflags '$(GO_BUILD_LDFLAGS)' -i -o cadence-server cmd/server/cadence.go cmd/server/server.go
+	go build -ldflags '$(GO_BUILD_LDFLAGS)' -i -o cadence-server cmd/server/main.go
 
 go-generate:
 	GO111MODULE=off go get -u github.com/myitcv/gobin
