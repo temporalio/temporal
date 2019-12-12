@@ -2204,7 +2204,14 @@ func (e *mutableStateBuilder) ReplicateActivityTaskStartedEvent(
 
 	attributes := event.ActivityTaskStartedEventAttributes
 	scheduleID := attributes.GetScheduledEventId()
-	ai, _ := e.GetActivityInfo(scheduleID)
+	ai, ok := e.GetActivityInfo(scheduleID)
+	if !ok {
+		e.logError(
+			fmt.Sprintf("unable to find activity event id: %v in mutable state", scheduleID),
+			tag.ErrorTypeInvalidMutableStateAction,
+		)
+		return ErrMissingActivityInfo
+	}
 
 	ai.Version = event.GetVersion()
 	ai.StartedID = event.GetEventId()
