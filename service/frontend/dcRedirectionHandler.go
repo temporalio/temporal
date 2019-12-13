@@ -29,7 +29,6 @@ import (
 	"github.com/uber/cadence/.gen/go/health/metaserver"
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/metrics"
@@ -40,8 +39,6 @@ import (
 var _ workflowserviceserver.Interface = (*DCRedirectionHandlerImpl)(nil)
 
 type (
-	clientBeanProvider func() client.Bean
-
 	// DCRedirectionHandlerImpl is simple wrapper over frontend service, doing redirection based on policy
 	DCRedirectionHandlerImpl struct {
 		resource.Resource
@@ -58,7 +55,10 @@ type (
 )
 
 // NewDCRedirectionHandler creates a thrift handler for the cadence service, frontend
-func NewDCRedirectionHandler(wfHandler *WorkflowHandler, policy config.DCRedirectionPolicy) *DCRedirectionHandlerImpl {
+func NewDCRedirectionHandler(
+	wfHandler *WorkflowHandler,
+	policy config.DCRedirectionPolicy,
+) *DCRedirectionHandlerImpl {
 	dcRedirectionPolicy := RedirectionPolicyGenerator(
 		wfHandler.GetClusterMetadata(),
 		wfHandler.config,

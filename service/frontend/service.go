@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2019 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -129,12 +129,12 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int, enableReadFro
 type Service struct {
 	resource.Resource
 
-	status               int32
-	dcRedirectionHandler *DCRedirectionHandlerImpl
-	adminHandler         *AdminHandler
-	stopC                chan struct{}
-	config               *Config
-	params               *service.BootstrapParams
+	status       int32
+	handler      *AccessControlledWorkflowHandler
+	adminHandler *AdminHandler
+	stopC        chan struct{}
+	config       *Config
+	params       *service.BootstrapParams
 }
 
 // NewService builds a new cadence-frontend service
@@ -227,15 +227,17 @@ func (s *Service) Start() {
 	}
 
 	wfHandler := NewWorkflowHandler(s, s.config, replicationMessageSink)
-	s.dcRedirectionHandler = NewDCRedirectionHandler(wfHandler, s.params.DCRedirectionPolicy)
-	s.dcRedirectionHandler.RegisterHandler()
+	dcRedirectionHandler := NewDCRedirectionHandler(wfHandler, s.params.DCRedirectionPolicy)
+
+	s.handler = NewAccessControlledHandlerImpl(dcRedirectionHandler, s.params.Authorizer)
+	s.handler.RegisterHandler()
 
 	s.adminHandler = NewAdminHandler(s, s.params, s.config)
 	s.adminHandler.RegisterHandler()
 
 	// must start resource first
 	s.Resource.Start()
-	s.dcRedirectionHandler.Start()
+	s.handler.Start()
 	s.adminHandler.Start()
 
 	// base (service is not started in frontend or admin handler) in case of race condition in yarpc registration function
@@ -253,7 +255,7 @@ func (s *Service) Stop() {
 
 	close(s.stopC)
 
-	s.dcRedirectionHandler.Stop()
+	s.handler.Stop()
 	s.adminHandler.Stop()
 	s.Resource.Stop()
 

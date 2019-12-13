@@ -26,6 +26,8 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/uber/cadence/common/authorization"
+
 	"github.com/pborman/uuid"
 	"github.com/uber-go/tally"
 
@@ -407,6 +409,7 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 	params.ArchiverProvider = c.archiverProvider
 	params.ESConfig = c.esConfig
 	params.ESClient = c.esClient
+	params.Authorizer = authorization.NewNopAuthorizer()
 
 	var err error
 	params.PersistenceConfig, err = copyPersistenceConfig(c.persistenceConfig)

@@ -24,6 +24,8 @@ import (
 	"log"
 	"time"
 
+	"github.com/uber/cadence/common/authorization"
+
 	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 	"go.uber.org/zap"
 
@@ -203,6 +205,8 @@ func (s *server) startService() common.Daemon {
 	params.ArchiverProvider = provider.NewArchiverProvider(s.cfg.Archival.History.Provider, s.cfg.Archival.Visibility.Provider)
 
 	params.PersistenceConfig.TransactionSizeLimit = dc.GetIntProperty(dynamicconfig.TransactionSizeLimit, common.DefaultTransactionSizeLimit)
+
+	params.Authorizer = authorization.NewNopAuthorizer()
 
 	params.Logger.Info("Starting service " + s.name)
 

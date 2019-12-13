@@ -27,8 +27,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/uber/cadence/common/service/dynamicconfig"
-
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -42,6 +40,7 @@ import (
 	mmocks "github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/resource"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
 type (
