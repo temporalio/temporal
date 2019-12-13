@@ -131,6 +131,16 @@ func (s *VersionCheckerSuite) TestSupportsStickyQuery() {
 			expectErr:  true,
 		},
 		{
+			clientImpl:           "",
+			clientFeatureVersion: "0.9.0",
+			expectErr:            true,
+		},
+		{
+			clientImpl:           "",
+			clientFeatureVersion: "1.0.0",
+			expectErr:            false,
+		},
+		{
 			clientImpl: GoSDK,
 			expectErr:  true,
 		},
@@ -197,6 +207,11 @@ func (s *VersionCheckerSuite) TestSupportsConsistentQuery() {
 		{
 			clientImpl: "",
 			expectErr:  true,
+		},
+		{
+			clientImpl:           "",
+			clientFeatureVersion: GoWorkerConsistentQueryVersion,
+			expectErr:            true,
 		},
 		{
 			clientImpl: GoSDK,
