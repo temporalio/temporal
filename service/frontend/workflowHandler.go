@@ -3116,7 +3116,7 @@ func (wh *WorkflowHandler) getDefaultScope(scope int) metrics.Scope {
 	return wh.GetMetricsClient().Scope(scope).Tagged(metrics.DomainUnknownTag())
 }
 
-func frontendInternalServiceError(fmtStr string, args... interface{}) error{
+func frontendInternalServiceError(fmtStr string, args ...interface{}) error {
 	// NOTE: For internal error, we can't return thrift error from cadence-frontend.
 	// Because in uber internal metrics, thrift errors are counted as user errors.
 	return fmt.Errorf(fmtStr, args...)

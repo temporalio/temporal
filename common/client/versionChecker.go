@@ -40,11 +40,11 @@ const (
 	CLI = "cli"
 
 	// SupportedGoSDKVersion indicates the highest go sdk version server will accept requests from
-	SupportedGoSDKVersion = "1.4.0"
+	SupportedGoSDKVersion = "1.5.0"
 	// SupportedJavaSDKVersion indicates the highest java sdk version server will accept requests from
-	SupportedJavaSDKVersion = "1.4.0"
+	SupportedJavaSDKVersion = "1.5.0"
 	// SupportedCLIVersion indicates the highest cli version server will accept requests from
-	SupportedCLIVersion = "1.4.0"
+	SupportedCLIVersion = "1.5.0"
 
 	// GoWorkerStickyQueryVersion indicates the minimum client version of go worker which supports StickyQuery
 	GoWorkerStickyQueryVersion = "1.0.0"
