@@ -105,7 +105,7 @@ persistence:
   datastores:
     datastore1:
       sql:
-        driverName: "mysql"            -- name of the go sql driver, mysql is the only supported driver today
+        pluginName: "mysql"            -- name of the go sql driver, mysql is the only supported driver today
         databaseName: "cadence"        -- name of the database to connect to
         connectAddr: "127.0.0.1:3306"  -- connection address, could be ip address or domain socket
         connectProtocol: "tcp"         -- connection protocol, tcp or anything that SQL Data Source Name accepts
