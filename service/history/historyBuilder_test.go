@@ -33,9 +33,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/resource"
 )
 
 type (
@@ -44,7 +42,7 @@ type (
 		*require.Assertions
 
 		controller      *gomock.Controller
-		mockResource    *resource.Test
+		mockShard       *shardContextTest
 		mockEventsCache *MockeventsCache
 		mockDomainCache *cache.MockDomainCache
 
@@ -52,7 +50,6 @@ type (
 		domainEntry *cache.DomainCacheEntry
 		msBuilder   mutableState
 		builder     *historyBuilder
-		mockShard   *shardContextImpl
 		logger      log.Logger
 	}
 )
@@ -66,27 +63,26 @@ func (s *historyBuilderSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockResource = resource.NewTest(s.controller, metrics.History)
-	s.mockEventsCache = NewMockeventsCache(s.controller)
+	s.mockShard = newTestShardContext(
+		s.controller,
+		&persistence.ShardInfo{
+			ShardID:          0,
+			RangeID:          1,
+			TransferAckLevel: 0,
+		},
+		NewDynamicConfigForTest(),
+	)
+
+	s.mockDomainCache = s.mockShard.resource.DomainCache
+	s.mockEventsCache = s.mockShard.mockEventsCache
+	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(s.domainEntry, nil).AnyTimes()
 	s.mockEventsCache.EXPECT().putEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
-	s.mockDomainCache = s.mockResource.DomainCache
-	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(s.domainEntry, nil).AnyTimes()
-
-	s.logger = s.mockResource.Logger
+	s.logger = s.mockShard.GetLogger()
 
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.domainID = testDomainID
 	s.domainEntry = cache.NewLocalDomainCacheEntryForTest(&persistence.DomainInfo{ID: s.domainID}, &persistence.DomainConfig{}, "", nil)
-	s.mockShard = &shardContextImpl{
-		Resource:                  s.mockResource,
-		shardInfo:                 &persistence.ShardInfo{ShardID: 0, RangeID: 1, TransferAckLevel: 0},
-		transferSequenceNumber:    1,
-		maxTransferSequenceNumber: 100000,
-		closeCh:                   make(chan int, 100),
-		config:                    NewDynamicConfigForTest(),
-		logger:                    s.logger,
-	}
 
 	s.msBuilder = newMutableStateBuilder(s.mockShard, s.mockEventsCache,
 		s.logger, testLocalDomainEntry)
@@ -95,7 +91,7 @@ func (s *historyBuilderSuite) SetupTest() {
 
 func (s *historyBuilderSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockResource.Finish(s.T())
+	s.mockShard.Finish(s.T())
 }
 
 func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {

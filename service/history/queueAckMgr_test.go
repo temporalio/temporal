@@ -33,7 +33,6 @@ import (
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/metrics"
 	p "github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/resource"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
@@ -42,10 +41,9 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller   *gomock.Controller
-		mockResource *resource.Test
+		controller *gomock.Controller
+		mockShard  *shardContextTest
 
-		mockShard     *shardContextImpl
 		mockProcessor *MockProcessor
 
 		logger      log.Logger
@@ -56,10 +54,9 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller   *gomock.Controller
-		mockResource *resource.Test
+		controller *gomock.Controller
+		mockShard  *shardContextTest
 
-		mockShard     *shardContextImpl
 		mockProcessor *MockProcessor
 
 		logger              log.Logger
@@ -88,29 +85,26 @@ func (s *queueAckMgrSuite) TearDownSuite() {
 func (s *queueAckMgrSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
+	config := NewDynamicConfigForTest()
+	config.ShardUpdateMinInterval = dynamicconfig.GetDurationPropertyFn(0 * time.Second)
+
 	s.controller = gomock.NewController(s.T())
-	s.mockResource = resource.NewTest(s.controller, metrics.History)
-
-	s.mockProcessor = &MockProcessor{}
-
-	s.logger = s.mockResource.Logger
-	s.mockShard = &shardContextImpl{
-		Resource: s.mockResource,
-		shardInfo: copyShardInfo(&p.ShardInfo{
+	s.mockShard = newTestShardContext(
+		s.controller,
+		&p.ShardInfo{
 			ShardID: 0,
 			RangeID: 1,
 			ClusterTimerAckLevel: map[string]time.Time{
 				cluster.TestCurrentClusterName:     time.Now().Add(-8 * time.Second),
 				cluster.TestAlternativeClusterName: time.Now().Add(-10 * time.Second),
 			},
-		}),
-		transferSequenceNumber:    1,
-		maxTransferSequenceNumber: 100000,
-		closeCh:                   make(chan int, 100),
-		config:                    NewDynamicConfigForTest(),
-		logger:                    s.logger,
-	}
-	s.mockShard.config.ShardUpdateMinInterval = dynamicconfig.GetDurationPropertyFn(0 * time.Second)
+		},
+		config,
+	)
+
+	s.mockProcessor = &MockProcessor{}
+
+	s.logger = s.mockShard.GetLogger()
 
 	s.queueAckMgr = newQueueAckMgr(s.mockShard, &QueueProcessorOptions{
 		MetricScope: metrics.ReplicatorQueueProcessorScope,
@@ -119,7 +113,7 @@ func (s *queueAckMgrSuite) SetupTest() {
 
 func (s *queueAckMgrSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockResource.Finish(s.T())
+	s.mockShard.Finish(s.T())
 	s.mockProcessor.AssertExpectations(s.T())
 }
 
@@ -279,29 +273,26 @@ func (s *queueFailoverAckMgrSuite) TearDownSuite() {
 func (s *queueFailoverAckMgrSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
+	config := NewDynamicConfigForTest()
+	config.ShardUpdateMinInterval = dynamicconfig.GetDurationPropertyFn(0 * time.Second)
+
 	s.controller = gomock.NewController(s.T())
-	s.mockResource = resource.NewTest(s.controller, metrics.History)
-
-	s.mockProcessor = &MockProcessor{}
-
-	s.logger = s.mockResource.Logger
-	s.mockShard = &shardContextImpl{
-		Resource: s.mockResource,
-		shardInfo: copyShardInfo(&p.ShardInfo{
+	s.mockShard = newTestShardContext(
+		s.controller,
+		&p.ShardInfo{
 			ShardID: 0,
 			RangeID: 1,
 			ClusterTimerAckLevel: map[string]time.Time{
 				cluster.TestCurrentClusterName:     time.Now(),
 				cluster.TestAlternativeClusterName: time.Now().Add(-10 * time.Second),
 			},
-		}),
-		transferSequenceNumber:    1,
-		maxTransferSequenceNumber: 100000,
-		closeCh:                   make(chan int, 100),
-		config:                    NewDynamicConfigForTest(),
-		logger:                    s.logger,
-	}
-	s.mockShard.config.ShardUpdateMinInterval = dynamicconfig.GetDurationPropertyFn(0 * time.Second)
+		},
+		config,
+	)
+
+	s.mockProcessor = &MockProcessor{}
+
+	s.logger = s.mockShard.GetLogger()
 
 	s.queueFailoverAckMgr = newQueueFailoverAckMgr(s.mockShard, &QueueProcessorOptions{
 		MetricScope: metrics.ReplicatorQueueProcessorScope,
@@ -310,7 +301,7 @@ func (s *queueFailoverAckMgrSuite) SetupTest() {
 
 func (s *queueFailoverAckMgrSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockResource.Finish(s.T())
+	s.mockShard.Finish(s.T())
 	s.mockProcessor.AssertExpectations(s.T())
 }
 

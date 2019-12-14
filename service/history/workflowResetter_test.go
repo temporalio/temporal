@@ -35,10 +35,8 @@ import (
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
-	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/resource"
 )
 
 type (
@@ -47,11 +45,10 @@ type (
 		*require.Assertions
 
 		controller         *gomock.Controller
-		mockResource       *resource.Test
+		mockShard          *shardContextTest
 		mockTransactionMgr *MocknDCTransactionMgr
 		mockStateRebuilder *MocknDCStateRebuilder
 
-		mockShard        *shardContextImpl
 		mockHistoryV2Mgr *mocks.HistoryV2Manager
 
 		logger       log.Logger
@@ -81,19 +78,19 @@ func (s *workflowResetterSuite) SetupTest() {
 
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.controller = gomock.NewController(s.T())
-	s.mockResource = resource.NewTest(s.controller, metrics.History)
 	s.mockTransactionMgr = NewMocknDCTransactionMgr(s.controller)
 	s.mockStateRebuilder = NewMocknDCStateRebuilder(s.controller)
 
-	s.mockHistoryV2Mgr = s.mockResource.HistoryMgr
-
-	s.mockShard = &shardContextImpl{
-		Resource:                  s.mockResource,
-		shardInfo:                 &persistence.ShardInfo{ShardID: 0, RangeID: 1, TransferAckLevel: 0},
-		config:                    NewDynamicConfigForTest(),
-		maxTransferSequenceNumber: 100000,
-		logger:                    s.logger,
-	}
+	s.mockShard = newTestShardContext(
+		s.controller,
+		&persistence.ShardInfo{
+			ShardID:          0,
+			RangeID:          1,
+			TransferAckLevel: 0,
+		},
+		NewDynamicConfigForTest(),
+	)
+	s.mockHistoryV2Mgr = s.mockShard.resource.HistoryMgr
 
 	s.workflowResetter = newWorkflowResetter(
 		s.mockShard,
@@ -114,7 +111,7 @@ func (s *workflowResetterSuite) SetupTest() {
 
 func (s *workflowResetterSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockResource.Finish(s.T())
+	s.mockShard.Finish(s.T())
 }
 
 func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {

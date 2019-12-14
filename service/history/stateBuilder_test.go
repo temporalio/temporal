@@ -35,9 +35,7 @@ import (
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/resource"
 )
 
 type (
@@ -46,14 +44,13 @@ type (
 		*require.Assertions
 
 		controller          *gomock.Controller
-		mockResource        *resource.Test
+		mockShard           *shardContextTest
 		mockEventsCache     *MockeventsCache
 		mockDomainCache     *cache.MockDomainCache
 		mockTaskGenerator   *MockmutableStateTaskGenerator
 		mockMutableState    *MockmutableState
 		mockClusterMetadata *cluster.MockMetadata
 
-		mockShard               *shardContextImpl
 		mockTaskGeneratorForNew *MockmutableStateTaskGenerator
 
 		logger log.Logger
@@ -80,29 +77,29 @@ func (s *stateBuilderSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockResource = resource.NewTest(s.controller, metrics.History)
-	s.mockEventsCache = NewMockeventsCache(s.controller)
 	s.mockTaskGenerator = NewMockmutableStateTaskGenerator(s.controller)
 	s.mockMutableState = NewMockmutableState(s.controller)
 	s.mockTaskGeneratorForNew = NewMockmutableStateTaskGenerator(s.controller)
-	s.mockEventsCache.EXPECT().putEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
-	s.mockDomainCache = s.mockResource.DomainCache
-	s.mockClusterMetadata = s.mockResource.ClusterMetadata
+	s.mockShard = newTestShardContext(
+		s.controller,
+		&persistence.ShardInfo{
+			ShardID:          0,
+			RangeID:          1,
+			TransferAckLevel: 0,
+		},
+		NewDynamicConfigForTest(),
+	)
+
+	s.mockDomainCache = s.mockShard.resource.DomainCache
+	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
+	s.mockEventsCache = s.mockShard.mockEventsCache
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsGlobalDomainEnabled().Return(true).AnyTimes()
+	s.mockEventsCache.EXPECT().putEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
-	s.logger = s.mockResource.Logger
-	s.mockShard = &shardContextImpl{
-		Resource:                  s.mockResource,
-		shardInfo:                 &persistence.ShardInfo{ShardID: 0, RangeID: 1, TransferAckLevel: 0},
-		transferSequenceNumber:    1,
-		maxTransferSequenceNumber: 100000,
-		closeCh:                   make(chan int, 100),
-		config:                    NewDynamicConfigForTest(),
-		logger:                    s.logger,
-		eventsCache:               s.mockEventsCache,
-	}
+	s.logger = s.mockShard.GetLogger()
+
 	s.mockMutableState.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes()
 	s.stateBuilder = newStateBuilder(
 		s.mockShard,
@@ -121,7 +118,7 @@ func (s *stateBuilderSuite) SetupTest() {
 func (s *stateBuilderSuite) TearDownTest() {
 	s.stateBuilder = nil
 	s.controller.Finish()
-	s.mockResource.Finish(s.T())
+	s.mockShard.Finish(s.T())
 }
 
 func (s *stateBuilderSuite) mockUpdateVersion(events ...*shared.HistoryEvent) {

@@ -43,7 +43,6 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/resource"
 )
 
 type (
@@ -52,7 +51,7 @@ type (
 		*require.Assertions
 
 		controller               *gomock.Controller
-		mockResource             *resource.Test
+		mockShard                *shardContextTest
 		mockTxProcessor          *MocktransferQueueProcessor
 		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MocktimerQueueProcessor
@@ -61,7 +60,6 @@ type (
 		mockMutableState         *MockmutableState
 
 		mockExecutionMgr *mocks.ExecutionManager
-		mockShard        *shardContextImpl
 
 		logger       log.Logger
 		historyCache *historyCache
@@ -87,7 +85,6 @@ func (s *activityReplicatorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockResource = resource.NewTest(s.controller, metrics.History)
 	s.mockMutableState = NewMockmutableState(s.controller)
 	s.mockTxProcessor = NewMocktransferQueueProcessor(s.controller)
 	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.controller)
@@ -96,26 +93,24 @@ func (s *activityReplicatorSuite) SetupTest() {
 	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
 
-	s.mockDomainCache = s.mockResource.DomainCache
-	s.mockExecutionMgr = s.mockResource.ExecutionMgr
-	s.mockClusterMetadata = s.mockResource.ClusterMetadata
+	s.mockShard = newTestShardContext(
+		s.controller,
+		&persistence.ShardInfo{
+			ShardID:          0,
+			RangeID:          1,
+			TransferAckLevel: 0,
+		},
+		NewDynamicConfigForTest(),
+	)
+
+	s.mockDomainCache = s.mockShard.resource.DomainCache
+	s.mockExecutionMgr = s.mockShard.resource.ExecutionMgr
+	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
 	s.mockClusterMetadata.EXPECT().IsGlobalDomainEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 
-	s.logger = s.mockResource.Logger
-	s.mockShard = &shardContextImpl{
-		Resource:                  s.mockResource,
-		shardInfo:                 &persistence.ShardInfo{ShardID: 0, RangeID: 1, TransferAckLevel: 0},
-		shardID:                   0,
-		transferSequenceNumber:    1,
-		executionManager:          s.mockExecutionMgr,
-		maxTransferSequenceNumber: 100000,
-		closeCh:                   make(chan int, 100),
-		config:                    NewDynamicConfigForTest(),
-		logger:                    s.logger,
-		standbyClusterCurrentTime: make(map[string]time.Time),
-	}
+	s.logger = s.mockShard.GetLogger()
 
 	s.historyCache = newHistoryCache(s.mockShard)
 	engine := &historyEngineImpl{
@@ -127,7 +122,7 @@ func (s *activityReplicatorSuite) SetupTest() {
 		logger:               s.logger,
 		tokenSerializer:      common.NewJSONTaskTokenSerializer(),
 		metricsClient:        s.mockShard.GetMetricsClient(),
-		timeSource:           s.mockResource.TimeSource,
+		timeSource:           s.mockShard.GetTimeSource(),
 		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string) int { return 0 }),
 		txProcessor:          s.mockTxProcessor,
 		replicatorProcessor:  s.mockReplicationProcessor,
@@ -144,7 +139,7 @@ func (s *activityReplicatorSuite) SetupTest() {
 
 func (s *activityReplicatorSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockResource.Finish(s.T())
+	s.mockShard.Finish(s.T())
 }
 
 func (s *activityReplicatorSuite) TestSyncActivity_WorkflowNotFound() {

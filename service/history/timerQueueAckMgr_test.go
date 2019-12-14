@@ -32,10 +32,8 @@ import (
 
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/resource"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
@@ -45,12 +43,11 @@ type (
 		*require.Assertions
 
 		controller          *gomock.Controller
-		mockResource        *resource.Test
+		mockShard           *shardContextTest
 		mockClusterMetadata *cluster.MockMetadata
 
 		mockExecutionMgr *mocks.ExecutionManager
 		mockShardMgr     *mocks.ShardManager
-		mockShard        *shardContextImpl
 
 		logger           log.Logger
 		clusterName      string
@@ -62,12 +59,11 @@ type (
 		*require.Assertions
 
 		controller          *gomock.Controller
-		mockResource        *resource.Test
+		mockShard           *shardContextTest
 		mockClusterMetadata *cluster.MockMetadata
 
 		mockExecutionMgr *mocks.ExecutionManager
 		mockShardMgr     *mocks.ShardManager
-		mockShard        *shardContextImpl
 
 		logger                   log.Logger
 		domainID                 string
@@ -98,40 +94,35 @@ func (s *timerQueueAckMgrSuite) TearDownSuite() {
 func (s *timerQueueAckMgrSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
+	config := NewDynamicConfigForTest()
+	config.ShardUpdateMinInterval = dynamicconfig.GetDurationPropertyFn(0 * time.Second)
+
 	s.controller = gomock.NewController(s.T())
-	s.mockResource = resource.NewTest(s.controller, metrics.History)
-
-	s.mockShardMgr = s.mockResource.ShardMgr
-	s.mockExecutionMgr = s.mockResource.ExecutionMgr
-	s.mockClusterMetadata = s.mockResource.ClusterMetadata
-
-	s.logger = s.mockResource.Logger
-	s.mockShard = &shardContextImpl{
-		Resource: s.mockResource,
-		shardInfo: copyShardInfo(&persistence.ShardInfo{
+	s.mockShard = newTestShardContext(
+		s.controller,
+		&persistence.ShardInfo{
 			ShardID: 0,
 			RangeID: 1,
 			ClusterTimerAckLevel: map[string]time.Time{
 				cluster.TestCurrentClusterName:     time.Now().Add(-8 * time.Second),
 				cluster.TestAlternativeClusterName: time.Now().Add(-10 * time.Second),
 			},
-		}),
-		transferSequenceNumber:    1,
-		executionManager:          s.mockExecutionMgr,
-		maxTransferSequenceNumber: 100000,
-		closeCh:                   make(chan int, 100),
-		config:                    NewDynamicConfigForTest(),
-		logger:                    s.logger,
-		timerMaxReadLevelMap:      make(map[string]time.Time),
-	}
-	s.mockShard.config.ShardUpdateMinInterval = dynamicconfig.GetDurationPropertyFn(0 * time.Second)
+		},
+		config,
+	)
+
+	s.mockShardMgr = s.mockShard.resource.ShardMgr
+	s.mockExecutionMgr = s.mockShard.resource.ExecutionMgr
+	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
+
+	s.logger = s.mockShard.GetLogger()
 
 	// this is used by shard context, not relevant to this test, so we do not care how many times "GetCurrentClusterName" is called
 	s.clusterName = cluster.TestCurrentClusterName
 	s.timerQueueAckMgr = newTimerQueueAckMgr(
 		0,
 		s.mockShard,
-		s.mockResource.GetMetricsClient(),
+		s.mockShard.GetMetricsClient(),
 		s.mockShard.GetTimerClusterAckLevel(s.clusterName),
 		func() time.Time {
 			return s.mockShard.GetCurrentTime(s.clusterName)
@@ -146,7 +137,7 @@ func (s *timerQueueAckMgrSuite) SetupTest() {
 
 func (s *timerQueueAckMgrSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockResource.Finish(s.T())
+	s.mockShard.Finish(s.T())
 }
 
 // Test for normal ack manager
@@ -536,40 +527,37 @@ func (s *timerQueueFailoverAckMgrSuite) TearDownSuite() {
 func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
-	s.controller = gomock.NewController(s.T())
-	s.mockResource = resource.NewTest(s.controller, metrics.History)
-	s.mockShardMgr = s.mockResource.ShardMgr
-	s.mockExecutionMgr = s.mockResource.ExecutionMgr
-	s.mockClusterMetadata = s.mockResource.ClusterMetadata
-	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	config := NewDynamicConfigForTest()
+	config.ShardUpdateMinInterval = dynamicconfig.GetDurationPropertyFn(0 * time.Second)
 
-	s.logger = s.mockResource.Logger
-	s.mockShard = &shardContextImpl{
-		Resource: s.mockResource,
-		shardInfo: copyShardInfo(&persistence.ShardInfo{
+	s.controller = gomock.NewController(s.T())
+	s.mockShard = newTestShardContext(
+		s.controller,
+		&persistence.ShardInfo{
 			ShardID: 0,
 			RangeID: 1,
 			ClusterTimerAckLevel: map[string]time.Time{
 				cluster.TestCurrentClusterName:     time.Now(),
 				cluster.TestAlternativeClusterName: time.Now().Add(-10 * time.Second),
 			},
-		}),
-		transferSequenceNumber:    1,
-		executionManager:          s.mockExecutionMgr,
-		maxTransferSequenceNumber: 100000,
-		closeCh:                   make(chan int, 100),
-		config:                    NewDynamicConfigForTest(),
-		logger:                    s.logger,
-		timerMaxReadLevelMap:      make(map[string]time.Time),
-	}
-	s.mockShard.config.ShardUpdateMinInterval = dynamicconfig.GetDurationPropertyFn(0 * time.Second)
+			TimerFailoverLevels: make(map[string]persistence.TimerFailoverLevel),
+		},
+		config,
+	)
+
+	s.mockShardMgr = s.mockShard.resource.ShardMgr
+	s.mockExecutionMgr = s.mockShard.resource.ExecutionMgr
+	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+
+	s.logger = s.mockShard.GetLogger()
 
 	s.domainID = "some random failover domain ID"
 	s.minLevel = time.Now().Add(-10 * time.Minute)
 	s.maxLevel = time.Now().Add(10 * time.Minute)
 	s.timerQueueFailoverAckMgr = newTimerQueueFailoverAckMgr(
 		s.mockShard,
-		s.mockResource.GetMetricsClient(),
+		s.mockShard.GetMetricsClient(),
 		s.minLevel,
 		s.maxLevel,
 		func() time.Time {
@@ -594,7 +582,7 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 
 func (s *timerQueueFailoverAckMgrSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockResource.Finish(s.T())
+	s.mockShard.Finish(s.T())
 }
 
 func (s *timerQueueFailoverAckMgrSuite) TestIsProcessNow() {

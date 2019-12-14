@@ -33,9 +33,7 @@ import (
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/resource"
 )
 
 type (
@@ -43,10 +41,9 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller   *gomock.Controller
-		mockResource *resource.Test
+		controller *gomock.Controller
+		mockShard  *shardContextTest
 
-		mockShard       ShardContext
 		mockProcessor   *MockTimerProcessor
 		mockQueueAckMgr *MockTimerQueueAckMgr
 
@@ -76,30 +73,28 @@ func (s *taskProcessorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockResource = resource.NewTest(s.controller, metrics.History)
+	s.mockShard = newTestShardContext(
+		s.controller,
+		&persistence.ShardInfo{
+			ShardID:          0,
+			RangeID:          1,
+			TransferAckLevel: 0,
+		},
+		NewDynamicConfigForTest(),
+	)
 
 	s.clusterName = cluster.TestAlternativeClusterName
 	s.mockProcessor = &MockTimerProcessor{}
 	s.mockQueueAckMgr = &MockTimerQueueAckMgr{}
 
-	s.logger = s.mockResource.Logger
-	s.mockShard = &shardContextImpl{
-		Resource:                  s.mockResource,
-		shardInfo:                 &persistence.ShardInfo{ShardID: 0, RangeID: 1, TransferAckLevel: 0},
-		transferSequenceNumber:    1,
-		maxTransferSequenceNumber: 100000,
-		closeCh:                   make(chan int, 100),
-		config:                    NewDynamicConfigForTest(),
-		logger:                    s.logger,
-		standbyClusterCurrentTime: make(map[string]time.Time),
-	}
+	s.logger = s.mockShard.GetLogger()
 
 	s.scope = 0
 	s.notificationChan = make(chan struct{})
 	h := &historyEngineImpl{
 		shard:         s.mockShard,
 		logger:        s.logger,
-		metricsClient: s.mockResource.MetricsClient,
+		metricsClient: s.mockShard.GetMetricsClient(),
 	}
 	options := taskProcessorOptions{
 		queueSize:   s.mockShard.GetConfig().TimerTaskBatchSize() * s.mockShard.GetConfig().TimerTaskWorkerCount(),
@@ -110,7 +105,7 @@ func (s *taskProcessorSuite) SetupTest() {
 
 func (s *taskProcessorSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockResource.Finish(s.T())
+	s.mockShard.Finish(s.T())
 	s.mockProcessor.AssertExpectations(s.T())
 	s.mockQueueAckMgr.AssertExpectations(s.T())
 }

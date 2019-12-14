@@ -43,7 +43,6 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	p "github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/resource"
 )
 
 type (
@@ -52,7 +51,7 @@ type (
 		*require.Assertions
 
 		controller               *gomock.Controller
-		mockResource             *resource.Test
+		mockShard                *shardContextTest
 		mockTxProcessor          *MocktransferQueueProcessor
 		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MocktimerQueueProcessor
@@ -85,41 +84,40 @@ func (s *engine3Suite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockResource = resource.NewTest(s.controller, metrics.History)
 	s.mockTxProcessor = NewMocktransferQueueProcessor(s.controller)
 	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.controller)
 	s.mockTimerProcessor = NewMocktimerQueueProcessor(s.controller)
-	s.mockEventsCache = NewMockeventsCache(s.controller)
 	s.mockTxProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
 	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
-	s.mockEventsCache.EXPECT().putEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
-	s.mockExecutionMgr = s.mockResource.ExecutionMgr
-	s.mockHistoryV2Mgr = s.mockResource.HistoryMgr
-	s.mockClusterMetadata = s.mockResource.ClusterMetadata
-	s.mockDomainCache = s.mockResource.DomainCache
+	s.mockShard = newTestShardContext(
+		s.controller,
+		&p.ShardInfo{
+			ShardID:          0,
+			RangeID:          1,
+			TransferAckLevel: 0,
+		},
+		s.config,
+	)
 
-	s.logger = s.mockResource.Logger
-	mockShard := &shardContextImpl{
-		Resource:                  s.mockResource,
-		shardInfo:                 &p.ShardInfo{ShardID: 0, RangeID: 1, TransferAckLevel: 0},
-		transferSequenceNumber:    1,
-		executionManager:          s.mockExecutionMgr,
-		eventsCache:               s.mockEventsCache,
-		maxTransferSequenceNumber: 100000,
-		closeCh:                   make(chan int, 100),
-		config:                    s.config,
-		logger:                    s.logger,
-	}
+	s.mockExecutionMgr = s.mockShard.resource.ExecutionMgr
+	s.mockHistoryV2Mgr = s.mockShard.resource.HistoryMgr
+	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
+	s.mockDomainCache = s.mockShard.resource.DomainCache
+	s.mockEventsCache = s.mockShard.mockEventsCache
+
 	s.mockClusterMetadata.EXPECT().IsGlobalDomainEnabled().Return(false).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(common.EmptyVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockEventsCache.EXPECT().putEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
-	historyCache := newHistoryCache(mockShard)
+	s.logger = s.mockShard.GetLogger()
+
+	historyCache := newHistoryCache(s.mockShard)
 	h := &historyEngineImpl{
-		currentClusterName:   mockShard.GetService().GetClusterMetadata().GetCurrentClusterName(),
-		shard:                mockShard,
+		currentClusterName:   s.mockShard.GetClusterMetadata().GetCurrentClusterName(),
+		shard:                s.mockShard,
 		clusterMetadata:      s.mockClusterMetadata,
 		executionManager:     s.mockExecutionMgr,
 		historyV2Mgr:         s.mockHistoryV2Mgr,
@@ -129,13 +127,13 @@ func (s *engine3Suite) SetupTest() {
 		metricsClient:        metrics.NewClient(tally.NoopScope, metrics.History),
 		tokenSerializer:      common.NewJSONTaskTokenSerializer(),
 		config:               s.config,
-		timeSource:           s.mockResource.TimeSource,
+		timeSource:           s.mockShard.GetTimeSource(),
 		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string) int { return 0 }),
 		txProcessor:          s.mockTxProcessor,
 		replicatorProcessor:  s.mockReplicationProcessor,
 		timerProcessor:       s.mockTimerProcessor,
 	}
-	mockShard.SetEngine(h)
+	s.mockShard.SetEngine(h)
 	h.decisionHandler = newDecisionHandler(h)
 
 	s.historyEngine = h
@@ -143,7 +141,7 @@ func (s *engine3Suite) SetupTest() {
 
 func (s *engine3Suite) TearDownTest() {
 	s.controller.Finish()
-	s.mockResource.Finish(s.T())
+	s.mockShard.Finish(s.T())
 }
 
 func (s *engine3Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {

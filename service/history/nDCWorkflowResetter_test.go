@@ -34,10 +34,8 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/resource"
 )
 
 type (
@@ -46,7 +44,7 @@ type (
 		*require.Assertions
 
 		controller              *gomock.Controller
-		mockResource            *resource.Test
+		mockShard               *shardContextTest
 		mockBaseMutableState    *MockmutableState
 		mockRebuiltMutableState *MockmutableState
 		mockTransactionMgr      *MocknDCTransactionMgr
@@ -54,7 +52,6 @@ type (
 
 		logger           log.Logger
 		mockHistoryV2Mgr *mocks.HistoryV2Manager
-		mockShard        *shardContextImpl
 
 		domainID   string
 		domainName string
@@ -76,24 +73,24 @@ func (s *nDCWorkflowResetterSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockResource = resource.NewTest(s.controller, metrics.History)
 	s.mockBaseMutableState = NewMockmutableState(s.controller)
 	s.mockRebuiltMutableState = NewMockmutableState(s.controller)
 	s.mockTransactionMgr = NewMocknDCTransactionMgr(s.controller)
 	s.mockStateBuilder = NewMocknDCStateRebuilder(s.controller)
 
-	s.mockHistoryV2Mgr = s.mockResource.HistoryMgr
+	s.mockShard = newTestShardContext(
+		s.controller,
+		&persistence.ShardInfo{
+			ShardID:          10,
+			RangeID:          1,
+			TransferAckLevel: 0,
+		},
+		NewDynamicConfigForTest(),
+	)
 
-	s.logger = s.mockResource.Logger
-	s.mockShard = &shardContextImpl{
-		Resource:                  s.mockResource,
-		shardInfo:                 &persistence.ShardInfo{ShardID: 10, RangeID: 1, TransferAckLevel: 0},
-		transferSequenceNumber:    1,
-		maxTransferSequenceNumber: 100000,
-		closeCh:                   make(chan int, 100),
-		config:                    NewDynamicConfigForTest(),
-		logger:                    s.logger,
-	}
+	s.mockHistoryV2Mgr = s.mockShard.resource.HistoryMgr
+
+	s.logger = s.mockShard.GetLogger()
 
 	s.domainID = uuid.New()
 	s.domainName = "some random domain name"
@@ -119,7 +116,7 @@ func (s *nDCWorkflowResetterSuite) SetupTest() {
 
 func (s *nDCWorkflowResetterSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockResource.Finish(s.T())
+	s.mockShard.Finish(s.T())
 }
 
 func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {

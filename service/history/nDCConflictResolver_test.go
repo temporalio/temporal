@@ -31,9 +31,7 @@ import (
 
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/resource"
 )
 
 type (
@@ -42,13 +40,12 @@ type (
 		*require.Assertions
 
 		controller       *gomock.Controller
-		mockResource     *resource.Test
+		mockShard        *shardContextTest
 		mockContext      *MockworkflowExecutionContext
 		mockMutableState *MockmutableState
 		mockStateBuilder *MocknDCStateRebuilder
 
-		mockShard *shardContextImpl
-		logger    log.Logger
+		logger log.Logger
 
 		domainID   string
 		domainName string
@@ -68,21 +65,21 @@ func (s *nDCConflictResolverSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockResource = resource.NewTest(s.controller, metrics.History)
 	s.mockContext = NewMockworkflowExecutionContext(s.controller)
 	s.mockMutableState = NewMockmutableState(s.controller)
 	s.mockStateBuilder = NewMocknDCStateRebuilder(s.controller)
 
-	s.logger = s.mockResource.Logger
-	s.mockShard = &shardContextImpl{
-		Resource:                  s.mockResource,
-		shardInfo:                 &persistence.ShardInfo{ShardID: 10, RangeID: 1, TransferAckLevel: 0},
-		transferSequenceNumber:    1,
-		maxTransferSequenceNumber: 100000,
-		closeCh:                   make(chan int, 100),
-		config:                    NewDynamicConfigForTest(),
-		logger:                    s.logger,
-	}
+	s.mockShard = newTestShardContext(
+		s.controller,
+		&persistence.ShardInfo{
+			ShardID:          10,
+			RangeID:          1,
+			TransferAckLevel: 0,
+		},
+		NewDynamicConfigForTest(),
+	)
+
+	s.logger = s.mockShard.GetLogger()
 
 	s.domainID = uuid.New()
 	s.domainName = "some random domain name"
@@ -97,7 +94,7 @@ func (s *nDCConflictResolverSuite) SetupTest() {
 
 func (s *nDCConflictResolverSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockResource.Finish(s.T())
+	s.mockShard.Finish(s.T())
 }
 
 func (s *nDCConflictResolverSuite) TestRebuild() {

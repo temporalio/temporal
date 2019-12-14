@@ -48,7 +48,6 @@ import (
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	p "github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/resource"
 	dc "github.com/uber/cadence/common/service/dynamicconfig"
 	warchiver "github.com/uber/cadence/service/worker/archiver"
 	"github.com/uber/cadence/service/worker/parentclosepolicy"
@@ -60,7 +59,7 @@ type (
 		*require.Assertions
 
 		controller               *gomock.Controller
-		mockResource             *resource.Test
+		mockShard                *shardContextTest
 		mockTxProcessor          *MocktransferQueueProcessor
 		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MocktimerQueueProcessor
@@ -72,7 +71,6 @@ type (
 		mockVisibilityMgr           *mocks.VisibilityManager
 		mockExecutionMgr            *mocks.ExecutionManager
 		mockHistoryV2Mgr            *mocks.HistoryV2Manager
-		mockShard                   ShardContext
 		mockQueueAckMgr             *MockQueueAckMgr
 		mockArchivalClient          *warchiver.ClientMock
 		mockArchivalMetadata        *archiver.MockArchivalMetadata
@@ -112,35 +110,6 @@ func (s *transferQueueActiveProcessorSuite) TearDownSuite() {
 func (s *transferQueueActiveProcessorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
-	s.controller = gomock.NewController(s.T())
-	s.mockResource = resource.NewTest(s.controller, metrics.History)
-	s.mockTxProcessor = NewMocktransferQueueProcessor(s.controller)
-	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.controller)
-	s.mockTimerProcessor = NewMocktimerQueueProcessor(s.controller)
-	s.mockTxProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
-	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
-	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
-
-	s.mockMatchingClient = s.mockResource.MatchingClient
-	s.mockHistoryClient = s.mockResource.HistoryClient
-	s.mockExecutionMgr = s.mockResource.ExecutionMgr
-	s.mockHistoryV2Mgr = s.mockResource.HistoryMgr
-	s.mockVisibilityMgr = s.mockResource.VisibilityMgr
-	s.mockClusterMetadata = s.mockResource.ClusterMetadata
-	s.mockArchivalClient = &warchiver.ClientMock{}
-	s.mockArchivalMetadata = s.mockResource.ArchivalMetadata
-	s.mockArchiverProvider = s.mockResource.ArchiverProvider
-	s.mockDomainCache = s.mockResource.DomainCache
-	s.mockDomainCache.EXPECT().GetDomainByID(testDomainID).Return(testGlobalDomainEntry, nil).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomain(testDomainName).Return(testGlobalDomainEntry, nil).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomainByID(testTargetDomainID).Return(testGlobalTargetDomainEntry, nil).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomain(testTargetDomainName).Return(testGlobalTargetDomainEntry, nil).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomainByID(testParentDomainID).Return(testGlobalParentDomainEntry, nil).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomain(testParentDomainName).Return(testGlobalParentDomainEntry, nil).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomainByID(testChildDomainID).Return(testGlobalChildDomainEntry, nil).AnyTimes()
-	s.mockDomainCache.EXPECT().GetDomain(testChildDomainName).Return(testGlobalChildDomainEntry, nil).AnyTimes()
-
-	config := NewDynamicConfigForTest()
 	s.domainID = testDomainID
 	s.domainName = testDomainName
 	s.domainEntry = testGlobalDomainEntry
@@ -153,26 +122,51 @@ func (s *transferQueueActiveProcessorSuite) SetupTest() {
 	s.version = s.domainEntry.GetFailoverVersion()
 	s.now = time.Now()
 	s.timeSource = clock.NewEventTimeSource().Update(s.now)
-	s.mockResource.TimeSource = s.timeSource
 
-	s.logger = s.mockResource.Logger
-	shardContext := &shardContextImpl{
-		Resource:                  s.mockResource,
-		shardInfo:                 &persistence.ShardInfo{ShardID: 0, RangeID: 1, TransferAckLevel: 0},
-		transferSequenceNumber:    1,
-		executionManager:          s.mockExecutionMgr,
-		maxTransferSequenceNumber: 100000,
-		closeCh:                   make(chan int, 100),
-		config:                    config,
-		logger:                    s.logger,
-		timerMaxReadLevelMap:      make(map[string]time.Time),
-	}
-	shardContext.eventsCache = newEventsCache(shardContext)
-	s.mockShard = shardContext
+	s.controller = gomock.NewController(s.T())
+	s.mockTxProcessor = NewMocktransferQueueProcessor(s.controller)
+	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.controller)
+	s.mockTimerProcessor = NewMocktimerQueueProcessor(s.controller)
+	s.mockTxProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
+	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
+
+	s.mockShard = newTestShardContext(
+		s.controller,
+		&persistence.ShardInfo{
+			ShardID:          0,
+			RangeID:          1,
+			TransferAckLevel: 0,
+		},
+		NewDynamicConfigForTest(),
+	)
+	s.mockShard.eventsCache = newEventsCache(s.mockShard)
+	s.mockShard.resource.TimeSource = s.timeSource
+
+	s.mockArchivalClient = &warchiver.ClientMock{}
+	s.mockMatchingClient = s.mockShard.resource.MatchingClient
+	s.mockHistoryClient = s.mockShard.resource.HistoryClient
+	s.mockExecutionMgr = s.mockShard.resource.ExecutionMgr
+	s.mockHistoryV2Mgr = s.mockShard.resource.HistoryMgr
+	s.mockVisibilityMgr = s.mockShard.resource.VisibilityMgr
+	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
+	s.mockArchivalMetadata = s.mockShard.resource.ArchivalMetadata
+	s.mockArchiverProvider = s.mockShard.resource.ArchiverProvider
+	s.mockDomainCache = s.mockShard.resource.DomainCache
+	s.mockDomainCache.EXPECT().GetDomainByID(testDomainID).Return(testGlobalDomainEntry, nil).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomain(testDomainName).Return(testGlobalDomainEntry, nil).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomainByID(testTargetDomainID).Return(testGlobalTargetDomainEntry, nil).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomain(testTargetDomainName).Return(testGlobalTargetDomainEntry, nil).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomainByID(testParentDomainID).Return(testGlobalParentDomainEntry, nil).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomain(testParentDomainName).Return(testGlobalParentDomainEntry, nil).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomainByID(testChildDomainID).Return(testGlobalChildDomainEntry, nil).AnyTimes()
+	s.mockDomainCache.EXPECT().GetDomain(testChildDomainName).Return(testGlobalChildDomainEntry, nil).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsGlobalDomainEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.version).Return(s.mockClusterMetadata.GetCurrentClusterName()).AnyTimes()
+
+	s.logger = s.mockShard.GetLogger()
 
 	historyCache := newHistoryCache(s.mockShard)
 	h := &historyEngineImpl{
@@ -192,6 +186,7 @@ func (s *transferQueueActiveProcessorSuite) SetupTest() {
 		archivalClient:       s.mockArchivalClient,
 	}
 	s.mockShard.SetEngine(h)
+
 	s.mockQueueAckMgr = &MockQueueAckMgr{}
 	s.transferQueueActiveProcessor = newTransferQueueActiveProcessor(
 		s.mockShard,
@@ -211,7 +206,7 @@ func (s *transferQueueActiveProcessorSuite) SetupTest() {
 
 func (s *transferQueueActiveProcessorSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockResource.Finish(s.T())
+	s.mockShard.Finish(s.T())
 	s.mockQueueAckMgr.AssertExpectations(s.T())
 	s.mockArchivalClient.AssertExpectations(s.T())
 }

@@ -37,10 +37,8 @@ import (
 	"github.com/uber/cadence/common/collection"
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/resource"
 )
 
 type (
@@ -49,13 +47,12 @@ type (
 		*require.Assertions
 
 		controller          *gomock.Controller
-		mockResource        *resource.Test
+		mockShard           *shardContextTest
 		mockEventsCache     *MockeventsCache
 		mockTaskRefresher   *MockmutableStateTaskRefresher
 		mockDomainCache     *cache.MockDomainCache
 		mockClusterMetadata *cluster.MockMetadata
 
-		mockShard        *shardContextImpl
 		mockHistoryV2Mgr *mocks.HistoryV2Manager
 		logger           log.Logger
 
@@ -77,27 +74,26 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockResource = resource.NewTest(s.controller, metrics.History)
 	s.mockTaskRefresher = NewMockmutableStateTaskRefresher(s.controller)
-	s.mockEventsCache = NewMockeventsCache(s.controller)
+
+	s.mockShard = newTestShardContext(
+		s.controller,
+		&persistence.ShardInfo{
+			ShardID:          10,
+			RangeID:          1,
+			TransferAckLevel: 0,
+		},
+		NewDynamicConfigForTest(),
+	)
+
+	s.mockHistoryV2Mgr = s.mockShard.resource.HistoryMgr
+	s.mockDomainCache = s.mockShard.resource.DomainCache
+	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
+	s.mockEventsCache = s.mockShard.mockEventsCache
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockEventsCache.EXPECT().putEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
-	s.mockHistoryV2Mgr = s.mockResource.HistoryMgr
-	s.mockDomainCache = s.mockResource.DomainCache
-	s.mockClusterMetadata = s.mockResource.ClusterMetadata
-	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-
-	s.logger = s.mockResource.Logger
-	s.mockShard = &shardContextImpl{
-		Resource:                  s.mockResource,
-		shardInfo:                 &persistence.ShardInfo{ShardID: 10, RangeID: 1, TransferAckLevel: 0},
-		transferSequenceNumber:    1,
-		maxTransferSequenceNumber: 100000,
-		closeCh:                   make(chan int, 100),
-		config:                    NewDynamicConfigForTest(),
-		logger:                    s.logger,
-		eventsCache:               s.mockEventsCache,
-	}
+	s.logger = s.mockShard.GetLogger()
 
 	s.workflowID = "some random workflow ID"
 	s.runID = uuid.New()
@@ -109,7 +105,7 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 
 func (s *nDCStateRebuilderSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockResource.Finish(s.T())
+	s.mockShard.Finish(s.T())
 }
 
 func (s *nDCStateRebuilderSuite) TestInitializeBuilders() {

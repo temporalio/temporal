@@ -32,9 +32,7 @@ import (
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/resource"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
@@ -43,11 +41,10 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller   *gomock.Controller
-		mockResource *resource.Test
+		controller *gomock.Controller
+		mockShard  *shardContextTest
 
-		mockShard *shardContextImpl
-		cache     *historyCache
+		cache *historyCache
 	}
 )
 
@@ -67,24 +64,22 @@ func (s *historyCacheSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockResource = resource.NewTest(s.controller, metrics.History)
-	s.mockResource.ClusterMetadata.EXPECT().IsGlobalDomainEnabled().Return(false).AnyTimes()
+	s.mockShard = newTestShardContext(
+		s.controller,
+		&persistence.ShardInfo{
+			ShardID:          0,
+			RangeID:          1,
+			TransferAckLevel: 0,
+		},
+		NewDynamicConfigForTest(),
+	)
 
-	s.mockShard = &shardContextImpl{
-		Resource:                  s.mockResource,
-		shardInfo:                 &persistence.ShardInfo{ShardID: 0, RangeID: 1, TransferAckLevel: 0},
-		transferSequenceNumber:    1,
-		executionManager:          s.mockResource.ExecutionMgr,
-		maxTransferSequenceNumber: 100000,
-		closeCh:                   make(chan int, 100),
-		config:                    NewDynamicConfigForTest(),
-		logger:                    s.mockResource.Logger,
-	}
+	s.mockShard.resource.ClusterMetadata.EXPECT().IsGlobalDomainEnabled().Return(false).AnyTimes()
 }
 
 func (s *historyCacheSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockResource.Finish(s.T())
+	s.mockShard.Finish(s.T())
 }
 
 func (s *historyCacheSuite) TestHistoryCacheBasic() {

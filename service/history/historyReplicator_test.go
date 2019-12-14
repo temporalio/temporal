@@ -46,7 +46,6 @@ import (
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	p "github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/resource"
 )
 
 const (
@@ -59,7 +58,7 @@ type (
 		*require.Assertions
 
 		controller               *gomock.Controller
-		mockResource             *resource.Test
+		mockShard                *shardContextTest
 		mockWorkflowResetor      *MockworkflowResetor
 		mockTxProcessor          *MocktransferQueueProcessor
 		mockReplicationProcessor *MockReplicatorQueueProcessor
@@ -72,7 +71,6 @@ type (
 		mockExecutionMgr *mocks.ExecutionManager
 		mockHistoryV2Mgr *mocks.HistoryV2Manager
 		mockShardManager *mocks.ShardManager
-		mockShard        *shardContextImpl
 
 		historyReplicator *historyReplicator
 	}
@@ -95,7 +93,6 @@ func (s *historyReplicatorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockResource = resource.NewTest(s.controller, metrics.History)
 	s.mockWorkflowResetor = NewMockworkflowResetor(s.controller)
 	s.mockTxProcessor = NewMocktransferQueueProcessor(s.controller)
 	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.controller)
@@ -105,32 +102,30 @@ func (s *historyReplicatorSuite) SetupTest() {
 	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
 
-	s.mockExecutionMgr = s.mockResource.ExecutionMgr
-	s.mockHistoryV2Mgr = s.mockResource.HistoryMgr
-	s.mockShardManager = s.mockResource.ShardMgr
-	s.mockClusterMetadata = s.mockResource.ClusterMetadata
-	s.mockDomainCache = s.mockResource.DomainCache
+	s.mockShard = newTestShardContext(
+		s.controller,
+		&persistence.ShardInfo{
+			ShardID:          testShardID,
+			RangeID:          1,
+			TransferAckLevel: 0,
+		},
+		NewDynamicConfigForTest(),
+	)
+
+	s.mockExecutionMgr = s.mockShard.resource.ExecutionMgr
+	s.mockHistoryV2Mgr = s.mockShard.resource.HistoryMgr
+	s.mockShardManager = s.mockShard.resource.ShardMgr
+	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
+	s.mockDomainCache = s.mockShard.resource.DomainCache
 	s.mockClusterMetadata.EXPECT().IsGlobalDomainEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 
-	s.logger = s.mockResource.Logger
-	s.mockShard = &shardContextImpl{
-		Resource:                  s.mockResource,
-		shardInfo:                 &persistence.ShardInfo{ShardID: testShardID, RangeID: 1, TransferAckLevel: 0},
-		shardID:                   testShardID,
-		transferSequenceNumber:    1,
-		executionManager:          s.mockExecutionMgr,
-		maxTransferSequenceNumber: 100000,
-		closeCh:                   make(chan int, 100),
-		config:                    NewDynamicConfigForTest(),
-		logger:                    s.logger,
-		standbyClusterCurrentTime: make(map[string]time.Time),
-	}
+	s.logger = s.mockShard.GetLogger()
 
 	historyCache := newHistoryCache(s.mockShard)
 	engine := &historyEngineImpl{
-		currentClusterName:   s.mockShard.GetService().GetClusterMetadata().GetCurrentClusterName(),
+		currentClusterName:   s.mockShard.GetClusterMetadata().GetCurrentClusterName(),
 		shard:                s.mockShard,
 		clusterMetadata:      s.mockClusterMetadata,
 		executionManager:     s.mockExecutionMgr,
@@ -138,7 +133,7 @@ func (s *historyReplicatorSuite) SetupTest() {
 		logger:               s.logger,
 		tokenSerializer:      common.NewJSONTaskTokenSerializer(),
 		metricsClient:        s.mockShard.GetMetricsClient(),
-		timeSource:           s.mockResource.TimeSource,
+		timeSource:           s.mockShard.GetTimeSource(),
 		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string) int { return 0 }),
 		txProcessor:          s.mockTxProcessor,
 		replicatorProcessor:  s.mockReplicationProcessor,
@@ -153,7 +148,7 @@ func (s *historyReplicatorSuite) SetupTest() {
 func (s *historyReplicatorSuite) TearDownTest() {
 	s.historyReplicator = nil
 	s.controller.Finish()
-	s.mockResource.Finish(s.T())
+	s.mockShard.Finish(s.T())
 }
 
 func (s *historyReplicatorSuite) TestApplyStartEvent() {

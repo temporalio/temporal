@@ -34,10 +34,8 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/resource"
 )
 
 type (
@@ -46,13 +44,12 @@ type (
 		*require.Assertions
 
 		controller          *gomock.Controller
-		mockResource        *resource.Test
+		mockShard           *shardContextTest
 		mockCreateMgr       *MocknDCTransactionMgrForNewWorkflow
 		mockUpdateMgr       *MocknDCTransactionMgrForExistingWorkflow
 		mockEventsReapplier *MocknDCEventsReapplier
 		mockClusterMetadata *cluster.MockMetadata
 
-		mockShard        *shardContextImpl
 		mockExecutionMgr *mocks.ExecutionManager
 
 		logger log.Logger
@@ -70,25 +67,24 @@ func (s *nDCTransactionMgrSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockResource = resource.NewTest(s.controller, metrics.History)
 	s.mockCreateMgr = NewMocknDCTransactionMgrForNewWorkflow(s.controller)
 	s.mockUpdateMgr = NewMocknDCTransactionMgrForExistingWorkflow(s.controller)
 	s.mockEventsReapplier = NewMocknDCEventsReapplier(s.controller)
 
-	s.mockClusterMetadata = s.mockResource.ClusterMetadata
-	s.mockExecutionMgr = s.mockResource.ExecutionMgr
+	s.mockShard = newTestShardContext(
+		s.controller,
+		&persistence.ShardInfo{
+			ShardID:          10,
+			RangeID:          1,
+			TransferAckLevel: 0,
+		},
+		NewDynamicConfigForTest(),
+	)
 
-	s.logger = s.mockResource.Logger
-	s.mockShard = &shardContextImpl{
-		Resource:                  s.mockResource,
-		shardInfo:                 &persistence.ShardInfo{ShardID: 10, RangeID: 1, TransferAckLevel: 0},
-		transferSequenceNumber:    1,
-		executionManager:          s.mockExecutionMgr,
-		maxTransferSequenceNumber: 100000,
-		closeCh:                   make(chan int, 100),
-		config:                    NewDynamicConfigForTest(),
-		logger:                    s.logger,
-	}
+	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
+	s.mockExecutionMgr = s.mockShard.resource.ExecutionMgr
+
+	s.logger = s.mockShard.GetLogger()
 
 	s.transactionMgr = newNDCTransactionMgr(s.mockShard, newHistoryCache(s.mockShard), s.mockEventsReapplier, s.logger)
 	s.transactionMgr.createMgr = s.mockCreateMgr
@@ -97,7 +93,7 @@ func (s *nDCTransactionMgrSuite) SetupTest() {
 
 func (s *nDCTransactionMgrSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockResource.Finish(s.T())
+	s.mockShard.Finish(s.T())
 }
 
 func (s *nDCTransactionMgrSuite) TestCreateWorkflow() {
