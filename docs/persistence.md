@@ -1,8 +1,8 @@
 # Overview
 Cadence has a well defined API interface at the persistence layer. Any database that supports multi-row transactions on
 a single shard or partition can be made to work with cadence. This includes cassandra, dynamoDB, auroraDB, MySQL,
-Postgres and may others. There are currently two supported database implementations at the persistence layer - 
-cassandra and MySQL. This doc shows how to run cadence with cassandra and mysql. It also describes the steps involved
+Postgres and may others. There are currently three supported database implementations at the persistence layer - 
+cassandra and MySQL/Postgres. This doc shows how to run cadence with cassandra and MySQL(Postgres is mostly the same). It also describes the steps involved
 in adding support for a new database at the persistence layer.
  
 # Getting started on mac
@@ -53,7 +53,7 @@ don't expose these sub-systems today but this may change in future. Visibility i
 search. This includes APIs such as ListOpenWorkflows and ListClosedWorkflows. Today, it is possible to run a cadence 
 server with cadence-core backed by one database and cadence-visibility backed by another kind of database.To get the full 
 feature set of visibility, the recommendation is to use elastic search as the persistence layer. However, it is also possible 
-to run visibility with limited feature set against cassandra or mysql today.  The top level persistence configuration looks 
+to run visibility with limited feature set against Cassandra or MySQL today.  The top level persistence configuration looks 
 like the following:
  
 
@@ -105,7 +105,7 @@ persistence:
   datastores:
     datastore1:
       sql:
-        pluginName: "mysql"            -- name of the go sql driver, mysql is the only supported driver today
+        pluginName: "mysql"            -- name of the go sql plugin
         databaseName: "cadence"        -- name of the database to connect to
         connectAddr: "127.0.0.1:3306"  -- connection address, could be ip address or domain socket
         connectProtocol: "tcp"         -- connection protocol, tcp or anything that SQL Data Source Name accepts
@@ -120,15 +120,20 @@ persistence:
 ```
 
 # Adding support for new database
-As mentioned before, cadence can only work against a database that supports multi-row single shard transactions. The top level
-persistence API interface can be found [here](https://github.com/uber/cadence/blob/master/common/persistence/dataInterfaces.go).
-Any database that supports this interface can be plugged in with cadence server. For databases that don't support SQL
-interface, implementing this interface is the only way to make it work with cadence. 
 
-## Databases that support SQL interface
-If your database supports SQL interface, there is a simpler low level API interface that can be implemented to make it
-work with cadence. This interface is tied to a specific schema i.e. the way data is laid out across tables and the table
+## For Any Database
+Cadence can only work against a database that supports multi-row single shard transactions. The top level
+persistence API interface can be found [here](https://github.com/uber/cadence/blob/master/common/persistence/dataInterfaces.go).
+Currently this is only implemented with Cassandra. 
+
+## For SQL Database
+As there are many shared concepts and functionalities in SQL database, we abstracted those common code so that is much easier to implement persistence interfaces with any SQL database. It requires your database supports SQL operations like explicit transaction(with pessimistic locking)
+
+This interface is tied to a specific schema i.e. the way data is laid out across tables and the table
 names themselves are fixed. However, you get the flexibility wrt how you store the data within a table (i.e. column names and
 types are not fixed). The API interface can be found [here](https://github.com/uber/cadence/blob/master/common/persistence/sql/plugins/interfaces.go).
 It's basically a CRUD API for every table in the schema. A sample schema definition for mysql that uses this interface
 can be found [here](https://github.com/uber/cadence/blob/master/schema/mysql/v57/cadence/schema.sql)
+
+Any database that supports this interface can be plugged in with cadence server. 
+We have implemented Postgres within the repo, and also here is [**an example**](https://github.com/longquanzheng/cadence-extensions/tree/master/cadence-sqlite) to implement any database externally. 
