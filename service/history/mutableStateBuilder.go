@@ -1289,7 +1289,8 @@ func (e *mutableStateBuilder) DeleteActivity(
 			fmt.Sprintf("unable to find activity event id: %v in mutable state", scheduleEventID),
 			tag.ErrorTypeInvalidMutableStateAction,
 		)
-		return ErrMissingActivityInfo
+		// log data inconsistency instead of returning an error
+		e.logDataInconsistency()
 	}
 
 	_, ok = e.pendingActivityIDToEventID[activityInfo.ActivityID]
@@ -1298,7 +1299,8 @@ func (e *mutableStateBuilder) DeleteActivity(
 			fmt.Sprintf("unable to find activity ID: %v in mutable state", activityInfo.ActivityID),
 			tag.ErrorTypeInvalidMutableStateAction,
 		)
-		return ErrMissingActivityInfo
+		// log data inconsistency instead of returning an error
+		e.logDataInconsistency()
 	}
 
 	delete(e.pendingActivityInfoIDs, scheduleEventID)
@@ -1366,7 +1368,8 @@ func (e *mutableStateBuilder) DeleteUserTimer(
 			fmt.Sprintf("unable to find timer ID: %v in mutable state", timerID),
 			tag.ErrorTypeInvalidMutableStateAction,
 		)
-		return ErrMissingTimerInfo
+		// log data inconsistency instead of returning an error
+		e.logDataInconsistency()
 	}
 
 	_, ok = e.pendingTimerEventIDToID[timerInfo.StartedID]
@@ -1375,7 +1378,8 @@ func (e *mutableStateBuilder) DeleteUserTimer(
 			fmt.Sprintf("unable to find timer event ID: %v in mutable state", timerID),
 			tag.ErrorTypeInvalidMutableStateAction,
 		)
-		return ErrMissingTimerInfo
+		// log data inconsistency instead of returning an error
+		e.logDataInconsistency()
 	}
 
 	delete(e.pendingTimerInfoIDs, timerID)
@@ -4544,9 +4548,22 @@ func (e *mutableStateBuilder) logWarn(msg string, tags ...tag.Tag) {
 	tags = append(tags, tag.WorkflowDomainID(e.executionInfo.DomainID))
 	e.logger.Warn(msg, tags...)
 }
+
 func (e *mutableStateBuilder) logError(msg string, tags ...tag.Tag) {
 	tags = append(tags, tag.WorkflowID(e.executionInfo.WorkflowID))
 	tags = append(tags, tag.WorkflowRunID(e.executionInfo.RunID))
 	tags = append(tags, tag.WorkflowDomainID(e.executionInfo.DomainID))
 	e.logger.Error(msg, tags...)
+}
+
+func (e *mutableStateBuilder) logDataInconsistency() {
+	domainID := e.executionInfo.DomainID
+	workflowID := e.executionInfo.WorkflowID
+	runID := e.executionInfo.RunID
+
+	e.logger.Error("encounter cassandra data inconsistency",
+		tag.WorkflowDomainID(domainID),
+		tag.WorkflowID(workflowID),
+		tag.WorkflowRunID(runID),
+	)
 }
