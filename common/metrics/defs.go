@@ -1498,6 +1498,7 @@ const (
 	ShardClosedCounter
 	ShardItemCreatedCounter
 	ShardItemRemovedCounter
+	ShardItemAcquisitionLatency
 	ShardInfoReplicationPendingTasksTimer
 	ShardInfoTransferActivePendingTasksTimer
 	ShardInfoTransferStandbyPendingTasksTimer
@@ -1823,6 +1824,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ShardClosedCounter:                                {metricName: "shard_closed_count", metricType: Counter},
 		ShardItemCreatedCounter:                           {metricName: "sharditem_created_count", metricType: Counter},
 		ShardItemRemovedCounter:                           {metricName: "sharditem_removed_count", metricType: Counter},
+		ShardItemAcquisitionLatency:                       {metricName: "sharditem_acquisition_latency", metricType: Timer},
 		ShardInfoReplicationPendingTasksTimer:             {metricName: "shardinfo_replication_pending_task", metricType: Timer},
 		ShardInfoTransferActivePendingTasksTimer:          {metricName: "shardinfo_transfer_active_pending_task", metricType: Timer},
 		ShardInfoTransferStandbyPendingTasksTimer:         {metricName: "shardinfo_transfer_standby_pending_task", metricType: Timer},

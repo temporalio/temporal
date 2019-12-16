@@ -391,6 +391,10 @@ func (i *historyShardsItem) getOrCreateEngine(shardClosedCh chan<- int) (Engine,
 		if err != nil {
 			return nil, err
 		}
+		if context.PreviousShardOwnerWasDifferent() {
+			i.GetMetricsClient().RecordTimer(metrics.ShardInfoScope, metrics.ShardItemAcquisitionLatency,
+				context.GetCurrentTime(i.GetClusterMetadata().GetCurrentClusterName()).Sub(context.GetLastUpdatedTime()))
+		}
 		i.engine = i.engineFactory.CreateEngine(context)
 		i.engine.Start()
 		i.logger.Info("", tag.LifeCycleStarted, tag.ComponentShardEngine)
