@@ -1,0 +1,41 @@
+version: '3'
+services:
+  postgres:
+    image: postgres:12
+    environment:
+      POSTGRES_USER: cadence
+      POSTGRES_PASSWORD: cadence
+    ports:
+      - "5432:5432"
+  statsd:
+    image: graphiteapp/graphite-statsd
+    ports:
+      - "8080:80"
+      - "2003:2003"
+      - "8125:8125"
+      - "8126:8126"
+  cadence:
+    image: ubercadence/server:master-auto-setup
+    ports:
+      - "7933:7933"
+      - "7934:7934"
+      - "7935:7935"
+      - "7939:7939"
+    environment:
+      - "DB=postgres"
+      - "DB_PORT=5432"
+      - "POSTGRES_USER=cadence"
+      - "POSTGRES_PWD=cadence"
+      - "POSTGRES_SEEDS=postgres"
+      - "STATSD_ENDPOINT=statsd:8125"
+      - "DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development.yaml"
+    depends_on:
+      - postgres
+  cadence-web:
+    image: ubercadence/web:3.4.1
+    environment:
+      - "CADENCE_TCHANNEL_PEERS=cadence:7933"
+    ports:
+      - "8088:8088"
+    depends_on:
+      - cadence
