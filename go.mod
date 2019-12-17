@@ -22,7 +22,6 @@ require (
 	github.com/go-sql-driver/mysql v1.4.1
 	github.com/gocql/gocql v0.0.0-20171220143535-56a164ee9f31
 	github.com/gogo/googleapis v1.2.0 // indirect
-	github.com/gogo/protobuf v1.3.1 // indirect
 	github.com/gogo/status v1.1.0 // indirect
 	github.com/golang/mock v1.3.1
 	github.com/google/uuid v1.1.1
