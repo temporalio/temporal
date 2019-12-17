@@ -1594,3 +1594,14 @@ struct ReapplyEventsRequest{
   20: optional WorkflowExecution workflowExecution
   30: optional DataBlob events
 }
+
+// SupportedClientVersions contains the support versions for client library
+struct SupportedClientVersions{
+  10: optional string goSdk
+  20: optional string javaSdk
+}
+
+// ClusterInfo contains information about cadence cluster
+struct ClusterInfo{
+  10: optional SupportedClientVersions supportedClientVersions
+}

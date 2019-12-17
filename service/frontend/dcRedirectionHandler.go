@@ -1156,6 +1156,13 @@ func (handler *DCRedirectionHandlerImpl) ReapplyEvents(
 	return handler.frontendHandler.ReapplyEvents(ctx, request)
 }
 
+// GetClusterInfo API call
+func (handler *DCRedirectionHandlerImpl) GetClusterInfo(
+	ctx context.Context,
+) (*shared.ClusterInfo, error) {
+	return handler.frontendHandler.GetClusterInfo(ctx)
+}
+
 func (handler *DCRedirectionHandlerImpl) beforeCall(
 	scope int,
 ) (metrics.Scope, time.Time) {

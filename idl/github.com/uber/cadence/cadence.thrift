@@ -581,4 +581,13 @@ service WorkflowService {
       5: shared.ServiceBusyError serviceBusyError,
       6: shared.EntityNotExistsError entityNotExistError,
     )
+
+  /**
+  * GetClusterInfo returns information about cadence cluster
+  **/
+  shared.ClusterInfo GetClusterInfo()
+    throws (
+      1: shared.InternalServiceError internalServiceError,
+      2: shared.ServiceBusyError serviceBusyError,
+    )
 }

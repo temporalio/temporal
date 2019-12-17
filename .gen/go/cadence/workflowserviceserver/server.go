@@ -62,6 +62,10 @@ type Interface interface {
 		DescribeRequest *shared.DescribeWorkflowExecutionRequest,
 	) (*shared.DescribeWorkflowExecutionResponse, error)
 
+	GetClusterInfo(
+		ctx context.Context,
+	) (*shared.ClusterInfo, error)
+
 	GetDomainReplicationMessages(
 		ctx context.Context,
 		Request *replicator.GetDomainReplicationMessagesRequest,
@@ -295,6 +299,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 					Unary: thrift.UnaryHandler(h.DescribeWorkflowExecution),
 				},
 				Signature:    "DescribeWorkflowExecution(DescribeRequest *shared.DescribeWorkflowExecutionRequest) (*shared.DescribeWorkflowExecutionResponse)",
+				ThriftModule: cadence.ThriftModule,
+			},
+
+			thrift.Method{
+				Name: "GetClusterInfo",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.GetClusterInfo),
+				},
+				Signature:    "GetClusterInfo() (*shared.ClusterInfo)",
 				ThriftModule: cadence.ThriftModule,
 			},
 
@@ -674,7 +689,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 39)
+	procedures := make([]transport.Procedure, 0, 40)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -767,6 +782,25 @@ func (h handler) DescribeWorkflowExecution(ctx context.Context, body wire.Value)
 
 	hadError := err != nil
 	result, err := cadence.WorkflowService_DescribeWorkflowExecution_Helper.WrapResponse(success, err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) GetClusterInfo(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args cadence.WorkflowService_GetClusterInfo_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	success, err := h.impl.GetClusterInfo(ctx)
+
+	hadError := err != nil
+	result, err := cadence.WorkflowService_GetClusterInfo_Helper.WrapResponse(success, err)
 
 	var response thrift.Response
 	if err == nil {

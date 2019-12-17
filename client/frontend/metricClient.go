@@ -742,3 +742,19 @@ func (c *metricClient) ReapplyEvents(
 	}
 	return err
 }
+
+func (c *metricClient) GetClusterInfo(
+	ctx context.Context,
+	opts ...yarpc.CallOption,
+) (*shared.ClusterInfo, error) {
+
+	c.metricsClient.IncCounter(metrics.FrontendClientGetClusterInfoScope, metrics.CadenceClientRequests)
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientGetClusterInfoScope, metrics.CadenceClientLatency)
+	resp, err := c.client.GetClusterInfo(ctx, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.FrontendClientGetClusterInfoScope, metrics.CadenceClientFailures)
+	}
+	return resp, err
+}

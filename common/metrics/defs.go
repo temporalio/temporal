@@ -399,6 +399,8 @@ const (
 	FrontendClientGetDomainReplicationTasksScope
 	// FrontendClientReapplyEventsScope tracks RPC calls to frontend service
 	FrontendClientReapplyEventsScope
+	// FrontendClientGetClusterInfoScope tracks RPC calls to frontend
+	FrontendClientGetClusterInfoScope
 	// AdminClientAddSearchAttributeScope tracks RPC calls to admin service
 	AdminClientAddSearchAttributeScope
 	// AdminClientCloseShardScope tracks RPC calls to admin service
@@ -1088,6 +1090,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendClientGetReplicationTasksScope:              {operation: "FrontendClientGetReplicationTasksScope", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientGetDomainReplicationTasksScope:        {operation: "FrontendClientGetDomainReplicationTasksScope", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientReapplyEventsScope:                    {operation: "FrontendClientReapplyEventsScope", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientGetClusterInfoScope:                   {operation: "FrontendClientGetClusterInfoScope", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
 		AdminClientAddSearchAttributeScope:                  {operation: "AdminClientAddSearchAttribute", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		AdminClientDescribeHistoryHostScope:                 {operation: "AdminClientDescribeHistoryHost", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		AdminClientDescribeWorkflowExecutionScope:           {operation: "AdminClientDescribeWorkflowExecution", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},

@@ -611,3 +611,17 @@ func (c *retryableClient) ReapplyEvents(
 	}
 	return backoff.Retry(op, c.policy, c.isRetryable)
 }
+
+func (c *retryableClient) GetClusterInfo(
+	ctx context.Context,
+	opts ...yarpc.CallOption,
+) (*shared.ClusterInfo, error) {
+	var resp *shared.ClusterInfo
+	op := func() error {
+		var err error
+		resp, err = c.client.GetClusterInfo(ctx, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}

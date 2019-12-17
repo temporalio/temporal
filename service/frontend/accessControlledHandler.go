@@ -414,6 +414,13 @@ func (a *AccessControlledWorkflowHandler) ReapplyEvents(
 	return a.frontendHandler.ReapplyEvents(ctx, request)
 }
 
+// GetClusterInfo API call
+func (a *AccessControlledWorkflowHandler) GetClusterInfo(
+	ctx context.Context,
+) (*shared.ClusterInfo, error) {
+	return a.frontendHandler.GetClusterInfo(ctx)
+}
+
 // RecordActivityTaskHeartbeat API call
 func (a *AccessControlledWorkflowHandler) RecordActivityTaskHeartbeat(
 	ctx context.Context,
