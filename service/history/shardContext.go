@@ -128,7 +128,8 @@ type (
 		timerMaxReadLevelMap      map[string]time.Time // cluster -> timerMaxReadLevel
 
 		// exist only in memory
-		standbyClusterCurrentTime map[string]time.Time
+		remoteClusterCurrentTime map[string]time.Time
+
 		// true if previous owner was different from the acquirer's identity.
 		previousShardOwnerWasDifferent bool
 	}
@@ -391,7 +392,7 @@ func (s *shardContextImpl) UpdateTimerMaxReadLevel(cluster string) time.Time {
 
 	currentTime := s.GetTimeSource().Now()
 	if cluster != "" && cluster != s.GetClusterMetadata().GetCurrentClusterName() {
-		currentTime = s.standbyClusterCurrentTime[cluster]
+		currentTime = s.remoteClusterCurrentTime[cluster]
 	}
 
 	s.timerMaxReadLevelMap[cluster] = currentTime.Add(s.config.TimerProcessorMaxTimeShift())
@@ -970,7 +971,7 @@ func (s *shardContextImpl) emitShardInfoMetricsLogsLocked() {
 			logWarnTimerLevelDiff < timerLag) {
 
 		logger := s.logger.WithTags(
-			tag.ShardTime(s.standbyClusterCurrentTime),
+			tag.ShardTime(s.remoteClusterCurrentTime),
 			tag.ShardReplicationAck(s.shardInfo.ReplicationAckLevel),
 			tag.ShardTimerAcks(s.shardInfo.ClusterTimerAckLevel),
 			tag.ShardTransferAcks(s.shardInfo.ClusterTransferAckLevel))
@@ -1079,9 +1080,9 @@ func (s *shardContextImpl) SetCurrentTime(cluster string, currentTime time.Time)
 	s.Lock()
 	defer s.Unlock()
 	if cluster != s.GetClusterMetadata().GetCurrentClusterName() {
-		prevTime := s.standbyClusterCurrentTime[cluster]
+		prevTime := s.remoteClusterCurrentTime[cluster]
 		if prevTime.Before(currentTime) {
-			s.standbyClusterCurrentTime[cluster] = currentTime
+			s.remoteClusterCurrentTime[cluster] = currentTime
 		}
 	} else {
 		panic("Cannot set current time for current cluster")
@@ -1092,7 +1093,7 @@ func (s *shardContextImpl) GetCurrentTime(cluster string) time.Time {
 	s.RLock()
 	defer s.RUnlock()
 	if cluster != s.GetClusterMetadata().GetCurrentClusterName() {
-		return s.standbyClusterCurrentTime[cluster]
+		return s.remoteClusterCurrentTime[cluster]
 	}
 	return s.GetTimeSource().Now()
 }
@@ -1153,7 +1154,7 @@ func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContex
 	updatedShardInfo.Owner = shardItem.GetHostInfo().Identity()
 
 	// initialize the cluster current time to be the same as ack level
-	standbyClusterCurrentTime := make(map[string]time.Time)
+	remoteClusterCurrentTime := make(map[string]time.Time)
 	timerMaxReadLevelMap := make(map[string]time.Time)
 	for clusterName, info := range shardItem.GetClusterMetadata().GetAllClusterInfo() {
 		if !info.Enabled {
@@ -1162,10 +1163,10 @@ func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContex
 
 		if clusterName != shardItem.GetClusterMetadata().GetCurrentClusterName() {
 			if currentTime, ok := shardInfo.ClusterTimerAckLevel[clusterName]; ok {
-				standbyClusterCurrentTime[clusterName] = currentTime
+				remoteClusterCurrentTime[clusterName] = currentTime
 				timerMaxReadLevelMap[clusterName] = currentTime
 			} else {
-				standbyClusterCurrentTime[clusterName] = shardInfo.TimerAckLevel
+				remoteClusterCurrentTime[clusterName] = shardInfo.TimerAckLevel
 				timerMaxReadLevelMap[clusterName] = shardInfo.TimerAckLevel
 			}
 		} else { // active cluster
@@ -1186,7 +1187,7 @@ func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContex
 		shardInfo:                      updatedShardInfo,
 		closeCh:                        closeCh,
 		config:                         shardItem.config,
-		standbyClusterCurrentTime:      standbyClusterCurrentTime,
+		remoteClusterCurrentTime:       remoteClusterCurrentTime,
 		timerMaxReadLevelMap:           timerMaxReadLevelMap, // use ack to init read level
 		logger:                         shardItem.logger,
 		throttledLogger:                shardItem.throttledLogger,

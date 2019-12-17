@@ -118,6 +118,7 @@ var (
 	errInvalidTaskStartToCloseTimeoutSeconds      = &gen.BadRequestError{Message: "A valid TaskStartToCloseTimeoutSeconds is not set on request."}
 	errClientVersionNotSet                        = &gen.BadRequestError{Message: "Client version is not set on request."}
 	errQueryDisallowedForDomain                   = &gen.BadRequestError{Message: "Domain is not allowed to query, please contact cadence team to re-enable queries."}
+	errClusterNameNotSet                          = &gen.BadRequestError{Message: "Cluster name is not set."}
 
 	// err for archival
 	errHistoryNotFound = &gen.BadRequestError{Message: "Requested workflow history not found, may have passed retention period."}
@@ -3499,6 +3500,9 @@ func (wh *WorkflowHandler) GetReplicationMessages(
 
 	if request == nil {
 		return nil, wh.error(errRequestNotSet, scope)
+	}
+	if !request.IsSetClusterName() {
+		return nil, wh.error(errClusterNameNotSet, scope)
 	}
 
 	resp, err = wh.GetHistoryClient().GetReplicationMessages(ctx, request)

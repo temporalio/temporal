@@ -1079,6 +1079,13 @@ Loop:
 	return result, nil
 }
 
+// RangeCompleteReplicationTask is a utility method to complete a range of replication tasks
+func (s *TestBase) RangeCompleteReplicationTask(inclusiveEndTaskID int64) error {
+	return s.ExecutionManager.RangeCompleteReplicationTask(&p.RangeCompleteReplicationTaskRequest{
+		InclusiveEndTaskID: inclusiveEndTaskID,
+	})
+}
+
 // CompleteTransferTask is a utility method to complete a transfer task
 func (s *TestBase) CompleteTransferTask(taskID int64) error {
 

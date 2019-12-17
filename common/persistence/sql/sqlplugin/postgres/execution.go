@@ -109,7 +109,8 @@ task_id > $2 AND
 task_id <= $3 
 ORDER BY task_id LIMIT $4`
 
-	deleteReplicationTaskQuery = `DELETE FROM replication_tasks WHERE shard_id = $1 AND task_id = $2`
+	deleteReplicationTaskQuery      = `DELETE FROM replication_tasks WHERE shard_id = $1 AND task_id = $2`
+	rangeDeleteReplicationTaskQuery = `DELETE FROM replication_tasks WHERE shard_id = $1 AND task_id <= $2`
 
 	getReplicationTasksDLQQuery = `SELECT task_id, data, data_encoding FROM replication_tasks_dlq WHERE 
 source_cluster_name = $1 AND
@@ -309,9 +310,14 @@ func (pdb *db) SelectFromReplicationTasks(filter *sqlplugin.ReplicationTasksFilt
 	return rows, err
 }
 
-// DeleteFromReplicationTasks deletes one or more rows from replication_tasks table
-func (pdb *db) DeleteFromReplicationTasks(shardID, taskID int) (sql.Result, error) {
-	return pdb.conn.Exec(deleteReplicationTaskQuery, shardID, taskID)
+// DeleteFromReplicationTasks deletes one rows from replication_tasks table
+func (pdb *db) DeleteFromReplicationTasks(filter *sqlplugin.ReplicationTasksFilter) (sql.Result, error) {
+	return pdb.conn.Exec(deleteReplicationTaskQuery, filter.ShardID, filter.TaskID)
+}
+
+// RangeDeleteFromReplicationTasks deletes multi rows from replication_tasks table
+func (pdb *db) RangeDeleteFromReplicationTasks(filter *sqlplugin.ReplicationTasksFilter) (sql.Result, error) {
+	return pdb.conn.Exec(rangeDeleteReplicationTaskQuery, filter.ShardID, filter.InclusiveEndTaskID)
 }
 
 // InsertIntoReplicationTasksDLQ inserts one or more rows into replication_tasks_dlq table

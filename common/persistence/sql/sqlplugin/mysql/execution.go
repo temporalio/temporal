@@ -109,7 +109,8 @@ task_id > ? AND
 task_id <= ? 
 ORDER BY task_id LIMIT ?`
 
-	deleteReplicationTaskQuery = `DELETE FROM replication_tasks WHERE shard_id = ? AND task_id = ?`
+	deleteReplicationTaskQuery      = `DELETE FROM replication_tasks WHERE shard_id = ? AND task_id = ?`
+	rangeDeleteReplicationTaskQuery = `DELETE FROM replication_tasks WHERE shard_id = ? AND task_id <= ?`
 
 	getReplicationTasksDLQQuery = `SELECT task_id, data, data_encoding FROM replication_tasks_dlq WHERE 
 source_cluster_name = ? AND
@@ -310,9 +311,14 @@ func (mdb *db) SelectFromReplicationTasks(filter *sqlplugin.ReplicationTasksFilt
 	return rows, err
 }
 
-// DeleteFromReplicationTasks deletes one or more rows from replication_tasks table
-func (mdb *db) DeleteFromReplicationTasks(shardID, taskID int) (sql.Result, error) {
-	return mdb.conn.Exec(deleteReplicationTaskQuery, shardID, taskID)
+// DeleteFromReplicationTasks deletes one row from replication_tasks table
+func (mdb *db) DeleteFromReplicationTasks(filter *sqlplugin.ReplicationTasksFilter) (sql.Result, error) {
+	return mdb.conn.Exec(deleteReplicationTaskQuery, filter.ShardID, filter.TaskID)
+}
+
+// RangeDeleteFromReplicationTasks deletes multi rows from replication_tasks table
+func (mdb *db) RangeDeleteFromReplicationTasks(filter *sqlplugin.ReplicationTasksFilter) (sql.Result, error) {
+	return mdb.conn.Exec(rangeDeleteReplicationTaskQuery, filter.ShardID, filter.InclusiveEndTaskID)
 }
 
 // InsertIntoReplicationTasksDLQ inserts one or more rows into replication_tasks_dlq table

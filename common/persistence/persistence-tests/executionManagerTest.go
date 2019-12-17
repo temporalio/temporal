@@ -2916,6 +2916,7 @@ func (s *ExecutionManagerSuite) TestContinueAsNew() {
 
 // TestReplicationTransferTaskTasks test
 func (s *ExecutionManagerSuite) TestReplicationTransferTaskTasks() {
+	s.ClearReplicationQueue()
 	domainID := "2466d7de-6602-4ad8-b939-fb8f8c36c711"
 	workflowExecution := gen.WorkflowExecution{
 		WorkflowId: common.StringPtr("replication-transfer-task-test"),
@@ -2986,6 +2987,113 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskTasks() {
 
 	err = s.CompleteTransferTask(task1.TaskID)
 	s.NoError(err)
+	tasks2, err := s.GetReplicationTasks(1, false)
+	s.NoError(err)
+	s.Equal(0, len(tasks2))
+}
+
+// TestReplicationTransferTaskRangeComplete test
+func (s *ExecutionManagerSuite) TestReplicationTransferTaskRangeComplete() {
+	s.ClearReplicationQueue()
+	domainID := uuid.New()
+	workflowExecution := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("replication-transfer-task--range-complete-test"),
+		RunId:      common.StringPtr(uuid.New()),
+	}
+
+	task0, err := s.CreateWorkflowExecution(domainID, workflowExecution, "queue1", "wType", 20, 13, nil, 3, 0, 2, nil)
+	s.NoError(err)
+	s.NotNil(task0, "Expected non empty task identifier.")
+
+	taskD, err := s.GetTransferTasks(1, false)
+	s.Equal(1, len(taskD), "Expected 1 decision task.")
+	err = s.CompleteTransferTask(taskD[0].TaskID)
+	s.NoError(err)
+
+	state1, err := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.NoError(err)
+	info1 := state1.ExecutionInfo
+	s.NotNil(info1, "Valid Workflow info expected.")
+	updatedInfo1 := copyWorkflowExecutionInfo(info1)
+	updatedStats1 := copyExecutionStats(state1.ExecutionStats)
+
+	replicationTasks := []p.Task{
+		&p.HistoryReplicationTask{
+			TaskID:       s.GetNextSequenceNumber(),
+			FirstEventID: int64(1),
+			NextEventID:  int64(3),
+			Version:      int64(9),
+			LastReplicationInfo: map[string]*p.ReplicationInfo{
+				"dc1": {
+					Version:     int64(3),
+					LastEventID: int64(1),
+				},
+				"dc2": {
+					Version:     int64(5),
+					LastEventID: int64(2),
+				},
+			},
+		},
+		&p.HistoryReplicationTask{
+			TaskID:       s.GetNextSequenceNumber(),
+			FirstEventID: int64(4),
+			NextEventID:  int64(5),
+			Version:      int64(9),
+			LastReplicationInfo: map[string]*p.ReplicationInfo{
+				"dc1": {
+					Version:     int64(3),
+					LastEventID: int64(1),
+				},
+				"dc2": {
+					Version:     int64(5),
+					LastEventID: int64(2),
+				},
+			},
+		},
+	}
+	err = s.UpdateWorklowStateAndReplication(
+		updatedInfo1,
+		updatedStats1,
+		nil,
+		nil,
+		int64(3),
+		replicationTasks,
+	)
+	s.NoError(err)
+
+	tasks1, err := s.GetReplicationTasks(1, false)
+	s.NoError(err)
+	s.NotNil(tasks1, "expected valid list of tasks.")
+	s.Equal(1, len(tasks1), "Expected 1 replication task.")
+	task1 := tasks1[0]
+	s.Equal(p.ReplicationTaskTypeHistory, task1.TaskType)
+	s.Equal(domainID, task1.DomainID)
+	s.Equal(workflowExecution.GetWorkflowId(), task1.WorkflowID)
+	s.Equal(workflowExecution.GetRunId(), task1.RunID)
+	s.Equal(int64(1), task1.FirstEventID)
+	s.Equal(int64(3), task1.NextEventID)
+	s.Equal(int64(9), task1.Version)
+	s.Equal(2, len(task1.LastReplicationInfo))
+
+	err = s.RangeCompleteReplicationTask(task1.TaskID)
+	s.NoError(err)
+	tasks2, err := s.GetReplicationTasks(1, false)
+	s.NoError(err)
+	s.NotNil(tasks2, "expected valid list of tasks.")
+	task2 := tasks2[0]
+	s.Equal(p.ReplicationTaskTypeHistory, task2.TaskType)
+	s.Equal(domainID, task2.DomainID)
+	s.Equal(workflowExecution.GetWorkflowId(), task2.WorkflowID)
+	s.Equal(workflowExecution.GetRunId(), task2.RunID)
+	s.Equal(int64(4), task2.FirstEventID)
+	s.Equal(int64(5), task2.NextEventID)
+	s.Equal(int64(9), task2.Version)
+	s.Equal(2, len(task2.LastReplicationInfo))
+	err = s.CompleteReplicationTask(task2.TaskID)
+	s.NoError(err)
+	tasks3, err := s.GetReplicationTasks(1, false)
+	s.NoError(err)
+	s.Equal(0, len(tasks3))
 }
 
 // TestWorkflowReplicationState test

@@ -98,7 +98,7 @@ type (
 		ReplicateEventsV2(ctx ctx.Context, request *h.ReplicateEventsV2Request) error
 		SyncShardStatus(ctx ctx.Context, request *h.SyncShardStatusRequest) error
 		SyncActivity(ctx ctx.Context, request *h.SyncActivityRequest) error
-		GetReplicationMessages(ctx ctx.Context, taskID int64) (*r.ReplicationMessages, error)
+		GetReplicationMessages(ctx ctx.Context, pollingCluster string, lastReadMessageID int64) (*r.ReplicationMessages, error)
 		QueryWorkflow(ctx ctx.Context, request *h.QueryWorkflowRequest) (*h.QueryWorkflowResponse, error)
 		ReapplyEvents(ctx ctx.Context, domainUUID string, workflowID string, runID string, events []*workflow.HistoryEvent) error
 
@@ -134,7 +134,7 @@ type (
 		archivalClient            warchiver.Client
 		resetor                   workflowResetor
 		workflowResetter          workflowResetter
-		replicationTaskProcessors []*ReplicationTaskProcessor
+		replicationTaskProcessors []ReplicationTaskProcessor
 		publicClient              workflowserviceclient.Interface
 		eventsReapplier           nDCEventsReapplier
 		matchingClient            matching.Client
@@ -203,7 +203,7 @@ func NewEngineWithShardContext(
 	historyEventNotifier historyEventNotifier,
 	publisher messaging.Producer,
 	config *Config,
-	replicationTaskFetchers *ReplicationTaskFetchers,
+	replicationTaskFetchers ReplicationTaskFetchers,
 	rawMatchingClient matching.Client,
 ) Engine {
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
@@ -250,7 +250,8 @@ func NewEngineWithShardContext(
 		historyEngImpl.replicatorProcessor = newReplicatorQueueProcessor(
 			shard,
 			historyEngImpl.historyCache,
-			publisher, executionManager,
+			publisher,
+			executionManager,
 			historyV2Manager,
 			logger,
 		)
@@ -289,7 +290,7 @@ func NewEngineWithShardContext(
 	)
 	historyEngImpl.decisionHandler = newDecisionHandler(historyEngImpl)
 
-	var replicationTaskProcessors []*ReplicationTaskProcessor
+	var replicationTaskProcessors []ReplicationTaskProcessor
 	for _, replicationTaskFetcher := range replicationTaskFetchers.GetFetchers() {
 		replicationTaskProcessor := NewReplicationTaskProcessor(
 			shard,
@@ -2745,17 +2746,30 @@ func getWorkflowAlreadyStartedError(errMsg string, createRequestID string, workf
 	}
 }
 
-func (e *historyEngineImpl) GetReplicationMessages(ctx ctx.Context, taskID int64) (*r.ReplicationMessages, error) {
+func (e *historyEngineImpl) GetReplicationMessages(
+	ctx ctx.Context,
+	pollingCluster string,
+	lastReadMessageID int64,
+) (*r.ReplicationMessages, error) {
+
 	scope := metrics.HistoryGetReplicationMessagesScope
 	sw := e.metricsClient.StartTimer(scope, metrics.GetReplicationMessagesForShardLatency)
 	defer sw.Stop()
 
-	replicationMessages, err := e.replicatorProcessor.getTasks(ctx, taskID)
+	replicationMessages, err := e.replicatorProcessor.getTasks(
+		ctx,
+		pollingCluster,
+		lastReadMessageID,
+	)
 	if err != nil {
 		e.logger.Error("Failed to retrieve replication messages.", tag.Error(err))
 		return nil, err
 	}
 
+	//Set cluster status for sync shard info
+	replicationMessages.SyncShardStatus = &r.SyncShardStatus{
+		Timestamp: common.Int64Ptr(e.timeSource.Now().UnixNano()),
+	}
 	e.logger.Debug("Successfully fetched replication messages.", tag.Counter(len(replicationMessages.ReplicationTasks)))
 	return replicationMessages, nil
 }

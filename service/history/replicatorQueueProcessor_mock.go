@@ -81,18 +81,18 @@ func (mr *MockReplicatorQueueProcessorMockRecorder) Stop() *gomock.Call {
 }
 
 // getTasks mocks base method
-func (m *MockReplicatorQueueProcessor) getTasks(arg0 context.Context, arg1 int64) (*replicator.ReplicationMessages, error) {
+func (m *MockReplicatorQueueProcessor) getTasks(arg0 context.Context, arg1 string, arg2 int64) (*replicator.ReplicationMessages, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getTasks", arg0, arg1)
+	ret := m.ctrl.Call(m, "getTasks", arg0, arg1, arg2)
 	ret0, _ := ret[0].(*replicator.ReplicationMessages)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // getTasks indicates an expected call of getTasks
-func (mr *MockReplicatorQueueProcessorMockRecorder) getTasks(arg0 interface{}, arg1 interface{}) *gomock.Call {
+func (mr *MockReplicatorQueueProcessorMockRecorder) getTasks(arg0 interface{}, arg1 interface{}, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getTasks", reflect.TypeOf((*MockReplicatorQueueProcessor)(nil).getTasks), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getTasks", reflect.TypeOf((*MockReplicatorQueueProcessor)(nil).getTasks), arg0, arg1, arg2)
 }
 
 // notifyNewTask mocks base method

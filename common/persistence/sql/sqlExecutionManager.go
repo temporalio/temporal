@@ -1000,9 +1000,27 @@ func (m *sqlExecutionManager) CompleteReplicationTask(
 	request *p.CompleteReplicationTaskRequest,
 ) error {
 
-	if _, err := m.db.DeleteFromReplicationTasks(m.shardID, int(request.TaskID)); err != nil {
+	if _, err := m.db.DeleteFromReplicationTasks(&sqlplugin.ReplicationTasksFilter{
+		ShardID: m.shardID,
+		TaskID:  request.TaskID,
+	}); err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("CompleteReplicationTask operation failed. Error: %v", err),
+		}
+	}
+	return nil
+}
+
+func (m *sqlExecutionManager) RangeCompleteReplicationTask(
+	request *p.RangeCompleteReplicationTaskRequest,
+) error {
+
+	if _, err := m.db.RangeDeleteFromReplicationTasks(&sqlplugin.ReplicationTasksFilter{
+		ShardID: m.shardID,
+		TaskID:  request.InclusiveEndTaskID,
+	}); err != nil {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("RangeCompleteReplicationTask operation failed. Error: %v", err),
 		}
 	}
 	return nil

@@ -225,10 +225,12 @@ type (
 	// ReplicationTasksFilter contains the column names within replication_tasks table that
 	// can be used to filter results through a WHERE clause
 	ReplicationTasksFilter struct {
-		ShardID   int
-		MinTaskID int64
-		MaxTaskID int64
-		PageSize  int
+		ShardID            int
+		TaskID             int64
+		InclusiveEndTaskID int64
+		MinTaskID          int64
+		MaxTaskID          int64
+		PageSize           int
 	}
 
 	// ReplicationTasksDLQFilter contains the column names within replication_tasks_dlq table that
@@ -595,8 +597,11 @@ type (
 		// Required filter params - {shardID, minTaskID, maxTaskID, pageSize}
 		SelectFromReplicationTasks(filter *ReplicationTasksFilter) ([]ReplicationTasksRow, error)
 		// DeleteFromReplicationTasks deletes a row from replication_tasks table
-		// Required filter params - {shardID, taskID}
-		DeleteFromReplicationTasks(shardID, taskID int) (sql.Result, error)
+		// Required filter params - {shardID, inclusiveEndTaskID}
+		DeleteFromReplicationTasks(filter *ReplicationTasksFilter) (sql.Result, error)
+		// DeleteFromReplicationTasks deletes multi rows from replication_tasks table
+		// Required filter params - {shardID, inclusiveEndTaskID}
+		RangeDeleteFromReplicationTasks(filter *ReplicationTasksFilter) (sql.Result, error)
 		// InsertIntoReplicationTasksDLQ puts the replication task into DLQ
 		InsertIntoReplicationTasksDLQ(row *ReplicationTaskDLQRow) (sql.Result, error)
 		// SelectFromReplicationTasksDLQ returns one or more rows from replication_tasks_dlq table

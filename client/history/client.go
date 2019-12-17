@@ -773,7 +773,9 @@ func (c *clientImpl) GetReplicationMessages(
 		}
 
 		if _, ok := requestsByClient[client]; !ok {
-			requestsByClient[client] = &replicator.GetReplicationMessagesRequest{}
+			requestsByClient[client] = &replicator.GetReplicationMessagesRequest{
+				ClusterName: request.ClusterName,
+			}
 		}
 
 		req := requestsByClient[client]

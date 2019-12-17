@@ -62,7 +62,7 @@ func newTestShardContext(
 		transferMaxReadLevel:      0,
 		maxTransferSequenceNumber: 100000,
 		timerMaxReadLevelMap:      make(map[string]time.Time),
-		standbyClusterCurrentTime: make(map[string]time.Time),
+		remoteClusterCurrentTime:  make(map[string]time.Time),
 		eventsCache:               eventsCache,
 	}
 	return &shardContextTest{

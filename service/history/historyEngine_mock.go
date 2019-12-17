@@ -477,18 +477,18 @@ func (mr *MockEngineMockRecorder) SyncActivity(ctx, request interface{}) *gomock
 }
 
 // GetReplicationMessages mocks base method
-func (m *MockEngine) GetReplicationMessages(ctx context.Context, taskID int64) (*replicator.ReplicationMessages, error) {
+func (m *MockEngine) GetReplicationMessages(ctx context.Context, sourceCluster string, lastReadMessageID int64) (*replicator.ReplicationMessages, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetReplicationMessages", ctx, taskID)
+	ret := m.ctrl.Call(m, "GetReplicationMessages", ctx, sourceCluster, lastReadMessageID)
 	ret0, _ := ret[0].(*replicator.ReplicationMessages)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetReplicationMessages indicates an expected call of GetReplicationMessages
-func (mr *MockEngineMockRecorder) GetReplicationMessages(ctx, taskID interface{}) *gomock.Call {
+func (mr *MockEngineMockRecorder) GetReplicationMessages(ctx, sourceCluster, lastReadMessageID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationMessages", reflect.TypeOf((*MockEngine)(nil).GetReplicationMessages), ctx, taskID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationMessages", reflect.TypeOf((*MockEngine)(nil).GetReplicationMessages), ctx, sourceCluster, lastReadMessageID)
 }
 
 // QueryWorkflow mocks base method

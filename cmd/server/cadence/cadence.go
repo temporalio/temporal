@@ -149,7 +149,7 @@ func constructPath(dir string, file string) string {
 	return dir + "/" + file
 }
 
-// main entry point for the cadence server
+// BuildCLI is the main entry point for the cadence server
 func BuildCLI() *cli.App {
 
 	app := cli.NewApp()

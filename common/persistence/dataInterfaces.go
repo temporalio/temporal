@@ -969,6 +969,11 @@ type (
 		TaskID int64
 	}
 
+	// RangeCompleteReplicationTaskRequest is used to complete a range of task in the replication task queue
+	RangeCompleteReplicationTaskRequest struct {
+		InclusiveEndTaskID int64
+	}
+
 	// PutReplicationTaskToDLQRequest is used to put a replication task to dlq
 	PutReplicationTaskToDLQRequest struct {
 		SourceClusterName string
@@ -1455,6 +1460,7 @@ type (
 		// Replication task related methods
 		GetReplicationTasks(request *GetReplicationTasksRequest) (*GetReplicationTasksResponse, error)
 		CompleteReplicationTask(request *CompleteReplicationTaskRequest) error
+		RangeCompleteReplicationTask(request *RangeCompleteReplicationTaskRequest) error
 		PutReplicationTaskToDLQ(request *PutReplicationTaskToDLQRequest) error
 		GetReplicationTasksFromDLQ(request *GetReplicationTasksFromDLQRequest) (*GetReplicationTasksFromDLQResponse, error)
 

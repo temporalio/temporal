@@ -400,6 +400,20 @@ func (p *workflowExecutionPersistenceClient) CompleteReplicationTask(request *Co
 	return err
 }
 
+func (p *workflowExecutionPersistenceClient) RangeCompleteReplicationTask(request *RangeCompleteReplicationTaskRequest) error {
+	p.metricClient.IncCounter(metrics.PersistenceRangeCompleteReplicationTaskScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceRangeCompleteReplicationTaskScope, metrics.PersistenceLatency)
+	err := p.persistence.RangeCompleteReplicationTask(request)
+	sw.Stop()
+
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceRangeCompleteReplicationTaskScope, err)
+	}
+
+	return err
+}
+
 func (p *workflowExecutionPersistenceClient) PutReplicationTaskToDLQ(
 	request *PutReplicationTaskToDLQRequest,
 ) error {

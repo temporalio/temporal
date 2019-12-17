@@ -130,7 +130,8 @@ type Config struct {
 	// ShardUpdateMinInterval the minimal time interval which the shard info can be updated
 	ShardUpdateMinInterval dynamicconfig.DurationPropertyFn
 	// ShardSyncMinInterval the minimal time interval which the shard info should be sync to remote
-	ShardSyncMinInterval dynamicconfig.DurationPropertyFn
+	ShardSyncMinInterval            dynamicconfig.DurationPropertyFn
+	ShardSyncTimerJitterCoefficient dynamicconfig.FloatPropertyFn
 
 	// Time to hold a poll request before returning an empty response
 	// right now only used by GetMutableState
@@ -177,13 +178,15 @@ type Config struct {
 	MaxDecisionStartToCloseSeconds dynamicconfig.IntPropertyFnWithDomainFilter
 
 	// The following is used by the new RPC replication stack
-	ReplicationTaskFetcherParallelism             dynamicconfig.IntPropertyFn
-	ReplicationTaskFetcherAggregationInterval     dynamicconfig.DurationPropertyFn
-	ReplicationTaskFetcherTimerJitterCoefficient  dynamicconfig.FloatPropertyFn
-	ReplicationTaskFetcherErrorRetryWait          dynamicconfig.DurationPropertyFn
-	ReplicationTaskProcessorErrorRetryWait        dynamicconfig.DurationPropertyFn
-	ReplicationTaskProcessorErrorRetryMaxAttempts dynamicconfig.IntPropertyFn
-	ReplicationTaskProcessorNoTaskRetryWait       dynamicconfig.DurationPropertyFn
+	ReplicationTaskFetcherParallelism                dynamicconfig.IntPropertyFn
+	ReplicationTaskFetcherAggregationInterval        dynamicconfig.DurationPropertyFn
+	ReplicationTaskFetcherTimerJitterCoefficient     dynamicconfig.FloatPropertyFn
+	ReplicationTaskFetcherErrorRetryWait             dynamicconfig.DurationPropertyFn
+	ReplicationTaskProcessorErrorRetryWait           dynamicconfig.DurationPropertyFn
+	ReplicationTaskProcessorErrorRetryMaxAttempts    dynamicconfig.IntPropertyFn
+	ReplicationTaskProcessorNoTaskRetryWait          dynamicconfig.DurationPropertyFn
+	ReplicationTaskProcessorCleanupInterval          dynamicconfig.DurationPropertyFn
+	ReplicationTaskProcessorCleanupJitterCoefficient dynamicconfig.FloatPropertyFn
 
 	// The following are used by consistent query
 	EnableConsistentQuery         dynamicconfig.BoolPropertyFn
@@ -265,6 +268,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		MaximumSignalsPerExecution:                            dc.GetIntPropertyFilteredByDomain(dynamicconfig.MaximumSignalsPerExecution, 0),
 		ShardUpdateMinInterval:                                dc.GetDurationProperty(dynamicconfig.ShardUpdateMinInterval, 5*time.Minute),
 		ShardSyncMinInterval:                                  dc.GetDurationProperty(dynamicconfig.ShardSyncMinInterval, 5*time.Minute),
+		ShardSyncTimerJitterCoefficient:                       dc.GetFloat64Property(dynamicconfig.TransferProcessorMaxPollIntervalJitterCoefficient, 0.15),
 
 		// history client: client/history/client.go set the client timeout 30s
 		LongPollExpirationInterval:          dc.GetDurationPropertyFilteredByDomain(dynamicconfig.HistoryLongPollExpirationInterval, time.Second*20),
@@ -294,13 +298,15 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		StickyTTL:                         dc.GetDurationPropertyFilteredByDomain(dynamicconfig.StickyTTL, time.Hour*24*365),
 		DecisionHeartbeatTimeout:          dc.GetDurationPropertyFilteredByDomain(dynamicconfig.DecisionHeartbeatTimeout, time.Minute*30),
 
-		ReplicationTaskFetcherParallelism:             dc.GetIntProperty(dynamicconfig.ReplicationTaskFetcherParallelism, 1),
-		ReplicationTaskFetcherAggregationInterval:     dc.GetDurationProperty(dynamicconfig.ReplicationTaskFetcherAggregationInterval, 2*time.Second),
-		ReplicationTaskFetcherTimerJitterCoefficient:  dc.GetFloat64Property(dynamicconfig.ReplicationTaskFetcherTimerJitterCoefficient, 0.15),
-		ReplicationTaskFetcherErrorRetryWait:          dc.GetDurationProperty(dynamicconfig.ReplicationTaskFetcherErrorRetryWait, time.Second),
-		ReplicationTaskProcessorErrorRetryWait:        dc.GetDurationProperty(dynamicconfig.ReplicationTaskProcessorErrorRetryWait, time.Second),
-		ReplicationTaskProcessorErrorRetryMaxAttempts: dc.GetIntProperty(dynamicconfig.ReplicationTaskProcessorErrorRetryMaxAttempts, 20),
-		ReplicationTaskProcessorNoTaskRetryWait:       dc.GetDurationProperty(dynamicconfig.ReplicationTaskProcessorNoTaskInitialWait, 2*time.Second),
+		ReplicationTaskFetcherParallelism:                dc.GetIntProperty(dynamicconfig.ReplicationTaskFetcherParallelism, 1),
+		ReplicationTaskFetcherAggregationInterval:        dc.GetDurationProperty(dynamicconfig.ReplicationTaskFetcherAggregationInterval, 2*time.Second),
+		ReplicationTaskFetcherTimerJitterCoefficient:     dc.GetFloat64Property(dynamicconfig.ReplicationTaskFetcherTimerJitterCoefficient, 0.15),
+		ReplicationTaskFetcherErrorRetryWait:             dc.GetDurationProperty(dynamicconfig.ReplicationTaskFetcherErrorRetryWait, time.Second),
+		ReplicationTaskProcessorErrorRetryWait:           dc.GetDurationProperty(dynamicconfig.ReplicationTaskProcessorErrorRetryWait, time.Second),
+		ReplicationTaskProcessorErrorRetryMaxAttempts:    dc.GetIntProperty(dynamicconfig.ReplicationTaskProcessorErrorRetryMaxAttempts, 20),
+		ReplicationTaskProcessorNoTaskRetryWait:          dc.GetDurationProperty(dynamicconfig.ReplicationTaskProcessorNoTaskInitialWait, 2*time.Second),
+		ReplicationTaskProcessorCleanupInterval:          dc.GetDurationProperty(dynamicconfig.ReplicationTaskProcessorCleanupInterval, 5*time.Minute),
+		ReplicationTaskProcessorCleanupJitterCoefficient: dc.GetFloat64Property(dynamicconfig.ReplicationTaskProcessorCleanupJitterCoefficient, 0.15),
 
 		EnableConsistentQuery:         dc.GetBoolProperty(dynamicconfig.EnableConsistentQuery, true),
 		EnableConsistentQueryByDomain: dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableConsistentQueryByDomain, false),

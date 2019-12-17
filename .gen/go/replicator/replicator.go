@@ -1030,7 +1030,8 @@ func (v *GetDomainReplicationMessagesResponse) IsSetMessages() bool {
 }
 
 type GetReplicationMessagesRequest struct {
-	Tokens []*ReplicationToken `json:"tokens,omitempty"`
+	Tokens      []*ReplicationToken `json:"tokens,omitempty"`
+	ClusterName *string             `json:"clusterName,omitempty"`
 }
 
 type _List_ReplicationToken_ValueList []*ReplicationToken
@@ -1079,7 +1080,7 @@ func (_List_ReplicationToken_ValueList) Close() {}
 //   }
 func (v *GetReplicationMessagesRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [1]wire.Field
+		fields [2]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -1091,6 +1092,14 @@ func (v *GetReplicationMessagesRequest) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.ClusterName != nil {
+		w, err = wire.NewValueString(*(v.ClusterName)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
 		i++
 	}
 
@@ -1151,6 +1160,16 @@ func (v *GetReplicationMessagesRequest) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 20:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.ClusterName = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -1164,10 +1183,14 @@ func (v *GetReplicationMessagesRequest) String() string {
 		return "<nil>"
 	}
 
-	var fields [1]string
+	var fields [2]string
 	i := 0
 	if v.Tokens != nil {
 		fields[i] = fmt.Sprintf("Tokens: %v", v.Tokens)
+		i++
+	}
+	if v.ClusterName != nil {
+		fields[i] = fmt.Sprintf("ClusterName: %v", *(v.ClusterName))
 		i++
 	}
 
@@ -1202,6 +1225,9 @@ func (v *GetReplicationMessagesRequest) Equals(rhs *GetReplicationMessagesReques
 	if !((v.Tokens == nil && rhs.Tokens == nil) || (v.Tokens != nil && rhs.Tokens != nil && _List_ReplicationToken_Equals(v.Tokens, rhs.Tokens))) {
 		return false
 	}
+	if !_String_EqualsPtr(v.ClusterName, rhs.ClusterName) {
+		return false
+	}
 
 	return true
 }
@@ -1226,6 +1252,9 @@ func (v *GetReplicationMessagesRequest) MarshalLogObject(enc zapcore.ObjectEncod
 	if v.Tokens != nil {
 		err = multierr.Append(err, enc.AddArray("tokens", (_List_ReplicationToken_Zapper)(v.Tokens)))
 	}
+	if v.ClusterName != nil {
+		enc.AddString("clusterName", *v.ClusterName)
+	}
 	return err
 }
 
@@ -1242,6 +1271,21 @@ func (v *GetReplicationMessagesRequest) GetTokens() (o []*ReplicationToken) {
 // IsSetTokens returns true if Tokens is not nil.
 func (v *GetReplicationMessagesRequest) IsSetTokens() bool {
 	return v != nil && v.Tokens != nil
+}
+
+// GetClusterName returns the value of ClusterName if it is set or its
+// zero value if it is unset.
+func (v *GetReplicationMessagesRequest) GetClusterName() (o string) {
+	if v != nil && v.ClusterName != nil {
+		return *v.ClusterName
+	}
+
+	return
+}
+
+// IsSetClusterName returns true if ClusterName is not nil.
+func (v *GetReplicationMessagesRequest) IsSetClusterName() bool {
+	return v != nil && v.ClusterName != nil
 }
 
 type GetReplicationMessagesResponse struct {
@@ -3226,6 +3270,7 @@ type ReplicationMessages struct {
 	ReplicationTasks       []*ReplicationTask `json:"replicationTasks,omitempty"`
 	LastRetrievedMessageId *int64             `json:"lastRetrievedMessageId,omitempty"`
 	HasMore                *bool              `json:"hasMore,omitempty"`
+	SyncShardStatus        *SyncShardStatus   `json:"syncShardStatus,omitempty"`
 }
 
 type _List_ReplicationTask_ValueList []*ReplicationTask
@@ -3274,7 +3319,7 @@ func (_List_ReplicationTask_ValueList) Close() {}
 //   }
 func (v *ReplicationMessages) ToWire() (wire.Value, error) {
 	var (
-		fields [3]wire.Field
+		fields [4]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -3304,6 +3349,14 @@ func (v *ReplicationMessages) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 30, Value: w}
 		i++
 	}
+	if v.SyncShardStatus != nil {
+		w, err = v.SyncShardStatus.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
@@ -3330,6 +3383,12 @@ func _List_ReplicationTask_Read(l wire.ValueList) ([]*ReplicationTask, error) {
 	})
 	l.Close()
 	return o, err
+}
+
+func _SyncShardStatus_Read(w wire.Value) (*SyncShardStatus, error) {
+	var v SyncShardStatus
+	err := v.FromWire(w)
+	return &v, err
 }
 
 // FromWire deserializes a ReplicationMessages struct from its Thrift-level
@@ -3382,6 +3441,14 @@ func (v *ReplicationMessages) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 40:
+			if field.Value.Type() == wire.TStruct {
+				v.SyncShardStatus, err = _SyncShardStatus_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -3395,7 +3462,7 @@ func (v *ReplicationMessages) String() string {
 		return "<nil>"
 	}
 
-	var fields [3]string
+	var fields [4]string
 	i := 0
 	if v.ReplicationTasks != nil {
 		fields[i] = fmt.Sprintf("ReplicationTasks: %v", v.ReplicationTasks)
@@ -3407,6 +3474,10 @@ func (v *ReplicationMessages) String() string {
 	}
 	if v.HasMore != nil {
 		fields[i] = fmt.Sprintf("HasMore: %v", *(v.HasMore))
+		i++
+	}
+	if v.SyncShardStatus != nil {
+		fields[i] = fmt.Sprintf("SyncShardStatus: %v", v.SyncShardStatus)
 		i++
 	}
 
@@ -3447,6 +3518,9 @@ func (v *ReplicationMessages) Equals(rhs *ReplicationMessages) bool {
 	if !_Bool_EqualsPtr(v.HasMore, rhs.HasMore) {
 		return false
 	}
+	if !((v.SyncShardStatus == nil && rhs.SyncShardStatus == nil) || (v.SyncShardStatus != nil && rhs.SyncShardStatus != nil && v.SyncShardStatus.Equals(rhs.SyncShardStatus))) {
+		return false
+	}
 
 	return true
 }
@@ -3476,6 +3550,9 @@ func (v *ReplicationMessages) MarshalLogObject(enc zapcore.ObjectEncoder) (err e
 	}
 	if v.HasMore != nil {
 		enc.AddBool("hasMore", *v.HasMore)
+	}
+	if v.SyncShardStatus != nil {
+		err = multierr.Append(err, enc.AddObject("syncShardStatus", v.SyncShardStatus))
 	}
 	return err
 }
@@ -3523,6 +3600,21 @@ func (v *ReplicationMessages) GetHasMore() (o bool) {
 // IsSetHasMore returns true if HasMore is not nil.
 func (v *ReplicationMessages) IsSetHasMore() bool {
 	return v != nil && v.HasMore != nil
+}
+
+// GetSyncShardStatus returns the value of SyncShardStatus if it is set or its
+// zero value if it is unset.
+func (v *ReplicationMessages) GetSyncShardStatus() (o *SyncShardStatus) {
+	if v != nil && v.SyncShardStatus != nil {
+		return v.SyncShardStatus
+	}
+
+	return
+}
+
+// IsSetSyncShardStatus returns true if SyncShardStatus is not nil.
+func (v *ReplicationMessages) IsSetSyncShardStatus() bool {
+	return v != nil && v.SyncShardStatus != nil
 }
 
 type ReplicationTask struct {
@@ -5214,6 +5306,144 @@ func (v *SyncActivityTaskAttributes) IsSetVersionHistory() bool {
 	return v != nil && v.VersionHistory != nil
 }
 
+type SyncShardStatus struct {
+	Timestamp *int64 `json:"timestamp,omitempty"`
+}
+
+// ToWire translates a SyncShardStatus struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *SyncShardStatus) ToWire() (wire.Value, error) {
+	var (
+		fields [1]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.Timestamp != nil {
+		w, err = wire.NewValueI64(*(v.Timestamp)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a SyncShardStatus struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a SyncShardStatus struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v SyncShardStatus
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *SyncShardStatus) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.Timestamp = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a SyncShardStatus
+// struct.
+func (v *SyncShardStatus) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [1]string
+	i := 0
+	if v.Timestamp != nil {
+		fields[i] = fmt.Sprintf("Timestamp: %v", *(v.Timestamp))
+		i++
+	}
+
+	return fmt.Sprintf("SyncShardStatus{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this SyncShardStatus match the
+// provided SyncShardStatus.
+//
+// This function performs a deep comparison.
+func (v *SyncShardStatus) Equals(rhs *SyncShardStatus) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !_I64_EqualsPtr(v.Timestamp, rhs.Timestamp) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of SyncShardStatus.
+func (v *SyncShardStatus) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.Timestamp != nil {
+		enc.AddInt64("timestamp", *v.Timestamp)
+	}
+	return err
+}
+
+// GetTimestamp returns the value of Timestamp if it is set or its
+// zero value if it is unset.
+func (v *SyncShardStatus) GetTimestamp() (o int64) {
+	if v != nil && v.Timestamp != nil {
+		return *v.Timestamp
+	}
+
+	return
+}
+
+// IsSetTimestamp returns true if Timestamp is not nil.
+func (v *SyncShardStatus) IsSetTimestamp() bool {
+	return v != nil && v.Timestamp != nil
+}
+
 type SyncShardStatusTaskAttributes struct {
 	SourceCluster *string `json:"sourceCluster,omitempty"`
 	ShardId       *int64  `json:"shardId,omitempty"`
@@ -5445,11 +5675,11 @@ var ThriftModule = &thriftreflect.ThriftModule{
 	Name:     "replicator",
 	Package:  "github.com/uber/cadence/.gen/go/replicator",
 	FilePath: "replicator.thrift",
-	SHA1:     "92866390e100b86b10e966d6ae2f931deb59e13b",
+	SHA1:     "6de87f2a70835ac200976ccfa0139929487b1b1e",
 	Includes: []*thriftreflect.ThriftModule{
 		shared.ThriftModule,
 	},
 	Raw: rawIDL,
 }
 
-const rawIDL = "// Copyright (c) 2017 Uber Technologies, Inc.\n//\n// Permission is hereby granted, free of charge, to any person obtaining a copy\n// of this software and associated documentation files (the \"Software\"), to deal\n// in the Software without restriction, including without limitation the rights\n// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n// copies of the Software, and to permit persons to whom the Software is\n// furnished to do so, subject to the following conditions:\n//\n// The above copyright notice and this permission notice shall be included in\n// all copies or substantial portions of the Software.\n//\n// THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n// THE SOFTWARE.\n\nnamespace java com.uber.cadence.replicator\n\ninclude \"shared.thrift\"\n\nenum ReplicationTaskType {\n  Domain\n  History\n  SyncShardStatus\n  SyncActivity\n  HistoryMetadata\n  HistoryV2\n}\n\nenum DomainOperation {\n  Create\n  Update\n}\n\nstruct DomainTaskAttributes {\n  05: optional DomainOperation domainOperation\n  10: optional string id\n  20: optional shared.DomainInfo info\n  30: optional shared.DomainConfiguration config\n  40: optional shared.DomainReplicationConfiguration replicationConfig\n  50: optional i64 (js.type = \"Long\") configVersion\n  60: optional i64 (js.type = \"Long\") failoverVersion\n}\n\nstruct HistoryTaskAttributes {\n  05: optional list<string> targetClusters\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") firstEventId\n  50: optional i64 (js.type = \"Long\") nextEventId\n  60: optional i64 (js.type = \"Long\") version\n  70: optional map<string, shared.ReplicationInfo> replicationInfo\n  80: optional shared.History history\n  90: optional shared.History newRunHistory\n  100: optional i32 eventStoreVersion\n  110: optional i32 newRunEventStoreVersion\n  120: optional bool resetWorkflow\n  130: optional bool newRunNDC\n}\n\nstruct HistoryMetadataTaskAttributes {\n  05: optional list<string> targetClusters\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") firstEventId\n  50: optional i64 (js.type = \"Long\") nextEventId\n}\n\nstruct SyncShardStatusTaskAttributes {\n  10: optional string sourceCluster\n  20: optional i64 (js.type = \"Long\") shardId\n  30: optional i64 (js.type = \"Long\") timestamp\n}\n\nstruct SyncActivityTaskAttributes {\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") version\n  50: optional i64 (js.type = \"Long\") scheduledId\n  60: optional i64 (js.type = \"Long\") scheduledTime\n  70: optional i64 (js.type = \"Long\") startedId\n  80: optional i64 (js.type = \"Long\") startedTime\n  90: optional i64 (js.type = \"Long\") lastHeartbeatTime\n  100: optional binary details\n  110: optional i32 attempt\n  120: optional string lastFailureReason\n  130: optional string lastWorkerIdentity\n  140: optional binary lastFailureDetails\n  150: optional shared.VersionHistory versionHistory\n}\n\nstruct HistoryTaskV2Attributes {\n  05: optional i64 (js.type = \"Long\") taskId\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional list<shared.VersionHistoryItem> versionHistoryItems\n  50: optional shared.DataBlob events\n  // new run events does not need version history since there is no prior events\n  70: optional shared.DataBlob newRunEvents\n}\n\nstruct ReplicationTask {\n  10: optional ReplicationTaskType taskType\n  11: optional i64 (js.type = \"Long\") sourceTaskId\n  20: optional DomainTaskAttributes domainTaskAttributes\n  30: optional HistoryTaskAttributes historyTaskAttributes  // TODO deprecate once NDC migration is done\n  40: optional SyncShardStatusTaskAttributes syncShardStatusTaskAttributes\n  50: optional SyncActivityTaskAttributes syncActivityTaskAttributes\n  60: optional HistoryMetadataTaskAttributes historyMetadataTaskAttributes // TODO deprecate once kafka deprecation is done\n  70: optional HistoryTaskV2Attributes historyTaskV2Attributes\n}\n\nstruct ReplicationToken {\n  10: optional i32 shardID\n  // lastRetrivedMessageId is where the next fetch should begin with\n  20: optional i64 (js.type = \"Long\") lastRetrievedMessageId\n  // lastProcessedMessageId is the last messageId that is processed on the passive side.\n  // This can be different than lastRetrievedMessageId if passive side supports prefetching messages.\n  30: optional i64 (js.type = \"Long\") lastProcessedMessageId\n}\n\nstruct ReplicationMessages {\n  10: optional list<ReplicationTask> replicationTasks\n  // This can be different than the last taskId in the above list, because sender can decide to skip tasks (e.g. for completed workflows).\n  20: optional i64 (js.type = \"Long\") lastRetrievedMessageId\n  30: optional bool hasMore // Hint for flow control\n}\n\nstruct GetReplicationMessagesRequest {\n  10: optional list<ReplicationToken> tokens\n}\n\nstruct GetReplicationMessagesResponse {\n  10: optional map<i32, ReplicationMessages> messagesByShard\n}\n\nstruct GetDomainReplicationMessagesRequest {\n  // lastRetrievedMessageId is where the next fetch should begin with\n  10: optional i64 (js.type = \"Long\") lastRetrievedMessageId\n  // lastProcessedMessageId is the last messageId that is processed on the passive side.\n  // This can be different than lastRetrievedMessageId if passive side supports prefetching messages.\n  20: optional i64 (js.type = \"Long\") lastProcessedMessageId\n  // clusterName is the name of the pulling cluster\n  30: optional string clusterName\n}\n\nstruct GetDomainReplicationMessagesResponse {\n  10: optional ReplicationMessages messages\n}"
+const rawIDL = "// Copyright (c) 2017 Uber Technologies, Inc.\n//\n// Permission is hereby granted, free of charge, to any person obtaining a copy\n// of this software and associated documentation files (the \"Software\"), to deal\n// in the Software without restriction, including without limitation the rights\n// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n// copies of the Software, and to permit persons to whom the Software is\n// furnished to do so, subject to the following conditions:\n//\n// The above copyright notice and this permission notice shall be included in\n// all copies or substantial portions of the Software.\n//\n// THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n// THE SOFTWARE.\n\nnamespace java com.uber.cadence.replicator\n\ninclude \"shared.thrift\"\n\nenum ReplicationTaskType {\n  Domain\n  History\n  SyncShardStatus\n  SyncActivity\n  HistoryMetadata\n  HistoryV2\n}\n\nenum DomainOperation {\n  Create\n  Update\n}\n\nstruct DomainTaskAttributes {\n  05: optional DomainOperation domainOperation\n  10: optional string id\n  20: optional shared.DomainInfo info\n  30: optional shared.DomainConfiguration config\n  40: optional shared.DomainReplicationConfiguration replicationConfig\n  50: optional i64 (js.type = \"Long\") configVersion\n  60: optional i64 (js.type = \"Long\") failoverVersion\n}\n\nstruct HistoryTaskAttributes {\n  05: optional list<string> targetClusters\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") firstEventId\n  50: optional i64 (js.type = \"Long\") nextEventId\n  60: optional i64 (js.type = \"Long\") version\n  70: optional map<string, shared.ReplicationInfo> replicationInfo\n  80: optional shared.History history\n  90: optional shared.History newRunHistory\n  100: optional i32 eventStoreVersion\n  110: optional i32 newRunEventStoreVersion\n  120: optional bool resetWorkflow\n  130: optional bool newRunNDC\n}\n\nstruct HistoryMetadataTaskAttributes {\n  05: optional list<string> targetClusters\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") firstEventId\n  50: optional i64 (js.type = \"Long\") nextEventId\n}\n\nstruct SyncShardStatusTaskAttributes {\n  10: optional string sourceCluster\n  20: optional i64 (js.type = \"Long\") shardId\n  30: optional i64 (js.type = \"Long\") timestamp\n}\n\nstruct SyncActivityTaskAttributes {\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") version\n  50: optional i64 (js.type = \"Long\") scheduledId\n  60: optional i64 (js.type = \"Long\") scheduledTime\n  70: optional i64 (js.type = \"Long\") startedId\n  80: optional i64 (js.type = \"Long\") startedTime\n  90: optional i64 (js.type = \"Long\") lastHeartbeatTime\n  100: optional binary details\n  110: optional i32 attempt\n  120: optional string lastFailureReason\n  130: optional string lastWorkerIdentity\n  140: optional binary lastFailureDetails\n  150: optional shared.VersionHistory versionHistory\n}\n\nstruct HistoryTaskV2Attributes {\n  05: optional i64 (js.type = \"Long\") taskId\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional list<shared.VersionHistoryItem> versionHistoryItems\n  50: optional shared.DataBlob events\n  // new run events does not need version history since there is no prior events\n  70: optional shared.DataBlob newRunEvents\n}\n\nstruct ReplicationTask {\n  10: optional ReplicationTaskType taskType\n  11: optional i64 (js.type = \"Long\") sourceTaskId\n  20: optional DomainTaskAttributes domainTaskAttributes\n  30: optional HistoryTaskAttributes historyTaskAttributes  // TODO deprecate once NDC migration is done\n  40: optional SyncShardStatusTaskAttributes syncShardStatusTaskAttributes\n  50: optional SyncActivityTaskAttributes syncActivityTaskAttributes\n  60: optional HistoryMetadataTaskAttributes historyMetadataTaskAttributes // TODO deprecate once kafka deprecation is done\n  70: optional HistoryTaskV2Attributes historyTaskV2Attributes\n}\n\nstruct ReplicationToken {\n  10: optional i32 shardID\n  // lastRetrivedMessageId is where the next fetch should begin with\n  20: optional i64 (js.type = \"Long\") lastRetrievedMessageId\n  // lastProcessedMessageId is the last messageId that is processed on the passive side.\n  // This can be different than lastRetrievedMessageId if passive side supports prefetching messages.\n  30: optional i64 (js.type = \"Long\") lastProcessedMessageId\n}\n\nstruct SyncShardStatus {\n    10: optional i64 (js.type = \"Long\") timestamp\n}\n\nstruct ReplicationMessages {\n  10: optional list<ReplicationTask> replicationTasks\n  // This can be different than the last taskId in the above list, because sender can decide to skip tasks (e.g. for completed workflows).\n  20: optional i64 (js.type = \"Long\") lastRetrievedMessageId\n  30: optional bool hasMore // Hint for flow control\n  40: optional SyncShardStatus syncShardStatus\n}\n\nstruct GetReplicationMessagesRequest {\n  10: optional list<ReplicationToken> tokens\n  20: optional string clusterName\n}\n\nstruct GetReplicationMessagesResponse {\n  10: optional map<i32, ReplicationMessages> messagesByShard\n}\n\nstruct GetDomainReplicationMessagesRequest {\n  // lastRetrievedMessageId is where the next fetch should begin with\n  10: optional i64 (js.type = \"Long\") lastRetrievedMessageId\n  // lastProcessedMessageId is the last messageId that is processed on the passive side.\n  // This can be different than lastRetrievedMessageId if passive side supports prefetching messages.\n  20: optional i64 (js.type = \"Long\") lastProcessedMessageId\n  // clusterName is the name of the pulling cluster\n  30: optional string clusterName\n}\n\nstruct GetDomainReplicationMessagesResponse {\n  10: optional ReplicationMessages messages\n}"

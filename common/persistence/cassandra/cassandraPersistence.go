@@ -734,6 +734,15 @@ workflow_state = ? ` +
 		`and task_id > ? ` +
 		`and task_id <= ?`
 
+	templateRangeCompleteReplicationTaskQuery = `DELETE FROM executions ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and domain_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id <= ?`
+
 	templateGetTimerTasksQuery = `SELECT timer ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
@@ -2219,6 +2228,35 @@ func (d *cassandraPersistence) CompleteReplicationTask(request *p.CompleteReplic
 		}
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("CompleteReplicationTask operation failed. Error: %v", err),
+		}
+	}
+
+	return nil
+}
+
+func (d *cassandraPersistence) RangeCompleteReplicationTask(
+	request *p.RangeCompleteReplicationTaskRequest,
+) error {
+
+	query := d.session.Query(templateRangeCompleteReplicationTaskQuery,
+		d.shardID,
+		rowTypeReplicationTask,
+		rowTypeReplicationDomainID,
+		rowTypeReplicationWorkflowID,
+		rowTypeReplicationRunID,
+		defaultVisibilityTimestamp,
+		request.InclusiveEndTaskID,
+	)
+
+	err := query.Exec()
+	if err != nil {
+		if isThrottlingError(err) {
+			return &workflow.ServiceBusyError{
+				Message: fmt.Sprintf("RangeCompleteReplicationTask operation failed. Error: %v", err),
+			}
+		}
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("RangeCompleteReplicationTask operation failed. Error: %v", err),
 		}
 	}
 

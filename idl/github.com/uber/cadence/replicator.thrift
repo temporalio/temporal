@@ -127,15 +127,21 @@ struct ReplicationToken {
   30: optional i64 (js.type = "Long") lastProcessedMessageId
 }
 
+struct SyncShardStatus {
+    10: optional i64 (js.type = "Long") timestamp
+}
+
 struct ReplicationMessages {
   10: optional list<ReplicationTask> replicationTasks
   // This can be different than the last taskId in the above list, because sender can decide to skip tasks (e.g. for completed workflows).
   20: optional i64 (js.type = "Long") lastRetrievedMessageId
   30: optional bool hasMore // Hint for flow control
+  40: optional SyncShardStatus syncShardStatus
 }
 
 struct GetReplicationMessagesRequest {
   10: optional list<ReplicationToken> tokens
+  20: optional string clusterName
 }
 
 struct GetReplicationMessagesResponse {

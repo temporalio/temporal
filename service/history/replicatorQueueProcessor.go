@@ -39,7 +39,7 @@ import (
 
 type (
 	replicatorQueueProcessorImpl struct {
-		currentClusterNamer   string
+		currentClusterName    string
 		shard                 ShardContext
 		historyCache          *historyCache
 		replicationTaskFilter taskFilter
@@ -100,7 +100,7 @@ func newReplicatorQueueProcessor(
 	retryPolicy.SetBackoffCoefficient(1)
 
 	processor := &replicatorQueueProcessorImpl{
-		currentClusterNamer:   currentClusterName,
+		currentClusterName:    currentClusterName,
 		shard:                 shard,
 		historyCache:          historyCache,
 		replicationTaskFilter: replicationTaskFilter,
@@ -292,7 +292,7 @@ func (p *replicatorQueueProcessorImpl) updateAckLevel(ackLevel int64) error {
 		syncStatusTask := &replicator.ReplicationTask{
 			TaskType: replicator.ReplicationTaskType.Ptr(replicator.ReplicationTaskTypeSyncShardStatus),
 			SyncShardStatusTaskAttributes: &replicator.SyncShardStatusTaskAttributes{
-				SourceCluster: common.StringPtr(p.currentClusterNamer),
+				SourceCluster: common.StringPtr(p.currentClusterName),
 				ShardId:       common.Int64Ptr(int64(p.shard.GetShardID())),
 				Timestamp:     common.Int64Ptr(now.UnixNano()),
 			},
@@ -423,14 +423,21 @@ func convertLastReplicationInfo(info map[string]*persistence.ReplicationInfo) ma
 
 func (p *replicatorQueueProcessorImpl) getTasks(
 	ctx ctx.Context,
-	readLevel int64,
+	pollingCluster string,
+	lastReadTaskID int64,
 ) (*replicator.ReplicationMessages, error) {
-	taskInfoList, hasMore, err := p.readTasksWithBatchSize(readLevel, p.fetchTasksBatchSize)
+
+	if lastReadTaskID == emptyMessageID {
+		lastReadTaskID = p.shard.GetClusterReplicationLevel(pollingCluster)
+	}
+
+	taskInfoList, hasMore, err := p.readTasksWithBatchSize(lastReadTaskID, p.fetchTasksBatchSize)
 	if err != nil {
 		return nil, err
 	}
 
 	var replicationTasks []*replicator.ReplicationTask
+	readLevel := lastReadTaskID
 	for _, taskInfo := range taskInfoList {
 		var replicationTask *replicator.ReplicationTask
 		op := func() error {
@@ -445,7 +452,6 @@ func (p *replicatorQueueProcessorImpl) getTasks(
 			hasMore = true
 			break
 		}
-
 		readLevel = taskInfo.GetTaskID()
 		if replicationTask != nil {
 			replicationTasks = append(replicationTasks, replicationTask)
@@ -470,6 +476,13 @@ func (p *replicatorQueueProcessorImpl) getTasks(
 		metrics.ReplicationTasksReturned,
 		time.Duration(len(replicationTasks)),
 	)
+
+	if err := p.shard.UpdateClusterReplicationLevel(
+		pollingCluster,
+		lastReadTaskID,
+	); err != nil {
+		p.logger.Error("error updating replication level for shard", tag.Error(err), tag.OperationFailed)
+	}
 
 	return &replicator.ReplicationMessages{
 		ReplicationTasks:       replicationTasks,

@@ -184,6 +184,7 @@ var keys = map[Key]string{
 	MaximumSignalsPerExecution:                            "history.maximumSignalsPerExecution",
 	ShardUpdateMinInterval:                                "history.shardUpdateMinInterval",
 	ShardSyncMinInterval:                                  "history.shardSyncMinInterval",
+	ShardSyncTimerJitterCoefficient:                       "history.shardSyncMinInterval",
 	DefaultEventEncoding:                                  "history.defaultEventEncoding",
 	EnableAdminProtection:                                 "history.enableAdminProtection",
 	AdminOperationToken:                                   "history.adminOperationToken",
@@ -203,6 +204,8 @@ var keys = map[Key]string{
 	ReplicationTaskProcessorErrorRetryWait:                "history.ReplicationTaskProcessorErrorRetryWait",
 	ReplicationTaskProcessorErrorRetryMaxAttempts:         "history.ReplicationTaskProcessorErrorRetryMaxAttempts",
 	ReplicationTaskProcessorNoTaskInitialWait:             "history.ReplicationTaskProcessorNoTaskInitialWait",
+	ReplicationTaskProcessorCleanupInterval:               "history.ReplicationTaskProcessorCleanupInterval",
+	ReplicationTaskProcessorCleanupJitterCoefficient:      "history.ReplicationTaskProcessorCleanupJitterCoefficient",
 	EnableConsistentQuery:                                 "history.EnableConsistentQuery",
 	EnableConsistentQueryByDomain:                         "history.EnableConsistentQueryByDomain",
 	MaxBufferedQueryCount:                                 "history.MaxBufferedQueryCount",
@@ -510,6 +513,8 @@ const (
 	ShardUpdateMinInterval
 	// ShardSyncMinInterval is the minimal time interval which the shard info should be sync to remote
 	ShardSyncMinInterval
+	// ShardSyncTimerJitterCoefficient is the sync shard jitter coefficient
+	ShardSyncTimerJitterCoefficient
 	// DefaultEventEncoding is the encoding type for history events
 	DefaultEventEncoding
 	// NumArchiveSystemWorkflows is key for number of archive system workflows running in total
@@ -608,7 +613,10 @@ const (
 	ReplicationTaskProcessorErrorRetryMaxAttempts
 	// ReplicationTaskProcessorNoTaskInitialWait is the wait time when not ask is returned
 	ReplicationTaskProcessorNoTaskInitialWait
-
+	// ReplicationTaskProcessorCleanupInterval determines how frequently the cleanup replication queue
+	ReplicationTaskProcessorCleanupInterval
+	// ReplicationTaskProcessorCleanupJitterCoefficient is the jitter for cleanup timer
+	ReplicationTaskProcessorCleanupJitterCoefficient
 	// EnableConsistentQuery indicates if consistent query is enabled for the cluster
 	EnableConsistentQuery
 	// EnableConsistentQueryByDomain indicates if consistent query is enabled for a domain

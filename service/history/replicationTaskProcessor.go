@@ -18,11 +18,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination replicationTaskProcessor_mock.go
+
 package history
 
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync/atomic"
 	"time"
 
@@ -47,6 +50,7 @@ const (
 	replicationTimeout               = 30 * time.Second
 	taskErrorRetryBackoffCoefficient = 1.2
 	dlqErrorRetryWait                = time.Second
+	emptyMessageID                   = -1
 )
 
 var (
@@ -55,8 +59,8 @@ var (
 )
 
 type (
-	// ReplicationTaskProcessor is responsible for processing replication tasks for a shard.
-	ReplicationTaskProcessor struct {
+	// ReplicationTaskProcessorImpl is responsible for processing replication tasks for a shard.
+	ReplicationTaskProcessorImpl struct {
 		currentCluster      string
 		sourceCluster       string
 		status              int32
@@ -77,8 +81,14 @@ type (
 		lastProcessedMessageID int64
 		lastRetrievedMessageID int64
 
-		requestChan chan<- *request
-		done        chan struct{}
+		requestChan   chan<- *request
+		syncShardChan chan *r.SyncShardStatus
+		done          chan struct{}
+	}
+
+	// ReplicationTaskProcessor is responsible for processing replication tasks for a shard.
+	ReplicationTaskProcessor interface {
+		common.Daemon
 	}
 
 	request struct {
@@ -94,8 +104,8 @@ func NewReplicationTaskProcessor(
 	config *Config,
 	historyClient hc.Client,
 	metricsClient metrics.Client,
-	replicationTaskFetcher *ReplicationTaskFetcher,
-) *ReplicationTaskProcessor {
+	replicationTaskFetcher ReplicationTaskFetcher,
+) *ReplicationTaskProcessorImpl {
 	taskRetryPolicy := backoff.NewExponentialRetryPolicy(config.ReplicationTaskProcessorErrorRetryWait())
 	taskRetryPolicy.SetBackoffCoefficient(taskErrorRetryBackoffCoefficient)
 	taskRetryPolicy.SetMaximumAttempts(config.ReplicationTaskProcessorErrorRetryMaxAttempts())
@@ -128,45 +138,52 @@ func NewReplicationTaskProcessor(
 		replicationTimeout,
 		shard.GetLogger(),
 	)
-	return &ReplicationTaskProcessor{
-		currentCluster:      shard.GetClusterMetadata().GetCurrentClusterName(),
-		sourceCluster:       replicationTaskFetcher.GetSourceCluster(),
-		status:              common.DaemonStatusInitialized,
-		shard:               shard,
-		historyEngine:       historyEngine,
-		historySerializer:   persistence.NewPayloadSerializer(),
-		domainCache:         shard.GetDomainCache(),
-		metricsClient:       metricsClient,
-		logger:              shard.GetLogger(),
-		nDCHistoryResender:  nDCHistoryResender,
-		historyRereplicator: historyRereplicator,
-		taskRetryPolicy:     taskRetryPolicy,
-		noTaskRetrier:       noTaskRetrier,
-		requestChan:         replicationTaskFetcher.GetRequestChan(),
-		done:                make(chan struct{}),
+	return &ReplicationTaskProcessorImpl{
+		currentCluster:         shard.GetClusterMetadata().GetCurrentClusterName(),
+		sourceCluster:          replicationTaskFetcher.GetSourceCluster(),
+		status:                 common.DaemonStatusInitialized,
+		shard:                  shard,
+		historyEngine:          historyEngine,
+		historySerializer:      persistence.NewPayloadSerializer(),
+		config:                 config,
+		domainCache:            shard.GetDomainCache(),
+		metricsClient:          metricsClient,
+		logger:                 shard.GetLogger(),
+		nDCHistoryResender:     nDCHistoryResender,
+		historyRereplicator:    historyRereplicator,
+		taskRetryPolicy:        taskRetryPolicy,
+		noTaskRetrier:          noTaskRetrier,
+		requestChan:            replicationTaskFetcher.GetRequestChan(),
+		syncShardChan:          make(chan *r.SyncShardStatus),
+		done:                   make(chan struct{}),
+		lastProcessedMessageID: emptyMessageID,
+		lastRetrievedMessageID: emptyMessageID,
 	}
 }
 
 // Start starts the processor
-func (p *ReplicationTaskProcessor) Start() {
+func (p *ReplicationTaskProcessorImpl) Start() {
 	if !atomic.CompareAndSwapInt32(&p.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
 
 	go p.processorLoop()
+	go p.syncShardStatusLoop()
+	go p.cleanupReplicationTaskLoop()
 	p.logger.Info("ReplicationTaskProcessor started.")
 }
 
 // Stop stops the processor
-func (p *ReplicationTaskProcessor) Stop() {
+func (p *ReplicationTaskProcessorImpl) Stop() {
 	if !atomic.CompareAndSwapInt32(&p.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
 
+	p.logger.Info("ReplicationTaskProcessor shutting down.")
 	close(p.done)
 }
 
-func (p *ReplicationTaskProcessor) processorLoop() {
+func (p *ReplicationTaskProcessorImpl) processorLoop() {
 	p.lastProcessedMessageID = p.shard.GetClusterReplicationLevel(p.sourceCluster)
 
 	defer func() {
@@ -200,15 +217,66 @@ Loop:
 
 			p.processResponse(response)
 		case <-p.done:
-			p.logger.Info("ReplicationTaskProcessor shutting down.")
 			return
 		}
 	}
 }
 
-func (p *ReplicationTaskProcessor) sendFetchMessageRequest() <-chan *r.ReplicationMessages {
+func (p *ReplicationTaskProcessorImpl) cleanupReplicationTaskLoop() {
+
+	timer := time.NewTimer(backoff.JitDuration(
+		p.config.ShardSyncMinInterval(),
+		p.config.ShardSyncTimerJitterCoefficient(),
+	))
+	for {
+		select {
+		case <-p.done:
+			timer.Stop()
+			return
+		case <-timer.C:
+			err := p.cleanupAckedReplicationTasks()
+			if err != nil {
+				p.logger.Error("Failed to clean up replication messages.", tag.Error(err))
+				p.metricsClient.Scope(metrics.ReplicationTaskCleanupScope).IncCounter(metrics.ReplicationTaskCleanupFailure)
+			}
+			timer.Reset(backoff.JitDuration(
+				p.config.ShardSyncMinInterval(),
+				p.config.ShardSyncTimerJitterCoefficient(),
+			))
+		}
+	}
+}
+
+func (p *ReplicationTaskProcessorImpl) cleanupAckedReplicationTasks() error {
+
+	clusterMetadata := p.shard.GetClusterMetadata()
+	currentCluster := clusterMetadata.GetCurrentClusterName()
+	minAckLevel := int64(math.MaxInt64)
+	for clusterName, clusterInfo := range clusterMetadata.GetAllClusterInfo() {
+		if !clusterInfo.Enabled {
+			continue
+		}
+
+		if clusterName != currentCluster {
+			ackLevel := p.shard.GetClusterReplicationLevel(clusterName)
+			if ackLevel < minAckLevel {
+				minAckLevel = ackLevel
+			}
+		}
+	}
+
+	p.logger.Info("Cleaning up replication task queue.", tag.ReadLevel(minAckLevel))
+	p.metricsClient.Scope(metrics.ReplicationTaskCleanupScope).IncCounter(metrics.ReplicationTaskCleanupCount)
+	return p.shard.GetExecutionManager().RangeCompleteReplicationTask(
+		&persistence.RangeCompleteReplicationTaskRequest{
+			InclusiveEndTaskID: minAckLevel,
+		},
+	)
+}
+
+func (p *ReplicationTaskProcessorImpl) sendFetchMessageRequest() <-chan *r.ReplicationMessages {
 	respChan := make(chan *r.ReplicationMessages, 1)
-	// TODO: when we support prefetching, LastRetrivedMessageId can be different than LastProcessedMessageId
+	// TODO: when we support prefetching, LastRetrievedMessageId can be different than LastProcessedMessageId
 	p.requestChan <- &request{
 		token: &r.ReplicationToken{
 			ShardID:                common.Int32Ptr(int32(p.shard.GetShardID())),
@@ -220,7 +288,9 @@ func (p *ReplicationTaskProcessor) sendFetchMessageRequest() <-chan *r.Replicati
 	return respChan
 }
 
-func (p *ReplicationTaskProcessor) processResponse(response *r.ReplicationMessages) {
+func (p *ReplicationTaskProcessorImpl) processResponse(response *r.ReplicationMessages) {
+
+	p.syncShardChan <- response.GetSyncShardStatus()
 	// Note here we check replication tasks instead of hasMore. The expectation is that in a steady state
 	// we will receive replication tasks but hasMore is false (meaning that we are always catching up).
 	// So hasMore might not be a good indicator for additional wait.
@@ -240,17 +310,60 @@ func (p *ReplicationTaskProcessor) processResponse(response *r.ReplicationMessag
 
 	p.lastProcessedMessageID = response.GetLastRetrievedMessageId()
 	p.lastRetrievedMessageID = response.GetLastRetrievedMessageId()
-	err := p.shard.UpdateClusterReplicationLevel(p.sourceCluster, p.lastRetrievedMessageID)
-	if err != nil {
-		p.logger.Error("Error updating replication level for shard", tag.Error(err), tag.OperationFailed)
-	}
-
 	scope := p.metricsClient.Scope(metrics.ReplicationTaskFetcherScope, metrics.TargetClusterTag(p.sourceCluster))
 	scope.UpdateGauge(metrics.LastRetrievedMessageID, float64(p.lastRetrievedMessageID))
 	p.noTaskRetrier.Reset()
 }
 
-func (p *ReplicationTaskProcessor) processSingleTask(replicationTask *r.ReplicationTask) error {
+func (p *ReplicationTaskProcessorImpl) syncShardStatusLoop() {
+
+	timer := time.NewTimer(backoff.JitDuration(
+		p.config.ShardSyncMinInterval(),
+		p.config.ShardSyncTimerJitterCoefficient(),
+	))
+	var syncShardTask *r.SyncShardStatus
+	for {
+		select {
+		case syncShardRequest := <-p.syncShardChan:
+			syncShardTask = syncShardRequest
+		case <-timer.C:
+			if err := p.handleSyncShardStatus(
+				syncShardTask,
+			); err != nil {
+				p.logger.Error("failed to sync shard status", tag.Error(err))
+				p.metricsClient.Scope(metrics.HistorySyncShardStatusScope).IncCounter(metrics.SyncShardFromRemoteFailure)
+			}
+			timer.Reset(backoff.JitDuration(
+				p.config.ShardSyncMinInterval(),
+				p.config.ShardSyncTimerJitterCoefficient(),
+			))
+		case <-p.done:
+			timer.Stop()
+			return
+		}
+	}
+}
+
+func (p *ReplicationTaskProcessorImpl) handleSyncShardStatus(
+	status *r.SyncShardStatus,
+) error {
+
+	if status == nil ||
+		p.shard.GetTimeSource().Now().Sub(
+			time.Unix(0, status.GetTimestamp())) > dropSyncShardTaskTimeThreshold {
+		return nil
+	}
+	p.metricsClient.Scope(metrics.HistorySyncShardStatusScope).IncCounter(metrics.SyncShardFromRemoteCounter)
+	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
+	defer cancel()
+	return p.historyEngine.SyncShardStatus(ctx, &h.SyncShardStatusRequest{
+		SourceCluster: common.StringPtr(p.sourceCluster),
+		ShardId:       common.Int64Ptr(int64(p.shard.GetShardID())),
+		Timestamp:     status.Timestamp,
+	})
+}
+
+func (p *ReplicationTaskProcessorImpl) processSingleTask(replicationTask *r.ReplicationTask) error {
 	err := backoff.Retry(func() error {
 		return p.processTaskOnce(replicationTask)
 	}, p.taskRetryPolicy, isTransientRetryableError)
@@ -268,7 +381,7 @@ func (p *ReplicationTaskProcessor) processSingleTask(replicationTask *r.Replicat
 	return nil
 }
 
-func (p *ReplicationTaskProcessor) processTaskOnce(replicationTask *r.ReplicationTask) error {
+func (p *ReplicationTaskProcessorImpl) processTaskOnce(replicationTask *r.ReplicationTask) error {
 	var err error
 	var scope int
 	switch replicationTask.GetTaskType() {
@@ -276,8 +389,7 @@ func (p *ReplicationTaskProcessor) processTaskOnce(replicationTask *r.Replicatio
 		// Domain replication task should be handled in worker (domainReplicationMessageProcessor)
 		panic("task type not supported")
 	case r.ReplicationTaskTypeSyncShardStatus:
-		scope = metrics.SyncShardTaskScope
-		err = p.handleSyncShardTask(replicationTask)
+		// Shard status will be sent as part of the Replication message without kafka
 	case r.ReplicationTaskTypeSyncActivity:
 		scope = metrics.SyncActivityTaskScope
 		err = p.handleActivityTask(replicationTask)
@@ -308,7 +420,7 @@ func (p *ReplicationTaskProcessor) processTaskOnce(replicationTask *r.Replicatio
 	return err
 }
 
-func (p *ReplicationTaskProcessor) putReplicationTaskToDLQ(replicationTask *r.ReplicationTask) error {
+func (p *ReplicationTaskProcessorImpl) putReplicationTaskToDLQ(replicationTask *r.ReplicationTask) error {
 	request, err := p.generateDLQRequest(replicationTask)
 	if err != nil {
 		p.logger.Error("Failed to generate DLQ replication task.", tag.Error(err))
@@ -326,7 +438,7 @@ func (p *ReplicationTaskProcessor) putReplicationTaskToDLQ(replicationTask *r.Re
 	}, p.dlqRetryPolicy, p.shouldRetryDLQ)
 }
 
-func (p *ReplicationTaskProcessor) generateDLQRequest(
+func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 	replicationTask *r.ReplicationTask,
 ) (*persistence.PutReplicationTaskToDLQRequest, error) {
 	switch *replicationTask.TaskType {
@@ -402,7 +514,7 @@ func isTransientRetryableError(err error) bool {
 	}
 }
 
-func (p *ReplicationTaskProcessor) shouldRetryDLQ(err error) bool {
+func (p *ReplicationTaskProcessorImpl) shouldRetryDLQ(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -430,7 +542,7 @@ func toPersistenceReplicationInfo(
 	return replicationInfoMap
 }
 
-func (p *ReplicationTaskProcessor) updateFailureMetric(scope int, err error) {
+func (p *ReplicationTaskProcessorImpl) updateFailureMetric(scope int, err error) {
 	// Always update failure counter for all replicator errors
 	p.metricsClient.IncCounter(scope, metrics.ReplicatorFailures)
 
@@ -457,7 +569,7 @@ func (p *ReplicationTaskProcessor) updateFailureMetric(scope int, err error) {
 	}
 }
 
-func (p *ReplicationTaskProcessor) handleActivityTask(
+func (p *ReplicationTaskProcessorImpl) handleActivityTask(
 	task *r.ReplicationTask,
 ) error {
 
@@ -481,6 +593,7 @@ func (p *ReplicationTaskProcessor) handleActivityTask(
 		Attempt:            attr.Attempt,
 		LastFailureReason:  attr.LastFailureReason,
 		LastWorkerIdentity: attr.LastWorkerIdentity,
+		VersionHistory:     attr.GetVersionHistory(),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
 	defer cancel()
@@ -537,7 +650,7 @@ func (p *ReplicationTaskProcessor) handleActivityTask(
 }
 
 //TODO: remove this part after 2DC deprecation
-func (p *ReplicationTaskProcessor) handleHistoryReplicationTask(
+func (p *ReplicationTaskProcessorImpl) handleHistoryReplicationTask(
 	task *r.ReplicationTask,
 ) error {
 
@@ -594,7 +707,7 @@ func (p *ReplicationTaskProcessor) handleHistoryReplicationTask(
 	return p.historyEngine.ReplicateEvents(ctx, request)
 }
 
-func (p *ReplicationTaskProcessor) handleHistoryReplicationTaskV2(
+func (p *ReplicationTaskProcessorImpl) handleHistoryReplicationTaskV2(
 	task *r.ReplicationTask,
 ) error {
 
@@ -644,26 +757,7 @@ func (p *ReplicationTaskProcessor) handleHistoryReplicationTaskV2(
 	return p.historyEngine.ReplicateEventsV2(ctx, request)
 }
 
-func (p *ReplicationTaskProcessor) handleSyncShardTask(
-	task *r.ReplicationTask,
-) error {
-
-	attr := task.SyncShardStatusTaskAttributes
-	if time.Now().Sub(time.Unix(0, attr.GetTimestamp())) > dropSyncShardTaskTimeThreshold {
-		return nil
-	}
-
-	req := &h.SyncShardStatusRequest{
-		SourceCluster: attr.SourceCluster,
-		ShardId:       attr.ShardId,
-		Timestamp:     attr.Timestamp,
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
-	defer cancel()
-	return p.historyEngine.SyncShardStatus(ctx, req)
-}
-
-func (p *ReplicationTaskProcessor) filterTask(
+func (p *ReplicationTaskProcessorImpl) filterTask(
 	domainID string,
 ) (bool, error) {
 
@@ -684,7 +778,7 @@ FilterLoop:
 }
 
 //TODO: remove this code after 2DC deprecation
-func (p *ReplicationTaskProcessor) convertRetryTaskError(
+func (p *ReplicationTaskProcessorImpl) convertRetryTaskError(
 	err error,
 ) (*shared.RetryTaskError, bool) {
 
@@ -692,7 +786,7 @@ func (p *ReplicationTaskProcessor) convertRetryTaskError(
 	return retError, ok
 }
 
-func (p *ReplicationTaskProcessor) convertRetryTaskV2Error(
+func (p *ReplicationTaskProcessorImpl) convertRetryTaskV2Error(
 	err error,
 ) (*shared.RetryTaskV2Error, bool) {
 

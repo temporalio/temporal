@@ -813,6 +813,12 @@ func (m *executionManagerImpl) CompleteReplicationTask(
 	return m.persistence.CompleteReplicationTask(request)
 }
 
+func (m *executionManagerImpl) RangeCompleteReplicationTask(
+	request *RangeCompleteReplicationTaskRequest,
+) error {
+	return m.persistence.RangeCompleteReplicationTask(request)
+}
+
 func (m *executionManagerImpl) PutReplicationTaskToDLQ(
 	request *PutReplicationTaskToDLQRequest,
 ) error {
