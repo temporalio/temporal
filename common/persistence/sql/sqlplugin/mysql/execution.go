@@ -80,7 +80,7 @@ workflow_id = :workflow_id
 `
 
 	getTransferTasksQuery = `SELECT task_id, data, data_encoding 
- FROM transfer_tasks WHERE shard_id = ? AND task_id > ? AND task_id <= ?`
+ FROM transfer_tasks WHERE shard_id = ? AND task_id > ? AND task_id <= ? ORDER BY shard_id, task_id`
 
 	createTransferTasksQuery = `INSERT INTO transfer_tasks(shard_id, task_id, data, data_encoding) 
  VALUES(:shard_id, :task_id, :data, :data_encoding)`

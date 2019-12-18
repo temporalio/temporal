@@ -2287,7 +2287,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksRangeComplete() {
 	err2 := s.UpdateWorklowStateAndReplication(updatedInfo, updatedStats, nil, nil, int64(3), tasks)
 	s.NoError(err2)
 
-	txTasks, err1 := s.GetTransferTasks(1, true) // use page size one to force pagination
+	txTasks, err1 := s.GetTransferTasks(2, true) // use page size one to force pagination
 	s.NoError(err1)
 	s.NotNil(txTasks, "expected valid list of tasks.")
 	s.Equal(len(tasks), len(txTasks))
@@ -2306,6 +2306,12 @@ func (s *ExecutionManagerSuite) TestTransferTasksRangeComplete() {
 	s.Equal(int64(444), txTasks[3].Version)
 	s.Equal(int64(555), txTasks[4].Version)
 	s.Equal(int64(666), txTasks[5].Version)
+	s.Equal(currentTransferID + 10001, txTasks[0].TaskID)
+	s.Equal(currentTransferID + 10002, txTasks[1].TaskID)
+	s.Equal(currentTransferID + 10003, txTasks[2].TaskID)
+	s.Equal(currentTransferID + 10004, txTasks[3].TaskID)
+	s.Equal(currentTransferID + 10005, txTasks[4].TaskID)
+	s.Equal(currentTransferID + 10006, txTasks[5].TaskID)
 
 	err2 = s.RangeCompleteTransferTask(txTasks[0].TaskID-1, txTasks[5].TaskID)
 	s.NoError(err2)
