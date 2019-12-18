@@ -72,7 +72,7 @@ func ToProtoError(in error) error {
 	case *shared.CancellationAlreadyRequestedError:
 		return protobuf.NewError(yarpcerrors.CodeAlreadyExists, thriftError.Message)
 	case *shared.QueryFailedError:
-		return protobuf.NewError(yarpcerrors.CodeInternal, thriftError.Message)
+		return protobuf.NewError(yarpcerrors.CodeInvalidArgument, thriftError.Message)
 	case *shared.LimitExceededError:
 		return protobuf.NewError(yarpcerrors.CodeResourceExhausted, thriftError.Message)
 	case *shared.ClientVersionNotSupportedError:

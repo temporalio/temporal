@@ -110,6 +110,7 @@ PROTO_REPO := github.com/temporalio/temporal-proto
 # List only subdirectories with *.proto files (sort to remove duplicates).
 # Note: using "shell find" instead of "wildcard" because "wildcard" caches directory structure.
 PROTO_DIRS = $(sort $(dir $(shell find $(PROTO_ROOT) -name "*.proto")))
+PROTO_SERVICES := $(shell find $(PROTO_ROOT) -name "*service.proto")
 
 # Everything that deals with go modules (go.mod) needs to take dependency on this target.
 $(PROTO_ROOT)/go.mod:
@@ -128,7 +129,7 @@ install-proto-submodule:
 protoc:
 #   run protoc separately for each directory because of different package names
 	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_ROOT) --gogoslick_out=paths=source_relative:$(PROTO_ROOT) $(PROTO_DIR)*.proto;)
-	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_ROOT) --yarpc-go_out=$(PROTO_ROOT) $(PROTO_DIR)*.proto;)
+	$(foreach PROTO_SERVICE,$(PROTO_SERVICES),protoc --proto_path=$(PROTO_ROOT) --yarpc-go_out=$(PROTO_ROOT) $(PROTO_SERVICE);)
 
 # All YARPC generated service files pathes relative to PROTO_ROOT
 PROTO_YARPC_SERVICES = $(patsubst $(PROTO_ROOT)/%,%,$(shell find $(PROTO_ROOT) -name "service.pb.yarpc.go"))
