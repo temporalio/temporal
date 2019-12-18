@@ -124,10 +124,10 @@ enum DomainStatus {
 }
 
 enum TimeoutType {
-  START_TO_CLOSE,
-  SCHEDULE_TO_START,
-  SCHEDULE_TO_CLOSE,
-  HEARTBEAT,
+    StartToClose,
+    ScheduleToStart,
+    ScheduleToClose,
+    Heartbeat,
 }
 
 enum ParentClosePolicy {
