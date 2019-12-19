@@ -1715,6 +1715,70 @@ func (s *ExecutionManagerSuite) TestUpdateDeleteWorkflow() {
 	s.True(ok)
 }
 
+func (s *ExecutionManagerSuite) TestCleanupCorruptedWorkflow() {
+	domainID := "54d15308-e20e-4b91-a00f-a518a3892790"
+	workflowExecution := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("cleanup-corrupted-workflow-test"),
+		RunId:      common.StringPtr("6cae4054-6ba7-46d3-8755-e3c2db6f74ea"),
+	}
+
+	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, "queue1", "wType", 20, 13, nil, 3, 0, 2, nil)
+	s.NoError(err0)
+	s.NotNil(task0, "Expected non empty task identifier.")
+
+	runID0, err1 := s.GetCurrentWorkflowRunID(domainID, workflowExecution.GetWorkflowId())
+	s.NoError(err1)
+	s.Equal(workflowExecution.GetRunId(), runID0)
+
+	info0, err2 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.NoError(err2)
+
+	// deleting current record and verify
+	err3 := s.DeleteCurrentWorkflowExecution(info0.ExecutionInfo)
+	s.NoError(err3)
+	runID0, err4 := s.GetCurrentWorkflowRunID(domainID, workflowExecution.GetWorkflowId())
+	s.Error(err4)
+	s.Empty(runID0)
+	_, ok := err4.(*gen.EntityNotExistsError)
+	s.True(ok)
+
+	// we should still be able to load with runID
+	info1, err5 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.NoError(err5)
+	s.Equal(info0, info1)
+
+	// mark it as corrupted
+	info0.ExecutionInfo.State = p.WorkflowStateCorrupted
+	_, err6 := s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
+		UpdateWorkflowMutation: p.WorkflowMutation{
+			ExecutionInfo:  info0.ExecutionInfo,
+			ExecutionStats: info0.ExecutionStats,
+			Condition:      info0.ExecutionInfo.NextEventID,
+		},
+		RangeID: s.ShardInfo.RangeID,
+		Mode:    p.UpdateWorkflowModeBypassCurrent,
+	})
+	s.NoError(err6)
+
+	// we should still be able to load with runID
+	info2, err7 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.NoError(err7)
+	s.Equal(p.WorkflowStateCorrupted, info2.ExecutionInfo.State)
+	info2.ExecutionInfo.State = info1.ExecutionInfo.State
+	info2.ExecutionInfo.LastUpdatedTimestamp = info1.ExecutionInfo.LastUpdatedTimestamp
+	s.Equal(info2, info1)
+
+	//delete the run
+	err8 := s.DeleteWorkflowExecution(info0.ExecutionInfo)
+	s.NoError(err8)
+
+	// execution record should be gone
+	_, err9 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Error(err9)
+	_, ok = err9.(*gen.EntityNotExistsError)
+	s.True(ok)
+}
+
 // TestGetCurrentWorkflow test
 func (s *ExecutionManagerSuite) TestGetCurrentWorkflow() {
 	domainID := "54d15308-e20e-4b91-a00f-a518a3892790"

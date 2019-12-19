@@ -32,6 +32,7 @@ var (
 		WorkflowStateRunning:   {},
 		WorkflowStateCompleted: {},
 		WorkflowStateZombie:    {},
+		WorkflowStateCorrupted: {},
 	}
 
 	validWorkflowCloseStatuses = map[int]struct{}{

@@ -1914,6 +1914,10 @@ func (d *cassandraPersistence) assertNotCurrentExecution(
 		DomainID:   domainID,
 		WorkflowID: workflowID,
 	}); err != nil {
+		if _, ok := err.(*workflow.EntityNotExistsError); ok{
+			// allow bypassing no current record
+			return nil
+		}
 		return err
 	} else if resp.RunID == runID {
 		return &p.ConditionFailedError{

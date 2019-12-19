@@ -1030,11 +1030,21 @@ func assertNotCurrentExecution(
 	workflowID string,
 	runID sqlplugin.UUID,
 ) error {
-
-	assertFn := func(currentRow *sqlplugin.CurrentExecutionsRow) error {
-		return assertRunIDMismatch(runID, currentRow.RunID)
+	currentRow, err := tx.LockCurrentExecutions(&sqlplugin.CurrentExecutionsFilter{
+		ShardID:    int64(shardID),
+		DomainID:   domainID,
+		WorkflowID: workflowID,
+	})
+	if err != nil {
+		if err == sql.ErrNoRows{
+			// allow bypassing no current record
+			return nil
+		}
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("assertCurrentExecution failed. Unable to load current record. Error: %v", err),
+		}
 	}
-	return assertCurrentExecution(tx, shardID, domainID, workflowID, assertFn)
+	return assertRunIDMismatch(runID, currentRow.RunID)
 }
 
 func assertRunIDAndUpdateCurrentExecution(

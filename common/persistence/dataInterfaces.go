@@ -100,6 +100,7 @@ const (
 	WorkflowStateCompleted
 	WorkflowStateZombie
 	WorkflowStateVoid
+	WorkflowStateCorrupted
 )
 
 // Workflow execution close status

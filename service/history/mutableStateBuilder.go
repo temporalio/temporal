@@ -789,6 +789,8 @@ func (e *mutableStateBuilder) IsCurrentWorkflowGuaranteed() bool {
 		return false
 	case persistence.WorkflowStateZombie:
 		return false
+	case persistence.WorkflowStateCorrupted:
+		return false
 	default:
 		panic(fmt.Sprintf("unknown workflow state: %v", e.executionInfo.State))
 	}
@@ -1520,6 +1522,8 @@ func (e *mutableStateBuilder) IsWorkflowExecutionRunning() bool {
 	case persistence.WorkflowStateCompleted:
 		return false
 	case persistence.WorkflowStateZombie:
+		return false
+	case persistence.WorkflowStateCorrupted:
 		return false
 	default:
 		panic(fmt.Sprintf("unknown workflow state: %v", e.executionInfo.State))
