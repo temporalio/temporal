@@ -76,6 +76,7 @@ func NewHandler(
 			resource.GetLogger(),
 			resource.GetMetricsClient(),
 			resource.GetDomainCache(),
+			resource.GetMatchingServiceResolver(),
 		),
 	}
 	// prevent us from trying to serve requests before matching engine is started and ready
@@ -283,6 +284,21 @@ func (h *Handler) DescribeTaskList(ctx context.Context, request *m.DescribeTaskL
 	}
 
 	response, err := h.engine.DescribeTaskList(ctx, request)
+	return response, h.handleErr(err, scope)
+}
+
+// ListTaskListPartitions returns information about partitions for a taskList
+func (h *Handler) ListTaskListPartitions(ctx context.Context, request *m.ListTaskListPartitionsRequest) (resp *gen.ListTaskListPartitionsResponse, retError error) {
+	defer log.CapturePanic(h.GetLogger(), &retError)
+	scope := metrics.MatchingListTaskListPartitionsScope
+	sw := h.startRequestProfile("ListTaskListPartitions", scope)
+	defer sw.Stop()
+
+	if ok := h.rateLimiter.Allow(); !ok {
+		return nil, h.handleErr(errMatchingHostThrottle, scope)
+	}
+
+	response, err := h.engine.ListTaskListPartitions(ctx, request)
 	return response, h.handleErr(err, scope)
 }
 

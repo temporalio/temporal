@@ -191,6 +191,39 @@ func (mr *_MockClientRecorder) DescribeTaskList(
 	return mr.mock.ctrl.RecordCall(mr.mock, "DescribeTaskList", args...)
 }
 
+// ListTaskListPartitions responds to a ListTaskListPartitions call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().ListTaskListPartitions(gomock.Any(), ...).Return(...)
+// 	... := client.ListTaskListPartitions(...)
+func (m *MockClient) ListTaskListPartitions(
+	ctx context.Context,
+	_Request *matching.ListTaskListPartitionsRequest,
+	opts ...yarpc.CallOption,
+) (success *shared.ListTaskListPartitionsResponse, err error) {
+
+	args := []interface{}{ctx, _Request}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "ListTaskListPartitions", args...)
+	success, _ = ret[i].(*shared.ListTaskListPartitionsResponse)
+	i++
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) ListTaskListPartitions(
+	ctx interface{},
+	_Request interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _Request}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "ListTaskListPartitions", args...)
+}
+
 // PollForActivityTask responds to a PollForActivityTask call based on the mock expectations. This
 // call will fail if the mock does not expect this call. Use EXPECT to expect
 // a call to this function.

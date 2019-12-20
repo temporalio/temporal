@@ -709,7 +709,8 @@ func (c *clientImpl) ReapplyEvents(
 
 func (c *clientImpl) GetClusterInfo(
 	ctx context.Context,
-	opts ...yarpc.CallOption) (*shared.ClusterInfo, error) {
+	opts ...yarpc.CallOption,
+) (*shared.ClusterInfo, error) {
 
 	opts = common.AggregateYarpcOptions(ctx, opts...)
 	client, err := c.getRandomClient()
@@ -719,4 +720,21 @@ func (c *clientImpl) GetClusterInfo(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.GetClusterInfo(ctx, opts...)
+}
+
+func (c *clientImpl) ListTaskListPartitions(
+	ctx context.Context,
+	request *shared.ListTaskListPartitionsRequest,
+	opts ...yarpc.CallOption,
+) (*shared.ListTaskListPartitionsResponse, error) {
+
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+
+	return client.ListTaskListPartitions(ctx, request, opts...)
 }

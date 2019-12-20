@@ -101,6 +101,11 @@ struct DescribeTaskListRequest {
   20: optional shared.DescribeTaskListRequest descRequest
 }
 
+struct ListTaskListPartitionsRequest {
+  10: optional string domain
+  20: optional shared.TaskList taskList
+}
+
 /**
 * MatchingService API is exposed to provide support for polling from long running applications.
 * Such applications are expected to have a worker which regularly polls for DecisionTask and ActivityTask.  For each
@@ -211,4 +216,15 @@ service MatchingService {
         3: shared.EntityNotExistsError entityNotExistError,
         4: shared.ServiceBusyError serviceBusyError,
       )
+
+
+  /**
+  * ListTaskListPartitions returns a map of partitionKey and hostAddress for a taskList
+  **/
+  shared.ListTaskListPartitionsResponse ListTaskListPartitions(1: ListTaskListPartitionsRequest request)
+    throws (
+        1: shared.BadRequestError badRequestError,
+        2: shared.InternalServiceError internalServiceError,
+        4: shared.ServiceBusyError serviceBusyError,
+    )
 }

@@ -1036,7 +1036,7 @@ func assertNotCurrentExecution(
 		WorkflowID: workflowID,
 	})
 	if err != nil {
-		if err == sql.ErrNoRows{
+		if err == sql.ErrNoRows {
 			// allow bypassing no current record
 			return nil
 		}

@@ -29,6 +29,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/uber/cadence/common/membership"
+
 	"github.com/pborman/uuid"
 
 	h "github.com/uber/cadence/.gen/go/history"
@@ -76,6 +78,7 @@ type (
 		lockableQueryTaskMap lockableQueryTaskMap
 		domainCache          cache.DomainCache
 		versionChecker       client.VersionChecker
+		keyResolver          membership.ServiceResolver
 	}
 )
 
@@ -105,6 +108,7 @@ func NewEngine(taskManager persistence.TaskManager,
 	logger log.Logger,
 	metricsClient metrics.Client,
 	domainCache cache.DomainCache,
+	resolver membership.ServiceResolver,
 ) Engine {
 
 	return &matchingEngineImpl{
@@ -119,6 +123,7 @@ func NewEngine(taskManager persistence.TaskManager,
 		lockableQueryTaskMap: lockableQueryTaskMap{queryTaskMap: make(map[string]chan *queryResult)},
 		domainCache:          domainCache,
 		versionChecker:       client.NewVersionChecker(),
+		keyResolver:          resolver,
 	}
 }
 
@@ -554,6 +559,84 @@ func (e *matchingEngineImpl) DescribeTaskList(ctx context.Context, request *m.De
 	}
 
 	return tlMgr.DescribeTaskList(request.DescRequest.GetIncludeTaskListStatus()), nil
+}
+
+func (e *matchingEngineImpl) ListTaskListPartitions(ctx context.Context, request *m.ListTaskListPartitionsRequest) (*workflow.ListTaskListPartitionsResponse, error) {
+	activityTaskListInfo, err := e.listTaskListPartitions(request, persistence.TaskListTypeActivity)
+	if err != nil {
+		return nil, err
+	}
+	decisionTaskListInfo, err := e.listTaskListPartitions(request, persistence.TaskListTypeDecision)
+	if err != nil {
+		return nil, err
+	}
+	resp := workflow.ListTaskListPartitionsResponse{
+		ActivityTaskListPartitions: activityTaskListInfo,
+		DecisionTaskListPartitions: decisionTaskListInfo,
+	}
+	return &resp, nil
+}
+
+func (e *matchingEngineImpl) listTaskListPartitions(request *m.ListTaskListPartitionsRequest, taskListType int) ([]*workflow.TaskListPartitionMetadata, error) {
+	partitions, err := e.getAllPartitions(
+		request.GetDomain(),
+		*request.TaskList,
+		taskListType,
+	)
+	if err != nil {
+		return nil, err
+	}
+	partitionHostInfo := make([]*workflow.TaskListPartitionMetadata, len(partitions))
+
+	if err != nil {
+		return nil, err
+	}
+	for _, partition := range partitions {
+		if host, err := e.getHostInfo(partition); err != nil {
+			partitionHostInfo = append(partitionHostInfo,
+				&workflow.TaskListPartitionMetadata{
+					Key:           common.StringPtr(partition),
+					OwnerHostName: common.StringPtr(host),
+				})
+		}
+	}
+	return partitionHostInfo, nil
+}
+
+func (e *matchingEngineImpl) getHostInfo(partitionKey string) (string, error) {
+	host, err := e.keyResolver.Lookup(partitionKey)
+	if err != nil {
+		return "", err
+	}
+	return host.GetAddress(), nil
+}
+
+func (e *matchingEngineImpl) getAllPartitions(
+	domain string,
+	taskList workflow.TaskList,
+	taskListType int,
+) ([]string, error) {
+	var partitionKeys []string
+	domainID, err := e.domainCache.GetDomainID(domain)
+	if err != nil {
+		return partitionKeys, err
+	}
+	taskListID, err := newTaskListID(domainID, taskList.GetName(), persistence.TaskListTypeDecision)
+	rootPartition := taskListID.GetRoot()
+
+	partitionKeys = append(partitionKeys, rootPartition)
+
+	nWritePartitions := e.config.GetTasksBatchSize
+	n := nWritePartitions(domain, rootPartition, taskListType)
+	if n <= 0 {
+		return partitionKeys, nil
+	}
+
+	for i := 1; i < n; i++ {
+		partitionKeys = append(partitionKeys, fmt.Sprintf("%v%v/%v", taskListPartitionPrefix, rootPartition, i))
+	}
+
+	return partitionKeys, nil
 }
 
 // Loads a task from persistence and wraps it in a task context

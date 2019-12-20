@@ -625,3 +625,18 @@ func (c *retryableClient) GetClusterInfo(
 	err := backoff.Retry(op, c.policy, c.isRetryable)
 	return resp, err
 }
+
+func (c *retryableClient) ListTaskListPartitions(
+	ctx context.Context,
+	request *shared.ListTaskListPartitionsRequest,
+	opts ...yarpc.CallOption,
+) (*shared.ListTaskListPartitionsResponse, error) {
+	var resp *shared.ListTaskListPartitionsResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.ListTaskListPartitions(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}

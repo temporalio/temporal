@@ -699,6 +699,27 @@ func (a *AccessControlledWorkflowHandler) TerminateWorkflowExecution(
 	return a.frontendHandler.TerminateWorkflowExecution(ctx, request)
 }
 
+// ListTaskListPartitions API call
+func (a *AccessControlledWorkflowHandler) ListTaskListPartitions(
+	ctx context.Context,
+	request *shared.ListTaskListPartitionsRequest,
+) (*shared.ListTaskListPartitionsResponse, error) {
+
+	attr := &authorization.Attributes{
+		APIName:    "ListTaskListPartitions",
+		DomainName: request.GetDomain(),
+	}
+	isAuthorized, err := a.isAuthorized(ctx, attr)
+	if err != nil {
+		return nil, err
+	}
+	if !isAuthorized {
+		return nil, errUnauthorized
+	}
+
+	return a.frontendHandler.ListTaskListPartitions(ctx, request)
+}
+
 // UpdateDomain API call
 func (a *AccessControlledWorkflowHandler) UpdateDomain(
 	ctx context.Context,

@@ -82,6 +82,11 @@ func (tn *qualifiedTaskListName) IsRoot() bool {
 	return tn.partition == 0
 }
 
+// GetRoot returns the root name for a task list
+func (tn *qualifiedTaskListName) GetRoot() string {
+	return tn.baseName
+}
+
 // Parent returns the name of the parent task list
 // input:
 //   degree: Number of children at each level of the tree

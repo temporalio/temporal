@@ -1132,6 +1132,36 @@ func (handler *DCRedirectionHandlerImpl) TerminateWorkflowExecution(
 	return err
 }
 
+// ListTaskListPartitions API call
+func (handler *DCRedirectionHandlerImpl) ListTaskListPartitions(
+	ctx context.Context,
+	request *shared.ListTaskListPartitionsRequest,
+) (resp *shared.ListTaskListPartitionsResponse, retError error) {
+
+	var apiName = "ListTaskListPartitions"
+	var err error
+	var cluster string
+
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionListTaskListPartitionsScope)
+	defer func() {
+		handler.afterCall(scope, startTime, cluster, &retError)
+	}()
+
+	err = handler.redirectionPolicy.WithDomainNameRedirect(ctx, request.GetDomain(), apiName, func(targetDC string) error {
+		cluster = targetDC
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.ListTaskListPartitions(ctx, request)
+		default:
+			remoteClient := handler.GetRemoteFrontendClient(targetDC)
+			resp, err = remoteClient.ListTaskListPartitions(ctx, request)
+		}
+		return err
+	})
+
+	return resp, err
+}
+
 // GetReplicationMessages API call
 func (handler *DCRedirectionHandlerImpl) GetReplicationMessages(
 	ctx context.Context,
