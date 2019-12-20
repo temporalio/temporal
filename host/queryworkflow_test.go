@@ -34,7 +34,6 @@ import (
 	commonproto "github.com/temporalio/temporal-proto/common"
 	"github.com/temporalio/temporal-proto/enums"
 	"github.com/temporalio/temporal-proto/workflowservice"
-	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log/tag"
 )
 
@@ -47,79 +46,75 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 	activityName := "activity_type1"
 	queryType := "test-query"
 
-	workflowType := &workflow.WorkflowType{}
-	workflowType.Name = common.StringPtr(wt)
+	workflowType := &commonproto.WorkflowType{Name: wt}
+	taskList := &commonproto.TaskList{Name: tl}
 
-	taskList := &workflow.TaskList{}
-	taskList.Name = common.StringPtr(tl)
-
-	stickyTaskList := &workflow.TaskList{}
-	stickyTaskList.Name = common.StringPtr(stl)
-	stickyScheduleToStartTimeoutSeconds := common.Int32Ptr(10)
+	stickyTaskList := &commonproto.TaskList{Name: stl}
+	stickyScheduleToStartTimeoutSeconds := 10
 
 	// Start workflow execution
-	request := &workflow.StartWorkflowExecutionRequest{
-		RequestId:                           common.StringPtr(uuid.New()),
-		Domain:                              common.StringPtr(s.domainName),
-		WorkflowId:                          common.StringPtr(id),
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:                           uuid.New(),
+		Domain:                              s.domainName,
+		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
-		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
-		Identity:                            common.StringPtr(identity),
+		ExecutionStartToCloseTimeoutSeconds: 100,
+		TaskStartToCloseTimeoutSeconds:      1,
+		Identity:                            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
-	s.Logger.Info("StartWorkflowExecution: response", tag.WorkflowRunID(*we.RunId))
+	s.Logger.Info("StartWorkflowExecution: response", tag.WorkflowRunID(we.RunId))
 
 	// decider logic
 	activityScheduled := false
 	activityData := int32(1)
-	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return nil, []*workflow.Decision{{
-				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeScheduleActivityTask),
-				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    common.StringPtr(strconv.Itoa(int(1))),
-					ActivityType:                  &workflow.ActivityType{Name: common.StringPtr(activityName)},
-					TaskList:                      &workflow.TaskList{Name: &tl},
+			return nil, []*commonproto.Decision{{
+				DecisionType: enums.DecisionTypeScheduleActivityTask,
+				Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
+					ActivityId:                    "1",
+					ActivityType:                  &commonproto.ActivityType{Name: activityName},
+					TaskList:                      &commonproto.TaskList{Name: tl},
 					Input:                         buf.Bytes(),
-					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
-					ScheduleToStartTimeoutSeconds: common.Int32Ptr(2),
-					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
-					HeartbeatTimeoutSeconds:       common.Int32Ptr(5),
-				},
+					ScheduleToCloseTimeoutSeconds: 100,
+					ScheduleToStartTimeoutSeconds: 2,
+					StartToCloseTimeoutSeconds:    50,
+					HeartbeatTimeoutSeconds:       5,
+				}},
 			}}, nil
 		}
 
-		return nil, []*workflow.Decision{{
-			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
-			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+		return nil, []*commonproto.Decision{{
+			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
+			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done."),
-			},
+			}},
 		}}, nil
 	}
 
 	// activity handler
-	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
+	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 
 		return []byte("Activity Result."), false, nil
 	}
 
-	queryHandler := func(task *workflow.PollForDecisionTaskResponse) ([]byte, error) {
+	queryHandler := func(task *workflowservice.PollForDecisionTaskResponse) ([]byte, error) {
 		s.NotNil(task.Query)
 		s.NotNil(task.Query.QueryType)
-		if *task.Query.QueryType == queryType {
+		if task.Query.QueryType == queryType {
 			return []byte("query-result"), nil
 		}
 
@@ -137,7 +132,7 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 		Logger:                              s.Logger,
 		T:                                   s.T(),
 		StickyTaskList:                      stickyTaskList,
-		StickyScheduleToStartTimeoutSeconds: stickyScheduleToStartTimeoutSeconds,
+		StickyScheduleToStartTimeoutSeconds: int32(stickyScheduleToStartTimeoutSeconds),
 	}
 
 	// Make first decision to schedule activity
@@ -146,19 +141,19 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 	s.Nil(err)
 
 	type QueryResult struct {
-		Resp *workflow.QueryWorkflowResponse
+		Resp *workflowservice.QueryWorkflowResponse
 		Err  error
 	}
 	queryResultCh := make(chan QueryResult)
 	queryWorkflowFn := func(queryType string) {
-		queryResp, err := s.engine.QueryWorkflow(createContext(), &workflow.QueryWorkflowRequest{
-			Domain: common.StringPtr(s.domainName),
-			Execution: &workflow.WorkflowExecution{
-				WorkflowId: common.StringPtr(id),
-				RunId:      common.StringPtr(*we.RunId),
+		queryResp, err := s.engine.QueryWorkflow(createContext(), &workflowservice.QueryWorkflowRequest{
+			Domain: s.domainName,
+			Execution: &commonproto.WorkflowExecution{
+				WorkflowId: id,
+				RunId:      we.RunId,
 			},
-			Query: &workflow.WorkflowQuery{
-				QueryType: common.StringPtr(queryType),
+			Query: &commonproto.WorkflowQuery{
+				QueryType: queryType,
 			},
 		})
 		queryResultCh <- QueryResult{Resp: queryResp, Err: err}
@@ -196,9 +191,9 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 	}
 	queryResult = <-queryResultCh
 	s.NotNil(queryResult.Err)
-	queryFailError, ok := queryResult.Err.(*workflow.QueryFailedError)
-	s.True(ok)
-	s.Equal("unknown-query-type", queryFailError.Message)
+	st := yarpcerrors.FromError(queryResult.Err)
+	s.Equal(yarpcerrors.CodeInvalidArgument, st.Code())
+	s.Equal("unknown-query-type", st.Message())
 }
 
 func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
@@ -210,79 +205,75 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 	activityName := "activity_type1"
 	queryType := "test-query"
 
-	workflowType := &workflow.WorkflowType{}
-	workflowType.Name = common.StringPtr(wt)
+	workflowType := &commonproto.WorkflowType{Name: wt}
+	taskList := &commonproto.TaskList{Name: tl}
 
-	taskList := &workflow.TaskList{}
-	taskList.Name = common.StringPtr(tl)
-
-	stickyTaskList := &workflow.TaskList{}
-	stickyTaskList.Name = common.StringPtr(stl)
-	stickyScheduleToStartTimeoutSeconds := common.Int32Ptr(10)
+	stickyTaskList := &commonproto.TaskList{Name: stl}
+	stickyScheduleToStartTimeoutSeconds := 10
 
 	// Start workflow execution
-	request := &workflow.StartWorkflowExecutionRequest{
-		RequestId:                           common.StringPtr(uuid.New()),
-		Domain:                              common.StringPtr(s.domainName),
-		WorkflowId:                          common.StringPtr(id),
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:                           uuid.New(),
+		Domain:                              s.domainName,
+		WorkflowId:                          id,
 		WorkflowType:                        workflowType,
 		TaskList:                            taskList,
 		Input:                               nil,
-		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
-		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
-		Identity:                            common.StringPtr(identity),
+		ExecutionStartToCloseTimeoutSeconds: 100,
+		TaskStartToCloseTimeoutSeconds:      1,
+		Identity:                            identity,
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(*we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	// decider logic
 	activityScheduled := false
 	activityData := int32(1)
-	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return nil, []*workflow.Decision{{
-				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeScheduleActivityTask),
-				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    common.StringPtr(strconv.Itoa(int(1))),
-					ActivityType:                  &workflow.ActivityType{Name: common.StringPtr(activityName)},
-					TaskList:                      &workflow.TaskList{Name: &tl},
+			return nil, []*commonproto.Decision{{
+				DecisionType: enums.DecisionTypeScheduleActivityTask,
+				Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
+					ActivityId:                    "1",
+					ActivityType:                  &commonproto.ActivityType{Name: activityName},
+					TaskList:                      &commonproto.TaskList{Name: tl},
 					Input:                         buf.Bytes(),
-					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
-					ScheduleToStartTimeoutSeconds: common.Int32Ptr(2),
-					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
-					HeartbeatTimeoutSeconds:       common.Int32Ptr(5),
-				},
+					ScheduleToCloseTimeoutSeconds: 100,
+					ScheduleToStartTimeoutSeconds: 2,
+					StartToCloseTimeoutSeconds:    50,
+					HeartbeatTimeoutSeconds:       5,
+				}},
 			}}, nil
 		}
 
-		return nil, []*workflow.Decision{{
-			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
-			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+		return nil, []*commonproto.Decision{{
+			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
+			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done."),
-			},
+			}},
 		}}, nil
 	}
 
 	// activity handler
-	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
+	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 
 		return []byte("Activity Result."), false, nil
 	}
 
-	queryHandler := func(task *workflow.PollForDecisionTaskResponse) ([]byte, error) {
+	queryHandler := func(task *workflowservice.PollForDecisionTaskResponse) ([]byte, error) {
 		s.NotNil(task.Query)
 		s.NotNil(task.Query.QueryType)
-		if *task.Query.QueryType == queryType {
+		if task.Query.QueryType == queryType {
 			return []byte("query-result"), nil
 		}
 
@@ -300,7 +291,7 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 		Logger:                              s.Logger,
 		T:                                   s.T(),
 		StickyTaskList:                      stickyTaskList,
-		StickyScheduleToStartTimeoutSeconds: stickyScheduleToStartTimeoutSeconds,
+		StickyScheduleToStartTimeoutSeconds: int32(stickyScheduleToStartTimeoutSeconds),
 	}
 
 	// Make first decision to schedule activity
@@ -309,19 +300,19 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 	s.Nil(err)
 
 	type QueryResult struct {
-		Resp *workflow.QueryWorkflowResponse
+		Resp *workflowservice.QueryWorkflowResponse
 		Err  error
 	}
 	queryResultCh := make(chan QueryResult)
 	queryWorkflowFn := func(queryType string) {
-		queryResp, err := s.engine.QueryWorkflow(createContext(), &workflow.QueryWorkflowRequest{
-			Domain: common.StringPtr(s.domainName),
-			Execution: &workflow.WorkflowExecution{
-				WorkflowId: common.StringPtr(id),
-				RunId:      common.StringPtr(*we.RunId),
+		queryResp, err := s.engine.QueryWorkflow(createContext(), &workflowservice.QueryWorkflowRequest{
+			Domain: s.domainName,
+			Execution: &commonproto.WorkflowExecution{
+				WorkflowId: id,
+				RunId:      we.RunId,
 			},
-			Query: &workflow.WorkflowQuery{
-				QueryType: common.StringPtr(queryType),
+			Query: &commonproto.WorkflowQuery{
+				QueryType: queryType,
 			},
 		})
 		queryResultCh <- QueryResult{Resp: queryResp, Err: err}
@@ -500,7 +491,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	queryResult = <-queryResultCh
 	s.NotNil(queryResult.Err)
 	st := yarpcerrors.FromError(queryResult.Err)
-	s.Equal(yarpcerrors.CodeInternal, st.Code())
+	s.Equal(yarpcerrors.CodeInvalidArgument, st.Code())
 	s.Equal("unknown-query-type", st.Message())
 
 	// advance the state of the decider
