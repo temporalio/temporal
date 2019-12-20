@@ -135,9 +135,9 @@ type (
 		// DataStores contains the configuration for all datastores
 		DataStores map[string]DataStore `yaml:"datastores"`
 		// VisibilityConfig is config for visibility sampling
-		VisibilityConfig *VisibilityConfig
+		VisibilityConfig *VisibilityConfig `yaml:"-" json:"-"`
 		// TransactionSizeLimit is the largest allowed transaction size
-		TransactionSizeLimit dynamicconfig.IntPropertyFn
+		TransactionSizeLimit dynamicconfig.IntPropertyFn `yaml:"-" json:"-"`
 	}
 
 	// DataStore is the configuration for a single datastore
@@ -153,21 +153,21 @@ type (
 	// VisibilityConfig is config for visibility sampling
 	VisibilityConfig struct {
 		// EnableSampling for visibility
-		EnableSampling dynamicconfig.BoolPropertyFn
+		EnableSampling dynamicconfig.BoolPropertyFn `yaml:"-" json:"-"`
 		// EnableReadFromClosedExecutionV2 read closed from v2 table
-		EnableReadFromClosedExecutionV2 dynamicconfig.BoolPropertyFn
+		EnableReadFromClosedExecutionV2 dynamicconfig.BoolPropertyFn `yaml:"-" json:"-"`
 		// VisibilityOpenMaxQPS max QPS for record open workflows
-		VisibilityOpenMaxQPS dynamicconfig.IntPropertyFnWithDomainFilter
+		VisibilityOpenMaxQPS dynamicconfig.IntPropertyFnWithDomainFilter `yaml:"-" json:"-"`
 		// VisibilityClosedMaxQPS max QPS for record closed workflows
-		VisibilityClosedMaxQPS dynamicconfig.IntPropertyFnWithDomainFilter
+		VisibilityClosedMaxQPS dynamicconfig.IntPropertyFnWithDomainFilter `yaml:"-" json:"-"`
 		// VisibilityListMaxQPS max QPS for list workflow
-		VisibilityListMaxQPS dynamicconfig.IntPropertyFnWithDomainFilter
+		VisibilityListMaxQPS dynamicconfig.IntPropertyFnWithDomainFilter `yaml:"-" json:"-"`
 		// ESIndexMaxResultWindow ElasticSearch index setting max_result_window
-		ESIndexMaxResultWindow dynamicconfig.IntPropertyFn
+		ESIndexMaxResultWindow dynamicconfig.IntPropertyFn `yaml:"-" json:"-"`
 		// MaxQPS is overall max QPS
-		MaxQPS dynamicconfig.IntPropertyFn
+		MaxQPS dynamicconfig.IntPropertyFn `yaml:"-" json:"-"`
 		// ValidSearchAttributes is legal indexed keys that can be used in list APIs
-		ValidSearchAttributes dynamicconfig.MapPropertyFn
+		ValidSearchAttributes dynamicconfig.MapPropertyFn `yaml:"-" json:"-"`
 	}
 
 	// Cassandra contains configuration to connect to Cassandra cluster
