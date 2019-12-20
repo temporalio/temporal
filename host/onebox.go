@@ -27,6 +27,8 @@ import (
 	"net"
 	"sync"
 
+	"github.com/temporalio/temporal/common/authorization"
+
 	"github.com/pborman/uuid"
 	"github.com/uber-go/tally"
 	"go.uber.org/yarpc/transport/grpc"
@@ -500,6 +502,7 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 	params.ArchiverProvider = c.archiverProvider
 	params.ESConfig = c.esConfig
 	params.ESClient = c.esClient
+	params.Authorizer = authorization.NewNopAuthorizer()
 
 	var err error
 	params.PersistenceConfig, err = copyPersistenceConfig(c.persistenceConfig)

@@ -110,6 +110,7 @@ PROTO_REPO := github.com/temporalio/temporal-proto
 # List only subdirectories with *.proto files (sort to remove duplicates).
 # Note: using "shell find" instead of "wildcard" because "wildcard" caches directory structure.
 PROTO_DIRS = $(sort $(dir $(shell find $(PROTO_ROOT) -name "*.proto")))
+PROTO_SERVICES := $(shell find $(PROTO_ROOT) -name "*service.proto")
 
 # Everything that deals with go modules (go.mod) needs to take dependency on this target.
 $(PROTO_ROOT)/go.mod:
@@ -128,7 +129,7 @@ install-proto-submodule:
 protoc:
 #   run protoc separately for each directory because of different package names
 	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_ROOT) --gogoslick_out=paths=source_relative:$(PROTO_ROOT) $(PROTO_DIR)*.proto;)
-	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_ROOT) --yarpc-go_out=$(PROTO_ROOT) $(PROTO_DIR)*.proto;)
+	$(foreach PROTO_SERVICE,$(PROTO_SERVICES),protoc --proto_path=$(PROTO_ROOT) --yarpc-go_out=$(PROTO_ROOT) $(PROTO_SERVICE);)
 
 # All YARPC generated service files pathes relative to PROTO_ROOT
 PROTO_YARPC_SERVICES = $(patsubst $(PROTO_ROOT)/%,%,$(shell find $(PROTO_ROOT) -name "service.pb.yarpc.go"))
@@ -175,7 +176,7 @@ cadence: $(TOOLS_SRC)
 
 cadence-server: $(ALL_SRC)
 	@echo "compiling cadence-server with OS: $(GOOS), ARCH: $(GOARCH)"
-	go build -ldflags '$(GO_BUILD_LDFLAGS)' -i -o cadence-server cmd/server/cadence.go cmd/server/server.go
+	go build -ldflags '$(GO_BUILD_LDFLAGS)' -i -o cadence-server cmd/server/main.go
 
 go-generate: $(PROTO_ROOT)/go.mod
 	GO111MODULE=off go get -u github.com/myitcv/gobin

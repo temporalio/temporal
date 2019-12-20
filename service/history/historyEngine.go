@@ -31,8 +31,9 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-
 	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
+	"go.uber.org/yarpc/yarpcerrors"
+	"golang.org/x/net/context"
 
 	h "github.com/temporalio/temporal/.gen/go/history"
 	m "github.com/temporalio/temporal/.gen/go/matching"
@@ -42,6 +43,7 @@ import (
 	"github.com/temporalio/temporal/client/matching"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
+	"github.com/temporalio/temporal/common/client"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/definition"
@@ -96,7 +98,7 @@ type (
 		ReplicateEventsV2(ctx ctx.Context, request *h.ReplicateEventsV2Request) error
 		SyncShardStatus(ctx ctx.Context, request *h.SyncShardStatusRequest) error
 		SyncActivity(ctx ctx.Context, request *h.SyncActivityRequest) error
-		GetReplicationMessages(ctx ctx.Context, taskID int64) (*r.ReplicationMessages, error)
+		GetReplicationMessages(ctx ctx.Context, pollingCluster string, lastReadMessageID int64) (*r.ReplicationMessages, error)
 		QueryWorkflow(ctx ctx.Context, request *h.QueryWorkflowRequest) (*h.QueryWorkflowResponse, error)
 		ReapplyEvents(ctx ctx.Context, domainUUID string, workflowID string, runID string, events []*workflow.HistoryEvent) error
 
@@ -132,11 +134,12 @@ type (
 		archivalClient            warchiver.Client
 		resetor                   workflowResetor
 		workflowResetter          workflowResetter
-		replicationTaskProcessors []*ReplicationTaskProcessor
+		replicationTaskProcessors []ReplicationTaskProcessor
 		publicClient              workflowserviceclient.Interface
 		eventsReapplier           nDCEventsReapplier
 		matchingClient            matching.Client
 		rawMatchingClient         matching.Client
+		clientChecker             client.VersionChecker
 	}
 )
 
@@ -172,7 +175,7 @@ var (
 	// ErrEventsAterWorkflowFinish is the error indicating server error trying to write events after workflow finish event
 	ErrEventsAterWorkflowFinish = &workflow.InternalServiceError{Message: "error validating last event being workflow finish event"}
 	// ErrQueryEnteredInvalidState is error indicating query entered invalid state
-	ErrQueryEnteredInvalidState = &workflow.InternalServiceError{Message: "query entered invalid state, this should be impossible"}
+	ErrQueryEnteredInvalidState = &workflow.BadRequestError{Message: "query entered invalid state, this should be impossible"}
 	// ErrQueryWorkflowBeforeFirstDecision is error indicating that query was attempted before first decision task completed
 	ErrQueryWorkflowBeforeFirstDecision = &workflow.BadRequestError{Message: "workflow must handle at least one decision task before it can be queried"}
 	// ErrConsistentQueryNotEnabled is error indicating that consistent query was requested but either cluster or domain does not enable consistent query
@@ -200,7 +203,7 @@ func NewEngineWithShardContext(
 	historyEventNotifier historyEventNotifier,
 	publisher messaging.Producer,
 	config *Config,
-	replicationTaskFetchers *ReplicationTaskFetchers,
+	replicationTaskFetchers ReplicationTaskFetchers,
 	rawMatchingClient matching.Client,
 ) Engine {
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
@@ -235,6 +238,7 @@ func NewEngineWithShardContext(
 		publicClient:      publicClient,
 		matchingClient:    matching,
 		rawMatchingClient: rawMatchingClient,
+		clientChecker:     client.NewVersionChecker(),
 	}
 
 	historyEngImpl.txProcessor = newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, logger)
@@ -246,7 +250,8 @@ func NewEngineWithShardContext(
 		historyEngImpl.replicatorProcessor = newReplicatorQueueProcessor(
 			shard,
 			historyEngImpl.historyCache,
-			publisher, executionManager,
+			publisher,
+			executionManager,
 			historyV2Manager,
 			logger,
 		)
@@ -285,7 +290,7 @@ func NewEngineWithShardContext(
 	)
 	historyEngImpl.decisionHandler = newDecisionHandler(historyEngImpl)
 
-	var replicationTaskProcessors []*ReplicationTaskProcessor
+	var replicationTaskProcessors []ReplicationTaskProcessor
 	for _, replicationTaskFetcher := range replicationTaskFetchers.GetFetchers() {
 		replicationTaskProcessor := NewReplicationTaskProcessor(
 			shard,
@@ -833,10 +838,8 @@ func (e *historyEngineImpl) QueryWorkflow(
 		if err != nil {
 			return nil, err
 		}
-		sw := scope.StartTimer(metrics.DirectQueryDispatchLatency)
-		defer sw.Stop()
 		req.Execution.RunId = msResp.Execution.RunId
-		return e.queryDirectlyThroughMatching(ctx, msResp, request.GetDomainUUID(), req)
+		return e.queryDirectlyThroughMatching(ctx, msResp, request.GetDomainUUID(), req, scope)
 	}
 
 	// If we get here it means query could not be dispatched through matching directly, so it must block
@@ -880,7 +883,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 				return nil, err
 			}
 			req.Execution.RunId = msResp.Execution.RunId
-			return e.queryDirectlyThroughMatching(ctx, msResp, request.GetDomainUUID(), req)
+			return e.queryDirectlyThroughMatching(ctx, msResp, request.GetDomainUUID(), req, scope)
 		case queryTerminationTypeFailed:
 			return nil, state.failure
 		default:
@@ -898,16 +901,94 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 	msResp *h.GetMutableStateResponse,
 	domainID string,
 	queryRequest *workflow.QueryWorkflowRequest,
+	scope metrics.Scope,
 ) (*h.QueryWorkflowResponse, error) {
-	matchingRequest := &m.QueryWorkflowRequest{
+
+	sw := scope.StartTimer(metrics.DirectQueryDispatchLatency)
+	defer sw.Stop()
+
+	supportsStickyQuery := e.clientChecker.SupportsStickyQuery(msResp.GetClientImpl(), msResp.GetClientFeatureVersion()) == nil
+	if msResp.GetIsStickyTaskListEnabled() &&
+		len(msResp.GetStickyTaskList().GetName()) != 0 &&
+		supportsStickyQuery &&
+		e.config.EnableStickyQuery(queryRequest.GetDomain()) {
+
+		stickyMatchingRequest := &m.QueryWorkflowRequest{
+			DomainUUID:   common.StringPtr(domainID),
+			QueryRequest: queryRequest,
+			TaskList:     msResp.GetStickyTaskList(),
+		}
+
+		// using a clean new context in case customer provide a context which has
+		// a really short deadline, causing we clear the stickiness
+		stickyContext, cancel := context.WithTimeout(context.Background(), time.Duration(msResp.GetStickyTaskListScheduleToStartTimeout())*time.Second)
+		stickyStopWatch := scope.StartTimer(metrics.DirectQueryDispatchStickyLatency)
+		matchingResp, err := e.rawMatchingClient.QueryWorkflow(stickyContext, stickyMatchingRequest)
+		stickyStopWatch.Stop()
+		cancel()
+		if err == nil {
+			scope.IncCounter(metrics.DirectQueryDispatchStickySuccessCount)
+			return &h.QueryWorkflowResponse{Response: matchingResp}, nil
+		}
+		if yarpcError, ok := err.(*yarpcerrors.Status); !ok || yarpcError.Code() != yarpcerrors.CodeDeadlineExceeded {
+			e.logger.Error("query directly though matching on sticky failed, will not attempt query on non-sticky",
+				tag.WorkflowDomainName(queryRequest.GetDomain()),
+				tag.WorkflowID(queryRequest.Execution.GetWorkflowId()),
+				tag.WorkflowRunID(queryRequest.Execution.GetRunId()),
+				tag.WorkflowQueryType(queryRequest.Query.GetQueryType()),
+				tag.Error(err))
+			return nil, err
+		}
+		if msResp.GetIsWorkflowRunning() {
+			e.logger.Info("query direct through matching failed on sticky, clearing sticky before attempting on non-sticky",
+				tag.WorkflowDomainName(queryRequest.GetDomain()),
+				tag.WorkflowID(queryRequest.Execution.GetWorkflowId()),
+				tag.WorkflowRunID(queryRequest.Execution.GetRunId()),
+				tag.WorkflowQueryType(queryRequest.Query.GetQueryType()))
+			resetContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			clearStickinessStopWatch := scope.StartTimer(metrics.DirectQueryDispatchClearStickinessLatency)
+			_, err := e.ResetStickyTaskList(resetContext, &h.ResetStickyTaskListRequest{
+				DomainUUID: common.StringPtr(domainID),
+				Execution:  queryRequest.GetExecution(),
+			})
+			clearStickinessStopWatch.Stop()
+			cancel()
+			if err != nil && err != ErrWorkflowCompleted {
+				return nil, err
+			}
+			scope.IncCounter(metrics.DirectQueryDispatchClearStickinessSuccessCount)
+		}
+	}
+
+	if err := common.IsValidContext(ctx); err != nil {
+		e.logger.Info("query context timed out before query on non-sticky task list could be attempted",
+			tag.WorkflowDomainName(queryRequest.GetDomain()),
+			tag.WorkflowID(queryRequest.Execution.GetWorkflowId()),
+			tag.WorkflowRunID(queryRequest.Execution.GetRunId()),
+			tag.WorkflowQueryType(queryRequest.Query.GetQueryType()))
+		scope.IncCounter(metrics.DirectQueryDispatchTimeoutBeforeNonStickyCount)
+		return nil, err
+	}
+
+	e.logger.Info("query directly through matching on sticky timed out, attempting to query on non-sticky",
+		tag.WorkflowDomainName(queryRequest.GetDomain()),
+		tag.WorkflowID(queryRequest.Execution.GetWorkflowId()),
+		tag.WorkflowRunID(queryRequest.Execution.GetRunId()),
+		tag.WorkflowQueryType(queryRequest.Query.GetQueryType()),
+		tag.WorkflowTaskListName(msResp.GetStickyTaskList().GetName()),
+		tag.WorkflowNextEventID(msResp.GetNextEventId()))
+
+	nonStickyMatchingRequest := &m.QueryWorkflowRequest{
 		DomainUUID:   common.StringPtr(domainID),
 		QueryRequest: queryRequest,
 		TaskList:     msResp.TaskList,
 	}
 
-	matchingResp, err := e.matchingClient.QueryWorkflow(ctx, matchingRequest)
+	nonStickyStopWatch := scope.StartTimer(metrics.DirectQueryDispatchNonStickyLatency)
+	matchingResp, err := e.matchingClient.QueryWorkflow(ctx, nonStickyMatchingRequest)
+	nonStickyStopWatch.Stop()
 	if err != nil {
-		e.logger.Error("Query directly though matching on non-sticky failed",
+		e.logger.Error("query directly though matching on non-sticky failed",
 			tag.WorkflowDomainName(queryRequest.GetDomain()),
 			tag.WorkflowID(queryRequest.Execution.GetWorkflowId()),
 			tag.WorkflowRunID(queryRequest.Execution.GetRunId()),
@@ -915,7 +996,8 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 			tag.Error(err))
 		return nil, err
 	}
-	return &h.QueryWorkflowResponse{Response: matchingResp}, nil
+	scope.IncCounter(metrics.DirectQueryDispatchNonStickySuccessCount)
+	return &h.QueryWorkflowResponse{Response: matchingResp}, err
 }
 
 func (e *historyEngineImpl) getMutableState(
@@ -959,6 +1041,7 @@ func (e *historyEngineImpl) getMutableState(
 		CurrentBranchToken:                   currentBranchToken,
 		WorkflowState:                        common.Int32Ptr(int32(workflowState)),
 		WorkflowCloseState:                   common.Int32Ptr(int32(workflowCloseState)),
+		IsStickyTaskListEnabled:              common.BoolPtr(mutableState.IsStickyTaskListEnabled()),
 	}
 	replicationState := mutableState.GetReplicationState()
 	if replicationState != nil {
@@ -2663,17 +2746,30 @@ func getWorkflowAlreadyStartedError(errMsg string, createRequestID string, workf
 	}
 }
 
-func (e *historyEngineImpl) GetReplicationMessages(ctx ctx.Context, taskID int64) (*r.ReplicationMessages, error) {
+func (e *historyEngineImpl) GetReplicationMessages(
+	ctx ctx.Context,
+	pollingCluster string,
+	lastReadMessageID int64,
+) (*r.ReplicationMessages, error) {
+
 	scope := metrics.HistoryGetReplicationMessagesScope
 	sw := e.metricsClient.StartTimer(scope, metrics.GetReplicationMessagesForShardLatency)
 	defer sw.Stop()
 
-	replicationMessages, err := e.replicatorProcessor.getTasks(ctx, taskID)
+	replicationMessages, err := e.replicatorProcessor.getTasks(
+		ctx,
+		pollingCluster,
+		lastReadMessageID,
+	)
 	if err != nil {
 		e.logger.Error("Failed to retrieve replication messages.", tag.Error(err))
 		return nil, err
 	}
 
+	//Set cluster status for sync shard info
+	replicationMessages.SyncShardStatus = &r.SyncShardStatus{
+		Timestamp: common.Int64Ptr(e.timeSource.Now().UnixNano()),
+	}
 	e.logger.Debug("Successfully fetched replication messages.", tag.Counter(len(replicationMessages.ReplicationTasks)))
 	return replicationMessages, nil
 }

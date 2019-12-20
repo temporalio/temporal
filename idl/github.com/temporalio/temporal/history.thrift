@@ -92,6 +92,7 @@ struct GetMutableStateResponse {
   150: optional i32 workflowState
   160: optional i32 workflowCloseState
   170: optional shared.VersionHistories versionHistories
+  180: optional bool isStickyTaskListEnabled
 }
 
 struct PollMutableStateRequest {

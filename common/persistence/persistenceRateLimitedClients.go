@@ -308,6 +308,15 @@ func (p *workflowExecutionRateLimitedPersistenceClient) CompleteReplicationTask(
 	return err
 }
 
+func (p *workflowExecutionRateLimitedPersistenceClient) RangeCompleteReplicationTask(request *RangeCompleteReplicationTaskRequest) error {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+
+	err := p.persistence.RangeCompleteReplicationTask(request)
+	return err
+}
+
 func (p *workflowExecutionRateLimitedPersistenceClient) PutReplicationTaskToDLQ(
 	request *PutReplicationTaskToDLQRequest,
 ) error {

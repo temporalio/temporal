@@ -118,6 +118,7 @@ var (
 	errInvalidTaskStartToCloseTimeoutSeconds      = &gen.BadRequestError{Message: "A valid TaskStartToCloseTimeoutSeconds is not set on request."}
 	errClientVersionNotSet                        = &gen.BadRequestError{Message: "Client version is not set on request."}
 	errQueryDisallowedForDomain                   = &gen.BadRequestError{Message: "Domain is not allowed to query, please contact cadence team to re-enable queries."}
+	errClusterNameNotSet                          = &gen.BadRequestError{Message: "Cluster name is not set."}
 
 	// err for archival
 	errHistoryNotFound = &gen.BadRequestError{Message: "Requested workflow history not found, may have passed retention period."}
@@ -1734,7 +1735,6 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 			tag.WorkflowID(getRequest.Execution.GetWorkflowId()),
 			tag.WorkflowRunID(getRequest.Execution.GetRunId()),
 			tag.WorkflowDomainID(domainID), tag.WorkflowSize(int64(getRequest.GetMaximumPageSize())))
-
 		getRequest.MaximumPageSize = common.Int32Ptr(common.GetHistoryMaxPageSize)
 	}
 
@@ -3008,6 +3008,7 @@ func (wh *WorkflowHandler) getHistory(
 	historyEvents := []*gen.HistoryEvent{}
 	var size int
 
+	isFirstPage := len(nextPageToken) == 0
 	shardID := common.WorkflowIDToHistoryShard(*execution.WorkflowId, wh.config.NumHistoryShards)
 	var err error
 	historyEvents, size, nextPageToken, err = persistence.ReadFullPageV2Events(wh.GetHistoryManager(), &persistence.ReadHistoryBranchRequest{
@@ -3024,7 +3025,32 @@ func (wh *WorkflowHandler) getHistory(
 
 	scope.RecordTimer(metrics.HistorySize, time.Duration(size))
 
+	isLastPage := len(nextPageToken) == 0
+	if err := verifyHistoryIsComplete(
+		historyEvents,
+		firstEventID,
+		nextEventID-1,
+		isFirstPage,
+		isLastPage,
+		int(pageSize)); err != nil {
+		scope.IncCounter(metrics.CadenceErrIncompleteHistoryCounter)
+		wh.GetLogger().Error("getHistory: incomplete history",
+			tag.WorkflowDomainID(domainID),
+			tag.WorkflowID(execution.GetWorkflowId()),
+			tag.WorkflowRunID(execution.GetRunId()),
+			tag.Error(err))
+		return nil, nil, err
+	}
+
 	if len(nextPageToken) == 0 && transientDecision != nil {
+		if err := wh.validateTransientDecisionEvents(nextEventID, transientDecision); err != nil {
+			scope.IncCounter(metrics.CadenceErrIncompleteHistoryCounter)
+			wh.GetLogger().Error("getHistory error",
+				tag.WorkflowDomainID(domainID),
+				tag.WorkflowID(execution.GetWorkflowId()),
+				tag.WorkflowRunID(execution.GetRunId()),
+				tag.Error(err))
+		}
 		// Append the transient decision events once we are done enumerating everything from the events table
 		historyEvents = append(historyEvents, transientDecision.ScheduledEvent, transientDecision.StartedEvent)
 	}
@@ -3032,6 +3058,25 @@ func (wh *WorkflowHandler) getHistory(
 	executionHistory := &gen.History{}
 	executionHistory.Events = historyEvents
 	return executionHistory, nextPageToken, nil
+}
+
+func (wh *WorkflowHandler) validateTransientDecisionEvents(
+	expectedNextEventID int64,
+	decision *gen.TransientDecisionInfo,
+) error {
+
+	if decision.ScheduledEvent.GetEventId() == expectedNextEventID &&
+		decision.StartedEvent.GetEventId() == expectedNextEventID+1 {
+		return nil
+	}
+
+	return fmt.Errorf(
+		"invalid transient decision: "+
+			"expectedScheduledEventID=%v expectedStartedEventID=%v but have scheduledEventID=%v startedEventID=%v",
+		expectedNextEventID,
+		expectedNextEventID+1,
+		decision.ScheduledEvent.GetEventId(),
+		decision.StartedEvent.GetEventId())
 }
 
 func (wh *WorkflowHandler) getLoggerForTask(taskToken []byte) log.Logger {
@@ -3072,14 +3117,18 @@ func (wh *WorkflowHandler) getDefaultScope(scope int) metrics.Scope {
 	return wh.GetMetricsClient().Scope(scope).Tagged(metrics.DomainUnknownTag())
 }
 
+func frontendInternalServiceError(fmtStr string, args ...interface{}) error {
+	// NOTE: For internal error, we can't return thrift error from cadence-frontend.
+	// Because in uber internal metrics, thrift errors are counted as user errors.
+	return fmt.Errorf(fmtStr, args...)
+}
+
 func (wh *WorkflowHandler) error(err error, scope metrics.Scope, tagsForErrorLog ...tag.Tag) error {
 	switch err := err.(type) {
 	case *gen.InternalServiceError:
 		wh.GetLogger().WithTags(tagsForErrorLog...).Error("Internal service error", tag.Error(err))
 		scope.IncCounter(metrics.CadenceFailures)
-		// NOTE: For internal error, we won't return thrift error from cadence-frontend.
-		// Because in uber internal metrics, thrift errors are counted as user errors
-		return fmt.Errorf("cadence internal error, msg: %v", err.Message)
+		return frontendInternalServiceError("cadence internal error, msg: %v", err.Message)
 	case *gen.BadRequestError:
 		scope.IncCounter(metrics.CadenceErrBadRequestCounter)
 		return err
@@ -3120,7 +3169,7 @@ func (wh *WorkflowHandler) error(err error, scope metrics.Scope, tagsForErrorLog
 	wh.GetLogger().WithTags(tagsForErrorLog...).Error("Uncategorized error",
 		tag.Error(err))
 	scope.IncCounter(metrics.CadenceFailures)
-	return fmt.Errorf("cadence internal uncategorized error, msg: %v", err.Error())
+	return frontendInternalServiceError("cadence internal uncategorized error, msg: %v", err.Error())
 }
 
 func (wh *WorkflowHandler) validateTaskListType(t *gen.TaskListType, scope metrics.Scope) error {
@@ -3252,6 +3301,70 @@ func (wh *WorkflowHandler) createPollForDecisionTaskResponse(
 	}
 
 	return resp, nil
+}
+
+func verifyHistoryIsComplete(
+	events []*gen.HistoryEvent,
+	expectedFirstEventID int64,
+	expectedLastEventID int64,
+	isFirstPage bool,
+	isLastPage bool,
+	pageSize int,
+) error {
+
+	nEvents := len(events)
+	if nEvents == 0 {
+		if isLastPage {
+			// we seem to be returning a non-nil pageToken on the lastPage which
+			// in turn cases the client to call getHistory again - only to find
+			// there are no more events to consume - bail out if this is the case here
+			return nil
+		}
+		return fmt.Errorf("invalid history: contains zero events")
+	}
+
+	firstEventID := events[0].GetEventId()
+	lastEventID := events[nEvents-1].GetEventId()
+
+	if !isFirstPage { // atleast one page of history has been read previously
+		if firstEventID <= expectedFirstEventID {
+			// not first page and no events have been read in the previous pages - not possible
+			return &gen.InternalServiceError{
+				Message: fmt.Sprintf(
+					"invalid history: expected first eventID to be > %v but got %v", expectedFirstEventID, firstEventID),
+			}
+		}
+		expectedFirstEventID = firstEventID
+	}
+
+	if !isLastPage {
+		// estimate lastEventID based on pageSize. This is a lower bound
+		// since the persistence layer counts "batch of events" as a single page
+		expectedLastEventID = expectedFirstEventID + int64(pageSize) - 1
+	}
+
+	nExpectedEvents := expectedLastEventID - expectedFirstEventID + 1
+
+	if firstEventID == expectedFirstEventID &&
+		((isLastPage && lastEventID == expectedLastEventID && int64(nEvents) == nExpectedEvents) ||
+			(!isLastPage && lastEventID >= expectedLastEventID && int64(nEvents) >= nExpectedEvents)) {
+		return nil
+	}
+
+	return &gen.InternalServiceError{
+		Message: fmt.Sprintf(
+			"incomplete history: "+
+				"expected events [%v-%v] but got events [%v-%v] of length %v:"+
+				"isFirstPage=%v,isLastPage=%v,pageSize=%v",
+			expectedFirstEventID,
+			expectedLastEventID,
+			firstEventID,
+			lastEventID,
+			nEvents,
+			isFirstPage,
+			isLastPage,
+			pageSize),
+	}
 }
 
 func deserializeHistoryToken(bytes []byte) (*getHistoryContinuationToken, error) {
@@ -3388,6 +3501,9 @@ func (wh *WorkflowHandler) GetReplicationMessages(
 	if request == nil {
 		return nil, wh.error(errRequestNotSet, scope)
 	}
+	if !request.IsSetClusterName() {
+		return nil, wh.error(errClusterNameNotSet, scope)
+	}
 
 	resp, err = wh.GetHistoryClient().GetReplicationMessages(ctx, request)
 	if err != nil {
@@ -3502,6 +3618,25 @@ func (wh *WorkflowHandler) ReapplyEvents(
 		return wh.error(err, scope)
 	}
 	return nil
+}
+
+// GetClusterInfo return information about cadence deployment
+func (wh *WorkflowHandler) GetClusterInfo(
+	ctx context.Context,
+) (resp *gen.ClusterInfo, err error) {
+	defer log.CapturePanic(wh.GetLogger(), &err)
+
+	scope := wh.getDefaultScope(metrics.FrontendClientGetClusterInfoScope)
+	if ok := wh.allow(nil); !ok {
+		return nil, wh.error(createServiceBusyError(), scope)
+	}
+
+	return &gen.ClusterInfo{
+		SupportedClientVersions: &gen.SupportedClientVersions{
+			GoSdk:   common.StringPtr(client.SupportedGoSDKVersion),
+			JavaSdk: common.StringPtr(client.SupportedJavaSDKVersion),
+		},
+	}, nil
 }
 
 func checkPermission(

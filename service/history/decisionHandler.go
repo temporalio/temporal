@@ -550,7 +550,14 @@ Update_History_Loop:
 			return nil, updateErr
 		}
 
-		handler.handleBufferedQueries(msBuilder, clientImpl, clientFeatureVersion, req.GetCompleteRequest().GetQueryResults(), createNewDecisionTask, domainEntry)
+		handler.handleBufferedQueries(
+			msBuilder,
+			clientImpl,
+			clientFeatureVersion,
+			req.GetCompleteRequest().GetQueryResults(),
+			createNewDecisionTask,
+			domainEntry,
+			decisionHeartbeating)
 
 		if decisionHeartbeatTimeout {
 			// at this point, update is successful, but we still return an error to client so that the worker will give up this workflow
@@ -639,6 +646,7 @@ func (handler *decisionHandlerImpl) handleBufferedQueries(
 	queryResults map[string]*workflow.WorkflowQueryResult,
 	createNewDecisionTask bool,
 	domainEntry *cache.DomainCacheEntry,
+	decisionHeartbeating bool,
 ) {
 	queryRegistry := msBuilder.GetQueryRegistry()
 	if !queryRegistry.hasBufferedQuery() {
@@ -658,7 +666,7 @@ func (handler *decisionHandlerImpl) handleBufferedQueries(
 		scope.IncCounter(metrics.WorkerNotSupportsConsistentQueryCount)
 		failedTerminationState := &queryTerminationState{
 			queryTerminationType: queryTerminationTypeFailed,
-			failure:              versionErr,
+			failure:              &workflow.BadRequestError{Message: versionErr.Error()},
 		}
 		buffered := queryRegistry.getBufferedIDs()
 		handler.logger.Info(
@@ -679,6 +687,12 @@ func (handler *decisionHandlerImpl) handleBufferedQueries(
 				scope.IncCounter(metrics.QueryRegistryInvalidStateCount)
 			}
 		}
+		return
+	}
+
+	// if its a heartbeat decision it means local activities may still be running on the worker
+	// which were started by an external event which happened before the query
+	if decisionHeartbeating {
 		return
 	}
 

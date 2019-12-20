@@ -29,7 +29,6 @@ import (
 	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/go/temporal/workflowserviceserver"
-	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/metrics"
@@ -40,8 +39,6 @@ import (
 var _ workflowserviceserver.Interface = (*DCRedirectionHandlerImpl)(nil)
 
 type (
-	clientBeanProvider func() client.Bean
-
 	// DCRedirectionHandlerImpl is simple wrapper over frontend service, doing redirection based on policy
 	DCRedirectionHandlerImpl struct {
 		resource.Resource
@@ -58,7 +55,10 @@ type (
 )
 
 // NewDCRedirectionHandler creates a thrift handler for the cadence service, frontend
-func NewDCRedirectionHandler(wfHandler *WorkflowHandler, policy config.DCRedirectionPolicy) *DCRedirectionHandlerImpl {
+func NewDCRedirectionHandler(
+	wfHandler *WorkflowHandler,
+	policy config.DCRedirectionPolicy,
+) *DCRedirectionHandlerImpl {
 	dcRedirectionPolicy := RedirectionPolicyGenerator(
 		wfHandler.GetClusterMetadata(),
 		wfHandler.config,
@@ -1154,6 +1154,13 @@ func (handler *DCRedirectionHandlerImpl) ReapplyEvents(
 	request *shared.ReapplyEventsRequest,
 ) error {
 	return handler.frontendHandler.ReapplyEvents(ctx, request)
+}
+
+// GetClusterInfo API call
+func (handler *DCRedirectionHandlerImpl) GetClusterInfo(
+	ctx context.Context,
+) (*shared.ClusterInfo, error) {
+	return handler.frontendHandler.GetClusterInfo(ctx)
 }
 
 func (handler *DCRedirectionHandlerImpl) beforeCall(

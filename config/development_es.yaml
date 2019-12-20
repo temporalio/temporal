@@ -8,12 +8,10 @@ persistence:
       cassandra:
         hosts: "127.0.0.1"
         keyspace: "cadence"
-        consistency: "One"
     cass-visibility:
       cassandra:
         hosts: "127.0.0.1"
         keyspace: "cadence_visibility"
-        consistency: "One"
     es-visibility:
       elasticsearch:
         url:
