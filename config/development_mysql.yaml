@@ -16,7 +16,7 @@ persistence:
         maxConnLifetime: "1h"
     mysql-visibility:
       sql:
-        driverName: "mysql"
+        pluginName: "mysql"
         databaseName: "cadence_visibility"
         connectAddr: "127.0.0.1:3306"
         connectProtocol: "tcp"

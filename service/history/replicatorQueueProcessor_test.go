@@ -36,10 +36,8 @@ import (
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/resource"
 )
 
 type (
@@ -48,7 +46,7 @@ type (
 		*require.Assertions
 
 		controller          *gomock.Controller
-		mockResource        *resource.Test
+		mockShard           *shardContextTest
 		mockDomainCache     *cache.MockDomainCache
 		mockMutableState    *MockmutableState
 		mockClusterMetadata *cluster.MockMetadata
@@ -56,7 +54,6 @@ type (
 		mockExecutionMgr *mocks.ExecutionManager
 		mockHistoryV2Mgr *mocks.HistoryV2Manager
 		mockProducer     *mocks.KafkaProducer
-		mockShard        ShardContext
 
 		logger log.Logger
 
@@ -81,29 +78,27 @@ func (s *replicatorQueueProcessorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockResource = resource.NewTest(s.controller, metrics.History)
 	s.mockMutableState = NewMockmutableState(s.controller)
 
+	s.mockShard = newTestShardContext(
+		s.controller,
+		&persistence.ShardInfo{
+			ShardID:          0,
+			RangeID:          1,
+			TransferAckLevel: 0,
+		},
+		NewDynamicConfigForTest(),
+	)
+
 	s.mockProducer = &mocks.KafkaProducer{}
-	s.mockDomainCache = s.mockResource.DomainCache
-	s.mockExecutionMgr = s.mockResource.ExecutionMgr
-	s.mockHistoryV2Mgr = s.mockResource.HistoryMgr
-	s.mockClusterMetadata = s.mockResource.ClusterMetadata
+	s.mockDomainCache = s.mockShard.resource.DomainCache
+	s.mockExecutionMgr = s.mockShard.resource.ExecutionMgr
+	s.mockHistoryV2Mgr = s.mockShard.resource.HistoryMgr
+	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsGlobalDomainEnabled().Return(true).AnyTimes()
 
-	s.logger = s.mockResource.Logger
-	s.mockShard = &shardContextImpl{
-		Resource:                  s.mockResource,
-		shardInfo:                 &persistence.ShardInfo{ShardID: 0, RangeID: 1, TransferAckLevel: 0},
-		transferSequenceNumber:    1,
-		maxTransferSequenceNumber: 100000,
-		closeCh:                   make(chan int, 100),
-		config:                    NewDynamicConfigForTest(),
-		logger:                    s.logger,
-		executionManager:          s.mockExecutionMgr,
-		standbyClusterCurrentTime: make(map[string]time.Time),
-	}
+	s.logger = s.mockShard.GetLogger()
 	historyCache := newHistoryCache(s.mockShard)
 
 	s.replicatorQueueProcessor = newReplicatorQueueProcessor(
@@ -113,7 +108,7 @@ func (s *replicatorQueueProcessorSuite) SetupTest() {
 
 func (s *replicatorQueueProcessorSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockResource.Finish(s.T())
+	s.mockShard.Finish(s.T())
 	s.mockProducer.AssertExpectations(s.T())
 }
 

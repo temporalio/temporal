@@ -134,6 +134,21 @@ func (mr *MockWorkflowHandlerMockRecorder) DescribeWorkflowExecution(ctx, Descri
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeWorkflowExecution", reflect.TypeOf((*MockWorkflowHandler)(nil).DescribeWorkflowExecution), ctx, DescribeRequest)
 }
 
+// GetClusterInfo mocks base method
+func (m *MockWorkflowHandler) GetClusterInfo(ctx context.Context) (*shared.ClusterInfo, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetClusterInfo", ctx)
+	ret0, _ := ret[0].(*shared.ClusterInfo)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetClusterInfo indicates an expected call of GetClusterInfo
+func (mr *MockWorkflowHandlerMockRecorder) GetClusterInfo(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterInfo", reflect.TypeOf((*MockWorkflowHandler)(nil).GetClusterInfo), ctx)
+}
+
 // GetDomainReplicationMessages mocks base method
 func (m *MockWorkflowHandler) GetDomainReplicationMessages(ctx context.Context, Request *replicator.GetDomainReplicationMessagesRequest) (*replicator.GetDomainReplicationMessagesResponse, error) {
 	m.ctrl.T.Helper()

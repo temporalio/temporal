@@ -69,6 +69,11 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) (*shared.DescribeWorkflowExecutionResponse, error)
 
+	GetClusterInfo(
+		ctx context.Context,
+		opts ...yarpc.CallOption,
+	) (*shared.ClusterInfo, error)
+
 	GetDomainReplicationMessages(
 		ctx context.Context,
 		Request *replicator.GetDomainReplicationMessagesRequest,
@@ -409,6 +414,28 @@ func (c client) DescribeWorkflowExecution(
 	}
 
 	success, err = temporal.WorkflowService_DescribeWorkflowExecution_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) GetClusterInfo(
+	ctx context.Context,
+	opts ...yarpc.CallOption,
+) (success *shared.ClusterInfo, err error) {
+
+	args := temporal.WorkflowService_GetClusterInfo_Helper.Args()
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result temporal.WorkflowService_GetClusterInfo_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	success, err = temporal.WorkflowService_GetClusterInfo_Helper.UnwrapResponse(&result)
 	return
 }
 

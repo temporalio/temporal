@@ -33,7 +33,6 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
 	"go.temporal.io/temporal/.gen/go/shared"
 
 	h "github.com/temporalio/temporal/.gen/go/history"
@@ -43,10 +42,8 @@ import (
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/mocks"
 	p "github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/resource"
 )
 
 type (
@@ -55,7 +52,7 @@ type (
 		*require.Assertions
 
 		controller               *gomock.Controller
-		mockResource             *resource.Test
+		mockShard                *shardContextTest
 		mockTxProcessor          *MocktransferQueueProcessor
 		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MocktimerQueueProcessor
@@ -90,60 +87,57 @@ func (s *resetorSuite) TearDownSuite() {
 func (s *resetorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
+	shardID := 10
+	s.shardID = shardID
+
 	s.controller = gomock.NewController(s.T())
-	s.mockResource = resource.NewTest(s.controller, metrics.History)
 	s.mockTxProcessor = NewMocktransferQueueProcessor(s.controller)
 	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.controller)
 	s.mockTimerProcessor = NewMocktimerQueueProcessor(s.controller)
-	s.mockEventsCache = NewMockeventsCache(s.controller)
 	s.mockTxProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
 	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
-	s.mockEventsCache.EXPECT().putEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
-	s.mockExecutionMgr = s.mockResource.ExecutionMgr
-	s.mockHistoryV2Mgr = s.mockResource.HistoryMgr
-	s.mockDomainCache = s.mockResource.DomainCache
-	s.mockClusterMetadata = s.mockResource.ClusterMetadata
+	s.mockShard = newTestShardContext(
+		s.controller,
+		&p.ShardInfo{
+			ShardID:          shardID,
+			RangeID:          1,
+			TransferAckLevel: 0,
+		},
+		s.config,
+	)
+
+	s.mockExecutionMgr = s.mockShard.resource.ExecutionMgr
+	s.mockHistoryV2Mgr = s.mockShard.resource.HistoryMgr
+	s.mockDomainCache = s.mockShard.resource.DomainCache
+	s.mockClusterMetadata = s.mockShard.resource.ClusterMetadata
+	s.mockEventsCache = s.mockShard.mockEventsCache
 	s.mockClusterMetadata.EXPECT().IsGlobalDomainEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(common.EmptyVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockEventsCache.EXPECT().putEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
-	shardID := 10
-	s.shardID = shardID
-	s.logger = s.mockResource.Logger
-	mockShard := &shardContextImpl{
-		Resource:                  s.mockResource,
-		shardInfo:                 &p.ShardInfo{ShardID: shardID, RangeID: 1, TransferAckLevel: 0},
-		shardID:                   shardID,
-		transferSequenceNumber:    1,
-		executionManager:          s.mockExecutionMgr,
-		eventsCache:               s.mockEventsCache,
-		maxTransferSequenceNumber: 100000,
-		closeCh:                   make(chan int, 100),
-		config:                    s.config,
-		logger:                    s.logger,
-		standbyClusterCurrentTime: map[string]time.Time{},
-	}
+	s.logger = s.mockShard.GetLogger()
 
-	historyCache := newHistoryCache(mockShard)
+	historyCache := newHistoryCache(s.mockShard)
 	h := &historyEngineImpl{
-		currentClusterName:   mockShard.GetService().GetClusterMetadata().GetCurrentClusterName(),
-		shard:                mockShard,
+		currentClusterName:   s.mockShard.GetClusterMetadata().GetCurrentClusterName(),
+		shard:                s.mockShard,
 		clusterMetadata:      s.mockClusterMetadata,
 		executionManager:     s.mockExecutionMgr,
 		historyV2Mgr:         s.mockHistoryV2Mgr,
 		historyCache:         historyCache,
 		logger:               s.logger,
-		metricsClient:        s.mockResource.GetMetricsClient(),
+		metricsClient:        s.mockShard.GetMetricsClient(),
 		tokenSerializer:      common.NewJSONTaskTokenSerializer(),
 		config:               s.config,
-		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), s.mockResource.GetMetricsClient(), func(string) int { return 0 }),
+		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), s.mockShard.GetMetricsClient(), func(string) int { return 0 }),
 		txProcessor:          s.mockTxProcessor,
 		replicatorProcessor:  s.mockReplicationProcessor,
 		timerProcessor:       s.mockTimerProcessor,
 	}
-	mockShard.SetEngine(h)
+	s.mockShard.SetEngine(h)
 	s.resetor = newWorkflowResetor(h)
 	h.resetor = s.resetor
 	s.historyEngine = h
@@ -151,7 +145,7 @@ func (s *resetorSuite) SetupTest() {
 
 func (s *resetorSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockResource.Finish(s.T())
+	s.mockShard.Finish(s.T())
 }
 
 func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {

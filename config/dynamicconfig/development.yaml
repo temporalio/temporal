@@ -4,3 +4,6 @@ frontend.enableClientVersionCheck:
 system.minRetentionDays:
 - value: 0
   constraints: {}
+history.EnableConsistentQueryByDomain:
+  - value: true
+    constrains: {}
