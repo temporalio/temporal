@@ -26,6 +26,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/temporalio/temporal/common/authorization"
+
 	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
 	"go.uber.org/yarpc"
 
@@ -81,6 +83,7 @@ type (
 		PublicClient        workflowserviceclient.Interface
 		ArchivalMetadata    archiver.ArchivalMetadata
 		ArchiverProvider    provider.ArchiverProvider
+		Authorizer          authorization.Authorizer
 	}
 
 	// MembershipMonitorFactory provides a bootstrapped membership monitor

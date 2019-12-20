@@ -18,11 +18,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package main
+package temporal
 
 import (
 	"log"
 	"time"
+
+	"github.com/temporalio/temporal/common/authorization"
 
 	"go.uber.org/zap"
 
@@ -216,6 +218,8 @@ func (s *server) startService() common.Daemon {
 	params.ArchiverProvider = provider.NewArchiverProvider(s.cfg.Archival.History.Provider, s.cfg.Archival.Visibility.Provider)
 
 	params.PersistenceConfig.TransactionSizeLimit = dc.GetIntProperty(dynamicconfig.TransactionSizeLimit, common.DefaultTransactionSizeLimit)
+
+	params.Authorizer = authorization.NewNopAuthorizer()
 
 	params.Logger.Info("Starting service " + s.name)
 

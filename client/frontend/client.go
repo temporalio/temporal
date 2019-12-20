@@ -706,3 +706,17 @@ func (c *clientImpl) ReapplyEvents(
 	defer cancel()
 	return client.ReapplyEvents(ctx, request, opts...)
 }
+
+func (c *clientImpl) GetClusterInfo(
+	ctx context.Context,
+	opts ...yarpc.CallOption) (*shared.ClusterInfo, error) {
+
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.GetClusterInfo(ctx, opts...)
+}

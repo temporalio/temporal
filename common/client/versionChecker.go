@@ -40,16 +40,28 @@ const (
 	CLI = "cli"
 
 	// SupportedGoSDKVersion indicates the highest go sdk version server will accept requests from
-	SupportedGoSDKVersion = "1.4.0"
+	SupportedGoSDKVersion = "1.5.0"
 	// SupportedJavaSDKVersion indicates the highest java sdk version server will accept requests from
-	SupportedJavaSDKVersion = "1.4.0"
+	SupportedJavaSDKVersion = "1.5.0"
 	// SupportedCLIVersion indicates the highest cli version server will accept requests from
-	SupportedCLIVersion = "1.4.0"
+	SupportedCLIVersion = "1.5.0"
 
+	// StickyQueryUnknownImplConstraints indicates the minimum client version of an unknown client type which supports StickyQuery
+	StickyQueryUnknownImplConstraints = "1.0.0"
+	// GoWorkerStickyQueryVersion indicates the minimum client version of go worker which supports StickyQuery
+	GoWorkerStickyQueryVersion = "1.0.0"
+	// JavaWorkerStickyQueryVersion indicates the minimum client version of the java worker which supports StickyQuery
+	JavaWorkerStickyQueryVersion = "1.0.0"
 	// GoWorkerConsistentQueryVersion indicates the minimum client version of the go worker which supports ConsistentQuery
 	GoWorkerConsistentQueryVersion = "1.5.0"
 
+	stickyQuery     = "sticky-query"
 	consistentQuery = "consistent-query"
+)
+
+var (
+	// ErrUnknownFeature indicates that requested feature is not known by version checker
+	ErrUnknownFeature = &shared.BadRequestError{Message: "Unknown feature"}
 )
 
 type (
@@ -57,12 +69,14 @@ type (
 	VersionChecker interface {
 		ClientSupported(ctx context.Context, enableClientVersionCheck bool) error
 
+		SupportsStickyQuery(clientImpl string, clientFeatureVersion string) error
 		SupportsConsistentQuery(clientImpl string, clientFeatureVersion string) error
 	}
 
 	versionChecker struct {
-		supportedFeatures map[string]map[string]version.Constraints
-		supportedClients  map[string]version.Constraints
+		supportedFeatures                 map[string]map[string]version.Constraints
+		supportedClients                  map[string]version.Constraints
+		stickyQueryUnknownImplConstraints version.Constraints
 	}
 )
 
@@ -70,9 +84,12 @@ type (
 func NewVersionChecker() VersionChecker {
 	supportedFeatures := map[string]map[string]version.Constraints{
 		GoSDK: {
+			stickyQuery:     mustNewConstraint(fmt.Sprintf(">=%v", GoWorkerStickyQueryVersion)),
 			consistentQuery: mustNewConstraint(fmt.Sprintf(">=%v", GoWorkerConsistentQueryVersion)),
 		},
-		JavaSDK: {},
+		JavaSDK: {
+			stickyQuery: mustNewConstraint(fmt.Sprintf(">=%v", JavaWorkerStickyQueryVersion)),
+		},
 	}
 	supportedClients := map[string]version.Constraints{
 		GoSDK:   mustNewConstraint(fmt.Sprintf("<=%v", SupportedGoSDKVersion)),
@@ -80,8 +97,9 @@ func NewVersionChecker() VersionChecker {
 		CLI:     mustNewConstraint(fmt.Sprintf("<=%v", SupportedCLIVersion)),
 	}
 	return &versionChecker{
-		supportedFeatures: supportedFeatures,
-		supportedClients:  supportedClients,
+		supportedFeatures:                 supportedFeatures,
+		supportedClients:                  supportedClients,
+		stickyQueryUnknownImplConstraints: mustNewConstraint(fmt.Sprintf(">=%v", StickyQueryUnknownImplConstraints)),
 	}
 }
 
@@ -113,6 +131,12 @@ func (vc *versionChecker) ClientSupported(ctx context.Context, enableClientVersi
 	return nil
 }
 
+// SupportsStickyQuery returns error if sticky query is not supported otherwise nil.
+// In case client version lookup fails assume the client does not support feature.
+func (vc *versionChecker) SupportsStickyQuery(clientImpl string, clientFeatureVersion string) error {
+	return vc.featureSupported(clientImpl, clientFeatureVersion, stickyQuery)
+}
+
 // SupportsConsistentQuery returns error if consistent query is not supported otherwise nil.
 // In case client version lookup fails assume the client does not support feature.
 func (vc *versionChecker) SupportsConsistentQuery(clientImpl string, clientFeatureVersion string) error {
@@ -120,7 +144,27 @@ func (vc *versionChecker) SupportsConsistentQuery(clientImpl string, clientFeatu
 }
 
 func (vc *versionChecker) featureSupported(clientImpl string, clientFeatureVersion string, feature string) error {
-	if clientImpl == "" || clientFeatureVersion == "" {
+	// Some older clients may not provide clientImpl.
+	// If this is the case special handling needs to be done to maintain backwards compatibility.
+	// This can be removed after it is sure there are no existing clients which do not provide clientImpl in RPC headers.
+	if clientImpl == "" {
+		switch feature {
+		case consistentQuery:
+			return &shared.ClientVersionNotSupportedError{FeatureVersion: clientFeatureVersion}
+		case stickyQuery:
+			version, err := version.NewVersion(clientFeatureVersion)
+			if err != nil {
+				return &shared.ClientVersionNotSupportedError{FeatureVersion: clientFeatureVersion}
+			}
+			if !vc.stickyQueryUnknownImplConstraints.Check(version) {
+				return &shared.ClientVersionNotSupportedError{FeatureVersion: clientFeatureVersion, SupportedVersions: vc.stickyQueryUnknownImplConstraints.String()}
+			}
+			return nil
+		default:
+			return ErrUnknownFeature
+		}
+	}
+	if clientFeatureVersion == "" {
 		return &shared.ClientVersionNotSupportedError{ClientImpl: clientImpl, FeatureVersion: clientFeatureVersion}
 	}
 	implMap, ok := vc.supportedFeatures[clientImpl]
