@@ -280,13 +280,7 @@ func NewEngineWithShardContext(
 	historyEngImpl.workflowResetter = newWorkflowResetter(
 		shard,
 		historyCache,
-		newNDCTransactionMgr(
-			shard,
-			historyCache,
-			historyEngImpl.eventsReapplier,
-			historyEngImpl.logger,
-		),
-		historyEngImpl.logger,
+		logger,
 	)
 	historyEngImpl.decisionHandler = newDecisionHandler(historyEngImpl)
 
@@ -1133,7 +1127,7 @@ func (e *historyEngineImpl) ResetStickyTaskList(
 	}
 
 	err = e.updateWorkflowExecution(ctx, domainID, *resetRequest.Execution, false,
-		func(mutableState mutableState) error {
+		func(context workflowExecutionContext, mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return ErrWorkflowCompleted
 			}
@@ -1305,7 +1299,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 
 	response := &h.RecordActivityTaskStartedResponse{}
 	err = e.updateWorkflowExecution(ctx, domainID, execution, false,
-		func(mutableState mutableState) error {
+		func(context workflowExecutionContext, mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return ErrWorkflowCompleted
 			}
@@ -1430,7 +1424,7 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 	}
 
 	return e.updateWorkflowExecution(ctx, domainID, workflowExecution, true,
-		func(mutableState mutableState) error {
+		func(context workflowExecutionContext, mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return ErrWorkflowCompleted
 			}
@@ -1488,7 +1482,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 	}
 
 	return e.updateWorkflowExecutionWithAction(ctx, domainID, workflowExecution,
-		func(mutableState mutableState) (*updateWorkflowAction, error) {
+		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
 			}
@@ -1556,7 +1550,7 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 	}
 
 	return e.updateWorkflowExecution(ctx, domainID, workflowExecution, true,
-		func(mutableState mutableState) error {
+		func(context workflowExecutionContext, mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return ErrWorkflowCompleted
 			}
@@ -1625,7 +1619,7 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 
 	var cancelRequested bool
 	err = e.updateWorkflowExecution(ctx, domainID, workflowExecution, false,
-		func(mutableState mutableState) error {
+		func(context workflowExecutionContext, mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				e.logger.Debug("Heartbeat failed")
 				return ErrWorkflowCompleted
@@ -1691,7 +1685,7 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 	}
 
 	return e.updateWorkflow(ctx, domainID, execution,
-		func(mutableState mutableState) (*updateWorkflowAction, error) {
+		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
 			}
@@ -1747,56 +1741,60 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 		RunId:      request.WorkflowExecution.RunId,
 	}
 
-	return e.updateWorkflow(ctx, domainID, execution, func(mutableState mutableState) (*updateWorkflowAction, error) {
-		executionInfo := mutableState.GetExecutionInfo()
-		createDecisionTask := true
-		// Do not create decision task when the workflow is cron and the cron has not been started yet
-		if mutableState.GetExecutionInfo().CronSchedule != "" && !mutableState.HasProcessedOrPendingDecision() {
-			createDecisionTask = false
-		}
-		postActions := &updateWorkflowAction{
-			createDecision: createDecisionTask,
-		}
-
-		if !mutableState.IsWorkflowExecutionRunning() {
-			return nil, ErrWorkflowCompleted
-		}
-
-		maxAllowedSignals := e.config.MaximumSignalsPerExecution(domainEntry.GetInfo().Name)
-		if maxAllowedSignals > 0 && int(executionInfo.SignalCount) >= maxAllowedSignals {
-			e.logger.Info("Execution limit reached for maximum signals", tag.WorkflowSignalCount(executionInfo.SignalCount),
-				tag.WorkflowID(execution.GetWorkflowId()),
-				tag.WorkflowRunID(execution.GetRunId()),
-				tag.WorkflowDomainID(domainID))
-			return nil, ErrSignalsLimitExceeded
-		}
-
-		if childWorkflowOnly {
-			parentWorkflowID := executionInfo.ParentWorkflowID
-			parentRunID := executionInfo.ParentRunID
-			if parentExecution.GetWorkflowId() != parentWorkflowID ||
-				parentExecution.GetRunId() != parentRunID {
-				return nil, ErrWorkflowParent
+	return e.updateWorkflow(
+		ctx,
+		domainID,
+		execution,
+		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
+			executionInfo := mutableState.GetExecutionInfo()
+			createDecisionTask := true
+			// Do not create decision task when the workflow is cron and the cron has not been started yet
+			if mutableState.GetExecutionInfo().CronSchedule != "" && !mutableState.HasProcessedOrPendingDecision() {
+				createDecisionTask = false
 			}
-		}
-
-		// deduplicate by request id for signal decision
-		if requestID := request.GetRequestId(); requestID != "" {
-			if mutableState.IsSignalRequested(requestID) {
-				return postActions, nil
+			postActions := &updateWorkflowAction{
+				createDecision: createDecisionTask,
 			}
-			mutableState.AddSignalRequested(requestID)
-		}
 
-		if _, err := mutableState.AddWorkflowExecutionSignaled(
-			request.GetSignalName(),
-			request.GetInput(),
-			request.GetIdentity()); err != nil {
-			return nil, &workflow.InternalServiceError{Message: "Unable to signal workflow execution."}
-		}
+			if !mutableState.IsWorkflowExecutionRunning() {
+				return nil, ErrWorkflowCompleted
+			}
 
-		return postActions, nil
-	})
+			maxAllowedSignals := e.config.MaximumSignalsPerExecution(domainEntry.GetInfo().Name)
+			if maxAllowedSignals > 0 && int(executionInfo.SignalCount) >= maxAllowedSignals {
+				e.logger.Info("Execution limit reached for maximum signals", tag.WorkflowSignalCount(executionInfo.SignalCount),
+					tag.WorkflowID(execution.GetWorkflowId()),
+					tag.WorkflowRunID(execution.GetRunId()),
+					tag.WorkflowDomainID(domainID))
+				return nil, ErrSignalsLimitExceeded
+			}
+
+			if childWorkflowOnly {
+				parentWorkflowID := executionInfo.ParentWorkflowID
+				parentRunID := executionInfo.ParentRunID
+				if parentExecution.GetWorkflowId() != parentWorkflowID ||
+					parentExecution.GetRunId() != parentRunID {
+					return nil, ErrWorkflowParent
+				}
+			}
+
+			// deduplicate by request id for signal decision
+			if requestID := request.GetRequestId(); requestID != "" {
+				if mutableState.IsSignalRequested(requestID) {
+					return postActions, nil
+				}
+				mutableState.AddSignalRequested(requestID)
+			}
+
+			if _, err := mutableState.AddWorkflowExecutionSignaled(
+				request.GetSignalName(),
+				request.GetInput(),
+				request.GetIdentity()); err != nil {
+				return nil, &workflow.InternalServiceError{Message: "Unable to signal workflow execution."}
+			}
+
+			return postActions, nil
+		})
 }
 
 func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
@@ -2032,7 +2030,7 @@ func (e *historyEngineImpl) RemoveSignalMutableState(
 	}
 
 	return e.updateWorkflowExecution(ctx, domainID, execution, false,
-		func(mutableState mutableState) error {
+		func(context workflowExecutionContext, mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return ErrWorkflowCompleted
 			}
@@ -2060,8 +2058,11 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 		RunId:      request.WorkflowExecution.RunId,
 	}
 
-	return e.updateWorkflow(ctx, domainID, execution,
-		func(mutableState mutableState) (*updateWorkflowAction, error) {
+	return e.updateWorkflow(
+		ctx,
+		domainID,
+		execution,
+		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
 			}
@@ -2095,7 +2096,7 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 	}
 
 	return e.updateWorkflowExecution(ctx, domainID, execution, true,
-		func(mutableState mutableState) error {
+		func(context workflowExecutionContext, mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return ErrWorkflowCompleted
 			}
@@ -2370,10 +2371,11 @@ func (e *historyEngineImpl) updateWorkflowHelper(
 
 UpdateHistoryLoop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
+		context := workflowContext.getContext()
 		mutableState := workflowContext.getMutableState()
 
 		// conduct caller action
-		postActions, err := action(mutableState)
+		postActions, err := action(context, mutableState)
 		if err != nil {
 			if err == ErrStaleState {
 				// Handler detected that cached workflow mutable could potentially be stale
@@ -2426,20 +2428,24 @@ func (e *historyEngineImpl) updateWorkflowExecution(
 	domainID string,
 	execution workflow.WorkflowExecution,
 	createDecisionTask bool,
-	action func(mutableState mutableState) error,
+	action func(context workflowExecutionContext, mutableState mutableState) error,
 ) error {
 
-	return e.updateWorkflowExecutionWithAction(ctx, domainID, execution,
-		getUpdateWorkflowActionFunc(createDecisionTask, action))
+	return e.updateWorkflowExecutionWithAction(
+		ctx,
+		domainID,
+		execution,
+		getUpdateWorkflowActionFunc(createDecisionTask, action),
+	)
 }
 
 func getUpdateWorkflowActionFunc(
 	createDecisionTask bool,
-	action func(builder mutableState) error,
+	action func(context workflowExecutionContext, mutableState mutableState) error,
 ) updateWorkflowActionFunc {
 
-	return func(builder mutableState) (*updateWorkflowAction, error) {
-		err := action(builder)
+	return func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
+		err := action(context, mutableState)
 		if err != nil {
 			return nil, err
 		}
@@ -2796,7 +2802,66 @@ func (e *historyEngineImpl) ReapplyEvents(
 		ctx,
 		domainID,
 		currentExecution,
-		func(mutableState mutableState) (*updateWorkflowAction, error) {
+		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
+
+			if !mutableState.IsWorkflowExecutionRunning() {
+				// need to reset target workflow (which is also the current workflow)
+				// to accept events to be reapplied
+				baseRunID := mutableState.GetExecutionInfo().RunID
+				resetRunID := uuid.New()
+				baseRebuildLastEventID := mutableState.GetPreviousStartedEventID()
+
+				// TODO when https://github.com/uber/cadence/issues/2420 is finished, remove this block,
+				//  since cannot reapply event to a finished workflow which had no decisions started
+				if baseRebuildLastEventID == common.EmptyEventID {
+					e.logger.Warn("cannot reapply event to a finished workflow",
+						tag.WorkflowDomainID(domainID),
+						tag.WorkflowID(currentExecution.GetWorkflowId()),
+					)
+					e.metricsClient.IncCounter(metrics.HistoryReapplyEventsScope, metrics.EventReapplySkippedCount)
+					return &updateWorkflowAction{noop: true}, nil
+				}
+
+				baseVersionHistories := mutableState.GetVersionHistories()
+				baseCurrentVersionHistory, err := baseVersionHistories.GetCurrentVersionHistory()
+				if err != nil {
+					return nil, err
+				}
+				baseRebuildLastEventVersion, err := baseCurrentVersionHistory.GetEventVersion(baseRebuildLastEventID)
+				if err != nil {
+					return nil, err
+				}
+				baseCurrentBranchToken := baseCurrentVersionHistory.GetBranchToken()
+				baseNextEventID := mutableState.GetNextEventID()
+
+				if err = e.workflowResetter.resetWorkflow(
+					ctx,
+					domainID,
+					workflowID,
+					baseRunID,
+					baseCurrentBranchToken,
+					baseRebuildLastEventID,
+					baseRebuildLastEventVersion,
+					baseNextEventID,
+					resetRunID,
+					uuid.New(),
+					newNDCWorkflow(
+						ctx,
+						e.shard.GetDomainCache(),
+						e.shard.GetClusterMetadata(),
+						context,
+						mutableState,
+						noopReleaseFn,
+					),
+					eventsReapplicationResetWorkflowReason,
+					reapplyEvents,
+				); err != nil {
+					return nil, err
+				}
+				return &updateWorkflowAction{
+					noop: true,
+				}, nil
+			}
 
 			postActions := &updateWorkflowAction{
 				createDecision: true,
@@ -2804,19 +2869,6 @@ func (e *historyEngineImpl) ReapplyEvents(
 			// Do not create decision task when the workflow is cron and the cron has not been started yet
 			if mutableState.GetExecutionInfo().CronSchedule != "" && !mutableState.HasProcessedOrPendingDecision() {
 				postActions.createDecision = false
-			}
-			// TODO when https://github.com/uber/cadence/issues/2420 is finished
-			//  reset to workflow finish event
-			//  ignore this case for now
-			if !mutableState.IsWorkflowExecutionRunning() {
-				e.logger.Warn("cannot reapply event to a finished workflow",
-					tag.WorkflowDomainID(domainID),
-					tag.WorkflowID(currentExecution.GetWorkflowId()),
-				)
-				e.metricsClient.IncCounter(metrics.HistoryReapplyEventsScope, metrics.EventReapplySkippedCount)
-				return &updateWorkflowAction{
-					noop: true,
-				}, nil
 			}
 			reappliedEvents, err := e.eventsReapplier.reapplyEvents(
 				ctx,

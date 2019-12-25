@@ -25,6 +25,8 @@ package history
 import (
 	ctx "context"
 
+	"go.uber.org/cadence/.gen/go/shared"
+
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/log"
@@ -65,7 +67,7 @@ func (r *nDCEventsReapplierImpl) reapplyEvents(
 	runID string,
 ) ([]*workflow.HistoryEvent, error) {
 
-	var toReapplyEvents []*workflow.HistoryEvent
+	var reappliedEvents []*workflow.HistoryEvent
 	for _, event := range historyEvents {
 		switch event.GetEventType() {
 		case workflow.EventTypeWorkflowExecutionSignaled:
@@ -74,23 +76,22 @@ func (r *nDCEventsReapplierImpl) reapplyEvents(
 				// skip already applied event
 				continue
 			}
-			toReapplyEvents = append(toReapplyEvents, event)
+			reappliedEvents = append(reappliedEvents, event)
 		}
 	}
 
-	if len(toReapplyEvents) == 0 {
+	if len(reappliedEvents) == 0 {
 		return nil, nil
 	}
 
+	// sanity check workflow still running
 	if !msBuilder.IsWorkflowExecutionRunning() {
-		// TODO when https://github.com/uber/cadence/issues/2420 is finished
-		//  reset to workflow finish event
-		//  ignore this case for now
-		return nil, nil
+		return nil, &shared.InternalServiceError{
+			Message: "unable to reapply events to closed workflow.",
+		}
 	}
 
-	var reappliedEvents []*workflow.HistoryEvent
-	for _, event := range toReapplyEvents {
+	for _, event := range reappliedEvents {
 		signal := event.GetWorkflowExecutionSignaledEventAttributes()
 		if _, err := msBuilder.AddWorkflowExecutionSignaled(
 			signal.GetSignalName(),
@@ -101,7 +102,6 @@ func (r *nDCEventsReapplierImpl) reapplyEvents(
 		}
 		deDupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
 		msBuilder.UpdateDuplicatedResource(deDupResource)
-		reappliedEvents = append(reappliedEvents, event)
 	}
 	return reappliedEvents, nil
 }

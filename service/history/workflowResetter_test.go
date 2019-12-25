@@ -46,7 +46,7 @@ type (
 
 		controller         *gomock.Controller
 		mockShard          *shardContextTest
-		mockTransactionMgr *MocknDCTransactionMgr
+		mockEngine         *historyEngineImpl
 		mockStateRebuilder *MocknDCStateRebuilder
 
 		mockHistoryV2Mgr *mocks.HistoryV2Manager
@@ -78,7 +78,6 @@ func (s *workflowResetterSuite) SetupTest() {
 
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.controller = gomock.NewController(s.T())
-	s.mockTransactionMgr = NewMocknDCTransactionMgr(s.controller)
 	s.mockStateRebuilder = NewMocknDCStateRebuilder(s.controller)
 
 	s.mockShard = newTestShardContext(
@@ -95,7 +94,6 @@ func (s *workflowResetterSuite) SetupTest() {
 	s.workflowResetter = newWorkflowResetter(
 		s.mockShard,
 		newHistoryCache(s.mockShard),
-		s.mockTransactionMgr,
 		s.logger,
 	)
 	s.workflowResetter.newStateRebuilder = func() nDCStateRebuilder {
@@ -441,17 +439,15 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents() {
 		NextPageToken: nil,
 	}, nil).Once()
 
-	resetWorkflow := NewMocknDCWorkflow(s.controller)
-	resetReleaseCalled := false
+	resetContext := NewMockworkflowExecutionContext(s.controller)
+	resetContext.EXPECT().lock(gomock.Any()).Return(nil).Times(1)
+	resetContext.EXPECT().unlock().Times(1)
 	resetMutableState := NewMockmutableState(s.controller)
-	var newReleaseFn releaseWorkflowExecutionFunc = func(error) { resetReleaseCalled = true }
-	resetWorkflow.EXPECT().getMutableState().Return(resetMutableState).AnyTimes()
-	resetWorkflow.EXPECT().getReleaseFn().Return(newReleaseFn).AnyTimes()
-
+	resetContext.EXPECT().loadWorkflowExecution().Return(resetMutableState, nil).Times(1)
 	resetMutableState.EXPECT().GetNextEventID().Return(newNextEventID).AnyTimes()
 	resetMutableState.EXPECT().GetCurrentBranchToken().Return(newBranchToken, nil).AnyTimes()
-
-	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, s.domainID, s.workflowID, newRunID).Return(resetWorkflow, nil).Times(1)
+	resetContextCacheKey := definition.NewWorkflowIdentifier(s.domainID, s.workflowID, newRunID)
+	_, _ = s.workflowResetter.historyCache.PutIfNotExist(resetContextCacheKey, resetContext)
 
 	mutableState := NewMockmutableState(s.controller)
 
@@ -466,7 +462,6 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents() {
 		baseNextEventID,
 	)
 	s.NoError(err)
-	s.True(resetReleaseCalled)
 }
 
 func (s *workflowResetterSuite) TestReapplyWorkflowEvents() {

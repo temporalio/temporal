@@ -75,7 +75,6 @@ var _ workflowResetter = (*workflowResetterImpl)(nil)
 func newWorkflowResetter(
 	shard ShardContext,
 	historyCache *historyCache,
-	transactionMgr nDCTransactionMgr,
 	logger log.Logger,
 ) *workflowResetterImpl {
 	return &workflowResetterImpl{
@@ -84,7 +83,6 @@ func newWorkflowResetter(
 		clusterMetadata: shard.GetClusterMetadata(),
 		historyV2Mgr:    shard.GetHistoryManager(),
 		historyCache:    historyCache,
-		transactionMgr:  transactionMgr,
 		newStateRebuilder: func() nDCStateRebuilder {
 			return newNDCStateRebuilder(shard, logger)
 		},
@@ -464,14 +462,27 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	}
 
 	getNextEventIDBranchToken := func(runID string) (nextEventID int64, branchToken []byte, retError error) {
-		workflow, err := r.transactionMgr.loadNDCWorkflow(ctx, domainID, workflowID, runID)
+		context, release, err := r.historyCache.getOrCreateWorkflowExecution(
+			ctx,
+			domainID,
+			shared.WorkflowExecution{
+				WorkflowId: common.StringPtr(workflowID),
+				RunId:      common.StringPtr(runID),
+			},
+		)
 		if err != nil {
 			return 0, nil, err
 		}
-		defer func() { workflow.getReleaseFn()(retError) }()
+		defer func() { release(retError) }()
 
-		nextEventID = workflow.getMutableState().GetNextEventID()
-		branchToken, err = workflow.getMutableState().GetCurrentBranchToken()
+		mutableState, err := context.loadWorkflowExecution()
+		if err != nil {
+			// no matter what error happen, we need to retry
+			return 0, nil, err
+		}
+
+		nextEventID = mutableState.GetNextEventID()
+		branchToken, err = mutableState.GetCurrentBranchToken()
 		if err != nil {
 			return 0, nil, err
 		}

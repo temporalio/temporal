@@ -32,6 +32,7 @@ import (
 
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/mocks"
@@ -43,16 +44,18 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller          *gomock.Controller
-		mockShard           *shardContextTest
-		mockCreateMgr       *MocknDCTransactionMgrForNewWorkflow
-		mockUpdateMgr       *MocknDCTransactionMgrForExistingWorkflow
-		mockEventsReapplier *MocknDCEventsReapplier
-		mockClusterMetadata *cluster.MockMetadata
+		controller           *gomock.Controller
+		mockShard            *shardContextTest
+		mockCreateMgr        *MocknDCTransactionMgrForNewWorkflow
+		mockUpdateMgr        *MocknDCTransactionMgrForExistingWorkflow
+		mockEventsReapplier  *MocknDCEventsReapplier
+		mockWorkflowResetter *MockworkflowResetter
+		mockClusterMetadata  *cluster.MockMetadata
 
 		mockExecutionMgr *mocks.ExecutionManager
 
-		logger log.Logger
+		logger      log.Logger
+		domainEntry *cache.DomainCacheEntry
 
 		transactionMgr *nDCTransactionMgrImpl
 	}
@@ -70,6 +73,7 @@ func (s *nDCTransactionMgrSuite) SetupTest() {
 	s.mockCreateMgr = NewMocknDCTransactionMgrForNewWorkflow(s.controller)
 	s.mockUpdateMgr = NewMocknDCTransactionMgrForExistingWorkflow(s.controller)
 	s.mockEventsReapplier = NewMocknDCEventsReapplier(s.controller)
+	s.mockWorkflowResetter = NewMockworkflowResetter(s.controller)
 
 	s.mockShard = newTestShardContext(
 		s.controller,
@@ -85,10 +89,12 @@ func (s *nDCTransactionMgrSuite) SetupTest() {
 	s.mockExecutionMgr = s.mockShard.resource.ExecutionMgr
 
 	s.logger = s.mockShard.GetLogger()
+	s.domainEntry = testGlobalDomainEntry
 
 	s.transactionMgr = newNDCTransactionMgr(s.mockShard, newHistoryCache(s.mockShard), s.mockEventsReapplier, s.logger)
 	s.transactionMgr.createMgr = s.mockCreateMgr
 	s.transactionMgr.updateMgr = s.mockUpdateMgr
+	s.transactionMgr.workflowResetter = s.mockWorkflowResetter
 }
 
 func (s *nDCTransactionMgrSuite) TearDownTest() {
@@ -124,10 +130,9 @@ func (s *nDCTransactionMgrSuite) TestUpdateWorkflow() {
 	s.NoError(err)
 }
 
-func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentGuaranteed_Active_ReapplyEvents() {
+func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Open() {
 	ctx := ctx.Background()
 	now := time.Now()
-	currentVersion := int64(1234)
 	releaseCalled := false
 	runID := uuid.New()
 
@@ -145,12 +150,13 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentGuaranteed_Active_R
 	workflow.EXPECT().getReleaseFn().Return(releaseFn).AnyTimes()
 
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(currentVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.domainEntry.GetFailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.mockEventsReapplier.EXPECT().reapplyEvents(ctx, mutableState, workflowEvents.Events, runID).Return(workflowEvents.Events, nil).Times(1)
 
 	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(true).AnyTimes()
-	mutableState.EXPECT().GetCurrentVersion().Return(currentVersion).AnyTimes()
+	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
+	mutableState.EXPECT().GetDomainEntry().Return(s.domainEntry).AnyTimes()
 	mutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{RunID: runID}).Times(1)
 	context.EXPECT().persistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil).Times(1)
 	context.EXPECT().updateWorkflowExecutionWithNew(
@@ -161,10 +167,83 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentGuaranteed_Active_R
 	s.True(releaseCalled)
 }
 
-func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentGuaranteed_Passive_NoReapplyEvents() {
+func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Closed() {
 	ctx := ctx.Background()
 	now := time.Now()
-	currentVersion := int64(1234)
+
+	domainID := "some random domain ID"
+	workflowID := "some random workflow ID"
+	runID := "some random run ID"
+	lastDecisionTaskStartedEventID := int64(9999)
+	nextEventID := lastDecisionTaskStartedEventID * 2
+	lastDecisionTaskStartedVersion := s.domainEntry.GetFailoverVersion()
+	versionHistory := persistence.NewVersionHistory([]byte("branch token"), []*persistence.VersionHistoryItem{
+		{EventID: lastDecisionTaskStartedEventID, Version: lastDecisionTaskStartedVersion},
+	})
+	histories := persistence.NewVersionHistories(versionHistory)
+
+	releaseCalled := false
+
+	workflow := NewMocknDCWorkflow(s.controller)
+	context := NewMockworkflowExecutionContext(s.controller)
+	mutableState := NewMockmutableState(s.controller)
+	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
+
+	workflowEvents := &persistence.WorkflowEvents{}
+
+	workflow.EXPECT().getContext().Return(context).AnyTimes()
+	workflow.EXPECT().getMutableState().Return(mutableState).AnyTimes()
+	workflow.EXPECT().getReleaseFn().Return(releaseFn).AnyTimes()
+
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.domainEntry.GetFailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+
+	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
+	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
+	mutableState.EXPECT().GetDomainEntry().Return(s.domainEntry).AnyTimes()
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
+		DomainID:   domainID,
+		WorkflowID: workflowID,
+		RunID:      runID,
+	}).AnyTimes()
+	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
+	mutableState.EXPECT().GetPreviousStartedEventID().Return(lastDecisionTaskStartedEventID).Times(1)
+	mutableState.EXPECT().GetVersionHistories().Return(histories).Times(1)
+
+	s.mockWorkflowResetter.EXPECT().resetWorkflow(
+		ctx,
+		domainID,
+		workflowID,
+		runID,
+		versionHistory.GetBranchToken(),
+		lastDecisionTaskStartedEventID,
+		lastDecisionTaskStartedVersion,
+		nextEventID,
+		gomock.Any(),
+		gomock.Any(),
+		workflow,
+		eventsReapplicationResetWorkflowReason,
+		workflowEvents.Events,
+	).Return(nil).Times(1)
+
+	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
+		DomainID:   domainID,
+		WorkflowID: workflowID,
+	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil).Once()
+
+	context.EXPECT().persistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil).Times(1)
+	context.EXPECT().updateWorkflowExecutionWithNew(
+		now, persistence.UpdateWorkflowModeBypassCurrent, nil, nil, transactionPolicyPassive, (*transactionPolicy)(nil),
+	).Return(nil).Times(1)
+
+	err := s.transactionMgr.backfillWorkflow(ctx, now, workflow, workflowEvents)
+	s.NoError(err)
+	s.True(releaseCalled)
+}
+
+func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Open() {
+	ctx := ctx.Background()
+	now := time.Now()
 	releaseCalled := false
 
 	workflow := NewMocknDCWorkflow(s.controller)
@@ -180,11 +259,13 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentGuaranteed_Passive_
 	workflow.EXPECT().getMutableState().Return(mutableState).AnyTimes()
 	workflow.EXPECT().getReleaseFn().Return(releaseFn).AnyTimes()
 
-	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(currentVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.domainEntry.GetFailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName).AnyTimes()
 
 	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(true).AnyTimes()
-	mutableState.EXPECT().GetCurrentVersion().Return(currentVersion).AnyTimes()
+	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
+	mutableState.EXPECT().GetDomainEntry().Return(s.domainEntry).AnyTimes()
+	context.EXPECT().reapplyEvents([]*persistence.WorkflowEvents{workflowEvents}).Times(1)
 	context.EXPECT().persistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil).Times(1)
 	context.EXPECT().updateWorkflowExecutionWithNew(
 		now, persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, transactionPolicyPassive, (*transactionPolicy)(nil),
@@ -194,10 +275,57 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentGuaranteed_Passive_
 	s.True(releaseCalled)
 }
 
-func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CheckDB_NotCurrent_Active() {
+func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Closed() {
 	ctx := ctx.Background()
 	now := time.Now()
-	currentVersion := int64(1234)
+
+	domainID := "some random domain ID"
+	workflowID := "some random workflow ID"
+	runID := "some random run ID"
+
+	releaseCalled := false
+
+	workflow := NewMocknDCWorkflow(s.controller)
+	context := NewMockworkflowExecutionContext(s.controller)
+	mutableState := NewMockmutableState(s.controller)
+	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
+
+	workflowEvents := &persistence.WorkflowEvents{}
+
+	workflow.EXPECT().getContext().Return(context).AnyTimes()
+	workflow.EXPECT().getMutableState().Return(mutableState).AnyTimes()
+	workflow.EXPECT().getReleaseFn().Return(releaseFn).AnyTimes()
+
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.domainEntry.GetFailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName).AnyTimes()
+
+	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
+	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
+	mutableState.EXPECT().GetDomainEntry().Return(s.domainEntry).AnyTimes()
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
+		DomainID:   domainID,
+		WorkflowID: workflowID,
+		RunID:      runID,
+	}).AnyTimes()
+
+	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
+		DomainID:   domainID,
+		WorkflowID: workflowID,
+	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil).Once()
+	context.EXPECT().reapplyEvents([]*persistence.WorkflowEvents{workflowEvents}).Times(1)
+	context.EXPECT().persistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil).Times(1)
+	context.EXPECT().updateWorkflowExecutionWithNew(
+		now, persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, transactionPolicyPassive, (*transactionPolicy)(nil),
+	).Return(nil).Times(1)
+
+	err := s.transactionMgr.backfillWorkflow(ctx, now, workflow, workflowEvents)
+	s.NoError(err)
+	s.True(releaseCalled)
+}
+
+func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Active() {
+	ctx := ctx.Background()
+	now := time.Now()
 
 	domainID := "some random domain ID"
 	workflowID := "some random workflow ID"
@@ -223,11 +351,12 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CheckDB_NotCurrent_Active(
 	workflow.EXPECT().getMutableState().Return(mutableState).AnyTimes()
 	workflow.EXPECT().getReleaseFn().Return(releaseFn).AnyTimes()
 
-	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(currentVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.domainEntry.GetFailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
-	mutableState.EXPECT().GetCurrentVersion().Return(currentVersion).AnyTimes()
+	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
+	mutableState.EXPECT().GetDomainEntry().Return(s.domainEntry).AnyTimes()
 	mutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
 		DomainID:   domainID,
 		WorkflowID: workflowID,
@@ -238,7 +367,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CheckDB_NotCurrent_Active(
 		DomainID:   domainID,
 		WorkflowID: workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{RunID: currentRunID}, nil).Once()
-
+	context.EXPECT().reapplyEvents([]*persistence.WorkflowEvents{workflowEvents}).Times(1)
 	context.EXPECT().persistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil).Times(1)
 	context.EXPECT().updateWorkflowExecutionWithNew(
 		now, persistence.UpdateWorkflowModeBypassCurrent, nil, nil, transactionPolicyPassive, (*transactionPolicy)(nil),
@@ -248,10 +377,9 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CheckDB_NotCurrent_Active(
 	s.True(releaseCalled)
 }
 
-func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CheckDB_NotCurrent_Passive() {
+func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Passive() {
 	ctx := ctx.Background()
 	now := time.Now()
-	currentVersion := int64(1234)
 
 	domainID := "some random domain ID"
 	workflowID := "some random workflow ID"
@@ -277,11 +405,12 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CheckDB_NotCurrent_Passive
 	workflow.EXPECT().getMutableState().Return(mutableState).AnyTimes()
 	workflow.EXPECT().getReleaseFn().Return(releaseFn).AnyTimes()
 
-	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(currentVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.domainEntry.GetFailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName).AnyTimes()
 
 	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
-	mutableState.EXPECT().GetCurrentVersion().Return(currentVersion).AnyTimes()
+	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
+	mutableState.EXPECT().GetDomainEntry().Return(s.domainEntry).AnyTimes()
 	mutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
 		DomainID:   domainID,
 		WorkflowID: workflowID,
@@ -292,107 +421,11 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CheckDB_NotCurrent_Passive
 		DomainID:   domainID,
 		WorkflowID: workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{RunID: currentRunID}, nil).Once()
-
+	context.EXPECT().reapplyEvents([]*persistence.WorkflowEvents{workflowEvents}).Times(1)
 	context.EXPECT().persistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil).Times(1)
 	context.EXPECT().updateWorkflowExecutionWithNew(
 		now, persistence.UpdateWorkflowModeBypassCurrent, nil, nil, transactionPolicyPassive, (*transactionPolicy)(nil),
 	).Return(nil).Times(1)
-	err := s.transactionMgr.backfillWorkflow(ctx, now, workflow, workflowEvents)
-	s.NoError(err)
-	s.True(releaseCalled)
-}
-
-func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CheckDB_Current_Active() {
-	ctx := ctx.Background()
-	now := time.Now()
-	currentVersion := int64(1234)
-
-	domainID := "some random domain ID"
-	workflowID := "some random workflow ID"
-	runID := "some random run ID"
-
-	releaseCalled := false
-
-	workflow := NewMocknDCWorkflow(s.controller)
-	context := NewMockworkflowExecutionContext(s.controller)
-	mutableState := NewMockmutableState(s.controller)
-	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
-
-	workflowEvents := &persistence.WorkflowEvents{}
-
-	workflow.EXPECT().getContext().Return(context).AnyTimes()
-	workflow.EXPECT().getMutableState().Return(mutableState).AnyTimes()
-	workflow.EXPECT().getReleaseFn().Return(releaseFn).AnyTimes()
-
-	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(currentVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-
-	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
-	mutableState.EXPECT().GetCurrentVersion().Return(currentVersion).AnyTimes()
-	mutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
-		RunID:      runID,
-	}).AnyTimes()
-
-	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
-	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil).Once()
-
-	context.EXPECT().persistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil).Times(1)
-	context.EXPECT().updateWorkflowExecutionWithNew(
-		now, persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, transactionPolicyActive, (*transactionPolicy)(nil),
-	).Return(nil).Times(1)
-
-	err := s.transactionMgr.backfillWorkflow(ctx, now, workflow, workflowEvents)
-	s.NoError(err)
-	s.True(releaseCalled)
-}
-
-func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CheckDB_Current_Passive() {
-	ctx := ctx.Background()
-	now := time.Now()
-	currentVersion := int64(1234)
-
-	domainID := "some random domain ID"
-	workflowID := "some random workflow ID"
-	runID := "some random run ID"
-
-	releaseCalled := false
-
-	workflow := NewMocknDCWorkflow(s.controller)
-	context := NewMockworkflowExecutionContext(s.controller)
-	mutableState := NewMockmutableState(s.controller)
-	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
-
-	workflowEvents := &persistence.WorkflowEvents{}
-
-	workflow.EXPECT().getContext().Return(context).AnyTimes()
-	workflow.EXPECT().getMutableState().Return(mutableState).AnyTimes()
-	workflow.EXPECT().getReleaseFn().Return(releaseFn).AnyTimes()
-
-	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(currentVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName).AnyTimes()
-
-	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
-	mutableState.EXPECT().GetCurrentVersion().Return(currentVersion).AnyTimes()
-	mutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
-		RunID:      runID,
-	}).AnyTimes()
-
-	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
-		DomainID:   domainID,
-		WorkflowID: workflowID,
-	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil).Once()
-
-	context.EXPECT().persistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil).Times(1)
-	context.EXPECT().updateWorkflowExecutionWithNew(
-		now, persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, transactionPolicyPassive, (*transactionPolicy)(nil),
-	).Return(nil).Times(1)
-
 	err := s.transactionMgr.backfillWorkflow(ctx, now, workflow, workflowEvents)
 	s.NoError(err)
 	s.True(releaseCalled)

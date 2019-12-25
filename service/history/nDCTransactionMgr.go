@@ -26,6 +26,8 @@ import (
 	ctx "context"
 	"time"
 
+	"github.com/pborman/uuid"
+
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
@@ -96,6 +98,10 @@ const (
 	nDCTransactionPolicySuppressCurrentAndUpdateAsCurrent
 )
 
+const (
+	eventsReapplicationResetWorkflowReason = "events-reapplication"
+)
+
 type (
 	nDCTransactionMgr interface {
 		createWorkflow(
@@ -137,15 +143,16 @@ type (
 	}
 
 	nDCTransactionMgrImpl struct {
-		shard           ShardContext
-		domainCache     cache.DomainCache
-		historyCache    *historyCache
-		clusterMetadata cluster.Metadata
-		historyV2Mgr    persistence.HistoryManager
-		serializer      persistence.PayloadSerializer
-		metricsClient   metrics.Client
-		eventsReapplier nDCEventsReapplier
-		logger          log.Logger
+		shard            ShardContext
+		domainCache      cache.DomainCache
+		historyCache     *historyCache
+		clusterMetadata  cluster.Metadata
+		historyV2Mgr     persistence.HistoryManager
+		serializer       persistence.PayloadSerializer
+		metricsClient    metrics.Client
+		workflowResetter workflowResetter
+		eventsReapplier  nDCEventsReapplier
+		logger           log.Logger
 
 		createMgr nDCTransactionMgrForNewWorkflow
 		updateMgr nDCTransactionMgrForExistingWorkflow
@@ -169,6 +176,11 @@ func newNDCTransactionMgr(
 		historyV2Mgr:    shard.GetHistoryManager(),
 		serializer:      shard.GetService().GetPayloadSerializer(),
 		metricsClient:   shard.GetMetricsClient(),
+		workflowResetter: newWorkflowResetter(
+			shard,
+			historyCache,
+			logger,
+		),
 		eventsReapplier: eventsReapplier,
 		logger:          logger.WithTags(tag.ComponentHistoryReplicator),
 
@@ -232,83 +244,131 @@ func (r *nDCTransactionMgrImpl) backfillWorkflow(
 		return err
 	}
 
-	mode := persistence.UpdateWorkflowModeUpdateCurrent
-	transactionPolicy := transactionPolicyPassive
-	// since we are not rebuilding the mutable state then we
-	// can trust the result from IsCurrentWorkflowGuaranteed
-	if !targetWorkflow.getMutableState().IsCurrentWorkflowGuaranteed() {
-		executionInfo := targetWorkflow.getMutableState().GetExecutionInfo()
-		domainID := executionInfo.DomainID
-		workflowID := executionInfo.WorkflowID
-		runID := executionInfo.RunID
-
-		currentRunID, err := r.getCurrentWorkflowRunID(
-			ctx,
-			domainID,
-			workflowID,
-		)
-		if err != nil {
-			return err
-		}
-		if currentRunID != runID {
-			mode = persistence.UpdateWorkflowModeBypassCurrent
-		}
-	}
-
-	targetWorkflowActiveCluster := r.clusterMetadata.ClusterNameForFailoverVersion(
-		targetWorkflow.getMutableState().GetCurrentVersion(),
+	updateMode, transactionPolicy, err := r.backfillWorkflowEventsReapply(
+		ctx,
+		targetWorkflow,
+		targetWorkflowEvents,
 	)
-	currentCluster := r.clusterMetadata.GetCurrentClusterName()
-
-	// workflow events reapplication to self (self workflow being current workflow)
-	// we need to handle 2 cases
-	// 1. workflow still running -> just reapply
-	// 2. workflow closed -> TODO wait until https://github.com/uber/cadence/issues/2420
-	//  NOTE: also remember that workflow reset will acquire a lock on current workflow (this)
-
-	// simple case workflow still running (implies current workflow),
-	// no workflow reset necessary
-	if targetWorkflowActiveCluster == currentCluster {
-		// target workflow is active && target workflow is current workflow
-		// we need to reapply events here, rather than using reapplyEvents
-		// within workflow execution context, or otherwise deadlock will appear
-		targetMutableState := targetWorkflow.getMutableState()
-		if targetMutableState.IsCurrentWorkflowGuaranteed() {
-			// case 1
-			transactionPolicy = transactionPolicyActive
-			if _, err := r.eventsReapplier.reapplyEvents(
-				ctx,
-				targetWorkflow.getMutableState(),
-				targetWorkflowEvents.Events,
-				targetMutableState.GetExecutionInfo().RunID,
-			); err != nil {
-				return err
-			}
-		} else if mode == persistence.UpdateWorkflowModeUpdateCurrent {
-			// case 2
-			transactionPolicy = transactionPolicyActive
-			r.logger.Warn("cannot reapply event to a finished workflow",
-				tag.WorkflowDomainID(targetWorkflowEvents.DomainID),
-				tag.WorkflowID(targetWorkflowEvents.WorkflowID),
-			)
-			r.metricsClient.IncCounter(metrics.HistoryReapplyEventsScope, metrics.EventReapplySkippedCount)
-			// TODO when https://github.com/uber/cadence/issues/2420 is finished
-			//  reset to workflow finish event and reapply to new resetted workflow by using
-			//  transactionPolicyActive, ignore this case for now
-		} else {
-			// target workflow is active but not being pointed by current record
-			// do not need to handle events reapplication here
-		}
+	if err != nil {
+		return err
 	}
 
 	return targetWorkflow.getContext().updateWorkflowExecutionWithNew(
 		now,
-		mode,
+		updateMode,
 		nil,
 		nil,
 		transactionPolicy,
 		nil,
 	)
+}
+
+func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
+	ctx ctx.Context,
+	targetWorkflow nDCWorkflow,
+	targetWorkflowEvents *persistence.WorkflowEvents,
+) (persistence.UpdateWorkflowMode, transactionPolicy, error) {
+
+	isCurrentWorkflow, err := r.isWorkflowCurrent(ctx, targetWorkflow)
+	if err != nil {
+		return 0, transactionPolicyActive, err
+	}
+	isWorkflowRunning := targetWorkflow.getMutableState().IsWorkflowExecutionRunning()
+	targetWorkflowActiveCluster := r.clusterMetadata.ClusterNameForFailoverVersion(
+		targetWorkflow.getMutableState().GetDomainEntry().GetFailoverVersion(),
+	)
+	currentCluster := r.clusterMetadata.GetCurrentClusterName()
+	isActiveCluster := targetWorkflowActiveCluster == currentCluster
+
+	// workflow events reapplication
+	// we need to handle 3 cases
+	// 1. target workflow is self & self being current & active
+	//  a. workflow still running -> just reapply
+	//  b. workflow closed -> reset current workflow & reapply
+	// 2. anything not case 1 -> find the current & active workflow to reapply
+
+	// case 1
+	if isCurrentWorkflow && isActiveCluster {
+		// case 1.a
+		if isWorkflowRunning {
+			if _, err := r.eventsReapplier.reapplyEvents(
+				ctx,
+				targetWorkflow.getMutableState(),
+				targetWorkflowEvents.Events,
+				targetWorkflow.getMutableState().GetExecutionInfo().RunID,
+			); err != nil {
+				return 0, transactionPolicyActive, err
+			}
+			return persistence.UpdateWorkflowModeUpdateCurrent, transactionPolicyActive, nil
+		}
+
+		// case 1.b
+		// need to reset target workflow (which is also the current workflow)
+		// to accept events to be reapplied
+		baseMutableState := targetWorkflow.getMutableState()
+		domainID := baseMutableState.GetExecutionInfo().DomainID
+		workflowID := baseMutableState.GetExecutionInfo().WorkflowID
+		baseRunID := baseMutableState.GetExecutionInfo().RunID
+		resetRunID := uuid.New()
+		baseRebuildLastEventID := baseMutableState.GetPreviousStartedEventID()
+
+		// TODO when https://github.com/uber/cadence/issues/2420 is finished, remove this block,
+		//  since cannot reapply event to a finished workflow which had no decisions started
+		if baseRebuildLastEventID == common.EmptyEventID {
+			r.logger.Warn("cannot reapply event to a finished workflow",
+				tag.WorkflowDomainID(domainID),
+				tag.WorkflowID(workflowID),
+			)
+			r.metricsClient.IncCounter(metrics.HistoryReapplyEventsScope, metrics.EventReapplySkippedCount)
+			return persistence.UpdateWorkflowModeBypassCurrent, transactionPolicyPassive, nil
+		}
+
+		baseVersionHistories := baseMutableState.GetVersionHistories()
+		baseCurrentVersionHistory, err := baseVersionHistories.GetCurrentVersionHistory()
+		if err != nil {
+			return 0, transactionPolicyActive, err
+		}
+		baseRebuildLastEventVersion, err := baseCurrentVersionHistory.GetEventVersion(baseRebuildLastEventID)
+		if err != nil {
+			return 0, transactionPolicyActive, err
+		}
+		baseCurrentBranchToken := baseCurrentVersionHistory.GetBranchToken()
+		baseNextEventID := baseMutableState.GetNextEventID()
+
+		if err = r.workflowResetter.resetWorkflow(
+			ctx,
+			domainID,
+			workflowID,
+			baseRunID,
+			baseCurrentBranchToken,
+			baseRebuildLastEventID,
+			baseRebuildLastEventVersion,
+			baseNextEventID,
+			resetRunID,
+			uuid.New(),
+			targetWorkflow,
+			eventsReapplicationResetWorkflowReason,
+			targetWorkflowEvents.Events,
+		); err != nil {
+			return 0, transactionPolicyActive, err
+		}
+		// after the reset of target workflow (current workflow) with additional events to be reapplied
+		// target workflow is no longer the current workflow
+		return persistence.UpdateWorkflowModeBypassCurrent, transactionPolicyPassive, nil
+	}
+
+	// case 2
+	//  find the current & active workflow to reapply
+	if err := targetWorkflow.getContext().reapplyEvents(
+		[]*persistence.WorkflowEvents{targetWorkflowEvents},
+	); err != nil {
+		return 0, transactionPolicyActive, err
+	}
+
+	if isCurrentWorkflow {
+		return persistence.UpdateWorkflowModeUpdateCurrent, transactionPolicyPassive, nil
+	}
+	return persistence.UpdateWorkflowModeBypassCurrent, transactionPolicyPassive, nil
 }
 
 func (r *nDCTransactionMgrImpl) checkWorkflowExists(
@@ -388,4 +448,33 @@ func (r *nDCTransactionMgrImpl) loadNDCWorkflow(
 		return nil, err
 	}
 	return newNDCWorkflow(ctx, r.domainCache, r.clusterMetadata, context, msBuilder, release), nil
+}
+
+func (r *nDCTransactionMgrImpl) isWorkflowCurrent(
+	ctx ctx.Context,
+	targetWorkflow nDCWorkflow,
+) (bool, error) {
+
+	// since we are not rebuilding the mutable state (when doing backfill) then we
+	// can trust the result from IsCurrentWorkflowGuaranteed
+	if targetWorkflow.getMutableState().IsCurrentWorkflowGuaranteed() {
+		return true, nil
+	}
+
+	// target workflow is not guaranteed to be current workflow, do additional check
+	executionInfo := targetWorkflow.getMutableState().GetExecutionInfo()
+	domainID := executionInfo.DomainID
+	workflowID := executionInfo.WorkflowID
+	runID := executionInfo.RunID
+
+	currentRunID, err := r.getCurrentWorkflowRunID(
+		ctx,
+		domainID,
+		workflowID,
+	)
+	if err != nil {
+		return false, err
+	}
+
+	return currentRunID == runID, nil
 }
