@@ -419,6 +419,8 @@ const (
 	AdminClientGetWorkflowExecutionRawHistoryScope
 	// AdminClientGetWorkflowExecutionRawHistoryV2Scope tracks RPC calls to admin service
 	AdminClientGetWorkflowExecutionRawHistoryV2Scope
+	// AdminClientDescribeClusterScope tracks RPC calls to admin service
+	AdminClientDescribeClusterScope
 	// DCRedirectionDeprecateDomainScope tracks RPC calls for dc redirection
 	DCRedirectionDeprecateDomainScope
 	// DCRedirectionDescribeDomainScope tracks RPC calls for dc redirection
@@ -1112,6 +1114,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminClientDescribeWorkflowExecutionScope:           {operation: "AdminClientDescribeWorkflowExecution", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		AdminClientGetWorkflowExecutionRawHistoryScope:      {operation: "AdminClientGetWorkflowExecutionRawHistory", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		AdminClientGetWorkflowExecutionRawHistoryV2Scope:    {operation: "AdminClientGetWorkflowExecutionRawHistoryV2", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
+		AdminClientDescribeClusterScope:                     {operation: "AdminClientDescribeCluster", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		AdminClientCloseShardScope:                          {operation: "AdminClientCloseShard", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		DCRedirectionDeprecateDomainScope:                   {operation: "DCRedirectionDeprecateDomain", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionDescribeDomainScope:                    {operation: "DCRedirectionDescribeDomain", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},

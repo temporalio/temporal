@@ -46,6 +46,10 @@ type Interface interface {
 		Request *shared.CloseShardRequest,
 	) error
 
+	DescribeCluster(
+		ctx context.Context,
+	) (*admin.DescribeClusterResponse, error)
+
 	DescribeHistoryHost(
 		ctx context.Context,
 		Request *shared.DescribeHistoryHostRequest,
@@ -106,6 +110,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 			},
 
 			thrift.Method{
+				Name: "DescribeCluster",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.DescribeCluster),
+				},
+				Signature:    "DescribeCluster() (*admin.DescribeClusterResponse)",
+				ThriftModule: admin.ThriftModule,
+			},
+
+			thrift.Method{
 				Name: "DescribeHistoryHost",
 				HandlerSpec: thrift.HandlerSpec{
 
@@ -162,7 +177,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 7)
+	procedures := make([]transport.Procedure, 0, 8)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -198,6 +213,25 @@ func (h handler) CloseShard(ctx context.Context, body wire.Value) (thrift.Respon
 
 	hadError := err != nil
 	result, err := admin.AdminService_CloseShard_Helper.WrapResponse(err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) DescribeCluster(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args admin.AdminService_DescribeCluster_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	success, err := h.impl.DescribeCluster(ctx)
+
+	hadError := err != nil
+	result, err := admin.AdminService_DescribeCluster_Helper.WrapResponse(success, err)
 
 	var response thrift.Response
 	if err == nil {

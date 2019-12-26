@@ -173,6 +173,19 @@ func (r *ringpopServiceResolver) RemoveListener(
 	return nil
 }
 
+func (r *ringpopServiceResolver) MemberCount() int {
+	return r.ring.ServerCount()
+}
+
+func (r *ringpopServiceResolver) Members() []*HostInfo {
+	var servers []*HostInfo
+	for _, s := range r.ring.Servers() {
+		servers = append(servers, NewHostInfo(s, r.getLabelsMap()))
+	}
+
+	return servers
+}
+
 // HandleEvent handles updates from ringpop
 func (r *ringpopServiceResolver) HandleEvent(
 	event events.Event,

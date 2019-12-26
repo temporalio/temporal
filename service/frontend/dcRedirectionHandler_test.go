@@ -810,9 +810,9 @@ func (s *dcRedirectionHandlerSuite) TestListTaskListPartitions() {
 
 	req := &shared.ListTaskListPartitionsRequest{
 		Domain: common.StringPtr(s.domainName),
-		TaskList:&shared.TaskList{
-			Name:common.StringPtr("test_tesk_list"),
-			Kind:common.TaskListKindPtr(0),
+		TaskList: &shared.TaskList{
+			Name: common.StringPtr("test_tesk_list"),
+			Kind: common.TaskListKindPtr(0),
 		},
 	}
 	resp, err := s.handler.ListTaskListPartitions(context.Background(), req)

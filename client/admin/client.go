@@ -168,6 +168,21 @@ func (c *clientImpl) GetWorkflowExecutionRawHistoryV2(
 	return client.GetWorkflowExecutionRawHistoryV2(ctx, request, opts...)
 }
 
+func (c *clientImpl) DescribeCluster(
+	ctx context.Context,
+	opts ...yarpc.CallOption,
+) (*admin.DescribeClusterResponse, error) {
+
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.DescribeCluster(ctx, opts...)
+}
+
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
 	if parent == nil {
 		return context.WithTimeout(context.Background(), c.timeout)

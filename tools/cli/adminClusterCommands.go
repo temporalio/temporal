@@ -69,6 +69,20 @@ func AdminAddSearchAttribute(c *cli.Context) {
 	fmt.Println("Success")
 }
 
+// AdminDescribeCluster is used to dump information about the cluster
+func AdminDescribeCluster(c *cli.Context) {
+	adminClient := cFactory.ServerAdminClient(c)
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+	response, err := adminClient.DescribeCluster(ctx)
+	if err != nil {
+		ErrorAndExit("Operation DescribeCluster failed.", err)
+	}
+
+	prettyPrintJSONObject(response)
+}
+
 func intValTypeToString(valType int) string {
 	switch valType {
 	case 0:

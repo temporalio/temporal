@@ -50,6 +50,11 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) error
 
+	DescribeCluster(
+		ctx context.Context,
+		opts ...yarpc.CallOption,
+	) (*admin.DescribeClusterResponse, error)
+
 	DescribeHistoryHost(
 		ctx context.Context,
 		Request *shared.DescribeHistoryHostRequest,
@@ -148,6 +153,28 @@ func (c client) CloseShard(
 	}
 
 	err = admin.AdminService_CloseShard_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) DescribeCluster(
+	ctx context.Context,
+	opts ...yarpc.CallOption,
+) (success *admin.DescribeClusterResponse, err error) {
+
+	args := admin.AdminService_DescribeCluster_Helper.Args()
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result admin.AdminService_DescribeCluster_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	success, err = admin.AdminService_DescribeCluster_Helper.UnwrapResponse(&result)
 	return
 }
 

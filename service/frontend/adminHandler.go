@@ -39,6 +39,7 @@ import (
 	hist "github.com/uber/cadence/.gen/go/history"
 	gen "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/client"
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
@@ -540,6 +541,66 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(
 	}
 
 	return result, nil
+}
+
+// DescribeCluster return information about cadence deployment
+func (adh *AdminHandler) DescribeCluster(
+	ctx context.Context,
+) (resp *admin.DescribeClusterResponse, retError error) {
+
+	defer log.CapturePanic(adh.GetLogger(), &retError)
+	scope := metrics.AdminGetWorkflowExecutionRawHistoryV2Scope
+	sw := adh.startRequestProfile(scope)
+	defer sw.Stop()
+
+	membershipInfo := &admin.MembershipInfo{}
+	if monitor := adh.GetMembershipMonitor(); monitor != nil {
+		currentHost, err := monitor.WhoAmI()
+		if err != nil {
+			return nil, adh.error(err, scope)
+		}
+
+		membershipInfo.CurrentHost = &admin.HostInfo{
+			Identity: common.StringPtr(currentHost.Identity()),
+		}
+
+		members, err := monitor.GetReachableMembers()
+		if err != nil {
+			return nil, adh.error(err, scope)
+		}
+
+		membershipInfo.ReachableMembers = members
+
+		var rings []*admin.RingInfo
+		for _, role := range []string{common.FrontendServiceName, common.HistoryServiceName, common.MatchingServiceName, common.WorkerServiceName} {
+			resolver, err := monitor.GetResolver(role)
+			if err != nil {
+				return nil, adh.error(err, scope)
+			}
+
+			var servers []*admin.HostInfo
+			for _, server := range resolver.Members() {
+				servers = append(servers, &admin.HostInfo{
+					Identity: common.StringPtr(server.Identity()),
+				})
+			}
+
+			rings = append(rings, &admin.RingInfo{
+				Role:        common.StringPtr(role),
+				MemberCount: common.Int32Ptr(int32(resolver.MemberCount())),
+				Members:     servers,
+			})
+		}
+		membershipInfo.Rings = rings
+	}
+
+	return &admin.DescribeClusterResponse{
+		SupportedClientVersions: &gen.SupportedClientVersions{
+			GoSdk:   common.StringPtr(client.SupportedGoSDKVersion),
+			JavaSdk: common.StringPtr(client.SupportedJavaSDKVersion),
+		},
+		MembershipInfo: membershipInfo,
+	}, nil
 }
 
 func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(
