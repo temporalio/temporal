@@ -52,6 +52,7 @@ func TestValidTaskListNames(t *testing.T) {
 			require.Equal(t, tc.partition, tn.partition)
 			require.Equal(t, tc.partition == 0, tn.IsRoot())
 			require.Equal(t, tc.baseName, tn.baseName)
+			require.Equal(t, tc.baseName, tn.GetRoot())
 			require.Equal(t, tc.input, tn.name)
 		})
 	}

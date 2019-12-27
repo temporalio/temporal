@@ -164,6 +164,10 @@ func (rpo *ringpopMonitor) RemoveListener(service string, name string) error {
 	return ring.RemoveListener(name)
 }
 
+func (rpo *ringpopMonitor) GetReachableMembers() ([]string, error) {
+	return rpo.rp.GetReachableMembers()
+}
+
 func replaceServicePort(address string, servicePort int) (string, error) {
 	parts := strings.Split(address, ":")
 	if len(parts) != 2 {

@@ -56,6 +56,11 @@ type Interface interface {
 		Request *matching.DescribeTaskListRequest,
 	) (*shared.DescribeTaskListResponse, error)
 
+	ListTaskListPartitions(
+		ctx context.Context,
+		Request *matching.ListTaskListPartitionsRequest,
+	) (*shared.ListTaskListPartitionsResponse, error)
+
 	PollForActivityTask(
 		ctx context.Context,
 		PollRequest *matching.PollForActivityTaskRequest,
@@ -133,6 +138,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 			},
 
 			thrift.Method{
+				Name: "ListTaskListPartitions",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.ListTaskListPartitions),
+				},
+				Signature:    "ListTaskListPartitions(Request *matching.ListTaskListPartitionsRequest) (*shared.ListTaskListPartitionsResponse)",
+				ThriftModule: matching.ThriftModule,
+			},
+
+			thrift.Method{
 				Name: "PollForActivityTask",
 				HandlerSpec: thrift.HandlerSpec{
 
@@ -178,7 +194,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 8)
+	procedures := make([]transport.Procedure, 0, 9)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -252,6 +268,25 @@ func (h handler) DescribeTaskList(ctx context.Context, body wire.Value) (thrift.
 
 	hadError := err != nil
 	result, err := matching.MatchingService_DescribeTaskList_Helper.WrapResponse(success, err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) ListTaskListPartitions(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args matching.MatchingService_ListTaskListPartitions_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	success, err := h.impl.ListTaskListPartitions(ctx, args.Request)
+
+	hadError := err != nil
+	result, err := matching.MatchingService_ListTaskListPartitions_Helper.WrapResponse(success, err)
 
 	var response thrift.Response
 	if err == nil {

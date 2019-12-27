@@ -325,6 +325,196 @@ func (v *AddSearchAttributeRequest) IsSetSecurityToken() bool {
 	return v != nil && v.SecurityToken != nil
 }
 
+type DescribeClusterResponse struct {
+	SupportedClientVersions *shared.SupportedClientVersions `json:"supportedClientVersions,omitempty"`
+	MembershipInfo          *MembershipInfo                 `json:"membershipInfo,omitempty"`
+}
+
+// ToWire translates a DescribeClusterResponse struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *DescribeClusterResponse) ToWire() (wire.Value, error) {
+	var (
+		fields [2]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.SupportedClientVersions != nil {
+		w, err = v.SupportedClientVersions.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.MembershipInfo != nil {
+		w, err = v.MembershipInfo.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _SupportedClientVersions_Read(w wire.Value) (*shared.SupportedClientVersions, error) {
+	var v shared.SupportedClientVersions
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _MembershipInfo_Read(w wire.Value) (*MembershipInfo, error) {
+	var v MembershipInfo
+	err := v.FromWire(w)
+	return &v, err
+}
+
+// FromWire deserializes a DescribeClusterResponse struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a DescribeClusterResponse struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v DescribeClusterResponse
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *DescribeClusterResponse) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TStruct {
+				v.SupportedClientVersions, err = _SupportedClientVersions_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TStruct {
+				v.MembershipInfo, err = _MembershipInfo_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a DescribeClusterResponse
+// struct.
+func (v *DescribeClusterResponse) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [2]string
+	i := 0
+	if v.SupportedClientVersions != nil {
+		fields[i] = fmt.Sprintf("SupportedClientVersions: %v", v.SupportedClientVersions)
+		i++
+	}
+	if v.MembershipInfo != nil {
+		fields[i] = fmt.Sprintf("MembershipInfo: %v", v.MembershipInfo)
+		i++
+	}
+
+	return fmt.Sprintf("DescribeClusterResponse{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this DescribeClusterResponse match the
+// provided DescribeClusterResponse.
+//
+// This function performs a deep comparison.
+func (v *DescribeClusterResponse) Equals(rhs *DescribeClusterResponse) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !((v.SupportedClientVersions == nil && rhs.SupportedClientVersions == nil) || (v.SupportedClientVersions != nil && rhs.SupportedClientVersions != nil && v.SupportedClientVersions.Equals(rhs.SupportedClientVersions))) {
+		return false
+	}
+	if !((v.MembershipInfo == nil && rhs.MembershipInfo == nil) || (v.MembershipInfo != nil && rhs.MembershipInfo != nil && v.MembershipInfo.Equals(rhs.MembershipInfo))) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of DescribeClusterResponse.
+func (v *DescribeClusterResponse) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.SupportedClientVersions != nil {
+		err = multierr.Append(err, enc.AddObject("supportedClientVersions", v.SupportedClientVersions))
+	}
+	if v.MembershipInfo != nil {
+		err = multierr.Append(err, enc.AddObject("membershipInfo", v.MembershipInfo))
+	}
+	return err
+}
+
+// GetSupportedClientVersions returns the value of SupportedClientVersions if it is set or its
+// zero value if it is unset.
+func (v *DescribeClusterResponse) GetSupportedClientVersions() (o *shared.SupportedClientVersions) {
+	if v != nil && v.SupportedClientVersions != nil {
+		return v.SupportedClientVersions
+	}
+
+	return
+}
+
+// IsSetSupportedClientVersions returns true if SupportedClientVersions is not nil.
+func (v *DescribeClusterResponse) IsSetSupportedClientVersions() bool {
+	return v != nil && v.SupportedClientVersions != nil
+}
+
+// GetMembershipInfo returns the value of MembershipInfo if it is set or its
+// zero value if it is unset.
+func (v *DescribeClusterResponse) GetMembershipInfo() (o *MembershipInfo) {
+	if v != nil && v.MembershipInfo != nil {
+		return v.MembershipInfo
+	}
+
+	return
+}
+
+// IsSetMembershipInfo returns true if MembershipInfo is not nil.
+func (v *DescribeClusterResponse) IsSetMembershipInfo() bool {
+	return v != nil && v.MembershipInfo != nil
+}
+
 type DescribeWorkflowExecutionRequest struct {
 	Domain    *string                   `json:"domain,omitempty"`
 	Execution *shared.WorkflowExecution `json:"execution,omitempty"`
@@ -2268,19 +2458,829 @@ func (v *GetWorkflowExecutionRawHistoryV2Response) IsSetVersionHistory() bool {
 	return v != nil && v.VersionHistory != nil
 }
 
+type HostInfo struct {
+	Identity *string `json:"Identity,omitempty"`
+}
+
+// ToWire translates a HostInfo struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *HostInfo) ToWire() (wire.Value, error) {
+	var (
+		fields [1]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.Identity != nil {
+		w, err = wire.NewValueString(*(v.Identity)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a HostInfo struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a HostInfo struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v HostInfo
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *HostInfo) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.Identity = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a HostInfo
+// struct.
+func (v *HostInfo) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [1]string
+	i := 0
+	if v.Identity != nil {
+		fields[i] = fmt.Sprintf("Identity: %v", *(v.Identity))
+		i++
+	}
+
+	return fmt.Sprintf("HostInfo{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this HostInfo match the
+// provided HostInfo.
+//
+// This function performs a deep comparison.
+func (v *HostInfo) Equals(rhs *HostInfo) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !_String_EqualsPtr(v.Identity, rhs.Identity) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of HostInfo.
+func (v *HostInfo) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.Identity != nil {
+		enc.AddString("Identity", *v.Identity)
+	}
+	return err
+}
+
+// GetIdentity returns the value of Identity if it is set or its
+// zero value if it is unset.
+func (v *HostInfo) GetIdentity() (o string) {
+	if v != nil && v.Identity != nil {
+		return *v.Identity
+	}
+
+	return
+}
+
+// IsSetIdentity returns true if Identity is not nil.
+func (v *HostInfo) IsSetIdentity() bool {
+	return v != nil && v.Identity != nil
+}
+
+type MembershipInfo struct {
+	CurrentHost      *HostInfo   `json:"currentHost,omitempty"`
+	ReachableMembers []string    `json:"reachableMembers,omitempty"`
+	Rings            []*RingInfo `json:"rings,omitempty"`
+}
+
+type _List_String_ValueList []string
+
+func (v _List_String_ValueList) ForEach(f func(wire.Value) error) error {
+	for _, x := range v {
+		w, err := wire.NewValueString(x), error(nil)
+		if err != nil {
+			return err
+		}
+		err = f(w)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (v _List_String_ValueList) Size() int {
+	return len(v)
+}
+
+func (_List_String_ValueList) ValueType() wire.Type {
+	return wire.TBinary
+}
+
+func (_List_String_ValueList) Close() {}
+
+type _List_RingInfo_ValueList []*RingInfo
+
+func (v _List_RingInfo_ValueList) ForEach(f func(wire.Value) error) error {
+	for i, x := range v {
+		if x == nil {
+			return fmt.Errorf("invalid [%v]: value is nil", i)
+		}
+		w, err := x.ToWire()
+		if err != nil {
+			return err
+		}
+		err = f(w)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (v _List_RingInfo_ValueList) Size() int {
+	return len(v)
+}
+
+func (_List_RingInfo_ValueList) ValueType() wire.Type {
+	return wire.TStruct
+}
+
+func (_List_RingInfo_ValueList) Close() {}
+
+// ToWire translates a MembershipInfo struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *MembershipInfo) ToWire() (wire.Value, error) {
+	var (
+		fields [3]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.CurrentHost != nil {
+		w, err = v.CurrentHost.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.ReachableMembers != nil {
+		w, err = wire.NewValueList(_List_String_ValueList(v.ReachableMembers)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.Rings != nil {
+		w, err = wire.NewValueList(_List_RingInfo_ValueList(v.Rings)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _HostInfo_Read(w wire.Value) (*HostInfo, error) {
+	var v HostInfo
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _List_String_Read(l wire.ValueList) ([]string, error) {
+	if l.ValueType() != wire.TBinary {
+		return nil, nil
+	}
+
+	o := make([]string, 0, l.Size())
+	err := l.ForEach(func(x wire.Value) error {
+		i, err := x.GetString(), error(nil)
+		if err != nil {
+			return err
+		}
+		o = append(o, i)
+		return nil
+	})
+	l.Close()
+	return o, err
+}
+
+func _RingInfo_Read(w wire.Value) (*RingInfo, error) {
+	var v RingInfo
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _List_RingInfo_Read(l wire.ValueList) ([]*RingInfo, error) {
+	if l.ValueType() != wire.TStruct {
+		return nil, nil
+	}
+
+	o := make([]*RingInfo, 0, l.Size())
+	err := l.ForEach(func(x wire.Value) error {
+		i, err := _RingInfo_Read(x)
+		if err != nil {
+			return err
+		}
+		o = append(o, i)
+		return nil
+	})
+	l.Close()
+	return o, err
+}
+
+// FromWire deserializes a MembershipInfo struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a MembershipInfo struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v MembershipInfo
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *MembershipInfo) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TStruct {
+				v.CurrentHost, err = _HostInfo_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TList {
+				v.ReachableMembers, err = _List_String_Read(field.Value.GetList())
+				if err != nil {
+					return err
+				}
+
+			}
+		case 30:
+			if field.Value.Type() == wire.TList {
+				v.Rings, err = _List_RingInfo_Read(field.Value.GetList())
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a MembershipInfo
+// struct.
+func (v *MembershipInfo) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [3]string
+	i := 0
+	if v.CurrentHost != nil {
+		fields[i] = fmt.Sprintf("CurrentHost: %v", v.CurrentHost)
+		i++
+	}
+	if v.ReachableMembers != nil {
+		fields[i] = fmt.Sprintf("ReachableMembers: %v", v.ReachableMembers)
+		i++
+	}
+	if v.Rings != nil {
+		fields[i] = fmt.Sprintf("Rings: %v", v.Rings)
+		i++
+	}
+
+	return fmt.Sprintf("MembershipInfo{%v}", strings.Join(fields[:i], ", "))
+}
+
+func _List_String_Equals(lhs, rhs []string) bool {
+	if len(lhs) != len(rhs) {
+		return false
+	}
+
+	for i, lv := range lhs {
+		rv := rhs[i]
+		if !(lv == rv) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func _List_RingInfo_Equals(lhs, rhs []*RingInfo) bool {
+	if len(lhs) != len(rhs) {
+		return false
+	}
+
+	for i, lv := range lhs {
+		rv := rhs[i]
+		if !lv.Equals(rv) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// Equals returns true if all the fields of this MembershipInfo match the
+// provided MembershipInfo.
+//
+// This function performs a deep comparison.
+func (v *MembershipInfo) Equals(rhs *MembershipInfo) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !((v.CurrentHost == nil && rhs.CurrentHost == nil) || (v.CurrentHost != nil && rhs.CurrentHost != nil && v.CurrentHost.Equals(rhs.CurrentHost))) {
+		return false
+	}
+	if !((v.ReachableMembers == nil && rhs.ReachableMembers == nil) || (v.ReachableMembers != nil && rhs.ReachableMembers != nil && _List_String_Equals(v.ReachableMembers, rhs.ReachableMembers))) {
+		return false
+	}
+	if !((v.Rings == nil && rhs.Rings == nil) || (v.Rings != nil && rhs.Rings != nil && _List_RingInfo_Equals(v.Rings, rhs.Rings))) {
+		return false
+	}
+
+	return true
+}
+
+type _List_String_Zapper []string
+
+// MarshalLogArray implements zapcore.ArrayMarshaler, enabling
+// fast logging of _List_String_Zapper.
+func (l _List_String_Zapper) MarshalLogArray(enc zapcore.ArrayEncoder) (err error) {
+	for _, v := range l {
+		enc.AppendString(v)
+	}
+	return err
+}
+
+type _List_RingInfo_Zapper []*RingInfo
+
+// MarshalLogArray implements zapcore.ArrayMarshaler, enabling
+// fast logging of _List_RingInfo_Zapper.
+func (l _List_RingInfo_Zapper) MarshalLogArray(enc zapcore.ArrayEncoder) (err error) {
+	for _, v := range l {
+		err = multierr.Append(err, enc.AppendObject(v))
+	}
+	return err
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of MembershipInfo.
+func (v *MembershipInfo) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.CurrentHost != nil {
+		err = multierr.Append(err, enc.AddObject("currentHost", v.CurrentHost))
+	}
+	if v.ReachableMembers != nil {
+		err = multierr.Append(err, enc.AddArray("reachableMembers", (_List_String_Zapper)(v.ReachableMembers)))
+	}
+	if v.Rings != nil {
+		err = multierr.Append(err, enc.AddArray("rings", (_List_RingInfo_Zapper)(v.Rings)))
+	}
+	return err
+}
+
+// GetCurrentHost returns the value of CurrentHost if it is set or its
+// zero value if it is unset.
+func (v *MembershipInfo) GetCurrentHost() (o *HostInfo) {
+	if v != nil && v.CurrentHost != nil {
+		return v.CurrentHost
+	}
+
+	return
+}
+
+// IsSetCurrentHost returns true if CurrentHost is not nil.
+func (v *MembershipInfo) IsSetCurrentHost() bool {
+	return v != nil && v.CurrentHost != nil
+}
+
+// GetReachableMembers returns the value of ReachableMembers if it is set or its
+// zero value if it is unset.
+func (v *MembershipInfo) GetReachableMembers() (o []string) {
+	if v != nil && v.ReachableMembers != nil {
+		return v.ReachableMembers
+	}
+
+	return
+}
+
+// IsSetReachableMembers returns true if ReachableMembers is not nil.
+func (v *MembershipInfo) IsSetReachableMembers() bool {
+	return v != nil && v.ReachableMembers != nil
+}
+
+// GetRings returns the value of Rings if it is set or its
+// zero value if it is unset.
+func (v *MembershipInfo) GetRings() (o []*RingInfo) {
+	if v != nil && v.Rings != nil {
+		return v.Rings
+	}
+
+	return
+}
+
+// IsSetRings returns true if Rings is not nil.
+func (v *MembershipInfo) IsSetRings() bool {
+	return v != nil && v.Rings != nil
+}
+
+type RingInfo struct {
+	Role        *string     `json:"role,omitempty"`
+	MemberCount *int32      `json:"memberCount,omitempty"`
+	Members     []*HostInfo `json:"members,omitempty"`
+}
+
+type _List_HostInfo_ValueList []*HostInfo
+
+func (v _List_HostInfo_ValueList) ForEach(f func(wire.Value) error) error {
+	for i, x := range v {
+		if x == nil {
+			return fmt.Errorf("invalid [%v]: value is nil", i)
+		}
+		w, err := x.ToWire()
+		if err != nil {
+			return err
+		}
+		err = f(w)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (v _List_HostInfo_ValueList) Size() int {
+	return len(v)
+}
+
+func (_List_HostInfo_ValueList) ValueType() wire.Type {
+	return wire.TStruct
+}
+
+func (_List_HostInfo_ValueList) Close() {}
+
+// ToWire translates a RingInfo struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *RingInfo) ToWire() (wire.Value, error) {
+	var (
+		fields [3]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.Role != nil {
+		w, err = wire.NewValueString(*(v.Role)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.MemberCount != nil {
+		w, err = wire.NewValueI32(*(v.MemberCount)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.Members != nil {
+		w, err = wire.NewValueList(_List_HostInfo_ValueList(v.Members)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _List_HostInfo_Read(l wire.ValueList) ([]*HostInfo, error) {
+	if l.ValueType() != wire.TStruct {
+		return nil, nil
+	}
+
+	o := make([]*HostInfo, 0, l.Size())
+	err := l.ForEach(func(x wire.Value) error {
+		i, err := _HostInfo_Read(x)
+		if err != nil {
+			return err
+		}
+		o = append(o, i)
+		return nil
+	})
+	l.Close()
+	return o, err
+}
+
+// FromWire deserializes a RingInfo struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a RingInfo struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v RingInfo
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *RingInfo) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.Role = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.MemberCount = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 30:
+			if field.Value.Type() == wire.TList {
+				v.Members, err = _List_HostInfo_Read(field.Value.GetList())
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a RingInfo
+// struct.
+func (v *RingInfo) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [3]string
+	i := 0
+	if v.Role != nil {
+		fields[i] = fmt.Sprintf("Role: %v", *(v.Role))
+		i++
+	}
+	if v.MemberCount != nil {
+		fields[i] = fmt.Sprintf("MemberCount: %v", *(v.MemberCount))
+		i++
+	}
+	if v.Members != nil {
+		fields[i] = fmt.Sprintf("Members: %v", v.Members)
+		i++
+	}
+
+	return fmt.Sprintf("RingInfo{%v}", strings.Join(fields[:i], ", "))
+}
+
+func _List_HostInfo_Equals(lhs, rhs []*HostInfo) bool {
+	if len(lhs) != len(rhs) {
+		return false
+	}
+
+	for i, lv := range lhs {
+		rv := rhs[i]
+		if !lv.Equals(rv) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// Equals returns true if all the fields of this RingInfo match the
+// provided RingInfo.
+//
+// This function performs a deep comparison.
+func (v *RingInfo) Equals(rhs *RingInfo) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !_String_EqualsPtr(v.Role, rhs.Role) {
+		return false
+	}
+	if !_I32_EqualsPtr(v.MemberCount, rhs.MemberCount) {
+		return false
+	}
+	if !((v.Members == nil && rhs.Members == nil) || (v.Members != nil && rhs.Members != nil && _List_HostInfo_Equals(v.Members, rhs.Members))) {
+		return false
+	}
+
+	return true
+}
+
+type _List_HostInfo_Zapper []*HostInfo
+
+// MarshalLogArray implements zapcore.ArrayMarshaler, enabling
+// fast logging of _List_HostInfo_Zapper.
+func (l _List_HostInfo_Zapper) MarshalLogArray(enc zapcore.ArrayEncoder) (err error) {
+	for _, v := range l {
+		err = multierr.Append(err, enc.AppendObject(v))
+	}
+	return err
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of RingInfo.
+func (v *RingInfo) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.Role != nil {
+		enc.AddString("role", *v.Role)
+	}
+	if v.MemberCount != nil {
+		enc.AddInt32("memberCount", *v.MemberCount)
+	}
+	if v.Members != nil {
+		err = multierr.Append(err, enc.AddArray("members", (_List_HostInfo_Zapper)(v.Members)))
+	}
+	return err
+}
+
+// GetRole returns the value of Role if it is set or its
+// zero value if it is unset.
+func (v *RingInfo) GetRole() (o string) {
+	if v != nil && v.Role != nil {
+		return *v.Role
+	}
+
+	return
+}
+
+// IsSetRole returns true if Role is not nil.
+func (v *RingInfo) IsSetRole() bool {
+	return v != nil && v.Role != nil
+}
+
+// GetMemberCount returns the value of MemberCount if it is set or its
+// zero value if it is unset.
+func (v *RingInfo) GetMemberCount() (o int32) {
+	if v != nil && v.MemberCount != nil {
+		return *v.MemberCount
+	}
+
+	return
+}
+
+// IsSetMemberCount returns true if MemberCount is not nil.
+func (v *RingInfo) IsSetMemberCount() bool {
+	return v != nil && v.MemberCount != nil
+}
+
+// GetMembers returns the value of Members if it is set or its
+// zero value if it is unset.
+func (v *RingInfo) GetMembers() (o []*HostInfo) {
+	if v != nil && v.Members != nil {
+		return v.Members
+	}
+
+	return
+}
+
+// IsSetMembers returns true if Members is not nil.
+func (v *RingInfo) IsSetMembers() bool {
+	return v != nil && v.Members != nil
+}
+
 // ThriftModule represents the IDL file used to generate this package.
 var ThriftModule = &thriftreflect.ThriftModule{
 	Name:     "admin",
 	Package:  "github.com/temporalio/temporal/.gen/go/admin",
 	FilePath: "admin.thrift",
-	SHA1:     "aafd9eea3acc21da6b887827d68d2a15eb4567f9",
+	SHA1:     "50852c6bb889609f5a86c126f6b83e90a0bee4df",
 	Includes: []*thriftreflect.ThriftModule{
 		shared.ThriftModule,
 	},
 	Raw: rawIDL,
 }
 
-const rawIDL = "// Copyright (c) 2017 Uber Technologies, Inc.\n//\n// Permission is hereby granted, free of charge, to any person obtaining a copy\n// of this software and associated documentation files (the \"Software\"), to deal\n// in the Software without restriction, including without limitation the rights\n// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n// copies of the Software, and to permit persons to whom the Software is\n// furnished to do so, subject to the following conditions:\n//\n// The above copyright notice and this permission notice shall be included in\n// all copies or substantial portions of the Software.\n//\n// THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n// THE SOFTWARE.\n\nnamespace java com.temporalio.temporal.admin\n\ninclude \"shared.thrift\"\n\n/**\n* AdminService provides advanced APIs for debugging and analysis with admin privillege\n**/\nservice AdminService {\n  /**\n  * DescribeWorkflowExecution returns information about the internal states of workflow execution.\n  **/\n  DescribeWorkflowExecutionResponse DescribeWorkflowExecution(1: DescribeWorkflowExecutionRequest request)\n    throws (\n      1: shared.BadRequestError         badRequestError,\n      2: shared.InternalServiceError    internalServiceError,\n      3: shared.EntityNotExistsError    entityNotExistError,\n      4: shared.AccessDeniedError       accessDeniedError,\n    )\n\n  /**\n  * DescribeHistoryHost returns information about the internal states of a history host\n  **/\n  shared.DescribeHistoryHostResponse DescribeHistoryHost(1: shared.DescribeHistoryHostRequest request)\n    throws (\n      1: shared.BadRequestError       badRequestError,\n      2: shared.InternalServiceError  internalServiceError,\n      3: shared.AccessDeniedError     accessDeniedError,\n    )\n\n  void CloseShard(1: shared.CloseShardRequest request)\n    throws (\n      1: shared.BadRequestError       badRequestError,\n      2: shared.InternalServiceError  internalServiceError,\n      3: shared.AccessDeniedError     accessDeniedError,\n    )\n\n  void RemoveTask(1: shared.RemoveTaskRequest request)\n    throws (\n      1: shared.BadRequestError       badRequestError,\n      2: shared.InternalServiceError  internalServiceError,\n      3: shared.AccessDeniedError     accessDeniedError,\n    )\n\n\n  /**\n  * Returns the raw history of specified workflow execution.  It fails with 'EntityNotExistError' if speficied workflow\n  * execution in unknown to the service.\n  **/\n  GetWorkflowExecutionRawHistoryResponse GetWorkflowExecutionRawHistory(1: GetWorkflowExecutionRawHistoryRequest getRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * Returns the raw history of specified workflow execution.  It fails with 'EntityNotExistError' if speficied workflow\n  * execution in unknown to the service.\n  * StartEventId defines the beginning of the event to fetch. The first event is inclusive.\n  * EndEventId and EndEventVersion defines the end of the event to fetch. The end event is exclusive.\n  **/\n  GetWorkflowExecutionRawHistoryV2Response GetWorkflowExecutionRawHistoryV2(1: GetWorkflowExecutionRawHistoryV2Request getRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * AddSearchAttribute whitelist search attribute in request.\n  **/\n  void AddSearchAttribute(1: AddSearchAttributeRequest request)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.ServiceBusyError serviceBusyError,\n    )\n}\n\nstruct DescribeWorkflowExecutionRequest {\n  10: optional string                       domain\n  20: optional shared.WorkflowExecution     execution\n}\n\nstruct DescribeWorkflowExecutionResponse {\n  10: optional string shardId\n  20: optional string historyAddr\n  40: optional string mutableStateInCache\n  50: optional string mutableStateInDatabase\n}\n\nstruct GetWorkflowExecutionRawHistoryRequest {\n  10: optional string domain\n  20: optional shared.WorkflowExecution execution\n  30: optional i64 (js.type = \"Long\") firstEventId\n  40: optional i64 (js.type = \"Long\") nextEventId\n  50: optional i32 maximumPageSize\n  60: optional binary nextPageToken\n}\n\nstruct GetWorkflowExecutionRawHistoryResponse {\n  10: optional binary nextPageToken\n  20: optional list<shared.DataBlob> historyBatches\n  30: optional map<string, shared.ReplicationInfo> replicationInfo\n  40: optional i32 eventStoreVersion\n}\n\n/**\n  * StartEventId defines the beginning of the event to fetch. The first event is exclusive.\n  * EndEventId and EndEventVersion defines the end of the event to fetch. The end event is exclusive.\n  **/\nstruct GetWorkflowExecutionRawHistoryV2Request {\n  10: optional string domain\n  20: optional shared.WorkflowExecution execution\n  30: optional i64 (js.type = \"Long\") startEventId\n  40: optional i64 (js.type = \"Long\") startEventVersion\n  50: optional i64 (js.type = \"Long\") endEventId\n  60: optional i64 (js.type = \"Long\") endEventVersion\n  70: optional i32 maximumPageSize\n  80: optional binary nextPageToken\n}\n\nstruct GetWorkflowExecutionRawHistoryV2Response {\n  10: optional binary nextPageToken\n  20: optional list<shared.DataBlob> historyBatches\n  30: optional shared.VersionHistory versionHistory\n}\n\nstruct AddSearchAttributeRequest {\n  10: optional map<string, shared.IndexedValueType> searchAttribute\n  20: optional string securityToken\n}\n"
+const rawIDL = "// Copyright (c) 2017 Uber Technologies, Inc.\n//\n// Permission is hereby granted, free of charge, to any person obtaining a copy\n// of this software and associated documentation files (the \"Software\"), to deal\n// in the Software without restriction, including without limitation the rights\n// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n// copies of the Software, and to permit persons to whom the Software is\n// furnished to do so, subject to the following conditions:\n//\n// The above copyright notice and this permission notice shall be included in\n// all copies or substantial portions of the Software.\n//\n// THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n// THE SOFTWARE.\n\nnamespace java com.temporalio.temporal.admin\n\ninclude \"shared.thrift\"\n\n/**\n* AdminService provides advanced APIs for debugging and analysis with admin privillege\n**/\nservice AdminService {\n  /**\n  * DescribeWorkflowExecution returns information about the internal states of workflow execution.\n  **/\n  DescribeWorkflowExecutionResponse DescribeWorkflowExecution(1: DescribeWorkflowExecutionRequest request)\n    throws (\n      1: shared.BadRequestError         badRequestError,\n      2: shared.InternalServiceError    internalServiceError,\n      3: shared.EntityNotExistsError    entityNotExistError,\n      4: shared.AccessDeniedError       accessDeniedError,\n    )\n\n  /**\n  * DescribeHistoryHost returns information about the internal states of a history host\n  **/\n  shared.DescribeHistoryHostResponse DescribeHistoryHost(1: shared.DescribeHistoryHostRequest request)\n    throws (\n      1: shared.BadRequestError       badRequestError,\n      2: shared.InternalServiceError  internalServiceError,\n      3: shared.AccessDeniedError     accessDeniedError,\n    )\n\n  void CloseShard(1: shared.CloseShardRequest request)\n    throws (\n      1: shared.BadRequestError       badRequestError,\n      2: shared.InternalServiceError  internalServiceError,\n      3: shared.AccessDeniedError     accessDeniedError,\n    )\n\n  void RemoveTask(1: shared.RemoveTaskRequest request)\n    throws (\n      1: shared.BadRequestError       badRequestError,\n      2: shared.InternalServiceError  internalServiceError,\n      3: shared.AccessDeniedError     accessDeniedError,\n    )\n\n\n  /**\n  * Returns the raw history of specified workflow execution.  It fails with 'EntityNotExistError' if speficied workflow\n  * execution in unknown to the service.\n  **/\n  GetWorkflowExecutionRawHistoryResponse GetWorkflowExecutionRawHistory(1: GetWorkflowExecutionRawHistoryRequest getRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * Returns the raw history of specified workflow execution.  It fails with 'EntityNotExistError' if speficied workflow\n  * execution in unknown to the service.\n  * StartEventId defines the beginning of the event to fetch. The first event is inclusive.\n  * EndEventId and EndEventVersion defines the end of the event to fetch. The end event is exclusive.\n  **/\n  GetWorkflowExecutionRawHistoryV2Response GetWorkflowExecutionRawHistoryV2(1: GetWorkflowExecutionRawHistoryV2Request getRequest)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.EntityNotExistsError entityNotExistError,\n      4: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * AddSearchAttribute whitelist search attribute in request.\n  **/\n  void AddSearchAttribute(1: AddSearchAttributeRequest request)\n    throws (\n      1: shared.BadRequestError badRequestError,\n      2: shared.InternalServiceError internalServiceError,\n      3: shared.ServiceBusyError serviceBusyError,\n    )\n\n  /**\n  * DescribeCluster returns information about cadence cluster\n  **/\n  DescribeClusterResponse DescribeCluster()\n    throws (\n      1: shared.InternalServiceError internalServiceError,\n      2: shared.ServiceBusyError serviceBusyError,\n    )\n}\n\nstruct DescribeWorkflowExecutionRequest {\n  10: optional string                       domain\n  20: optional shared.WorkflowExecution     execution\n}\n\nstruct DescribeWorkflowExecutionResponse {\n  10: optional string shardId\n  20: optional string historyAddr\n  40: optional string mutableStateInCache\n  50: optional string mutableStateInDatabase\n}\n\nstruct GetWorkflowExecutionRawHistoryRequest {\n  10: optional string domain\n  20: optional shared.WorkflowExecution execution\n  30: optional i64 (js.type = \"Long\") firstEventId\n  40: optional i64 (js.type = \"Long\") nextEventId\n  50: optional i32 maximumPageSize\n  60: optional binary nextPageToken\n}\n\nstruct GetWorkflowExecutionRawHistoryResponse {\n  10: optional binary nextPageToken\n  20: optional list<shared.DataBlob> historyBatches\n  30: optional map<string, shared.ReplicationInfo> replicationInfo\n  40: optional i32 eventStoreVersion\n}\n\n/**\n  * StartEventId defines the beginning of the event to fetch. The first event is exclusive.\n  * EndEventId and EndEventVersion defines the end of the event to fetch. The end event is exclusive.\n  **/\nstruct GetWorkflowExecutionRawHistoryV2Request {\n  10: optional string domain\n  20: optional shared.WorkflowExecution execution\n  30: optional i64 (js.type = \"Long\") startEventId\n  40: optional i64 (js.type = \"Long\") startEventVersion\n  50: optional i64 (js.type = \"Long\") endEventId\n  60: optional i64 (js.type = \"Long\") endEventVersion\n  70: optional i32 maximumPageSize\n  80: optional binary nextPageToken\n}\n\nstruct GetWorkflowExecutionRawHistoryV2Response {\n  10: optional binary nextPageToken\n  20: optional list<shared.DataBlob> historyBatches\n  30: optional shared.VersionHistory versionHistory\n}\n\nstruct AddSearchAttributeRequest {\n  10: optional map<string, shared.IndexedValueType> searchAttribute\n  20: optional string securityToken\n}\n\nstruct HostInfo {\n  10: optional string Identity\n}\n\nstruct RingInfo {\n  10: optional string role\n  20: optional i32 memberCount\n  30: optional list<HostInfo> members\n}\n\nstruct MembershipInfo {\n  10: optional HostInfo currentHost\n  20: optional list<string> reachableMembers\n  30: optional list<RingInfo> rings\n}\n\nstruct DescribeClusterResponse {\n  10: optional shared.SupportedClientVersions supportedClientVersions\n  20: optional MembershipInfo membershipInfo\n}\n"
 
 // AdminService_AddSearchAttribute_Args represents the arguments for the AdminService.AddSearchAttribute function.
 //
@@ -3357,6 +4357,479 @@ func (v *AdminService_CloseShard_Result) MethodName() string {
 //
 // This will always be Reply for this struct.
 func (v *AdminService_CloseShard_Result) EnvelopeType() wire.EnvelopeType {
+	return wire.Reply
+}
+
+// AdminService_DescribeCluster_Args represents the arguments for the AdminService.DescribeCluster function.
+//
+// The arguments for DescribeCluster are sent and received over the wire as this struct.
+type AdminService_DescribeCluster_Args struct {
+}
+
+// ToWire translates a AdminService_DescribeCluster_Args struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *AdminService_DescribeCluster_Args) ToWire() (wire.Value, error) {
+	var (
+		fields [0]wire.Field
+		i      int = 0
+	)
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a AdminService_DescribeCluster_Args struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a AdminService_DescribeCluster_Args struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v AdminService_DescribeCluster_Args
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *AdminService_DescribeCluster_Args) FromWire(w wire.Value) error {
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a AdminService_DescribeCluster_Args
+// struct.
+func (v *AdminService_DescribeCluster_Args) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [0]string
+	i := 0
+
+	return fmt.Sprintf("AdminService_DescribeCluster_Args{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this AdminService_DescribeCluster_Args match the
+// provided AdminService_DescribeCluster_Args.
+//
+// This function performs a deep comparison.
+func (v *AdminService_DescribeCluster_Args) Equals(rhs *AdminService_DescribeCluster_Args) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of AdminService_DescribeCluster_Args.
+func (v *AdminService_DescribeCluster_Args) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	return err
+}
+
+// MethodName returns the name of the Thrift function as specified in
+// the IDL, for which this struct represent the arguments.
+//
+// This will always be "DescribeCluster" for this struct.
+func (v *AdminService_DescribeCluster_Args) MethodName() string {
+	return "DescribeCluster"
+}
+
+// EnvelopeType returns the kind of value inside this struct.
+//
+// This will always be Call for this struct.
+func (v *AdminService_DescribeCluster_Args) EnvelopeType() wire.EnvelopeType {
+	return wire.Call
+}
+
+// AdminService_DescribeCluster_Helper provides functions that aid in handling the
+// parameters and return values of the AdminService.DescribeCluster
+// function.
+var AdminService_DescribeCluster_Helper = struct {
+	// Args accepts the parameters of DescribeCluster in-order and returns
+	// the arguments struct for the function.
+	Args func() *AdminService_DescribeCluster_Args
+
+	// IsException returns true if the given error can be thrown
+	// by DescribeCluster.
+	//
+	// An error can be thrown by DescribeCluster only if the
+	// corresponding exception type was mentioned in the 'throws'
+	// section for it in the Thrift file.
+	IsException func(error) bool
+
+	// WrapResponse returns the result struct for DescribeCluster
+	// given its return value and error.
+	//
+	// This allows mapping values and errors returned by
+	// DescribeCluster into a serializable result struct.
+	// WrapResponse returns a non-nil error if the provided
+	// error cannot be thrown by DescribeCluster
+	//
+	//   value, err := DescribeCluster(args)
+	//   result, err := AdminService_DescribeCluster_Helper.WrapResponse(value, err)
+	//   if err != nil {
+	//     return fmt.Errorf("unexpected error from DescribeCluster: %v", err)
+	//   }
+	//   serialize(result)
+	WrapResponse func(*DescribeClusterResponse, error) (*AdminService_DescribeCluster_Result, error)
+
+	// UnwrapResponse takes the result struct for DescribeCluster
+	// and returns the value or error returned by it.
+	//
+	// The error is non-nil only if DescribeCluster threw an
+	// exception.
+	//
+	//   result := deserialize(bytes)
+	//   value, err := AdminService_DescribeCluster_Helper.UnwrapResponse(result)
+	UnwrapResponse func(*AdminService_DescribeCluster_Result) (*DescribeClusterResponse, error)
+}{}
+
+func init() {
+	AdminService_DescribeCluster_Helper.Args = func() *AdminService_DescribeCluster_Args {
+		return &AdminService_DescribeCluster_Args{}
+	}
+
+	AdminService_DescribeCluster_Helper.IsException = func(err error) bool {
+		switch err.(type) {
+		case *shared.InternalServiceError:
+			return true
+		case *shared.ServiceBusyError:
+			return true
+		default:
+			return false
+		}
+	}
+
+	AdminService_DescribeCluster_Helper.WrapResponse = func(success *DescribeClusterResponse, err error) (*AdminService_DescribeCluster_Result, error) {
+		if err == nil {
+			return &AdminService_DescribeCluster_Result{Success: success}, nil
+		}
+
+		switch e := err.(type) {
+		case *shared.InternalServiceError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for AdminService_DescribeCluster_Result.InternalServiceError")
+			}
+			return &AdminService_DescribeCluster_Result{InternalServiceError: e}, nil
+		case *shared.ServiceBusyError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for AdminService_DescribeCluster_Result.ServiceBusyError")
+			}
+			return &AdminService_DescribeCluster_Result{ServiceBusyError: e}, nil
+		}
+
+		return nil, err
+	}
+	AdminService_DescribeCluster_Helper.UnwrapResponse = func(result *AdminService_DescribeCluster_Result) (success *DescribeClusterResponse, err error) {
+		if result.InternalServiceError != nil {
+			err = result.InternalServiceError
+			return
+		}
+		if result.ServiceBusyError != nil {
+			err = result.ServiceBusyError
+			return
+		}
+
+		if result.Success != nil {
+			success = result.Success
+			return
+		}
+
+		err = errors.New("expected a non-void result")
+		return
+	}
+
+}
+
+// AdminService_DescribeCluster_Result represents the result of a AdminService.DescribeCluster function call.
+//
+// The result of a DescribeCluster execution is sent and received over the wire as this struct.
+//
+// Success is set only if the function did not throw an exception.
+type AdminService_DescribeCluster_Result struct {
+	// Value returned by DescribeCluster after a successful execution.
+	Success              *DescribeClusterResponse     `json:"success,omitempty"`
+	InternalServiceError *shared.InternalServiceError `json:"internalServiceError,omitempty"`
+	ServiceBusyError     *shared.ServiceBusyError     `json:"serviceBusyError,omitempty"`
+}
+
+// ToWire translates a AdminService_DescribeCluster_Result struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *AdminService_DescribeCluster_Result) ToWire() (wire.Value, error) {
+	var (
+		fields [3]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.Success != nil {
+		w, err = v.Success.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 0, Value: w}
+		i++
+	}
+	if v.InternalServiceError != nil {
+		w, err = v.InternalServiceError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 1, Value: w}
+		i++
+	}
+	if v.ServiceBusyError != nil {
+		w, err = v.ServiceBusyError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 2, Value: w}
+		i++
+	}
+
+	if i != 1 {
+		return wire.Value{}, fmt.Errorf("AdminService_DescribeCluster_Result should have exactly one field: got %v fields", i)
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _DescribeClusterResponse_Read(w wire.Value) (*DescribeClusterResponse, error) {
+	var v DescribeClusterResponse
+	err := v.FromWire(w)
+	return &v, err
+}
+
+// FromWire deserializes a AdminService_DescribeCluster_Result struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a AdminService_DescribeCluster_Result struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v AdminService_DescribeCluster_Result
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *AdminService_DescribeCluster_Result) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 0:
+			if field.Value.Type() == wire.TStruct {
+				v.Success, err = _DescribeClusterResponse_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 1:
+			if field.Value.Type() == wire.TStruct {
+				v.InternalServiceError, err = _InternalServiceError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 2:
+			if field.Value.Type() == wire.TStruct {
+				v.ServiceBusyError, err = _ServiceBusyError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	count := 0
+	if v.Success != nil {
+		count++
+	}
+	if v.InternalServiceError != nil {
+		count++
+	}
+	if v.ServiceBusyError != nil {
+		count++
+	}
+	if count != 1 {
+		return fmt.Errorf("AdminService_DescribeCluster_Result should have exactly one field: got %v fields", count)
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a AdminService_DescribeCluster_Result
+// struct.
+func (v *AdminService_DescribeCluster_Result) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [3]string
+	i := 0
+	if v.Success != nil {
+		fields[i] = fmt.Sprintf("Success: %v", v.Success)
+		i++
+	}
+	if v.InternalServiceError != nil {
+		fields[i] = fmt.Sprintf("InternalServiceError: %v", v.InternalServiceError)
+		i++
+	}
+	if v.ServiceBusyError != nil {
+		fields[i] = fmt.Sprintf("ServiceBusyError: %v", v.ServiceBusyError)
+		i++
+	}
+
+	return fmt.Sprintf("AdminService_DescribeCluster_Result{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this AdminService_DescribeCluster_Result match the
+// provided AdminService_DescribeCluster_Result.
+//
+// This function performs a deep comparison.
+func (v *AdminService_DescribeCluster_Result) Equals(rhs *AdminService_DescribeCluster_Result) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !((v.Success == nil && rhs.Success == nil) || (v.Success != nil && rhs.Success != nil && v.Success.Equals(rhs.Success))) {
+		return false
+	}
+	if !((v.InternalServiceError == nil && rhs.InternalServiceError == nil) || (v.InternalServiceError != nil && rhs.InternalServiceError != nil && v.InternalServiceError.Equals(rhs.InternalServiceError))) {
+		return false
+	}
+	if !((v.ServiceBusyError == nil && rhs.ServiceBusyError == nil) || (v.ServiceBusyError != nil && rhs.ServiceBusyError != nil && v.ServiceBusyError.Equals(rhs.ServiceBusyError))) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of AdminService_DescribeCluster_Result.
+func (v *AdminService_DescribeCluster_Result) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.Success != nil {
+		err = multierr.Append(err, enc.AddObject("success", v.Success))
+	}
+	if v.InternalServiceError != nil {
+		err = multierr.Append(err, enc.AddObject("internalServiceError", v.InternalServiceError))
+	}
+	if v.ServiceBusyError != nil {
+		err = multierr.Append(err, enc.AddObject("serviceBusyError", v.ServiceBusyError))
+	}
+	return err
+}
+
+// GetSuccess returns the value of Success if it is set or its
+// zero value if it is unset.
+func (v *AdminService_DescribeCluster_Result) GetSuccess() (o *DescribeClusterResponse) {
+	if v != nil && v.Success != nil {
+		return v.Success
+	}
+
+	return
+}
+
+// IsSetSuccess returns true if Success is not nil.
+func (v *AdminService_DescribeCluster_Result) IsSetSuccess() bool {
+	return v != nil && v.Success != nil
+}
+
+// GetInternalServiceError returns the value of InternalServiceError if it is set or its
+// zero value if it is unset.
+func (v *AdminService_DescribeCluster_Result) GetInternalServiceError() (o *shared.InternalServiceError) {
+	if v != nil && v.InternalServiceError != nil {
+		return v.InternalServiceError
+	}
+
+	return
+}
+
+// IsSetInternalServiceError returns true if InternalServiceError is not nil.
+func (v *AdminService_DescribeCluster_Result) IsSetInternalServiceError() bool {
+	return v != nil && v.InternalServiceError != nil
+}
+
+// GetServiceBusyError returns the value of ServiceBusyError if it is set or its
+// zero value if it is unset.
+func (v *AdminService_DescribeCluster_Result) GetServiceBusyError() (o *shared.ServiceBusyError) {
+	if v != nil && v.ServiceBusyError != nil {
+		return v.ServiceBusyError
+	}
+
+	return
+}
+
+// IsSetServiceBusyError returns true if ServiceBusyError is not nil.
+func (v *AdminService_DescribeCluster_Result) IsSetServiceBusyError() bool {
+	return v != nil && v.ServiceBusyError != nil
+}
+
+// MethodName returns the name of the Thrift function as specified in
+// the IDL, for which this struct represent the result.
+//
+// This will always be "DescribeCluster" for this struct.
+func (v *AdminService_DescribeCluster_Result) MethodName() string {
+	return "DescribeCluster"
+}
+
+// EnvelopeType returns the kind of value inside this struct.
+//
+// This will always be Reply for this struct.
+func (v *AdminService_DescribeCluster_Result) EnvelopeType() wire.EnvelopeType {
 	return wire.Reply
 }
 

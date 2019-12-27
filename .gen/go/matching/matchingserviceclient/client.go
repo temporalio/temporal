@@ -62,6 +62,12 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) (*shared.DescribeTaskListResponse, error)
 
+	ListTaskListPartitions(
+		ctx context.Context,
+		Request *matching.ListTaskListPartitionsRequest,
+		opts ...yarpc.CallOption,
+	) (*shared.ListTaskListPartitionsResponse, error)
+
 	PollForActivityTask(
 		ctx context.Context,
 		PollRequest *matching.PollForActivityTaskRequest,
@@ -200,6 +206,29 @@ func (c client) DescribeTaskList(
 	}
 
 	success, err = matching.MatchingService_DescribeTaskList_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) ListTaskListPartitions(
+	ctx context.Context,
+	_Request *matching.ListTaskListPartitionsRequest,
+	opts ...yarpc.CallOption,
+) (success *shared.ListTaskListPartitionsResponse, err error) {
+
+	args := matching.MatchingService_ListTaskListPartitions_Helper.Args(_Request)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result matching.MatchingService_ListTaskListPartitions_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	success, err = matching.MatchingService_ListTaskListPartitions_Helper.UnwrapResponse(&result)
 	return
 }
 

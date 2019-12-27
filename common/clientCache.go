@@ -29,6 +29,7 @@ type (
 	ClientCache interface {
 		GetClientForKey(key string) (interface{}, error)
 		GetClientForClientKey(clientKey string) (interface{}, error)
+		GetHostNameForKey(key string) (string, error)
 	}
 
 	keyResolver    func(string) (string, error)
@@ -55,6 +56,14 @@ func NewClientCache(
 
 		clients: make(map[string]interface{}),
 	}
+}
+
+func (c *clientCacheImpl) GetHostNameForKey(key string) (string, error) {
+	hostName, err := c.keyResolver(key)
+	if err != nil {
+		return "", err
+	}
+	return hostName, nil
 }
 
 func (c *clientCacheImpl) GetClientForKey(key string) (interface{}, error) {

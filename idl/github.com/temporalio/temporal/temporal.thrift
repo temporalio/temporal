@@ -590,4 +590,15 @@ service WorkflowService {
       1: shared.InternalServiceError internalServiceError,
       2: shared.ServiceBusyError serviceBusyError,
     )
+
+   /**
+   * ReapplyEvents applies stale events to the current workflow and current run
+   **/
+  shared.ListTaskListPartitionsResponse ListTaskListPartitions(1: shared.ListTaskListPartitionsRequest request)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      3: shared.EntityNotExistsError entityNotExistError,
+      4: shared.LimitExceededError limitExceededError,
+      5: shared.ServiceBusyError serviceBusyError,
+    )
 }

@@ -97,6 +97,15 @@ service AdminService {
       2: shared.InternalServiceError internalServiceError,
       3: shared.ServiceBusyError serviceBusyError,
     )
+
+  /**
+  * DescribeCluster returns information about cadence cluster
+  **/
+  DescribeClusterResponse DescribeCluster()
+    throws (
+      1: shared.InternalServiceError internalServiceError,
+      2: shared.ServiceBusyError serviceBusyError,
+    )
 }
 
 struct DescribeWorkflowExecutionRequest {
@@ -151,4 +160,25 @@ struct GetWorkflowExecutionRawHistoryV2Response {
 struct AddSearchAttributeRequest {
   10: optional map<string, shared.IndexedValueType> searchAttribute
   20: optional string securityToken
+}
+
+struct HostInfo {
+  10: optional string Identity
+}
+
+struct RingInfo {
+  10: optional string role
+  20: optional i32 memberCount
+  30: optional list<HostInfo> members
+}
+
+struct MembershipInfo {
+  10: optional HostInfo currentHost
+  20: optional list<string> reachableMembers
+  30: optional list<RingInfo> rings
+}
+
+struct DescribeClusterResponse {
+  10: optional shared.SupportedClientVersions supportedClientVersions
+  20: optional MembershipInfo membershipInfo
 }
