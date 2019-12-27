@@ -70,3 +70,7 @@ func (s *simpleMonitor) AddListener(service string, name string, notifyChannel c
 func (s *simpleMonitor) RemoveListener(service string, name string) error {
 	return nil
 }
+
+func (s *simpleMonitor) GetReachableMembers() ([]string, error) {
+	return nil, nil
+}

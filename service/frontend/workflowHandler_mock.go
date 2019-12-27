@@ -269,6 +269,21 @@ func (mr *MockWorkflowHandlerMockRecorder) ListOpenWorkflowExecutions(ctx, ListR
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOpenWorkflowExecutions", reflect.TypeOf((*MockWorkflowHandler)(nil).ListOpenWorkflowExecutions), ctx, ListRequest)
 }
 
+// ListTaskListPartitions mocks base method
+func (m *MockWorkflowHandler) ListTaskListPartitions(ctx context.Context, Request *shared.ListTaskListPartitionsRequest) (*shared.ListTaskListPartitionsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListTaskListPartitions", ctx, Request)
+	ret0, _ := ret[0].(*shared.ListTaskListPartitionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListTaskListPartitions indicates an expected call of ListTaskListPartitions
+func (mr *MockWorkflowHandlerMockRecorder) ListTaskListPartitions(ctx, Request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTaskListPartitions", reflect.TypeOf((*MockWorkflowHandler)(nil).ListTaskListPartitions), ctx, Request)
+}
+
 // ListWorkflowExecutions mocks base method
 func (m *MockWorkflowHandler) ListWorkflowExecutions(ctx context.Context, ListRequest *shared.ListWorkflowExecutionsRequest) (*shared.ListWorkflowExecutionsResponse, error) {
 	m.ctrl.T.Helper()

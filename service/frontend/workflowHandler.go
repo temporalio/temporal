@@ -2994,6 +2994,36 @@ func (wh *WorkflowHandler) DescribeTaskList(
 	return response, nil
 }
 
+// ListTaskListPartitions returns all the partition and host for a taskList
+func (wh *WorkflowHandler) ListTaskListPartitions(ctx context.Context, request *gen.ListTaskListPartitionsRequest) (resp *gen.ListTaskListPartitionsResponse, retError error) {
+	defer log.CapturePanic(wh.GetLogger(), &retError)
+
+	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendListTaskListPartitionsScope, request)
+	defer sw.Stop()
+
+	if request == nil {
+		return nil, wh.error(errRequestNotSet, scope)
+	}
+
+	if ok := wh.allow(request); !ok {
+		return nil, wh.error(createServiceBusyError(), scope)
+	}
+
+	if request.GetDomain() == "" {
+		return nil, wh.error(errDomainNotSet, scope)
+	}
+
+	if err := wh.validateTaskList(request.TaskList, scope); err != nil {
+		return nil, err
+	}
+
+	resp, err := wh.GetMatchingClient().ListTaskListPartitions(ctx, &m.ListTaskListPartitionsRequest{
+		Domain:   request.Domain,
+		TaskList: request.TaskList,
+	})
+	return resp, err
+}
+
 func (wh *WorkflowHandler) getHistory(
 	scope metrics.Scope,
 	domainID string,

@@ -113,22 +113,22 @@ func (handler *decisionHandlerImpl) handleDecisionTaskScheduled(
 	}
 
 	return handler.historyEngine.updateWorkflowExecutionWithAction(ctx, domainID, execution,
-		func(msBuilder mutableState) (*updateWorkflowAction, error) {
-			if !msBuilder.IsWorkflowExecutionRunning() {
+		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
+			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
 			}
 
-			if msBuilder.HasProcessedOrPendingDecision() {
+			if mutableState.HasProcessedOrPendingDecision() {
 				return &updateWorkflowAction{
 					noop: true,
 				}, nil
 			}
 
-			startEvent, err := msBuilder.GetStartEvent()
+			startEvent, err := mutableState.GetStartEvent()
 			if err != nil {
 				return nil, err
 			}
-			if err := msBuilder.AddFirstDecisionTaskScheduled(
+			if err := mutableState.AddFirstDecisionTaskScheduled(
 				startEvent,
 			); err != nil {
 				return nil, err
@@ -159,16 +159,16 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 
 	var resp *h.RecordDecisionTaskStartedResponse
 	err = handler.historyEngine.updateWorkflowExecutionWithAction(ctx, domainID, execution,
-		func(msBuilder mutableState) (*updateWorkflowAction, error) {
-			if !msBuilder.IsWorkflowExecutionRunning() {
+		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
+			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
 			}
 
-			decision, isRunning := msBuilder.GetDecisionInfo(scheduleID)
+			decision, isRunning := mutableState.GetDecisionInfo(scheduleID)
 
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
-			if !isRunning && scheduleID >= msBuilder.GetNextEventID() {
+			if !isRunning && scheduleID >= mutableState.GetNextEventID() {
 				handler.metricsClient.IncCounter(metrics.HistoryRecordDecisionTaskStartedScope, metrics.StaleMutableStateCounter)
 				// Reload workflow execution history
 				// ErrStaleState will trigger updateWorkflowExecutionWithAction function to reload the mutable state
@@ -188,7 +188,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 			if decision.StartedID != common.EmptyEventID {
 				// If decision is started as part of the current request scope then return a positive response
 				if decision.RequestID == requestID {
-					resp, err = handler.createRecordDecisionTaskStartedResponse(domainID, msBuilder, decision, req.PollRequest.GetIdentity())
+					resp, err = handler.createRecordDecisionTaskStartedResponse(domainID, mutableState, decision, req.PollRequest.GetIdentity())
 					if err != nil {
 						return nil, err
 					}
@@ -201,13 +201,13 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 				return nil, &h.EventAlreadyStartedError{Message: "Decision task already started."}
 			}
 
-			_, decision, err = msBuilder.AddDecisionTaskStartedEvent(scheduleID, requestID, req.PollRequest)
+			_, decision, err = mutableState.AddDecisionTaskStartedEvent(scheduleID, requestID, req.PollRequest)
 			if err != nil {
 				// Unable to add DecisionTaskStarted event to history
 				return nil, &workflow.InternalServiceError{Message: "Unable to add DecisionTaskStarted event to history."}
 			}
 
-			resp, err = handler.createRecordDecisionTaskStartedResponse(domainID, msBuilder, decision, req.PollRequest.GetIdentity())
+			resp, err = handler.createRecordDecisionTaskStartedResponse(domainID, mutableState, decision, req.PollRequest.GetIdentity())
 			if err != nil {
 				return nil, err
 			}
@@ -243,18 +243,18 @@ func (handler *decisionHandlerImpl) handleDecisionTaskFailed(
 	}
 
 	return handler.historyEngine.updateWorkflowExecution(ctx, domainID, workflowExecution, true,
-		func(msBuilder mutableState) error {
-			if !msBuilder.IsWorkflowExecutionRunning() {
+		func(context workflowExecutionContext, mutableState mutableState) error {
+			if !mutableState.IsWorkflowExecutionRunning() {
 				return ErrWorkflowCompleted
 			}
 
 			scheduleID := token.ScheduleID
-			decision, isRunning := msBuilder.GetDecisionInfo(scheduleID)
+			decision, isRunning := mutableState.GetDecisionInfo(scheduleID)
 			if !isRunning || decision.Attempt != token.ScheduleAttempt || decision.StartedID == common.EmptyEventID {
 				return &workflow.EntityNotExistsError{Message: "Decision task not found."}
 			}
 
-			_, err := msBuilder.AddDecisionTaskFailedEvent(decision.ScheduleID, decision.StartedID, request.GetCause(), request.Details,
+			_, err := mutableState.AddDecisionTaskFailedEvent(decision.ScheduleID, decision.StartedID, request.GetCause(), request.Details,
 				request.GetIdentity(), "", request.GetBinaryChecksum(), "", "", 0)
 			return err
 		})

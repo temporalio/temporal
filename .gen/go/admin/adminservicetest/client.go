@@ -127,6 +127,37 @@ func (mr *_MockClientRecorder) CloseShard(
 	return mr.mock.ctrl.RecordCall(mr.mock, "CloseShard", args...)
 }
 
+// DescribeCluster responds to a DescribeCluster call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().DescribeCluster(gomock.Any(), ...).Return(...)
+// 	... := client.DescribeCluster(...)
+func (m *MockClient) DescribeCluster(
+	ctx context.Context,
+	opts ...yarpc.CallOption,
+) (success *admin.DescribeClusterResponse, err error) {
+
+	args := []interface{}{ctx}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "DescribeCluster", args...)
+	success, _ = ret[i].(*admin.DescribeClusterResponse)
+	i++
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) DescribeCluster(
+	ctx interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "DescribeCluster", args...)
+}
+
 // DescribeHistoryHost responds to a DescribeHistoryHost call based on the mock expectations. This
 // call will fail if the mock does not expect this call. Use EXPECT to expect
 // a call to this function.

@@ -79,4 +79,32 @@ func (_m *ServiceResolver) RemoveListener(name string) error {
 	return r0
 }
 
+// MemberCount is am mock implementation
+func (_m *ServiceResolver) MemberCount() int {
+	ret := _m.Called()
+
+	var r0 int
+	if rf, ok := ret.Get(0).(func() int); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+
+	return r0
+}
+
+// Members is am mock implementation
+func (_m *ServiceResolver) Members() []*membership.HostInfo {
+	ret := _m.Called()
+
+	var r0 []*membership.HostInfo
+	if rf, ok := ret.Get(0).(func() []*membership.HostInfo); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).([]*membership.HostInfo)
+	}
+
+	return r0
+}
+
 var _ membership.ServiceResolver = (*ServiceResolver)(nil)

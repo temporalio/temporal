@@ -39,5 +39,6 @@ type (
 		RespondQueryTaskCompleted(ctx context.Context, request *m.RespondQueryTaskCompletedRequest) error
 		CancelOutstandingPoll(ctx context.Context, request *m.CancelOutstandingPollRequest) error
 		DescribeTaskList(ctx context.Context, request *m.DescribeTaskListRequest) (*workflow.DescribeTaskListResponse, error)
+		ListTaskListPartitions(ctx context.Context, request *m.ListTaskListPartitionsRequest) (*workflow.ListTaskListPartitionsResponse, error)
 	}
 )
