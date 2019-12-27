@@ -28,7 +28,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/uber/cadence/client"
-	frontendclient "github.com/uber/cadence/client/frontend"
+	adminClient "github.com/uber/cadence/client/admin"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/archiver/filestore"
@@ -79,7 +79,7 @@ type (
 		HistoryConfig         *HistoryConfig
 		ESConfig              *elasticsearch.Config
 		WorkerConfig          *WorkerConfig
-		MockFrontendClient    map[string]frontendclient.Client
+		MockAdminClient       map[string]adminClient.Client
 	}
 
 	// MessagingClientConfig is the config for messaging config
@@ -187,7 +187,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		ArchiverProvider:    archiverBase.provider,
 		HistoryConfig:       options.HistoryConfig,
 		WorkerConfig:        options.WorkerConfig,
-		MockFrontendClient:  options.MockFrontendClient,
+		MockAdminClient:     options.MockAdminClient,
 	}
 	cluster := NewCadence(cadenceParams)
 	if err := cluster.Start(); err != nil {

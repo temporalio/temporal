@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"sync"
 
+	adminClient "github.com/uber/cadence/client/admin"
 	"github.com/uber/cadence/common/authorization"
 
 	"github.com/pborman/uuid"
@@ -41,7 +42,6 @@ import (
 	"github.com/uber/cadence/.gen/go/history/historyserviceclient"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client"
-	frontendclient "github.com/uber/cadence/client/frontend"
 	"github.com/uber/cadence/common"
 	carchiver "github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/archiver/provider"
@@ -112,7 +112,7 @@ type (
 		esConfig            *elasticsearch.Config
 		esClient            elasticsearch.Client
 		workerConfig        *WorkerConfig
-		mockFrontendClient  map[string]frontendclient.Client
+		mockAdminClient     map[string]adminClient.Client
 	}
 
 	// HistoryConfig contains configs for history service
@@ -145,7 +145,7 @@ type (
 		ESConfig                      *elasticsearch.Config
 		ESClient                      elasticsearch.Client
 		WorkerConfig                  *WorkerConfig
-		MockFrontendClient            map[string]frontendclient.Client
+		MockAdminClient               map[string]adminClient.Client
 	}
 
 	membershipFactoryImpl struct {
@@ -177,7 +177,7 @@ func NewCadence(params *CadenceParams) Cadence {
 		archiverProvider:    params.ArchiverProvider,
 		historyConfig:       params.HistoryConfig,
 		workerConfig:        params.WorkerConfig,
-		mockFrontendClient:  params.MockFrontendClient,
+		mockAdminClient:     params.MockAdminClient,
 	}
 }
 
@@ -430,11 +430,11 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 		params.Logger.Fatal("unable to start frontend service", tag.Error(err))
 	}
 
-	if c.mockFrontendClient != nil {
+	if c.mockAdminClient != nil {
 		clientBean := frontendService.GetClientBean()
 		if clientBean != nil {
-			for serviceName, frontendClient := range c.mockFrontendClient {
-				clientBean.SetRemoteFrontendClient(serviceName, frontendClient)
+			for serviceName, client := range c.mockAdminClient {
+				clientBean.SetRemoteAdminClient(serviceName, client)
 			}
 		}
 	}
@@ -498,11 +498,11 @@ func (c *cadenceImpl) startHistory(
 			params.Logger.Fatal("unable to start history service", tag.Error(err))
 		}
 
-		if c.mockFrontendClient != nil {
+		if c.mockAdminClient != nil {
 			clientBean := historyService.GetClientBean()
 			if clientBean != nil {
-				for serviceName, client := range c.mockFrontendClient {
-					clientBean.SetRemoteFrontendClient(serviceName, client)
+				for serviceName, client := range c.mockAdminClient {
+					clientBean.SetRemoteAdminClient(serviceName, client)
 				}
 			}
 		}
@@ -549,11 +549,11 @@ func (c *cadenceImpl) startMatching(hosts map[string][]string, startWG *sync.Wai
 	if err != nil {
 		params.Logger.Fatal("unable to start matching service", tag.Error(err))
 	}
-	if c.mockFrontendClient != nil {
+	if c.mockAdminClient != nil {
 		clientBean := matchingService.GetClientBean()
 		if clientBean != nil {
-			for serviceName, frontendClient := range c.mockFrontendClient {
-				clientBean.SetRemoteFrontendClient(serviceName, frontendClient)
+			for serviceName, client := range c.mockAdminClient {
+				clientBean.SetRemoteAdminClient(serviceName, client)
 			}
 		}
 	}

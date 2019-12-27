@@ -125,7 +125,7 @@ func (r *Replicator) Start() error {
 				processor := newDomainReplicationMessageProcessor(
 					clusterName,
 					r.logger.WithTags(tag.ComponentReplicationTaskProcessor, tag.SourceCluster(clusterName)),
-					r.clientBean.GetRemoteFrontendClient(clusterName),
+					r.clientBean.GetRemoteAdminClient(clusterName),
 					r.metricsClient,
 					r.domainReplicator,
 					r.hostInfo,

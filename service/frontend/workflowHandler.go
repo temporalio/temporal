@@ -25,7 +25,6 @@ package frontend
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
@@ -38,7 +37,6 @@ import (
 	"github.com/uber/cadence/.gen/go/health/metaserver"
 	h "github.com/uber/cadence/.gen/go/history"
 	m "github.com/uber/cadence/.gen/go/matching"
-	"github.com/uber/cadence/.gen/go/replicator"
 	gen "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/archiver"
@@ -3512,142 +3510,6 @@ func (wh *WorkflowHandler) allow(d domainGetter) bool {
 		domain = d.GetDomain()
 	}
 	return wh.rateLimiter.Allow(quotas.Info{Domain: domain})
-}
-
-// GetReplicationMessages returns new replication tasks since the read level provided in the token.
-func (wh *WorkflowHandler) GetReplicationMessages(
-	ctx context.Context,
-	request *replicator.GetReplicationMessagesRequest,
-) (resp *replicator.GetReplicationMessagesResponse, err error) {
-	defer log.CapturePanic(wh.GetLogger(), &err)
-
-	scope, sw := wh.startRequestProfile(metrics.FrontendGetReplicationMessagesScope)
-	defer sw.Stop()
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, wh.error(err, scope)
-	}
-
-	if request == nil {
-		return nil, wh.error(errRequestNotSet, scope)
-	}
-	if !request.IsSetClusterName() {
-		return nil, wh.error(errClusterNameNotSet, scope)
-	}
-
-	resp, err = wh.GetHistoryClient().GetReplicationMessages(ctx, request)
-	if err != nil {
-		return nil, wh.error(err, scope)
-	}
-	return resp, nil
-}
-
-// GetDomainReplicationMessages returns new domain replication tasks since last retrieved task ID.
-func (wh *WorkflowHandler) GetDomainReplicationMessages(
-	ctx context.Context,
-	request *replicator.GetDomainReplicationMessagesRequest,
-) (resp *replicator.GetDomainReplicationMessagesResponse, err error) {
-	defer log.CapturePanic(wh.GetLogger(), &err)
-
-	scope, sw := wh.startRequestProfile(metrics.FrontendGetDomainReplicationMessagesScope)
-	defer sw.Stop()
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, wh.error(err, scope)
-	}
-
-	if request == nil {
-		return nil, wh.error(errRequestNotSet, scope)
-	}
-
-	if wh.GetDomainReplicationQueue() == nil {
-		return nil, wh.error(errors.New("domain replication queue not enabled for cluster"), scope)
-	}
-
-	lastMessageID := defaultLastMessageID
-	if request.IsSetLastRetrievedMessageId() {
-		lastMessageID = int(request.GetLastRetrievedMessageId())
-	}
-
-	if lastMessageID == defaultLastMessageID {
-		clusterAckLevels, err := wh.GetDomainReplicationQueue().GetAckLevels()
-		if err == nil {
-			if ackLevel, ok := clusterAckLevels[request.GetClusterName()]; ok {
-				lastMessageID = ackLevel
-			}
-		}
-	}
-
-	replicationTasks, lastMessageID, err := wh.GetDomainReplicationQueue().GetReplicationMessages(
-		lastMessageID, getDomainReplicationMessageBatchSize)
-	if err != nil {
-		return nil, wh.error(err, scope)
-	}
-
-	lastProcessedMessageID := defaultLastMessageID
-	if request.IsSetLastProcessedMessageId() {
-		lastProcessedMessageID = int(request.GetLastProcessedMessageId())
-	}
-
-	if lastProcessedMessageID != defaultLastMessageID {
-		err := wh.GetDomainReplicationQueue().UpdateAckLevel(lastProcessedMessageID, request.GetClusterName())
-		if err != nil {
-			wh.GetLogger().Warn("Failed to update domain replication queue ack level.",
-				tag.TaskID(int64(lastProcessedMessageID)),
-				tag.ClusterName(request.GetClusterName()))
-		}
-	}
-
-	return &replicator.GetDomainReplicationMessagesResponse{
-		Messages: &replicator.ReplicationMessages{
-			ReplicationTasks:       replicationTasks,
-			LastRetrievedMessageId: common.Int64Ptr(int64(lastMessageID)),
-		},
-	}, nil
-}
-
-// ReapplyEvents applies stale events to the current workflow and the current run
-func (wh *WorkflowHandler) ReapplyEvents(
-	ctx context.Context,
-	request *gen.ReapplyEventsRequest,
-) (err error) {
-	defer log.CapturePanic(wh.GetLogger(), &err)
-
-	scope, sw := wh.startRequestProfile(metrics.FrontendReapplyEventsScope)
-	defer sw.Stop()
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return wh.error(err, scope)
-	}
-
-	if request == nil {
-		return wh.error(errRequestNotSet, scope)
-	}
-	if request.DomainName == nil || request.GetDomainName() == "" {
-		return wh.error(errDomainNotSet, scope)
-	}
-	if request.WorkflowExecution == nil {
-		return wh.error(errExecutionNotSet, scope)
-	}
-	if request.GetWorkflowExecution().GetWorkflowId() == "" {
-		return wh.error(errWorkflowIDNotSet, scope)
-	}
-	if request.GetEvents() == nil {
-		return wh.error(errWorkflowIDNotSet, scope)
-	}
-	domainEntry, err := wh.GetDomainCache().GetDomain(request.GetDomainName())
-	if err != nil {
-		return wh.error(err, scope)
-	}
-
-	err = wh.GetHistoryClient().ReapplyEvents(ctx, &h.ReapplyEventsRequest{
-		DomainUUID: common.StringPtr(domainEntry.GetInfo().ID),
-		Request:    request,
-	})
-	if err != nil {
-		return wh.error(err, scope)
-	}
-	return nil
 }
 
 // GetClusterInfo return information about cadence deployment

@@ -28,7 +28,6 @@ import (
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceserver"
 	"github.com/uber/cadence/.gen/go/health"
 	"github.com/uber/cadence/.gen/go/health/metaserver"
-	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/resource"
@@ -193,22 +192,6 @@ func (a *AccessControlledWorkflowHandler) DescribeWorkflowExecution(
 	}
 
 	return a.frontendHandler.DescribeWorkflowExecution(ctx, request)
-}
-
-// GetDomainReplicationMessages API call
-func (a *AccessControlledWorkflowHandler) GetDomainReplicationMessages(
-	ctx context.Context,
-	request *replicator.GetDomainReplicationMessagesRequest,
-) (*replicator.GetDomainReplicationMessagesResponse, error) {
-	return a.frontendHandler.GetDomainReplicationMessages(ctx, request)
-}
-
-// GetReplicationMessages API call
-func (a *AccessControlledWorkflowHandler) GetReplicationMessages(
-	ctx context.Context,
-	request *replicator.GetReplicationMessagesRequest,
-) (*replicator.GetReplicationMessagesResponse, error) {
-	return a.frontendHandler.GetReplicationMessages(ctx, request)
 }
 
 // GetSearchAttributes API call
@@ -404,14 +387,6 @@ func (a *AccessControlledWorkflowHandler) QueryWorkflow(
 	}
 
 	return a.frontendHandler.QueryWorkflow(ctx, request)
-}
-
-// ReapplyEvents API call
-func (a *AccessControlledWorkflowHandler) ReapplyEvents(
-	ctx context.Context,
-	request *shared.ReapplyEventsRequest,
-) error {
-	return a.frontendHandler.ReapplyEvents(ctx, request)
 }
 
 // GetClusterInfo API call

@@ -26,8 +26,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
 	"github.com/uber/cadence/.gen/go/replicator"
+	"github.com/uber/cadence/client/admin"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/log"
@@ -48,7 +48,7 @@ const (
 func newDomainReplicationMessageProcessor(
 	sourceCluster string,
 	logger log.Logger,
-	remotePeer workflowserviceclient.Interface,
+	remotePeer admin.Client,
 	metricsClient metrics.Client,
 	domainReplicator DomainReplicator,
 	hostInfo *membership.HostInfo,
@@ -81,7 +81,7 @@ type (
 		status                 int32
 		sourceCluster          string
 		logger                 log.Logger
-		remotePeer             workflowserviceclient.Interface
+		remotePeer             admin.Client
 		domainReplicator       DomainReplicator
 		metricsClient          metrics.Client
 		retryPolicy            backoff.RetryPolicy

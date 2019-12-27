@@ -446,7 +446,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 		{
 			Name:     "nil request",
 			Request:  nil,
-			Expected: &shared.BadRequestError{Message: "Request is not provided"},
+			Expected: &shared.BadRequestError{Message: "Request is nil."},
 		},
 		{
 			Name:     "empty request",

@@ -28,7 +28,6 @@ package workflowserviceclient
 import (
 	context "context"
 	cadence "github.com/uber/cadence/.gen/go/cadence"
-	replicator "github.com/uber/cadence/.gen/go/replicator"
 	shared "github.com/uber/cadence/.gen/go/shared"
 	wire "go.uber.org/thriftrw/wire"
 	yarpc "go.uber.org/yarpc"
@@ -73,18 +72,6 @@ type Interface interface {
 		ctx context.Context,
 		opts ...yarpc.CallOption,
 	) (*shared.ClusterInfo, error)
-
-	GetDomainReplicationMessages(
-		ctx context.Context,
-		Request *replicator.GetDomainReplicationMessagesRequest,
-		opts ...yarpc.CallOption,
-	) (*replicator.GetDomainReplicationMessagesResponse, error)
-
-	GetReplicationMessages(
-		ctx context.Context,
-		Request *replicator.GetReplicationMessagesRequest,
-		opts ...yarpc.CallOption,
-	) (*replicator.GetReplicationMessagesResponse, error)
 
 	GetSearchAttributes(
 		ctx context.Context,
@@ -150,12 +137,6 @@ type Interface interface {
 		QueryRequest *shared.QueryWorkflowRequest,
 		opts ...yarpc.CallOption,
 	) (*shared.QueryWorkflowResponse, error)
-
-	ReapplyEvents(
-		ctx context.Context,
-		ReapplyEventsRequest *shared.ReapplyEventsRequest,
-		opts ...yarpc.CallOption,
-	) error
 
 	RecordActivityTaskHeartbeat(
 		ctx context.Context,
@@ -445,52 +426,6 @@ func (c client) GetClusterInfo(
 	return
 }
 
-func (c client) GetDomainReplicationMessages(
-	ctx context.Context,
-	_Request *replicator.GetDomainReplicationMessagesRequest,
-	opts ...yarpc.CallOption,
-) (success *replicator.GetDomainReplicationMessagesResponse, err error) {
-
-	args := cadence.WorkflowService_GetDomainReplicationMessages_Helper.Args(_Request)
-
-	var body wire.Value
-	body, err = c.c.Call(ctx, args, opts...)
-	if err != nil {
-		return
-	}
-
-	var result cadence.WorkflowService_GetDomainReplicationMessages_Result
-	if err = result.FromWire(body); err != nil {
-		return
-	}
-
-	success, err = cadence.WorkflowService_GetDomainReplicationMessages_Helper.UnwrapResponse(&result)
-	return
-}
-
-func (c client) GetReplicationMessages(
-	ctx context.Context,
-	_Request *replicator.GetReplicationMessagesRequest,
-	opts ...yarpc.CallOption,
-) (success *replicator.GetReplicationMessagesResponse, err error) {
-
-	args := cadence.WorkflowService_GetReplicationMessages_Helper.Args(_Request)
-
-	var body wire.Value
-	body, err = c.c.Call(ctx, args, opts...)
-	if err != nil {
-		return
-	}
-
-	var result cadence.WorkflowService_GetReplicationMessages_Result
-	if err = result.FromWire(body); err != nil {
-		return
-	}
-
-	success, err = cadence.WorkflowService_GetReplicationMessages_Helper.UnwrapResponse(&result)
-	return
-}
-
 func (c client) GetSearchAttributes(
 	ctx context.Context,
 	opts ...yarpc.CallOption,
@@ -740,29 +675,6 @@ func (c client) QueryWorkflow(
 	}
 
 	success, err = cadence.WorkflowService_QueryWorkflow_Helper.UnwrapResponse(&result)
-	return
-}
-
-func (c client) ReapplyEvents(
-	ctx context.Context,
-	_ReapplyEventsRequest *shared.ReapplyEventsRequest,
-	opts ...yarpc.CallOption,
-) (err error) {
-
-	args := cadence.WorkflowService_ReapplyEvents_Helper.Args(_ReapplyEventsRequest)
-
-	var body wire.Value
-	body, err = c.c.Call(ctx, args, opts...)
-	if err != nil {
-		return
-	}
-
-	var result cadence.WorkflowService_ReapplyEvents_Result
-	if err = result.FromWire(body); err != nil {
-		return
-	}
-
-	err = cadence.WorkflowService_ReapplyEvents_Helper.UnwrapResponse(&result)
 	return
 }
 

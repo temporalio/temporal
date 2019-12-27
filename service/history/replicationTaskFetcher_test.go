@@ -27,7 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/uber/cadence/.gen/go/cadence/workflowservicetest"
+	"github.com/uber/cadence/.gen/go/admin/adminservicetest"
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
@@ -43,7 +43,7 @@ type (
 
 		mockResource           *resource.Test
 		config                 *Config
-		frontendClient         *workflowservicetest.MockClient
+		frontendClient         *adminservicetest.MockClient
 		replicationTaskFetcher *ReplicationTaskFetcherImpl
 	}
 )
@@ -66,9 +66,9 @@ func (s *replicationTaskFetcherSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 
 	s.mockResource = resource.NewTest(s.controller, metrics.History)
+	s.frontendClient = s.mockResource.RemoteAdminClient
 	logger := log.NewNoop()
 	s.config = NewDynamicConfigForTest()
-	s.frontendClient = s.mockResource.FrontendClient
 
 	s.replicationTaskFetcher = newReplicationTaskFetcher(
 		logger,

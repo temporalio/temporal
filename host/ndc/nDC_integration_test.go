@@ -40,12 +40,12 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/uber/cadence/.gen/go/admin"
-	"github.com/uber/cadence/.gen/go/cadence/workflowservicetest"
+	"github.com/uber/cadence/.gen/go/admin/adminservicetest"
 	"github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
 	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/client/frontend"
+	adminClient "github.com/uber/cadence/client/admin"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/log"
@@ -72,7 +72,7 @@ type (
 		domainID                    string
 		version                     int64
 		versionIncrement            int64
-		mockFrontendClient          map[string]frontend.Client
+		mockAdminClient             map[string]adminClient.Client
 		standByReplicationTasksChan chan *replicator.ReplicationTask
 		standByTaskID               int64
 	}
@@ -118,18 +118,18 @@ func (s *nDCIntegrationTestSuite) SetupSuite() {
 	s.standByReplicationTasksChan = make(chan *replicator.ReplicationTask, 100)
 
 	s.standByTaskID = 0
-	s.mockFrontendClient = make(map[string]frontend.Client)
+	s.mockAdminClient = make(map[string]adminClient.Client)
 	controller := gomock.NewController(s.T())
-	mockStandbyClient := workflowservicetest.NewMockClient(controller)
+	mockStandbyClient := adminservicetest.NewMockClient(controller)
 	mockStandbyClient.EXPECT().GetReplicationMessages(gomock.Any(), gomock.Any()).DoAndReturn(s.GetReplicationMessagesMock).AnyTimes()
-	mockOtherClient := workflowservicetest.NewMockClient(controller)
+	mockOtherClient := adminservicetest.NewMockClient(controller)
 	mockOtherClient.EXPECT().GetReplicationMessages(gomock.Any(), gomock.Any()).Return(
 		&replicator.GetReplicationMessagesResponse{
 			MessagesByShard: make(map[int32]*replicator.ReplicationMessages),
 		}, nil).AnyTimes()
-	s.mockFrontendClient["standby"] = mockStandbyClient
-	s.mockFrontendClient["other"] = mockOtherClient
-	clusterConfigs[0].MockFrontendClient = s.mockFrontendClient
+	s.mockAdminClient["standby"] = mockStandbyClient
+	s.mockAdminClient["other"] = mockOtherClient
+	clusterConfigs[0].MockAdminClient = s.mockAdminClient
 
 	cluster, err := host.NewCluster(clusterConfigs[0], s.logger.WithTags(tag.ClusterName(clusterName[0])))
 	s.Require().NoError(err)
@@ -978,7 +978,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_ZombieWorkflow() {
 	s.generator = test.InitializeHistoryEventGenerator(s.domainName, version)
 
 	// verify two batches of zombie workflow are call reapply API
-	s.mockFrontendClient["standby"].(*workflowservicetest.MockClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(nil).Times(2)
+	s.mockAdminClient["standby"].(*adminservicetest.MockClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(nil).Times(2)
 	for i := 0; i < 2 && s.generator.HasNextVertex(); i++ {
 		events := s.generator.GetNextVertices()
 		historyEvents := &shared.History{}
@@ -1076,7 +1076,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
 		historyClient,
 	)
 
-	s.mockFrontendClient["standby"].(*workflowservicetest.MockClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	s.mockAdminClient["standby"].(*adminservicetest.MockClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 	// Handcraft a stale signal event
 	baseBranchLastEventBatch := baseBranch[len(baseBranch)-1].GetEvents()
 	baseBranchLastEvent := baseBranchLastEventBatch[len(baseBranchLastEventBatch)-1]
@@ -1738,7 +1738,6 @@ func (s *nDCIntegrationTestSuite) applyEventsThroughFetcher(
 	tasklist string,
 	versionHistory *persistence.VersionHistory,
 	eventBatches []*shared.History,
-	frontend *workflowservicetest.MockClient,
 ) {
 	for _, batch := range eventBatches {
 		eventBlob, newRunEventBlob := s.generateEventBlobs(workflowID, runID, workflowType, tasklist, batch)
@@ -1804,6 +1803,6 @@ func (s *nDCIntegrationTestSuite) createContext() context.Context {
 }
 
 func (s *nDCIntegrationTestSuite) setupRemoteFrontendClients() {
-	s.mockFrontendClient["standby"].(*workflowservicetest.MockClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-	s.mockFrontendClient["other"].(*workflowservicetest.MockClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	s.mockAdminClient["standby"].(*adminservicetest.MockClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	s.mockAdminClient["other"].(*adminservicetest.MockClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 }

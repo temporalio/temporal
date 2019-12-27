@@ -1243,7 +1243,7 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 	// The active cluster of the domain is differ from the current cluster
 	// Use frontend client to route this request to the active cluster
 	// Reapplication only happens in active cluster
-	sourceCluster := clientBean.GetRemoteFrontendClient(activeCluster)
+	sourceCluster := clientBean.GetRemoteAdminClient(activeCluster)
 	if sourceCluster == nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("cannot find cluster config %v to do reapply", activeCluster),

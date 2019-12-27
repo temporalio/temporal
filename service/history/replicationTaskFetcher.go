@@ -27,9 +27,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
 	r "github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/client"
+	"github.com/uber/cadence/client/admin"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cluster"
@@ -51,7 +51,7 @@ type (
 		sourceCluster  string
 		config         *Config
 		logger         log.Logger
-		remotePeer     workflowserviceclient.Interface
+		remotePeer     admin.Client
 		requestChan    chan *request
 		done           chan struct{}
 	}
@@ -96,7 +96,7 @@ func NewReplicationTaskFetchers(
 
 			currentCluster := clusterMetadata.GetCurrentClusterName()
 			if clusterName != currentCluster {
-				remoteFrontendClient := clientBean.GetRemoteFrontendClient(clusterName)
+				remoteFrontendClient := clientBean.GetRemoteAdminClient(clusterName)
 				fetcher := newReplicationTaskFetcher(
 					logger,
 					clusterName,
@@ -151,7 +151,7 @@ func newReplicationTaskFetcher(
 	sourceCluster string,
 	currentCluster string,
 	config *Config,
-	sourceFrontend workflowserviceclient.Interface,
+	sourceFrontend admin.Client,
 ) *ReplicationTaskFetcherImpl {
 
 	return &ReplicationTaskFetcherImpl{

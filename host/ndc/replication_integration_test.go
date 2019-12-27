@@ -29,7 +29,6 @@ import (
 
 	"github.com/pborman/uuid"
 
-	"github.com/uber/cadence/.gen/go/cadence/workflowservicetest"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	test "github.com/uber/cadence/common/testing"
@@ -55,7 +54,6 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageApplication() {
 	}
 
 	versionHistory := s.eventBatchesToVersionHistory(nil, historyBatch)
-	standbyClient := s.mockFrontendClient["standby"].(*workflowservicetest.MockClient)
 
 	s.applyEventsThroughFetcher(
 		workflowID,
@@ -64,7 +62,6 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageApplication() {
 		tasklist,
 		versionHistory,
 		historyBatch,
-		standbyClient,
 	)
 
 	// Applying replication messages through fetcher is Async.
@@ -101,7 +98,6 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageDLQ() {
 
 	s.NotNil(historyBatch)
 	historyBatch[0].Events[1].Version = common.Int64Ptr(2)
-	standbyClient := s.mockFrontendClient["standby"].(*workflowservicetest.MockClient)
 
 	s.applyEventsThroughFetcher(
 		workflowID,
@@ -110,7 +106,6 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageDLQ() {
 		tasklist,
 		versionHistory,
 		historyBatch,
-		standbyClient,
 	)
 
 	execMgrFactory := s.active.GetExecutionManagerFactory()

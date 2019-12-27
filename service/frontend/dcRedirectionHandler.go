@@ -27,7 +27,6 @@ import (
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceserver"
 	"github.com/uber/cadence/.gen/go/health"
 	"github.com/uber/cadence/.gen/go/health/metaserver"
-	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
@@ -1160,30 +1159,6 @@ func (handler *DCRedirectionHandlerImpl) ListTaskListPartitions(
 	})
 
 	return resp, err
-}
-
-// GetReplicationMessages API call
-func (handler *DCRedirectionHandlerImpl) GetReplicationMessages(
-	ctx context.Context,
-	request *replicator.GetReplicationMessagesRequest,
-) (*replicator.GetReplicationMessagesResponse, error) {
-	return handler.frontendHandler.GetReplicationMessages(ctx, request)
-}
-
-// GetDomainReplicationMessages API call
-func (handler *DCRedirectionHandlerImpl) GetDomainReplicationMessages(
-	ctx context.Context,
-	request *replicator.GetDomainReplicationMessagesRequest,
-) (*replicator.GetDomainReplicationMessagesResponse, error) {
-	return handler.frontendHandler.GetDomainReplicationMessages(ctx, request)
-}
-
-// ReapplyEvents API call
-func (handler *DCRedirectionHandlerImpl) ReapplyEvents(
-	ctx context.Context,
-	request *shared.ReapplyEventsRequest,
-) error {
-	return handler.frontendHandler.ReapplyEvents(ctx, request)
 }
 
 // GetClusterInfo API call
