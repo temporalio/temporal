@@ -477,7 +477,7 @@ func (d *HandlerImpl) UpdateDomain(
 				})
 			}
 
-			if err := d.domainAttrValidator.validateDomainReplicationConfigClustersDoesNotChange(
+			if err := d.domainAttrValidator.validateDomainReplicationConfigClustersDoesNotRemove(
 				replicationConfig.Clusters,
 				clustersNew,
 			); err != nil {
