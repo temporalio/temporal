@@ -266,7 +266,7 @@ func newWorkflowCommands() []cli.Command {
 		{
 			Name: "reset-batch",
 			Usage: "reset workflow in batch by resetType: " + strings.Join(mapKeysToArray(resetTypesMap), ",") +
-				"batch source is from input file or visibility query.",
+				"To get base workflowIDs/runIDs to reset, source is from input file or visibility query.",
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  FlagInputFileWithAlias,
@@ -283,8 +283,8 @@ func newWorkflowCommands() []cli.Command {
 				},
 				cli.StringFlag{
 					Name:  FlagInputSeparator,
-					Value: ",",
-					Usage: "Separator for input file",
+					Value: "\t",
+					Usage: "Separator for input file(default to tab)",
 				},
 				cli.StringFlag{
 					Name:  FlagReason,
@@ -296,8 +296,23 @@ func newWorkflowCommands() []cli.Command {
 					Usage: "Number of goroutines to run in parallel. Each goroutine would process one line for every second.",
 				},
 				cli.BoolFlag{
-					Name:  FlagSkipCurrent,
-					Usage: "Skip the workflow if the current run is open.",
+					Name:  FlagSkipCurrentOpen,
+					Usage: "Skip the workflow if the current run is open for the same workflowID as base.",
+				},
+				cli.BoolFlag{
+					Name: FlagSkipBaseIsNotCurrent,
+					// TODO https://github.com/uber/cadence/issues/2930
+					// The right way to prevent needs server side implementation .
+					// This client side is only best effort
+					Usage: "Skip if base run is not current run.",
+				},
+				cli.BoolFlag{
+					Name:  FlagNonDeterministicOnly,
+					Usage: "Only apply onto workflows whose last event is decisionTaskFailed with non deterministic error.",
+				},
+				cli.BoolFlag{
+					Name:  FlagDryRun,
+					Usage: "Not do real action of reset(just logging in STDOUT)",
 				},
 				cli.StringFlag{
 					Name:  FlagResetType,
