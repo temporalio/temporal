@@ -48,6 +48,7 @@ func ToProtoError(in error) error {
 		default:
 			return protobuf.NewError(yarpcerrors.CodeInvalidArgument, thriftError.Message)
 		}
+
 	case *shared.DomainNotActiveError:
 		return protobuf.NewError(yarpcerrors.CodeInvalidArgument, thriftError.Message, protobuf.WithErrorDetails(
 			&errordetails.DomainNotActiveFailure{

@@ -860,3 +860,35 @@ func ToProtoGetDomainReplicationMessagesResponse(in *replicator.GetDomainReplica
 		Messages: toProtoReplicationMessages(in.GetMessages()),
 	}
 }
+
+// ToThriftListTaskListPartitionsRequest ...
+func ToThriftListTaskListPartitionsRequest(in *workflowservice.ListTaskListPartitionsRequest) *shared.ListTaskListPartitionsRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.ListTaskListPartitionsRequest{
+		Domain:   &in.Domain,
+		TaskList: toThriftTaskList(in.TaskList),
+	}
+}
+
+// ToProtoGetClusterInfoResponse ...
+func ToProtoGetClusterInfoResponse(in *shared.ClusterInfo) *workflowservice.GetClusterInfoResponse {
+	if in == nil {
+		return nil
+	}
+	return &workflowservice.GetClusterInfoResponse{
+		SupportedClientVersions: toProtoSupportedClientVersions(in.SupportedClientVersions),
+	}
+}
+
+// ToProtoListTaskListPartitionsResponse ...
+func ToProtoListTaskListPartitionsResponse(in *shared.ListTaskListPartitionsResponse) *workflowservice.ListTaskListPartitionsResponse {
+	if in == nil {
+		return nil
+	}
+	return &workflowservice.ListTaskListPartitionsResponse{
+		ActivityTaskListPartitions: toProtoTaskListPartitionMetadatas(in.ActivityTaskListPartitions),
+		DecisionTaskListPartitions: toProtoTaskListPartitionMetadatas(in.DecisionTaskListPartitions),
+	}
+}

@@ -454,7 +454,7 @@ func (wh *WorkflowHandlerGRPC) CountWorkflowExecutions(ctx context.Context, requ
 }
 
 // GetSearchAttributes is a visibility API to get all legal keys that could be used in list APIs
-func (wh *WorkflowHandlerGRPC) GetSearchAttributes(ctx context.Context, request *workflowservice.GetSearchAttributesRequest) (_ *workflowservice.GetSearchAttributesResponse, retError error) {
+func (wh *WorkflowHandlerGRPC) GetSearchAttributes(ctx context.Context, _ *workflowservice.GetSearchAttributesRequest) (_ *workflowservice.GetSearchAttributesResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
 	response, err := wh.workflowHandlerThrift.GetSearchAttributes(ctx)
@@ -559,4 +559,24 @@ func (wh *WorkflowHandlerGRPC) ReapplyEvents(ctx context.Context, request *workf
 		return nil, adapter.ToProtoError(err)
 	}
 	return &workflowservice.ReapplyEventsResponse{}, nil
+}
+
+func (wh *WorkflowHandlerGRPC) GetClusterInfo(ctx context.Context, _ *workflowservice.GetClusterInfoRequest) (_ *workflowservice.GetClusterInfoResponse, retError error) {
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	response, err := wh.workflowHandlerThrift.GetClusterInfo(ctx)
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return adapter.ToProtoGetClusterInfoResponse(response), nil
+}
+
+func (wh *WorkflowHandlerGRPC) ListTaskListPartitions(ctx context.Context, request *workflowservice.ListTaskListPartitionsRequest) (_ *workflowservice.ListTaskListPartitionsResponse, retError error) {
+	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
+
+	response, err := wh.workflowHandlerThrift.ListTaskListPartitions(ctx, adapter.ToThriftListTaskListPartitionsRequest(request))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return adapter.ToProtoListTaskListPartitionsResponse(response), nil
 }
