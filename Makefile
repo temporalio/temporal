@@ -111,7 +111,7 @@ PROTO_REPO := github.com/temporalio/temporal-proto
 # List only subdirectories with *.proto files (sort to remove duplicates).
 # Note: using "shell find" instead of "wildcard" because "wildcard" caches directory structure.
 PROTO_DIRS = $(sort $(dir $(shell find $(PROTO_ROOT) -name "*.proto")))
-PROTO_SERVICES := $(shell find $(PROTO_ROOT) -name "*service.proto")
+PROTO_SERVICES = $(shell find $(PROTO_ROOT) -name "*service.proto")
 
 # Everything that deals with go modules (go.mod) needs to take dependency on this target.
 $(PROTO_GEN):
@@ -146,6 +146,10 @@ proto-mock: $(PROTO_GEN)
 update-proto: clean-proto update-proto-submodule yarpc-install protoc proto-mock
 
 proto: clean-proto install-proto-submodule yarpc-install protoc proto-mock
+
+echo: install-proto-submodule
+	@echo $(PROTO_SERVICES)
+
 #==============================================================================
 
 yarpc-install: $(PROTO_GEN)
