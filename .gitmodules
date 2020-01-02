@@ -1,3 +1,3 @@
-[submodule ".gen/proto"]
-	path = .gen/proto
+[submodule "proto"]
+	path = proto
 	url = git@github.com:temporalio/temporal-proto.git

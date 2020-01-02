@@ -943,3 +943,35 @@ func toThriftWorkerVersionInfo(in *common.WorkerVersionInfo) *shared.WorkerVersi
 		FeatureVersion: &in.FeatureVersion,
 	}
 }
+
+func toProtoSupportedClientVersions(in *shared.SupportedClientVersions) *common.SupportedClientVersions {
+	if in == nil {
+		return nil
+	}
+	return &common.SupportedClientVersions{
+		GoSdk:   in.GetGoSdk(),
+		JavaSdk: in.GetJavaSdk(),
+	}
+}
+
+func toProtoTaskListPartitionMetadatas(in []*shared.TaskListPartitionMetadata) []*common.TaskListPartitionMetadata {
+	if in == nil {
+		return nil
+	}
+
+	var ret []*common.TaskListPartitionMetadata
+	for _, item := range in {
+		ret = append(ret, toProtoTaskListPartitionMetadata(item))
+	}
+	return ret
+}
+
+func toProtoTaskListPartitionMetadata(in *shared.TaskListPartitionMetadata) *common.TaskListPartitionMetadata {
+	if in == nil {
+		return nil
+	}
+	return &common.TaskListPartitionMetadata{
+		Key:           in.GetKey(),
+		OwnerHostName: in.GetOwnerHostName(),
+	}
+}
