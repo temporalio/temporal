@@ -1682,7 +1682,7 @@ func doReset(c *cli.Context, domain, wid, rid string, params batchResetParamsTyp
 
 	if params.dryRun {
 		fmt.Printf("dry run to reset wid: %v, rid:%v to baseRunID:%v, eventID:%v \n", wid, rid, resetBaseRunID, decisionFinishID)
-	}else{
+	} else {
 		resp2, err := frontendClient.ResetWorkflowExecution(ctx, &shared.ResetWorkflowExecutionRequest{
 			Domain: common.StringPtr(domain),
 			WorkflowExecution: &shared.WorkflowExecution{
