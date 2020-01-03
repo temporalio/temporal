@@ -25,6 +25,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/uber/cadence/common/definition"
+
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
@@ -666,6 +668,50 @@ func (s *VisibilityPersistenceSuite) TestDelete() {
 		})
 		s.Nil(err5)
 		s.Equal(remaining, len(resp.Executions))
+	}
+}
+
+func (s *VisibilityPersistenceSuite) TestUpsertWorkflowExecution() {
+	tests := []struct {
+		request  *p.UpsertWorkflowExecutionRequest
+		expected error
+	}{
+		{
+			request: &p.UpsertWorkflowExecutionRequest{
+				DomainUUID:         "",
+				Domain:             "",
+				Execution:          gen.WorkflowExecution{},
+				WorkflowTypeName:   "",
+				StartTimestamp:     0,
+				ExecutionTimestamp: 0,
+				WorkflowTimeout:    0,
+				TaskID:             0,
+				Memo:               nil,
+				SearchAttributes: map[string][]byte{
+					definition.CadenceChangeVersion: []byte("dummy"),
+				},
+			},
+			expected: nil,
+		},
+		{
+			request: &p.UpsertWorkflowExecutionRequest{
+				DomainUUID:         "",
+				Domain:             "",
+				Execution:          gen.WorkflowExecution{},
+				WorkflowTypeName:   "",
+				StartTimestamp:     0,
+				ExecutionTimestamp: 0,
+				WorkflowTimeout:    0,
+				TaskID:             0,
+				Memo:               nil,
+				SearchAttributes:   nil,
+			},
+			expected: p.NewOperationNotSupportErrorForVis(),
+		},
+	}
+
+	for _, test := range tests {
+		s.Equal(test.expected, s.VisibilityMgr.UpsertWorkflowExecution(test.request))
 	}
 }
 

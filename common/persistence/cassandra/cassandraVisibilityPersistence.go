@@ -328,7 +328,9 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 
 func (v *cassandraVisibilityPersistence) UpsertWorkflowExecution(
 	request *p.InternalUpsertWorkflowExecutionRequest) error {
-
+	if p.IsNopUpsertWorkflowRequest(request) {
+		return nil
+	}
 	return p.NewOperationNotSupportErrorForVis()
 }
 
