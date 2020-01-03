@@ -50,7 +50,7 @@ require (
 	github.com/robfig/cron v1.2.0
 	github.com/sirupsen/logrus v1.4.2
 	github.com/stretchr/testify v1.4.0
-	github.com/temporalio/temporal-proto-go v0.0.0-20200103175215-11daab9d14c9
+	github.com/temporalio/temporal-proto-go v0.0.0-20200103184242-06c5b2472e15
 	github.com/uber-common/bark v1.2.1 // indirect
 	github.com/uber-go/kafka-client v0.2.3-0.20191018205945-8b3555b395f9
 	github.com/uber-go/tally v3.3.13+incompatible
