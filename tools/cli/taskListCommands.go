@@ -23,6 +23,9 @@ package cli
 import (
 	"os"
 
+	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
+
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
 	s "go.uber.org/cadence/.gen/go/shared"
@@ -58,6 +61,44 @@ func DescribeTaskList(c *cli.Context) {
 	table.SetHeaderColor(tableHeaderBlue, tableHeaderBlue)
 	for _, poller := range pollers {
 		table.Append([]string{poller.GetIdentity(), convertTime(poller.GetLastAccessTime(), false)})
+	}
+	table.Render()
+}
+
+// ListTaskListPartitions gets all the tasklist partition and host information.
+func ListTaskListPartitions(c *cli.Context) {
+	frontendClient := cFactory.ServerFrontendClient(c)
+	domain := getRequiredGlobalOption(c, FlagDomain)
+	taskList := getRequiredOption(c, FlagTaskList)
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+	request := &shared.ListTaskListPartitionsRequest{
+		Domain:   common.StringPtr(domain),
+		TaskList: &shared.TaskList{Name: common.StringPtr(taskList)},
+	}
+
+	response, err := frontendClient.ListTaskListPartitions(ctx, request)
+	if err != nil {
+		ErrorAndExit("Operation ListTaskListPartitions failed.", err)
+	}
+	if len(response.DecisionTaskListPartitions) > 0 {
+		printTaskListPartitions("Decision", response.DecisionTaskListPartitions)
+	}
+	if len(response.ActivityTaskListPartitions) > 0 {
+		printTaskListPartitions("Activity", response.ActivityTaskListPartitions)
+	}
+}
+
+func printTaskListPartitions(taskListType string, partitions []*shared.TaskListPartitionMetadata) {
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetBorder(false)
+	table.SetColumnSeparator("|")
+	table.SetHeader([]string{taskListType + "TaskListPartition", "Host"})
+	table.SetHeaderLine(false)
+	table.SetHeaderColor(tableHeaderBlue, tableHeaderBlue)
+	for _, partition := range partitions {
+		table.Append([]string{partition.GetKey(), partition.GetOwnerHostName()})
 	}
 	table.Render()
 }
