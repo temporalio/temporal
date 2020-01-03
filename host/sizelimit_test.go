@@ -32,9 +32,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	commonproto "github.com/temporalio/temporal-proto/common"
-	"github.com/temporalio/temporal-proto/enums"
-	"github.com/temporalio/temporal-proto/workflowservice"
+	commonproto "github.com/temporalio/temporal-proto-go/common"
+	"github.com/temporalio/temporal-proto-go/enums"
+	"github.com/temporalio/temporal-proto-go/workflowservice"
+
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log/tag"
 )

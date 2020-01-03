@@ -38,7 +38,8 @@ import (
 	"go.uber.org/yarpc/api/transport"
 	"go.uber.org/yarpc/transport/tchannel"
 
-	"github.com/temporalio/temporal-proto/workflowservice"
+	"github.com/temporalio/temporal-proto-go/workflowservice"
+
 	"github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"
 	"github.com/temporalio/temporal/.gen/go/history/historyserviceclient"
 	"github.com/temporalio/temporal/.gen/go/shared"

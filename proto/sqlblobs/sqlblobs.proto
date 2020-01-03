@@ -1,0 +1,288 @@
+// Copyright (c) 2019 Temporal Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+syntax = "proto3";
+
+package sqlblobs;
+option go_package = "github.com/temporalio/temporal/proto/sqlblobs";
+
+// HistoryBranchRange represents a piece of range for a branch.
+message HistoryBranchRange {
+    // BranchID of original branch forked from.
+    string branchID = 1;
+    // Beginning node for the range, inclusive.
+    int64 beginNodeID = 2;
+    // Ending node for the range, exclusive.
+    int64 endNodeID = 3;
+}
+
+// For history persistence to serialize/deserialize branch details.
+message HistoryBranch {
+    string treeID = 1;
+    string branchID = 2;
+    repeated HistoryBranchRange ancestors = 3;
+}
+
+message ShardInfo {
+    int32 stolenSinceRenew = 1;
+    int64 updatedAtNanos = 2;
+    int64 replicationAckLevel = 3;
+    int64 transferAckLevel = 4;
+    int64 timerAckLevelNanos = 5;
+    int64 domainNotificationVersion = 6;
+    map<string, int64> clusterTransferAckLevel = 7;
+    map<string, int64> clusterTimerAckLevel = 8;
+    string owner = 9;
+    map<string, int64> clusterReplicationLevel = 10;
+}
+
+message DomainInfo {
+    string name = 1;
+    string description = 2;
+    string owner = 3;
+    int32 status = 4;
+    int32 retentionDays = 5;
+    bool emitMetric = 6;
+    string archivalBucket = 7;
+    int32 archivalStatus = 8;
+    int64 configVersion = 9;
+    int64 notificationVersion = 10;
+    int64 failoverNotificationVersion = 11;
+    int64 failoverVersion = 12;
+    string activeClusterName = 13;
+    repeated string clusters = 14;
+    map<string, string> data = 15;
+    bytes badBinaries = 16;
+    string badBinariesEncoding = 17;
+    int32 historyArchivalStatus = 18;
+    string historyArchivalURI = 19;
+    int32 visibilityArchivalStatus = 20;
+    string visibilityArchivalURI = 21;
+}
+
+message HistoryTreeInfo {
+    // For fork operation to prevent race condition of leaking event data when forking branches fail. Also can be used for clean up leaked data. 
+    int64 createdTimeNanos = 1;
+    repeated HistoryBranchRange ancestors = 2;
+    // For lookup back to workflow during debugging, also background cleanup when fork operation cannot finish self cleanup due to crash.
+    string info = 3;
+}
+
+message ReplicationInfo {
+    int64 version = 1;
+    int64 lastEventID = 2;
+}
+
+message WorkflowExecutionInfo {
+    bytes parentDomainID = 1;
+    string parentWorkflowID = 2;
+    bytes parentRunID = 3;
+    int64 initiatedID = 4;
+    int64 completionEventBatchID = 5;
+    bytes completionEvent = 6;
+    string completionEventEncoding = 7;
+    string taskList = 8;
+    string workflowTypeName = 9;
+    int32 workflowTimeoutSeconds = 10;
+    int32 decisionTaskTimeoutSeconds = 11;
+    bytes executionContext = 12;
+    int32 state = 13;
+    int32 closeStatus = 14;
+    int64 startVersion = 15;
+    int64 currentVersion = 16;
+    int64 lastWriteEventID = 17;
+    map<string, ReplicationInfo> lastReplicationInfo = 18;
+    int64 lastEventTaskID = 19;
+    int64 lastFirstEventID = 20;
+    int64 lastProcessedEvent = 21;
+    int64 startTimeNanos = 22;
+    int64 lastUpdatedTimeNanos = 23;
+    int64 decisionVersion = 24;
+    int64 decisionScheduleID = 25;
+    int64 decisionStartedID = 26;
+    int32 decisionTimeout = 27;
+    int64 decisionAttempt = 28;
+    int64 decisionStartedTimestampNanos = 29;
+    int64 decisionScheduledTimestampNanos = 30;
+    bool cancelRequested = 31;
+    int64 decisionOriginalScheduledTimestampNanos = 32;
+    string createRequestID = 33;
+    string decisionRequestID = 34;
+    string cancelRequestID = 35;
+    string stickyTaskList = 36;
+    int64 stickyScheduleToStartTimeout = 37;
+    int64 retryAttempt = 38;
+    int32 retryInitialIntervalSeconds = 39;
+    int32 retryMaximumIntervalSeconds = 40;
+    int32 retryMaximumAttempts = 41;
+    int32 retryExpirationSeconds = 42;
+    double retryBackoffCoefficient = 43;
+    int64 retryExpirationTimeNanos = 44;
+    repeated string retryNonRetryableErrors = 45;
+    bool hasRetryPolicy = 46;
+    string cronSchedule = 47;
+    int32 eventStoreVersion = 48;
+    bytes eventBranchToken = 49;
+    int64 signalCount = 50;
+    int64 historySize = 51;
+    string clientLibraryVersion = 52;
+    string clientFeatureVersion = 53;
+    string clientImpl = 54;
+    bytes autoResetPoints = 55;
+    string autoResetPointsEncoding = 56;
+    map<string, bytes> searchAttributes = 57;
+    map<string, bytes> memo = 58;
+    bytes versionHistories = 59;
+    string versionHistoriesEncoding = 60;
+}
+
+message ActivityInfo {
+    int64 version = 1;
+    int64 scheduledEventBatchID = 2;
+    bytes scheduledEvent = 3;
+    string scheduledEventEncoding = 4;
+    int64 scheduledTimeNanos = 5;
+    int64 startedID = 6;
+    bytes startedEvent = 7;
+    string startedEventEncoding = 8;
+    int64 startedTimeNanos = 9;
+    string activityID = 10;
+    string requestID = 11;
+    int32 scheduleToStartTimeoutSeconds = 12;
+    int32 scheduleToCloseTimeoutSeconds = 13;
+    int32 startToCloseTimeoutSeconds = 14;
+    int32 heartbeatTimeoutSeconds = 15;
+    bool cancelRequested = 16;
+    int64 cancelRequestID = 17;
+    int32 timerTaskStatus = 18;
+    int32 attempt = 19;
+    string taskList = 20;
+    string startedIdentity = 21;
+    bool hasRetryPolicy = 22;
+    int32 retryInitialIntervalSeconds = 23;
+    int32 retryMaximumIntervalSeconds = 24;
+    int32 retryMaximumAttempts = 25;
+    int64 retryExpirationTimeNanos = 26;
+    double retryBackoffCoefficient = 27;
+    repeated string retryNonRetryableErrors = 28;
+    string retryLastFailureReason = 29;
+    string retryLastWorkerIdentity = 30;
+    bytes retryLastFailureDetails = 31;
+}
+
+message ChildExecutionInfo {
+    int64 version = 1;
+    int64 initiatedEventBatchID = 2;
+    int64 startedID = 3;
+    bytes initiatedEvent = 4;
+    string initiatedEventEncoding = 5;
+    string startedWorkflowID = 6;
+    bytes startedRunID = 7;
+    bytes startedEvent = 8;
+    string startedEventEncoding = 9;
+    string createRequestID = 10;
+    string domainName = 11;
+    string workflowTypeName = 12;
+    int32 parentClosePolicy = 13;
+}
+
+message SignalInfo {
+    int64 version = 1;
+    int64 initiatedEventBatchID = 2;
+    string requestID = 3;
+    string name = 4;
+    bytes input = 5;
+    bytes control = 6;
+}
+
+message RequestCancelInfo {
+    int64 version = 1;
+    int64 initiatedEventBatchID = 2;
+    string cancelRequestID = 3;
+}
+
+message TimerInfo {
+    int64 version = 1;
+    int64 startedID = 2;
+    int64 expiryTimeNanos = 3;
+    // taskID is a misleading variable, it actually serves
+    // the purpose of indicating whether a timer task is
+    // generated for this timer info
+    int64 taskID = 4;
+}
+
+message TaskInfo {
+    string workflowID = 1;
+    bytes runID = 2;
+    int64 scheduleID = 3;
+    int64 expiryTimeNanos = 4;
+    int64 createdTimeNanos = 5;
+}
+
+message TaskListInfo {
+    // {Normal, Sticky}
+    int32 kind = 1;
+    int64 ackLevel = 2;
+    int64 expiryTimeNanos = 3;
+    int64 lastUpdatedNanos = 4;
+}
+
+message TransferTaskInfo {
+    bytes domainID = 1;
+    string workflowID = 2;
+    bytes runID = 3;
+    int32 taskType = 4;
+    bytes targetDomainID = 5;
+    string targetWorkflowID = 6;
+    bytes targetRunID = 7;
+    string taskList = 8;
+    bool targetChildWorkflowOnly = 9;
+    int64 scheduleID = 10;
+    int64 version = 11;
+    int64 visibilityTimestampNanos = 12;
+}
+
+message TimerTaskInfo {
+    bytes domainID = 1;
+    string workflowID = 2;
+    bytes runID = 3;
+    int32 taskType = 4;
+    int32 timeoutType = 5;
+    int64 version = 6;
+    int64 scheduleAttempt = 7;
+    int64 eventID = 8;
+}
+
+message ReplicationTaskInfo {
+    bytes domainID = 1;
+    string workflowID = 2;
+    bytes runID = 3;
+    int32 taskType = 4;
+    int64 version = 5;
+    int64 firstEventID = 6;
+    int64 nextEventID = 7;
+    int64 scheduledID = 8;
+    int32 eventStoreVersion = 9;
+    int32 newRunEventStoreVersion = 10;
+    bytes branch_token = 11;
+    map<string, ReplicationInfo> lastReplicationInfo = 12;
+    bytes newRunBranchToken = 13;
+    bool resetWorkflow = 14;
+}

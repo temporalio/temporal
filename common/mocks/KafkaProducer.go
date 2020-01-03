@@ -22,6 +22,7 @@ package mocks
 
 import (
 	"github.com/stretchr/testify/mock"
+
 	"github.com/temporalio/temporal/common/messaging"
 )
 

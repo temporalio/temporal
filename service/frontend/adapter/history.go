@@ -21,8 +21,9 @@
 package adapter
 
 import (
-	"github.com/temporalio/temporal-proto/common"
-	"github.com/temporalio/temporal-proto/enums"
+	"github.com/temporalio/temporal-proto-go/common"
+	"github.com/temporalio/temporal-proto-go/enums"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 )
 

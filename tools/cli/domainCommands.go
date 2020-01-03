@@ -32,9 +32,10 @@ import (
 	"github.com/urfave/cli"
 	"go.uber.org/yarpc/yarpcerrors"
 
-	pbCommon "github.com/temporalio/temporal-proto/common"
-	"github.com/temporalio/temporal-proto/enums"
-	"github.com/temporalio/temporal-proto/workflowservice"
+	commonproto "github.com/temporalio/temporal-proto-go/common"
+	"github.com/temporalio/temporal-proto-go/enums"
+	"github.com/temporalio/temporal-proto-go/workflowservice"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 	serviceFrontend "github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
 	"github.com/temporalio/temporal/common/domain"
@@ -123,14 +124,14 @@ func (d *domainCLIImpl) RegisterDomain(c *cli.Context) {
 		activeClusterName = c.String(FlagActiveClusterName)
 	}
 
-	var clusters []*pbCommon.ClusterReplicationConfiguration
+	var clusters []*commonproto.ClusterReplicationConfiguration
 	if c.IsSet(FlagClusters) {
 		clusterStr := c.String(FlagClusters)
-		clusters = append(clusters, &pbCommon.ClusterReplicationConfiguration{
+		clusters = append(clusters, &commonproto.ClusterReplicationConfiguration{
 			ClusterName: clusterStr,
 		})
 		for _, clusterStr := range c.Args() {
-			clusters = append(clusters, &pbCommon.ClusterReplicationConfiguration{
+			clusters = append(clusters, &commonproto.ClusterReplicationConfiguration{
 				ClusterName: clusterStr,
 			})
 		}
@@ -181,7 +182,7 @@ func (d *domainCLIImpl) UpdateDomain(c *cli.Context) {
 	if c.IsSet(FlagActiveClusterName) {
 		activeCluster := c.String(FlagActiveClusterName)
 		fmt.Printf("Will set active cluster name to: %s, other flag will be omitted.\n", activeCluster)
-		replicationConfig := &pbCommon.DomainReplicationConfiguration{
+		replicationConfig := &commonproto.DomainReplicationConfiguration{
 			ActiveClusterName: activeCluster,
 		}
 		updateRequest = &workflowservice.UpdateDomainRequest{
@@ -208,7 +209,7 @@ func (d *domainCLIImpl) UpdateDomain(c *cli.Context) {
 		ownerEmail := resp.DomainInfo.GetOwnerEmail()
 		retentionDays := resp.Configuration.GetWorkflowExecutionRetentionPeriodInDays()
 		emitMetric := resp.Configuration.GetEmitMetric().GetValue()
-		var clusters []*pbCommon.ClusterReplicationConfiguration
+		var clusters []*commonproto.ClusterReplicationConfiguration
 
 		if c.IsSet(FlagDescription) {
 			description = c.String(FlagDescription)
@@ -235,17 +236,17 @@ func (d *domainCLIImpl) UpdateDomain(c *cli.Context) {
 		}
 		if c.IsSet(FlagClusters) {
 			clusterStr := c.String(FlagClusters)
-			clusters = append(clusters, &pbCommon.ClusterReplicationConfiguration{
+			clusters = append(clusters, &commonproto.ClusterReplicationConfiguration{
 				ClusterName: clusterStr,
 			})
 			for _, clusterStr := range c.Args() {
-				clusters = append(clusters, &pbCommon.ClusterReplicationConfiguration{
+				clusters = append(clusters, &commonproto.ClusterReplicationConfiguration{
 					ClusterName: clusterStr,
 				})
 			}
 		}
 
-		var binBinaries *pbCommon.BadBinaries
+		var binBinaries *commonproto.BadBinaries
 		if c.IsSet(FlagAddBadBinary) {
 			if !c.IsSet(FlagReason) {
 				ErrorAndExit("Must provide a reason.", nil)
@@ -253,8 +254,8 @@ func (d *domainCLIImpl) UpdateDomain(c *cli.Context) {
 			binChecksum := c.String(FlagAddBadBinary)
 			reason := c.String(FlagReason)
 			operator := getCurrentUserFromEnv()
-			binBinaries = &pbCommon.BadBinaries{
-				Binaries: map[string]*pbCommon.BadBinaryInfo{
+			binBinaries = &commonproto.BadBinaries{
+				Binaries: map[string]*commonproto.BadBinaryInfo{
 					binChecksum: {
 						Reason:   reason,
 						Operator: operator,
@@ -268,21 +269,21 @@ func (d *domainCLIImpl) UpdateDomain(c *cli.Context) {
 			badBinaryToDelete = c.String(FlagRemoveBadBinary)
 		}
 
-		updateInfo := &pbCommon.UpdateDomainInfo{
+		updateInfo := &commonproto.UpdateDomainInfo{
 			Description: description,
 			OwnerEmail:  ownerEmail,
 			Data:        domainData,
 		}
-		updateConfig := &pbCommon.DomainConfiguration{
+		updateConfig := &commonproto.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retentionDays,
-			EmitMetric:                             &pbCommon.BoolValue{Value: emitMetric},
+			EmitMetric:                             &commonproto.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  archivalStatus(c, FlagHistoryArchivalStatus),
 			HistoryArchivalURI:                     c.String(FlagHistoryArchivalURI),
 			VisibilityArchivalStatus:               archivalStatus(c, FlagVisibilityArchivalStatus),
 			VisibilityArchivalURI:                  c.String(FlagVisibilityArchivalURI),
 			BadBinaries:                            binBinaries,
 		}
-		replicationConfig := &pbCommon.DomainReplicationConfiguration{
+		replicationConfig := &commonproto.DomainReplicationConfiguration{
 			Clusters: clusters,
 		}
 		updateRequest = &workflowservice.UpdateDomainRequest{
@@ -438,7 +439,7 @@ func (d *domainCLIImpl) describeDomain(
 	return adapter.ToProtoDescribeDomainResponse(resp), err
 }
 
-func clustersToString(clusters []*pbCommon.ClusterReplicationConfiguration) string {
+func clustersToString(clusters []*commonproto.ClusterReplicationConfiguration) string {
 	var res string
 	for i, cluster := range clusters {
 		if i == 0 {

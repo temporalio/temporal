@@ -31,9 +31,10 @@ import (
 
 	"github.com/pborman/uuid"
 
-	commonproto "github.com/temporalio/temporal-proto/common"
-	"github.com/temporalio/temporal-proto/enums"
-	"github.com/temporalio/temporal-proto/workflowservice"
+	commonproto "github.com/temporalio/temporal-proto-go/common"
+	"github.com/temporalio/temporal-proto-go/enums"
+	"github.com/temporalio/temporal-proto-go/workflowservice"
+
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/service/matching"
 )

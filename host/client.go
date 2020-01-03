@@ -23,7 +23,8 @@ package host
 import (
 	"go.uber.org/yarpc"
 
-	"github.com/temporalio/temporal-proto/workflowservice"
+	"github.com/temporalio/temporal-proto-go/workflowservice"
+
 	"github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"
 	"github.com/temporalio/temporal/.gen/go/history/historyserviceclient"
 	"github.com/temporalio/temporal/common"

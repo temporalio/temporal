@@ -1,0 +1,455 @@
+// Copyright (c) 2019 Temporal Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+syntax = "proto3";
+
+package historyservice;
+option go_package = "github.com/temporalio/temporal/proto/historyservice";
+
+import "enums/enums.proto";
+import "common/common.proto";
+import "common/history.proto";
+import "common/decision.proto";
+import "common/workflow_execution.proto";
+import "common/domain.proto";
+import "common/replication.proto";
+
+// TODO: remove this dependency
+import "workflowservice/request_response.proto";
+
+message StartWorkflowExecutionRequest {
+    string domainUUID = 1;
+    workflowservice.StartWorkflowExecutionRequest startRequest = 2;
+    common.ParentExecutionInfo parentExecutionInfo = 3;
+    int32 attempt = 4;
+    int64 expirationTimestamp = 5;
+    enums.ContinueAsNewInitiator continueAsNewInitiator = 6;
+    string continuedFailureReason = 7;
+    bytes continuedFailureDetails = 8;
+    bytes lastCompletionResult = 9;
+    int32 firstDecisionTaskBackoffSeconds = 10;
+}
+
+message StartWorkflowExecutionResponse {
+    string runId = 1;
+}
+
+message GetMutableStateRequest {
+    string domainUUID = 1;
+    common.WorkflowExecution execution = 2;
+    int64 expectedNextEventId = 3;
+    bytes currentBranchToken = 4;
+}
+
+message GetMutableStateResponse {
+    common.WorkflowExecution execution = 1;
+    common.WorkflowType workflowType = 2;
+    int64 NextEventId = 3;
+    int64 PreviousStartedEventId = 4;
+    int64 LastFirstEventId = 5;
+    common.TaskList taskList = 6;
+    common.TaskList stickyTaskList = 7;
+    string clientLibraryVersion = 8;
+    string clientFeatureVersion = 9;
+    string clientImpl = 10;
+    //TODO: isWorkflowRunning is deprecating. workflowState is going replace this field
+    bool isWorkflowRunning = 11;
+    int32 stickyTaskListScheduleToStartTimeout = 12;
+    int32 eventStoreVersion = 13;
+    bytes currentBranchToken = 14;
+    map<string, common.ReplicationInfo> replicationInfo = 15;
+    // TODO: when migrating to gRPC, make this a enum
+    // TODO: when migrating to gRPC, unify internal & external representation
+    // NOTE: workflowState & workflowCloseState are the same as persistence representation
+    int32 workflowState = 16;
+    int32 workflowCloseState = 17;
+    common.VersionHistories versionHistories = 18;
+    bool isStickyTaskListEnabled = 19;
+}
+
+message PollMutableStateRequest {
+    string domainUUID = 1;
+    common.WorkflowExecution execution = 2;
+    int64 expectedNextEventId = 3;
+    bytes currentBranchToken = 4;
+}
+
+message PollMutableStateResponse {
+    common.WorkflowExecution execution = 1;
+    common.WorkflowType workflowType = 2;
+    int64 NextEventId = 3;
+    int64 PreviousStartedEventId = 4;
+    int64 LastFirstEventId = 5;
+    common.TaskList taskList = 6;
+    common.TaskList stickyTaskList = 7;
+    string clientLibraryVersion = 8;
+    string clientFeatureVersion = 9;
+    string clientImpl = 10;
+    int32 stickyTaskListScheduleToStartTimeout = 11;
+    bytes currentBranchToken = 12;
+    map<string, common.ReplicationInfo> replicationInfo = 13;
+    common.VersionHistories versionHistories = 14;
+    // TODO: when migrating to gRPC, make this a enum
+    // TODO: when migrating to gRPC, unify internal & external representation
+    // NOTE: workflowState & workflowCloseState are the same as persistence representation
+    int32 workflowState = 15;
+    int32 workflowCloseState = 16;
+}
+
+message ResetStickyTaskListRequest {
+    string domainUUID = 1;
+    common.WorkflowExecution execution = 2;
+}
+
+message ResetStickyTaskListResponse {
+}
+
+message RecordDecisionTaskStartedRequest {
+    string domainUUID = 1;
+    common.WorkflowExecution workflowExecution = 2;
+    int64 scheduleId = 3;
+    int64 taskId = 4;
+    // Unique id of each poll request. Used to ensure at most once delivery of tasks.
+    string requestId = 5;
+    workflowservice.PollForDecisionTaskRequest pollRequest = 6;
+}
+
+message RecordDecisionTaskStartedResponse {
+    common.WorkflowType workflowType = 1;
+    int64 previousStartedEventId = 2;
+    int64 scheduledEventId = 3;
+    int64 startedEventId = 4;
+    int64 nextEventId = 5;
+    int64 attempt = 6;
+    bool stickyExecutionEnabled = 7;
+    common.TransientDecisionInfo decisionInfo = 8;
+    common.TaskList WorkflowExecutionTaskList = 9;
+    int32 eventStoreVersion = 10;
+    bytes branchToken = 11;
+    int64 scheduledTimestamp = 12;
+    int64 startedTimestamp = 13;
+    map<string, common.WorkflowQuery> queries = 14;
+}
+
+message RecordActivityTaskStartedRequest {
+    string domainUUID = 1;
+    common.WorkflowExecution workflowExecution = 2;
+    int64 scheduleId = 3;
+    int64 taskId = 4;
+    // Unique id of each poll request. Used to ensure at most once delivery of tasks.
+    string requestId = 5;
+    workflowservice.PollForActivityTaskRequest pollRequest = 6;
+}
+
+message RecordActivityTaskStartedResponse {
+    common.HistoryEvent scheduledEvent = 1;
+    int64 startedTimestamp = 2;
+    int64 attempt = 3;
+    int64 scheduledTimestampOfThisAttempt = 4;
+    bytes heartbeatDetails = 5;
+    common.WorkflowType workflowType = 6;
+    string workflowDomain = 7;
+}
+
+message RespondDecisionTaskCompletedRequest {
+    string domainUUID = 1;
+    workflowservice.RespondDecisionTaskCompletedRequest completeRequest = 2;
+}
+
+message RespondDecisionTaskCompletedResponse {
+    RecordDecisionTaskStartedResponse startedResponse = 1;
+}
+
+message RespondDecisionTaskFailedRequest {
+    string domainUUID = 1;
+    workflowservice.RespondDecisionTaskFailedRequest failedRequest = 2;
+}
+
+message RespondDecisionTaskFailedResponse {
+}
+
+message RecordActivityTaskHeartbeatRequest {
+    string domainUUID = 1;
+    workflowservice.RecordActivityTaskHeartbeatRequest heartbeatRequest = 2;
+}
+
+message RecordActivityTaskHeartbeatResponse {
+    bool cancelRequested = 1;
+}
+
+message RespondActivityTaskCompletedRequest {
+    string domainUUID = 1;
+    workflowservice.RespondActivityTaskCompletedRequest completeRequest = 2;
+}
+
+message RespondActivityTaskCompletedResponse {
+}
+
+message RespondActivityTaskFailedRequest {
+    string domainUUID = 1;
+    workflowservice.RespondActivityTaskFailedRequest failedRequest = 2;
+}
+
+message RespondActivityTaskFailedResponse {
+}
+
+message RespondActivityTaskCanceledRequest {
+    string domainUUID = 1;
+    workflowservice.RespondActivityTaskCanceledRequest cancelRequest = 2;
+}
+
+message RespondActivityTaskCanceledResponse {
+}
+
+message SignalWorkflowExecutionRequest {
+    string domainUUID = 1;
+    workflowservice.SignalWorkflowExecutionRequest signalRequest = 2;
+    common.WorkflowExecution externalWorkflowExecution = 3;
+    bool childWorkflowOnly = 4;
+}
+
+message SignalWorkflowExecutionResponse {
+}
+
+message SignalWithStartWorkflowExecutionRequest {
+    string domainUUID = 1;
+    workflowservice.SignalWithStartWorkflowExecutionRequest signalWithStartRequest = 2;
+}
+
+message RemoveSignalMutableStateRequest {
+    string domainUUID = 1;
+    common.WorkflowExecution workflowExecution = 2;
+    string requestId = 3;
+}
+
+message RemoveSignalMutableStateResponse {
+}
+
+message TerminateWorkflowExecutionRequest {
+    string domainUUID = 1;
+    workflowservice.TerminateWorkflowExecutionRequest terminateRequest = 2;
+}
+
+message TerminateWorkflowExecutionResponse {
+}
+
+message ResetWorkflowExecutionRequest {
+    string domainUUID = 1;
+    workflowservice.ResetWorkflowExecutionRequest resetRequest = 2;
+}
+
+message ResetWorkflowExecutionResponse {
+    string runId = 1;
+}
+
+message RequestCancelWorkflowExecutionRequest {
+    string domainUUID = 1;
+    workflowservice.RequestCancelWorkflowExecutionRequest cancelRequest = 2;
+    int64 externalInitiatedEventId = 3;
+    common.WorkflowExecution externalWorkflowExecution = 4;
+    bool childWorkflowOnly = 5;
+}
+
+message RequestCancelWorkflowExecutionResponse {
+}
+
+message ScheduleDecisionTaskRequest {
+    string domainUUID = 1;
+    common.WorkflowExecution workflowExecution = 2;
+    bool isFirstDecision = 3;
+}
+
+message ScheduleDecisionTaskResponse {
+}
+
+/**
+* RecordChildExecutionCompletedRequest is used for reporting the completion of child execution to parent workflow
+* execution which started it.  When a child execution is completed it creates this request and calls the
+* RecordChildExecutionCompleted API with the workflowExecution of parent.  It also sets the completedExecution of the
+* child as it could potentially be different than the ChildExecutionStartedEvent of parent in the situation when
+* child creates multiple runs through ContinueAsNew before finally completing.
+**/
+message RecordChildExecutionCompletedRequest {
+    string domainUUID = 1;
+    common.WorkflowExecution workflowExecution = 2;
+    int64 initiatedId = 3;
+    common.WorkflowExecution completedExecution = 4;
+    common.HistoryEvent completionEvent = 5;
+}
+
+message RecordChildExecutionCompletedResponse {
+}
+
+message DescribeWorkflowExecutionRequest {
+    string domainUUID = 1;
+    workflowservice.DescribeWorkflowExecutionRequest request = 2;
+}
+
+message DescribeWorkflowExecutionResponse {
+    common.WorkflowExecutionConfiguration executionConfiguration = 1;
+    common.WorkflowExecutionInfo workflowExecutionInfo = 2;
+    repeated common.PendingActivityInfo pendingActivities = 3;
+    repeated common.PendingChildExecutionInfo pendingChildren = 4;
+}
+
+message ReplicateEventsRequest {
+    string sourceCluster = 1;
+    string domainUUID = 2;
+    common.WorkflowExecution workflowExecution = 3;
+    int64 firstEventId = 4;
+    int64 nextEventId = 5;
+    int64 version = 6;
+    map<string, common.ReplicationInfo> replicationInfo = 7;
+    common.History history = 8;
+    common.History newRunHistory = 9;
+    // this attribute is deprecated
+    bool forceBufferEvents = 10;
+    int32 eventStoreVersion = 11;
+    int32 newRunEventStoreVersion = 12;
+    bool resetWorkflow = 13;
+    bool newRunNDC = 14;
+}
+
+message ReplicateEventsResponse {
+}
+
+message ReplicateRawEventsRequest {
+    string domainUUID = 1;
+    common.WorkflowExecution workflowExecution = 2;
+    map<string, common.ReplicationInfo> replicationInfo = 3;
+    common.DataBlob history = 4;
+    common.DataBlob newRunHistory = 5;
+    int32 eventStoreVersion = 6;
+    int32 newRunEventStoreVersion = 7;
+}
+
+message ReplicateRawEventsResponse {
+}
+
+message ReplicateEventsV2Request {
+    string domainUUID = 1;
+    common.WorkflowExecution workflowExecution = 2;
+    repeated common.VersionHistoryItem versionHistoryItems = 3;
+    common.DataBlob events = 4;
+    // New run events does not need version history since there is no prior events.
+    common.DataBlob newRunEvents = 5;
+}
+
+message ReplicateEventsV2Response {
+}
+
+message SyncShardStatusRequest {
+    string sourceCluster = 1;
+    int64 shardId = 2;
+    int64 timestamp = 3;
+}
+
+message SyncShardStatusResponse {
+}
+
+message SyncActivityRequest {
+    string domainId = 1;
+    string workflowId = 2;
+    string runId = 3;
+    int64 version = 4;
+    int64 scheduledId = 5;
+    int64 scheduledTime = 6;
+    int64 startedId = 7;
+    int64 startedTime = 8;
+    int64 lastHeartbeatTime = 9;
+    bytes details = 10;
+    int32 attempt = 11;
+    string lastFailureReason = 12;
+    string lastWorkerIdentity = 13;
+    bytes lastFailureDetails = 14;
+    common.VersionHistory versionHistory = 15;
+}
+
+message SyncActivityResponse {
+}
+
+message DescribeMutableStateRequest {
+    string domainUUID = 1;
+    common.WorkflowExecution execution = 2;
+}
+
+message DescribeMutableStateResponse {
+    string mutableStateInCache = 1;
+    string mutableStateInDatabase = 2;
+}
+
+//At least one of the parameters needs to be provided
+message DescribeHistoryHostRequest {
+    //ip:port
+    string hostAddress = 1;
+    int32 shardIdForHost = 2;
+    common.WorkflowExecution executionForHost = 3;
+}
+
+message DescribeHistoryHostResponse {
+    int32 numberOfShards = 1;
+    repeated int32
+    shardIDs = 2;
+    common.DomainCacheInfo domainCache = 3;
+    string shardControllerStatus = 4;
+    string address = 5;
+}
+
+message CloseShardRequest {
+    int32 shardID = 1;
+}
+
+message CloseShardResponse {
+}
+
+message RemoveTaskRequest {
+    int32 shardID = 1;
+    int32 type = 2;
+    int64 taskID = 3;
+}
+
+message RemoveTaskResponse {
+}
+
+message GetReplicationMessagesRequest {
+    repeated common.ReplicationToken tokens = 1;
+    string clusterName = 2;
+}
+
+message GetReplicationMessagesResponse {
+    map<int32, common.ReplicationMessages> messagesByShard = 1;
+}
+
+message QueryWorkflowRequest {
+    string domainUUID = 1;
+    workflowservice.QueryWorkflowRequest request = 2;
+}
+
+message QueryWorkflowResponse {
+    workflowservice.QueryWorkflowResponse response = 1;
+}
+
+message ReapplyEventsRequest {
+    string domainUUID = 1;
+    workflowservice.ReapplyEventsRequest request = 2;
+}
+
+message ReapplyEventsResponse {
+}
