@@ -106,31 +106,29 @@ GOCOVERPKG_ARG := -coverpkg="$(PROJECT_ROOT)/common/...,$(PROJECT_ROOT)/service/
 
 #================================= protobuf ===================================
 PROTO_ROOT := proto
-PROTO_GEN := .gen/proto
-PROTO_REPO := github.com/temporalio/temporal-proto
 # List only subdirectories with *.proto files (sort to remove duplicates).
 # Note: using "shell find" instead of "wildcard" because "wildcard" caches directory structure.
-PROTO_DIRS = $(sort $(dir $(shell find $(PROTO_ROOT) -name "*.proto")))
-PROTO_SERVICES = $(shell find $(PROTO_ROOT) -name "*service.proto")
+PROTO_DIRS = $(sort $(dir $(shell find $(PROTO_ROOT) -name "*.proto" | grep -v temporal-proto)))
+PROTO_SERVICES = $(shell find $(PROTO_ROOT) -name "*service.proto" | grep -v temporal-proto)
+PROTO_IMPORT := $(PROTO_ROOT):$(PROTO_ROOT)/temporal-proto
+PROTO_GEN := .gen/proto
 
-# Everything that deals with go modules (go.mod) needs to take dependency on this target.
 $(PROTO_GEN):
 	mkdir -p $(PROTO_GEN)
-	cd $(PROTO_GEN) && go mod init $(PROTO_REPO)
 
 clean-proto:
-	rm -rf $(PROTO_GEN)/*/
+	rm -rf $(PROTO_GEN)/*
 
 update-proto-submodule:
-	git submodule update --remote $(PROTO_ROOT)
+	git submodule update --remote $(PROTO_ROOT)/temporal-proto
 
 install-proto-submodule:
-	git submodule update --init $(PROTO_ROOT)
+	git submodule update --init $(PROTO_ROOT)/temporal-proto
 
-protoc:
+protoc: $(PROTO_GEN)
 #   run protoc separately for each directory because of different package names
-	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_ROOT) --gogoslick_out=paths=source_relative:$(PROTO_GEN) $(PROTO_DIR)*.proto;)
-	$(foreach PROTO_SERVICE,$(PROTO_SERVICES),protoc --proto_path=$(PROTO_ROOT) --yarpc-go_out=$(PROTO_GEN) $(PROTO_SERVICE);)
+	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_IMPORT) --gogoslick_out=paths=source_relative:$(PROTO_GEN) $(PROTO_DIR)*.proto;)
+	$(foreach PROTO_SERVICE,$(PROTO_SERVICES),protoc --proto_path=$(PROTO_IMPORT) --yarpc-go_out=$(PROTO_GEN) $(PROTO_SERVICE);)
 
 # All YARPC generated service files pathes relative to PROTO_ROOT
 PROTO_YARPC_SERVICES = $(patsubst $(PROTO_GEN)/%,%,$(shell find $(PROTO_GEN) -name "service.pb.yarpc.go"))
@@ -147,12 +145,9 @@ update-proto: clean-proto update-proto-submodule yarpc-install protoc proto-mock
 
 proto: clean-proto install-proto-submodule yarpc-install protoc proto-mock
 
-echo: install-proto-submodule
-	@echo $(PROTO_SERVICES)
-
 #==============================================================================
 
-yarpc-install: $(PROTO_GEN)
+yarpc-install:
 	GO111MODULE=off go get -u github.com/myitcv/gobin
 	GO111MODULE=off go get -u github.com/gogo/protobuf/protoc-gen-gogoslick
 	GO111MODULE=off go get -u go.uber.org/yarpc/encoding/protobuf/protoc-gen-yarpc-go
@@ -183,7 +178,7 @@ cadence-server: $(ALL_SRC)
 	@echo "compiling cadence-server with OS: $(GOOS), ARCH: $(GOARCH)"
 	go build -ldflags '$(GO_BUILD_LDFLAGS)' -i -o cadence-server cmd/server/main.go
 
-go-generate: $(PROTO_GEN)
+go-generate:
 	GO111MODULE=off go get -u github.com/myitcv/gobin
 	GOOS= GOARCH= gobin -mod=readonly github.com/golang/mock/mockgen
 	@echo "running go generate ./..."
@@ -203,7 +198,7 @@ lint:
 		exit 1; \
 	fi
 
-fmt: $(PROTO_GEN)
+fmt:
 	GO111MODULE=off go get -u github.com/myitcv/gobin
 	GOOS= GOARCH= gobin -mod=readonly golang.org/x/tools/cmd/goimports
 	@echo "running goimports"

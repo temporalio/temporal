@@ -20,8 +20,11 @@
 
 package mocks
 
-import "github.com/temporalio/temporal/common/persistence"
-import "github.com/stretchr/testify/mock"
+import (
+	"github.com/stretchr/testify/mock"
+
+	"github.com/temporalio/temporal/common/persistence"
+)
 
 // HistoryManager mock implementation
 type HistoryV2Manager struct {

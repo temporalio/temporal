@@ -21,7 +21,8 @@
 package adapter
 
 import (
-	"github.com/temporalio/temporal-proto/workflowservice"
+	"github.com/temporalio/temporal-proto-go/workflowservice"
+
 	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/go/shared"
 )

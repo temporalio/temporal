@@ -39,9 +39,10 @@ import (
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
-	commonproto "github.com/temporalio/temporal-proto/common"
-	"github.com/temporalio/temporal-proto/enums"
-	"github.com/temporalio/temporal-proto/workflowservice"
+	commonproto "github.com/temporalio/temporal-proto-go/common"
+	"github.com/temporalio/temporal-proto-go/enums"
+	"github.com/temporalio/temporal-proto-go/workflowservice"
+
 	"github.com/temporalio/temporal/.gen/go/admin"
 	"github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/replicator"

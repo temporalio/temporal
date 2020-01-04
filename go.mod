@@ -17,7 +17,6 @@ require (
 	github.com/eapache/go-resiliency v1.2.0 // indirect
 	github.com/emirpasic/gods v0.0.0-20190624094223-e689965507ab
 	github.com/fatih/color v0.0.0-20181010231311-3f9d52f7176a
-	github.com/fatih/structtag v1.1.0 // indirect
 	github.com/fortytw2/leaktest v1.3.0 // indirect
 	github.com/go-sql-driver/mysql v1.4.1
 	github.com/gocql/gocql v0.0.0-20171220143535-56a164ee9f31
@@ -51,7 +50,7 @@ require (
 	github.com/robfig/cron v1.2.0
 	github.com/sirupsen/logrus v1.4.2
 	github.com/stretchr/testify v1.4.0
-	github.com/temporalio/temporal-proto v0.0.0
+	github.com/temporalio/temporal-proto-go v0.0.0-20200103184242-06c5b2472e15
 	github.com/uber-common/bark v1.2.1 // indirect
 	github.com/uber-go/kafka-client v0.2.3-0.20191018205945-8b3555b395f9
 	github.com/uber-go/tally v3.3.13+incompatible
@@ -63,6 +62,7 @@ require (
 	go.temporal.io/temporal v0.9.4
 	go.uber.org/atomic v1.5.0
 	go.uber.org/config v1.3.1
+	go.uber.org/fx v1.10.0
 	go.uber.org/multierr v1.4.0
 	go.uber.org/thriftrw v1.20.2
 	go.uber.org/yarpc v1.42.1
@@ -81,5 +81,3 @@ require (
 
 // TODO https://github.com/uber/cadence/issues/2863
 replace github.com/jmoiron/sqlx v1.2.0 => github.com/longquanzheng/sqlx v0.0.0-20191125235044-053e6130695c
-
-replace github.com/temporalio/temporal-proto => ./.gen/proto

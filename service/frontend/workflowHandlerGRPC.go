@@ -23,7 +23,8 @@ package frontend
 import (
 	"context"
 
-	"github.com/temporalio/temporal-proto/workflowservice"
+	"github.com/temporalio/temporal-proto-go/workflowservice"
+
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/service/frontend/adapter"
 )
@@ -561,6 +562,7 @@ func (wh *WorkflowHandlerGRPC) ReapplyEvents(ctx context.Context, request *workf
 	return &workflowservice.ReapplyEventsResponse{}, nil
 }
 
+// GetClusterInfo ...
 func (wh *WorkflowHandlerGRPC) GetClusterInfo(ctx context.Context, _ *workflowservice.GetClusterInfoRequest) (_ *workflowservice.GetClusterInfoResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
@@ -571,6 +573,7 @@ func (wh *WorkflowHandlerGRPC) GetClusterInfo(ctx context.Context, _ *workflowse
 	return adapter.ToProtoGetClusterInfoResponse(response), nil
 }
 
+// ListTaskListPartitions ...
 func (wh *WorkflowHandlerGRPC) ListTaskListPartitions(ctx context.Context, request *workflowservice.ListTaskListPartitionsRequest) (_ *workflowservice.ListTaskListPartitionsResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 

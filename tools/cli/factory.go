@@ -32,7 +32,8 @@ import (
 
 	clientFrontend "go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
 
-	"github.com/temporalio/temporal-proto/workflowservice"
+	"github.com/temporalio/temporal-proto-go/workflowservice"
+
 	serverAdmin "github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"
 	serverFrontend "github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
 	"github.com/temporalio/temporal/common"
