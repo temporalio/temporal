@@ -25,39 +25,57 @@ import (
 
 	"github.com/uber-go/tally"
 	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
-	"go.uber.org/config"
 	"go.uber.org/zap"
+
+	"github.com/uber/cadence/common/service/config"
+)
+
+const (
+	// EnvKeyRoot the environment variable key for runtime root dir
+	EnvKeyRoot = "CADENCE_CANARY_ROOT"
+	// EnvKeyConfigDir the environment variable key for config dir
+	EnvKeyConfigDir = "CADENCE_CANARY_CONFIG_DIR"
+	// EnvKeyEnvironment is the environment variable key for environment
+	EnvKeyEnvironment = "CADENCE_CANARY_ENVIRONMENT"
+	// EnvKeyAvailabilityZone is the environment variable key for AZ
+	EnvKeyAvailabilityZone = "CADENCE_CANARY_AVAILABILITY_ZONE"
+)
+
+const (
+	// CadenceLocalHostPort is the default address for cadence frontend service
+	CadenceLocalHostPort = "127.0.0.1:7933"
+	// CadenceServiceName is the default service name for cadence frontend
+	CadenceServiceName = "cadence-frontend"
+	// CanaryServiceName is the default service name for cadence canary
+	CanaryServiceName = "cadence-canary"
 )
 
 type (
 	// Config contains the configurable yaml
 	// properties for the canary runtime
 	Config struct {
+		Canary  Canary         `yaml:"canary"`
+		Cadence Cadence        `yaml:"cadence"`
+		Log     config.Logger  `yaml:"log"`
+		Metrics config.Metrics `yaml:"metrics"`
+	}
+
+	// Canary contains the configuration for canary tests
+	Canary struct {
 		Domains  []string `yaml:"domains"`
 		Excludes []string `yaml:"excludes"`
 	}
+
+	// Cadence contains the configuration for cadence service
+	Cadence struct {
+		ServiceName     string `yaml:"service"`
+		HostNameAndPort string `yaml:"host"`
+	}
 )
 
-const (
-	// ConfigurationKey is the config YAML key for the canary module
-	ConfigurationKey = "canary"
-)
-
-// Init validates and initializes the config
-func newCanaryConfig(provider config.Provider) (*Config, error) {
-	raw := provider.Get(ConfigurationKey)
-	var cfg Config
-	if err := raw.Populate(&cfg); err != nil {
-		return nil, fmt.Errorf("failed to load canary configuration with error: %v", err)
-	}
-	if err := cfg.validate(); err != nil {
-		return nil, err
-	}
-	return &cfg, nil
-}
-
-func (c *Config) validate() error {
-	if len(c.Domains) == 0 {
+// Validate validates canary configration
+func (c *Config) Validate() error {
+	if len(c.Canary.Domains) == 0 {
 		return fmt.Errorf("missing value for domains property")
 	}
 	return nil
@@ -66,16 +84,18 @@ func (c *Config) validate() error {
 // RuntimeContext contains all the context
 // information needed to run the canary
 type RuntimeContext struct {
-	Env     string
 	logger  *zap.Logger
 	metrics tally.Scope
 	service workflowserviceclient.Interface
 }
 
 // NewRuntimeContext builds a runtime context from the config
-func newRuntimeContext(env string, logger *zap.Logger, scope tally.Scope, service workflowserviceclient.Interface) *RuntimeContext {
+func NewRuntimeContext(
+	logger *zap.Logger,
+	scope tally.Scope,
+	service workflowserviceclient.Interface,
+) *RuntimeContext {
 	return &RuntimeContext{
-		Env:     env,
 		logger:  logger,
 		metrics: scope,
 		service: service,

@@ -133,6 +133,10 @@ cadence-server: $(ALL_SRC)
 	@echo "compiling cadence-server with OS: $(GOOS), ARCH: $(GOARCH)"
 	go build -ldflags '$(GO_BUILD_LDFLAGS)' -i -o cadence-server cmd/server/main.go
 
+cadence-canary: $(ALL_SRC)
+	@echo "compiling cadence-canary with OS: $(GOOS), ARCH: $(GOARCH)"
+	go build -i -o cadence-canary cmd/canary/main.go
+
 go-generate:
 	GO111MODULE=off go get -u github.com/myitcv/gobin
 	GOOS= GOARCH= gobin -mod=readonly github.com/golang/mock/mockgen
@@ -159,7 +163,7 @@ fmt:
 	@echo "running goimports"
 	@goimports -local "github.com/uber/cadence" -w $(ALL_SRC)
 
-bins_nothrift: fmt lint copyright cadence-cassandra-tool cadence-sql-tool cadence cadence-server
+bins_nothrift: fmt lint copyright cadence-cassandra-tool cadence-sql-tool cadence cadence-server cadence-canary
 
 bins: thriftc bins_nothrift
 
@@ -303,3 +307,6 @@ start-cdc-standby: bins
 
 start-cdc-other: bins
 	./cadence-server --zone other start
+
+start-canary: bins
+	./cadence-canary start
