@@ -26,7 +26,7 @@ import (
 	"go.uber.org/yarpc/encoding/protobuf"
 	"go.uber.org/yarpc/yarpcerrors"
 
-	"github.com/temporalio/temporal-proto-go/errordetails"
+	"go.temporal.io/temporal-proto/errordetails"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 )

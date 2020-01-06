@@ -309,6 +309,10 @@ github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2 h1:zzrxE1FKn5ryB
 github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2/go.mod h1:hzfGeIUDq/j97IG+FhNqkowIyEcD88LrW6fyU3K3WqY=
 go.temporal.io/temporal v0.9.4 h1:NHgdT7zfo76jB6rhCbWtuZzja9Kkv2NDKe24IOXjn74=
 go.temporal.io/temporal v0.9.4/go.mod h1:bOAfElLBVnDTsE7SBQnhEtHY20usKRHl5Js4ISRJUpA=
+go.temporal.io/temporal v0.10.3 h1:uuZA/tbv7IIFl9rgR9aMJEiAmSp/pnspR8MWRNjsSkU=
+go.temporal.io/temporal v0.10.3/go.mod h1:dC56oH+e6QhhlGUU0u7eQpLRZ7TWr9Rgv1Z7ZLThbMs=
+go.temporal.io/temporal-proto v0.0.0-20200104005919-6abdf3300ac7 h1:NdZxGjp9KcmERWIW4dbQPSCCWIthkV003/0l/J3fncQ=
+go.temporal.io/temporal-proto v0.0.0-20200104005919-6abdf3300ac7/go.mod h1:Hcd8jaNNn/g6w3+8vHvTz1QIuodcT1skcUYD6gYoA80=
 go.uber.org/atomic v1.3.2/go.mod h1:gD2HeocX3+yG+ygLZcrzQJaqmWj9AIm7n08wl/qW/PE=
 go.uber.org/atomic v1.5.0 h1:OI5t8sDa1Or+q8AeE+yKeB/SDYioSHAgcVljj9JIETY=
 go.uber.org/atomic v1.5.0/go.mod h1:sABNBOSYdrvTF6hTgEIbc7YasKWGhgEQZyfxyTvoXHQ=

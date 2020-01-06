@@ -32,10 +32,10 @@ import (
 	"go.uber.org/yarpc/encoding/protobuf"
 	"go.uber.org/yarpc/yarpcerrors"
 
-	commonproto "github.com/temporalio/temporal-proto-go/common"
-	"github.com/temporalio/temporal-proto-go/enums"
-	"github.com/temporalio/temporal-proto-go/errordetails"
-	"github.com/temporalio/temporal-proto-go/workflowservice"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/errordetails"
+	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/common/log/tag"
 )

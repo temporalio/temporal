@@ -32,7 +32,7 @@ import (
 	"go.uber.org/yarpc/yarpcerrors"
 	"golang.org/x/net/context"
 
-	commonproto "github.com/temporalio/temporal-proto-go/common"
+	commonproto "go.temporal.io/temporal-proto/common"
 
 	h "github.com/temporalio/temporal/.gen/go/history"
 	m "github.com/temporalio/temporal/.gen/go/matching"

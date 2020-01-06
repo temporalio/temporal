@@ -27,7 +27,7 @@ import (
 	"github.com/uber-go/tally"
 	"github.com/urfave/cli"
 
-	"github.com/temporalio/temporal-proto-go/workflowservice"
+	"go.temporal.io/temporal-proto/workflowservice"
 
 	sericeFrontend "github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
 	"github.com/temporalio/temporal/common"
