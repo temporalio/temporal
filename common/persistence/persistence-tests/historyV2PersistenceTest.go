@@ -161,7 +161,7 @@ func (s *HistoryV2PersistenceSuite) TestScanAllTrees() {
 			}
 		}
 
-		if resp.NextPageToken == nil {
+		if len(resp.NextPageToken) == 0 {
 			break
 		}
 		pgToken = resp.NextPageToken
