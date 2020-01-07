@@ -34,8 +34,8 @@ import (
 	clientFrontend "go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
 	clientFrontendTest "go.temporal.io/temporal/.gen/go/temporal/workflowservicetest"
 
-	"github.com/temporalio/temporal-proto-go/workflowservice"
-	"github.com/temporalio/temporal-proto-go/workflowservicemock"
+	"go.temporal.io/temporal-proto/workflowservice"
+	"go.temporal.io/temporal-proto/workflowservicemock"
 
 	"github.com/temporalio/temporal/.gen/go/admin"
 	serverAdmin "github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"

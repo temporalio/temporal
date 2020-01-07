@@ -21,7 +21,7 @@
 package adapter
 
 import (
-	"github.com/temporalio/temporal-proto-go/common"
+	"go.temporal.io/temporal-proto/common"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 )

@@ -25,15 +25,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/temporalio/temporal-proto-go/enums"
+	"go.temporal.io/temporal-proto/enums"
 
 	"github.com/temporalio/temporal/common/client"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/yarpc"
 
-	commonproto "github.com/temporalio/temporal-proto-go/common"
-	"github.com/temporalio/temporal-proto-go/workflowservice"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
