@@ -35,7 +35,6 @@ import (
 	gomock "github.com/golang/mock/gomock"
 
 	shared "github.com/uber/cadence/.gen/go/shared"
-	log "github.com/uber/cadence/common/log"
 	persistence "github.com/uber/cadence/common/persistence"
 )
 
@@ -102,20 +101,6 @@ func (m *MockworkflowExecutionContext) getExecution() *shared.WorkflowExecution 
 func (mr *MockworkflowExecutionContextMockRecorder) getExecution() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getExecution", reflect.TypeOf((*MockworkflowExecutionContext)(nil).getExecution))
-}
-
-// getLogger mocks base method
-func (m *MockworkflowExecutionContext) getLogger() log.Logger {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getLogger")
-	ret0, _ := ret[0].(log.Logger)
-	return ret0
-}
-
-// getLogger indicates an expected call of getLogger
-func (mr *MockworkflowExecutionContextMockRecorder) getLogger() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getLogger", reflect.TypeOf((*MockworkflowExecutionContext)(nil).getLogger))
 }
 
 // loadWorkflowExecution mocks base method

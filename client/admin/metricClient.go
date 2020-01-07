@@ -223,6 +223,23 @@ func (c *metricClient) GetDomainReplicationMessages(
 	return resp, err
 }
 
+func (c *metricClient) GetDLQReplicationMessages(
+	ctx context.Context,
+	request *replicator.GetDLQReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (*replicator.GetDLQReplicationMessagesResponse, error) {
+	c.metricsClient.IncCounter(metrics.FrontendClientGetDLQReplicationTasksScope, metrics.CadenceClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientGetDLQReplicationTasksScope, metrics.CadenceClientLatency)
+	resp, err := c.client.GetDLQReplicationMessages(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.FrontendClientGetDLQReplicationTasksScope, metrics.CadenceClientFailures)
+	}
+	return resp, err
+}
+
 func (c *metricClient) ReapplyEvents(
 	ctx context.Context,
 	request *shared.ReapplyEventsRequest,

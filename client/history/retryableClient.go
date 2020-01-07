@@ -480,6 +480,22 @@ func (c *retryableClient) GetReplicationMessages(
 	return resp, err
 }
 
+func (c *retryableClient) GetDLQReplicationMessages(
+	ctx context.Context,
+	request *replicator.GetDLQReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (*replicator.GetDLQReplicationMessagesResponse, error) {
+	var resp *replicator.GetDLQReplicationMessagesResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.GetDLQReplicationMessages(ctx, request, opts...)
+		return err
+	}
+
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) QueryWorkflow(
 	ctx context.Context,
 	request *h.QueryWorkflowRequest,

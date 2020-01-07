@@ -63,6 +63,12 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) (*shared.DescribeWorkflowExecutionResponse, error)
 
+	GetDLQReplicationMessages(
+		ctx context.Context,
+		Request *replicator.GetDLQReplicationMessagesRequest,
+		opts ...yarpc.CallOption,
+	) (*replicator.GetDLQReplicationMessagesResponse, error)
+
 	GetMutableState(
 		ctx context.Context,
 		GetRequest *history.GetMutableStateRequest,
@@ -351,6 +357,29 @@ func (c client) DescribeWorkflowExecution(
 	}
 
 	success, err = history.HistoryService_DescribeWorkflowExecution_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) GetDLQReplicationMessages(
+	ctx context.Context,
+	_Request *replicator.GetDLQReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (success *replicator.GetDLQReplicationMessagesResponse, err error) {
+
+	args := history.HistoryService_GetDLQReplicationMessages_Helper.Args(_Request)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result history.HistoryService_GetDLQReplicationMessages_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	success, err = history.HistoryService_GetDLQReplicationMessages_Helper.UnwrapResponse(&result)
 	return
 }
 

@@ -787,10 +787,10 @@ service HistoryService {
       3: shared.AccessDeniedError accessDeniedError,
     )
 
- /**
- * CloseShard close the shard
- **/
- void CloseShard(1: shared.CloseShardRequest request)
+  /**
+  * CloseShard close the shard
+  **/
+  void CloseShard(1: shared.CloseShardRequest request)
     throws (
     1: shared.BadRequestError badRequestError,
     2: shared.InternalServiceError internalServiceError,
@@ -806,6 +806,10 @@ service HistoryService {
      2: shared.InternalServiceError internalServiceError,
      3: shared.AccessDeniedError accessDeniedError,
      )
+
+  /**
+  * GetReplicationMessages return replication messages based on the read level
+  **/
   replicator.GetReplicationMessagesResponse GetReplicationMessages(1: replicator.GetReplicationMessagesRequest request)
     throws (
       1: shared.BadRequestError badRequestError,
@@ -813,6 +817,17 @@ service HistoryService {
       3: shared.LimitExceededError limitExceededError,
       4: shared.ServiceBusyError serviceBusyError,
       5: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,
+    )
+
+  /**
+  * GetDLQReplicationMessages return replication messages based on dlq info
+  **/
+  replicator.GetDLQReplicationMessagesResponse GetDLQReplicationMessages(1: replicator.GetDLQReplicationMessagesRequest request)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.ServiceBusyError serviceBusyError,
+      4: shared.EntityNotExistsError entityNotExistError,
     )
 
   /**

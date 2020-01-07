@@ -68,6 +68,12 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) (*admin.DescribeWorkflowExecutionResponse, error)
 
+	GetDLQReplicationMessages(
+		ctx context.Context,
+		Request *replicator.GetDLQReplicationMessagesRequest,
+		opts ...yarpc.CallOption,
+	) (*replicator.GetDLQReplicationMessagesResponse, error)
+
 	GetDomainReplicationMessages(
 		ctx context.Context,
 		Request *replicator.GetDomainReplicationMessagesRequest,
@@ -240,6 +246,29 @@ func (c client) DescribeWorkflowExecution(
 	}
 
 	success, err = admin.AdminService_DescribeWorkflowExecution_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) GetDLQReplicationMessages(
+	ctx context.Context,
+	_Request *replicator.GetDLQReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (success *replicator.GetDLQReplicationMessagesResponse, err error) {
+
+	args := admin.AdminService_GetDLQReplicationMessages_Helper.Args(_Request)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result admin.AdminService_GetDLQReplicationMessages_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	success, err = admin.AdminService_GetDLQReplicationMessages_Helper.UnwrapResponse(&result)
 	return
 }
 

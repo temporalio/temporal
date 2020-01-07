@@ -33,7 +33,6 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 
-	replicator "github.com/uber/cadence/.gen/go/replicator"
 	shared "github.com/uber/cadence/.gen/go/shared"
 )
 
@@ -147,36 +146,6 @@ func (m *MockWorkflowHandler) GetClusterInfo(ctx context.Context) (*shared.Clust
 func (mr *MockWorkflowHandlerMockRecorder) GetClusterInfo(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterInfo", reflect.TypeOf((*MockWorkflowHandler)(nil).GetClusterInfo), ctx)
-}
-
-// GetDomainReplicationMessages mocks base method
-func (m *MockWorkflowHandler) GetDomainReplicationMessages(ctx context.Context, Request *replicator.GetDomainReplicationMessagesRequest) (*replicator.GetDomainReplicationMessagesResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetDomainReplicationMessages", ctx, Request)
-	ret0, _ := ret[0].(*replicator.GetDomainReplicationMessagesResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetDomainReplicationMessages indicates an expected call of GetDomainReplicationMessages
-func (mr *MockWorkflowHandlerMockRecorder) GetDomainReplicationMessages(ctx, Request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDomainReplicationMessages", reflect.TypeOf((*MockWorkflowHandler)(nil).GetDomainReplicationMessages), ctx, Request)
-}
-
-// GetReplicationMessages mocks base method
-func (m *MockWorkflowHandler) GetReplicationMessages(ctx context.Context, Request *replicator.GetReplicationMessagesRequest) (*replicator.GetReplicationMessagesResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetReplicationMessages", ctx, Request)
-	ret0, _ := ret[0].(*replicator.GetReplicationMessagesResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetReplicationMessages indicates an expected call of GetReplicationMessages
-func (mr *MockWorkflowHandlerMockRecorder) GetReplicationMessages(ctx, Request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationMessages", reflect.TypeOf((*MockWorkflowHandler)(nil).GetReplicationMessages), ctx, Request)
 }
 
 // GetSearchAttributes mocks base method
@@ -342,20 +311,6 @@ func (m *MockWorkflowHandler) QueryWorkflow(ctx context.Context, QueryRequest *s
 func (mr *MockWorkflowHandlerMockRecorder) QueryWorkflow(ctx, QueryRequest interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryWorkflow", reflect.TypeOf((*MockWorkflowHandler)(nil).QueryWorkflow), ctx, QueryRequest)
-}
-
-// ReapplyEvents mocks base method
-func (m *MockWorkflowHandler) ReapplyEvents(ctx context.Context, ReapplyEventsRequest *shared.ReapplyEventsRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReapplyEvents", ctx, ReapplyEventsRequest)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// ReapplyEvents indicates an expected call of ReapplyEvents
-func (mr *MockWorkflowHandlerMockRecorder) ReapplyEvents(ctx, ReapplyEventsRequest interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReapplyEvents", reflect.TypeOf((*MockWorkflowHandler)(nil).ReapplyEvents), ctx, ReapplyEventsRequest)
 }
 
 // RecordActivityTaskHeartbeat mocks base method

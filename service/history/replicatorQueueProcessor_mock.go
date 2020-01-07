@@ -89,6 +89,15 @@ func (m *MockReplicatorQueueProcessor) getTasks(arg0 context.Context, arg1 strin
 	return ret0, ret1
 }
 
+// getTasks mocks base method
+func (m *MockReplicatorQueueProcessor) getTask(arg0 context.Context, arg1 *replicator.ReplicationTaskInfo) (*replicator.ReplicationTask, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "getTask", arg0, arg1)
+	ret0, _ := ret[0].(*replicator.ReplicationTask)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
 // getTasks indicates an expected call of getTasks
 func (mr *MockReplicatorQueueProcessorMockRecorder) getTasks(arg0 interface{}, arg1 interface{}, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()

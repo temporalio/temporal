@@ -709,6 +709,30 @@ func (adh *AdminHandler) GetDomainReplicationMessages(
 	}, nil
 }
 
+// GetDLQReplicationMessages returns new replication tasks based on the dlq info.
+func (adh *AdminHandler) GetDLQReplicationMessages(
+	ctx context.Context,
+	request *replicator.GetDLQReplicationMessagesRequest,
+) (resp *replicator.GetDLQReplicationMessagesResponse, err error) {
+
+	defer log.CapturePanic(adh.GetLogger(), &err)
+	scope, sw := adh.startRequestProfile(metrics.AdminGetDLQReplicationMessagesScope)
+	defer sw.Stop()
+
+	if request == nil {
+		return nil, adh.error(errRequestNotSet, scope)
+	}
+	if len(request.GetTaskInfos()) == 0 {
+		return nil, adh.error(errEmptyReplicationInfo, scope)
+	}
+
+	resp, err = adh.GetHistoryClient().GetDLQReplicationMessages(ctx, request)
+	if err != nil {
+		return nil, adh.error(err, scope)
+	}
+	return resp, nil
+}
+
 // ReapplyEvents applies stale events to the current workflow and the current run
 func (adh *AdminHandler) ReapplyEvents(
 	ctx context.Context,

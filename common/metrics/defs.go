@@ -304,6 +304,8 @@ const (
 	HistoryClientSyncActivityScope
 	// HistoryClientGetReplicationTasksScope tracks RPC calls to history service
 	HistoryClientGetReplicationTasksScope
+	// HistoryClientGetDLQReplicationTasksScope tracks RPC calls to history service
+	HistoryClientGetDLQReplicationTasksScope
 	// HistoryClientQueryWorkflowScope tracks RPC calls to history service
 	HistoryClientQueryWorkflowScope
 	// HistoryClientReapplyEventsScope tracks RPC calls to history service
@@ -402,6 +404,8 @@ const (
 	FrontendClientGetReplicationTasksScope
 	// FrontendClientGetDomainReplicationTasksScope tracks RPC calls to frontend service
 	FrontendClientGetDomainReplicationTasksScope
+	// FrontendClientGetDLQReplicationTasksScope tracks RPC calls to frontend service
+	FrontendClientGetDLQReplicationTasksScope
 	// FrontendClientReapplyEventsScope tracks RPC calls to frontend service
 	FrontendClientReapplyEventsScope
 	// FrontendClientGetClusterInfoScope tracks RPC calls to frontend
@@ -607,6 +611,8 @@ const (
 	AdminGetReplicationMessagesScope
 	// AdminGetDomainReplicationMessagesScope is the metric scope for admin.GetDomainReplicationMessages
 	AdminGetDomainReplicationMessagesScope
+	// AdminGetDLQReplicationMessagesScope is the metric scope for admin.GetDLQReplicationMessages
+	AdminGetDLQReplicationMessagesScope
 	// AdminReapplyEventsScope is the metric scope for admin.ReapplyEvents
 	AdminReapplyEventsScope
 	// AdminRemoveTaskScope is the metric scope for admin.AdminRemoveTaskScope
@@ -753,6 +759,8 @@ const (
 	HistoryDescribeMutableStateScope
 	// GetReplicationMessages tracks GetReplicationMessages API calls received by service
 	HistoryGetReplicationMessagesScope
+	// HistoryGetDLQReplicationMessagesScope tracks GetReplicationMessages API calls received by service
+	HistoryGetDLQReplicationMessagesScope
 	// HistoryShardControllerScope is the scope used by shard controller
 	HistoryShardControllerScope
 	// HistoryReapplyEventsScope is the scope used by event reapplication
@@ -1060,6 +1068,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryClientSyncShardStatusScope:                   {operation: "HistoryClientSyncShardStatusScope", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientSyncActivityScope:                      {operation: "HistoryClientSyncActivityScope", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientGetReplicationTasksScope:               {operation: "HistoryClientGetReplicationTasksScope", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientGetDLQReplicationTasksScope:            {operation: "HistoryClientGetDLQReplicationTasksScope", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientQueryWorkflowScope:                     {operation: "HistoryClientQueryWorkflowScope", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientReapplyEventsScope:                     {operation: "HistoryClientReapplyEventsScope", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		MatchingClientPollForDecisionTaskScope:              {operation: "MatchingClientPollForDecisionTask", tags: map[string]string{CadenceRoleTagName: MatchingRoleTagValue}},
@@ -1109,6 +1118,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendClientGetSearchAttributesScope:              {operation: "FrontendClientGetSearchAttributes", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientGetReplicationTasksScope:              {operation: "FrontendClientGetReplicationTasksScope", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientGetDomainReplicationTasksScope:        {operation: "FrontendClientGetDomainReplicationTasksScope", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientGetDLQReplicationTasksScope:           {operation: "FrontendClientGetDLQReplicationTasksScope", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientReapplyEventsScope:                    {operation: "FrontendClientReapplyEventsScope", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientGetClusterInfoScope:                   {operation: "FrontendClientGetClusterInfoScope", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListTaskListPartitionsScope:           {operation: "FrontendClientListTaskListPartitions", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
@@ -1206,6 +1216,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminGetWorkflowExecutionRawHistoryV2Scope: {operation: "GetWorkflowExecutionRawHistoryV2"},
 		AdminGetReplicationMessagesScope:           {operation: "GetReplicationMessages"},
 		AdminGetDomainReplicationMessagesScope:     {operation: "GetDomainReplicationMessages"},
+		AdminGetDLQReplicationMessagesScope:        {operation: "AdminGetDLQReplicationMessages"},
 		AdminReapplyEventsScope:                    {operation: "ReapplyEvents"},
 
 		FrontendStartWorkflowExecutionScope:           {operation: "StartWorkflowExecution"},
@@ -1278,6 +1289,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistorySyncActivityScope:                               {operation: "SyncActivity"},
 		HistoryDescribeMutableStateScope:                       {operation: "DescribeMutableState"},
 		HistoryGetReplicationMessagesScope:                     {operation: "GetReplicationMessages"},
+		HistoryGetDLQReplicationMessagesScope:                  {operation: "GetDLQReplicationMessages"},
 		HistoryShardControllerScope:                            {operation: "ShardController"},
 		HistoryReapplyEventsScope:                              {operation: "EventReapplication"},
 		TransferQueueProcessorScope:                            {operation: "TransferQueueProcessor"},
@@ -1616,6 +1628,7 @@ const (
 	ReplicationTasksFetched
 	ReplicationTasksReturned
 	GetReplicationMessagesForShardLatency
+	GetDLQReplicationMessagesLatency
 	EventReapplySkippedCount
 	DirectQueryDispatchLatency
 	DirectQueryDispatchStickyLatency
@@ -1946,6 +1959,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ReplicationTasksFetched:                           {metricName: "replication_tasks_fetched", metricType: Timer},
 		ReplicationTasksReturned:                          {metricName: "replication_tasks_returned", metricType: Timer},
 		GetReplicationMessagesForShardLatency:             {metricName: "get_replication_messages_for_shard", metricType: Timer},
+		GetDLQReplicationMessagesLatency:                  {metricName: "get_dlq_replication_messages", metricType: Timer},
 		EventReapplySkippedCount:                          {metricName: "event_reapply_skipped_count", metricType: Counter},
 		DirectQueryDispatchLatency:                        {metricName: "direct_query_dispatch_latency", metricType: Timer},
 		DirectQueryDispatchStickyLatency:                  {metricName: "direct_query_dispatch_sticky_latency", metricType: Timer},

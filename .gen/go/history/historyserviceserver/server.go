@@ -57,6 +57,11 @@ type Interface interface {
 		DescribeRequest *history.DescribeWorkflowExecutionRequest,
 	) (*shared.DescribeWorkflowExecutionResponse, error)
 
+	GetDLQReplicationMessages(
+		ctx context.Context,
+		Request *replicator.GetDLQReplicationMessagesRequest,
+	) (*replicator.GetDLQReplicationMessagesResponse, error)
+
 	GetMutableState(
 		ctx context.Context,
 		GetRequest *history.GetMutableStateRequest,
@@ -255,6 +260,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 					Unary: thrift.UnaryHandler(h.DescribeWorkflowExecution),
 				},
 				Signature:    "DescribeWorkflowExecution(DescribeRequest *history.DescribeWorkflowExecutionRequest) (*shared.DescribeWorkflowExecutionResponse)",
+				ThriftModule: history.ThriftModule,
+			},
+
+			thrift.Method{
+				Name: "GetDLQReplicationMessages",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.GetDLQReplicationMessages),
+				},
+				Signature:    "GetDLQReplicationMessages(Request *replicator.GetDLQReplicationMessagesRequest) (*replicator.GetDLQReplicationMessagesResponse)",
 				ThriftModule: history.ThriftModule,
 			},
 
@@ -579,7 +595,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 33)
+	procedures := make([]transport.Procedure, 0, 34)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -653,6 +669,25 @@ func (h handler) DescribeWorkflowExecution(ctx context.Context, body wire.Value)
 
 	hadError := err != nil
 	result, err := history.HistoryService_DescribeWorkflowExecution_Helper.WrapResponse(success, err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) GetDLQReplicationMessages(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args history.HistoryService_GetDLQReplicationMessages_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	success, err := h.impl.GetDLQReplicationMessages(ctx, args.Request)
+
+	hadError := err != nil
+	result, err := history.HistoryService_GetDLQReplicationMessages_Helper.WrapResponse(success, err)
 
 	var response thrift.Response
 	if err == nil {

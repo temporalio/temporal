@@ -477,18 +477,33 @@ func (mr *MockEngineMockRecorder) SyncActivity(ctx, request interface{}) *gomock
 }
 
 // GetReplicationMessages mocks base method
-func (m *MockEngine) GetReplicationMessages(ctx context.Context, sourceCluster string, lastReadMessageID int64) (*replicator.ReplicationMessages, error) {
+func (m *MockEngine) GetReplicationMessages(ctx context.Context, pollingCluster string, lastReadMessageID int64) (*replicator.ReplicationMessages, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetReplicationMessages", ctx, sourceCluster, lastReadMessageID)
+	ret := m.ctrl.Call(m, "GetReplicationMessages", ctx, pollingCluster, lastReadMessageID)
 	ret0, _ := ret[0].(*replicator.ReplicationMessages)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetReplicationMessages indicates an expected call of GetReplicationMessages
-func (mr *MockEngineMockRecorder) GetReplicationMessages(ctx, sourceCluster, lastReadMessageID interface{}) *gomock.Call {
+func (mr *MockEngineMockRecorder) GetReplicationMessages(ctx, pollingCluster, lastReadMessageID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationMessages", reflect.TypeOf((*MockEngine)(nil).GetReplicationMessages), ctx, sourceCluster, lastReadMessageID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationMessages", reflect.TypeOf((*MockEngine)(nil).GetReplicationMessages), ctx, pollingCluster, lastReadMessageID)
+}
+
+// GetDLQReplicationMessages mocks base method
+func (m *MockEngine) GetDLQReplicationMessages(ctx context.Context, taskInfos []*replicator.ReplicationTaskInfo) ([]*replicator.ReplicationTask, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDLQReplicationMessages", ctx, taskInfos)
+	ret0, _ := ret[0].([]*replicator.ReplicationTask)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDLQReplicationMessages indicates an expected call of GetDLQReplicationMessages
+func (mr *MockEngineMockRecorder) GetDLQReplicationMessages(ctx, taskInfos interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDLQReplicationMessages", reflect.TypeOf((*MockEngine)(nil).GetDLQReplicationMessages), ctx, taskInfos)
 }
 
 // QueryWorkflow mocks base method

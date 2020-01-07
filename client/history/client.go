@@ -819,6 +819,25 @@ func (c *clientImpl) GetReplicationMessages(
 	return response, nil
 }
 
+func (c *clientImpl) GetDLQReplicationMessages(
+	ctx context.Context,
+	request *replicator.GetDLQReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (*replicator.GetDLQReplicationMessagesResponse, error) {
+	// All workflow IDs are in the same shard per request
+	workflowID := request.GetTaskInfos()[0].GetWorkflowID()
+	client, err := c.getClientForWorkflowID(workflowID)
+	if err != nil {
+		return nil, err
+	}
+
+	return client.GetDLQReplicationMessages(
+		ctx,
+		request,
+		opts...,
+	)
+}
+
 func (c *clientImpl) ReapplyEvents(
 	ctx context.Context,
 	request *h.ReapplyEventsRequest,

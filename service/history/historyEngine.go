@@ -99,6 +99,7 @@ type (
 		SyncShardStatus(ctx ctx.Context, request *h.SyncShardStatusRequest) error
 		SyncActivity(ctx ctx.Context, request *h.SyncActivityRequest) error
 		GetReplicationMessages(ctx ctx.Context, pollingCluster string, lastReadMessageID int64) (*r.ReplicationMessages, error)
+		GetDLQReplicationMessages(ctx ctx.Context, taskInfos []*r.ReplicationTaskInfo) ([]*r.ReplicationTask, error)
 		QueryWorkflow(ctx ctx.Context, request *h.QueryWorkflowRequest) (*h.QueryWorkflowResponse, error)
 		ReapplyEvents(ctx ctx.Context, domainUUID string, workflowID string, runID string, events []*workflow.HistoryEvent) error
 
@@ -2778,6 +2779,28 @@ func (e *historyEngineImpl) GetReplicationMessages(
 	}
 	e.logger.Debug("Successfully fetched replication messages.", tag.Counter(len(replicationMessages.ReplicationTasks)))
 	return replicationMessages, nil
+}
+
+func (e *historyEngineImpl) GetDLQReplicationMessages(
+	ctx ctx.Context,
+	taskInfos []*r.ReplicationTaskInfo,
+) ([]*r.ReplicationTask, error) {
+
+	scope := metrics.HistoryGetDLQReplicationMessagesScope
+	sw := e.metricsClient.StartTimer(scope, metrics.GetDLQReplicationMessagesLatency)
+	defer sw.Stop()
+
+	tasks := make([]*r.ReplicationTask, len(taskInfos))
+	for _, taskInfo := range taskInfos {
+		task, err := e.replicatorProcessor.getTask(ctx, taskInfo)
+		if err != nil {
+			e.logger.Error("Failed to fetch DLQ replication messages.", tag.Error(err))
+			return nil, err
+		}
+		tasks = append(tasks, task)
+	}
+
+	return tasks, nil
 }
 
 func (e *historyEngineImpl) ReapplyEvents(

@@ -61,6 +61,11 @@ type Interface interface {
 		Request *admin.DescribeWorkflowExecutionRequest,
 	) (*admin.DescribeWorkflowExecutionResponse, error)
 
+	GetDLQReplicationMessages(
+		ctx context.Context,
+		Request *replicator.GetDLQReplicationMessagesRequest,
+	) (*replicator.GetDLQReplicationMessagesResponse, error)
+
 	GetDomainReplicationMessages(
 		ctx context.Context,
 		Request *replicator.GetDomainReplicationMessagesRequest,
@@ -159,6 +164,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 			},
 
 			thrift.Method{
+				Name: "GetDLQReplicationMessages",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.GetDLQReplicationMessages),
+				},
+				Signature:    "GetDLQReplicationMessages(Request *replicator.GetDLQReplicationMessagesRequest) (*replicator.GetDLQReplicationMessagesResponse)",
+				ThriftModule: admin.ThriftModule,
+			},
+
+			thrift.Method{
 				Name: "GetDomainReplicationMessages",
 				HandlerSpec: thrift.HandlerSpec{
 
@@ -226,7 +242,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 11)
+	procedures := make([]transport.Procedure, 0, 12)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -319,6 +335,25 @@ func (h handler) DescribeWorkflowExecution(ctx context.Context, body wire.Value)
 
 	hadError := err != nil
 	result, err := admin.AdminService_DescribeWorkflowExecution_Helper.WrapResponse(success, err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) GetDLQReplicationMessages(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args admin.AdminService_GetDLQReplicationMessages_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	success, err := h.impl.GetDLQReplicationMessages(ctx, args.Request)
+
+	hadError := err != nil
+	result, err := admin.AdminService_GetDLQReplicationMessages_Helper.WrapResponse(success, err)
 
 	var response thrift.Response
 	if err == nil {

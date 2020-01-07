@@ -213,6 +213,21 @@ func (c *clientImpl) GetDomainReplicationMessages(
 	return client.GetDomainReplicationMessages(ctx, request, opts...)
 }
 
+func (c *clientImpl) GetDLQReplicationMessages(
+	ctx context.Context,
+	request *replicator.GetDLQReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (*replicator.GetDLQReplicationMessagesResponse, error) {
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.GetDLQReplicationMessages(ctx, request, opts...)
+}
+
 func (c *clientImpl) ReapplyEvents(
 	ctx context.Context,
 	request *shared.ReapplyEventsRequest,

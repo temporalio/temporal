@@ -661,6 +661,436 @@ func (v *DomainTaskAttributes) IsSetFailoverVersion() bool {
 	return v != nil && v.FailoverVersion != nil
 }
 
+type GetDLQReplicationMessagesRequest struct {
+	TaskInfos []*ReplicationTaskInfo `json:"taskInfos,omitempty"`
+}
+
+type _List_ReplicationTaskInfo_ValueList []*ReplicationTaskInfo
+
+func (v _List_ReplicationTaskInfo_ValueList) ForEach(f func(wire.Value) error) error {
+	for i, x := range v {
+		if x == nil {
+			return fmt.Errorf("invalid [%v]: value is nil", i)
+		}
+		w, err := x.ToWire()
+		if err != nil {
+			return err
+		}
+		err = f(w)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (v _List_ReplicationTaskInfo_ValueList) Size() int {
+	return len(v)
+}
+
+func (_List_ReplicationTaskInfo_ValueList) ValueType() wire.Type {
+	return wire.TStruct
+}
+
+func (_List_ReplicationTaskInfo_ValueList) Close() {}
+
+// ToWire translates a GetDLQReplicationMessagesRequest struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *GetDLQReplicationMessagesRequest) ToWire() (wire.Value, error) {
+	var (
+		fields [1]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.TaskInfos != nil {
+		w, err = wire.NewValueList(_List_ReplicationTaskInfo_ValueList(v.TaskInfos)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _ReplicationTaskInfo_Read(w wire.Value) (*ReplicationTaskInfo, error) {
+	var v ReplicationTaskInfo
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _List_ReplicationTaskInfo_Read(l wire.ValueList) ([]*ReplicationTaskInfo, error) {
+	if l.ValueType() != wire.TStruct {
+		return nil, nil
+	}
+
+	o := make([]*ReplicationTaskInfo, 0, l.Size())
+	err := l.ForEach(func(x wire.Value) error {
+		i, err := _ReplicationTaskInfo_Read(x)
+		if err != nil {
+			return err
+		}
+		o = append(o, i)
+		return nil
+	})
+	l.Close()
+	return o, err
+}
+
+// FromWire deserializes a GetDLQReplicationMessagesRequest struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a GetDLQReplicationMessagesRequest struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v GetDLQReplicationMessagesRequest
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *GetDLQReplicationMessagesRequest) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TList {
+				v.TaskInfos, err = _List_ReplicationTaskInfo_Read(field.Value.GetList())
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a GetDLQReplicationMessagesRequest
+// struct.
+func (v *GetDLQReplicationMessagesRequest) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [1]string
+	i := 0
+	if v.TaskInfos != nil {
+		fields[i] = fmt.Sprintf("TaskInfos: %v", v.TaskInfos)
+		i++
+	}
+
+	return fmt.Sprintf("GetDLQReplicationMessagesRequest{%v}", strings.Join(fields[:i], ", "))
+}
+
+func _List_ReplicationTaskInfo_Equals(lhs, rhs []*ReplicationTaskInfo) bool {
+	if len(lhs) != len(rhs) {
+		return false
+	}
+
+	for i, lv := range lhs {
+		rv := rhs[i]
+		if !lv.Equals(rv) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// Equals returns true if all the fields of this GetDLQReplicationMessagesRequest match the
+// provided GetDLQReplicationMessagesRequest.
+//
+// This function performs a deep comparison.
+func (v *GetDLQReplicationMessagesRequest) Equals(rhs *GetDLQReplicationMessagesRequest) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !((v.TaskInfos == nil && rhs.TaskInfos == nil) || (v.TaskInfos != nil && rhs.TaskInfos != nil && _List_ReplicationTaskInfo_Equals(v.TaskInfos, rhs.TaskInfos))) {
+		return false
+	}
+
+	return true
+}
+
+type _List_ReplicationTaskInfo_Zapper []*ReplicationTaskInfo
+
+// MarshalLogArray implements zapcore.ArrayMarshaler, enabling
+// fast logging of _List_ReplicationTaskInfo_Zapper.
+func (l _List_ReplicationTaskInfo_Zapper) MarshalLogArray(enc zapcore.ArrayEncoder) (err error) {
+	for _, v := range l {
+		err = multierr.Append(err, enc.AppendObject(v))
+	}
+	return err
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of GetDLQReplicationMessagesRequest.
+func (v *GetDLQReplicationMessagesRequest) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.TaskInfos != nil {
+		err = multierr.Append(err, enc.AddArray("taskInfos", (_List_ReplicationTaskInfo_Zapper)(v.TaskInfos)))
+	}
+	return err
+}
+
+// GetTaskInfos returns the value of TaskInfos if it is set or its
+// zero value if it is unset.
+func (v *GetDLQReplicationMessagesRequest) GetTaskInfos() (o []*ReplicationTaskInfo) {
+	if v != nil && v.TaskInfos != nil {
+		return v.TaskInfos
+	}
+
+	return
+}
+
+// IsSetTaskInfos returns true if TaskInfos is not nil.
+func (v *GetDLQReplicationMessagesRequest) IsSetTaskInfos() bool {
+	return v != nil && v.TaskInfos != nil
+}
+
+type GetDLQReplicationMessagesResponse struct {
+	ReplicationTasks []*ReplicationTask `json:"replicationTasks,omitempty"`
+}
+
+type _List_ReplicationTask_ValueList []*ReplicationTask
+
+func (v _List_ReplicationTask_ValueList) ForEach(f func(wire.Value) error) error {
+	for i, x := range v {
+		if x == nil {
+			return fmt.Errorf("invalid [%v]: value is nil", i)
+		}
+		w, err := x.ToWire()
+		if err != nil {
+			return err
+		}
+		err = f(w)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (v _List_ReplicationTask_ValueList) Size() int {
+	return len(v)
+}
+
+func (_List_ReplicationTask_ValueList) ValueType() wire.Type {
+	return wire.TStruct
+}
+
+func (_List_ReplicationTask_ValueList) Close() {}
+
+// ToWire translates a GetDLQReplicationMessagesResponse struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *GetDLQReplicationMessagesResponse) ToWire() (wire.Value, error) {
+	var (
+		fields [1]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.ReplicationTasks != nil {
+		w, err = wire.NewValueList(_List_ReplicationTask_ValueList(v.ReplicationTasks)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _ReplicationTask_Read(w wire.Value) (*ReplicationTask, error) {
+	var v ReplicationTask
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _List_ReplicationTask_Read(l wire.ValueList) ([]*ReplicationTask, error) {
+	if l.ValueType() != wire.TStruct {
+		return nil, nil
+	}
+
+	o := make([]*ReplicationTask, 0, l.Size())
+	err := l.ForEach(func(x wire.Value) error {
+		i, err := _ReplicationTask_Read(x)
+		if err != nil {
+			return err
+		}
+		o = append(o, i)
+		return nil
+	})
+	l.Close()
+	return o, err
+}
+
+// FromWire deserializes a GetDLQReplicationMessagesResponse struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a GetDLQReplicationMessagesResponse struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v GetDLQReplicationMessagesResponse
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *GetDLQReplicationMessagesResponse) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TList {
+				v.ReplicationTasks, err = _List_ReplicationTask_Read(field.Value.GetList())
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a GetDLQReplicationMessagesResponse
+// struct.
+func (v *GetDLQReplicationMessagesResponse) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [1]string
+	i := 0
+	if v.ReplicationTasks != nil {
+		fields[i] = fmt.Sprintf("ReplicationTasks: %v", v.ReplicationTasks)
+		i++
+	}
+
+	return fmt.Sprintf("GetDLQReplicationMessagesResponse{%v}", strings.Join(fields[:i], ", "))
+}
+
+func _List_ReplicationTask_Equals(lhs, rhs []*ReplicationTask) bool {
+	if len(lhs) != len(rhs) {
+		return false
+	}
+
+	for i, lv := range lhs {
+		rv := rhs[i]
+		if !lv.Equals(rv) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// Equals returns true if all the fields of this GetDLQReplicationMessagesResponse match the
+// provided GetDLQReplicationMessagesResponse.
+//
+// This function performs a deep comparison.
+func (v *GetDLQReplicationMessagesResponse) Equals(rhs *GetDLQReplicationMessagesResponse) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !((v.ReplicationTasks == nil && rhs.ReplicationTasks == nil) || (v.ReplicationTasks != nil && rhs.ReplicationTasks != nil && _List_ReplicationTask_Equals(v.ReplicationTasks, rhs.ReplicationTasks))) {
+		return false
+	}
+
+	return true
+}
+
+type _List_ReplicationTask_Zapper []*ReplicationTask
+
+// MarshalLogArray implements zapcore.ArrayMarshaler, enabling
+// fast logging of _List_ReplicationTask_Zapper.
+func (l _List_ReplicationTask_Zapper) MarshalLogArray(enc zapcore.ArrayEncoder) (err error) {
+	for _, v := range l {
+		err = multierr.Append(err, enc.AppendObject(v))
+	}
+	return err
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of GetDLQReplicationMessagesResponse.
+func (v *GetDLQReplicationMessagesResponse) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.ReplicationTasks != nil {
+		err = multierr.Append(err, enc.AddArray("replicationTasks", (_List_ReplicationTask_Zapper)(v.ReplicationTasks)))
+	}
+	return err
+}
+
+// GetReplicationTasks returns the value of ReplicationTasks if it is set or its
+// zero value if it is unset.
+func (v *GetDLQReplicationMessagesResponse) GetReplicationTasks() (o []*ReplicationTask) {
+	if v != nil && v.ReplicationTasks != nil {
+		return v.ReplicationTasks
+	}
+
+	return
+}
+
+// IsSetReplicationTasks returns true if ReplicationTasks is not nil.
+func (v *GetDLQReplicationMessagesResponse) IsSetReplicationTasks() bool {
+	return v != nil && v.ReplicationTasks != nil
+}
+
 type GetDomainReplicationMessagesRequest struct {
 	LastRetrievedMessageId *int64  `json:"lastRetrievedMessageId,omitempty"`
 	LastProcessedMessageId *int64  `json:"lastProcessedMessageId,omitempty"`
@@ -3273,35 +3703,6 @@ type ReplicationMessages struct {
 	SyncShardStatus        *SyncShardStatus   `json:"syncShardStatus,omitempty"`
 }
 
-type _List_ReplicationTask_ValueList []*ReplicationTask
-
-func (v _List_ReplicationTask_ValueList) ForEach(f func(wire.Value) error) error {
-	for i, x := range v {
-		if x == nil {
-			return fmt.Errorf("invalid [%v]: value is nil", i)
-		}
-		w, err := x.ToWire()
-		if err != nil {
-			return err
-		}
-		err = f(w)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (v _List_ReplicationTask_ValueList) Size() int {
-	return len(v)
-}
-
-func (_List_ReplicationTask_ValueList) ValueType() wire.Type {
-	return wire.TStruct
-}
-
-func (_List_ReplicationTask_ValueList) Close() {}
-
 // ToWire translates a ReplicationMessages struct into a Thrift-level intermediate
 // representation. This intermediate representation may be serialized
 // into bytes using a ThriftRW protocol implementation.
@@ -3359,30 +3760,6 @@ func (v *ReplicationMessages) ToWire() (wire.Value, error) {
 	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
-}
-
-func _ReplicationTask_Read(w wire.Value) (*ReplicationTask, error) {
-	var v ReplicationTask
-	err := v.FromWire(w)
-	return &v, err
-}
-
-func _List_ReplicationTask_Read(l wire.ValueList) ([]*ReplicationTask, error) {
-	if l.ValueType() != wire.TStruct {
-		return nil, nil
-	}
-
-	o := make([]*ReplicationTask, 0, l.Size())
-	err := l.ForEach(func(x wire.Value) error {
-		i, err := _ReplicationTask_Read(x)
-		if err != nil {
-			return err
-		}
-		o = append(o, i)
-		return nil
-	})
-	l.Close()
-	return o, err
 }
 
 func _SyncShardStatus_Read(w wire.Value) (*SyncShardStatus, error) {
@@ -3484,21 +3861,6 @@ func (v *ReplicationMessages) String() string {
 	return fmt.Sprintf("ReplicationMessages{%v}", strings.Join(fields[:i], ", "))
 }
 
-func _List_ReplicationTask_Equals(lhs, rhs []*ReplicationTask) bool {
-	if len(lhs) != len(rhs) {
-		return false
-	}
-
-	for i, lv := range lhs {
-		rv := rhs[i]
-		if !lv.Equals(rv) {
-			return false
-		}
-	}
-
-	return true
-}
-
 // Equals returns true if all the fields of this ReplicationMessages match the
 // provided ReplicationMessages.
 //
@@ -3523,17 +3885,6 @@ func (v *ReplicationMessages) Equals(rhs *ReplicationMessages) bool {
 	}
 
 	return true
-}
-
-type _List_ReplicationTask_Zapper []*ReplicationTask
-
-// MarshalLogArray implements zapcore.ArrayMarshaler, enabling
-// fast logging of _List_ReplicationTask_Zapper.
-func (l _List_ReplicationTask_Zapper) MarshalLogArray(enc zapcore.ArrayEncoder) (err error) {
-	for _, v := range l {
-		err = multierr.Append(err, enc.AppendObject(v))
-	}
-	return err
 }
 
 // MarshalLogObject implements zapcore.ObjectMarshaler, enabling
@@ -4101,6 +4452,506 @@ func (v *ReplicationTask) GetHistoryTaskV2Attributes() (o *HistoryTaskV2Attribut
 // IsSetHistoryTaskV2Attributes returns true if HistoryTaskV2Attributes is not nil.
 func (v *ReplicationTask) IsSetHistoryTaskV2Attributes() bool {
 	return v != nil && v.HistoryTaskV2Attributes != nil
+}
+
+type ReplicationTaskInfo struct {
+	DomainID     *string `json:"domainID,omitempty"`
+	WorkflowID   *string `json:"workflowID,omitempty"`
+	RunID        *string `json:"runID,omitempty"`
+	TaskType     *int16  `json:"taskType,omitempty"`
+	TaskID       *int64  `json:"taskID,omitempty"`
+	Version      *int64  `json:"version,omitempty"`
+	FirstEventID *int64  `json:"firstEventID,omitempty"`
+	NextEventID  *int64  `json:"nextEventID,omitempty"`
+	ScheduledID  *int64  `json:"scheduledID,omitempty"`
+}
+
+// ToWire translates a ReplicationTaskInfo struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *ReplicationTaskInfo) ToWire() (wire.Value, error) {
+	var (
+		fields [9]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.DomainID != nil {
+		w, err = wire.NewValueString(*(v.DomainID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.WorkflowID != nil {
+		w, err = wire.NewValueString(*(v.WorkflowID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.RunID != nil {
+		w, err = wire.NewValueString(*(v.RunID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.TaskType != nil {
+		w, err = wire.NewValueI16(*(v.TaskType)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+	if v.TaskID != nil {
+		w, err = wire.NewValueI64(*(v.TaskID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 50, Value: w}
+		i++
+	}
+	if v.Version != nil {
+		w, err = wire.NewValueI64(*(v.Version)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 60, Value: w}
+		i++
+	}
+	if v.FirstEventID != nil {
+		w, err = wire.NewValueI64(*(v.FirstEventID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 70, Value: w}
+		i++
+	}
+	if v.NextEventID != nil {
+		w, err = wire.NewValueI64(*(v.NextEventID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 80, Value: w}
+		i++
+	}
+	if v.ScheduledID != nil {
+		w, err = wire.NewValueI64(*(v.ScheduledID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 90, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a ReplicationTaskInfo struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a ReplicationTaskInfo struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v ReplicationTaskInfo
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *ReplicationTaskInfo) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.DomainID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.WorkflowID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 30:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.RunID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 40:
+			if field.Value.Type() == wire.TI16 {
+				var x int16
+				x, err = field.Value.GetI16(), error(nil)
+				v.TaskType = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 50:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.TaskID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 60:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.Version = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 70:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.FirstEventID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 80:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.NextEventID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 90:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.ScheduledID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a ReplicationTaskInfo
+// struct.
+func (v *ReplicationTaskInfo) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [9]string
+	i := 0
+	if v.DomainID != nil {
+		fields[i] = fmt.Sprintf("DomainID: %v", *(v.DomainID))
+		i++
+	}
+	if v.WorkflowID != nil {
+		fields[i] = fmt.Sprintf("WorkflowID: %v", *(v.WorkflowID))
+		i++
+	}
+	if v.RunID != nil {
+		fields[i] = fmt.Sprintf("RunID: %v", *(v.RunID))
+		i++
+	}
+	if v.TaskType != nil {
+		fields[i] = fmt.Sprintf("TaskType: %v", *(v.TaskType))
+		i++
+	}
+	if v.TaskID != nil {
+		fields[i] = fmt.Sprintf("TaskID: %v", *(v.TaskID))
+		i++
+	}
+	if v.Version != nil {
+		fields[i] = fmt.Sprintf("Version: %v", *(v.Version))
+		i++
+	}
+	if v.FirstEventID != nil {
+		fields[i] = fmt.Sprintf("FirstEventID: %v", *(v.FirstEventID))
+		i++
+	}
+	if v.NextEventID != nil {
+		fields[i] = fmt.Sprintf("NextEventID: %v", *(v.NextEventID))
+		i++
+	}
+	if v.ScheduledID != nil {
+		fields[i] = fmt.Sprintf("ScheduledID: %v", *(v.ScheduledID))
+		i++
+	}
+
+	return fmt.Sprintf("ReplicationTaskInfo{%v}", strings.Join(fields[:i], ", "))
+}
+
+func _I16_EqualsPtr(lhs, rhs *int16) bool {
+	if lhs != nil && rhs != nil {
+
+		x := *lhs
+		y := *rhs
+		return (x == y)
+	}
+	return lhs == nil && rhs == nil
+}
+
+// Equals returns true if all the fields of this ReplicationTaskInfo match the
+// provided ReplicationTaskInfo.
+//
+// This function performs a deep comparison.
+func (v *ReplicationTaskInfo) Equals(rhs *ReplicationTaskInfo) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !_String_EqualsPtr(v.DomainID, rhs.DomainID) {
+		return false
+	}
+	if !_String_EqualsPtr(v.WorkflowID, rhs.WorkflowID) {
+		return false
+	}
+	if !_String_EqualsPtr(v.RunID, rhs.RunID) {
+		return false
+	}
+	if !_I16_EqualsPtr(v.TaskType, rhs.TaskType) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.TaskID, rhs.TaskID) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.Version, rhs.Version) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.FirstEventID, rhs.FirstEventID) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.NextEventID, rhs.NextEventID) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.ScheduledID, rhs.ScheduledID) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of ReplicationTaskInfo.
+func (v *ReplicationTaskInfo) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.DomainID != nil {
+		enc.AddString("domainID", *v.DomainID)
+	}
+	if v.WorkflowID != nil {
+		enc.AddString("workflowID", *v.WorkflowID)
+	}
+	if v.RunID != nil {
+		enc.AddString("runID", *v.RunID)
+	}
+	if v.TaskType != nil {
+		enc.AddInt16("taskType", *v.TaskType)
+	}
+	if v.TaskID != nil {
+		enc.AddInt64("taskID", *v.TaskID)
+	}
+	if v.Version != nil {
+		enc.AddInt64("version", *v.Version)
+	}
+	if v.FirstEventID != nil {
+		enc.AddInt64("firstEventID", *v.FirstEventID)
+	}
+	if v.NextEventID != nil {
+		enc.AddInt64("nextEventID", *v.NextEventID)
+	}
+	if v.ScheduledID != nil {
+		enc.AddInt64("scheduledID", *v.ScheduledID)
+	}
+	return err
+}
+
+// GetDomainID returns the value of DomainID if it is set or its
+// zero value if it is unset.
+func (v *ReplicationTaskInfo) GetDomainID() (o string) {
+	if v != nil && v.DomainID != nil {
+		return *v.DomainID
+	}
+
+	return
+}
+
+// IsSetDomainID returns true if DomainID is not nil.
+func (v *ReplicationTaskInfo) IsSetDomainID() bool {
+	return v != nil && v.DomainID != nil
+}
+
+// GetWorkflowID returns the value of WorkflowID if it is set or its
+// zero value if it is unset.
+func (v *ReplicationTaskInfo) GetWorkflowID() (o string) {
+	if v != nil && v.WorkflowID != nil {
+		return *v.WorkflowID
+	}
+
+	return
+}
+
+// IsSetWorkflowID returns true if WorkflowID is not nil.
+func (v *ReplicationTaskInfo) IsSetWorkflowID() bool {
+	return v != nil && v.WorkflowID != nil
+}
+
+// GetRunID returns the value of RunID if it is set or its
+// zero value if it is unset.
+func (v *ReplicationTaskInfo) GetRunID() (o string) {
+	if v != nil && v.RunID != nil {
+		return *v.RunID
+	}
+
+	return
+}
+
+// IsSetRunID returns true if RunID is not nil.
+func (v *ReplicationTaskInfo) IsSetRunID() bool {
+	return v != nil && v.RunID != nil
+}
+
+// GetTaskType returns the value of TaskType if it is set or its
+// zero value if it is unset.
+func (v *ReplicationTaskInfo) GetTaskType() (o int16) {
+	if v != nil && v.TaskType != nil {
+		return *v.TaskType
+	}
+
+	return
+}
+
+// IsSetTaskType returns true if TaskType is not nil.
+func (v *ReplicationTaskInfo) IsSetTaskType() bool {
+	return v != nil && v.TaskType != nil
+}
+
+// GetTaskID returns the value of TaskID if it is set or its
+// zero value if it is unset.
+func (v *ReplicationTaskInfo) GetTaskID() (o int64) {
+	if v != nil && v.TaskID != nil {
+		return *v.TaskID
+	}
+
+	return
+}
+
+// IsSetTaskID returns true if TaskID is not nil.
+func (v *ReplicationTaskInfo) IsSetTaskID() bool {
+	return v != nil && v.TaskID != nil
+}
+
+// GetVersion returns the value of Version if it is set or its
+// zero value if it is unset.
+func (v *ReplicationTaskInfo) GetVersion() (o int64) {
+	if v != nil && v.Version != nil {
+		return *v.Version
+	}
+
+	return
+}
+
+// IsSetVersion returns true if Version is not nil.
+func (v *ReplicationTaskInfo) IsSetVersion() bool {
+	return v != nil && v.Version != nil
+}
+
+// GetFirstEventID returns the value of FirstEventID if it is set or its
+// zero value if it is unset.
+func (v *ReplicationTaskInfo) GetFirstEventID() (o int64) {
+	if v != nil && v.FirstEventID != nil {
+		return *v.FirstEventID
+	}
+
+	return
+}
+
+// IsSetFirstEventID returns true if FirstEventID is not nil.
+func (v *ReplicationTaskInfo) IsSetFirstEventID() bool {
+	return v != nil && v.FirstEventID != nil
+}
+
+// GetNextEventID returns the value of NextEventID if it is set or its
+// zero value if it is unset.
+func (v *ReplicationTaskInfo) GetNextEventID() (o int64) {
+	if v != nil && v.NextEventID != nil {
+		return *v.NextEventID
+	}
+
+	return
+}
+
+// IsSetNextEventID returns true if NextEventID is not nil.
+func (v *ReplicationTaskInfo) IsSetNextEventID() bool {
+	return v != nil && v.NextEventID != nil
+}
+
+// GetScheduledID returns the value of ScheduledID if it is set or its
+// zero value if it is unset.
+func (v *ReplicationTaskInfo) GetScheduledID() (o int64) {
+	if v != nil && v.ScheduledID != nil {
+		return *v.ScheduledID
+	}
+
+	return
+}
+
+// IsSetScheduledID returns true if ScheduledID is not nil.
+func (v *ReplicationTaskInfo) IsSetScheduledID() bool {
+	return v != nil && v.ScheduledID != nil
 }
 
 type ReplicationTaskType int32
@@ -5675,11 +6526,11 @@ var ThriftModule = &thriftreflect.ThriftModule{
 	Name:     "replicator",
 	Package:  "github.com/uber/cadence/.gen/go/replicator",
 	FilePath: "replicator.thrift",
-	SHA1:     "6de87f2a70835ac200976ccfa0139929487b1b1e",
+	SHA1:     "e9f6f3071e14a1a2dc3882d1823908fc4b2b266a",
 	Includes: []*thriftreflect.ThriftModule{
 		shared.ThriftModule,
 	},
 	Raw: rawIDL,
 }
 
-const rawIDL = "// Copyright (c) 2017 Uber Technologies, Inc.\n//\n// Permission is hereby granted, free of charge, to any person obtaining a copy\n// of this software and associated documentation files (the \"Software\"), to deal\n// in the Software without restriction, including without limitation the rights\n// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n// copies of the Software, and to permit persons to whom the Software is\n// furnished to do so, subject to the following conditions:\n//\n// The above copyright notice and this permission notice shall be included in\n// all copies or substantial portions of the Software.\n//\n// THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n// THE SOFTWARE.\n\nnamespace java com.uber.cadence.replicator\n\ninclude \"shared.thrift\"\n\nenum ReplicationTaskType {\n  Domain\n  History\n  SyncShardStatus\n  SyncActivity\n  HistoryMetadata\n  HistoryV2\n}\n\nenum DomainOperation {\n  Create\n  Update\n}\n\nstruct DomainTaskAttributes {\n  05: optional DomainOperation domainOperation\n  10: optional string id\n  20: optional shared.DomainInfo info\n  30: optional shared.DomainConfiguration config\n  40: optional shared.DomainReplicationConfiguration replicationConfig\n  50: optional i64 (js.type = \"Long\") configVersion\n  60: optional i64 (js.type = \"Long\") failoverVersion\n}\n\nstruct HistoryTaskAttributes {\n  05: optional list<string> targetClusters\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") firstEventId\n  50: optional i64 (js.type = \"Long\") nextEventId\n  60: optional i64 (js.type = \"Long\") version\n  70: optional map<string, shared.ReplicationInfo> replicationInfo\n  80: optional shared.History history\n  90: optional shared.History newRunHistory\n  100: optional i32 eventStoreVersion\n  110: optional i32 newRunEventStoreVersion\n  120: optional bool resetWorkflow\n  130: optional bool newRunNDC\n}\n\nstruct HistoryMetadataTaskAttributes {\n  05: optional list<string> targetClusters\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") firstEventId\n  50: optional i64 (js.type = \"Long\") nextEventId\n}\n\nstruct SyncShardStatusTaskAttributes {\n  10: optional string sourceCluster\n  20: optional i64 (js.type = \"Long\") shardId\n  30: optional i64 (js.type = \"Long\") timestamp\n}\n\nstruct SyncActivityTaskAttributes {\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") version\n  50: optional i64 (js.type = \"Long\") scheduledId\n  60: optional i64 (js.type = \"Long\") scheduledTime\n  70: optional i64 (js.type = \"Long\") startedId\n  80: optional i64 (js.type = \"Long\") startedTime\n  90: optional i64 (js.type = \"Long\") lastHeartbeatTime\n  100: optional binary details\n  110: optional i32 attempt\n  120: optional string lastFailureReason\n  130: optional string lastWorkerIdentity\n  140: optional binary lastFailureDetails\n  150: optional shared.VersionHistory versionHistory\n}\n\nstruct HistoryTaskV2Attributes {\n  05: optional i64 (js.type = \"Long\") taskId\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional list<shared.VersionHistoryItem> versionHistoryItems\n  50: optional shared.DataBlob events\n  // new run events does not need version history since there is no prior events\n  70: optional shared.DataBlob newRunEvents\n}\n\nstruct ReplicationTask {\n  10: optional ReplicationTaskType taskType\n  11: optional i64 (js.type = \"Long\") sourceTaskId\n  20: optional DomainTaskAttributes domainTaskAttributes\n  30: optional HistoryTaskAttributes historyTaskAttributes  // TODO deprecate once NDC migration is done\n  40: optional SyncShardStatusTaskAttributes syncShardStatusTaskAttributes\n  50: optional SyncActivityTaskAttributes syncActivityTaskAttributes\n  60: optional HistoryMetadataTaskAttributes historyMetadataTaskAttributes // TODO deprecate once kafka deprecation is done\n  70: optional HistoryTaskV2Attributes historyTaskV2Attributes\n}\n\nstruct ReplicationToken {\n  10: optional i32 shardID\n  // lastRetrivedMessageId is where the next fetch should begin with\n  20: optional i64 (js.type = \"Long\") lastRetrievedMessageId\n  // lastProcessedMessageId is the last messageId that is processed on the passive side.\n  // This can be different than lastRetrievedMessageId if passive side supports prefetching messages.\n  30: optional i64 (js.type = \"Long\") lastProcessedMessageId\n}\n\nstruct SyncShardStatus {\n    10: optional i64 (js.type = \"Long\") timestamp\n}\n\nstruct ReplicationMessages {\n  10: optional list<ReplicationTask> replicationTasks\n  // This can be different than the last taskId in the above list, because sender can decide to skip tasks (e.g. for completed workflows).\n  20: optional i64 (js.type = \"Long\") lastRetrievedMessageId\n  30: optional bool hasMore // Hint for flow control\n  40: optional SyncShardStatus syncShardStatus\n}\n\nstruct GetReplicationMessagesRequest {\n  10: optional list<ReplicationToken> tokens\n  20: optional string clusterName\n}\n\nstruct GetReplicationMessagesResponse {\n  10: optional map<i32, ReplicationMessages> messagesByShard\n}\n\nstruct GetDomainReplicationMessagesRequest {\n  // lastRetrievedMessageId is where the next fetch should begin with\n  10: optional i64 (js.type = \"Long\") lastRetrievedMessageId\n  // lastProcessedMessageId is the last messageId that is processed on the passive side.\n  // This can be different than lastRetrievedMessageId if passive side supports prefetching messages.\n  20: optional i64 (js.type = \"Long\") lastProcessedMessageId\n  // clusterName is the name of the pulling cluster\n  30: optional string clusterName\n}\n\nstruct GetDomainReplicationMessagesResponse {\n  10: optional ReplicationMessages messages\n}"
+const rawIDL = "// Copyright (c) 2017 Uber Technologies, Inc.\n//\n// Permission is hereby granted, free of charge, to any person obtaining a copy\n// of this software and associated documentation files (the \"Software\"), to deal\n// in the Software without restriction, including without limitation the rights\n// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n// copies of the Software, and to permit persons to whom the Software is\n// furnished to do so, subject to the following conditions:\n//\n// The above copyright notice and this permission notice shall be included in\n// all copies or substantial portions of the Software.\n//\n// THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n// THE SOFTWARE.\n\nnamespace java com.uber.cadence.replicator\n\ninclude \"shared.thrift\"\n\nenum ReplicationTaskType {\n  Domain\n  History\n  SyncShardStatus\n  SyncActivity\n  HistoryMetadata\n  HistoryV2\n}\n\nenum DomainOperation {\n  Create\n  Update\n}\n\nstruct DomainTaskAttributes {\n  05: optional DomainOperation domainOperation\n  10: optional string id\n  20: optional shared.DomainInfo info\n  30: optional shared.DomainConfiguration config\n  40: optional shared.DomainReplicationConfiguration replicationConfig\n  50: optional i64 (js.type = \"Long\") configVersion\n  60: optional i64 (js.type = \"Long\") failoverVersion\n}\n\nstruct HistoryTaskAttributes {\n  05: optional list<string> targetClusters\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") firstEventId\n  50: optional i64 (js.type = \"Long\") nextEventId\n  60: optional i64 (js.type = \"Long\") version\n  70: optional map<string, shared.ReplicationInfo> replicationInfo\n  80: optional shared.History history\n  90: optional shared.History newRunHistory\n  100: optional i32 eventStoreVersion\n  110: optional i32 newRunEventStoreVersion\n  120: optional bool resetWorkflow\n  130: optional bool newRunNDC\n}\n\nstruct HistoryMetadataTaskAttributes {\n  05: optional list<string> targetClusters\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") firstEventId\n  50: optional i64 (js.type = \"Long\") nextEventId\n}\n\nstruct SyncShardStatusTaskAttributes {\n  10: optional string sourceCluster\n  20: optional i64 (js.type = \"Long\") shardId\n  30: optional i64 (js.type = \"Long\") timestamp\n}\n\nstruct SyncActivityTaskAttributes {\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") version\n  50: optional i64 (js.type = \"Long\") scheduledId\n  60: optional i64 (js.type = \"Long\") scheduledTime\n  70: optional i64 (js.type = \"Long\") startedId\n  80: optional i64 (js.type = \"Long\") startedTime\n  90: optional i64 (js.type = \"Long\") lastHeartbeatTime\n  100: optional binary details\n  110: optional i32 attempt\n  120: optional string lastFailureReason\n  130: optional string lastWorkerIdentity\n  140: optional binary lastFailureDetails\n  150: optional shared.VersionHistory versionHistory\n}\n\nstruct HistoryTaskV2Attributes {\n  05: optional i64 (js.type = \"Long\") taskId\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional list<shared.VersionHistoryItem> versionHistoryItems\n  50: optional shared.DataBlob events\n  // new run events does not need version history since there is no prior events\n  70: optional shared.DataBlob newRunEvents\n}\n\nstruct ReplicationTask {\n  10: optional ReplicationTaskType taskType\n  11: optional i64 (js.type = \"Long\") sourceTaskId\n  20: optional DomainTaskAttributes domainTaskAttributes\n  30: optional HistoryTaskAttributes historyTaskAttributes  // TODO deprecate once NDC migration is done\n  40: optional SyncShardStatusTaskAttributes syncShardStatusTaskAttributes\n  50: optional SyncActivityTaskAttributes syncActivityTaskAttributes\n  60: optional HistoryMetadataTaskAttributes historyMetadataTaskAttributes // TODO deprecate once kafka deprecation is done\n  70: optional HistoryTaskV2Attributes historyTaskV2Attributes\n}\n\nstruct ReplicationToken {\n  10: optional i32 shardID\n  // lastRetrivedMessageId is where the next fetch should begin with\n  20: optional i64 (js.type = \"Long\") lastRetrievedMessageId\n  // lastProcessedMessageId is the last messageId that is processed on the passive side.\n  // This can be different than lastRetrievedMessageId if passive side supports prefetching messages.\n  30: optional i64 (js.type = \"Long\") lastProcessedMessageId\n}\n\nstruct SyncShardStatus {\n    10: optional i64 (js.type = \"Long\") timestamp\n}\n\nstruct ReplicationMessages {\n  10: optional list<ReplicationTask> replicationTasks\n  // This can be different than the last taskId in the above list, because sender can decide to skip tasks (e.g. for completed workflows).\n  20: optional i64 (js.type = \"Long\") lastRetrievedMessageId\n  30: optional bool hasMore // Hint for flow control\n  40: optional SyncShardStatus syncShardStatus\n}\n\nstruct ReplicationTaskInfo {\n  10: optional string domainID\n  20: optional string workflowID\n  30: optional string runID\n  40: optional i16 taskType\n  50: optional i64 (js.type = \"Long\") taskID\n  60: optional i64 (js.type = \"Long\") version\n  70: optional i64 (js.type = \"Long\") firstEventID\n  80: optional i64 (js.type = \"Long\") nextEventID\n  90: optional i64 (js.type = \"Long\") scheduledID\n}\n\nstruct GetReplicationMessagesRequest {\n  10: optional list<ReplicationToken> tokens\n  20: optional string clusterName\n}\n\nstruct GetReplicationMessagesResponse {\n  10: optional map<i32, ReplicationMessages> messagesByShard\n}\n\nstruct GetDomainReplicationMessagesRequest {\n  // lastRetrievedMessageId is where the next fetch should begin with\n  10: optional i64 (js.type = \"Long\") lastRetrievedMessageId\n  // lastProcessedMessageId is the last messageId that is processed on the passive side.\n  // This can be different than lastRetrievedMessageId if passive side supports prefetching messages.\n  20: optional i64 (js.type = \"Long\") lastProcessedMessageId\n  // clusterName is the name of the pulling cluster\n  30: optional string clusterName\n}\n\nstruct GetDomainReplicationMessagesResponse {\n  10: optional ReplicationMessages messages\n}\n\nstruct GetDLQReplicationMessagesRequest {\n  10: optional list<ReplicationTaskInfo> taskInfos\n}\n\nstruct GetDLQReplicationMessagesResponse {\n  10: optional list<ReplicationTask> replicationTasks\n}"
