@@ -29,7 +29,6 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"go.uber.org/yarpc/encoding/protobuf"
 	"go.uber.org/yarpc/yarpcerrors"
 
 	commonproto "go.temporal.io/temporal-proto/common"
@@ -1506,9 +1505,8 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	s.Equal(&workflowservice.SignalWithStartWorkflowExecutionResponse{RunId: ""}, resp)
 	s.Error(err)
 	st := yarpcerrors.FromError(err)
-	s.Equal(yarpcerrors.CodeAlreadyExists, st.Code())
 	s.True(strings.Contains(st.Message(), "reject duplicate workflow ID"))
-	s.IsType(&errordetails.WorkflowExecutionAlreadyStartedFailure{}, protobuf.GetErrorDetails(err)[0])
+	s.True(errordetails.IsWorkflowExecutionAlreadyStartedFailureYARPC(err))
 
 	// test policy WorkflowIdReusePolicyAllowDuplicateFailedOnly
 	sRequest.WorkflowIdReusePolicy = enums.WorkflowIdReusePolicyAllowDuplicateFailedOnly
@@ -1517,9 +1515,8 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	s.Equal(&workflowservice.SignalWithStartWorkflowExecutionResponse{RunId: ""}, resp)
 	s.Error(err)
 	st = yarpcerrors.FromError(err)
-	s.Equal(yarpcerrors.CodeAlreadyExists, st.Code())
 	s.True(strings.Contains(st.Message(), "allow duplicate workflow ID if last run failed"))
-	s.IsType(&errordetails.WorkflowExecutionAlreadyStartedFailure{}, protobuf.GetErrorDetails(err)[0])
+	s.True(errordetails.IsWorkflowExecutionAlreadyStartedFailureYARPC(err))
 
 	// test policy WorkflowIdReusePolicyAllowDuplicate
 	sRequest.WorkflowIdReusePolicy = enums.WorkflowIdReusePolicyAllowDuplicate

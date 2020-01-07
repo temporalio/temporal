@@ -37,7 +37,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.uber.org/yarpc/encoding/protobuf"
 	"go.uber.org/yarpc/yarpcerrors"
 
 	commonproto "go.temporal.io/temporal-proto/common"
@@ -115,10 +114,7 @@ func (s *integrationSuite) TestStartWorkflowExecution() {
 	}
 	we2, err2 := s.engine.StartWorkflowExecution(createContext(), newRequest)
 	s.NotNil(err2)
-	st := yarpcerrors.FromError(err2)
-	s.Equal(yarpcerrors.CodeAlreadyExists, st.Code())
-	errDetails := protobuf.GetErrorDetails(err2)[0]
-	s.IsType(&errordetails.WorkflowExecutionAlreadyStartedFailure{}, errDetails)
+	s.True(errordetails.IsWorkflowExecutionAlreadyStartedFailureYARPC(err2))
 	log.Infof("Unable to start workflow execution: %v", err2.Error())
 	s.Equal(&workflowservice.StartWorkflowExecutionResponse{}, we2)
 }

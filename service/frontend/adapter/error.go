@@ -23,10 +23,9 @@ package adapter
 import (
 	"fmt"
 
+	"go.temporal.io/temporal-proto/errordetails"
 	"go.uber.org/yarpc/encoding/protobuf"
 	"go.uber.org/yarpc/yarpcerrors"
-
-	"go.temporal.io/temporal-proto/errordetails"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 )
@@ -51,24 +50,13 @@ func ToProtoError(in error) error {
 		}
 
 	case *shared.DomainNotActiveError:
-		return protobuf.NewError(yarpcerrors.CodeInvalidArgument, thriftError.Message, protobuf.WithErrorDetails(
-			&errordetails.DomainNotActiveFailure{
-				DomainName:     thriftError.DomainName,
-				CurrentCluster: thriftError.CurrentCluster,
-				ActiveCluster:  thriftError.ActiveCluster,
-			},
-		))
+		return errordetails.NewDomainNotActiveErrorYARPC(thriftError.Message, thriftError.DomainName, thriftError.CurrentCluster, thriftError.ActiveCluster)
 	case *shared.ServiceBusyError:
 		return protobuf.NewError(yarpcerrors.CodeResourceExhausted, thriftError.Message)
 	case *shared.EntityNotExistsError:
 		return protobuf.NewError(yarpcerrors.CodeNotFound, thriftError.Message)
 	case *shared.WorkflowExecutionAlreadyStartedError:
-		return protobuf.NewError(yarpcerrors.CodeAlreadyExists, *thriftError.Message, protobuf.WithErrorDetails(
-			&errordetails.WorkflowExecutionAlreadyStartedFailure{
-				StartRequestId: *thriftError.StartRequestId,
-				RunId:          *thriftError.RunId,
-			},
-		))
+		return errordetails.NewWorkflowExecutionAlreadyStartedErrorYARPC(*thriftError.Message, *thriftError.StartRequestId, *thriftError.RunId)
 	case *shared.DomainAlreadyExistsError:
 		return protobuf.NewError(yarpcerrors.CodeAlreadyExists, thriftError.Message)
 	case *shared.CancellationAlreadyRequestedError:
@@ -78,11 +66,7 @@ func ToProtoError(in error) error {
 	case *shared.LimitExceededError:
 		return protobuf.NewError(yarpcerrors.CodeResourceExhausted, thriftError.Message)
 	case *shared.ClientVersionNotSupportedError:
-		return protobuf.NewError(yarpcerrors.CodeFailedPrecondition, "Client version is not supported.", protobuf.WithErrorDetails(
-			&errordetails.ClientVersionNotSupportedFailure{
-				FeatureVersion: thriftError.FeatureVersion, ClientImpl: thriftError.ClientImpl, SupportedVersions: thriftError.SupportedVersions,
-			},
-		))
+		return errordetails.NewClientVersionNotSupportedErrorYARPC("Client version is not supported.", thriftError.FeatureVersion, thriftError.ClientImpl, thriftError.SupportedVersions)
 	case *yarpcerrors.Status:
 		if thriftError.Code() == yarpcerrors.CodeDeadlineExceeded {
 			return protobuf.NewError(yarpcerrors.CodeDeadlineExceeded, thriftError.Message())
