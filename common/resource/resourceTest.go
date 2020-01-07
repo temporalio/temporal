@@ -25,12 +25,11 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/uber-go/tally"
 	"go.temporal.io/temporal-proto/workflowservice"
-	publicservicetest "go.temporal.io/temporal/.gen/go/temporal/workflowservicetest"
+	"go.temporal.io/temporal-proto/workflowservicemock"
 
 	"github.com/temporalio/temporal/.gen/go/admin/adminservicetest"
 	"github.com/temporalio/temporal/.gen/go/history/historyservicetest"
 	"github.com/temporalio/temporal/.gen/go/matching/matchingservicetest"
-	"github.com/temporalio/temporal/.gen/go/temporal/workflowservicetest"
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/client/frontend"
@@ -80,12 +79,12 @@ type (
 
 		// internal services clients
 
-		SDKClient            *publicservicetest.MockClient
-		FrontendClient       *workflowservicetest.MockClient
+		SDKClient            *workflowservicemock.MockWorkflowServiceClient
+		FrontendClient       *workflowservicemock.MockWorkflowServiceYARPCClient
 		MatchingClient       *matchingservicetest.MockClient
 		HistoryClient        *historyservicetest.MockClient
 		RemoteAdminClient    *adminservicetest.MockClient
-		RemoteFrontendClient *workflowservicetest.MockClient
+		RemoteFrontendClient *workflowservicemock.MockWorkflowServiceYARPCClient
 		ClientBean           *client.MockBean
 
 		// persistence clients
@@ -125,10 +124,10 @@ func NewTest(
 	}
 	logger := loggerimpl.NewLogger(zapLogger)
 
-	frontendClient := workflowservicetest.NewMockClient(controller)
+	frontendClient := workflowservicemock.NewMockWorkflowServiceYARPCClient(controller)
 	matchingClient := matchingservicetest.NewMockClient(controller)
 	historyClient := historyservicetest.NewMockClient(controller)
-	remoteFrontendClient := workflowservicetest.NewMockClient(controller)
+	remoteFrontendClient := workflowservicemock.NewMockWorkflowServiceYARPCClient(controller)
 	remoteAdminClient := adminservicetest.NewMockClient(controller)
 	clientBean := client.NewMockBean(controller)
 	clientBean.EXPECT().GetFrontendClient().Return(frontendClient).AnyTimes()
@@ -184,7 +183,7 @@ func NewTest(
 
 		// internal services clients
 
-		SDKClient:            publicservicetest.NewMockClient(controller),
+		SDKClient:            workflowservicemock.NewMockWorkflowServiceClient(controller),
 		FrontendClient:       frontendClient,
 		MatchingClient:       matchingClient,
 		HistoryClient:        historyClient,

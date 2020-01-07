@@ -27,6 +27,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/temporal-proto/workflowservice"
+
 	r "github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common"
@@ -35,7 +37,6 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	serviceConfig "github.com/temporalio/temporal/common/service/config"
-	"go.temporal.io/temporal-proto/workflowservice"
 )
 
 const (

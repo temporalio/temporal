@@ -26,6 +26,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/temporal-proto/workflowservice"
+
 	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
@@ -33,7 +35,6 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/membership"
 	"github.com/temporalio/temporal/common/metrics"
-	"go.temporal.io/temporal-proto/workflowservice"
 )
 
 const (
