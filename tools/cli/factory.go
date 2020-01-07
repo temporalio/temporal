@@ -24,15 +24,13 @@ import (
 	"context"
 
 	"github.com/urfave/cli"
+	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/api/transport"
-	"go.uber.org/yarpc/transport/grpc"
+	yarpcgrpc "go.uber.org/yarpc/transport/grpc"
 	"go.uber.org/yarpc/transport/tchannel"
 	"go.uber.org/zap"
-
-	clientFrontend "go.temporal.io/temporal-proto/workflowservice"
-
-	"go.temporal.io/temporal-proto/workflowservice"
+	"google.golang.org/grpc"
 
 	serverAdmin "github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"
 	serverFrontend "github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
@@ -46,7 +44,7 @@ const (
 
 // ClientFactory is used to construct rpc clients
 type ClientFactory interface {
-	ClientFrontendClient(c *cli.Context) clientFrontend.Interface
+	ClientFrontendClient(c *cli.Context) workflowservice.WorkflowServiceClient
 	ServerFrontendClient(c *cli.Context) serverFrontend.Interface
 	ServerFrontendClientGRPC(c *cli.Context) workflowservice.WorkflowServiceYARPCClient
 	ServerAdminClient(c *cli.Context) serverAdmin.Interface
@@ -71,9 +69,14 @@ func NewClientFactory() ClientFactory {
 }
 
 // ClientFrontendClient builds a frontend client
-func (b *clientFactory) ClientFrontendClient(c *cli.Context) clientFrontend.Interface {
-	b.ensureDispatcher(c)
-	return clientFrontend.New(b.dispatcher.ClientConfig(cadenceFrontendService))
+func (b *clientFactory) ClientFrontendClient(c *cli.Context) workflowservice.WorkflowServiceClient {
+	connection, err := grpc.Dial(localHostPortGRPC, grpc.WithInsecure())
+	if err != nil {
+		b.logger.Fatal("Failed to create connection", zap.Error(err))
+		return nil
+	}
+
+	return workflowservice.NewWorkflowServiceClient(connection)
 }
 
 // ServerFrontendClient builds a frontend client (based on server side thrift interface)
@@ -111,7 +114,7 @@ func (b *clientFactory) ensureDispatcher(c *cli.Context) {
 
 	var unaryOutbound transport.UnaryOutbound
 	if c.IsSet(FlagGRPC) {
-		unaryOutbound = grpc.NewTransport().NewSingleOutbound(b.hostPort)
+		unaryOutbound = yarpcgrpc.NewTransport().NewSingleOutbound(b.hostPort)
 	} else {
 		ch, err := tchannel.NewChannelTransport(tchannel.ServiceName(cadenceClientName), tchannel.ListenAddr("127.0.0.1:0"))
 		if err != nil {

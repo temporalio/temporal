@@ -26,7 +26,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
-	s "go.temporal.io/temporal/.gen/go/shared"
+	"go.temporal.io/temporal-proto/enums"
 )
 
 const (
@@ -49,7 +49,7 @@ const (
 	defaultDecisionTimeoutInSeconds = 10
 	defaultPageSizeForList          = 500
 	defaultPageSizeForScan          = 2000
-	defaultWorkflowIDReusePolicy    = s.WorkflowIdReusePolicyAllowDuplicateFailedOnly
+	defaultWorkflowIDReusePolicy    = enums.WorkflowIdReusePolicyAllowDuplicateFailedOnly
 
 	workflowStatusNotSet = -1
 	showErrorStackEnv    = `CADENCE_CLI_SHOW_STACKS`
@@ -87,24 +87,24 @@ var (
 	tableHeaderBlue         = tablewriter.Colors{tablewriter.FgHiBlueColor}
 	optionErr               = "there is something wrong with your command options"
 	osExit                  = os.Exit
-	workflowClosedStatusMap = map[string]s.WorkflowExecutionCloseStatus{
-		"completed":      s.WorkflowExecutionCloseStatusCompleted,
-		"failed":         s.WorkflowExecutionCloseStatusFailed,
-		"canceled":       s.WorkflowExecutionCloseStatusCanceled,
-		"terminated":     s.WorkflowExecutionCloseStatusTerminated,
-		"continuedasnew": s.WorkflowExecutionCloseStatusContinuedAsNew,
-		"continueasnew":  s.WorkflowExecutionCloseStatusContinuedAsNew,
-		"timedout":       s.WorkflowExecutionCloseStatusTimedOut,
+	workflowClosedStatusMap = map[string]enums.WorkflowExecutionCloseStatus{
+		"completed":      enums.WorkflowExecutionCloseStatusCompleted,
+		"failed":         enums.WorkflowExecutionCloseStatusFailed,
+		"canceled":       enums.WorkflowExecutionCloseStatusCanceled,
+		"terminated":     enums.WorkflowExecutionCloseStatusTerminated,
+		"continuedasnew": enums.WorkflowExecutionCloseStatusContinuedAsNew,
+		"continueasnew":  enums.WorkflowExecutionCloseStatusContinuedAsNew,
+		"timedout":       enums.WorkflowExecutionCloseStatusTimedOut,
 		// below are some alias
-		"c":         s.WorkflowExecutionCloseStatusCompleted,
-		"complete":  s.WorkflowExecutionCloseStatusCompleted,
-		"f":         s.WorkflowExecutionCloseStatusFailed,
-		"fail":      s.WorkflowExecutionCloseStatusFailed,
-		"cancel":    s.WorkflowExecutionCloseStatusCanceled,
-		"terminate": s.WorkflowExecutionCloseStatusTerminated,
-		"term":      s.WorkflowExecutionCloseStatusTerminated,
-		"continue":  s.WorkflowExecutionCloseStatusContinuedAsNew,
-		"cont":      s.WorkflowExecutionCloseStatusContinuedAsNew,
-		"timeout":   s.WorkflowExecutionCloseStatusTimedOut,
+		"c":         enums.WorkflowExecutionCloseStatusCompleted,
+		"complete":  enums.WorkflowExecutionCloseStatusCompleted,
+		"f":         enums.WorkflowExecutionCloseStatusFailed,
+		"fail":      enums.WorkflowExecutionCloseStatusFailed,
+		"cancel":    enums.WorkflowExecutionCloseStatusCanceled,
+		"terminate": enums.WorkflowExecutionCloseStatusTerminated,
+		"term":      enums.WorkflowExecutionCloseStatusTerminated,
+		"continue":  enums.WorkflowExecutionCloseStatusContinuedAsNew,
+		"cont":      enums.WorkflowExecutionCloseStatusContinuedAsNew,
+		"timeout":   enums.WorkflowExecutionCloseStatusTimedOut,
 	}
 )

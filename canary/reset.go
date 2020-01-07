@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"go.temporal.io/temporal"
-	"go.temporal.io/temporal/.gen/go/shared"
 	"go.temporal.io/temporal/activity"
 	"go.temporal.io/temporal/workflow"
 )

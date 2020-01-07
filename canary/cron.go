@@ -32,7 +32,6 @@ import (
 	"go.temporal.io/temporal/activity"
 	"go.temporal.io/temporal/workflow"
 	"go.uber.org/zap"
-	"google.golang.org/grpc/codes"
 )
 
 var (
@@ -91,7 +90,7 @@ func cronActivity(
 	if err != nil {
 		logger.Error("cronActivity: failed to start job", zap.Error(err))
 		st := status.Convert(err)
-		if isDomainNotActiveStatus(st) {
+		if errordetails.IsDomainNotActiveFailure(st) {
 			return err
 		}
 	} else {
@@ -124,26 +123,14 @@ func startJob(
 	if err != nil {
 		scope.Counter(startWorkflowFailureCount).Inc(1)
 		st := status.Convert(err)
-		switch st.Code() {
-		case codes.AlreadyExists:
+		if errordetails.IsWorkflowExecutionAlreadyStartedFailure(st) {
 			scope.Counter(startWorkflowAlreadyStartedCount).Inc(1)
-		case codes.InvalidArgument:
-			if isDomainNotActiveStatus(st) {
-				scope.Counter(startWorkflowDomainNotActiveCount).Inc(1)
-			}
+		} else if errordetails.IsDomainNotActiveFailure(st) {
+			scope.Counter(startWorkflowDomainNotActiveCount).Inc(1)
 		}
+
 		return nil, err
 	}
 	scope.Counter(startWorkflowSuccessCount).Inc(1)
 	return wf, err
-}
-
-func isDomainNotActiveStatus(st *status.Status) bool {
-	details := st.Details()
-	if len(details) > 0 {
-		_, ok := details[0].(errordetails.DomainNotActiveFailure)
-		return ok
-	}
-
-	return false
 }

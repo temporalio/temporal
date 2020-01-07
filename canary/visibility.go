@@ -27,7 +27,9 @@ import (
 	"time"
 
 	"github.com/uber-go/tally"
-	"go.temporal.io/temporal/.gen/go/shared"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/activity"
 	"go.temporal.io/temporal/workflow"
 	"go.uber.org/zap"
@@ -87,12 +89,12 @@ func listMyWorkflow(client cadenceClient, wfID string, scope tally.Scope) error 
 	pageSz := int32(1)
 	startTime := time.Now().UnixNano() - int64(timeSkewToleranceDuration)
 	endTime := time.Now().UnixNano() + int64(timeSkewToleranceDuration)
-	request := &shared.ListOpenWorkflowExecutionsRequest{
-		MaximumPageSize: &pageSz,
-		ExecutionFilter: &shared.WorkflowExecutionFilter{WorkflowId: &wfID},
-		StartTimeFilter: &shared.StartTimeFilter{
-			EarliestTime: &startTime,
-			LatestTime:   &endTime,
+	request := &workflowservice.ListOpenWorkflowExecutionsRequest{
+		MaximumPageSize: pageSz,
+		Filters:         &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &commonproto.WorkflowExecutionFilter{WorkflowId: wfID}},
+		StartTimeFilter: &commonproto.StartTimeFilter{
+			EarliestTime: startTime,
+			LatestTime:   endTime,
 		},
 	}
 
@@ -121,13 +123,13 @@ func listMyWorkflow(client cadenceClient, wfID string, scope tally.Scope) error 
 	return nil
 }
 
-func getMyHistory(client cadenceClient, execInfo workflow.Execution, scope tally.Scope) ([]*shared.HistoryEvent, error) {
+func getMyHistory(client cadenceClient, execInfo workflow.Execution, scope tally.Scope) ([]*commonproto.HistoryEvent, error) {
 	scope.Counter(getWorkflowHistoryCount).Inc(1)
 	sw := scope.Timer(getWorkflowHistoryLatency).Start()
 	defer sw.Stop()
 
-	events := []*shared.HistoryEvent{}
-	iter := client.GetWorkflowHistory(context.Background(), execInfo.ID, execInfo.RunID, false, shared.HistoryEventFilterTypeAllEvent)
+	var events []*commonproto.HistoryEvent
+	iter := client.GetWorkflowHistory(context.Background(), execInfo.ID, execInfo.RunID, false, enums.HistoryEventFilterTypeAllEvent)
 
 	for iter.HasNext() {
 		event, err := iter.Next()

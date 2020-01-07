@@ -32,8 +32,9 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/api/transport"
-	"go.uber.org/yarpc/transport/grpc"
+	yarpcgrpc "go.uber.org/yarpc/transport/grpc"
 	"go.uber.org/yarpc/transport/tchannel"
+	"google.golang.org/grpc"
 
 	"github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"
 	"github.com/temporalio/temporal/.gen/go/history/historyserviceclient"
@@ -562,11 +563,13 @@ func (c *cadenceImpl) startHistory(
 		integrationClient := newIntegrationConfigClient(dynamicconfig.NewNopClient())
 		c.overrideHistoryDynamicConfig(integrationClient)
 		params.DynamicConfig = integrationClient
-		dispatcher, err := params.DispatcherProvider.Get(common.FrontendServiceName, c.FrontendAddress())
+
+		connection, err := grpc.Dial(c.FrontendAddress(), grpc.WithInsecure())
 		if err != nil {
-			c.logger.Fatal("Failed to get dispatcher for history", tag.Error(err))
+			c.logger.Fatal("Failed to create connection for history", tag.Error(err))
 		}
-		params.PublicClient = workflowservice.NewWorkflowServiceClient(dispatcher.ClientConfig(common.FrontendServiceName))
+		params.PublicClient = workflowservice.NewWorkflowServiceClient(connection)
+
 		params.ArchivalMetadata = c.archiverMetadata
 		params.ArchiverProvider = c.archiverProvider
 		params.ESConfig = c.esConfig
@@ -681,11 +684,12 @@ func (c *cadenceImpl) startWorker(hosts map[string][]string, startWG *sync.WaitG
 		c.logger.Fatal("Failed to copy persistence config for worker", tag.Error(err))
 	}
 
-	dispatcher, err := params.DispatcherProvider.Get(common.FrontendServiceName, c.FrontendAddress())
+	connection, err := grpc.Dial(c.FrontendAddress(), grpc.WithInsecure())
 	if err != nil {
-		c.logger.Fatal("Failed to get dispatcher for worker", tag.Error(err))
+		c.logger.Fatal("Failed to create connection for worker", tag.Error(err))
 	}
-	params.PublicClient = workflowservice.NewWorkflowServiceClient(dispatcher.ClientConfig(common.FrontendServiceName))
+	params.PublicClient = workflowservice.NewWorkflowServiceClient(connection)
+
 	service := service.New(params)
 	service.Start()
 
@@ -911,7 +915,7 @@ func (c *rpcFactoryImpl) GetGRPCDispatcher() *yarpc.Dispatcher {
 		c.logger.Fatal("Failed create a gRPC listener", tag.Error(err), tag.Address(c.grpcHostPort))
 	}
 
-	t := grpc.NewTransport()
+	t := yarpcgrpc.NewTransport()
 
 	return yarpc.NewDispatcher(yarpc.Config{
 		Name:     c.serviceName,
@@ -991,7 +995,7 @@ func (c *rpcFactoryImpl) CreateTChannelDispatcherForOutbound(callerName, service
 
 // CreateGRPCDispatcherForOutbound creates a dispatcher for outbound connection
 func (c *rpcFactoryImpl) CreateGRPCDispatcherForOutbound(callerName, serviceName, hostName string) *yarpc.Dispatcher {
-	return c.createDispatcherForOutbound(grpc.NewTransport().NewSingleOutbound(hostName), callerName, serviceName, "gRPC")
+	return c.createDispatcherForOutbound(yarpcgrpc.NewTransport().NewSingleOutbound(hostName), callerName, serviceName, "gRPC")
 }
 
 func (c *rpcFactoryImpl) createDispatcherForOutbound(unaryOutbound transport.UnaryOutbound, callerName, serviceName, transportType string) *yarpc.Dispatcher {

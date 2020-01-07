@@ -29,9 +29,9 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/temporal-proto/enums"
 
 	"go.temporal.io/temporal"
-	"go.temporal.io/temporal/.gen/go/shared"
 	"go.temporal.io/temporal/testsuite"
 	"go.temporal.io/temporal/workflow"
 
@@ -92,7 +92,7 @@ func (s *handlerSuite) TestHandleHistoryRequest_UploadFails_ExpireRetryTimeout()
 	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverDeleteSuccessCount).Once()
 	handlerTestLogger.On("Error", mock.Anything, mock.Anything).Once()
 
-	timeoutErr := workflow.NewTimeoutError(shared.TimeoutTypeStartToClose)
+	timeoutErr := workflow.NewTimeoutError(enums.TimeoutTypeStartToClose)
 	env := s.NewTestWorkflowEnvironment()
 	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(timeoutErr)
 	env.OnActivity(deleteHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)

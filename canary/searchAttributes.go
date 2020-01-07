@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"github.com/uber-go/tally"
-	"go.temporal.io/temporal/.gen/go/shared"
+	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/activity"
 	"go.temporal.io/temporal/workflow"
 	"go.uber.org/zap"
@@ -97,9 +97,9 @@ func listWorkflow(client cadenceClient, wfID string, scope tally.Scope) error {
 	endTime := time.Now().UnixNano() + int64(timeSkewToleranceDuration)
 	queryStr := fmt.Sprintf("WorkflowID = '%s' and CustomKeywordField = '%s' and StartTime between %d and %d",
 		wfID, "canaryTest", startTime, endTime)
-	request := &shared.ListWorkflowExecutionsRequest{
-		PageSize: &pageSz,
-		Query:    &queryStr,
+	request := &workflowservice.ListWorkflowExecutionsRequest{
+		PageSize: pageSz,
+		Query:    queryStr,
 	}
 
 	scope.Counter(listWorkflowsCount).Inc(1)
