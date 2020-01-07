@@ -38,7 +38,6 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.uber.org/yarpc/encoding/protobuf"
 	"go.uber.org/yarpc/yarpcerrors"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
@@ -805,20 +804,14 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	startReq.RequestId = uuid.New()
 	startReq.WorkflowIdReusePolicy = enums.WorkflowIdReusePolicyAllowDuplicateFailedOnly
 	we, err = client2.StartWorkflowExecution(createContext(), startReq)
-	st := yarpcerrors.FromError(err)
-	s.Equal(yarpcerrors.CodeAlreadyExists, st.Code())
-	errDetails := protobuf.GetErrorDetails(err)
-	s.IsType(&errordetails.WorkflowExecutionAlreadyStartedFailure{}, errDetails[0])
+	s.True(errordetails.IsWorkflowExecutionAlreadyStartedFailureYARPC(err))
 	s.IsType(&workflowservice.StartWorkflowExecutionResponse{}, we)
 
 	// start the same workflow in cluster 2 is not allowed if policy is RejectDuplicate
 	startReq.RequestId = uuid.New()
 	startReq.WorkflowIdReusePolicy = enums.WorkflowIdReusePolicyRejectDuplicate
 	we, err = client2.StartWorkflowExecution(createContext(), startReq)
-	st = yarpcerrors.FromError(err)
-	s.Equal(yarpcerrors.CodeAlreadyExists, st.Code())
-	errDetails = protobuf.GetErrorDetails(err)
-	s.IsType(&errordetails.WorkflowExecutionAlreadyStartedFailure{}, errDetails[0])
+	s.True(errordetails.IsWorkflowExecutionAlreadyStartedFailureYARPC(err))
 	s.IsType(&workflowservice.StartWorkflowExecutionResponse{}, we)
 
 	// start the workflow in cluster 2
