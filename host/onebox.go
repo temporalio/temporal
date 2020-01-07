@@ -27,18 +27,13 @@ import (
 	"net"
 	"sync"
 
-	"github.com/temporalio/temporal/common/authorization"
-
 	"github.com/pborman/uuid"
 	"github.com/uber-go/tally"
-	"go.uber.org/yarpc/transport/grpc"
-
-	cwsc "go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
+	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/api/transport"
+	"go.uber.org/yarpc/transport/grpc"
 	"go.uber.org/yarpc/transport/tchannel"
-
-	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"
 	"github.com/temporalio/temporal/.gen/go/history/historyserviceclient"
@@ -48,6 +43,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	carchiver "github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
+	"github.com/temporalio/temporal/common/authorization"
 	"github.com/temporalio/temporal/common/cache"
 	cc "github.com/temporalio/temporal/common/client"
 	"github.com/temporalio/temporal/common/cluster"
@@ -570,7 +566,7 @@ func (c *cadenceImpl) startHistory(
 		if err != nil {
 			c.logger.Fatal("Failed to get dispatcher for history", tag.Error(err))
 		}
-		params.PublicClient = cwsc.New(dispatcher.ClientConfig(common.FrontendServiceName))
+		params.PublicClient = workflowservice.NewWorkflowServiceClient(dispatcher.ClientConfig(common.FrontendServiceName))
 		params.ArchivalMetadata = c.archiverMetadata
 		params.ArchiverProvider = c.archiverProvider
 		params.ESConfig = c.esConfig
@@ -689,7 +685,7 @@ func (c *cadenceImpl) startWorker(hosts map[string][]string, startWG *sync.WaitG
 	if err != nil {
 		c.logger.Fatal("Failed to get dispatcher for worker", tag.Error(err))
 	}
-	params.PublicClient = cwsc.New(dispatcher.ClientConfig(common.FrontendServiceName))
+	params.PublicClient = workflowservice.NewWorkflowServiceClient(dispatcher.ClientConfig(common.FrontendServiceName))
 	service := service.New(params)
 	service.Start()
 

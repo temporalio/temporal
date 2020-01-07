@@ -24,12 +24,14 @@ import (
 	"context"
 	"time"
 
+	"github.com/gogo/status"
 	"github.com/opentracing/opentracing-go"
-	"go.temporal.io/temporal/.gen/go/shared"
-	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
+	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/activity"
 	"go.temporal.io/temporal/client"
 	"go.temporal.io/temporal/workflow"
+	"google.golang.org/grpc/codes"
 )
 
 const (
@@ -45,28 +47,29 @@ type cadenceClient struct {
 	// domainClient only exposes domain API
 	client.DomainClient
 	// this is the service needed to start the workers
-	Service workflowserviceclient.Interface
+	Service workflowservice.WorkflowServiceClient
 }
 
 // createDomain creates a cadence domain with the given name and description
 // if the domain already exist, this method silently returns success
-func (client *cadenceClient) createDomain(name string, desc string, owner string, archivalStatus *shared.ArchivalStatus) error {
+func (client *cadenceClient) createDomain(name string, desc string, owner string, archivalStatus enums.ArchivalStatus) error {
 	emitMetric := true
 	retention := int32(workflowRetentionDays)
-	if archivalStatus != nil && *archivalStatus == shared.ArchivalStatusEnabled {
+	if archivalStatus == enums.ArchivalStatusEnabled {
 		retention = int32(0)
 	}
-	req := &shared.RegisterDomainRequest{
-		Name:                                   &name,
-		Description:                            &desc,
-		OwnerEmail:                             &owner,
-		WorkflowExecutionRetentionPeriodInDays: &retention,
-		EmitMetric:                             &emitMetric,
+	req := &workflowservice.RegisterDomainRequest{
+		Name:                                   name,
+		Description:                            desc,
+		OwnerEmail:                             owner,
+		WorkflowExecutionRetentionPeriodInDays: retention,
+		EmitMetric:                             emitMetric,
 		HistoryArchivalStatus:                  archivalStatus,
 	}
 	err := client.Register(context.Background(), req)
 	if err != nil {
-		if _, ok := err.(*shared.DomainAlreadyExistsError); !ok {
+		st := status.Convert(err)
+		if st.Code() == codes.AlreadyExists {
 			return err
 		}
 	}

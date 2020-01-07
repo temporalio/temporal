@@ -21,9 +21,8 @@
 package resource
 
 import (
+	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/yarpc"
-
-	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
 
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/client/admin"
@@ -76,7 +75,7 @@ type (
 
 		// internal services clients
 
-		GetSDKClient() workflowserviceclient.Interface
+		GetSDKClient() workflowservice.WorkflowServiceClient
 		GetFrontendRawClient() frontend.Client
 		GetFrontendClient() frontend.Client
 		GetMatchingRawClient() matching.Client

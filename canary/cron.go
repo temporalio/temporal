@@ -25,12 +25,14 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gogo/status"
 	"github.com/opentracing/opentracing-go"
 	"github.com/uber-go/tally"
-	"go.temporal.io/temporal/.gen/go/shared"
+	"go.temporal.io/temporal-proto/errordetails"
 	"go.temporal.io/temporal/activity"
 	"go.temporal.io/temporal/workflow"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
 )
 
 var (
@@ -88,7 +90,8 @@ func cronActivity(
 	wf, err := startJob(&cadenceClient, scope, jobID, jobName, domain)
 	if err != nil {
 		logger.Error("cronActivity: failed to start job", zap.Error(err))
-		if isDomainNotActiveErr(err) {
+		st := status.Convert(err)
+		if isDomainNotActiveStatus(st) {
 			return err
 		}
 	} else {
@@ -120,11 +123,14 @@ func startJob(
 	wf, err := cadenceClient.StartWorkflow(ctx, opts, jobName, time.Now().UnixNano(), domain)
 	if err != nil {
 		scope.Counter(startWorkflowFailureCount).Inc(1)
-		switch err.(type) {
-		case *shared.WorkflowExecutionAlreadyStartedError:
+		st := status.Convert(err)
+		switch st.Code() {
+		case codes.AlreadyExists:
 			scope.Counter(startWorkflowAlreadyStartedCount).Inc(1)
-		case *shared.DomainNotActiveError:
-			scope.Counter(startWorkflowDomainNotActiveCount).Inc(1)
+		case codes.InvalidArgument:
+			if isDomainNotActiveStatus(st) {
+				scope.Counter(startWorkflowDomainNotActiveCount).Inc(1)
+			}
 		}
 		return nil, err
 	}
@@ -132,7 +138,12 @@ func startJob(
 	return wf, err
 }
 
-func isDomainNotActiveErr(err error) bool {
-	_, ok := err.(*shared.DomainNotActiveError)
-	return ok
+func isDomainNotActiveStatus(st *status.Status) bool {
+	details := st.Details()
+	if len(details) > 0 {
+		_, ok := details[0].(errordetails.DomainNotActiveFailure)
+		return ok
+	}
+
+	return false
 }

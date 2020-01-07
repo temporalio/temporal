@@ -28,7 +28,6 @@ import (
 	"time"
 
 	r "github.com/temporalio/temporal/.gen/go/replicator"
-	"github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
@@ -36,6 +35,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	serviceConfig "github.com/temporalio/temporal/common/service/config"
+	"go.temporal.io/temporal-proto/workflowservice"
 )
 
 const (
@@ -51,7 +51,7 @@ type (
 		sourceCluster  string
 		config         *Config
 		logger         log.Logger
-		remotePeer     workflowserviceclient.Interface
+		remotePeer     workflowservice.WorkflowServiceClient
 		requestChan    chan *request
 		done           chan struct{}
 	}
@@ -151,7 +151,7 @@ func newReplicationTaskFetcher(
 	sourceCluster string,
 	currentCluster string,
 	config *Config,
-	sourceFrontend workflowserviceclient.Interface,
+	sourceFrontend workflowservice.WorkflowServiceClient,
 ) *ReplicationTaskFetcherImpl {
 
 	return &ReplicationTaskFetcherImpl{

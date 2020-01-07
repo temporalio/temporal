@@ -25,11 +25,11 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/yarpc"
 
 	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
 	"github.com/temporalio/temporal/common"
 )
 
@@ -650,7 +650,7 @@ func (c *clientImpl) createLongPollContext(parent context.Context) (context.Cont
 	return context.WithTimeout(parent, c.longPollTimeout)
 }
 
-func (c *clientImpl) getRandomClient() (workflowserviceclient.Interface, error) {
+func (c *clientImpl) getRandomClient() (workflowservice.WorkflowServiceClient, error) {
 	// generate a random shard key to do load balancing
 	key := uuid.New()
 	client, err := c.clients.GetClientForKey(key)
@@ -658,7 +658,7 @@ func (c *clientImpl) getRandomClient() (workflowserviceclient.Interface, error) 
 		return nil, err
 	}
 
-	return client.(workflowserviceclient.Interface), nil
+	return client.(workflowservice.WorkflowServiceClient), nil
 }
 
 func (c *clientImpl) GetReplicationMessages(

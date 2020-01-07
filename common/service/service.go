@@ -26,17 +26,15 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/temporalio/temporal/common/authorization"
-
-	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
-	"go.uber.org/yarpc"
-
 	"github.com/uber-go/tally"
+	"go.temporal.io/temporal-proto/workflowservice"
+	"go.uber.org/yarpc"
 
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
+	"github.com/temporalio/temporal/common/authorization"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
 	es "github.com/temporalio/temporal/common/elasticsearch"
@@ -80,7 +78,7 @@ type (
 		DynamicConfig       dynamicconfig.Client
 		DispatcherProvider  client.DispatcherProvider
 		DCRedirectionPolicy config.DCRedirectionPolicy
-		PublicClient        workflowserviceclient.Interface
+		PublicClient        workflowservice.WorkflowServiceClient
 		ArchivalMetadata    archiver.ArchivalMetadata
 		ArchiverProvider    provider.ArchiverProvider
 		Authorizer          authorization.Authorizer

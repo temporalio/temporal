@@ -28,8 +28,6 @@ import (
 
 	"go.uber.org/zap"
 
-	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
-
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"

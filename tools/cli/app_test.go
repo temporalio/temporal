@@ -30,8 +30,8 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 	"github.com/urfave/cli"
+	clientFrontend "go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/.gen/go/shared"
-	clientFrontend "go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
 	clientFrontendTest "go.temporal.io/temporal/.gen/go/temporal/workflowservicetest"
 
 	"go.temporal.io/temporal-proto/workflowservice"

@@ -24,7 +24,7 @@ import (
 	"context"
 	"time"
 
-	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
+	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/activity"
 	"go.temporal.io/temporal/worker"
 	"go.temporal.io/temporal/workflow"
@@ -53,7 +53,7 @@ type (
 
 	// BootstrapContainer contains everything need for bootstrapping
 	BootstrapContainer struct {
-		PublicClient     workflowserviceclient.Interface
+		PublicClient     workflowservice.WorkflowServiceClient
 		MetricsClient    metrics.Client
 		Logger           log.Logger
 		HistoryV2Manager persistence.HistoryManager

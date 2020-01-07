@@ -30,7 +30,7 @@ import (
 	"go.uber.org/yarpc/transport/tchannel"
 	"go.uber.org/zap"
 
-	clientFrontend "go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
+	clientFrontend "go.temporal.io/temporal-proto/workflowservice"
 
 	"go.temporal.io/temporal-proto/workflowservice"
 

@@ -41,11 +41,11 @@ import (
 	"github.com/urfave/cli"
 	"github.com/valyala/fastjson"
 
+	"go.temporal.io/temporal-proto/workflowservice"
 	s "go.temporal.io/temporal/.gen/go/shared"
 	"go.temporal.io/temporal/client"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/service/history"
@@ -904,7 +904,7 @@ type pendingActivityInfo struct {
 }
 
 func convertDescribeWorkflowExecutionResponse(resp *shared.DescribeWorkflowExecutionResponse,
-	wfClient workflowserviceclient.Interface, c *cli.Context) *describeWorkflowExecutionResponse {
+	wfClient workflowservice.WorkflowServiceClient, c *cli.Context) *describeWorkflowExecutionResponse {
 
 	info := resp.WorkflowExecutionInfo
 	executionInfo := workflowExecutionInfo{
@@ -955,7 +955,7 @@ func convertDescribeWorkflowExecutionResponse(resp *shared.DescribeWorkflowExecu
 }
 
 func convertSearchAttributesToMapOfInterface(searchAttributes *shared.SearchAttributes,
-	wfClient workflowserviceclient.Interface, c *cli.Context) map[string]interface{} {
+	wfClient workflowservice.WorkflowServiceClient, c *cli.Context) map[string]interface{} {
 
 	if searchAttributes == nil || len(searchAttributes.GetIndexedFields()) == 0 {
 		return nil
@@ -1672,7 +1672,7 @@ func doReset(c *cli.Context, domain, wid, rid string, reason, resetType string, 
 	return nil
 }
 
-func getResetEventIDByType(ctx context.Context, c *cli.Context, resetType, domain, wid, rid string, frontendClient workflowserviceclient.Interface) (resetBaseRunID string, decisionFinishID int64, err error) {
+func getResetEventIDByType(ctx context.Context, c *cli.Context, resetType, domain, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, decisionFinishID int64, err error) {
 	fmt.Println("resetType:", resetType)
 	switch resetType {
 	case "LastDecisionCompleted":
@@ -1702,7 +1702,7 @@ func getResetEventIDByType(ctx context.Context, c *cli.Context, resetType, domai
 	return
 }
 
-func getLastDecisionCompletedID(ctx context.Context, domain, wid, rid string, frontendClient workflowserviceclient.Interface) (resetBaseRunID string, decisionFinishID int64, err error) {
+func getLastDecisionCompletedID(ctx context.Context, domain, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, decisionFinishID int64, err error) {
 	resetBaseRunID = rid
 	req := &shared.GetWorkflowExecutionHistoryRequest{
 		Domain: common.StringPtr(domain),
@@ -1736,7 +1736,7 @@ func getLastDecisionCompletedID(ctx context.Context, domain, wid, rid string, fr
 	return
 }
 
-func getBadDecisionCompletedID(ctx context.Context, domain, wid, rid, binChecksum string, frontendClient workflowserviceclient.Interface) (resetBaseRunID string, decisionFinishID int64, err error) {
+func getBadDecisionCompletedID(ctx context.Context, domain, wid, rid, binChecksum string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, decisionFinishID int64, err error) {
 	resetBaseRunID = rid
 	resp, err := frontendClient.DescribeWorkflowExecution(ctx, &shared.DescribeWorkflowExecutionRequest{
 		Domain: common.StringPtr(domain),
@@ -1764,7 +1764,7 @@ func getBadDecisionCompletedID(ctx context.Context, domain, wid, rid, binChecksu
 	return
 }
 
-func getFirstDecisionCompletedID(ctx context.Context, domain, wid, rid string, frontendClient workflowserviceclient.Interface) (resetBaseRunID string, decisionFinishID int64, err error) {
+func getFirstDecisionCompletedID(ctx context.Context, domain, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, decisionFinishID int64, err error) {
 	resetBaseRunID = rid
 	req := &shared.GetWorkflowExecutionHistoryRequest{
 		Domain: common.StringPtr(domain),
@@ -1799,7 +1799,7 @@ func getFirstDecisionCompletedID(ctx context.Context, domain, wid, rid string, f
 	return
 }
 
-func getLastContinueAsNewID(ctx context.Context, domain, wid, rid string, frontendClient workflowserviceclient.Interface) (resetBaseRunID string, decisionFinishID int64, err error) {
+func getLastContinueAsNewID(ctx context.Context, domain, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, decisionFinishID int64, err error) {
 	// get first event
 	req := &shared.GetWorkflowExecutionHistoryRequest{
 		Domain: common.StringPtr(domain),

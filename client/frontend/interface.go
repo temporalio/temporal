@@ -20,11 +20,9 @@
 
 package frontend
 
-import (
-	"github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
-)
+import "go.temporal.io/temporal-proto/workflowservice"
 
 // Client is the interface exposed by frontend service client
 type Client interface {
-	workflowserviceclient.Interface
+	workflowservice.WorkflowServiceClient
 }

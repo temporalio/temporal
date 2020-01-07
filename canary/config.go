@@ -24,7 +24,7 @@ import (
 	"fmt"
 
 	"github.com/uber-go/tally"
-	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
+	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/config"
 	"go.uber.org/zap"
 )
@@ -69,11 +69,11 @@ type RuntimeContext struct {
 	Env     string
 	logger  *zap.Logger
 	metrics tally.Scope
-	service workflowserviceclient.Interface
+	service workflowservice.WorkflowServiceClient
 }
 
 // NewRuntimeContext builds a runtime context from the config
-func newRuntimeContext(env string, logger *zap.Logger, scope tally.Scope, service workflowserviceclient.Interface) *RuntimeContext {
+func newRuntimeContext(env string, logger *zap.Logger, scope tally.Scope, service workflowservice.WorkflowServiceClient) *RuntimeContext {
 	return &RuntimeContext{
 		Env:     env,
 		logger:  logger,
