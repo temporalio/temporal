@@ -82,7 +82,6 @@ type (
 	cadenceImpl struct {
 		frontendService common.Daemon
 		matchingService common.Daemon
-		workerService   common.Daemon
 		historyServices []common.Daemon
 
 		adminClient         adminserviceclient.Interface
@@ -272,7 +271,7 @@ func (c *cadenceImpl) FrontendPProfPort() int {
 
 func (c *cadenceImpl) HistoryServiceAddress() []string {
 	var hosts []string
-	startPort := 7201
+	var startPort int
 	switch c.clusterNo {
 	case 0:
 		startPort = 7201
@@ -296,7 +295,7 @@ func (c *cadenceImpl) HistoryServiceAddress() []string {
 
 func (c *cadenceImpl) HistoryPProfPort() []int {
 	var ports []int
-	startPort := 7301
+	var startPort int
 	switch c.clusterNo {
 	case 0:
 		startPort = 7301

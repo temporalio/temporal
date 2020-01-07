@@ -18,6 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//nolint
 package canary
 
 import (
@@ -30,10 +31,6 @@ import (
 	"go.uber.org/cadence/activity"
 	"go.uber.org/cadence/client"
 	"go.uber.org/cadence/workflow"
-)
-
-const (
-	cadenceConfig = "cadence"
 )
 
 // cadenceClient is an abstraction on top of

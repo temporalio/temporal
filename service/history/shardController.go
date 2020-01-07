@@ -130,7 +130,10 @@ func (c *shardController) Start() {
 	c.shutdownWG.Add(1)
 	go c.shardManagementPump()
 
-	c.GetHistoryServiceResolver().AddListener(shardControllerMembershipUpdateListenerName, c.membershipUpdateCh)
+	err := c.GetHistoryServiceResolver().AddListener(shardControllerMembershipUpdateListenerName, c.membershipUpdateCh)
+	if err != nil {
+		c.logger.Error("Error adding listener", tag.Error(err))
+	}
 
 	c.logger.Info("", tag.LifeCycleStarted)
 }

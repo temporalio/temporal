@@ -28,7 +28,6 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	"go.uber.org/cadence/.gen/go/shared"
 	"go.uber.org/cadence/mocks"
 	"go.uber.org/cadence/testsuite"
 	"go.uber.org/cadence/worker"
@@ -138,14 +137,6 @@ func (s *workflowTestSuite) TestLocalActivityWorkflow() {
 	err := s.env.GetWorkflowResult(&result)
 	s.NoError(err)
 	s.Equal("data%2 == 0 and data%5 == 0", result)
-}
-
-func newMockOpenWorkflowResponse(wfID string, runID string) *shared.ListOpenWorkflowExecutionsResponse {
-	return &shared.ListOpenWorkflowExecutionsResponse{
-		Executions: []*shared.WorkflowExecutionInfo{
-			{Execution: &shared.WorkflowExecution{WorkflowId: &wfID, RunId: &runID}},
-		},
-	}
 }
 
 func newTestWorkerOptions(ctx *activityContext) worker.Options {

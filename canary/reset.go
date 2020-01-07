@@ -18,6 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//nolint
 package canary
 
 import (
@@ -34,7 +35,6 @@ import (
 const (
 	smallWait         = 1
 	bigWait           = 30
-	signalDelaySecs   = 10
 	signalToTrigger   = "signalToTrigger"
 	signalBeforeReset = "signalBeforeReset"
 	signalAfterReset  = "signalAfterReset"

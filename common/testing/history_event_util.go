@@ -31,7 +31,6 @@ import (
 
 const (
 	timeout              = int32(10000)
-	cause                = "NDC test"
 	signal               = "NDC signal"
 	checksum             = "NDC checksum"
 	childWorkflowPrefix  = "child-"

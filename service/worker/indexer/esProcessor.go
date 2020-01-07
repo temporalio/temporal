@@ -112,15 +112,14 @@ func NewESProcessorAndStart(config *Config, client es.Client, processorName stri
 }
 
 func (p *esProcessorImpl) Stop() {
-	p.processor.Stop()
+	p.processor.Stop() //nolint:errcheck
 	p.mapToKafkaMsg = nil
 }
 
 // Add an ES request, and an map item for kafka message
 func (p *esProcessorImpl) Add(request elastic.BulkableRequest, key string, kafkaMsg messaging.Message) {
 	actionWhenFoundDuplicates := func(key interface{}, value interface{}) error {
-		kafkaMsg.Ack()
-		return nil
+		return kafkaMsg.Ack()
 	}
 	sw := p.metricsClient.StartTimer(metrics.ESProcessorScope, metrics.ESProcessorProcessMsgLatency)
 	mapVal := newKafkaMessageWithMetrics(kafkaMsg, &sw)
@@ -298,14 +297,14 @@ func newKafkaMessageWithMetrics(kafkaMsg messaging.Message, stopwatch *tally.Sto
 }
 
 func (km *kafkaMessageWithMetrics) Ack() {
-	km.message.Ack()
+	km.message.Ack() //nolint:errcheck
 	if km.swFromAddToAck != nil {
 		km.swFromAddToAck.Stop()
 	}
 }
 
 func (km *kafkaMessageWithMetrics) Nack() {
-	km.message.Nack()
+	km.message.Nack() //nolint:errcheck
 	if km.swFromAddToAck != nil {
 		km.swFromAddToAck.Stop()
 	}

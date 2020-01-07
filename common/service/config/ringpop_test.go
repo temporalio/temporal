@@ -55,7 +55,7 @@ func (s *RingpopSuite) TestHostsMode() {
 	s.Equal(BootstrapModeHosts, cfg.BootstrapMode)
 	s.Equal([]string{"127.0.0.1:1111"}, cfg.BootstrapHosts)
 	s.Equal(time.Second*30, cfg.MaxJoinDuration)
-	cfg.validate()
+	err = cfg.validate()
 	s.Nil(err)
 	f, err := cfg.NewFactory(nil, "test", loggerimpl.NewNopLogger())
 	s.Nil(err)

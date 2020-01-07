@@ -50,7 +50,6 @@ type (
 
 		minRetentionDays     int
 		maxBadBinaryCount    int
-		logger               log.Logger
 		metadataMgr          persistence.MetadataManager
 		mockProducer         *mocks.KafkaProducer
 		mockDomainReplicator Replicator

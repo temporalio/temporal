@@ -846,7 +846,10 @@ func (entry *DomainCacheEntry) IsSampledForLongerRetention(
 		}
 
 		h := fnv.New32a()
-		h.Write([]byte(workflowID))
+		_, err = h.Write([]byte(workflowID))
+		if err != nil {
+			return false
+		}
 		hash := h.Sum32()
 
 		r := float64(hash%1000) / float64(1000) // use 1000 so we support one decimal rate like 1.5%.

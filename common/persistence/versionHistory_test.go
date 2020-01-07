@@ -658,7 +658,7 @@ func (s *versionHistoriesSuite) TestFindFirstVersionHistoryIndexByItem() {
 	s.NoError(err)
 	s.Equal(0, index)
 
-	index, err = histories.FindFirstVersionHistoryIndexByItem(NewVersionHistoryItem(41, 4))
+	_, err = histories.FindFirstVersionHistoryIndexByItem(NewVersionHistoryItem(41, 4))
 	s.Error(err)
 }
 

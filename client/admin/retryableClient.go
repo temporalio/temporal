@@ -83,12 +83,9 @@ func (c *retryableClient) RemoveTask(
 ) error {
 
 	op := func() error {
-		var err error
-		err = c.client.RemoveTask(ctx, request, opts...)
-		return err
+		return c.client.RemoveTask(ctx, request, opts...)
 	}
-	err := backoff.Retry(op, c.policy, c.isRetryable)
-	return err
+	return backoff.Retry(op, c.policy, c.isRetryable)
 }
 
 func (c *retryableClient) CloseShard(
@@ -98,12 +95,9 @@ func (c *retryableClient) CloseShard(
 ) error {
 
 	op := func() error {
-		var err error
-		err = c.client.CloseShard(ctx, request, opts...)
-		return err
+		return c.client.CloseShard(ctx, request, opts...)
 	}
-	err := backoff.Retry(op, c.policy, c.isRetryable)
-	return err
+	return backoff.Retry(op, c.policy, c.isRetryable)
 }
 
 func (c *retryableClient) DescribeWorkflowExecution(

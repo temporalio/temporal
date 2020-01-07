@@ -532,7 +532,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderFlushBufferedEvents() {
 	s.Equal(int64(10), s.getPreviousDecisionStartedEventID())
 
 	// flush buffered events. 12: Activity2Started, 13: Activity2Failed
-	s.msBuilder.FlushBufferedEvents()
+	s.NoError(s.msBuilder.FlushBufferedEvents())
 	s.Equal(int64(14), s.getNextEventID())
 	activity2StartedEvent2 := s.msBuilder.GetHistoryBuilder().history[11]
 	s.Equal(int64(12), activity2StartedEvent2.GetEventId())

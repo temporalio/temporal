@@ -49,7 +49,6 @@ type (
 	replicationTaskProcessor struct {
 		currentCluster          string
 		sourceCluster           string
-		topicName               string
 		consumerName            string
 		client                  messaging.Client
 		consumer                messaging.Consumer

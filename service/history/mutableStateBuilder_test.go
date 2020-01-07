@@ -541,7 +541,7 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 			RequestId:        common.StringPtr(uuid.New()),
 		},
 	}
-	eventID++
+	eventID++ //nolint:ineffassign
 
 	di, err = s.msBuilder.ReplicateDecisionTaskScheduledEvent(
 		newDecisionScheduleEvent.GetVersion(),

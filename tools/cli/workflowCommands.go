@@ -718,8 +718,8 @@ func ListArchivedWorkflow(c *cli.Context) {
 
 	var table *tablewriter.Table
 	var printFn func([]*s.WorkflowExecutionInfo, bool)
-	prePrintFn := func() {}
-	postPrintFn := func() {}
+	var prePrintFn func()
+	var postPrintFn func()
 	printRawTime := c.Bool(FlagPrintRawTime)
 	printDateTime := c.Bool(FlagPrintDateTime)
 	printMemo := c.Bool(FlagPrintMemo)

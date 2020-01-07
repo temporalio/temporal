@@ -113,7 +113,7 @@ func (e *ESql) ConvertPretty(sql string, pagination ...interface{}) (dsl string,
 	if err != nil {
 		return "", nil, err
 	}
-	return string(prettifiedDSLBytes.Bytes()), sortField, err
+	return prettifiedDSLBytes.String(), sortField, err
 }
 
 // Convert ...
@@ -137,9 +137,9 @@ func (e *ESql) Convert(sql string, pagination ...interface{}) (dsl string, sortF
 	}
 
 	//sql valid, start to handle
-	switch stmt.(type) {
+	switch stmt := stmt.(type) {
 	case *sqlparser.Select:
-		dsl, sortField, err = e.convertSelect(*(stmt.(*sqlparser.Select)), "", pagination...)
+		dsl, sortField, err = e.convertSelect(*(stmt), "", pagination...)
 	default:
 		err = fmt.Errorf(`esql: Queries other than select not supported`)
 	}

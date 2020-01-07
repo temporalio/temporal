@@ -1138,6 +1138,7 @@ type (
 	// ClusterReplicationConfig describes the cross DC cluster replication configuration
 	ClusterReplicationConfig struct {
 		ClusterName string
+		// Note: if adding new properties of non-primitive types, remember to update GetCopy()
 	}
 
 	// CreateDomainRequest is used to create the domain
@@ -2374,6 +2375,12 @@ func (config *ClusterReplicationConfig) serialize() map[string]interface{} {
 
 func (config *ClusterReplicationConfig) deserialize(input map[string]interface{}) {
 	config.ClusterName = input["cluster_name"].(string)
+}
+
+// GetCopy return a copy of ClusterReplicationConfig
+func (config *ClusterReplicationConfig) GetCopy() *ClusterReplicationConfig {
+	res := *config
+	return &res
 }
 
 // DBTimestampToUnixNano converts CQL timestamp to UnixNano

@@ -95,12 +95,10 @@ var (
 	errDomainNotSet                               = &gen.BadRequestError{Message: "Domain not set on request."}
 	errTaskTokenNotSet                            = &gen.BadRequestError{Message: "Task token not set on request."}
 	errInvalidTaskToken                           = &gen.BadRequestError{Message: "Invalid TaskToken."}
-	errInvalidRequestType                         = &gen.BadRequestError{Message: "Invalid request type."}
 	errTaskListNotSet                             = &gen.BadRequestError{Message: "TaskList is not set on request."}
 	errTaskListTypeNotSet                         = &gen.BadRequestError{Message: "TaskListType is not set on request."}
 	errExecutionNotSet                            = &gen.BadRequestError{Message: "Execution is not set on request."}
 	errWorkflowIDNotSet                           = &gen.BadRequestError{Message: "WorkflowId is not set on request."}
-	errRunIDNotSet                                = &gen.BadRequestError{Message: "RunId is not set on request."}
 	errActivityIDNotSet                           = &gen.BadRequestError{Message: "ActivityID is not set on request."}
 	errInvalidRunID                               = &gen.BadRequestError{Message: "Invalid RunId."}
 	errInvalidNextPageToken                       = &gen.BadRequestError{Message: "Invalid NextPageToken."}
@@ -114,13 +112,11 @@ var (
 	errInvalidRetention                           = &gen.BadRequestError{Message: "RetentionDays is invalid."}
 	errInvalidExecutionStartToCloseTimeoutSeconds = &gen.BadRequestError{Message: "A valid ExecutionStartToCloseTimeoutSeconds is not set on request."}
 	errInvalidTaskStartToCloseTimeoutSeconds      = &gen.BadRequestError{Message: "A valid TaskStartToCloseTimeoutSeconds is not set on request."}
-	errClientVersionNotSet                        = &gen.BadRequestError{Message: "Client version is not set on request."}
 	errQueryDisallowedForDomain                   = &gen.BadRequestError{Message: "Domain is not allowed to query, please contact cadence team to re-enable queries."}
 	errClusterNameNotSet                          = &gen.BadRequestError{Message: "Cluster name is not set."}
 
 	// err for archival
 	errHistoryNotFound = &gen.BadRequestError{Message: "Requested workflow history not found, may have passed retention period."}
-	errURIUpdate       = &gen.BadRequestError{Message: "Cannot update existing archival URI"}
 
 	// err for string too long
 	errDomainTooLong       = &gen.BadRequestError{Message: "Domain length exceeds limit."}
@@ -3033,7 +3029,7 @@ func (wh *WorkflowHandler) getHistory(
 	branchToken []byte,
 ) (*gen.History, []byte, error) {
 
-	historyEvents := []*gen.HistoryEvent{}
+	var historyEvents []*gen.HistoryEvent
 	var size int
 
 	isFirstPage := len(nextPageToken) == 0
@@ -3105,17 +3101,6 @@ func (wh *WorkflowHandler) validateTransientDecisionEvents(
 		expectedNextEventID+1,
 		decision.ScheduledEvent.GetEventId(),
 		decision.StartedEvent.GetEventId())
-}
-
-func (wh *WorkflowHandler) getLoggerForTask(taskToken []byte) log.Logger {
-	logger := wh.GetLogger()
-	task, err := wh.tokenSerializer.Deserialize(taskToken)
-	if err == nil {
-		logger = logger.WithTags(tag.WorkflowID(task.WorkflowID),
-			tag.WorkflowRunID(task.RunID),
-			tag.WorkflowScheduleID(task.ScheduleID))
-	}
-	return logger
 }
 
 // startRequestProfile initiates recording of request metrics

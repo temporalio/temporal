@@ -18,6 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//nolint
 package canary
 
 import (
@@ -157,6 +158,7 @@ func (c *canaryImpl) createArchivalDomain() error {
 }
 
 // Override worker options to create large number of pollers to improve the chances of activities getting sync matched
+//nolint:unused
 func overrideWorkerOptions(ctx context.Context) context.Context {
 	optionsOverride := make(map[string]map[string]string)
 	optionsOverride["worker-options"] = map[string]string{

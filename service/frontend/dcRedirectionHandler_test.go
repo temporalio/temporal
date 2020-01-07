@@ -58,8 +58,7 @@ type (
 		alternativeClusterName string
 		config                 *Config
 
-		frontendHandler *WorkflowHandler
-		handler         *DCRedirectionHandlerImpl
+		handler *DCRedirectionHandlerImpl
 	}
 )
 

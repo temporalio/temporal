@@ -31,7 +31,6 @@ import (
 	"go.uber.org/cadence/worker"
 	"go.uber.org/zap"
 
-	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	carchiver "github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/archiver/provider"
@@ -57,7 +56,6 @@ var (
 	testBranchToken = []byte{1, 2, 3}
 
 	errPersistenceNonRetryable = errors.New("persistence non-retryable error")
-	errPersistenceRetryable    = &shared.InternalServiceError{}
 )
 
 type activitiesSuite struct {
@@ -377,10 +375,4 @@ func (s *activitiesSuite) TestArchiveVisibilityActivity_Success() {
 	}
 	_, err := env.ExecuteActivity(archiveVisibilityActivity, request)
 	s.NoError(err)
-}
-
-func getCanceledContext() context.Context {
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	return ctx
 }

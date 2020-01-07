@@ -1212,10 +1212,6 @@ func (e *mutableStateBuilder) writeEventToCache(
 	)
 }
 
-func (e *mutableStateBuilder) hasPendingTasks() bool {
-	return len(e.pendingActivityInfoIDs) > 0 || len(e.pendingTimerInfoIDs) > 0
-}
-
 func (e *mutableStateBuilder) HasParentExecution() bool {
 	return e.executionInfo.ParentDomainID != "" && e.executionInfo.ParentWorkflowID != ""
 }
@@ -1396,6 +1392,7 @@ func (e *mutableStateBuilder) DeleteUserTimer(
 	return nil
 }
 
+//nolint:unused
 func (e *mutableStateBuilder) getDecisionInfo() *decisionInfo {
 
 	taskList := e.executionInfo.TaskList
@@ -2072,7 +2069,7 @@ func (e *mutableStateBuilder) AddActivityTaskScheduledEvent(
 		return nil, nil, err
 	}
 
-	ai, ok := e.GetActivityByActivityID(attributes.GetActivityId())
+	_, ok := e.GetActivityByActivityID(attributes.GetActivityId())
 	if ok {
 		e.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
@@ -3000,7 +2997,7 @@ func (e *mutableStateBuilder) AddTimerStartedEvent(
 	}
 
 	timerID := request.GetTimerId()
-	ti, ok := e.GetUserTimerInfo(timerID)
+	_, ok := e.GetUserTimerInfo(timerID)
 	if ok {
 		e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),

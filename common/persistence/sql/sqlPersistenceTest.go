@@ -195,7 +195,7 @@ func (s *TestCluster) loadDatabaseSchema(dir string, fileNames []string, overrid
 		}
 		err = db.Exec(string(content))
 		if err != nil {
-			err = fmt.Errorf("error loading schema from %v: %v", file, err.Error())
+			return fmt.Errorf("error loading schema from %v: %v", file, err.Error())
 		}
 	}
 	return nil

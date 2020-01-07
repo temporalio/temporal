@@ -305,22 +305,6 @@ func (p *TaskPoller) HandlePartialDecision(response *workflow.PollForDecisionTas
 		p.Logger.Fatal("History Events are empty")
 	}
 
-	nextPageToken := response.NextPageToken
-	for nextPageToken != nil {
-		resp, err2 := p.Engine.GetWorkflowExecutionHistory(createContext(), &workflow.GetWorkflowExecutionHistoryRequest{
-			Domain:        common.StringPtr(p.Domain),
-			Execution:     response.WorkflowExecution,
-			NextPageToken: nextPageToken,
-		})
-
-		if err2 != nil {
-			return nil, err2
-		}
-
-		events = append(events, resp.History.Events...)
-		nextPageToken = resp.NextPageToken
-	}
-
 	executionCtx, decisions, err := p.DecisionHandler(response.WorkflowExecution, response.WorkflowType,
 		common.Int64Default(response.PreviousStartedEventId), common.Int64Default(response.StartedEventId), response.History)
 	if err != nil {

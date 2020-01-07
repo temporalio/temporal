@@ -37,7 +37,6 @@ import (
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/archiver"
-	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/service/config"
 )
@@ -64,7 +63,6 @@ type historyArchiverSuite struct {
 	suite.Suite
 
 	container          *archiver.HistoryBootstrapContainer
-	logger             log.Logger
 	testArchivalURI    archiver.URI
 	testGetDirectory   string
 	historyBatchesV1   []*shared.History

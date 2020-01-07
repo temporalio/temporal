@@ -72,7 +72,7 @@ func (tb *DBTestBase) SetupSuiteBase(db DB) {
 
 // TearDownSuiteBase tears down the test suite
 func (tb *DBTestBase) TearDownSuiteBase() {
-	tb.db.DropDatabase(tb.DBName)
+	tb.NoError(tb.db.DropDatabase(tb.DBName))
 	tb.db.Close()
 }
 
@@ -86,7 +86,8 @@ func (tb *DBTestBase) RunParseFileTest(content string) {
 	tb.Nil(err)
 	defer os.Remove(cqlFile.Name())
 
-	cqlFile.WriteString(content)
+	_, err = cqlFile.WriteString(content)
+	tb.NoError(err)
 	stmts, err := schema.ParseFile(cqlFile.Name())
 	tb.Nil(err)
 	tb.Equal(2, len(stmts), "wrong number of sql statements")
@@ -129,6 +130,7 @@ func (tb *DBTestBase) RunUpdateTest(db DB) {
 	tb.Equal("10.0", ver)
 
 	err = db.UpdateSchemaVersion("12.0", "5.0")
+	tb.Nil(err)
 	ver, err = db.ReadSchemaVersion()
 	tb.Nil(err)
 	tb.Equal("12.0", ver)

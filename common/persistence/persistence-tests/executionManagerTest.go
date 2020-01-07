@@ -1643,14 +1643,14 @@ func (s *ExecutionManagerSuite) TestDeleteCurrentWorkflow() {
 	}
 
 	// test wrong run id with conditional delete
-	s.DeleteCurrentWorkflowExecution(fakeInfo)
+	s.NoError(s.DeleteCurrentWorkflowExecution(fakeInfo))
 
 	runID5, err5 := s.GetCurrentWorkflowRunID(domainID, workflowExecution.GetWorkflowId())
 	s.NoError(err5)
 	s.Equal(workflowExecution.GetRunId(), runID5)
 
 	// simulate a timer_task deleting execution after retention
-	s.DeleteCurrentWorkflowExecution(info0.ExecutionInfo)
+	s.NoError(s.DeleteCurrentWorkflowExecution(info0.ExecutionInfo))
 
 	runID0, err1 = s.GetCurrentWorkflowRunID(domainID, workflowExecution.GetWorkflowId())
 	s.Error(err1)
@@ -1659,7 +1659,7 @@ func (s *ExecutionManagerSuite) TestDeleteCurrentWorkflow() {
 	s.True(ok)
 
 	// execution record should still be there
-	info0, err2 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	_, err2 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	s.NoError(err2)
 }
 
@@ -1709,12 +1709,13 @@ func (s *ExecutionManagerSuite) TestUpdateDeleteWorkflow() {
 	s.True(ok)
 
 	// execution record should still be there
-	info0, err2 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	_, err2 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	s.Error(err2)
 	_, ok = err2.(*gen.EntityNotExistsError)
 	s.True(ok)
 }
 
+// TestCleanupCorruptedWorkflow test
 func (s *ExecutionManagerSuite) TestCleanupCorruptedWorkflow() {
 	domainID := "54d15308-e20e-4b91-a00f-a518a3892790"
 	workflowExecution := gen.WorkflowExecution{
@@ -2667,7 +2668,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateTimers() {
 	err2 = s.UpdateWorkflowExecution(updatedInfo, updatedStats, nil, nil, nil, int64(5), nil, nil, nil, nil, []string{timerID})
 	s.NoError(err2)
 
-	state, err1 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	state, err2 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	s.NoError(err2)
 	s.NotNil(state, "expected valid state.")
 	s.Equal(0, len(state.TimerInfos))
@@ -2735,7 +2736,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateChildExecutions() {
 	err2 = s.DeleteChildExecutionsState(updatedInfo, updatedStats, nil, int64(5), int64(1))
 	s.NoError(err2)
 
-	state, err1 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	state, err2 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	s.NoError(err2)
 	s.NotNil(state, "expected valid state.")
 	s.Equal(0, len(state.ChildExecutionInfos))
@@ -2783,7 +2784,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateRequestCancel() {
 	err2 = s.DeleteCancelState(updatedInfo, updatedStats, nil, int64(5), requestCancelInfo.InitiatedID)
 	s.NoError(err2)
 
-	state, err1 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	state, err2 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	s.NoError(err2)
 	s.NotNil(state, "expected valid state.")
 	s.Equal(0, len(state.RequestCancelInfos))
@@ -2835,7 +2836,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateSignalInfo() {
 	err2 = s.DeleteSignalState(updatedInfo, updatedStats, nil, int64(5), signalInfo.InitiatedID)
 	s.NoError(err2)
 
-	state, err1 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	state, err2 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	s.NoError(err2)
 	s.NotNil(state, "expected valid state.")
 	s.Equal(0, len(state.SignalInfos))
@@ -2879,7 +2880,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateSignalRequested() {
 	err2 = s.DeleteSignalsRequestedState(updatedInfo, updatedStats, nil, int64(5), signalRequestedID)
 	s.NoError(err2)
 
-	state, err1 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	state, err2 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	s.NoError(err2)
 	s.NotNil(state, "expected valid state.")
 	s.Equal(0, len(state.SignalRequestedIDs))
@@ -4540,7 +4541,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	s.NoError(err)
 	s.NotNil(resp)
 
-	state, err := s.GetWorkflowExecutionInfo(domainID, workflowExecutionReset)
+	_, err = s.GetWorkflowExecutionInfo(domainID, workflowExecutionReset)
 	s.NoError(err)
 
 	resetExecutionInfo := &p.WorkflowExecutionInfo{
@@ -4612,7 +4613,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	s.Equal(resetExecutionInfo.CloseStatus, currentRecord.CloseStatus)
 	s.Equal(resetReplicationState.LastWriteVersion, currentRecord.LastWriteVersion)
 
-	state, err = s.GetWorkflowExecutionInfo(domainID, workflowExecutionReset)
+	state, err := s.GetWorkflowExecutionInfo(domainID, workflowExecutionReset)
 	s.NoError(err)
 	state.ExecutionInfo.StartTimestamp = resetReq.ResetWorkflowSnapshot.ExecutionInfo.StartTimestamp
 	state.ExecutionInfo.LastUpdatedTimestamp = resetReq.ResetWorkflowSnapshot.ExecutionInfo.LastUpdatedTimestamp
@@ -4643,7 +4644,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	s.NoError(err)
 	s.NotNil(resp)
 
-	state, err := s.GetWorkflowExecutionInfo(domainID, workflowExecutionReset)
+	_, err = s.GetWorkflowExecutionInfo(domainID, workflowExecutionReset)
 	s.NoError(err)
 
 	resetExecutionInfo := &p.WorkflowExecutionInfo{
@@ -4737,7 +4738,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 	s.Equal(newWorkflowExecutionInfo.CloseStatus, currentRecord.CloseStatus)
 	s.Equal(newWorkflowExecutionState.LastWriteVersion, currentRecord.LastWriteVersion)
 
-	state, err = s.GetWorkflowExecutionInfo(domainID, workflowExecutionReset)
+	state, err := s.GetWorkflowExecutionInfo(domainID, workflowExecutionReset)
 	s.NoError(err)
 	state.ExecutionInfo.StartTimestamp = resetReq.ResetWorkflowSnapshot.ExecutionInfo.StartTimestamp
 	state.ExecutionInfo.LastUpdatedTimestamp = resetReq.ResetWorkflowSnapshot.ExecutionInfo.LastUpdatedTimestamp

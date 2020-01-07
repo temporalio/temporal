@@ -32,6 +32,7 @@ type (
 
 	// metricDefinition contains the definition for a metric
 	metricDefinition struct {
+		//nolint
 		metricType MetricType    // metric type
 		metricName MetricName    // metric name
 		buckets    tally.Buckets // buckets if we are emitting histograms

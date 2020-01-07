@@ -591,6 +591,7 @@ func (t *timerQueueProcessorBase) deleteWorkflowVisibility(
 	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 }
 
+//nolint:unused
 func (t *timerQueueProcessorBase) getTimerTaskType(
 	taskType int,
 ) string {

@@ -21,8 +21,6 @@
 package history
 
 import (
-	"time"
-
 	"github.com/stretchr/testify/mock"
 
 	"github.com/uber/cadence/common/persistence"
@@ -123,17 +121,4 @@ func (_m *MockTimerQueueAckMgr) getReadLevel() timerKey {
 
 func (_m *MockTimerQueueAckMgr) updateAckLevel() {
 	_m.Called()
-}
-
-func (_m *MockTimerQueueAckMgr) isProcessNow(expiryTime time.Time) bool {
-	ret := _m.Called(expiryTime)
-
-	var r0 bool
-	if rf, ok := ret.Get(0).(func(time.Time) bool); ok {
-		r0 = rf(expiryTime)
-	} else {
-		r0 = ret.Get(0).(bool)
-	}
-
-	return r0
 }

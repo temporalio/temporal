@@ -57,7 +57,6 @@ type (
 	taskProcessor struct {
 		shard         ShardContext
 		cache         *historyCache
-		shutdownWG    sync.WaitGroup
 		shutdownCh    chan struct{}
 		tasksCh       chan *taskInfo
 		config        *Config

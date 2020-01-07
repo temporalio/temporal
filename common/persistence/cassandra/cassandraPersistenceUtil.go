@@ -1036,7 +1036,7 @@ func createReplicationTasks(
 		// Replication task specific information
 		firstEventID := common.EmptyEventID
 		nextEventID := common.EmptyEventID
-		version := common.EmptyVersion
+		version := common.EmptyVersion //nolint:ineffassign
 		var lastReplicationInfo map[string]map[string]interface{}
 		activityScheduleID := common.EmptyEventID
 		var branchToken, newRunBranchToken []byte

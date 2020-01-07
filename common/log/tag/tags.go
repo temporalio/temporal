@@ -547,10 +547,6 @@ func ESDocID(id string) Tag {
 // LoggingCallAtKey is reserved tag
 const LoggingCallAtKey = "logging-call-at"
 
-func loggingCallAt(position string) Tag {
-	return newStringTag(LoggingCallAtKey, position)
-}
-
 // SysStackTrace returns tag for SysStackTrace
 func SysStackTrace(stackTrace string) Tag {
 	return newStringTag("sys-stack-trace", stackTrace)

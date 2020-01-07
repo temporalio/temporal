@@ -228,7 +228,7 @@ func (tr *taskReader) isIdle(lastWriteTime time.Time) bool {
 }
 
 func (tr *taskReader) handleIdleTimeout() {
-	tr.persistAckLevel()
+	tr.persistAckLevel() //nolint:errcheck
 	tr.tlMgr.taskGC.RunNow(tr.tlMgr.taskAckManager.getAckLevel())
 	tr.tlMgr.Stop()
 }

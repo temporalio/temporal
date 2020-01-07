@@ -476,7 +476,8 @@ func (w *workflowResetorImpl) replayReceivedSignals(
 			Identity:   se.GetWorkflowExecutionSignaledEventAttributes().Identity,
 			Input:      se.GetWorkflowExecutionSignaledEventAttributes().Input,
 		}
-		newMutableState.AddWorkflowExecutionSignaled(sigReq.GetSignalName(), sigReq.GetInput(), sigReq.GetIdentity())
+		newMutableState.AddWorkflowExecutionSignaled( //nolint:errcheck
+			sigReq.GetSignalName(), sigReq.GetInput(), sigReq.GetIdentity())
 	}
 	for {
 		if len(continueRunID) == 0 {
@@ -530,7 +531,8 @@ func (w *workflowResetorImpl) replayReceivedSignals(
 							Identity:   e.GetWorkflowExecutionSignaledEventAttributes().Identity,
 							Input:      e.GetWorkflowExecutionSignaledEventAttributes().Input,
 						}
-						newMutableState.AddWorkflowExecutionSignaled(sigReq.GetSignalName(), sigReq.GetInput(), sigReq.GetIdentity())
+						newMutableState.AddWorkflowExecutionSignaled( //nolint:errcheck
+							sigReq.GetSignalName(), sigReq.GetInput(), sigReq.GetIdentity())
 					} else if e.GetEventType() == workflow.EventTypeWorkflowExecutionContinuedAsNew {
 						attr := e.GetWorkflowExecutionContinuedAsNewEventAttributes()
 						continueRunID = attr.GetNewExecutionRunId()

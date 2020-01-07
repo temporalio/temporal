@@ -134,7 +134,8 @@ func (t *MatcherTestSuite) TestRemoteSyncMatch() {
 		},
 	).Return(nil)
 
-	t.matcher.Offer(ctx, task)
+	_, err0 := t.matcher.Offer(ctx, task)
+	t.NoError(err0)
 	cancel()
 	t.NotNil(req)
 	t.NoError(err)
@@ -328,7 +329,7 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 		},
 	).Return(nil)
 
-	t.matcher.MustOffer(ctx, task)
+	t.NoError(t.matcher.MustOffer(ctx, task))
 	cancel()
 	t.NotNil(req)
 	t.NoError(err)

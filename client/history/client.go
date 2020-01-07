@@ -186,6 +186,9 @@ func (c *clientImpl) RemoveTask(
 	var client historyserviceclient.Interface
 	if request.ShardID != nil {
 		client, err = c.getClientForShardID(int(request.GetShardID()))
+		if err != nil {
+			return err
+		}
 	}
 	op := func(ctx context.Context, client historyserviceclient.Interface) error {
 		var err error
@@ -208,6 +211,9 @@ func (c *clientImpl) CloseShard(
 	var client historyserviceclient.Interface
 	if request.ShardID != nil {
 		client, err = c.getClientForShardID(int(request.GetShardID()))
+		if err != nil {
+			return err
+		}
 	}
 	op := func(ctx context.Context, client historyserviceclient.Interface) error {
 		var err error

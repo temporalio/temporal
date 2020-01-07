@@ -396,6 +396,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_NonFirstDeci
 	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskListName, uuid.New())
 	di.StartedID = event.GetEventId()
 	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, nil, "some random identity")
+	s.NotNil(event)
 
 	// make another round of decision
 	taskID := int64(59)
@@ -450,6 +451,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_Sticky_NonFi
 	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskListName, uuid.New())
 	di.StartedID = event.GetEventId()
 	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, nil, "some random identity")
+	s.NotNil(event)
 	// set the sticky tasklist attr
 	executionInfo := mutableState.GetExecutionInfo()
 	executionInfo.StickyTaskList = stickyTaskListName
@@ -508,6 +510,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_DecisionNotS
 	event := addDecisionTaskStartedEvent(mutableState, di.ScheduleID, taskListName, uuid.New())
 	di.StartedID = event.GetEventId()
 	event = addDecisionTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, nil, "some random identity")
+	s.NotNil(event)
 	// set the sticky tasklist attr
 	executionInfo := mutableState.GetExecutionInfo()
 	executionInfo.StickyTaskList = stickyTaskListName

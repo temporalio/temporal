@@ -170,10 +170,13 @@ func doDropDatabase(p ConnectParams, name string) {
 	p.Database = ""
 	conn, err := NewConnection(&p)
 	if err != nil {
-		handleErr(err)
+		logErr(err)
 		return
 	}
-	conn.DropDatabase(name)
+	err = conn.DropDatabase(name)
+	if err != nil {
+		logErr(err)
+	}
 	conn.Close()
 }
 
@@ -213,4 +216,8 @@ func flag(opt string) string {
 func handleErr(err error) error {
 	log.Println(err)
 	return err
+}
+
+func logErr(err error) {
+	log.Println(err)
 }

@@ -230,7 +230,10 @@ func (t *timerQueueProcessorImpl) FailoverDomain(
 
 	// NOTE: READ REF BEFORE MODIFICATION
 	// ref: historyEngine.go registerDomainFailoverCallback function
-	updateShardAckLevel(timerKey{VisibilityTimestamp: minLevel})
+	err := updateShardAckLevel(timerKey{VisibilityTimestamp: minLevel})
+	if err != nil {
+		t.logger.Error("Error when update shard ack level", tag.Error(err))
+	}
 	failoverTimerProcessor.Start()
 }
 
@@ -242,21 +245,6 @@ func (t *timerQueueProcessorImpl) UnlockTaskProcessing() {
 	t.taskAllocator.unlock()
 }
 
-func (t *timerQueueProcessorImpl) getTimerFiredCount(
-	clusterName string,
-) uint64 {
-
-	if clusterName == t.currentClusterName {
-		return t.activeTimerProcessor.getTimerFiredCount()
-	}
-
-	standbyTimerProcessor, ok := t.standbyTimerProcessors[clusterName]
-	if !ok {
-		panic(fmt.Sprintf("Cannot find timer processor for %s.", clusterName))
-	}
-	return standbyTimerProcessor.getTimerFiredCount()
-}
-
 func (t *timerQueueProcessorImpl) completeTimersLoop() {
 	timer := time.NewTimer(t.config.TimerProcessorCompleteTimerInterval())
 	defer timer.Stop()
@@ -264,7 +252,7 @@ func (t *timerQueueProcessorImpl) completeTimersLoop() {
 		select {
 		case <-t.shutdownChan:
 			// before shutdown, make sure the ack level is up to date
-			t.completeTimers()
+			t.completeTimers() //nolint:errcheck
 			return
 		case <-timer.C:
 		CompleteLoop:
@@ -321,6 +309,5 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 
 	t.ackLevel = upperAckLevel
 
-	t.shard.UpdateTimerAckLevel(t.ackLevel.VisibilityTimestamp)
-	return nil
+	return t.shard.UpdateTimerAckLevel(t.ackLevel.VisibilityTimestamp)
 }

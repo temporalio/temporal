@@ -69,8 +69,6 @@ type (
 	}
 )
 
-const domainRefreshInterval = time.Second * 11
-
 // NewService builds a new cadence-worker service
 func NewService(
 	params *service.BootstrapParams,

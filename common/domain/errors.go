@@ -27,7 +27,6 @@ import (
 var (
 	// err indicating that this cluster is not the master, so cannot do domain registration or update
 	errNotMasterCluster                = &workflow.BadRequestError{Message: "Cluster is not master cluster, cannot do domain registration or domain update."}
-	errCannotAddClusterToLocalDomain   = &workflow.BadRequestError{Message: "Cannot add more replicated cluster to local domain."}
 	errCannotRemoveClustersFromDomain  = &workflow.BadRequestError{Message: "Cannot remove existing replicated clusters from a domain."}
 	errActiveClusterNotInClusters      = &workflow.BadRequestError{Message: "Active cluster is not contained in all clusters."}
 	errCannotDoDomainFailoverAndUpdate = &workflow.BadRequestError{Message: "Cannot set active cluster to current cluster when other parameters are set."}

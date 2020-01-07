@@ -68,7 +68,10 @@ func (initializer *PProfInitializerImpl) Start() error {
 	if atomic.CompareAndSwapInt32(&pprofStatus, pprofNotInitialized, pprofInitialized) {
 		go func() {
 			initializer.Logger.Info("PProf listen on ", tag.Port(port))
-			http.ListenAndServe(fmt.Sprintf("localhost:%d", port), nil)
+			err := http.ListenAndServe(fmt.Sprintf("localhost:%d", port), nil)
+			if err != nil {
+				initializer.Logger.Error("listen and serve err", tag.Error(err))
+			}
 		}()
 	}
 	return nil

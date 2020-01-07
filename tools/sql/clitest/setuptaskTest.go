@@ -66,7 +66,7 @@ func (s *SetupSchemaTestSuite) TearDownSuite() {
 
 // TestCreateDatabase test
 func (s *SetupSchemaTestSuite) TestCreateDatabase() {
-	sql.RunTool([]string{"./tool", "-u", testUser, "--pw", testPassword, "create", "--db", "foobar123"})
+	s.NoError(sql.RunTool([]string{"./tool", "-u", testUser, "--pw", testPassword, "create", "--db", "foobar123"}))
 	err := s.conn.DropDatabase("foobar123")
 	s.Nil(err)
 }

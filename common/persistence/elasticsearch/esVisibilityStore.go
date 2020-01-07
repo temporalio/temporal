@@ -422,7 +422,8 @@ func (v *esVisibilityStore) ScanWorkflowExecutions(
 	var searchResult *elastic.SearchResult
 	var scrollService es.ScrollService
 	if len(token.ScrollID) == 0 { // first call
-		queryDSL, err := getESQueryDSLForScan(request)
+		var queryDSL string
+		queryDSL, err = getESQueryDSLForScan(request)
 		if err != nil {
 			return nil, &workflow.BadRequestError{Message: fmt.Sprintf("Error when parse query: %v", err)}
 		}
@@ -434,7 +435,7 @@ func (v *esVisibilityStore) ScanWorkflowExecutions(
 	isLastPage := false
 	if err == io.EOF { // no more result
 		isLastPage = true
-		scrollService.Clear(context.Background())
+		scrollService.Clear(context.Background()) //nolint:errcheck
 	} else if err != nil {
 		return nil, &workflow.InternalServiceError{
 			Message: fmt.Sprintf("ScanWorkflowExecutions failed. Error: %v", err),
@@ -474,7 +475,6 @@ const (
 	dslFieldSearchAfter = "search_after"
 	dslFieldFrom        = "from"
 	dslFieldSize        = "size"
-	dslFieldMust        = "must"
 
 	defaultDateTimeFormat = time.RFC3339 // used for converting UnixNano to string like 2018-02-15T16:16:36-08:00
 )

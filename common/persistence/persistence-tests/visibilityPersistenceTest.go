@@ -671,6 +671,7 @@ func (s *VisibilityPersistenceSuite) TestDelete() {
 	}
 }
 
+// TestUpsertWorkflowExecution test
 func (s *VisibilityPersistenceSuite) TestUpsertWorkflowExecution() {
 	tests := []struct {
 		request  *p.UpsertWorkflowExecutionRequest

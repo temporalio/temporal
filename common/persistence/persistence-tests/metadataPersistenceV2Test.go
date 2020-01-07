@@ -70,7 +70,7 @@ ListLoop:
 		m.NoError(err)
 		token = resp.NextPageToken
 		for _, domain := range resp.Domains {
-			m.DeleteDomain(domain.Info.ID, "")
+			m.NoError(m.DeleteDomain(domain.Info.ID, ""))
 		}
 		if len(token) == 0 {
 			break ListLoop

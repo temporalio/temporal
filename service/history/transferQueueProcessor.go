@@ -251,7 +251,10 @@ func (t *transferQueueProcessorImpl) FailoverDomain(
 
 	// NOTE: READ REF BEFORE MODIFICATION
 	// ref: historyEngine.go registerDomainFailoverCallback function
-	updateShardAckLevel(minLevel)
+	err := updateShardAckLevel(minLevel)
+	if err != nil {
+		t.logger.Error("Error update shard ack level", tag.Error(err))
+	}
 	failoverTaskProcessor.Start()
 }
 
@@ -271,7 +274,10 @@ func (t *transferQueueProcessorImpl) completeTransferLoop() {
 		select {
 		case <-t.shutdownChan:
 			// before shutdown, make sure the ack level is up to date
-			t.completeTransfer()
+			err := t.completeTransfer()
+			if err != nil {
+				t.logger.Error("Error complete transfer task", tag.Error(err))
+			}
 			return
 		case <-timer.C:
 		CompleteLoop:
@@ -328,6 +334,5 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 
 	t.ackLevel = upperAckLevel
 
-	t.shard.UpdateTransferAckLevel(upperAckLevel)
-	return nil
+	return t.shard.UpdateTransferAckLevel(upperAckLevel)
 }

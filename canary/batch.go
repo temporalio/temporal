@@ -43,7 +43,6 @@ func init() {
 const (
 	// TODO: to get rid of them:
 	//  after batch job has an API, we should use the API: https://github.com/uber/cadence/issues/2225
-	sysDomainName             = "cadence-system"
 	sysBatchWFTypeName        = "cadence-sys-batch-workflow"
 	systemBatcherTaskListName = "cadence-sys-batcher-tasklist"
 

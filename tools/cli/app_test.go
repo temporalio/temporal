@@ -114,7 +114,7 @@ func (s *cliAppSuite) RunErrorExitCode(arguments []string) int {
 	osExit = func(code int) {
 		errorCode = code
 	}
-	s.app.Run(arguments)
+	s.NoError(s.app.Run(arguments))
 	return errorCode
 }
 

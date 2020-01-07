@@ -77,8 +77,8 @@ type (
 	// RevokeFunc is the condition inside edge
 	// The function used to check if the edge is accessible at a certain state
 	RevokeFunc struct {
-		methodName string
-		input      []interface{}
+		methodName string        //nolint
+		input      []interface{} //nolint
 	}
 )
 

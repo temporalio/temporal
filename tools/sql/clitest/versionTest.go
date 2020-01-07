@@ -175,7 +175,7 @@ func (s *VersionTestSuite) runCheckCompatibleVersion(
 	}
 
 	sqlFile := subdir + "/v" + actual + "/tmp.sql"
-	sql.RunTool([]string{
+	s.NoError(sql.RunTool([]string{
 		"./tool",
 		"-ep", environment.GetMySQLAddress(),
 		"-p", strconv.Itoa(environment.GetMySQLPort()),
@@ -188,7 +188,7 @@ func (s *VersionTestSuite) runCheckCompatibleVersion(
 		"-f", sqlFile,
 		"-version", actual,
 		"-o",
-	})
+	}))
 	if expectedFail {
 		os.RemoveAll(subdir + "/v" + actual)
 	}

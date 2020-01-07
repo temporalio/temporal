@@ -317,14 +317,14 @@ func GetAllHistory(
 ) (*shared.History, []*shared.History, error) {
 
 	// overall result
-	historyEvents := []*shared.HistoryEvent{}
-	historyBatches := []*shared.History{}
+	var historyEvents []*shared.HistoryEvent
+	var historyBatches []*shared.History
 	historySize := 0
 	var err error
 
 	// variable used for each page
-	pageHistoryEvents := []*shared.HistoryEvent{}
-	pageHistoryBatches := []*shared.History{}
+	var pageHistoryEvents []*shared.HistoryEvent
+	var pageHistoryBatches []*shared.History
 	var pageToken []byte
 	var pageHistorySize int
 

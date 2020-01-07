@@ -75,8 +75,7 @@ type (
 var (
 	errUnexpectedQueueTask = errors.New("unexpected queue task")
 
-	loadDomainEntryForQueueTaskRetryDelay = 100 * time.Millisecond
-	loadQueueTaskThrottleRetryDelay       = 5 * time.Second
+	loadQueueTaskThrottleRetryDelay = 5 * time.Second
 )
 
 func newQueueProcessorBase(

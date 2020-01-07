@@ -86,8 +86,7 @@ func (c *retryableClient) CloseShard(
 	opts ...yarpc.CallOption) error {
 
 	op := func() error {
-		var err error
-		err = c.client.CloseShard(ctx, request, opts...)
+		err := c.client.CloseShard(ctx, request, opts...)
 		return err
 	}
 
@@ -101,8 +100,7 @@ func (c *retryableClient) RemoveTask(
 	opts ...yarpc.CallOption) error {
 
 	op := func() error {
-		var err error
-		err = c.client.RemoveTask(ctx, request, opts...)
+		err := c.client.RemoveTask(ctx, request, opts...)
 		return err
 	}
 

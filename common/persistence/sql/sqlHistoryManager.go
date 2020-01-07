@@ -22,7 +22,6 @@ package sql
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 
 	"github.com/uber/cadence/.gen/go/shared"
@@ -35,7 +34,6 @@ import (
 
 type sqlHistoryV2Manager struct {
 	sqlStore
-	shardID int
 }
 
 // newHistoryV2Persistence creates an instance of HistoryManager
@@ -50,29 +48,6 @@ func newHistoryV2Persistence(
 			logger: logger,
 		},
 	}, nil
-}
-
-func (m *sqlHistoryV2Manager) serializeAncestors(
-	ans []*shared.HistoryBranchRange,
-) ([]byte, error) {
-
-	ancestors, err := json.Marshal(ans)
-	if err != nil {
-		return nil, err
-	}
-	return ancestors, nil
-}
-
-func (m *sqlHistoryV2Manager) deserializeAncestors(
-	jsonStr []byte,
-) ([]*shared.HistoryBranchRange, error) {
-
-	var ans []*shared.HistoryBranchRange
-	err := json.Unmarshal(jsonStr, &ans)
-	if err != nil {
-		return nil, err
-	}
-	return ans, nil
 }
 
 // AppendHistoryNodes add(or override) a node to a history branch

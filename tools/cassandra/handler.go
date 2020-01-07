@@ -165,9 +165,13 @@ func doDropKeyspace(cfg CQLClientConfig, name string) {
 	cfg.Keyspace = systemKeyspace
 	client, err := newCQLClient(&cfg)
 	if err != nil {
+		logErr(fmt.Errorf("error creating client: %v", err))
 		return
 	}
-	client.dropKeyspace(name)
+	err = client.dropKeyspace(name)
+	if err != nil {
+		logErr(fmt.Errorf("error dropping keyspace %v: %v", name, err))
+	}
 	client.Close()
 }
 
@@ -225,4 +229,8 @@ func flag(opt string) string {
 func handleErr(err error) error {
 	log.Println(err)
 	return err
+}
+
+func logErr(err error) {
+	log.Println(err)
 }

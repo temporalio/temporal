@@ -1314,7 +1314,7 @@ func (s *TestBase) ClearTransferQueue() {
 	counter := 0
 	for _, t := range tasks {
 		s.logger.Info("Deleting transfer task with ID", tag.TaskID(t.TaskID))
-		s.CompleteTransferTask(t.TaskID)
+		s.NoError(s.CompleteTransferTask(t.TaskID))
 		counter++
 	}
 
@@ -1333,7 +1333,7 @@ func (s *TestBase) ClearReplicationQueue() {
 	counter := 0
 	for _, t := range tasks {
 		s.logger.Info("Deleting replication task with ID", tag.TaskID(t.TaskID))
-		s.CompleteReplicationTask(t.TaskID)
+		s.NoError(s.CompleteReplicationTask(t.TaskID))
 		counter++
 	}
 

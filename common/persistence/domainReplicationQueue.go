@@ -23,13 +23,11 @@ package persistence
 import (
 	"errors"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/common/codec"
 	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
 )
 
@@ -64,7 +62,6 @@ type (
 		metricsClient       metrics.Client
 		logger              log.Logger
 		encoder             codec.BinaryEncoder
-		ackLevelUpdated     bool
 		ackNotificationChan chan bool
 		done                chan bool
 	}
@@ -123,58 +120,6 @@ func (q *domainReplicationQueueImpl) UpdateAckLevel(lastProcessedMessageID int, 
 
 func (q *domainReplicationQueueImpl) GetAckLevels() (map[string]int, error) {
 	return q.queue.GetAckLevels()
-}
-
-func (q *domainReplicationQueueImpl) purgeAckedMessages() error {
-	ackLevelByCluster, err := q.GetAckLevels()
-	if err != nil {
-		return fmt.Errorf("failed to purge messages: %v", err)
-	}
-
-	if len(ackLevelByCluster) == 0 {
-		return nil
-	}
-
-	minAckLevel := math.MaxInt64
-	for _, ackLevel := range ackLevelByCluster {
-		if ackLevel < minAckLevel {
-			minAckLevel = ackLevel
-		}
-	}
-
-	err = q.queue.DeleteMessagesBefore(minAckLevel)
-	if err != nil {
-		return fmt.Errorf("failed to purge messages: %v", err)
-	}
-
-	q.metricsClient.
-		Scope(metrics.FrontendDomainReplicationQueueScope).
-		UpdateGauge(metrics.DomainReplicationTaskAckLevel, float64(minAckLevel))
-
-	q.ackLevelUpdated = false
-
-	return nil
-}
-
-func (q *domainReplicationQueueImpl) purgeProcessor() {
-	ticker := time.NewTicker(purgeInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-q.done:
-			return
-		case <-ticker.C:
-			if q.ackLevelUpdated {
-				err := q.purgeAckedMessages()
-				if err != nil {
-					q.logger.Warn("Failed to purge acked domain replication messages.", tag.Error(err))
-				}
-			}
-		case <-q.ackNotificationChan:
-			q.ackLevelUpdated = true
-		}
-	}
 }
 
 func (q *domainReplicationQueueImpl) Close() {

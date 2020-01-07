@@ -40,7 +40,6 @@ type (
 		esClient            es.Client
 		logger              log.Logger
 		metricsClient       metrics.Client
-		dynamicCollection   *dynamicconfig.Collection
 		visibilityProcessor *indexProcessor
 		visibilityIndexName string
 	}

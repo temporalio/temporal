@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// Copyright (c) 2017 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,46 +18,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package definition
+package persistence
 
 import (
-	"fmt"
 	"testing"
 
-	"github.com/stretchr/testify/suite"
+	"github.com/bmizerany/assert"
 )
 
-type (
-	resourceDeduplicationSuite struct {
-		suite.Suite
+func TestClusterReplicationConfigGetCopy(t *testing.T) {
+	config := &ClusterReplicationConfig{
+		ClusterName: "test",
 	}
-)
-
-func TestResourceDeduplicationSuite(t *testing.T) {
-	s := new(resourceDeduplicationSuite)
-	suite.Run(t, s)
-}
-
-func (s *resourceDeduplicationSuite) TestGenerateKey() {
-	resourceType := int32(1)
-	id := "id"
-	key := generateKey(resourceType, id)
-	s.Equal(fmt.Sprintf("%v::%v", resourceType, id), key)
-}
-
-func (s *resourceDeduplicationSuite) TestGenerateDeduplicationKey() {
-	runID := "runID"
-	eventID := int64(1)
-	version := int64(2)
-	resource := NewEventReappliedID(runID, eventID, version)
-	key := GenerateDeduplicationKey(resource)
-	s.Equal(fmt.Sprintf("%v::%v::%v::%v", eventReappliedID, runID, eventID, version), key)
-}
-
-func (s *resourceDeduplicationSuite) TestEventReappliedID() {
-	runID := "runID"
-	eventID := int64(1)
-	version := int64(2)
-	resource := NewEventReappliedID(runID, eventID, version)
-	s.Equal(fmt.Sprintf("%v::%v::%v", runID, eventID, version), resource.GetID())
+	assert.Equal(t, config, config.GetCopy()) // deep equal
+	assert.Equal(t, true, config != config.GetCopy())
 }

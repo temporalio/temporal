@@ -159,7 +159,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 	err2 = s.UpdateWorkflowExecution(updatedInfo, updatedStats, nil, nil, nil, int64(5), nil, nil, nil, nil, []string{timerID})
 	s.NoError(err2)
 
-	state, err1 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	state, err2 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	s.NoError(err2)
 	s.NotNil(state, "expected valid state.")
 	s.Equal(0, len(state.TimerInfos))

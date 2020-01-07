@@ -173,15 +173,6 @@ func (s *IntegrationBase) registerDomain(
 	})
 }
 
-func (s *IntegrationBase) describeDomain(domain string) (*workflow.DescribeDomainResponse, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	return s.engine.DescribeDomain(ctx, &workflow.DescribeDomainRequest{
-		Name: &domain,
-	})
-}
-
 func (s *IntegrationBase) randomizeStr(id string) string {
 	return fmt.Sprintf("%v-%v", id, uuid.New())
 }

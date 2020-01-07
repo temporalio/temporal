@@ -35,10 +35,6 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 )
 
-// TagErr is the tag for error object message
-// TODO: move to constants file under common logging
-const TagErr = `err`
-
 // TestRingpopCluster is a type that represents a test ringpop cluster
 type TestRingpopCluster struct {
 	hostUUIDs    []string

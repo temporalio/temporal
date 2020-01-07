@@ -53,9 +53,7 @@ type (
 
 		minRetentionDays     int
 		maxBadBinaryCount    int
-		logger               log.Logger
 		metadataMgr          persistence.MetadataManager
-		mockClusterMetadata  *mocks.ClusterMetadata
 		mockProducer         *mocks.KafkaProducer
 		mockDomainReplicator Replicator
 		archivalMetadata     archiver.ArchivalMetadata

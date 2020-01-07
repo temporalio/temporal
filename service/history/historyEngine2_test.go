@@ -823,6 +823,7 @@ func (s *engine2Suite) createExecutionStartedState(we workflow.WorkflowExecution
 	return msBuilder
 }
 
+//nolint:unused
 func (s *engine2Suite) printHistory(builder mutableState) string {
 	return builder.GetHistoryBuilder().GetHistory().String()
 }

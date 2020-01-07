@@ -70,13 +70,9 @@ const (
 	rowTypeDLQDomainID = "10000000-6000-f000-f000-000000000000"
 	rowTypeDLQRunID    = "30000000-6000-f000-f000-000000000000"
 	// Special TaskId constants
-	rowTypeExecutionTaskID  = int64(-10)
-	rowTypeShardTaskID      = int64(-11)
-	emptyInitiatedID        = int64(-7)
-	defaultDeleteTTLSeconds = int64(time.Hour*24*7) / int64(time.Second) // keep deleted records for 7 days
-
-	// minimum current execution retention TTL when current execution is deleted, in seconds
-	minCurrentExecutionRetentionTTL = int32(24 * time.Hour / time.Second)
+	rowTypeExecutionTaskID = int64(-10)
+	rowTypeShardTaskID     = int64(-11)
+	emptyInitiatedID       = int64(-7)
 
 	stickyTaskListTTL = int32(24 * time.Hour / time.Second) // if sticky task_list stopped being updated, remove it in one day
 )

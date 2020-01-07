@@ -57,7 +57,6 @@ type (
 		logger           log.Logger
 
 		domainID   string
-		domainName string
 		workflowID string
 		runID      string
 

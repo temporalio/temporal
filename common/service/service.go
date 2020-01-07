@@ -49,13 +49,6 @@ import (
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
-var cadenceServices = []string{
-	common.FrontendServiceName,
-	common.HistoryServiceName,
-	common.MatchingServiceName,
-	common.WorkerServiceName,
-}
-
 type (
 	// BootstrapParams holds the set of parameters
 	// needed to bootstrap a service
@@ -232,7 +225,7 @@ func (h *serviceImpl) Stop() {
 	}
 
 	if h.dispatcher != nil {
-		h.dispatcher.Stop()
+		h.dispatcher.Stop() //nolint:errcheck
 	}
 
 	h.runtimeMetricsReporter.Stop()
