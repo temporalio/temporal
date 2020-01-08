@@ -208,7 +208,8 @@ bins_nothrift: fmt lint copyright cadence-cassandra-tool cadence-sql-tool cadenc
 
 bins: proto thriftc bins_nothrift
 
-test: bins
+test:
+# bins
 	@rm -f test
 	@rm -f test.log
 	@for dir in $(TEST_DIRS); do \

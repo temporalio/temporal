@@ -472,7 +472,8 @@ func getEventAttributes(e *commonproto.HistoryEvent) interface{} {
 }
 
 func isAttributeName(name string) bool {
-	for i := enums.EventType(0); i < enums.EventType(40); i++ {
+	name = "EventType" + name
+	for i := enums.EventType(0); i <= enums.EventType(41); i++ {
 		if name == i.String()+"EventAttributes" {
 			return true
 		}

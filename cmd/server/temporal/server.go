@@ -24,9 +24,13 @@ import (
 	"log"
 	"time"
 
+	"google.golang.org/grpc"
+
 	"github.com/temporalio/temporal/common/authorization"
 
 	"go.uber.org/zap"
+
+	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common"
@@ -198,11 +202,11 @@ func (s *server) startService() common.Daemon {
 		}
 	}
 
-	dispatcher, err := params.DispatcherProvider.Get(common.FrontendServiceName, s.cfg.PublicClient.HostPort)
+	connection, err := grpc.Dial(s.cfg.PublicClient.HostPort, grpc.WithInsecure())
 	if err != nil {
-		log.Fatalf("failed to construct dispatcher: %v", err)
+		log.Fatalf("failed to construct connection: %v", err)
 	}
-	params.PublicClient = workflowserviceclient.New(dispatcher.ClientConfig(common.FrontendServiceName))
+	params.PublicClient = workflowservice.NewWorkflowServiceClient(connection)
 
 	params.ArchivalMetadata = archiver.NewArchivalMetadata(
 		dc,

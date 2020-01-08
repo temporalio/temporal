@@ -26,9 +26,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/temporal-proto/workflowservice"
-
 	"github.com/temporalio/temporal/.gen/go/replicator"
+	"github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/log"
@@ -49,7 +48,7 @@ const (
 func newDomainReplicationMessageProcessor(
 	sourceCluster string,
 	logger log.Logger,
-	remotePeer workflowservice.WorkflowServiceClient,
+	remotePeer workflowserviceclient.Interface,
 	metricsClient metrics.Client,
 	domainReplicator DomainReplicator,
 	hostInfo *membership.HostInfo,
@@ -82,7 +81,7 @@ type (
 		status                 int32
 		sourceCluster          string
 		logger                 log.Logger
-		remotePeer             workflowservice.WorkflowServiceClient
+		remotePeer             workflowserviceclient.Interface
 		domainReplicator       DomainReplicator
 		metricsClient          metrics.Client
 		retryPolicy            backoff.RetryPolicy

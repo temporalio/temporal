@@ -63,6 +63,7 @@ require (
 	go.temporal.io/temporal-proto v0.0.0-20200107082912-100353b9ce5d
 	go.uber.org/atomic v1.5.0
 	go.uber.org/config v1.3.1
+	go.uber.org/fx v1.10.0
 	go.uber.org/multierr v1.4.0
 	go.uber.org/thriftrw v1.20.2
 	go.uber.org/yarpc v1.42.1

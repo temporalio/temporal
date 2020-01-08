@@ -31,7 +31,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	replicator "github.com/temporalio/temporal/.gen/go/replicator"
 	shared "github.com/temporalio/temporal/.gen/go/shared"
-	"go.temporal.io/temporal-proto/workflowservice"
+	workflowserviceclient "github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
 	yarpc "go.uber.org/yarpc"
 )
 
@@ -42,7 +42,7 @@ type MockClient struct {
 	recorder *_MockClientRecorder
 }
 
-var _ workflowservice.WorkflowServiceClient = (*MockClient)(nil)
+var _ workflowserviceclient.Interface = (*MockClient)(nil)
 
 type _MockClientRecorder struct {
 	mock *MockClient
