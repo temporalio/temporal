@@ -1,4 +1,4 @@
-.PHONY: test bins clean cover cover_ci
+.PHONY: git-submodules test bins clean cover cover_ci
 PROJECT_ROOT = github.com/uber/cadence
 
 export PATH := $(shell go env GOPATH)/bin:$(PATH)
@@ -18,15 +18,15 @@ default: test
 # define the list of thrift files the service depends on
 # (if you have some)
 THRIFTRW_SRCS = \
-  idl/github.com/uber/cadence/cadence.thrift \
-  idl/github.com/uber/cadence/health.thrift \
-  idl/github.com/uber/cadence/history.thrift \
-  idl/github.com/uber/cadence/matching.thrift \
-  idl/github.com/uber/cadence/replicator.thrift \
-  idl/github.com/uber/cadence/indexer.thrift \
-  idl/github.com/uber/cadence/shared.thrift \
-  idl/github.com/uber/cadence/admin.thrift \
-  idl/github.com/uber/cadence/sqlblobs.thrift \
+  idls/thrift/cadence.thrift \
+  idls/thrift/health.thrift \
+  idls/thrift/history.thrift \
+  idls/thrift/matching.thrift \
+  idls/thrift/replicator.thrift \
+  idls/thrift/indexer.thrift \
+  idls/thrift/shared.thrift \
+  idls/thrift/admin.thrift \
+  idls/thrift/sqlblobs.thrift \
 
 PROGS = cadence
 TEST_TIMEOUT = 20m
@@ -104,6 +104,9 @@ INTEG_NDC_SQL_COVER_FILE   := $(COVER_ROOT)/integ_ndc_sql_cover.out
 #   Packages are specified as import paths.
 GOCOVERPKG_ARG := -coverpkg="$(PROJECT_ROOT)/common/...,$(PROJECT_ROOT)/service/...,$(PROJECT_ROOT)/client/...,$(PROJECT_ROOT)/tools/..."
 
+git-submodules:
+	git submodule update --init --recursive
+
 yarpc-install:
 	GO111MODULE=off go get -u github.com/myitcv/gobin
 	GOOS= GOARCH= gobin -mod=readonly go.uber.org/thriftrw
@@ -112,7 +115,7 @@ yarpc-install:
 clean_thrift:
 	rm -rf .gen
 
-thriftc: yarpc-install $(THRIFTRW_GEN_SRC)
+thriftc: yarpc-install git-submodules $(THRIFTRW_GEN_SRC) copyright
 
 copyright: cmd/tools/copyright/licensegen.go
 	GOOS= GOARCH= go run ./cmd/tools/copyright/licensegen.go --verifyOnly
