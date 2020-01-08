@@ -97,7 +97,7 @@ func (s *clientIntegrationSuite) TearDownSuite() {
 }
 
 func (s *clientIntegrationSuite) buildServiceClient() (workflowservice.WorkflowServiceClient, error) {
-	hostPort := "127.0.0.1:7104"
+	hostPort := "127.0.0.1:7134"
 	if TestFlags.FrontendAddr != "" {
 		hostPort = TestFlags.FrontendAddr
 	}
