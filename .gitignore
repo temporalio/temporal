@@ -25,5 +25,6 @@ test_eventsV2_xdc.log
 # Executables produced by cadence repo
 cadence
 cadence-server
+cadence-canary
 cadence-cassandra-tool
 cadence-sql-tool
