@@ -97,10 +97,13 @@ func (adh *AdminHandler) RegisterHandler() {
 
 // Start starts the handler
 func (adh *AdminHandler) Start() {
+	// Start domain replication queue cleanup
+	adh.Resource.GetDomainReplicationQueue().Start()
 }
 
 // Stop stops the handler
 func (adh *AdminHandler) Stop() {
+	adh.Resource.GetDomainReplicationQueue().Stop()
 }
 
 // AddSearchAttribute add search attribute to whitelist

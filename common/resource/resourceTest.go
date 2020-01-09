@@ -143,6 +143,9 @@ func NewTest(
 	shardMgr := &mocks.ShardManager{}
 	historyMgr := &mocks.HistoryV2Manager{}
 	executionMgr := &mocks.ExecutionManager{}
+	domainReplicationQueue := persistence.NewMockDomainReplicationQueue(controller)
+	domainReplicationQueue.EXPECT().Start().AnyTimes()
+	domainReplicationQueue.EXPECT().Stop().AnyTimes()
 	persistenceBean := persistenceClient.NewMockBean(controller)
 	persistenceBean.EXPECT().GetMetadataManager().Return(metadataMgr).AnyTimes()
 	persistenceBean.EXPECT().GetTaskManager().Return(taskMgr).AnyTimes()
@@ -150,6 +153,7 @@ func NewTest(
 	persistenceBean.EXPECT().GetHistoryManager().Return(historyMgr).AnyTimes()
 	persistenceBean.EXPECT().GetShardManager().Return(shardMgr).AnyTimes()
 	persistenceBean.EXPECT().GetExecutionManager(gomock.Any()).Return(executionMgr, nil).AnyTimes()
+	persistenceBean.EXPECT().GetDomainReplicationQueue().Return(domainReplicationQueue).AnyTimes()
 
 	membershipMonitor := membership.NewMockMonitor(controller)
 	frontendServiceResolver := membership.NewMockServiceResolver(controller)
@@ -199,7 +203,7 @@ func NewTest(
 		MetadataMgr:            metadataMgr,
 		TaskMgr:                taskMgr,
 		VisibilityMgr:          visibilityMgr,
-		DomainReplicationQueue: nil,
+		DomainReplicationQueue: domainReplicationQueue,
 		ShardMgr:               shardMgr,
 		HistoryMgr:             historyMgr,
 		ExecutionMgr:           executionMgr,
@@ -385,7 +389,7 @@ func (s *Test) GetVisibilityManager() persistence.VisibilityManager {
 // GetDomainReplicationQueue for testing
 func (s *Test) GetDomainReplicationQueue() persistence.DomainReplicationQueue {
 	// user should implement this method for test
-	return nil
+	return s.DomainReplicationQueue
 }
 
 // GetShardManager for testing

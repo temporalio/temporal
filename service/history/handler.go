@@ -746,7 +746,7 @@ func (h *Handler) PollMutableState(
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	scope := metrics.HistoryClientPollMutableStateScope
+	scope := metrics.HistoryPollMutableStateScope
 	h.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()

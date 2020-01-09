@@ -723,6 +723,8 @@ const (
 	HistoryRespondActivityTaskCanceledScope
 	// HistoryGetMutableStateScope tracks GetMutableStateScope API calls received by service
 	HistoryGetMutableStateScope
+	// HistoryPollMutableStateScope tracks PollMutableStateScope API calls received by service
+	HistoryPollMutableStateScope
 	// HistoryResetStickyTaskListScope tracks ResetStickyTaskListScope API calls received by service
 	HistoryResetStickyTaskListScope
 	// HistoryDescribeWorkflowExecutionScope tracks DescribeWorkflowExecution API calls received by service
@@ -893,6 +895,7 @@ const (
 	ReplicationTaskFetcherScope
 	// ReplicationTaskCleanupScope is scope used by all metrics emitted by ReplicationTaskProcessor cleanup
 	ReplicationTaskCleanupScope
+
 	NumHistoryScopes
 )
 
@@ -1268,6 +1271,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryRespondActivityTaskFailedScope:                  {operation: "RespondActivityTaskFailed"},
 		HistoryRespondActivityTaskCanceledScope:                {operation: "RespondActivityTaskCanceled"},
 		HistoryGetMutableStateScope:                            {operation: "GetMutableState"},
+		HistoryPollMutableStateScope:                           {operation: "PollMutableState"},
 		HistoryResetStickyTaskListScope:                        {operation: "ResetStickyTaskListScope"},
 		HistoryDescribeWorkflowExecutionScope:                  {operation: "DescribeWorkflowExecution"},
 		HistoryRecordDecisionTaskStartedScope:                  {operation: "RecordDecisionTaskStarted"},
