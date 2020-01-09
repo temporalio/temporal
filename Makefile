@@ -27,6 +27,7 @@ THRIFTRW_SRCS = \
   idls/thrift/shared.thrift \
   idls/thrift/admin.thrift \
   idls/thrift/sqlblobs.thrift \
+  idls/thrift/checksum.thrift \
 
 PROGS = cadence
 TEST_TIMEOUT = 20m

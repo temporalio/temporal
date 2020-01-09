@@ -192,6 +192,11 @@ type Config struct {
 	EnableConsistentQuery         dynamicconfig.BoolPropertyFn
 	EnableConsistentQueryByDomain dynamicconfig.BoolPropertyFnWithDomainFilter
 	MaxBufferedQueryCount         dynamicconfig.IntPropertyFn
+
+	// Data integrity check related config knobs
+	MutableStateChecksumGenProbability    dynamicconfig.IntPropertyFnWithDomainFilter
+	MutableStateChecksumVerifyProbability dynamicconfig.IntPropertyFnWithDomainFilter
+	MutableStateChecksumInvalidateBefore  dynamicconfig.FloatPropertyFn
 }
 
 const (
@@ -308,9 +313,12 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		ReplicationTaskProcessorCleanupInterval:          dc.GetDurationProperty(dynamicconfig.ReplicationTaskProcessorCleanupInterval, 5*time.Minute),
 		ReplicationTaskProcessorCleanupJitterCoefficient: dc.GetFloat64Property(dynamicconfig.ReplicationTaskProcessorCleanupJitterCoefficient, 0.15),
 
-		EnableConsistentQuery:         dc.GetBoolProperty(dynamicconfig.EnableConsistentQuery, true),
-		EnableConsistentQueryByDomain: dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableConsistentQueryByDomain, false),
-		MaxBufferedQueryCount:         dc.GetIntProperty(dynamicconfig.MaxBufferedQueryCount, 1),
+		EnableConsistentQuery:                 dc.GetBoolProperty(dynamicconfig.EnableConsistentQuery, true),
+		EnableConsistentQueryByDomain:         dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableConsistentQueryByDomain, false),
+		MaxBufferedQueryCount:                 dc.GetIntProperty(dynamicconfig.MaxBufferedQueryCount, 1),
+		MutableStateChecksumGenProbability:    dc.GetIntPropertyFilteredByDomain(dynamicconfig.MutableStateChecksumGenProbability, 0),
+		MutableStateChecksumVerifyProbability: dc.GetIntPropertyFilteredByDomain(dynamicconfig.MutableStateChecksumVerifyProbability, 0),
+		MutableStateChecksumInvalidateBefore:  dc.GetFloat64Property(dynamicconfig.MutableStateChecksumInvalidateBefore, 0),
 	}
 
 	return cfg

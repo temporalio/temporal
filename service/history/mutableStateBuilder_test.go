@@ -29,12 +29,17 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/uber-go/tally"
+
 	"github.com/uber/cadence/.gen/go/shared"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/checksum"
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
 type (
@@ -48,6 +53,7 @@ type (
 
 		msBuilder *mutableStateBuilder
 		logger    log.Logger
+		testScope tally.TestScope
 	}
 )
 
@@ -79,8 +85,12 @@ func (s *mutableStateSuite) SetupTest() {
 		},
 		NewDynamicConfigForTest(),
 	)
+	// set the checksum probabilities to 100% for exercising during test
+	s.mockShard.config.MutableStateChecksumGenProbability = func(domain string) int { return 100 }
+	s.mockShard.config.MutableStateChecksumVerifyProbability = func(domain string) int { return 100 }
 	s.mockShard.eventsCache = s.mockEventsCache
 
+	s.testScope = s.mockShard.resource.MetricsScope.(tally.TestScope)
 	s.logger = s.mockShard.GetLogger()
 
 	s.msBuilder = newMutableStateBuilder(s.mockShard, s.mockEventsCache, s.logger, testLocalDomainEntry)
@@ -338,6 +348,126 @@ func (s *mutableStateSuite) TestReorderEvents() {
 	s.Equal(int64(5), s.msBuilder.hBuilder.history[1].ActivityTaskCompletedEventAttributes.GetScheduledEventId())
 }
 
+func (s *mutableStateSuite) TestChecksum() {
+	testCases := []struct {
+		name                 string
+		enableBufferedEvents bool
+		closeTxFunc          func(ms *mutableStateBuilder) (checksum.Checksum, error)
+	}{
+		{
+			name: "closeTransactionAsSnapshot",
+			closeTxFunc: func(ms *mutableStateBuilder) (checksum.Checksum, error) {
+				snapshot, _, err := ms.CloseTransactionAsSnapshot(time.Now(), transactionPolicyPassive)
+				if err != nil {
+					return checksum.Checksum{}, err
+				}
+				return snapshot.Checksum, err
+			},
+		},
+		{
+			name:                 "closeTransactionAsMutation",
+			enableBufferedEvents: true,
+			closeTxFunc: func(ms *mutableStateBuilder) (checksum.Checksum, error) {
+				mutation, _, err := ms.CloseTransactionAsMutation(time.Now(), transactionPolicyPassive)
+				if err != nil {
+					return checksum.Checksum{}, err
+				}
+				return mutation.Checksum, err
+			},
+		},
+	}
+
+	loadErrorsFunc := func() int64 {
+		counter := s.testScope.Snapshot().Counters()["test.mutable_state_checksum_mismatch+operation=WorkflowContext"]
+		if counter != nil {
+			return counter.Value()
+		}
+		return 0
+	}
+
+	var loadErrors int64
+
+	for _, tc := range testCases {
+		s.T().Run(tc.name, func(t *testing.T) {
+			dbState := s.buildWorkflowMutableState()
+			if !tc.enableBufferedEvents {
+				dbState.BufferedEvents = nil
+			}
+
+			// create mutable state and verify checksum is generated on close
+			loadErrors = loadErrorsFunc()
+			s.msBuilder.Load(dbState)
+			s.Equal(loadErrors, loadErrorsFunc()) // no errors expected
+			s.EqualValues(dbState.Checksum, s.msBuilder.checksum)
+			s.msBuilder.domainEntry = s.newDomainCacheEntry()
+			csum, err := tc.closeTxFunc(s.msBuilder)
+			s.Nil(err)
+			s.NotNil(csum.Value)
+			s.Equal(checksum.FlavorIEEECRC32OverThriftBinary, csum.Flavor)
+			s.Equal(mutableStateChecksumPayloadV1, csum.Version)
+			s.EqualValues(csum, s.msBuilder.checksum)
+
+			// verify checksum is verified on Load
+			dbState.Checksum = csum
+			s.msBuilder.Load(dbState)
+			s.Equal(loadErrors, loadErrorsFunc())
+
+			// generate checksum again and verify its the same
+			csum, err = tc.closeTxFunc(s.msBuilder)
+			s.Nil(err)
+			s.NotNil(csum.Value)
+			s.Equal(dbState.Checksum.Value, csum.Value)
+
+			// modify checksum and verify Load fails
+			dbState.Checksum.Value[0]++
+			s.msBuilder.Load(dbState)
+			s.Equal(loadErrors+1, loadErrorsFunc())
+			s.EqualValues(dbState.Checksum, s.msBuilder.checksum)
+
+			// test checksum is invalidated
+			loadErrors = loadErrorsFunc()
+			s.mockShard.config.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 {
+				return float64((s.msBuilder.executionInfo.LastUpdatedTimestamp.UnixNano() / int64(time.Second)) + 1)
+			}
+			s.msBuilder.Load(dbState)
+			s.Equal(loadErrors, loadErrorsFunc())
+			s.EqualValues(checksum.Checksum{}, s.msBuilder.checksum)
+
+			// revert the config value for the next test case
+			s.mockShard.config.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 {
+				return float64(0)
+			}
+		})
+	}
+}
+
+func (s *mutableStateSuite) TestChecksumProbabilities() {
+	for _, prob := range []int{0, 100} {
+		s.mockShard.config.MutableStateChecksumGenProbability = func(domain string) int { return prob }
+		s.mockShard.config.MutableStateChecksumVerifyProbability = func(domain string) int { return prob }
+		for i := 0; i < 100; i++ {
+			shouldGenerate := s.msBuilder.shouldGenerateChecksum()
+			shouldVerify := s.msBuilder.shouldVerifyChecksum()
+			s.Equal(prob == 100, shouldGenerate)
+			s.Equal(prob == 100, shouldVerify)
+		}
+	}
+}
+
+func (s *mutableStateSuite) TestChecksumShouldInvalidate() {
+	s.mockShard.config.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 { return 0 }
+	s.False(s.msBuilder.shouldInvalidateCheckum())
+	s.msBuilder.executionInfo.LastUpdatedTimestamp = time.Now()
+	s.mockShard.config.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 {
+		return float64((s.msBuilder.executionInfo.LastUpdatedTimestamp.UnixNano() / int64(time.Second)) + 1)
+	}
+	s.True(s.msBuilder.shouldInvalidateCheckum())
+	s.mockShard.config.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 {
+		return float64((s.msBuilder.executionInfo.LastUpdatedTimestamp.UnixNano() / int64(time.Second)) - 1)
+	}
+	s.False(s.msBuilder.shouldInvalidateCheckum())
+}
+
 func (s *mutableStateSuite) TestTrimEvents() {
 	var input []*workflow.HistoryEvent
 	output := s.msBuilder.trimEventsAfterWorkflowClose(input)
@@ -566,4 +696,139 @@ func (s *mutableStateSuite) prepareTransientDecisionCompletionFirstBatchReplicat
 	s.NotNil(di)
 
 	return newDecisionScheduleEvent, newDecisionStartedEvent
+}
+
+func (s *mutableStateSuite) newDomainCacheEntry() *cache.DomainCacheEntry {
+	return cache.NewDomainCacheEntryForTest(
+		&persistence.DomainInfo{Name: "mutableStateTest"},
+		&persistence.DomainConfig{},
+		true,
+		&persistence.DomainReplicationConfig{},
+		1,
+		nil,
+	)
+}
+
+func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMutableState {
+	domainID := testDomainID
+	we := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("wId"),
+		RunId:      common.StringPtr(testRunID),
+	}
+	tl := "testTaskList"
+	failoverVersion := int64(300)
+
+	info := &persistence.WorkflowExecutionInfo{
+		DomainID:                    domainID,
+		WorkflowID:                  we.GetWorkflowId(),
+		RunID:                       we.GetRunId(),
+		TaskList:                    tl,
+		WorkflowTypeName:            "wType",
+		WorkflowTimeout:             200,
+		DecisionStartToCloseTimeout: 100,
+		State:                       persistence.WorkflowStateRunning,
+		CloseStatus:                 persistence.WorkflowCloseStatusNone,
+		NextEventID:                 int64(101),
+		LastProcessedEvent:          int64(99),
+		LastUpdatedTimestamp:        time.Now(),
+		DecisionVersion:             failoverVersion,
+		DecisionScheduleID:          common.EmptyEventID,
+		DecisionStartedID:           common.EmptyEventID,
+		DecisionTimeout:             100,
+	}
+
+	activityInfos := map[int64]*persistence.ActivityInfo{
+		5: &persistence.ActivityInfo{
+			Version:                failoverVersion,
+			ScheduleID:             int64(90),
+			ScheduledTime:          time.Now(),
+			StartedID:              common.EmptyEventID,
+			StartedTime:            time.Now(),
+			ActivityID:             "activityID_5",
+			ScheduleToStartTimeout: 100,
+			ScheduleToCloseTimeout: 200,
+			StartToCloseTimeout:    300,
+			HeartbeatTimeout:       50,
+		},
+	}
+
+	timerInfos := map[string]*persistence.TimerInfo{
+		"25": &persistence.TimerInfo{
+			Version:    failoverVersion,
+			TimerID:    "25",
+			StartedID:  85,
+			ExpiryTime: time.Now().Add(time.Hour),
+		},
+	}
+
+	childInfos := map[int64]*persistence.ChildExecutionInfo{
+		80: &persistence.ChildExecutionInfo{
+			Version:               failoverVersion,
+			InitiatedID:           80,
+			InitiatedEventBatchID: 20,
+			InitiatedEvent:        &shared.HistoryEvent{},
+			StartedID:             common.EmptyEventID,
+			CreateRequestID:       uuid.New(),
+			DomainName:            testDomainID,
+			WorkflowTypeName:      "code.uber.internal/test/foobar",
+		},
+	}
+
+	signalInfos := map[int64]*persistence.SignalInfo{
+		75: &persistence.SignalInfo{
+			Version:               failoverVersion,
+			InitiatedID:           75,
+			InitiatedEventBatchID: 17,
+			SignalRequestID:       uuid.New(),
+			SignalName:            "test-signal-75",
+			Input:                 []byte("signal-input-75"),
+		},
+	}
+
+	signalRequestIDs := map[string]struct{}{
+		uuid.New(): struct{}{},
+	}
+
+	bufferedEvents := []*workflow.HistoryEvent{
+		&workflow.HistoryEvent{
+			EventId:   common.Int64Ptr(common.BufferedEventID),
+			EventType: workflow.EventTypeWorkflowExecutionSignaled.Ptr(),
+			Version:   common.Int64Ptr(failoverVersion),
+			WorkflowExecutionSignaledEventAttributes: &workflow.WorkflowExecutionSignaledEventAttributes{
+				SignalName: common.StringPtr("test-signal-buffered"),
+				Input:      []byte("test-signal-buffered-input"),
+			},
+		},
+	}
+
+	replicationState := &persistence.ReplicationState{
+		StartVersion:        failoverVersion,
+		CurrentVersion:      failoverVersion,
+		LastWriteVersion:    common.EmptyVersion,
+		LastWriteEventID:    common.EmptyEventID,
+		LastReplicationInfo: make(map[string]*persistence.ReplicationInfo),
+	}
+
+	versionHistories := &persistence.VersionHistories{
+		Histories: []*persistence.VersionHistory{
+			{
+				BranchToken: []byte("token#1"),
+				Items: []*persistence.VersionHistoryItem{
+					{EventID: 1, Version: 300},
+				},
+			},
+		},
+	}
+
+	return &persistence.WorkflowMutableState{
+		ExecutionInfo:       info,
+		ActivityInfos:       activityInfos,
+		TimerInfos:          timerInfos,
+		ChildExecutionInfos: childInfos,
+		SignalInfos:         signalInfos,
+		SignalRequestedIDs:  signalRequestIDs,
+		BufferedEvents:      bufferedEvents,
+		ReplicationState:    replicationState,
+		VersionHistories:    versionHistories,
+	}
 }

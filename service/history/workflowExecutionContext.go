@@ -247,7 +247,9 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, er
 			c.logger,
 			domainEntry,
 		)
+
 		c.mutableState.Load(response.State)
+
 		c.stats = response.State.ExecutionStats
 		c.updateCondition = response.State.ExecutionInfo.NextEventID
 

@@ -209,6 +209,9 @@ var keys = map[Key]string{
 	EnableConsistentQuery:                                 "history.EnableConsistentQuery",
 	EnableConsistentQueryByDomain:                         "history.EnableConsistentQueryByDomain",
 	MaxBufferedQueryCount:                                 "history.MaxBufferedQueryCount",
+	MutableStateChecksumGenProbability:                    "history.mutableStateChecksumGenProbability",
+	MutableStateChecksumVerifyProbability:                 "history.mutableStateChecksumVerifyProbability",
+	MutableStateChecksumInvalidateBefore:                  "history.mutableStateChecksumInvalidateBefore",
 
 	WorkerPersistenceMaxQPS:                         "worker.persistenceMaxQPS",
 	WorkerReplicatorMetaTaskConcurrency:             "worker.replicatorMetaTaskConcurrency",
@@ -623,6 +626,12 @@ const (
 	EnableConsistentQueryByDomain
 	// MaxBufferedQueryCount indicates the maximum number of queries which can be buffered at a given time for a single workflow
 	MaxBufferedQueryCount
+	// MutableStateChecksumGenProbability is the probability [0-100] that checksum will be generated for mutable state
+	MutableStateChecksumGenProbability
+	// MutableStateChecksumVerifyProbability is the probability [0-100] that checksum will be verified for mutable state
+	MutableStateChecksumVerifyProbability
+	// MutableStateChecksumInvalidateBefore is the epoch timestamp before which all checksums are to be discarded
+	MutableStateChecksumInvalidateBefore
 
 	// lastKeyForTest must be the last one in this const group for testing purpose
 	lastKeyForTest

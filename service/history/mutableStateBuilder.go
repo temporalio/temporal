@@ -23,6 +23,7 @@ package history
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -32,12 +33,14 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/checksum"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/errors"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
+	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 )
 
@@ -130,6 +133,12 @@ type (
 		insertReplicationTasks []persistence.Task
 		insertTimerTasks       []persistence.Task
 
+		// do not rely on this, this is only updated on
+		// Load() and closeTransactionXXX methods. So when
+		// a transaction is in progress, this value will be
+		// wrong. This exist primarily for visibility via CLI
+		checksum checksum.Checksum
+
 		taskGenerator       mutableStateTaskGenerator
 		decisionTaskManager mutableStateDecisionTaskManager
 		queryRegistry       queryRegistry
@@ -140,6 +149,7 @@ type (
 		config          *Config
 		timeSource      clock.TimeSource
 		logger          log.Logger
+		metricsClient   metrics.Client
 	}
 )
 
@@ -194,6 +204,7 @@ func newMutableStateBuilder(
 		config:          shard.GetConfig(),
 		timeSource:      shard.GetTimeSource(),
 		logger:          logger,
+		metricsClient:   shard.GetMetricsClient(),
 	}
 	s.executionInfo = &persistence.WorkflowExecutionInfo{
 		DecisionVersion:    common.EmptyVersion,
@@ -255,6 +266,7 @@ func (e *mutableStateBuilder) CopyToPersistence() *persistence.WorkflowMutableSt
 	state.ExecutionInfo = e.executionInfo
 	state.BufferedEvents = e.bufferedEvents
 	state.VersionHistories = e.versionHistories
+	state.Checksum = e.checksum
 
 	// TODO when 2DC is deprecated, remove this
 	state.ReplicationState = e.replicationState
@@ -288,6 +300,23 @@ func (e *mutableStateBuilder) Load(
 	e.stateInDB = state.ExecutionInfo.State
 	e.nextEventIDInDB = state.ExecutionInfo.NextEventID
 	e.versionHistories = state.VersionHistories
+	e.checksum = state.Checksum
+
+	if len(state.Checksum.Value) > 0 {
+		switch {
+		case e.shouldInvalidateCheckum():
+			e.checksum = checksum.Checksum{}
+			e.metricsClient.IncCounter(metrics.WorkflowContextScope, metrics.MutableStateChecksumInvalidated)
+		case e.shouldVerifyChecksum():
+			if err := verifyMutableStateChecksum(e, state.Checksum); err != nil {
+				// we ignore checksum verification errors for now until this
+				// feature is tested and/or we have mechanisms in place to deal
+				// with these types of errors
+				e.metricsClient.IncCounter(metrics.WorkflowContextScope, metrics.MutableStateChecksumMismatch)
+				e.logError("mutable state checksum mismatch", tag.Error(err))
+			}
+		}
+	}
 }
 
 func (e *mutableStateBuilder) GetCurrentBranchToken() ([]byte, error) {
@@ -3884,6 +3913,13 @@ func (e *mutableStateBuilder) CloseTransactionAsMutation(
 	// update last update time
 	e.executionInfo.LastUpdatedTimestamp = now
 
+	// we generate checksum here based on the assumption that the returned
+	// snapshot object is considered immutable. As of this writing, the only
+	// code that modifies the returned object lives inside workflowExecutionContext.resetWorkflowExecution
+	// currently, the updates done inside workflowExecutionContext.resetWorkflowExecution doesn't
+	// impact the checksum calculation
+	checksum := e.generateChecksum()
+
 	workflowMutation := &persistence.WorkflowMutation{
 		ExecutionInfo:    e.executionInfo,
 		ReplicationState: e.replicationState,
@@ -3909,8 +3945,10 @@ func (e *mutableStateBuilder) CloseTransactionAsMutation(
 		TimerTasks:       e.insertTimerTasks,
 
 		Condition: e.nextEventIDInDB,
+		Checksum:  checksum,
 	}
 
+	e.checksum = checksum
 	if err := e.cleanupTransaction(transactionPolicy); err != nil {
 		return nil, nil, err
 	}
@@ -3962,6 +4000,13 @@ func (e *mutableStateBuilder) CloseTransactionAsSnapshot(
 	// update last update time
 	e.executionInfo.LastUpdatedTimestamp = now
 
+	// we generate checksum here based on the assumption that the returned
+	// snapshot object is considered immutable. As of this writing, the only
+	// code that modifies the returned object lives inside workflowExecutionContext.resetWorkflowExecution
+	// currently, the updates done inside workflowExecutionContext.resetWorkflowExecution doesn't
+	// impact the checksum calculation
+	checksum := e.generateChecksum()
+
 	workflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo:    e.executionInfo,
 		ReplicationState: e.replicationState,
@@ -3979,8 +4024,10 @@ func (e *mutableStateBuilder) CloseTransactionAsSnapshot(
 		TimerTasks:       e.insertTimerTasks,
 
 		Condition: e.nextEventIDInDB,
+		Checksum:  checksum,
 	}
 
+	e.checksum = checksum
 	if err := e.cleanupTransaction(transactionPolicy); err != nil {
 		return nil, nil, err
 	}
@@ -4517,6 +4564,41 @@ func (e *mutableStateBuilder) checkMutability(
 		return ErrWorkflowFinished
 	}
 	return nil
+}
+
+func (e *mutableStateBuilder) generateChecksum() checksum.Checksum {
+	if !e.shouldGenerateChecksum() {
+		return checksum.Checksum{}
+	}
+	csum, err := generateMutableStateChecksum(e)
+	if err != nil {
+		e.logWarn("error generating mutableState checksum", tag.Error(err))
+		return checksum.Checksum{}
+	}
+	return csum
+}
+
+func (e *mutableStateBuilder) shouldGenerateChecksum() bool {
+	if e.domainEntry == nil {
+		return false
+	}
+	return rand.Intn(100) < e.config.MutableStateChecksumGenProbability(e.domainEntry.GetInfo().Name)
+}
+
+func (e *mutableStateBuilder) shouldVerifyChecksum() bool {
+	if e.domainEntry == nil {
+		return false
+	}
+	return rand.Intn(100) < e.config.MutableStateChecksumVerifyProbability(e.domainEntry.GetInfo().Name)
+}
+
+func (e *mutableStateBuilder) shouldInvalidateCheckum() bool {
+	invalidateBeforeEpochSecs := int64(e.config.MutableStateChecksumInvalidateBefore())
+	if invalidateBeforeEpochSecs > 0 {
+		invalidateBefore := time.Unix(invalidateBeforeEpochSecs, 0)
+		return e.executionInfo.LastUpdatedTimestamp.Before(invalidateBefore)
+	}
+	return false
 }
 
 func (e *mutableStateBuilder) createInternalServerError(

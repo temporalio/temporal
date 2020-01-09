@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -358,6 +359,14 @@ func MaxInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// SortInt64Slice sorts the given int64 slice.
+// Sort is not guaranteed to be stable.
+func SortInt64Slice(slice []int64) {
+	sort.Slice(slice, func(i int, j int) bool {
+		return slice[i] < slice[j]
+	})
 }
 
 // ValidateRetryPolicy validates a retry policy
