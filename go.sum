@@ -241,8 +241,6 @@ github.com/rcrowley/go-metrics v0.0.0-20181016184325-3113b8401b8a/go.mod h1:bCqn
 github.com/robfig/cron v1.2.0 h1:ZjScXvvxeQ63Dbyxy76Fj3AT3Ut0aKsyd2/tl3DTMuQ=
 github.com/robfig/cron v1.2.0/go.mod h1:JGuDeoQd7Z6yL4zQhZ3OPEVHB7fL6Ka6skscFHfmt2k=
 github.com/rogpeppe/go-internal v1.3.0/go.mod h1:M8bDsm7K2OlrFYOpmOWEs/qY81heoFRclV5y23lUDJ4=
-github.com/samuel/go-thrift v0.0.0-20190219015601-e8b6b52668fe h1:gD4vkYmuoWVgdV6UwI3tPo9MtMfVoIRY+Xn9919SJBg=
-github.com/samuel/go-thrift v0.0.0-20190219015601-e8b6b52668fe/go.mod h1:Vrkh1pnjV9Bl8c3P9zH0/D4NlOHWP5d4/hF4YTULaec=
 github.com/samuel/go-thrift v0.0.0-20191111193933-5165175b40af h1:EiWVfh8mr40yFZEui2oF0d45KgH48PkB2H0Z0GANvSI=
 github.com/samuel/go-thrift v0.0.0-20191111193933-5165175b40af/go.mod h1:Vrkh1pnjV9Bl8c3P9zH0/D4NlOHWP5d4/hF4YTULaec=
 github.com/schollz/progressbar/v2 v2.12.1/go.mod h1:fBI3onORwtNtwCWJHsrXtjE3QnJOtqIZrvr3rDaF7L0=
@@ -308,7 +306,6 @@ go.uber.org/multierr v1.4.0 h1:f3WCSC2KzAcBXGATIxAB1E2XuCpNU255wNKZ505qi3E=
 go.uber.org/multierr v1.4.0/go.mod h1:VgVr7evmIr6uPjLBxg28wmKNXyqE9akIJ5XnfpiKl+4=
 go.uber.org/net/metrics v1.2.0 h1:mCej7Kba5Qwkvw6TC7JQv8SgrsHCtpHIlVStZrjhINo=
 go.uber.org/net/metrics v1.2.0/go.mod h1:cQvI3JawIRCZEgrpuF3rrV2OrQGLchMqJPyPAH7GUdo=
-go.uber.org/thriftrw v1.11.0/go.mod h1:a0+HZMaS9tmHDCPyrrx1GjYWFRK02xzxnrK1Nl9LiLU=
 go.uber.org/thriftrw v1.20.2 h1:0JlCE7dOyWHEQdfDm0MWIbgTn6vXkiMA6LNIe8FQXjw=
 go.uber.org/thriftrw v1.20.2/go.mod h1:a0+HZMaS9tmHDCPyrrx1GjYWFRK02xzxnrK1Nl9LiLU=
 go.uber.org/tools v0.0.0-20190618225709-2cfd321de3ee h1:0mgffUl7nfd+FpvXMVz4IDEaUSmT1ysygQC7qYo7sG4=
