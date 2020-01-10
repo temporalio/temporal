@@ -23,8 +23,6 @@ package common
 import (
 	"time"
 
-	"go.temporal.io/temporal/.gen/go/shared"
-
 	s "github.com/temporalio/temporal/.gen/go/shared"
 )
 
@@ -146,11 +144,6 @@ func ChildWorkflowExecutionFailedCausePtr(t s.ChildWorkflowExecutionFailedCause)
 
 // ArchivalStatusPtr makes a copy and returns the pointer to an ArchivalStatus.
 func ArchivalStatusPtr(t s.ArchivalStatus) *s.ArchivalStatus {
-	return &t
-}
-
-// ClientArchivalStatusPtr makes a copy and returns the pointer to a client ArchivalStatus.
-func ClientArchivalStatusPtr(t shared.ArchivalStatus) *shared.ArchivalStatus {
 	return &t
 }
 

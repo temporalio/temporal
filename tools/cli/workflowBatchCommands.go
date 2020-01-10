@@ -28,8 +28,9 @@ import (
 	"strings"
 
 	"github.com/urfave/cli"
+	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/workflowservice"
 
-	"go.temporal.io/temporal/.gen/go/shared"
 	cclient "go.temporal.io/temporal/client"
 
 	"github.com/temporalio/temporal/common"
@@ -68,8 +69,8 @@ func DescribeBatchJob(c *cli.Context) {
 	}
 
 	output := map[string]interface{}{}
-	if wf.WorkflowExecutionInfo.CloseStatus != nil {
-		if wf.WorkflowExecutionInfo.GetCloseStatus() != shared.WorkflowExecutionCloseStatusCompleted {
+	if wf.WorkflowExecutionInfo.GetCloseStatus() != enums.WorkflowExecutionCloseStatusRunning {
+		if wf.WorkflowExecutionInfo.GetCloseStatus() != enums.WorkflowExecutionCloseStatusCompleted {
 			output["msg"] = "batch job stopped status: " + wf.WorkflowExecutionInfo.GetCloseStatus().String()
 		} else {
 			output["msg"] = "batch job is finished successfully"
@@ -97,10 +98,10 @@ func ListBatchJobs(c *cli.Context) {
 	client := cclient.NewClient(svcClient, common.SystemLocalDomainName, &cclient.Options{})
 	tcCtx, cancel := newContext(c)
 	defer cancel()
-	resp, err := client.ListWorkflow(tcCtx, &shared.ListWorkflowExecutionsRequest{
-		Domain:   common.StringPtr(common.SystemLocalDomainName),
-		PageSize: common.Int32Ptr(int32(pageSize)),
-		Query:    common.StringPtr(fmt.Sprintf("CustomDomain = '%v'", domain)),
+	resp, err := client.ListWorkflow(tcCtx, &workflowservice.ListWorkflowExecutionsRequest{
+		Domain:   common.SystemLocalDomainName,
+		PageSize: int32(pageSize),
+		Query:    fmt.Sprintf("CustomDomain = '%v'", domain),
 	})
 	if err != nil {
 		ErrorAndExit("Failed to list batch jobs", err)
@@ -114,7 +115,7 @@ func ListBatchJobs(c *cli.Context) {
 			"operator":  string(wf.SearchAttributes.IndexedFields["Operator"]),
 		}
 
-		if wf.CloseStatus != nil {
+		if wf.CloseStatus != enums.WorkflowExecutionCloseStatusRunning {
 			job["status"] = wf.CloseStatus.String()
 			job["closeTime"] = convertTime(wf.GetCloseTime(), false)
 		} else {
@@ -147,9 +148,9 @@ func StartBatchJob(c *cli.Context) {
 	client := cclient.NewClient(svcClient, common.SystemLocalDomainName, &cclient.Options{})
 	tcCtx, cancel := newContext(c)
 	defer cancel()
-	resp, err := client.CountWorkflow(tcCtx, &shared.CountWorkflowExecutionsRequest{
-		Domain: common.StringPtr(domain),
-		Query:  common.StringPtr(query),
+	resp, err := client.CountWorkflow(tcCtx, &workflowservice.CountWorkflowExecutionsRequest{
+		Domain: domain,
+		Query:  query,
 	})
 	if err != nil {
 		ErrorAndExit("Failed to count impacting workflows for starting a batch job", err)

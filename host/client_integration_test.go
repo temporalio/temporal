@@ -35,18 +35,16 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/temporal/.gen/go/shared"
-	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
+	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/activity"
 	"go.temporal.io/temporal/client"
 	"go.temporal.io/temporal/encoded"
-	cworker "go.temporal.io/temporal/worker"
+	"go.temporal.io/temporal/worker"
 	"go.temporal.io/temporal/workflow"
-	"go.uber.org/yarpc"
-	"go.uber.org/yarpc/transport/tchannel"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
 
-	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log/tag"
 )
 
@@ -63,10 +61,11 @@ type (
 		// not merely log an error
 		*require.Assertions
 		IntegrationBase
-		wfService workflowserviceclient.Interface
-		wfClient  client.Client
-		worker    cworker.Worker
-		taskList  string
+		wfService        workflowservice.WorkflowServiceClient
+		wfClient         client.Client
+		worker           worker.Worker
+		taskList         string
+		connectionCloser func()
 	}
 )
 
@@ -86,43 +85,33 @@ func (s *clientIntegrationSuite) SetupSuite() {
 	s.wfClient = client.NewClient(s.wfService, s.domainName, nil)
 
 	s.taskList = "client-integration-test-tasklist"
-	s.worker = cworker.New(s.wfService, s.domainName, s.taskList, cworker.Options{})
+	s.worker = worker.New(s.wfService, s.domainName, s.taskList, worker.Options{})
 	if err := s.worker.Start(); err != nil {
 		s.Logger.Fatal("Error when start worker", tag.Error(err))
 	}
 }
 
 func (s *clientIntegrationSuite) TearDownSuite() {
+	s.connectionCloser()
 	s.tearDownSuite()
 }
 
-func (s *clientIntegrationSuite) buildServiceClient() (workflowserviceclient.Interface, error) {
-	cadenceClientName := "cadence-client"
-	cadenceFrontendService := common.FrontendServiceName
-	hostPort := "127.0.0.1:7104"
+func (s *clientIntegrationSuite) buildServiceClient() (workflowservice.WorkflowServiceClient, error) {
+	hostPort := "127.0.0.1:7134"
 	if TestFlags.FrontendAddr != "" {
 		hostPort = TestFlags.FrontendAddr
 	}
 
-	ch, err := tchannel.NewChannelTransport(tchannel.ServiceName(cadenceClientName))
+	connection, err := grpc.Dial(hostPort, grpc.WithInsecure())
 	if err != nil {
-		s.Logger.Fatal("Failed to create transport channel", tag.Error(err))
+		return nil, err
 	}
 
-	dispatcher := yarpc.NewDispatcher(yarpc.Config{
-		Name: cadenceClientName,
-		Outbounds: yarpc.Outbounds{
-			cadenceFrontendService: {Unary: ch.NewSingleOutbound(hostPort)},
-		},
-	})
-	if dispatcher == nil {
-		s.Logger.Fatal("No RPC dispatcher provided to create a connection to Cadence Service")
-	}
-	if err := dispatcher.Start(); err != nil {
-		s.Logger.Fatal("Failed to create outbound transport channel", tag.Error(err))
+	s.connectionCloser = func() {
+		_ = connection.Close()
 	}
 
-	return workflowserviceclient.New(dispatcher.ClientConfig(cadenceFrontendService)), nil
+	return workflowservice.NewWorkflowServiceClient(connection), nil
 }
 
 func (s *clientIntegrationSuite) SetupTest() {
@@ -194,12 +183,12 @@ func testDataConverterWorkflow(ctx workflow.Context, tl string) (string, error) 
 	return result + "," + result1, nil
 }
 
-func (s *clientIntegrationSuite) startWorkerWithDataConverter(tl string, dataConverter encoded.DataConverter) cworker.Worker {
-	opts := cworker.Options{}
+func (s *clientIntegrationSuite) startWorkerWithDataConverter(tl string, dataConverter encoded.DataConverter) worker.Worker {
+	opts := worker.Options{}
 	if dataConverter != nil {
 		opts.DataConverter = dataConverter
 	}
-	worker := cworker.New(s.wfService, s.domainName, tl, opts)
+	worker := worker.New(s.wfService, s.domainName, tl, opts)
 	if err := worker.Start(); err != nil {
 		s.Logger.Fatal("Error when start worker with data converter", tag.Error(err))
 	}
@@ -269,12 +258,12 @@ func (s *clientIntegrationSuite) TestClientDataConverter_Failed() {
 	for iter.HasNext() {
 		event, err := iter.Next()
 		s.Nil(err)
-		if event.GetEventType() == shared.EventTypeActivityTaskCompleted {
+		if event.GetEventType() == enums.EventTypeActivityTaskCompleted {
 			completedAct++
 		}
-		if event.GetEventType() == shared.EventTypeActivityTaskFailed {
+		if event.GetEventType() == enums.EventTypeActivityTaskFailed {
 			failedAct++
-			attr := event.ActivityTaskFailedEventAttributes
+			attr := event.GetActivityTaskFailedEventAttributes()
 			s.True(strings.HasPrefix(string(attr.Details), "unable to decode the activity function input bytes with error"))
 		}
 	}

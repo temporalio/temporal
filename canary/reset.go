@@ -26,7 +26,9 @@ import (
 	"time"
 
 	"go.temporal.io/temporal"
-	"go.temporal.io/temporal/.gen/go/shared"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/activity"
 	"go.temporal.io/temporal/workflow"
 )
@@ -192,10 +194,10 @@ func triggerResetActivity(ctx context.Context, domain string, baseWE workflow.Ex
 		return workflow.Execution{}, err
 	}
 	for _, event := range events {
-		if event.GetEventType() == shared.EventTypeDecisionTaskCompleted {
+		if event.GetEventType() == enums.EventTypeDecisionTaskCompleted {
 			resetEventID = event.GetEventId()
 		}
-		if event.GetEventType() == shared.EventTypeSignalExternalWorkflowExecutionInitiated {
+		if event.GetEventType() == enums.EventTypeSignalExternalWorkflowExecutionInitiated {
 			seenTrigger = true
 			break
 		}
@@ -205,38 +207,38 @@ func triggerResetActivity(ctx context.Context, domain string, baseWE workflow.Ex
 		return workflow.Execution{}, fmt.Errorf("something went wrong...base workflow has not reach reset point, %v, %v", resetEventID, seenTrigger)
 	}
 
-	req := &shared.ResetWorkflowExecutionRequest{
-		Domain: &domain,
-		WorkflowExecution: &shared.WorkflowExecution{
-			WorkflowId: &baseWE.ID,
-			RunId:      &baseWE.RunID,
+	req := &workflowservice.ResetWorkflowExecutionRequest{
+		Domain: domain,
+		WorkflowExecution: &commonproto.WorkflowExecution{
+			WorkflowId: baseWE.ID,
+			RunId:      baseWE.RunID,
 		},
-		Reason:                &reason,
-		DecisionFinishEventId: &resetEventID,
-		RequestId:             &baseWE.RunID,
+		Reason:                reason,
+		DecisionFinishEventId: resetEventID,
+		RequestId:             baseWE.RunID,
 	}
 	resp, err := svClient.ResetWorkflowExecution(ctx, req)
 	if err != nil {
 		return workflow.Execution{}, err
 	}
-	baseWE.RunID = *resp.RunId
+	baseWE.RunID = resp.RunId
 	return baseWE, nil
 }
 
 func verifyResetActivity(ctx context.Context, domain string, newWE workflow.Execution) error {
 	svClient := getActivityContext(ctx).cadence.Service
 
-	resp, err := svClient.DescribeWorkflowExecution(ctx, &shared.DescribeWorkflowExecutionRequest{
-		Domain: &domain,
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: &newWE.ID,
-			RunId:      &newWE.RunID,
+	resp, err := svClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Domain: domain,
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: newWE.ID,
+			RunId:      newWE.RunID,
 		},
 	})
 	if err != nil {
 		return err
 	}
-	if resp.WorkflowExecutionInfo.CloseStatus == nil || resp.WorkflowExecutionInfo.GetCloseStatus() != shared.WorkflowExecutionCloseStatusCompleted {
+	if resp.WorkflowExecutionInfo.CloseStatus == enums.WorkflowExecutionCloseStatusRunning || resp.WorkflowExecutionInfo.GetCloseStatus() != enums.WorkflowExecutionCloseStatusCompleted {
 		return fmt.Errorf("new execution triggered by reset is not completed")
 	}
 	return nil

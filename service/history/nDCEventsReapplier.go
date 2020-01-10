@@ -25,8 +25,6 @@ package history
 import (
 	ctx "context"
 
-	"go.temporal.io/temporal/.gen/go/shared"
-
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
@@ -86,7 +84,7 @@ func (r *nDCEventsReapplierImpl) reapplyEvents(
 
 	// sanity check workflow still running
 	if !msBuilder.IsWorkflowExecutionRunning() {
-		return nil, &shared.InternalServiceError{
+		return nil, &workflow.InternalServiceError{
 			Message: "unable to reapply events to closed workflow.",
 		}
 	}

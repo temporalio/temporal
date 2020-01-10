@@ -976,3 +976,40 @@ func toProtoTaskListPartitionMetadata(in *shared.TaskListPartitionMetadata) *com
 		OwnerHostName: in.GetOwnerHostName(),
 	}
 }
+
+func ToThriftResetPoints(in *common.ResetPoints) *shared.ResetPoints {
+	if in == nil {
+		return nil
+	}
+
+	return &shared.ResetPoints{
+		Points: toThriftResetPointInfos(in.Points),
+	}
+}
+
+func toThriftResetPointInfos(in []*common.ResetPointInfo) []*shared.ResetPointInfo {
+	if in == nil {
+		return nil
+	}
+
+	var ret []*shared.ResetPointInfo
+	for _, item := range in {
+		ret = append(ret, toThriftResetPointInfo(item))
+	}
+	return ret
+}
+
+func toThriftResetPointInfo(in *common.ResetPointInfo) *shared.ResetPointInfo {
+	if in == nil {
+		return nil
+	}
+
+	return &shared.ResetPointInfo{
+		BinaryChecksum:           &in.BinaryChecksum,
+		RunId:                    &in.RunId,
+		FirstDecisionCompletedId: &in.FirstDecisionCompletedId,
+		CreatedTimeNano:          &in.CreatedTimeNano,
+		ExpiringTimeNano:         &in.ExpiringTimeNano,
+		Resettable:               &in.Resettable,
+	}
+}

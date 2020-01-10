@@ -21,6 +21,7 @@ require (
 	github.com/go-sql-driver/mysql v1.4.1
 	github.com/gocql/gocql v0.0.0-20171220143535-56a164ee9f31
 	github.com/gogo/protobuf v1.3.1
+	github.com/gogo/status v1.1.0
 	github.com/golang/mock v1.3.1
 	github.com/google/uuid v1.1.1
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
@@ -58,11 +59,10 @@ require (
 	github.com/urfave/cli v1.20.0
 	github.com/valyala/fastjson v1.4.1
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
-	go.temporal.io/temporal v0.9.4
+	go.temporal.io/temporal v0.10.3
 	go.temporal.io/temporal-proto v0.0.0-20200107082912-100353b9ce5d
 	go.uber.org/atomic v1.5.0
 	go.uber.org/config v1.3.1
-	go.uber.org/fx v1.10.0
 	go.uber.org/multierr v1.4.0
 	go.uber.org/thriftrw v1.20.2
 	go.uber.org/yarpc v1.42.1
@@ -72,6 +72,7 @@ require (
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4
 	golang.org/x/tools v0.0.0-20191114200427-caa0b0f7d508
 	google.golang.org/appengine v1.6.1 // indirect
+	google.golang.org/grpc v1.26.0
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/jcmturner/goidentity.v3 v3.0.0 // indirect
 	gopkg.in/jcmturner/gokrb5.v7 v7.3.0 // indirect

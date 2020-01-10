@@ -23,10 +23,12 @@ package canary
 import (
 	"context"
 
+	"github.com/gogo/status"
 	"github.com/opentracing/opentracing-go"
-	"go.temporal.io/temporal/.gen/go/shared"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal/worker"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
 )
 
 type (
@@ -125,7 +127,8 @@ func (c *canaryImpl) startCronWorkflow() {
 	ctx = opentracing.ContextWithSpan(ctx, span)
 	_, err := c.canaryClient.StartWorkflow(ctx, opts, cronWorkflow, c.canaryDomain, wfTypeSanity)
 	if err != nil {
-		if _, ok := err.(*shared.WorkflowExecutionAlreadyStartedError); !ok {
+		st := status.Convert(err)
+		if st.Code() == codes.AlreadyExists {
 			c.runtime.logger.Error("error starting cron workflow", zap.Error(err))
 		}
 	}
@@ -144,15 +147,15 @@ func (c *canaryImpl) createDomain() error {
 	name := c.canaryDomain
 	desc := "Domain for running cadence canary workflows"
 	owner := "cadence-canary"
-	return c.canaryClient.createDomain(name, desc, owner, nil)
+	return c.canaryClient.createDomain(name, desc, owner, enums.ArchivalStatusDefault)
 }
 
 func (c *canaryImpl) createArchivalDomain() error {
 	name := archivalDomain
 	desc := "Domain used by cadence canary workflows to verify archival"
 	owner := "cadence-canary"
-	archivalStatus := shared.ArchivalStatusEnabled
-	return c.canaryClient.createDomain(name, desc, owner, &archivalStatus)
+	archivalStatus := enums.ArchivalStatusEnabled
+	return c.canaryClient.createDomain(name, desc, owner, archivalStatus)
 }
 
 // Override worker options to create large number of pollers to improve the chances of activities getting sync matched

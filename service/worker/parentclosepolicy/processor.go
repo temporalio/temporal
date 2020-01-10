@@ -26,7 +26,7 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/uber-go/tally"
 
-	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
+	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/worker"
 
 	"github.com/temporalio/temporal/client"
@@ -42,7 +42,7 @@ type (
 	BootstrapParams struct {
 		// Config contains the configuration for scanner
 		// ServiceClient is an instance of cadence service client
-		ServiceClient workflowserviceclient.Interface
+		ServiceClient workflowservice.WorkflowServiceClient
 		// MetricsClient is an instance of metrics object for emitting stats
 		MetricsClient metrics.Client
 		Logger        log.Logger
@@ -54,7 +54,7 @@ type (
 
 	// Processor is the background sub-system that execute workflow for ParentClosePolicy
 	Processor struct {
-		svcClient     workflowserviceclient.Interface
+		svcClient     workflowservice.WorkflowServiceClient
 		clientBean    client.Bean
 		metricsClient metrics.Client
 		tallyScope    tally.Scope

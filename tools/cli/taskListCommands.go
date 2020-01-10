@@ -25,7 +25,7 @@ import (
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
-	s "go.temporal.io/temporal/.gen/go/shared"
+	"go.temporal.io/temporal-proto/enums"
 )
 
 // DescribeTaskList show pollers info of a given tasklist
@@ -49,7 +49,7 @@ func DescribeTaskList(c *cli.Context) {
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetBorder(false)
 	table.SetColumnSeparator("|")
-	if taskListType == s.TaskListTypeActivity {
+	if taskListType == enums.TaskListTypeActivity {
 		table.SetHeader([]string{"Activity Poller Identity", "Last Access Time"})
 	} else {
 		table.SetHeader([]string{"Decision Poller Identity", "Last Access Time"})

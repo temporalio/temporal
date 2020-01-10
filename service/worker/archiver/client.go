@@ -27,7 +27,7 @@ import (
 	"math/rand"
 	"time"
 
-	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
+	"go.temporal.io/temporal-proto/workflowservice"
 	cclient "go.temporal.io/temporal/client"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
@@ -118,7 +118,7 @@ const (
 func NewClient(
 	metricsClient metrics.Client,
 	logger log.Logger,
-	publicClient workflowserviceclient.Interface,
+	publicClient workflowservice.WorkflowServiceClient,
 	numWorkflows dynamicconfig.IntPropertyFn,
 	requestRPS dynamicconfig.IntPropertyFn,
 	archiverProvider provider.ArchiverProvider,

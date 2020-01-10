@@ -31,7 +31,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
+	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/yarpc/yarpcerrors"
 	"golang.org/x/net/context"
 
@@ -135,7 +135,7 @@ type (
 		resetor                   workflowResetor
 		workflowResetter          workflowResetter
 		replicationTaskProcessors []ReplicationTaskProcessor
-		publicClient              workflowserviceclient.Interface
+		publicClient              workflowservice.WorkflowServiceClient
 		eventsReapplier           nDCEventsReapplier
 		matchingClient            matching.Client
 		rawMatchingClient         matching.Client
@@ -199,7 +199,7 @@ func NewEngineWithShardContext(
 	visibilityMgr persistence.VisibilityManager,
 	matching matching.Client,
 	historyClient hc.Client,
-	publicClient workflowserviceclient.Interface,
+	publicClient workflowservice.WorkflowServiceClient,
 	historyEventNotifier historyEventNotifier,
 	publisher messaging.Producer,
 	config *Config,

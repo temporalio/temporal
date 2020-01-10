@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"go.temporal.io/temporal"
-	"go.temporal.io/temporal/.gen/go/shared"
+	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/client"
 	"go.temporal.io/temporal/workflow"
 )
@@ -197,9 +197,9 @@ func verifyBatchActivity(ctx context.Context, domain, startTime string) error {
 	svClient := getActivityContext(ctx).cadence.Service
 
 	q1 := "WorkflowType = '" + wfTypeBatchParent + "' AND CloseTime = missing  AND StartTime <'" + startTime + "' "
-	resp, err := svClient.CountWorkflowExecutions(ctx, &shared.CountWorkflowExecutionsRequest{
-		Domain: &domain,
-		Query:  &q1,
+	resp, err := svClient.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
+		Domain: domain,
+		Query:  q1,
 	})
 	if err != nil {
 		return err
@@ -209,9 +209,9 @@ func verifyBatchActivity(ctx context.Context, domain, startTime string) error {
 	}
 
 	q2 := "WorkflowType = '" + wfTypeBatchChild + "' AND CloseTime = missing  AND StartTime <'" + startTime + "' "
-	resp, err = svClient.CountWorkflowExecutions(ctx, &shared.CountWorkflowExecutionsRequest{
-		Domain: &domain,
-		Query:  &q2,
+	resp, err = svClient.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
+		Domain: domain,
+		Query:  q2,
 	})
 	if err != nil {
 		return err
