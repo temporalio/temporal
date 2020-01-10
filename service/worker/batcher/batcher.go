@@ -26,7 +26,7 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/uber-go/tally"
 
-	"go.temporal.io/temporal/.gen/go/temporal/workflowserviceclient"
+	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/worker"
 
 	"github.com/temporalio/temporal/client"
@@ -52,7 +52,7 @@ type (
 		// Config contains the configuration for scanner
 		Config Config
 		// ServiceClient is an instance of cadence service client
-		ServiceClient workflowserviceclient.Interface
+		ServiceClient workflowservice.WorkflowServiceClient
 		// MetricsClient is an instance of metrics object for emitting stats
 		MetricsClient metrics.Client
 		Logger        log.Logger
@@ -66,7 +66,7 @@ type (
 	// It is also the context object that get's passed around within the scanner workflows / activities
 	Batcher struct {
 		cfg           Config
-		svcClient     workflowserviceclient.Interface
+		svcClient     workflowservice.WorkflowServiceClient
 		clientBean    client.Bean
 		metricsClient metrics.Client
 		tallyScope    tally.Scope

@@ -26,8 +26,6 @@ import (
 	ctx "context"
 	"time"
 
-	"go.temporal.io/temporal/.gen/go/shared"
-
 	h "github.com/temporalio/temporal/.gen/go/history"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
@@ -300,7 +298,7 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 			)
 		}
 	} else {
-		return false, &shared.InternalServiceError{Message: "The workflow is neither 2DC or 3DC enabled."}
+		return false, &workflow.InternalServiceError{Message: "The workflow is neither 2DC nor 3DC enabled."}
 	}
 
 	return true, nil

@@ -38,36 +38,34 @@ import (
 	"github.com/fatih/color"
 	"github.com/urfave/cli"
 	"github.com/valyala/fastjson"
-
-	s "go.temporal.io/temporal/.gen/go/shared"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal/client"
-
-	"github.com/temporalio/temporal/common"
 )
 
 // JSONHistorySerializer is used to encode history event in JSON
 type JSONHistorySerializer struct{}
 
 // Serialize serializes history.
-func (j *JSONHistorySerializer) Serialize(h *s.History) ([]byte, error) {
+func (j *JSONHistorySerializer) Serialize(h *commonproto.History) ([]byte, error) {
 	return json.Marshal(h.Events)
 }
 
 // Deserialize deserializes history
-func (j *JSONHistorySerializer) Deserialize(data []byte) (*s.History, error) {
-	var events []*s.HistoryEvent
+func (j *JSONHistorySerializer) Deserialize(data []byte) (*commonproto.History, error) {
+	var events []*commonproto.HistoryEvent
 	err := json.Unmarshal(data, &events)
 	if err != nil {
 		return nil, err
 	}
-	return &s.History{Events: events}, nil
+	return &commonproto.History{Events: events}, nil
 }
 
 // GetHistory helper method to iterate over all pages and return complete list of history events
-func GetHistory(ctx context.Context, workflowClient client.Client, workflowID, runID string) (*s.History, error) {
+func GetHistory(ctx context.Context, workflowClient client.Client, workflowID, runID string) (*commonproto.History, error) {
 	iter := workflowClient.GetWorkflowHistory(ctx, workflowID, runID, false,
-		s.HistoryEventFilterTypeAllEvent)
-	events := []*s.HistoryEvent{}
+		enums.HistoryEventFilterTypeAllEvent)
+	var events []*commonproto.HistoryEvent
 	for iter.HasNext() {
 		event, err := iter.Next()
 		if err != nil {
@@ -76,13 +74,13 @@ func GetHistory(ctx context.Context, workflowClient client.Client, workflowID, r
 		events = append(events, event)
 	}
 
-	history := &s.History{}
+	history := &commonproto.History{}
 	history.Events = events
 	return history, nil
 }
 
 // HistoryEventToString convert HistoryEvent to string
-func HistoryEventToString(e *s.HistoryEvent, printFully bool, maxFieldLength int) string {
+func HistoryEventToString(e *commonproto.HistoryEvent, printFully bool, maxFieldLength int) string {
 	data := getEventAttributes(e)
 	return anyToString(data, printFully, maxFieldLength)
 }
@@ -212,130 +210,130 @@ func breakLongWords(input string, maxWordLength int) string {
 //   Completed - green
 //   Started - blue
 //   Others - default (white/black)
-func ColorEvent(e *s.HistoryEvent) string {
+func ColorEvent(e *commonproto.HistoryEvent) string {
 	var data string
 	switch e.GetEventType() {
-	case s.EventTypeWorkflowExecutionStarted:
+	case enums.EventTypeWorkflowExecutionStarted:
 		data = color.BlueString(e.EventType.String())
 
-	case s.EventTypeWorkflowExecutionCompleted:
+	case enums.EventTypeWorkflowExecutionCompleted:
 		data = color.GreenString(e.EventType.String())
 
-	case s.EventTypeWorkflowExecutionFailed:
+	case enums.EventTypeWorkflowExecutionFailed:
 		data = color.RedString(e.EventType.String())
 
-	case s.EventTypeWorkflowExecutionTimedOut:
+	case enums.EventTypeWorkflowExecutionTimedOut:
 		data = color.YellowString(e.EventType.String())
 
-	case s.EventTypeDecisionTaskScheduled:
+	case enums.EventTypeDecisionTaskScheduled:
 		data = e.EventType.String()
 
-	case s.EventTypeDecisionTaskStarted:
+	case enums.EventTypeDecisionTaskStarted:
 		data = e.EventType.String()
 
-	case s.EventTypeDecisionTaskCompleted:
+	case enums.EventTypeDecisionTaskCompleted:
 		data = e.EventType.String()
 
-	case s.EventTypeDecisionTaskTimedOut:
+	case enums.EventTypeDecisionTaskTimedOut:
 		data = color.YellowString(e.EventType.String())
 
-	case s.EventTypeActivityTaskScheduled:
+	case enums.EventTypeActivityTaskScheduled:
 		data = e.EventType.String()
 
-	case s.EventTypeActivityTaskStarted:
+	case enums.EventTypeActivityTaskStarted:
 		data = e.EventType.String()
 
-	case s.EventTypeActivityTaskCompleted:
+	case enums.EventTypeActivityTaskCompleted:
 		data = e.EventType.String()
 
-	case s.EventTypeActivityTaskFailed:
+	case enums.EventTypeActivityTaskFailed:
 		data = color.RedString(e.EventType.String())
 
-	case s.EventTypeActivityTaskTimedOut:
+	case enums.EventTypeActivityTaskTimedOut:
 		data = color.YellowString(e.EventType.String())
 
-	case s.EventTypeActivityTaskCancelRequested:
+	case enums.EventTypeActivityTaskCancelRequested:
 		data = e.EventType.String()
 
-	case s.EventTypeRequestCancelActivityTaskFailed:
+	case enums.EventTypeRequestCancelActivityTaskFailed:
 		data = color.RedString(e.EventType.String())
 
-	case s.EventTypeActivityTaskCanceled:
+	case enums.EventTypeActivityTaskCanceled:
 		data = e.EventType.String()
 
-	case s.EventTypeTimerStarted:
+	case enums.EventTypeTimerStarted:
 		data = e.EventType.String()
 
-	case s.EventTypeTimerFired:
+	case enums.EventTypeTimerFired:
 		data = e.EventType.String()
 
-	case s.EventTypeCancelTimerFailed:
+	case enums.EventTypeCancelTimerFailed:
 		data = color.RedString(e.EventType.String())
 
-	case s.EventTypeTimerCanceled:
+	case enums.EventTypeTimerCanceled:
 		data = color.MagentaString(e.EventType.String())
 
-	case s.EventTypeWorkflowExecutionCancelRequested:
+	case enums.EventTypeWorkflowExecutionCancelRequested:
 		data = e.EventType.String()
 
-	case s.EventTypeWorkflowExecutionCanceled:
+	case enums.EventTypeWorkflowExecutionCanceled:
 		data = color.MagentaString(e.EventType.String())
 
-	case s.EventTypeRequestCancelExternalWorkflowExecutionInitiated:
+	case enums.EventTypeRequestCancelExternalWorkflowExecutionInitiated:
 		data = e.EventType.String()
 
-	case s.EventTypeRequestCancelExternalWorkflowExecutionFailed:
+	case enums.EventTypeRequestCancelExternalWorkflowExecutionFailed:
 		data = color.RedString(e.EventType.String())
 
-	case s.EventTypeExternalWorkflowExecutionCancelRequested:
+	case enums.EventTypeExternalWorkflowExecutionCancelRequested:
 		data = e.EventType.String()
 
-	case s.EventTypeMarkerRecorded:
+	case enums.EventTypeMarkerRecorded:
 		data = e.EventType.String()
 
-	case s.EventTypeWorkflowExecutionSignaled:
+	case enums.EventTypeWorkflowExecutionSignaled:
 		data = e.EventType.String()
 
-	case s.EventTypeWorkflowExecutionTerminated:
+	case enums.EventTypeWorkflowExecutionTerminated:
 		data = e.EventType.String()
 
-	case s.EventTypeWorkflowExecutionContinuedAsNew:
+	case enums.EventTypeWorkflowExecutionContinuedAsNew:
 		data = e.EventType.String()
 
-	case s.EventTypeStartChildWorkflowExecutionInitiated:
+	case enums.EventTypeStartChildWorkflowExecutionInitiated:
 		data = e.EventType.String()
 
-	case s.EventTypeStartChildWorkflowExecutionFailed:
+	case enums.EventTypeStartChildWorkflowExecutionFailed:
 		data = color.RedString(e.EventType.String())
 
-	case s.EventTypeChildWorkflowExecutionStarted:
+	case enums.EventTypeChildWorkflowExecutionStarted:
 		data = color.BlueString(e.EventType.String())
 
-	case s.EventTypeChildWorkflowExecutionCompleted:
+	case enums.EventTypeChildWorkflowExecutionCompleted:
 		data = color.GreenString(e.EventType.String())
 
-	case s.EventTypeChildWorkflowExecutionFailed:
+	case enums.EventTypeChildWorkflowExecutionFailed:
 		data = color.RedString(e.EventType.String())
 
-	case s.EventTypeChildWorkflowExecutionCanceled:
+	case enums.EventTypeChildWorkflowExecutionCanceled:
 		data = color.MagentaString(e.EventType.String())
 
-	case s.EventTypeChildWorkflowExecutionTimedOut:
+	case enums.EventTypeChildWorkflowExecutionTimedOut:
 		data = color.YellowString(e.EventType.String())
 
-	case s.EventTypeChildWorkflowExecutionTerminated:
+	case enums.EventTypeChildWorkflowExecutionTerminated:
 		data = e.EventType.String()
 
-	case s.EventTypeSignalExternalWorkflowExecutionInitiated:
+	case enums.EventTypeSignalExternalWorkflowExecutionInitiated:
 		data = e.EventType.String()
 
-	case s.EventTypeSignalExternalWorkflowExecutionFailed:
+	case enums.EventTypeSignalExternalWorkflowExecutionFailed:
 		data = color.RedString(e.EventType.String())
 
-	case s.EventTypeExternalWorkflowExecutionSignaled:
+	case enums.EventTypeExternalWorkflowExecutionSignaled:
 		data = e.EventType.String()
 
-	case s.EventTypeUpsertWorkflowSearchAttributes:
+	case enums.EventTypeUpsertWorkflowSearchAttributes:
 		data = e.EventType.String()
 
 	default:
@@ -344,128 +342,128 @@ func ColorEvent(e *s.HistoryEvent) string {
 	return data
 }
 
-func getEventAttributes(e *s.HistoryEvent) interface{} {
+func getEventAttributes(e *commonproto.HistoryEvent) interface{} {
 	var data interface{}
 	switch e.GetEventType() {
-	case s.EventTypeWorkflowExecutionStarted:
-		data = e.WorkflowExecutionStartedEventAttributes
+	case enums.EventTypeWorkflowExecutionStarted:
+		data = e.GetWorkflowExecutionStartedEventAttributes()
 
-	case s.EventTypeWorkflowExecutionCompleted:
-		data = e.WorkflowExecutionCompletedEventAttributes
+	case enums.EventTypeWorkflowExecutionCompleted:
+		data = e.GetWorkflowExecutionCompletedEventAttributes()
 
-	case s.EventTypeWorkflowExecutionFailed:
-		data = e.WorkflowExecutionFailedEventAttributes
+	case enums.EventTypeWorkflowExecutionFailed:
+		data = e.GetWorkflowExecutionFailedEventAttributes()
 
-	case s.EventTypeWorkflowExecutionTimedOut:
-		data = e.WorkflowExecutionTimedOutEventAttributes
+	case enums.EventTypeWorkflowExecutionTimedOut:
+		data = e.GetWorkflowExecutionTimedOutEventAttributes()
 
-	case s.EventTypeDecisionTaskScheduled:
-		data = e.DecisionTaskScheduledEventAttributes
+	case enums.EventTypeDecisionTaskScheduled:
+		data = e.GetDecisionTaskScheduledEventAttributes()
 
-	case s.EventTypeDecisionTaskStarted:
-		data = e.DecisionTaskStartedEventAttributes
+	case enums.EventTypeDecisionTaskStarted:
+		data = e.GetDecisionTaskStartedEventAttributes()
 
-	case s.EventTypeDecisionTaskCompleted:
-		data = e.DecisionTaskCompletedEventAttributes
+	case enums.EventTypeDecisionTaskCompleted:
+		data = e.GetDecisionTaskCompletedEventAttributes()
 
-	case s.EventTypeDecisionTaskTimedOut:
-		data = e.DecisionTaskTimedOutEventAttributes
+	case enums.EventTypeDecisionTaskTimedOut:
+		data = e.GetDecisionTaskTimedOutEventAttributes()
 
-	case s.EventTypeActivityTaskScheduled:
-		data = e.ActivityTaskScheduledEventAttributes
+	case enums.EventTypeActivityTaskScheduled:
+		data = e.GetActivityTaskScheduledEventAttributes()
 
-	case s.EventTypeActivityTaskStarted:
-		data = e.ActivityTaskStartedEventAttributes
+	case enums.EventTypeActivityTaskStarted:
+		data = e.GetActivityTaskStartedEventAttributes()
 
-	case s.EventTypeActivityTaskCompleted:
-		data = e.ActivityTaskCompletedEventAttributes
+	case enums.EventTypeActivityTaskCompleted:
+		data = e.GetActivityTaskCompletedEventAttributes()
 
-	case s.EventTypeActivityTaskFailed:
-		data = e.ActivityTaskFailedEventAttributes
+	case enums.EventTypeActivityTaskFailed:
+		data = e.GetActivityTaskFailedEventAttributes()
 
-	case s.EventTypeActivityTaskTimedOut:
-		data = e.ActivityTaskTimedOutEventAttributes
+	case enums.EventTypeActivityTaskTimedOut:
+		data = e.GetActivityTaskTimedOutEventAttributes()
 
-	case s.EventTypeActivityTaskCancelRequested:
-		data = e.ActivityTaskCancelRequestedEventAttributes
+	case enums.EventTypeActivityTaskCancelRequested:
+		data = e.GetActivityTaskCancelRequestedEventAttributes()
 
-	case s.EventTypeRequestCancelActivityTaskFailed:
-		data = e.RequestCancelActivityTaskFailedEventAttributes
+	case enums.EventTypeRequestCancelActivityTaskFailed:
+		data = e.GetRequestCancelActivityTaskFailedEventAttributes()
 
-	case s.EventTypeActivityTaskCanceled:
-		data = e.ActivityTaskCanceledEventAttributes
+	case enums.EventTypeActivityTaskCanceled:
+		data = e.GetActivityTaskCanceledEventAttributes()
 
-	case s.EventTypeTimerStarted:
-		data = e.TimerStartedEventAttributes
+	case enums.EventTypeTimerStarted:
+		data = e.GetTimerStartedEventAttributes()
 
-	case s.EventTypeTimerFired:
-		data = e.TimerFiredEventAttributes
+	case enums.EventTypeTimerFired:
+		data = e.GetTimerFiredEventAttributes()
 
-	case s.EventTypeCancelTimerFailed:
-		data = e.CancelTimerFailedEventAttributes
+	case enums.EventTypeCancelTimerFailed:
+		data = e.GetCancelTimerFailedEventAttributes()
 
-	case s.EventTypeTimerCanceled:
-		data = e.TimerCanceledEventAttributes
+	case enums.EventTypeTimerCanceled:
+		data = e.GetTimerCanceledEventAttributes()
 
-	case s.EventTypeWorkflowExecutionCancelRequested:
-		data = e.WorkflowExecutionCancelRequestedEventAttributes
+	case enums.EventTypeWorkflowExecutionCancelRequested:
+		data = e.GetWorkflowExecutionCancelRequestedEventAttributes()
 
-	case s.EventTypeWorkflowExecutionCanceled:
-		data = e.WorkflowExecutionCanceledEventAttributes
+	case enums.EventTypeWorkflowExecutionCanceled:
+		data = e.GetWorkflowExecutionCanceledEventAttributes()
 
-	case s.EventTypeRequestCancelExternalWorkflowExecutionInitiated:
-		data = e.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes
+	case enums.EventTypeRequestCancelExternalWorkflowExecutionInitiated:
+		data = e.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes()
 
-	case s.EventTypeRequestCancelExternalWorkflowExecutionFailed:
-		data = e.RequestCancelExternalWorkflowExecutionFailedEventAttributes
+	case enums.EventTypeRequestCancelExternalWorkflowExecutionFailed:
+		data = e.GetRequestCancelExternalWorkflowExecutionFailedEventAttributes()
 
-	case s.EventTypeExternalWorkflowExecutionCancelRequested:
-		data = e.ExternalWorkflowExecutionCancelRequestedEventAttributes
+	case enums.EventTypeExternalWorkflowExecutionCancelRequested:
+		data = e.GetExternalWorkflowExecutionCancelRequestedEventAttributes()
 
-	case s.EventTypeMarkerRecorded:
-		data = e.MarkerRecordedEventAttributes
+	case enums.EventTypeMarkerRecorded:
+		data = e.GetMarkerRecordedEventAttributes()
 
-	case s.EventTypeWorkflowExecutionSignaled:
-		data = e.WorkflowExecutionSignaledEventAttributes
+	case enums.EventTypeWorkflowExecutionSignaled:
+		data = e.GetWorkflowExecutionSignaledEventAttributes()
 
-	case s.EventTypeWorkflowExecutionTerminated:
-		data = e.WorkflowExecutionTerminatedEventAttributes
+	case enums.EventTypeWorkflowExecutionTerminated:
+		data = e.GetWorkflowExecutionTerminatedEventAttributes()
 
-	case s.EventTypeWorkflowExecutionContinuedAsNew:
-		data = e.WorkflowExecutionContinuedAsNewEventAttributes
+	case enums.EventTypeWorkflowExecutionContinuedAsNew:
+		data = e.GetWorkflowExecutionContinuedAsNewEventAttributes()
 
-	case s.EventTypeStartChildWorkflowExecutionInitiated:
-		data = e.StartChildWorkflowExecutionInitiatedEventAttributes
+	case enums.EventTypeStartChildWorkflowExecutionInitiated:
+		data = e.GetStartChildWorkflowExecutionInitiatedEventAttributes()
 
-	case s.EventTypeStartChildWorkflowExecutionFailed:
-		data = e.StartChildWorkflowExecutionFailedEventAttributes
+	case enums.EventTypeStartChildWorkflowExecutionFailed:
+		data = e.GetStartChildWorkflowExecutionFailedEventAttributes()
 
-	case s.EventTypeChildWorkflowExecutionStarted:
-		data = e.ChildWorkflowExecutionStartedEventAttributes
+	case enums.EventTypeChildWorkflowExecutionStarted:
+		data = e.GetChildWorkflowExecutionStartedEventAttributes()
 
-	case s.EventTypeChildWorkflowExecutionCompleted:
-		data = e.ChildWorkflowExecutionCompletedEventAttributes
+	case enums.EventTypeChildWorkflowExecutionCompleted:
+		data = e.GetChildWorkflowExecutionCompletedEventAttributes()
 
-	case s.EventTypeChildWorkflowExecutionFailed:
-		data = e.ChildWorkflowExecutionFailedEventAttributes
+	case enums.EventTypeChildWorkflowExecutionFailed:
+		data = e.GetChildWorkflowExecutionFailedEventAttributes()
 
-	case s.EventTypeChildWorkflowExecutionCanceled:
-		data = e.ChildWorkflowExecutionCanceledEventAttributes
+	case enums.EventTypeChildWorkflowExecutionCanceled:
+		data = e.GetChildWorkflowExecutionCanceledEventAttributes()
 
-	case s.EventTypeChildWorkflowExecutionTimedOut:
-		data = e.ChildWorkflowExecutionTimedOutEventAttributes
+	case enums.EventTypeChildWorkflowExecutionTimedOut:
+		data = e.GetChildWorkflowExecutionTimedOutEventAttributes()
 
-	case s.EventTypeChildWorkflowExecutionTerminated:
-		data = e.ChildWorkflowExecutionTerminatedEventAttributes
+	case enums.EventTypeChildWorkflowExecutionTerminated:
+		data = e.GetChildWorkflowExecutionTerminatedEventAttributes()
 
-	case s.EventTypeSignalExternalWorkflowExecutionInitiated:
-		data = e.SignalExternalWorkflowExecutionInitiatedEventAttributes
+	case enums.EventTypeSignalExternalWorkflowExecutionInitiated:
+		data = e.GetSignalExternalWorkflowExecutionInitiatedEventAttributes()
 
-	case s.EventTypeSignalExternalWorkflowExecutionFailed:
-		data = e.SignalExternalWorkflowExecutionFailedEventAttributes
+	case enums.EventTypeSignalExternalWorkflowExecutionFailed:
+		data = e.GetSignalExternalWorkflowExecutionFailedEventAttributes()
 
-	case s.EventTypeExternalWorkflowExecutionSignaled:
-		data = e.ExternalWorkflowExecutionSignaledEventAttributes
+	case enums.EventTypeExternalWorkflowExecutionSignaled:
+		data = e.GetExternalWorkflowExecutionSignaledEventAttributes()
 
 	default:
 		data = e
@@ -474,7 +472,8 @@ func getEventAttributes(e *s.HistoryEvent) interface{} {
 }
 
 func isAttributeName(name string) bool {
-	for i := s.EventType(0); i < s.EventType(40); i++ {
+	name = "EventType" + name
+	for i := enums.EventType(0); i <= enums.EventType(41); i++ {
 		if name == i.String()+"EventAttributes" {
 			return true
 		}
@@ -567,13 +566,6 @@ func getRequiredGlobalOption(c *cli.Context, optionName string) string {
 	return value
 }
 
-func timestampPtrToStringPtr(unixNanoPtr *int64, onlyTime bool) *string {
-	if unixNanoPtr == nil {
-		return nil
-	}
-	return common.StringPtr(convertTime(*unixNanoPtr, onlyTime))
-}
-
 func convertTime(unixNano int64, onlyTime bool) string {
 	t := time.Unix(0, unixNano)
 	var result string
@@ -605,18 +597,11 @@ func parseTime(timeStr string, defaultValue int64) int64 {
 	return resultValue
 }
 
-func strToTaskListType(str string) s.TaskListType {
+func strToTaskListType(str string) enums.TaskListType {
 	if strings.ToLower(str) == "activity" {
-		return s.TaskListTypeActivity
+		return enums.TaskListTypeActivity
 	}
-	return s.TaskListTypeDecision
-}
-
-func getPtrOrNilIfEmpty(value string) *string {
-	if value == "" {
-		return nil
-	}
-	return common.StringPtr(value)
+	return enums.TaskListTypeDecision
 }
 
 func getCliIdentity() string {

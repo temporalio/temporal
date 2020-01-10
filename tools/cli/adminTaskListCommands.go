@@ -28,28 +28,28 @@ import (
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
-
-	s "github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/common"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/workflowservice"
 )
 
 // AdminDescribeTaskList displays poller and status information of task list.
 func AdminDescribeTaskList(c *cli.Context) {
-	frontendClient := cFactory.ServerFrontendClient(c)
+	frontendClient := cFactory.ServerFrontendClientGRPC(c)
 	domain := getRequiredGlobalOption(c, FlagDomain)
 	taskList := getRequiredOption(c, FlagTaskList)
-	taskListType := s.TaskListTypeDecision
+	taskListType := enums.TaskListTypeDecision
 	if strings.ToLower(c.String(FlagTaskListType)) == "activity" {
-		taskListType = s.TaskListTypeActivity
+		taskListType = enums.TaskListTypeActivity
 	}
 
 	ctx, cancel := newContext(c)
 	defer cancel()
-	request := &s.DescribeTaskListRequest{
-		Domain:                common.StringPtr(domain),
-		TaskList:              &s.TaskList{Name: common.StringPtr(taskList)},
-		TaskListType:          &taskListType,
-		IncludeTaskListStatus: common.BoolPtr(true),
+	request := &workflowservice.DescribeTaskListRequest{
+		Domain:                domain,
+		TaskList:              &commonproto.TaskList{Name: taskList},
+		TaskListType:          taskListType,
+		IncludeTaskListStatus: true,
 	}
 
 	response, err := frontendClient.DescribeTaskList(ctx, request)
@@ -71,7 +71,7 @@ func AdminDescribeTaskList(c *cli.Context) {
 	printPollerInfo(pollers, taskListType)
 }
 
-func printTaskListStatus(taskListStatus *s.TaskListStatus) {
+func printTaskListStatus(taskListStatus *commonproto.TaskListStatus) {
 	taskIDBlock := taskListStatus.GetTaskIDBlock()
 
 	table := tablewriter.NewWriter(os.Stdout)
@@ -88,11 +88,11 @@ func printTaskListStatus(taskListStatus *s.TaskListStatus) {
 	table.Render()
 }
 
-func printPollerInfo(pollers []*s.PollerInfo, taskListType s.TaskListType) {
+func printPollerInfo(pollers []*commonproto.PollerInfo, taskListType enums.TaskListType) {
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetBorder(false)
 	table.SetColumnSeparator("|")
-	if taskListType == s.TaskListTypeActivity {
+	if taskListType == enums.TaskListTypeActivity {
 		table.SetHeader([]string{"Activity Poller Identity", "Last Access Time"})
 	} else {
 		table.SetHeader([]string{"Decision Poller Identity", "Last Access Time"})

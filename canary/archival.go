@@ -28,7 +28,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"go.temporal.io/temporal/.gen/go/shared"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/activity"
 	"go.temporal.io/temporal/workflow"
 	"go.uber.org/zap"
@@ -96,11 +97,11 @@ func archivalActivity(ctx context.Context, scheduledTimeNanos int64) error {
 	}
 	domain := archivalDomain
 	runID := workflowRun.GetRunID()
-	getHistoryReq := &shared.GetWorkflowExecutionHistoryRequest{
-		Domain: &domain,
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: &workflowID,
-			RunId:      &runID,
+	getHistoryReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Domain: domain,
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
 		},
 	}
 
