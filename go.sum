@@ -258,6 +258,7 @@ github.com/robfig/cron v1.2.0/go.mod h1:JGuDeoQd7Z6yL4zQhZ3OPEVHB7fL6Ka6skscFHfm
 github.com/rogpeppe/go-internal v1.3.0/go.mod h1:M8bDsm7K2OlrFYOpmOWEs/qY81heoFRclV5y23lUDJ4=
 github.com/samuel/go-thrift v0.0.0-20190219015601-e8b6b52668fe h1:gD4vkYmuoWVgdV6UwI3tPo9MtMfVoIRY+Xn9919SJBg=
 github.com/samuel/go-thrift v0.0.0-20190219015601-e8b6b52668fe/go.mod h1:Vrkh1pnjV9Bl8c3P9zH0/D4NlOHWP5d4/hF4YTULaec=
+github.com/samuel/go-thrift v0.0.0-20191111193933-5165175b40af h1:EiWVfh8mr40yFZEui2oF0d45KgH48PkB2H0Z0GANvSI=
 github.com/samuel/go-thrift v0.0.0-20191111193933-5165175b40af/go.mod h1:Vrkh1pnjV9Bl8c3P9zH0/D4NlOHWP5d4/hF4YTULaec=
 github.com/schollz/progressbar/v2 v2.12.1/go.mod h1:fBI3onORwtNtwCWJHsrXtjE3QnJOtqIZrvr3rDaF7L0=
 github.com/sirupsen/logrus v0.11.5/go.mod h1:pMByvHTf9Beacp5x1UXfOR9xyW/9antXMhjMPG0dEzc=
@@ -276,8 +277,6 @@ github.com/stretchr/testify v1.3.0 h1:TivCn/peBQ7UY8ooIcPgZFpTNSz0Q2U6UrFlUfqbe0
 github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UVUgZn+9EI=
 github.com/stretchr/testify v1.4.0 h1:2E4SXV/wtOkTonXsotYi4li6zVWxYlZuYNCXe9XRJyk=
 github.com/stretchr/testify v1.4.0/go.mod h1:j7eGeouHqKxXV5pUuKE4zz7dFj8WfuZ+81PSLYec5m4=
-github.com/temporalio/temporal-proto-go v0.0.0-20200103184242-06c5b2472e15 h1:CRdB+axODpCGSPShGUETU3Tcx/GGYnDpxJ0K6UVwYxs=
-github.com/temporalio/temporal-proto-go v0.0.0-20200103184242-06c5b2472e15/go.mod h1:P197dHJeYi4bMf0n/7CAbhK4VlzCfK7KlsyP44biIdI=
 github.com/uber-common/bark v1.2.1 h1:cREJ9b7CpTjwZr0/5wV82fXlitoCIEHHnt9WkQ4lIk0=
 github.com/uber-common/bark v1.2.1/go.mod h1:g0ZuPcD7XiExKHynr93Q742G/sbrdVQkghrqLGOoFuY=
 github.com/uber-go/atomic v1.4.0 h1:yOuPqEq4ovnhEjpHmfFwsqBXDYbQeT6Nb0bwD6XnD5o=
@@ -309,14 +308,6 @@ github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2 h1:zzrxE1FKn5ryB
 github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2/go.mod h1:hzfGeIUDq/j97IG+FhNqkowIyEcD88LrW6fyU3K3WqY=
 go.temporal.io/temporal v0.9.4 h1:NHgdT7zfo76jB6rhCbWtuZzja9Kkv2NDKe24IOXjn74=
 go.temporal.io/temporal v0.9.4/go.mod h1:bOAfElLBVnDTsE7SBQnhEtHY20usKRHl5Js4ISRJUpA=
-go.temporal.io/temporal v0.10.3 h1:uuZA/tbv7IIFl9rgR9aMJEiAmSp/pnspR8MWRNjsSkU=
-go.temporal.io/temporal v0.10.3/go.mod h1:dC56oH+e6QhhlGUU0u7eQpLRZ7TWr9Rgv1Z7ZLThbMs=
-go.temporal.io/temporal-proto v0.0.0-20200104005919-6abdf3300ac7 h1:NdZxGjp9KcmERWIW4dbQPSCCWIthkV003/0l/J3fncQ=
-go.temporal.io/temporal-proto v0.0.0-20200104005919-6abdf3300ac7/go.mod h1:Hcd8jaNNn/g6w3+8vHvTz1QIuodcT1skcUYD6gYoA80=
-go.temporal.io/temporal-proto v0.0.0-20200107070928-7cf537180e0b h1:K2rN36+NYmST2XzgKL1MASg3AgvKnvPz7efj04NyzCk=
-go.temporal.io/temporal-proto v0.0.0-20200107070928-7cf537180e0b/go.mod h1:fRYT1yXdFOKzWiD8cz/mb3vZzGfxxudPprEWAHkl75o=
-go.temporal.io/temporal-proto v0.0.0-20200107080218-07c36368bde5 h1:omiuLaDUPXC6/STFQ7myGcnwCFPBg0H0Phhi4ZRfHLI=
-go.temporal.io/temporal-proto v0.0.0-20200107080218-07c36368bde5/go.mod h1:fRYT1yXdFOKzWiD8cz/mb3vZzGfxxudPprEWAHkl75o=
 go.temporal.io/temporal-proto v0.0.0-20200107082912-100353b9ce5d h1:hSXR11/rzTNBeHiPG3m4a9KIRwp1el58JPXf2CF2X8w=
 go.temporal.io/temporal-proto v0.0.0-20200107082912-100353b9ce5d/go.mod h1:fRYT1yXdFOKzWiD8cz/mb3vZzGfxxudPprEWAHkl75o=
 go.uber.org/atomic v1.3.2/go.mod h1:gD2HeocX3+yG+ygLZcrzQJaqmWj9AIm7n08wl/qW/PE=
@@ -345,6 +336,7 @@ go.uber.org/net/metrics v1.0.1/go.mod h1:cQvI3JawIRCZEgrpuF3rrV2OrQGLchMqJPyPAH7
 go.uber.org/net/metrics v1.2.0 h1:mCej7Kba5Qwkvw6TC7JQv8SgrsHCtpHIlVStZrjhINo=
 go.uber.org/net/metrics v1.2.0/go.mod h1:cQvI3JawIRCZEgrpuF3rrV2OrQGLchMqJPyPAH7GUdo=
 go.uber.org/thriftrw v1.11.0/go.mod h1:a0+HZMaS9tmHDCPyrrx1GjYWFRK02xzxnrK1Nl9LiLU=
+go.uber.org/thriftrw v1.20.2 h1:0JlCE7dOyWHEQdfDm0MWIbgTn6vXkiMA6LNIe8FQXjw=
 go.uber.org/thriftrw v1.20.2/go.mod h1:a0+HZMaS9tmHDCPyrrx1GjYWFRK02xzxnrK1Nl9LiLU=
 go.uber.org/tools v0.0.0-20190430173459-422a61c266e1/go.mod h1:vJERXedbb3MVM5f9Ejo0C68/HhF8uaILCdgjnY+goOA=
 go.uber.org/tools v0.0.0-20190618225709-2cfd321de3ee h1:0mgffUl7nfd+FpvXMVz4IDEaUSmT1ysygQC7qYo7sG4=
@@ -362,6 +354,7 @@ golang.org/x/crypto v0.0.0-20190404164418-38d8ce5564a5/go.mod h1:WFFai1msRO1wXaE
 golang.org/x/crypto v0.0.0-20190510104115-cbcb75029529 h1:iMGN4xG0cnqj3t+zOM8wUB0BiPKHEwSxEZCvzcbZuvk=
 golang.org/x/crypto v0.0.0-20190510104115-cbcb75029529/go.mod h1:yigFU9vqHzYiE8UmvKecakEJjdnWj3jj499lnFckfCI=
 golang.org/x/crypto v0.0.0-20190605123033-f99c8df09eb5/go.mod h1:yigFU9vqHzYiE8UmvKecakEJjdnWj3jj499lnFckfCI=
+golang.org/x/crypto v0.0.0-20190701094942-4def268fd1a4 h1:HuIa8hRrWRSrqYzx1qI49NNxhdi2PrY7gxVSq1JjLDc=
 golang.org/x/crypto v0.0.0-20190701094942-4def268fd1a4/go.mod h1:yigFU9vqHzYiE8UmvKecakEJjdnWj3jj499lnFckfCI=
 golang.org/x/exp v0.0.0-20190121172915-509febef88a4/go.mod h1:CJ0aWSM057203Lf6IL+f9T1iT9GByDxfZKAQTCR3kQA=
 golang.org/x/lint v0.0.0-20181026193005-c67002cb31c3/go.mod h1:UVdnD1Gm6xHRNCYTkRU2/jEulfH38KcIWyp/GAMgvoE=
