@@ -21,9 +21,12 @@
 package clitest
 
 import (
-	"github.com/stretchr/testify/require"
+	"net"
+	"strconv"
 
+	"github.com/stretchr/testify/require"
 	"github.com/uber/cadence/common/log/tag"
+	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/environment"
 	"github.com/uber/cadence/tools/common/schema/test"
 	"github.com/uber/cadence/tools/sql"
@@ -79,13 +82,15 @@ func (s *SQLConnTestSuite) TestParseCQLFile() {
 // TODO refactor the whole package to support testing against Postgres
 // https://github.com/uber/cadence/issues/2856
 func (s *SQLConnTestSuite) TestSQLConn() {
-	conn, err := sql.NewConnection(&sql.ConnectParams{
-		Host:       environment.GetMySQLAddress(),
-		Port:       environment.GetMySQLPort(),
-		User:       testUser,
-		Password:   testPassword,
-		PluginName: s.pluginName,
-		Database:   s.DBName,
+	conn, err := sql.NewConnection(&config.SQL{
+		ConnectAddr: net.JoinHostPort(
+			environment.GetMySQLAddress(),
+			strconv.Itoa(environment.GetMySQLPort()),
+		),
+		User:         testUser,
+		Password:     testPassword,
+		PluginName:   s.pluginName,
+		DatabaseName: s.DBName,
 	})
 	s.Nil(err)
 	s.RunCreateTest(conn)
@@ -95,13 +100,15 @@ func (s *SQLConnTestSuite) TestSQLConn() {
 }
 
 func newTestConn(database, pluginName string) (*sql.Connection, error) {
-	return sql.NewConnection(&sql.ConnectParams{
-		Host:       environment.GetMySQLAddress(),
-		Port:       environment.GetMySQLPort(),
-		User:       testUser,
-		Password:   testPassword,
-		PluginName: pluginName,
-		Database:   database,
+	return sql.NewConnection(&config.SQL{
+		ConnectAddr: net.JoinHostPort(
+			environment.GetMySQLAddress(),
+			strconv.Itoa(environment.GetMySQLPort()),
+		),
+		User:         testUser,
+		Password:     testPassword,
+		PluginName:   pluginName,
+		DatabaseName: database,
 	})
 }
 

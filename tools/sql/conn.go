@@ -21,8 +21,6 @@
 package sql
 
 import (
-	"fmt"
-
 	"github.com/uber/cadence/common/persistence/sql"
 	"github.com/uber/cadence/common/persistence/sql/sqlplugin"
 	"github.com/uber/cadence/common/service/config"
@@ -30,16 +28,6 @@ import (
 )
 
 type (
-	// ConnectParams is the connection param
-	ConnectParams struct {
-		Host       string
-		Port       int
-		User       string
-		Password   string
-		Database   string
-		PluginName string
-	}
-
 	// Connection is the connection to database
 	Connection struct {
 		dbName  string
@@ -50,22 +38,15 @@ type (
 var _ schema.DB = (*Connection)(nil)
 
 // NewConnection creates a new connection to database
-func NewConnection(params *ConnectParams) (*Connection, error) {
-
-	db, err := sql.NewSQLAdminDB(&config.SQL{
-		PluginName:   params.PluginName,
-		User:         params.User,
-		Password:     params.Password,
-		DatabaseName: params.Database,
-		ConnectAddr:  fmt.Sprintf("%v:%v", params.Host, params.Port),
-	})
+func NewConnection(cfg *config.SQL) (*Connection, error) {
+	db, err := sql.NewSQLAdminDB(cfg)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Connection{
 		adminDb: db,
-		dbName:  params.Database,
+		dbName:  cfg.DatabaseName,
 	}, nil
 }
 

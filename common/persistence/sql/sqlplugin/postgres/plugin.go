@@ -21,6 +21,7 @@
 package postgres
 
 import (
+	"errors"
 	"fmt"
 	"net"
 
@@ -37,6 +38,8 @@ const (
 	PluginName             = "postgres"
 	dataSourceNamePostgres = "user=%v password=%v host=%v port=%v dbname=%v sslmode=disable "
 )
+
+var errTLSNotImplemented = errors.New("tls for postgres has not been implemented")
 
 type plugin struct{}
 
@@ -71,6 +74,11 @@ func (d *plugin) CreateAdminDB(cfg *config.SQL) (sqlplugin.AdminDB, error) {
 // SQL database and the object can be used to perform CRUD operations on
 // the tables in the database
 func (d *plugin) createDBConnection(cfg *config.SQL) (*sqlx.DB, error) {
+	err := registerTLSConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+
 	host, port, err := net.SplitHostPort(cfg.ConnectAddr)
 	if err != nil {
 		return nil, fmt.Errorf("invalid connect address, it must be in host:port format, %v, err: %v", cfg.ConnectAddr, err)
@@ -90,4 +98,12 @@ func (d *plugin) createDBConnection(cfg *config.SQL) (*sqlx.DB, error) {
 	// Maps struct names in CamelCase to snake without need for db struct tags.
 	db.MapperFunc(strcase.ToSnake)
 	return db, nil
+}
+
+// TODO: implement postgres specific support for TLS
+func registerTLSConfig(cfg *config.SQL) error {
+	if cfg.TLS == nil || !cfg.TLS.Enabled {
+		return nil
+	}
+	return errTLSNotImplemented
 }

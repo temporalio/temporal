@@ -22,10 +22,15 @@ package mysql
 
 import (
 	"bytes"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"io/ioutil"
+	"net"
 	"net/url"
 	"strings"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/iancoleman/strcase"
 	"github.com/jmoiron/sqlx"
 
@@ -43,6 +48,8 @@ const (
 	isolationLevelAttrName       = "transaction_isolation"
 	isolationLevelAttrNameLegacy = "tx_isolation"
 	defaultIsolationLevel        = "'READ-COMMITTED'"
+	// customTLSName is the name used if a custom tls configuration is created
+	customTLSName = "tls-custom"
 )
 
 var dsnAttrOverrides = map[string]string{
@@ -84,6 +91,11 @@ func (p *plugin) CreateAdminDB(cfg *config.SQL) (sqlplugin.AdminDB, error) {
 // SQL database and the object can be used to perform CRUD operations on
 // the tables in the database
 func (p *plugin) createDBConnection(cfg *config.SQL) (*sqlx.DB, error) {
+	err := registerTLSConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+
 	db, err := sqlx.Connect(PluginName, buildDSN(cfg))
 	if err != nil {
 		return nil, err
@@ -97,9 +109,70 @@ func (p *plugin) createDBConnection(cfg *config.SQL) (*sqlx.DB, error) {
 	if cfg.MaxConnLifetime > 0 {
 		db.SetConnMaxLifetime(cfg.MaxConnLifetime)
 	}
+
 	// Maps struct names in CamelCase to snake without need for db struct tags.
 	db.MapperFunc(strcase.ToSnake)
 	return db, nil
+}
+
+func registerTLSConfig(cfg *config.SQL) error {
+	if cfg.TLS == nil || !cfg.TLS.Enabled {
+		return nil
+	}
+
+	host, _, err := net.SplitHostPort(cfg.ConnectAddr)
+	if err != nil {
+		return fmt.Errorf("error in host port from ConnectAddr: %v", err)
+	}
+
+	// TODO: create a way to set MinVersion and CipherSuites via cfg.
+	tlsConfig := &tls.Config{
+		ServerName: host,
+	}
+
+	if cfg.TLS.CaFile != "" {
+		rootCertPool := x509.NewCertPool()
+		pem, err := ioutil.ReadFile(cfg.TLS.CaFile)
+		if err != nil {
+			return fmt.Errorf("failed to load CA files: %v", err)
+		}
+		if ok := rootCertPool.AppendCertsFromPEM(pem); !ok {
+			return fmt.Errorf("failed to append CA file")
+		}
+		tlsConfig.RootCAs = rootCertPool
+	}
+
+	if cfg.TLS.CertFile != "" && cfg.TLS.KeyFile != "" {
+		clientCert := make([]tls.Certificate, 0, 1)
+		certs, err := tls.LoadX509KeyPair(
+			cfg.TLS.CertFile,
+			cfg.TLS.KeyFile,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to load tls x509 key pair: %v", err)
+		}
+		clientCert = append(clientCert, certs)
+		tlsConfig.Certificates = clientCert
+	}
+
+	// In order to use the TLS configuration you need to register it. Once registered you use it by specifying
+	// `tls` in the connect attributes.
+	err = mysql.RegisterTLSConfig(customTLSName, tlsConfig)
+	if err != nil {
+		return fmt.Errorf("failed to register tls config: %v", err)
+	}
+
+	if cfg.ConnectAttributes == nil {
+		cfg.ConnectAttributes = map[string]string{}
+	}
+
+	// If no `tls` connect attribute is provided then we override it to our newly registered tls config automatically.
+	// This allows users to simply provide a tls config without needing to remember to also set the connect attribute
+	if cfg.ConnectAttributes["tls"] == "" {
+		cfg.ConnectAttributes["tls"] = customTLSName
+	}
+
+	return nil
 }
 
 func buildDSN(cfg *config.SQL) string {

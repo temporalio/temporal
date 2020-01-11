@@ -84,6 +84,8 @@ const (
 	CLIOptDatabase = "database"
 	// CLIOptPluginName is the cli option for plugin name
 	CLIOptPluginName = "plugin"
+	// CLIOptConnectAttributes is the cli option for connect attributes (key/values via a url query string)
+	CLIOptConnectAttributes = "connect-attributes"
 	// CLIOptVersion is the cli option for version
 	CLIOptVersion = "version"
 	// CLIOptSchemaFile is the cli option for schema file
@@ -119,6 +121,8 @@ const (
 	CLIFlagDatabase = CLIOptDatabase + ", db"
 	// CLIFlagPluginName is the cli flag for plugin name
 	CLIFlagPluginName = CLIOptPluginName + ", pl"
+	// CLIFlagConnectAttributes allows arbitrary connect attributes
+	CLIFlagConnectAttributes = CLIOptConnectAttributes + ", ca"
 	// CLIFlagVersion is the cli flag for version
 	CLIFlagVersion = CLIOptVersion + ", v"
 	// CLIFlagSchemaFile is the cli flag for schema file

@@ -21,9 +21,14 @@
 package clitest
 
 import (
+	"net"
+	"strconv"
+
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/uber/cadence/common/auth"
+	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/environment"
 	"github.com/uber/cadence/tools/common/schema"
 	"github.com/uber/cadence/tools/sql"
@@ -50,18 +55,46 @@ func (s *HandlerTestSuite) SetupTest() {
 	s.Assertions = require.New(s.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 }
 
-// TestValidateConnectParams test
-func (s *HandlerTestSuite) TestValidateConnectParams() {
-	p := new(sql.ConnectParams)
-	s.NotNil(sql.ValidateConnectParams(p, false))
-	s.NotNil(sql.ValidateConnectParams(p, true))
+// TestValidateConnectConfig test
+func (s *HandlerTestSuite) TestValidateConnectConfig() {
+	cfg := new(config.SQL)
 
-	p.Host = environment.GetMySQLAddress()
-	s.NotNil(sql.ValidateConnectParams(p, false))
-	s.Nil(sql.ValidateConnectParams(p, true))
-	s.Equal(schema.DryrunDBName, p.Database)
+	s.NotNil(sql.ValidateConnectConfig(cfg, false))
+	s.NotNil(sql.ValidateConnectConfig(cfg, true))
 
-	p.Database = "foobar"
-	s.Nil(sql.ValidateConnectParams(p, false))
-	s.Nil(sql.ValidateConnectParams(p, true))
+	cfg.ConnectAddr = net.JoinHostPort(
+		environment.GetMySQLAddress(),
+		strconv.Itoa(environment.GetMySQLPort()),
+	)
+	s.NotNil(sql.ValidateConnectConfig(cfg, false))
+	s.Nil(sql.ValidateConnectConfig(cfg, true))
+	s.Equal(schema.DryrunDBName, cfg.DatabaseName)
+
+	cfg.DatabaseName = "foobar"
+	s.Nil(sql.ValidateConnectConfig(cfg, false))
+	s.Nil(sql.ValidateConnectConfig(cfg, true))
+
+	cfg.TLS = &auth.TLS{}
+	cfg.TLS.Enabled = true
+	s.NotNil(sql.ValidateConnectConfig(cfg, false))
+	s.NotNil(sql.ValidateConnectConfig(cfg, true))
+
+	cfg.TLS.CaFile = "ca.pem"
+	s.Nil(sql.ValidateConnectConfig(cfg, false))
+	s.Nil(sql.ValidateConnectConfig(cfg, true))
+
+	cfg.TLS.KeyFile = "key_file"
+	cfg.TLS.CertFile = ""
+	s.NotNil(sql.ValidateConnectConfig(cfg, false))
+	s.NotNil(sql.ValidateConnectConfig(cfg, true))
+
+	cfg.TLS.KeyFile = ""
+	cfg.TLS.CertFile = "cert_file"
+	s.NotNil(sql.ValidateConnectConfig(cfg, false))
+	s.NotNil(sql.ValidateConnectConfig(cfg, true))
+
+	cfg.TLS.KeyFile = "key_file"
+	cfg.TLS.CertFile = "cert_file"
+	s.Nil(sql.ValidateConnectConfig(cfg, false))
+	s.Nil(sql.ValidateConnectConfig(cfg, true))
 }
