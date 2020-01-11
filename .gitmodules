@@ -1,4 +1,4 @@
 [submodule "idls"]
 	path = idls
-	url = git@github.com:uber/cadence-idl.git
+	url = https://github.com/uber/cadence-idl.git
 	branch = master
