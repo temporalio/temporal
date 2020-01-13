@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "0.24",
+  "MinCompatibleVersion": "0.23",
+  "Description": "Added checksum to executions table",
+  "SchemaUpdateCqlFiles": [
+    "checksum.cql"
+  ]
+}

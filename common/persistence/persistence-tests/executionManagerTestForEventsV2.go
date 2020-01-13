@@ -26,6 +26,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/uber/cadence/common/checksum"
+
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
@@ -75,6 +77,23 @@ func (s *ExecutionManagerSuiteForEventsV2) SetupTest() {
 	s.ClearTasks()
 }
 
+func (s *ExecutionManagerSuiteForEventsV2) newRandomChecksum() checksum.Checksum {
+	return checksum.Checksum{
+		Flavor:  checksum.FlavorIEEECRC32OverThriftBinary,
+		Version: 22,
+		Value:   []byte(uuid.NewRandom()),
+	}
+}
+
+func (s *ExecutionManagerSuiteForEventsV2) assertChecksumsEqual(expected checksum.Checksum, actual checksum.Checksum) {
+	if !actual.Flavor.IsValid() {
+		// not all stores support checksum persistence today
+		// if its not supported, assert that everything is zero'd out
+		expected = checksum.Checksum{}
+	}
+	s.EqualValues(expected, actual)
+}
+
 // TestWorkflowCreation test
 func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 	defer failOnPanic(s.T())
@@ -83,6 +102,8 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 		WorkflowId: common.StringPtr("test-eventsv2-workflow"),
 		RunId:      common.StringPtr("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
 	}
+
+	csum := s.newRandomChecksum()
 
 	_, err0 := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
@@ -116,6 +137,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 				},
 			},
 			TimerTasks: nil,
+			Checksum:   csum,
 		},
 		RangeID: s.ShardInfo.RangeID,
 	})
@@ -127,6 +149,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 	info0 := state0.ExecutionInfo
 	s.NotNil(info0, "Valid Workflow info expected.")
 	s.Equal([]byte("branchToken1"), info0.BranchToken)
+	s.assertChecksumsEqual(csum, state0.Checksum)
 
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedStats := copyExecutionStats(state0.ExecutionStats)
@@ -155,6 +178,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 	s.EqualTimesWithPrecision(currentTime, state.TimerInfos[timerID].ExpiryTime, time.Millisecond*500)
 	s.Equal(int64(2), state.TimerInfos[timerID].TaskStatus)
 	s.Equal(int64(5), state.TimerInfos[timerID].StartedID)
+	s.assertChecksumsEqual(testWorkflowChecksum, state.Checksum)
 
 	err2 = s.UpdateWorkflowExecution(updatedInfo, updatedStats, nil, nil, nil, int64(5), nil, nil, nil, nil, []string{timerID})
 	s.NoError(err2)
@@ -165,6 +189,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 	s.Equal(0, len(state.TimerInfos))
 	info1 := state.ExecutionInfo
 	s.Equal([]byte("branchToken2"), info1.BranchToken)
+	s.assertChecksumsEqual(testWorkflowChecksum, state.Checksum)
 }
 
 // TestWorkflowCreationWithVersionHistories test
@@ -180,6 +205,8 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 		[]*p.VersionHistoryItem{p.NewVersionHistoryItem(1, 0)},
 	)
 	versionHistories := p.NewVersionHistories(versionHistory)
+
+	csum := s.newRandomChecksum()
 
 	_, err0 := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
 		RangeID: s.ShardInfo.RangeID,
@@ -215,6 +242,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 				},
 			},
 			TimerTasks: nil,
+			Checksum:   csum,
 		},
 	})
 
@@ -225,6 +253,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 	info0 := state0.ExecutionInfo
 	s.NotNil(info0, "Valid Workflow info expected.")
 	s.Equal(versionHistories, state0.VersionHistories)
+	s.assertChecksumsEqual(csum, state0.Checksum)
 
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedStats := copyExecutionStats(state0.ExecutionStats)
@@ -256,6 +285,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 	s.Equal(int64(2), state.TimerInfos[timerID].TaskStatus)
 	s.Equal(int64(5), state.TimerInfos[timerID].StartedID)
 	s.Equal(state.VersionHistories, versionHistories)
+	s.assertChecksumsEqual(testWorkflowChecksum, state.Checksum)
 }
 
 //TestContinueAsNew test
@@ -457,6 +487,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 	s.Equal(int64(7), replicationState0.LastWriteVersion)
 	s.Equal(int64(6), replicationState0.LastWriteEventID)
 	s.Equal(2, len(replicationState0.LastReplicationInfo))
+	s.assertChecksumsEqual(testWorkflowChecksum, state0.Checksum)
 	for k, v := range replicationState0.LastReplicationInfo {
 		log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventID)
 		switch k {
@@ -555,6 +586,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 	s.Equal(int64(12), replicationState1.LastWriteVersion)
 	s.Equal(int64(13), replicationState1.LastWriteEventID)
 	s.Equal(2, len(replicationState1.LastReplicationInfo))
+	s.assertChecksumsEqual(testWorkflowChecksum, state1.Checksum)
 	for k, v := range replicationState1.LastReplicationInfo {
 		log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventID)
 		switch k {
@@ -620,6 +652,7 @@ func (s *ExecutionManagerSuiteForEventsV2) createWorkflowExecutionWithReplicatio
 			TimerTasks:       timerTasks,
 			TransferTasks:    transferTasks,
 			ReplicationTasks: replicationTasks,
+			Checksum:         testWorkflowChecksum,
 		},
 		RangeID: s.ShardInfo.RangeID,
 	})

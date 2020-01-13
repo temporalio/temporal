@@ -28,6 +28,7 @@ import (
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/checksum"
 	p "github.com/uber/cadence/common/persistence"
 )
 
@@ -55,6 +56,7 @@ func applyWorkflowMutationBatch(
 		versionHistories,
 		cqlNowTimestampMillis,
 		condition,
+		workflowMutation.Checksum,
 	); err != nil {
 		return err
 	}
@@ -170,6 +172,7 @@ func applyWorkflowSnapshotBatchAsReset(
 		versionHistories,
 		cqlNowTimestampMillis,
 		condition,
+		workflowSnapshot.Checksum,
 	); err != nil {
 		return err
 	}
@@ -274,6 +277,7 @@ func applyWorkflowSnapshotBatchAsNew(
 		executionInfo,
 		replicationState,
 		versionHistories,
+		workflowSnapshot.Checksum,
 		cqlNowTimestampMillis,
 	); err != nil {
 		return err
@@ -362,6 +366,7 @@ func createExecution(
 	executionInfo *p.InternalWorkflowExecutionInfo,
 	replicationState *p.ReplicationState,
 	versionHistories *p.DataBlob,
+	checksum checksum.Checksum,
 	cqlNowTimestampMillis int64,
 ) error {
 
@@ -460,7 +465,10 @@ func createExecution(
 			executionInfo.Memo,
 			executionInfo.NextEventID,
 			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID)
+			rowTypeExecutionTaskID,
+			checksum.Version,
+			checksum.Flavor,
+			checksum.Value)
 	} else if versionHistories != nil {
 		// TODO also need to set the start / current / last write version
 		versionHistoriesData, versionHistoriesEncoding := p.FromDataBlob(versionHistories)
@@ -532,7 +540,10 @@ func createExecution(
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID,
 			versionHistoriesData,
-			versionHistoriesEncoding)
+			versionHistoriesEncoding,
+			checksum.Version,
+			checksum.Flavor,
+			checksum.Value)
 	} else if replicationState != nil {
 		lastReplicationInfo := make(map[string]map[string]interface{})
 		for k, v := range replicationState.LastReplicationInfo {
@@ -610,7 +621,10 @@ func createExecution(
 			lastReplicationInfo,
 			executionInfo.NextEventID,
 			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID)
+			rowTypeExecutionTaskID,
+			checksum.Version,
+			checksum.Flavor,
+			checksum.Value)
 	} else {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("Create workflow execution with both version histories and replication state."),
@@ -627,6 +641,7 @@ func updateExecution(
 	versionHistories *p.DataBlob,
 	cqlNowTimestampMillis int64,
 	condition int64,
+	checksum checksum.Checksum,
 ) error {
 
 	// validate workflow state & close status
@@ -717,6 +732,9 @@ func updateExecution(
 			executionInfo.SearchAttributes,
 			executionInfo.Memo,
 			executionInfo.NextEventID,
+			checksum.Version,
+			checksum.Flavor,
+			checksum.Value,
 			shardID,
 			rowTypeExecution,
 			domainID,
@@ -790,6 +808,9 @@ func updateExecution(
 			executionInfo.NextEventID,
 			versionHistoriesData,
 			versionHistoriesEncoding,
+			checksum.Version,
+			checksum.Flavor,
+			checksum.Value,
 			shardID,
 			rowTypeExecution,
 			domainID,
@@ -869,6 +890,9 @@ func updateExecution(
 			replicationState.LastWriteEventID,
 			lastReplicationInfo,
 			executionInfo.NextEventID,
+			checksum.Version,
+			checksum.Flavor,
+			checksum.Value,
 			shardID,
 			rowTypeExecution,
 			domainID,
@@ -2498,6 +2522,24 @@ func createReplicationInfoMap(
 	rInfoMap["last_event_id"] = info.LastEventID
 
 	return rInfoMap
+}
+
+func createChecksum(result map[string]interface{}) checksum.Checksum {
+	csum := checksum.Checksum{}
+	if len(result) == 0 {
+		return csum
+	}
+	for k, v := range result {
+		switch k {
+		case "flavor":
+			csum.Flavor = checksum.Flavor(v.(int))
+		case "version":
+			csum.Version = v.(int)
+		case "value":
+			csum.Value = v.([]byte)
+		}
+	}
+	return csum
 }
 
 func isTimeoutError(err error) bool {

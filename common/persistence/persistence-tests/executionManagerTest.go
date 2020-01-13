@@ -31,6 +31,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/uber/cadence/common/checksum"
+
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
@@ -51,6 +53,12 @@ type (
 	}
 )
 
+var testWorkflowChecksum = checksum.Checksum{
+	Version: 22,
+	Flavor:  checksum.FlavorIEEECRC32OverThriftBinary,
+	Value:   []byte("test-checksum"),
+}
+
 // SetupSuite implementation
 func (s *ExecutionManagerSuite) SetupSuite() {
 	if testing.Verbose() {
@@ -70,6 +78,23 @@ func (s *ExecutionManagerSuite) SetupTest() {
 	s.ClearTasks()
 }
 
+func (s *ExecutionManagerSuite) newRandomChecksum() checksum.Checksum {
+	return checksum.Checksum{
+		Flavor:  checksum.FlavorIEEECRC32OverThriftBinary,
+		Version: 22,
+		Value:   []byte(uuid.NewRandom()),
+	}
+}
+
+func (s *ExecutionManagerSuite) assertChecksumsEqual(expected checksum.Checksum, actual checksum.Checksum) {
+	if !actual.Flavor.IsValid() {
+		// not all stores support checksum persistence today
+		// if its not supported, assert that everything is zero'd out
+		expected = checksum.Checksum{}
+	}
+	s.EqualValues(expected, actual)
+}
+
 // TestCreateWorkflowExecutionDeDup test
 func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionDeDup() {
 	domainID := uuid.New()
@@ -85,6 +110,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionDeDup() {
 	decisionTimeout := int32(14)
 	lastProcessedEventID := int64(0)
 	nextEventID := int64(3)
+	csum := s.newRandomChecksum()
 
 	req := &p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
@@ -104,6 +130,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionDeDup() {
 				CloseStatus:                 p.WorkflowCloseStatusNone,
 			},
 			ExecutionStats: &p.ExecutionStats{},
+			Checksum:       csum,
 		},
 		RangeID: s.ShardInfo.RangeID,
 		Mode:    p.CreateWorkflowModeBrandNew,
@@ -113,6 +140,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionDeDup() {
 	s.Nil(err)
 	info, err := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	s.Nil(err)
+	s.assertChecksumsEqual(csum, info.Checksum)
 	updatedInfo := copyWorkflowExecutionInfo(info.ExecutionInfo)
 	updatedStats := copyExecutionStats(info.ExecutionStats)
 	updatedInfo.State = p.WorkflowStateCompleted
@@ -153,6 +181,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateCloseStatus() {
 	decisionTimeout := int32(14)
 	lastProcessedEventID := int64(0)
 	nextEventID := int64(3)
+	csum := s.newRandomChecksum()
 
 	req := &p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
@@ -168,6 +197,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateCloseStatus() {
 				LastProcessedEvent:          lastProcessedEventID,
 			},
 			ExecutionStats: &p.ExecutionStats{},
+			Checksum:       csum,
 		},
 		RangeID: s.ShardInfo.RangeID,
 		Mode:    p.CreateWorkflowModeBrandNew,
@@ -192,6 +222,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateCloseStatus() {
 	s.Nil(err)
 	s.Equal(p.WorkflowStateCreated, info.ExecutionInfo.State)
 	s.Equal(p.WorkflowCloseStatusNone, info.ExecutionInfo.CloseStatus)
+	s.assertChecksumsEqual(csum, info.Checksum)
 
 	workflowExecutionStatusRunning := gen.WorkflowExecution{
 		WorkflowId: common.StringPtr("create-workflow-test-state-running"),
@@ -212,6 +243,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateCloseStatus() {
 	s.Nil(err)
 	s.Equal(p.WorkflowStateRunning, info.ExecutionInfo.State)
 	s.Equal(p.WorkflowCloseStatusNone, info.ExecutionInfo.CloseStatus)
+	s.assertChecksumsEqual(csum, info.Checksum)
 
 	workflowExecutionStatusCompleted := gen.WorkflowExecution{
 		WorkflowId: common.StringPtr("create-workflow-test-state-completed"),
@@ -251,6 +283,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateCloseStatus() {
 	s.Nil(err)
 	s.Equal(p.WorkflowStateZombie, info.ExecutionInfo.State)
 	s.Equal(p.WorkflowCloseStatusNone, info.ExecutionInfo.CloseStatus)
+	s.assertChecksumsEqual(csum, info.Checksum)
 }
 
 // TestCreateWorkflowExecutionWithZombieState test
@@ -267,6 +300,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionWithZombieState() {
 	decisionTimeout := int32(14)
 	lastProcessedEventID := int64(0)
 	nextEventID := int64(3)
+	csum := s.newRandomChecksum()
 
 	req := &p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
@@ -285,6 +319,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionWithZombieState() {
 				CloseStatus:                 p.WorkflowCloseStatusNone,
 			},
 			ExecutionStats: &p.ExecutionStats{},
+			Checksum:       csum,
 		},
 		RangeID: s.ShardInfo.RangeID,
 		Mode:    p.CreateWorkflowModeZombie,
@@ -326,6 +361,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionWithZombieState() {
 	s.Nil(err)
 	s.Equal(p.WorkflowStateZombie, info.ExecutionInfo.State)
 	s.Equal(p.WorkflowCloseStatusNone, info.ExecutionInfo.CloseStatus)
+	s.assertChecksumsEqual(csum, info.Checksum)
 }
 
 // TestUpdateWorkflowExecutionStateCloseStatus test
@@ -349,6 +385,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateCloseStatus() {
 	decisionTimeout := int32(14)
 	lastProcessedEventID := int64(0)
 	nextEventID := int64(3)
+	csum := s.newRandomChecksum()
 
 	req := &p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
@@ -366,6 +403,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateCloseStatus() {
 				LastProcessedEvent:          lastProcessedEventID,
 			},
 			ExecutionStats: &p.ExecutionStats{},
+			Checksum:       csum,
 		},
 		RangeID: s.ShardInfo.RangeID,
 		Mode:    p.CreateWorkflowModeBrandNew,
@@ -379,7 +417,9 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateCloseStatus() {
 	s.Nil(err)
 	s.Equal(p.WorkflowStateCreated, info.ExecutionInfo.State)
 	s.Equal(p.WorkflowCloseStatusNone, info.ExecutionInfo.CloseStatus)
+	s.assertChecksumsEqual(csum, info.Checksum)
 
+	csum = s.newRandomChecksum() // update the checksum to new value
 	updatedInfo := copyWorkflowExecutionInfo(info.ExecutionInfo)
 	updatedStats := copyExecutionStats(info.ExecutionStats)
 	updatedInfo.State = p.WorkflowStateRunning
@@ -389,6 +429,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateCloseStatus() {
 			ExecutionInfo:  updatedInfo,
 			ExecutionStats: updatedStats,
 			Condition:      nextEventID,
+			Checksum:       csum,
 		},
 		RangeID: s.ShardInfo.RangeID,
 		Mode:    p.UpdateWorkflowModeUpdateCurrent,
@@ -398,6 +439,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateCloseStatus() {
 	s.Nil(err)
 	s.Equal(p.WorkflowStateRunning, info.ExecutionInfo.State)
 	s.Equal(p.WorkflowCloseStatusNone, info.ExecutionInfo.CloseStatus)
+	s.assertChecksumsEqual(csum, info.Checksum)
 
 	updatedInfo = copyWorkflowExecutionInfo(info.ExecutionInfo)
 	updatedStats = copyExecutionStats(info.ExecutionStats)
@@ -516,6 +558,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 	decisionTimeout := int32(14)
 	lastProcessedEventID := int64(0)
 	nextEventID := int64(3)
+	csum := s.newRandomChecksum()
 
 	// create and update a workflow to make it completed
 	req := &p.CreateWorkflowExecutionRequest{
@@ -535,6 +578,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 				CloseStatus:                 p.WorkflowCloseStatusNone,
 			},
 			ExecutionStats: &p.ExecutionStats{},
+			Checksum:       csum,
 		},
 		RangeID: s.ShardInfo.RangeID,
 		Mode:    p.CreateWorkflowModeBrandNew,
@@ -547,6 +591,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 
 	info, err := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	s.Nil(err)
+	s.assertChecksumsEqual(csum, info.Checksum)
 
 	// try to turn current workflow into zombie state, this should end with an error
 	updatedInfo := copyWorkflowExecutionInfo(info.ExecutionInfo)
@@ -558,6 +603,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 			ExecutionInfo:  updatedInfo,
 			ExecutionStats: updateStats,
 			Condition:      nextEventID,
+			Checksum:       csum,
 		},
 		RangeID: s.ShardInfo.RangeID,
 		Mode:    p.UpdateWorkflowModeBypassCurrent,
@@ -584,6 +630,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 		WorkflowId: common.StringPtr(workflowID),
 		RunId:      common.StringPtr(uuid.New()),
 	}
+	csum = checksum.Checksum{} // set checksum to nil
 	req.NewWorkflowSnapshot.ExecutionInfo.WorkflowID = workflowExecutionRunning.GetWorkflowId()
 	req.NewWorkflowSnapshot.ExecutionInfo.RunID = workflowExecutionRunning.GetRunId()
 	req.Mode = p.CreateWorkflowModeWorkflowIDReuse
@@ -591,6 +638,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 	req.PreviousLastWriteVersion = common.EmptyVersion
 	req.NewWorkflowSnapshot.ExecutionInfo.State = p.WorkflowStateRunning
 	req.NewWorkflowSnapshot.ExecutionInfo.CloseStatus = p.WorkflowCloseStatusNone
+	req.NewWorkflowSnapshot.Checksum = csum
 	_, err = s.ExecutionManager.CreateWorkflowExecution(req)
 	s.Nil(err)
 	currentRunID, err = s.GetCurrentWorkflowRunID(domainID, workflowID)
@@ -600,6 +648,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 	// get the workflow to be turned into a zombie
 	info, err = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	s.Nil(err)
+	s.assertChecksumsEqual(csum, info.Checksum)
 	updatedInfo = copyWorkflowExecutionInfo(info.ExecutionInfo)
 	updateStats = copyExecutionStats(info.ExecutionStats)
 	updatedInfo.State = p.WorkflowStateZombie
@@ -609,6 +658,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 			ExecutionInfo:  updatedInfo,
 			ExecutionStats: updateStats,
 			Condition:      nextEventID,
+			Checksum:       csum,
 		},
 		RangeID: s.ShardInfo.RangeID,
 		Mode:    p.UpdateWorkflowModeBypassCurrent,
@@ -618,6 +668,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 	s.Nil(err)
 	s.Equal(p.WorkflowStateZombie, info.ExecutionInfo.State)
 	s.Equal(p.WorkflowCloseStatusNone, info.ExecutionInfo.CloseStatus)
+	s.assertChecksumsEqual(csum, info.Checksum)
 	// check current run ID is un touched
 	currentRunID, err = s.GetCurrentWorkflowRunID(domainID, workflowID)
 	s.Nil(err)
@@ -737,6 +788,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 
 	info, err := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	s.NoError(err)
+	s.assertChecksumsEqual(testWorkflowChecksum, info.Checksum)
 
 	testResetPoints := gen.ResetPoints{
 		Points: []*gen.ResetPointInfo{
@@ -764,6 +816,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 		LastWriteVersion: version,
 		LastWriteEventID: updatedInfo.NextEventID - 1,
 	}
+	csum := s.newRandomChecksum()
 	_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
 		RangeID: s.ShardInfo.RangeID,
 		UpdateWorkflowMutation: p.WorkflowMutation{
@@ -777,6 +830,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 			UpsertTimerInfos:    nil,
 			DeleteTimerInfos:    nil,
 			ReplicationState:    updateReplicationState,
+			Checksum:            csum,
 		},
 	})
 	s.NoError(err)
@@ -785,6 +839,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 	s.NoError(err)
 	s.NotNil(state.ExecutionInfo, "Valid Workflow response expected.")
 	s.Equal(testResetPoints.String(), state.ExecutionInfo.AutoResetPoints.String())
+	s.assertChecksumsEqual(csum, state.Checksum)
 
 	// try to create a workflow while the current workflow is complete but run ID is wrong
 	_, err = s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
@@ -896,6 +951,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithoutRepl
 
 	state0, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	s.NoError(err1)
+	s.assertChecksumsEqual(testWorkflowChecksum, state0.Checksum)
 	info0 := state0.ExecutionInfo
 	closeInfo := copyWorkflowExecutionInfo(info0)
 	closeInfo.State = p.WorkflowStateCompleted
@@ -1158,6 +1214,8 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 		testMemoKey: testMemoVal,
 	}
 
+	csum := s.newRandomChecksum()
+
 	createReq := &p.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &p.WorkflowExecutionInfo{
@@ -1210,6 +1268,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 					"r2": &p.ReplicationInfo{Version: math.MaxInt32, LastEventID: math.MaxInt32},
 				},
 			},
+			Checksum: csum,
 		},
 		Mode: p.CreateWorkflowModeBrandNew,
 	}
@@ -1279,6 +1338,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 		s.Equal(v.Version, v1.Version)
 		s.Equal(v.LastEventID, v1.LastEventID)
 	}
+	s.assertChecksumsEqual(csum, state.Checksum)
 }
 
 // TestUpdateWorkflow test
@@ -1327,6 +1387,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.True(info0.AutoResetPoints.Equals(&gen.ResetPoints{}))
 	s.True(len(info0.SearchAttributes) == 0)
 	s.True(len(info0.Memo) == 0)
+	s.assertChecksumsEqual(testWorkflowChecksum, state0.Checksum)
 
 	log.Infof("Workflow execution last updated: %v", info0.LastUpdatedTimestamp)
 
@@ -1410,6 +1471,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	memoVal1, ok := info1.Memo[memoKey]
 	s.True(ok)
 	s.Equal(memoVal, memoVal1)
+	s.assertChecksumsEqual(testWorkflowChecksum, state1.Checksum)
 
 	log.Infof("Workflow execution last updated: %v", info1.LastUpdatedTimestamp)
 
@@ -1460,6 +1522,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	memoVal2, ok := info1.Memo[memoKey]
 	s.True(ok)
 	s.Equal(memoVal, memoVal2)
+	s.assertChecksumsEqual(testWorkflowChecksum, state2.Checksum)
 	log.Infof("Workflow execution last updated: %v", info2.LastUpdatedTimestamp)
 
 	err5 := s.UpdateWorkflowExecutionWithRangeID(failedUpdateInfo, failedUpdateStats, nil, []int64{int64(5)}, nil, int64(12345), int64(5), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "")
@@ -1507,6 +1570,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	memoVal3, ok := info1.Memo[memoKey]
 	s.True(ok)
 	s.Equal(memoVal, memoVal3)
+	s.assertChecksumsEqual(testWorkflowChecksum, state3.Checksum)
 
 	log.Infof("Workflow execution last updated: %v", info3.LastUpdatedTimestamp)
 
@@ -1554,6 +1618,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	memoVal4, ok := info1.Memo[memoKey]
 	s.True(ok)
 	s.Equal(memoVal, memoVal4)
+	s.assertChecksumsEqual(testWorkflowChecksum, state4.Checksum)
 
 	log.Infof("Workflow execution last updated: %v", info4.LastUpdatedTimestamp)
 }
@@ -1755,6 +1820,7 @@ func (s *ExecutionManagerSuite) TestCleanupCorruptedWorkflow() {
 			ExecutionInfo:  info0.ExecutionInfo,
 			ExecutionStats: info0.ExecutionStats,
 			Condition:      info0.ExecutionInfo.NextEventID,
+			Checksum:       testWorkflowChecksum,
 		},
 		RangeID: s.ShardInfo.RangeID,
 		Mode:    p.UpdateWorkflowModeBypassCurrent,
@@ -3550,6 +3616,8 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 		},
 	}
 
+	csum := s.newRandomChecksum()
+
 	updatedState := &p.WorkflowMutableState{
 		ExecutionInfo:  updatedInfo,
 		ExecutionStats: updatedStats,
@@ -3648,6 +3716,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 			"00000000-0000-0000-0000-000000000002": {},
 			"00000000-0000-0000-0000-000000000003": {},
 		},
+		Checksum: csum,
 	}
 
 	err2 := s.UpdateAllMutableState(updatedState, int64(3))
@@ -3658,6 +3727,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 	s.NotNil(partialState, "expected valid state.")
 	partialInfo := partialState.ExecutionInfo
 	s.NotNil(partialInfo, "Valid Workflow info expected.")
+	s.assertChecksumsEqual(csum, partialState.Checksum)
 
 	bufferUpdateInfo := copyWorkflowExecutionInfo(partialInfo)
 	bufferedUpdatedStats := copyExecutionStats(partialState.ExecutionStats)
@@ -3671,6 +3741,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 	s.NoError(err2)
 	s.Equal(1, stats0.BufferedEventsCount)
 	s.True(stats0.BufferedEventsSize > 0)
+	s.assertChecksumsEqual(testWorkflowChecksum, state0.Checksum)
 	history := &gen.History{Events: make([]*gen.HistoryEvent, 0)}
 	history.Events = append(history.Events, eventsBatch1...)
 	history0 := &gen.History{Events: state0.BufferedEvents}
@@ -3687,6 +3758,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 	s.NotNil(info1, "Valid Workflow info expected.")
 	s.Equal(2, stats1.BufferedEventsCount)
 	s.True(stats1.BufferedEventsSize > 0)
+	s.assertChecksumsEqual(testWorkflowChecksum, state1.Checksum)
 	history1 := &gen.History{Events: state1.BufferedEvents}
 	s.True(history.Equals(history1))
 
@@ -3953,6 +4025,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 	s.Equal(0, len(state4.SignalRequestedIDs))
 
 	s.Equal(0, len(state4.BufferedEvents))
+	s.assertChecksumsEqual(testWorkflowChecksum, state4.Checksum)
 
 }
 

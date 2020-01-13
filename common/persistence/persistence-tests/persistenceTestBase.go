@@ -305,6 +305,7 @@ func (s *TestBase) CreateWorkflowExecutionWithBranchToken(domainID string, workf
 				},
 			},
 			TimerTasks: timerTasks,
+			Checksum:   testWorkflowChecksum,
 		},
 		RangeID: s.ShardInfo.RangeID,
 	})
@@ -367,6 +368,7 @@ func (s *TestBase) CreateWorkflowExecutionWithReplication(domainID string, workf
 			ReplicationState: state,
 			TransferTasks:    transferTasks,
 			ReplicationTasks: replicationTasks,
+			Checksum:         testWorkflowChecksum,
 		},
 		RangeID: s.ShardInfo.RangeID,
 	})
@@ -420,6 +422,7 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(domainID string, workflowExe
 			},
 			ExecutionStats: &p.ExecutionStats{},
 			TransferTasks:  transferTasks,
+			Checksum:       testWorkflowChecksum,
 		},
 		RangeID: s.ShardInfo.RangeID,
 	})
@@ -772,6 +775,7 @@ func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *p.Workflo
 			TimerTasks:       timerTasks,
 
 			Condition: condition,
+			Checksum:  testWorkflowChecksum,
 		},
 		Encoding: pickRandomEncoding(),
 	})
@@ -940,6 +944,7 @@ func (s *TestBase) ConflictResolveWorkflowExecution(prevRunID string, prevLastWr
 			RequestCancelInfos:  requestCancelInfos,
 			SignalInfos:         signalInfos,
 			SignalRequestedIDs:  ids,
+			Checksum:            testWorkflowChecksum,
 		},
 		Encoding: pickRandomEncoding(),
 	})
