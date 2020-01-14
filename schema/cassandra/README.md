@@ -31,7 +31,7 @@ Q: What's the format of manifest.json
 
 Example below:
 * MinCompatibleVersion is the minimum schema version that your code can handle
-* SchemaUpdateCqlFiles are list of .cql files containg your create/alter commands
+* SchemaUpdateCqlFiles are list of .cql files containing your create/alter commands
 
 
 ```
