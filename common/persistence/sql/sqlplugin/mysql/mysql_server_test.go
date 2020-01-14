@@ -83,3 +83,10 @@ func TestSQLQueuePersistence(t *testing.T) {
 	s.TestBase.Setup()
 	suite.Run(t, s)
 }
+
+func TestClusterMetadataPersistence(t *testing.T) {
+	s := new(pt.ClusterMetadataManagerSuite)
+	s.TestBase = pt.NewTestBaseWithSQL(GetTestClusterOption())
+	s.TestBase.Setup()
+	suite.Run(t, s)
+}

@@ -95,6 +95,13 @@ func TestSQLVisibilityPersistenceSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestClusterMetadataPersistence(t *testing.T) {
+	s := new(pt.ClusterMetadataManagerSuite)
+	s.TestBase = pt.NewTestBaseWithSQL(getTestClusterOption())
+	s.TestBase.Setup()
+	suite.Run(t, s)
+}
+
 // TODO flaky test in buildkite
 // https://github.com/temporalio/temporal/issues/2877
 /*
