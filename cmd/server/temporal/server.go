@@ -21,10 +21,15 @@
 package temporal
 
 import (
+	"fmt"
 	"log"
 	"time"
 
 	"google.golang.org/grpc"
+
+	persist "github.com/temporalio/temporal/.gen/go/persistence"
+	"github.com/temporalio/temporal/common/persistence"
+	persistenceClient "github.com/temporalio/temporal/common/persistence/client"
 
 	"github.com/temporalio/temporal/common/authorization"
 
@@ -151,6 +156,12 @@ func (s *server) startService() common.Daemon {
 	params.MetricsClient = metrics.NewClient(params.MetricScope, service.GetMetricsServiceIdx(params.Name, params.Logger))
 
 	clusterMetadata := s.cfg.ClusterMetadata
+
+	// This call performs a config check against the configured persistence store for immutable cluster metadata.
+	// If there is a mismatch, the persisted values take precedence and will be written over in the config objects.
+	// This is to keep this check hidden from independent downstream daemons and keep this in a single place.
+	immutableClusterMetadataInitialization(&params, clusterMetadata)
+
 	params.ClusterMetadata = cluster.NewMetadata(
 		params.Logger,
 		dc.GetBoolProperty(dynamicconfig.EnableGlobalDomain, clusterMetadata.EnableGlobalDomain),
@@ -244,6 +255,57 @@ func (s *server) startService() common.Daemon {
 	go execute(daemon, s.doneC)
 
 	return daemon
+}
+
+func immutableClusterMetadataInitialization(params *service.BootstrapParams, clusterMetadata *config.ClusterMetadata) {
+	clusterMetadataManager, err := persistenceClient.NewFactory(
+		&params.PersistenceConfig,
+		params.ClusterMetadata.GetCurrentClusterName(),
+		params.MetricsClient,
+		params.Logger,
+	).NewClusterMetadataManager()
+
+	if err != nil {
+		log.Fatalf("Error initializing cluster metadata manager: %v", err)
+	}
+
+	resp, err := clusterMetadataManager.InitializeImmutableClusterMetadata(
+		&persistence.InitializeImmutableClusterMetadataRequest{
+			ImmutableClusterMetadata: persist.ImmutableClusterMetadata{
+				HistoryShardCount: common.Int32Ptr(int32(params.PersistenceConfig.NumHistoryShards)),
+				ClusterName:       &clusterMetadata.CurrentClusterName,
+			}})
+
+	if err != nil {
+		log.Fatalf("Error while fetching or persisting immutable cluster metadata: %v", err)
+	}
+
+	if resp.RequestApplied {
+		params.Logger.Info("Successfully applied immutable cluster metadata.")
+	} else {
+		if clusterMetadata.CurrentClusterName != *resp.PersistedImmutableData.ClusterName {
+			params.Logger.Error(fmt.Sprintf(
+				"Supplied configuration CurrentClusterName is '%s' which mismatches persisted ImmutableClusterMetadata."+
+					"Continuing with the persisted value of '%s' as this value cannot be changed once intialized. "+
+					"This suggests you have accidentally the value or connected to the wrong database.",
+				clusterMetadata.CurrentClusterName,
+				*resp.PersistedImmutableData.ClusterName))
+
+			clusterMetadata.CurrentClusterName = *resp.PersistedImmutableData.ClusterName
+		}
+
+		var persistedShardCount = int(*resp.PersistedImmutableData.HistoryShardCount)
+		if params.PersistenceConfig.NumHistoryShards != persistedShardCount {
+			params.Logger.Error(fmt.Sprintf(
+				"Supplied PersistenceConfig.NumHistoryShards is '%d' which mismatches persisted ImmutableClusterMetadata."+
+					"Continuing with the persisted value of '%d' as this value cannot be changed once intialized. "+
+					"This suggests you have accidentally the value or connected to the wrong database.",
+				params.PersistenceConfig.NumHistoryShards,
+				persistedShardCount))
+
+			params.PersistenceConfig.NumHistoryShards = persistedShardCount
+		}
+	}
 }
 
 // execute runs the daemon in a separate go routine
