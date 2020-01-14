@@ -53,6 +53,17 @@ type (
 		GetMetadata() (*GetMetadataResponse, error)
 	}
 
+	// ClusterMetadataStore is a lower level of ClusterMetadataManager.
+	// There is no Internal constructs needed to abstract away at the interface level currently,
+	//  so we can reimplement the ClusterMetadataManager and leave this as a placeholder.
+	ClusterMetadataStore interface {
+		Closeable
+		GetName() string
+		// Initialize immutable metadata for the cluster. Takes no action if already initialized.
+		InitializeImmutableClusterMetadata(request *InternalInitializeImmutableClusterMetadataRequest) (*InternalInitializeImmutableClusterMetadataResponse, error)
+		GetImmutableClusterMetadata() (*InternalGetImmutableClusterMetadataResponse, error)
+	}
+
 	// ExecutionStore is used to manage workflow executions for Persistence layer
 	ExecutionStore interface {
 		Closeable
@@ -634,6 +645,27 @@ type (
 	InternalListDomainsResponse struct {
 		Domains       []*InternalGetDomainResponse
 		NextPageToken []byte
+	}
+
+	// InternalInitializeImmutableClusterMetadataRequest is a request of InitializeImmutableClusterMetadata
+	// These values can only be set a single time upon cluster initialization.
+	InternalInitializeImmutableClusterMetadataRequest struct {
+		// Serialized ImmutableCusterMetadata to persist.
+		ImmutableClusterMetadata *DataBlob
+	}
+
+	// InternalInitializeImmutableClusterMetadataResponse is a request of InitializeImmutableClusterMetadata
+	InternalInitializeImmutableClusterMetadataResponse struct {
+		// Serialized ImmutableCusterMetadata that is currently persisted.
+		PersistedImmutableMetadata *DataBlob
+		RequestApplied             bool
+	}
+
+	// InternalGetImmutableClusterMetadataResponse is the response to GetImmutableClusterMetadata
+	// These values are set a single time upon cluster initialization.
+	InternalGetImmutableClusterMetadataResponse struct {
+		// Serialized ImmutableCusterMetadata.
+		ImmutableClusterMetadata *DataBlob
 	}
 )
 
