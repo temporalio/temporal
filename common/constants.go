@@ -130,6 +130,8 @@ const (
 )
 
 // Queue types used in queue table
+// Use positive numbers for queue type
+// Negative numbers are reserved for DLQ
 const (
 	DomainReplicationQueueType QueueType = 1
 )

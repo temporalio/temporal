@@ -96,6 +96,20 @@ func (mr *MockDomainReplicationQueueMockRecorder) Publish(message interface{}) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Publish", reflect.TypeOf((*MockDomainReplicationQueue)(nil).Publish), message)
 }
 
+// PublishToDLQ mocks base method
+func (m *MockDomainReplicationQueue) PublishToDLQ(message interface{}) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PublishToDLQ", message)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// PublishToDLQ indicates an expected call of PublishToDLQ
+func (mr *MockDomainReplicationQueueMockRecorder) PublishToDLQ(message interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishToDLQ", reflect.TypeOf((*MockDomainReplicationQueue)(nil).PublishToDLQ), message)
+}
+
 // GetReplicationMessages mocks base method
 func (m *MockDomainReplicationQueue) GetReplicationMessages(lastMessageID, maxCount int) ([]*replicator.ReplicationTask, int, error) {
 	m.ctrl.T.Helper()

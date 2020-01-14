@@ -79,6 +79,7 @@ type (
 	DomainReplicationQueue interface {
 		common.Daemon
 		Publish(message interface{}) error
+		PublishToDLQ(message interface{}) error
 		GetReplicationMessages(lastMessageID int, maxCount int) ([]*replicator.ReplicationTask, int, error)
 		UpdateAckLevel(lastProcessedMessageID int, clusterName string) error
 		GetAckLevels() (map[string]int, error)
@@ -110,6 +111,19 @@ func (q *domainReplicationQueueImpl) Publish(message interface{}) error {
 		return fmt.Errorf("failed to encode message: %v", err)
 	}
 	return q.queue.EnqueueMessage(bytes)
+}
+
+func (q *domainReplicationQueueImpl) PublishToDLQ(message interface{}) error {
+	task, ok := message.(*replicator.ReplicationTask)
+	if !ok {
+		return errors.New("wrong message type")
+	}
+
+	bytes, err := q.encoder.Encode(task)
+	if err != nil {
+		return fmt.Errorf("failed to encode message: %v", err)
+	}
+	return q.queue.EnqueueMessageToDLQ(bytes)
 }
 
 func (q *domainReplicationQueueImpl) GetReplicationMessages(
@@ -178,7 +192,7 @@ func (q *domainReplicationQueueImpl) purgeAckedMessages() error {
 	}
 
 	q.metricsClient.
-		Scope(metrics.FrontendDomainReplicationQueueScope).
+		Scope(metrics.PersistenceDomainReplicationQueueScope).
 		UpdateGauge(metrics.DomainReplicationTaskAckLevel, float64(minAckLevel))
 	return nil
 }

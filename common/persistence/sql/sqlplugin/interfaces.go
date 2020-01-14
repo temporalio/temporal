@@ -687,7 +687,9 @@ type (
 		InsertIntoQueue(row *QueueRow) (sql.Result, error)
 		GetLastEnqueuedMessageIDForUpdate(queueType common.QueueType) (int, error)
 		GetMessagesFromQueue(queueType common.QueueType, lastMessageID, maxRows int) ([]QueueRow, error)
+		GetMessagesBetween(queueType common.QueueType, firstMessageID int, lastMessageID int, maxRows int) ([]QueueRow, error)
 		DeleteMessagesBefore(queueType common.QueueType, messageID int) (sql.Result, error)
+		DeleteMessage(queueType common.QueueType, messageID int) (sql.Result, error)
 		InsertAckLevel(queueType common.QueueType, messageID int, clusterName string) error
 		UpdateAckLevels(queueType common.QueueType, clusterAckLevels map[string]int) error
 		GetAckLevels(queueType common.QueueType, forUpdate bool) (map[string]int, error)

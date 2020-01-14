@@ -34,6 +34,7 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/membership"
 	"github.com/uber/cadence/common/metrics"
+	"github.com/uber/cadence/common/persistence"
 )
 
 const (
@@ -53,6 +54,7 @@ func newDomainReplicationMessageProcessor(
 	domainReplicator DomainReplicator,
 	hostInfo *membership.HostInfo,
 	serviceResolver membership.ServiceResolver,
+	domainReplicationQueue persistence.DomainReplicationQueue,
 ) *domainReplicationMessageProcessor {
 	retryPolicy := backoff.NewExponentialRetryPolicy(taskProcessorErrorRetryWait)
 	retryPolicy.SetBackoffCoefficient(taskProcessorErrorRetryBackoffCoefficient)
@@ -71,6 +73,7 @@ func newDomainReplicationMessageProcessor(
 		lastProcessedMessageID: -1,
 		lastRetrievedMessageID: -1,
 		done:                   make(chan struct{}),
+		domainReplicationQueue: domainReplicationQueue,
 	}
 }
 
@@ -88,6 +91,7 @@ type (
 		lastProcessedMessageID int64
 		lastRetrievedMessageID int64
 		done                   chan struct{}
+		domainReplicationQueue persistence.DomainReplicationQueue
 	}
 )
 
@@ -146,14 +150,24 @@ func (p *domainReplicationMessageProcessor) getAndHandleDomainReplicationTasks()
 
 	p.logger.Debug("Successfully fetched domain replication tasks.", tag.Counter(len(response.Messages.ReplicationTasks)))
 
-	for _, task := range response.Messages.ReplicationTasks {
+	for taskIndex := range response.Messages.ReplicationTasks {
+		task := response.Messages.ReplicationTasks[taskIndex]
 		err := backoff.Retry(func() error {
 			return p.handleDomainReplicationTask(task)
 		}, p.retryPolicy, isTransientRetryableError)
 
 		if err != nil {
 			p.metricsClient.IncCounter(metrics.DomainReplicationTaskScope, metrics.ReplicatorFailures)
-			// TODO: put task into DLQ
+			p.logger.Error("Failed to apply domain replication tasks", tag.Error(err))
+
+			dlqErr := backoff.Retry(func() error {
+				return p.putDomainReplicationTaskToDLQ(task)
+			}, p.retryPolicy, isTransientRetryableError)
+			if dlqErr != nil {
+				p.logger.Error("Failed to put replication tasks to DLQ", tag.Error(dlqErr))
+				p.metricsClient.IncCounter(metrics.DomainReplicationTaskScope, metrics.ReplicatorFailures)
+				return
+			}
 		}
 	}
 
@@ -161,7 +175,16 @@ func (p *domainReplicationMessageProcessor) getAndHandleDomainReplicationTasks()
 	p.lastRetrievedMessageID = response.Messages.GetLastRetrievedMessageId()
 }
 
-func (p *domainReplicationMessageProcessor) handleDomainReplicationTask(task *replicator.ReplicationTask) error {
+func (p *domainReplicationMessageProcessor) putDomainReplicationTaskToDLQ(
+	task *replicator.ReplicationTask,
+) error {
+
+	return p.domainReplicationQueue.PublishToDLQ(task)
+}
+
+func (p *domainReplicationMessageProcessor) handleDomainReplicationTask(
+	task *replicator.ReplicationTask,
+) error {
 	p.metricsClient.IncCounter(metrics.DomainReplicationTaskScope, metrics.ReplicatorMessages)
 	sw := p.metricsClient.StartTimer(metrics.DomainReplicationTaskScope, metrics.ReplicatorLatency)
 	defer sw.Stop()
