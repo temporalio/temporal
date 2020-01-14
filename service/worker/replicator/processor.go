@@ -332,7 +332,7 @@ func (p *replicationTaskProcessor) handleSyncShardTask(task *replicator.Replicat
 		ShardId:       attr.ShardId,
 		Timestamp:     attr.Timestamp,
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), p.config.ReplicationTaskContextTimeout())
 	defer cancel()
 	return p.historyClient.SyncShardStatus(ctx, req)
 }

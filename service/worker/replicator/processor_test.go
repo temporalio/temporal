@@ -115,7 +115,8 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.config = &Config{
-		ReplicatorTaskConcurrency: dynamicconfig.GetIntPropertyFn(10),
+		ReplicatorTaskConcurrency:     dynamicconfig.GetIntPropertyFn(10),
+		ReplicationTaskContextTimeout: dynamicconfig.GetDurationPropertyFn(30 * time.Second),
 	}
 	s.metricsClient = metrics.NewClient(tally.NoopScope, metrics.Worker)
 	s.msgEncoder = codec.NewThriftRWEncoder()
