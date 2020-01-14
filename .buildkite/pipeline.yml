@@ -1,7 +1,7 @@
 steps:
     - label: ":golang: unit test"
       agents:
-        queue: "workers"
+        queue: "default"
         docker: "*"
       command: "make cover_profile"
       artifact_paths:
