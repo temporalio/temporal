@@ -1620,3 +1620,4 @@ struct SupportedClientVersions{
 struct ClusterInfo{
   10: optional SupportedClientVersions supportedClientVersions
 }
+
