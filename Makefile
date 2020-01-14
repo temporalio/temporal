@@ -225,7 +225,7 @@ test_xdc: bins
 		go test -timeout $(TEST_TIMEOUT) -coverprofile=$@ "$$dir" $(TEST_TAG) | tee -a test.log; \
 	done;
 
-cover_profile: clean bins_nothrift
+cover_profile: clean bins
 	@mkdir -p $(BUILD)
 	@mkdir -p $(COVER_ROOT)
 	@echo "mode: atomic" > $(UNIT_COVER_FILE)
@@ -237,7 +237,7 @@ cover_profile: clean bins_nothrift
 		cat $(BUILD)/"$$dir"/coverage.out | grep -v "^mode: \w\+" >> $(UNIT_COVER_FILE); \
 	done;
 
-cover_integration_profile: clean bins_nothrift
+cover_integration_profile: clean bins
 	@mkdir -p $(BUILD)
 	@mkdir -p $(COVER_ROOT)
 	@echo "mode: atomic" > $(INTEG_COVER_FILE)
@@ -247,7 +247,7 @@ cover_integration_profile: clean bins_nothrift
 	@time go test $(INTEG_TEST_ROOT) $(TEST_ARG) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_DIR)/coverage.out || exit 1;
 	@cat $(BUILD)/$(INTEG_TEST_DIR)/coverage.out | grep -v "^mode: \w\+" >> $(INTEG_COVER_FILE)
 
-cover_xdc_profile: clean bins_nothrift
+cover_xdc_profile: clean bins
 	@mkdir -p $(BUILD)
 	@mkdir -p $(COVER_ROOT)
 	@echo "mode: atomic" > $(INTEG_XDC_COVER_FILE)
@@ -257,7 +257,7 @@ cover_xdc_profile: clean bins_nothrift
 	@time go test -v -timeout $(TEST_TIMEOUT) $(INTEG_TEST_XDC_ROOT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_XDC_DIR)/coverage.out || exit 1;
 	@cat $(BUILD)/$(INTEG_TEST_XDC_DIR)/coverage.out | grep -v "^mode: \w\+" | grep -v "mode: set" >> $(INTEG_XDC_COVER_FILE)
 
-cover_ndc_profile: clean bins_nothrift
+cover_ndc_profile: clean bins
 	@mkdir -p $(BUILD)
 	@mkdir -p $(COVER_ROOT)
 	@echo "mode: atomic" > $(INTEG_NDC_COVER_FILE)

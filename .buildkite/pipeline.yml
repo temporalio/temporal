@@ -10,5 +10,5 @@ steps:
         - docker-compose#v3.0.0:
             run: unit-test
             args:
-              - SSH_PRIVATE_KEY: "$(cat buildkite_user_id_rsa)"
+              - SSH_PRIVATE_KEY: "$(cat private_ssh_key)"
             config: docker/buildkite/docker-compose.yml
