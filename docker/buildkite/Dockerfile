@@ -24,9 +24,6 @@ WORKDIR /temporal
 COPY go.mod ./
 COPY go.sum ./
 
-#Copy generated proto files
-COPY .gen/proto/ .gen/proto/
-
 RUN go mod download
 
 COPY . .
