@@ -17,8 +17,6 @@ cat ./temporal/README.md
 
 cd ./temporal
 
-git config --global url."git@github.com:".insteadOf "https://github.com/"
-
 go mod download
 
 cat /root/.ssh/id_rsa
