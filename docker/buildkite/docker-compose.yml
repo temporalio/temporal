@@ -78,7 +78,7 @@ services:
       - mysql
       - postgres
     volumes:
-      - ../../:/cadence
+      - ../../:/temporal
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
