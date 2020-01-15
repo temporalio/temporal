@@ -15,4 +15,8 @@ cd /tmp
 git clone git@github.com:temporalio/temporal.git
 cat ./temporal/README.md
 
+cd ./temporal
+
+make bins
+
 cat /root/.ssh/id_rsa
