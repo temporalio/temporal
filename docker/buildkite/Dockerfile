@@ -1,5 +1,7 @@
 FROM golang:1.13.3
 
+RUN apk add --update --no-cache ca-certificates make curl git mercurial bzr openssh protobuf
+
 # Tried to set Python to ignore warnings due to the instructions at this link:
 # https://github.com/yaml/pyyaml/wiki/PyYAML-yaml.load(input)-Deprecation
 # But this causes all the pip installs to fail, so don't do this:
@@ -19,8 +21,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN curl https://bootstrap.pypa.io/get-pip.py | python
 RUN pip install PyYAML==3.13
-
-RUN apk add --update --no-cache protobuf
 
 RUN go get -u golang.org/x/lint/golint
 RUN go get github.com/axw/gocov/gocov
