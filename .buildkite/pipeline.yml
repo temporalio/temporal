@@ -14,5 +14,5 @@ steps:
               - "${SSH_AUTH_SOCK}:/ssh-agent"
               - "${HOME}/.ssh/known_hosts:/root/.ssh/known_hosts"
             environment:
-              - SSH_AUTH_SOCK=/var/lib/buildkite-agent/.ssh/ssh-agent.sock
+              - SSH_AUTH_SOCK=/ssh-agent
               - GOPRIVATE=go.temporal.io/temporal
