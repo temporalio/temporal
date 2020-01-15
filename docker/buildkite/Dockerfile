@@ -19,6 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       python-pip \
       python-setuptools \
       time \
+      protobuf-compiler \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl https://bootstrap.pypa.io/get-pip.py | python
