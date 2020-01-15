@@ -3,7 +3,7 @@ steps:
       agents:
         queue: "default"
         docker: "*"
-      command: "make bins"
+      command: "make cover_profile"
       artifact_paths:
         - "build/coverage/*.out"
       plugins:
