@@ -1,7 +1,3 @@
-#FROM golang:1.13.3-alpine
-
-#RUN apk add --update --no-cache ca-certificates make curl git mercurial bzr openssh protobuf python
-
 FROM golang:1.13.3
 
 # Tried to set Python to ignore warnings due to the instructions at this link:
