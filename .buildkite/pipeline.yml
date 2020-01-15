@@ -11,7 +11,7 @@ steps:
             run: unit-test
             config: docker/buildkite/docker-compose.yml
             volumes:
-              - "${SSH_AUTH_SOCK}:/ssh-agent"
+              - "${HOME}/.ssh/ssh-agent.sock:/ssh-agent"
               - "${HOME}/.ssh/known_hosts:/root/.ssh/known_hosts"
             environment:
               - SSH_AUTH_SOCK=/ssh-agent
