@@ -17,6 +17,6 @@ cat ./temporal/README.md
 
 cd ./temporal
 
-make bins
+go mod download
 
 cat /root/.ssh/id_rsa
