@@ -20,6 +20,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl https://bootstrap.pypa.io/get-pip.py | python
 RUN pip install PyYAML==3.13
 
+RUN apk add --update --no-cache protobuf
+
 RUN go get -u golang.org/x/lint/golint
 RUN go get github.com/axw/gocov/gocov
 RUN go get github.com/dmetzgar/goveralls
