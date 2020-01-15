@@ -29,4 +29,6 @@ RUN go get golang.org/x/tools/cmd/cover
 
 # https://github.com/docker-library/golang/blob/c1baf037d71331eb0b8d4c70cff4c29cf124c5e0/1.4/Dockerfile
 RUN mkdir -p /temporal
+
+ENV GOPRIVATE=go.temporal.io/temporal
 WORKDIR /temporal
