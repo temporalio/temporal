@@ -80,6 +80,8 @@ services:
     volumes:
       - ../../:/temporal
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+      - "${SSH_AUTH_SOCK}:/ssh-agent"
+      - "${HOME}/.ssh/known_hosts:/root/.ssh/known_hosts"
     networks:
       services-network:
         aliases:
