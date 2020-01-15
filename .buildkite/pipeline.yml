@@ -14,4 +14,4 @@ steps:
               - "${SSH_AUTH_SOCK}:/ssh-agent"
               - "${HOME}/.ssh/known_hosts:/root/.ssh/known_hosts"
             environment:
-              - SSH_AUTH_SOCK=/ssh-agent
+              - SSH_AUTH_SOCK=/var/lib/buildkite-agent/.ssh-agent.sock
