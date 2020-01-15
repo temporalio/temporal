@@ -8,11 +8,3 @@ RUN git config --global url."git@github.com:".insteadOf "https://github.com/"
 ENV GOFLAGS="-mod=readonly"
 
 WORKDIR /temporal
-
-# Copy go mod dependencies and build cache
-COPY go.mod ./
-COPY go.sum ./
-
-RUN go mod download
-
-COPY . .
