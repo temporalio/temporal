@@ -72,6 +72,7 @@ services:
       - BUILDKITE_JOB_ID
       - BUILDKITE_BUILD_ID
       - BUILDKITE_BUILD_NUMBER
+      - SSH_AUTH_SOCK
     depends_on:
       - cassandra
       - mysql
