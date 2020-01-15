@@ -7,4 +7,7 @@ echo $SSH_AUTH_SOCK
 
 echo "Known Hosts"
 cat /root/.ssh/known_hosts
+
+ssh-add -l
+
 cat /root/.ssh/id_rsa
