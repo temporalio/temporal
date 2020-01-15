@@ -7,7 +7,12 @@ steps:
       artifact_paths:
         - "build/coverage/*.out"
       plugins:
-        - docker-compose#v3.0.0:
+        - docker-compose#v3.0.3:
             run: unit-test
             config: docker/buildkite/docker-compose.yml
-            mount-ssh-agent: true
+            volumes:
+              - ${BUILDKITE_AGENT_BINARY_PATH:-/usr/bin/buildkite-agent}:/usr/bin/buildkite-agent
+            environment:
+              - BUILDKITE_JOB_ID
+              - BUILDKITE_BUILD_ID
+              - BUILDKITE_AGENT_ACCESS_TOKEN
