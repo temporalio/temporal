@@ -155,9 +155,27 @@ func (p *replicatorQueueProcessorImpl) process(
 		if _, ok := err.(*shared.EntityNotExistsError); ok {
 			err = errHistoryNotFoundTask
 		}
+
 		if err == nil {
 			err = p.executionMgr.CompleteReplicationTask(&persistence.CompleteReplicationTaskRequest{TaskID: task.GetTaskID()})
 		}
+
+		if err != nil && taskInfo.attempt >= p.options.MaxRetryCount(task.GetDomainID()) {
+			err1 := p.executionMgr.CompleteReplicationTask(&persistence.CompleteReplicationTaskRequest{TaskID: task.GetTaskID()})
+			if err1 == nil {
+				p.metricsClient.IncCounter(metrics.ReplicatorTaskHistoryScope, metrics.ReplicatorTaskDroppedCount)
+				p.logger.Warn(
+					"replicator dropped task after max retry attempts",
+					tag.WorkflowDomainID(task.GetDomainID()),
+					tag.WorkflowID(task.GetWorkflowID()),
+					tag.WorkflowRunID(task.GetRunID()),
+					tag.TaskID(task.GetTaskID()),
+					tag.Attempt(int32(taskInfo.attempt)),
+					tag.Error(err))
+				err = nil
+			}
+		}
+
 		return metrics.ReplicatorTaskHistoryScope, err
 	default:
 		return metrics.ReplicatorQueueProcessorScope, errUnknownReplicationTask

@@ -47,7 +47,7 @@ type (
 		MaxPollIntervalJitterCoefficient   dynamicconfig.FloatPropertyFn
 		UpdateAckInterval                  dynamicconfig.DurationPropertyFn
 		UpdateAckIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
-		MaxRetryCount                      dynamicconfig.IntPropertyFn
+		MaxRetryCount                      dynamicconfig.IntPropertyFnWithDomainIDFilter
 		MetricScope                        int
 	}
 

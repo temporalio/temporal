@@ -204,7 +204,7 @@ FilterLoop:
 		err := t.handleTaskError(scope, task, notificationChan, err)
 		if err != nil {
 			task.attempt++
-			if task.attempt >= t.config.TimerTaskMaxRetryCount() {
+			if task.attempt >= t.config.TimerTaskMaxRetryCount(task.task.GetDomainID()) {
 				t.metricsClient.RecordTimer(scope, metrics.TaskAttemptTimer, time.Duration(task.attempt))
 				task.logger.Error("Critical error processing timer task, retrying.", tag.Error(err), tag.OperationCritical)
 			}

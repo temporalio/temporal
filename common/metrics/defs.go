@@ -1468,6 +1468,8 @@ const (
 	MatchingClientForwardedCounter
 	MatchingClientInvalidTaskListName
 
+	ReplicatorTaskDroppedCount
+
 	NumCommonMetrics // Needs to be last on this list for iota numbering
 )
 
@@ -1806,6 +1808,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		VisibilityArchiveSuccessCount:                             {metricName: "visibility_archiver_archive_success", metricType: Counter},
 		MatchingClientForwardedCounter:                            {metricName: "forwarded", metricType: Counter},
 		MatchingClientInvalidTaskListName:                         {metricName: "invalid_task_list_name", metricType: Counter},
+		ReplicatorTaskDroppedCount:                                {metricName: "replicator_task_dropped", metricType: Counter},
 	},
 	Frontend: {
 		DomainReplicationTaskAckLevel: {metricName: "domain_replication_task_ack_level", metricType: Gauge},

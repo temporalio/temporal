@@ -69,6 +69,9 @@ type IntPropertyFn func(opts ...FilterOption) int
 // IntPropertyFnWithDomainFilter is a wrapper to get int property from dynamic config with domain as filter
 type IntPropertyFnWithDomainFilter func(domain string) int
 
+// IntPropertyFnWithDomainIDFilter is a wrapper to get int property from dynamic config with domainID as filter
+type IntPropertyFnWithDomainIDFilter func(domainID string) int
+
 // IntPropertyFnWithTaskListInfoFilters is a wrapper to get int property from dynamic config with three filters: domain, taskList, taskType
 type IntPropertyFnWithTaskListInfoFilters func(domain string, taskList string, taskType int) int
 
@@ -139,6 +142,18 @@ func (c *Collection) GetIntProperty(key Key, defaultValue int) IntPropertyFn {
 func (c *Collection) GetIntPropertyFilteredByDomain(key Key, defaultValue int) IntPropertyFnWithDomainFilter {
 	return func(domain string) int {
 		val, err := c.client.GetIntValue(key, getFilterMap(DomainFilter(domain)), defaultValue)
+		if err != nil {
+			c.logNoValue(key, err)
+		}
+		c.logValue(key, val, defaultValue)
+		return val
+	}
+}
+
+// GetIntPropertyFilteredByDomainID gets property with domainID filter and asserts that it's an integer
+func (c *Collection) GetIntPropertyFilteredByDomainID(key Key, defaultValue int) IntPropertyFnWithDomainIDFilter {
+	return func(domainID string) int {
+		val, err := c.client.GetIntValue(key, getFilterMap(DomainIDFilter(domainID)), defaultValue)
 		if err != nil {
 			c.logNoValue(key, err)
 		}
