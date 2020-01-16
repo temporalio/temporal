@@ -1,18 +1,157 @@
 steps:
-    - label: ":golang: unit test"
-      agents:
-        queue: "default"
-        docker: "*"
-      command: "make cover_profile"
-      artifact_paths:
-        - "build/coverage/*.out"
-      plugins:
-        - docker-compose#v3.0.3:
-            run: unit-test
-            config: docker/buildkite/docker-compose.yml
-            volumes:
-              - "${SSH_AUTH_SOCK}:/ssh-agent"
-              - "${HOME}/.ssh/known_hosts:/root/.ssh/known_hosts"
-            environment:
-              - SSH_AUTH_SOCK=/ssh-agent
-              - GOPRIVATE=go.temporal.io/temporal
+  - label: ":golang: unit test"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make cover_profile"
+    artifact_paths:
+      - "build/coverage/*.out"
+    plugins:
+      - docker-compose#v3.0.3:
+          run: unit-test
+          config: docker/buildkite/docker-compose.yml
+          volumes:
+            - "${SSH_AUTH_SOCK}:/ssh-agent"
+            - "${HOME}/.ssh/known_hosts:/root/.ssh/known_hosts"
+          environment:
+            - SSH_AUTH_SOCK=/ssh-agent
+
+  - label: ":golang: integration test with cassandra"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make cover_integration_profile"
+    artifact_paths:
+      - "build/coverage/*.out"
+    retry:
+      automatic:
+        limit: 1
+    plugins:
+      - docker-compose#v3.0.0:
+          run: integration-test-cassandra
+          config: docker/buildkite/docker-compose.yml
+          volumes:
+            - "${SSH_AUTH_SOCK}:/ssh-agent"
+            - "${HOME}/.ssh/known_hosts:/root/.ssh/known_hosts"
+          environment:
+            - SSH_AUTH_SOCK=/ssh-agent
+
+  - label: ":golang: integration xdc test with cassandra"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make cover_xdc_profile"
+    artifact_paths:
+      - "build/coverage/*.out"
+    retry:
+      automatic:
+        limit: 1
+    plugins:
+      - docker-compose#v3.0.0:
+          run: integration-test-xdc-cassandra
+          config: docker/buildkite/docker-compose.yml
+          volumes:
+            - "${SSH_AUTH_SOCK}:/ssh-agent"
+            - "${HOME}/.ssh/known_hosts:/root/.ssh/known_hosts"
+          environment:
+            - SSH_AUTH_SOCK=/ssh-agent
+
+  - label: ":golang: integration ndc test with cassandra"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make cover_ndc_profile"
+    artifact_paths:
+      - "build/coverage/*.out"
+    retry:
+      automatic:
+        limit: 1
+    plugins:
+      - docker-compose#v3.0.0:
+          run: integration-test-xdc-cassandra
+          config: docker/buildkite/docker-compose.yml
+          volumes:
+            - "${SSH_AUTH_SOCK}:/ssh-agent"
+            - "${HOME}/.ssh/known_hosts:/root/.ssh/known_hosts"
+          environment:
+            - SSH_AUTH_SOCK=/ssh-agent
+
+  - label: ":golang: integration test with mysql"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make cover_integration_profile"
+    artifact_paths:
+      - "build/coverage/*.out"
+    retry:
+      automatic:
+        limit: 1
+    plugins:
+      - docker-compose#v3.0.0:
+          run: integration-test-mysql
+          config: docker/buildkite/docker-compose.yml
+          volumes:
+            - "${SSH_AUTH_SOCK}:/ssh-agent"
+            - "${HOME}/.ssh/known_hosts:/root/.ssh/known_hosts"
+          environment:
+            - SSH_AUTH_SOCK=/ssh-agent
+
+  - label: ":golang: integration xdc test with mysql"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make cover_xdc_profile"
+    artifact_paths:
+      - "build/coverage/*.out"
+    retry:
+      automatic:
+        limit: 1
+    plugins:
+      - docker-compose#v3.0.0:
+          run: integration-test-xdc-mysql
+          config: docker/buildkite/docker-compose.yml
+          volumes:
+            - "${SSH_AUTH_SOCK}:/ssh-agent"
+            - "${HOME}/.ssh/known_hosts:/root/.ssh/known_hosts"
+          environment:
+            - SSH_AUTH_SOCK=/ssh-agent
+
+  - label: ":golang: integration ndc test with mysql"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make cover_ndc_profile"
+    artifact_paths:
+      - "build/coverage/*.out"
+    retry:
+      automatic:
+        limit: 1
+    plugins:
+      - docker-compose#v3.0.0:
+          run: integration-test-xdc-mysql
+          config: docker/buildkite/docker-compose.yml
+          volumes:
+            - "${SSH_AUTH_SOCK}:/ssh-agent"
+            - "${HOME}/.ssh/known_hosts:/root/.ssh/known_hosts"
+          environment:
+            - SSH_AUTH_SOCK=/ssh-agent
+
+  - wait
+
+  - label: ":golang: code-coverage"
+    agents:
+      queue: "workers"
+      docker: "*"
+    command: "scripts/buildkite/gocov.sh"
+    retry:
+      automatic:
+        limit: 2
+    plugins:
+      - docker-compose#v3.0.0:
+          run: coverage-report
+          config: docker/buildkite/docker-compose.yml
+          volumes:
+            - "${SSH_AUTH_SOCK}:/ssh-agent"
+            - "${HOME}/.ssh/known_hosts:/root/.ssh/known_hosts"
+          environment:
+            - SSH_AUTH_SOCK=/ssh-agent
