@@ -160,7 +160,8 @@ func (p *replicatorQueueProcessorImpl) process(
 			err = p.executionMgr.CompleteReplicationTask(&persistence.CompleteReplicationTaskRequest{TaskID: task.GetTaskID()})
 		}
 
-		if err != nil && taskInfo.attempt >= p.options.MaxRetryCount(task.GetDomainID()) {
+		maxRetries := p.options.MaxRetryCount(task.GetDomainID())
+		if err != nil && maxRetries > 0 && taskInfo.attempt >= maxRetries {
 			err1 := p.executionMgr.CompleteReplicationTask(&persistence.CompleteReplicationTaskRequest{TaskID: task.GetTaskID()})
 			if err1 == nil {
 				p.metricsClient.IncCounter(metrics.ReplicatorTaskHistoryScope, metrics.ReplicatorTaskDroppedCount)
