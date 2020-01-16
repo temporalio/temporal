@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "0.24",
+  "MinCompatibleVersion": "0.24",
+  "Description": "Add cluster metadata table to store immutable cluster metadata",
+  "SchemaUpdateCqlFiles": [
+    "cluster_metadata.cql"
+  ]
+}
