@@ -72,13 +72,16 @@ services:
       - BUILDKITE_JOB_ID
       - BUILDKITE_BUILD_ID
       - BUILDKITE_BUILD_NUMBER
+      - SSH_AUTH_SOCK
     depends_on:
       - cassandra
       - mysql
       - postgres
     volumes:
-      - ../../:/cadence
+      - ../../:/temporal
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+      - "${SSH_AUTH_SOCK}:/ssh-agent"
+      - "${HOME}/.ssh/known_hosts:/root/.ssh/known_hosts"
     networks:
       services-network:
         aliases:
@@ -97,13 +100,16 @@ services:
       - BUILDKITE_JOB_ID
       - BUILDKITE_BUILD_ID
       - BUILDKITE_BUILD_NUMBER
+      - SSH_AUTH_SOCK
     depends_on:
       - cassandra
       - elasticsearch
       - kafka
     volumes:
-      - ../../:/cadence
+      - ../../:/temporal
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+      - "${SSH_AUTH_SOCK}:/ssh-agent"
+      - "${HOME}/.ssh/known_hosts:/root/.ssh/known_hosts"
     networks:
       services-network:
         aliases:
@@ -123,13 +129,16 @@ services:
       - BUILDKITE_JOB_ID
       - BUILDKITE_BUILD_ID
       - BUILDKITE_BUILD_NUMBER
+      - SSH_AUTH_SOCK
     depends_on:
       - mysql
       - elasticsearch
       - kafka
     volumes:
-      - ../../:/cadence
+      - ../../:/temporal
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+      - "${SSH_AUTH_SOCK}:/ssh-agent"
+      - "${HOME}/.ssh/known_hosts:/root/.ssh/known_hosts"
     networks:
       services-network:
         aliases:
@@ -149,13 +158,16 @@ services:
       - BUILDKITE_JOB_ID
       - BUILDKITE_BUILD_ID
       - BUILDKITE_BUILD_NUMBER
+      - SSH_AUTH_SOCK
     depends_on:
       - cassandra
       - elasticsearch
       - kafka
     volumes:
-      - ../../:/cadence
+      - ../../:/temporal
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+      - "${SSH_AUTH_SOCK}:/ssh-agent"
+      - "${HOME}/.ssh/known_hosts:/root/.ssh/known_hosts"
     networks:
       services-network:
         aliases:
@@ -176,13 +188,16 @@ services:
       - BUILDKITE_JOB_ID
       - BUILDKITE_BUILD_ID
       - BUILDKITE_BUILD_NUMBER
+      - SSH_AUTH_SOCK
     depends_on:
       - mysql
       - elasticsearch
       - kafka
     volumes:
-      - ../../:/cadence
+      - ../../:/temporal
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+      - "${SSH_AUTH_SOCK}:/ssh-agent"
+      - "${HOME}/.ssh/known_hosts:/root/.ssh/known_hosts"
     networks:
       services-network:
         aliases:
@@ -211,9 +226,12 @@ services:
       - BUILDKITE_BUILD_CREATOR_TEAMS
       - BUILDKITE_PULL_REQUEST_REPO
       - COVERALLS_TOKEN
+      - SSH_AUTH_SOCK
     volumes:
-      - ../../:/cadence
+      - ../../:/temporal
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+      - "${SSH_AUTH_SOCK}:/ssh-agent"
+      - "${HOME}/.ssh/known_hosts:/root/.ssh/known_hosts"
 
 networks:
   services-network:
