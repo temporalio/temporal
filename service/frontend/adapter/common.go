@@ -145,10 +145,10 @@ func toThriftDomainConfiguration(in *common.DomainConfiguration) *shared.DomainC
 	return &shared.DomainConfiguration{
 		WorkflowExecutionRetentionPeriodInDays: &in.WorkflowExecutionRetentionPeriodInDays,
 		EmitMetric:                             toThriftBool(in.EmitMetric),
-		BadBinaries:                            toThriftBadBinaries(in.BadBinaries),
-		HistoryArchivalStatus:                  toThriftArchivalStatus(in.HistoryArchivalStatus),
+		BadBinaries:                            ToThriftBadBinaries(in.BadBinaries),
+		HistoryArchivalStatus:                  ToThriftArchivalStatus(in.HistoryArchivalStatus),
 		HistoryArchivalURI:                     &in.HistoryArchivalURI,
-		VisibilityArchivalStatus:               toThriftArchivalStatus(in.VisibilityArchivalStatus),
+		VisibilityArchivalStatus:               ToThriftArchivalStatus(in.VisibilityArchivalStatus),
 		VisibilityArchivalURI:                  &in.VisibilityArchivalURI,
 	}
 }
@@ -162,7 +162,8 @@ func toThriftDomainReplicationConfiguration(in *common.DomainReplicationConfigur
 	}
 }
 
-func toThriftBadBinaries(in *common.BadBinaries) *shared.BadBinaries {
+// ToThriftBadBinaries ...
+func ToThriftBadBinaries(in *common.BadBinaries) *shared.BadBinaries {
 	if in == nil {
 		return nil
 	}
@@ -612,8 +613,8 @@ func toThriftReplicationTokens(in []*common.ReplicationToken) []*replicator.Repl
 	return ret
 }
 
-// toThriftDataBlob ...
-func toThriftDataBlob(in *common.DataBlob) *shared.DataBlob {
+// ToThriftDataBlob ...
+func ToThriftDataBlob(in *common.DataBlob) *shared.DataBlob {
 	if in == nil {
 		return nil
 	}
@@ -691,6 +692,16 @@ func toProtoReplicationMessages(in *replicator.ReplicationMessages) *common.Repl
 		ReplicationTasks:       toProtoReplicationTasks(in.GetReplicationTasks()),
 		LastRetrievedMessageId: in.GetLastRetrievedMessageId(),
 		HasMore:                in.GetHasMore(),
+		SyncShardStatus:        toProtoSyncShardStatusTask(in.GetSyncShardStatus()),
+	}
+}
+
+func toProtoSyncShardStatusTask(in *replicator.SyncShardStatus) *common.SyncShardStatus {
+	if in == nil {
+		return nil
+	}
+	return &common.SyncShardStatus{
+		Timestamp: in.GetTimestamp(),
 	}
 }
 
@@ -894,12 +905,12 @@ func toProtoHistoryTaskV2Attributes(in *replicator.HistoryTaskV2Attributes) *com
 		WorkflowId:          in.GetWorkflowId(),
 		RunId:               in.GetRunId(),
 		VersionHistoryItems: toProtoVersionHistoryItems(in.GetVersionHistoryItems()),
-		Events:              toProtoDataBlob(in.GetEvents()),
-		NewRunEvents:        toProtoDataBlob(in.GetNewRunEvents()),
+		Events:              ToProtoDataBlob(in.GetEvents()),
+		NewRunEvents:        ToProtoDataBlob(in.GetNewRunEvents()),
 	}
 }
 
-func toProtoDataBlob(in *shared.DataBlob) *common.DataBlob {
+func ToProtoDataBlob(in *shared.DataBlob) *common.DataBlob {
 	if in == nil {
 		return nil
 	}
@@ -1011,5 +1022,98 @@ func toThriftResetPointInfo(in *common.ResetPointInfo) *shared.ResetPointInfo {
 		CreatedTimeNano:          &in.CreatedTimeNano,
 		ExpiringTimeNano:         &in.ExpiringTimeNano,
 		Resettable:               &in.Resettable,
+	}
+}
+
+// ToThriftVersionHistory ...
+func ToThriftVersionHistory(in *common.VersionHistory) *shared.VersionHistory {
+	if in == nil {
+		return nil
+	}
+
+	return &shared.VersionHistory{
+		BranchToken: in.BranchToken,
+		Items:       ToThriftVersionHistoryItems(in.Items),
+	}
+}
+
+// ToThriftVersionHistoryItems ...
+func ToThriftVersionHistoryItems(in []*common.VersionHistoryItem) []*shared.VersionHistoryItem {
+	if in == nil {
+		return nil
+	}
+
+	var ret []*shared.VersionHistoryItem
+	for _, item := range in {
+		ret = append(ret, toThriftVersionHistoryItem(item))
+	}
+	return ret
+}
+
+func toThriftVersionHistoryItem(in *common.VersionHistoryItem) *shared.VersionHistoryItem {
+	if in == nil {
+		return nil
+	}
+
+	return &shared.VersionHistoryItem{
+		EventID: &in.EventID,
+		Version: &in.Version,
+	}
+
+}
+
+// ToThriftReplicationInfos ...
+func ToThriftReplicationInfos(in map[string]*common.ReplicationInfo) map[string]*shared.ReplicationInfo {
+	if in == nil {
+		return nil
+	}
+	ret := make(map[string]*shared.ReplicationInfo, len(in))
+
+	for key, value := range in {
+		ret[key] = toThriftReplicationInfo(value)
+	}
+
+	return ret
+}
+
+func toThriftReplicationInfo(in *common.ReplicationInfo) *shared.ReplicationInfo {
+	if in == nil {
+		return nil
+	}
+
+	return &shared.ReplicationInfo{
+		Version:     &in.Version,
+		LastEventId: &in.Version,
+	}
+}
+
+// ToThriftDomainTaskAttributes ...
+func ToThriftDomainTaskAttributes(in *common.DomainTaskAttributes) *replicator.DomainTaskAttributes {
+	if in == nil {
+		return nil
+	}
+	return &replicator.DomainTaskAttributes{
+		DomainOperation:   toThriftDomainOperation(in.DomainOperation),
+		ID:                &in.Id,
+		Info:              toThriftDomainInfo(in.Info),
+		Config:            toThriftDomainConfiguration(in.Config),
+		ReplicationConfig: toThriftDomainReplicationConfiguration(in.ReplicationConfig),
+		ConfigVersion:     &in.ConfigVersion,
+		FailoverVersion:   &in.FailoverVersion,
+	}
+}
+
+// toThriftDomainInfo ...
+func toThriftDomainInfo(in *common.DomainInfo) *shared.DomainInfo {
+	if in == nil {
+		return nil
+	}
+	return &shared.DomainInfo{
+		Name:        &in.Name,
+		Status:      toThriftDomainStatus(in.Status),
+		Description: &in.Description,
+		OwnerEmail:  &in.OwnerEmail,
+		Data:        in.Data,
+		UUID:        &in.Uuid,
 	}
 }

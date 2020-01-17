@@ -61,8 +61,8 @@ type (
 		SetFrontendClient(client frontend.Client)
 		GetRemoteAdminClient(cluster string) admin.Client
 		SetRemoteAdminClient(cluster string, client admin.Client)
-		GetRemoteFrontendClient(cluster string) frontend.Client
-		SetRemoteFrontendClient(cluster string, client frontend.Client)
+		GetRemoteFrontendClient(cluster string) frontend.ClientGRPC
+		SetRemoteFrontendClient(cluster string, client frontend.ClientGRPC)
 	}
 
 	// DispatcherProvider provides a diapatcher to a given address
@@ -76,7 +76,7 @@ type (
 		matchingClient        atomic.Value
 		frontendClient        frontend.Client
 		remoteAdminClients    map[string]admin.Client
-		remoteFrontendClients map[string]frontend.Client
+		remoteFrontendClients map[string]frontend.ClientGRPC
 		factory               Factory
 	}
 
@@ -111,7 +111,9 @@ func NewClientBean(factory Factory, dispatcherProvider DispatcherProvider, clust
 	}
 
 	remoteAdminClients := map[string]admin.Client{}
-	remoteFrontendClients := map[string]frontend.Client{}
+	remoteFrontendClients := map[string]frontend.ClientGRPC{}
+	var frontendClient frontend.Client
+
 	for clusterName, info := range clusterMetadata.GetAllClusterInfo() {
 		if !info.Enabled {
 			continue
@@ -131,24 +133,35 @@ func NewClientBean(factory Factory, dispatcherProvider DispatcherProvider, clust
 			return nil, err
 		}
 
-		frontendClient, err := factory.NewFrontendClientWithTimeoutAndDispatcher(
-			info.RPCName,
+		remoteFrontendClient, err := factory.NewFrontendClientWithTimeoutGRPC(
+			info.RPCAddress,
 			frontend.DefaultTimeout,
 			frontend.DefaultLongPollTimeout,
-			dispatcher,
 		)
 		if err != nil {
 			return nil, err
 		}
 
 		remoteAdminClients[clusterName] = adminClient
-		remoteFrontendClients[clusterName] = frontendClient
+		remoteFrontendClients[clusterName] = remoteFrontendClient
+
+		if clusterMetadata.GetCurrentClusterName() == clusterName {
+			frontendClient, err = factory.NewFrontendClientWithTimeoutAndDispatcher(
+				info.RPCName,
+				frontend.DefaultTimeout,
+				frontend.DefaultLongPollTimeout,
+				dispatcher,
+			)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	return &clientBeanImpl{
 		factory:               factory,
 		historyClient:         historyClient,
-		frontendClient:        remoteFrontendClients[clusterMetadata.GetCurrentClusterName()],
+		frontendClient:        frontendClient,
 		remoteAdminClients:    remoteAdminClients,
 		remoteFrontendClients: remoteFrontendClients,
 	}, nil
@@ -210,7 +223,7 @@ func (h *clientBeanImpl) SetRemoteAdminClient(
 	h.remoteAdminClients[cluster] = client
 }
 
-func (h *clientBeanImpl) GetRemoteFrontendClient(cluster string) frontend.Client {
+func (h *clientBeanImpl) GetRemoteFrontendClient(cluster string) frontend.ClientGRPC {
 	client, ok := h.remoteFrontendClients[cluster]
 	if !ok {
 		panic(fmt.Sprintf(
@@ -224,7 +237,7 @@ func (h *clientBeanImpl) GetRemoteFrontendClient(cluster string) frontend.Client
 
 func (h *clientBeanImpl) SetRemoteFrontendClient(
 	cluster string,
-	client frontend.Client,
+	client frontend.ClientGRPC,
 ) {
 
 	h.remoteFrontendClients[cluster] = client

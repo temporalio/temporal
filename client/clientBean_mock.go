@@ -168,10 +168,10 @@ func (mr *MockBeanMockRecorder) SetRemoteAdminClient(cluster, client interface{}
 }
 
 // GetRemoteFrontendClient mocks base method
-func (m *MockBean) GetRemoteFrontendClient(cluster string) frontend.Client {
+func (m *MockBean) GetRemoteFrontendClient(cluster string) frontend.ClientGRPC {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetRemoteFrontendClient", cluster)
-	ret0, _ := ret[0].(frontend.Client)
+	ret0, _ := ret[0].(frontend.ClientGRPC)
 	return ret0
 }
 
@@ -182,7 +182,7 @@ func (mr *MockBeanMockRecorder) GetRemoteFrontendClient(cluster interface{}) *go
 }
 
 // SetRemoteFrontendClient mocks base method
-func (m *MockBean) SetRemoteFrontendClient(cluster string, client frontend.Client) {
+func (m *MockBean) SetRemoteFrontendClient(cluster string, client frontend.ClientGRPC) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetRemoteFrontendClient", cluster, client)
 }

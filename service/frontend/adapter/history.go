@@ -708,3 +708,737 @@ func toProtoUpsertWorkflowSearchAttributesEventAttributes(in *shared.UpsertWorkf
 		SearchAttributes:             toProtoSearchAttributes(in.GetSearchAttributes()),
 	}
 }
+
+// ToThriftHistory ...
+func ToThriftHistory(in *common.History) *shared.History {
+	if in == nil {
+		return nil
+	}
+
+	return &shared.History{
+		Events: toThriftHistoryEvents(in.Events),
+	}
+}
+
+func toThriftHistoryEvents(in []*common.HistoryEvent) []*shared.HistoryEvent {
+	if in == nil {
+		return nil
+	}
+
+	var ret []*shared.HistoryEvent
+	for _, item := range in {
+		ret = append(ret, toThriftHistoryEvent(item))
+	}
+	return ret
+}
+
+// toThriftHistoryEvent ...
+func toThriftHistoryEvent(in *common.HistoryEvent) *shared.HistoryEvent {
+	if in == nil {
+		return nil
+	}
+	ret := &shared.HistoryEvent{
+		EventId:   &in.EventId,
+		Timestamp: &in.Timestamp,
+		EventType: toThriftEventType(in.EventType),
+		Version:   &in.Version,
+		TaskId:    &in.TaskId,
+	}
+
+	switch in.EventType {
+	case enums.EventTypeWorkflowExecutionStarted:
+		ret.WorkflowExecutionStartedEventAttributes = ToThriftWorkflowExecutionStartedEventAttributes(in.GetWorkflowExecutionStartedEventAttributes())
+	case enums.EventTypeWorkflowExecutionCompleted:
+		ret.WorkflowExecutionCompletedEventAttributes = ToThriftWorkflowExecutionCompletedEventAttributes(in.GetWorkflowExecutionCompletedEventAttributes())
+	case enums.EventTypeWorkflowExecutionFailed:
+		ret.WorkflowExecutionFailedEventAttributes = ToThriftWorkflowExecutionFailedEventAttributes(in.GetWorkflowExecutionFailedEventAttributes())
+	case enums.EventTypeWorkflowExecutionTimedOut:
+		ret.WorkflowExecutionTimedOutEventAttributes = ToThriftWorkflowExecutionTimedOutEventAttributes(in.GetWorkflowExecutionTimedOutEventAttributes())
+	case enums.EventTypeDecisionTaskScheduled:
+		ret.DecisionTaskScheduledEventAttributes = toThriftDecisionTaskScheduledEventAttributes(in.GetDecisionTaskScheduledEventAttributes())
+	case enums.EventTypeDecisionTaskStarted:
+		ret.DecisionTaskStartedEventAttributes = toThriftDecisionTaskStartedEventAttributes(in.GetDecisionTaskStartedEventAttributes())
+	case enums.EventTypeDecisionTaskCompleted:
+		ret.DecisionTaskCompletedEventAttributes = toThriftDecisionTaskCompletedEventAttributes(in.GetDecisionTaskCompletedEventAttributes())
+	case enums.EventTypeDecisionTaskTimedOut:
+		ret.DecisionTaskTimedOutEventAttributes = toThriftDecisionTaskTimedOutEventAttributes(in.GetDecisionTaskTimedOutEventAttributes())
+	case enums.EventTypeDecisionTaskFailed:
+		ret.DecisionTaskFailedEventAttributes = toThriftDecisionTaskFailedEventAttributes(in.GetDecisionTaskFailedEventAttributes())
+	case enums.EventTypeActivityTaskScheduled:
+		ret.ActivityTaskScheduledEventAttributes = toThriftActivityTaskScheduledEventAttributes(in.GetActivityTaskScheduledEventAttributes())
+	case enums.EventTypeActivityTaskStarted:
+		ret.ActivityTaskStartedEventAttributes = toThriftActivityTaskStartedEventAttributes(in.GetActivityTaskStartedEventAttributes())
+	case enums.EventTypeActivityTaskCompleted:
+		ret.ActivityTaskCompletedEventAttributes = toThriftActivityTaskCompletedEventAttributes(in.GetActivityTaskCompletedEventAttributes())
+	case enums.EventTypeActivityTaskFailed:
+		ret.ActivityTaskFailedEventAttributes = toThriftActivityTaskFailedEventAttributes(in.GetActivityTaskFailedEventAttributes())
+	case enums.EventTypeActivityTaskTimedOut:
+		ret.ActivityTaskTimedOutEventAttributes = toThriftActivityTaskTimedOutEventAttributes(in.GetActivityTaskTimedOutEventAttributes())
+	case enums.EventTypeTimerStarted:
+		ret.TimerStartedEventAttributes = toThriftTimerStartedEventAttributes(in.GetTimerStartedEventAttributes())
+	case enums.EventTypeTimerFired:
+		ret.TimerFiredEventAttributes = toThriftTimerFiredEventAttributes(in.GetTimerFiredEventAttributes())
+	case enums.EventTypeActivityTaskCancelRequested:
+		ret.ActivityTaskCancelRequestedEventAttributes = toThriftActivityTaskCancelRequestedEventAttributes(in.GetActivityTaskCancelRequestedEventAttributes())
+	case enums.EventTypeRequestCancelActivityTaskFailed:
+		ret.RequestCancelActivityTaskFailedEventAttributes = toThriftRequestCancelActivityTaskFailedEventAttributes(in.GetRequestCancelActivityTaskFailedEventAttributes())
+	case enums.EventTypeActivityTaskCanceled:
+		ret.ActivityTaskCanceledEventAttributes = toThriftActivityTaskCanceledEventAttributes(in.GetActivityTaskCanceledEventAttributes())
+	case enums.EventTypeTimerCanceled:
+		ret.TimerCanceledEventAttributes = toThriftTimerCanceledEventAttributes(in.GetTimerCanceledEventAttributes())
+	case enums.EventTypeCancelTimerFailed:
+		ret.CancelTimerFailedEventAttributes = toThriftCancelTimerFailedEventAttributes(in.GetCancelTimerFailedEventAttributes())
+	case enums.EventTypeMarkerRecorded:
+		ret.MarkerRecordedEventAttributes = toThriftMarkerRecordedEventAttributes(in.GetMarkerRecordedEventAttributes())
+	case enums.EventTypeWorkflowExecutionSignaled:
+		ret.WorkflowExecutionSignaledEventAttributes = ToThriftWorkflowExecutionSignaledEventAttributes(in.GetWorkflowExecutionSignaledEventAttributes())
+	case enums.EventTypeWorkflowExecutionTerminated:
+		ret.WorkflowExecutionTerminatedEventAttributes = ToThriftWorkflowExecutionTerminatedEventAttributes(in.GetWorkflowExecutionTerminatedEventAttributes())
+	case enums.EventTypeWorkflowExecutionCancelRequested:
+		ret.WorkflowExecutionCancelRequestedEventAttributes = ToThriftWorkflowExecutionCancelRequestedEventAttributes(in.GetWorkflowExecutionCancelRequestedEventAttributes())
+	case enums.EventTypeWorkflowExecutionCanceled:
+		ret.WorkflowExecutionCanceledEventAttributes = ToThriftWorkflowExecutionCanceledEventAttributes(in.GetWorkflowExecutionCanceledEventAttributes())
+	case enums.EventTypeRequestCancelExternalWorkflowExecutionInitiated:
+		ret.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes = toThriftRequestCancelExternalWorkflowExecutionInitiatedEventAttributes(in.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes())
+	case enums.EventTypeRequestCancelExternalWorkflowExecutionFailed:
+		ret.RequestCancelExternalWorkflowExecutionFailedEventAttributes = toThriftRequestCancelExternalWorkflowExecutionFailedEventAttributes(in.GetRequestCancelExternalWorkflowExecutionFailedEventAttributes())
+	case enums.EventTypeExternalWorkflowExecutionCancelRequested:
+		ret.ExternalWorkflowExecutionCancelRequestedEventAttributes = toThriftExternalWorkflowExecutionCancelRequestedEventAttributes(in.GetExternalWorkflowExecutionCancelRequestedEventAttributes())
+	case enums.EventTypeWorkflowExecutionContinuedAsNew:
+		ret.WorkflowExecutionContinuedAsNewEventAttributes = ToThriftWorkflowExecutionContinuedAsNewEventAttributes(in.GetWorkflowExecutionContinuedAsNewEventAttributes())
+	case enums.EventTypeStartChildWorkflowExecutionInitiated:
+		ret.StartChildWorkflowExecutionInitiatedEventAttributes = toThriftStartChildWorkflowExecutionInitiatedEventAttributes(in.GetStartChildWorkflowExecutionInitiatedEventAttributes())
+	case enums.EventTypeStartChildWorkflowExecutionFailed:
+		ret.StartChildWorkflowExecutionFailedEventAttributes = toThriftStartChildWorkflowExecutionFailedEventAttributes(in.GetStartChildWorkflowExecutionFailedEventAttributes())
+	case enums.EventTypeChildWorkflowExecutionStarted:
+		ret.ChildWorkflowExecutionStartedEventAttributes = toThriftChildWorkflowExecutionStartedEventAttributes(in.GetChildWorkflowExecutionStartedEventAttributes())
+	case enums.EventTypeChildWorkflowExecutionCompleted:
+		ret.ChildWorkflowExecutionCompletedEventAttributes = toThriftChildWorkflowExecutionCompletedEventAttributes(in.GetChildWorkflowExecutionCompletedEventAttributes())
+	case enums.EventTypeChildWorkflowExecutionFailed:
+		ret.ChildWorkflowExecutionFailedEventAttributes = toThriftChildWorkflowExecutionFailedEventAttributes(in.GetChildWorkflowExecutionFailedEventAttributes())
+	case enums.EventTypeChildWorkflowExecutionCanceled:
+		ret.ChildWorkflowExecutionCanceledEventAttributes = toThriftChildWorkflowExecutionCanceledEventAttributes(in.GetChildWorkflowExecutionCanceledEventAttributes())
+	case enums.EventTypeChildWorkflowExecutionTimedOut:
+		ret.ChildWorkflowExecutionTimedOutEventAttributes = toThriftChildWorkflowExecutionTimedOutEventAttributes(in.GetChildWorkflowExecutionTimedOutEventAttributes())
+	case enums.EventTypeChildWorkflowExecutionTerminated:
+		ret.ChildWorkflowExecutionTerminatedEventAttributes = toThriftChildWorkflowExecutionTerminatedEventAttributes(in.GetChildWorkflowExecutionTerminatedEventAttributes())
+	case enums.EventTypeSignalExternalWorkflowExecutionInitiated:
+		ret.SignalExternalWorkflowExecutionInitiatedEventAttributes = toThriftSignalExternalWorkflowExecutionInitiatedEventAttributes(in.GetSignalExternalWorkflowExecutionInitiatedEventAttributes())
+	case enums.EventTypeSignalExternalWorkflowExecutionFailed:
+		ret.SignalExternalWorkflowExecutionFailedEventAttributes = toThriftSignalExternalWorkflowExecutionFailedEventAttributes(in.GetSignalExternalWorkflowExecutionFailedEventAttributes())
+	case enums.EventTypeExternalWorkflowExecutionSignaled:
+		ret.ExternalWorkflowExecutionSignaledEventAttributes = toThriftExternalWorkflowExecutionSignaledEventAttributes(in.GetExternalWorkflowExecutionSignaledEventAttributes())
+	case enums.EventTypeUpsertWorkflowSearchAttributes:
+		ret.UpsertWorkflowSearchAttributesEventAttributes = toThriftUpsertWorkflowSearchAttributesEventAttributes(in.GetUpsertWorkflowSearchAttributesEventAttributes())
+	}
+
+	return ret
+}
+
+// ToThriftWorkflowExecutionStartedEventAttributes ...
+func ToThriftWorkflowExecutionStartedEventAttributes(in *common.WorkflowExecutionStartedEventAttributes) *shared.WorkflowExecutionStartedEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.WorkflowExecutionStartedEventAttributes{
+		WorkflowType:                        toThriftWorkflowType(in.WorkflowType),
+		ParentWorkflowDomain:                &in.ParentWorkflowDomain,
+		ParentWorkflowExecution:             ToThriftWorkflowExecution(in.ParentWorkflowExecution),
+		ParentInitiatedEventId:              &in.ParentInitiatedEventId,
+		TaskList:                            toThriftTaskList(in.TaskList),
+		Input:                               in.Input,
+		ExecutionStartToCloseTimeoutSeconds: &in.ExecutionStartToCloseTimeoutSeconds,
+		TaskStartToCloseTimeoutSeconds:      &in.TaskStartToCloseTimeoutSeconds,
+		ContinuedExecutionRunId:             &in.ContinuedExecutionRunId,
+		Initiator:                           toThriftContinueAsNewInitiator(in.Initiator),
+		ContinuedFailureReason:              &in.ContinuedFailureReason,
+		ContinuedFailureDetails:             in.ContinuedFailureDetails,
+		LastCompletionResult:                in.LastCompletionResult,
+		OriginalExecutionRunId:              &in.OriginalExecutionRunId,
+		Identity:                            &in.Identity,
+		FirstExecutionRunId:                 &in.FirstExecutionRunId,
+		RetryPolicy:                         toThriftRetryPolicy(in.RetryPolicy),
+		Attempt:                             &in.Attempt,
+		ExpirationTimestamp:                 &in.ExpirationTimestamp,
+		CronSchedule:                        &in.CronSchedule,
+		FirstDecisionTaskBackoffSeconds:     &in.FirstDecisionTaskBackoffSeconds,
+		Memo:                                toThriftMemo(in.Memo),
+		SearchAttributes:                    toThriftSearchAttributes(in.SearchAttributes),
+		PrevAutoResetPoints:                 ToThriftResetPoints(in.PrevAutoResetPoints),
+		Header:                              toThriftHeader(in.Header),
+	}
+}
+
+// ToThriftWorkflowExecutionCompletedEventAttributes ...
+func ToThriftWorkflowExecutionCompletedEventAttributes(in *common.WorkflowExecutionCompletedEventAttributes) *shared.WorkflowExecutionCompletedEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.WorkflowExecutionCompletedEventAttributes{
+		Result:                       in.Result,
+		DecisionTaskCompletedEventId: &in.DecisionTaskCompletedEventId,
+	}
+}
+
+// ToThriftWorkflowExecutionFailedEventAttributes ...
+func ToThriftWorkflowExecutionFailedEventAttributes(in *common.WorkflowExecutionFailedEventAttributes) *shared.WorkflowExecutionFailedEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.WorkflowExecutionFailedEventAttributes{
+		Reason:                       &in.Reason,
+		Details:                      in.Details,
+		DecisionTaskCompletedEventId: &in.DecisionTaskCompletedEventId,
+	}
+}
+
+// ToThriftWorkflowExecutionTimedOutEventAttributes ...
+func ToThriftWorkflowExecutionTimedOutEventAttributes(in *common.WorkflowExecutionTimedOutEventAttributes) *shared.WorkflowExecutionTimedOutEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.WorkflowExecutionTimedOutEventAttributes{
+		TimeoutType: toThriftTimeoutType(in.TimeoutType),
+	}
+}
+
+// ToThriftWorkflowExecutionContinuedAsNewEventAttributes ...
+func ToThriftWorkflowExecutionContinuedAsNewEventAttributes(in *common.WorkflowExecutionContinuedAsNewEventAttributes) *shared.WorkflowExecutionContinuedAsNewEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.WorkflowExecutionContinuedAsNewEventAttributes{
+		NewExecutionRunId:                   &in.NewExecutionRunId,
+		WorkflowType:                        toThriftWorkflowType(in.WorkflowType),
+		TaskList:                            toThriftTaskList(in.TaskList),
+		Input:                               in.Input,
+		ExecutionStartToCloseTimeoutSeconds: &in.ExecutionStartToCloseTimeoutSeconds,
+		TaskStartToCloseTimeoutSeconds:      &in.TaskStartToCloseTimeoutSeconds,
+		DecisionTaskCompletedEventId:        &in.DecisionTaskCompletedEventId,
+		BackoffStartIntervalInSeconds:       &in.BackoffStartIntervalInSeconds,
+		Initiator:                           toThriftContinueAsNewInitiator(in.Initiator),
+		FailureReason:                       &in.FailureReason,
+		FailureDetails:                      in.FailureDetails,
+		LastCompletionResult:                in.LastCompletionResult,
+		Header:                              toThriftHeader(in.Header),
+		Memo:                                toThriftMemo(in.Memo),
+		SearchAttributes:                    toThriftSearchAttributes(in.SearchAttributes),
+	}
+}
+
+// toThriftDecisionTaskScheduledEventAttributes ...
+func toThriftDecisionTaskScheduledEventAttributes(in *common.DecisionTaskScheduledEventAttributes) *shared.DecisionTaskScheduledEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.DecisionTaskScheduledEventAttributes{
+		TaskList:                   toThriftTaskList(in.TaskList),
+		StartToCloseTimeoutSeconds: &in.StartToCloseTimeoutSeconds,
+		Attempt:                    &in.Attempt,
+	}
+}
+
+// toThriftDecisionTaskStartedEventAttributes ...
+func toThriftDecisionTaskStartedEventAttributes(in *common.DecisionTaskStartedEventAttributes) *shared.DecisionTaskStartedEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.DecisionTaskStartedEventAttributes{
+		ScheduledEventId: &in.ScheduledEventId,
+		Identity:         &in.Identity,
+		RequestId:        &in.RequestId,
+	}
+}
+
+// toThriftDecisionTaskCompletedEventAttributes ...
+func toThriftDecisionTaskCompletedEventAttributes(in *common.DecisionTaskCompletedEventAttributes) *shared.DecisionTaskCompletedEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.DecisionTaskCompletedEventAttributes{
+		ExecutionContext: in.ExecutionContext,
+		ScheduledEventId: &in.ScheduledEventId,
+		StartedEventId:   &in.StartedEventId,
+		Identity:         &in.Identity,
+		BinaryChecksum:   &in.BinaryChecksum,
+	}
+}
+
+// toThriftDecisionTaskTimedOutEventAttributes ...
+func toThriftDecisionTaskTimedOutEventAttributes(in *common.DecisionTaskTimedOutEventAttributes) *shared.DecisionTaskTimedOutEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.DecisionTaskTimedOutEventAttributes{
+		ScheduledEventId: &in.ScheduledEventId,
+		StartedEventId:   &in.StartedEventId,
+		TimeoutType:      toThriftTimeoutType(in.TimeoutType),
+	}
+}
+
+// toThriftDecisionTaskFailedEventAttributes ...
+func toThriftDecisionTaskFailedEventAttributes(in *common.DecisionTaskFailedEventAttributes) *shared.DecisionTaskFailedEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.DecisionTaskFailedEventAttributes{
+		ScheduledEventId: &in.ScheduledEventId,
+		StartedEventId:   &in.StartedEventId,
+		Cause:            toThriftDecisionTaskFailedCause(in.Cause),
+		Details:          in.Details,
+		Identity:         &in.Identity,
+		Reason:           &in.Reason,
+		BaseRunId:        &in.BaseRunId,
+		NewRunId:         &in.NewRunId,
+		ForkEventVersion: &in.ForkEventVersion,
+	}
+}
+
+// toThriftActivityTaskScheduledEventAttributes ...
+func toThriftActivityTaskScheduledEventAttributes(in *common.ActivityTaskScheduledEventAttributes) *shared.ActivityTaskScheduledEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.ActivityTaskScheduledEventAttributes{
+		ActivityId:                    &in.ActivityId,
+		ActivityType:                  toThriftActivityType(in.ActivityType),
+		Domain:                        &in.Domain,
+		TaskList:                      toThriftTaskList(in.TaskList),
+		Input:                         in.Input,
+		ScheduleToCloseTimeoutSeconds: &in.ScheduleToCloseTimeoutSeconds,
+		ScheduleToStartTimeoutSeconds: &in.ScheduleToStartTimeoutSeconds,
+		StartToCloseTimeoutSeconds:    &in.StartToCloseTimeoutSeconds,
+		HeartbeatTimeoutSeconds:       &in.HeartbeatTimeoutSeconds,
+		DecisionTaskCompletedEventId:  &in.DecisionTaskCompletedEventId,
+		RetryPolicy:                   toThriftRetryPolicy(in.RetryPolicy),
+		Header:                        toThriftHeader(in.Header),
+	}
+}
+
+// toThriftActivityTaskStartedEventAttributes ...
+func toThriftActivityTaskStartedEventAttributes(in *common.ActivityTaskStartedEventAttributes) *shared.ActivityTaskStartedEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.ActivityTaskStartedEventAttributes{
+		ScheduledEventId: &in.ScheduledEventId,
+		Identity:         &in.Identity,
+		RequestId:        &in.RequestId,
+		Attempt:          &in.Attempt,
+	}
+}
+
+// toThriftActivityTaskCompletedEventAttributes ...
+func toThriftActivityTaskCompletedEventAttributes(in *common.ActivityTaskCompletedEventAttributes) *shared.ActivityTaskCompletedEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.ActivityTaskCompletedEventAttributes{
+		Result:           in.Result,
+		ScheduledEventId: &in.ScheduledEventId,
+		StartedEventId:   &in.StartedEventId,
+		Identity:         &in.Identity,
+	}
+}
+
+// toThriftActivityTaskFailedEventAttributes ...
+func toThriftActivityTaskFailedEventAttributes(in *common.ActivityTaskFailedEventAttributes) *shared.ActivityTaskFailedEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.ActivityTaskFailedEventAttributes{
+		Reason:           &in.Reason,
+		Details:          in.Details,
+		ScheduledEventId: &in.ScheduledEventId,
+		StartedEventId:   &in.StartedEventId,
+		Identity:         &in.Identity,
+	}
+}
+
+// toThriftActivityTaskTimedOutEventAttributes ...
+func toThriftActivityTaskTimedOutEventAttributes(in *common.ActivityTaskTimedOutEventAttributes) *shared.ActivityTaskTimedOutEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.ActivityTaskTimedOutEventAttributes{
+		Details:            in.Details,
+		ScheduledEventId:   &in.ScheduledEventId,
+		StartedEventId:     &in.StartedEventId,
+		TimeoutType:        toThriftTimeoutType(in.TimeoutType),
+		LastFailureReason:  &in.LastFailureReason,
+		LastFailureDetails: in.LastFailureDetails,
+	}
+}
+
+// toThriftActivityTaskCancelRequestedEventAttributes ...
+func toThriftActivityTaskCancelRequestedEventAttributes(in *common.ActivityTaskCancelRequestedEventAttributes) *shared.ActivityTaskCancelRequestedEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.ActivityTaskCancelRequestedEventAttributes{
+		ActivityId:                   &in.ActivityId,
+		DecisionTaskCompletedEventId: &in.DecisionTaskCompletedEventId,
+	}
+}
+
+// toThriftRequestCancelActivityTaskFailedEventAttributes ...
+func toThriftRequestCancelActivityTaskFailedEventAttributes(in *common.RequestCancelActivityTaskFailedEventAttributes) *shared.RequestCancelActivityTaskFailedEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.RequestCancelActivityTaskFailedEventAttributes{
+		ActivityId:                   &in.ActivityId,
+		Cause:                        &in.Cause,
+		DecisionTaskCompletedEventId: &in.DecisionTaskCompletedEventId,
+	}
+}
+
+// toThriftActivityTaskCanceledEventAttributes ...
+func toThriftActivityTaskCanceledEventAttributes(in *common.ActivityTaskCanceledEventAttributes) *shared.ActivityTaskCanceledEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.ActivityTaskCanceledEventAttributes{
+		Details:                      in.Details,
+		LatestCancelRequestedEventId: &in.LatestCancelRequestedEventId,
+		ScheduledEventId:             &in.ScheduledEventId,
+		StartedEventId:               &in.StartedEventId,
+		Identity:                     &in.Identity,
+	}
+}
+
+// toThriftTimerStartedEventAttributes ...
+func toThriftTimerStartedEventAttributes(in *common.TimerStartedEventAttributes) *shared.TimerStartedEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.TimerStartedEventAttributes{
+		TimerId:                      &in.TimerId,
+		StartToFireTimeoutSeconds:    &in.StartToFireTimeoutSeconds,
+		DecisionTaskCompletedEventId: &in.DecisionTaskCompletedEventId,
+	}
+}
+
+// toThriftTimerFiredEventAttributes ...
+func toThriftTimerFiredEventAttributes(in *common.TimerFiredEventAttributes) *shared.TimerFiredEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.TimerFiredEventAttributes{
+		TimerId:        &in.TimerId,
+		StartedEventId: &in.StartedEventId,
+	}
+}
+
+// toThriftTimerCanceledEventAttributes ...
+func toThriftTimerCanceledEventAttributes(in *common.TimerCanceledEventAttributes) *shared.TimerCanceledEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.TimerCanceledEventAttributes{
+		TimerId:                      &in.TimerId,
+		StartedEventId:               &in.StartedEventId,
+		DecisionTaskCompletedEventId: &in.DecisionTaskCompletedEventId,
+		Identity:                     &in.Identity,
+	}
+}
+
+// toThriftCancelTimerFailedEventAttributes ...
+func toThriftCancelTimerFailedEventAttributes(in *common.CancelTimerFailedEventAttributes) *shared.CancelTimerFailedEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.CancelTimerFailedEventAttributes{
+		TimerId:                      &in.TimerId,
+		Cause:                        &in.Cause,
+		DecisionTaskCompletedEventId: &in.DecisionTaskCompletedEventId,
+		Identity:                     &in.Identity,
+	}
+}
+
+// ToThriftWorkflowExecutionCancelRequestedEventAttributes ...
+func ToThriftWorkflowExecutionCancelRequestedEventAttributes(in *common.WorkflowExecutionCancelRequestedEventAttributes) *shared.WorkflowExecutionCancelRequestedEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.WorkflowExecutionCancelRequestedEventAttributes{
+		Cause:                     &in.Cause,
+		ExternalInitiatedEventId:  &in.ExternalInitiatedEventId,
+		ExternalWorkflowExecution: ToThriftWorkflowExecution(in.ExternalWorkflowExecution),
+		Identity:                  &in.Identity,
+	}
+}
+
+// ToThriftWorkflowExecutionCanceledEventAttributes ...
+func ToThriftWorkflowExecutionCanceledEventAttributes(in *common.WorkflowExecutionCanceledEventAttributes) *shared.WorkflowExecutionCanceledEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.WorkflowExecutionCanceledEventAttributes{
+		DecisionTaskCompletedEventId: &in.DecisionTaskCompletedEventId,
+		Details:                      in.Details,
+	}
+}
+
+// toThriftMarkerRecordedEventAttributes ...
+func toThriftMarkerRecordedEventAttributes(in *common.MarkerRecordedEventAttributes) *shared.MarkerRecordedEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.MarkerRecordedEventAttributes{
+		MarkerName:                   &in.MarkerName,
+		Details:                      in.Details,
+		DecisionTaskCompletedEventId: &in.DecisionTaskCompletedEventId,
+		Header:                       toThriftHeader(in.Header),
+	}
+}
+
+// ToThriftWorkflowExecutionSignaledEventAttributes ...
+func ToThriftWorkflowExecutionSignaledEventAttributes(in *common.WorkflowExecutionSignaledEventAttributes) *shared.WorkflowExecutionSignaledEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.WorkflowExecutionSignaledEventAttributes{
+		SignalName: &in.SignalName,
+		Input:      in.Input,
+		Identity:   &in.Identity,
+	}
+}
+
+// ToThriftWorkflowExecutionTerminatedEventAttributes ...
+func ToThriftWorkflowExecutionTerminatedEventAttributes(in *common.WorkflowExecutionTerminatedEventAttributes) *shared.WorkflowExecutionTerminatedEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.WorkflowExecutionTerminatedEventAttributes{
+		Reason:   &in.Reason,
+		Details:  in.Details,
+		Identity: &in.Identity,
+	}
+}
+
+// toThriftRequestCancelExternalWorkflowExecutionInitiatedEventAttributes ...
+func toThriftRequestCancelExternalWorkflowExecutionInitiatedEventAttributes(in *common.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes) *shared.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
+		DecisionTaskCompletedEventId: &in.DecisionTaskCompletedEventId,
+		Domain:                       &in.Domain,
+		WorkflowExecution:            ToThriftWorkflowExecution(in.WorkflowExecution),
+		Control:                      in.Control,
+		ChildWorkflowOnly:            &in.ChildWorkflowOnly,
+	}
+}
+
+// toThriftRequestCancelExternalWorkflowExecutionFailedEventAttributes ...
+func toThriftRequestCancelExternalWorkflowExecutionFailedEventAttributes(in *common.RequestCancelExternalWorkflowExecutionFailedEventAttributes) *shared.RequestCancelExternalWorkflowExecutionFailedEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.RequestCancelExternalWorkflowExecutionFailedEventAttributes{
+		Cause:                        toThriftCancelExternalWorkflowExecutionFailedCause(in.Cause),
+		DecisionTaskCompletedEventId: &in.DecisionTaskCompletedEventId,
+		Domain:                       &in.Domain,
+		WorkflowExecution:            ToThriftWorkflowExecution(in.WorkflowExecution),
+		InitiatedEventId:             &in.InitiatedEventId,
+		Control:                      in.Control,
+	}
+}
+
+// toThriftExternalWorkflowExecutionCancelRequestedEventAttributes ...
+func toThriftExternalWorkflowExecutionCancelRequestedEventAttributes(in *common.ExternalWorkflowExecutionCancelRequestedEventAttributes) *shared.ExternalWorkflowExecutionCancelRequestedEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.ExternalWorkflowExecutionCancelRequestedEventAttributes{
+		InitiatedEventId:  &in.InitiatedEventId,
+		Domain:            &in.Domain,
+		WorkflowExecution: ToThriftWorkflowExecution(in.WorkflowExecution),
+	}
+}
+
+// toThriftSignalExternalWorkflowExecutionInitiatedEventAttributes ...
+func toThriftSignalExternalWorkflowExecutionInitiatedEventAttributes(in *common.SignalExternalWorkflowExecutionInitiatedEventAttributes) *shared.SignalExternalWorkflowExecutionInitiatedEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.SignalExternalWorkflowExecutionInitiatedEventAttributes{
+		DecisionTaskCompletedEventId: &in.DecisionTaskCompletedEventId,
+		Domain:                       &in.Domain,
+		WorkflowExecution:            ToThriftWorkflowExecution(in.WorkflowExecution),
+		SignalName:                   &in.SignalName,
+		Input:                        in.Input,
+		Control:                      in.Control,
+		ChildWorkflowOnly:            &in.ChildWorkflowOnly,
+	}
+}
+
+// toThriftSignalExternalWorkflowExecutionFailedEventAttributes ...
+func toThriftSignalExternalWorkflowExecutionFailedEventAttributes(in *common.SignalExternalWorkflowExecutionFailedEventAttributes) *shared.SignalExternalWorkflowExecutionFailedEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.SignalExternalWorkflowExecutionFailedEventAttributes{
+		Cause:                        toThriftSignalExternalWorkflowExecutionFailedCause(in.Cause),
+		DecisionTaskCompletedEventId: &in.DecisionTaskCompletedEventId,
+		Domain:                       &in.Domain,
+		WorkflowExecution:            ToThriftWorkflowExecution(in.WorkflowExecution),
+		InitiatedEventId:             &in.InitiatedEventId,
+		Control:                      in.Control,
+	}
+}
+
+// toThriftExternalWorkflowExecutionSignaledEventAttributes ...
+func toThriftExternalWorkflowExecutionSignaledEventAttributes(in *common.ExternalWorkflowExecutionSignaledEventAttributes) *shared.ExternalWorkflowExecutionSignaledEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.ExternalWorkflowExecutionSignaledEventAttributes{
+		InitiatedEventId:  &in.InitiatedEventId,
+		Domain:            &in.Domain,
+		WorkflowExecution: ToThriftWorkflowExecution(in.WorkflowExecution),
+		Control:           in.Control,
+	}
+}
+
+// toThriftUpsertWorkflowSearchAttributesEventAttributes ...
+func toThriftUpsertWorkflowSearchAttributesEventAttributes(in *common.UpsertWorkflowSearchAttributesEventAttributes) *shared.UpsertWorkflowSearchAttributesEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.UpsertWorkflowSearchAttributesEventAttributes{
+		DecisionTaskCompletedEventId: &in.DecisionTaskCompletedEventId,
+		SearchAttributes:             toThriftSearchAttributes(in.SearchAttributes),
+	}
+}
+
+// toThriftStartChildWorkflowExecutionInitiatedEventAttributes ...
+func toThriftStartChildWorkflowExecutionInitiatedEventAttributes(in *common.StartChildWorkflowExecutionInitiatedEventAttributes) *shared.StartChildWorkflowExecutionInitiatedEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.StartChildWorkflowExecutionInitiatedEventAttributes{
+		Domain:                              &in.Domain,
+		WorkflowId:                          &in.WorkflowId,
+		WorkflowType:                        toThriftWorkflowType(in.WorkflowType),
+		TaskList:                            toThriftTaskList(in.TaskList),
+		Input:                               in.Input,
+		ExecutionStartToCloseTimeoutSeconds: &in.ExecutionStartToCloseTimeoutSeconds,
+		TaskStartToCloseTimeoutSeconds:      &in.TaskStartToCloseTimeoutSeconds,
+		ParentClosePolicy:                   toThriftParentClosePolicy(in.ParentClosePolicy),
+		Control:                             in.Control,
+		DecisionTaskCompletedEventId:        &in.DecisionTaskCompletedEventId,
+		WorkflowIdReusePolicy:               toThriftWorkflowIdReusePolicy(in.WorkflowIdReusePolicy),
+		RetryPolicy:                         toThriftRetryPolicy(in.RetryPolicy),
+		CronSchedule:                        &in.CronSchedule,
+		Header:                              toThriftHeader(in.Header),
+		Memo:                                toThriftMemo(in.Memo),
+		SearchAttributes:                    toThriftSearchAttributes(in.SearchAttributes),
+	}
+}
+
+// toThriftStartChildWorkflowExecutionFailedEventAttributes ...
+func toThriftStartChildWorkflowExecutionFailedEventAttributes(in *common.StartChildWorkflowExecutionFailedEventAttributes) *shared.StartChildWorkflowExecutionFailedEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.StartChildWorkflowExecutionFailedEventAttributes{
+		Domain:                       &in.Domain,
+		WorkflowId:                   &in.WorkflowId,
+		WorkflowType:                 toThriftWorkflowType(in.WorkflowType),
+		Cause:                        toThriftChildWorkflowExecutionFailedCause(in.Cause),
+		Control:                      in.Control,
+		InitiatedEventId:             &in.InitiatedEventId,
+		DecisionTaskCompletedEventId: &in.DecisionTaskCompletedEventId,
+	}
+}
+
+// toThriftChildWorkflowExecutionStartedEventAttributes ...
+func toThriftChildWorkflowExecutionStartedEventAttributes(in *common.ChildWorkflowExecutionStartedEventAttributes) *shared.ChildWorkflowExecutionStartedEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.ChildWorkflowExecutionStartedEventAttributes{
+		Domain:            &in.Domain,
+		InitiatedEventId:  &in.InitiatedEventId,
+		WorkflowExecution: ToThriftWorkflowExecution(in.WorkflowExecution),
+		WorkflowType:      toThriftWorkflowType(in.WorkflowType),
+		Header:            toThriftHeader(in.Header),
+	}
+}
+
+// toThriftChildWorkflowExecutionCompletedEventAttributes ...
+func toThriftChildWorkflowExecutionCompletedEventAttributes(in *common.ChildWorkflowExecutionCompletedEventAttributes) *shared.ChildWorkflowExecutionCompletedEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.ChildWorkflowExecutionCompletedEventAttributes{
+		Result:            in.Result,
+		Domain:            &in.Domain,
+		WorkflowExecution: ToThriftWorkflowExecution(in.WorkflowExecution),
+		WorkflowType:      toThriftWorkflowType(in.WorkflowType),
+		InitiatedEventId:  &in.InitiatedEventId,
+		StartedEventId:    &in.StartedEventId,
+	}
+}
+
+// toThriftChildWorkflowExecutionFailedEventAttributes ...
+func toThriftChildWorkflowExecutionFailedEventAttributes(in *common.ChildWorkflowExecutionFailedEventAttributes) *shared.ChildWorkflowExecutionFailedEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.ChildWorkflowExecutionFailedEventAttributes{
+		Reason:            &in.Reason,
+		Details:           in.Details,
+		Domain:            &in.Domain,
+		WorkflowExecution: ToThriftWorkflowExecution(in.WorkflowExecution),
+		WorkflowType:      toThriftWorkflowType(in.WorkflowType),
+		InitiatedEventId:  &in.InitiatedEventId,
+		StartedEventId:    &in.StartedEventId,
+	}
+}
+
+// toThriftChildWorkflowExecutionCanceledEventAttributes ...
+func toThriftChildWorkflowExecutionCanceledEventAttributes(in *common.ChildWorkflowExecutionCanceledEventAttributes) *shared.ChildWorkflowExecutionCanceledEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.ChildWorkflowExecutionCanceledEventAttributes{
+		Details:           in.Details,
+		Domain:            &in.Domain,
+		WorkflowExecution: ToThriftWorkflowExecution(in.WorkflowExecution),
+		WorkflowType:      toThriftWorkflowType(in.WorkflowType),
+		InitiatedEventId:  &in.InitiatedEventId,
+		StartedEventId:    &in.StartedEventId,
+	}
+}
+
+// toThriftChildWorkflowExecutionTimedOutEventAttributes ...
+func toThriftChildWorkflowExecutionTimedOutEventAttributes(in *common.ChildWorkflowExecutionTimedOutEventAttributes) *shared.ChildWorkflowExecutionTimedOutEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.ChildWorkflowExecutionTimedOutEventAttributes{
+		TimeoutType:       toThriftTimeoutType(in.TimeoutType),
+		Domain:            &in.Domain,
+		WorkflowExecution: ToThriftWorkflowExecution(in.WorkflowExecution),
+		WorkflowType:      toThriftWorkflowType(in.WorkflowType),
+		InitiatedEventId:  &in.InitiatedEventId,
+		StartedEventId:    &in.StartedEventId,
+	}
+}
+
+// toThriftChildWorkflowExecutionTerminatedEventAttributes ...
+func toThriftChildWorkflowExecutionTerminatedEventAttributes(in *common.ChildWorkflowExecutionTerminatedEventAttributes) *shared.ChildWorkflowExecutionTerminatedEventAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.ChildWorkflowExecutionTerminatedEventAttributes{
+		Domain:            &in.Domain,
+		WorkflowExecution: ToThriftWorkflowExecution(in.WorkflowExecution),
+		WorkflowType:      toThriftWorkflowType(in.WorkflowType),
+		InitiatedEventId:  &in.InitiatedEventId,
+		StartedEventId:    &in.StartedEventId,
+	}
+}

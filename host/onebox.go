@@ -112,7 +112,7 @@ type (
 		esConfig            *elasticsearch.Config
 		esClient            elasticsearch.Client
 		workerConfig        *WorkerConfig
-		mockFrontendClient  map[string]frontendclient.Client
+		mockFrontendClient  map[string]frontendclient.ClientGRPC
 	}
 
 	// HistoryConfig contains configs for history service
@@ -145,7 +145,7 @@ type (
 		ESConfig                      *elasticsearch.Config
 		ESClient                      elasticsearch.Client
 		WorkerConfig                  *WorkerConfig
-		MockFrontendClient            map[string]frontendclient.Client
+		MockFrontendClient            map[string]frontendclient.ClientGRPC
 	}
 
 	membershipFactoryImpl struct {
@@ -996,6 +996,16 @@ func (c *rpcFactoryImpl) CreateTChannelDispatcherForOutbound(callerName, service
 // CreateGRPCDispatcherForOutbound creates a dispatcher for outbound connection
 func (c *rpcFactoryImpl) CreateGRPCDispatcherForOutbound(callerName, serviceName, hostName string) *yarpc.Dispatcher {
 	return c.createDispatcherForOutbound(yarpcgrpc.NewTransport().NewSingleOutbound(hostName), callerName, serviceName, "gRPC")
+}
+
+// CreateGRPCConnection creates connection for gRPC calls
+func (c *rpcFactoryImpl) CreateGRPCConnection(hostName string) *grpc.ClientConn {
+	connection, err := grpc.Dial(hostName, grpc.WithInsecure())
+	if err != nil {
+		c.logger.Fatal("Failed to create gRPC connection", tag.Error(err))
+	}
+
+	return connection
 }
 
 func (c *rpcFactoryImpl) createDispatcherForOutbound(unaryOutbound transport.UnaryOutbound, callerName, serviceName, transportType string) *yarpc.Dispatcher {

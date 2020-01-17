@@ -544,7 +544,7 @@ func (h *Impl) GetRemoteAdminClient(
 // GetRemoteFrontendClient return remote frontend client for given cluster name
 func (h *Impl) GetRemoteFrontendClient(
 	cluster string,
-) frontend.Client {
+) frontend.ClientGRPC {
 
 	return h.clientBean.GetRemoteFrontendClient(cluster)
 }

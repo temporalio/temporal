@@ -23,10 +23,12 @@ package adapter
 import (
 	"go.temporal.io/temporal-proto/enums"
 
+	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/go/shared"
 )
 
-func toThriftArchivalStatus(in enums.ArchivalStatus) *shared.ArchivalStatus {
+// ToThriftArchivalStatus ...
+func ToThriftArchivalStatus(in enums.ArchivalStatus) *shared.ArchivalStatus {
 	if in == enums.ArchivalStatusDefault {
 		return nil
 	}
@@ -144,4 +146,42 @@ func toProtoEncodingType(in shared.EncodingType) enums.EncodingType {
 	}
 
 	return enums.EncodingTypeThriftRW
+}
+func toThriftEventType(in enums.EventType) *shared.EventType {
+	ret := shared.EventType(in)
+	return &ret
+}
+
+func toThriftTimeoutType(in enums.TimeoutType) *shared.TimeoutType {
+	ret := shared.TimeoutType(in)
+	return &ret
+}
+
+func toThriftCancelExternalWorkflowExecutionFailedCause(in enums.CancelExternalWorkflowExecutionFailedCause) *shared.CancelExternalWorkflowExecutionFailedCause {
+	ret := shared.CancelExternalWorkflowExecutionFailedCause(in)
+	return &ret
+}
+
+func toThriftSignalExternalWorkflowExecutionFailedCause(in enums.SignalExternalWorkflowExecutionFailedCause) *shared.SignalExternalWorkflowExecutionFailedCause {
+	ret := shared.SignalExternalWorkflowExecutionFailedCause(in)
+	return &ret
+}
+
+func toThriftWorkflowIdReusePolicy(in enums.WorkflowIdReusePolicy) *shared.WorkflowIdReusePolicy {
+	ret := shared.WorkflowIdReusePolicy(in)
+	return &ret
+}
+
+func toThriftChildWorkflowExecutionFailedCause(in enums.ChildWorkflowExecutionFailedCause) *shared.ChildWorkflowExecutionFailedCause {
+	ret := shared.ChildWorkflowExecutionFailedCause(in)
+	return &ret
+}
+
+func toThriftDomainOperation(in enums.DomainOperation) *replicator.DomainOperation {
+	ret := replicator.DomainOperation(in)
+	return &ret
+}
+func toThriftDomainStatus(in enums.DomainStatus) *shared.DomainStatus {
+	ret := shared.DomainStatus(in)
+	return &ret
 }

@@ -129,13 +129,12 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int, enableReadFro
 type Service struct {
 	resource.Resource
 
-	status        int32
-	handler       *AccessControlledWorkflowHandler
-	wfHandlerGRPC *WorkflowHandlerGRPC
-	adminHandler  *AdminHandler
-	stopC         chan struct{}
-	config        *Config
-	params        *service.BootstrapParams
+	status       int32
+	handler      *AccessControlledWorkflowHandler
+	adminHandler *AdminHandler
+	stopC        chan struct{}
+	config       *Config
+	params       *service.BootstrapParams
 }
 
 // NewService builds a new cadence-frontend service
@@ -228,13 +227,11 @@ func (s *Service) Start() {
 	}
 
 	wfHandler := NewWorkflowHandler(s, s.config, replicationMessageSink)
-	dcRedirectionHandler := NewDCRedirectionHandler(wfHandler, s.params.DCRedirectionPolicy)
+	wfHandlerGRPC := NewWorkflowHandlerGRPC(wfHandler)
+	dcRedirectionHandler := NewDCRedirectionHandler(wfHandlerGRPC, s.params.DCRedirectionPolicy)
 
 	s.handler = NewAccessControlledHandlerImpl(dcRedirectionHandler, s.params.Authorizer)
 	s.handler.RegisterHandler()
-
-	s.wfHandlerGRPC = NewWorkflowHandlerGRPC(wfHandler)
-	s.wfHandlerGRPC.RegisterHandler()
 
 	s.adminHandler = NewAdminHandler(s, s.params, s.config)
 	s.adminHandler.RegisterHandler()

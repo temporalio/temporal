@@ -30,24 +30,22 @@ import (
 	"testing"
 	"time"
 
-	"go.uber.org/yarpc"
-
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.uber.org/zap"
-	"gopkg.in/yaml.v2"
-
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/workflowservice"
+	"go.temporal.io/temporal-proto/workflowservicemock"
+	"go.uber.org/yarpc"
+	"go.uber.org/zap"
+	"gopkg.in/yaml.v2"
 
 	"github.com/temporalio/temporal/.gen/go/admin"
 	"github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/.gen/go/temporal/workflowservicetest"
 	"github.com/temporalio/temporal/client/frontend"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -75,7 +73,7 @@ type (
 		domainID                    string
 		version                     int64
 		versionIncrement            int64
-		mockFrontendClient          map[string]frontend.Client
+		mockFrontendClient          map[string]frontend.ClientGRPC
 		standByReplicationTasksChan chan *replicator.ReplicationTask
 		standByTaskID               int64
 	}
@@ -121,11 +119,11 @@ func (s *nDCIntegrationTestSuite) SetupSuite() {
 	s.standByReplicationTasksChan = make(chan *replicator.ReplicationTask, 100)
 
 	s.standByTaskID = 0
-	s.mockFrontendClient = make(map[string]frontend.Client)
+	s.mockFrontendClient = make(map[string]frontend.ClientGRPC)
 	controller := gomock.NewController(s.T())
-	mockStandbyClient := workflowservicetest.NewMockClient(controller)
+	mockStandbyClient := workflowservicemock.NewMockWorkflowServiceClient(controller)
 	mockStandbyClient.EXPECT().GetReplicationMessages(gomock.Any(), gomock.Any()).DoAndReturn(s.GetReplicationMessagesMock).AnyTimes()
-	mockOtherClient := workflowservicetest.NewMockClient(controller)
+	mockOtherClient := workflowservicemock.NewMockWorkflowServiceClient(controller)
 	mockOtherClient.EXPECT().GetReplicationMessages(gomock.Any(), gomock.Any()).Return(
 		&replicator.GetReplicationMessagesResponse{
 			MessagesByShard: make(map[int32]*replicator.ReplicationMessages),
@@ -981,7 +979,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_ZombieWorkflow() {
 	s.generator = test.InitializeHistoryEventGenerator(s.domainName, version)
 
 	// verify two batches of zombie workflow are call reapply API
-	s.mockFrontendClient["standby"].(*workflowservicetest.MockClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(nil).Times(2)
+	s.mockFrontendClient["standby"].(*workflowservicemock.MockWorkflowServiceClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(&workflowservice.ReapplyEventsResponse{}, nil).Times(2)
 	for i := 0; i < 2 && s.generator.HasNextVertex(); i++ {
 		events := s.generator.GetNextVertices()
 		historyEvents := &shared.History{}
@@ -1079,7 +1077,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
 		historyClient,
 	)
 
-	s.mockFrontendClient["standby"].(*workflowservicetest.MockClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	s.mockFrontendClient["standby"].(*workflowservicemock.MockWorkflowServiceClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(&workflowservice.ReapplyEventsResponse{}, nil).Times(1)
 	// Handcraft a stale signal event
 	baseBranchLastEventBatch := baseBranch[len(baseBranch)-1].GetEvents()
 	baseBranchLastEvent := baseBranchLastEventBatch[len(baseBranchLastEventBatch)-1]
@@ -1741,7 +1739,6 @@ func (s *nDCIntegrationTestSuite) applyEventsThroughFetcher(
 	tasklist string,
 	versionHistory *persistence.VersionHistory,
 	eventBatches []*shared.History,
-	frontend *workflowservicetest.MockClient,
 ) {
 	for _, batch := range eventBatches {
 		eventBlob, newRunEventBlob := s.generateEventBlobs(workflowID, runID, workflowType, tasklist, batch)
@@ -1807,6 +1804,6 @@ func (s *nDCIntegrationTestSuite) createContext() context.Context {
 }
 
 func (s *nDCIntegrationTestSuite) setupRemoteFrontendClients() {
-	s.mockFrontendClient["standby"].(*workflowservicetest.MockClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-	s.mockFrontendClient["other"].(*workflowservicetest.MockClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	s.mockFrontendClient["standby"].(*workflowservicemock.MockWorkflowServiceClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(&workflowservice.ReapplyEventsResponse{}, nil).AnyTimes()
+	s.mockFrontendClient["other"].(*workflowservicemock.MockWorkflowServiceClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(&workflowservice.ReapplyEventsResponse{}, nil).AnyTimes()
 }
