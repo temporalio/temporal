@@ -48,7 +48,7 @@ const (
 func newDomainReplicationMessageProcessor(
 	sourceCluster string,
 	logger log.Logger,
-	remotePeer workflowservice.WorkflowServiceClient,
+	remotePeer workflowservice.WorkflowServiceYARPCClient,
 	metricsClient metrics.Client,
 	domainReplicator DomainReplicator,
 	hostInfo *membership.HostInfo,
@@ -81,7 +81,7 @@ type (
 		status                 int32
 		sourceCluster          string
 		logger                 log.Logger
-		remotePeer             workflowservice.WorkflowServiceClient
+		remotePeer             workflowservice.WorkflowServiceYARPCClient
 		domainReplicator       DomainReplicator
 		metricsClient          metrics.Client
 		retryPolicy            backoff.RetryPolicy

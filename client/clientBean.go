@@ -133,14 +133,12 @@ func NewClientBean(factory Factory, dispatcherProvider DispatcherProvider, clust
 			return nil, err
 		}
 
-		remoteFrontendClient, err := factory.NewFrontendClientWithTimeoutGRPC(
-			info.RPCAddress,
+		remoteFrontendClient, err := factory.NewFrontendClientWithTimeoutAndDispatcherGRPC(
+			info.RPCName,
 			frontend.DefaultTimeout,
 			frontend.DefaultLongPollTimeout,
+			dispatcher,
 		)
-		if err != nil {
-			return nil, err
-		}
 
 		remoteAdminClients[clusterName] = adminClient
 		remoteFrontendClients[clusterName] = remoteFrontendClient

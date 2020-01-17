@@ -51,7 +51,7 @@ type (
 		sourceCluster  string
 		config         *Config
 		logger         log.Logger
-		remotePeer     workflowservice.WorkflowServiceClient
+		remotePeer     workflowservice.WorkflowServiceYARPCClient
 		requestChan    chan *request
 		done           chan struct{}
 	}
@@ -151,7 +151,7 @@ func newReplicationTaskFetcher(
 	sourceCluster string,
 	currentCluster string,
 	config *Config,
-	sourceFrontend workflowservice.WorkflowServiceClient,
+	sourceFrontend workflowservice.WorkflowServiceYARPCClient,
 ) *ReplicationTaskFetcherImpl {
 
 	return &ReplicationTaskFetcherImpl{

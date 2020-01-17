@@ -32,5 +32,5 @@ type Client interface {
 }
 
 type ClientGRPC interface {
-	workflowservice.WorkflowServiceClient
+	workflowservice.WorkflowServiceYARPCClient
 }

@@ -40,7 +40,7 @@ type (
 		controller *gomock.Controller
 
 		config                 *Config
-		frontendClient         *workflowservicemock.MockWorkflowServiceClient
+		frontendClient         *workflowservicemock.MockWorkflowServiceYARPCClient
 		replicationTaskFetcher *ReplicationTaskFetcherImpl
 	}
 )
@@ -64,7 +64,7 @@ func (s *replicationTaskFetcherSuite) SetupTest() {
 
 	logger := log.NewNoop()
 	s.config = NewDynamicConfigForTest()
-	s.frontendClient = workflowservicemock.NewMockWorkflowServiceClient(s.controller)
+	s.frontendClient = workflowservicemock.NewMockWorkflowServiceYARPCClient(s.controller)
 
 	s.replicationTaskFetcher = newReplicationTaskFetcher(
 		logger,
