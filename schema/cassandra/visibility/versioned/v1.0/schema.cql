@@ -12,7 +12,7 @@ CREATE TABLE open_executions (
 ) WITH CLUSTERING ORDER BY (start_time DESC)
   AND COMPACTION = {
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy',
-    'tombstone_threshold': 0.6
+    'tombstone_threshold': 0.4
   }
   AND GC_GRACE_SECONDS = 60;
 
