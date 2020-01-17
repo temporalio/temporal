@@ -267,7 +267,7 @@ CREATE TYPE domain_config (
   visibility_archival_status int,
   visibility_archival_uri text,
   bad_binaries    blob,
-  bad_binaries_encoding blob,
+  bad_binaries_encoding text,
 );
 
 CREATE TYPE cluster_replication_config (
