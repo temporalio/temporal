@@ -1,1 +1,0 @@
-ALTER TYPE workflow_execution ADD workflow_timeout int;

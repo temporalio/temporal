@@ -1,1 +1,0 @@
-ALTER TYPE shard ADD cluster_replication_level   map<text, bigint>;

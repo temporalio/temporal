@@ -1,1 +1,0 @@
-ALTER TYPE child_execution_info ADD parent_close_policy int;

@@ -1,1 +1,0 @@
-ALTER TYPE task ADD created_time timestamp;
