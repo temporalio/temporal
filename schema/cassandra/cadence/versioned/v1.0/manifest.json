@@ -1,8 +1,8 @@
 {
-    "CurrVersion": "0.1",
-    "MinCompatibleVersion": "0.1",
+    "CurrVersion": "1.0",
+    "MinCompatibleVersion": "1.0",
     "Description": "base version of schema",
     "SchemaUpdateCqlFiles": [
-        "base.cql"
+        "schema.cql"
     ]
 }

@@ -1,1 +1,0 @@
-ALTER TYPE domain ADD data map<text,text>;

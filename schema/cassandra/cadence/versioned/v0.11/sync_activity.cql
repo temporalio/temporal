@@ -1,1 +1,0 @@
-ALTER TYPE replication_task ADD scheduled_id bigint;

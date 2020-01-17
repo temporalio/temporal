@@ -1,1 +1,0 @@
-ALTER TABLE events ADD event_batch_version bigint;
