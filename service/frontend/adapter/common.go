@@ -911,6 +911,7 @@ func toProtoHistoryTaskV2Attributes(in *replicator.HistoryTaskV2Attributes) *com
 	}
 }
 
+// ToProtoDataBlob ...
 func ToProtoDataBlob(in *shared.DataBlob) *common.DataBlob {
 	if in == nil {
 		return nil
@@ -989,6 +990,7 @@ func toProtoTaskListPartitionMetadata(in *shared.TaskListPartitionMetadata) *com
 	}
 }
 
+// ToThriftResetPoints ...
 func ToThriftResetPoints(in *common.ResetPoints) *shared.ResetPoints {
 	if in == nil {
 		return nil
