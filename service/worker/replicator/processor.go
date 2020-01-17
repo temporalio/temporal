@@ -30,6 +30,7 @@ import (
 
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
+	"github.com/temporalio/temporal/service/frontend/adapter"
 
 	h "github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/replicator"
@@ -305,7 +306,7 @@ func (p *replicationTaskProcessor) handleDomainReplicationTask(task *replicator.
 		}
 	}()
 
-	err := p.domainReplicator.HandleReceivingTask(task.DomainTaskAttributes)
+	err := p.domainReplicator.HandleReceivingTask(adapter.ToProtoDomainTaskAttributes(task.GetDomainTaskAttributes()))
 	if err != nil {
 		return err
 	}

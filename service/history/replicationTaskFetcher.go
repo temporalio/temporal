@@ -27,8 +27,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/workflowservice"
+
 	r "github.com/temporalio/temporal/.gen/go/replicator"
-	"github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
@@ -36,6 +38,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	serviceConfig "github.com/temporalio/temporal/common/service/config"
+	"github.com/temporalio/temporal/service/frontend/adapter"
 )
 
 const (
@@ -51,7 +54,7 @@ type (
 		sourceCluster  string
 		config         *Config
 		logger         log.Logger
-		remotePeer     workflowserviceclient.Interface
+		remotePeer     workflowservice.WorkflowServiceClient
 		requestChan    chan *request
 		done           chan struct{}
 	}
@@ -151,7 +154,7 @@ func newReplicationTaskFetcher(
 	sourceCluster string,
 	currentCluster string,
 	config *Config,
-	sourceFrontend workflowserviceclient.Interface,
+	sourceFrontend workflowservice.WorkflowServiceClient,
 ) *ReplicationTaskFetcherImpl {
 
 	return &ReplicationTaskFetcherImpl{
@@ -260,17 +263,17 @@ func (f *ReplicationTaskFetcherImpl) fetchAndDistributeTasks(requestByShard map[
 func (f *ReplicationTaskFetcherImpl) getMessages(
 	requestByShard map[int32]*request,
 ) (map[int32]*r.ReplicationMessages, error) {
-	var tokens []*r.ReplicationToken
+	var tokens []*commonproto.ReplicationToken
 	for _, request := range requestByShard {
-		tokens = append(tokens, request.token)
+		tokens = append(tokens, adapter.ToProtoRecordActivityTaskHeartbeatByIDResponse() request.token)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), fetchTaskRequestTimeout)
 	defer cancel()
 
-	request := &r.GetReplicationMessagesRequest{
+	request := &workflowservice.GetReplicationMessagesRequest{
 		Tokens:      tokens,
-		ClusterName: common.StringPtr(f.currentCluster),
+		ClusterName: f.currentCluster,
 	}
 	response, err := f.remotePeer.GetReplicationMessages(ctx, request)
 	if err != nil {

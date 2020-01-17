@@ -730,7 +730,7 @@ func toProtoReplicationTask(in *replicator.ReplicationTask) *common.ReplicationT
 
 	switch ret.TaskType {
 	case enums.ReplicationTaskTypeDomain:
-		ret.Attributes = &common.ReplicationTask_DomainTaskAttributes{DomainTaskAttributes: toProtoDomainTaskAttributes(in.GetDomainTaskAttributes())}
+		ret.Attributes = &common.ReplicationTask_DomainTaskAttributes{DomainTaskAttributes: ToProtoDomainTaskAttributes(in.GetDomainTaskAttributes())}
 	case enums.ReplicationTaskTypeHistory:
 		ret.Attributes = &common.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: toProtoHistoryTaskAttributes(in.GetHistoryTaskAttributes())}
 	case enums.ReplicationTaskTypeSyncShardStatus:
@@ -746,8 +746,8 @@ func toProtoReplicationTask(in *replicator.ReplicationTask) *common.ReplicationT
 	return ret
 }
 
-// toProtoDomainTaskAttributes ...
-func toProtoDomainTaskAttributes(in *replicator.DomainTaskAttributes) *common.DomainTaskAttributes {
+// ToProtoDomainTaskAttributes ...
+func ToProtoDomainTaskAttributes(in *replicator.DomainTaskAttributes) *common.DomainTaskAttributes {
 	if in == nil {
 		return nil
 	}
