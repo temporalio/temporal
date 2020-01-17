@@ -149,7 +149,7 @@ func toProtoWorkflowExecutionStartedEventAttributes(in *shared.WorkflowExecution
 	return &common.WorkflowExecutionStartedEventAttributes{
 		WorkflowType:                        toProtoWorkflowType(in.GetWorkflowType()),
 		ParentWorkflowDomain:                in.GetParentWorkflowDomain(),
-		ParentWorkflowExecution:             toProtoWorkflowExecution(in.GetParentWorkflowExecution()),
+		ParentWorkflowExecution:             ToProtoWorkflowExecution(in.GetParentWorkflowExecution()),
 		ParentInitiatedEventId:              in.GetParentInitiatedEventId(),
 		TaskList:                            toProtoTaskList(in.GetTaskList()),
 		Input:                               in.GetInput(),
@@ -460,7 +460,7 @@ func toProtoWorkflowExecutionCancelRequestedEventAttributes(in *shared.WorkflowE
 	return &common.WorkflowExecutionCancelRequestedEventAttributes{
 		Cause:                     in.GetCause(),
 		ExternalInitiatedEventId:  in.GetExternalInitiatedEventId(),
-		ExternalWorkflowExecution: toProtoWorkflowExecution(in.GetExternalWorkflowExecution()),
+		ExternalWorkflowExecution: ToProtoWorkflowExecution(in.GetExternalWorkflowExecution()),
 		Identity:                  in.GetIdentity(),
 	}
 }
@@ -482,7 +482,7 @@ func toProtoRequestCancelExternalWorkflowExecutionInitiatedEventAttributes(in *s
 	return &common.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
 		DecisionTaskCompletedEventId: in.GetDecisionTaskCompletedEventId(),
 		Domain:                       in.GetDomain(),
-		WorkflowExecution:            toProtoWorkflowExecution(in.GetWorkflowExecution()),
+		WorkflowExecution:            ToProtoWorkflowExecution(in.GetWorkflowExecution()),
 		Control:                      in.GetControl(),
 		ChildWorkflowOnly:            in.GetChildWorkflowOnly(),
 	}
@@ -496,7 +496,7 @@ func toProtoRequestCancelExternalWorkflowExecutionFailedEventAttributes(in *shar
 		Cause:                        enums.CancelExternalWorkflowExecutionFailedCause(in.GetCause()),
 		DecisionTaskCompletedEventId: in.GetDecisionTaskCompletedEventId(),
 		Domain:                       in.GetDomain(),
-		WorkflowExecution:            toProtoWorkflowExecution(in.GetWorkflowExecution()),
+		WorkflowExecution:            ToProtoWorkflowExecution(in.GetWorkflowExecution()),
 		InitiatedEventId:             in.GetInitiatedEventId(),
 		Control:                      in.GetControl(),
 	}
@@ -509,7 +509,7 @@ func toProtoExternalWorkflowExecutionCancelRequestedEventAttributes(in *shared.E
 	return &common.ExternalWorkflowExecutionCancelRequestedEventAttributes{
 		InitiatedEventId:  in.GetInitiatedEventId(),
 		Domain:            in.GetDomain(),
-		WorkflowExecution: toProtoWorkflowExecution(in.GetWorkflowExecution()),
+		WorkflowExecution: ToProtoWorkflowExecution(in.GetWorkflowExecution()),
 	}
 }
 
@@ -582,7 +582,7 @@ func toProtoChildWorkflowExecutionStartedEventAttributes(in *shared.ChildWorkflo
 	return &common.ChildWorkflowExecutionStartedEventAttributes{
 		Domain:            in.GetDomain(),
 		InitiatedEventId:  in.GetInitiatedEventId(),
-		WorkflowExecution: toProtoWorkflowExecution(in.GetWorkflowExecution()),
+		WorkflowExecution: ToProtoWorkflowExecution(in.GetWorkflowExecution()),
 		WorkflowType:      toProtoWorkflowType(in.GetWorkflowType()),
 		Header:            toProtoHeader(in.GetHeader()),
 	}
@@ -595,7 +595,7 @@ func toProtoChildWorkflowExecutionCompletedEventAttributes(in *shared.ChildWorkf
 	return &common.ChildWorkflowExecutionCompletedEventAttributes{
 		Result:            in.GetResult(),
 		Domain:            in.GetDomain(),
-		WorkflowExecution: toProtoWorkflowExecution(in.GetWorkflowExecution()),
+		WorkflowExecution: ToProtoWorkflowExecution(in.GetWorkflowExecution()),
 		WorkflowType:      toProtoWorkflowType(in.GetWorkflowType()),
 		InitiatedEventId:  in.GetInitiatedEventId(),
 		StartedEventId:    in.GetStartedEventId(),
@@ -610,7 +610,7 @@ func toProtoChildWorkflowExecutionFailedEventAttributes(in *shared.ChildWorkflow
 		Reason:            in.GetReason(),
 		Details:           in.GetDetails(),
 		Domain:            in.GetDomain(),
-		WorkflowExecution: toProtoWorkflowExecution(in.GetWorkflowExecution()),
+		WorkflowExecution: ToProtoWorkflowExecution(in.GetWorkflowExecution()),
 		WorkflowType:      toProtoWorkflowType(in.GetWorkflowType()),
 		InitiatedEventId:  in.GetInitiatedEventId(),
 		StartedEventId:    in.GetStartedEventId(),
@@ -624,7 +624,7 @@ func toProtoChildWorkflowExecutionCanceledEventAttributes(in *shared.ChildWorkfl
 	return &common.ChildWorkflowExecutionCanceledEventAttributes{
 		Details:           in.GetDetails(),
 		Domain:            in.GetDomain(),
-		WorkflowExecution: toProtoWorkflowExecution(in.GetWorkflowExecution()),
+		WorkflowExecution: ToProtoWorkflowExecution(in.GetWorkflowExecution()),
 		WorkflowType:      toProtoWorkflowType(in.GetWorkflowType()),
 		InitiatedEventId:  in.GetInitiatedEventId(),
 		StartedEventId:    in.GetStartedEventId(),
@@ -638,7 +638,7 @@ func toProtoChildWorkflowExecutionTimedOutEventAttributes(in *shared.ChildWorkfl
 	return &common.ChildWorkflowExecutionTimedOutEventAttributes{
 		TimeoutType:       enums.TimeoutType(in.GetTimeoutType()),
 		Domain:            in.GetDomain(),
-		WorkflowExecution: toProtoWorkflowExecution(in.GetWorkflowExecution()),
+		WorkflowExecution: ToProtoWorkflowExecution(in.GetWorkflowExecution()),
 		WorkflowType:      toProtoWorkflowType(in.GetWorkflowType()),
 		InitiatedEventId:  in.GetInitiatedEventId(),
 		StartedEventId:    in.GetStartedEventId(),
@@ -651,7 +651,7 @@ func toProtoChildWorkflowExecutionTerminatedEventAttributes(in *shared.ChildWork
 	}
 	return &common.ChildWorkflowExecutionTerminatedEventAttributes{
 		Domain:            in.GetDomain(),
-		WorkflowExecution: toProtoWorkflowExecution(in.GetWorkflowExecution()),
+		WorkflowExecution: ToProtoWorkflowExecution(in.GetWorkflowExecution()),
 		WorkflowType:      toProtoWorkflowType(in.GetWorkflowType()),
 		InitiatedEventId:  in.GetInitiatedEventId(),
 		StartedEventId:    in.GetStartedEventId(),
@@ -665,7 +665,7 @@ func toProtoSignalExternalWorkflowExecutionInitiatedEventAttributes(in *shared.S
 	return &common.SignalExternalWorkflowExecutionInitiatedEventAttributes{
 		DecisionTaskCompletedEventId: in.GetDecisionTaskCompletedEventId(),
 		Domain:                       in.GetDomain(),
-		WorkflowExecution:            toProtoWorkflowExecution(in.GetWorkflowExecution()),
+		WorkflowExecution:            ToProtoWorkflowExecution(in.GetWorkflowExecution()),
 		SignalName:                   in.GetSignalName(),
 		Input:                        in.GetInput(),
 		Control:                      in.GetControl(),
@@ -681,7 +681,7 @@ func toProtoSignalExternalWorkflowExecutionFailedEventAttributes(in *shared.Sign
 		Cause:                        enums.SignalExternalWorkflowExecutionFailedCause(in.GetCause()),
 		DecisionTaskCompletedEventId: in.GetDecisionTaskCompletedEventId(),
 		Domain:                       in.GetDomain(),
-		WorkflowExecution:            toProtoWorkflowExecution(in.GetWorkflowExecution()),
+		WorkflowExecution:            ToProtoWorkflowExecution(in.GetWorkflowExecution()),
 		InitiatedEventId:             in.GetInitiatedEventId(),
 		Control:                      in.GetControl(),
 	}
@@ -694,7 +694,7 @@ func toProtoExternalWorkflowExecutionSignaledEventAttributes(in *shared.External
 	return &common.ExternalWorkflowExecutionSignaledEventAttributes{
 		InitiatedEventId:  in.GetInitiatedEventId(),
 		Domain:            in.GetDomain(),
-		WorkflowExecution: toProtoWorkflowExecution(in.GetWorkflowExecution()),
+		WorkflowExecution: ToProtoWorkflowExecution(in.GetWorkflowExecution()),
 		Control:           in.GetControl(),
 	}
 }

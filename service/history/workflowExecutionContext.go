@@ -27,6 +27,8 @@ import (
 	"fmt"
 	"time"
 
+	"go.temporal.io/temporal-proto/workflowservice"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
@@ -36,6 +38,7 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/service/frontend/adapter"
 )
 
 const (
@@ -1249,12 +1252,14 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 			Message: fmt.Sprintf("cannot find cluster config %v to do reapply", activeCluster),
 		}
 	}
-	return sourceCluster.ReapplyEvents(
+	_, err = sourceCluster.ReapplyEvents(
 		ctx,
-		&workflow.ReapplyEventsRequest{
-			DomainName:        common.StringPtr(domainEntry.GetInfo().Name),
-			WorkflowExecution: execution,
-			Events:            reapplyEventsDataBlob.ToThrift(),
+		&workflowservice.ReapplyEventsRequest{
+			DomainName:        domainEntry.GetInfo().Name,
+			WorkflowExecution: adapter.ToProtoWorkflowExecution(execution),
+			Events:            adapter.ToProtoDataBlob(reapplyEventsDataBlob.ToThrift()),
 		},
 	)
+
+	return err
 }

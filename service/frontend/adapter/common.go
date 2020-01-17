@@ -265,7 +265,8 @@ func toProtoWorkflowType(in *shared.WorkflowType) *common.WorkflowType {
 	}
 }
 
-func toProtoWorkflowExecution(in *shared.WorkflowExecution) *common.WorkflowExecution {
+// ToProtoWorkflowExecution ...
+func ToProtoWorkflowExecution(in *shared.WorkflowExecution) *common.WorkflowExecution {
 	if in == nil {
 		return nil
 	}
@@ -368,14 +369,14 @@ func toProtoWorkflowExecutionInfo(in *shared.WorkflowExecutionInfo) *common.Work
 		return nil
 	}
 	return &common.WorkflowExecutionInfo{
-		Execution:        toProtoWorkflowExecution(in.GetExecution()),
+		Execution:        ToProtoWorkflowExecution(in.GetExecution()),
 		Type:             toProtoWorkflowType(in.GetType()),
 		StartTime:        in.GetStartTime(),
 		CloseTime:        in.GetCloseTime(),
 		CloseStatus:      toProtoWorkflowExecutionCloseStatus(in.CloseStatus),
 		HistoryLength:    in.GetHistoryLength(),
 		ParentDomainId:   in.GetParentDomainId(),
-		ParentExecution:  toProtoWorkflowExecution(in.GetParentExecution()),
+		ParentExecution:  ToProtoWorkflowExecution(in.GetParentExecution()),
 		ExecutionTime:    in.GetExecutionTime(),
 		Memo:             toProtoMemo(in.GetMemo()),
 		SearchAttributes: toProtoSearchAttributes(in.GetSearchAttributes()),

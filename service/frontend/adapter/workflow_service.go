@@ -498,7 +498,7 @@ func ToProtoPollForDecisionTaskResponse(in *shared.PollForDecisionTaskResponse) 
 	}
 	return &workflowservice.PollForDecisionTaskResponse{
 		TaskToken:                 in.GetTaskToken(),
-		WorkflowExecution:         toProtoWorkflowExecution(in.GetWorkflowExecution()),
+		WorkflowExecution:         ToProtoWorkflowExecution(in.GetWorkflowExecution()),
 		WorkflowType:              toProtoWorkflowType(in.GetWorkflowType()),
 		PreviousStartedEventId:    in.GetPreviousStartedEventId(),
 		StartedEventId:            in.GetStartedEventId(),
@@ -531,7 +531,7 @@ func ToProtoPollForActivityTaskResponse(in *shared.PollForActivityTaskResponse) 
 	}
 	return &workflowservice.PollForActivityTaskResponse{
 		TaskToken:                       in.GetTaskToken(),
-		WorkflowExecution:               toProtoWorkflowExecution(in.GetWorkflowExecution()),
+		WorkflowExecution:               ToProtoWorkflowExecution(in.GetWorkflowExecution()),
 		ActivityId:                      in.GetActivityId(),
 		ActivityType:                    toProtoActivityType(in.GetActivityType()),
 		Input:                           in.GetInput(),
