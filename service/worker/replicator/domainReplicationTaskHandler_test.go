@@ -25,6 +25,8 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 	"go.uber.org/zap"
 
 	"github.com/temporalio/temporal/.gen/go/replicator"
@@ -72,7 +74,7 @@ func (s *domainReplicatorSuite) TearDownTest() {
 }
 
 func (s *domainReplicatorSuite) TestHandleReceivingTask_RegisterDomainTask_NameUUIDCollision() {
-	operation := replicator.DomainOperationCreate
+	operation := enums.DomainOperationCreate
 	id := uuid.New()
 	name := "some random domain test name"
 	status := shared.DomainStatusRegistered
@@ -98,9 +100,9 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_RegisterDomainTask_NameU
 		},
 	}
 
-	task := &replicator.DomainTaskAttributes{
-		DomainOperation: &operation,
-		ID:              common.StringPtr(id),
+	task := &commonproto.DomainTaskAttributes{
+		DomainOperation: operation,
+		Id:              common.StringPtr(id),
 		Info: &shared.DomainInfo{
 			Name:        common.StringPtr(name),
 			Status:      &status,
