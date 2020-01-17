@@ -263,7 +263,7 @@ func (cf *rpcClientFactory) NewFrontendClientWithTimeoutAndDispatcherGRPC(
 
 	client := frontend.NewClientGRPC(timeout, longPollTimeout, common.NewClientCache(keyResolver, clientProvider))
 	if cf.metricsClient != nil {
-		client = frontend.NewmetricClientGRPC(client, cf.metricsClient)
+		client = frontend.NewMetricClientGRPC(client, cf.metricsClient)
 	}
 	return client, nil
 }
@@ -284,7 +284,7 @@ func (cf *rpcClientFactory) NewFrontendClientWithTimeoutAndDispatcherGRPC(
 //
 //	client := frontend.NewClientGRPC(timeout, longPollTimeout, common.NewClientCache(keyResolver, clientProvider))
 //	if cf.metricsClient != nil {
-//		client = frontend.NewmetricClientGRPC(client, cf.metricsClient)
+//		client = frontend.NewMetricClientGRPC(client, cf.metricsClient)
 //	}
 //	return client, nil
 //}

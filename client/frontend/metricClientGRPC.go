@@ -36,8 +36,8 @@ type metricClientGRPC struct {
 	metricsClient metrics.Client
 }
 
-// NewmetricClientGRPC creates a new instance of Client that emits metrics
-func NewmetricClientGRPC(client ClientGRPC, metricsClient metrics.Client) ClientGRPC {
+// NewMetricClientGRPC creates a new instance of Client that emits metrics
+func NewMetricClientGRPC(client ClientGRPC, metricsClient metrics.Client) ClientGRPC {
 	return &metricClientGRPC{
 		client:        client,
 		metricsClient: metricsClient,

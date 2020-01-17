@@ -48,7 +48,7 @@ type (
 		controller               *gomock.Controller
 		mockResource             *resource.Test
 		mockFrontendHandler      *workflowservicemock.MockWorkflowServiceYARPCServer
-		mockRemoteFrontendClient *workflowservicemock.MockWorkflowServiceClient
+		mockRemoteFrontendClient *workflowservicemock.MockWorkflowServiceYARPCClient
 		mockClusterMetadata      *cluster.MockMetadata
 
 		mockDCRedirectionPolicy *MockDCRedirectionPolicy
