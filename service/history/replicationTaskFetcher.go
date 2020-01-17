@@ -30,7 +30,6 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/workflowservice"
 
-	r "github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
@@ -38,7 +37,6 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	serviceConfig "github.com/temporalio/temporal/common/service/config"
-	"github.com/temporalio/temporal/service/frontend/adapter"
 )
 
 const (
@@ -262,10 +260,10 @@ func (f *ReplicationTaskFetcherImpl) fetchAndDistributeTasks(requestByShard map[
 
 func (f *ReplicationTaskFetcherImpl) getMessages(
 	requestByShard map[int32]*request,
-) (map[int32]*r.ReplicationMessages, error) {
+) (map[int32]*commonproto.ReplicationMessages, error) {
 	var tokens []*commonproto.ReplicationToken
 	for _, request := range requestByShard {
-		tokens = append(tokens, adapter.ToProtoRecordActivityTaskHeartbeatByIDResponse() request.token)
+		tokens = append(tokens, request.token)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), fetchTaskRequestTimeout)
