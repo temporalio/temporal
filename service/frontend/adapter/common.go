@@ -76,9 +76,9 @@ func toProtoDomainConfiguration(in *shared.DomainConfiguration) *common.DomainCo
 		WorkflowExecutionRetentionPeriodInDays: in.GetWorkflowExecutionRetentionPeriodInDays(),
 		EmitMetric:                             toProtoBool(in.EmitMetric),
 		BadBinaries:                            toProtoBadBinaries(in.GetBadBinaries()),
-		HistoryArchivalStatus:                  toProtoArchivalStatus(in.HistoryArchivalStatus),
+		HistoryArchivalStatus:                  ToProtoArchivalStatus(in.HistoryArchivalStatus),
 		HistoryArchivalURI:                     in.GetVisibilityArchivalURI(),
-		VisibilityArchivalStatus:               toProtoArchivalStatus(in.VisibilityArchivalStatus),
+		VisibilityArchivalStatus:               ToProtoArchivalStatus(in.VisibilityArchivalStatus),
 		VisibilityArchivalURI:                  in.GetVisibilityArchivalURI(),
 	}
 }

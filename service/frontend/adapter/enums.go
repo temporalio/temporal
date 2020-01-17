@@ -37,7 +37,8 @@ func ToThriftArchivalStatus(in enums.ArchivalStatus) *shared.ArchivalStatus {
 	return &ret
 }
 
-func toProtoArchivalStatus(in *shared.ArchivalStatus) enums.ArchivalStatus {
+// ToProtoArchivalStatus ...
+func ToProtoArchivalStatus(in *shared.ArchivalStatus) enums.ArchivalStatus {
 	if in == nil {
 		return enums.ArchivalStatusDefault
 	}

@@ -265,10 +265,6 @@ func (domainReplicator *domainReplicatorImpl) validateDomainReplicationTask(task
 		return ErrInvalidDomainConfig
 	} else if task.ReplicationConfig == nil {
 		return ErrInvalidDomainReplicationConfig
-	} else if task.ConfigVersion == 0 {
-		return ErrInvalidDomainConfigVersion
-	} else if task.FailoverVersion == 0 {
-		return ErrInvalidDomainFailoverVersion
 	}
 	return nil
 }

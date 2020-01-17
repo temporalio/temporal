@@ -255,9 +255,18 @@ func (s *replicationTaskProcessorSuite) TestProcessTaskOnce_SyncActivityReplicat
 		}},
 	}
 	request := &history.SyncActivityRequest{
-		DomainId:   common.StringPtr(domainID),
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(runID),
+		DomainId:           common.StringPtr(domainID),
+		WorkflowId:         common.StringPtr(workflowID),
+		RunId:              common.StringPtr(runID),
+		Version:            common.Int64Ptr(0),
+		ScheduledId:        common.Int64Ptr(0),
+		ScheduledTime:      common.Int64Ptr(0),
+		StartedId:          common.Int64Ptr(0),
+		StartedTime:        common.Int64Ptr(0),
+		LastHeartbeatTime:  common.Int64Ptr(0),
+		Attempt:            common.Int32Ptr(0),
+		LastFailureReason:  common.StringPtr(""),
+		LastWorkerIdentity: common.StringPtr(""),
 	}
 
 	s.mockDomainCache.EXPECT().
@@ -299,6 +308,11 @@ func (s *replicationTaskProcessorSuite) TestProcessTaskOnce_HistoryReplicationTa
 		},
 		SourceCluster:     common.StringPtr("standby"),
 		ForceBufferEvents: common.BoolPtr(false),
+		FirstEventId:      common.Int64Ptr(0),
+		NextEventId:       common.Int64Ptr(0),
+		Version:           common.Int64Ptr(0),
+		ResetWorkflow:     common.BoolPtr(false),
+		NewRunNDC:         common.BoolPtr(false),
 	}
 
 	s.mockDomainCache.EXPECT().
