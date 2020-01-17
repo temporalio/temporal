@@ -401,6 +401,25 @@ CREATE TABLE domains_by_name_v2 (
      'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
    };
 
+CREATE TABLE queue_metadata (
+  queue_type        int,
+  cluster_ack_level map<text, bigint>,
+  version           bigint,
+PRIMARY KEY (queue_type)
+)  WITH COMPACTION = {
+     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
+   };
+
+CREATE TABLE cluster_metadata (
+  metadata_partition      int,
+  immutable_data          blob,
+  immutable_data_encoding text,
+  PRIMARY KEY  (metadata_partition)
+) WITH COMPACTION = {
+    'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
+    };
+
+-- Create metadata for system domain
 INSERT INTO domains_by_name_v2 (
    domains_partition,
    name,
@@ -449,21 +468,3 @@ CREATE TABLE queue (
 ) WITH COMPACTION = {
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
   };
-
-CREATE TABLE queue_metadata (
-  queue_type        int,
-  cluster_ack_level map<text, bigint>,
-  version           bigint,
-PRIMARY KEY (queue_type)
-)  WITH COMPACTION = {
-     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
-   };
-
-CREATE TABLE cluster_metadata (
-  metadata_partition      int,
-  immutable_data          blob,
-  immutable_data_encoding text,
-  PRIMARY KEY  (metadata_partition)
-) WITH COMPACTION = {
-    'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
-    };

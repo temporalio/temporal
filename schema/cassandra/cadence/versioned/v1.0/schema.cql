@@ -401,6 +401,44 @@ CREATE TABLE domains_by_name_v2 (
      'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
    };
 
+CREATE TABLE queue (
+  queue_type      int,
+  message_id      int,
+  message_payload blob,
+  PRIMARY KEY  (queue_type, message_id)
+) WITH COMPACTION = {
+    'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
+  };
+
+CREATE TABLE queue_metadata (
+  queue_type        int,
+  cluster_ack_level map<text, bigint>,
+  version           bigint,
+PRIMARY KEY (queue_type)
+)  WITH COMPACTION = {
+     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
+   };
+
+CREATE TABLE cluster_metadata (
+  metadata_partition      int,
+  immutable_data          blob,
+  immutable_data_encoding text,
+  PRIMARY KEY  (metadata_partition)
+) WITH COMPACTION = {
+    'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
+    };
+
+-- Create metadata for system domain
+INSERT INTO domains (
+   id,
+   domain
+) VALUES (
+   32049b68-7872-4094-8e63-d0dd59896a83,
+   {
+       name: 'cadence-system'
+   }
+) IF NOT EXISTS;
+
 INSERT INTO domains_by_name_v2 (
    domains_partition,
    name,
@@ -430,40 +468,3 @@ INSERT INTO domains_by_name_v2 (
    -1,
    -1
 ) IF NOT EXISTS;
-
-INSERT INTO domains (
-   id,
-   domain
-) VALUES (
-   32049b68-7872-4094-8e63-d0dd59896a83,
-   {
-       name: 'cadence-system'
-   }
-) IF NOT EXISTS;
-
-CREATE TABLE queue (
-  queue_type      int,
-  message_id      int,
-  message_payload blob,
-  PRIMARY KEY  (queue_type, message_id)
-) WITH COMPACTION = {
-    'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
-  };
-
-CREATE TABLE queue_metadata (
-  queue_type        int,
-  cluster_ack_level map<text, bigint>,
-  version           bigint,
-PRIMARY KEY (queue_type)
-)  WITH COMPACTION = {
-     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
-   };
-
-CREATE TABLE cluster_metadata (
-  metadata_partition      int,
-  immutable_data          blob,
-  immutable_data_encoding text,
-  PRIMARY KEY  (metadata_partition)
-) WITH COMPACTION = {
-    'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
-    };
