@@ -564,7 +564,7 @@ func (c *cadenceImpl) startHistory(
 		c.overrideHistoryDynamicConfig(integrationClient)
 		params.DynamicConfig = integrationClient
 
-		connection, err := grpc.Dial(c.FrontendAddress(), grpc.WithInsecure())
+		connection, err := grpc.Dial(c.FrontendGRPCAddress(), grpc.WithInsecure())
 		if err != nil {
 			c.logger.Fatal("Failed to create connection for history", tag.Error(err))
 		}
@@ -684,7 +684,7 @@ func (c *cadenceImpl) startWorker(hosts map[string][]string, startWG *sync.WaitG
 		c.logger.Fatal("Failed to copy persistence config for worker", tag.Error(err))
 	}
 
-	connection, err := grpc.Dial(c.FrontendAddress(), grpc.WithInsecure())
+	connection, err := grpc.Dial(c.FrontendGRPCAddress(), grpc.WithInsecure())
 	if err != nil {
 		c.logger.Fatal("Failed to create connection for worker", tag.Error(err))
 	}
