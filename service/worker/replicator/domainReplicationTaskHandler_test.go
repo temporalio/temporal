@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/temporal-proto/enums"
 	"go.uber.org/zap"
 
+	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/persistence"
 	persistencetests "github.com/temporalio/temporal/common/persistence/persistence-tests"
@@ -131,13 +132,13 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_RegisterDomainTask_NameU
 	task.Info.Name = name
 	err = s.domainReplicator.HandleReceivingTask(task)
 	s.NotNil(err)
-	//s.IsType(&commonproto.BadRequestError{}, err)
+	s.IsType(&shared.BadRequestError{}, err)
 
 	task.Id = id
 	task.Info.Name = "other random domain test name"
 	err = s.domainReplicator.HandleReceivingTask(task)
 	s.NotNil(err)
-	//s.IsType(&commonproto.BadRequestError{}, err)
+	s.IsType(&shared.BadRequestError{}, err)
 }
 
 func (s *domainReplicatorSuite) TestHandleReceivingTask_RegisterDomainTask() {

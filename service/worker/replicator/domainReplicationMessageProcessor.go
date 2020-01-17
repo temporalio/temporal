@@ -21,7 +21,6 @@
 package replicator
 
 import (
-	"context"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -132,7 +131,7 @@ func (p *domainReplicationMessageProcessor) getAndHandleDomainReplicationTasks()
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), fetchTaskRequestTimeout)
+	ctx, cancel := createContextWithCancel(fetchTaskRequestTimeout)
 	request := &workflowservice.GetDomainReplicationMessagesRequest{
 		LastRetrievedMessageId: p.lastRetrievedMessageID,
 		LastProcessedMessageId: p.lastProcessedMessageID,

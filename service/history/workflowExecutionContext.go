@@ -1252,8 +1252,10 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 			Message: fmt.Sprintf("cannot find cluster config %v to do reapply", activeCluster),
 		}
 	}
+	ctx2, cancel2 := createContextWithCancel(defaultRemoteCallTimeout)
+	defer cancel2()
 	_, err = sourceCluster.ReapplyEvents(
-		ctx,
+		ctx2,
 		&workflowservice.ReapplyEventsRequest{
 			DomainName:        domainEntry.GetInfo().Name,
 			WorkflowExecution: adapter.ToProtoWorkflowExecution(execution),

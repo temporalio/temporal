@@ -23,7 +23,6 @@
 package history
 
 import (
-	"context"
 	"sync/atomic"
 	"time"
 
@@ -266,7 +265,7 @@ func (f *ReplicationTaskFetcherImpl) getMessages(
 		tokens = append(tokens, request.token)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), fetchTaskRequestTimeout)
+	ctx, cancel := createContextWithCancel(fetchTaskRequestTimeout)
 	defer cancel()
 
 	request := &workflowservice.GetReplicationMessagesRequest{
