@@ -879,11 +879,12 @@ func toProtoVersionHistory(in *shared.VersionHistory) *common.VersionHistory {
 	}
 	return &common.VersionHistory{
 		BranchToken: in.GetBranchToken(),
-		Items:       toProtoVersionHistoryItems(in.GetItems()),
+		Items:       ToProtoVersionHistoryItems(in.GetItems()),
 	}
 }
 
-func toProtoVersionHistoryItems(in []*shared.VersionHistoryItem) []*common.VersionHistoryItem {
+// ToProtoVersionHistoryItems ...
+func ToProtoVersionHistoryItems(in []*shared.VersionHistoryItem) []*common.VersionHistoryItem {
 	if in == nil {
 		return nil
 	}
@@ -905,7 +906,7 @@ func toProtoHistoryTaskV2Attributes(in *replicator.HistoryTaskV2Attributes) *com
 		DomainId:            in.GetDomainId(),
 		WorkflowId:          in.GetWorkflowId(),
 		RunId:               in.GetRunId(),
-		VersionHistoryItems: toProtoVersionHistoryItems(in.GetVersionHistoryItems()),
+		VersionHistoryItems: ToProtoVersionHistoryItems(in.GetVersionHistoryItems()),
 		Events:              ToProtoDataBlob(in.GetEvents()),
 		NewRunEvents:        ToProtoDataBlob(in.GetNewRunEvents()),
 	}
