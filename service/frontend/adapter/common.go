@@ -1087,7 +1087,7 @@ func toThriftReplicationInfo(in *common.ReplicationInfo) *shared.ReplicationInfo
 
 	return &shared.ReplicationInfo{
 		Version:     &in.Version,
-		LastEventId: &in.Version,
+		LastEventId: &in.LastEventId,
 	}
 }
 
