@@ -24,6 +24,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 
 	persist "github.com/temporalio/temporal/.gen/go/persistence"
@@ -74,10 +75,9 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 	getResp, err := s.ClusterMetadataManager.GetImmutableClusterMetadata()
 
 	// Validate they match our initializations
-	s.Nil(err)
-	s.NotNil(getResp)
-	s.Nil(getResp.ClusterName)
-	s.Nil(getResp.HistoryShardCount)
+	s.NotNil(err)
+	s.IsType(&shared.EntityNotExistsError{}, err)
+	s.Nil(getResp)
 
 	var clusterNameToPersist = "testing"
 	var historyShardsToPersist = 43
