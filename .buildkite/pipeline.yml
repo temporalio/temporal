@@ -7,7 +7,7 @@ steps:
     artifact_paths:
       - "build/coverage/*.out"
     plugins:
-      - docker-compose#v3.0.3:
+      - docker-compose#v3.1.0:
           run: unit-test
           config: docker/buildkite/docker-compose.yml
           volumes:
@@ -27,7 +27,7 @@ steps:
       automatic:
         limit: 1
     plugins:
-      - docker-compose#v3.0.0:
+      - docker-compose#v3.1.0:
           run: integration-test-cassandra
           config: docker/buildkite/docker-compose.yml
           volumes:
@@ -47,7 +47,7 @@ steps:
       automatic:
         limit: 2
     plugins:
-      - docker-compose#v3.0.0:
+      - docker-compose#v3.1.0:
           run: coverage-report
           config: docker/buildkite/docker-compose.yml
           volumes:
