@@ -21,7 +21,9 @@ package sql
 
 import (
 	"database/sql"
+	"fmt"
 
+	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	p "github.com/temporalio/temporal/common/persistence"
@@ -38,22 +40,28 @@ func (s *sqlClusterMetadataManager) InitializeImmutableClusterMetadata(request *
 	resp, err := s.GetImmutableClusterMetadata()
 
 	if err != nil {
+		if _, ok := err.(*shared.EntityNotExistsError); ok {
+			// If we have received EntityNotExistsError, we have not yet initialized
+			return s.InsertImmutableDataIfNotExists(request)
+		}
 		return nil, err
 	}
 
-	if resp.ImmutableClusterMetadata != nil {
-		return &p.InternalInitializeImmutableClusterMetadataResponse{
-			PersistedImmutableMetadata: resp.ImmutableClusterMetadata,
-			RequestApplied:             false,
-		}, nil
-	}
+	// Return our get result if we didn't need to initialize
+	return &p.InternalInitializeImmutableClusterMetadataResponse{
+		PersistedImmutableMetadata: resp.ImmutableClusterMetadata,
+		RequestApplied:             false,
+	}, nil
 
+}
+
+func (s *sqlClusterMetadataManager) InsertImmutableDataIfNotExists(request *p.InternalInitializeImmutableClusterMetadataRequest) (*p.InternalInitializeImmutableClusterMetadataResponse, error) {
 	// InsertIfNotExists is idempotent and silently fails if already exists.
 	// Assuming that if we make it here, no out-of-band method or tool is deleting the db row
 	//	in between the Get above and Insert below as that would violate the immutability guarantees.
 	// Alternative would be to make the insert non-idempotent and detect insert conflicts
 	// or even move to a lock mechanism, but that doesn't appear worth the extra lines of code.
-	_, err = s.db.InsertIfNotExistsIntoClusterMetadata(&sqlplugin.ClusterMetadataRow{
+	_, err := s.db.InsertIfNotExistsIntoClusterMetadata(&sqlplugin.ClusterMetadataRow{
 		ImmutableData:         request.ImmutableClusterMetadata.Data,
 		ImmutableDataEncoding: *common.StringPtr(string(request.ImmutableClusterMetadata.Encoding)),
 	})
@@ -73,10 +81,14 @@ func (s *sqlClusterMetadataManager) GetImmutableClusterMetadata() (*p.InternalGe
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return &p.InternalGetImmutableClusterMetadataResponse{}, nil
+			return nil, &shared.EntityNotExistsError{
+				Message: fmt.Sprintf("GetImmutableClusterMetadata failed. Error: %v", err),
+			}
 		}
 
-		return nil, err
+		return nil, &shared.InternalServiceError{
+			Message: fmt.Sprintf("GetImmutableClusterMetadata failed. Error: %v", err),
+		}
 	}
 
 	return &p.InternalGetImmutableClusterMetadataResponse{
