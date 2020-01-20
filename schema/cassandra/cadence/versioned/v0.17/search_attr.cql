@@ -1,1 +1,0 @@
-ALTER TYPE workflow_execution ADD search_attributes map<text, blob>;

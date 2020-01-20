@@ -1,8 +1,0 @@
-{
-  "CurrVersion": "0.20",
-  "MinCompatibleVersion": "0.20",
-  "Description": "Add memo to mutable state",
-  "SchemaUpdateCqlFiles": [
-    "memo.cql"
-  ]
-}

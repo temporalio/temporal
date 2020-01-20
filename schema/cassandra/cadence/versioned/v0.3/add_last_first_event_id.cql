@@ -1,1 +1,0 @@
-ALTER TYPE workflow_execution ADD last_first_event_id bigint;
