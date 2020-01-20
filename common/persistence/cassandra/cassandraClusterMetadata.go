@@ -21,11 +21,8 @@
 package cassandra
 
 import (
-	"fmt"
-
 	"github.com/gocql/gocql"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cassandra"
 	"github.com/temporalio/temporal/common/log"
@@ -44,6 +41,10 @@ VALUES(?, ?, ?) IF NOT EXISTS`
 	// metadata_partition is constant and PK, this should only return one row.
 	templateGetImmutableClusterMetadata = `SELECT immutable_data, immutable_data_encoding FROM 
 cluster_metadata WHERE metadata_partition = ?`
+
+	immutablePayloadFieldName = `immutable_data`
+
+	immutableEncodingFieldName = immutablePayloadFieldName + `_encoding`
 )
 
 type (
@@ -90,23 +91,12 @@ func (m *cassandraClusterMetadata) InitializeImmutableClusterMetadata(
 	applied, err := query.MapScanCAS(previous)
 
 	if err != nil {
-		if isThrottlingError(err) {
-			return nil, &workflow.ServiceBusyError{
-				Message: fmt.Sprintf("CreateImmutableMetadataEntryIfNoneExists operation failed. Error: %v", err),
-			}
-		}
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("CreateImmutableMetadataEntryIfNoneExists operation failed. Error: %v", err),
-		}
+		return nil, convertCommonErrors("InitializeImmutableClusterMetadata", err)
 	}
 
 	if !applied {
 		// We didn't apply, parse the previous row
-		return &p.InternalInitializeImmutableClusterMetadataResponse{
-			PersistedImmutableMetadata: p.NewDataBlob(previous["immutable_data"].([]byte),
-				common.EncodingType(previous["immutable_data_encoding"].(string))),
-			RequestApplied: false,
-		}, nil
+		return m.convertPreviousMapToInitializeResponse(previous)
 	}
 
 	// If we applied, return the request back as the persisted data
@@ -116,17 +106,42 @@ func (m *cassandraClusterMetadata) InitializeImmutableClusterMetadata(
 	}, nil
 }
 
+func (m *cassandraClusterMetadata) convertPreviousMapToInitializeResponse(previous map[string]interface{}) (*p.InternalInitializeImmutableClusterMetadataResponse, error) {
+	// First, check if fields we are looking for is in previous map and verify we can type assert successfully
+	rawImData, ok := previous[immutablePayloadFieldName]
+	if !ok {
+		return nil, newFieldNotFoundError(immutablePayloadFieldName, previous)
+	}
+
+	imData, ok := rawImData.([]byte)
+	if !ok {
+		var byteSliceType []byte
+		return nil, newPersistedTypeMismatchError(immutablePayloadFieldName, byteSliceType, rawImData, previous)
+	}
+
+	rawImDataEncoding, ok := previous[immutableEncodingFieldName]
+	if !ok {
+		return nil, newFieldNotFoundError(immutableEncodingFieldName, previous)
+	}
+
+	imDataEncoding, ok := rawImDataEncoding.(string)
+	if !ok {
+		return nil, newPersistedTypeMismatchError(immutableEncodingFieldName, "", rawImDataEncoding, previous)
+	}
+
+	return &p.InternalInitializeImmutableClusterMetadataResponse{
+		PersistedImmutableMetadata: p.NewDataBlob(imData, common.EncodingType(imDataEncoding)),
+		RequestApplied:             false,
+	}, nil
+}
+
 func (m *cassandraClusterMetadata) GetImmutableClusterMetadata() (*p.InternalGetImmutableClusterMetadataResponse, error) {
 	query := m.session.Query(templateGetImmutableClusterMetadata, constMetadataPartition)
 	var immutableMetadata []byte
 	var encoding string
 	err := query.Scan(&immutableMetadata, &encoding)
 	if err != nil {
-		if err == gocql.ErrNotFound {
-			return &p.InternalGetImmutableClusterMetadataResponse{}, nil
-		}
-
-		return nil, fmt.Errorf("failed to get immutable cluster metadata: %v", err)
+		return nil, convertCommonErrors("GetImmutableClusterMetadata", err)
 	}
 
 	return &p.InternalGetImmutableClusterMetadataResponse{

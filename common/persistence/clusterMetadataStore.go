@@ -59,7 +59,7 @@ func (m *clusterMetadataManagerImpl) Close() {
 func (m *clusterMetadataManagerImpl) InitializeImmutableClusterMetadata(request *InitializeImmutableClusterMetadataRequest) (*InitializeImmutableClusterMetadataResponse, error) {
 	icm, err := m.serializer.SerializeImmutableClusterMetadata(&request.ImmutableClusterMetadata, clusterMetadataEncoding)
 	if err != nil {
-		return &InitializeImmutableClusterMetadataResponse{}, err
+		return nil, err
 	}
 
 	resp, err := m.persistence.InitializeImmutableClusterMetadata(&InternalInitializeImmutableClusterMetadataRequest{
@@ -67,7 +67,7 @@ func (m *clusterMetadataManagerImpl) InitializeImmutableClusterMetadata(request 
 	})
 
 	if err != nil {
-		return &InitializeImmutableClusterMetadataResponse{}, err
+		return nil, err
 	}
 
 	deserialized, err := m.serializer.DeserializeImmutableClusterMetadata(resp.PersistedImmutableMetadata)
