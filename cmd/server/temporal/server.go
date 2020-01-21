@@ -26,7 +26,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	persist "github.com/temporalio/temporal/.gen/go/persistence"
+	persist "github.com/temporalio/temporal/.gen/go/persistenceblobs"
 	"github.com/temporalio/temporal/common/persistence"
 	persistenceClient "github.com/temporalio/temporal/common/persistence/client"
 

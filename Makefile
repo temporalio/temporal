@@ -27,7 +27,7 @@ THRIFTRW_SRCS = \
   idl/github.com/temporalio/temporal/shared.thrift \
   idl/github.com/temporalio/temporal/admin.thrift \
   idl/github.com/temporalio/temporal/sqlblobs.thrift \
-  idl/github.com/temporalio/temporal/persistence.thrift \
+  idl/github.com/temporalio/temporal/persistenceblobs.thrift \
 
 PROGS = cadence
 TEST_TIMEOUT = 20m

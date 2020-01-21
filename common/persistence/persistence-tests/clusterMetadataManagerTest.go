@@ -27,7 +27,7 @@ import (
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 
-	persist "github.com/temporalio/temporal/.gen/go/persistence"
+	persist "github.com/temporalio/temporal/.gen/go/persistenceblobs"
 	p "github.com/temporalio/temporal/common/persistence"
 
 	log "github.com/sirupsen/logrus"

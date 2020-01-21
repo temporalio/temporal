@@ -24,7 +24,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	persist "github.com/temporalio/temporal/.gen/go/persistence"
+	persist "github.com/temporalio/temporal/.gen/go/persistenceblobs"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/codec"

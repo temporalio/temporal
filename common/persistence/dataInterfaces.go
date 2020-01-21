@@ -25,7 +25,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/temporalio/temporal/.gen/go/persistence"
+	"github.com/temporalio/temporal/.gen/go/persistenceblobs"
 
 	"github.com/pborman/uuid"
 
@@ -1429,19 +1429,19 @@ type (
 	// InitializeImmutableClusterMetadataRequest is a request of InitializeImmutableClusterMetadata
 	// These values can only be set a single time upon cluster initialization.
 	InitializeImmutableClusterMetadataRequest struct {
-		persistence.ImmutableClusterMetadata
+		persistenceblobs.ImmutableClusterMetadata
 	}
 
 	// InitializeImmutableClusterMetadataResponse is a request of InitializeImmutableClusterMetadata
 	InitializeImmutableClusterMetadataResponse struct {
-		PersistedImmutableData persistence.ImmutableClusterMetadata
+		PersistedImmutableData persistenceblobs.ImmutableClusterMetadata
 		RequestApplied         bool
 	}
 
 	// GetImmutableClusterMetadataResponse is the response to GetImmutableClusterMetadata
 	// These values are set a single time upon cluster initialization.
 	GetImmutableClusterMetadataResponse struct {
-		persistence.ImmutableClusterMetadata
+		persistenceblobs.ImmutableClusterMetadata
 	}
 
 	// Closeable is an interface for any entity that supports a close operation to release resources
