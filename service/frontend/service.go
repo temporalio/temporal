@@ -130,7 +130,6 @@ type Service struct {
 	resource.Resource
 
 	status       int32
-	handler      *AccessControlledWorkflowHandler
 	adminHandler *AdminHandler
 	stopC        chan struct{}
 	config       *Config
@@ -229,16 +228,16 @@ func (s *Service) Start() {
 	wfHandler := NewWorkflowHandler(s, s.config, replicationMessageSink)
 	wfHandlerGRPC := NewWorkflowHandlerGRPC(wfHandler)
 	dcRedirectionHandler := NewDCRedirectionHandler(wfHandlerGRPC, s.params.DCRedirectionPolicy)
+	accessControlledWorkflowHandler := NewAccessControlledHandlerImpl(dcRedirectionHandler, s.params.Authorizer)
 
-	s.handler = NewAccessControlledHandlerImpl(dcRedirectionHandler, s.params.Authorizer)
-	s.handler.RegisterHandler()
+	accessControlledWorkflowHandler.RegisterHandler()
+	wfHandler.RegisterHandler()
 
 	s.adminHandler = NewAdminHandler(s, s.params, s.config)
 	s.adminHandler.RegisterHandler()
 
 	// must start resource first
 	s.Resource.Start()
-	s.handler.Start()
 	s.adminHandler.Start()
 
 	// base (service is not started in frontend or admin handler) in case of race condition in yarpc registration function
@@ -256,7 +255,6 @@ func (s *Service) Stop() {
 
 	close(s.stopC)
 
-	s.handler.Stop()
 	s.adminHandler.Stop()
 	s.Resource.Stop()
 

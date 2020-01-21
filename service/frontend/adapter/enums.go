@@ -186,3 +186,7 @@ func toThriftDomainStatus(in enums.DomainStatus) *shared.DomainStatus {
 	ret := shared.DomainStatus(in)
 	return &ret
 }
+func toThriftReplicationTaskType(in enums.ReplicationTaskType) *replicator.ReplicationTaskType {
+	ret := replicator.ReplicationTaskType(in)
+	return &ret
+}

@@ -35,6 +35,7 @@ import (
 	"go.uber.org/yarpc/api/peer"
 	"go.uber.org/yarpc/api/transport"
 	"go.uber.org/yarpc/peer/roundrobin"
+	yarpcgrpc "go.uber.org/yarpc/transport/grpc"
 	"go.uber.org/yarpc/transport/tchannel"
 
 	"github.com/temporalio/temporal/client/admin"
@@ -68,6 +69,7 @@ type (
 	// DispatcherProvider provides a diapatcher to a given address
 	DispatcherProvider interface {
 		Get(name string, address string) (*yarpc.Dispatcher, error)
+		GetGRPC(name string, address string) (*yarpc.Dispatcher, error)
 	}
 
 	clientBeanImpl struct {
@@ -124,6 +126,11 @@ func NewClientBean(factory Factory, dispatcherProvider DispatcherProvider, clust
 			return nil, err
 		}
 
+		dispatcherGRPC, err := dispatcherProvider.GetGRPC(info.RPCName, info.RPCAddress)
+		if err != nil {
+			return nil, err
+		}
+
 		adminClient, err := factory.NewAdminClientWithTimeoutAndDispatcher(
 			info.RPCName,
 			admin.DefaultTimeout,
@@ -137,7 +144,7 @@ func NewClientBean(factory Factory, dispatcherProvider DispatcherProvider, clust
 			info.RPCName,
 			frontend.DefaultTimeout,
 			frontend.DefaultLongPollTimeout,
-			dispatcher,
+			dispatcherGRPC,
 		)
 
 		remoteAdminClients[clusterName] = adminClient
@@ -285,6 +292,36 @@ func (p *dnsDispatcherProvider) Get(serviceName string, address string) (*yarpc.
 	outbound := tchanTransport.NewOutbound(peerList)
 
 	p.logger.Info("Creating RPC dispatcher outbound", tag.Service(serviceName), tag.Address(address))
+
+	// Attach the outbound to the dispatcher (this will add middleware/logging/etc)
+	dispatcher := yarpc.NewDispatcher(yarpc.Config{
+		Name: crossDCCaller,
+		Outbounds: yarpc.Outbounds{
+			serviceName: transport.Outbounds{
+				Unary:       outbound,
+				ServiceName: serviceName,
+			},
+		},
+	})
+
+	if err := dispatcher.Start(); err != nil {
+		return nil, err
+	}
+	return dispatcher, nil
+}
+
+func (p *dnsDispatcherProvider) GetGRPC(serviceName string, address string) (*yarpc.Dispatcher, error) {
+	grpcTransport := yarpcgrpc.NewTransport()
+
+	peerList := roundrobin.New(grpcTransport)
+	peerListUpdater, err := newDNSUpdater(peerList, address, p.interval, p.logger)
+	if err != nil {
+		return nil, err
+	}
+	peerListUpdater.Start()
+	outbound := grpcTransport.NewOutbound(peerList)
+
+	p.logger.Info("Creating RPC dispatcher outbound for gRPC", tag.Service(serviceName), tag.Address(address))
 
 	// Attach the outbound to the dispatcher (this will add middleware/logging/etc)
 	dispatcher := yarpc.NewDispatcher(yarpc.Config{

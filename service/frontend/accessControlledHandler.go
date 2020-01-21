@@ -72,7 +72,6 @@ func NewAccessControlledHandlerImpl(wfHandler *DCRedirectionHandlerImpl, authori
 // RegisterHandler register this handler, must be called before Start()
 func (a *AccessControlledWorkflowHandler) RegisterHandler() {
 	a.GetGRPCDispatcher().Register(workflowservice.BuildWorkflowServiceYARPCProcedures(a))
-	a.GetDispatcher().Register(workflowservice.BuildWorkflowServiceYARPCProcedures(a))
 	a.GetDispatcher().Register(metaserver.New(a))
 }
 
