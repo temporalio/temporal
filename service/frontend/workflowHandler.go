@@ -1685,6 +1685,154 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 	return resp, nil
 }
 
+// GetRawHistory - retrieves raw history directly from DB layer
+func (wh *WorkflowHandler) GetWorkflowExecutionRawHistory(
+	ctx context.Context,
+	getRequest *gen.GetWorkflowExecutionRawHistoryRequest,
+) (resp *gen.GetWorkflowExecutionRawHistoryResponse, retError error) {
+	defer log.CapturePanic(wh.GetLogger(), &retError)
+
+	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendGetWorkflowExecutionRawHistoryScope, getRequest)
+	defer sw.Stop()
+
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	if getRequest == nil {
+		return nil, wh.error(errRequestNotSet, scope)
+	}
+
+	if ok := wh.allow(getRequest); !ok {
+		return nil, wh.error(createServiceBusyError(), scope)
+	}
+
+	if getRequest.GetDomain() == "" {
+		return nil, wh.error(errDomainNotSet, scope)
+	}
+
+	if err := wh.validateExecutionAndEmitMetrics(getRequest.Execution, scope); err != nil {
+		return nil, err
+	}
+
+	if getRequest.GetMaximumPageSize() <= 0 {
+		getRequest.MaximumPageSize = common.Int32Ptr(int32(wh.config.HistoryMaxPageSize(getRequest.GetDomain())))
+	}
+
+	domainID, err := wh.GetDomainCache().GetDomainID(getRequest.GetDomain())
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	// force limit page size if exceed
+	if getRequest.GetMaximumPageSize() > common.GetHistoryMaxPageSize {
+		wh.GetThrottledLogger().Warn("GetHistory page size is larger than threshold",
+			tag.WorkflowID(getRequest.Execution.GetWorkflowId()),
+			tag.WorkflowRunID(getRequest.Execution.GetRunId()),
+			tag.WorkflowDomainID(domainID), tag.WorkflowSize(int64(getRequest.GetMaximumPageSize())))
+		getRequest.MaximumPageSize = common.Int32Ptr(common.GetHistoryMaxPageSize)
+	}
+
+	// this function return the following 5 things,
+	// 1. current branch token
+	// 2. the workflow run ID
+	// 3. the next event ID
+	// 4. error if any
+	queryHistory := func(
+		domainUUID string,
+		execution *gen.WorkflowExecution,
+		currentBranchToken []byte,
+	) ([]byte, string, int64, error) {
+		response, err := wh.GetHistoryClient().GetMutableState(ctx, &h.GetMutableStateRequest{
+			DomainUUID:          common.StringPtr(domainUUID),
+			Execution:           execution,
+			ExpectedNextEventId: nil,
+			CurrentBranchToken:  currentBranchToken,
+		})
+
+		if err != nil {
+			return nil, "", 0, err
+		}
+
+		return response.CurrentBranchToken,
+			response.Execution.GetRunId(),
+			response.GetNextEventId(),
+			nil
+	}
+
+	execution := getRequest.Execution
+	token := &getHistoryContinuationToken{}
+
+	var runID string
+	var nextEventID int64
+
+	// process the token for paging
+	if getRequest.NextPageToken != nil {
+		token, err = deserializeHistoryToken(getRequest.NextPageToken)
+		if err != nil {
+			return nil, wh.error(errInvalidNextPageToken, scope)
+		}
+		if execution.RunId != nil && execution.GetRunId() != token.RunID {
+			return nil, wh.error(errNextPageTokenRunIDMismatch, scope)
+		}
+
+		execution.RunId = common.StringPtr(token.RunID)
+
+	} else {
+
+		token.BranchToken, runID, nextEventID, err =
+			queryHistory(domainID, execution, nil)
+		if err != nil {
+			return nil, wh.error(err, scope)
+		}
+
+		execution.RunId = &runID
+
+		token.RunID = runID
+		token.FirstEventID = common.FirstEventID
+		token.NextEventID = nextEventID
+		token.PersistenceToken = nil
+	}
+
+	history := []*gen.DataBlob{}
+	// return all events
+	if token.FirstEventID >= token.NextEventID {
+		return &gen.GetWorkflowExecutionRawHistoryResponse{
+			RawHistory:    []*gen.DataBlob{},
+			NextPageToken: nil,
+		}, nil
+	}
+
+	history, token.PersistenceToken, err = wh.getRawHistory(
+		scope,
+		domainID,
+		*execution,
+		token.FirstEventID,
+		token.NextEventID,
+		getRequest.GetMaximumPageSize(),
+		token.PersistenceToken,
+		token.TransientDecision,
+		token.BranchToken,
+	)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	if len(token.PersistenceToken) == 0 {
+		// meaning, there is no more history to be returned
+		token = nil
+	}
+
+	nextToken, err := serializeHistoryToken(token)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+	return &gen.GetWorkflowExecutionRawHistoryResponse{
+		RawHistory:    history,
+		NextPageToken: nextToken,
+	}, nil
+}
+
 // GetWorkflowExecutionHistory - retrieves the history of workflow execution
 func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 	ctx context.Context,
@@ -3017,6 +3165,80 @@ func (wh *WorkflowHandler) ListTaskListPartitions(ctx context.Context, request *
 		TaskList: request.TaskList,
 	})
 	return resp, err
+}
+
+func (wh *WorkflowHandler) getRawHistory(
+	scope metrics.Scope,
+	domainID string,
+	execution gen.WorkflowExecution,
+	firstEventID int64,
+	nextEventID int64,
+	pageSize int32,
+	nextPageToken []byte,
+	transientDecision *gen.TransientDecisionInfo,
+	branchToken []byte,
+) ([]*gen.DataBlob, []byte, error) {
+	rawHistory := []*gen.DataBlob{}
+	shardID := common.WorkflowIDToHistoryShard(*execution.WorkflowId, wh.config.NumHistoryShards)
+
+	resp, err := wh.GetHistoryManager().ReadRawHistoryBranch(&persistence.ReadHistoryBranchRequest{
+		BranchToken:   branchToken,
+		MinEventID:    firstEventID,
+		MaxEventID:    nextEventID,
+		PageSize:      int(pageSize),
+		NextPageToken: nextPageToken,
+		ShardID:       common.IntPtr(shardID),
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var encoding *gen.EncodingType
+	for _, data := range resp.HistoryEventBlobs {
+		switch data.Encoding {
+		case common.EncodingTypeJSON:
+			encoding = gen.EncodingTypeJSON.Ptr()
+		case common.EncodingTypeThriftRW:
+			encoding = gen.EncodingTypeThriftRW.Ptr()
+		default:
+			panic(fmt.Sprintf("Invalid encoding type for raw history, encoding type: %s", data.Encoding))
+		}
+		rawHistory = append(rawHistory, &gen.DataBlob{
+			EncodingType: encoding,
+			Data:         data.Data,
+		})
+	}
+
+	if len(nextPageToken) == 0 && transientDecision != nil {
+		if err := wh.validateTransientDecisionEvents(nextEventID, transientDecision); err != nil {
+			scope.IncCounter(metrics.CadenceErrIncompleteHistoryCounter)
+			wh.GetLogger().Error("getHistory error",
+				tag.WorkflowDomainID(domainID),
+				tag.WorkflowID(execution.GetWorkflowId()),
+				tag.WorkflowRunID(execution.GetRunId()),
+				tag.Error(err))
+		}
+
+		blob, err := wh.GetPayloadSerializer().SerializeEvent(transientDecision.ScheduledEvent, common.EncodingTypeThriftRW)
+		if err != nil {
+			return nil, nil, err
+		}
+		rawHistory = append(rawHistory, &gen.DataBlob{
+			EncodingType: gen.EncodingTypeThriftRW.Ptr(),
+			Data:         blob.Data,
+		})
+
+		blob, err = wh.GetPayloadSerializer().SerializeEvent(transientDecision.StartedEvent, common.EncodingTypeThriftRW)
+		if err != nil {
+			return nil, nil, err
+		}
+		rawHistory = append(rawHistory, &gen.DataBlob{
+			EncodingType: gen.EncodingTypeThriftRW.Ptr(),
+			Data:         blob.Data,
+		})
+	}
+
+	return rawHistory, resp.NextPageToken, nil
 }
 
 func (wh *WorkflowHandler) getHistory(

@@ -140,6 +140,22 @@ func (c *clientImpl) GetWorkflowExecutionHistory(
 	return client.GetWorkflowExecutionHistory(ctx, request, opts...)
 }
 
+func (c *clientImpl) GetWorkflowExecutionRawHistory(
+	ctx context.Context,
+	request *shared.GetWorkflowExecutionRawHistoryRequest,
+	opts ...yarpc.CallOption,
+) (*shared.GetWorkflowExecutionRawHistoryResponse, error) {
+
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.GetWorkflowExecutionRawHistory(ctx, request, opts...)
+}
+
 func (c *clientImpl) ListArchivedWorkflowExecutions(
 	ctx context.Context,
 	request *shared.ListArchivedWorkflowExecutionsRequest,
