@@ -1773,6 +1773,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 		e.executionInfo.ParentWorkflowID = event.ParentWorkflowExecution.GetWorkflowId()
 		e.executionInfo.ParentRunID = event.ParentWorkflowExecution.GetRunId()
 	}
+	// TODO: need to check for 0 value?
 	if event.ParentInitiatedEventId != nil {
 		e.executionInfo.InitiatedID = event.GetParentInitiatedEventId()
 	} else {
@@ -2103,7 +2104,7 @@ func (e *mutableStateBuilder) ReplicateActivityTaskScheduledEvent(
 
 	attributes := event.ActivityTaskScheduledEventAttributes
 	targetDomainID := e.executionInfo.DomainID
-	if attributes.Domain != nil {
+	if attributes.GetDomain() != "" {
 		targetDomainEntry, err := e.shard.GetDomainCache().GetDomain(attributes.GetDomain())
 		if err != nil {
 			return nil, err
