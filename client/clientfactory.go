@@ -261,8 +261,7 @@ func (cf *rpcClientFactory) NewFrontendClientWithTimeoutAndDispatcherGRPC(
 		return workflowservice.NewWorkflowServiceYARPCClient(dispatcher.ClientConfig(rpcName)), nil
 	}
 
-	client := frontend.NewClientGRPC(timeout, longPollTimeout, common.
-		NewClientCache(keyResolver, clientProvider))
+	client := frontend.NewClientGRPC(timeout, longPollTimeout, common.NewClientCache(keyResolver, clientProvider))
 	if cf.metricsClient != nil {
 		client = frontend.NewMetricClientGRPC(client, cf.metricsClient)
 	}
