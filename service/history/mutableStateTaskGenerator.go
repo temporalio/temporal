@@ -193,7 +193,6 @@ func (r *mutableStateTaskGeneratorImpl) generateDelayedDecisionTasks(
 	// noParentWorkflow case
 	firstDecisionDelayType := persistence.WorkflowBackoffTimeoutTypeCron
 	// continue as new case
-	// TODO: need to check for 0 value?
 	if startAttr.Initiator != nil {
 		switch startAttr.GetInitiator() {
 		case shared.ContinueAsNewInitiatorRetryPolicy:

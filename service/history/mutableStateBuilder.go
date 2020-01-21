@@ -1773,7 +1773,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 		e.executionInfo.ParentWorkflowID = event.ParentWorkflowExecution.GetWorkflowId()
 		e.executionInfo.ParentRunID = event.ParentWorkflowExecution.GetRunId()
 	}
-	// TODO: need to check for 0 value?
+	// TODO (shtin): need to check for 0 value?
 	if event.ParentInitiatedEventId != nil {
 		e.executionInfo.InitiatedID = event.GetParentInitiatedEventId()
 	} else {
