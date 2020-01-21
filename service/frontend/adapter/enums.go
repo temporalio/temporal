@@ -81,8 +81,19 @@ func toThriftDecisionType(in enums.DecisionType) *shared.DecisionType {
 }
 
 func toThriftContinueAsNewInitiator(in enums.ContinueAsNewInitiator) *shared.ContinueAsNewInitiator {
-	ret := shared.ContinueAsNewInitiator(in)
+	if in == enums.ContinueAsNewInitiatorNotSet {
+		return nil
+	}
+	ret := shared.ContinueAsNewInitiator(in - 1)
 	return &ret
+}
+
+// ToProtoContinueAsNewInitiator ...
+func ToProtoContinueAsNewInitiator(in *shared.ContinueAsNewInitiator) enums.ContinueAsNewInitiator {
+	if in == nil {
+		return enums.ContinueAsNewInitiatorNotSet
+	}
+	return enums.ContinueAsNewInitiator(*in + 1)
 }
 
 func toThriftParentClosePolicy(in enums.ParentClosePolicy) *shared.ParentClosePolicy {
