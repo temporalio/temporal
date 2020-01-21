@@ -1329,7 +1329,7 @@ func toThriftStartChildWorkflowExecutionInitiatedEventAttributes(in *common.Star
 		ParentClosePolicy:                   toThriftParentClosePolicy(in.ParentClosePolicy),
 		Control:                             in.Control,
 		DecisionTaskCompletedEventId:        &in.DecisionTaskCompletedEventId,
-		WorkflowIdReusePolicy:               toThriftWorkflowIdReusePolicy(in.WorkflowIdReusePolicy),
+		WorkflowIdReusePolicy:               toThriftWorkflowIDReusePolicy(in.WorkflowIdReusePolicy),
 		RetryPolicy:                         toThriftRetryPolicy(in.RetryPolicy),
 		CronSchedule:                        &in.CronSchedule,
 		Header:                              toThriftHeader(in.Header),

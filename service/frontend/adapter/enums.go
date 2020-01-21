@@ -179,11 +179,6 @@ func toThriftSignalExternalWorkflowExecutionFailedCause(in enums.SignalExternalW
 	return &ret
 }
 
-func toThriftWorkflowIdReusePolicy(in enums.WorkflowIdReusePolicy) *shared.WorkflowIdReusePolicy {
-	ret := shared.WorkflowIdReusePolicy(in)
-	return &ret
-}
-
 func toThriftChildWorkflowExecutionFailedCause(in enums.ChildWorkflowExecutionFailedCause) *shared.ChildWorkflowExecutionFailedCause {
 	ret := shared.ChildWorkflowExecutionFailedCause(in)
 	return &ret

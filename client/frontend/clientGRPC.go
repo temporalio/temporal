@@ -39,7 +39,7 @@ type clientGRPCImpl struct {
 	clients         common.ClientCache
 }
 
-// NewClient creates a new frontend service TChannel client
+// NewClientGRPC creates a new frontend service gRPC client
 func NewClientGRPC(
 	timeout time.Duration,
 	longPollTimeout time.Duration,
