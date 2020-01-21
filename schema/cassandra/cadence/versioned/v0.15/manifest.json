@@ -1,8 +1,0 @@
-{
-  "CurrVersion": "0.15",
-  "MinCompatibleVersion": "0.15",
-  "Description": "Added schema for auto-reset",
-  "SchemaUpdateCqlFiles": [
-    "auto_reset.cql"
-  ]
-}

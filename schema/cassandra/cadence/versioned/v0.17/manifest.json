@@ -1,9 +1,0 @@
-{
-  "CurrVersion": "0.17",
-  "MinCompatibleVersion": "0.17",
-  "Description": "Added search attributes to execution",
-  "SchemaUpdateCqlFiles": [
-    "search_attr.cql",
-    "task_created_time.cql"
-  ]
-}
