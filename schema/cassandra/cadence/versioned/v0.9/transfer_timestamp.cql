@@ -1,1 +1,0 @@
-ALTER TYPE transfer_task ADD visibility_ts timestamp;
