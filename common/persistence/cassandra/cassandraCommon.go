@@ -45,7 +45,7 @@ func newFieldNotFoundError(fieldName string, payload map[string]interface{}) *Fi
 }
 
 type (
-	// PersistedTypeMismatch error is an error type returned when a persisted cassandra value does not match the expected type.
+	// PersistedTypeMismatchError is an error type returned when a persisted cassandra value does not match the expected type.
 	PersistedTypeMismatchError struct {
 		Msg string
 	}
