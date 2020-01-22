@@ -1517,7 +1517,7 @@ type (
 		// its mandatory to specify it. On success this method returns the number of rows
 		// actually deleted. If the underlying storage doesn't support "limit", all rows
 		// less than or equal to taskID will be deleted.
-		// Osuccess, this method returns:
+		// On success, this method returns:
 		//  - number of rows actually deleted, if limit is honored
 		//  - UnknownNumRowsDeleted, when all rows below value are deleted
 		CompleteTasksLessThan(request *CompleteTasksLessThanRequest) (int, error)
