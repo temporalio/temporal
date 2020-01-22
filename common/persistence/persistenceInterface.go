@@ -24,6 +24,9 @@ import (
 	"fmt"
 	"time"
 
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 )
@@ -740,6 +743,26 @@ func NewDataBlobFromThrift(blob *workflow.DataBlob) *DataBlob {
 			Encoding: common.EncodingTypeThriftRW,
 			Data:     blob.Data,
 		}
+	default:
+		panic(fmt.Sprintf("NewDataBlobFromThrift seeing unsupported enconding type: %v", blob.GetEncodingType()))
+	}
+}
+
+// NewDataBlobFromProto convert data blob from Proto representation
+func NewDataBlobFromProto(blob *commonproto.DataBlob) *DataBlob {
+	switch blob.GetEncodingType() {
+	case enums.EncodingTypeJSON:
+		return &DataBlob{
+			Encoding: common.EncodingTypeJSON,
+			Data:     blob.Data,
+		}
+	case enums.EncodingTypeThriftRW:
+		return &DataBlob{
+			Encoding: common.EncodingTypeThriftRW,
+			Data:     blob.Data,
+		}
+	case enums.EncodingTypeProto:
+		panic("EncodingTypeProto is not supported")
 	default:
 		panic(fmt.Sprintf("NewDataBlobFromThrift seeing unsupported enconding type: %v", blob.GetEncodingType()))
 	}

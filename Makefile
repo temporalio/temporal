@@ -1,4 +1,4 @@
-.PHONY: test bins clean cover cover_ci
+.PHONY: test bins clean cover cover_ci unit-test
 PROJECT_ROOT = github.com/temporalio/temporal
 
 export PATH := $(shell go env GOPATH)/bin:$(PATH)
@@ -213,6 +213,13 @@ test: bins
 	@rm -f test
 	@rm -f test.log
 	@for dir in $(TEST_DIRS); do \
+		go test -timeout $(TEST_TIMEOUT) -race -coverprofile=$@ "$$dir" $(TEST_TAG) | tee -a test.log; \
+	done;
+
+unit-test:
+	@rm -f test
+	@rm -f test.log
+	@for dir in $(PKG_TEST_DIRS); do \
 		go test -timeout $(TEST_TIMEOUT) -race -coverprofile=$@ "$$dir" $(TEST_TAG) | tee -a test.log; \
 	done;
 

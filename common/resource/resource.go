@@ -83,7 +83,7 @@ type (
 		GetHistoryRawClient() history.Client
 		GetHistoryClient() history.Client
 		GetRemoteAdminClient(cluster string) admin.Client
-		GetRemoteFrontendClient(cluster string) frontend.Client
+		GetRemoteFrontendClient(cluster string) frontend.ClientGRPC
 		GetClientBean() client.Bean
 
 		// persistence clients
