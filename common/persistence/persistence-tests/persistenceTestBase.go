@@ -71,6 +71,7 @@ type (
 		ExecutionManager       p.ExecutionManager
 		TaskMgr                p.TaskManager
 		HistoryV2Mgr           p.HistoryManager
+		ClusterMetadataManager p.ClusterMetadataManager
 		MetadataManager        p.MetadataManager
 		VisibilityMgr          p.VisibilityManager
 		DomainReplicationQueue p.DomainReplicationQueue
@@ -182,6 +183,9 @@ func (s *TestBase) Setup() {
 
 	s.TaskMgr, err = factory.NewTaskManager()
 	s.fatalOnError("NewTaskManager", err)
+
+	s.ClusterMetadataManager, err = factory.NewClusterMetadataManager()
+	s.fatalOnError("NewClusterMetadataManager", err)
 
 	s.MetadataManager, err = factory.NewMetadataManager()
 	s.fatalOnError("NewMetadataManager", err)

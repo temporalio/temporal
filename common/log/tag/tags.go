@@ -356,6 +356,11 @@ func DefaultValue(v interface{}) Tag {
 	return newObjectTag("default-value", v)
 }
 
+// IgnoredValue returns tag for IgnoredValue
+func IgnoredValue(v interface{}) Tag {
+	return newObjectTag("ignored-value", v)
+}
+
 // Port returns tag for Port
 func Port(p int) Tag {
 	return newInt("port", p)

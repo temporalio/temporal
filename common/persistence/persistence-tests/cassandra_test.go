@@ -81,3 +81,10 @@ func TestQueuePersistence(t *testing.T) {
 	s.TestBase.Setup()
 	suite.Run(t, s)
 }
+
+func TestClusterMetadataPersistence(t *testing.T) {
+	s := new(ClusterMetadataManagerSuite)
+	s.TestBase = NewTestBaseWithCassandra(&TestBaseOptions{})
+	s.TestBase.Setup()
+	suite.Run(t, s)
+}

@@ -249,6 +249,10 @@ const (
 	PersistenceUpdateAckLevelScope
 	// PersistenceGetAckLevelScope tracks GetAckLevel calls made by service to persistence layer
 	PersistenceGetAckLevelScope
+	// PersistenceInitImmutableClusterMetadataScope tracks InitializeImmutableClusterMetadata calls made by service to persistence layer
+	PersistenceInitImmutableClusterMetadataScope
+	// PersistenceGetImmutableClusterMetadataScope tracks GetImmutableClusterMetadata calls made by service to persistence layer
+	PersistenceGetImmutableClusterMetadataScope
 	// HistoryClientStartWorkflowExecutionScope tracks RPC calls to history service
 	HistoryClientStartWorkflowExecutionScope
 	// HistoryClientRecordActivityTaskHeartbeatScope tracks RPC calls to history service
@@ -1027,6 +1031,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceDeleteQueueMessagesScope:                      {operation: "DeleteQueueMessages"},
 		PersistenceUpdateAckLevelScope:                           {operation: "UpdateAckLevel"},
 		PersistenceGetAckLevelScope:                              {operation: "GetAckLevel"},
+		PersistenceInitImmutableClusterMetadataScope:             {operation: "InitializeImmutableClusterMetadata"},
+		PersistenceGetImmutableClusterMetadataScope:              {operation: "GetImmutableClusterMetadata"},
 
 		ClusterMetadataArchivalConfigScope: {operation: "ArchivalConfig"},
 

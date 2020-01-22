@@ -561,6 +561,11 @@ func (h *Impl) GetMetadataManager() persistence.MetadataManager {
 	return h.persistenceBean.GetMetadataManager()
 }
 
+// GetClusterMetadataManager return metadata manager
+func (h *Impl) GetClusterMetadataManager() persistence.ClusterMetadataManager {
+	return h.persistenceBean.GetClusterMetadataManager()
+}
+
 // GetTaskManager return task manager
 func (h *Impl) GetTaskManager() persistence.TaskManager {
 	return h.persistenceBean.GetTaskManager()

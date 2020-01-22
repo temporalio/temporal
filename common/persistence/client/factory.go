@@ -54,6 +54,8 @@ type (
 		NewVisibilityManager() (p.VisibilityManager, error)
 		// NewDomainReplicationQueue returns a new queue for domain replication
 		NewDomainReplicationQueue() (p.DomainReplicationQueue, error)
+		// NewClusterMetadata returns a new manager for cluster specific metadata
+		NewClusterMetadataManager() (p.ClusterMetadataManager, error)
 	}
 	// DataStoreFactory is a low level interface to be implemented by a datastore
 	// Examples of datastores are cassandra, mysql etc
@@ -73,6 +75,8 @@ type (
 		// NewVisibilityStore returns a new visibility store
 		NewVisibilityStore() (p.VisibilityStore, error)
 		NewQueue(queueType common.QueueType) (p.Queue, error)
+		// NewClusterMetadataStore returns a new metadata store
+		NewClusterMetadataStore() (p.ClusterMetadataStore, error)
 	}
 	// Datastore represents a datastore
 	Datastore struct {
@@ -99,6 +103,7 @@ const (
 	storeTypeExecution
 	storeTypeVisibility
 	storeTypeQueue
+	storeTypeClusterMetadata
 )
 
 var storeTypes = []storeType{
@@ -109,6 +114,7 @@ var storeTypes = []storeType{
 	storeTypeExecution,
 	storeTypeVisibility,
 	storeTypeQueue,
+	storeTypeClusterMetadata,
 }
 
 // NewFactory returns an implementation of factory that vends persistence objects based on
@@ -200,6 +206,26 @@ func (f *factoryImpl) NewMetadataManager() (p.MetadataManager, error) {
 	}
 	if f.metricsClient != nil {
 		result = p.NewMetadataPersistenceMetricsClient(result, f.metricsClient, f.logger)
+	}
+	return result, nil
+}
+
+// NewClusterMetadataManager returns a new cluster metadata manager
+func (f *factoryImpl) NewClusterMetadataManager() (p.ClusterMetadataManager, error) {
+	var err error
+	var store p.ClusterMetadataStore
+	ds := f.datastores[storeTypeClusterMetadata]
+	store, err = ds.factory.NewClusterMetadataStore()
+	if err != nil {
+		return nil, err
+	}
+
+	result := p.NewClusterMetadataManagerImpl(store, f.logger)
+	if ds.ratelimit != nil {
+		result = p.NewClusterMetadataPersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
+	}
+	if f.metricsClient != nil {
+		result = p.NewClusterMetadataPersistenceMetricsClient(result, f.metricsClient, f.logger)
 	}
 	return result, nil
 }
