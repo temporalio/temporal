@@ -544,7 +544,7 @@ func (h *Impl) GetRemoteAdminClient(
 // GetRemoteFrontendClient return remote frontend client for given cluster name
 func (h *Impl) GetRemoteFrontendClient(
 	cluster string,
-) frontend.Client {
+) frontend.ClientGRPC {
 
 	return h.clientBean.GetRemoteFrontendClient(cluster)
 }
@@ -559,6 +559,11 @@ func (h *Impl) GetClientBean() client.Bean {
 // GetMetadataManager return metadata manager
 func (h *Impl) GetMetadataManager() persistence.MetadataManager {
 	return h.persistenceBean.GetMetadataManager()
+}
+
+// GetClusterMetadataManager return metadata manager
+func (h *Impl) GetClusterMetadataManager() persistence.ClusterMetadataManager {
+	return h.persistenceBean.GetClusterMetadataManager()
 }
 
 // GetTaskManager return task manager

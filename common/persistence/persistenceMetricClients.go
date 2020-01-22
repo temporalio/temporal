@@ -58,6 +58,12 @@ type (
 		logger       log.Logger
 	}
 
+	clusterMetadataPersistenceClient struct {
+		metricClient metrics.Client
+		persistence  ClusterMetadataManager
+		logger       log.Logger
+	}
+
 	visibilityPersistenceClient struct {
 		metricClient metrics.Client
 		persistence  VisibilityManager
@@ -76,6 +82,7 @@ var _ ExecutionManager = (*workflowExecutionPersistenceClient)(nil)
 var _ TaskManager = (*taskPersistenceClient)(nil)
 var _ HistoryManager = (*historyV2PersistenceClient)(nil)
 var _ MetadataManager = (*metadataPersistenceClient)(nil)
+var _ ClusterMetadataManager = (*clusterMetadataPersistenceClient)(nil)
 var _ VisibilityManager = (*visibilityPersistenceClient)(nil)
 var _ Queue = (*queuePersistenceClient)(nil)
 
@@ -118,6 +125,15 @@ func NewHistoryV2PersistenceMetricsClient(persistence HistoryManager, metricClie
 // NewMetadataPersistenceMetricsClient creates a MetadataManager client to manage metadata
 func NewMetadataPersistenceMetricsClient(persistence MetadataManager, metricClient metrics.Client, logger log.Logger) MetadataManager {
 	return &metadataPersistenceClient{
+		persistence:  persistence,
+		metricClient: metricClient,
+		logger:       logger,
+	}
+}
+
+// NewClusterMetadataPersistenceMetricsClient creates a ClusterMetadataManager client to manage cluster metadata
+func NewClusterMetadataPersistenceMetricsClient(persistence ClusterMetadataManager, metricClient metrics.Client, logger log.Logger) ClusterMetadataManager {
+	return &clusterMetadataPersistenceClient{
 		persistence:  persistence,
 		metricClient: metricClient,
 		logger:       logger,
@@ -1213,4 +1229,40 @@ func (p *queuePersistenceClient) DeleteMessagesBefore(messageID int) error {
 
 func (p *queuePersistenceClient) Close() {
 	p.persistence.Close()
+}
+
+func (c *clusterMetadataPersistenceClient) Close() {
+	c.persistence.Close()
+}
+
+func (c *clusterMetadataPersistenceClient) GetImmutableClusterMetadata() (*GetImmutableClusterMetadataResponse, error) {
+	c.metricClient.IncCounter(metrics.PersistenceGetImmutableClusterMetadataScope, metrics.PersistenceRequests)
+
+	sw := c.metricClient.StartTimer(metrics.PersistenceGetImmutableClusterMetadataScope, metrics.PersistenceLatency)
+	result, err := c.persistence.GetImmutableClusterMetadata()
+	sw.Stop()
+
+	if err != nil {
+		c.metricClient.IncCounter(metrics.PersistenceGetImmutableClusterMetadataScope, metrics.PersistenceFailures)
+	}
+
+	return result, err
+}
+
+func (c *clusterMetadataPersistenceClient) GetName() string {
+	return c.persistence.GetName()
+}
+
+func (c *clusterMetadataPersistenceClient) InitializeImmutableClusterMetadata(request *InitializeImmutableClusterMetadataRequest) (*InitializeImmutableClusterMetadataResponse, error) {
+	c.metricClient.IncCounter(metrics.PersistenceInitImmutableClusterMetadataScope, metrics.PersistenceRequests)
+
+	sw := c.metricClient.StartTimer(metrics.PersistenceInitImmutableClusterMetadataScope, metrics.PersistenceLatency)
+	res, err := c.persistence.InitializeImmutableClusterMetadata(request)
+	sw.Stop()
+
+	if err != nil {
+		c.metricClient.IncCounter(metrics.PersistenceInitImmutableClusterMetadataScope, metrics.PersistenceFailures)
+	}
+
+	return res, err
 }

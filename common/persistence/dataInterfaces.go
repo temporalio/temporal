@@ -25,6 +25,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/temporalio/temporal/.gen/go/persistenceblobs"
+
 	"github.com/pborman/uuid"
 
 	"github.com/temporalio/temporal/.gen/go/replicator"
@@ -1424,6 +1426,24 @@ type (
 		Branches []HistoryBranchDetail
 	}
 
+	// InitializeImmutableClusterMetadataRequest is a request of InitializeImmutableClusterMetadata
+	// These values can only be set a single time upon cluster initialization.
+	InitializeImmutableClusterMetadataRequest struct {
+		persistenceblobs.ImmutableClusterMetadata
+	}
+
+	// InitializeImmutableClusterMetadataResponse is a request of InitializeImmutableClusterMetadata
+	InitializeImmutableClusterMetadataResponse struct {
+		PersistedImmutableData persistenceblobs.ImmutableClusterMetadata
+		RequestApplied         bool
+	}
+
+	// GetImmutableClusterMetadataResponse is the response to GetImmutableClusterMetadata
+	// These values are set a single time upon cluster initialization.
+	GetImmutableClusterMetadataResponse struct {
+		persistenceblobs.ImmutableClusterMetadata
+	}
+
 	// Closeable is an interface for any entity that supports a close operation to release resources
 	Closeable interface {
 		Close()
@@ -1543,6 +1563,14 @@ type (
 		DeleteDomainByName(request *DeleteDomainByNameRequest) error
 		ListDomains(request *ListDomainsRequest) (*ListDomainsResponse, error)
 		GetMetadata() (*GetMetadataResponse, error)
+	}
+
+	// ClusterMetadataManager is used to manage cluster-wide metadata and configuration
+	ClusterMetadataManager interface {
+		Closeable
+		GetName() string
+		InitializeImmutableClusterMetadata(request *InitializeImmutableClusterMetadataRequest) (*InitializeImmutableClusterMetadataResponse, error)
+		GetImmutableClusterMetadata() (*GetImmutableClusterMetadataResponse, error)
 	}
 
 	// DomainReplicationQueue is used to publish and list domain replication tasks

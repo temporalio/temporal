@@ -28,15 +28,13 @@
 package client
 
 import (
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
-	yarpc "go.uber.org/yarpc"
-
 	admin "github.com/temporalio/temporal/client/admin"
 	frontend "github.com/temporalio/temporal/client/frontend"
 	history "github.com/temporalio/temporal/client/history"
 	matching "github.com/temporalio/temporal/client/matching"
+	yarpc "go.uber.org/yarpc"
+	reflect "reflect"
 )
 
 // MockBean is a mock of Bean interface
@@ -168,10 +166,10 @@ func (mr *MockBeanMockRecorder) SetRemoteAdminClient(cluster, client interface{}
 }
 
 // GetRemoteFrontendClient mocks base method
-func (m *MockBean) GetRemoteFrontendClient(cluster string) frontend.Client {
+func (m *MockBean) GetRemoteFrontendClient(cluster string) frontend.ClientGRPC {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetRemoteFrontendClient", cluster)
-	ret0, _ := ret[0].(frontend.Client)
+	ret0, _ := ret[0].(frontend.ClientGRPC)
 	return ret0
 }
 
@@ -182,7 +180,7 @@ func (mr *MockBeanMockRecorder) GetRemoteFrontendClient(cluster interface{}) *go
 }
 
 // SetRemoteFrontendClient mocks base method
-func (m *MockBean) SetRemoteFrontendClient(cluster string, client frontend.Client) {
+func (m *MockBean) SetRemoteFrontendClient(cluster string, client frontend.ClientGRPC) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetRemoteFrontendClient", cluster, client)
 }
@@ -229,4 +227,19 @@ func (m *MockDispatcherProvider) Get(name, address string) (*yarpc.Dispatcher, e
 func (mr *MockDispatcherProviderMockRecorder) Get(name, address interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockDispatcherProvider)(nil).Get), name, address)
+}
+
+// GetGRPC mocks base method
+func (m *MockDispatcherProvider) GetGRPC(name, address string) (*yarpc.Dispatcher, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetGRPC", name, address)
+	ret0, _ := ret[0].(*yarpc.Dispatcher)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetGRPC indicates an expected call of GetGRPC
+func (mr *MockDispatcherProviderMockRecorder) GetGRPC(name, address interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGRPC", reflect.TypeOf((*MockDispatcherProvider)(nil).GetGRPC), name, address)
 }

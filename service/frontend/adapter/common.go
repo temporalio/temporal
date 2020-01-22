@@ -76,9 +76,9 @@ func toProtoDomainConfiguration(in *shared.DomainConfiguration) *common.DomainCo
 		WorkflowExecutionRetentionPeriodInDays: in.GetWorkflowExecutionRetentionPeriodInDays(),
 		EmitMetric:                             toProtoBool(in.EmitMetric),
 		BadBinaries:                            toProtoBadBinaries(in.GetBadBinaries()),
-		HistoryArchivalStatus:                  toProtoArchivalStatus(in.HistoryArchivalStatus),
+		HistoryArchivalStatus:                  ToProtoArchivalStatus(in.HistoryArchivalStatus),
 		HistoryArchivalURI:                     in.GetVisibilityArchivalURI(),
-		VisibilityArchivalStatus:               toProtoArchivalStatus(in.VisibilityArchivalStatus),
+		VisibilityArchivalStatus:               ToProtoArchivalStatus(in.VisibilityArchivalStatus),
 		VisibilityArchivalURI:                  in.GetVisibilityArchivalURI(),
 	}
 }
@@ -145,10 +145,10 @@ func toThriftDomainConfiguration(in *common.DomainConfiguration) *shared.DomainC
 	return &shared.DomainConfiguration{
 		WorkflowExecutionRetentionPeriodInDays: &in.WorkflowExecutionRetentionPeriodInDays,
 		EmitMetric:                             toThriftBool(in.EmitMetric),
-		BadBinaries:                            toThriftBadBinaries(in.BadBinaries),
-		HistoryArchivalStatus:                  toThriftArchivalStatus(in.HistoryArchivalStatus),
+		BadBinaries:                            ToThriftBadBinaries(in.BadBinaries),
+		HistoryArchivalStatus:                  ToThriftArchivalStatus(in.HistoryArchivalStatus),
 		HistoryArchivalURI:                     &in.HistoryArchivalURI,
-		VisibilityArchivalStatus:               toThriftArchivalStatus(in.VisibilityArchivalStatus),
+		VisibilityArchivalStatus:               ToThriftArchivalStatus(in.VisibilityArchivalStatus),
 		VisibilityArchivalURI:                  &in.VisibilityArchivalURI,
 	}
 }
@@ -162,7 +162,8 @@ func toThriftDomainReplicationConfiguration(in *common.DomainReplicationConfigur
 	}
 }
 
-func toThriftBadBinaries(in *common.BadBinaries) *shared.BadBinaries {
+// ToThriftBadBinaries ...
+func ToThriftBadBinaries(in *common.BadBinaries) *shared.BadBinaries {
 	if in == nil {
 		return nil
 	}
@@ -264,7 +265,8 @@ func toProtoWorkflowType(in *shared.WorkflowType) *common.WorkflowType {
 	}
 }
 
-func toProtoWorkflowExecution(in *shared.WorkflowExecution) *common.WorkflowExecution {
+// ToProtoWorkflowExecution ...
+func ToProtoWorkflowExecution(in *shared.WorkflowExecution) *common.WorkflowExecution {
 	if in == nil {
 		return nil
 	}
@@ -367,14 +369,14 @@ func toProtoWorkflowExecutionInfo(in *shared.WorkflowExecutionInfo) *common.Work
 		return nil
 	}
 	return &common.WorkflowExecutionInfo{
-		Execution:        toProtoWorkflowExecution(in.GetExecution()),
+		Execution:        ToProtoWorkflowExecution(in.GetExecution()),
 		Type:             toProtoWorkflowType(in.GetType()),
 		StartTime:        in.GetStartTime(),
 		CloseTime:        in.GetCloseTime(),
 		CloseStatus:      toProtoWorkflowExecutionCloseStatus(in.CloseStatus),
 		HistoryLength:    in.GetHistoryLength(),
 		ParentDomainId:   in.GetParentDomainId(),
-		ParentExecution:  toProtoWorkflowExecution(in.GetParentExecution()),
+		ParentExecution:  ToProtoWorkflowExecution(in.GetParentExecution()),
 		ExecutionTime:    in.GetExecutionTime(),
 		Memo:             toProtoMemo(in.GetMemo()),
 		SearchAttributes: toProtoSearchAttributes(in.GetSearchAttributes()),
@@ -612,8 +614,8 @@ func toThriftReplicationTokens(in []*common.ReplicationToken) []*replicator.Repl
 	return ret
 }
 
-// toThriftDataBlob ...
-func toThriftDataBlob(in *common.DataBlob) *shared.DataBlob {
+// ToThriftDataBlob ...
+func ToThriftDataBlob(in *common.DataBlob) *shared.DataBlob {
 	if in == nil {
 		return nil
 	}
@@ -691,6 +693,16 @@ func toProtoReplicationMessages(in *replicator.ReplicationMessages) *common.Repl
 		ReplicationTasks:       toProtoReplicationTasks(in.GetReplicationTasks()),
 		LastRetrievedMessageId: in.GetLastRetrievedMessageId(),
 		HasMore:                in.GetHasMore(),
+		SyncShardStatus:        toProtoSyncShardStatusTask(in.GetSyncShardStatus()),
+	}
+}
+
+func toProtoSyncShardStatusTask(in *replicator.SyncShardStatus) *common.SyncShardStatus {
+	if in == nil {
+		return nil
+	}
+	return &common.SyncShardStatus{
+		Timestamp: in.GetTimestamp(),
 	}
 }
 
@@ -719,7 +731,7 @@ func toProtoReplicationTask(in *replicator.ReplicationTask) *common.ReplicationT
 
 	switch ret.TaskType {
 	case enums.ReplicationTaskTypeDomain:
-		ret.Attributes = &common.ReplicationTask_DomainTaskAttributes{DomainTaskAttributes: toProtoDomainTaskAttributes(in.GetDomainTaskAttributes())}
+		ret.Attributes = &common.ReplicationTask_DomainTaskAttributes{DomainTaskAttributes: ToProtoDomainTaskAttributes(in.GetDomainTaskAttributes())}
 	case enums.ReplicationTaskTypeHistory:
 		ret.Attributes = &common.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: toProtoHistoryTaskAttributes(in.GetHistoryTaskAttributes())}
 	case enums.ReplicationTaskTypeSyncShardStatus:
@@ -735,8 +747,8 @@ func toProtoReplicationTask(in *replicator.ReplicationTask) *common.ReplicationT
 	return ret
 }
 
-// toProtoDomainTaskAttributes ...
-func toProtoDomainTaskAttributes(in *replicator.DomainTaskAttributes) *common.DomainTaskAttributes {
+// ToProtoDomainTaskAttributes ...
+func ToProtoDomainTaskAttributes(in *replicator.DomainTaskAttributes) *common.DomainTaskAttributes {
 	if in == nil {
 		return nil
 	}
@@ -867,11 +879,12 @@ func toProtoVersionHistory(in *shared.VersionHistory) *common.VersionHistory {
 	}
 	return &common.VersionHistory{
 		BranchToken: in.GetBranchToken(),
-		Items:       toProtoVersionHistoryItems(in.GetItems()),
+		Items:       ToProtoVersionHistoryItems(in.GetItems()),
 	}
 }
 
-func toProtoVersionHistoryItems(in []*shared.VersionHistoryItem) []*common.VersionHistoryItem {
+// ToProtoVersionHistoryItems ...
+func ToProtoVersionHistoryItems(in []*shared.VersionHistoryItem) []*common.VersionHistoryItem {
 	if in == nil {
 		return nil
 	}
@@ -893,13 +906,14 @@ func toProtoHistoryTaskV2Attributes(in *replicator.HistoryTaskV2Attributes) *com
 		DomainId:            in.GetDomainId(),
 		WorkflowId:          in.GetWorkflowId(),
 		RunId:               in.GetRunId(),
-		VersionHistoryItems: toProtoVersionHistoryItems(in.GetVersionHistoryItems()),
-		Events:              toProtoDataBlob(in.GetEvents()),
-		NewRunEvents:        toProtoDataBlob(in.GetNewRunEvents()),
+		VersionHistoryItems: ToProtoVersionHistoryItems(in.GetVersionHistoryItems()),
+		Events:              ToProtoDataBlob(in.GetEvents()),
+		NewRunEvents:        ToProtoDataBlob(in.GetNewRunEvents()),
 	}
 }
 
-func toProtoDataBlob(in *shared.DataBlob) *common.DataBlob {
+// ToProtoDataBlob ...
+func ToProtoDataBlob(in *shared.DataBlob) *common.DataBlob {
 	if in == nil {
 		return nil
 	}
@@ -977,6 +991,7 @@ func toProtoTaskListPartitionMetadata(in *shared.TaskListPartitionMetadata) *com
 	}
 }
 
+// ToThriftResetPoints ...
 func ToThriftResetPoints(in *common.ResetPoints) *shared.ResetPoints {
 	if in == nil {
 		return nil
@@ -1011,5 +1026,294 @@ func toThriftResetPointInfo(in *common.ResetPointInfo) *shared.ResetPointInfo {
 		CreatedTimeNano:          &in.CreatedTimeNano,
 		ExpiringTimeNano:         &in.ExpiringTimeNano,
 		Resettable:               &in.Resettable,
+	}
+}
+
+// ToThriftVersionHistory ...
+func ToThriftVersionHistory(in *common.VersionHistory) *shared.VersionHistory {
+	if in == nil {
+		return nil
+	}
+
+	return &shared.VersionHistory{
+		BranchToken: in.BranchToken,
+		Items:       ToThriftVersionHistoryItems(in.Items),
+	}
+}
+
+// ToThriftVersionHistoryItems ...
+func ToThriftVersionHistoryItems(in []*common.VersionHistoryItem) []*shared.VersionHistoryItem {
+	if in == nil {
+		return nil
+	}
+
+	var ret []*shared.VersionHistoryItem
+	for _, item := range in {
+		ret = append(ret, toThriftVersionHistoryItem(item))
+	}
+	return ret
+}
+
+func toThriftVersionHistoryItem(in *common.VersionHistoryItem) *shared.VersionHistoryItem {
+	if in == nil {
+		return nil
+	}
+
+	return &shared.VersionHistoryItem{
+		EventID: &in.EventID,
+		Version: &in.Version,
+	}
+
+}
+
+// ToThriftReplicationInfos ...
+func ToThriftReplicationInfos(in map[string]*common.ReplicationInfo) map[string]*shared.ReplicationInfo {
+	if in == nil {
+		return nil
+	}
+	ret := make(map[string]*shared.ReplicationInfo, len(in))
+
+	for key, value := range in {
+		ret[key] = toThriftReplicationInfo(value)
+	}
+
+	return ret
+}
+
+func toThriftReplicationInfo(in *common.ReplicationInfo) *shared.ReplicationInfo {
+	if in == nil {
+		return nil
+	}
+
+	return &shared.ReplicationInfo{
+		Version:     &in.Version,
+		LastEventId: &in.LastEventId,
+	}
+}
+
+// ToThriftDomainTaskAttributes ...
+func ToThriftDomainTaskAttributes(in *common.DomainTaskAttributes) *replicator.DomainTaskAttributes {
+	if in == nil {
+		return nil
+	}
+	return &replicator.DomainTaskAttributes{
+		DomainOperation:   toThriftDomainOperation(in.DomainOperation),
+		ID:                &in.Id,
+		Info:              toThriftDomainInfo(in.Info),
+		Config:            toThriftDomainConfiguration(in.Config),
+		ReplicationConfig: toThriftDomainReplicationConfiguration(in.ReplicationConfig),
+		ConfigVersion:     &in.ConfigVersion,
+		FailoverVersion:   &in.FailoverVersion,
+	}
+}
+
+// toThriftDomainInfo ...
+func toThriftDomainInfo(in *common.DomainInfo) *shared.DomainInfo {
+	if in == nil {
+		return nil
+	}
+	return &shared.DomainInfo{
+		Name:        &in.Name,
+		Status:      toThriftDomainStatus(in.Status),
+		Description: &in.Description,
+		OwnerEmail:  &in.OwnerEmail,
+		Data:        in.Data,
+		UUID:        &in.Uuid,
+	}
+}
+
+// ToProtoReplicationToken ...
+func ToProtoReplicationToken(in *replicator.ReplicationToken) *common.ReplicationToken {
+	if in == nil {
+		return nil
+	}
+	return &common.ReplicationToken{
+		ShardID:                in.GetShardID(),
+		LastRetrievedMessageId: in.GetLastRetrievedMessageId(),
+		LastProcessedMessageId: in.GetLastProcessedMessageId(),
+	}
+}
+
+// ToThriftReplicationMessagesByShard ...
+func ToThriftReplicationMessagesByShard(in map[int32]*common.ReplicationMessages) map[int32]*replicator.ReplicationMessages {
+	if in == nil {
+		return nil
+	}
+	ret := make(map[int32]*replicator.ReplicationMessages, len(in))
+
+	for key, value := range in {
+		ret[key] = ToThriftReplicationMessages(value)
+	}
+
+	return ret
+}
+
+// ToThriftReplicationMessages ...
+func ToThriftReplicationMessages(in *common.ReplicationMessages) *replicator.ReplicationMessages {
+	if in == nil {
+		return nil
+	}
+	return &replicator.ReplicationMessages{
+		ReplicationTasks:       toThriftReplicationTasks(in.ReplicationTasks),
+		LastRetrievedMessageId: &in.LastRetrievedMessageId,
+		HasMore:                &in.HasMore,
+		SyncShardStatus:        toThriftSyncShardStatus(in.SyncShardStatus),
+	}
+}
+
+// toThriftSyncShardStatus ...
+func toThriftSyncShardStatus(in *common.SyncShardStatus) *replicator.SyncShardStatus {
+	if in == nil {
+		return nil
+	}
+	return &replicator.SyncShardStatus{
+		Timestamp: &in.Timestamp,
+	}
+}
+
+// toThriftReplicationTasks ...
+func toThriftReplicationTasks(in []*common.ReplicationTask) []*replicator.ReplicationTask {
+	if in == nil {
+		return nil
+	}
+
+	var ret []*replicator.ReplicationTask
+	for _, item := range in {
+		ret = append(ret, ToThriftReplicationTask(item))
+	}
+	return ret
+}
+
+// ToThriftReplicationTask ...
+func ToThriftReplicationTask(in *common.ReplicationTask) *replicator.ReplicationTask {
+	if in == nil {
+		return nil
+	}
+	ret := &replicator.ReplicationTask{
+		TaskType:     toThriftReplicationTaskType(in.TaskType),
+		SourceTaskId: &in.SourceTaskId,
+	}
+
+	switch in.TaskType {
+	case enums.ReplicationTaskTypeDomain:
+		ret.DomainTaskAttributes = toThriftDomainTaskAttributes(in.GetDomainTaskAttributes())
+	case enums.ReplicationTaskTypeHistory:
+		ret.HistoryTaskAttributes = toThriftHistoryTaskAttributes(in.GetHistoryTaskAttributes())
+	case enums.ReplicationTaskTypeSyncShardStatus:
+		ret.SyncShardStatusTaskAttributes = toThriftSyncShardStatusTaskAttributes(in.GetSyncShardStatusTaskAttributes())
+	case enums.ReplicationTaskTypeSyncActivity:
+		ret.SyncActivityTaskAttributes = toThriftSyncActivityTaskAttributes(in.GetSyncActivityTaskAttributes())
+	case enums.ReplicationTaskTypeHistoryMetadata:
+		ret.HistoryMetadataTaskAttributes = toThriftHistoryMetadataTaskAttributes(in.GetHistoryMetadataTaskAttributes())
+	case enums.ReplicationTaskTypeHistoryV2:
+		ret.HistoryTaskV2Attributes = toThriftHistoryTaskV2Attributes(in.GetHistoryTaskV2Attributes())
+	}
+
+	return ret
+}
+
+// toThriftDomainTaskAttributes ...
+func toThriftDomainTaskAttributes(in *common.DomainTaskAttributes) *replicator.DomainTaskAttributes {
+	if in == nil {
+		return nil
+	}
+	return &replicator.DomainTaskAttributes{
+		DomainOperation:   toThriftDomainOperation(in.DomainOperation),
+		ID:                &in.Id,
+		Info:              toThriftDomainInfo(in.Info),
+		Config:            toThriftDomainConfiguration(in.Config),
+		ReplicationConfig: toThriftDomainReplicationConfiguration(in.ReplicationConfig),
+		ConfigVersion:     &in.ConfigVersion,
+		FailoverVersion:   &in.FailoverVersion,
+	}
+}
+
+// toThriftHistoryTaskAttributes ...
+func toThriftHistoryTaskAttributes(in *common.HistoryTaskAttributes) *replicator.HistoryTaskAttributes {
+	if in == nil {
+		return nil
+	}
+	return &replicator.HistoryTaskAttributes{
+		TargetClusters:          in.TargetClusters,
+		DomainId:                &in.DomainId,
+		WorkflowId:              &in.WorkflowId,
+		RunId:                   &in.RunId,
+		FirstEventId:            &in.FirstEventId,
+		NextEventId:             &in.NextEventId,
+		Version:                 &in.Version,
+		ReplicationInfo:         ToThriftReplicationInfos(in.ReplicationInfo),
+		History:                 ToThriftHistory(in.History),
+		NewRunHistory:           ToThriftHistory(in.NewRunHistory),
+		EventStoreVersion:       &in.EventStoreVersion,
+		NewRunEventStoreVersion: &in.NewRunEventStoreVersion,
+		ResetWorkflow:           &in.ResetWorkflow,
+		NewRunNDC:               &in.NewRunNDC,
+	}
+}
+
+// toThriftHistoryMetadataTaskAttributes ...
+func toThriftHistoryMetadataTaskAttributes(in *common.HistoryMetadataTaskAttributes) *replicator.HistoryMetadataTaskAttributes {
+	if in == nil {
+		return nil
+	}
+	return &replicator.HistoryMetadataTaskAttributes{
+		TargetClusters: in.TargetClusters,
+		DomainId:       &in.DomainId,
+		WorkflowId:     &in.WorkflowId,
+		RunId:          &in.RunId,
+		FirstEventId:   &in.FirstEventId,
+		NextEventId:    &in.NextEventId,
+	}
+}
+
+// toThriftSyncShardStatusTaskAttributes ...
+func toThriftSyncShardStatusTaskAttributes(in *common.SyncShardStatusTaskAttributes) *replicator.SyncShardStatusTaskAttributes {
+	if in == nil {
+		return nil
+	}
+	return &replicator.SyncShardStatusTaskAttributes{
+		SourceCluster: &in.SourceCluster,
+		ShardId:       &in.ShardId,
+		Timestamp:     &in.Timestamp,
+	}
+}
+
+// toThriftSyncActivityTaskAttributes ...
+func toThriftSyncActivityTaskAttributes(in *common.SyncActivityTaskAttributes) *replicator.SyncActivityTaskAttributes {
+	if in == nil {
+		return nil
+	}
+	return &replicator.SyncActivityTaskAttributes{
+		DomainId:           &in.DomainId,
+		WorkflowId:         &in.WorkflowId,
+		RunId:              &in.RunId,
+		Version:            &in.Version,
+		ScheduledId:        &in.ScheduledId,
+		ScheduledTime:      &in.ScheduledTime,
+		StartedId:          &in.StartedId,
+		StartedTime:        &in.StartedTime,
+		LastHeartbeatTime:  &in.LastHeartbeatTime,
+		Details:            in.Details,
+		Attempt:            &in.Attempt,
+		LastFailureReason:  &in.LastFailureReason,
+		LastWorkerIdentity: &in.LastWorkerIdentity,
+		LastFailureDetails: in.LastFailureDetails,
+		VersionHistory:     ToThriftVersionHistory(in.VersionHistory),
+	}
+}
+
+// toThriftHistoryTaskV2Attributes ...
+func toThriftHistoryTaskV2Attributes(in *common.HistoryTaskV2Attributes) *replicator.HistoryTaskV2Attributes {
+	if in == nil {
+		return nil
+	}
+	return &replicator.HistoryTaskV2Attributes{
+		TaskId:              &in.TaskId,
+		DomainId:            &in.DomainId,
+		WorkflowId:          &in.WorkflowId,
+		RunId:               &in.RunId,
+		VersionHistoryItems: ToThriftVersionHistoryItems(in.VersionHistoryItems),
+		Events:              ToThriftDataBlob(in.Events),
+		NewRunEvents:        ToThriftDataBlob(in.NewRunEvents),
 	}
 }

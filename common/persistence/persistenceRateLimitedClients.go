@@ -64,6 +64,12 @@ type (
 		logger      log.Logger
 	}
 
+	clusterMetadataRateLimitedPersistenceClient struct {
+		rateLimiter quotas.Limiter
+		persistence ClusterMetadataManager
+		logger      log.Logger
+	}
+
 	visibilityRateLimitedPersistenceClient struct {
 		rateLimiter quotas.Limiter
 		persistence VisibilityManager
@@ -82,6 +88,7 @@ var _ ExecutionManager = (*workflowExecutionRateLimitedPersistenceClient)(nil)
 var _ TaskManager = (*taskRateLimitedPersistenceClient)(nil)
 var _ HistoryManager = (*historyV2RateLimitedPersistenceClient)(nil)
 var _ MetadataManager = (*metadataRateLimitedPersistenceClient)(nil)
+var _ ClusterMetadataManager = (*clusterMetadataRateLimitedPersistenceClient)(nil)
 var _ VisibilityManager = (*visibilityRateLimitedPersistenceClient)(nil)
 var _ Queue = (*queueRateLimitedPersistenceClient)(nil)
 
@@ -124,6 +131,15 @@ func NewHistoryV2PersistenceRateLimitedClient(persistence HistoryManager, rateLi
 // NewMetadataPersistenceRateLimitedClient creates a MetadataManager client to manage metadata
 func NewMetadataPersistenceRateLimitedClient(persistence MetadataManager, rateLimiter quotas.Limiter, logger log.Logger) MetadataManager {
 	return &metadataRateLimitedPersistenceClient{
+		persistence: persistence,
+		rateLimiter: rateLimiter,
+		logger:      logger,
+	}
+}
+
+// NewClusterMetadataPersistenceRateLimitedClient creates a MetadataManager client to manage metadata
+func NewClusterMetadataPersistenceRateLimitedClient(persistence ClusterMetadataManager, rateLimiter quotas.Limiter, logger log.Logger) ClusterMetadataManager {
+	return &clusterMetadataRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
 		logger:      logger,
@@ -777,4 +793,26 @@ func (p *queueRateLimitedPersistenceClient) DeleteMessagesBefore(messageID int) 
 
 func (p *queueRateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
+}
+
+func (c *clusterMetadataRateLimitedPersistenceClient) Close() {
+	c.persistence.Close()
+}
+
+func (c clusterMetadataRateLimitedPersistenceClient) GetName() string {
+	return c.persistence.GetName()
+}
+
+func (c clusterMetadataRateLimitedPersistenceClient) InitializeImmutableClusterMetadata(request *InitializeImmutableClusterMetadataRequest) (*InitializeImmutableClusterMetadataResponse, error) {
+	if ok := c.rateLimiter.Allow(); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+	return c.InitializeImmutableClusterMetadata(request)
+}
+
+func (c clusterMetadataRateLimitedPersistenceClient) GetImmutableClusterMetadata() (*GetImmutableClusterMetadataResponse, error) {
+	if ok := c.rateLimiter.Allow(); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+	return c.GetImmutableClusterMetadata()
 }

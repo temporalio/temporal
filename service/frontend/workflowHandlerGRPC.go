@@ -84,11 +84,11 @@ func (wh *WorkflowHandlerGRPC) DescribeDomain(ctx context.Context, request *work
 func (wh *WorkflowHandlerGRPC) ListDomains(ctx context.Context, request *workflowservice.ListDomainsRequest) (_ *workflowservice.ListDomainsResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
-	response, err := wh.workflowHandlerThrift.ListDomains(ctx, adapter.ToThriftListDomainRequest(request))
+	response, err := wh.workflowHandlerThrift.ListDomains(ctx, adapter.ToThriftListDomainsRequest(request))
 	if err != nil {
 		return nil, adapter.ToProtoError(err)
 	}
-	return adapter.ToProtoListDomainResponse(response), nil
+	return adapter.ToProtoListDomainsResponse(response), nil
 }
 
 // UpdateDomain is used to update the information and configuration for a registered domain.
@@ -425,11 +425,11 @@ func (wh *WorkflowHandlerGRPC) ListWorkflowExecutions(ctx context.Context, reque
 func (wh *WorkflowHandlerGRPC) ListArchivedWorkflowExecutions(ctx context.Context, request *workflowservice.ListArchivedWorkflowExecutionsRequest) (_ *workflowservice.ListArchivedWorkflowExecutionsResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
-	response, err := wh.workflowHandlerThrift.ListArchivedWorkflowExecutions(ctx, adapter.ToThriftArchivedWorkflowExecutionsRequest(request))
+	response, err := wh.workflowHandlerThrift.ListArchivedWorkflowExecutions(ctx, adapter.ToThriftListArchivedWorkflowExecutionsRequest(request))
 	if err != nil {
 		return nil, adapter.ToProtoError(err)
 	}
-	return adapter.ToProtoArchivedWorkflowExecutionsResponse(response), nil
+	return adapter.ToProtoListArchivedWorkflowExecutionsResponse(response), nil
 }
 
 // ScanWorkflowExecutions is a visibility API to list large amount of workflow executions in a specific domain without order.

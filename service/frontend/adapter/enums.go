@@ -23,10 +23,12 @@ package adapter
 import (
 	"go.temporal.io/temporal-proto/enums"
 
+	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/go/shared"
 )
 
-func toThriftArchivalStatus(in enums.ArchivalStatus) *shared.ArchivalStatus {
+// ToThriftArchivalStatus ...
+func ToThriftArchivalStatus(in enums.ArchivalStatus) *shared.ArchivalStatus {
 	if in == enums.ArchivalStatusDefault {
 		return nil
 	}
@@ -35,7 +37,8 @@ func toThriftArchivalStatus(in enums.ArchivalStatus) *shared.ArchivalStatus {
 	return &ret
 }
 
-func toProtoArchivalStatus(in *shared.ArchivalStatus) enums.ArchivalStatus {
+// ToProtoArchivalStatus ...
+func ToProtoArchivalStatus(in *shared.ArchivalStatus) enums.ArchivalStatus {
 	if in == nil {
 		return enums.ArchivalStatusDefault
 	}
@@ -78,8 +81,19 @@ func toThriftDecisionType(in enums.DecisionType) *shared.DecisionType {
 }
 
 func toThriftContinueAsNewInitiator(in enums.ContinueAsNewInitiator) *shared.ContinueAsNewInitiator {
-	ret := shared.ContinueAsNewInitiator(in)
+	if in == enums.ContinueAsNewInitiatorNotSet {
+		return nil
+	}
+	ret := shared.ContinueAsNewInitiator(in - 1)
 	return &ret
+}
+
+// ToProtoContinueAsNewInitiator ...
+func ToProtoContinueAsNewInitiator(in *shared.ContinueAsNewInitiator) enums.ContinueAsNewInitiator {
+	if in == nil {
+		return enums.ContinueAsNewInitiatorNotSet
+	}
+	return enums.ContinueAsNewInitiator(*in + 1)
 }
 
 func toThriftParentClosePolicy(in enums.ParentClosePolicy) *shared.ParentClosePolicy {
@@ -144,4 +158,41 @@ func toProtoEncodingType(in shared.EncodingType) enums.EncodingType {
 	}
 
 	return enums.EncodingTypeThriftRW
+}
+func toThriftEventType(in enums.EventType) *shared.EventType {
+	ret := shared.EventType(in)
+	return &ret
+}
+
+func toThriftTimeoutType(in enums.TimeoutType) *shared.TimeoutType {
+	ret := shared.TimeoutType(in)
+	return &ret
+}
+
+func toThriftCancelExternalWorkflowExecutionFailedCause(in enums.CancelExternalWorkflowExecutionFailedCause) *shared.CancelExternalWorkflowExecutionFailedCause {
+	ret := shared.CancelExternalWorkflowExecutionFailedCause(in)
+	return &ret
+}
+
+func toThriftSignalExternalWorkflowExecutionFailedCause(in enums.SignalExternalWorkflowExecutionFailedCause) *shared.SignalExternalWorkflowExecutionFailedCause {
+	ret := shared.SignalExternalWorkflowExecutionFailedCause(in)
+	return &ret
+}
+
+func toThriftChildWorkflowExecutionFailedCause(in enums.ChildWorkflowExecutionFailedCause) *shared.ChildWorkflowExecutionFailedCause {
+	ret := shared.ChildWorkflowExecutionFailedCause(in)
+	return &ret
+}
+
+func toThriftDomainOperation(in enums.DomainOperation) *replicator.DomainOperation {
+	ret := replicator.DomainOperation(in)
+	return &ret
+}
+func toThriftDomainStatus(in enums.DomainStatus) *shared.DomainStatus {
+	ret := shared.DomainStatus(in)
+	return &ret
+}
+func toThriftReplicationTaskType(in enums.ReplicationTaskType) *replicator.ReplicationTaskType {
+	ret := replicator.ReplicationTaskType(in)
+	return &ret
 }
