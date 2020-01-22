@@ -557,10 +557,102 @@ func (s *cliAppSuite) TestObserveWorkflowWithID() {
 	s.Nil(err)
 }
 
+// TestParseTime tests the parsing of date argument in UTC and UnixNano formats
 func (s *cliAppSuite) TestParseTime() {
 	s.Equal(int64(100), parseTime("", 100))
 	s.Equal(int64(1528383845000000000), parseTime("2018-06-07T15:04:05+00:00", 0))
 	s.Equal(int64(1528383845000000000), parseTime("1528383845000000000", 0))
+}
+
+// TestParseTimeDateRange tests the parsing of date argument in time range format, N<duration>
+// where N is the integral multiplier, and duration can be second/minute/hour/day/week/month/year
+func (s *cliAppSuite) TestParseTimeDateRange() {
+	tests := []struct {
+		timeStr  string // input
+		defVal   int64  // input
+		expected int64  // expected unix nano (approx)
+	}{
+		{
+			timeStr:  "1s",
+			defVal:   int64(0),
+			expected: time.Now().Add(-time.Second).UnixNano(),
+		},
+		{
+			timeStr:  "100second",
+			defVal:   int64(0),
+			expected: time.Now().Add(-100 * time.Second).UnixNano(),
+		},
+		{
+			timeStr:  "2m",
+			defVal:   int64(0),
+			expected: time.Now().Add(-2 * time.Minute).UnixNano(),
+		},
+		{
+			timeStr:  "200minute",
+			defVal:   int64(0),
+			expected: time.Now().Add(-200 * time.Minute).UnixNano(),
+		},
+		{
+			timeStr:  "3h",
+			defVal:   int64(0),
+			expected: time.Now().Add(-3 * time.Hour).UnixNano(),
+		},
+		{
+			timeStr:  "1000hour",
+			defVal:   int64(0),
+			expected: time.Now().Add(-1000 * time.Hour).UnixNano(),
+		},
+		{
+			timeStr:  "5d",
+			defVal:   int64(0),
+			expected: time.Now().Add(-5 * day).UnixNano(),
+		},
+		{
+			timeStr:  "25day",
+			defVal:   int64(0),
+			expected: time.Now().Add(-25 * day).UnixNano(),
+		},
+		{
+			timeStr:  "5w",
+			defVal:   int64(0),
+			expected: time.Now().Add(-5 * week).UnixNano(),
+		},
+		{
+			timeStr:  "52week",
+			defVal:   int64(0),
+			expected: time.Now().Add(-52 * week).UnixNano(),
+		},
+		{
+			timeStr:  "3M",
+			defVal:   int64(0),
+			expected: time.Now().Add(-3 * month).UnixNano(),
+		},
+		{
+			timeStr:  "6month",
+			defVal:   int64(0),
+			expected: time.Now().Add(-6 * month).UnixNano(),
+		},
+		{
+			timeStr:  "1y",
+			defVal:   int64(0),
+			expected: time.Now().Add(-year).UnixNano(),
+		},
+		{
+			timeStr:  "7year",
+			defVal:   int64(0),
+			expected: time.Now().Add(-7 * year).UnixNano(),
+		},
+		{
+			timeStr:  "100y", // epoch time will be returned as that's the minimum unix timestamp possible
+			defVal:   int64(0),
+			expected: time.Unix(0, 0).UnixNano(),
+		},
+	}
+	delta := int64(5 * time.Millisecond)
+	for _, te := range tests {
+		s.True(te.expected <= parseTime(te.timeStr, te.defVal))
+		s.True(te.expected+delta >= parseTime(te.timeStr, te.defVal))
+	}
 }
 
 func (s *cliAppSuite) TestBreakLongWords() {

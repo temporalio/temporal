@@ -406,12 +406,16 @@ func getFlagsForListAll() []cli.Flag {
 			Usage: "List for open workflow executions, default is to list for closed ones",
 		},
 		cli.StringFlag{
-			Name:  FlagEarliestTimeWithAlias,
-			Usage: "EarliestTime of start time, supported formats are '2006-01-02T15:04:05+07:00' and raw UnixNano",
+			Name: FlagEarliestTimeWithAlias,
+			Usage: "EarliestTime of start time, supported formats are '2006-01-02T15:04:05+07:00', raw UnixNano and " +
+				"time range (N<duration>), where 0 < N < 1000000 and duration (full-notation/short-notation) can be second/s, " +
+				"minute/m, hour/h, day/d, week/w, month/M or year/y. For example, '15minute' or '15m' implies last 15 minutes.",
 		},
 		cli.StringFlag{
-			Name:  FlagLatestTimeWithAlias,
-			Usage: "LatestTime of start time, supported formats are '2006-01-02T15:04:05+07:00' and raw UnixNano",
+			Name: FlagLatestTimeWithAlias,
+			Usage: "LatestTime of start time, supported formats are '2006-01-02T15:04:05+07:00', raw UnixNano and " +
+				"time range (N<duration>), where 0 < N < 1000000 and duration (in full-notation/short-notation) can be second/s, " +
+				"minute/m, hour/h, day/d, week/w, month/M or year/y. For example, '15minute' or '15m' implies last 15 minutes",
 		},
 		cli.StringFlag{
 			Name:  FlagWorkflowIDWithAlias,
