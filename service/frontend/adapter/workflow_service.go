@@ -43,9 +43,9 @@ func ToThriftRegisterDomainRequest(in *workflowservice.RegisterDomainRequest) *s
 		Data:                                   in.Data,
 		SecurityToken:                          &in.SecurityToken,
 		IsGlobalDomain:                         &in.IsGlobalDomain,
-		HistoryArchivalStatus:                  toThriftArchivalStatus(in.HistoryArchivalStatus),
+		HistoryArchivalStatus:                  ToThriftArchivalStatus(in.HistoryArchivalStatus),
 		HistoryArchivalURI:                     &in.HistoryArchivalURI,
-		VisibilityArchivalStatus:               toThriftArchivalStatus(in.VisibilityArchivalStatus),
+		VisibilityArchivalStatus:               ToThriftArchivalStatus(in.VisibilityArchivalStatus),
 		VisibilityArchivalURI:                  &in.VisibilityArchivalURI,
 	}
 }
@@ -75,8 +75,8 @@ func ToProtoDescribeDomainResponse(in *shared.DescribeDomainResponse) *workflows
 	}
 }
 
-// ToThriftListDomainRequest ...
-func ToThriftListDomainRequest(in *workflowservice.ListDomainsRequest) *shared.ListDomainsRequest {
+// ToThriftListDomainsRequest ...
+func ToThriftListDomainsRequest(in *workflowservice.ListDomainsRequest) *shared.ListDomainsRequest {
 	if in == nil {
 		return nil
 	}
@@ -86,8 +86,8 @@ func ToThriftListDomainRequest(in *workflowservice.ListDomainsRequest) *shared.L
 	}
 }
 
-// ToProtoListDomainResponse ...
-func ToProtoListDomainResponse(in *shared.ListDomainsResponse) *workflowservice.ListDomainsResponse {
+// ToProtoListDomainsResponse ...
+func ToProtoListDomainsResponse(in *shared.ListDomainsResponse) *workflowservice.ListDomainsResponse {
 	if in == nil {
 		return nil
 	}
@@ -409,8 +409,8 @@ func ToProtoScanWorkflowExecutionsResponse(in *shared.ListWorkflowExecutionsResp
 	}
 }
 
-// ToProtoArchivedWorkflowExecutionsResponse ...
-func ToProtoArchivedWorkflowExecutionsResponse(in *shared.ListArchivedWorkflowExecutionsResponse) *workflowservice.ListArchivedWorkflowExecutionsResponse {
+// ToProtoListArchivedWorkflowExecutionsResponse ...
+func ToProtoListArchivedWorkflowExecutionsResponse(in *shared.ListArchivedWorkflowExecutionsResponse) *workflowservice.ListArchivedWorkflowExecutionsResponse {
 	if in == nil {
 		return nil
 	}
@@ -420,8 +420,8 @@ func ToProtoArchivedWorkflowExecutionsResponse(in *shared.ListArchivedWorkflowEx
 	}
 }
 
-// ToThriftArchivedWorkflowExecutionsRequest ...
-func ToThriftArchivedWorkflowExecutionsRequest(in *workflowservice.ListArchivedWorkflowExecutionsRequest) *shared.ListArchivedWorkflowExecutionsRequest {
+// ToThriftListArchivedWorkflowExecutionsRequest ...
+func ToThriftListArchivedWorkflowExecutionsRequest(in *workflowservice.ListArchivedWorkflowExecutionsRequest) *shared.ListArchivedWorkflowExecutionsRequest {
 	if in == nil {
 		return nil
 	}
@@ -498,7 +498,7 @@ func ToProtoPollForDecisionTaskResponse(in *shared.PollForDecisionTaskResponse) 
 	}
 	return &workflowservice.PollForDecisionTaskResponse{
 		TaskToken:                 in.GetTaskToken(),
-		WorkflowExecution:         toProtoWorkflowExecution(in.GetWorkflowExecution()),
+		WorkflowExecution:         ToProtoWorkflowExecution(in.GetWorkflowExecution()),
 		WorkflowType:              toProtoWorkflowType(in.GetWorkflowType()),
 		PreviousStartedEventId:    in.GetPreviousStartedEventId(),
 		StartedEventId:            in.GetStartedEventId(),
@@ -531,7 +531,7 @@ func ToProtoPollForActivityTaskResponse(in *shared.PollForActivityTaskResponse) 
 	}
 	return &workflowservice.PollForActivityTaskResponse{
 		TaskToken:                       in.GetTaskToken(),
-		WorkflowExecution:               toProtoWorkflowExecution(in.GetWorkflowExecution()),
+		WorkflowExecution:               ToProtoWorkflowExecution(in.GetWorkflowExecution()),
 		ActivityId:                      in.GetActivityId(),
 		ActivityType:                    toProtoActivityType(in.GetActivityType()),
 		Input:                           in.GetInput(),
@@ -782,7 +782,8 @@ func ToThriftGetReplicationMessagesRequest(in *workflowservice.GetReplicationMes
 		return nil
 	}
 	return &replicator.GetReplicationMessagesRequest{
-		Tokens: toThriftReplicationTokens(in.Tokens),
+		Tokens:      toThriftReplicationTokens(in.Tokens),
+		ClusterName: &in.ClusterName,
 	}
 }
 
@@ -806,7 +807,7 @@ func ToThriftReapplyEventsRequest(in *workflowservice.ReapplyEventsRequest) *sha
 	return &shared.ReapplyEventsRequest{
 		DomainName:        &in.DomainName,
 		WorkflowExecution: ToThriftWorkflowExecution(in.WorkflowExecution),
-		Events:            toThriftDataBlob(in.Events),
+		Events:            ToThriftDataBlob(in.Events),
 	}
 }
 

@@ -23,12 +23,12 @@
 package history
 
 import (
-	"context"
 	"sync/atomic"
 	"time"
 
-	r "github.com/temporalio/temporal/.gen/go/replicator"
-	"github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/workflowservice"
+
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
@@ -51,7 +51,7 @@ type (
 		sourceCluster  string
 		config         *Config
 		logger         log.Logger
-		remotePeer     workflowserviceclient.Interface
+		remotePeer     workflowservice.WorkflowServiceYARPCClient
 		requestChan    chan *request
 		done           chan struct{}
 	}
@@ -151,7 +151,7 @@ func newReplicationTaskFetcher(
 	sourceCluster string,
 	currentCluster string,
 	config *Config,
-	sourceFrontend workflowserviceclient.Interface,
+	sourceFrontend workflowservice.WorkflowServiceYARPCClient,
 ) *ReplicationTaskFetcherImpl {
 
 	return &ReplicationTaskFetcherImpl{
@@ -259,18 +259,18 @@ func (f *ReplicationTaskFetcherImpl) fetchAndDistributeTasks(requestByShard map[
 
 func (f *ReplicationTaskFetcherImpl) getMessages(
 	requestByShard map[int32]*request,
-) (map[int32]*r.ReplicationMessages, error) {
-	var tokens []*r.ReplicationToken
+) (map[int32]*commonproto.ReplicationMessages, error) {
+	var tokens []*commonproto.ReplicationToken
 	for _, request := range requestByShard {
 		tokens = append(tokens, request.token)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), fetchTaskRequestTimeout)
+	ctx, cancel := createContextWithCancel(fetchTaskRequestTimeout)
 	defer cancel()
 
-	request := &r.GetReplicationMessagesRequest{
+	request := &workflowservice.GetReplicationMessagesRequest{
 		Tokens:      tokens,
-		ClusterName: common.StringPtr(f.currentCluster),
+		ClusterName: f.currentCluster,
 	}
 	response, err := f.remotePeer.GetReplicationMessages(ctx, request)
 	if err != nil {

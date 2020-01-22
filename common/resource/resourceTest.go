@@ -85,7 +85,7 @@ type (
 		MatchingClient       *matchingservicetest.MockClient
 		HistoryClient        *historyservicetest.MockClient
 		RemoteAdminClient    *adminservicetest.MockClient
-		RemoteFrontendClient *workflowservicetest.MockClient
+		RemoteFrontendClient *workflowservicemock.MockWorkflowServiceYARPCClient
 		ClientBean           *client.MockBean
 
 		// persistence clients
@@ -128,7 +128,7 @@ func NewTest(
 	frontendClient := workflowservicetest.NewMockClient(controller)
 	matchingClient := matchingservicetest.NewMockClient(controller)
 	historyClient := historyservicetest.NewMockClient(controller)
-	remoteFrontendClient := workflowservicetest.NewMockClient(controller)
+	remoteFrontendClient := workflowservicemock.NewMockWorkflowServiceYARPCClient(controller)
 	remoteAdminClient := adminservicetest.NewMockClient(controller)
 	clientBean := client.NewMockBean(controller)
 	clientBean.EXPECT().GetFrontendClient().Return(frontendClient).AnyTimes()
@@ -353,7 +353,7 @@ func (s *Test) GetRemoteAdminClient(
 // GetRemoteFrontendClient for testing
 func (s *Test) GetRemoteFrontendClient(
 	cluster string,
-) frontend.Client {
+) frontend.ClientGRPC {
 
 	return s.RemoteFrontendClient
 }

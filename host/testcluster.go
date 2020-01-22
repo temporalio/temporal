@@ -79,7 +79,7 @@ type (
 		HistoryConfig         *HistoryConfig
 		ESConfig              *elasticsearch.Config
 		WorkerConfig          *WorkerConfig
-		MockFrontendClient    map[string]frontendclient.Client
+		MockFrontendClient    map[string]frontendclient.ClientGRPC
 	}
 
 	// MessagingClientConfig is the config for messaging config

@@ -27,8 +27,9 @@ import (
 
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/api/transport"
-	"go.uber.org/yarpc/transport/grpc"
+	yarpcgrpc "go.uber.org/yarpc/transport/grpc"
 	"go.uber.org/yarpc/transport/tchannel"
+	"google.golang.org/grpc"
 
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -76,7 +77,7 @@ func (d *RPCFactory) GetGRPCDispatcher() *yarpc.Dispatcher {
 
 		d.grpcDispatcher = yarpc.NewDispatcher(yarpc.Config{
 			Name:     d.serviceName,
-			Inbounds: yarpc.Inbounds{grpc.NewTransport().NewInbound(l)},
+			Inbounds: yarpc.Inbounds{yarpcgrpc.NewTransport().NewInbound(l)},
 		})
 
 		d.logger.Info("Created gRPC dispatcher", tag.Service(d.serviceName), tag.Address(hostAddress))
@@ -135,7 +136,7 @@ func (d *RPCFactory) CreateTChannelDispatcherForOutbound(callerName, serviceName
 
 // CreateGRPCDispatcherForOutbound creates a dispatcher for outbound connection
 func (d *RPCFactory) CreateGRPCDispatcherForOutbound(callerName, serviceName, hostName string) *yarpc.Dispatcher {
-	return d.createDispatcherForOutbound(grpc.NewTransport().NewSingleOutbound(hostName), callerName, serviceName, hostName, "gRPC")
+	return d.createDispatcherForOutbound(yarpcgrpc.NewTransport().NewSingleOutbound(hostName), callerName, serviceName, hostName, "gRPC")
 }
 
 func (d *RPCFactory) createDispatcherForOutbound(unaryOutbound transport.UnaryOutbound, callerName, serviceName, hostName, transportType string) *yarpc.Dispatcher {
@@ -176,4 +177,14 @@ func (d *RPCFactory) getListenIP() net.IP {
 		d.logger.Fatal("ListenIP failed, err=%v", tag.Error(err))
 	}
 	return ip
+}
+
+// CreateGRPCConnection creates connection for gRPC calls
+func (d *RPCFactory) CreateGRPCConnection(hostName string) *grpc.ClientConn {
+	connection, err := grpc.Dial(hostName, grpc.WithInsecure())
+	if err != nil {
+		d.logger.Fatal("Failed to create gRPC connection", tag.Error(err))
+	}
+
+	return connection
 }
