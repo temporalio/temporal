@@ -77,6 +77,11 @@ func (f *Factory) NewMetadataStore() (p.MetadataStore, error) {
 	return newMetadataPersistenceV2(f.cfg, f.clusterName, f.logger)
 }
 
+// NewClusterMetadataStore returns a metadata store
+func (f *Factory) NewClusterMetadataStore() (p.ClusterMetadataStore, error) {
+	return newClusterMetadataInstance(f.cfg, f.logger)
+}
+
 // NewExecutionStore returns an ExecutionStore for a given shardID
 func (f *Factory) NewExecutionStore(shardID int) (p.ExecutionStore, error) {
 	factory, err := f.executionStoreFactory()

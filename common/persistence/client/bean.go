@@ -33,6 +33,9 @@ type (
 	Bean interface {
 		Close()
 
+		GetClusterMetadataManager() persistence.ClusterMetadataManager
+		SetClusterMetadataManager(persistence.ClusterMetadataManager)
+
 		GetMetadataManager() persistence.MetadataManager
 		SetMetadataManager(persistence.MetadataManager)
 
@@ -57,6 +60,7 @@ type (
 
 	// BeanImpl stores persistence managers
 	BeanImpl struct {
+		clusterMetadataManager  persistence.ClusterMetadataManager
 		metadataManager         persistence.MetadataManager
 		taskManager             persistence.TaskManager
 		visibilityManager       persistence.VisibilityManager
@@ -70,10 +74,16 @@ type (
 	}
 )
 
+var _ Bean = (*BeanImpl)(nil)
+
 // NewBeanFromFactory crate a new store bean using factory
 func NewBeanFromFactory(
 	factory Factory,
 ) (*BeanImpl, error) {
+	clusterMetadataMgr, err := factory.NewClusterMetadataManager()
+	if err != nil {
+		return nil, err
+	}
 
 	metadataMgr, err := factory.NewMetadataManager()
 	if err != nil {
@@ -106,6 +116,7 @@ func NewBeanFromFactory(
 	}
 
 	return NewBean(
+		clusterMetadataMgr,
 		metadataMgr,
 		taskMgr,
 		visibilityMgr,
@@ -118,6 +129,7 @@ func NewBeanFromFactory(
 
 // NewBean create a new store bean
 func NewBean(
+	clusterMetadataManager persistence.ClusterMetadataManager,
 	metadataManager persistence.MetadataManager,
 	taskManager persistence.TaskManager,
 	visibilityManager persistence.VisibilityManager,
@@ -127,6 +139,7 @@ func NewBean(
 	executionManagerFactory persistence.ExecutionManagerFactory,
 ) *BeanImpl {
 	return &BeanImpl{
+		clusterMetadataManager:  clusterMetadataManager,
 		metadataManager:         metadataManager,
 		taskManager:             taskManager,
 		visibilityManager:       visibilityManager,
@@ -137,6 +150,25 @@ func NewBean(
 
 		shardIDToExecutionManager: make(map[int]persistence.ExecutionManager),
 	}
+}
+
+// GetClusterMetadataManager get ClusterMetadataManager
+func (s *BeanImpl) GetClusterMetadataManager() persistence.ClusterMetadataManager {
+	s.RLock()
+	defer s.RUnlock()
+
+	return s.clusterMetadataManager
+}
+
+// SetClusterMetadataManager set ClusterMetadataManager
+func (s *BeanImpl) SetClusterMetadataManager(
+	clusterMetadataManager persistence.ClusterMetadataManager,
+) {
+
+	s.Lock()
+	defer s.Unlock()
+
+	s.clusterMetadataManager = clusterMetadataManager
 }
 
 // GetMetadataManager get MetadataManager

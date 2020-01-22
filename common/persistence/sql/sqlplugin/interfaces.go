@@ -35,6 +35,12 @@ type (
 		CreateAdminDB(cfg *config.SQL) (AdminDB, error)
 	}
 
+	// ClusterMetadataRow represents a row in the cluster_metadata table
+	ClusterMetadataRow struct {
+		ImmutableData         []byte
+		ImmutableDataEncoding string
+	}
+
 	// DomainRow represents a row in domain table
 	DomainRow struct {
 		ID           UUID
@@ -496,6 +502,9 @@ type (
 
 	// tableCRUD defines the API for interacting with the database tables
 	tableCRUD interface {
+		InsertIfNotExistsIntoClusterMetadata(row *ClusterMetadataRow) (sql.Result, error)
+		GetClusterMetadata() (*ClusterMetadataRow, error)
+
 		InsertIntoDomain(rows *DomainRow) (sql.Result, error)
 		UpdateDomain(row *DomainRow) (sql.Result, error)
 		// SelectFromDomain returns domains that match filter criteria. Either ID or
