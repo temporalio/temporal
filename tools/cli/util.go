@@ -41,14 +41,30 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal/client"
+	"google.golang.org/grpc/metadata"
+
+	"github.com/temporalio/temporal/common"
 )
 
 // JSONHistorySerializer is used to encode history event in JSON
 type JSONHistorySerializer struct{}
 
+var (
+	// call header to cadence server
+	headers = metadata.New(map[string]string{
+		common.LibraryVersionHeaderName: "1.0.0",
+		common.FeatureVersionHeaderName: "1.0.0",
+		common.ClientImplHeaderName:     "cli",
+		// TODO: remove these headers when server is vanilla gRPC (not YARPC)
+		"rpc-caller":   "temporal-cli",
+		"rpc-service":  "cadence-frontend",
+		"rpc-encoding": "proto",
+	})
+)
+
 // Serialize serializes history.
 func (j *JSONHistorySerializer) Serialize(h *commonproto.History) ([]byte, error) {
-	return json.Marshal(h.Events)
+	return json.Marshal(h)
 }
 
 // Deserialize deserializes history
@@ -473,8 +489,8 @@ func getEventAttributes(e *commonproto.HistoryEvent) interface{} {
 
 func isAttributeName(name string) bool {
 	name = "EventType" + name
-	for i := enums.EventType(0); i <= enums.EventType(41); i++ {
-		if name == i.String()+"EventAttributes" {
+	for i := 0; i < len(enums.EventType_name); i++ {
+		if name == enums.EventType(i).String()+"EventAttributes" {
 			return true
 		}
 	}
@@ -496,7 +512,7 @@ func prettyPrintJSONObject(o interface{}) {
 		fmt.Printf("Error when try to print pretty: %v\n", err)
 		fmt.Println(o)
 	}
-	os.Stdout.Write(b)
+	_, _ = os.Stdout.Write(b)
 	fmt.Println()
 }
 
@@ -526,12 +542,12 @@ func ErrorAndExit(msg string, err error) {
 
 func getWorkflowClient(c *cli.Context) client.Client {
 	domain := getRequiredGlobalOption(c, FlagDomain)
-	return client.NewClient(cFactory.ClientFrontendClient(c), domain, &client.Options{})
+	return client.NewClient(cFactory.FrontendClient(c), domain, &client.Options{})
 }
 
 func getWorkflowClientWithOptionalDomain(c *cli.Context) client.Client {
 	if !c.GlobalIsSet(FlagDomain) {
-		c.GlobalSet(FlagDomain, "system-domain")
+		_ = c.GlobalSet(FlagDomain, "system-domain")
 	}
 	return getWorkflowClient(c)
 }
@@ -613,19 +629,21 @@ func getCliIdentity() string {
 }
 
 func newContext(c *cli.Context) (context.Context, context.CancelFunc) {
-	contextTimeout := defaultContextTimeout
-	if c.GlobalInt(FlagContextTimeout) > 0 {
-		contextTimeout = time.Duration(c.GlobalInt(FlagContextTimeout)) * time.Second
-	}
-	return context.WithTimeout(context.Background(), contextTimeout)
+	return newContextWithTimeout(c, defaultContextTimeout)
 }
 
 func newContextForLongPoll(c *cli.Context) (context.Context, context.CancelFunc) {
-	contextTimeout := defaultContextTimeoutForLongPoll
+	return newContextWithTimeout(c, defaultContextTimeoutForLongPoll)
+}
+
+func newContextWithTimeout(c *cli.Context, defaultTimeout time.Duration) (context.Context, context.CancelFunc) {
+	contextTimeout := defaultTimeout
 	if c.GlobalIsSet(FlagContextTimeout) {
 		contextTimeout = time.Duration(c.GlobalInt(FlagContextTimeout)) * time.Second
 	}
-	return context.WithTimeout(context.Background(), contextTimeout)
+	ctx := metadata.NewOutgoingContext(context.Background(), headers)
+
+	return context.WithTimeout(ctx, contextTimeout)
 }
 
 // process and validate input provided through cmd or file
@@ -772,6 +790,6 @@ func showNextPage() bool {
 	fmt.Printf("Press %s to show next page, press %s to quit: ",
 		color.GreenString("Enter"), color.RedString("any other key then Enter"))
 	var input string
-	fmt.Scanln(&input)
+	_, _ = fmt.Scanln(&input)
 	return strings.Trim(input, " ") == ""
 }

@@ -29,10 +29,11 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/gogo/protobuf/proto"
+	"github.com/gogo/status"
+	commonproto "go.temporal.io/temporal-proto/common"
 	"go.uber.org/yarpc/yarpcerrors"
 	"golang.org/x/net/context"
-
-	commonproto "go.temporal.io/temporal-proto/common"
+	"google.golang.org/grpc/codes"
 
 	h "github.com/temporalio/temporal/.gen/go/history"
 	m "github.com/temporalio/temporal/.gen/go/matching"
@@ -245,6 +246,26 @@ func IsWhitelistServiceTransientError(err error) bool {
 			return true
 		}
 		return false
+	}
+
+	return false
+}
+
+// IsWhitelistServiceTransientErrorGRPC checks if the error is a transient error.
+func IsWhitelistServiceTransientErrorGRPC(err error) bool {
+	if err == context.DeadlineExceeded {
+		return true
+	}
+
+	if st, ok := status.FromError(err); ok {
+		if st.Code() == codes.Internal ||
+			st.Code() == codes.ResourceExhausted ||
+			st.Code() == codes.Unavailable ||
+			st.Code() == codes.Unknown ||
+			st.Code() == codes.DeadlineExceeded {
+			// TODO: add *h.ShardOwnershipLostError handle here
+			return true
+		}
 	}
 
 	return false

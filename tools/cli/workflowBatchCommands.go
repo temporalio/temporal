@@ -41,7 +41,7 @@ import (
 func TerminateBatchJob(c *cli.Context) {
 	jobID := getRequiredOption(c, FlagJobID)
 	reason := getRequiredOption(c, FlagReason)
-	svcClient := cFactory.ClientFrontendClient(c)
+	svcClient := cFactory.FrontendClient(c)
 	client := cclient.NewClient(svcClient, common.SystemLocalDomainName, &cclient.Options{})
 	tcCtx, cancel := newContext(c)
 	defer cancel()
@@ -59,7 +59,7 @@ func TerminateBatchJob(c *cli.Context) {
 func DescribeBatchJob(c *cli.Context) {
 	jobID := getRequiredOption(c, FlagJobID)
 
-	svcClient := cFactory.ClientFrontendClient(c)
+	svcClient := cFactory.FrontendClient(c)
 	client := cclient.NewClient(svcClient, common.SystemLocalDomainName, &cclient.Options{})
 	tcCtx, cancel := newContext(c)
 	defer cancel()
@@ -94,7 +94,7 @@ func DescribeBatchJob(c *cli.Context) {
 func ListBatchJobs(c *cli.Context) {
 	domain := getRequiredGlobalOption(c, FlagDomain)
 	pageSize := c.Int(FlagPageSize)
-	svcClient := cFactory.ClientFrontendClient(c)
+	svcClient := cFactory.FrontendClient(c)
 	client := cclient.NewClient(svcClient, common.SystemLocalDomainName, &cclient.Options{})
 	tcCtx, cancel := newContext(c)
 	defer cancel()
@@ -144,7 +144,7 @@ func StartBatchJob(c *cli.Context) {
 	}
 	rps := c.Int(FlagRPS)
 
-	svcClient := cFactory.ClientFrontendClient(c)
+	svcClient := cFactory.FrontendClient(c)
 	client := cclient.NewClient(svcClient, common.SystemLocalDomainName, &cclient.Options{})
 	tcCtx, cancel := newContext(c)
 	defer cancel()
