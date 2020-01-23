@@ -35,7 +35,7 @@ import (
 
 // AdminDescribeTaskList displays poller and status information of task list.
 func AdminDescribeTaskList(c *cli.Context) {
-	frontendClient := cFactory.ServerFrontendClientGRPC(c)
+	frontendClient := cFactory.FrontendClient(c)
 	domain := getRequiredGlobalOption(c, FlagDomain)
 	taskList := getRequiredOption(c, FlagTaskList)
 	taskListType := enums.TaskListTypeDecision

@@ -29,10 +29,11 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/gogo/protobuf/proto"
+	"github.com/gogo/status"
+	commonproto "go.temporal.io/temporal-proto/common"
 	"go.uber.org/yarpc/yarpcerrors"
 	"golang.org/x/net/context"
-
-	commonproto "go.temporal.io/temporal-proto/common"
+	"google.golang.org/grpc/codes"
 
 	h "github.com/temporalio/temporal/.gen/go/history"
 	m "github.com/temporalio/temporal/.gen/go/matching"
@@ -199,7 +200,7 @@ func IsServiceTransientError(err error) bool {
 
 // IsServiceNonRetryableError checks if the error is a non retryable error.
 func IsServiceNonRetryableError(err error) bool {
-	switch err.(type) {
+	switch rpcErr := err.(type) {
 	case *workflow.EntityNotExistsError:
 		return true
 	case *workflow.BadRequestError:
@@ -211,11 +212,16 @@ func IsServiceNonRetryableError(err error) bool {
 	case *workflow.CancellationAlreadyRequestedError:
 		return true
 	case *yarpcerrors.Status:
-		rpcErr := err.(*yarpcerrors.Status)
 		if rpcErr.Code() != yarpcerrors.CodeDeadlineExceeded {
 			return true
 		}
 		return false
+	}
+
+	if st, ok := status.FromError(err); ok {
+		if st.Code() != codes.DeadlineExceeded {
+			return true
+		}
 	}
 
 	return false
@@ -245,6 +251,15 @@ func IsWhitelistServiceTransientError(err error) bool {
 			return true
 		}
 		return false
+	}
+
+	if st, ok := status.FromError(err); ok {
+		if st.Code() == codes.DeadlineExceeded ||
+			st.Code() == codes.Unavailable ||
+			st.Code() == codes.Unknown ||
+			st.Code() == codes.Internal {
+			return true
+		}
 	}
 
 	return false

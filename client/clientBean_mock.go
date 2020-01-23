@@ -28,13 +28,15 @@
 package client
 
 import (
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
+	yarpc "go.uber.org/yarpc"
+
 	admin "github.com/temporalio/temporal/client/admin"
 	frontend "github.com/temporalio/temporal/client/frontend"
 	history "github.com/temporalio/temporal/client/history"
 	matching "github.com/temporalio/temporal/client/matching"
-	yarpc "go.uber.org/yarpc"
-	reflect "reflect"
 )
 
 // MockBean is a mock of Bean interface
@@ -114,10 +116,10 @@ func (mr *MockBeanMockRecorder) SetMatchingClient(client interface{}) *gomock.Ca
 }
 
 // GetFrontendClient mocks base method
-func (m *MockBean) GetFrontendClient() frontend.Client {
+func (m *MockBean) GetFrontendClient() frontend.ClientGRPC {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetFrontendClient")
-	ret0, _ := ret[0].(frontend.Client)
+	ret0, _ := ret[0].(frontend.ClientGRPC)
 	return ret0
 }
 
@@ -128,7 +130,7 @@ func (mr *MockBeanMockRecorder) GetFrontendClient() *gomock.Call {
 }
 
 // SetFrontendClient mocks base method
-func (m *MockBean) SetFrontendClient(client frontend.Client) {
+func (m *MockBean) SetFrontendClient(client frontend.ClientGRPC) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetFrontendClient", client)
 }

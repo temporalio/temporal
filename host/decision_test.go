@@ -25,8 +25,9 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/gogo/status"
 	"github.com/pborman/uuid"
-	"go.uber.org/yarpc/yarpcerrors"
+	"google.golang.org/grpc/codes"
 
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
@@ -96,8 +97,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 			ReturnNewDecisionTask:      true,
 			ForceCreateNewDecisionTask: true,
 		})
-		st := yarpcerrors.FromError(err2)
-		if st.Code() == yarpcerrors.CodeNotFound {
+		if status.Code(err2) == codes.NotFound {
 			hbTimeout++
 			s.IsType(&workflowservice.RespondDecisionTaskCompletedResponse{}, resp2)
 

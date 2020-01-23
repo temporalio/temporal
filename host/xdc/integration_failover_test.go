@@ -25,7 +25,6 @@ package xdc
 
 import (
 	"bytes"
-	"context"
 	"encoding/binary"
 	"errors"
 	"flag"
@@ -35,17 +34,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/status"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.uber.org/yarpc/yarpcerrors"
-	"go.uber.org/zap"
-	"gopkg.in/yaml.v2"
-
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/errordetails"
 	"go.temporal.io/temporal-proto/workflowservice"
+	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
+	"gopkg.in/yaml.v2"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -83,11 +82,6 @@ var (
 		},
 	}
 )
-
-func createContext() context.Context {
-	ctx, _ := context.WithTimeout(context.Background(), 90*time.Second)
-	return ctx
-}
 
 func TestIntegrationClustersTestSuite(t *testing.T) {
 	flag.Parse()
@@ -357,7 +351,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 		Err  error
 	}
 	queryResultCh := make(chan QueryResult)
-	queryWorkflowFn := func(client workflowservice.WorkflowServiceYARPCClient, queryType string) {
+	queryWorkflowFn := func(client workflowservice.WorkflowServiceClient, queryType string) {
 		queryResp, err := client.QueryWorkflow(createContext(), &workflowservice.QueryWorkflowRequest{
 			Domain: domainName,
 			Execution: &commonproto.WorkflowExecution{
@@ -804,15 +798,17 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	startReq.RequestId = uuid.New()
 	startReq.WorkflowIdReusePolicy = enums.WorkflowIdReusePolicyAllowDuplicateFailedOnly
 	we, err = client2.StartWorkflowExecution(createContext(), startReq)
-	s.True(errordetails.IsWorkflowExecutionAlreadyStartedFailureYARPC(err))
-	s.IsType(&workflowservice.StartWorkflowExecutionResponse{}, we)
+	st := status.Convert(err)
+	s.True(errordetails.IsWorkflowExecutionAlreadyStartedFailure(st))
+	s.Nil(we)
 
 	// start the same workflow in cluster 2 is not allowed if policy is RejectDuplicate
 	startReq.RequestId = uuid.New()
 	startReq.WorkflowIdReusePolicy = enums.WorkflowIdReusePolicyRejectDuplicate
 	we, err = client2.StartWorkflowExecution(createContext(), startReq)
-	s.True(errordetails.IsWorkflowExecutionAlreadyStartedFailureYARPC(err))
-	s.IsType(&workflowservice.StartWorkflowExecutionResponse{}, we)
+	st = status.Convert(err)
+	s.True(errordetails.IsWorkflowExecutionAlreadyStartedFailure(st))
+	s.Nil(we)
 
 	// start the workflow in cluster 2
 	startReq.RequestId = uuid.New()
@@ -1639,7 +1635,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 		T:               s.T(),
 	}
 
-	describeWorkflowExecution := func(client workflowservice.WorkflowServiceYARPCClient) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
+	describeWorkflowExecution := func(client workflowservice.WorkflowServiceClient) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
 		return client.DescribeWorkflowExecution(createContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Domain: domainName,
 			Execution: &commonproto.WorkflowExecution{
@@ -1652,8 +1648,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	_, err = poller1.PollAndProcessDecisionTask(false, false)
 	s.Nil(err)
 	err = poller1.PollAndProcessActivityTask(false)
-	st := yarpcerrors.FromError(err)
-	s.Equal(yarpcerrors.CodeNotFound, st.Code())
+	s.Equal(codes.NotFound, status.Code(err))
 
 	// Update domain to fail over
 	updateReq := &workflowservice.UpdateDomainRequest{

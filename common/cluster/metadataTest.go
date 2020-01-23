@@ -39,9 +39,9 @@ const (
 	// TestAlternativeClusterName is alternative cluster used for test
 	TestAlternativeClusterName = "standby"
 	// TestCurrentClusterFrontendAddress is the ip port address of current cluster
-	TestCurrentClusterFrontendAddress = "127.0.0.1:7104"
+	TestCurrentClusterFrontendAddress = "127.0.0.1:7134"
 	// TestAlternativeClusterFrontendAddress is the ip port address of alternative cluster
-	TestAlternativeClusterFrontendAddress = "127.0.0.1:8104"
+	TestAlternativeClusterFrontendAddress = "127.0.0.1:8134"
 )
 
 var (

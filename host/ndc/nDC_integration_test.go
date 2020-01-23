@@ -1826,8 +1826,7 @@ func (s *nDCIntegrationTestSuite) toThriftVersionHistoryItems(
 }
 
 func (s *nDCIntegrationTestSuite) createContext() context.Context {
-	ctx, _ := context.WithTimeout(context.Background(), 90*time.Second)
-	return ctx
+	return createContext()
 }
 
 func (s *nDCIntegrationTestSuite) setupRemoteFrontendClients() {
