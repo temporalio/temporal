@@ -26,10 +26,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/uber-go/tally"
 	"github.com/urfave/cli"
-
 	"go.temporal.io/temporal-proto/workflowservice"
 
-	sericeFrontend "github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
@@ -106,10 +104,6 @@ var (
 			Name:  FlagVisibilityArchivalURIWithAlias,
 			Usage: "Optionally specify visibility archival URI (cannot be changed after first time archival is enabled)",
 		},
-		cli.BoolFlag{
-			Name:  FlagGRPC,
-			Usage: "Use gRPC to make an RPC call",
-		},
 	}
 
 	updateDomainFlags = []cli.Flag{
@@ -176,20 +170,12 @@ var (
 			Name:  FlagReason,
 			Usage: "Reason for the operation",
 		},
-		cli.BoolFlag{
-			Name:  FlagGRPC,
-			Usage: "Use gRPC to make an RPC call",
-		},
 	}
 
 	describeDomainFlags = []cli.Flag{
 		cli.StringFlag{
 			Name:  FlagDomainID,
 			Usage: "Domain UUID (required if not specify domainName)",
-		},
-		cli.BoolFlag{
-			Name:  FlagGRPC,
-			Usage: "Use gRPC to make an RPC call",
 		},
 	}
 
@@ -226,14 +212,8 @@ var (
 
 func initializeFrontendClient(
 	context *cli.Context,
-) sericeFrontend.Interface {
-	return cFactory.ServerFrontendClient(context)
-}
-
-func initializeFrontendClientGRPC(
-	context *cli.Context,
-) workflowservice.WorkflowServiceYARPCClient {
-	return cFactory.ServerFrontendClientGRPC(context)
+) workflowservice.WorkflowServiceClient {
+	return cFactory.FrontendClient(context)
 }
 
 func initializeAdminDomainHandler(

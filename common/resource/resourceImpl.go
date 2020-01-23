@@ -96,8 +96,8 @@ type (
 		// internal services clients
 
 		sdkClient         workflowservice.WorkflowServiceClient
-		frontendRawClient frontend.Client
-		frontendClient    frontend.Client
+		frontendRawClient frontend.ClientGRPC
+		frontendClient    frontend.ClientGRPC
 		matchingRawClient matching.Client
 		matchingClient    matching.Client
 		historyRawClient  history.Client
@@ -223,10 +223,10 @@ func New(
 	)
 
 	frontendRawClient := clientBean.GetFrontendClient()
-	frontendClient := frontend.NewRetryableClient(
+	frontendClient := frontend.NewRetryableClientGRPC(
 		frontendRawClient,
 		common.CreateFrontendServiceRetryPolicy(),
-		common.IsWhitelistServiceTransientError,
+		common.IsWhitelistServiceTransientErrorGRPC,
 	)
 
 	matchingRawClient, err := clientBean.GetMatchingClient(domainCache.GetDomainName)
@@ -504,12 +504,12 @@ func (h *Impl) GetSDKClient() workflowservice.WorkflowServiceClient {
 }
 
 // GetFrontendRawClient return frontend client without retry policy
-func (h *Impl) GetFrontendRawClient() frontend.Client {
+func (h *Impl) GetFrontendRawClient() frontend.ClientGRPC {
 	return h.frontendRawClient
 }
 
 // GetFrontendClient return frontend client with retry policy
-func (h *Impl) GetFrontendClient() frontend.Client {
+func (h *Impl) GetFrontendClient() frontend.ClientGRPC {
 	return h.frontendClient
 }
 

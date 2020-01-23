@@ -21,7 +21,6 @@
 package host
 
 import (
-	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -29,15 +28,14 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
-	"go.uber.org/yarpc"
-	"go.uber.org/yarpc/transport/grpc"
-	"go.uber.org/yarpc/transport/tchannel"
-	"go.uber.org/zap"
-	"gopkg.in/yaml.v2"
-
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/workflowservice"
+	"go.uber.org/yarpc"
+	"go.uber.org/yarpc/transport/tchannel"
+	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"gopkg.in/yaml.v2"
 
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
@@ -89,20 +87,12 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 			s.Logger.Fatal("Failed to create outbound transport channel", tag.Error(err))
 		}
 
-		dispatcherGRPC := yarpc.NewDispatcher(yarpc.Config{
-			Name: "unittest",
-			Outbounds: yarpc.Outbounds{
-				"cadence-frontend": {Unary: grpc.NewTransport().NewSingleOutbound(TestFlags.FrontendAddrGRPC)},
-			},
-			InboundMiddleware: yarpc.InboundMiddleware{
-				Unary: &versionMiddleware{},
-			},
-		})
-		if err := dispatcherGRPC.Start(); err != nil {
-			s.Logger.Fatal("Failed to start gRPC dispatcher", tag.Error(err))
+		connection, err := grpc.Dial(TestFlags.FrontendAddrGRPC, grpc.WithInsecure())
+		if err != nil {
+			s.Logger.Fatal("Failed to create gRPC connection", tag.Error(err))
 		}
 
-		s.engine = NewFrontendClient(dispatcherGRPC)
+		s.engine = NewFrontendClient(connection)
 		s.adminClient = NewAdminClient(dispatcher)
 	} else {
 		s.Logger.Info("Running integration test against test cluster")
@@ -178,7 +168,7 @@ func (s *IntegrationBase) registerDomain(
 	visibilityArchivalStatus enums.ArchivalStatus,
 	visibilityArchivalURI string,
 ) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10000*time.Second)
+	ctx, cancel := createContextWithCancel(10000 * time.Second)
 	defer cancel()
 	_, err := s.engine.RegisterDomain(ctx, &workflowservice.RegisterDomainRequest{
 		Name:                                   domain,
@@ -194,7 +184,7 @@ func (s *IntegrationBase) registerDomain(
 }
 
 func (s *IntegrationBase) describeDomain(domain string) (*workflowservice.DescribeDomainResponse, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := createContextWithCancel(10 * time.Second)
 	defer cancel()
 
 	return s.engine.DescribeDomain(ctx, &workflowservice.DescribeDomainRequest{

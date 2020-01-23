@@ -22,18 +22,17 @@ package host
 
 import (
 	"bytes"
-	"context"
 	"encoding/binary"
 	"errors"
 	"strconv"
 	"time"
 
+	"github.com/gogo/status"
 	"github.com/pborman/uuid"
-	"go.uber.org/yarpc/yarpcerrors"
-
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/workflowservice"
+	"google.golang.org/grpc/codes"
 
 	"github.com/temporalio/temporal/common/log/tag"
 )
@@ -192,8 +191,8 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 	}
 	queryResult = <-queryResultCh
 	s.NotNil(queryResult.Err)
-	st := yarpcerrors.FromError(queryResult.Err)
-	s.Equal(yarpcerrors.CodeInvalidArgument, st.Code())
+	st := status.Convert(queryResult.Err)
+	s.Equal(codes.InvalidArgument, st.Code())
 	s.Equal("unknown-query-type", st.Message())
 }
 
@@ -491,8 +490,8 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	}
 	queryResult = <-queryResultCh
 	s.NotNil(queryResult.Err)
-	st := yarpcerrors.FromError(queryResult.Err)
-	s.Equal(yarpcerrors.CodeInvalidArgument, st.Code())
+	st := status.Convert(queryResult.Err)
+	s.Equal(codes.InvalidArgument, st.Code())
 	s.Equal("unknown-query-type", st.Message())
 
 	// advance the state of the decider
@@ -840,7 +839,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 	}
 	queryResultCh := make(chan QueryResult)
 	queryWorkflowFn := func(queryType string, rejectCondition enums.QueryRejectCondition) {
-		shortCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+		shortCtx, cancel := createContextWithCancel(time.Second)
 		queryResp, err := s.engine.QueryWorkflow(shortCtx, &workflowservice.QueryWorkflowRequest{
 			Domain: s.domainName,
 			Execution: &commonproto.WorkflowExecution{
@@ -886,7 +885,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 	// wait for query to timeout
 	queryResult := <-queryResultCh
 	s.Error(queryResult.Err) // got a timeout error
-	s.Equal(&workflowservice.QueryWorkflowResponse{}, queryResult.Resp)
+	s.Nil(queryResult.Resp)
 }
 
 func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonSticky() {
@@ -1329,7 +1328,7 @@ func (s *integrationSuite) TestQueryWorkflow_BeforeFirstDecision() {
 		},
 	})
 	s.IsType(&workflowservice.QueryWorkflowResponse{}, queryResp)
-	st := yarpcerrors.FromError(err)
-	s.Equal(yarpcerrors.CodeInvalidArgument, st.Code())
+	st := status.Convert(err)
+	s.Equal(codes.InvalidArgument, st.Code())
 	s.Equal("workflow must handle at least one decision task before it can be queried", st.Message())
 }
