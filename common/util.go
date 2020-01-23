@@ -200,7 +200,7 @@ func IsServiceTransientError(err error) bool {
 
 // IsServiceNonRetryableError checks if the error is a non retryable error.
 func IsServiceNonRetryableError(err error) bool {
-	switch rpcErr := err.(type) {
+	switch err.(type) {
 	case *workflow.EntityNotExistsError:
 		return true
 	case *workflow.BadRequestError:
@@ -212,16 +212,11 @@ func IsServiceNonRetryableError(err error) bool {
 	case *workflow.CancellationAlreadyRequestedError:
 		return true
 	case *yarpcerrors.Status:
+		rpcErr := err.(*yarpcerrors.Status)
 		if rpcErr.Code() != yarpcerrors.CodeDeadlineExceeded {
 			return true
 		}
 		return false
-	}
-
-	if st, ok := status.FromError(err); ok {
-		if st.Code() != codes.DeadlineExceeded {
-			return true
-		}
 	}
 
 	return false
@@ -253,11 +248,22 @@ func IsWhitelistServiceTransientError(err error) bool {
 		return false
 	}
 
+	return false
+}
+
+// IsWhitelistServiceTransientErrorGRPC checks if the error is a transient error.
+func IsWhitelistServiceTransientErrorGRPC(err error) bool {
+	if err == context.DeadlineExceeded {
+		return true
+	}
+
 	if st, ok := status.FromError(err); ok {
-		if st.Code() == codes.DeadlineExceeded ||
+		if st.Code() == codes.Internal ||
+			st.Code() == codes.ResourceExhausted ||
 			st.Code() == codes.Unavailable ||
 			st.Code() == codes.Unknown ||
-			st.Code() == codes.Internal {
+			st.Code() == codes.DeadlineExceeded {
+			// TODO: add *h.ShardOwnershipLostError handle here
 			return true
 		}
 	}

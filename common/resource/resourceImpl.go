@@ -226,7 +226,7 @@ func New(
 	frontendClient := frontend.NewRetryableClientGRPC(
 		frontendRawClient,
 		common.CreateFrontendServiceRetryPolicy(),
-		common.IsWhitelistServiceTransientError,
+		common.IsWhitelistServiceTransientErrorGRPC,
 	)
 
 	matchingRawClient, err := clientBean.GetMatchingClient(domainCache.GetDomainName)
