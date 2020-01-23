@@ -68,8 +68,7 @@ func (client *cadenceClient) createDomain(name string, desc string, owner string
 	}
 	err := client.Register(context.Background(), req)
 	if err != nil {
-		st := status.Convert(err)
-		if st.Code() == codes.AlreadyExists {
+		if status.Code(err) == codes.AlreadyExists {
 			return err
 		}
 	}

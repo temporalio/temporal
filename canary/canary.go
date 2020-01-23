@@ -127,8 +127,7 @@ func (c *canaryImpl) startCronWorkflow() {
 	ctx = opentracing.ContextWithSpan(ctx, span)
 	_, err := c.canaryClient.StartWorkflow(ctx, opts, cronWorkflow, c.canaryDomain, wfTypeSanity)
 	if err != nil {
-		st := status.Convert(err)
-		if st.Code() == codes.AlreadyExists {
+		if status.Code(err) == codes.AlreadyExists {
 			c.runtime.logger.Error("error starting cron workflow", zap.Error(err))
 		}
 	}
