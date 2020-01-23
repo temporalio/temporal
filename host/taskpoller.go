@@ -300,23 +300,8 @@ func (p *TaskPoller) HandlePartialDecision(response *workflowservice.PollForDeci
 		p.Logger.Fatal("History Events are empty")
 	}
 
-	nextPageToken := response.NextPageToken
-	for nextPageToken != nil {
-		resp, err2 := p.Engine.GetWorkflowExecutionHistory(createContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-			Domain:        p.Domain,
-			Execution:     response.WorkflowExecution,
-			NextPageToken: nextPageToken,
-		})
-
-		if err2 != nil {
-			return nil, err2
-		}
-
-		events = append(events, resp.History.Events...)
-		nextPageToken = resp.NextPageToken
-	}
-
-	executionCtx, decisions, err := p.DecisionHandler(response.WorkflowExecution, response.WorkflowType, response.PreviousStartedEventId, response.StartedEventId, response.History)
+	executionCtx, decisions, err := p.DecisionHandler(response.WorkflowExecution, response.WorkflowType,
+		common.Int64Default(response.PreviousStartedEventId), common.Int64Default(response.StartedEventId), response.History)
 	if err != nil {
 		p.Logger.Info("Failing Decision. Decision handler failed with error: %v", tag.Error(err))
 		_, err = p.Engine.RespondDecisionTaskFailed(createContext(), &workflowservice.RespondDecisionTaskFailedRequest{

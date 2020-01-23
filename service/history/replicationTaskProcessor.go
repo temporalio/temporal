@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination replicationTaskProcessor_mock.go
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination replicationTaskProcessor_mock.go -self_package github.com/uber/cadence/service/history
 
 package history
 
@@ -435,6 +435,7 @@ func (p *ReplicationTaskProcessorImpl) putReplicationTaskToDLQ(replicationTask *
 		err := p.shard.GetExecutionManager().PutReplicationTaskToDLQ(request)
 		if err != nil {
 			p.logger.Error("Failed to put replication task to DLQ.", tag.Error(err))
+			p.metricsClient.IncCounter(metrics.ReplicationTaskFetcherScope, metrics.ReplicationDLQFailed)
 		}
 		return err
 	}, p.dlqRetryPolicy, p.shouldRetryDLQ)

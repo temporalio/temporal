@@ -1,3 +1,9 @@
+build/
+cadence
+cadence-server
+cadence-canary
+cadence-sql-tool
+cadence-cassandra-tool
 vendor/
 .gobincache/
 .idea/

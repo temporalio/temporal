@@ -39,8 +39,7 @@ import (
 )
 
 const (
-	resendContextTimeout  = 30 * time.Second
-	continueAsNewPageSize = 1
+	resendContextTimeout = 30 * time.Second
 )
 
 type (

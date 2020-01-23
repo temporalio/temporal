@@ -21,12 +21,9 @@
 package config
 
 import (
-	"log"
 	"os"
-	"path/filepath"
 	"strings"
 
-	"github.com/sirupsen/logrus"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -69,26 +66,6 @@ func (cfg *Logger) NewZapLogger() *zap.Logger {
 	}
 	logger, _ := config.Build()
 	return logger
-}
-
-func getFormatter() logrus.Formatter {
-	formatter := &logrus.TextFormatter{}
-	formatter.FullTimestamp = true
-	return formatter
-}
-
-func createLogFile(path string) *os.File {
-	dir := filepath.Dir(path)
-	if len(dir) > 0 && dir != "." {
-		if err := os.MkdirAll(dir, fileMode); err != nil {
-			log.Fatalf("error creating log directory %v, err=%v", dir, err)
-		}
-	}
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, fileMode)
-	if err != nil {
-		log.Fatalf("error creating log file %v, err=%v", path, err)
-	}
-	return file
 }
 
 func parseZapLevel(level string) zapcore.Level {

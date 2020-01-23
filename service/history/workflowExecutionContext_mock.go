@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 //
-// Copyright (c) 2019 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -35,7 +35,6 @@ import (
 	gomock "github.com/golang/mock/gomock"
 
 	shared "github.com/temporalio/temporal/.gen/go/shared"
-	log "github.com/temporalio/temporal/common/log"
 	persistence "github.com/temporalio/temporal/common/persistence"
 )
 
@@ -102,20 +101,6 @@ func (m *MockworkflowExecutionContext) getExecution() *shared.WorkflowExecution 
 func (mr *MockworkflowExecutionContextMockRecorder) getExecution() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getExecution", reflect.TypeOf((*MockworkflowExecutionContext)(nil).getExecution))
-}
-
-// getLogger mocks base method
-func (m *MockworkflowExecutionContext) getLogger() log.Logger {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getLogger")
-	ret0, _ := ret[0].(log.Logger)
-	return ret0
-}
-
-// getLogger indicates an expected call of getLogger
-func (mr *MockworkflowExecutionContextMockRecorder) getLogger() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getLogger", reflect.TypeOf((*MockworkflowExecutionContext)(nil).getLogger))
 }
 
 // loadWorkflowExecution mocks base method

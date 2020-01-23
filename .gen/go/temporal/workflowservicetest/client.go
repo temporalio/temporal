@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 // 
-// Copyright (c) 2019 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -28,7 +28,6 @@ package workflowservicetest
 import (
 	context "context"
 	gomock "github.com/golang/mock/gomock"
-	replicator "github.com/temporalio/temporal/.gen/go/replicator"
 	shared "github.com/temporalio/temporal/.gen/go/shared"
 	workflowserviceclient "github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
 	yarpc "go.uber.org/yarpc"
@@ -259,72 +258,6 @@ func (mr *_MockClientRecorder) GetClusterInfo(
 	return mr.mock.ctrl.RecordCall(mr.mock, "GetClusterInfo", args...)
 }
 
-// GetDomainReplicationMessages responds to a GetDomainReplicationMessages call based on the mock expectations. This
-// call will fail if the mock does not expect this call. Use EXPECT to expect
-// a call to this function.
-//
-// 	client.EXPECT().GetDomainReplicationMessages(gomock.Any(), ...).Return(...)
-// 	... := client.GetDomainReplicationMessages(...)
-func (m *MockClient) GetDomainReplicationMessages(
-	ctx context.Context,
-	_Request *replicator.GetDomainReplicationMessagesRequest,
-	opts ...yarpc.CallOption,
-) (success *replicator.GetDomainReplicationMessagesResponse, err error) {
-
-	args := []interface{}{ctx, _Request}
-	for _, o := range opts {
-		args = append(args, o)
-	}
-	i := 0
-	ret := m.ctrl.Call(m, "GetDomainReplicationMessages", args...)
-	success, _ = ret[i].(*replicator.GetDomainReplicationMessagesResponse)
-	i++
-	err, _ = ret[i].(error)
-	return
-}
-
-func (mr *_MockClientRecorder) GetDomainReplicationMessages(
-	ctx interface{},
-	_Request interface{},
-	opts ...interface{},
-) *gomock.Call {
-	args := append([]interface{}{ctx, _Request}, opts...)
-	return mr.mock.ctrl.RecordCall(mr.mock, "GetDomainReplicationMessages", args...)
-}
-
-// GetReplicationMessages responds to a GetReplicationMessages call based on the mock expectations. This
-// call will fail if the mock does not expect this call. Use EXPECT to expect
-// a call to this function.
-//
-// 	client.EXPECT().GetReplicationMessages(gomock.Any(), ...).Return(...)
-// 	... := client.GetReplicationMessages(...)
-func (m *MockClient) GetReplicationMessages(
-	ctx context.Context,
-	_Request *replicator.GetReplicationMessagesRequest,
-	opts ...yarpc.CallOption,
-) (success *replicator.GetReplicationMessagesResponse, err error) {
-
-	args := []interface{}{ctx, _Request}
-	for _, o := range opts {
-		args = append(args, o)
-	}
-	i := 0
-	ret := m.ctrl.Call(m, "GetReplicationMessages", args...)
-	success, _ = ret[i].(*replicator.GetReplicationMessagesResponse)
-	i++
-	err, _ = ret[i].(error)
-	return
-}
-
-func (mr *_MockClientRecorder) GetReplicationMessages(
-	ctx interface{},
-	_Request interface{},
-	opts ...interface{},
-) *gomock.Call {
-	args := append([]interface{}{ctx, _Request}, opts...)
-	return mr.mock.ctrl.RecordCall(mr.mock, "GetReplicationMessages", args...)
-}
-
 // GetSearchAttributes responds to a GetSearchAttributes call based on the mock expectations. This
 // call will fail if the mock does not expect this call. Use EXPECT to expect
 // a call to this function.
@@ -387,6 +320,39 @@ func (mr *_MockClientRecorder) GetWorkflowExecutionHistory(
 ) *gomock.Call {
 	args := append([]interface{}{ctx, _GetRequest}, opts...)
 	return mr.mock.ctrl.RecordCall(mr.mock, "GetWorkflowExecutionHistory", args...)
+}
+
+// GetWorkflowExecutionRawHistory responds to a GetWorkflowExecutionRawHistory call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), ...).Return(...)
+// 	... := client.GetWorkflowExecutionRawHistory(...)
+func (m *MockClient) GetWorkflowExecutionRawHistory(
+	ctx context.Context,
+	_GetRequest *shared.GetWorkflowExecutionRawHistoryRequest,
+	opts ...yarpc.CallOption,
+) (success *shared.GetWorkflowExecutionRawHistoryResponse, err error) {
+
+	args := []interface{}{ctx, _GetRequest}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "GetWorkflowExecutionRawHistory", args...)
+	success, _ = ret[i].(*shared.GetWorkflowExecutionRawHistoryResponse)
+	i++
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) GetWorkflowExecutionRawHistory(
+	ctx interface{},
+	_GetRequest interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _GetRequest}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "GetWorkflowExecutionRawHistory", args...)
 }
 
 // ListArchivedWorkflowExecutions responds to a ListArchivedWorkflowExecutions call based on the mock expectations. This
@@ -684,37 +650,6 @@ func (mr *_MockClientRecorder) QueryWorkflow(
 ) *gomock.Call {
 	args := append([]interface{}{ctx, _QueryRequest}, opts...)
 	return mr.mock.ctrl.RecordCall(mr.mock, "QueryWorkflow", args...)
-}
-
-// ReapplyEvents responds to a ReapplyEvents call based on the mock expectations. This
-// call will fail if the mock does not expect this call. Use EXPECT to expect
-// a call to this function.
-//
-// 	client.EXPECT().ReapplyEvents(gomock.Any(), ...).Return(...)
-// 	... := client.ReapplyEvents(...)
-func (m *MockClient) ReapplyEvents(
-	ctx context.Context,
-	_ReapplyEventsRequest *shared.ReapplyEventsRequest,
-	opts ...yarpc.CallOption,
-) (err error) {
-
-	args := []interface{}{ctx, _ReapplyEventsRequest}
-	for _, o := range opts {
-		args = append(args, o)
-	}
-	i := 0
-	ret := m.ctrl.Call(m, "ReapplyEvents", args...)
-	err, _ = ret[i].(error)
-	return
-}
-
-func (mr *_MockClientRecorder) ReapplyEvents(
-	ctx interface{},
-	_ReapplyEventsRequest interface{},
-	opts ...interface{},
-) *gomock.Call {
-	args := append([]interface{}{ctx, _ReapplyEventsRequest}, opts...)
-	return mr.mock.ctrl.RecordCall(mr.mock, "ReapplyEvents", args...)
 }
 
 // RecordActivityTaskHeartbeat responds to a RecordActivityTaskHeartbeat call based on the mock expectations. This

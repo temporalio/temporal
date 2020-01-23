@@ -36,14 +36,16 @@ import (
 )
 
 const (
-	firstMessageID = 0
+	emptyMessageID = -1
 )
 
 const (
 	templateEnqueueMessageQuery      = `INSERT INTO queue (queue_type, message_id, message_payload) VALUES(?, ?, ?) IF NOT EXISTS`
 	templateGetLastMessageIDQuery    = `SELECT message_id FROM queue WHERE queue_type=? ORDER BY message_id DESC LIMIT 1`
-	templateGetMessagesQuery         = `SELECT message_id, message_payload FROM queue WHERE queue_type = ? and message_id > ? LIMIT ?`
+	templateGetMessagesQuery         = `SELECT message_id, message_payload FROM queue WHERE queue_type = ? and message_id > ? ORDER BY message_id ASC LIMIT ?`
+	templateGetMessagesFromDLQQuery  = `SELECT message_id, message_payload FROM queue WHERE queue_type = ? and message_id > ? and message_id <= ? ORDER BY message_id ASC LIMIT ?`
 	templateDeleteMessagesQuery      = `DELETE FROM queue WHERE queue_type = ? and message_id < ?`
+	templateDeleteMessageQuery       = `DELETE FROM queue WHERE queue_type = ? and message_id = ?`
 	templateGetQueueMetadataQuery    = `SELECT cluster_ack_level, version FROM queue_metadata WHERE queue_type = ?`
 	templateInsertQueueMetadataQuery = `INSERT INTO queue_metadata (queue_type, cluster_ack_level, version) VALUES(?, ?, ?) IF NOT EXISTS`
 	templateUpdateQueueMetadataQuery = `UPDATE queue_metadata SET cluster_ack_level = ?, version = ? WHERE queue_type = ? IF version = ?`
@@ -115,29 +117,43 @@ func (q *cassandraQueue) createQueueMetadataEntryIfNotExist() error {
 func (q *cassandraQueue) EnqueueMessage(
 	messagePayload []byte,
 ) error {
-	nextMessageID, err := q.getNextMessageID()
+	lastMessageID, err := q.getLastMessageID(q.queueType)
 	if err != nil {
 		return err
 	}
 
-	return q.tryEnqueue(nextMessageID, messagePayload)
+	return q.tryEnqueue(q.queueType, lastMessageID+1, messagePayload)
+}
+
+func (q *cassandraQueue) EnqueueMessageToDLQ(
+	messagePayload []byte,
+) error {
+	// Use negative queue type as the dlq type
+	lastMessageID, err := q.getLastMessageID(-q.queueType)
+	if err != nil {
+		return err
+	}
+
+	// Use negative queue type as the dlq type
+	return q.tryEnqueue(-q.queueType, lastMessageID+1, messagePayload)
 }
 
 func (q *cassandraQueue) tryEnqueue(
+	queueType common.QueueType,
 	messageID int,
 	messagePayload []byte,
 ) error {
-	query := q.session.Query(templateEnqueueMessageQuery, q.queueType, messageID, messagePayload)
+	query := q.session.Query(templateEnqueueMessageQuery, queueType, messageID, messagePayload)
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
 		if isThrottlingError(err) {
 			return &workflow.ServiceBusyError{
-				Message: fmt.Sprintf("Failed to enqueue message. Error: %v", err),
+				Message: fmt.Sprintf("Failed to enqueue message. Error: %v, Type: %v.", err, queueType),
 			}
 		}
 		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to enqueue message. Error: %v", err),
+			Message: fmt.Sprintf("Failed to enqueue message. Error: %v, Type: %v.", err, queueType),
 		}
 	}
 
@@ -148,26 +164,28 @@ func (q *cassandraQueue) tryEnqueue(
 	return nil
 }
 
-func (q *cassandraQueue) getNextMessageID() (int, error) {
-	query := q.session.Query(templateGetLastMessageIDQuery, q.queueType)
+func (q *cassandraQueue) getLastMessageID(
+	queueType common.QueueType,
+) (int, error) {
 
+	query := q.session.Query(templateGetLastMessageIDQuery, queueType)
 	result := make(map[string]interface{})
 	err := query.MapScan(result)
 	if err != nil {
 		if err == gocql.ErrNotFound {
-			return firstMessageID, nil
+			return emptyMessageID, nil
 		} else if isThrottlingError(err) {
-			return 0, &workflow.ServiceBusyError{
-				Message: fmt.Sprintf("Failed to get last message ID for queue %v. Error: %v", q.queueType, err),
+			return emptyMessageID, &workflow.ServiceBusyError{
+				Message: fmt.Sprintf("Failed to get last message ID for queue %v. Error: %v", queueType, err),
 			}
 		}
 
-		return 0, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to get last message ID for queue %v. Error: %v", q.queueType, err),
+		return emptyMessageID, &workflow.InternalServiceError{
+			Message: fmt.Sprintf("Failed to get last message ID for queue %v. Error: %v", queueType, err),
 		}
 	}
 
-	return result["message_id"].(int) + 1, nil
+	return result["message_id"].(int), nil
 }
 
 func (q *cassandraQueue) ReadMessages(
@@ -206,19 +224,97 @@ func (q *cassandraQueue) ReadMessages(
 	return result, nil
 }
 
-func getMessagePayload(message map[string]interface{}) []byte {
+func (q *cassandraQueue) ReadMessagesFromDLQ(
+	firstMessageID int,
+	lastMessageID int,
+	maxCount int,
+) ([]*persistence.QueueMessage, error) {
+	// Reading replication tasks need to be quorum level consistent, otherwise we could loose task
+	// Use negative queue type as the dlq type
+	query := q.session.Query(templateGetMessagesFromDLQQuery,
+		-q.queueType,
+		firstMessageID,
+		lastMessageID,
+		maxCount,
+	)
+
+	iter := query.Iter()
+	if iter == nil {
+		return nil, &workflow.InternalServiceError{
+			Message: fmt.Sprintf("ReadMessagesFromDLQ operation failed. Not able to create query iterator."),
+		}
+	}
+
+	var result []*persistence.QueueMessage
+	message := make(map[string]interface{})
+	for iter.MapScan(message) {
+		payload := getMessagePayload(message)
+		id := getMessageID(message)
+		result = append(result, &persistence.QueueMessage{ID: id, Payload: payload})
+		message = make(map[string]interface{})
+	}
+
+	if err := iter.Close(); err != nil {
+		return nil, &workflow.InternalServiceError{
+			Message: fmt.Sprintf("ReadMessagesFromDLQ operation failed. Error: %v", err),
+		}
+	}
+
+	return result, nil
+}
+
+func getMessagePayload(
+	message map[string]interface{},
+) []byte {
+
 	return message["message_payload"].([]byte)
 }
 
-func getMessageID(message map[string]interface{}) int {
+func getMessageID(
+	message map[string]interface{},
+) int {
+
 	return message["message_id"].(int)
 }
 
-func (q *cassandraQueue) DeleteMessagesBefore(messageID int) error {
+func (q *cassandraQueue) DeleteMessagesBefore(
+	messageID int,
+) error {
+
 	query := q.session.Query(templateDeleteMessagesQuery, q.queueType, messageID)
 	if err := query.Exec(); err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("DeleteMessagesBefore operation failed. Error %v", err),
+		}
+	}
+
+	return nil
+}
+
+func (q *cassandraQueue) DeleteMessageFromDLQ(
+	messageID int,
+) error {
+
+	// Use negative queue type as the dlq type
+	query := q.session.Query(templateDeleteMessageQuery, -q.queueType, messageID)
+	if err := query.Exec(); err != nil {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("DeleteMessagesFromDLQ operation failed. Error %v", err),
+		}
+	}
+
+	return nil
+}
+
+func (q *cassandraQueue) DeleteDLQMessagesBefore(
+	messageID int,
+) error {
+
+	// Use negative queue type as the dlq type
+	query := q.session.Query(templateDeleteMessagesQuery, -q.queueType, messageID)
+	if err := query.Exec(); err != nil {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("RangeDeleteMessagesFromDLQ operation failed. Error %v", err),
 		}
 	}
 
@@ -237,7 +333,11 @@ func (q *cassandraQueue) insertInitialQueueMetadataRecord() error {
 	return nil
 }
 
-func (q *cassandraQueue) UpdateAckLevel(messageID int, clusterName string) error {
+func (q *cassandraQueue) UpdateAckLevel(
+	messageID int,
+	clusterName string,
+) error {
+
 	queueMetadata, err := q.getQueueMetadata()
 	if err != nil {
 		return &workflow.InternalServiceError{
@@ -293,7 +393,10 @@ func (q *cassandraQueue) getQueueMetadata() (*queueMetadata, error) {
 	return &queueMetadata{clusterAckLevels: ackLevels, version: version}, nil
 }
 
-func (q *cassandraQueue) updateQueueMetadata(metadata *queueMetadata) error {
+func (q *cassandraQueue) updateQueueMetadata(
+	metadata *queueMetadata,
+) error {
+
 	query := q.session.Query(templateUpdateQueueMetadataQuery,
 		metadata.clusterAckLevels,
 		metadata.version,
@@ -313,6 +416,11 @@ func (q *cassandraQueue) updateQueueMetadata(metadata *queueMetadata) error {
 	}
 
 	return nil
+}
+
+func (q *cassandraQueue) GetLastMessageIDFromDLQ() (int, error) {
+	// Use negative queue type as the dlq type
+	return q.getLastMessageID(-q.queueType)
 }
 
 func (q *cassandraQueue) Close() {

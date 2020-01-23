@@ -48,7 +48,7 @@ func (e *ESql) ConvertPrettyCadence(sql string, domainID string, pagination ...i
 	if err != nil {
 		return "", nil, err
 	}
-	return string(prettifiedDSLBytes.Bytes()), sortFields, err
+	return prettifiedDSLBytes.String(), sortFields, err
 }
 
 // ConvertCadence ...
@@ -64,9 +64,9 @@ func (e *ESql) ConvertCadence(sql string, domainID string, pagination ...interfa
 	}
 
 	//sql valid, start to handle
-	switch stmt.(type) {
+	switch stmt := stmt.(type) {
 	case *sqlparser.Select:
-		dsl, sortFields, err = e.convertSelect(*(stmt.(*sqlparser.Select)), domainID, pagination...)
+		dsl, sortFields, err = e.convertSelect(*(stmt), domainID, pagination...)
 	default:
 		err = fmt.Errorf(`esql: Queries other than select not supported`)
 	}

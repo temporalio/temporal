@@ -73,7 +73,7 @@ func BenchmarkLock(b *testing.B) {
 	l := NewMutex()
 	ctx := context.Background()
 	for n := 0; n < b.N; n++ {
-		l.Lock(ctx)
-		l.Unlock()
+		l.Lock(ctx) //nolint:errcheck
+		l.Unlock()  //nolint:staticcheck
 	}
 }

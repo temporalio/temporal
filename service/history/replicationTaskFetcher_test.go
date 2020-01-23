@@ -30,7 +30,10 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal-proto/workflowservicemock"
 
+	"github.com/temporalio/temporal/.gen/go/admin/adminservicetest"
 	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/resource"
 )
 
 type (
@@ -40,7 +43,7 @@ type (
 		controller *gomock.Controller
 
 		config                 *Config
-		frontendClient         *workflowservicemock.MockWorkflowServiceClient
+		frontendClient         *adminservicetest.MockClient
 		replicationTaskFetcher *ReplicationTaskFetcherImpl
 	}
 )
@@ -62,6 +65,8 @@ func (s *replicationTaskFetcherSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 
+	s.mockResource = resource.NewTest(s.controller, metrics.History)
+	s.frontendClient = s.mockResource.RemoteAdminClient
 	logger := log.NewNoop()
 	s.config = NewDynamicConfigForTest()
 	s.frontendClient = workflowservicemock.NewMockWorkflowServiceClient(s.controller)

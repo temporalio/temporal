@@ -302,6 +302,12 @@ CREATE TYPE branch_range (
   end_node_id bigint, -- exclusive node_id to represent the stopping point for this range
 );
 
+CREATE TYPE checksum (
+  version int,  -- version of the payload used to generate checksum
+  flavor  int,  -- type of checksum e.g crc32OverThrift
+  value   blob, -- checksum bytes
+);
+
 CREATE TABLE executions (
   shard_id                       int,
   type                           int, -- enum RowType { Shard, Execution, TransferTask, TimerTask, ReplicationTask}
@@ -331,6 +337,7 @@ CREATE TABLE executions (
   workflow_state                 int,
   version_histories              blob, -- the metadata of history branching
   version_histories_encoding     text,
+  checksum                       frozen<checksum>,
   PRIMARY KEY  (shard_id, type, domain_id, workflow_id, run_id, visibility_ts, task_id)
 ) WITH COMPACTION = {
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'

@@ -293,7 +293,7 @@ func newHistoryReplicationV2Task(
 }
 
 func (t *activityReplicationTask) Execute() error {
-	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), t.config.ReplicationTaskContextTimeout())
 	defer cancel()
 	return t.historyClient.SyncActivity(ctx, t.req)
 }
@@ -357,7 +357,7 @@ func (t *activityReplicationTask) HandleErr(
 }
 
 func (t *historyReplicationTask) Execute() error {
-	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), t.config.ReplicationTaskContextTimeout())
 	defer cancel()
 	return t.historyClient.ReplicateEvents(ctx, t.req)
 }
@@ -439,7 +439,7 @@ func (t *historyMetadataReplicationTask) HandleErr(
 }
 
 func (t *historyReplicationV2Task) Execute() error {
-	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), t.config.ReplicationTaskContextTimeout())
 	defer cancel()
 	return t.historyClient.ReplicateEventsV2(ctx, t.req)
 }

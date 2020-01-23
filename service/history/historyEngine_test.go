@@ -28,14 +28,13 @@ import (
 	"testing"
 	"time"
 
-	"go.uber.org/yarpc/api/encoding"
-	"go.uber.org/yarpc/api/transport"
-
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/yarpc/api/encoding"
+	"go.uber.org/yarpc/api/transport"
 
 	"github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/history/historyservicetest"
@@ -48,6 +47,7 @@ import (
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
+	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/persistence"
 	p "github.com/temporalio/temporal/common/persistence"
@@ -117,13 +117,6 @@ var testGlobalDomainEntry = cache.NewGlobalDomainCacheEntryForTest(
 	nil,
 )
 
-var testLocalParentDomainEntry = cache.NewLocalDomainCacheEntryForTest(
-	&persistence.DomainInfo{ID: testParentDomainID, Name: testParentDomainName},
-	&p.DomainConfig{Retention: 1},
-	cluster.TestCurrentClusterName,
-	nil,
-)
-
 var testGlobalParentDomainEntry = cache.NewGlobalDomainCacheEntryForTest(
 	&persistence.DomainInfo{ID: testParentDomainID, Name: testParentDomainName},
 	&p.DomainConfig{Retention: 1},
@@ -138,13 +131,6 @@ var testGlobalParentDomainEntry = cache.NewGlobalDomainCacheEntryForTest(
 	nil,
 )
 
-var testLocalTargetDomainEntry = cache.NewLocalDomainCacheEntryForTest(
-	&persistence.DomainInfo{ID: testTargetDomainID, Name: testTargetDomainName},
-	&p.DomainConfig{Retention: 1},
-	cluster.TestCurrentClusterName,
-	nil,
-)
-
 var testGlobalTargetDomainEntry = cache.NewGlobalDomainCacheEntryForTest(
 	&persistence.DomainInfo{ID: testTargetDomainID, Name: testTargetDomainName},
 	&p.DomainConfig{Retention: 1},
@@ -156,13 +142,6 @@ var testGlobalTargetDomainEntry = cache.NewGlobalDomainCacheEntryForTest(
 		},
 	},
 	testVersion,
-	nil,
-)
-
-var testLocalChildDomainEntry = cache.NewLocalDomainCacheEntryForTest(
-	&persistence.DomainInfo{ID: testChildDomainID, Name: testChildDomainName},
-	&p.DomainConfig{Retention: 1},
-	cluster.TestCurrentClusterName,
 	nil,
 )
 
@@ -4940,7 +4919,7 @@ func addDecisionTaskCompletedEvent(builder mutableState, scheduleID, startedID i
 		Identity:         common.StringPtr(identity),
 	}, defaultHistoryMaxAutoResetPoints)
 
-	builder.FlushBufferedEvents()
+	builder.FlushBufferedEvents() //nolint:errcheck
 
 	return event
 }
@@ -5147,7 +5126,10 @@ func newMutableStateBuilderWithReplicationStateWithEventV2(shard ShardContext, e
 
 	msBuilder := newMutableStateBuilderWithReplicationState(shard, eventsCache, logger, testGlobalDomainEntry)
 	msBuilder.GetReplicationState().StartVersion = version
-	msBuilder.UpdateCurrentVersion(version, true)
+	err := msBuilder.UpdateCurrentVersion(version, true)
+	if err != nil {
+		logger.Error("update current version error", tag.Error(err))
+	}
 	_ = msBuilder.SetHistoryTree(runID)
 
 	return msBuilder
@@ -5155,7 +5137,7 @@ func newMutableStateBuilderWithReplicationStateWithEventV2(shard ShardContext, e
 
 func createMutableState(ms mutableState) *persistence.WorkflowMutableState {
 	builder := ms.(*mutableStateBuilder)
-	builder.FlushBufferedEvents()
+	builder.FlushBufferedEvents() //nolint:errcheck
 	info := copyWorkflowExecutionInfo(builder.executionInfo)
 	stats := &persistence.ExecutionStats{}
 	activityInfos := make(map[int64]*persistence.ActivityInfo)
@@ -5179,7 +5161,7 @@ func createMutableState(ms mutableState) *persistence.WorkflowMutableState {
 		childInfos[id] = copyChildInfo(info)
 	}
 
-	builder.FlushBufferedEvents()
+	builder.FlushBufferedEvents() //nolint:errcheck
 	var bufferedEvents []*workflow.HistoryEvent
 	if len(builder.bufferedEvents) > 0 {
 		bufferedEvents = append(bufferedEvents, builder.bufferedEvents...)

@@ -99,6 +99,7 @@ type (
 		SyncShardStatus(ctx ctx.Context, request *h.SyncShardStatusRequest) error
 		SyncActivity(ctx ctx.Context, request *h.SyncActivityRequest) error
 		GetReplicationMessages(ctx ctx.Context, pollingCluster string, lastReadMessageID int64) (*r.ReplicationMessages, error)
+		GetDLQReplicationMessages(ctx ctx.Context, taskInfos []*r.ReplicationTaskInfo) ([]*r.ReplicationTask, error)
 		QueryWorkflow(ctx ctx.Context, request *h.QueryWorkflowRequest) (*h.QueryWorkflowResponse, error)
 		ReapplyEvents(ctx ctx.Context, domainUUID string, workflowID string, runID string, events []*workflow.HistoryEvent) error
 
@@ -119,7 +120,6 @@ type (
 		visibilityMgr             persistence.VisibilityManager
 		txProcessor               transferQueueProcessor
 		timerProcessor            timerQueueProcessor
-		taskAllocator             taskAllocator
 		replicator                *historyReplicator
 		nDCReplicator             nDCHistoryReplicator
 		nDCActivityReplicator     nDCActivityReplicator
@@ -417,6 +417,7 @@ func (e *historyEngineImpl) registerDomainFailoverCallback() {
 				e.timerProcessor.NotifyNewTimers(e.currentClusterName, fakeDecisionTimeoutTask)
 			}
 
+			//nolint:errcheck
 			e.shard.UpdateDomainNotificationVersion(nextDomains[len(nextDomains)-1].GetNotificationVersion() + 1)
 		},
 	)
@@ -698,7 +699,7 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 		if err != nil {
 			return nil, err
 		}
-		defer e.historyEventNotifier.UnwatchHistoryEvent(definition.NewWorkflowIdentifier(domainID, execution.GetWorkflowId(), execution.GetRunId()), subscriberID)
+		defer e.historyEventNotifier.UnwatchHistoryEvent(definition.NewWorkflowIdentifier(domainID, execution.GetWorkflowId(), execution.GetRunId()), subscriberID) //nolint:errcheck
 		// check again in case the next event ID is updated
 		response, err = e.getMutableState(ctx, domainID, execution)
 		if err != nil {
@@ -2778,6 +2779,28 @@ func (e *historyEngineImpl) GetReplicationMessages(
 	}
 	e.logger.Debug("Successfully fetched replication messages.", tag.Counter(len(replicationMessages.ReplicationTasks)))
 	return replicationMessages, nil
+}
+
+func (e *historyEngineImpl) GetDLQReplicationMessages(
+	ctx ctx.Context,
+	taskInfos []*r.ReplicationTaskInfo,
+) ([]*r.ReplicationTask, error) {
+
+	scope := metrics.HistoryGetDLQReplicationMessagesScope
+	sw := e.metricsClient.StartTimer(scope, metrics.GetDLQReplicationMessagesLatency)
+	defer sw.Stop()
+
+	tasks := make([]*r.ReplicationTask, len(taskInfos))
+	for _, taskInfo := range taskInfos {
+		task, err := e.replicatorProcessor.getTask(ctx, taskInfo)
+		if err != nil {
+			e.logger.Error("Failed to fetch DLQ replication messages.", tag.Error(err))
+			return nil, err
+		}
+		tasks = append(tasks, task)
+	}
+
+	return tasks, nil
 }
 
 func (e *historyEngineImpl) ReapplyEvents(

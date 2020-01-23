@@ -25,7 +25,6 @@ import (
 
 	"go.uber.org/yarpc"
 
-	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/backoff"
 )
@@ -117,6 +116,22 @@ func (c *retryableClient) GetWorkflowExecutionHistory(
 	op := func() error {
 		var err error
 		resp, err = c.client.GetWorkflowExecutionHistory(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) GetWorkflowExecutionRawHistory(
+	ctx context.Context,
+	request *shared.GetWorkflowExecutionRawHistoryRequest,
+	opts ...yarpc.CallOption,
+) (*shared.GetWorkflowExecutionRawHistoryResponse, error) {
+
+	var resp *shared.GetWorkflowExecutionRawHistoryResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.GetWorkflowExecutionRawHistory(ctx, request, opts...)
 		return err
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)
@@ -568,48 +583,6 @@ func (c *retryableClient) UpdateDomain(
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)
 	return resp, err
-}
-
-func (c *retryableClient) GetReplicationMessages(
-	ctx context.Context,
-	request *replicator.GetReplicationMessagesRequest,
-	opts ...yarpc.CallOption,
-) (*replicator.GetReplicationMessagesResponse, error) {
-	var resp *replicator.GetReplicationMessagesResponse
-	op := func() error {
-		var err error
-		resp, err = c.client.GetReplicationMessages(ctx, request, opts...)
-		return err
-	}
-	err := backoff.Retry(op, c.policy, c.isRetryable)
-	return resp, err
-}
-
-func (c *retryableClient) GetDomainReplicationMessages(
-	ctx context.Context,
-	request *replicator.GetDomainReplicationMessagesRequest,
-	opts ...yarpc.CallOption,
-) (*replicator.GetDomainReplicationMessagesResponse, error) {
-	var resp *replicator.GetDomainReplicationMessagesResponse
-	op := func() error {
-		var err error
-		resp, err = c.client.GetDomainReplicationMessages(ctx, request, opts...)
-		return err
-	}
-	err := backoff.Retry(op, c.policy, c.isRetryable)
-	return resp, err
-}
-
-func (c *retryableClient) ReapplyEvents(
-	ctx context.Context,
-	request *shared.ReapplyEventsRequest,
-	opts ...yarpc.CallOption,
-) error {
-
-	op := func() error {
-		return c.client.ReapplyEvents(ctx, request, opts...)
-	}
-	return backoff.Retry(op, c.policy, c.isRetryable)
 }
 
 func (c *retryableClient) GetClusterInfo(

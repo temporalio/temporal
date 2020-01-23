@@ -57,7 +57,6 @@ type (
 	taskProcessor struct {
 		shard         ShardContext
 		cache         *historyCache
-		shutdownWG    sync.WaitGroup
 		shutdownCh    chan struct{}
 		tasksCh       chan *taskInfo
 		config        *Config
@@ -131,7 +130,6 @@ func (t *taskProcessor) start() {
 
 func (t *taskProcessor) stop() {
 	close(t.shutdownCh)
-	close(t.tasksCh)
 	if success := common.AwaitWaitGroup(&t.workerWG, time.Minute); !success {
 		t.logger.Warn("Timer queue task processor timedout on shutdown.")
 	}

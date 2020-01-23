@@ -98,8 +98,8 @@ func (s *matchingEngineSuite) TasksHandler(w http.ResponseWriter, r *http.Reques
 	s.Lock()
 	defer s.Unlock()
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	fmt.Fprintf(w, fmt.Sprintf("%v\n", s.taskManager))
-	fmt.Fprintf(w, fmt.Sprintf("%v\n", s.matchingEngine))
+	fmt.Fprint(w, fmt.Sprintf("%v\n", s.taskManager))
+	fmt.Fprint(w, fmt.Sprintf("%v\n", s.matchingEngine))
 }
 
 func (s *matchingEngineSuite) TearDownSuite() {
@@ -1486,7 +1486,7 @@ func (s *matchingEngineSuite) TestTaskListManagerGetTaskBatch() {
 		}
 	}
 	s.EqualValues(taskCount-rangeSize, s.taskManager.getTaskCount(tlID))
-	tasks, readLevel, isReadBatchDone, err = tlMgr.taskReader.getTaskBatch()
+	tasks, _, isReadBatchDone, err = tlMgr.taskReader.getTaskBatch()
 	s.Nil(err)
 	s.True(0 < len(tasks) && len(tasks) <= rangeSize)
 	s.True(isReadBatchDone)
@@ -1659,17 +1659,6 @@ func newActivityTaskScheduledEvent(eventID int64, decisionTaskCompletedEventID i
 	attributes.HeartbeatTimeoutSeconds = common.Int32Ptr(*scheduleAttributes.HeartbeatTimeoutSeconds)
 	attributes.DecisionTaskCompletedEventId = common.Int64Ptr(decisionTaskCompletedEventID)
 	historyEvent.ActivityTaskScheduledEventAttributes = attributes
-
-	return historyEvent
-}
-
-func newActivityTaskStartedEvent(eventID, scheduledEventID int64,
-	request *workflow.PollForActivityTaskRequest) *workflow.HistoryEvent {
-	historyEvent := newHistoryEvent(eventID, workflow.EventTypeActivityTaskStarted)
-	attributes := &workflow.ActivityTaskStartedEventAttributes{}
-	attributes.ScheduledEventId = common.Int64Ptr(scheduledEventID)
-	attributes.Identity = common.StringPtr(*request.Identity)
-	historyEvent.ActivityTaskStartedEventAttributes = attributes
 
 	return historyEvent
 }

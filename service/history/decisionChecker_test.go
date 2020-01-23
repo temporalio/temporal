@@ -45,8 +45,7 @@ type (
 		controller      *gomock.Controller
 		mockDomainCache *cache.MockDomainCache
 
-		maxIDLengthLimit int
-		validator        *decisionAttrValidator
+		validator *decisionAttrValidator
 
 		testDomainID       string
 		testTargetDomainID string

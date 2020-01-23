@@ -4,7 +4,7 @@ ARG TARGET=server
 ARG GOPROXY
 
 # Build tcheck binary
-FROM golang:1.13.3-alpine AS tcheck
+FROM golang:1.13.6-alpine AS tcheck
 
 RUN apk add --update --no-cache ca-certificates git curl
 
@@ -24,7 +24,7 @@ RUN glide install
 RUN go install
 
 # Build Cadence binaries
-FROM golang:1.13.3-alpine AS builder
+FROM golang:1.13.6-alpine AS builder
 
 RUN apk add --update --no-cache ca-certificates make curl git mercurial bzr openssh protobuf
 
@@ -57,11 +57,11 @@ RUN go mod download
 
 COPY . .
 
-# need to make clean first in case binaries to be built are stale
-RUN make clean && CGO_ENABLED=0 make copyright cadence-cassandra-tool cadence-sql-tool cadence cadence-server
+
+RUN CGO_ENABLED=0 make copyright cadence-cassandra-tool cadence-sql-tool cadence cadence-server
 
 # Download dockerize
-FROM alpine:3.10 AS dockerize
+FROM alpine:3.11 AS dockerize
 
 RUN apk add --no-cache openssl
 
@@ -73,7 +73,7 @@ RUN wget https://github.com/jwilder/dockerize/releases/download/$DOCKERIZE_VERSI
     && chown root:root /usr/local/bin/dockerize
 
 # Alpine base image
-FROM alpine:3.10 AS alpine
+FROM alpine:3.11 AS alpine
 
 RUN apk add --update --no-cache ca-certificates tzdata bash curl
 
@@ -129,7 +129,7 @@ COPY --from=builder /temporal/cadence /usr/local/bin
 
 ENTRYPOINT ["cadence"]
 
-# All candence tool binaries 
+# All candence tool binaries
 FROM alpine AS cadence-admin-tools
 
 ENV CADENCE_HOME /etc/cadence

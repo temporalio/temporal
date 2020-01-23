@@ -18,6 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//nolint
 package canary
 
 import (
@@ -32,10 +33,6 @@ import (
 	"go.temporal.io/temporal/client"
 	"go.temporal.io/temporal/workflow"
 	"google.golang.org/grpc/codes"
-)
-
-const (
-	cadenceConfig = "cadence"
 )
 
 // cadenceClient is an abstraction on top of

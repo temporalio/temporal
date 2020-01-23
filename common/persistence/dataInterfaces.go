@@ -27,6 +27,8 @@ import (
 
 	"github.com/temporalio/temporal/.gen/go/persistenceblobs"
 
+	"github.com/temporalio/temporal/common/checksum"
+
 	"github.com/pborman/uuid"
 
 	"github.com/temporalio/temporal/.gen/go/replicator"
@@ -633,6 +635,7 @@ type (
 		ReplicationState    *ReplicationState
 		BufferedEvents      []*workflow.HistoryEvent
 		VersionHistories    *VersionHistories
+		Checksum            checksum.Checksum
 	}
 
 	// ActivityInfo details.
@@ -883,6 +886,7 @@ type (
 		TimerTasks       []Task
 
 		Condition int64
+		Checksum  checksum.Checksum
 	}
 
 	// WorkflowSnapshot is used as generic workflow execution state snapshot
@@ -904,6 +908,7 @@ type (
 		TimerTasks       []Task
 
 		Condition int64
+		Checksum  checksum.Checksum
 	}
 
 	// DeleteWorkflowExecutionRequest is used to delete a workflow execution
@@ -1140,6 +1145,7 @@ type (
 	// ClusterReplicationConfig describes the cross DC cluster replication configuration
 	ClusterReplicationConfig struct {
 		ClusterName string
+		// Note: if adding new properties of non-primitive types, remember to update GetCopy()
 	}
 
 	// CreateDomainRequest is used to create the domain
@@ -2402,6 +2408,12 @@ func (config *ClusterReplicationConfig) serialize() map[string]interface{} {
 
 func (config *ClusterReplicationConfig) deserialize(input map[string]interface{}) {
 	config.ClusterName = input["cluster_name"].(string)
+}
+
+// GetCopy return a copy of ClusterReplicationConfig
+func (config *ClusterReplicationConfig) GetCopy() *ClusterReplicationConfig {
+	res := *config
+	return &res
 }
 
 // DBTimestampToUnixNano converts CQL timestamp to UnixNano

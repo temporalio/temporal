@@ -37,8 +37,7 @@ import (
 )
 
 const (
-	errEncodeVisibilityRecord    = "failed to encode visibility record"
-	errInvalidVisibilityFilename = "failed to parse visibility file name"
+	errEncodeVisibilityRecord = "failed to encode visibility record"
 )
 
 type (

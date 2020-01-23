@@ -72,12 +72,17 @@ func mkdirAll(path string, dirMode os.FileMode) error {
 	return os.MkdirAll(path, dirMode)
 }
 
-func writeFile(filepath string, data []byte, fileMode os.FileMode) error {
+func writeFile(filepath string, data []byte, fileMode os.FileMode) (retErr error) {
 	if err := os.Remove(filepath); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	f, err := os.Create(filepath)
-	defer f.Close()
+	defer func() {
+		err := f.Close()
+		if err != nil {
+			retErr = err
+		}
+	}()
 	if err != nil {
 		return err
 	}

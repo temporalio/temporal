@@ -27,6 +27,7 @@ THRIFTRW_SRCS = \
   idl/github.com/temporalio/temporal/shared.thrift \
   idl/github.com/temporalio/temporal/admin.thrift \
   idl/github.com/temporalio/temporal/sqlblobs.thrift \
+  idl/github.com/temporalio/temporal/checksum.thrift \
   idl/github.com/temporalio/temporal/persistenceblobs.thrift \
 
 PROGS = cadence
@@ -158,7 +159,7 @@ yarpc-install:
 clean_thrift:
 	rm -rf .gen/go
 
-thriftc: yarpc-install $(THRIFTRW_GEN_SRC)
+thriftc: yarpc-install $(THRIFTRW_GEN_SRC) copyright
 
 copyright: cmd/tools/copyright/licensegen.go
 	GOOS= GOARCH= go run ./cmd/tools/copyright/licensegen.go --verifyOnly
@@ -178,6 +179,10 @@ cadence: $(TOOLS_SRC)
 cadence-server: $(ALL_SRC)
 	@echo "compiling cadence-server with OS: $(GOOS), ARCH: $(GOARCH)"
 	go build -ldflags '$(GO_BUILD_LDFLAGS)' -i -o cadence-server cmd/server/main.go
+
+cadence-canary: $(ALL_SRC)
+	@echo "compiling cadence-canary with OS: $(GOOS), ARCH: $(GOARCH)"
+	go build -i -o cadence-canary cmd/canary/main.go
 
 go-generate:
 	GO111MODULE=off go get -u github.com/myitcv/gobin
@@ -205,7 +210,7 @@ fmt:
 	@echo "running goimports"
 	@goimports -local "github.com/temporalio/temporal" -w $(ALL_SRC)
 
-bins_nothrift: fmt lint copyright cadence-cassandra-tool cadence-sql-tool cadence cadence-server
+bins_nothrift: fmt lint copyright cadence-cassandra-tool cadence-sql-tool cadence cadence-server cadence-canary
 
 bins: proto thriftc bins_nothrift
 
@@ -291,9 +296,10 @@ cover_ci: $(COVER_ROOT)/cover.out
 
 clean:
 	rm -f cadence
+	rm -f cadence-server
+	rm -f cadence-canary
 	rm -f cadence-sql-tool
 	rm -f cadence-cassandra-tool
-	rm -f cadence-server
 	rm -Rf $(BUILD)
 
 install-schema: bins
@@ -356,3 +362,6 @@ start-cdc-standby: bins
 
 start-cdc-other: bins
 	./cadence-server --zone other start
+
+start-canary: bins
+	./cadence-canary start

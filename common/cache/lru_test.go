@@ -130,18 +130,18 @@ func TestLRUCacheConcurrentAccess(t *testing.T) {
 			}
 		}()
 
-		// confurrent iteration
+		// concurrent iteration
 		go func() {
 			defer wg.Done()
 
 			<-start
 
 			for j := 0; j < 50; j++ {
-				result := []Entry{}
+				var result []Entry
 				it := cache.Iterator()
 				for it.HasNext() {
 					entry := it.Next()
-					result = append(result, entry)
+					result = append(result, entry) //nolint:staticcheck
 				}
 				it.Close()
 			}
@@ -212,7 +212,8 @@ func TestRemovedFuncWithTTL_Pin(t *testing.T) {
 		},
 	})
 
-	cache.PutIfNotExist("A", t)
+	_, err := cache.PutIfNotExist("A", t)
+	assert.NoError(t, err)
 	assert.Equal(t, t, cache.Get("A"))
 	time.Sleep(time.Millisecond * 100)
 	assert.Equal(t, t, cache.Get("A"))
