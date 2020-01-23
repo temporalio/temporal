@@ -648,7 +648,7 @@ func (s *cliAppSuite) TestParseTimeDateRange() {
 			expected: time.Unix(0, 0).UnixNano(),
 		},
 	}
-	delta := int64(5 * time.Millisecond)
+	delta := int64(50 * time.Millisecond)
 	for _, te := range tests {
 		s.True(te.expected <= parseTime(te.timeStr, te.defVal))
 		s.True(te.expected+delta >= parseTime(te.timeStr, te.defVal))
