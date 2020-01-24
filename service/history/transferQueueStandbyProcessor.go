@@ -680,15 +680,15 @@ func (t *transferQueueStandbyProcessorImpl) fetchHistoryFromRemote(
 	defer stopwatch.Stop()
 
 	var err error
-	if resendInfo.lastEventID != nil && resendInfo.lastEventVersion != nil {
+	if resendInfo.lastEventID != common.EmptyEventID && resendInfo.lastEventVersion != common.EmptyVersion {
 		err = t.nDCHistoryResender.SendSingleWorkflowHistory(
 			transferTask.DomainID,
 			transferTask.WorkflowID,
 			transferTask.RunID,
 			resendInfo.lastEventID,
 			resendInfo.lastEventVersion,
-			nil,
-			nil,
+			common.EmptyEventID,
+			common.EmptyVersion,
 		)
 	} else if resendInfo.nextEventID != nil {
 		err = t.historyRereplicator.SendMultiWorkflowHistory(

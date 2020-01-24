@@ -40,6 +40,8 @@ import (
 	"github.com/temporalio/temporal/.gen/go/admin"
 	"github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"
 	"github.com/temporalio/temporal/.gen/go/admin/adminservicetest"
+	"github.com/temporalio/temporal/.gen/proto/adminservice"
+	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
 	"github.com/temporalio/temporal/common"
 )
 
@@ -48,12 +50,12 @@ type cliAppSuite struct {
 	app               *cli.App
 	mockCtrl          *gomock.Controller
 	frontendClient    *workflowservicemock.MockWorkflowServiceClient
-	serverAdminClient *adminservicetest.MockClient
+	serverAdminClient *adminservicemock.MockAdminServiceYARPCClient
 }
 
 type clientFactoryMock struct {
 	frontendClient    workflowservice.WorkflowServiceClient
-	serverAdminClient adminserviceclient.Interface
+	serverAdminClient adminservice.AdminServiceYARPCClient
 }
 
 func (m *clientFactoryMock) FrontendClient(c *cli.Context) workflowservice.WorkflowServiceClient {

@@ -212,10 +212,10 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 		s.domainID,
 		workflowID,
 		runID,
-		common.Int64Ptr(startEventID),
-		common.Int64Ptr(startEventVersion),
-		nil,
-		nil,
+		startEventID,
+		startEventVersion,
+		common.EmptyEventID,
+		common.EmptyVersion,
 	)
 
 	s.Nil(err)
@@ -342,10 +342,10 @@ func (s *nDCHistoryResenderSuite) TestGetHistory() {
 		s.domainID,
 		workflowID,
 		runID,
-		&startEventID,
-		&version,
-		&endEventID,
-		&version,
+		startEventID,
+		version,
+		endEventID,
+		version,
 		nextTokenIn,
 		pageSize)
 	s.Nil(err)

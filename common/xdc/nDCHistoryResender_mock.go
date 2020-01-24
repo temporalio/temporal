@@ -28,9 +28,8 @@
 package xdc
 
 import (
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
+	reflect "reflect"
 )
 
 // MockNDCHistoryResender is a mock of NDCHistoryResender interface
@@ -57,7 +56,7 @@ func (m *MockNDCHistoryResender) EXPECT() *MockNDCHistoryResenderMockRecorder {
 }
 
 // SendSingleWorkflowHistory mocks base method
-func (m *MockNDCHistoryResender) SendSingleWorkflowHistory(domainID, workflowID, runID string, startEventID, startEventVersion, endEventID, endEventVersion *int64) error {
+func (m *MockNDCHistoryResender) SendSingleWorkflowHistory(domainID, workflowID, runID string, startEventID, startEventVersion, endEventID, endEventVersion int64) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SendSingleWorkflowHistory", domainID, workflowID, runID, startEventID, startEventVersion, endEventID, endEventVersion)
 	ret0, _ := ret[0].(error)

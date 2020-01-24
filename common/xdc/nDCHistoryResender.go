@@ -58,10 +58,10 @@ type (
 			domainID string,
 			workflowID string,
 			runID string,
-			startEventID *int64,
-			startEventVersion *int64,
-			endEventID *int64,
-			endEventVersion *int64,
+			startEventID int64,
+			startEventVersion int64,
+			endEventID int64,
+			endEventVersion int64,
 		) error
 	}
 
@@ -103,10 +103,10 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 	domainID string,
 	workflowID string,
 	runID string,
-	startEventID *int64,
-	startEventVersion *int64,
-	endEventID *int64,
-	endEventVersion *int64,
+	startEventID int64,
+	startEventVersion int64,
+	endEventID int64,
+	endEventVersion int64,
 ) error {
 
 	historyIterator := collection.NewPagingIterator(n.getPaginationFn(
@@ -154,10 +154,10 @@ func (n *NDCHistoryResenderImpl) getPaginationFn(
 	domainID string,
 	workflowID string,
 	runID string,
-	startEventID *int64,
-	startEventVersion *int64,
-	endEventID *int64,
-	endEventVersion *int64,
+	startEventID int64,
+	startEventVersion int64,
+	endEventID int64,
+	endEventVersion int64,
 ) collection.PaginationFn {
 
 	return func(paginationToken []byte) ([]interface{}, []byte, error) {
@@ -223,10 +223,10 @@ func (n *NDCHistoryResenderImpl) getHistory(
 	domainID string,
 	workflowID string,
 	runID string,
-	startEventID *int64,
-	startEventVersion *int64,
-	endEventID *int64,
-	endEventVersion *int64,
+	startEventID int64,
+	startEventVersion int64,
+	endEventID int64,
+	endEventVersion int64,
 	token []byte,
 	pageSize int32,
 ) (*adminservice.GetWorkflowExecutionRawHistoryV2Response, error) {
@@ -248,10 +248,10 @@ func (n *NDCHistoryResenderImpl) getHistory(
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
-		StartEventId:      *startEventID,
-		StartEventVersion: *startEventVersion,
-		EndEventId:        *endEventID,
-		EndEventVersion:   *endEventVersion,
+		StartEventId:      startEventID,
+		StartEventVersion: startEventVersion,
+		EndEventId:        endEventID,
+		EndEventVersion:   endEventVersion,
 		MaximumPageSize:   pageSize,
 		NextPageToken:     token,
 	})
