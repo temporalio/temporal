@@ -1317,3 +1317,53 @@ func toThriftHistoryTaskV2Attributes(in *common.HistoryTaskV2Attributes) *replic
 		NewRunEvents:        ToThriftDataBlob(in.NewRunEvents),
 	}
 }
+
+// ToProtoDomainCacheInfo ...
+func ToProtoDomainCacheInfo(in *shared.DomainCacheInfo) *common.DomainCacheInfo {
+	if in == nil {
+		return nil
+	}
+	return &common.DomainCacheInfo{
+		NumOfItemsInCacheByID:   in.GetNumOfItemsInCacheByID(),
+		NumOfItemsInCacheByName: in.GetNumOfItemsInCacheByName(),
+	}
+}
+
+// ToProtoDataBlobs ...
+func ToProtoDataBlobs(in []*shared.DataBlob) []*common.DataBlob {
+	if in == nil {
+		return nil
+	}
+
+	var ret []*common.DataBlob
+	for _, item := range in {
+		ret = append(ret, ToProtoDataBlob(item))
+	}
+	return ret
+}
+
+// ToThriftDataBlobs ...
+func ToThriftDataBlobs(in []*common.DataBlob) []*shared.DataBlob {
+	if in == nil {
+		return nil
+	}
+
+	var ret []*shared.DataBlob
+	for _, item := range in {
+		ret = append(ret, ToThriftDataBlob(item))
+	}
+	return ret
+}
+
+func toThriftIndexedValueTypes(in map[string]enums.IndexedValueType) map[string]shared.IndexedValueType {
+	if in == nil {
+		return nil
+	}
+
+	ret := make(map[string]shared.IndexedValueType, len(in))
+	for k, v := range in {
+		ret[k] = shared.IndexedValueType(v)
+	}
+
+	return ret
+}
