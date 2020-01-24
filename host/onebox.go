@@ -532,7 +532,7 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 
 	c.frontendService = frontendService
 	c.frontendClient = NewFrontendClient(params.RPCFactory.CreateGRPCConnection(c.FrontendGRPCAddress()))
-	c.adminClient = NewAdminClient(frontendService.GetDispatcher())
+	c.adminClient = NewAdminClient(frontendService.GetGRPCDispatcher())
 	go frontendService.Start()
 
 	startWG.Done()

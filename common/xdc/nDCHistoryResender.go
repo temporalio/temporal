@@ -26,9 +26,11 @@ import (
 	"context"
 	"time"
 
-	"github.com/temporalio/temporal/.gen/go/admin"
+	commonproto "go.temporal.io/temporal-proto/common"
+
 	"github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	adminClient "github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -36,6 +38,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/service/frontend/adapter"
 )
 
 const (
@@ -72,8 +75,8 @@ type (
 	}
 
 	historyBatch struct {
-		versionHistory *shared.VersionHistory
-		rawEventBatch  *shared.DataBlob
+		versionHistory *commonproto.VersionHistory
+		rawEventBatch  *commonproto.DataBlob
 	}
 )
 
@@ -191,8 +194,8 @@ func (n *NDCHistoryResenderImpl) createReplicationRawRequest(
 	domainID string,
 	workflowID string,
 	runID string,
-	historyBlob *shared.DataBlob,
-	versionHistoryItems []*shared.VersionHistoryItem,
+	historyBlob *commonproto.DataBlob,
+	versionHistoryItems []*commonproto.VersionHistoryItem,
 ) *history.ReplicateEventsV2Request {
 
 	request := &history.ReplicateEventsV2Request{
@@ -201,8 +204,8 @@ func (n *NDCHistoryResenderImpl) createReplicationRawRequest(
 			WorkflowId: common.StringPtr(workflowID),
 			RunId:      common.StringPtr(runID),
 		},
-		Events:              historyBlob,
-		VersionHistoryItems: versionHistoryItems,
+		Events:              adapter.ToThriftDataBlob(historyBlob),
+		VersionHistoryItems: adapter.ToThriftVersionHistoryItems(versionHistoryItems),
 	}
 	return request
 }
@@ -226,7 +229,7 @@ func (n *NDCHistoryResenderImpl) getHistory(
 	endEventVersion *int64,
 	token []byte,
 	pageSize int32,
-) (*admin.GetWorkflowExecutionRawHistoryV2Response, error) {
+) (*adminservice.GetWorkflowExecutionRawHistoryV2Response, error) {
 
 	logger := n.logger.WithTags(tag.WorkflowRunID(runID))
 
@@ -239,17 +242,17 @@ func (n *NDCHistoryResenderImpl) getHistory(
 
 	ctx, cancel := context.WithTimeout(context.Background(), resendContextTimeout)
 	defer cancel()
-	response, err := n.adminClient.GetWorkflowExecutionRawHistoryV2(ctx, &admin.GetWorkflowExecutionRawHistoryV2Request{
-		Domain: common.StringPtr(domainName),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
+	response, err := n.adminClient.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+		Domain: domainName,
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
 		},
-		StartEventId:      startEventID,
-		StartEventVersion: startEventVersion,
-		EndEventId:        endEventID,
-		EndEventVersion:   endEventVersion,
-		MaximumPageSize:   common.Int32Ptr(pageSize),
+		StartEventId:      *startEventID,
+		StartEventVersion: *startEventVersion,
+		EndEventId:        *endEventID,
+		EndEventVersion:   *endEventVersion,
+		MaximumPageSize:   pageSize,
 		NextPageToken:     token,
 	})
 	if err != nil {
