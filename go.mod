@@ -3,6 +3,7 @@ module github.com/uber/cadence
 go 1.12
 
 require (
+	cloud.google.com/go v0.38.0
 	github.com/DataDog/zstd v1.4.0 // indirect
 	github.com/Shopify/sarama v1.23.0
 	github.com/apache/thrift v0.0.0-20161221203622-b2a4d4ae21c7
@@ -58,6 +59,7 @@ require (
 	github.com/urfave/cli v1.20.0
 	github.com/valyala/fastjson v1.4.1
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
+	go.opencensus.io v0.22.2 // indirect
 	go.uber.org/atomic v1.5.0
 	go.uber.org/cadence v0.9.1-0.20191023030824-883f86358883
 	go.uber.org/config v1.3.1
@@ -68,9 +70,11 @@ require (
 	go.uber.org/zap v1.12.0
 	golang.org/x/crypto v0.0.0-20190701094942-4def268fd1a4 // indirect
 	golang.org/x/net v0.0.0-20191101175033-0deb6923b6d9
+	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
 	golang.org/x/sys v0.0.0-20191029155521-f43be2a4598c // indirect
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4
 	golang.org/x/tools v0.0.0-20191101175824-a860bcda08c7
+	google.golang.org/api v0.14.0
 	google.golang.org/appengine v1.6.1 // indirect
 	gopkg.in/jcmturner/goidentity.v3 v3.0.0 // indirect
 	gopkg.in/jcmturner/gokrb5.v7 v7.3.0 // indirect

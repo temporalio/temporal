@@ -87,6 +87,8 @@ archival:
       filestore:
         fileMode: "0666"
         dirMode: "0766"
+      gstorage:
+        credentialsPath: "/tmp/gcloud/keyfile.json"
   visibility:
     status: "disabled"
     enableRead: false

@@ -330,6 +330,7 @@ type (
 	// HistoryArchiverProvider contains the config for all history archivers
 	HistoryArchiverProvider struct {
 		Filestore *FilestoreArchiver `yaml:"filestore"`
+		Gstorage  *GstorageArchiver  `yaml:"gstorage"`
 		S3store   *S3Archiver        `yaml:"s3store"`
 	}
 
@@ -355,6 +356,10 @@ type (
 		DirMode  string `yaml:"dirMode"`
 	}
 
+	// GstorageArchiver contain the config for google storage archiver
+	GstorageArchiver struct {
+		CredentialsPath string `yaml:"credentialsPath"`
+	}
 	// S3Archiver contains the config for S3 archiver
 	S3Archiver struct {
 		Region           string  `yaml:"region"`
