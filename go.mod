@@ -6,6 +6,7 @@ require (
 	github.com/DataDog/zstd v1.4.0 // indirect
 	github.com/Shopify/sarama v1.23.0
 	github.com/apache/thrift v0.0.0-20161221203622-b2a4d4ae21c7
+	github.com/aws/aws-sdk-go v1.25.34
 	github.com/benbjohnson/clock v0.0.0-20161215174838-7dc76406b6d3 // indirect
 	github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869
 	github.com/bsm/sarama-cluster v2.1.13+incompatible
