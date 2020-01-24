@@ -31,7 +31,7 @@ import (
 	"github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
-	adminClient "github.com/temporalio/temporal/client/admin"
+	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/collection"
@@ -68,7 +68,7 @@ type (
 	// NDCHistoryResenderImpl is the implementation of NDCHistoryResender
 	NDCHistoryResenderImpl struct {
 		domainCache          cache.DomainCache
-		adminClient          adminClient.Client
+		adminClient          admin.Client
 		historyReplicationFn nDCHistoryReplicationFn
 		serializer           persistence.PayloadSerializer
 		logger               log.Logger
@@ -83,7 +83,7 @@ type (
 // NewNDCHistoryResender create a new NDCHistoryResenderImpl
 func NewNDCHistoryResender(
 	domainCache cache.DomainCache,
-	adminClient adminClient.Client,
+	adminClient admin.Client,
 	historyReplicationFn nDCHistoryReplicationFn,
 	serializer persistence.PayloadSerializer,
 	logger log.Logger,

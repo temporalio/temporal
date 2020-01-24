@@ -134,10 +134,10 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_SameRunID() {
 	firstEventID := int64(123)
 	nextEventID := firstEventID + 100
 	pageSize := defaultPageSize
-	replicationInfo := map[string]*shared.ReplicationInfo{
-		"random data center": &shared.ReplicationInfo{
-			Version:     common.Int64Ptr(777),
-			LastEventId: common.Int64Ptr(999),
+	replicationInfo := map[string]*commonproto.ReplicationInfo{
+		"random data center": {
+			Version:     777,
+			LastEventId: 999,
 		},
 	}
 	eventBatch := []*shared.HistoryEvent{
@@ -157,17 +157,17 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_SameRunID() {
 	blob := s.serializeEvents(eventBatch)
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
-		Domain: common.StringPtr(s.domainName),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
+		Domain: s.domainName,
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
 		},
-		FirstEventId:    common.Int64Ptr(firstEventID),
-		NextEventId:     common.Int64Ptr(nextEventID),
-		MaximumPageSize: common.Int32Ptr(pageSize),
+		FirstEventId:    firstEventID,
+		NextEventId:     nextEventID,
+		MaximumPageSize: pageSize,
 		NextPageToken:   nil,
 	}).Return(&adminservice.GetWorkflowExecutionRawHistoryResponse{
-		HistoryBatches:  []*shared.DataBlob{blob},
+		HistoryBatches:  []*commonproto.DataBlob{blob},
 		NextPageToken:   nil,
 		ReplicationInfo: replicationInfo,
 	}, nil).Times(1)
@@ -178,7 +178,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_SameRunID() {
 			WorkflowId: common.StringPtr(workflowID),
 			RunId:      common.StringPtr(runID),
 		},
-		ReplicationInfo: replicationInfo,
+		ReplicationInfo: adapter.ToThriftReplicationInfos(replicationInfo),
 		History: &shared.DataBlob{
 			EncodingType: shared.EncodingTypeThriftRW.Ptr(),
 			Data:         blob.Data,
@@ -199,34 +199,34 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 	// beginingRunID -> midRunID1; not continue relationship; midRunID2 -> endingRunID
 
 	beginingRunID := "00001111-2222-3333-4444-555566661111"
-	beginingReplicationInfo := map[string]*shared.ReplicationInfo{
-		"random data center 1": &shared.ReplicationInfo{
-			Version:     common.Int64Ptr(111),
-			LastEventId: common.Int64Ptr(222),
+	beginingReplicationInfo := map[string]*commonproto.ReplicationInfo{
+		"random data center 1": {
+			Version:     111,
+			LastEventId: 222,
 		},
 	}
 
 	midRunID1 := "00001111-2222-3333-4444-555566662222"
-	midReplicationInfo1 := map[string]*shared.ReplicationInfo{
-		"random data center 2": &shared.ReplicationInfo{
-			Version:     common.Int64Ptr(111),
-			LastEventId: common.Int64Ptr(222),
+	midReplicationInfo1 := map[string]*commonproto.ReplicationInfo{
+		"random data center 2": {
+			Version:     111,
+			LastEventId: 222,
 		},
 	}
 
 	midRunID2 := "00001111-2222-3333-4444-555566663333"
-	midReplicationInfo2 := map[string]*shared.ReplicationInfo{
-		"random data center 3": &shared.ReplicationInfo{
-			Version:     common.Int64Ptr(111),
-			LastEventId: common.Int64Ptr(222),
+	midReplicationInfo2 := map[string]*commonproto.ReplicationInfo{
+		"random data center 3": {
+			Version:     111,
+			LastEventId: 222,
 		},
 	}
 
 	endingRunID := "00001111-2222-3333-4444-555566664444"
-	endingReplicationInfo := map[string]*shared.ReplicationInfo{
-		"random data center 4": &shared.ReplicationInfo{
-			Version:     common.Int64Ptr(777),
-			LastEventId: common.Int64Ptr(888),
+	endingReplicationInfo := map[string]*commonproto.ReplicationInfo{
+		"random data center 4": {
+			Version:     777,
+			LastEventId: 888,
 		},
 	}
 
@@ -310,129 +310,129 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 	endingBlob := s.serializeEvents(endingEventBatch)
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
-		Domain: common.StringPtr(s.domainName),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(beginingRunID),
+		Domain: s.domainName,
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      beginingRunID,
 		},
-		FirstEventId:    common.Int64Ptr(beginingEventID),
-		NextEventId:     common.Int64Ptr(common.EndEventID),
-		MaximumPageSize: common.Int32Ptr(pageSize),
+		FirstEventId:    beginingEventID,
+		NextEventId:     common.EndEventID,
+		MaximumPageSize: pageSize,
 		NextPageToken:   nil,
 	}).Return(&adminservice.GetWorkflowExecutionRawHistoryResponse{
-		HistoryBatches:  []*shared.DataBlob{beginingBlob},
+		HistoryBatches:  []*commonproto.DataBlob{beginingBlob},
 		NextPageToken:   nil,
 		ReplicationInfo: beginingReplicationInfo,
 	}, nil).Times(1)
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
-		Domain: common.StringPtr(s.domainName),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(midRunID1),
+		Domain: s.domainName,
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      midRunID1,
 		},
-		FirstEventId:    common.Int64Ptr(common.FirstEventID),
-		NextEventId:     common.Int64Ptr(common.EndEventID),
-		MaximumPageSize: common.Int32Ptr(1),
+		FirstEventId:    common.FirstEventID,
+		NextEventId:     common.EndEventID,
+		MaximumPageSize: 1,
 		NextPageToken:   nil,
 	}).Return(&adminservice.GetWorkflowExecutionRawHistoryResponse{
-		HistoryBatches:  []*shared.DataBlob{midBlob1},
+		HistoryBatches:  []*commonproto.DataBlob{midBlob1},
 		NextPageToken:   nil,
 		ReplicationInfo: midReplicationInfo1,
 	}, nil).Times(1)
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
-		Domain: common.StringPtr(s.domainName),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(midRunID1),
+		Domain: s.domainName,
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      midRunID1,
 		},
-		FirstEventId:    common.Int64Ptr(common.FirstEventID),
-		NextEventId:     common.Int64Ptr(common.EndEventID),
-		MaximumPageSize: common.Int32Ptr(pageSize),
+		FirstEventId:    common.FirstEventID,
+		NextEventId:     common.EndEventID,
+		MaximumPageSize: pageSize,
 		NextPageToken:   nil,
 	}).Return(&adminservice.GetWorkflowExecutionRawHistoryResponse{
-		HistoryBatches:  []*shared.DataBlob{midBlob1},
+		HistoryBatches:  []*commonproto.DataBlob{midBlob1},
 		NextPageToken:   nil,
 		ReplicationInfo: midReplicationInfo1,
 	}, nil).Times(1)
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
-		Domain: common.StringPtr(s.domainName),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(endingRunID),
+		Domain: s.domainName,
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      endingRunID,
 		},
-		FirstEventId:    common.Int64Ptr(common.FirstEventID),
-		NextEventId:     common.Int64Ptr(common.EndEventID),
-		MaximumPageSize: common.Int32Ptr(1),
+		FirstEventId:    common.FirstEventID,
+		NextEventId:     common.EndEventID,
+		MaximumPageSize: 1,
 		NextPageToken:   nil,
 	}).Return(&adminservice.GetWorkflowExecutionRawHistoryResponse{
-		HistoryBatches:  []*shared.DataBlob{endingBlob},
+		HistoryBatches:  []*commonproto.DataBlob{endingBlob},
 		NextPageToken:   nil,
 		ReplicationInfo: endingReplicationInfo,
 	}, nil).Times(1)
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
-		Domain: common.StringPtr(s.domainName),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(midRunID2),
+		Domain: s.domainName,
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      midRunID2,
 		},
-		FirstEventId:    common.Int64Ptr(common.FirstEventID),
-		NextEventId:     common.Int64Ptr(common.EndEventID),
-		MaximumPageSize: common.Int32Ptr(1),
+		FirstEventId:    common.FirstEventID,
+		NextEventId:     common.EndEventID,
+		MaximumPageSize: 1,
 		NextPageToken:   nil,
 	}).Return(&adminservice.GetWorkflowExecutionRawHistoryResponse{
-		HistoryBatches:  []*shared.DataBlob{midBlob2},
+		HistoryBatches:  []*commonproto.DataBlob{midBlob2},
 		NextPageToken:   nil,
 		ReplicationInfo: midReplicationInfo2,
 	}, nil).Times(1)
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
-		Domain: common.StringPtr(s.domainName),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(midRunID2),
+		Domain: s.domainName,
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      midRunID2,
 		},
-		FirstEventId:    common.Int64Ptr(common.FirstEventID),
-		NextEventId:     common.Int64Ptr(common.EndEventID),
-		MaximumPageSize: common.Int32Ptr(pageSize),
+		FirstEventId:    common.FirstEventID,
+		NextEventId:     common.EndEventID,
+		MaximumPageSize: pageSize,
 		NextPageToken:   nil,
 	}).Return(&adminservice.GetWorkflowExecutionRawHistoryResponse{
-		HistoryBatches:  []*shared.DataBlob{midBlob2},
+		HistoryBatches:  []*commonproto.DataBlob{midBlob2},
 		NextPageToken:   nil,
 		ReplicationInfo: midReplicationInfo2,
 	}, nil).Times(1)
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
-		Domain: common.StringPtr(s.domainName),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(endingRunID),
+		Domain: s.domainName,
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      endingRunID,
 		},
-		FirstEventId:    common.Int64Ptr(common.FirstEventID),
-		NextEventId:     common.Int64Ptr(common.EndEventID),
-		MaximumPageSize: common.Int32Ptr(1),
+		FirstEventId:    common.FirstEventID,
+		NextEventId:     common.EndEventID,
+		MaximumPageSize: 1,
 		NextPageToken:   nil,
 	}).Return(&adminservice.GetWorkflowExecutionRawHistoryResponse{
-		HistoryBatches:  []*shared.DataBlob{endingBlob},
+		HistoryBatches:  []*commonproto.DataBlob{endingBlob},
 		NextPageToken:   nil,
 		ReplicationInfo: endingReplicationInfo,
 	}, nil).Times(1)
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
-		Domain: common.StringPtr(s.domainName),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(endingRunID),
+		Domain: s.domainName,
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      endingRunID,
 		},
-		FirstEventId:    common.Int64Ptr(common.FirstEventID),
-		NextEventId:     common.Int64Ptr(endingEventID),
-		MaximumPageSize: common.Int32Ptr(pageSize),
+		FirstEventId:    common.FirstEventID,
+		NextEventId:     endingEventID,
+		MaximumPageSize: pageSize,
 		NextPageToken:   nil,
 	}).Return(&adminservice.GetWorkflowExecutionRawHistoryResponse{
-		HistoryBatches:  []*shared.DataBlob{endingBlob},
+		HistoryBatches:  []*commonproto.DataBlob{endingBlob},
 		NextPageToken:   nil,
 		ReplicationInfo: endingReplicationInfo,
 	}, nil).Times(1)
@@ -450,10 +450,10 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_NotContinueAsNe
 	runID := uuid.New()
 	nextToken := []byte("some random next token")
 	pageSize := defaultPageSize
-	replicationInfo := map[string]*shared.ReplicationInfo{
-		"random data center": &shared.ReplicationInfo{
-			Version:     common.Int64Ptr(777),
-			LastEventId: common.Int64Ptr(999),
+	replicationInfo := map[string]*commonproto.ReplicationInfo{
+		"random data center": {
+			Version:     777,
+			LastEventId: 999,
 		},
 	}
 
@@ -496,33 +496,33 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_NotContinueAsNe
 	blob2 := s.serializeEvents(eventBatch2)
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
-		Domain: common.StringPtr(s.domainName),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
+		Domain: s.domainName,
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
 		},
-		FirstEventId:    common.Int64Ptr(common.FirstEventID),
-		NextEventId:     common.Int64Ptr(common.EndEventID),
-		MaximumPageSize: common.Int32Ptr(pageSize),
+		FirstEventId:    common.FirstEventID,
+		NextEventId:     common.EndEventID,
+		MaximumPageSize: pageSize,
 		NextPageToken:   nil,
 	}).Return(&adminservice.GetWorkflowExecutionRawHistoryResponse{
-		HistoryBatches:  []*shared.DataBlob{blob1},
+		HistoryBatches:  []*commonproto.DataBlob{blob1},
 		NextPageToken:   nextToken,
 		ReplicationInfo: replicationInfo,
 	}, nil).Times(1)
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
-		Domain: common.StringPtr(s.domainName),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
+		Domain: s.domainName,
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
 		},
-		FirstEventId:    common.Int64Ptr(common.FirstEventID),
-		NextEventId:     common.Int64Ptr(common.EndEventID),
-		MaximumPageSize: common.Int32Ptr(pageSize),
+		FirstEventId:    common.FirstEventID,
+		NextEventId:     common.EndEventID,
+		MaximumPageSize: pageSize,
 		NextPageToken:   nextToken,
 	}).Return(&adminservice.GetWorkflowExecutionRawHistoryResponse{
-		HistoryBatches:  []*shared.DataBlob{blob2},
+		HistoryBatches:  []*commonproto.DataBlob{blob2},
 		NextPageToken:   nil,
 		ReplicationInfo: replicationInfo,
 	}, nil).Times(1)
@@ -533,7 +533,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_NotContinueAsNe
 			WorkflowId: common.StringPtr(workflowID),
 			RunId:      common.StringPtr(runID),
 		},
-		ReplicationInfo: replicationInfo,
+		ReplicationInfo: adapter.ToThriftReplicationInfos(replicationInfo),
 		History: &shared.DataBlob{
 			EncodingType: shared.EncodingTypeThriftRW.Ptr(),
 			Data:         blob1.Data,
@@ -547,7 +547,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_NotContinueAsNe
 			WorkflowId: common.StringPtr(workflowID),
 			RunId:      common.StringPtr(runID),
 		},
-		ReplicationInfo: replicationInfo,
+		ReplicationInfo: adapter.ToThriftReplicationInfos(replicationInfo),
 		History: &shared.DataBlob{
 			EncodingType: shared.EncodingTypeThriftRW.Ptr(),
 			Data:         blob2.Data,
@@ -566,16 +566,16 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 	newRunID := uuid.New()
 	nextToken := []byte("some random next token")
 	pageSize := defaultPageSize
-	replicationInfo := map[string]*shared.ReplicationInfo{
-		"random data center": &shared.ReplicationInfo{
-			Version:     common.Int64Ptr(777),
-			LastEventId: common.Int64Ptr(999),
+	replicationInfo := map[string]*commonproto.ReplicationInfo{
+		"random data center": {
+			Version:     777,
+			LastEventId: 999,
 		},
 	}
-	replicationInfoNew := map[string]*shared.ReplicationInfo{
-		"random data center": &shared.ReplicationInfo{
-			Version:     common.Int64Ptr(222),
-			LastEventId: common.Int64Ptr(111),
+	replicationInfoNew := map[string]*commonproto.ReplicationInfo{
+		"random data center": {
+			Version:     222,
+			LastEventId: 111,
 		},
 	}
 
@@ -634,49 +634,49 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 	blobNew := s.serializeEvents(eventBatchNew)
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
-		Domain: common.StringPtr(s.domainName),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
+		Domain: s.domainName,
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
 		},
-		FirstEventId:    common.Int64Ptr(common.FirstEventID),
-		NextEventId:     common.Int64Ptr(common.EndEventID),
-		MaximumPageSize: common.Int32Ptr(pageSize),
+		FirstEventId:    common.FirstEventID,
+		NextEventId:     common.EndEventID,
+		MaximumPageSize: pageSize,
 		NextPageToken:   nil,
 	}).Return(&adminservice.GetWorkflowExecutionRawHistoryResponse{
-		HistoryBatches:  []*shared.DataBlob{blob1},
+		HistoryBatches:  []*commonproto.DataBlob{blob1},
 		NextPageToken:   nextToken,
 		ReplicationInfo: replicationInfo,
 	}, nil).Times(1)
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
-		Domain: common.StringPtr(s.domainName),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
+		Domain: s.domainName,
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
 		},
-		FirstEventId:    common.Int64Ptr(common.FirstEventID),
-		NextEventId:     common.Int64Ptr(common.EndEventID),
-		MaximumPageSize: common.Int32Ptr(pageSize),
+		FirstEventId:    common.FirstEventID,
+		NextEventId:     common.EndEventID,
+		MaximumPageSize: pageSize,
 		NextPageToken:   nextToken,
 	}).Return(&adminservice.GetWorkflowExecutionRawHistoryResponse{
-		HistoryBatches:  []*shared.DataBlob{blob2},
+		HistoryBatches:  []*commonproto.DataBlob{blob2},
 		NextPageToken:   nil,
 		ReplicationInfo: replicationInfo,
 	}, nil).Times(1)
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
-		Domain: common.StringPtr(s.domainName),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(newRunID),
+		Domain: s.domainName,
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      newRunID,
 		},
-		FirstEventId:    common.Int64Ptr(common.FirstEventID),
-		NextEventId:     common.Int64Ptr(common.EndEventID),
-		MaximumPageSize: common.Int32Ptr(1),
+		FirstEventId:    common.FirstEventID,
+		NextEventId:     common.EndEventID,
+		MaximumPageSize: 1,
 		NextPageToken:   nil,
 	}).Return(&adminservice.GetWorkflowExecutionRawHistoryResponse{
-		HistoryBatches:  []*shared.DataBlob{blobNew},
+		HistoryBatches:  []*commonproto.DataBlob{blobNew},
 		NextPageToken:   nil,
 		ReplicationInfo: replicationInfoNew,
 	}, nil).Times(1)
@@ -687,7 +687,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 			WorkflowId: common.StringPtr(workflowID),
 			RunId:      common.StringPtr(runID),
 		},
-		ReplicationInfo: replicationInfo,
+		ReplicationInfo: adapter.ToThriftReplicationInfos(replicationInfo),
 		History: &shared.DataBlob{
 			EncodingType: shared.EncodingTypeThriftRW.Ptr(),
 			Data:         blob1.Data,
@@ -701,7 +701,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 			WorkflowId: common.StringPtr(workflowID),
 			RunId:      common.StringPtr(runID),
 		},
-		ReplicationInfo: replicationInfo,
+		ReplicationInfo: adapter.ToThriftReplicationInfos(replicationInfo),
 		History: &shared.DataBlob{
 			EncodingType: shared.EncodingTypeThriftRW.Ptr(),
 			Data:         blob2.Data,
@@ -810,10 +810,10 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest() {
 func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_HistoryReset_MissingHistory() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
-	replicationInfo := map[string]*shared.ReplicationInfo{
-		"random data center": &shared.ReplicationInfo{
-			Version:     common.Int64Ptr(777),
-			LastEventId: common.Int64Ptr(999),
+	replicationInfo := map[string]*commonproto.ReplicationInfo{
+		"random data center": {
+			Version:     777,
+			LastEventId: 999,
 		},
 	}
 	request := &history.ReplicateRawEventsRequest{
@@ -822,7 +822,7 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_HistoryReset_Mi
 			WorkflowId: common.StringPtr(workflowID),
 			RunId:      common.StringPtr(runID),
 		},
-		ReplicationInfo: replicationInfo,
+		ReplicationInfo: adapter.ToThriftReplicationInfos(replicationInfo),
 		History: &shared.DataBlob{
 			EncodingType: shared.EncodingTypeThriftRW.Ptr(),
 			Data:         []byte("some random history blob"),
@@ -852,17 +852,17 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_HistoryReset_Mi
 	}
 	missingBlob := s.serializeEvents(missingEventBatch)
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
-		Domain: common.StringPtr(s.domainName),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
+		Domain: s.domainName,
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
 		},
-		FirstEventId:    common.Int64Ptr(retryErr.GetNextEventId()),
-		NextEventId:     common.Int64Ptr(rereplicationContext.beginningFirstEventID),
-		MaximumPageSize: common.Int32Ptr(defaultPageSize),
+		FirstEventId:    retryErr.GetNextEventId(),
+		NextEventId:     rereplicationContext.beginningFirstEventID,
+		MaximumPageSize: defaultPageSize,
 		NextPageToken:   nil,
 	}).Return(&adminservice.GetWorkflowExecutionRawHistoryResponse{
-		HistoryBatches:  []*shared.DataBlob{missingBlob},
+		HistoryBatches:  []*commonproto.DataBlob{missingBlob},
 		NextPageToken:   nil,
 		ReplicationInfo: replicationInfo,
 	}, nil).Times(1)
@@ -872,8 +872,8 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_HistoryReset_Mi
 			WorkflowId: common.StringPtr(workflowID),
 			RunId:      common.StringPtr(runID),
 		},
-		ReplicationInfo: replicationInfo,
-		History:         missingBlob,
+		ReplicationInfo: adapter.ToThriftReplicationInfos(replicationInfo),
+		History:         adapter.ToThriftDataBlob(missingBlob),
 		NewRunHistory:   nil,
 	}).Return(nil).Times(1)
 
@@ -887,7 +887,7 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_Err() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	replicationInfo := map[string]*shared.ReplicationInfo{
-		"random data center": &shared.ReplicationInfo{
+		"random data center": {
 			Version:     common.Int64Ptr(777),
 			LastEventId: common.Int64Ptr(999),
 		},
@@ -963,14 +963,14 @@ func (s *historyRereplicatorSuite) TestHandleEmptyHistory_FoundReplicationInfoEn
 	blob := s.serializeEvents(eventBatch)
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
-		Domain: common.StringPtr(s.domainName),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
+		Domain: s.domainName,
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
 		},
-		FirstEventId:    common.Int64Ptr(lastEventID + 1),
-		NextEventId:     common.Int64Ptr(common.EndEventID),
-		MaximumPageSize: common.Int32Ptr(defaultPageSize),
+		FirstEventId:    lastEventID + 1,
+		NextEventId:     common.EndEventID,
+		MaximumPageSize: defaultPageSize,
 		NextPageToken:   nil,
 	}).Return(&adminservice.GetWorkflowExecutionRawHistoryResponse{
 		HistoryBatches:  []*commonproto.DataBlob{blob},
@@ -984,8 +984,8 @@ func (s *historyRereplicatorSuite) TestHandleEmptyHistory_FoundReplicationInfoEn
 			WorkflowId: common.StringPtr(workflowID),
 			RunId:      common.StringPtr(runID),
 		},
-		ReplicationInfo: replicationInfo,
-		History:         blob,
+		ReplicationInfo: adapter.ToThriftReplicationInfos(replicationInfo),
+		History:         adapter.ToThriftDataBlob(blob),
 		NewRunHistory:   nil,
 	}).Return(nil).Times(1)
 
@@ -999,10 +999,10 @@ func (s *historyRereplicatorSuite) TestHandleEmptyHistory_NoReplicationInfoEntry
 	runID := uuid.New()
 	lastVersion := int64(777)
 	lastEventID := int64(999)
-	replicationInfo := map[string]*shared.ReplicationInfo{
-		"some randon cluster": &shared.ReplicationInfo{
-			Version:     common.Int64Ptr(lastVersion),
-			LastEventId: common.Int64Ptr(lastEventID),
+	replicationInfo := map[string]*commonproto.ReplicationInfo{
+		"some randon cluster": {
+			Version:     lastVersion,
+			LastEventId: lastEventID,
 		},
 	}
 	eventBatch := []*shared.HistoryEvent{
@@ -1016,17 +1016,17 @@ func (s *historyRereplicatorSuite) TestHandleEmptyHistory_NoReplicationInfoEntry
 	blob := s.serializeEvents(eventBatch)
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
-		Domain: common.StringPtr(s.domainName),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
+		Domain: s.domainName,
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
 		},
-		FirstEventId:    common.Int64Ptr(common.FirstEventID),
-		NextEventId:     common.Int64Ptr(common.EndEventID),
-		MaximumPageSize: common.Int32Ptr(defaultPageSize),
+		FirstEventId:    common.FirstEventID,
+		NextEventId:     common.EndEventID,
+		MaximumPageSize: defaultPageSize,
 		NextPageToken:   nil,
 	}).Return(&adminservice.GetWorkflowExecutionRawHistoryResponse{
-		HistoryBatches:  []*shared.DataBlob{blob},
+		HistoryBatches:  []*commonproto.DataBlob{blob},
 		NextPageToken:   nil,
 		ReplicationInfo: replicationInfo,
 	}, nil).Times(1)
@@ -1037,8 +1037,8 @@ func (s *historyRereplicatorSuite) TestHandleEmptyHistory_NoReplicationInfoEntry
 			WorkflowId: common.StringPtr(workflowID),
 			RunId:      common.StringPtr(runID),
 		},
-		ReplicationInfo: replicationInfo,
-		History:         blob,
+		ReplicationInfo: adapter.ToThriftReplicationInfos(replicationInfo),
+		History:         adapter.ToThriftDataBlob(blob),
 		NewRunHistory:   nil,
 	}).Return(nil).Times(1)
 
@@ -1058,27 +1058,27 @@ func (s *historyRereplicatorSuite) TestGetHistory() {
 	blob := []byte("some random events blob")
 
 	response := &adminservice.GetWorkflowExecutionRawHistoryResponse{
-		HistoryBatches: []*shared.DataBlob{&shared.DataBlob{
-			EncodingType: shared.EncodingTypeThriftRW.Ptr(),
+		HistoryBatches: []*commonproto.DataBlob{{
+			EncodingType: enums.EncodingTypeThriftRW,
 			Data:         blob,
 		}},
 		NextPageToken: nextTokenOut,
-		ReplicationInfo: map[string]*shared.ReplicationInfo{
-			"random data center": &shared.ReplicationInfo{
-				Version:     common.Int64Ptr(777),
-				LastEventId: common.Int64Ptr(999),
+		ReplicationInfo: map[string]*commonproto.ReplicationInfo{
+			"random data center": {
+				Version:     777,
+				LastEventId: 999,
 			},
 		},
 	}
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
-		Domain: common.StringPtr(s.domainName),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
+		Domain: s.domainName,
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
 		},
-		FirstEventId:    common.Int64Ptr(firstEventID),
-		NextEventId:     common.Int64Ptr(nextEventID),
-		MaximumPageSize: common.Int32Ptr(pageSize),
+		FirstEventId:    firstEventID,
+		NextEventId:     nextEventID,
+		MaximumPageSize: pageSize,
 		NextPageToken:   nextTokenIn,
 	}).Return(response, nil).Times(1)
 
@@ -1113,18 +1113,18 @@ func (s *historyRereplicatorSuite) TestGetPrevEventID() {
 		s.Nil(err)
 
 		s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
-			Domain: common.StringPtr(s.domainName),
-			Execution: &shared.WorkflowExecution{
-				WorkflowId: common.StringPtr(workflowID),
-				RunId:      common.StringPtr(currentRunID),
+			Domain: s.domainName,
+			Execution: &commonproto.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      currentRunID,
 			},
-			FirstEventId:    common.Int64Ptr(common.FirstEventID),
-			NextEventId:     common.Int64Ptr(common.EndEventID),
-			MaximumPageSize: common.Int32Ptr(1),
+			FirstEventId:    common.FirstEventID,
+			NextEventId:     common.EndEventID,
+			MaximumPageSize: 1,
 			NextPageToken:   nil,
 		}).Return(&adminservice.GetWorkflowExecutionRawHistoryResponse{
-			HistoryBatches: []*shared.DataBlob{&shared.DataBlob{
-				EncodingType: shared.EncodingTypeThriftRW.Ptr(),
+			HistoryBatches: []*commonproto.DataBlob{{
+				EncodingType: enums.EncodingTypeThriftRW,
 				Data:         blob.Data,
 			}},
 		}, nil).Times(1)
@@ -1149,17 +1149,17 @@ func (s *historyRereplicatorSuite) TestGetPrevEventID_EmptyEvents() {
 	currentRunID := uuid.New()
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
-		Domain: common.StringPtr(s.domainName),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(currentRunID),
+		Domain: s.domainName,
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      currentRunID,
 		},
-		FirstEventId:    common.Int64Ptr(common.FirstEventID),
-		NextEventId:     common.Int64Ptr(common.EndEventID),
-		MaximumPageSize: common.Int32Ptr(1),
+		FirstEventId:    common.FirstEventID,
+		NextEventId:     common.EndEventID,
+		MaximumPageSize: 1,
 		NextPageToken:   nil,
 	}).Return(&adminservice.GetWorkflowExecutionRawHistoryResponse{
-		HistoryBatches: []*shared.DataBlob{},
+		HistoryBatches: []*commonproto.DataBlob{},
 	}, nil).Times(1)
 
 	runID, err := s.getDummyRereplicationContext().getPrevRunID(s.domainID, workflowID, currentRunID)
@@ -1189,8 +1189,8 @@ func (s *historyRereplicatorSuite) TestGetNextRunID_ContinueAsNew() {
 	blob, err := s.serializer.SerializeBatchEvents(eventBatchIn, common.EncodingTypeThriftRW)
 	s.Nil(err)
 
-	runID, err := s.getDummyRereplicationContext().getNextRunID(&shared.DataBlob{
-		EncodingType: shared.EncodingTypeThriftRW.Ptr(),
+	runID, err := s.getDummyRereplicationContext().getNextRunID(&commonproto.DataBlob{
+		EncodingType: enums.EncodingTypeThriftRW,
 		Data:         blob.Data,
 	})
 	s.Nil(err)
@@ -1216,8 +1216,8 @@ func (s *historyRereplicatorSuite) TestGetNextRunID_NotContinueAsNew() {
 	blob, err := s.serializer.SerializeBatchEvents(eventBatchIn, common.EncodingTypeThriftRW)
 	s.Nil(err)
 
-	runID, err := s.getDummyRereplicationContext().getNextRunID(&shared.DataBlob{
-		EncodingType: shared.EncodingTypeThriftRW.Ptr(),
+	runID, err := s.getDummyRereplicationContext().getNextRunID(&commonproto.DataBlob{
+		EncodingType: enums.EncodingTypeThriftRW,
 		Data:         blob.Data,
 	})
 	s.Nil(err)
@@ -1243,8 +1243,8 @@ func (s *historyRereplicatorSuite) TestDeserializeBlob() {
 	blob, err := s.serializer.SerializeBatchEvents(eventBatchIn, common.EncodingTypeThriftRW)
 	s.Nil(err)
 
-	eventBatchOut, err := s.getDummyRereplicationContext().deserializeBlob(&shared.DataBlob{
-		EncodingType: shared.EncodingTypeThriftRW.Ptr(),
+	eventBatchOut, err := s.getDummyRereplicationContext().deserializeBlob(&commonproto.DataBlob{
+		EncodingType: enums.EncodingTypeThriftRW,
 		Data:         blob.Data,
 	})
 	s.Nil(err)
