@@ -291,7 +291,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	// this function poll events from history side
 	getHistory := func(domain string, workflowID string, token []byte, isLongPoll bool) ([]*commonproto.HistoryEvent, []byte) {
 		closeEventOnly := enums.HistoryEventFilterTypeCloseEvent
-		responseInner, _ := s.engine.GetWorkflowExecutionHistory(createContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		responseInner, err := s.engine.GetWorkflowExecutionHistory(createContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Domain: domain,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: workflowID,
@@ -304,6 +304,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 			HistoryEventFilterType: closeEventOnly,
 		})
 
+		s.NoError(err)
 		return responseInner.History.Events, responseInner.NextPageToken
 	}
 

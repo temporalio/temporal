@@ -22,19 +22,18 @@ package host
 
 import (
 	"bytes"
-	"context"
 	"encoding/binary"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/gogo/status"
 	"github.com/pborman/uuid"
-	"go.uber.org/yarpc/yarpcerrors"
-
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/errordetails"
 	"go.temporal.io/temporal-proto/workflowservice"
+	"google.golang.org/grpc/codes"
 
 	"github.com/temporalio/temporal/common/log/tag"
 )
@@ -62,8 +61,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 		Identity:   identity,
 	})
 	s.NotNil(err0)
-	st0 := yarpcerrors.FromError(err0)
-	s.Equal(yarpcerrors.CodeNotFound, st0.Code())
+	s.Equal(codes.NotFound, status.Code(err0))
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -225,8 +223,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 		Identity:   identity,
 	})
 	s.NotNil(err)
-	st := yarpcerrors.FromError(err)
-	s.Equal(yarpcerrors.CodeNotFound, st.Code())
+	s.Equal(codes.NotFound, status.Code(err))
 }
 
 func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
@@ -1500,27 +1497,27 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 		Identity:                            identity,
 		WorkflowIdReusePolicy:               enums.WorkflowIdReusePolicyRejectDuplicate,
 	}
-	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, _ := createContextWithCancel(5 * time.Second)
 	resp, err := s.engine.SignalWithStartWorkflowExecution(ctx, sRequest)
-	s.Equal(&workflowservice.SignalWithStartWorkflowExecutionResponse{RunId: ""}, resp)
+	s.Nil(resp)
 	s.Error(err)
-	st := yarpcerrors.FromError(err)
+	st := status.Convert(err)
 	s.True(strings.Contains(st.Message(), "reject duplicate workflow ID"))
-	s.True(errordetails.IsWorkflowExecutionAlreadyStartedFailureYARPC(err))
+	s.True(errordetails.IsWorkflowExecutionAlreadyStartedFailure(st))
 
 	// test policy WorkflowIdReusePolicyAllowDuplicateFailedOnly
 	sRequest.WorkflowIdReusePolicy = enums.WorkflowIdReusePolicyAllowDuplicateFailedOnly
-	ctx, _ = context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, _ = createContextWithCancel(5 * time.Second)
 	resp, err = s.engine.SignalWithStartWorkflowExecution(ctx, sRequest)
-	s.Equal(&workflowservice.SignalWithStartWorkflowExecutionResponse{RunId: ""}, resp)
+	s.Nil(resp)
 	s.Error(err)
-	st = yarpcerrors.FromError(err)
+	st = status.Convert(err)
 	s.True(strings.Contains(st.Message(), "allow duplicate workflow ID if last run failed"))
-	s.True(errordetails.IsWorkflowExecutionAlreadyStartedFailureYARPC(err))
+	s.True(errordetails.IsWorkflowExecutionAlreadyStartedFailure(st))
 
 	// test policy WorkflowIdReusePolicyAllowDuplicate
 	sRequest.WorkflowIdReusePolicy = enums.WorkflowIdReusePolicyAllowDuplicate
-	ctx, _ = context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, _ = createContextWithCancel(5 * time.Second)
 	resp, err = s.engine.SignalWithStartWorkflowExecution(ctx, sRequest)
 	s.Nil(err)
 	s.NotEmpty(resp.GetRunId())

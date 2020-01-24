@@ -36,6 +36,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gogo/status"
 	"github.com/olekukonko/tablewriter"
 	"github.com/pborman/uuid"
 	"github.com/urfave/cli"
@@ -44,8 +45,7 @@ import (
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/client"
-	"go.uber.org/yarpc/encoding/protobuf"
-	"go.uber.org/yarpc/yarpcerrors"
+	"google.golang.org/grpc/codes"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/clock"
@@ -167,7 +167,7 @@ func RunWorkflow(c *cli.Context) {
 }
 
 func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
-	serviceClient := cFactory.ClientFrontendClient(c)
+	serviceClient := cFactory.FrontendClient(c)
 
 	domain := getRequiredGlobalOption(c, FlagDomain)
 	taskList := getRequiredOption(c, FlagTaskList)
@@ -442,7 +442,7 @@ func CancelWorkflow(c *cli.Context) {
 
 // SignalWorkflow signals a workflow execution
 func SignalWorkflow(c *cli.Context) {
-	serviceClient := cFactory.ClientFrontendClient(c)
+	serviceClient := cFactory.FrontendClient(c)
 
 	domain := getRequiredGlobalOption(c, FlagDomain)
 	wid := getRequiredOption(c, FlagWorkflowID)
@@ -485,7 +485,7 @@ func QueryWorkflowUsingStackTrace(c *cli.Context) {
 }
 
 func queryWorkflowHelper(c *cli.Context, queryType string) {
-	serviceClient := cFactory.ClientFrontendClient(c)
+	serviceClient := cFactory.FrontendClient(c)
 
 	domain := getRequiredGlobalOption(c, FlagDomain)
 	wid := getRequiredOption(c, FlagWorkflowID)
@@ -808,7 +808,7 @@ func DescribeWorkflowWithID(c *cli.Context) {
 }
 
 func describeWorkflowHelper(c *cli.Context, wid, rid string) {
-	frontendClient := cFactory.ServerFrontendClientGRPC(c)
+	frontendClient := cFactory.FrontendClient(c)
 	domain := getRequiredGlobalOption(c, FlagDomain)
 	printRaw := c.Bool(FlagPrintRaw) // printRaw is false by default,
 	// and will show datetime and decoded search attributes instead of raw timestamp and byte arrays
@@ -906,7 +906,7 @@ type pendingActivityInfo struct {
 }
 
 func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWorkflowExecutionResponse,
-	wfClient workflowservice.WorkflowServiceYARPCClient, c *cli.Context) *describeWorkflowExecutionResponse {
+	wfClient workflowservice.WorkflowServiceClient, c *cli.Context) *describeWorkflowExecutionResponse {
 
 	info := resp.WorkflowExecutionInfo
 	executionInfo := workflowExecutionInfo{
@@ -957,7 +957,7 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 }
 
 func convertSearchAttributesToMapOfInterface(searchAttributes *commonproto.SearchAttributes,
-	wfClient workflowservice.WorkflowServiceYARPCClient, c *cli.Context) map[string]interface{} {
+	wfClient workflowservice.WorkflowServiceClient, c *cli.Context) map[string]interface{} {
 
 	if searchAttributes == nil || len(searchAttributes.GetIndexedFields()) == 0 {
 		return nil
@@ -1411,7 +1411,7 @@ func ResetWorkflow(c *cli.Context) {
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	frontendClient := cFactory.ServerFrontendClientGRPC(c)
+	frontendClient := cFactory.FrontendClient(c)
 
 	resetBaseRunID := rid
 	decisionFinishID := eventID
@@ -1451,8 +1451,7 @@ func processResets(c *cli.Context, domain string, wes chan commonproto.WorkflowE
 				if err == nil {
 					break
 				}
-				st := yarpcerrors.FromError(err)
-				if st.Code() == yarpcerrors.CodeInvalidArgument {
+				if status.Code(err) == codes.InvalidArgument {
 					break
 				}
 				fmt.Println("failed and retry...: ", wid, rid, err)
@@ -1624,7 +1623,7 @@ func doReset(c *cli.Context, domain, wid, rid string, reason, resetType string, 
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	frontendClient := cFactory.ServerFrontendClientGRPC(c)
+	frontendClient := cFactory.FrontendClient(c)
 	resp, err := frontendClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 		Domain: domain,
 		Execution: &commonproto.WorkflowExecution{
@@ -1676,7 +1675,7 @@ func doReset(c *cli.Context, domain, wid, rid string, reason, resetType string, 
 	return nil
 }
 
-func getResetEventIDByType(ctx context.Context, c *cli.Context, resetType, domain, wid, rid string, frontendClient workflowservice.WorkflowServiceYARPCClient) (resetBaseRunID string, decisionFinishID int64, err error) {
+func getResetEventIDByType(ctx context.Context, c *cli.Context, resetType, domain, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, decisionFinishID int64, err error) {
 	fmt.Println("resetType:", resetType)
 	switch resetType {
 	case "LastDecisionCompleted":
@@ -1706,7 +1705,7 @@ func getResetEventIDByType(ctx context.Context, c *cli.Context, resetType, domai
 	return
 }
 
-func getLastDecisionCompletedID(ctx context.Context, domain, wid, rid string, frontendClient workflowservice.WorkflowServiceYARPCClient) (resetBaseRunID string, decisionFinishID int64, err error) {
+func getLastDecisionCompletedID(ctx context.Context, domain, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, decisionFinishID int64, err error) {
 	resetBaseRunID = rid
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Domain: domain,
@@ -1740,7 +1739,7 @@ func getLastDecisionCompletedID(ctx context.Context, domain, wid, rid string, fr
 	return
 }
 
-func getBadDecisionCompletedID(ctx context.Context, domain, wid, rid, binChecksum string, frontendClient workflowservice.WorkflowServiceYARPCClient) (resetBaseRunID string, decisionFinishID int64, err error) {
+func getBadDecisionCompletedID(ctx context.Context, domain, wid, rid, binChecksum string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, decisionFinishID int64, err error) {
 	resetBaseRunID = rid
 	resp, err := frontendClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 		Domain: domain,
@@ -1763,12 +1762,12 @@ func getBadDecisionCompletedID(ctx context.Context, domain, wid, rid, binChecksu
 	}
 
 	if decisionFinishID == 0 {
-		return "", 0, printErrorAndReturn("Get DecisionFinishID failed", protobuf.NewError(yarpcerrors.CodeInvalidArgument, "no DecisionFinishID"))
+		return "", 0, printErrorAndReturn("Get DecisionFinishID failed", status.New(codes.InvalidArgument, "no DecisionFinishID").Err())
 	}
 	return
 }
 
-func getFirstDecisionCompletedID(ctx context.Context, domain, wid, rid string, frontendClient workflowservice.WorkflowServiceYARPCClient) (resetBaseRunID string, decisionFinishID int64, err error) {
+func getFirstDecisionCompletedID(ctx context.Context, domain, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, decisionFinishID int64, err error) {
 	resetBaseRunID = rid
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Domain: domain,
@@ -1803,7 +1802,7 @@ func getFirstDecisionCompletedID(ctx context.Context, domain, wid, rid string, f
 	return
 }
 
-func getLastContinueAsNewID(ctx context.Context, domain, wid, rid string, frontendClient workflowservice.WorkflowServiceYARPCClient) (resetBaseRunID string, decisionFinishID int64, err error) {
+func getLastContinueAsNewID(ctx context.Context, domain, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (resetBaseRunID string, decisionFinishID int64, err error) {
 	// get first event
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Domain: domain,
@@ -1869,7 +1868,7 @@ func CompleteActivity(c *cli.Context) {
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	frontendClient := cFactory.ServerFrontendClientGRPC(c)
+	frontendClient := cFactory.FrontendClient(c)
 	_, err := frontendClient.RespondActivityTaskCompletedByID(ctx, &workflowservice.RespondActivityTaskCompletedByIDRequest{
 		Domain:     domain,
 		WorkflowID: wid,
@@ -1900,7 +1899,7 @@ func FailActivity(c *cli.Context) {
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	frontendClient := cFactory.ServerFrontendClientGRPC(c)
+	frontendClient := cFactory.FrontendClient(c)
 	_, err := frontendClient.RespondActivityTaskFailedByID(ctx, &workflowservice.RespondActivityTaskFailedByIDRequest{
 		Domain:     domain,
 		WorkflowID: wid,

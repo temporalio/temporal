@@ -72,7 +72,7 @@ type Cadence interface {
 	Start() error
 	Stop()
 	GetAdminClient() adminserviceclient.Interface
-	GetFrontendClient() workflowservice.WorkflowServiceYARPCClient
+	GetFrontendClient() workflowservice.WorkflowServiceClient
 	FrontendAddress() string
 	GetHistoryClient() historyserviceclient.Interface
 	GetExecutionManagerFactory() persistence.ExecutionManagerFactory
@@ -86,7 +86,7 @@ type (
 		historyServices []common.Daemon
 
 		adminClient         adminserviceclient.Interface
-		frontendClient      workflowservice.WorkflowServiceYARPCClient
+		frontendClient      workflowservice.WorkflowServiceClient
 		historyClient       historyserviceclient.Interface
 		logger              log.Logger
 		clusterMetadata     cluster.Metadata
@@ -187,7 +187,7 @@ func (c *cadenceImpl) enableWorker() bool {
 
 func (c *cadenceImpl) Start() error {
 	hosts := make(map[string][]string)
-	hosts[common.FrontendServiceName] = []string{c.FrontendAddress()}
+	hosts[common.FrontendServiceName] = []string{c.FrontendGRPCAddress()}
 	hosts[common.MatchingServiceName] = []string{c.MatchingServiceAddress()}
 	hosts[common.HistoryServiceName] = c.HistoryServiceAddress(0)
 	if c.enableWorker() {
@@ -472,7 +472,7 @@ func (c *cadenceImpl) GetAdminClient() adminserviceclient.Interface {
 	return c.adminClient
 }
 
-func (c *cadenceImpl) GetFrontendClient() workflowservice.WorkflowServiceYARPCClient {
+func (c *cadenceImpl) GetFrontendClient() workflowservice.WorkflowServiceClient {
 	return c.frontendClient
 }
 
@@ -531,7 +531,7 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 	}
 
 	c.frontendService = frontendService
-	c.frontendClient = NewFrontendClient(frontendService.GetGRPCDispatcher())
+	c.frontendClient = NewFrontendClient(params.RPCFactory.CreateGRPCConnection(c.FrontendGRPCAddress()))
 	c.adminClient = NewAdminClient(frontendService.GetDispatcher())
 	go frontendService.Start()
 

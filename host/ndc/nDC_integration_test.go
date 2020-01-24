@@ -121,9 +121,9 @@ func (s *nDCIntegrationTestSuite) SetupSuite() {
 	s.standByTaskID = 0
 	s.mockFrontendClient = make(map[string]frontend.ClientGRPC)
 	controller := gomock.NewController(s.T())
-	mockStandbyClient := workflowservicemock.NewMockWorkflowServiceYARPCClient(controller)
+	mockStandbyClient := workflowservicemock.NewMockWorkflowServiceClient(controller)
 	mockStandbyClient.EXPECT().GetReplicationMessages(gomock.Any(), gomock.Any()).DoAndReturn(s.GetReplicationMessagesMock).AnyTimes()
-	mockOtherClient := workflowservicemock.NewMockWorkflowServiceYARPCClient(controller)
+	mockOtherClient := workflowservicemock.NewMockWorkflowServiceClient(controller)
 	mockOtherClient.EXPECT().GetReplicationMessages(gomock.Any(), gomock.Any()).Return(
 		&workflowservice.GetReplicationMessagesResponse{
 			MessagesByShard: make(map[int32]*commonproto.ReplicationMessages),
@@ -979,7 +979,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_ZombieWorkflow() {
 	s.generator = test.InitializeHistoryEventGenerator(s.domainName, version)
 
 	// verify two batches of zombie workflow are call reapply API
-	s.mockFrontendClient["standby"].(*workflowservicemock.MockWorkflowServiceYARPCClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(&workflowservice.ReapplyEventsResponse{}, nil).Times(2)
+	s.mockFrontendClient["standby"].(*workflowservicemock.MockWorkflowServiceClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(&workflowservice.ReapplyEventsResponse{}, nil).Times(2)
 	for i := 0; i < 2 && s.generator.HasNextVertex(); i++ {
 		events := s.generator.GetNextVertices()
 		historyEvents := &shared.History{}
@@ -1077,7 +1077,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
 		historyClient,
 	)
 
-	s.mockFrontendClient["standby"].(*workflowservicemock.MockWorkflowServiceYARPCClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(&workflowservice.ReapplyEventsResponse{}, nil).Times(1)
+	s.mockFrontendClient["standby"].(*workflowservicemock.MockWorkflowServiceClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(&workflowservice.ReapplyEventsResponse{}, nil).Times(1)
 	// Handcraft a stale signal event
 	baseBranchLastEventBatch := baseBranch[len(baseBranch)-1].GetEvents()
 	baseBranchLastEvent := baseBranchLastEventBatch[len(baseBranchLastEventBatch)-1]
@@ -1826,11 +1826,10 @@ func (s *nDCIntegrationTestSuite) toThriftVersionHistoryItems(
 }
 
 func (s *nDCIntegrationTestSuite) createContext() context.Context {
-	ctx, _ := context.WithTimeout(context.Background(), 90*time.Second)
-	return ctx
+	return createContext()
 }
 
 func (s *nDCIntegrationTestSuite) setupRemoteFrontendClients() {
-	s.mockFrontendClient["standby"].(*workflowservicemock.MockWorkflowServiceYARPCClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(&workflowservice.ReapplyEventsResponse{}, nil).AnyTimes()
-	s.mockFrontendClient["other"].(*workflowservicemock.MockWorkflowServiceYARPCClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(&workflowservice.ReapplyEventsResponse{}, nil).AnyTimes()
+	s.mockFrontendClient["standby"].(*workflowservicemock.MockWorkflowServiceClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(&workflowservice.ReapplyEventsResponse{}, nil).AnyTimes()
+	s.mockFrontendClient["other"].(*workflowservicemock.MockWorkflowServiceClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(&workflowservice.ReapplyEventsResponse{}, nil).AnyTimes()
 }

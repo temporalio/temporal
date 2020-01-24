@@ -26,11 +26,12 @@ import (
 	"github.com/uber-go/tally"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal-proto/workflowservicemock"
+	"go.uber.org/yarpc"
+	"go.uber.org/zap"
 
 	"github.com/temporalio/temporal/.gen/go/admin/adminservicetest"
 	"github.com/temporalio/temporal/.gen/go/history/historyservicetest"
 	"github.com/temporalio/temporal/.gen/go/matching/matchingservicetest"
-	"github.com/temporalio/temporal/.gen/go/temporal/workflowservicetest"
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/client/frontend"
@@ -50,9 +51,6 @@ import (
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/persistence"
 	persistenceClient "github.com/temporalio/temporal/common/persistence/client"
-
-	"go.uber.org/yarpc"
-	"go.uber.org/zap"
 )
 
 type (
@@ -81,11 +79,11 @@ type (
 		// internal services clients
 
 		SDKClient            *workflowservicemock.MockWorkflowServiceClient
-		FrontendClient       *workflowservicetest.MockClient
+		FrontendClient       *workflowservicemock.MockWorkflowServiceClient
 		MatchingClient       *matchingservicetest.MockClient
 		HistoryClient        *historyservicetest.MockClient
 		RemoteAdminClient    *adminservicetest.MockClient
-		RemoteFrontendClient *workflowservicemock.MockWorkflowServiceYARPCClient
+		RemoteFrontendClient *workflowservicemock.MockWorkflowServiceClient
 		ClientBean           *client.MockBean
 
 		// persistence clients
@@ -125,10 +123,10 @@ func NewTest(
 	}
 	logger := loggerimpl.NewLogger(zapLogger)
 
-	frontendClient := workflowservicetest.NewMockClient(controller)
+	frontendClient := workflowservicemock.NewMockWorkflowServiceClient(controller)
 	matchingClient := matchingservicetest.NewMockClient(controller)
 	historyClient := historyservicetest.NewMockClient(controller)
-	remoteFrontendClient := workflowservicemock.NewMockWorkflowServiceYARPCClient(controller)
+	remoteFrontendClient := workflowservicemock.NewMockWorkflowServiceClient(controller)
 	remoteAdminClient := adminservicetest.NewMockClient(controller)
 	clientBean := client.NewMockBean(controller)
 	clientBean.EXPECT().GetFrontendClient().Return(frontendClient).AnyTimes()
@@ -313,12 +311,12 @@ func (s *Test) GetSDKClient() workflowservice.WorkflowServiceClient {
 }
 
 // GetFrontendRawClient for testing
-func (s *Test) GetFrontendRawClient() frontend.Client {
+func (s *Test) GetFrontendRawClient() frontend.ClientGRPC {
 	return s.FrontendClient
 }
 
 // GetFrontendClient for testing
-func (s *Test) GetFrontendClient() frontend.Client {
+func (s *Test) GetFrontendClient() frontend.ClientGRPC {
 	return s.FrontendClient
 }
 

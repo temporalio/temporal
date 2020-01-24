@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package replicator
+package host
 
 import (
 	"context"
@@ -37,11 +37,16 @@ var (
 		common.FeatureVersionHeaderName: client.GoWorkerConsistentQueryVersion,
 		common.ClientImplHeaderName:     client.GoSDK,
 		// TODO: remove these headers when server is vanilla gRPC (not YARPC)
-		"rpc-caller":   "temporal-replicator",
+		"rpc-caller":   "temporal-onebox",
 		"rpc-service":  "cadence-frontend",
 		"rpc-encoding": "proto",
 	})
 )
+
+func createContext() context.Context {
+	ctx, _ := createContextWithCancel(90 * time.Second)
+	return ctx
+}
 
 func createContextWithCancel(timeout time.Duration) (context.Context, context.CancelFunc) {
 	ctx := metadata.NewOutgoingContext(context.Background(), headers)

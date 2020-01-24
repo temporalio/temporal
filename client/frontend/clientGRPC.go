@@ -26,7 +26,7 @@ import (
 
 	"github.com/pborman/uuid"
 	"go.temporal.io/temporal-proto/workflowservice"
-	"go.uber.org/yarpc"
+	"google.golang.org/grpc"
 
 	"github.com/temporalio/temporal/common"
 )
@@ -55,10 +55,9 @@ func NewClientGRPC(
 func (c *clientGRPCImpl) DeprecateDomain(
 	ctx context.Context,
 	request *workflowservice.DeprecateDomainRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.DeprecateDomainResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -70,10 +69,9 @@ func (c *clientGRPCImpl) DeprecateDomain(
 func (c *clientGRPCImpl) DescribeDomain(
 	ctx context.Context,
 	request *workflowservice.DescribeDomainRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.DescribeDomainResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -85,10 +83,9 @@ func (c *clientGRPCImpl) DescribeDomain(
 func (c *clientGRPCImpl) DescribeTaskList(
 	ctx context.Context,
 	request *workflowservice.DescribeTaskListRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.DescribeTaskListResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -100,10 +97,9 @@ func (c *clientGRPCImpl) DescribeTaskList(
 func (c *clientGRPCImpl) DescribeWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.DescribeWorkflowExecutionRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -115,10 +111,9 @@ func (c *clientGRPCImpl) DescribeWorkflowExecution(
 func (c *clientGRPCImpl) GetWorkflowExecutionHistory(
 	ctx context.Context,
 	request *workflowservice.GetWorkflowExecutionHistoryRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.GetWorkflowExecutionHistoryResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -130,10 +125,9 @@ func (c *clientGRPCImpl) GetWorkflowExecutionHistory(
 func (c *clientGRPCImpl) ListArchivedWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.ListArchivedWorkflowExecutionsRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.ListArchivedWorkflowExecutionsResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -145,10 +139,9 @@ func (c *clientGRPCImpl) ListArchivedWorkflowExecutions(
 func (c *clientGRPCImpl) ListClosedWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.ListClosedWorkflowExecutionsRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.ListClosedWorkflowExecutionsResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -160,10 +153,9 @@ func (c *clientGRPCImpl) ListClosedWorkflowExecutions(
 func (c *clientGRPCImpl) ListDomains(
 	ctx context.Context,
 	request *workflowservice.ListDomainsRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.ListDomainsResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -175,10 +167,9 @@ func (c *clientGRPCImpl) ListDomains(
 func (c *clientGRPCImpl) ListOpenWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.ListOpenWorkflowExecutionsRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.ListOpenWorkflowExecutionsResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -190,10 +181,9 @@ func (c *clientGRPCImpl) ListOpenWorkflowExecutions(
 func (c *clientGRPCImpl) ListWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.ListWorkflowExecutionsRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.ListWorkflowExecutionsResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -205,10 +195,9 @@ func (c *clientGRPCImpl) ListWorkflowExecutions(
 func (c *clientGRPCImpl) ScanWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.ScanWorkflowExecutionsRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.ScanWorkflowExecutionsResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -220,10 +209,9 @@ func (c *clientGRPCImpl) ScanWorkflowExecutions(
 func (c *clientGRPCImpl) CountWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.CountWorkflowExecutionsRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.CountWorkflowExecutionsResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -235,10 +223,9 @@ func (c *clientGRPCImpl) CountWorkflowExecutions(
 func (c *clientGRPCImpl) GetSearchAttributes(
 	ctx context.Context,
 	request *workflowservice.GetSearchAttributesRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.GetSearchAttributesResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -250,10 +237,9 @@ func (c *clientGRPCImpl) GetSearchAttributes(
 func (c *clientGRPCImpl) PollForActivityTask(
 	ctx context.Context,
 	request *workflowservice.PollForActivityTaskRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.PollForActivityTaskResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -265,10 +251,9 @@ func (c *clientGRPCImpl) PollForActivityTask(
 func (c *clientGRPCImpl) PollForDecisionTask(
 	ctx context.Context,
 	request *workflowservice.PollForDecisionTaskRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.PollForDecisionTaskResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -280,10 +265,9 @@ func (c *clientGRPCImpl) PollForDecisionTask(
 func (c *clientGRPCImpl) QueryWorkflow(
 	ctx context.Context,
 	request *workflowservice.QueryWorkflowRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.QueryWorkflowResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -295,10 +279,9 @@ func (c *clientGRPCImpl) QueryWorkflow(
 func (c *clientGRPCImpl) RecordActivityTaskHeartbeat(
 	ctx context.Context,
 	request *workflowservice.RecordActivityTaskHeartbeatRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.RecordActivityTaskHeartbeatResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -310,10 +293,9 @@ func (c *clientGRPCImpl) RecordActivityTaskHeartbeat(
 func (c *clientGRPCImpl) RecordActivityTaskHeartbeatByID(
 	ctx context.Context,
 	request *workflowservice.RecordActivityTaskHeartbeatByIDRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.RecordActivityTaskHeartbeatByIDResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -325,11 +307,10 @@ func (c *clientGRPCImpl) RecordActivityTaskHeartbeatByID(
 func (c *clientGRPCImpl) RegisterDomain(
 	ctx context.Context,
 	request *workflowservice.RegisterDomainRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.RegisterDomainResponse, error) {
 
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -341,10 +322,9 @@ func (c *clientGRPCImpl) RegisterDomain(
 func (c *clientGRPCImpl) RequestCancelWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.RequestCancelWorkflowExecutionRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.RequestCancelWorkflowExecutionResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -356,10 +336,9 @@ func (c *clientGRPCImpl) RequestCancelWorkflowExecution(
 func (c *clientGRPCImpl) ResetStickyTaskList(
 	ctx context.Context,
 	request *workflowservice.ResetStickyTaskListRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.ResetStickyTaskListResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -371,10 +350,9 @@ func (c *clientGRPCImpl) ResetStickyTaskList(
 func (c *clientGRPCImpl) ResetWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.ResetWorkflowExecutionRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.ResetWorkflowExecutionResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -386,10 +364,9 @@ func (c *clientGRPCImpl) ResetWorkflowExecution(
 func (c *clientGRPCImpl) RespondActivityTaskCanceled(
 	ctx context.Context,
 	request *workflowservice.RespondActivityTaskCanceledRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.RespondActivityTaskCanceledResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -401,10 +378,9 @@ func (c *clientGRPCImpl) RespondActivityTaskCanceled(
 func (c *clientGRPCImpl) RespondActivityTaskCanceledByID(
 	ctx context.Context,
 	request *workflowservice.RespondActivityTaskCanceledByIDRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.RespondActivityTaskCanceledByIDResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -416,10 +392,9 @@ func (c *clientGRPCImpl) RespondActivityTaskCanceledByID(
 func (c *clientGRPCImpl) RespondActivityTaskCompleted(
 	ctx context.Context,
 	request *workflowservice.RespondActivityTaskCompletedRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.RespondActivityTaskCompletedResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -431,10 +406,9 @@ func (c *clientGRPCImpl) RespondActivityTaskCompleted(
 func (c *clientGRPCImpl) RespondActivityTaskCompletedByID(
 	ctx context.Context,
 	request *workflowservice.RespondActivityTaskCompletedByIDRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.RespondActivityTaskCompletedByIDResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -446,10 +420,9 @@ func (c *clientGRPCImpl) RespondActivityTaskCompletedByID(
 func (c *clientGRPCImpl) RespondActivityTaskFailed(
 	ctx context.Context,
 	request *workflowservice.RespondActivityTaskFailedRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.RespondActivityTaskFailedResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -461,10 +434,9 @@ func (c *clientGRPCImpl) RespondActivityTaskFailed(
 func (c *clientGRPCImpl) RespondActivityTaskFailedByID(
 	ctx context.Context,
 	request *workflowservice.RespondActivityTaskFailedByIDRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.RespondActivityTaskFailedByIDResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -476,10 +448,9 @@ func (c *clientGRPCImpl) RespondActivityTaskFailedByID(
 func (c *clientGRPCImpl) RespondDecisionTaskCompleted(
 	ctx context.Context,
 	request *workflowservice.RespondDecisionTaskCompletedRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.RespondDecisionTaskCompletedResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -491,10 +462,9 @@ func (c *clientGRPCImpl) RespondDecisionTaskCompleted(
 func (c *clientGRPCImpl) RespondDecisionTaskFailed(
 	ctx context.Context,
 	request *workflowservice.RespondDecisionTaskFailedRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.RespondDecisionTaskFailedResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -506,10 +476,9 @@ func (c *clientGRPCImpl) RespondDecisionTaskFailed(
 func (c *clientGRPCImpl) RespondQueryTaskCompleted(
 	ctx context.Context,
 	request *workflowservice.RespondQueryTaskCompletedRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.RespondQueryTaskCompletedResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -521,10 +490,9 @@ func (c *clientGRPCImpl) RespondQueryTaskCompleted(
 func (c *clientGRPCImpl) SignalWithStartWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.SignalWithStartWorkflowExecutionRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.SignalWithStartWorkflowExecutionResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -536,10 +504,9 @@ func (c *clientGRPCImpl) SignalWithStartWorkflowExecution(
 func (c *clientGRPCImpl) SignalWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.SignalWorkflowExecutionRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.SignalWorkflowExecutionResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -551,10 +518,9 @@ func (c *clientGRPCImpl) SignalWorkflowExecution(
 func (c *clientGRPCImpl) StartWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.StartWorkflowExecutionRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.StartWorkflowExecutionResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -566,10 +532,9 @@ func (c *clientGRPCImpl) StartWorkflowExecution(
 func (c *clientGRPCImpl) TerminateWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.TerminateWorkflowExecutionRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.TerminateWorkflowExecutionResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -581,10 +546,9 @@ func (c *clientGRPCImpl) TerminateWorkflowExecution(
 func (c *clientGRPCImpl) UpdateDomain(
 	ctx context.Context,
 	request *workflowservice.UpdateDomainRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.UpdateDomainResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -607,7 +571,7 @@ func (c *clientGRPCImpl) createLongPollContext(parent context.Context) (context.
 	return context.WithTimeout(parent, c.longPollTimeout)
 }
 
-func (c *clientGRPCImpl) getRandomClient() (workflowservice.WorkflowServiceYARPCClient, error) {
+func (c *clientGRPCImpl) getRandomClient() (workflowservice.WorkflowServiceClient, error) {
 	// generate a random shard key to do load balancing
 	key := uuid.New()
 	client, err := c.clients.GetClientForKey(key)
@@ -615,16 +579,15 @@ func (c *clientGRPCImpl) getRandomClient() (workflowservice.WorkflowServiceYARPC
 		return nil, err
 	}
 
-	return client.(workflowservice.WorkflowServiceYARPCClient), nil
+	return client.(workflowservice.WorkflowServiceClient), nil
 }
 
 func (c *clientGRPCImpl) GetReplicationMessages(
 	ctx context.Context,
 	request *workflowservice.GetReplicationMessagesRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.GetReplicationMessagesResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -636,10 +599,9 @@ func (c *clientGRPCImpl) GetReplicationMessages(
 func (c *clientGRPCImpl) GetDomainReplicationMessages(
 	ctx context.Context,
 	request *workflowservice.GetDomainReplicationMessagesRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.GetDomainReplicationMessagesResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -651,10 +613,9 @@ func (c *clientGRPCImpl) GetDomainReplicationMessages(
 func (c *clientGRPCImpl) ReapplyEvents(
 	ctx context.Context,
 	request *workflowservice.ReapplyEventsRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.ReapplyEventsResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -666,10 +627,9 @@ func (c *clientGRPCImpl) ReapplyEvents(
 func (c *clientGRPCImpl) GetClusterInfo(
 	ctx context.Context,
 	request *workflowservice.GetClusterInfoRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.GetClusterInfoResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -681,10 +641,9 @@ func (c *clientGRPCImpl) GetClusterInfo(
 func (c *clientGRPCImpl) ListTaskListPartitions(
 	ctx context.Context,
 	request *workflowservice.ListTaskListPartitionsRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*workflowservice.ListTaskListPartitionsResponse, error) {
 	client, err := c.getRandomClient()
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}

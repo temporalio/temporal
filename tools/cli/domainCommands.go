@@ -28,16 +28,14 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/gogo/status"
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
-	"go.uber.org/yarpc/yarpcerrors"
-
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/workflowservice"
+	"google.golang.org/grpc/codes"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
-	serviceFrontend "github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
 	"github.com/temporalio/temporal/common/domain"
 	"github.com/temporalio/temporal/service/frontend/adapter"
 )
@@ -45,9 +43,7 @@ import (
 type (
 	domainCLIImpl struct {
 		// used when making RPC call to frontend service``
-		frontendClient serviceFrontend.Interface
-
-		frontendClientGRPC workflowservice.WorkflowServiceYARPCClient
+		frontendClient workflowservice.WorkflowServiceClient
 
 		// act as admin to modify domain in DB directly
 		domainHandler domain.Handler
@@ -60,19 +56,16 @@ func newDomainCLI(
 	isAdminMode bool,
 ) *domainCLIImpl {
 
-	var frontendClient serviceFrontend.Interface
-	var frontendClientGRPC workflowservice.WorkflowServiceYARPCClient
+	var frontendClient workflowservice.WorkflowServiceClient
 	var domainHandler domain.Handler
 	if !isAdminMode {
 		frontendClient = initializeFrontendClient(c)
-		frontendClientGRPC = initializeFrontendClientGRPC(c)
 	} else {
 		domainHandler = initializeAdminDomainHandler(c)
 	}
 	return &domainCLIImpl{
-		frontendClient:     frontendClient,
-		frontendClientGRPC: frontendClientGRPC,
-		domainHandler:      domainHandler,
+		frontendClient: frontendClient,
+		domainHandler:  domainHandler,
 	}
 }
 
@@ -156,15 +149,15 @@ func (d *domainCLIImpl) RegisterDomain(c *cli.Context) {
 
 	ctx, cancel := newContext(c)
 	defer cancel()
-	err = d.registerDomain(ctx, request, c.IsSet(FlagGRPC))
+	err = d.registerDomain(ctx, request)
 	if err != nil {
-		switch er := err.(type) {
-		case *shared.DomainAlreadyExistsError:
-			ErrorAndExit(fmt.Sprintf("Domain %s already registered.", domainName), er)
-		case *yarpcerrors.Status:
-			ErrorAndExit(er.Message(), er)
-		default:
-			ErrorAndExit("Operation RegisterDomain failed.", er)
+		st := status.Convert(err)
+		if st.Code() == codes.AlreadyExists {
+			ErrorAndExit(fmt.Sprintf("Domain %s already registered.", domainName), err)
+		} else if st.Code() != codes.Unknown {
+			ErrorAndExit(st.Message(), err)
+		} else {
+			ErrorAndExit("Operation RegisterDomain failed.", err)
 		}
 	} else {
 		fmt.Printf("Domain %s successfully registered.\n", domainName)
@@ -192,14 +185,14 @@ func (d *domainCLIImpl) UpdateDomain(c *cli.Context) {
 	} else {
 		resp, err := d.describeDomain(ctx, &workflowservice.DescribeDomainRequest{
 			Name: domainName,
-		}, c.IsSet(FlagGRPC))
+		})
 		if err != nil {
-			switch er := err.(type) {
-			case *shared.EntityNotExistsError:
-				ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domainName), er)
-			case *yarpcerrors.Status:
-				ErrorAndExit(er.Message(), er)
-			default:
+			st := status.Convert(err)
+			if st.Code() == codes.NotFound {
+				ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domainName), err)
+			} else if st.Code() != codes.Unknown {
+				ErrorAndExit(st.Message(), err)
+			} else {
 				ErrorAndExit("Operation UpdateDomain failed.", err)
 			}
 			return
@@ -297,19 +290,20 @@ func (d *domainCLIImpl) UpdateDomain(c *cli.Context) {
 
 	securityToken := c.String(FlagSecurityToken)
 	updateRequest.SecurityToken = securityToken
-	err := d.updateDomain(ctx, updateRequest, c.IsSet(FlagGRPC))
+	err := d.updateDomain(ctx, updateRequest)
 	if err != nil {
-		switch er := err.(type) {
-		case *shared.EntityNotExistsError:
-			ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domainName), er)
-		case *yarpcerrors.Status:
-			ErrorAndExit(er.Message(), er)
-		default:
+		st := status.Convert(err)
+		if st.Code() == codes.NotFound {
+			ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domainName), err)
+		} else if st.Code() != codes.Unknown {
+			ErrorAndExit(st.Message(), err)
+		} else {
 			ErrorAndExit("Operation UpdateDomain failed.", err)
 		}
-	} else {
-		fmt.Printf("Domain %s successfully updated.\n", domainName)
+		return
 	}
+
+	fmt.Printf("Domain %s successfully updated.\n", domainName)
 }
 
 // DescribeDomain updates a domain
@@ -325,14 +319,14 @@ func (d *domainCLIImpl) DescribeDomain(c *cli.Context) {
 	resp, err := d.describeDomain(ctx, &workflowservice.DescribeDomainRequest{
 		Name: domainName,
 		Uuid: domainID,
-	}, c.IsSet(FlagGRPC))
+	})
 	if err != nil {
-		switch er := err.(type) {
-		case *shared.EntityNotExistsError:
-			ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domainName), er)
-		case *yarpcerrors.Status:
-			ErrorAndExit(er.Message(), er)
-		default:
+		st := status.Convert(err)
+		if st.Code() == codes.NotFound {
+			ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domainName), err)
+		} else if st.Code() != codes.Unknown {
+			ErrorAndExit(st.Message(), err)
+		} else {
 			ErrorAndExit("Operation DescribeDomain failed.", err)
 		}
 		return
@@ -387,16 +381,10 @@ func (d *domainCLIImpl) DescribeDomain(c *cli.Context) {
 func (d *domainCLIImpl) registerDomain(
 	ctx context.Context,
 	request *workflowservice.RegisterDomainRequest,
-	useGRPC bool,
 ) error {
-
-	if useGRPC && d.frontendClientGRPC != nil {
-		_, err := d.frontendClientGRPC.RegisterDomain(ctx, request)
+	if d.frontendClient != nil {
+		_, err := d.frontendClient.RegisterDomain(ctx, request)
 		return err
-	}
-
-	if !useGRPC && d.frontendClient != nil {
-		return d.frontendClient.RegisterDomain(ctx, adapter.ToThriftRegisterDomainRequest(request))
 	}
 
 	return d.domainHandler.RegisterDomain(ctx, adapter.ToThriftRegisterDomainRequest(request))
@@ -405,15 +393,9 @@ func (d *domainCLIImpl) registerDomain(
 func (d *domainCLIImpl) updateDomain(
 	ctx context.Context,
 	request *workflowservice.UpdateDomainRequest,
-	useGRPC bool,
 ) error {
-	if useGRPC && d.frontendClientGRPC != nil {
-		_, err := d.frontendClientGRPC.UpdateDomain(ctx, request)
-		return err
-	}
-
-	if !useGRPC && d.frontendClient != nil {
-		_, err := d.frontendClient.UpdateDomain(ctx, adapter.ToThriftUpdateDomainRequest(request))
+	if d.frontendClient != nil {
+		_, err := d.frontendClient.UpdateDomain(ctx, request)
 		return err
 	}
 
@@ -424,15 +406,10 @@ func (d *domainCLIImpl) updateDomain(
 func (d *domainCLIImpl) describeDomain(
 	ctx context.Context,
 	request *workflowservice.DescribeDomainRequest,
-	useGRPC bool,
 ) (*workflowservice.DescribeDomainResponse, error) {
-	if useGRPC && d.frontendClientGRPC != nil {
-		return d.frontendClientGRPC.DescribeDomain(ctx, request)
-	}
 
-	if !useGRPC && d.frontendClient != nil {
-		resp, err := d.frontendClient.DescribeDomain(ctx, adapter.ToThriftDescribeDomainRequest(request))
-		return adapter.ToProtoDescribeDomainResponse(resp), err
+	if d.frontendClient != nil {
+		return d.frontendClient.DescribeDomain(ctx, request)
 	}
 
 	resp, err := d.domainHandler.DescribeDomain(ctx, adapter.ToThriftDescribeDomainRequest(request))

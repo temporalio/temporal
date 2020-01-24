@@ -1392,7 +1392,7 @@ func (h *Handler) SyncActivity(
 	defer sw.Stop()
 
 	domainID := syncActivityRequest.GetDomainId()
-	if syncActivityRequest.DomainId == nil || uuid.Parse(syncActivityRequest.GetDomainId()) == nil {
+	if syncActivityRequest.GetDomainId() == "" || uuid.Parse(syncActivityRequest.GetDomainId()) == nil {
 		return h.error(errDomainNotSet, scope, domainID, "")
 	}
 
@@ -1400,11 +1400,11 @@ func (h *Handler) SyncActivity(
 		return h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
-	if syncActivityRequest.WorkflowId == nil {
+	if syncActivityRequest.GetWorkflowId() == "" {
 		return h.error(errWorkflowIDNotSet, scope, domainID, "")
 	}
 
-	if syncActivityRequest.RunId == nil || uuid.Parse(syncActivityRequest.GetRunId()) == nil {
+	if syncActivityRequest.GetRunId() == "" || uuid.Parse(syncActivityRequest.GetRunId()) == nil {
 		return h.error(errRunIDNotValid, scope, domainID, "")
 	}
 
