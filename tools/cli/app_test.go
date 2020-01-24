@@ -37,12 +37,8 @@ import (
 	"go.temporal.io/temporal-proto/workflowservicemock"
 	"google.golang.org/grpc/codes"
 
-	"github.com/temporalio/temporal/.gen/go/admin"
-	"github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"
-	"github.com/temporalio/temporal/.gen/go/admin/adminservicetest"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
-	"github.com/temporalio/temporal/common"
 )
 
 type cliAppSuite struct {
@@ -62,7 +58,7 @@ func (m *clientFactoryMock) FrontendClient(c *cli.Context) workflowservice.Workf
 	return m.frontendClient
 }
 
-func (m *clientFactoryMock) ServerAdminClient(c *cli.Context) adminserviceclient.Interface {
+func (m *clientFactoryMock) ServerAdminClient(c *cli.Context) adminservice.AdminServiceYARPCClient {
 	return m.serverAdminClient
 }
 
@@ -87,7 +83,7 @@ func (s *cliAppSuite) SetupTest() {
 	s.mockCtrl = gomock.NewController(s.T())
 
 	s.frontendClient = workflowservicemock.NewMockWorkflowServiceClient(s.mockCtrl)
-	s.serverAdminClient = adminservicetest.NewMockClient(s.mockCtrl)
+	s.serverAdminClient = adminservicemock.NewMockAdminServiceYARPCClient(s.mockCtrl)
 	SetFactory(&clientFactoryMock{
 		frontendClient:    s.frontendClient,
 		serverAdminClient: s.serverAdminClient,
@@ -494,10 +490,10 @@ var describeTaskListResponse = &workflowservice.DescribeTaskListResponse{
 }
 
 func (s *cliAppSuite) TestAdminDescribeWorkflow() {
-	resp := &admin.DescribeWorkflowExecutionResponse{
-		ShardId:                common.StringPtr("test-shard-id"),
-		HistoryAddr:            common.StringPtr("ip:port"),
-		MutableStateInDatabase: common.StringPtr("{\"ExecutionInfo\":{\"BranchToken\":\"WQsACgAAACQ2MzI5YzEzMi1mMGI0LTQwZmUtYWYxMS1hODVmMDA3MzAzODQLABQAAAAkOWM5OWI1MjItMGEyZi00NTdmLWEyNDgtMWU0OTA0ZDg4YzVhDwAeDAAAAAAA\"}}"),
+	resp := &adminservice.DescribeWorkflowExecutionResponse{
+		ShardId:                "test-shard-id",
+		HistoryAddr:            "ip:port",
+		MutableStateInDatabase: "{\"ExecutionInfo\":{\"BranchToken\":\"WQsACgAAACQ2MzI5YzEzMi1mMGI0LTQwZmUtYWYxMS1hODVmMDA3MzAzODQLABQAAAAkOWM5OWI1MjItMGEyZi00NTdmLWEyNDgtMWU0OTA0ZDg4YzVhDwAeDAAAAAAA\"}}",
 	}
 
 	s.serverAdminClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(resp, nil)
