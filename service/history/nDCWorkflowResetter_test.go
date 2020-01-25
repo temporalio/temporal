@@ -245,11 +245,13 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_Error() {
 	retryErr, isRetryError := err.(*shared.RetryTaskV2Error)
 	s.True(isRetryError)
 	expectedErr := &shared.RetryTaskV2Error{
-		DomainId:        common.StringPtr(s.domainID),
-		WorkflowId:      common.StringPtr(s.workflowID),
-		RunId:           common.StringPtr(s.newRunID),
-		EndEventId:      common.Int64Ptr(incomingFirstEventID),
-		EndEventVersion: common.Int64Ptr(incomingFirstEventVersion),
+		DomainId:          common.StringPtr(s.domainID),
+		WorkflowId:        common.StringPtr(s.workflowID),
+		RunId:             common.StringPtr(s.newRunID),
+		StartEventId:      common.Int64Ptr(common.EmptyEventID),
+		StartEventVersion: common.Int64Ptr(common.EmptyVersion),
+		EndEventId:        common.Int64Ptr(incomingFirstEventID),
+		EndEventVersion:   common.Int64Ptr(incomingFirstEventVersion),
 	}
 	s.Equal(retryErr, expectedErr)
 }

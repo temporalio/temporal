@@ -207,10 +207,10 @@ func (r *nDCBranchMgrImpl) verifyEventsOrder(
 			executionInfo.DomainID,
 			executionInfo.WorkflowID,
 			executionInfo.RunID,
-			common.Int64Ptr(lastVersionHistoryItem.GetEventID()),
-			common.Int64Ptr(lastVersionHistoryItem.GetVersion()),
-			common.Int64Ptr(incomingFirstEventID),
-			common.Int64Ptr(incomingFirstEventVersion))
+			lastVersionHistoryItem.GetEventID(),
+			lastVersionHistoryItem.GetVersion(),
+			incomingFirstEventID,
+			incomingFirstEventVersion)
 	}
 	// task.getFirstEvent().GetEventId() == nextEventID
 	return true, nil
