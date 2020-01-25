@@ -160,7 +160,7 @@ func (s *server) startService() common.Daemon {
 	// This call performs a config check against the configured persistence store for immutable cluster metadata.
 	// If there is a mismatch, the persisted values take precedence and will be written over in the config objects.
 	// This is to keep this check hidden from independent downstream daemons and keep this in a single place.
-	immutableClusterMetadataInitialization(&params, clusterMetadata)
+	immutableClusterMetadataInitialization(params.Logger, &params.PersistenceConfig, &params.MetricsClient, clusterMetadata)
 
 	params.ClusterMetadata = cluster.NewMetadata(
 		params.Logger,
@@ -257,12 +257,17 @@ func (s *server) startService() common.Daemon {
 	return daemon
 }
 
-func immutableClusterMetadataInitialization(params *service.BootstrapParams, clusterMetadata *config.ClusterMetadata) {
-	logger := params.Logger.WithTags(tag.ComponentMetadataInitializer)
+func immutableClusterMetadataInitialization(
+	logger l.Logger,
+	persistenceConfig *config.Persistence,
+	metricsClient *metrics.Client,
+	clusterMetadata *config.ClusterMetadata) {
+
+	logger = logger.WithTags(tag.ComponentMetadataInitializer)
 	clusterMetadataManager, err := persistenceClient.NewFactory(
-		&params.PersistenceConfig,
-		params.ClusterMetadata.GetCurrentClusterName(),
-		params.MetricsClient,
+		persistenceConfig,
+		clusterMetadata.CurrentClusterName,
+		*metricsClient,
 		logger,
 	).NewClusterMetadataManager()
 
@@ -275,7 +280,7 @@ func immutableClusterMetadataInitialization(params *service.BootstrapParams, clu
 	resp, err := clusterMetadataManager.InitializeImmutableClusterMetadata(
 		&persistence.InitializeImmutableClusterMetadataRequest{
 			ImmutableClusterMetadata: persist.ImmutableClusterMetadata{
-				HistoryShardCount: common.Int32Ptr(int32(params.PersistenceConfig.NumHistoryShards)),
+				HistoryShardCount: common.Int32Ptr(int32(persistenceConfig.NumHistoryShards)),
 				ClusterName:       &clusterMetadata.CurrentClusterName,
 			}})
 
@@ -296,13 +301,13 @@ func immutableClusterMetadataInitialization(params *service.BootstrapParams, clu
 		}
 
 		var persistedShardCount = int(*resp.PersistedImmutableData.HistoryShardCount)
-		if params.PersistenceConfig.NumHistoryShards != persistedShardCount {
+		if persistenceConfig.NumHistoryShards != persistedShardCount {
 			logImmutableMismatch(logger,
 				"Persistence.NumHistoryShards",
-				params.PersistenceConfig.NumHistoryShards,
+				persistenceConfig.NumHistoryShards,
 				persistedShardCount)
 
-			params.PersistenceConfig.NumHistoryShards = persistedShardCount
+			persistenceConfig.NumHistoryShards = persistedShardCount
 		}
 	}
 }
