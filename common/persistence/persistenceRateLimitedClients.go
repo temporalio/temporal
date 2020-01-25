@@ -839,18 +839,18 @@ func (c *clusterMetadataRateLimitedPersistenceClient) Close() {
 	c.persistence.Close()
 }
 
-func (c clusterMetadataRateLimitedPersistenceClient) GetName() string {
+func (c *clusterMetadataRateLimitedPersistenceClient) GetName() string {
 	return c.persistence.GetName()
 }
 
-func (c clusterMetadataRateLimitedPersistenceClient) InitializeImmutableClusterMetadata(request *InitializeImmutableClusterMetadataRequest) (*InitializeImmutableClusterMetadataResponse, error) {
+func (c *clusterMetadataRateLimitedPersistenceClient) InitializeImmutableClusterMetadata(request *InitializeImmutableClusterMetadataRequest) (*InitializeImmutableClusterMetadataResponse, error) {
 	if ok := c.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
-	return c.InitializeImmutableClusterMetadata(request)
+	return c.persistence.InitializeImmutableClusterMetadata(request)
 }
 
-func (c clusterMetadataRateLimitedPersistenceClient) GetImmutableClusterMetadata() (*GetImmutableClusterMetadataResponse, error) {
+func (c *clusterMetadataRateLimitedPersistenceClient) GetImmutableClusterMetadata() (*GetImmutableClusterMetadataResponse, error) {
 	if ok := c.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
