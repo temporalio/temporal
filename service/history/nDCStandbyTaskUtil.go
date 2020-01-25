@@ -134,7 +134,9 @@ func newHistoryResendInfoFor2DC(
 	nextEventID int64,
 ) *historyResendInfo {
 	return &historyResendInfo{
-		nextEventID: common.Int64Ptr(nextEventID),
+		nextEventID:      common.Int64Ptr(nextEventID),
+		lastEventID:      common.EmptyEventID,
+		lastEventVersion: common.EmptyVersion,
 	}
 }
 

@@ -693,6 +693,7 @@ func (t *transferQueueStandbyProcessorImpl) fetchHistoryFromRemote(
 	} else if resendInfo.nextEventID != nil {
 		err = t.historyRereplicator.SendMultiWorkflowHistory(
 			transferTask.DomainID,
+
 			transferTask.WorkflowID,
 			transferTask.RunID,
 			*resendInfo.nextEventID,

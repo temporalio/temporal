@@ -54,6 +54,7 @@ func (adh *AdminHandlerGRPC) RegisterHandler() {
 	adh.adminHandlerThrift.GetGRPCDispatcher().Register(adminservice.BuildAdminServiceYARPCProcedures(adh))
 }
 
+// DescribeWorkflowExecution ...
 func (adh *AdminHandlerGRPC) DescribeWorkflowExecution(ctx context.Context, request *adminservice.DescribeWorkflowExecutionRequest) (_ *adminservice.DescribeWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanicGRPC(adh.adminHandlerThrift.GetLogger(), &retError)
 
@@ -64,6 +65,7 @@ func (adh *AdminHandlerGRPC) DescribeWorkflowExecution(ctx context.Context, requ
 	return adapter.ToProtoAdminDescribeWorkflowExecutionResponse(resp), nil
 }
 
+// DescribeHistoryHost ...
 func (adh *AdminHandlerGRPC) DescribeHistoryHost(ctx context.Context, request *adminservice.DescribeHistoryHostRequest) (_ *adminservice.DescribeHistoryHostResponse, retError error) {
 	defer log.CapturePanicGRPC(adh.adminHandlerThrift.GetLogger(), &retError)
 
@@ -74,6 +76,7 @@ func (adh *AdminHandlerGRPC) DescribeHistoryHost(ctx context.Context, request *a
 	return adapter.ToProtoDescribeHistoryHostResponse(resp), nil
 }
 
+// CloseShard ...
 func (adh *AdminHandlerGRPC) CloseShard(ctx context.Context, request *adminservice.CloseShardRequest) (_ *adminservice.CloseShardResponse, retError error) {
 	defer log.CapturePanicGRPC(adh.adminHandlerThrift.GetLogger(), &retError)
 
@@ -84,6 +87,7 @@ func (adh *AdminHandlerGRPC) CloseShard(ctx context.Context, request *adminservi
 	return &adminservice.CloseShardResponse{}, nil
 }
 
+// RemoveTask ...
 func (adh *AdminHandlerGRPC) RemoveTask(ctx context.Context, request *adminservice.RemoveTaskRequest) (_ *adminservice.RemoveTaskResponse, retError error) {
 	defer log.CapturePanicGRPC(adh.adminHandlerThrift.GetLogger(), &retError)
 
@@ -94,6 +98,7 @@ func (adh *AdminHandlerGRPC) RemoveTask(ctx context.Context, request *adminservi
 	return &adminservice.RemoveTaskResponse{}, nil
 }
 
+// GetWorkflowExecutionRawHistory ...
 func (adh *AdminHandlerGRPC) GetWorkflowExecutionRawHistory(ctx context.Context, request *adminservice.GetWorkflowExecutionRawHistoryRequest) (_ *adminservice.GetWorkflowExecutionRawHistoryResponse, retError error) {
 	defer log.CapturePanicGRPC(adh.adminHandlerThrift.GetLogger(), &retError)
 
@@ -104,6 +109,7 @@ func (adh *AdminHandlerGRPC) GetWorkflowExecutionRawHistory(ctx context.Context,
 	return adapter.ToProtoGetWorkflowExecutionRawHistoryResponse(resp), nil
 }
 
+// GetWorkflowExecutionRawHistoryV2 ...
 func (adh *AdminHandlerGRPC) GetWorkflowExecutionRawHistoryV2(ctx context.Context, request *adminservice.GetWorkflowExecutionRawHistoryV2Request) (_ *adminservice.GetWorkflowExecutionRawHistoryV2Response, retError error) {
 	defer log.CapturePanicGRPC(adh.adminHandlerThrift.GetLogger(), &retError)
 
@@ -114,6 +120,7 @@ func (adh *AdminHandlerGRPC) GetWorkflowExecutionRawHistoryV2(ctx context.Contex
 	return adapter.ToProtoGetWorkflowExecutionRawHistoryV2Response(resp), nil
 }
 
+// AddSearchAttribute ...
 func (adh *AdminHandlerGRPC) AddSearchAttribute(ctx context.Context, request *adminservice.AddSearchAttributeRequest) (_ *adminservice.AddSearchAttributeResponse, retError error) {
 	defer log.CapturePanicGRPC(adh.adminHandlerThrift.GetLogger(), &retError)
 
@@ -124,6 +131,7 @@ func (adh *AdminHandlerGRPC) AddSearchAttribute(ctx context.Context, request *ad
 	return &adminservice.AddSearchAttributeResponse{}, nil
 }
 
+// DescribeCluster ...
 func (adh *AdminHandlerGRPC) DescribeCluster(ctx context.Context, _ *adminservice.DescribeClusterRequest) (_ *adminservice.DescribeClusterResponse, retError error) {
 	defer log.CapturePanicGRPC(adh.adminHandlerThrift.GetLogger(), &retError)
 

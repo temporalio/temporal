@@ -166,6 +166,8 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 			},
 			StartEventId:      startEventID,
 			StartEventVersion: startEventVersion,
+			EndEventId:        common.EmptyEventID,
+			EndEventVersion:   common.EmptyVersion,
 			MaximumPageSize:   pageSize,
 			NextPageToken:     nil,
 		}).Return(&adminservice.GetWorkflowExecutionRawHistoryV2Response{
@@ -186,6 +188,8 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 			},
 			StartEventId:      startEventID,
 			StartEventVersion: startEventVersion,
+			EndEventId:        common.EmptyEventID,
+			EndEventVersion:   common.EmptyVersion,
 			MaximumPageSize:   pageSize,
 			NextPageToken:     token,
 		}).Return(&adminservice.GetWorkflowExecutionRawHistoryV2Response{
