@@ -30,7 +30,7 @@ steps:
 
   - label: ":golang: code-coverage"
     agents:
-      queue: "workers"
+      queue: "default"
       docker: "*"
     command: "scripts/buildkite/gocov.sh"
     retry:
