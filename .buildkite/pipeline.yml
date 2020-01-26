@@ -10,11 +10,6 @@ steps:
       - docker-compose#v3.1.0:
           run: unit-test
           config: docker/buildkite/docker-compose.yml
-          volumes:
-            - "${SSH_AUTH_SOCK}:/ssh-agent"
-            - "${HOME}/.ssh/known_hosts:/root/.ssh/known_hosts"
-          environment:
-            - SSH_AUTH_SOCK=/ssh-agent
 
   - label: ":golang: integration test with cassandra"
     agents:
@@ -30,11 +25,6 @@ steps:
       - docker-compose#v3.1.0:
           run: integration-test-cassandra
           config: docker/buildkite/docker-compose.yml
-          volumes:
-            - "${SSH_AUTH_SOCK}:/ssh-agent"
-            - "${HOME}/.ssh/known_hosts:/root/.ssh/known_hosts"
-          environment:
-            - SSH_AUTH_SOCK=/ssh-agent
 
   - wait
 
@@ -50,8 +40,3 @@ steps:
       - docker-compose#v3.1.0:
           run: coverage-report
           config: docker/buildkite/docker-compose.yml
-          volumes:
-            - "${SSH_AUTH_SOCK}:/ssh-agent"
-            - "${HOME}/.ssh/known_hosts:/root/.ssh/known_hosts"
-          environment:
-            - SSH_AUTH_SOCK=/ssh-agent
