@@ -24,9 +24,12 @@ import (
 	"context"
 	"time"
 
-	"github.com/temporalio/temporal/.gen/go/admin"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
+
 	"github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	a "github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -34,6 +37,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/service/frontend/adapter"
 )
 
 var (
@@ -194,7 +198,7 @@ func (c *historyRereplicationContext) sendSingleWorkflowHistory(domainID string,
 
 	var pendingRequest *history.ReplicateRawEventsRequest // pending replication request to history, initialized to nil
 
-	var replicationInfo map[string]*shared.ReplicationInfo
+	var replicationInfo map[string]*commonproto.ReplicationInfo
 
 	var token []byte
 	for doPaging := true; doPaging; doPaging = len(token) > 0 {
@@ -227,7 +231,7 @@ func (c *historyRereplicationContext) sendSingleWorkflowHistory(domainID string,
 	// after this for loop, there shall be one request not sent yet
 	// this request contains the last event, possible continue as new event
 	lastBatch := pendingRequest.History
-	nextRunID, err := c.getNextRunID(lastBatch)
+	nextRunID, err := c.getNextRunID(adapter.ToProtoDataBlob(lastBatch))
 	if err != nil {
 		return "", err
 	}
@@ -243,7 +247,7 @@ func (c *historyRereplicationContext) sendSingleWorkflowHistory(domainID string,
 
 		batch := response.HistoryBatches[0]
 
-		pendingRequest.NewRunHistory = batch
+		pendingRequest.NewRunHistory = adapter.ToThriftDataBlob(batch)
 	}
 
 	return nextRunID, c.sendReplicationRawRequest(pendingRequest)
@@ -275,8 +279,8 @@ func (c *historyRereplicationContext) eventIDRange(currentRunID string,
 
 func (c *historyRereplicationContext) createReplicationRawRequest(
 	domainID string, workflowID string, runID string,
-	historyBlob *shared.DataBlob,
-	replicationInfo map[string]*shared.ReplicationInfo,
+	historyBlob *commonproto.DataBlob,
+	replicationInfo map[string]*commonproto.ReplicationInfo,
 ) *history.ReplicateRawEventsRequest {
 
 	request := &history.ReplicateRawEventsRequest{
@@ -285,8 +289,8 @@ func (c *historyRereplicationContext) createReplicationRawRequest(
 			WorkflowId: common.StringPtr(workflowID),
 			RunId:      common.StringPtr(runID),
 		},
-		ReplicationInfo: replicationInfo,
-		History:         historyBlob,
+		ReplicationInfo: adapter.ToThriftReplicationInfos(replicationInfo),
+		History:         adapter.ToThriftDataBlob(historyBlob),
 		// NewRunHistory this will be handled separately
 	}
 
@@ -346,7 +350,7 @@ func (c *historyRereplicationContext) sendReplicationRawRequest(request *history
 }
 
 func (c *historyRereplicationContext) handleEmptyHistory(domainID string, workflowID string, runID string,
-	replicationInfo map[string]*shared.ReplicationInfo) error {
+	replicationInfo map[string]*commonproto.ReplicationInfo) error {
 
 	if c.seenEmptyEvents {
 		c.logger.Error("error, encounter empty history more than once", tag.WorkflowRunID(runID))
@@ -384,7 +388,7 @@ func (c *historyRereplicationContext) getHistory(
 	nextEventID int64,
 	token []byte,
 	pageSize int32,
-) (*admin.GetWorkflowExecutionRawHistoryResponse, error) {
+) (*adminservice.GetWorkflowExecutionRawHistoryResponse, error) {
 
 	logger := c.logger.WithTags(tag.WorkflowRunID(runID), tag.WorkflowFirstEventID(firstEventID), tag.WorkflowNextEventID(nextEventID))
 
@@ -397,15 +401,15 @@ func (c *historyRereplicationContext) getHistory(
 
 	ctx, cancel := context.WithTimeout(context.Background(), c.rereplicator.replicationTimeout)
 	defer cancel()
-	response, err := c.rereplicator.adminClient.GetWorkflowExecutionRawHistory(ctx, &admin.GetWorkflowExecutionRawHistoryRequest{
-		Domain: common.StringPtr(domainName),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
+	response, err := c.rereplicator.adminClient.GetWorkflowExecutionRawHistory(ctx, &adminservice.GetWorkflowExecutionRawHistoryRequest{
+		Domain: domainName,
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
 		},
-		FirstEventId:    common.Int64Ptr(firstEventID),
-		NextEventId:     common.Int64Ptr(nextEventID),
-		MaximumPageSize: common.Int32Ptr(pageSize),
+		FirstEventId:    firstEventID,
+		NextEventId:     nextEventID,
+		MaximumPageSize: pageSize,
 		NextPageToken:   token,
 	})
 
@@ -446,7 +450,7 @@ func (c *historyRereplicationContext) getPrevRunID(domainID string, workflowID s
 	return attr.GetContinuedExecutionRunId(), nil
 }
 
-func (c *historyRereplicationContext) getNextRunID(blob *shared.DataBlob) (string, error) {
+func (c *historyRereplicationContext) getNextRunID(blob *commonproto.DataBlob) (string, error) {
 
 	historyEvents, err := c.deserializeBlob(blob)
 	if err != nil {
@@ -462,13 +466,13 @@ func (c *historyRereplicationContext) getNextRunID(blob *shared.DataBlob) (strin
 	return attr.GetNewExecutionRunId(), nil
 }
 
-func (c *historyRereplicationContext) deserializeBlob(blob *shared.DataBlob) ([]*shared.HistoryEvent, error) {
+func (c *historyRereplicationContext) deserializeBlob(blob *commonproto.DataBlob) ([]*shared.HistoryEvent, error) {
 
 	var err error
 	var historyEvents []*shared.HistoryEvent
 
 	switch blob.GetEncodingType() {
-	case shared.EncodingTypeThriftRW:
+	case enums.EncodingTypeThriftRW:
 		historyEvents, err = c.rereplicator.serializer.DeserializeBatchEvents(&persistence.DataBlob{
 			Encoding: common.EncodingTypeThriftRW,
 			Data:     blob.Data,

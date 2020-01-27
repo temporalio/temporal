@@ -29,12 +29,14 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 
-	"github.com/temporalio/temporal/.gen/go/admin"
-	"github.com/temporalio/temporal/.gen/go/admin/adminservicetest"
 	"github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/history/historyservicetest"
 	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/adminservice"
+	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
@@ -42,6 +44,7 @@ import (
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/service/frontend/adapter"
 )
 
 type (
@@ -51,7 +54,7 @@ type (
 
 		controller        *gomock.Controller
 		mockDomainCache   *cache.MockDomainCache
-		mockAdminClient   *adminservicetest.MockClient
+		mockAdminClient   *adminservicemock.MockAdminServiceYARPCClient
 		mockHistoryClient *historyservicetest.MockClient
 
 		domainID   string
@@ -82,7 +85,7 @@ func (s *nDCHistoryResenderSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockAdminClient = adminservicetest.NewMockClient(s.controller)
+	s.mockAdminClient = adminservicemock.NewMockAdminServiceYARPCClient(s.controller)
 	s.mockHistoryClient = historyservicetest.NewMockClient(s.controller)
 	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
 
@@ -146,49 +149,53 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 		},
 	}
 	blob := s.serializeEvents(eventBatch)
-	versionHistoryItems := []*shared.VersionHistoryItem{
+	versionHistoryItems := []*commonproto.VersionHistoryItem{
 		{
-			EventID: common.Int64Ptr(1),
-			Version: common.Int64Ptr(1),
+			EventID: 1,
+			Version: 1,
 		},
 	}
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(
 		gomock.Any(),
-		&admin.GetWorkflowExecutionRawHistoryV2Request{
-			Domain: common.StringPtr(s.domainName),
-			Execution: &shared.WorkflowExecution{
-				WorkflowId: common.StringPtr(workflowID),
-				RunId:      common.StringPtr(runID),
+		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
+			Domain: s.domainName,
+			Execution: &commonproto.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      runID,
 			},
-			StartEventId:      common.Int64Ptr(startEventID),
-			StartEventVersion: common.Int64Ptr(startEventVersion),
-			MaximumPageSize:   common.Int32Ptr(pageSize),
+			StartEventId:      startEventID,
+			StartEventVersion: startEventVersion,
+			EndEventId:        common.EmptyEventID,
+			EndEventVersion:   common.EmptyVersion,
+			MaximumPageSize:   pageSize,
 			NextPageToken:     nil,
-		}).Return(&admin.GetWorkflowExecutionRawHistoryV2Response{
-		HistoryBatches: []*shared.DataBlob{blob},
+		}).Return(&adminservice.GetWorkflowExecutionRawHistoryV2Response{
+		HistoryBatches: []*commonproto.DataBlob{blob},
 		NextPageToken:  token,
-		VersionHistory: &shared.VersionHistory{
+		VersionHistory: &commonproto.VersionHistory{
 			Items: versionHistoryItems,
 		},
 	}, nil).Times(1)
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(
 		gomock.Any(),
-		&admin.GetWorkflowExecutionRawHistoryV2Request{
-			Domain: common.StringPtr(s.domainName),
-			Execution: &shared.WorkflowExecution{
-				WorkflowId: common.StringPtr(workflowID),
-				RunId:      common.StringPtr(runID),
+		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
+			Domain: s.domainName,
+			Execution: &commonproto.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      runID,
 			},
-			StartEventId:      common.Int64Ptr(startEventID),
-			StartEventVersion: common.Int64Ptr(startEventVersion),
-			MaximumPageSize:   common.Int32Ptr(pageSize),
+			StartEventId:      startEventID,
+			StartEventVersion: startEventVersion,
+			EndEventId:        common.EmptyEventID,
+			EndEventVersion:   common.EmptyVersion,
+			MaximumPageSize:   pageSize,
 			NextPageToken:     token,
-		}).Return(&admin.GetWorkflowExecutionRawHistoryV2Response{
-		HistoryBatches: []*shared.DataBlob{blob},
+		}).Return(&adminservice.GetWorkflowExecutionRawHistoryV2Response{
+		HistoryBatches: []*commonproto.DataBlob{blob},
 		NextPageToken:  nil,
-		VersionHistory: &shared.VersionHistory{
+		VersionHistory: &commonproto.VersionHistory{
 			Items: versionHistoryItems,
 		},
 	}, nil).Times(1)
@@ -201,18 +208,18 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 				WorkflowId: common.StringPtr(workflowID),
 				RunId:      common.StringPtr(runID),
 			},
-			VersionHistoryItems: versionHistoryItems,
-			Events:              blob,
+			VersionHistoryItems: adapter.ToThriftVersionHistoryItems(versionHistoryItems),
+			Events:              adapter.ToThriftDataBlob(blob),
 		}).Return(nil).Times(2)
 
 	err := s.rereplicator.SendSingleWorkflowHistory(
 		s.domainID,
 		workflowID,
 		runID,
-		common.Int64Ptr(startEventID),
-		common.Int64Ptr(startEventVersion),
-		nil,
-		nil,
+		startEventID,
+		startEventVersion,
+		common.EmptyEventID,
+		common.EmptyVersion,
 	)
 
 	s.Nil(err)
@@ -221,14 +228,14 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 func (s *nDCHistoryResenderSuite) TestCreateReplicateRawEventsRequest() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
-	blob := &shared.DataBlob{
-		EncodingType: shared.EncodingTypeThriftRW.Ptr(),
+	blob := &commonproto.DataBlob{
+		EncodingType: enums.EncodingTypeThriftRW,
 		Data:         []byte("some random history blob"),
 	}
-	versionHistoryItems := []*shared.VersionHistoryItem{
+	versionHistoryItems := []*commonproto.VersionHistoryItem{
 		{
-			EventID: common.Int64Ptr(1),
-			Version: common.Int64Ptr(1),
+			EventID: 1,
+			Version: 1,
 		},
 	}
 
@@ -238,8 +245,8 @@ func (s *nDCHistoryResenderSuite) TestCreateReplicateRawEventsRequest() {
 			WorkflowId: common.StringPtr(workflowID),
 			RunId:      common.StringPtr(runID),
 		},
-		VersionHistoryItems: versionHistoryItems,
-		Events:              blob,
+		VersionHistoryItems: adapter.ToThriftVersionHistoryItems(versionHistoryItems),
+		Events:              adapter.ToThriftDataBlob(blob),
 	}, s.rereplicator.createReplicationRawRequest(
 		s.domainID,
 		workflowID,
@@ -314,24 +321,24 @@ func (s *nDCHistoryResenderSuite) TestGetHistory() {
 	pageSize := int32(59)
 	blob := []byte("some random events blob")
 
-	response := &admin.GetWorkflowExecutionRawHistoryV2Response{
-		HistoryBatches: []*shared.DataBlob{&shared.DataBlob{
-			EncodingType: shared.EncodingTypeThriftRW.Ptr(),
+	response := &adminservice.GetWorkflowExecutionRawHistoryV2Response{
+		HistoryBatches: []*commonproto.DataBlob{{
+			EncodingType: enums.EncodingTypeThriftRW,
 			Data:         blob,
 		}},
 		NextPageToken: nextTokenOut,
 	}
-	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(gomock.Any(), &admin.GetWorkflowExecutionRawHistoryV2Request{
-		Domain: common.StringPtr(s.domainName),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
+	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+		Domain: s.domainName,
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
 		},
-		StartEventId:      common.Int64Ptr(startEventID),
-		StartEventVersion: common.Int64Ptr(version),
-		EndEventId:        common.Int64Ptr(endEventID),
-		EndEventVersion:   common.Int64Ptr(version),
-		MaximumPageSize:   common.Int32Ptr(pageSize),
+		StartEventId:      startEventID,
+		StartEventVersion: version,
+		EndEventId:        endEventID,
+		EndEventVersion:   version,
+		MaximumPageSize:   pageSize,
 		NextPageToken:     nextTokenIn,
 	}).Return(response, nil).Times(1)
 
@@ -339,21 +346,21 @@ func (s *nDCHistoryResenderSuite) TestGetHistory() {
 		s.domainID,
 		workflowID,
 		runID,
-		&startEventID,
-		&version,
-		&endEventID,
-		&version,
+		startEventID,
+		version,
+		endEventID,
+		version,
 		nextTokenIn,
 		pageSize)
 	s.Nil(err)
 	s.Equal(response, out)
 }
 
-func (s *nDCHistoryResenderSuite) serializeEvents(events []*shared.HistoryEvent) *shared.DataBlob {
+func (s *nDCHistoryResenderSuite) serializeEvents(events []*shared.HistoryEvent) *commonproto.DataBlob {
 	blob, err := s.serializer.SerializeBatchEvents(events, common.EncodingTypeThriftRW)
 	s.Nil(err)
-	return &shared.DataBlob{
-		EncodingType: shared.EncodingTypeThriftRW.Ptr(),
+	return &commonproto.DataBlob{
+		EncodingType: enums.EncodingTypeThriftRW,
 		Data:         blob.Data,
 	}
 }

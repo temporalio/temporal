@@ -27,9 +27,7 @@ import (
 	"github.com/pborman/uuid"
 	"go.uber.org/yarpc"
 
-	"github.com/temporalio/temporal/.gen/go/admin"
-	"github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"
-	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/common"
 )
 
@@ -58,14 +56,14 @@ func NewClient(
 
 func (c *clientImpl) AddSearchAttribute(
 	ctx context.Context,
-	request *admin.AddSearchAttributeRequest,
+	request *adminservice.AddSearchAttributeRequest,
 	opts ...yarpc.CallOption,
-) error {
+) (*adminservice.AddSearchAttributeResponse, error) {
 
 	opts = common.AggregateYarpcOptions(ctx, opts...)
 	client, err := c.getRandomClient()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
@@ -74,9 +72,9 @@ func (c *clientImpl) AddSearchAttribute(
 
 func (c *clientImpl) DescribeHistoryHost(
 	ctx context.Context,
-	request *shared.DescribeHistoryHostRequest,
+	request *adminservice.DescribeHistoryHostRequest,
 	opts ...yarpc.CallOption,
-) (*shared.DescribeHistoryHostResponse, error) {
+) (*adminservice.DescribeHistoryHostResponse, error) {
 
 	opts = common.AggregateYarpcOptions(ctx, opts...)
 	client, err := c.getRandomClient()
@@ -90,14 +88,14 @@ func (c *clientImpl) DescribeHistoryHost(
 
 func (c *clientImpl) RemoveTask(
 	ctx context.Context,
-	request *shared.RemoveTaskRequest,
+	request *adminservice.RemoveTaskRequest,
 	opts ...yarpc.CallOption,
-) error {
+) (*adminservice.RemoveTaskResponse, error) {
 
 	opts = common.AggregateYarpcOptions(ctx, opts...)
 	client, err := c.getRandomClient()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
@@ -106,14 +104,14 @@ func (c *clientImpl) RemoveTask(
 
 func (c *clientImpl) CloseShard(
 	ctx context.Context,
-	request *shared.CloseShardRequest,
+	request *adminservice.CloseShardRequest,
 	opts ...yarpc.CallOption,
-) error {
+) (*adminservice.CloseShardResponse, error) {
 
 	opts = common.AggregateYarpcOptions(ctx, opts...)
 	client, err := c.getRandomClient()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
@@ -122,9 +120,9 @@ func (c *clientImpl) CloseShard(
 
 func (c *clientImpl) DescribeWorkflowExecution(
 	ctx context.Context,
-	request *admin.DescribeWorkflowExecutionRequest,
+	request *adminservice.DescribeWorkflowExecutionRequest,
 	opts ...yarpc.CallOption,
-) (*admin.DescribeWorkflowExecutionResponse, error) {
+) (*adminservice.DescribeWorkflowExecutionResponse, error) {
 
 	opts = common.AggregateYarpcOptions(ctx, opts...)
 	client, err := c.getRandomClient()
@@ -138,9 +136,9 @@ func (c *clientImpl) DescribeWorkflowExecution(
 
 func (c *clientImpl) GetWorkflowExecutionRawHistory(
 	ctx context.Context,
-	request *admin.GetWorkflowExecutionRawHistoryRequest,
+	request *adminservice.GetWorkflowExecutionRawHistoryRequest,
 	opts ...yarpc.CallOption,
-) (*admin.GetWorkflowExecutionRawHistoryResponse, error) {
+) (*adminservice.GetWorkflowExecutionRawHistoryResponse, error) {
 
 	opts = common.AggregateYarpcOptions(ctx, opts...)
 	client, err := c.getRandomClient()
@@ -154,9 +152,9 @@ func (c *clientImpl) GetWorkflowExecutionRawHistory(
 
 func (c *clientImpl) GetWorkflowExecutionRawHistoryV2(
 	ctx context.Context,
-	request *admin.GetWorkflowExecutionRawHistoryV2Request,
+	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
 	opts ...yarpc.CallOption,
-) (*admin.GetWorkflowExecutionRawHistoryV2Response, error) {
+) (*adminservice.GetWorkflowExecutionRawHistoryV2Response, error) {
 
 	opts = common.AggregateYarpcOptions(ctx, opts...)
 	client, err := c.getRandomClient()
@@ -170,8 +168,9 @@ func (c *clientImpl) GetWorkflowExecutionRawHistoryV2(
 
 func (c *clientImpl) DescribeCluster(
 	ctx context.Context,
+	request *adminservice.DescribeClusterRequest,
 	opts ...yarpc.CallOption,
-) (*admin.DescribeClusterResponse, error) {
+) (*adminservice.DescribeClusterResponse, error) {
 
 	opts = common.AggregateYarpcOptions(ctx, opts...)
 	client, err := c.getRandomClient()
@@ -180,7 +179,7 @@ func (c *clientImpl) DescribeCluster(
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.DescribeCluster(ctx, opts...)
+	return client.DescribeCluster(ctx, request, opts...)
 }
 
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
@@ -190,7 +189,7 @@ func (c *clientImpl) createContext(parent context.Context) (context.Context, con
 	return context.WithTimeout(parent, c.timeout)
 }
 
-func (c *clientImpl) getRandomClient() (adminserviceclient.Interface, error) {
+func (c *clientImpl) getRandomClient() (adminservice.AdminServiceYARPCClient, error) {
 	// generate a random shard key to do load balancing
 	key := uuid.New()
 	client, err := c.clients.GetClientForKey(key)
@@ -198,5 +197,5 @@ func (c *clientImpl) getRandomClient() (adminserviceclient.Interface, error) {
 		return nil, err
 	}
 
-	return client.(adminserviceclient.Interface), nil
+	return client.(adminservice.AdminServiceYARPCClient), nil
 }

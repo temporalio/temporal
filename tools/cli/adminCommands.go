@@ -29,9 +29,10 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/urfave/cli"
+	commonproto "go.temporal.io/temporal-proto/common"
 
-	"github.com/temporalio/temporal/.gen/go/admin"
 	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/auth"
 	"github.com/temporalio/temporal/common/codec"
@@ -148,7 +149,7 @@ func AdminDescribeWorkflow(c *cli.Context) {
 	}
 }
 
-func describeMutableState(c *cli.Context) *admin.DescribeWorkflowExecutionResponse {
+func describeMutableState(c *cli.Context) *adminservice.DescribeWorkflowExecutionResponse {
 	adminClient := cFactory.ServerAdminClient(c)
 
 	domain := getRequiredGlobalOption(c, FlagDomain)
@@ -158,11 +159,11 @@ func describeMutableState(c *cli.Context) *admin.DescribeWorkflowExecutionRespon
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	resp, err := adminClient.DescribeWorkflowExecution(ctx, &admin.DescribeWorkflowExecutionRequest{
-		Domain: common.StringPtr(domain),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(wid),
-			RunId:      common.StringPtr(rid),
+	resp, err := adminClient.DescribeWorkflowExecution(ctx, &adminservice.DescribeWorkflowExecutionRequest{
+		Domain: domain,
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      rid,
 		},
 	})
 	if err != nil {
@@ -369,13 +370,13 @@ func AdminRemoveTask(c *cli.Context) {
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	req := &shared.RemoveTaskRequest{}
+	req := &adminservice.RemoveTaskRequest{}
 
-	req.ShardID = common.Int32Ptr(int32(sid))
-	req.TaskID = common.Int64Ptr(int64(taskID))
-	req.Type = common.Int32Ptr(int32(typeID))
+	req.ShardID = int32(sid)
+	req.TaskID = taskID
+	req.Type = int32(typeID)
 
-	err := adminClient.RemoveTask(ctx, req)
+	_, err := adminClient.RemoveTask(ctx, req)
 	if err != nil {
 		ErrorAndExit("Remove task has failed", err)
 	}
@@ -389,10 +390,10 @@ func AdminShardManagement(c *cli.Context) {
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	req := &shared.CloseShardRequest{}
-	req.ShardID = common.Int32Ptr(int32(sid))
+	req := &adminservice.CloseShardRequest{}
+	req.ShardID = int32(sid)
 
-	err := adminClient.CloseShard(ctx, req)
+	_, err := adminClient.CloseShard(ctx, req)
 	if err != nil {
 		ErrorAndExit("Close shard task has failed", err)
 	}
@@ -415,15 +416,15 @@ func AdminDescribeHistoryHost(c *cli.Context) {
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	req := &shared.DescribeHistoryHostRequest{}
+	req := &adminservice.DescribeHistoryHostRequest{}
 	if len(wid) > 0 {
-		req.ExecutionForHost = &shared.WorkflowExecution{WorkflowId: common.StringPtr(wid)}
+		req.ExecutionForHost = &commonproto.WorkflowExecution{WorkflowId: wid}
 	}
 	if c.IsSet(FlagShardID) {
-		req.ShardIdForHost = common.Int32Ptr(int32(sid))
+		req.ShardIdForHost = int32(sid)
 	}
 	if len(addr) > 0 {
-		req.HostAddress = common.StringPtr(addr)
+		req.HostAddress = addr
 	}
 
 	resp, err := adminClient.DescribeHistoryHost(ctx, req)

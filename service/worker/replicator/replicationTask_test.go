@@ -200,6 +200,7 @@ func (s *historyMetadataReplicationTaskSuite) SetupTest() {
 }
 
 func (s *historyMetadataReplicationTaskSuite) TearDownTest() {
+
 	s.mockMsg.AssertExpectations(s.T())
 	s.mockRereplicator.AssertExpectations(s.T())
 	s.controller.Finish()

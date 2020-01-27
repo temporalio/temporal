@@ -31,7 +31,7 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
-	"github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"
+	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/common"
 )
 
@@ -43,7 +43,7 @@ const (
 // ClientFactory is used to construct rpc clients
 type ClientFactory interface {
 	FrontendClient(c *cli.Context) workflowservice.WorkflowServiceClient
-	ServerAdminClient(c *cli.Context) adminserviceclient.Interface
+	ServerAdminClient(c *cli.Context) adminservice.AdminServiceYARPCClient
 }
 
 type clientFactory struct {
@@ -81,9 +81,9 @@ func (b *clientFactory) FrontendClient(c *cli.Context) workflowservice.WorkflowS
 }
 
 // ServerAdminClient builds an admin client (based on server side thrift interface)
-func (b *clientFactory) ServerAdminClient(c *cli.Context) adminserviceclient.Interface {
+func (b *clientFactory) ServerAdminClient(c *cli.Context) adminservice.AdminServiceYARPCClient {
 	b.ensureDispatcher(c)
-	return adminserviceclient.New(b.dispatcher.ClientConfig(cadenceFrontendService))
+	return adminservice.NewAdminServiceYARPCClient(b.dispatcher.ClientConfig(cadenceFrontendService))
 }
 
 func (b *clientFactory) ensureDispatcher(c *cli.Context) {

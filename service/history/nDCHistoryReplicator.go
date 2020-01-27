@@ -602,10 +602,10 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsMissingMutableState(
 			task.getDomainID(),
 			task.getWorkflowID(),
 			task.getRunID(),
-			nil,
-			nil,
-			common.Int64Ptr(firstEvent.GetEventId()),
-			common.Int64Ptr(firstEvent.GetVersion()),
+			common.EmptyEventID,
+			common.EmptyVersion,
+			firstEvent.GetEventId(),
+			firstEvent.GetVersion(),
 		)
 	}
 
@@ -710,19 +710,19 @@ func newNDCRetryTaskErrorWithHint(
 	domainID string,
 	workflowID string,
 	runID string,
-	startEventID *int64,
-	startEventVersion *int64,
-	endEventID *int64,
-	endEventVersion *int64,
+	startEventID int64,
+	startEventVersion int64,
+	endEventID int64,
+	endEventVersion int64,
 ) error {
 
 	return &shared.RetryTaskV2Error{
 		DomainId:          common.StringPtr(domainID),
 		WorkflowId:        common.StringPtr(workflowID),
 		RunId:             common.StringPtr(runID),
-		StartEventId:      startEventID,
-		StartEventVersion: startEventVersion,
-		EndEventId:        endEventID,
-		EndEventVersion:   endEventVersion,
+		StartEventId:      common.Int64Ptr(startEventID),
+		StartEventVersion: common.Int64Ptr(startEventVersion),
+		EndEventId:        common.Int64Ptr(endEventID),
+		EndEventVersion:   common.Int64Ptr(endEventVersion),
 	}
 }

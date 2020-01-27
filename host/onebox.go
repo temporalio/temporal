@@ -36,9 +36,9 @@ import (
 	"go.uber.org/yarpc/transport/tchannel"
 	"google.golang.org/grpc"
 
-	"github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"
 	"github.com/temporalio/temporal/.gen/go/history/historyserviceclient"
 	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/client"
 	frontendclient "github.com/temporalio/temporal/client/frontend"
 	"github.com/temporalio/temporal/common"
@@ -71,7 +71,7 @@ import (
 type Cadence interface {
 	Start() error
 	Stop()
-	GetAdminClient() adminserviceclient.Interface
+	GetAdminClient() adminservice.AdminServiceYARPCClient
 	GetFrontendClient() workflowservice.WorkflowServiceClient
 	FrontendAddress() string
 	GetHistoryClient() historyserviceclient.Interface
@@ -85,7 +85,7 @@ type (
 		workerService   common.Daemon
 		historyServices []common.Daemon
 
-		adminClient         adminserviceclient.Interface
+		adminClient         adminservice.AdminServiceYARPCClient
 		frontendClient      workflowservice.WorkflowServiceClient
 		historyClient       historyserviceclient.Interface
 		logger              log.Logger
@@ -468,7 +468,7 @@ func (c *cadenceImpl) WorkerPProfPort() int {
 	}
 }
 
-func (c *cadenceImpl) GetAdminClient() adminserviceclient.Interface {
+func (c *cadenceImpl) GetAdminClient() adminservice.AdminServiceYARPCClient {
 	return c.adminClient
 }
 
@@ -532,7 +532,7 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 
 	c.frontendService = frontendService
 	c.frontendClient = NewFrontendClient(params.RPCFactory.CreateGRPCConnection(c.FrontendGRPCAddress()))
-	c.adminClient = NewAdminClient(frontendService.GetDispatcher())
+	c.adminClient = NewAdminClient(frontendService.GetGRPCDispatcher())
 	go frontendService.Start()
 
 	startWG.Done()

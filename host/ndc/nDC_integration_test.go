@@ -42,9 +42,9 @@ import (
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
-	"github.com/temporalio/temporal/.gen/go/admin"
 	"github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/client/frontend"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -1125,26 +1125,26 @@ func (s *nDCIntegrationTestSuite) TestGetWorkflowExecutionRawHistoryV2() {
 		domain string,
 		workflowID string,
 		runID string,
-		startEventID *int64,
-		startEventVersion *int64,
-		endEventID *int64,
-		endEventVersion *int64,
+		startEventID int64,
+		startEventVersion int64,
+		endEventID int64,
+		endEventVersion int64,
 		pageSize int,
 		token []byte,
-	) (*admin.GetWorkflowExecutionRawHistoryV2Response, error) {
+	) (*adminservice.GetWorkflowExecutionRawHistoryV2Response, error) {
 
-		execution := &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
+		execution := &commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
 		}
-		return adminClient.GetWorkflowExecutionRawHistoryV2(s.createContext(), &admin.GetWorkflowExecutionRawHistoryV2Request{
-			Domain:            common.StringPtr(domain),
+		return adminClient.GetWorkflowExecutionRawHistoryV2(s.createContext(), &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+			Domain:            domain,
 			Execution:         execution,
 			StartEventId:      startEventID,
 			StartEventVersion: startEventVersion,
 			EndEventId:        endEventID,
 			EndEventVersion:   endEventVersion,
-			MaximumPageSize:   common.Int32Ptr(int32(pageSize)),
+			MaximumPageSize:   int32(pageSize),
 			NextPageToken:     token,
 		})
 	}
@@ -1494,10 +1494,10 @@ func (s *nDCIntegrationTestSuite) TestGetWorkflowExecutionRawHistoryV2() {
 			s.domainName,
 			workflowID,
 			runID,
-			common.Int64Ptr(14),
-			common.Int64Ptr(21),
-			common.Int64Ptr(20),
-			common.Int64Ptr(30),
+			14,
+			21,
+			20,
+			30,
 			1,
 			token,
 		)
@@ -1516,10 +1516,10 @@ func (s *nDCIntegrationTestSuite) TestGetWorkflowExecutionRawHistoryV2() {
 			s.domainName,
 			workflowID,
 			runID,
-			common.Int64Ptr(17),
-			common.Int64Ptr(30),
-			common.Int64Ptr(17),
-			common.Int64Ptr(32),
+			17,
+			30,
+			17,
+			32,
 			1,
 			token,
 		)
@@ -1538,10 +1538,10 @@ func (s *nDCIntegrationTestSuite) TestGetWorkflowExecutionRawHistoryV2() {
 			s.domainName,
 			workflowID,
 			runID,
-			common.Int64Ptr(14),
-			common.Int64Ptr(21),
-			nil,
-			nil,
+			14,
+			21,
+			common.EmptyEventID,
+			common.EmptyVersion,
 			1,
 			token,
 		)
@@ -1560,10 +1560,10 @@ func (s *nDCIntegrationTestSuite) TestGetWorkflowExecutionRawHistoryV2() {
 			s.domainName,
 			workflowID,
 			runID,
-			nil,
-			nil,
-			common.Int64Ptr(17),
-			common.Int64Ptr(32),
+			common.EmptyEventID,
+			common.EmptyVersion,
+			17,
+			32,
 			1,
 			token,
 		)
