@@ -222,7 +222,7 @@ func (a *AccessControlledWorkflowHandler) GetWorkflowExecutionHistory(
 	return a.frontendHandler.GetWorkflowExecutionHistory(ctx, request)
 }
 
-// GetRawHistory API call
+// GetWorkflowExecutionRawHistory API call
 func (a *AccessControlledWorkflowHandler) GetWorkflowExecutionRawHistory(
 	ctx context.Context,
 	request *shared.GetWorkflowExecutionRawHistoryRequest,

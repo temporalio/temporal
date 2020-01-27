@@ -1685,7 +1685,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 	return resp, nil
 }
 
-// GetRawHistory - retrieves raw history directly from DB layer
+// GetWorkflowExecutionRawHistory - retrieves raw history directly from DB layer
 func (wh *WorkflowHandler) GetWorkflowExecutionRawHistory(
 	ctx context.Context,
 	getRequest *gen.GetWorkflowExecutionRawHistoryRequest,

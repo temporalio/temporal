@@ -273,7 +273,7 @@ func (handler *DCRedirectionHandlerImpl) GetWorkflowExecutionHistory(
 	return resp, err
 }
 
-// GetRawHistory API call
+// GetWorkflowExecutionRawHistory API call
 func (handler *DCRedirectionHandlerImpl) GetWorkflowExecutionRawHistory(
 	ctx context.Context,
 	request *shared.GetWorkflowExecutionRawHistoryRequest,
