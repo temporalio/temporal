@@ -23,8 +23,8 @@ package cli
 import (
 	"os"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/common"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
@@ -67,15 +67,15 @@ func DescribeTaskList(c *cli.Context) {
 
 // ListTaskListPartitions gets all the tasklist partition and host information.
 func ListTaskListPartitions(c *cli.Context) {
-	frontendClient := cFactory.ServerFrontendClient(c)
+	frontendClient := cFactory.FrontendClient(c)
 	domain := getRequiredGlobalOption(c, FlagDomain)
 	taskList := getRequiredOption(c, FlagTaskList)
 
 	ctx, cancel := newContext(c)
 	defer cancel()
-	request := &shared.ListTaskListPartitionsRequest{
-		Domain:   common.StringPtr(domain),
-		TaskList: &shared.TaskList{Name: common.StringPtr(taskList)},
+	request := &workflowservice.ListTaskListPartitionsRequest{
+		Domain:   domain,
+		TaskList: &commonproto.TaskList{Name: taskList},
 	}
 
 	response, err := frontendClient.ListTaskListPartitions(ctx, request)
@@ -90,7 +90,7 @@ func ListTaskListPartitions(c *cli.Context) {
 	}
 }
 
-func printTaskListPartitions(taskListType string, partitions []*shared.TaskListPartitionMetadata) {
+func printTaskListPartitions(taskListType string, partitions []*commonproto.TaskListPartitionMetadata) {
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetBorder(false)
 	table.SetColumnSeparator("|")

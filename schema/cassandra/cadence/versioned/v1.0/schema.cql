@@ -468,3 +468,6 @@ INSERT INTO domains_by_name_v2 (
    -1,
    -1
 ) IF NOT EXISTS;
+
+CREATE TYPE checksum (version int, flavor int, value blob);
+ALTER TABLE executions ADD checksum frozen<checksum>;

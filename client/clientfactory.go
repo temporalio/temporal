@@ -26,10 +26,10 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/yarpc"
 
-	"github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"
 	"github.com/temporalio/temporal/.gen/go/history/historyserviceclient"
 	"github.com/temporalio/temporal/.gen/go/matching/matchingserviceclient"
 	"github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
+	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/client/frontend"
 	"github.com/temporalio/temporal/client/history"
@@ -216,7 +216,7 @@ func (cf *rpcClientFactory) NewAdminClientWithTimeoutAndDispatcher(
 	}
 
 	clientProvider := func(clientKey string) (interface{}, error) {
-		return adminserviceclient.New(dispatcher.ClientConfig(rpcName)), nil
+		return adminservice.NewAdminServiceYARPCClient(dispatcher.ClientConfig(rpcName)), nil
 	}
 
 	client := admin.NewClient(timeout, common.NewClientCache(keyResolver, clientProvider))

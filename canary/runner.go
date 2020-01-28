@@ -25,11 +25,10 @@ import (
 	"fmt"
 	"sync"
 
-	"go.uber.org/yarpc"
-	"go.uber.org/yarpc/transport/tchannel"
+	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
 
-	"github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 )
 
@@ -45,37 +44,18 @@ func NewCanaryRunner(cfg *Config) (Runnable, error) {
 
 	metricsScope := cfg.Metrics.NewScope(loggerimpl.NewLogger(logger))
 
-	if cfg.Cadence.ServiceName == "" {
-		cfg.Cadence.ServiceName = CadenceServiceName
-	}
-
 	if cfg.Cadence.HostNameAndPort == "" {
 		cfg.Cadence.HostNameAndPort = CadenceLocalHostPort
 	}
 
-	ch, err := tchannel.NewChannelTransport(
-		tchannel.ServiceName(CanaryServiceName),
-	)
+	connection, err := grpc.Dial(cfg.Cadence.HostNameAndPort, grpc.WithInsecure())
 	if err != nil {
-		return nil, fmt.Errorf("failed to create transport channel: %v", err)
+		return nil, fmt.Errorf("failed to create connection: %v", err)
 	}
-
-	dispatcher := yarpc.NewDispatcher(yarpc.Config{
-		Name: CanaryServiceName,
-		Outbounds: yarpc.Outbounds{
-			cfg.Cadence.ServiceName: {Unary: ch.NewSingleOutbound(cfg.Cadence.HostNameAndPort)},
-		},
-	})
-
-	if err := dispatcher.Start(); err != nil {
-		dispatcher.Stop()
-		return nil, fmt.Errorf("failed to create outbound transport channel: %v", err)
-	}
-
 	runtimeContext := NewRuntimeContext(
 		logger,
 		metricsScope,
-		workflowserviceclient.New(dispatcher.ClientConfig(cfg.Cadence.ServiceName)),
+		workflowservice.NewWorkflowServiceClient(connection),
 	)
 
 	return &canaryRunner{

@@ -48,7 +48,6 @@ import (
 	"google.golang.org/grpc/codes"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/service/frontend/adapter"
 	"github.com/temporalio/temporal/service/history"
@@ -1708,18 +1707,18 @@ func doReset(c *cli.Context, domain, wid, rid string, params batchResetParamsTyp
 	return nil
 }
 
-func isLastEventDecisionTaskFailedWithNonDeterminism(ctx context.Context, domain, wid, rid string, frontendClient workflowserviceclient.Interface) (bool, error) {
-	req := &shared.GetWorkflowExecutionHistoryRequest{
-		Domain: common.StringPtr(domain),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(wid),
-			RunId:      common.StringPtr(rid),
+func isLastEventDecisionTaskFailedWithNonDeterminism(ctx context.Context, domain, wid, rid string, frontendClient workflowservice.WorkflowServiceClient) (bool, error) {
+	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Domain: domain,
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      rid,
 		},
-		MaximumPageSize: common.Int32Ptr(1000),
+		MaximumPageSize: 1000,
 		NextPageToken:   nil,
 	}
 
-	var firstEvent, decisionFailed *shared.HistoryEvent
+	var firstEvent, decisionFailed *commonproto.HistoryEvent
 	for {
 		resp, err := frontendClient.GetWorkflowExecutionHistory(ctx, req)
 		if err != nil {
@@ -1729,9 +1728,9 @@ func isLastEventDecisionTaskFailedWithNonDeterminism(ctx context.Context, domain
 			if firstEvent == nil {
 				firstEvent = e
 			}
-			if e.GetEventType() == shared.EventTypeDecisionTaskFailed {
+			if e.GetEventType() == enums.EventTypeDecisionTaskFailed {
 				decisionFailed = e
-			} else if e.GetEventType() == shared.EventTypeDecisionTaskCompleted {
+			} else if e.GetEventType() == enums.EventTypeDecisionTaskCompleted {
 				decisionFailed = nil
 			}
 		}
@@ -1744,7 +1743,7 @@ func isLastEventDecisionTaskFailedWithNonDeterminism(ctx context.Context, domain
 
 	if decisionFailed != nil {
 		attr := decisionFailed.GetDecisionTaskFailedEventAttributes()
-		if attr.GetCause() == shared.DecisionTaskFailedCauseWorkflowWorkerUnhandledFailure ||
+		if attr.GetCause() == enums.DecisionTaskFailedCauseWorkflowWorkerUnhandledFailure ||
 			strings.Contains(string(attr.GetDetails()), "nondeterministic") {
 			fmt.Printf("found non determnistic workflow wid:%v, rid:%v, orignalStartTime:%v \n", wid, rid, time.Unix(0, firstEvent.GetTimestamp()))
 			return true, nil
