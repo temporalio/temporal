@@ -638,10 +638,10 @@ func (p *ReplicationTaskProcessorImpl) handleActivityTask(
 			retryV2Err.GetDomainId(),
 			retryV2Err.GetWorkflowId(),
 			retryV2Err.GetRunId(),
-			retryV2Err.StartEventId,
-			retryV2Err.StartEventVersion,
-			retryV2Err.EndEventId,
-			retryV2Err.EndEventVersion,
+			retryV2Err.GetStartEventId(),
+			retryV2Err.GetStartEventVersion(),
+			retryV2Err.GetEndEventId(),
+			retryV2Err.GetEndEventVersion(),
 		); resendErr != nil {
 			p.logger.Error("error resend history for sync activity", tag.Error(resendErr))
 			// should return the replication error, not the resending error
@@ -747,10 +747,10 @@ func (p *ReplicationTaskProcessorImpl) handleHistoryReplicationTaskV2(
 		retryErr.GetDomainId(),
 		retryErr.GetWorkflowId(),
 		retryErr.GetRunId(),
-		retryErr.StartEventId,
-		retryErr.StartEventVersion,
-		retryErr.EndEventId,
-		retryErr.EndEventVersion,
+		retryErr.GetStartEventId(),
+		retryErr.GetStartEventVersion(),
+		retryErr.GetEndEventId(),
+		retryErr.GetEndEventVersion(),
 	); resendErr != nil {
 		p.logger.Error("error resend history for history event v2", tag.Error(resendErr))
 		// should return the replication error, not the resending error

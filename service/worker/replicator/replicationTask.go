@@ -339,10 +339,10 @@ func (t *activityReplicationTask) HandleErr(
 			retryV2Err.GetDomainId(),
 			retryV2Err.GetWorkflowId(),
 			retryV2Err.GetRunId(),
-			retryV2Err.StartEventId,
-			retryV2Err.StartEventVersion,
-			retryV2Err.EndEventId,
-			retryV2Err.EndEventVersion,
+			retryV2Err.GetStartEventId(),
+			retryV2Err.GetStartEventVersion(),
+			retryV2Err.GetEndEventId(),
+			retryV2Err.GetEndEventVersion(),
 		); resendErr != nil {
 			t.logger.Error("error resend history", tag.Error(resendErr))
 			// should return the replication error, not the resending error
@@ -462,10 +462,10 @@ func (t *historyReplicationV2Task) HandleErr(err error) error {
 		retryErr.GetDomainId(),
 		retryErr.GetWorkflowId(),
 		retryErr.GetRunId(),
-		retryErr.StartEventId,
-		retryErr.StartEventVersion,
-		retryErr.EndEventId,
-		retryErr.EndEventVersion,
+		retryErr.GetStartEventId(),
+		retryErr.GetStartEventVersion(),
+		retryErr.GetEndEventId(),
+		retryErr.GetEndEventVersion(),
 	); resendErr != nil {
 		t.logger.Error("error resend history", tag.Error(resendErr))
 		// should return the replication error, not the resending error

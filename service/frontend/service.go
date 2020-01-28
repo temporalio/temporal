@@ -129,11 +129,10 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int, enableReadFro
 type Service struct {
 	resource.Resource
 
-	status       int32
-	adminHandler *AdminHandler
-	stopC        chan struct{}
-	config       *Config
-	params       *service.BootstrapParams
+	status int32
+	stopC  chan struct{}
+	config *Config
+	params *service.BootstrapParams
 }
 
 // NewService builds a new cadence-frontend service
@@ -233,12 +232,13 @@ func (s *Service) Start() {
 	accessControlledWorkflowHandler.RegisterHandler()
 	wfHandler.RegisterHandler()
 
-	s.adminHandler = NewAdminHandler(s, s.params, s.config)
-	s.adminHandler.RegisterHandler()
+	adminHandler := NewAdminHandler(s, s.params, s.config)
+	adminHandlerGRPC := NewAdminHandlerGRPC(adminHandler)
+	adminHandlerGRPC.RegisterHandler()
+	adminHandler.RegisterHandler()
 
 	// must start resource first
 	s.Resource.Start()
-	s.adminHandler.Start()
 
 	// base (service is not started in frontend or admin handler) in case of race condition in yarpc registration function
 
@@ -255,7 +255,6 @@ func (s *Service) Stop() {
 
 	close(s.stopC)
 
-	s.adminHandler.Stop()
 	s.Resource.Stop()
 
 	s.params.Logger.Info("frontend stopped")

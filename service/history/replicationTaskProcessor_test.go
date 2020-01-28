@@ -33,10 +33,10 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 
-	"github.com/temporalio/temporal/.gen/go/admin/adminservicetest"
 	"github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/history/historyservicetest"
 	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -62,7 +62,7 @@ type (
 		replicationTaskFetcher *MockReplicationTaskFetcher
 		mockDomainCache        *cache.MockDomainCache
 		mockClientBean         *client.MockBean
-		adminClient            *adminservicetest.MockClient
+		adminClient            *adminservicemock.MockAdminServiceYARPCClient
 		clusterMetadata        *cluster.MockMetadata
 		executionManager       *mocks.ExecutionManager
 		requestChan            chan *request

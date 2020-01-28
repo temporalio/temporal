@@ -41,9 +41,10 @@ import (
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
-	"github.com/temporalio/temporal/.gen/go/admin"
 	"github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/adminservice"
+	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
 	adminClient "github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -120,9 +121,9 @@ func (s *nDCIntegrationTestSuite) SetupSuite() {
 	s.standByTaskID = 0
 	s.mockAdminClient = make(map[string]adminClient.Client)
 	controller := gomock.NewController(s.T())
-	mockStandbyClient := adminservicetest.NewMockClient(controller)
+	mockStandbyClient := adminservicemock.NewMockAdminServiceYARPCClient(controller)
 	mockStandbyClient.EXPECT().GetReplicationMessages(gomock.Any(), gomock.Any()).DoAndReturn(s.GetReplicationMessagesMock).AnyTimes()
-	mockOtherClient := adminservicetest.NewMockClient(controller)
+	mockOtherClient := adminservicemock.NewMockAdminServiceYARPCClient(controller)
 	mockOtherClient.EXPECT().GetReplicationMessages(gomock.Any(), gomock.Any()).Return(
 		&workflowservice.GetReplicationMessagesResponse{
 			MessagesByShard: make(map[int32]*commonproto.ReplicationMessages),
@@ -978,7 +979,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_ZombieWorkflow() {
 	s.generator = test.InitializeHistoryEventGenerator(s.domainName, version)
 
 	// verify two batches of zombie workflow are call reapply API
-	s.mockAdminClient["standby"].(*adminservicetest.MockClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(nil).Times(2)
+	s.mockAdminClient["standby"].(*adminservicemock.MockAdminServiceYARPCClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(nil).Times(2)
 	for i := 0; i < 2 && s.generator.HasNextVertex(); i++ {
 		events := s.generator.GetNextVertices()
 		historyEvents := &shared.History{}
@@ -1076,7 +1077,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
 		historyClient,
 	)
 
-	s.mockAdminClient["standby"].(*adminservicetest.MockClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	s.mockAdminClient["standby"].(*adminservicemock.MockAdminServiceYARPCClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 	// Handcraft a stale signal event
 	baseBranchLastEventBatch := baseBranch[len(baseBranch)-1].GetEvents()
 	baseBranchLastEvent := baseBranchLastEventBatch[len(baseBranchLastEventBatch)-1]
@@ -1124,26 +1125,26 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 		domain string,
 		workflowID string,
 		runID string,
-		startEventID *int64,
-		startEventVersion *int64,
-		endEventID *int64,
-		endEventVersion *int64,
+		startEventID int64,
+		startEventVersion int64,
+		endEventID int64,
+		endEventVersion int64,
 		pageSize int,
 		token []byte,
-	) (*admin.GetWorkflowExecutionRawHistoryV2Response, error) {
+	) (*adminservice.GetWorkflowExecutionRawHistoryV2Response, error) {
 
-		execution := &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
+		execution := &commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
 		}
-		return adminClient.GetWorkflowExecutionRawHistoryV2(s.createContext(), &admin.GetWorkflowExecutionRawHistoryV2Request{
-			Domain:            common.StringPtr(domain),
+		return adminClient.GetWorkflowExecutionRawHistoryV2(s.createContext(), &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+			Domain:            domain,
 			Execution:         execution,
 			StartEventId:      startEventID,
 			StartEventVersion: startEventVersion,
 			EndEventId:        endEventID,
 			EndEventVersion:   endEventVersion,
-			MaximumPageSize:   common.Int32Ptr(int32(pageSize)),
+			MaximumPageSize:   int32(pageSize),
 			NextPageToken:     token,
 		})
 	}
@@ -1493,10 +1494,10 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			s.domainName,
 			workflowID,
 			runID,
-			common.Int64Ptr(14),
-			common.Int64Ptr(21),
-			common.Int64Ptr(20),
-			common.Int64Ptr(30),
+			14,
+			21,
+			20,
+			30,
 			1,
 			token,
 		)
@@ -1515,10 +1516,10 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			s.domainName,
 			workflowID,
 			runID,
-			common.Int64Ptr(17),
-			common.Int64Ptr(30),
-			common.Int64Ptr(17),
-			common.Int64Ptr(32),
+			17,
+			30,
+			17,
+			32,
 			1,
 			token,
 		)
@@ -1537,10 +1538,10 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			s.domainName,
 			workflowID,
 			runID,
-			common.Int64Ptr(14),
-			common.Int64Ptr(21),
-			nil,
-			nil,
+			14,
+			21,
+			common.EmptyEventID,
+			common.EmptyVersion,
 			1,
 			token,
 		)
@@ -1559,10 +1560,10 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			s.domainName,
 			workflowID,
 			runID,
-			nil,
-			nil,
-			common.Int64Ptr(17),
-			common.Int64Ptr(32),
+			common.EmptyEventID,
+			common.EmptyVersion,
+			17,
+			32,
 			1,
 			token,
 		)
@@ -1829,6 +1830,6 @@ func (s *nDCIntegrationTestSuite) createContext() context.Context {
 }
 
 func (s *nDCIntegrationTestSuite) setupRemoteFrontendClients() {
-	s.mockAdminClient["standby"].(*adminservicetest.MockClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-	s.mockAdminClient["other"].(*adminservicetest.MockClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	s.mockAdminClient["standby"].(*adminservicemock.MockAdminServiceYARPCClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	s.mockAdminClient["other"].(*adminservicemock.MockAdminServiceYARPCClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 }

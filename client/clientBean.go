@@ -35,7 +35,7 @@ import (
 	"go.uber.org/yarpc/api/peer"
 	"go.uber.org/yarpc/api/transport"
 	"go.uber.org/yarpc/peer/roundrobin"
-	"go.uber.org/yarpc/transport/tchannel"
+	yarpcgrpc "go.uber.org/yarpc/transport/grpc"
 
 	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/client/frontend"
@@ -256,22 +256,15 @@ func NewDNSYarpcDispatcherProvider(logger log.Logger, interval time.Duration) Di
 }
 
 func (p *dnsDispatcherProvider) Get(serviceName string, address string) (*yarpc.Dispatcher, error) {
-	tchanTransport, err := tchannel.NewTransport(
-		tchannel.ServiceName(serviceName),
-		// this aim to get rid of the annoying popup about accepting incoming network connections
-		tchannel.ListenAddr("127.0.0.1:0"),
-	)
-	if err != nil {
-		return nil, err
-	}
+	grpcTransport := yarpcgrpc.NewTransport()
 
-	peerList := roundrobin.New(tchanTransport)
+	peerList := roundrobin.New(grpcTransport)
 	peerListUpdater, err := newDNSUpdater(peerList, address, p.interval, p.logger)
 	if err != nil {
 		return nil, err
 	}
 	peerListUpdater.Start()
-	outbound := tchanTransport.NewOutbound(peerList)
+	outbound := grpcTransport.NewOutbound(peerList)
 
 	p.logger.Info("Creating RPC dispatcher outbound", tag.Service(serviceName), tag.Address(address))
 

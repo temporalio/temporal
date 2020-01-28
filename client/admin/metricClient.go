@@ -25,9 +25,9 @@ import (
 
 	"go.uber.org/yarpc"
 
-	"github.com/temporalio/temporal/.gen/go/admin"
 	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/common/metrics"
 )
 
@@ -48,27 +48,27 @@ func NewMetricClient(client Client, metricsClient metrics.Client) Client {
 
 func (c *metricClient) AddSearchAttribute(
 	ctx context.Context,
-	request *admin.AddSearchAttributeRequest,
+	request *adminservice.AddSearchAttributeRequest,
 	opts ...yarpc.CallOption,
-) error {
+) (*adminservice.AddSearchAttributeResponse, error) {
 
 	c.metricsClient.IncCounter(metrics.AdminClientAddSearchAttributeScope, metrics.CadenceClientRequests)
 
 	sw := c.metricsClient.StartTimer(metrics.AdminClientAddSearchAttributeScope, metrics.CadenceClientLatency)
-	err := c.client.AddSearchAttribute(ctx, request, opts...)
+	resp, err := c.client.AddSearchAttribute(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
 		c.metricsClient.IncCounter(metrics.AdminClientAddSearchAttributeScope, metrics.CadenceClientFailures)
 	}
-	return err
+	return resp, err
 }
 
 func (c *metricClient) DescribeHistoryHost(
 	ctx context.Context,
-	request *shared.DescribeHistoryHostRequest,
+	request *adminservice.DescribeHistoryHostRequest,
 	opts ...yarpc.CallOption,
-) (*shared.DescribeHistoryHostResponse, error) {
+) (*adminservice.DescribeHistoryHostResponse, error) {
 
 	c.metricsClient.IncCounter(metrics.AdminClientDescribeHistoryHostScope, metrics.CadenceClientRequests)
 
@@ -84,45 +84,45 @@ func (c *metricClient) DescribeHistoryHost(
 
 func (c *metricClient) RemoveTask(
 	ctx context.Context,
-	request *shared.RemoveTaskRequest,
+	request *adminservice.RemoveTaskRequest,
 	opts ...yarpc.CallOption,
-) error {
+) (*adminservice.RemoveTaskResponse, error) {
 
 	c.metricsClient.IncCounter(metrics.AdminClientCloseShardScope, metrics.CadenceClientRequests)
 
 	sw := c.metricsClient.StartTimer(metrics.AdminClientCloseShardScope, metrics.CadenceClientLatency)
-	err := c.client.RemoveTask(ctx, request, opts...)
+	resp, err := c.client.RemoveTask(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
 		c.metricsClient.IncCounter(metrics.AdminClientCloseShardScope, metrics.CadenceClientFailures)
 	}
-	return err
+	return resp, err
 }
 
 func (c *metricClient) CloseShard(
 	ctx context.Context,
-	request *shared.CloseShardRequest,
+	request *adminservice.CloseShardRequest,
 	opts ...yarpc.CallOption,
-) error {
+) (*adminservice.CloseShardResponse, error) {
 
 	c.metricsClient.IncCounter(metrics.AdminClientCloseShardScope, metrics.CadenceClientRequests)
 
 	sw := c.metricsClient.StartTimer(metrics.AdminClientCloseShardScope, metrics.CadenceClientLatency)
-	err := c.client.CloseShard(ctx, request, opts...)
+	resp, err := c.client.CloseShard(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
 		c.metricsClient.IncCounter(metrics.AdminClientCloseShardScope, metrics.CadenceClientFailures)
 	}
-	return err
+	return resp, err
 }
 
 func (c *metricClient) DescribeWorkflowExecution(
 	ctx context.Context,
-	request *admin.DescribeWorkflowExecutionRequest,
+	request *adminservice.DescribeWorkflowExecutionRequest,
 	opts ...yarpc.CallOption,
-) (*admin.DescribeWorkflowExecutionResponse, error) {
+) (*adminservice.DescribeWorkflowExecutionResponse, error) {
 
 	c.metricsClient.IncCounter(metrics.AdminClientDescribeWorkflowExecutionScope, metrics.CadenceClientRequests)
 
@@ -138,9 +138,9 @@ func (c *metricClient) DescribeWorkflowExecution(
 
 func (c *metricClient) GetWorkflowExecutionRawHistory(
 	ctx context.Context,
-	request *admin.GetWorkflowExecutionRawHistoryRequest,
+	request *adminservice.GetWorkflowExecutionRawHistoryRequest,
 	opts ...yarpc.CallOption,
-) (*admin.GetWorkflowExecutionRawHistoryResponse, error) {
+) (*adminservice.GetWorkflowExecutionRawHistoryResponse, error) {
 
 	c.metricsClient.IncCounter(metrics.AdminClientGetWorkflowExecutionRawHistoryScope, metrics.CadenceClientRequests)
 
@@ -156,9 +156,9 @@ func (c *metricClient) GetWorkflowExecutionRawHistory(
 
 func (c *metricClient) GetWorkflowExecutionRawHistoryV2(
 	ctx context.Context,
-	request *admin.GetWorkflowExecutionRawHistoryV2Request,
+	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
 	opts ...yarpc.CallOption,
-) (*admin.GetWorkflowExecutionRawHistoryV2Response, error) {
+) (*adminservice.GetWorkflowExecutionRawHistoryV2Response, error) {
 
 	c.metricsClient.IncCounter(metrics.AdminClientGetWorkflowExecutionRawHistoryV2Scope, metrics.CadenceClientRequests)
 
@@ -174,13 +174,14 @@ func (c *metricClient) GetWorkflowExecutionRawHistoryV2(
 
 func (c *metricClient) DescribeCluster(
 	ctx context.Context,
+	request *adminservice.DescribeClusterRequest,
 	opts ...yarpc.CallOption,
-) (*admin.DescribeClusterResponse, error) {
+) (*adminservice.DescribeClusterResponse, error) {
 
 	c.metricsClient.IncCounter(metrics.AdminClientDescribeClusterScope, metrics.CadenceClientRequests)
 
 	sw := c.metricsClient.StartTimer(metrics.AdminClientDescribeClusterScope, metrics.CadenceClientLatency)
-	resp, err := c.client.DescribeCluster(ctx, opts...)
+	resp, err := c.client.DescribeCluster(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {

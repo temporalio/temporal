@@ -228,6 +228,7 @@ func (adh *AdminHandler) RemoveTask(
 	scope, sw := adh.startRequestProfile(metrics.AdminRemoveTaskScope)
 	defer sw.Stop()
 
+	// TODO (alshtin): nil check
 	if request == nil || request.ShardID == nil || request.Type == nil || request.TaskID == nil {
 		return adh.error(errRequestNotSet, scope)
 	}
@@ -245,6 +246,7 @@ func (adh *AdminHandler) CloseShard(
 	scope, sw := adh.startRequestProfile(metrics.AdminCloseShardTaskScope)
 	defer sw.Stop()
 
+	// TODO (alshtin): nil check
 	if request == nil || request.ShardID == nil {
 		return adh.error(errRequestNotSet, scope)
 	}
@@ -262,6 +264,7 @@ func (adh *AdminHandler) DescribeHistoryHost(
 	scope, sw := adh.startRequestProfile(metrics.AdminDescribeHistoryHostScope)
 	defer sw.Stop()
 
+	// TODO (alshtin): nil check
 	if request == nil || (request.ShardIdForHost == nil && request.ExecutionForHost == nil && request.HostAddress == nil) {
 		return nil, adh.error(errRequestNotSet, scope)
 	}
@@ -796,20 +799,20 @@ func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(
 		return &gen.BadRequestError{Message: "Invalid PageSize."}
 	}
 
-	if request.StartEventId == nil &&
-		request.StartEventVersion == nil &&
-		request.EndEventId == nil &&
-		request.EndEventVersion == nil {
+	if request.GetStartEventId() == common.EmptyEventID &&
+		request.GetStartEventVersion() == common.EmptyVersion &&
+		request.GetEndEventId() == common.EmptyEventID &&
+		request.GetEndEventVersion() == common.EmptyVersion {
 		return &gen.BadRequestError{Message: "Invalid event query range."}
 	}
 
-	if (request.StartEventId != nil && request.StartEventVersion == nil) ||
-		(request.StartEventId == nil && request.StartEventVersion != nil) {
+	if (request.GetStartEventId() != common.EmptyEventID && request.GetStartEventVersion() == common.EmptyVersion) ||
+		(request.GetStartEventId() == common.EmptyEventID && request.GetStartEventVersion() != common.EmptyVersion) {
 		return &gen.BadRequestError{Message: "Invalid start event id and start event version combination."}
 	}
 
-	if (request.EndEventId != nil && request.EndEventVersion == nil) ||
-		(request.EndEventId == nil && request.EndEventVersion != nil) {
+	if (request.GetEndEventId() != common.EmptyEventID && request.GetEndEventVersion() == common.EmptyVersion) ||
+		(request.GetEndEventId() == common.EmptyEventID && request.GetEndEventVersion() != common.EmptyVersion) {
 		return &gen.BadRequestError{Message: "Invalid end event id and end event version combination."}
 	}
 	return nil
@@ -840,13 +843,13 @@ func (adh *AdminHandler) setRequestDefaultValueAndGetTargetVersionHistory(
 		return nil, err
 	}
 
-	if request.StartEventId == nil || request.StartEventVersion == nil {
+	if request.GetStartEventId() == common.EmptyVersion || request.GetStartEventVersion() == common.EmptyVersion {
 		// If start event is not set, get the events from the first event
 		// As the API is exclusive-exclusive, use first event id - 1 here
 		request.StartEventId = common.Int64Ptr(common.FirstEventID - 1)
 		request.StartEventVersion = common.Int64Ptr(firstItem.GetVersion())
 	}
-	if request.EndEventId == nil || request.EndEventVersion == nil {
+	if request.GetEndEventId() == common.EmptyEventID || request.GetEndEventVersion() == common.EmptyVersion {
 		// If end event is not set, get the events until the end event
 		// As the API is exclusive-exclusive, use end event id + 1 here
 		request.EndEventId = common.Int64Ptr(lastItem.GetEventID() + 1)

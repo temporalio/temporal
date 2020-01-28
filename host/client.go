@@ -26,14 +26,14 @@ import (
 
 	"go.temporal.io/temporal-proto/workflowservice"
 
-	"github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"
 	"github.com/temporalio/temporal/.gen/go/history/historyserviceclient"
+	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/common"
 )
 
 // AdminClient is the interface exposed by admin service client
 type AdminClient interface {
-	adminserviceclient.Interface
+	adminservice.AdminServiceYARPCClient
 }
 
 // FrontendClient is the interface exposed by frontend service client
@@ -48,7 +48,7 @@ type HistoryClient interface {
 
 // NewAdminClient creates a client to cadence admin client
 func NewAdminClient(d *yarpc.Dispatcher) AdminClient {
-	return adminserviceclient.New(d.ClientConfig(common.FrontendServiceName))
+	return adminservice.NewAdminServiceYARPCClient(d.ClientConfig(common.FrontendServiceName))
 }
 
 // NewFrontendClient creates a client to cadence frontend client

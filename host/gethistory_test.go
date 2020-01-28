@@ -32,12 +32,11 @@ import (
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/workflowservice"
 
-	"github.com/temporalio/temporal/.gen/go/admin"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/service/frontend/adapter"
 )
 
 func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
@@ -453,23 +452,23 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	// this function poll events from history side
 	pageSize := 1
 	getHistory := func(domain string, execution *commonproto.WorkflowExecution, firstEventID int64, nextEventID int64,
-		token []byte) (*admin.GetWorkflowExecutionRawHistoryResponse, error) {
+		token []byte) (*adminservice.GetWorkflowExecutionRawHistoryResponse, error) {
 
-		return s.adminClient.GetWorkflowExecutionRawHistory(createContext(), &admin.GetWorkflowExecutionRawHistoryRequest{
-			Domain:          common.StringPtr(domain),
-			Execution:       adapter.ToThriftWorkflowExecution(execution),
-			FirstEventId:    common.Int64Ptr(firstEventID),
-			NextEventId:     common.Int64Ptr(nextEventID),
-			MaximumPageSize: common.Int32Ptr(int32(pageSize)),
+		return s.adminClient.GetWorkflowExecutionRawHistory(createContext(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
+			Domain:          domain,
+			Execution:       execution,
+			FirstEventId:    firstEventID,
+			NextEventId:     nextEventID,
+			MaximumPageSize: int32(pageSize),
 			NextPageToken:   token,
 		})
 	}
 
 	serializer := persistence.NewPayloadSerializer()
-	convertBlob := func(blobs []*workflow.DataBlob) []*workflow.HistoryEvent {
+	convertBlob := func(blobs []*commonproto.DataBlob) []*workflow.HistoryEvent {
 		var events []*workflow.HistoryEvent
 		for _, blob := range blobs {
-			s.True(blob.GetEncodingType() == workflow.EncodingTypeThriftRW)
+			s.True(blob.GetEncodingType() == enums.EncodingTypeThriftRW)
 			blobEvents, err := serializer.DeserializeBatchEvents(&persistence.DataBlob{
 				Encoding: common.EncodingTypeThriftRW,
 				Data:     blob.Data,
@@ -480,7 +479,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 		return events
 	}
 
-	var blobs []*workflow.DataBlob
+	var blobs []*commonproto.DataBlob
 	var token []byte
 
 	resp, err := getHistory(s.domainName, execution, common.FirstEventID, common.EndEventID, token)
@@ -668,14 +667,14 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 	}
 
 	getHistory := func(domain string, execution *commonproto.WorkflowExecution, firstEventID int64, nextEventID int64,
-		token []byte) (*admin.GetWorkflowExecutionRawHistoryResponse, error) {
+		token []byte) (*adminservice.GetWorkflowExecutionRawHistoryResponse, error) {
 
-		return s.adminClient.GetWorkflowExecutionRawHistory(createContext(), &admin.GetWorkflowExecutionRawHistoryRequest{
-			Domain:          common.StringPtr(domain),
-			Execution:       adapter.ToThriftWorkflowExecution(execution),
-			FirstEventId:    common.Int64Ptr(firstEventID),
-			NextEventId:     common.Int64Ptr(nextEventID),
-			MaximumPageSize: common.Int32Ptr(1),
+		return s.adminClient.GetWorkflowExecutionRawHistory(createContext(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
+			Domain:          domain,
+			Execution:       execution,
+			FirstEventId:    firstEventID,
+			NextEventId:     nextEventID,
+			MaximumPageSize: 1,
 			NextPageToken:   token,
 		})
 	}

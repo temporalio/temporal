@@ -175,10 +175,10 @@ func (r *nDCWorkflowResetterImpl) getBaseBranchToken(
 			r.domainID,
 			r.workflowID,
 			r.newRunID,
-			nil,
-			nil,
-			common.Int64Ptr(incomingFirstEventID),
-			common.Int64Ptr(incomingFirstEventVersion),
+			common.EmptyEventID,
+			common.EmptyVersion,
+			incomingFirstEventID,
+			incomingFirstEventVersion,
 		)
 	}
 
