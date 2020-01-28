@@ -26,9 +26,8 @@ import (
 	"time"
 
 	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/workflowservice"
 
-	"github.com/temporalio/temporal/.gen/go/replicator"
+	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
@@ -37,6 +36,7 @@ import (
 	"github.com/temporalio/temporal/common/membership"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/service/frontend/adapter"
 )
 
 const (
@@ -138,7 +138,7 @@ func (p *domainReplicationMessageProcessor) getAndHandleDomainReplicationTasks()
 	}
 
 	ctx, cancel := createContextWithCancel(fetchTaskRequestTimeout)
-	request := &workflowservice.GetDomainReplicationMessagesRequest{
+	request := &adminservice.GetDomainReplicationMessagesRequest{
 		LastRetrievedMessageId: p.lastRetrievedMessageID,
 		LastProcessedMessageId: p.lastProcessedMessageID,
 	}
@@ -178,10 +178,10 @@ func (p *domainReplicationMessageProcessor) getAndHandleDomainReplicationTasks()
 }
 
 func (p *domainReplicationMessageProcessor) putDomainReplicationTaskToDLQ(
-	task *replicator.ReplicationTask,
+	task *commonproto.ReplicationTask,
 ) error {
 
-	return p.domainReplicationQueue.PublishToDLQ(task)
+	return p.domainReplicationQueue.PublishToDLQ(adapter.ToThriftReplicationTask(task))
 }
 
 func (p *domainReplicationMessageProcessor) handleDomainReplicationTask(

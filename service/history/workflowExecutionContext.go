@@ -27,9 +27,8 @@ import (
 	"fmt"
 	"time"
 
-	"go.temporal.io/temporal-proto/workflowservice"
-
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/clock"
@@ -1258,7 +1257,7 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 	defer cancel2()
 	_, err = sourceCluster.ReapplyEvents(
 		ctx2,
-		&workflowservice.ReapplyEventsRequest{
+		&adminservice.ReapplyEventsRequest{
 			DomainName:        domainEntry.GetInfo().Name,
 			WorkflowExecution: adapter.ToProtoWorkflowExecution(execution),
 			Events:            adapter.ToProtoDataBlob(reapplyEventsDataBlob.ToThrift()),

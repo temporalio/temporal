@@ -27,8 +27,8 @@ import (
 	"time"
 
 	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/workflowservice"
 
+	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
@@ -269,7 +269,7 @@ func (f *ReplicationTaskFetcherImpl) getMessages(
 	ctx, cancel := createContextWithCancel(fetchTaskRequestTimeout)
 	defer cancel()
 
-	request := &workflowservice.GetReplicationMessagesRequest{
+	request := &adminservice.GetReplicationMessagesRequest{
 		Tokens:      tokens,
 		ClusterName: f.currentCluster,
 	}

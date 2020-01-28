@@ -301,7 +301,7 @@ func (p *TaskPoller) HandlePartialDecision(response *workflowservice.PollForDeci
 	}
 
 	executionCtx, decisions, err := p.DecisionHandler(response.WorkflowExecution, response.WorkflowType,
-		common.Int64Default(response.PreviousStartedEventId), common.Int64Default(response.StartedEventId), response.History)
+		response.PreviousStartedEventId, response.StartedEventId, response.History)
 	if err != nil {
 		p.Logger.Info("Failing Decision. Decision handler failed with error: %v", tag.Error(err))
 		_, err = p.Engine.RespondDecisionTaskFailed(createContext(), &workflowservice.RespondDecisionTaskFailedRequest{
