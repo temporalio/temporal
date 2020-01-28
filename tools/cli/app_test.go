@@ -635,10 +635,11 @@ func (s *cliAppSuite) TestParseTimeDateRange() {
 			expected: time.Unix(0, 0).UnixNano(),
 		},
 	}
-	delta := int64(5 * time.Millisecond)
+	const delta = int64(5 * time.Millisecond)
 	for _, te := range tests {
-		s.True(te.expected <= parseTime(te.timeStr, te.defVal), te.timeStr)
-		s.True(te.expected+delta >= parseTime(te.timeStr, te.defVal), te.timeStr)
+		parsedTime := parseTime(te.timeStr, te.defVal)
+		s.True(te.expected <= parsedTime, "Case: %s. %d must be less or equal than parsed %d", te.timeStr, te.expected, parsedTime)
+		s.True(te.expected+delta >= parsedTime, "Case: %s. %d must be greater or equal than parsed %d", te.timeStr, te.expected, parsedTime)
 	}
 }
 
