@@ -21,23 +21,33 @@
 syntax = "proto3";
 
 package indexer;
-option go_package = "github.com/temporalio/temporal/.gen/proto/indexer";
+option go_package = "github.com/temporalio/temporal/.gen/proto/checksum";
 
-import "enums/enums.proto";
+import "common/common.proto";
 
-message Field {
-    enums.FieldType type = 1;
-    string stringData = 2;
-    int64 intData = 3;
-    bool boolData = 4;
-    bytes binaryData = 5;
-}
+message MutableStateChecksumPayload {
+    bool cancelRequested = 1;
+    int32 state = 2;
+    int32 closeStatus = 3;
 
-message Message {
-    enums.MessageType messageType = 1;
-    string domainID = 2;
-    string workflowID = 3;
-    string runID = 4;
-    int64 version = 5;
-    map<string, Field> fields = 6;
+    int64 lastWriteVersion = 4;
+    int64 lastWriteEventID = 5;
+    int64 lastFirstEventID = 6;
+    int64 nextEventID = 7;
+    int64 lastProcessedEventID = 8;
+    int64 signalCount = 9;
+
+    int32 decisionAttempt = 10;
+    int64 decisionVersion = 11;
+    int64 decisionScheduledID = 12;
+    int64 decisionStartedID = 13;
+
+    repeated int64 pendingTimerStartedIDs = 14;
+    repeated int64 pendingActivityScheduledIDs = 15;
+    repeated int64 pendingSignalInitiatedIDs = 16;
+    repeated int64 pendingReqCancelInitiatedIDs = 17;
+    repeated int64 pendingChildInitiatedIDs = 18;
+
+    string stickyTaskListName = 19;
+    common.VersionHistories VersionHistories = 20;
 }

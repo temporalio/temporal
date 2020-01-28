@@ -21,7 +21,7 @@
 syntax = "proto3";
 
 package adminservice;
-option go_package = "github.com/temporalio/temporal/proto/adminservice";
+option go_package = "github.com/temporalio/temporal/.gen/proto/adminservice";
 
 import "enums/enums.proto";
 import "common/common.proto";
@@ -109,6 +109,47 @@ message GetWorkflowExecutionRawHistoryV2Response {
     bytes nextPageToken = 1;
     repeated common.DataBlob historyBatches = 2;
     common.VersionHistory versionHistory = 3;
+}
+
+message GetReplicationMessagesRequest {
+    repeated common.ReplicationToken tokens = 1;
+    string clusterName = 2;
+}
+
+message GetReplicationMessagesResponse {
+    map<int32, common.ReplicationMessages> messagesByShard = 1;
+}
+
+message GetDomainReplicationMessagesRequest {
+    // lastRetrievedMessageId is where the next fetch should begin with.
+    int64 lastRetrievedMessageId = 1;
+    // lastProcessedMessageId is the last messageId that is processed on the passive side.
+    // This can be different than lastRetrievedMessageId if passive side supports prefetching messages.
+    int64 lastProcessedMessageId = 2;
+    // clusterName is the name of the pulling cluster.
+    string clusterName = 3;
+}
+
+message GetDomainReplicationMessagesResponse {
+    common.ReplicationMessages messages = 1;
+}
+
+message GetDLQReplicationMessagesRequest {
+    repeated common.ReplicationTaskInfo taskInfos = 1;
+}
+
+message GetDLQReplicationMessagesResponse {
+    repeated common.ReplicationTask replicationTasks = 1;
+}
+
+// ReapplyEventsRequest is the request for reapply events API.
+message ReapplyEventsRequest {
+    string domainName = 1;
+    common.WorkflowExecution workflowExecution = 2;
+    common.DataBlob events = 3;
+}
+
+message ReapplyEventsResponse {
 }
 
 message AddSearchAttributeRequest {

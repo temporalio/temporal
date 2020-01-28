@@ -21,7 +21,7 @@
 syntax = "proto3";
 
 package sqlblobs;
-option go_package = "github.com/temporalio/temporal/proto/sqlblobs";
+option go_package = "github.com/temporalio/temporal/.gen/proto/sqlblobs";
 
 // HistoryBranchRange represents a piece of range for a branch.
 message HistoryBranchRange {
