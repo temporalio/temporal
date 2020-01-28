@@ -39,7 +39,7 @@ import (
 type (
 	SequentialTaskProcessorSuite struct {
 		suite.Suite
-		processor SequentialTaskProcessor
+		processor Processor
 	}
 
 	testSequentialTaskQueueImpl struct {
@@ -70,7 +70,7 @@ func (s *SequentialTaskProcessorSuite) SetupTest() {
 		func(key interface{}) uint32 {
 			return key.(uint32)
 		},
-		func(task SequentialTask) SequentialTaskQueue {
+		func(task Task) SequentialTaskQueue {
 			taskQueue := collection.NewConcurrentPriorityQueue(func(this interface{}, other interface{}) bool {
 				return this.(*testSequentialTaskImpl).taskID < other.(*testSequentialTaskImpl).taskID
 			})
@@ -256,6 +256,18 @@ func (t *testSequentialTaskImpl) RetryErr(err error) bool {
 	return true
 }
 
+func (t *testSequentialTaskImpl) State() State {
+	if t.acked > 0 {
+		return TaskStateAcked
+	}
+
+	if t.nacked > 0 {
+		return TaskStateNacked
+	}
+
+	return TaskStatePending
+}
+
 func (t *testSequentialTaskImpl) Ack() {
 	t.lock.Lock()
 	defer t.lock.Unlock()
@@ -290,12 +302,12 @@ func (t *testSequentialTaskQueueImpl) QueueID() interface{} {
 	return t.id
 }
 
-func (t *testSequentialTaskQueueImpl) Add(task SequentialTask) {
+func (t *testSequentialTaskQueueImpl) Add(task Task) {
 	t.taskQueue.Add(task)
 }
 
-func (t *testSequentialTaskQueueImpl) Remove() SequentialTask {
-	return t.taskQueue.Remove().(SequentialTask)
+func (t *testSequentialTaskQueueImpl) Remove() Task {
+	return t.taskQueue.Remove().(Task)
 }
 
 func (t *testSequentialTaskQueueImpl) IsEmpty() bool {

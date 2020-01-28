@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
@@ -54,10 +53,11 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller        *gomock.Controller
-		mockHistoryClient *historyservicetest.MockClient
-		mockDomainCache   *cache.MockDomainCache
-		mockNDCResender   *xdc.MockNDCHistoryResender
+		controller                  *gomock.Controller
+		mockSequentialTaskProcessor *task.MockProcessor
+		mockHistoryClient           *historyservicetest.MockClient
+		mockDomainCache             *cache.MockDomainCache
+		mockNDCResender             *xdc.MockNDCHistoryResender
 
 		currentCluster string
 		sourceCluster  string
@@ -69,8 +69,7 @@ type (
 		mockMsg              *messageMocks.Message
 		mockDomainReplicator *MockDomainReplicator
 
-		mockSequentialTaskProcessor *task.MockSequentialTaskProcessor
-		mockRereplicator            *xdc.MockHistoryRereplicator
+		mockRereplicator *xdc.MockHistoryRereplicator
 
 		processor *replicationTaskProcessor
 	}
@@ -93,6 +92,7 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.controller = gomock.NewController(s.T())
+	s.mockSequentialTaskProcessor = task.NewMockProcessor(s.controller)
 	s.mockHistoryClient = historyservicetest.NewMockClient(s.controller)
 	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
 	s.mockNDCResender = xdc.NewMockNDCHistoryResender(s.controller)
@@ -126,7 +126,6 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 	s.mockMsg.On("Offset").Return(int64(0))
 	s.mockDomainReplicator = &MockDomainReplicator{}
 	s.mockRereplicator = &xdc.MockHistoryRereplicator{}
-	s.mockSequentialTaskProcessor = &task.MockSequentialTaskProcessor{}
 
 	s.currentCluster = cluster.TestAlternativeClusterName
 	s.sourceCluster = cluster.TestCurrentClusterName
@@ -149,12 +148,10 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 }
 
 func (s *replicationTaskProcessorSuite) TearDownTest() {
+	s.controller.Finish()
 	s.mockMsg.AssertExpectations(s.T())
 	s.mockDomainReplicator.AssertExpectations(s.T())
 	s.mockRereplicator.AssertExpectations(s.T())
-	s.mockSequentialTaskProcessor.AssertExpectations(s.T())
-
-	s.controller.Finish()
 }
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_BadEncoding() {
@@ -293,7 +290,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncActivity_Succ
 	replicationTaskBinary, err := s.msgEncoder.Encode(replicationTask)
 	s.Nil(err)
 	s.mockMsg.On("Value").Return(replicationTaskBinary)
-	s.mockSequentialTaskProcessor.On("Submit", mock.Anything).Return(nil).Once()
+	s.mockSequentialTaskProcessor.EXPECT().Submit(gomock.Any()).Return(nil).Times(1)
 
 	s.processor.decodeMsgAndSubmit(s.mockMsg)
 }
@@ -319,8 +316,8 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncActivity_Fail
 	replicationTaskBinary, err := s.msgEncoder.Encode(replicationTask)
 	s.Nil(err)
 	s.mockMsg.On("Value").Return(replicationTaskBinary)
-	s.mockSequentialTaskProcessor.On("Submit", mock.Anything).Return(errors.New("some random error")).Once()
-	s.mockSequentialTaskProcessor.On("Submit", mock.Anything).Return(nil).Once()
+	s.mockSequentialTaskProcessor.EXPECT().Submit(gomock.Any()).Return(errors.New("some random error")).Times(1)
+	s.mockSequentialTaskProcessor.EXPECT().Submit(gomock.Any()).Return(nil).Times(1)
 
 	s.processor.decodeMsgAndSubmit(s.mockMsg)
 }
@@ -348,7 +345,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_History_Success()
 	replicationTaskBinary, err := s.msgEncoder.Encode(replicationTask)
 	s.Nil(err)
 	s.mockMsg.On("Value").Return(replicationTaskBinary)
-	s.mockSequentialTaskProcessor.On("Submit", mock.Anything).Return(nil).Once()
+	s.mockSequentialTaskProcessor.EXPECT().Submit(gomock.Any()).Return(nil).Times(1)
 
 	s.processor.decodeMsgAndSubmit(s.mockMsg)
 }
@@ -376,8 +373,8 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_History_FailedThe
 	replicationTaskBinary, err := s.msgEncoder.Encode(replicationTask)
 	s.Nil(err)
 	s.mockMsg.On("Value").Return(replicationTaskBinary)
-	s.mockSequentialTaskProcessor.On("Submit", mock.Anything).Return(errors.New("some random error")).Once()
-	s.mockSequentialTaskProcessor.On("Submit", mock.Anything).Return(nil).Once()
+	s.mockSequentialTaskProcessor.EXPECT().Submit(gomock.Any()).Return(errors.New("some random error")).Times(1)
+	s.mockSequentialTaskProcessor.EXPECT().Submit(gomock.Any()).Return(nil).Times(1)
 
 	s.processor.decodeMsgAndSubmit(s.mockMsg)
 }
@@ -398,7 +395,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_HistoryMetadata_S
 	replicationTaskBinary, err := s.msgEncoder.Encode(replicationTask)
 	s.Nil(err)
 	s.mockMsg.On("Value").Return(replicationTaskBinary)
-	s.mockSequentialTaskProcessor.On("Submit", mock.Anything).Return(nil).Once()
+	s.mockSequentialTaskProcessor.EXPECT().Submit(gomock.Any()).Return(nil).Times(1)
 
 	s.processor.decodeMsgAndSubmit(s.mockMsg)
 }
@@ -419,8 +416,8 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_HistoryMetadata_F
 	replicationTaskBinary, err := s.msgEncoder.Encode(replicationTask)
 	s.Nil(err)
 	s.mockMsg.On("Value").Return(replicationTaskBinary)
-	s.mockSequentialTaskProcessor.On("Submit", mock.Anything).Return(errors.New("some random error")).Once()
-	s.mockSequentialTaskProcessor.On("Submit", mock.Anything).Return(nil).Once()
+	s.mockSequentialTaskProcessor.EXPECT().Submit(gomock.Any()).Return(errors.New("some random error")).Times(1)
+	s.mockSequentialTaskProcessor.EXPECT().Submit(gomock.Any()).Return(nil).Times(1)
 
 	s.processor.decodeMsgAndSubmit(s.mockMsg)
 }

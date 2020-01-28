@@ -43,6 +43,7 @@ import (
 	messageMocks "github.com/uber/cadence/common/messaging/mocks"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/service/dynamicconfig"
+	"github.com/uber/cadence/common/task"
 	"github.com/uber/cadence/common/xdc"
 )
 
@@ -212,7 +213,7 @@ func (s *activityReplicationTaskSuite) TestNewActivityReplicationTask() {
 	replicationTask := s.getActivityReplicationTask()
 	replicationAttr := replicationTask.SyncActivityTaskAttributes
 
-	task := newActivityReplicationTask(
+	activityTask := newActivityReplicationTask(
 		replicationTask,
 		s.mockMsg,
 		s.logger,
@@ -223,19 +224,20 @@ func (s *activityReplicationTaskSuite) TestNewActivityReplicationTask() {
 		s.mockRereplicator,
 		s.mockNDCResender)
 	// overwrite the logger for easy comparison
-	task.logger = s.logger
+	activityTask.logger = s.logger
 
 	s.Equal(
 		&activityReplicationTask{
 			workflowReplicationTask: workflowReplicationTask{
 				metricsScope: metrics.SyncActivityTaskScope,
-				startTime:    task.startTime,
+				startTime:    activityTask.startTime,
 				queueID: definition.NewWorkflowIdentifier(
 					replicationAttr.GetDomainId(),
 					replicationAttr.GetWorkflowId(),
 					replicationAttr.GetRunId(),
 				),
 				taskID:        replicationAttr.GetScheduledId(),
+				state:         task.TaskStatePending,
 				attempt:       0,
 				kafkaMsg:      s.mockMsg,
 				logger:        s.logger,
@@ -263,7 +265,7 @@ func (s *activityReplicationTaskSuite) TestNewActivityReplicationTask() {
 			historyRereplicator: s.mockRereplicator,
 			nDCHistoryResender:  s.mockNDCResender,
 		},
-		task,
+		activityTask,
 	)
 }
 
@@ -456,21 +458,32 @@ func (s *historyReplicationTaskSuite) TestNewHistoryReplicationTask() {
 	replicationTask := s.getHistoryReplicationTask()
 	replicationAttr := replicationTask.HistoryTaskAttributes
 
-	task := newHistoryReplicationTask(replicationTask, s.mockMsg, s.sourceCluster, s.logger,
-		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator)
+	historyTask := newHistoryReplicationTask(
+		replicationTask,
+		s.mockMsg,
+		s.sourceCluster,
+		s.logger,
+		s.config,
+		s.mockTimeSource,
+		s.mockHistoryClient,
+		s.metricsClient,
+		s.mockRereplicator,
+	)
 	// overwrite the logger for easy comparison
-	task.logger = s.logger
+	historyTask.logger = s.logger
+
 	s.Equal(
 		&historyReplicationTask{
 			workflowReplicationTask: workflowReplicationTask{
 				metricsScope: metrics.HistoryReplicationTaskScope,
-				startTime:    task.startTime,
+				startTime:    historyTask.startTime,
 				queueID: definition.NewWorkflowIdentifier(
 					replicationAttr.GetDomainId(),
 					replicationAttr.GetWorkflowId(),
 					replicationAttr.GetRunId(),
 				),
 				taskID:        replicationAttr.GetFirstEventId(),
+				state:         task.TaskStatePending,
 				attempt:       0,
 				kafkaMsg:      s.mockMsg,
 				logger:        s.logger,
@@ -498,7 +511,7 @@ func (s *historyReplicationTaskSuite) TestNewHistoryReplicationTask() {
 			},
 			historyRereplicator: s.mockRereplicator,
 		},
-		task,
+		historyTask,
 	)
 }
 
@@ -612,21 +625,32 @@ func (s *historyMetadataReplicationTaskSuite) TestNewHistoryMetadataReplicationT
 	replicationTask := s.getHistoryMetadataReplicationTask()
 	replicationAttr := replicationTask.HistoryMetadataTaskAttributes
 
-	task := newHistoryMetadataReplicationTask(replicationTask, s.mockMsg, s.sourceCluster, s.logger,
-		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator)
+	metadataTask := newHistoryMetadataReplicationTask(
+		replicationTask,
+		s.mockMsg,
+		s.sourceCluster,
+		s.logger,
+		s.config,
+		s.mockTimeSource,
+		s.mockHistoryClient,
+		s.metricsClient,
+		s.mockRereplicator,
+	)
 	// overwrite the logger for easy comparison
-	task.logger = s.logger
+	metadataTask.logger = s.logger
+
 	s.Equal(
 		&historyMetadataReplicationTask{
 			workflowReplicationTask: workflowReplicationTask{
 				metricsScope: metrics.HistoryMetadataReplicationTaskScope,
-				startTime:    task.startTime,
+				startTime:    metadataTask.startTime,
 				queueID: definition.NewWorkflowIdentifier(
 					replicationAttr.GetDomainId(),
 					replicationAttr.GetWorkflowId(),
 					replicationAttr.GetRunId(),
 				),
 				taskID:        replicationAttr.GetFirstEventId(),
+				state:         task.TaskStatePending,
 				attempt:       0,
 				kafkaMsg:      s.mockMsg,
 				logger:        s.logger,
@@ -640,7 +664,7 @@ func (s *historyMetadataReplicationTaskSuite) TestNewHistoryMetadataReplicationT
 			nextEventID:         replicationAttr.GetNextEventId(),
 			historyRereplicator: s.mockRereplicator,
 		},
-		task,
+		metadataTask,
 	)
 }
 

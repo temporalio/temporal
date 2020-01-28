@@ -66,7 +66,7 @@ type (
 		domainCache             cache.DomainCache
 		msgEncoder              codec.BinaryEncoder
 		timeSource              clock.TimeSource
-		sequentialTaskProcessor task.SequentialTaskProcessor
+		sequentialTaskProcessor task.Processor
 	}
 )
 
@@ -96,7 +96,7 @@ func newReplicationTaskProcessor(
 	nDCHistoryResender xdc.NDCHistoryResender,
 	historyClient history.Client,
 	domainCache cache.DomainCache,
-	sequentialTaskProcessor task.SequentialTaskProcessor,
+	sequentialTaskProcessor task.Processor,
 ) *replicationTaskProcessor {
 
 	retryableHistoryClient := history.NewRetryableClient(historyClient, common.CreateHistoryServiceRetryPolicy(),
