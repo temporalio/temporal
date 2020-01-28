@@ -28,7 +28,6 @@ import (
 
 	"github.com/temporalio/temporal/.gen/go/health"
 	"github.com/temporalio/temporal/.gen/go/health/metaserver"
-	shared "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/metrics"
@@ -277,8 +276,8 @@ func (handler *DCRedirectionHandlerImpl) GetWorkflowExecutionHistory(
 // GetRawHistory API call
 func (handler *DCRedirectionHandlerImpl) GetWorkflowExecutionRawHistory(
 	ctx context.Context,
-	request *shared.GetWorkflowExecutionRawHistoryRequest,
-) (resp *shared.GetWorkflowExecutionRawHistoryResponse, retError error) {
+	request *workflowservice.GetWorkflowExecutionRawHistoryRequest,
+) (resp *workflowservice.GetWorkflowExecutionRawHistoryResponse, retError error) {
 
 	var apiName = "GetWorkflowExecutionRawHistory"
 	var err error

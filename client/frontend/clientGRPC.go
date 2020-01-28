@@ -122,6 +122,20 @@ func (c *clientGRPCImpl) GetWorkflowExecutionHistory(
 	return client.GetWorkflowExecutionHistory(ctx, request, opts...)
 }
 
+func (c *clientGRPCImpl) GetWorkflowExecutionRawHistory(
+	ctx context.Context,
+	request *workflowservice.GetWorkflowExecutionRawHistoryRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.GetWorkflowExecutionRawHistoryResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.GetWorkflowExecutionRawHistory(ctx, request, opts...)
+}
+
 func (c *clientGRPCImpl) ListArchivedWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.ListArchivedWorkflowExecutionsRequest,
@@ -580,48 +594,6 @@ func (c *clientGRPCImpl) getRandomClient() (workflowservice.WorkflowServiceClien
 	}
 
 	return client.(workflowservice.WorkflowServiceClient), nil
-}
-
-func (c *clientGRPCImpl) GetReplicationMessages(
-	ctx context.Context,
-	request *workflowservice.GetReplicationMessagesRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.GetReplicationMessagesResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.GetReplicationMessages(ctx, request, opts...)
-}
-
-func (c *clientGRPCImpl) GetDomainReplicationMessages(
-	ctx context.Context,
-	request *workflowservice.GetDomainReplicationMessagesRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.GetDomainReplicationMessagesResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.GetDomainReplicationMessages(ctx, request, opts...)
-}
-
-func (c *clientGRPCImpl) ReapplyEvents(
-	ctx context.Context,
-	request *workflowservice.ReapplyEventsRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.ReapplyEventsResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.ReapplyEvents(ctx, request, opts...)
 }
 
 func (c *clientGRPCImpl) GetClusterInfo(

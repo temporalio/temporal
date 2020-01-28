@@ -22,7 +22,7 @@ package persistence
 
 import (
 	s "github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/definition"
+	"github.com/temporalio/temporal/common/definition"
 )
 
 // Interfaces for the Visibility Store.

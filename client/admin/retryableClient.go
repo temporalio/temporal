@@ -25,8 +25,6 @@ import (
 
 	"go.uber.org/yarpc"
 
-	"github.com/temporalio/temporal/.gen/go/replicator"
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/common/backoff"
 )
@@ -178,10 +176,10 @@ func (c *retryableClient) DescribeCluster(
 
 func (c *retryableClient) GetReplicationMessages(
 	ctx context.Context,
-	request *replicator.GetReplicationMessagesRequest,
+	request *adminservice.GetReplicationMessagesRequest,
 	opts ...yarpc.CallOption,
-) (*replicator.GetReplicationMessagesResponse, error) {
-	var resp *replicator.GetReplicationMessagesResponse
+) (*adminservice.GetReplicationMessagesResponse, error) {
+	var resp *adminservice.GetReplicationMessagesResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.GetReplicationMessages(ctx, request, opts...)
@@ -193,10 +191,10 @@ func (c *retryableClient) GetReplicationMessages(
 
 func (c *retryableClient) GetDomainReplicationMessages(
 	ctx context.Context,
-	request *replicator.GetDomainReplicationMessagesRequest,
+	request *adminservice.GetDomainReplicationMessagesRequest,
 	opts ...yarpc.CallOption,
-) (*replicator.GetDomainReplicationMessagesResponse, error) {
-	var resp *replicator.GetDomainReplicationMessagesResponse
+) (*adminservice.GetDomainReplicationMessagesResponse, error) {
+	var resp *adminservice.GetDomainReplicationMessagesResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.GetDomainReplicationMessages(ctx, request, opts...)
@@ -208,10 +206,10 @@ func (c *retryableClient) GetDomainReplicationMessages(
 
 func (c *retryableClient) GetDLQReplicationMessages(
 	ctx context.Context,
-	request *replicator.GetDLQReplicationMessagesRequest,
+	request *adminservice.GetDLQReplicationMessagesRequest,
 	opts ...yarpc.CallOption,
-) (*replicator.GetDLQReplicationMessagesResponse, error) {
-	var resp *replicator.GetDLQReplicationMessagesResponse
+) (*adminservice.GetDLQReplicationMessagesResponse, error) {
+	var resp *adminservice.GetDLQReplicationMessagesResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.GetDLQReplicationMessages(ctx, request, opts...)
@@ -223,12 +221,15 @@ func (c *retryableClient) GetDLQReplicationMessages(
 
 func (c *retryableClient) ReapplyEvents(
 	ctx context.Context,
-	request *shared.ReapplyEventsRequest,
+	request *adminservice.ReapplyEventsRequest,
 	opts ...yarpc.CallOption,
-) error {
-
+) (*adminservice.ReapplyEventsResponse, error) {
+	var resp *adminservice.ReapplyEventsResponse
 	op := func() error {
-		return c.client.ReapplyEvents(ctx, request, opts...)
+		var err error
+		resp, err = c.client.ReapplyEvents(ctx, request, opts...)
+		return err
 	}
-	return backoff.Retry(op, c.policy, c.isRetryable)
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
 }

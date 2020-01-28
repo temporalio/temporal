@@ -29,7 +29,6 @@ import (
 
 	"github.com/temporalio/temporal/.gen/go/health"
 	"github.com/temporalio/temporal/.gen/go/health/metaserver"
-	shared "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/authorization"
 	"github.com/temporalio/temporal/common/resource"
@@ -228,8 +227,8 @@ func (a *AccessControlledWorkflowHandler) GetWorkflowExecutionHistory(
 // GetRawHistory API call
 func (a *AccessControlledWorkflowHandler) GetWorkflowExecutionRawHistory(
 	ctx context.Context,
-	request *shared.GetWorkflowExecutionRawHistoryRequest,
-) (*shared.GetWorkflowExecutionRawHistoryResponse, error) {
+	request *workflowservice.GetWorkflowExecutionRawHistoryRequest,
+) (*workflowservice.GetWorkflowExecutionRawHistoryResponse, error) {
 
 	attr := &authorization.Attributes{
 		APIName:    "GetWorkflowExecutionRawHistory",

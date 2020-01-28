@@ -27,7 +27,6 @@ import (
 	"github.com/pborman/uuid"
 	"go.uber.org/yarpc"
 
-	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/common"
 )
@@ -184,9 +183,9 @@ func (c *clientImpl) DescribeCluster(
 
 func (c *clientImpl) GetReplicationMessages(
 	ctx context.Context,
-	request *replicator.GetReplicationMessagesRequest,
+	request *adminservice.GetReplicationMessagesRequest,
 	opts ...yarpc.CallOption,
-) (*replicator.GetReplicationMessagesResponse, error) {
+) (*adminservice.GetReplicationMessagesResponse, error) {
 	opts = common.AggregateYarpcOptions(ctx, opts...)
 	client, err := c.getRandomClient()
 	if err != nil {
@@ -199,9 +198,9 @@ func (c *clientImpl) GetReplicationMessages(
 
 func (c *clientImpl) GetDomainReplicationMessages(
 	ctx context.Context,
-	request *replicator.GetDomainReplicationMessagesRequest,
+	request *adminservice.GetDomainReplicationMessagesRequest,
 	opts ...yarpc.CallOption,
-) (*replicator.GetDomainReplicationMessagesResponse, error) {
+) (*adminservice.GetDomainReplicationMessagesResponse, error) {
 	opts = common.AggregateYarpcOptions(ctx, opts...)
 	client, err := c.getRandomClient()
 	if err != nil {
@@ -214,9 +213,9 @@ func (c *clientImpl) GetDomainReplicationMessages(
 
 func (c *clientImpl) GetDLQReplicationMessages(
 	ctx context.Context,
-	request *replicator.GetDLQReplicationMessagesRequest,
+	request *adminservice.GetDLQReplicationMessagesRequest,
 	opts ...yarpc.CallOption,
-) (*replicator.GetDLQReplicationMessagesResponse, error) {
+) (*adminservice.GetDLQReplicationMessagesResponse, error) {
 	opts = common.AggregateYarpcOptions(ctx, opts...)
 	client, err := c.getRandomClient()
 	if err != nil {
@@ -229,14 +228,13 @@ func (c *clientImpl) GetDLQReplicationMessages(
 
 func (c *clientImpl) ReapplyEvents(
 	ctx context.Context,
-	request *shared.ReapplyEventsRequest,
+	request *adminservice.ReapplyEventsRequest,
 	opts ...yarpc.CallOption,
-) error {
-
+) (*adminservice.ReapplyEventsResponse, error) {
 	opts = common.AggregateYarpcOptions(ctx, opts...)
 	client, err := c.getRandomClient()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()

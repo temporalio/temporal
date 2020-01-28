@@ -31,7 +31,6 @@ import (
 
 	"github.com/pborman/uuid"
 
-	"github.com/temporalio/temporal/.gen/go/replicator"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/codec"
@@ -1577,15 +1576,6 @@ type (
 		GetName() string
 		InitializeImmutableClusterMetadata(request *InitializeImmutableClusterMetadataRequest) (*InitializeImmutableClusterMetadataResponse, error)
 		GetImmutableClusterMetadata() (*GetImmutableClusterMetadataResponse, error)
-	}
-
-	// DomainReplicationQueue is used to publish and list domain replication tasks
-	DomainReplicationQueue interface {
-		Closeable
-		Publish(message interface{}) error
-		GetReplicationMessages(lastMessageID int, maxCount int) ([]*replicator.ReplicationTask, int, error)
-		UpdateAckLevel(lastProcessedMessageID int, clusterName string) error
-		GetAckLevels() (map[string]int, error)
 	}
 )
 

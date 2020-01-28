@@ -25,8 +25,6 @@ import (
 
 	"go.uber.org/yarpc"
 
-	"github.com/temporalio/temporal/.gen/go/replicator"
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/common/metrics"
 )
@@ -192,9 +190,9 @@ func (c *metricClient) DescribeCluster(
 
 func (c *metricClient) GetReplicationMessages(
 	ctx context.Context,
-	request *replicator.GetReplicationMessagesRequest,
+	request *adminservice.GetReplicationMessagesRequest,
 	opts ...yarpc.CallOption,
-) (*replicator.GetReplicationMessagesResponse, error) {
+) (*adminservice.GetReplicationMessagesResponse, error) {
 	c.metricsClient.IncCounter(metrics.FrontendClientGetReplicationTasksScope, metrics.CadenceClientRequests)
 
 	sw := c.metricsClient.StartTimer(metrics.FrontendClientGetReplicationTasksScope, metrics.CadenceClientLatency)
@@ -209,9 +207,9 @@ func (c *metricClient) GetReplicationMessages(
 
 func (c *metricClient) GetDomainReplicationMessages(
 	ctx context.Context,
-	request *replicator.GetDomainReplicationMessagesRequest,
+	request *adminservice.GetDomainReplicationMessagesRequest,
 	opts ...yarpc.CallOption,
-) (*replicator.GetDomainReplicationMessagesResponse, error) {
+) (*adminservice.GetDomainReplicationMessagesResponse, error) {
 	c.metricsClient.IncCounter(metrics.FrontendClientGetDomainReplicationTasksScope, metrics.CadenceClientRequests)
 
 	sw := c.metricsClient.StartTimer(metrics.FrontendClientGetDomainReplicationTasksScope, metrics.CadenceClientLatency)
@@ -226,9 +224,9 @@ func (c *metricClient) GetDomainReplicationMessages(
 
 func (c *metricClient) GetDLQReplicationMessages(
 	ctx context.Context,
-	request *replicator.GetDLQReplicationMessagesRequest,
+	request *adminservice.GetDLQReplicationMessagesRequest,
 	opts ...yarpc.CallOption,
-) (*replicator.GetDLQReplicationMessagesResponse, error) {
+) (*adminservice.GetDLQReplicationMessagesResponse, error) {
 	c.metricsClient.IncCounter(metrics.FrontendClientGetDLQReplicationTasksScope, metrics.CadenceClientRequests)
 
 	sw := c.metricsClient.StartTimer(metrics.FrontendClientGetDLQReplicationTasksScope, metrics.CadenceClientLatency)
@@ -243,17 +241,17 @@ func (c *metricClient) GetDLQReplicationMessages(
 
 func (c *metricClient) ReapplyEvents(
 	ctx context.Context,
-	request *shared.ReapplyEventsRequest,
+	request *adminservice.ReapplyEventsRequest,
 	opts ...yarpc.CallOption,
-) error {
+) (*adminservice.ReapplyEventsResponse, error) {
 
 	c.metricsClient.IncCounter(metrics.FrontendClientReapplyEventsScope, metrics.CadenceClientRequests)
 	sw := c.metricsClient.StartTimer(metrics.FrontendClientReapplyEventsScope, metrics.CadenceClientLatency)
-	err := c.client.ReapplyEvents(ctx, request, opts...)
+	resp, err := c.client.ReapplyEvents(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
 		c.metricsClient.IncCounter(metrics.FrontendClientReapplyEventsScope, metrics.CadenceClientFailures)
 	}
-	return err
+	return resp, err
 }

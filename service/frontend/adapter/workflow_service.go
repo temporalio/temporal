@@ -23,7 +23,6 @@ package adapter
 import (
 	"go.temporal.io/temporal-proto/workflowservice"
 
-	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/go/shared"
 )
 
@@ -776,41 +775,6 @@ func ToThriftDescribeTaskListRequest(in *workflowservice.DescribeTaskListRequest
 	}
 }
 
-// ToThriftGetReplicationMessagesRequest ...
-func ToThriftGetReplicationMessagesRequest(in *workflowservice.GetReplicationMessagesRequest) *replicator.GetReplicationMessagesRequest {
-	if in == nil {
-		return nil
-	}
-	return &replicator.GetReplicationMessagesRequest{
-		Tokens:      toThriftReplicationTokens(in.Tokens),
-		ClusterName: &in.ClusterName,
-	}
-}
-
-// ToThriftGetDomainReplicationMessagesRequest ...
-func ToThriftGetDomainReplicationMessagesRequest(in *workflowservice.GetDomainReplicationMessagesRequest) *replicator.GetDomainReplicationMessagesRequest {
-	if in == nil {
-		return nil
-	}
-	return &replicator.GetDomainReplicationMessagesRequest{
-		LastRetrievedMessageId: &in.LastRetrievedMessageId,
-		LastProcessedMessageId: &in.LastProcessedMessageId,
-		ClusterName:            &in.ClusterName,
-	}
-}
-
-// ToThriftReapplyEventsRequest ...
-func ToThriftReapplyEventsRequest(in *workflowservice.ReapplyEventsRequest) *shared.ReapplyEventsRequest {
-	if in == nil {
-		return nil
-	}
-	return &shared.ReapplyEventsRequest{
-		DomainName:        &in.DomainName,
-		WorkflowExecution: ToThriftWorkflowExecution(in.WorkflowExecution),
-		Events:            ToThriftDataBlob(in.Events),
-	}
-}
-
 // ToProtoGetSearchAttributesResponse ...
 func ToProtoGetSearchAttributesResponse(in *shared.GetSearchAttributesResponse) *workflowservice.GetSearchAttributesResponse {
 	if in == nil {
@@ -843,26 +807,6 @@ func ToProtoDescribeTaskListResponse(in *shared.DescribeTaskListResponse) *workf
 	}
 }
 
-// ToProtoGetReplicationMessagesResponse ...
-func ToProtoGetReplicationMessagesResponse(in *replicator.GetReplicationMessagesResponse) *workflowservice.GetReplicationMessagesResponse {
-	if in == nil {
-		return nil
-	}
-	return &workflowservice.GetReplicationMessagesResponse{
-		MessagesByShard: toProtoReplicationMessagess(in.GetMessagesByShard()),
-	}
-}
-
-// ToProtoGetDomainReplicationMessagesResponse ...
-func ToProtoGetDomainReplicationMessagesResponse(in *replicator.GetDomainReplicationMessagesResponse) *workflowservice.GetDomainReplicationMessagesResponse {
-	if in == nil {
-		return nil
-	}
-	return &workflowservice.GetDomainReplicationMessagesResponse{
-		Messages: toProtoReplicationMessages(in.GetMessages()),
-	}
-}
-
 // ToThriftListTaskListPartitionsRequest ...
 func ToThriftListTaskListPartitionsRequest(in *workflowservice.ListTaskListPartitionsRequest) *shared.ListTaskListPartitionsRequest {
 	if in == nil {
@@ -892,5 +836,29 @@ func ToProtoListTaskListPartitionsResponse(in *shared.ListTaskListPartitionsResp
 	return &workflowservice.ListTaskListPartitionsResponse{
 		ActivityTaskListPartitions: toProtoTaskListPartitionMetadatas(in.ActivityTaskListPartitions),
 		DecisionTaskListPartitions: toProtoTaskListPartitionMetadatas(in.DecisionTaskListPartitions),
+	}
+}
+
+// ToThriftGetWorkflowExecutionRawHistoryRequest ...
+func ToThriftGetWorkflowExecutionRawHistoryRequest(in *workflowservice.GetWorkflowExecutionRawHistoryRequest) *shared.GetWorkflowExecutionRawHistoryRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.GetWorkflowExecutionRawHistoryRequest{
+		Domain:          &in.Domain,
+		Execution:       ToThriftWorkflowExecution(in.Execution),
+		MaximumPageSize: &in.MaximumPageSize,
+		NextPageToken:   in.NextPageToken,
+	}
+}
+
+// ToProtoGetWorkflowExecutionRawHistoryResponse ...
+func ToProtoGetWorkflowExecutionRawHistoryResponse(in *shared.GetWorkflowExecutionRawHistoryResponse) *workflowservice.GetWorkflowExecutionRawHistoryResponse {
+	if in == nil {
+		return nil
+	}
+	return &workflowservice.GetWorkflowExecutionRawHistoryResponse{
+		RawHistory:    ToProtoDataBlobs(in.GetRawHistory()),
+		NextPageToken: in.GetNextPageToken(),
 	}
 }
