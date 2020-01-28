@@ -93,7 +93,7 @@ func ToProtoDescribeClusterResponse(in *admin.DescribeClusterResponse) *adminser
 	}
 }
 
-// ToThriftDescribeWorkflowExecutionRequest ...
+// ToThriftAdminDescribeWorkflowExecutionRequest ...
 func ToThriftAdminDescribeWorkflowExecutionRequest(in *adminservice.DescribeWorkflowExecutionRequest) *admin.DescribeWorkflowExecutionRequest {
 	if in == nil {
 		return nil

@@ -142,6 +142,7 @@ func (adh *AdminHandlerGRPC) DescribeCluster(ctx context.Context, _ *adminservic
 	return adapter.ToProtoDescribeClusterResponse(resp), nil
 }
 
+// GetReplicationMessages ...
 func (adh *AdminHandlerGRPC) GetReplicationMessages(ctx context.Context, request *adminservice.GetReplicationMessagesRequest) (_ *adminservice.GetReplicationMessagesResponse, retError error) {
 	defer log.CapturePanicGRPC(adh.adminHandlerThrift.GetLogger(), &retError)
 
@@ -152,6 +153,7 @@ func (adh *AdminHandlerGRPC) GetReplicationMessages(ctx context.Context, request
 	return adapter.ToProtoGetReplicationMessagesResponse(resp), nil
 }
 
+// GetDomainReplicationMessages ...
 func (adh *AdminHandlerGRPC) GetDomainReplicationMessages(ctx context.Context, request *adminservice.GetDomainReplicationMessagesRequest) (_ *adminservice.GetDomainReplicationMessagesResponse, retError error) {
 	defer log.CapturePanicGRPC(adh.adminHandlerThrift.GetLogger(), &retError)
 
@@ -162,6 +164,7 @@ func (adh *AdminHandlerGRPC) GetDomainReplicationMessages(ctx context.Context, r
 	return adapter.ToProtoGetDomainReplicationMessagesResponse(resp), nil
 }
 
+// GetDLQReplicationMessages ...
 func (adh *AdminHandlerGRPC) GetDLQReplicationMessages(ctx context.Context, request *adminservice.GetDLQReplicationMessagesRequest) (_ *adminservice.GetDLQReplicationMessagesResponse, retError error) {
 	defer log.CapturePanicGRPC(adh.adminHandlerThrift.GetLogger(), &retError)
 
@@ -172,6 +175,7 @@ func (adh *AdminHandlerGRPC) GetDLQReplicationMessages(ctx context.Context, requ
 	return adapter.ToProtoGetDLQReplicationMessagesResponse(resp), nil
 }
 
+// ReapplyEvents ...
 func (adh *AdminHandlerGRPC) ReapplyEvents(ctx context.Context, request *adminservice.ReapplyEventsRequest) (_ *adminservice.ReapplyEventsResponse, retError error) {
 	defer log.CapturePanicGRPC(adh.adminHandlerThrift.GetLogger(), &retError)
 

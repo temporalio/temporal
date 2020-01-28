@@ -529,7 +529,7 @@ func (wh *WorkflowHandlerGRPC) DescribeTaskList(ctx context.Context, request *wo
 	return adapter.ToProtoDescribeTaskListResponse(response), nil
 }
 
-// GetReplicationMessages returns new replication tasks since the read level provided in the token.
+// GetWorkflowExecutionRawHistory retrieves raw history directly from DB layer.
 func (wh *WorkflowHandlerGRPC) GetWorkflowExecutionRawHistory(ctx context.Context, request *workflowservice.GetWorkflowExecutionRawHistoryRequest) (_ *workflowservice.GetWorkflowExecutionRawHistoryResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
