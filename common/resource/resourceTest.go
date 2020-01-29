@@ -317,12 +317,12 @@ func (s *Test) GetSDKClient() workflowservice.WorkflowServiceClient {
 }
 
 // GetFrontendRawClient for testing
-func (s *Test) GetFrontendRawClient() frontend.ClientGRPC {
+func (s *Test) GetFrontendRawClient() frontend.Client {
 	return s.FrontendClient
 }
 
 // GetFrontendClient for testing
-func (s *Test) GetFrontendClient() frontend.ClientGRPC {
+func (s *Test) GetFrontendClient() frontend.Client {
 	return s.FrontendClient
 }
 
@@ -357,7 +357,7 @@ func (s *Test) GetRemoteAdminClient(
 // GetRemoteFrontendClient for testing
 func (s *Test) GetRemoteFrontendClient(
 	cluster string,
-) frontend.ClientGRPC {
+) frontend.Client {
 
 	return s.RemoteFrontendClient
 }
