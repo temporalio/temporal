@@ -25,8 +25,8 @@ import (
 
 	"go.temporal.io/temporal-proto/workflowservice"
 
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/service/frontend/adapter"
 )
 
 var _ workflowservice.WorkflowServiceYARPCServer = (*WorkflowHandlerGRPC)(nil)

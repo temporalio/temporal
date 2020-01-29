@@ -47,6 +47,7 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
 	adminClient "github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
@@ -55,7 +56,6 @@ import (
 	test "github.com/temporalio/temporal/common/testing"
 	"github.com/temporalio/temporal/environment"
 	"github.com/temporalio/temporal/host"
-	"github.com/temporalio/temporal/service/frontend/adapter"
 )
 
 type (
