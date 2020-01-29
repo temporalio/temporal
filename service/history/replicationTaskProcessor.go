@@ -37,6 +37,7 @@ import (
 	"github.com/temporalio/temporal/.gen/go/shared"
 	hc "github.com/temporalio/temporal/client/history"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/log"
@@ -44,7 +45,6 @@ import (
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/xdc"
-	"github.com/temporalio/temporal/service/frontend/adapter"
 )
 
 const (

@@ -36,8 +36,8 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 	"google.golang.org/grpc/codes"
 
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/domain"
-	"github.com/temporalio/temporal/service/frontend/adapter"
 )
 
 type (
