@@ -30,7 +30,7 @@ import (
 	"github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
-	a "github.com/temporalio/temporal/client/admin"
+	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
@@ -70,7 +70,7 @@ type (
 	HistoryRereplicatorImpl struct {
 		targetClusterName    string
 		domainCache          cache.DomainCache
-		adminClient          a.Client
+		adminClient          admin.Client
 		historyReplicationFn historyReplicationFn
 		serializer           persistence.PayloadSerializer
 		replicationTimeout   time.Duration
@@ -114,7 +114,7 @@ func newHistoryRereplicationContext(domainID string, workflowID string,
 }
 
 // NewHistoryRereplicator create a new HistoryRereplicatorImpl
-func NewHistoryRereplicator(targetClusterName string, domainCache cache.DomainCache, adminClient a.Client, historyReplicationFn historyReplicationFn,
+func NewHistoryRereplicator(targetClusterName string, domainCache cache.DomainCache, adminClient admin.Client, historyReplicationFn historyReplicationFn,
 	serializer persistence.PayloadSerializer, replicationTimeout time.Duration, logger log.Logger) *HistoryRereplicatorImpl {
 
 	return &HistoryRereplicatorImpl{
@@ -399,7 +399,7 @@ func (c *historyRereplicationContext) getHistory(
 	}
 	domainName := domainEntry.GetInfo().Name
 
-	ctx, cancel := context.WithTimeout(context.Background(), c.rereplicator.replicationTimeout)
+	ctx, cancel := createContextWithCancel(c.rereplicator.replicationTimeout)
 	defer cancel()
 	response, err := c.rereplicator.adminClient.GetWorkflowExecutionRawHistory(ctx, &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Domain: domainName,
