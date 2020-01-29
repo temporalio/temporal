@@ -26,14 +26,17 @@ import (
 	"time"
 
 	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/workflowservice"
 
+	"github.com/temporalio/temporal/.gen/proto/adminservice"
+	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/membership"
 	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/service/frontend/adapter"
 )
 
 const (
@@ -48,11 +51,12 @@ const (
 func newDomainReplicationMessageProcessor(
 	sourceCluster string,
 	logger log.Logger,
-	remotePeer workflowservice.WorkflowServiceClient,
+	remotePeer admin.Client,
 	metricsClient metrics.Client,
 	domainReplicator DomainReplicator,
 	hostInfo *membership.HostInfo,
 	serviceResolver membership.ServiceResolver,
+	domainReplicationQueue persistence.DomainReplicationQueue,
 ) *domainReplicationMessageProcessor {
 	retryPolicy := backoff.NewExponentialRetryPolicy(taskProcessorErrorRetryWait)
 	retryPolicy.SetBackoffCoefficient(taskProcessorErrorRetryBackoffCoefficient)
@@ -71,6 +75,7 @@ func newDomainReplicationMessageProcessor(
 		lastProcessedMessageID: -1,
 		lastRetrievedMessageID: -1,
 		done:                   make(chan struct{}),
+		domainReplicationQueue: domainReplicationQueue,
 	}
 }
 
@@ -81,13 +86,14 @@ type (
 		status                 int32
 		sourceCluster          string
 		logger                 log.Logger
-		remotePeer             workflowservice.WorkflowServiceClient
+		remotePeer             admin.Client
 		domainReplicator       DomainReplicator
 		metricsClient          metrics.Client
 		retryPolicy            backoff.RetryPolicy
 		lastProcessedMessageID int64
 		lastRetrievedMessageID int64
 		done                   chan struct{}
+		domainReplicationQueue persistence.DomainReplicationQueue
 	}
 )
 
@@ -132,7 +138,7 @@ func (p *domainReplicationMessageProcessor) getAndHandleDomainReplicationTasks()
 	}
 
 	ctx, cancel := createContextWithCancel(fetchTaskRequestTimeout)
-	request := &workflowservice.GetDomainReplicationMessagesRequest{
+	request := &adminservice.GetDomainReplicationMessagesRequest{
 		LastRetrievedMessageId: p.lastRetrievedMessageID,
 		LastProcessedMessageId: p.lastProcessedMessageID,
 	}
@@ -146,14 +152,24 @@ func (p *domainReplicationMessageProcessor) getAndHandleDomainReplicationTasks()
 
 	p.logger.Debug("Successfully fetched domain replication tasks.", tag.Counter(len(response.Messages.ReplicationTasks)))
 
-	for _, task := range response.Messages.ReplicationTasks {
+	for taskIndex := range response.Messages.ReplicationTasks {
+		task := response.Messages.ReplicationTasks[taskIndex]
 		err := backoff.Retry(func() error {
 			return p.handleDomainReplicationTask(task)
 		}, p.retryPolicy, isTransientRetryableError)
 
 		if err != nil {
 			p.metricsClient.IncCounter(metrics.DomainReplicationTaskScope, metrics.ReplicatorFailures)
-			// TODO: put task into DLQ
+			p.logger.Error("Failed to apply domain replication tasks", tag.Error(err))
+
+			dlqErr := backoff.Retry(func() error {
+				return p.putDomainReplicationTaskToDLQ(task)
+			}, p.retryPolicy, isTransientRetryableError)
+			if dlqErr != nil {
+				p.logger.Error("Failed to put replication tasks to DLQ", tag.Error(dlqErr))
+				p.metricsClient.IncCounter(metrics.DomainReplicationTaskScope, metrics.ReplicatorFailures)
+				return
+			}
 		}
 	}
 
@@ -161,7 +177,16 @@ func (p *domainReplicationMessageProcessor) getAndHandleDomainReplicationTasks()
 	p.lastRetrievedMessageID = response.Messages.GetLastRetrievedMessageId()
 }
 
-func (p *domainReplicationMessageProcessor) handleDomainReplicationTask(task *commonproto.ReplicationTask) error {
+func (p *domainReplicationMessageProcessor) putDomainReplicationTaskToDLQ(
+	task *commonproto.ReplicationTask,
+) error {
+
+	return p.domainReplicationQueue.PublishToDLQ(adapter.ToThriftReplicationTask(task))
+}
+
+func (p *domainReplicationMessageProcessor) handleDomainReplicationTask(
+	task *commonproto.ReplicationTask,
+) error {
 	p.metricsClient.IncCounter(metrics.DomainReplicationTaskScope, metrics.ReplicatorMessages)
 	sw := p.metricsClient.StartTimer(metrics.DomainReplicationTaskScope, metrics.ReplicatorLatency)
 	defer sw.Stop()

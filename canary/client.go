@@ -34,10 +34,6 @@ import (
 	"google.golang.org/grpc/codes"
 )
 
-const (
-	cadenceConfig = "cadence"
-)
-
 // cadenceClient is an abstraction on top of
 // the cadence library client that serves as
 // a union of all the client interfaces that

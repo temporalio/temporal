@@ -124,6 +124,7 @@ func (s *activityReplicationTaskSuite) SetupTest() {
 		ReplicatorActivityBufferRetryCount: dynamicconfig.GetIntPropertyFn(2),
 		ReplicationTaskMaxRetryCount:       dynamicconfig.GetIntPropertyFn(10),
 		ReplicationTaskMaxRetryDuration:    dynamicconfig.GetDurationPropertyFn(time.Minute),
+		ReplicationTaskContextTimeout:      dynamicconfig.GetDurationPropertyFn(30 * time.Second),
 	}
 	s.metricsClient = metrics.NewClient(tally.NoopScope, metrics.Worker)
 
@@ -156,6 +157,7 @@ func (s *historyReplicationTaskSuite) SetupTest() {
 		ReplicatorHistoryBufferRetryCount: dynamicconfig.GetIntPropertyFn(2),
 		ReplicationTaskMaxRetryCount:      dynamicconfig.GetIntPropertyFn(10),
 		ReplicationTaskMaxRetryDuration:   dynamicconfig.GetDurationPropertyFn(time.Minute),
+		ReplicationTaskContextTimeout:     dynamicconfig.GetDurationPropertyFn(30 * time.Second),
 	}
 	s.metricsClient = metrics.NewClient(tally.NoopScope, metrics.Worker)
 	s.sourceCluster = cluster.TestAlternativeClusterName
@@ -188,6 +190,7 @@ func (s *historyMetadataReplicationTaskSuite) SetupTest() {
 	s.config = &Config{
 		ReplicationTaskMaxRetryCount:    dynamicconfig.GetIntPropertyFn(10),
 		ReplicationTaskMaxRetryDuration: dynamicconfig.GetDurationPropertyFn(time.Minute),
+		ReplicationTaskContextTimeout:   dynamicconfig.GetDurationPropertyFn(30 * time.Second),
 	}
 	s.metricsClient = metrics.NewClient(tally.NoopScope, metrics.Worker)
 	s.sourceCluster = cluster.TestAlternativeClusterName

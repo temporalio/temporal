@@ -21,7 +21,7 @@
 syntax = "proto3";
 
 package healthservice;
-option go_package = "github.com/temporalio/temporal/proto/healthservice";
+option go_package = "github.com/temporalio/temporal/.gen/proto/healthservice";
 
 message HealthRequest {
 }

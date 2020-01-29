@@ -32,7 +32,6 @@ import (
 	"go.temporal.io/temporal/testsuite"
 	"go.temporal.io/temporal/worker"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	carchiver "github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
@@ -58,7 +57,6 @@ var (
 	testBranchToken = []byte{1, 2, 3}
 
 	errPersistenceNonRetryable = errors.New("persistence non-retryable error")
-	errPersistenceRetryable    = &shared.InternalServiceError{}
 )
 
 type activitiesSuite struct {
@@ -378,10 +376,4 @@ func (s *activitiesSuite) TestArchiveVisibilityActivity_Success() {
 	}
 	_, err := env.ExecuteActivity(archiveVisibilityActivity, request)
 	s.NoError(err)
-}
-
-func getCanceledContext() context.Context {
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	return ctx
 }

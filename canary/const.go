@@ -53,7 +53,6 @@ const workflowChangeID = "initial version"
 
 const (
 	cronJobTimeout         = 9 * time.Minute
-	sanityCronJobFreq      = 50 * time.Second
 	cronWFExecutionTimeout = 18 * time.Minute
 )
 

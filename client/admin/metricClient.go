@@ -187,3 +187,71 @@ func (c *metricClient) DescribeCluster(
 	}
 	return resp, err
 }
+
+func (c *metricClient) GetReplicationMessages(
+	ctx context.Context,
+	request *adminservice.GetReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (*adminservice.GetReplicationMessagesResponse, error) {
+	c.metricsClient.IncCounter(metrics.FrontendClientGetReplicationTasksScope, metrics.CadenceClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientGetReplicationTasksScope, metrics.CadenceClientLatency)
+	resp, err := c.client.GetReplicationMessages(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.FrontendClientGetReplicationTasksScope, metrics.CadenceClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) GetDomainReplicationMessages(
+	ctx context.Context,
+	request *adminservice.GetDomainReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (*adminservice.GetDomainReplicationMessagesResponse, error) {
+	c.metricsClient.IncCounter(metrics.FrontendClientGetDomainReplicationTasksScope, metrics.CadenceClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientGetDomainReplicationTasksScope, metrics.CadenceClientLatency)
+	resp, err := c.client.GetDomainReplicationMessages(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.FrontendClientGetDomainReplicationTasksScope, metrics.CadenceClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) GetDLQReplicationMessages(
+	ctx context.Context,
+	request *adminservice.GetDLQReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (*adminservice.GetDLQReplicationMessagesResponse, error) {
+	c.metricsClient.IncCounter(metrics.FrontendClientGetDLQReplicationTasksScope, metrics.CadenceClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientGetDLQReplicationTasksScope, metrics.CadenceClientLatency)
+	resp, err := c.client.GetDLQReplicationMessages(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.FrontendClientGetDLQReplicationTasksScope, metrics.CadenceClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) ReapplyEvents(
+	ctx context.Context,
+	request *adminservice.ReapplyEventsRequest,
+	opts ...yarpc.CallOption,
+) (*adminservice.ReapplyEventsResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.FrontendClientReapplyEventsScope, metrics.CadenceClientRequests)
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientReapplyEventsScope, metrics.CadenceClientLatency)
+	resp, err := c.client.ReapplyEvents(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.FrontendClientReapplyEventsScope, metrics.CadenceClientFailures)
+	}
+	return resp, err
+}

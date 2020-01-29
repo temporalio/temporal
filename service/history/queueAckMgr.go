@@ -207,9 +207,12 @@ MoveAckLevelLoop:
 		a.Unlock()
 		// this means in failover mode, all possible failover transfer tasks
 		// are processed and we are free to shundown
-		a.logger.Debug(fmt.Sprintf("Queue ack manager shutdown."))
+		a.logger.Debug("Queue ack manager shutdown.")
 		a.finishedChan <- struct{}{}
-		a.processor.queueShutdown()
+		err := a.processor.queueShutdown()
+		if err != nil {
+			a.logger.Error("Error shutdown queue", tag.Error(err))
+		}
 		return
 	}
 

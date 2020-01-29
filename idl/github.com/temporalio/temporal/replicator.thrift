@@ -139,6 +139,18 @@ struct ReplicationMessages {
   40: optional SyncShardStatus syncShardStatus
 }
 
+struct ReplicationTaskInfo {
+  10: optional string domainID
+  20: optional string workflowID
+  30: optional string runID
+  40: optional i16 taskType
+  50: optional i64 (js.type = "Long") taskID
+  60: optional i64 (js.type = "Long") version
+  70: optional i64 (js.type = "Long") firstEventID
+  80: optional i64 (js.type = "Long") nextEventID
+  90: optional i64 (js.type = "Long") scheduledID
+}
+
 struct GetReplicationMessagesRequest {
   10: optional list<ReplicationToken> tokens
   20: optional string clusterName
@@ -160,4 +172,12 @@ struct GetDomainReplicationMessagesRequest {
 
 struct GetDomainReplicationMessagesResponse {
   10: optional ReplicationMessages messages
+}
+
+struct GetDLQReplicationMessagesRequest {
+  10: optional list<ReplicationTaskInfo> taskInfos
+}
+
+struct GetDLQReplicationMessagesResponse {
+  10: optional list<ReplicationTask> replicationTasks
 }

@@ -508,6 +508,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 		time.Sleep(1 * time.Second)
 	}
 	s.Nil(err)
+	s.True(eventsReplicated)
 }
 
 func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {

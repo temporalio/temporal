@@ -24,14 +24,12 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 )
 
 type (
 	resourceDeduplicationSuite struct {
 		suite.Suite
-		controller *gomock.Controller
 	}
 )
 

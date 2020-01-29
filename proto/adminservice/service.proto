@@ -21,7 +21,7 @@
 syntax = "proto3";
 
 package adminservice;
-option go_package = "github.com/temporalio/temporal/proto/adminservice";
+option go_package = "github.com/temporalio/temporal/.gen/proto/adminservice";
 
 import "adminservice/request_response.proto";
 
@@ -52,6 +52,22 @@ service AdminService {
     // StartEventId defines the beginning of the event to fetch. The first event is inclusive.
     // EndEventId and EndEventVersion defines the end of the event to fetch. The end event is exclusive.
     rpc GetWorkflowExecutionRawHistoryV2 (GetWorkflowExecutionRawHistoryV2Request) returns (GetWorkflowExecutionRawHistoryV2Response) {
+    }
+
+    // GetReplicationMessages returns new replication tasks since the read level provided in the token.
+    rpc GetReplicationMessages (GetReplicationMessagesRequest) returns (GetReplicationMessagesResponse) {
+    }
+
+    // GetDomainReplicationMessages returns new domain replication tasks since last retrieved task ID.
+    rpc GetDomainReplicationMessages (GetDomainReplicationMessagesRequest) returns (GetDomainReplicationMessagesResponse) {
+    }
+
+    // GetDLQReplicationMessages return replication messages based on dlq info
+    rpc GetDLQReplicationMessages(GetDLQReplicationMessagesRequest) returns (GetDLQReplicationMessagesResponse){
+    }
+
+    // ReapplyEvents applies stale events to the current workflow and current run
+    rpc ReapplyEvents (ReapplyEventsRequest) returns (ReapplyEventsResponse) {
     }
 
     // AddSearchAttribute whitelist search attribute in request.

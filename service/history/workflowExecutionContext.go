@@ -27,9 +27,8 @@ import (
 	"fmt"
 	"time"
 
-	"go.temporal.io/temporal-proto/workflowservice"
-
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/clock"
@@ -250,7 +249,9 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, er
 			c.logger,
 			domainEntry,
 		)
+
 		c.mutableState.Load(response.State)
+
 		c.stats = response.State.ExecutionStats
 		c.updateCondition = response.State.ExecutionInfo.NextEventID
 
@@ -1246,7 +1247,7 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 	// The active cluster of the domain is differ from the current cluster
 	// Use frontend client to route this request to the active cluster
 	// Reapplication only happens in active cluster
-	sourceCluster := clientBean.GetRemoteFrontendClient(activeCluster)
+	sourceCluster := clientBean.GetRemoteAdminClient(activeCluster)
 	if sourceCluster == nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("cannot find cluster config %v to do reapply", activeCluster),
@@ -1256,7 +1257,7 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 	defer cancel2()
 	_, err = sourceCluster.ReapplyEvents(
 		ctx2,
-		&workflowservice.ReapplyEventsRequest{
+		&adminservice.ReapplyEventsRequest{
 			DomainName:        domainEntry.GetInfo().Name,
 			WorkflowExecution: adapter.ToProtoWorkflowExecution(execution),
 			Events:            adapter.ToProtoDataBlob(reapplyEventsDataBlob.ToThrift()),

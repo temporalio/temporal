@@ -21,7 +21,7 @@
 syntax = "proto3";
 
 package matchingservice;
-option go_package = "github.com/temporalio/temporal/proto/matchingservice";
+option go_package = "github.com/temporalio/temporal/.gen/proto/matchingservice";
 
 import "matchingservice/request_response.proto";
 

@@ -113,14 +113,13 @@ func (p *kafkaProducer) getKeyForReplicationTask(task *replicator.ReplicationTas
 }
 
 func (p *kafkaProducer) getProducerMessage(message interface{}) (*sarama.ProducerMessage, error) {
-	switch message.(type) {
+	switch message := message.(type) {
 	case *replicator.ReplicationTask:
-		task := message.(*replicator.ReplicationTask)
-		payload, err := p.serializeThrift(task)
+		payload, err := p.serializeThrift(message)
 		if err != nil {
 			return nil, err
 		}
-		partitionKey := p.getKeyForReplicationTask(task)
+		partitionKey := p.getKeyForReplicationTask(message)
 		msg := &sarama.ProducerMessage{
 			Topic: p.topic,
 			Key:   partitionKey,
@@ -128,14 +127,13 @@ func (p *kafkaProducer) getProducerMessage(message interface{}) (*sarama.Produce
 		}
 		return msg, nil
 	case *indexer.Message:
-		indexMsg := message.(*indexer.Message)
-		payload, err := p.serializeThrift(indexMsg)
+		payload, err := p.serializeThrift(message)
 		if err != nil {
 			return nil, err
 		}
 		msg := &sarama.ProducerMessage{
 			Topic: p.topic,
-			Key:   sarama.StringEncoder(indexMsg.GetWorkflowID()),
+			Key:   sarama.StringEncoder(message.GetWorkflowID()),
 			Value: sarama.ByteEncoder(payload),
 		}
 		return msg, nil

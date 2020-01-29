@@ -1367,3 +1367,37 @@ func toThriftIndexedValueTypes(in map[string]enums.IndexedValueType) map[string]
 
 	return ret
 }
+
+// ToThriftReplicationTaskInfo ...
+func ToThriftReplicationTaskInfo(in *common.ReplicationTaskInfo) *replicator.ReplicationTaskInfo {
+	if in == nil {
+		return nil
+	}
+
+	taskType := int16(in.TaskType)
+
+	return &replicator.ReplicationTaskInfo{
+		DomainID:     &in.DomainId,
+		WorkflowID:   &in.WorkflowId,
+		RunID:        &in.RunId,
+		TaskType:     &taskType,
+		TaskID:       &in.TaskId,
+		Version:      &in.Version,
+		FirstEventID: &in.FirstEventId,
+		NextEventID:  &in.NextEventId,
+		ScheduledID:  &in.ScheduledId,
+	}
+}
+
+// ToThriftReplicationTaskInfos ...
+func ToThriftReplicationTaskInfos(in []*common.ReplicationTaskInfo) []*replicator.ReplicationTaskInfo {
+	if in == nil {
+		return nil
+	}
+
+	var ret []*replicator.ReplicationTaskInfo
+	for _, item := range in {
+		ret = append(ret, ToThriftReplicationTaskInfo(item))
+	}
+	return ret
+}

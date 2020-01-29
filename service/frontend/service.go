@@ -23,7 +23,7 @@ package frontend
 import (
 	"sync/atomic"
 
-	mock "github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
@@ -133,6 +133,8 @@ type Service struct {
 	stopC  chan struct{}
 	config *Config
 	params *service.BootstrapParams
+
+	adminHandler *AdminHandler
 }
 
 // NewService builds a new cadence-frontend service
@@ -232,13 +234,14 @@ func (s *Service) Start() {
 	accessControlledWorkflowHandler.RegisterHandler()
 	wfHandler.RegisterHandler()
 
-	adminHandler := NewAdminHandler(s, s.params, s.config)
-	adminHandlerGRPC := NewAdminHandlerGRPC(adminHandler)
+	s.adminHandler = NewAdminHandler(s, s.params, s.config)
+	adminHandlerGRPC := NewAdminHandlerGRPC(s.adminHandler)
 	adminHandlerGRPC.RegisterHandler()
-	adminHandler.RegisterHandler()
+	s.adminHandler.RegisterHandler()
 
 	// must start resource first
 	s.Resource.Start()
+	s.adminHandler.Start()
 
 	// base (service is not started in frontend or admin handler) in case of race condition in yarpc registration function
 
@@ -255,6 +258,7 @@ func (s *Service) Stop() {
 
 	close(s.stopC)
 
+	s.adminHandler.Stop()
 	s.Resource.Stop()
 
 	s.params.Logger.Info("frontend stopped")

@@ -121,6 +121,21 @@ func (c *retryableClientGRPC) GetWorkflowExecutionHistory(
 	return resp, err
 }
 
+func (c *retryableClientGRPC) GetWorkflowExecutionRawHistory(
+	ctx context.Context,
+	request *workflowservice.GetWorkflowExecutionRawHistoryRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.GetWorkflowExecutionRawHistoryResponse, error) {
+	var resp *workflowservice.GetWorkflowExecutionRawHistoryResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.GetWorkflowExecutionRawHistory(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClientGRPC) ListArchivedWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.ListArchivedWorkflowExecutionsRequest,
@@ -584,51 +599,6 @@ func (c *retryableClientGRPC) UpdateDomain(
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)
 	return resp, err
-}
-
-func (c *retryableClientGRPC) GetReplicationMessages(
-	ctx context.Context,
-	request *workflowservice.GetReplicationMessagesRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.GetReplicationMessagesResponse, error) {
-	var resp *workflowservice.GetReplicationMessagesResponse
-	op := func() error {
-		var err error
-		resp, err = c.client.GetReplicationMessages(ctx, request, opts...)
-		return err
-	}
-	err := backoff.Retry(op, c.policy, c.isRetryable)
-	return resp, err
-}
-
-func (c *retryableClientGRPC) GetDomainReplicationMessages(
-	ctx context.Context,
-	request *workflowservice.GetDomainReplicationMessagesRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.GetDomainReplicationMessagesResponse, error) {
-	var resp *workflowservice.GetDomainReplicationMessagesResponse
-	op := func() error {
-		var err error
-		resp, err = c.client.GetDomainReplicationMessages(ctx, request, opts...)
-		return err
-	}
-	err := backoff.Retry(op, c.policy, c.isRetryable)
-	return resp, err
-}
-
-func (c *retryableClientGRPC) ReapplyEvents(
-	ctx context.Context,
-	request *workflowservice.ReapplyEventsRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.ReapplyEventsResponse, error) {
-	var resp *workflowservice.ReapplyEventsResponse
-	op := func() error {
-		var err error
-		resp, err = c.client.ReapplyEvents(ctx, request, opts...)
-		return err
-	}
-
-	return resp, backoff.Retry(op, c.policy, c.isRetryable)
 }
 
 func (c *retryableClientGRPC) GetClusterInfo(

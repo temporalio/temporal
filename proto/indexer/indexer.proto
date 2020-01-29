@@ -21,7 +21,7 @@
 syntax = "proto3";
 
 package indexer;
-option go_package = "github.com/temporalio/temporal/proto/indexer";
+option go_package = "github.com/temporalio/temporal/.gen/proto/indexer";
 
 import "enums/enums.proto";
 

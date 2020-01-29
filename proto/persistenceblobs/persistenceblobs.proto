@@ -21,7 +21,7 @@
 syntax = "proto3";
 
 package persistenceblobs;
-option go_package = "github.com/temporalio/temporal/proto/persistenceblobs";
+option go_package = "github.com/temporalio/temporal/.gen/proto/persistenceblobs";
 
 // ImmutableClusterMetadata contains initialization configuration and metadata for the cluster
 message ImmutableClusterMetadata {

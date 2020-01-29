@@ -48,13 +48,6 @@ import (
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
-var cadenceServices = []string{
-	common.FrontendServiceName,
-	common.HistoryServiceName,
-	common.MatchingServiceName,
-	common.WorkerServiceName,
-}
-
 type (
 	// BootstrapParams holds the set of parameters
 	// needed to bootstrap a service
@@ -251,15 +244,15 @@ func (h *serviceImpl) Stop() {
 	}
 
 	if h.ringpopDispatcher != nil {
-		h.ringpopDispatcher.Stop()
+		_ = h.ringpopDispatcher.Stop()
 	}
 
 	if h.tchannelDispatcher != nil {
-		h.tchannelDispatcher.Stop()
+		_ = h.tchannelDispatcher.Stop()
 	}
 
 	if h.grpcDispatcher != nil {
-		h.grpcDispatcher.Stop()
+		_ = h.grpcDispatcher.Stop()
 	}
 
 	h.runtimeMetricsReporter.Stop()

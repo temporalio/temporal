@@ -97,12 +97,3 @@ func mustParseMAC(s string) net.HardwareAddr {
 	}
 	return addr
 }
-
-// If the first octet's second least-significant-bit is set, then it's local.
-// https://en.wikipedia.org/wiki/MAC_address#Universal_vs._local
-func isLocalMacAddr(addr net.HardwareAddr) bool {
-	if len(addr) == 0 {
-		return false
-	}
-	return addr[0]&2 == 2
-}

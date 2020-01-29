@@ -86,8 +86,7 @@ func (c *retryableClient) CloseShard(
 	opts ...yarpc.CallOption) error {
 
 	op := func() error {
-		var err error
-		err = c.client.CloseShard(ctx, request, opts...)
+		err := c.client.CloseShard(ctx, request, opts...)
 		return err
 	}
 
@@ -101,8 +100,7 @@ func (c *retryableClient) RemoveTask(
 	opts ...yarpc.CallOption) error {
 
 	op := func() error {
-		var err error
-		err = c.client.RemoveTask(ctx, request, opts...)
+		err := c.client.RemoveTask(ctx, request, opts...)
 		return err
 	}
 
@@ -475,6 +473,22 @@ func (c *retryableClient) GetReplicationMessages(
 	op := func() error {
 		var err error
 		resp, err = c.client.GetReplicationMessages(ctx, request, opts...)
+		return err
+	}
+
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) GetDLQReplicationMessages(
+	ctx context.Context,
+	request *replicator.GetDLQReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (*replicator.GetDLQReplicationMessagesResponse, error) {
+	var resp *replicator.GetDLQReplicationMessagesResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.GetDLQReplicationMessages(ctx, request, opts...)
 		return err
 	}
 

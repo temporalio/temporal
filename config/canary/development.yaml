@@ -1,0 +1,7 @@
+canary:
+  domains: ["cadence-canary"]
+  excludes: ["workflow.searchAttributes", "workflow.batch"]
+
+cadence:
+  service: "cadence-frontend"
+  host: "127.0.0.1:7933"

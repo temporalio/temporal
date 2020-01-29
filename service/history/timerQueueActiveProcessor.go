@@ -208,10 +208,6 @@ func (t *timerQueueActiveProcessorImpl) Stop() {
 	t.timerQueueProcessorBase.Stop()
 }
 
-func (t *timerQueueActiveProcessorImpl) getTimerFiredCount() uint64 {
-	return t.timerQueueProcessorBase.getTimerFiredCount()
-}
-
 func (t *timerQueueActiveProcessorImpl) getTaskFilter() taskFilter {
 	return t.timerTaskFilter
 }

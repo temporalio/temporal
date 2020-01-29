@@ -87,6 +87,7 @@ const (
 )
 
 // DEBUG usage
+//nolint
 func print(v interface{}) {
 	fmt.Println("==============")
 	fmt.Println(v)
