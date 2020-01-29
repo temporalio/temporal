@@ -27,20 +27,20 @@ import (
 	"github.com/temporalio/temporal/.gen/go/shared"
 )
 
-func toProtoHistory(in *shared.History) *common.History {
+func ToProtoHistory(in *shared.History) *common.History {
 	if in == nil {
 		return nil
 	}
 	var events []*common.HistoryEvent
 	for _, event := range in.Events {
-		events = append(events, toProtoHistoryEvent(event))
+		events = append(events, ToProtoHistoryEvent(event))
 	}
 	return &common.History{
 		Events: events,
 	}
 }
 
-func toProtoHistoryEvent(in *shared.HistoryEvent) *common.HistoryEvent {
+func ToProtoHistoryEvent(in *shared.HistoryEvent) *common.HistoryEvent {
 	if in == nil {
 		return nil
 	}
@@ -55,103 +55,103 @@ func toProtoHistoryEvent(in *shared.HistoryEvent) *common.HistoryEvent {
 
 	switch ret.EventType {
 	case enums.EventTypeWorkflowExecutionStarted:
-		ret.Attributes = &common.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: toProtoWorkflowExecutionStartedEventAttributes(in.GetWorkflowExecutionStartedEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: ToProtoWorkflowExecutionStartedEventAttributes(in.GetWorkflowExecutionStartedEventAttributes())}
 	case enums.EventTypeWorkflowExecutionCompleted:
-		ret.Attributes = &common.HistoryEvent_WorkflowExecutionCompletedEventAttributes{WorkflowExecutionCompletedEventAttributes: toProtoWorkflowExecutionCompletedEventAttributes(in.GetWorkflowExecutionCompletedEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_WorkflowExecutionCompletedEventAttributes{WorkflowExecutionCompletedEventAttributes: ToProtoWorkflowExecutionCompletedEventAttributes(in.GetWorkflowExecutionCompletedEventAttributes())}
 	case enums.EventTypeWorkflowExecutionFailed:
-		ret.Attributes = &common.HistoryEvent_WorkflowExecutionFailedEventAttributes{WorkflowExecutionFailedEventAttributes: toProtoWorkflowExecutionFailedEventAttributes(in.GetWorkflowExecutionFailedEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_WorkflowExecutionFailedEventAttributes{WorkflowExecutionFailedEventAttributes: ToProtoWorkflowExecutionFailedEventAttributes(in.GetWorkflowExecutionFailedEventAttributes())}
 	case enums.EventTypeWorkflowExecutionTimedOut:
-		ret.Attributes = &common.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{WorkflowExecutionTimedOutEventAttributes: toProtoWorkflowExecutionTimedOutEventAttributes(in.GetWorkflowExecutionTimedOutEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{WorkflowExecutionTimedOutEventAttributes: ToProtoWorkflowExecutionTimedOutEventAttributes(in.GetWorkflowExecutionTimedOutEventAttributes())}
 	case enums.EventTypeDecisionTaskScheduled:
-		ret.Attributes = &common.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: toProtoDecisionTaskScheduledEventAttributes(in.GetDecisionTaskScheduledEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: ToProtoDecisionTaskScheduledEventAttributes(in.GetDecisionTaskScheduledEventAttributes())}
 	case enums.EventTypeDecisionTaskStarted:
-		ret.Attributes = &common.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: toProtoDecisionTaskStartedEventAttributes(in.GetDecisionTaskStartedEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: ToProtoDecisionTaskStartedEventAttributes(in.GetDecisionTaskStartedEventAttributes())}
 	case enums.EventTypeDecisionTaskCompleted:
-		ret.Attributes = &common.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: toProtoDecisionTaskCompletedEventAttributes(in.GetDecisionTaskCompletedEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: ToProtoDecisionTaskCompletedEventAttributes(in.GetDecisionTaskCompletedEventAttributes())}
 	case enums.EventTypeDecisionTaskTimedOut:
-		ret.Attributes = &common.HistoryEvent_DecisionTaskTimedOutEventAttributes{DecisionTaskTimedOutEventAttributes: toProtoDecisionTaskTimedOutEventAttributes(in.GetDecisionTaskTimedOutEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_DecisionTaskTimedOutEventAttributes{DecisionTaskTimedOutEventAttributes: ToProtoDecisionTaskTimedOutEventAttributes(in.GetDecisionTaskTimedOutEventAttributes())}
 	case enums.EventTypeDecisionTaskFailed:
-		ret.Attributes = &common.HistoryEvent_DecisionTaskFailedEventAttributes{DecisionTaskFailedEventAttributes: toProtoDecisionTaskFailedEventAttributes(in.GetDecisionTaskFailedEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_DecisionTaskFailedEventAttributes{DecisionTaskFailedEventAttributes: ToProtoDecisionTaskFailedEventAttributes(in.GetDecisionTaskFailedEventAttributes())}
 	case enums.EventTypeActivityTaskScheduled:
-		ret.Attributes = &common.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: toProtoActivityTaskScheduledEventAttributes(in.GetActivityTaskScheduledEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: ToProtoActivityTaskScheduledEventAttributes(in.GetActivityTaskScheduledEventAttributes())}
 	case enums.EventTypeActivityTaskStarted:
-		ret.Attributes = &common.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: toProtoActivityTaskStartedEventAttributes(in.GetActivityTaskStartedEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: ToProtoActivityTaskStartedEventAttributes(in.GetActivityTaskStartedEventAttributes())}
 	case enums.EventTypeActivityTaskCompleted:
-		ret.Attributes = &common.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: toProtoActivityTaskCompletedEventAttributes(in.GetActivityTaskCompletedEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: ToProtoActivityTaskCompletedEventAttributes(in.GetActivityTaskCompletedEventAttributes())}
 	case enums.EventTypeActivityTaskFailed:
-		ret.Attributes = &common.HistoryEvent_ActivityTaskFailedEventAttributes{ActivityTaskFailedEventAttributes: toProtoActivityTaskFailedEventAttributes(in.GetActivityTaskFailedEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_ActivityTaskFailedEventAttributes{ActivityTaskFailedEventAttributes: ToProtoActivityTaskFailedEventAttributes(in.GetActivityTaskFailedEventAttributes())}
 	case enums.EventTypeActivityTaskTimedOut:
-		ret.Attributes = &common.HistoryEvent_ActivityTaskTimedOutEventAttributes{ActivityTaskTimedOutEventAttributes: toProtoActivityTaskTimedOutEventAttributes(in.GetActivityTaskTimedOutEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_ActivityTaskTimedOutEventAttributes{ActivityTaskTimedOutEventAttributes: ToProtoActivityTaskTimedOutEventAttributes(in.GetActivityTaskTimedOutEventAttributes())}
 	case enums.EventTypeTimerStarted:
-		ret.Attributes = &common.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: toProtoTimerStartedEventAttributes(in.GetTimerStartedEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: ToProtoTimerStartedEventAttributes(in.GetTimerStartedEventAttributes())}
 	case enums.EventTypeTimerFired:
-		ret.Attributes = &common.HistoryEvent_TimerFiredEventAttributes{TimerFiredEventAttributes: toProtoTimerFiredEventAttributes(in.GetTimerFiredEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_TimerFiredEventAttributes{TimerFiredEventAttributes: ToProtoTimerFiredEventAttributes(in.GetTimerFiredEventAttributes())}
 	case enums.EventTypeActivityTaskCancelRequested:
-		ret.Attributes = &common.HistoryEvent_ActivityTaskCancelRequestedEventAttributes{ActivityTaskCancelRequestedEventAttributes: toProtoActivityTaskCancelRequestedEventAttributes(in.GetActivityTaskCancelRequestedEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_ActivityTaskCancelRequestedEventAttributes{ActivityTaskCancelRequestedEventAttributes: ToProtoActivityTaskCancelRequestedEventAttributes(in.GetActivityTaskCancelRequestedEventAttributes())}
 	case enums.EventTypeRequestCancelActivityTaskFailed:
-		ret.Attributes = &common.HistoryEvent_RequestCancelActivityTaskFailedEventAttributes{RequestCancelActivityTaskFailedEventAttributes: toProtoRequestCancelActivityTaskFailedEventAttributes(in.GetRequestCancelActivityTaskFailedEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_RequestCancelActivityTaskFailedEventAttributes{RequestCancelActivityTaskFailedEventAttributes: ToProtoRequestCancelActivityTaskFailedEventAttributes(in.GetRequestCancelActivityTaskFailedEventAttributes())}
 	case enums.EventTypeActivityTaskCanceled:
-		ret.Attributes = &common.HistoryEvent_ActivityTaskCanceledEventAttributes{ActivityTaskCanceledEventAttributes: toProtoActivityTaskCanceledEventAttributes(in.GetActivityTaskCanceledEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_ActivityTaskCanceledEventAttributes{ActivityTaskCanceledEventAttributes: ToProtoActivityTaskCanceledEventAttributes(in.GetActivityTaskCanceledEventAttributes())}
 	case enums.EventTypeTimerCanceled:
-		ret.Attributes = &common.HistoryEvent_TimerCanceledEventAttributes{TimerCanceledEventAttributes: toProtoTimerCanceledEventAttributes(in.GetTimerCanceledEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_TimerCanceledEventAttributes{TimerCanceledEventAttributes: ToProtoTimerCanceledEventAttributes(in.GetTimerCanceledEventAttributes())}
 	case enums.EventTypeCancelTimerFailed:
-		ret.Attributes = &common.HistoryEvent_CancelTimerFailedEventAttributes{CancelTimerFailedEventAttributes: toProtoCancelTimerFailedEventAttributes(in.GetCancelTimerFailedEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_CancelTimerFailedEventAttributes{CancelTimerFailedEventAttributes: ToProtoCancelTimerFailedEventAttributes(in.GetCancelTimerFailedEventAttributes())}
 	case enums.EventTypeMarkerRecorded:
-		ret.Attributes = &common.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: toProtoMarkerRecordedEventAttributes(in.GetMarkerRecordedEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: ToProtoMarkerRecordedEventAttributes(in.GetMarkerRecordedEventAttributes())}
 	case enums.EventTypeWorkflowExecutionSignaled:
-		ret.Attributes = &common.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: toProtoWorkflowExecutionSignaledEventAttributes(in.GetWorkflowExecutionSignaledEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: ToProtoWorkflowExecutionSignaledEventAttributes(in.GetWorkflowExecutionSignaledEventAttributes())}
 	case enums.EventTypeWorkflowExecutionTerminated:
-		ret.Attributes = &common.HistoryEvent_WorkflowExecutionTerminatedEventAttributes{WorkflowExecutionTerminatedEventAttributes: toProtoWorkflowExecutionTerminatedEventAttributes(in.GetWorkflowExecutionTerminatedEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_WorkflowExecutionTerminatedEventAttributes{WorkflowExecutionTerminatedEventAttributes: ToProtoWorkflowExecutionTerminatedEventAttributes(in.GetWorkflowExecutionTerminatedEventAttributes())}
 	case enums.EventTypeWorkflowExecutionCancelRequested:
-		ret.Attributes = &common.HistoryEvent_WorkflowExecutionCancelRequestedEventAttributes{WorkflowExecutionCancelRequestedEventAttributes: toProtoWorkflowExecutionCancelRequestedEventAttributes(in.GetWorkflowExecutionCancelRequestedEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_WorkflowExecutionCancelRequestedEventAttributes{WorkflowExecutionCancelRequestedEventAttributes: ToProtoWorkflowExecutionCancelRequestedEventAttributes(in.GetWorkflowExecutionCancelRequestedEventAttributes())}
 	case enums.EventTypeWorkflowExecutionCanceled:
-		ret.Attributes = &common.HistoryEvent_WorkflowExecutionCanceledEventAttributes{WorkflowExecutionCanceledEventAttributes: toProtoWorkflowExecutionCanceledEventAttributes(in.GetWorkflowExecutionCanceledEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_WorkflowExecutionCanceledEventAttributes{WorkflowExecutionCanceledEventAttributes: ToProtoWorkflowExecutionCanceledEventAttributes(in.GetWorkflowExecutionCanceledEventAttributes())}
 	case enums.EventTypeRequestCancelExternalWorkflowExecutionInitiated:
-		ret.Attributes = &common.HistoryEvent_RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: toProtoRequestCancelExternalWorkflowExecutionInitiatedEventAttributes(in.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: ToProtoRequestCancelExternalWorkflowExecutionInitiatedEventAttributes(in.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes())}
 	case enums.EventTypeRequestCancelExternalWorkflowExecutionFailed:
-		ret.Attributes = &common.HistoryEvent_RequestCancelExternalWorkflowExecutionFailedEventAttributes{RequestCancelExternalWorkflowExecutionFailedEventAttributes: toProtoRequestCancelExternalWorkflowExecutionFailedEventAttributes(in.GetRequestCancelExternalWorkflowExecutionFailedEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_RequestCancelExternalWorkflowExecutionFailedEventAttributes{RequestCancelExternalWorkflowExecutionFailedEventAttributes: ToProtoRequestCancelExternalWorkflowExecutionFailedEventAttributes(in.GetRequestCancelExternalWorkflowExecutionFailedEventAttributes())}
 	case enums.EventTypeExternalWorkflowExecutionCancelRequested:
-		ret.Attributes = &common.HistoryEvent_ExternalWorkflowExecutionCancelRequestedEventAttributes{ExternalWorkflowExecutionCancelRequestedEventAttributes: toProtoExternalWorkflowExecutionCancelRequestedEventAttributes(in.GetExternalWorkflowExecutionCancelRequestedEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_ExternalWorkflowExecutionCancelRequestedEventAttributes{ExternalWorkflowExecutionCancelRequestedEventAttributes: ToProtoExternalWorkflowExecutionCancelRequestedEventAttributes(in.GetExternalWorkflowExecutionCancelRequestedEventAttributes())}
 	case enums.EventTypeWorkflowExecutionContinuedAsNew:
-		ret.Attributes = &common.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: toProtoWorkflowExecutionContinuedAsNewEventAttributes(in.GetWorkflowExecutionContinuedAsNewEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: ToProtoWorkflowExecutionContinuedAsNewEventAttributes(in.GetWorkflowExecutionContinuedAsNewEventAttributes())}
 	case enums.EventTypeStartChildWorkflowExecutionInitiated:
-		ret.Attributes = &common.HistoryEvent_StartChildWorkflowExecutionInitiatedEventAttributes{StartChildWorkflowExecutionInitiatedEventAttributes: toProtoStartChildWorkflowExecutionInitiatedEventAttributes(in.GetStartChildWorkflowExecutionInitiatedEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_StartChildWorkflowExecutionInitiatedEventAttributes{StartChildWorkflowExecutionInitiatedEventAttributes: ToProtoStartChildWorkflowExecutionInitiatedEventAttributes(in.GetStartChildWorkflowExecutionInitiatedEventAttributes())}
 	case enums.EventTypeStartChildWorkflowExecutionFailed:
-		ret.Attributes = &common.HistoryEvent_StartChildWorkflowExecutionFailedEventAttributes{StartChildWorkflowExecutionFailedEventAttributes: toProtoStartChildWorkflowExecutionFailedEventAttributes(in.GetStartChildWorkflowExecutionFailedEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_StartChildWorkflowExecutionFailedEventAttributes{StartChildWorkflowExecutionFailedEventAttributes: ToProtoStartChildWorkflowExecutionFailedEventAttributes(in.GetStartChildWorkflowExecutionFailedEventAttributes())}
 	case enums.EventTypeChildWorkflowExecutionStarted:
-		ret.Attributes = &common.HistoryEvent_ChildWorkflowExecutionStartedEventAttributes{ChildWorkflowExecutionStartedEventAttributes: toProtoChildWorkflowExecutionStartedEventAttributes(in.GetChildWorkflowExecutionStartedEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_ChildWorkflowExecutionStartedEventAttributes{ChildWorkflowExecutionStartedEventAttributes: ToProtoChildWorkflowExecutionStartedEventAttributes(in.GetChildWorkflowExecutionStartedEventAttributes())}
 	case enums.EventTypeChildWorkflowExecutionCompleted:
-		ret.Attributes = &common.HistoryEvent_ChildWorkflowExecutionCompletedEventAttributes{ChildWorkflowExecutionCompletedEventAttributes: toProtoChildWorkflowExecutionCompletedEventAttributes(in.GetChildWorkflowExecutionCompletedEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_ChildWorkflowExecutionCompletedEventAttributes{ChildWorkflowExecutionCompletedEventAttributes: ToProtoChildWorkflowExecutionCompletedEventAttributes(in.GetChildWorkflowExecutionCompletedEventAttributes())}
 	case enums.EventTypeChildWorkflowExecutionFailed:
-		ret.Attributes = &common.HistoryEvent_ChildWorkflowExecutionFailedEventAttributes{ChildWorkflowExecutionFailedEventAttributes: toProtoChildWorkflowExecutionFailedEventAttributes(in.GetChildWorkflowExecutionFailedEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_ChildWorkflowExecutionFailedEventAttributes{ChildWorkflowExecutionFailedEventAttributes: ToProtoChildWorkflowExecutionFailedEventAttributes(in.GetChildWorkflowExecutionFailedEventAttributes())}
 	case enums.EventTypeChildWorkflowExecutionCanceled:
-		ret.Attributes = &common.HistoryEvent_ChildWorkflowExecutionCanceledEventAttributes{ChildWorkflowExecutionCanceledEventAttributes: toProtoChildWorkflowExecutionCanceledEventAttributes(in.GetChildWorkflowExecutionCanceledEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_ChildWorkflowExecutionCanceledEventAttributes{ChildWorkflowExecutionCanceledEventAttributes: ToProtoChildWorkflowExecutionCanceledEventAttributes(in.GetChildWorkflowExecutionCanceledEventAttributes())}
 	case enums.EventTypeChildWorkflowExecutionTimedOut:
-		ret.Attributes = &common.HistoryEvent_ChildWorkflowExecutionTimedOutEventAttributes{ChildWorkflowExecutionTimedOutEventAttributes: toProtoChildWorkflowExecutionTimedOutEventAttributes(in.GetChildWorkflowExecutionTimedOutEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_ChildWorkflowExecutionTimedOutEventAttributes{ChildWorkflowExecutionTimedOutEventAttributes: ToProtoChildWorkflowExecutionTimedOutEventAttributes(in.GetChildWorkflowExecutionTimedOutEventAttributes())}
 	case enums.EventTypeChildWorkflowExecutionTerminated:
-		ret.Attributes = &common.HistoryEvent_ChildWorkflowExecutionTerminatedEventAttributes{ChildWorkflowExecutionTerminatedEventAttributes: toProtoChildWorkflowExecutionTerminatedEventAttributes(in.GetChildWorkflowExecutionTerminatedEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_ChildWorkflowExecutionTerminatedEventAttributes{ChildWorkflowExecutionTerminatedEventAttributes: ToProtoChildWorkflowExecutionTerminatedEventAttributes(in.GetChildWorkflowExecutionTerminatedEventAttributes())}
 	case enums.EventTypeSignalExternalWorkflowExecutionInitiated:
-		ret.Attributes = &common.HistoryEvent_SignalExternalWorkflowExecutionInitiatedEventAttributes{SignalExternalWorkflowExecutionInitiatedEventAttributes: toProtoSignalExternalWorkflowExecutionInitiatedEventAttributes(in.GetSignalExternalWorkflowExecutionInitiatedEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_SignalExternalWorkflowExecutionInitiatedEventAttributes{SignalExternalWorkflowExecutionInitiatedEventAttributes: ToProtoSignalExternalWorkflowExecutionInitiatedEventAttributes(in.GetSignalExternalWorkflowExecutionInitiatedEventAttributes())}
 	case enums.EventTypeSignalExternalWorkflowExecutionFailed:
-		ret.Attributes = &common.HistoryEvent_SignalExternalWorkflowExecutionFailedEventAttributes{SignalExternalWorkflowExecutionFailedEventAttributes: toProtoSignalExternalWorkflowExecutionFailedEventAttributes(in.GetSignalExternalWorkflowExecutionFailedEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_SignalExternalWorkflowExecutionFailedEventAttributes{SignalExternalWorkflowExecutionFailedEventAttributes: ToProtoSignalExternalWorkflowExecutionFailedEventAttributes(in.GetSignalExternalWorkflowExecutionFailedEventAttributes())}
 	case enums.EventTypeExternalWorkflowExecutionSignaled:
-		ret.Attributes = &common.HistoryEvent_ExternalWorkflowExecutionSignaledEventAttributes{ExternalWorkflowExecutionSignaledEventAttributes: toProtoExternalWorkflowExecutionSignaledEventAttributes(in.GetExternalWorkflowExecutionSignaledEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_ExternalWorkflowExecutionSignaledEventAttributes{ExternalWorkflowExecutionSignaledEventAttributes: ToProtoExternalWorkflowExecutionSignaledEventAttributes(in.GetExternalWorkflowExecutionSignaledEventAttributes())}
 	case enums.EventTypeUpsertWorkflowSearchAttributes:
-		ret.Attributes = &common.HistoryEvent_UpsertWorkflowSearchAttributesEventAttributes{UpsertWorkflowSearchAttributesEventAttributes: toProtoUpsertWorkflowSearchAttributesEventAttributes(in.GetUpsertWorkflowSearchAttributesEventAttributes())}
+		ret.Attributes = &common.HistoryEvent_UpsertWorkflowSearchAttributesEventAttributes{UpsertWorkflowSearchAttributesEventAttributes: ToProtoUpsertWorkflowSearchAttributesEventAttributes(in.GetUpsertWorkflowSearchAttributesEventAttributes())}
 	}
 	return ret
 }
 
-func toProtoWorkflowExecutionStartedEventAttributes(in *shared.WorkflowExecutionStartedEventAttributes) *common.WorkflowExecutionStartedEventAttributes {
+func ToProtoWorkflowExecutionStartedEventAttributes(in *shared.WorkflowExecutionStartedEventAttributes) *common.WorkflowExecutionStartedEventAttributes {
 	if in == nil {
 		return nil
 	}
 	return &common.WorkflowExecutionStartedEventAttributes{
-		WorkflowType:                        toProtoWorkflowType(in.GetWorkflowType()),
+		WorkflowType:                        ToProtoWorkflowType(in.GetWorkflowType()),
 		ParentWorkflowDomain:                in.GetParentWorkflowDomain(),
 		ParentWorkflowExecution:             ToProtoWorkflowExecution(in.GetParentWorkflowExecution()),
 		ParentInitiatedEventId:              in.GetParentInitiatedEventId(),
-		TaskList:                            toProtoTaskList(in.GetTaskList()),
+		TaskList:                            ToProtoTaskList(in.GetTaskList()),
 		Input:                               in.GetInput(),
 		ExecutionStartToCloseTimeoutSeconds: in.GetExecutionStartToCloseTimeoutSeconds(),
 		TaskStartToCloseTimeoutSeconds:      in.GetTaskStartToCloseTimeoutSeconds(),
@@ -163,19 +163,19 @@ func toProtoWorkflowExecutionStartedEventAttributes(in *shared.WorkflowExecution
 		OriginalExecutionRunId:              in.GetOriginalExecutionRunId(),
 		Identity:                            in.GetIdentity(),
 		FirstExecutionRunId:                 in.GetFirstExecutionRunId(),
-		RetryPolicy:                         toProtoRetryPolicy(in.GetRetryPolicy()),
+		RetryPolicy:                         ToProtoRetryPolicy(in.GetRetryPolicy()),
 		Attempt:                             in.GetAttempt(),
 		ExpirationTimestamp:                 in.GetExpirationTimestamp(),
 		CronSchedule:                        in.GetCronSchedule(),
 		FirstDecisionTaskBackoffSeconds:     in.GetFirstDecisionTaskBackoffSeconds(),
-		Memo:                                toProtoMemo(in.GetMemo()),
-		SearchAttributes:                    toProtoSearchAttributes(in.GetSearchAttributes()),
-		PrevAutoResetPoints:                 toProtoResetPoints(in.GetPrevAutoResetPoints()),
-		Header:                              toProtoHeader(in.GetHeader()),
+		Memo:                                ToProtoMemo(in.GetMemo()),
+		SearchAttributes:                    ToProtoSearchAttributes(in.GetSearchAttributes()),
+		PrevAutoResetPoints:                 ToProtoResetPoints(in.GetPrevAutoResetPoints()),
+		Header:                              ToProtoHeader(in.GetHeader()),
 	}
 }
 
-func toProtoWorkflowExecutionCompletedEventAttributes(in *shared.WorkflowExecutionCompletedEventAttributes) *common.WorkflowExecutionCompletedEventAttributes {
+func ToProtoWorkflowExecutionCompletedEventAttributes(in *shared.WorkflowExecutionCompletedEventAttributes) *common.WorkflowExecutionCompletedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -185,7 +185,7 @@ func toProtoWorkflowExecutionCompletedEventAttributes(in *shared.WorkflowExecuti
 	}
 }
 
-func toProtoWorkflowExecutionFailedEventAttributes(in *shared.WorkflowExecutionFailedEventAttributes) *common.WorkflowExecutionFailedEventAttributes {
+func ToProtoWorkflowExecutionFailedEventAttributes(in *shared.WorkflowExecutionFailedEventAttributes) *common.WorkflowExecutionFailedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -196,7 +196,7 @@ func toProtoWorkflowExecutionFailedEventAttributes(in *shared.WorkflowExecutionF
 	}
 }
 
-func toProtoWorkflowExecutionTimedOutEventAttributes(in *shared.WorkflowExecutionTimedOutEventAttributes) *common.WorkflowExecutionTimedOutEventAttributes {
+func ToProtoWorkflowExecutionTimedOutEventAttributes(in *shared.WorkflowExecutionTimedOutEventAttributes) *common.WorkflowExecutionTimedOutEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -205,18 +205,18 @@ func toProtoWorkflowExecutionTimedOutEventAttributes(in *shared.WorkflowExecutio
 	}
 }
 
-func toProtoDecisionTaskScheduledEventAttributes(in *shared.DecisionTaskScheduledEventAttributes) *common.DecisionTaskScheduledEventAttributes {
+func ToProtoDecisionTaskScheduledEventAttributes(in *shared.DecisionTaskScheduledEventAttributes) *common.DecisionTaskScheduledEventAttributes {
 	if in == nil {
 		return nil
 	}
 	return &common.DecisionTaskScheduledEventAttributes{
-		TaskList:                   toProtoTaskList(in.GetTaskList()),
+		TaskList:                   ToProtoTaskList(in.GetTaskList()),
 		StartToCloseTimeoutSeconds: in.GetStartToCloseTimeoutSeconds(),
 		Attempt:                    in.GetAttempt(),
 	}
 }
 
-func toProtoDecisionTaskStartedEventAttributes(in *shared.DecisionTaskStartedEventAttributes) *common.DecisionTaskStartedEventAttributes {
+func ToProtoDecisionTaskStartedEventAttributes(in *shared.DecisionTaskStartedEventAttributes) *common.DecisionTaskStartedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -227,7 +227,7 @@ func toProtoDecisionTaskStartedEventAttributes(in *shared.DecisionTaskStartedEve
 	}
 }
 
-func toProtoDecisionTaskCompletedEventAttributes(in *shared.DecisionTaskCompletedEventAttributes) *common.DecisionTaskCompletedEventAttributes {
+func ToProtoDecisionTaskCompletedEventAttributes(in *shared.DecisionTaskCompletedEventAttributes) *common.DecisionTaskCompletedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -240,7 +240,7 @@ func toProtoDecisionTaskCompletedEventAttributes(in *shared.DecisionTaskComplete
 	}
 }
 
-func toProtoDecisionTaskTimedOutEventAttributes(in *shared.DecisionTaskTimedOutEventAttributes) *common.DecisionTaskTimedOutEventAttributes {
+func ToProtoDecisionTaskTimedOutEventAttributes(in *shared.DecisionTaskTimedOutEventAttributes) *common.DecisionTaskTimedOutEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -251,7 +251,7 @@ func toProtoDecisionTaskTimedOutEventAttributes(in *shared.DecisionTaskTimedOutE
 	}
 }
 
-func toProtoDecisionTaskFailedEventAttributes(in *shared.DecisionTaskFailedEventAttributes) *common.DecisionTaskFailedEventAttributes {
+func ToProtoDecisionTaskFailedEventAttributes(in *shared.DecisionTaskFailedEventAttributes) *common.DecisionTaskFailedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -269,27 +269,27 @@ func toProtoDecisionTaskFailedEventAttributes(in *shared.DecisionTaskFailedEvent
 	}
 }
 
-func toProtoActivityTaskScheduledEventAttributes(in *shared.ActivityTaskScheduledEventAttributes) *common.ActivityTaskScheduledEventAttributes {
+func ToProtoActivityTaskScheduledEventAttributes(in *shared.ActivityTaskScheduledEventAttributes) *common.ActivityTaskScheduledEventAttributes {
 	if in == nil {
 		return nil
 	}
 	return &common.ActivityTaskScheduledEventAttributes{
 		ActivityId:                    in.GetActivityId(),
-		ActivityType:                  toProtoActivityType(in.GetActivityType()),
+		ActivityType:                  ToProtoActivityType(in.GetActivityType()),
 		Domain:                        in.GetDomain(),
-		TaskList:                      toProtoTaskList(in.GetTaskList()),
+		TaskList:                      ToProtoTaskList(in.GetTaskList()),
 		Input:                         in.GetInput(),
 		ScheduleToCloseTimeoutSeconds: in.GetScheduleToCloseTimeoutSeconds(),
 		ScheduleToStartTimeoutSeconds: in.GetScheduleToStartTimeoutSeconds(),
 		StartToCloseTimeoutSeconds:    in.GetStartToCloseTimeoutSeconds(),
 		HeartbeatTimeoutSeconds:       in.GetHeartbeatTimeoutSeconds(),
 		DecisionTaskCompletedEventId:  in.GetDecisionTaskCompletedEventId(),
-		RetryPolicy:                   toProtoRetryPolicy(in.GetRetryPolicy()),
-		Header:                        toProtoHeader(in.GetHeader()),
+		RetryPolicy:                   ToProtoRetryPolicy(in.GetRetryPolicy()),
+		Header:                        ToProtoHeader(in.GetHeader()),
 	}
 }
 
-func toProtoActivityTaskStartedEventAttributes(in *shared.ActivityTaskStartedEventAttributes) *common.ActivityTaskStartedEventAttributes {
+func ToProtoActivityTaskStartedEventAttributes(in *shared.ActivityTaskStartedEventAttributes) *common.ActivityTaskStartedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -301,7 +301,7 @@ func toProtoActivityTaskStartedEventAttributes(in *shared.ActivityTaskStartedEve
 	}
 }
 
-func toProtoActivityTaskCompletedEventAttributes(in *shared.ActivityTaskCompletedEventAttributes) *common.ActivityTaskCompletedEventAttributes {
+func ToProtoActivityTaskCompletedEventAttributes(in *shared.ActivityTaskCompletedEventAttributes) *common.ActivityTaskCompletedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -313,7 +313,7 @@ func toProtoActivityTaskCompletedEventAttributes(in *shared.ActivityTaskComplete
 	}
 }
 
-func toProtoActivityTaskFailedEventAttributes(in *shared.ActivityTaskFailedEventAttributes) *common.ActivityTaskFailedEventAttributes {
+func ToProtoActivityTaskFailedEventAttributes(in *shared.ActivityTaskFailedEventAttributes) *common.ActivityTaskFailedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -326,7 +326,7 @@ func toProtoActivityTaskFailedEventAttributes(in *shared.ActivityTaskFailedEvent
 	}
 }
 
-func toProtoActivityTaskTimedOutEventAttributes(in *shared.ActivityTaskTimedOutEventAttributes) *common.ActivityTaskTimedOutEventAttributes {
+func ToProtoActivityTaskTimedOutEventAttributes(in *shared.ActivityTaskTimedOutEventAttributes) *common.ActivityTaskTimedOutEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -340,7 +340,7 @@ func toProtoActivityTaskTimedOutEventAttributes(in *shared.ActivityTaskTimedOutE
 	}
 }
 
-func toProtoTimerStartedEventAttributes(in *shared.TimerStartedEventAttributes) *common.TimerStartedEventAttributes {
+func ToProtoTimerStartedEventAttributes(in *shared.TimerStartedEventAttributes) *common.TimerStartedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -351,7 +351,7 @@ func toProtoTimerStartedEventAttributes(in *shared.TimerStartedEventAttributes) 
 	}
 }
 
-func toProtoTimerFiredEventAttributes(in *shared.TimerFiredEventAttributes) *common.TimerFiredEventAttributes {
+func ToProtoTimerFiredEventAttributes(in *shared.TimerFiredEventAttributes) *common.TimerFiredEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -361,7 +361,7 @@ func toProtoTimerFiredEventAttributes(in *shared.TimerFiredEventAttributes) *com
 	}
 }
 
-func toProtoActivityTaskCancelRequestedEventAttributes(in *shared.ActivityTaskCancelRequestedEventAttributes) *common.ActivityTaskCancelRequestedEventAttributes {
+func ToProtoActivityTaskCancelRequestedEventAttributes(in *shared.ActivityTaskCancelRequestedEventAttributes) *common.ActivityTaskCancelRequestedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -371,7 +371,7 @@ func toProtoActivityTaskCancelRequestedEventAttributes(in *shared.ActivityTaskCa
 	}
 }
 
-func toProtoRequestCancelActivityTaskFailedEventAttributes(in *shared.RequestCancelActivityTaskFailedEventAttributes) *common.RequestCancelActivityTaskFailedEventAttributes {
+func ToProtoRequestCancelActivityTaskFailedEventAttributes(in *shared.RequestCancelActivityTaskFailedEventAttributes) *common.RequestCancelActivityTaskFailedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -382,7 +382,7 @@ func toProtoRequestCancelActivityTaskFailedEventAttributes(in *shared.RequestCan
 	}
 }
 
-func toProtoActivityTaskCanceledEventAttributes(in *shared.ActivityTaskCanceledEventAttributes) *common.ActivityTaskCanceledEventAttributes {
+func ToProtoActivityTaskCanceledEventAttributes(in *shared.ActivityTaskCanceledEventAttributes) *common.ActivityTaskCanceledEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -395,7 +395,7 @@ func toProtoActivityTaskCanceledEventAttributes(in *shared.ActivityTaskCanceledE
 	}
 }
 
-func toProtoTimerCanceledEventAttributes(in *shared.TimerCanceledEventAttributes) *common.TimerCanceledEventAttributes {
+func ToProtoTimerCanceledEventAttributes(in *shared.TimerCanceledEventAttributes) *common.TimerCanceledEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -407,7 +407,7 @@ func toProtoTimerCanceledEventAttributes(in *shared.TimerCanceledEventAttributes
 	}
 }
 
-func toProtoCancelTimerFailedEventAttributes(in *shared.CancelTimerFailedEventAttributes) *common.CancelTimerFailedEventAttributes {
+func ToProtoCancelTimerFailedEventAttributes(in *shared.CancelTimerFailedEventAttributes) *common.CancelTimerFailedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -419,7 +419,7 @@ func toProtoCancelTimerFailedEventAttributes(in *shared.CancelTimerFailedEventAt
 	}
 }
 
-func toProtoMarkerRecordedEventAttributes(in *shared.MarkerRecordedEventAttributes) *common.MarkerRecordedEventAttributes {
+func ToProtoMarkerRecordedEventAttributes(in *shared.MarkerRecordedEventAttributes) *common.MarkerRecordedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -427,11 +427,11 @@ func toProtoMarkerRecordedEventAttributes(in *shared.MarkerRecordedEventAttribut
 		MarkerName:                   in.GetMarkerName(),
 		Details:                      in.GetDetails(),
 		DecisionTaskCompletedEventId: in.GetDecisionTaskCompletedEventId(),
-		Header:                       toProtoHeader(in.GetHeader()),
+		Header:                       ToProtoHeader(in.GetHeader()),
 	}
 }
 
-func toProtoWorkflowExecutionSignaledEventAttributes(in *shared.WorkflowExecutionSignaledEventAttributes) *common.WorkflowExecutionSignaledEventAttributes {
+func ToProtoWorkflowExecutionSignaledEventAttributes(in *shared.WorkflowExecutionSignaledEventAttributes) *common.WorkflowExecutionSignaledEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -442,7 +442,7 @@ func toProtoWorkflowExecutionSignaledEventAttributes(in *shared.WorkflowExecutio
 	}
 }
 
-func toProtoWorkflowExecutionTerminatedEventAttributes(in *shared.WorkflowExecutionTerminatedEventAttributes) *common.WorkflowExecutionTerminatedEventAttributes {
+func ToProtoWorkflowExecutionTerminatedEventAttributes(in *shared.WorkflowExecutionTerminatedEventAttributes) *common.WorkflowExecutionTerminatedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -453,7 +453,7 @@ func toProtoWorkflowExecutionTerminatedEventAttributes(in *shared.WorkflowExecut
 	}
 }
 
-func toProtoWorkflowExecutionCancelRequestedEventAttributes(in *shared.WorkflowExecutionCancelRequestedEventAttributes) *common.WorkflowExecutionCancelRequestedEventAttributes {
+func ToProtoWorkflowExecutionCancelRequestedEventAttributes(in *shared.WorkflowExecutionCancelRequestedEventAttributes) *common.WorkflowExecutionCancelRequestedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -465,7 +465,7 @@ func toProtoWorkflowExecutionCancelRequestedEventAttributes(in *shared.WorkflowE
 	}
 }
 
-func toProtoWorkflowExecutionCanceledEventAttributes(in *shared.WorkflowExecutionCanceledEventAttributes) *common.WorkflowExecutionCanceledEventAttributes {
+func ToProtoWorkflowExecutionCanceledEventAttributes(in *shared.WorkflowExecutionCanceledEventAttributes) *common.WorkflowExecutionCanceledEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -475,7 +475,7 @@ func toProtoWorkflowExecutionCanceledEventAttributes(in *shared.WorkflowExecutio
 	}
 }
 
-func toProtoRequestCancelExternalWorkflowExecutionInitiatedEventAttributes(in *shared.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes) *common.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes {
+func ToProtoRequestCancelExternalWorkflowExecutionInitiatedEventAttributes(in *shared.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes) *common.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -488,7 +488,7 @@ func toProtoRequestCancelExternalWorkflowExecutionInitiatedEventAttributes(in *s
 	}
 }
 
-func toProtoRequestCancelExternalWorkflowExecutionFailedEventAttributes(in *shared.RequestCancelExternalWorkflowExecutionFailedEventAttributes) *common.RequestCancelExternalWorkflowExecutionFailedEventAttributes {
+func ToProtoRequestCancelExternalWorkflowExecutionFailedEventAttributes(in *shared.RequestCancelExternalWorkflowExecutionFailedEventAttributes) *common.RequestCancelExternalWorkflowExecutionFailedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -502,7 +502,7 @@ func toProtoRequestCancelExternalWorkflowExecutionFailedEventAttributes(in *shar
 	}
 }
 
-func toProtoExternalWorkflowExecutionCancelRequestedEventAttributes(in *shared.ExternalWorkflowExecutionCancelRequestedEventAttributes) *common.ExternalWorkflowExecutionCancelRequestedEventAttributes {
+func ToProtoExternalWorkflowExecutionCancelRequestedEventAttributes(in *shared.ExternalWorkflowExecutionCancelRequestedEventAttributes) *common.ExternalWorkflowExecutionCancelRequestedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -513,14 +513,14 @@ func toProtoExternalWorkflowExecutionCancelRequestedEventAttributes(in *shared.E
 	}
 }
 
-func toProtoWorkflowExecutionContinuedAsNewEventAttributes(in *shared.WorkflowExecutionContinuedAsNewEventAttributes) *common.WorkflowExecutionContinuedAsNewEventAttributes {
+func ToProtoWorkflowExecutionContinuedAsNewEventAttributes(in *shared.WorkflowExecutionContinuedAsNewEventAttributes) *common.WorkflowExecutionContinuedAsNewEventAttributes {
 	if in == nil {
 		return nil
 	}
 	return &common.WorkflowExecutionContinuedAsNewEventAttributes{
 		NewExecutionRunId:                   in.GetNewExecutionRunId(),
-		WorkflowType:                        toProtoWorkflowType(in.GetWorkflowType()),
-		TaskList:                            toProtoTaskList(in.GetTaskList()),
+		WorkflowType:                        ToProtoWorkflowType(in.GetWorkflowType()),
+		TaskList:                            ToProtoTaskList(in.GetTaskList()),
 		Input:                               in.GetInput(),
 		ExecutionStartToCloseTimeoutSeconds: in.GetExecutionStartToCloseTimeoutSeconds(),
 		TaskStartToCloseTimeoutSeconds:      in.GetTaskStartToCloseTimeoutSeconds(),
@@ -530,21 +530,21 @@ func toProtoWorkflowExecutionContinuedAsNewEventAttributes(in *shared.WorkflowEx
 		FailureReason:                       in.GetFailureReason(),
 		FailureDetails:                      in.GetFailureDetails(),
 		LastCompletionResult:                in.GetLastCompletionResult(),
-		Header:                              toProtoHeader(in.GetHeader()),
-		Memo:                                toProtoMemo(in.GetMemo()),
-		SearchAttributes:                    toProtoSearchAttributes(in.GetSearchAttributes()),
+		Header:                              ToProtoHeader(in.GetHeader()),
+		Memo:                                ToProtoMemo(in.GetMemo()),
+		SearchAttributes:                    ToProtoSearchAttributes(in.GetSearchAttributes()),
 	}
 }
 
-func toProtoStartChildWorkflowExecutionInitiatedEventAttributes(in *shared.StartChildWorkflowExecutionInitiatedEventAttributes) *common.StartChildWorkflowExecutionInitiatedEventAttributes {
+func ToProtoStartChildWorkflowExecutionInitiatedEventAttributes(in *shared.StartChildWorkflowExecutionInitiatedEventAttributes) *common.StartChildWorkflowExecutionInitiatedEventAttributes {
 	if in == nil {
 		return nil
 	}
 	return &common.StartChildWorkflowExecutionInitiatedEventAttributes{
 		Domain:                              in.GetDomain(),
 		WorkflowId:                          in.GetWorkflowId(),
-		WorkflowType:                        toProtoWorkflowType(in.GetWorkflowType()),
-		TaskList:                            toProtoTaskList(in.GetTaskList()),
+		WorkflowType:                        ToProtoWorkflowType(in.GetWorkflowType()),
+		TaskList:                            ToProtoTaskList(in.GetTaskList()),
 		Input:                               in.GetInput(),
 		ExecutionStartToCloseTimeoutSeconds: in.GetExecutionStartToCloseTimeoutSeconds(),
 		TaskStartToCloseTimeoutSeconds:      in.GetTaskStartToCloseTimeoutSeconds(),
@@ -552,22 +552,22 @@ func toProtoStartChildWorkflowExecutionInitiatedEventAttributes(in *shared.Start
 		Control:                             in.GetControl(),
 		DecisionTaskCompletedEventId:        in.GetDecisionTaskCompletedEventId(),
 		WorkflowIdReusePolicy:               enums.WorkflowIdReusePolicy(in.GetWorkflowIdReusePolicy()),
-		RetryPolicy:                         toProtoRetryPolicy(in.GetRetryPolicy()),
+		RetryPolicy:                         ToProtoRetryPolicy(in.GetRetryPolicy()),
 		CronSchedule:                        in.GetCronSchedule(),
-		Header:                              toProtoHeader(in.GetHeader()),
-		Memo:                                toProtoMemo(in.GetMemo()),
-		SearchAttributes:                    toProtoSearchAttributes(in.GetSearchAttributes()),
+		Header:                              ToProtoHeader(in.GetHeader()),
+		Memo:                                ToProtoMemo(in.GetMemo()),
+		SearchAttributes:                    ToProtoSearchAttributes(in.GetSearchAttributes()),
 	}
 }
 
-func toProtoStartChildWorkflowExecutionFailedEventAttributes(in *shared.StartChildWorkflowExecutionFailedEventAttributes) *common.StartChildWorkflowExecutionFailedEventAttributes {
+func ToProtoStartChildWorkflowExecutionFailedEventAttributes(in *shared.StartChildWorkflowExecutionFailedEventAttributes) *common.StartChildWorkflowExecutionFailedEventAttributes {
 	if in == nil {
 		return nil
 	}
 	return &common.StartChildWorkflowExecutionFailedEventAttributes{
 		Domain:                       in.GetDomain(),
 		WorkflowId:                   in.GetWorkflowId(),
-		WorkflowType:                 toProtoWorkflowType(in.GetWorkflowType()),
+		WorkflowType:                 ToProtoWorkflowType(in.GetWorkflowType()),
 		Cause:                        enums.ChildWorkflowExecutionFailedCause(in.GetCause()),
 		Control:                      in.GetControl(),
 		InitiatedEventId:             in.GetInitiatedEventId(),
@@ -575,7 +575,7 @@ func toProtoStartChildWorkflowExecutionFailedEventAttributes(in *shared.StartChi
 	}
 }
 
-func toProtoChildWorkflowExecutionStartedEventAttributes(in *shared.ChildWorkflowExecutionStartedEventAttributes) *common.ChildWorkflowExecutionStartedEventAttributes {
+func ToProtoChildWorkflowExecutionStartedEventAttributes(in *shared.ChildWorkflowExecutionStartedEventAttributes) *common.ChildWorkflowExecutionStartedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -583,12 +583,12 @@ func toProtoChildWorkflowExecutionStartedEventAttributes(in *shared.ChildWorkflo
 		Domain:            in.GetDomain(),
 		InitiatedEventId:  in.GetInitiatedEventId(),
 		WorkflowExecution: ToProtoWorkflowExecution(in.GetWorkflowExecution()),
-		WorkflowType:      toProtoWorkflowType(in.GetWorkflowType()),
-		Header:            toProtoHeader(in.GetHeader()),
+		WorkflowType:      ToProtoWorkflowType(in.GetWorkflowType()),
+		Header:            ToProtoHeader(in.GetHeader()),
 	}
 }
 
-func toProtoChildWorkflowExecutionCompletedEventAttributes(in *shared.ChildWorkflowExecutionCompletedEventAttributes) *common.ChildWorkflowExecutionCompletedEventAttributes {
+func ToProtoChildWorkflowExecutionCompletedEventAttributes(in *shared.ChildWorkflowExecutionCompletedEventAttributes) *common.ChildWorkflowExecutionCompletedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -596,13 +596,13 @@ func toProtoChildWorkflowExecutionCompletedEventAttributes(in *shared.ChildWorkf
 		Result:            in.GetResult(),
 		Domain:            in.GetDomain(),
 		WorkflowExecution: ToProtoWorkflowExecution(in.GetWorkflowExecution()),
-		WorkflowType:      toProtoWorkflowType(in.GetWorkflowType()),
+		WorkflowType:      ToProtoWorkflowType(in.GetWorkflowType()),
 		InitiatedEventId:  in.GetInitiatedEventId(),
 		StartedEventId:    in.GetStartedEventId(),
 	}
 }
 
-func toProtoChildWorkflowExecutionFailedEventAttributes(in *shared.ChildWorkflowExecutionFailedEventAttributes) *common.ChildWorkflowExecutionFailedEventAttributes {
+func ToProtoChildWorkflowExecutionFailedEventAttributes(in *shared.ChildWorkflowExecutionFailedEventAttributes) *common.ChildWorkflowExecutionFailedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -611,13 +611,13 @@ func toProtoChildWorkflowExecutionFailedEventAttributes(in *shared.ChildWorkflow
 		Details:           in.GetDetails(),
 		Domain:            in.GetDomain(),
 		WorkflowExecution: ToProtoWorkflowExecution(in.GetWorkflowExecution()),
-		WorkflowType:      toProtoWorkflowType(in.GetWorkflowType()),
+		WorkflowType:      ToProtoWorkflowType(in.GetWorkflowType()),
 		InitiatedEventId:  in.GetInitiatedEventId(),
 		StartedEventId:    in.GetStartedEventId(),
 	}
 }
 
-func toProtoChildWorkflowExecutionCanceledEventAttributes(in *shared.ChildWorkflowExecutionCanceledEventAttributes) *common.ChildWorkflowExecutionCanceledEventAttributes {
+func ToProtoChildWorkflowExecutionCanceledEventAttributes(in *shared.ChildWorkflowExecutionCanceledEventAttributes) *common.ChildWorkflowExecutionCanceledEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -625,13 +625,13 @@ func toProtoChildWorkflowExecutionCanceledEventAttributes(in *shared.ChildWorkfl
 		Details:           in.GetDetails(),
 		Domain:            in.GetDomain(),
 		WorkflowExecution: ToProtoWorkflowExecution(in.GetWorkflowExecution()),
-		WorkflowType:      toProtoWorkflowType(in.GetWorkflowType()),
+		WorkflowType:      ToProtoWorkflowType(in.GetWorkflowType()),
 		InitiatedEventId:  in.GetInitiatedEventId(),
 		StartedEventId:    in.GetStartedEventId(),
 	}
 }
 
-func toProtoChildWorkflowExecutionTimedOutEventAttributes(in *shared.ChildWorkflowExecutionTimedOutEventAttributes) *common.ChildWorkflowExecutionTimedOutEventAttributes {
+func ToProtoChildWorkflowExecutionTimedOutEventAttributes(in *shared.ChildWorkflowExecutionTimedOutEventAttributes) *common.ChildWorkflowExecutionTimedOutEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -639,26 +639,26 @@ func toProtoChildWorkflowExecutionTimedOutEventAttributes(in *shared.ChildWorkfl
 		TimeoutType:       enums.TimeoutType(in.GetTimeoutType()),
 		Domain:            in.GetDomain(),
 		WorkflowExecution: ToProtoWorkflowExecution(in.GetWorkflowExecution()),
-		WorkflowType:      toProtoWorkflowType(in.GetWorkflowType()),
+		WorkflowType:      ToProtoWorkflowType(in.GetWorkflowType()),
 		InitiatedEventId:  in.GetInitiatedEventId(),
 		StartedEventId:    in.GetStartedEventId(),
 	}
 }
 
-func toProtoChildWorkflowExecutionTerminatedEventAttributes(in *shared.ChildWorkflowExecutionTerminatedEventAttributes) *common.ChildWorkflowExecutionTerminatedEventAttributes {
+func ToProtoChildWorkflowExecutionTerminatedEventAttributes(in *shared.ChildWorkflowExecutionTerminatedEventAttributes) *common.ChildWorkflowExecutionTerminatedEventAttributes {
 	if in == nil {
 		return nil
 	}
 	return &common.ChildWorkflowExecutionTerminatedEventAttributes{
 		Domain:            in.GetDomain(),
 		WorkflowExecution: ToProtoWorkflowExecution(in.GetWorkflowExecution()),
-		WorkflowType:      toProtoWorkflowType(in.GetWorkflowType()),
+		WorkflowType:      ToProtoWorkflowType(in.GetWorkflowType()),
 		InitiatedEventId:  in.GetInitiatedEventId(),
 		StartedEventId:    in.GetStartedEventId(),
 	}
 }
 
-func toProtoSignalExternalWorkflowExecutionInitiatedEventAttributes(in *shared.SignalExternalWorkflowExecutionInitiatedEventAttributes) *common.SignalExternalWorkflowExecutionInitiatedEventAttributes {
+func ToProtoSignalExternalWorkflowExecutionInitiatedEventAttributes(in *shared.SignalExternalWorkflowExecutionInitiatedEventAttributes) *common.SignalExternalWorkflowExecutionInitiatedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -673,7 +673,7 @@ func toProtoSignalExternalWorkflowExecutionInitiatedEventAttributes(in *shared.S
 	}
 }
 
-func toProtoSignalExternalWorkflowExecutionFailedEventAttributes(in *shared.SignalExternalWorkflowExecutionFailedEventAttributes) *common.SignalExternalWorkflowExecutionFailedEventAttributes {
+func ToProtoSignalExternalWorkflowExecutionFailedEventAttributes(in *shared.SignalExternalWorkflowExecutionFailedEventAttributes) *common.SignalExternalWorkflowExecutionFailedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -687,7 +687,7 @@ func toProtoSignalExternalWorkflowExecutionFailedEventAttributes(in *shared.Sign
 	}
 }
 
-func toProtoExternalWorkflowExecutionSignaledEventAttributes(in *shared.ExternalWorkflowExecutionSignaledEventAttributes) *common.ExternalWorkflowExecutionSignaledEventAttributes {
+func ToProtoExternalWorkflowExecutionSignaledEventAttributes(in *shared.ExternalWorkflowExecutionSignaledEventAttributes) *common.ExternalWorkflowExecutionSignaledEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -699,13 +699,13 @@ func toProtoExternalWorkflowExecutionSignaledEventAttributes(in *shared.External
 	}
 }
 
-func toProtoUpsertWorkflowSearchAttributesEventAttributes(in *shared.UpsertWorkflowSearchAttributesEventAttributes) *common.UpsertWorkflowSearchAttributesEventAttributes {
+func ToProtoUpsertWorkflowSearchAttributesEventAttributes(in *shared.UpsertWorkflowSearchAttributesEventAttributes) *common.UpsertWorkflowSearchAttributesEventAttributes {
 	if in == nil {
 		return nil
 	}
 	return &common.UpsertWorkflowSearchAttributesEventAttributes{
 		DecisionTaskCompletedEventId: in.GetDecisionTaskCompletedEventId(),
-		SearchAttributes:             toProtoSearchAttributes(in.GetSearchAttributes()),
+		SearchAttributes:             ToProtoSearchAttributes(in.GetSearchAttributes()),
 	}
 }
 
@@ -716,31 +716,31 @@ func ToThriftHistory(in *common.History) *shared.History {
 	}
 
 	return &shared.History{
-		Events: toThriftHistoryEvents(in.Events),
+		Events: ToThriftHistoryEvents(in.Events),
 	}
 }
 
-func toThriftHistoryEvents(in []*common.HistoryEvent) []*shared.HistoryEvent {
+func ToThriftHistoryEvents(in []*common.HistoryEvent) []*shared.HistoryEvent {
 	if in == nil {
 		return nil
 	}
 
 	var ret []*shared.HistoryEvent
 	for _, item := range in {
-		ret = append(ret, toThriftHistoryEvent(item))
+		ret = append(ret, ToThriftHistoryEvent(item))
 	}
 	return ret
 }
 
 // toThriftHistoryEvent ...
-func toThriftHistoryEvent(in *common.HistoryEvent) *shared.HistoryEvent {
+func ToThriftHistoryEvent(in *common.HistoryEvent) *shared.HistoryEvent {
 	if in == nil {
 		return nil
 	}
 	ret := &shared.HistoryEvent{
 		EventId:   &in.EventId,
 		Timestamp: &in.Timestamp,
-		EventType: toThriftEventType(in.EventType),
+		EventType: ToThriftEventType(in.EventType),
 		Version:   &in.Version,
 		TaskId:    &in.TaskId,
 	}
@@ -755,41 +755,41 @@ func toThriftHistoryEvent(in *common.HistoryEvent) *shared.HistoryEvent {
 	case enums.EventTypeWorkflowExecutionTimedOut:
 		ret.WorkflowExecutionTimedOutEventAttributes = ToThriftWorkflowExecutionTimedOutEventAttributes(in.GetWorkflowExecutionTimedOutEventAttributes())
 	case enums.EventTypeDecisionTaskScheduled:
-		ret.DecisionTaskScheduledEventAttributes = toThriftDecisionTaskScheduledEventAttributes(in.GetDecisionTaskScheduledEventAttributes())
+		ret.DecisionTaskScheduledEventAttributes = ToThriftDecisionTaskScheduledEventAttributes(in.GetDecisionTaskScheduledEventAttributes())
 	case enums.EventTypeDecisionTaskStarted:
-		ret.DecisionTaskStartedEventAttributes = toThriftDecisionTaskStartedEventAttributes(in.GetDecisionTaskStartedEventAttributes())
+		ret.DecisionTaskStartedEventAttributes = ToThriftDecisionTaskStartedEventAttributes(in.GetDecisionTaskStartedEventAttributes())
 	case enums.EventTypeDecisionTaskCompleted:
-		ret.DecisionTaskCompletedEventAttributes = toThriftDecisionTaskCompletedEventAttributes(in.GetDecisionTaskCompletedEventAttributes())
+		ret.DecisionTaskCompletedEventAttributes = ToThriftDecisionTaskCompletedEventAttributes(in.GetDecisionTaskCompletedEventAttributes())
 	case enums.EventTypeDecisionTaskTimedOut:
-		ret.DecisionTaskTimedOutEventAttributes = toThriftDecisionTaskTimedOutEventAttributes(in.GetDecisionTaskTimedOutEventAttributes())
+		ret.DecisionTaskTimedOutEventAttributes = ToThriftDecisionTaskTimedOutEventAttributes(in.GetDecisionTaskTimedOutEventAttributes())
 	case enums.EventTypeDecisionTaskFailed:
-		ret.DecisionTaskFailedEventAttributes = toThriftDecisionTaskFailedEventAttributes(in.GetDecisionTaskFailedEventAttributes())
+		ret.DecisionTaskFailedEventAttributes = ToThriftDecisionTaskFailedEventAttributes(in.GetDecisionTaskFailedEventAttributes())
 	case enums.EventTypeActivityTaskScheduled:
-		ret.ActivityTaskScheduledEventAttributes = toThriftActivityTaskScheduledEventAttributes(in.GetActivityTaskScheduledEventAttributes())
+		ret.ActivityTaskScheduledEventAttributes = ToThriftActivityTaskScheduledEventAttributes(in.GetActivityTaskScheduledEventAttributes())
 	case enums.EventTypeActivityTaskStarted:
-		ret.ActivityTaskStartedEventAttributes = toThriftActivityTaskStartedEventAttributes(in.GetActivityTaskStartedEventAttributes())
+		ret.ActivityTaskStartedEventAttributes = ToThriftActivityTaskStartedEventAttributes(in.GetActivityTaskStartedEventAttributes())
 	case enums.EventTypeActivityTaskCompleted:
-		ret.ActivityTaskCompletedEventAttributes = toThriftActivityTaskCompletedEventAttributes(in.GetActivityTaskCompletedEventAttributes())
+		ret.ActivityTaskCompletedEventAttributes = ToThriftActivityTaskCompletedEventAttributes(in.GetActivityTaskCompletedEventAttributes())
 	case enums.EventTypeActivityTaskFailed:
-		ret.ActivityTaskFailedEventAttributes = toThriftActivityTaskFailedEventAttributes(in.GetActivityTaskFailedEventAttributes())
+		ret.ActivityTaskFailedEventAttributes = ToThriftActivityTaskFailedEventAttributes(in.GetActivityTaskFailedEventAttributes())
 	case enums.EventTypeActivityTaskTimedOut:
-		ret.ActivityTaskTimedOutEventAttributes = toThriftActivityTaskTimedOutEventAttributes(in.GetActivityTaskTimedOutEventAttributes())
+		ret.ActivityTaskTimedOutEventAttributes = ToThriftActivityTaskTimedOutEventAttributes(in.GetActivityTaskTimedOutEventAttributes())
 	case enums.EventTypeTimerStarted:
-		ret.TimerStartedEventAttributes = toThriftTimerStartedEventAttributes(in.GetTimerStartedEventAttributes())
+		ret.TimerStartedEventAttributes = ToThriftTimerStartedEventAttributes(in.GetTimerStartedEventAttributes())
 	case enums.EventTypeTimerFired:
-		ret.TimerFiredEventAttributes = toThriftTimerFiredEventAttributes(in.GetTimerFiredEventAttributes())
+		ret.TimerFiredEventAttributes = ToThriftTimerFiredEventAttributes(in.GetTimerFiredEventAttributes())
 	case enums.EventTypeActivityTaskCancelRequested:
-		ret.ActivityTaskCancelRequestedEventAttributes = toThriftActivityTaskCancelRequestedEventAttributes(in.GetActivityTaskCancelRequestedEventAttributes())
+		ret.ActivityTaskCancelRequestedEventAttributes = ToThriftActivityTaskCancelRequestedEventAttributes(in.GetActivityTaskCancelRequestedEventAttributes())
 	case enums.EventTypeRequestCancelActivityTaskFailed:
-		ret.RequestCancelActivityTaskFailedEventAttributes = toThriftRequestCancelActivityTaskFailedEventAttributes(in.GetRequestCancelActivityTaskFailedEventAttributes())
+		ret.RequestCancelActivityTaskFailedEventAttributes = ToThriftRequestCancelActivityTaskFailedEventAttributes(in.GetRequestCancelActivityTaskFailedEventAttributes())
 	case enums.EventTypeActivityTaskCanceled:
-		ret.ActivityTaskCanceledEventAttributes = toThriftActivityTaskCanceledEventAttributes(in.GetActivityTaskCanceledEventAttributes())
+		ret.ActivityTaskCanceledEventAttributes = ToThriftActivityTaskCanceledEventAttributes(in.GetActivityTaskCanceledEventAttributes())
 	case enums.EventTypeTimerCanceled:
-		ret.TimerCanceledEventAttributes = toThriftTimerCanceledEventAttributes(in.GetTimerCanceledEventAttributes())
+		ret.TimerCanceledEventAttributes = ToThriftTimerCanceledEventAttributes(in.GetTimerCanceledEventAttributes())
 	case enums.EventTypeCancelTimerFailed:
-		ret.CancelTimerFailedEventAttributes = toThriftCancelTimerFailedEventAttributes(in.GetCancelTimerFailedEventAttributes())
+		ret.CancelTimerFailedEventAttributes = ToThriftCancelTimerFailedEventAttributes(in.GetCancelTimerFailedEventAttributes())
 	case enums.EventTypeMarkerRecorded:
-		ret.MarkerRecordedEventAttributes = toThriftMarkerRecordedEventAttributes(in.GetMarkerRecordedEventAttributes())
+		ret.MarkerRecordedEventAttributes = ToThriftMarkerRecordedEventAttributes(in.GetMarkerRecordedEventAttributes())
 	case enums.EventTypeWorkflowExecutionSignaled:
 		ret.WorkflowExecutionSignaledEventAttributes = ToThriftWorkflowExecutionSignaledEventAttributes(in.GetWorkflowExecutionSignaledEventAttributes())
 	case enums.EventTypeWorkflowExecutionTerminated:
@@ -799,37 +799,37 @@ func toThriftHistoryEvent(in *common.HistoryEvent) *shared.HistoryEvent {
 	case enums.EventTypeWorkflowExecutionCanceled:
 		ret.WorkflowExecutionCanceledEventAttributes = ToThriftWorkflowExecutionCanceledEventAttributes(in.GetWorkflowExecutionCanceledEventAttributes())
 	case enums.EventTypeRequestCancelExternalWorkflowExecutionInitiated:
-		ret.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes = toThriftRequestCancelExternalWorkflowExecutionInitiatedEventAttributes(in.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes())
+		ret.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes = ToThriftRequestCancelExternalWorkflowExecutionInitiatedEventAttributes(in.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes())
 	case enums.EventTypeRequestCancelExternalWorkflowExecutionFailed:
-		ret.RequestCancelExternalWorkflowExecutionFailedEventAttributes = toThriftRequestCancelExternalWorkflowExecutionFailedEventAttributes(in.GetRequestCancelExternalWorkflowExecutionFailedEventAttributes())
+		ret.RequestCancelExternalWorkflowExecutionFailedEventAttributes = ToThriftRequestCancelExternalWorkflowExecutionFailedEventAttributes(in.GetRequestCancelExternalWorkflowExecutionFailedEventAttributes())
 	case enums.EventTypeExternalWorkflowExecutionCancelRequested:
-		ret.ExternalWorkflowExecutionCancelRequestedEventAttributes = toThriftExternalWorkflowExecutionCancelRequestedEventAttributes(in.GetExternalWorkflowExecutionCancelRequestedEventAttributes())
+		ret.ExternalWorkflowExecutionCancelRequestedEventAttributes = ToThriftExternalWorkflowExecutionCancelRequestedEventAttributes(in.GetExternalWorkflowExecutionCancelRequestedEventAttributes())
 	case enums.EventTypeWorkflowExecutionContinuedAsNew:
 		ret.WorkflowExecutionContinuedAsNewEventAttributes = ToThriftWorkflowExecutionContinuedAsNewEventAttributes(in.GetWorkflowExecutionContinuedAsNewEventAttributes())
 	case enums.EventTypeStartChildWorkflowExecutionInitiated:
-		ret.StartChildWorkflowExecutionInitiatedEventAttributes = toThriftStartChildWorkflowExecutionInitiatedEventAttributes(in.GetStartChildWorkflowExecutionInitiatedEventAttributes())
+		ret.StartChildWorkflowExecutionInitiatedEventAttributes = ToThriftStartChildWorkflowExecutionInitiatedEventAttributes(in.GetStartChildWorkflowExecutionInitiatedEventAttributes())
 	case enums.EventTypeStartChildWorkflowExecutionFailed:
-		ret.StartChildWorkflowExecutionFailedEventAttributes = toThriftStartChildWorkflowExecutionFailedEventAttributes(in.GetStartChildWorkflowExecutionFailedEventAttributes())
+		ret.StartChildWorkflowExecutionFailedEventAttributes = ToThriftStartChildWorkflowExecutionFailedEventAttributes(in.GetStartChildWorkflowExecutionFailedEventAttributes())
 	case enums.EventTypeChildWorkflowExecutionStarted:
-		ret.ChildWorkflowExecutionStartedEventAttributes = toThriftChildWorkflowExecutionStartedEventAttributes(in.GetChildWorkflowExecutionStartedEventAttributes())
+		ret.ChildWorkflowExecutionStartedEventAttributes = ToThriftChildWorkflowExecutionStartedEventAttributes(in.GetChildWorkflowExecutionStartedEventAttributes())
 	case enums.EventTypeChildWorkflowExecutionCompleted:
-		ret.ChildWorkflowExecutionCompletedEventAttributes = toThriftChildWorkflowExecutionCompletedEventAttributes(in.GetChildWorkflowExecutionCompletedEventAttributes())
+		ret.ChildWorkflowExecutionCompletedEventAttributes = ToThriftChildWorkflowExecutionCompletedEventAttributes(in.GetChildWorkflowExecutionCompletedEventAttributes())
 	case enums.EventTypeChildWorkflowExecutionFailed:
-		ret.ChildWorkflowExecutionFailedEventAttributes = toThriftChildWorkflowExecutionFailedEventAttributes(in.GetChildWorkflowExecutionFailedEventAttributes())
+		ret.ChildWorkflowExecutionFailedEventAttributes = ToThriftChildWorkflowExecutionFailedEventAttributes(in.GetChildWorkflowExecutionFailedEventAttributes())
 	case enums.EventTypeChildWorkflowExecutionCanceled:
-		ret.ChildWorkflowExecutionCanceledEventAttributes = toThriftChildWorkflowExecutionCanceledEventAttributes(in.GetChildWorkflowExecutionCanceledEventAttributes())
+		ret.ChildWorkflowExecutionCanceledEventAttributes = ToThriftChildWorkflowExecutionCanceledEventAttributes(in.GetChildWorkflowExecutionCanceledEventAttributes())
 	case enums.EventTypeChildWorkflowExecutionTimedOut:
-		ret.ChildWorkflowExecutionTimedOutEventAttributes = toThriftChildWorkflowExecutionTimedOutEventAttributes(in.GetChildWorkflowExecutionTimedOutEventAttributes())
+		ret.ChildWorkflowExecutionTimedOutEventAttributes = ToThriftChildWorkflowExecutionTimedOutEventAttributes(in.GetChildWorkflowExecutionTimedOutEventAttributes())
 	case enums.EventTypeChildWorkflowExecutionTerminated:
-		ret.ChildWorkflowExecutionTerminatedEventAttributes = toThriftChildWorkflowExecutionTerminatedEventAttributes(in.GetChildWorkflowExecutionTerminatedEventAttributes())
+		ret.ChildWorkflowExecutionTerminatedEventAttributes = ToThriftChildWorkflowExecutionTerminatedEventAttributes(in.GetChildWorkflowExecutionTerminatedEventAttributes())
 	case enums.EventTypeSignalExternalWorkflowExecutionInitiated:
-		ret.SignalExternalWorkflowExecutionInitiatedEventAttributes = toThriftSignalExternalWorkflowExecutionInitiatedEventAttributes(in.GetSignalExternalWorkflowExecutionInitiatedEventAttributes())
+		ret.SignalExternalWorkflowExecutionInitiatedEventAttributes = ToThriftSignalExternalWorkflowExecutionInitiatedEventAttributes(in.GetSignalExternalWorkflowExecutionInitiatedEventAttributes())
 	case enums.EventTypeSignalExternalWorkflowExecutionFailed:
-		ret.SignalExternalWorkflowExecutionFailedEventAttributes = toThriftSignalExternalWorkflowExecutionFailedEventAttributes(in.GetSignalExternalWorkflowExecutionFailedEventAttributes())
+		ret.SignalExternalWorkflowExecutionFailedEventAttributes = ToThriftSignalExternalWorkflowExecutionFailedEventAttributes(in.GetSignalExternalWorkflowExecutionFailedEventAttributes())
 	case enums.EventTypeExternalWorkflowExecutionSignaled:
-		ret.ExternalWorkflowExecutionSignaledEventAttributes = toThriftExternalWorkflowExecutionSignaledEventAttributes(in.GetExternalWorkflowExecutionSignaledEventAttributes())
+		ret.ExternalWorkflowExecutionSignaledEventAttributes = ToThriftExternalWorkflowExecutionSignaledEventAttributes(in.GetExternalWorkflowExecutionSignaledEventAttributes())
 	case enums.EventTypeUpsertWorkflowSearchAttributes:
-		ret.UpsertWorkflowSearchAttributesEventAttributes = toThriftUpsertWorkflowSearchAttributesEventAttributes(in.GetUpsertWorkflowSearchAttributesEventAttributes())
+		ret.UpsertWorkflowSearchAttributesEventAttributes = ToThriftUpsertWorkflowSearchAttributesEventAttributes(in.GetUpsertWorkflowSearchAttributesEventAttributes())
 	}
 
 	return ret
@@ -841,31 +841,31 @@ func ToThriftWorkflowExecutionStartedEventAttributes(in *common.WorkflowExecutio
 		return nil
 	}
 	return &shared.WorkflowExecutionStartedEventAttributes{
-		WorkflowType:                        toThriftWorkflowType(in.WorkflowType),
+		WorkflowType:                        ToThriftWorkflowType(in.WorkflowType),
 		ParentWorkflowDomain:                &in.ParentWorkflowDomain,
 		ParentWorkflowExecution:             ToThriftWorkflowExecution(in.ParentWorkflowExecution),
 		ParentInitiatedEventId:              &in.ParentInitiatedEventId,
-		TaskList:                            toThriftTaskList(in.TaskList),
+		TaskList:                            ToThriftTaskList(in.TaskList),
 		Input:                               in.Input,
 		ExecutionStartToCloseTimeoutSeconds: &in.ExecutionStartToCloseTimeoutSeconds,
 		TaskStartToCloseTimeoutSeconds:      &in.TaskStartToCloseTimeoutSeconds,
 		ContinuedExecutionRunId:             &in.ContinuedExecutionRunId,
-		Initiator:                           toThriftContinueAsNewInitiator(in.Initiator),
+		Initiator:                           ToThriftContinueAsNewInitiator(in.Initiator),
 		ContinuedFailureReason:              &in.ContinuedFailureReason,
 		ContinuedFailureDetails:             in.ContinuedFailureDetails,
 		LastCompletionResult:                in.LastCompletionResult,
 		OriginalExecutionRunId:              &in.OriginalExecutionRunId,
 		Identity:                            &in.Identity,
 		FirstExecutionRunId:                 &in.FirstExecutionRunId,
-		RetryPolicy:                         toThriftRetryPolicy(in.RetryPolicy),
+		RetryPolicy:                         ToThriftRetryPolicy(in.RetryPolicy),
 		Attempt:                             &in.Attempt,
 		ExpirationTimestamp:                 &in.ExpirationTimestamp,
 		CronSchedule:                        &in.CronSchedule,
 		FirstDecisionTaskBackoffSeconds:     &in.FirstDecisionTaskBackoffSeconds,
-		Memo:                                toThriftMemo(in.Memo),
-		SearchAttributes:                    toThriftSearchAttributes(in.SearchAttributes),
+		Memo:                                ToThriftMemo(in.Memo),
+		SearchAttributes:                    ToThriftSearchAttributes(in.SearchAttributes),
 		PrevAutoResetPoints:                 ToThriftResetPoints(in.PrevAutoResetPoints),
-		Header:                              toThriftHeader(in.Header),
+		Header:                              ToThriftHeader(in.Header),
 	}
 }
 
@@ -898,7 +898,7 @@ func ToThriftWorkflowExecutionTimedOutEventAttributes(in *common.WorkflowExecuti
 		return nil
 	}
 	return &shared.WorkflowExecutionTimedOutEventAttributes{
-		TimeoutType: toThriftTimeoutType(in.TimeoutType),
+		TimeoutType: ToThriftTimeoutType(in.TimeoutType),
 	}
 }
 
@@ -909,37 +909,37 @@ func ToThriftWorkflowExecutionContinuedAsNewEventAttributes(in *common.WorkflowE
 	}
 	return &shared.WorkflowExecutionContinuedAsNewEventAttributes{
 		NewExecutionRunId:                   &in.NewExecutionRunId,
-		WorkflowType:                        toThriftWorkflowType(in.WorkflowType),
-		TaskList:                            toThriftTaskList(in.TaskList),
+		WorkflowType:                        ToThriftWorkflowType(in.WorkflowType),
+		TaskList:                            ToThriftTaskList(in.TaskList),
 		Input:                               in.Input,
 		ExecutionStartToCloseTimeoutSeconds: &in.ExecutionStartToCloseTimeoutSeconds,
 		TaskStartToCloseTimeoutSeconds:      &in.TaskStartToCloseTimeoutSeconds,
 		DecisionTaskCompletedEventId:        &in.DecisionTaskCompletedEventId,
 		BackoffStartIntervalInSeconds:       &in.BackoffStartIntervalInSeconds,
-		Initiator:                           toThriftContinueAsNewInitiator(in.Initiator),
+		Initiator:                           ToThriftContinueAsNewInitiator(in.Initiator),
 		FailureReason:                       &in.FailureReason,
 		FailureDetails:                      in.FailureDetails,
 		LastCompletionResult:                in.LastCompletionResult,
-		Header:                              toThriftHeader(in.Header),
-		Memo:                                toThriftMemo(in.Memo),
-		SearchAttributes:                    toThriftSearchAttributes(in.SearchAttributes),
+		Header:                              ToThriftHeader(in.Header),
+		Memo:                                ToThriftMemo(in.Memo),
+		SearchAttributes:                    ToThriftSearchAttributes(in.SearchAttributes),
 	}
 }
 
 // toThriftDecisionTaskScheduledEventAttributes ...
-func toThriftDecisionTaskScheduledEventAttributes(in *common.DecisionTaskScheduledEventAttributes) *shared.DecisionTaskScheduledEventAttributes {
+func ToThriftDecisionTaskScheduledEventAttributes(in *common.DecisionTaskScheduledEventAttributes) *shared.DecisionTaskScheduledEventAttributes {
 	if in == nil {
 		return nil
 	}
 	return &shared.DecisionTaskScheduledEventAttributes{
-		TaskList:                   toThriftTaskList(in.TaskList),
+		TaskList:                   ToThriftTaskList(in.TaskList),
 		StartToCloseTimeoutSeconds: &in.StartToCloseTimeoutSeconds,
 		Attempt:                    &in.Attempt,
 	}
 }
 
 // toThriftDecisionTaskStartedEventAttributes ...
-func toThriftDecisionTaskStartedEventAttributes(in *common.DecisionTaskStartedEventAttributes) *shared.DecisionTaskStartedEventAttributes {
+func ToThriftDecisionTaskStartedEventAttributes(in *common.DecisionTaskStartedEventAttributes) *shared.DecisionTaskStartedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -951,7 +951,7 @@ func toThriftDecisionTaskStartedEventAttributes(in *common.DecisionTaskStartedEv
 }
 
 // toThriftDecisionTaskCompletedEventAttributes ...
-func toThriftDecisionTaskCompletedEventAttributes(in *common.DecisionTaskCompletedEventAttributes) *shared.DecisionTaskCompletedEventAttributes {
+func ToThriftDecisionTaskCompletedEventAttributes(in *common.DecisionTaskCompletedEventAttributes) *shared.DecisionTaskCompletedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -965,26 +965,26 @@ func toThriftDecisionTaskCompletedEventAttributes(in *common.DecisionTaskComplet
 }
 
 // toThriftDecisionTaskTimedOutEventAttributes ...
-func toThriftDecisionTaskTimedOutEventAttributes(in *common.DecisionTaskTimedOutEventAttributes) *shared.DecisionTaskTimedOutEventAttributes {
+func ToThriftDecisionTaskTimedOutEventAttributes(in *common.DecisionTaskTimedOutEventAttributes) *shared.DecisionTaskTimedOutEventAttributes {
 	if in == nil {
 		return nil
 	}
 	return &shared.DecisionTaskTimedOutEventAttributes{
 		ScheduledEventId: &in.ScheduledEventId,
 		StartedEventId:   &in.StartedEventId,
-		TimeoutType:      toThriftTimeoutType(in.TimeoutType),
+		TimeoutType:      ToThriftTimeoutType(in.TimeoutType),
 	}
 }
 
 // toThriftDecisionTaskFailedEventAttributes ...
-func toThriftDecisionTaskFailedEventAttributes(in *common.DecisionTaskFailedEventAttributes) *shared.DecisionTaskFailedEventAttributes {
+func ToThriftDecisionTaskFailedEventAttributes(in *common.DecisionTaskFailedEventAttributes) *shared.DecisionTaskFailedEventAttributes {
 	if in == nil {
 		return nil
 	}
 	return &shared.DecisionTaskFailedEventAttributes{
 		ScheduledEventId: &in.ScheduledEventId,
 		StartedEventId:   &in.StartedEventId,
-		Cause:            toThriftDecisionTaskFailedCause(in.Cause),
+		Cause:            ToThriftDecisionTaskFailedCause(in.Cause),
 		Details:          in.Details,
 		Identity:         &in.Identity,
 		Reason:           &in.Reason,
@@ -995,28 +995,28 @@ func toThriftDecisionTaskFailedEventAttributes(in *common.DecisionTaskFailedEven
 }
 
 // toThriftActivityTaskScheduledEventAttributes ...
-func toThriftActivityTaskScheduledEventAttributes(in *common.ActivityTaskScheduledEventAttributes) *shared.ActivityTaskScheduledEventAttributes {
+func ToThriftActivityTaskScheduledEventAttributes(in *common.ActivityTaskScheduledEventAttributes) *shared.ActivityTaskScheduledEventAttributes {
 	if in == nil {
 		return nil
 	}
 	return &shared.ActivityTaskScheduledEventAttributes{
 		ActivityId:                    &in.ActivityId,
-		ActivityType:                  toThriftActivityType(in.ActivityType),
+		ActivityType:                  ToThriftActivityType(in.ActivityType),
 		Domain:                        &in.Domain,
-		TaskList:                      toThriftTaskList(in.TaskList),
+		TaskList:                      ToThriftTaskList(in.TaskList),
 		Input:                         in.Input,
 		ScheduleToCloseTimeoutSeconds: &in.ScheduleToCloseTimeoutSeconds,
 		ScheduleToStartTimeoutSeconds: &in.ScheduleToStartTimeoutSeconds,
 		StartToCloseTimeoutSeconds:    &in.StartToCloseTimeoutSeconds,
 		HeartbeatTimeoutSeconds:       &in.HeartbeatTimeoutSeconds,
 		DecisionTaskCompletedEventId:  &in.DecisionTaskCompletedEventId,
-		RetryPolicy:                   toThriftRetryPolicy(in.RetryPolicy),
-		Header:                        toThriftHeader(in.Header),
+		RetryPolicy:                   ToThriftRetryPolicy(in.RetryPolicy),
+		Header:                        ToThriftHeader(in.Header),
 	}
 }
 
 // toThriftActivityTaskStartedEventAttributes ...
-func toThriftActivityTaskStartedEventAttributes(in *common.ActivityTaskStartedEventAttributes) *shared.ActivityTaskStartedEventAttributes {
+func ToThriftActivityTaskStartedEventAttributes(in *common.ActivityTaskStartedEventAttributes) *shared.ActivityTaskStartedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -1029,7 +1029,7 @@ func toThriftActivityTaskStartedEventAttributes(in *common.ActivityTaskStartedEv
 }
 
 // toThriftActivityTaskCompletedEventAttributes ...
-func toThriftActivityTaskCompletedEventAttributes(in *common.ActivityTaskCompletedEventAttributes) *shared.ActivityTaskCompletedEventAttributes {
+func ToThriftActivityTaskCompletedEventAttributes(in *common.ActivityTaskCompletedEventAttributes) *shared.ActivityTaskCompletedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -1042,7 +1042,7 @@ func toThriftActivityTaskCompletedEventAttributes(in *common.ActivityTaskComplet
 }
 
 // toThriftActivityTaskFailedEventAttributes ...
-func toThriftActivityTaskFailedEventAttributes(in *common.ActivityTaskFailedEventAttributes) *shared.ActivityTaskFailedEventAttributes {
+func ToThriftActivityTaskFailedEventAttributes(in *common.ActivityTaskFailedEventAttributes) *shared.ActivityTaskFailedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -1056,7 +1056,7 @@ func toThriftActivityTaskFailedEventAttributes(in *common.ActivityTaskFailedEven
 }
 
 // toThriftActivityTaskTimedOutEventAttributes ...
-func toThriftActivityTaskTimedOutEventAttributes(in *common.ActivityTaskTimedOutEventAttributes) *shared.ActivityTaskTimedOutEventAttributes {
+func ToThriftActivityTaskTimedOutEventAttributes(in *common.ActivityTaskTimedOutEventAttributes) *shared.ActivityTaskTimedOutEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -1064,14 +1064,14 @@ func toThriftActivityTaskTimedOutEventAttributes(in *common.ActivityTaskTimedOut
 		Details:            in.Details,
 		ScheduledEventId:   &in.ScheduledEventId,
 		StartedEventId:     &in.StartedEventId,
-		TimeoutType:        toThriftTimeoutType(in.TimeoutType),
+		TimeoutType:        ToThriftTimeoutType(in.TimeoutType),
 		LastFailureReason:  &in.LastFailureReason,
 		LastFailureDetails: in.LastFailureDetails,
 	}
 }
 
 // toThriftActivityTaskCancelRequestedEventAttributes ...
-func toThriftActivityTaskCancelRequestedEventAttributes(in *common.ActivityTaskCancelRequestedEventAttributes) *shared.ActivityTaskCancelRequestedEventAttributes {
+func ToThriftActivityTaskCancelRequestedEventAttributes(in *common.ActivityTaskCancelRequestedEventAttributes) *shared.ActivityTaskCancelRequestedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -1082,7 +1082,7 @@ func toThriftActivityTaskCancelRequestedEventAttributes(in *common.ActivityTaskC
 }
 
 // toThriftRequestCancelActivityTaskFailedEventAttributes ...
-func toThriftRequestCancelActivityTaskFailedEventAttributes(in *common.RequestCancelActivityTaskFailedEventAttributes) *shared.RequestCancelActivityTaskFailedEventAttributes {
+func ToThriftRequestCancelActivityTaskFailedEventAttributes(in *common.RequestCancelActivityTaskFailedEventAttributes) *shared.RequestCancelActivityTaskFailedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -1094,7 +1094,7 @@ func toThriftRequestCancelActivityTaskFailedEventAttributes(in *common.RequestCa
 }
 
 // toThriftActivityTaskCanceledEventAttributes ...
-func toThriftActivityTaskCanceledEventAttributes(in *common.ActivityTaskCanceledEventAttributes) *shared.ActivityTaskCanceledEventAttributes {
+func ToThriftActivityTaskCanceledEventAttributes(in *common.ActivityTaskCanceledEventAttributes) *shared.ActivityTaskCanceledEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -1108,7 +1108,7 @@ func toThriftActivityTaskCanceledEventAttributes(in *common.ActivityTaskCanceled
 }
 
 // toThriftTimerStartedEventAttributes ...
-func toThriftTimerStartedEventAttributes(in *common.TimerStartedEventAttributes) *shared.TimerStartedEventAttributes {
+func ToThriftTimerStartedEventAttributes(in *common.TimerStartedEventAttributes) *shared.TimerStartedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -1120,7 +1120,7 @@ func toThriftTimerStartedEventAttributes(in *common.TimerStartedEventAttributes)
 }
 
 // toThriftTimerFiredEventAttributes ...
-func toThriftTimerFiredEventAttributes(in *common.TimerFiredEventAttributes) *shared.TimerFiredEventAttributes {
+func ToThriftTimerFiredEventAttributes(in *common.TimerFiredEventAttributes) *shared.TimerFiredEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -1131,7 +1131,7 @@ func toThriftTimerFiredEventAttributes(in *common.TimerFiredEventAttributes) *sh
 }
 
 // toThriftTimerCanceledEventAttributes ...
-func toThriftTimerCanceledEventAttributes(in *common.TimerCanceledEventAttributes) *shared.TimerCanceledEventAttributes {
+func ToThriftTimerCanceledEventAttributes(in *common.TimerCanceledEventAttributes) *shared.TimerCanceledEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -1144,7 +1144,7 @@ func toThriftTimerCanceledEventAttributes(in *common.TimerCanceledEventAttribute
 }
 
 // toThriftCancelTimerFailedEventAttributes ...
-func toThriftCancelTimerFailedEventAttributes(in *common.CancelTimerFailedEventAttributes) *shared.CancelTimerFailedEventAttributes {
+func ToThriftCancelTimerFailedEventAttributes(in *common.CancelTimerFailedEventAttributes) *shared.CancelTimerFailedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -1181,7 +1181,7 @@ func ToThriftWorkflowExecutionCanceledEventAttributes(in *common.WorkflowExecuti
 }
 
 // toThriftMarkerRecordedEventAttributes ...
-func toThriftMarkerRecordedEventAttributes(in *common.MarkerRecordedEventAttributes) *shared.MarkerRecordedEventAttributes {
+func ToThriftMarkerRecordedEventAttributes(in *common.MarkerRecordedEventAttributes) *shared.MarkerRecordedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -1189,7 +1189,7 @@ func toThriftMarkerRecordedEventAttributes(in *common.MarkerRecordedEventAttribu
 		MarkerName:                   &in.MarkerName,
 		Details:                      in.Details,
 		DecisionTaskCompletedEventId: &in.DecisionTaskCompletedEventId,
-		Header:                       toThriftHeader(in.Header),
+		Header:                       ToThriftHeader(in.Header),
 	}
 }
 
@@ -1218,7 +1218,7 @@ func ToThriftWorkflowExecutionTerminatedEventAttributes(in *common.WorkflowExecu
 }
 
 // toThriftRequestCancelExternalWorkflowExecutionInitiatedEventAttributes ...
-func toThriftRequestCancelExternalWorkflowExecutionInitiatedEventAttributes(in *common.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes) *shared.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes {
+func ToThriftRequestCancelExternalWorkflowExecutionInitiatedEventAttributes(in *common.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes) *shared.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -1232,12 +1232,12 @@ func toThriftRequestCancelExternalWorkflowExecutionInitiatedEventAttributes(in *
 }
 
 // toThriftRequestCancelExternalWorkflowExecutionFailedEventAttributes ...
-func toThriftRequestCancelExternalWorkflowExecutionFailedEventAttributes(in *common.RequestCancelExternalWorkflowExecutionFailedEventAttributes) *shared.RequestCancelExternalWorkflowExecutionFailedEventAttributes {
+func ToThriftRequestCancelExternalWorkflowExecutionFailedEventAttributes(in *common.RequestCancelExternalWorkflowExecutionFailedEventAttributes) *shared.RequestCancelExternalWorkflowExecutionFailedEventAttributes {
 	if in == nil {
 		return nil
 	}
 	return &shared.RequestCancelExternalWorkflowExecutionFailedEventAttributes{
-		Cause:                        toThriftCancelExternalWorkflowExecutionFailedCause(in.Cause),
+		Cause:                        ToThriftCancelExternalWorkflowExecutionFailedCause(in.Cause),
 		DecisionTaskCompletedEventId: &in.DecisionTaskCompletedEventId,
 		Domain:                       &in.Domain,
 		WorkflowExecution:            ToThriftWorkflowExecution(in.WorkflowExecution),
@@ -1247,7 +1247,7 @@ func toThriftRequestCancelExternalWorkflowExecutionFailedEventAttributes(in *com
 }
 
 // toThriftExternalWorkflowExecutionCancelRequestedEventAttributes ...
-func toThriftExternalWorkflowExecutionCancelRequestedEventAttributes(in *common.ExternalWorkflowExecutionCancelRequestedEventAttributes) *shared.ExternalWorkflowExecutionCancelRequestedEventAttributes {
+func ToThriftExternalWorkflowExecutionCancelRequestedEventAttributes(in *common.ExternalWorkflowExecutionCancelRequestedEventAttributes) *shared.ExternalWorkflowExecutionCancelRequestedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -1259,7 +1259,7 @@ func toThriftExternalWorkflowExecutionCancelRequestedEventAttributes(in *common.
 }
 
 // toThriftSignalExternalWorkflowExecutionInitiatedEventAttributes ...
-func toThriftSignalExternalWorkflowExecutionInitiatedEventAttributes(in *common.SignalExternalWorkflowExecutionInitiatedEventAttributes) *shared.SignalExternalWorkflowExecutionInitiatedEventAttributes {
+func ToThriftSignalExternalWorkflowExecutionInitiatedEventAttributes(in *common.SignalExternalWorkflowExecutionInitiatedEventAttributes) *shared.SignalExternalWorkflowExecutionInitiatedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -1275,12 +1275,12 @@ func toThriftSignalExternalWorkflowExecutionInitiatedEventAttributes(in *common.
 }
 
 // toThriftSignalExternalWorkflowExecutionFailedEventAttributes ...
-func toThriftSignalExternalWorkflowExecutionFailedEventAttributes(in *common.SignalExternalWorkflowExecutionFailedEventAttributes) *shared.SignalExternalWorkflowExecutionFailedEventAttributes {
+func ToThriftSignalExternalWorkflowExecutionFailedEventAttributes(in *common.SignalExternalWorkflowExecutionFailedEventAttributes) *shared.SignalExternalWorkflowExecutionFailedEventAttributes {
 	if in == nil {
 		return nil
 	}
 	return &shared.SignalExternalWorkflowExecutionFailedEventAttributes{
-		Cause:                        toThriftSignalExternalWorkflowExecutionFailedCause(in.Cause),
+		Cause:                        ToThriftSignalExternalWorkflowExecutionFailedCause(in.Cause),
 		DecisionTaskCompletedEventId: &in.DecisionTaskCompletedEventId,
 		Domain:                       &in.Domain,
 		WorkflowExecution:            ToThriftWorkflowExecution(in.WorkflowExecution),
@@ -1290,7 +1290,7 @@ func toThriftSignalExternalWorkflowExecutionFailedEventAttributes(in *common.Sig
 }
 
 // toThriftExternalWorkflowExecutionSignaledEventAttributes ...
-func toThriftExternalWorkflowExecutionSignaledEventAttributes(in *common.ExternalWorkflowExecutionSignaledEventAttributes) *shared.ExternalWorkflowExecutionSignaledEventAttributes {
+func ToThriftExternalWorkflowExecutionSignaledEventAttributes(in *common.ExternalWorkflowExecutionSignaledEventAttributes) *shared.ExternalWorkflowExecutionSignaledEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -1303,51 +1303,51 @@ func toThriftExternalWorkflowExecutionSignaledEventAttributes(in *common.Externa
 }
 
 // toThriftUpsertWorkflowSearchAttributesEventAttributes ...
-func toThriftUpsertWorkflowSearchAttributesEventAttributes(in *common.UpsertWorkflowSearchAttributesEventAttributes) *shared.UpsertWorkflowSearchAttributesEventAttributes {
+func ToThriftUpsertWorkflowSearchAttributesEventAttributes(in *common.UpsertWorkflowSearchAttributesEventAttributes) *shared.UpsertWorkflowSearchAttributesEventAttributes {
 	if in == nil {
 		return nil
 	}
 	return &shared.UpsertWorkflowSearchAttributesEventAttributes{
 		DecisionTaskCompletedEventId: &in.DecisionTaskCompletedEventId,
-		SearchAttributes:             toThriftSearchAttributes(in.SearchAttributes),
+		SearchAttributes:             ToThriftSearchAttributes(in.SearchAttributes),
 	}
 }
 
 // toThriftStartChildWorkflowExecutionInitiatedEventAttributes ...
-func toThriftStartChildWorkflowExecutionInitiatedEventAttributes(in *common.StartChildWorkflowExecutionInitiatedEventAttributes) *shared.StartChildWorkflowExecutionInitiatedEventAttributes {
+func ToThriftStartChildWorkflowExecutionInitiatedEventAttributes(in *common.StartChildWorkflowExecutionInitiatedEventAttributes) *shared.StartChildWorkflowExecutionInitiatedEventAttributes {
 	if in == nil {
 		return nil
 	}
 	return &shared.StartChildWorkflowExecutionInitiatedEventAttributes{
 		Domain:                              &in.Domain,
 		WorkflowId:                          &in.WorkflowId,
-		WorkflowType:                        toThriftWorkflowType(in.WorkflowType),
-		TaskList:                            toThriftTaskList(in.TaskList),
+		WorkflowType:                        ToThriftWorkflowType(in.WorkflowType),
+		TaskList:                            ToThriftTaskList(in.TaskList),
 		Input:                               in.Input,
 		ExecutionStartToCloseTimeoutSeconds: &in.ExecutionStartToCloseTimeoutSeconds,
 		TaskStartToCloseTimeoutSeconds:      &in.TaskStartToCloseTimeoutSeconds,
-		ParentClosePolicy:                   toThriftParentClosePolicy(in.ParentClosePolicy),
+		ParentClosePolicy:                   ToThriftParentClosePolicy(in.ParentClosePolicy),
 		Control:                             in.Control,
 		DecisionTaskCompletedEventId:        &in.DecisionTaskCompletedEventId,
-		WorkflowIdReusePolicy:               toThriftWorkflowIDReusePolicy(in.WorkflowIdReusePolicy),
-		RetryPolicy:                         toThriftRetryPolicy(in.RetryPolicy),
+		WorkflowIdReusePolicy:               ToThriftWorkflowIDReusePolicy(in.WorkflowIdReusePolicy),
+		RetryPolicy:                         ToThriftRetryPolicy(in.RetryPolicy),
 		CronSchedule:                        &in.CronSchedule,
-		Header:                              toThriftHeader(in.Header),
-		Memo:                                toThriftMemo(in.Memo),
-		SearchAttributes:                    toThriftSearchAttributes(in.SearchAttributes),
+		Header:                              ToThriftHeader(in.Header),
+		Memo:                                ToThriftMemo(in.Memo),
+		SearchAttributes:                    ToThriftSearchAttributes(in.SearchAttributes),
 	}
 }
 
 // toThriftStartChildWorkflowExecutionFailedEventAttributes ...
-func toThriftStartChildWorkflowExecutionFailedEventAttributes(in *common.StartChildWorkflowExecutionFailedEventAttributes) *shared.StartChildWorkflowExecutionFailedEventAttributes {
+func ToThriftStartChildWorkflowExecutionFailedEventAttributes(in *common.StartChildWorkflowExecutionFailedEventAttributes) *shared.StartChildWorkflowExecutionFailedEventAttributes {
 	if in == nil {
 		return nil
 	}
 	return &shared.StartChildWorkflowExecutionFailedEventAttributes{
 		Domain:                       &in.Domain,
 		WorkflowId:                   &in.WorkflowId,
-		WorkflowType:                 toThriftWorkflowType(in.WorkflowType),
-		Cause:                        toThriftChildWorkflowExecutionFailedCause(in.Cause),
+		WorkflowType:                 ToThriftWorkflowType(in.WorkflowType),
+		Cause:                        ToThriftChildWorkflowExecutionFailedCause(in.Cause),
 		Control:                      in.Control,
 		InitiatedEventId:             &in.InitiatedEventId,
 		DecisionTaskCompletedEventId: &in.DecisionTaskCompletedEventId,
@@ -1355,7 +1355,7 @@ func toThriftStartChildWorkflowExecutionFailedEventAttributes(in *common.StartCh
 }
 
 // toThriftChildWorkflowExecutionStartedEventAttributes ...
-func toThriftChildWorkflowExecutionStartedEventAttributes(in *common.ChildWorkflowExecutionStartedEventAttributes) *shared.ChildWorkflowExecutionStartedEventAttributes {
+func ToThriftChildWorkflowExecutionStartedEventAttributes(in *common.ChildWorkflowExecutionStartedEventAttributes) *shared.ChildWorkflowExecutionStartedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -1363,13 +1363,13 @@ func toThriftChildWorkflowExecutionStartedEventAttributes(in *common.ChildWorkfl
 		Domain:            &in.Domain,
 		InitiatedEventId:  &in.InitiatedEventId,
 		WorkflowExecution: ToThriftWorkflowExecution(in.WorkflowExecution),
-		WorkflowType:      toThriftWorkflowType(in.WorkflowType),
-		Header:            toThriftHeader(in.Header),
+		WorkflowType:      ToThriftWorkflowType(in.WorkflowType),
+		Header:            ToThriftHeader(in.Header),
 	}
 }
 
 // toThriftChildWorkflowExecutionCompletedEventAttributes ...
-func toThriftChildWorkflowExecutionCompletedEventAttributes(in *common.ChildWorkflowExecutionCompletedEventAttributes) *shared.ChildWorkflowExecutionCompletedEventAttributes {
+func ToThriftChildWorkflowExecutionCompletedEventAttributes(in *common.ChildWorkflowExecutionCompletedEventAttributes) *shared.ChildWorkflowExecutionCompletedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -1377,14 +1377,14 @@ func toThriftChildWorkflowExecutionCompletedEventAttributes(in *common.ChildWork
 		Result:            in.Result,
 		Domain:            &in.Domain,
 		WorkflowExecution: ToThriftWorkflowExecution(in.WorkflowExecution),
-		WorkflowType:      toThriftWorkflowType(in.WorkflowType),
+		WorkflowType:      ToThriftWorkflowType(in.WorkflowType),
 		InitiatedEventId:  &in.InitiatedEventId,
 		StartedEventId:    &in.StartedEventId,
 	}
 }
 
 // toThriftChildWorkflowExecutionFailedEventAttributes ...
-func toThriftChildWorkflowExecutionFailedEventAttributes(in *common.ChildWorkflowExecutionFailedEventAttributes) *shared.ChildWorkflowExecutionFailedEventAttributes {
+func ToThriftChildWorkflowExecutionFailedEventAttributes(in *common.ChildWorkflowExecutionFailedEventAttributes) *shared.ChildWorkflowExecutionFailedEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -1393,14 +1393,14 @@ func toThriftChildWorkflowExecutionFailedEventAttributes(in *common.ChildWorkflo
 		Details:           in.Details,
 		Domain:            &in.Domain,
 		WorkflowExecution: ToThriftWorkflowExecution(in.WorkflowExecution),
-		WorkflowType:      toThriftWorkflowType(in.WorkflowType),
+		WorkflowType:      ToThriftWorkflowType(in.WorkflowType),
 		InitiatedEventId:  &in.InitiatedEventId,
 		StartedEventId:    &in.StartedEventId,
 	}
 }
 
 // toThriftChildWorkflowExecutionCanceledEventAttributes ...
-func toThriftChildWorkflowExecutionCanceledEventAttributes(in *common.ChildWorkflowExecutionCanceledEventAttributes) *shared.ChildWorkflowExecutionCanceledEventAttributes {
+func ToThriftChildWorkflowExecutionCanceledEventAttributes(in *common.ChildWorkflowExecutionCanceledEventAttributes) *shared.ChildWorkflowExecutionCanceledEventAttributes {
 	if in == nil {
 		return nil
 	}
@@ -1408,36 +1408,36 @@ func toThriftChildWorkflowExecutionCanceledEventAttributes(in *common.ChildWorkf
 		Details:           in.Details,
 		Domain:            &in.Domain,
 		WorkflowExecution: ToThriftWorkflowExecution(in.WorkflowExecution),
-		WorkflowType:      toThriftWorkflowType(in.WorkflowType),
+		WorkflowType:      ToThriftWorkflowType(in.WorkflowType),
 		InitiatedEventId:  &in.InitiatedEventId,
 		StartedEventId:    &in.StartedEventId,
 	}
 }
 
 // toThriftChildWorkflowExecutionTimedOutEventAttributes ...
-func toThriftChildWorkflowExecutionTimedOutEventAttributes(in *common.ChildWorkflowExecutionTimedOutEventAttributes) *shared.ChildWorkflowExecutionTimedOutEventAttributes {
+func ToThriftChildWorkflowExecutionTimedOutEventAttributes(in *common.ChildWorkflowExecutionTimedOutEventAttributes) *shared.ChildWorkflowExecutionTimedOutEventAttributes {
 	if in == nil {
 		return nil
 	}
 	return &shared.ChildWorkflowExecutionTimedOutEventAttributes{
-		TimeoutType:       toThriftTimeoutType(in.TimeoutType),
+		TimeoutType:       ToThriftTimeoutType(in.TimeoutType),
 		Domain:            &in.Domain,
 		WorkflowExecution: ToThriftWorkflowExecution(in.WorkflowExecution),
-		WorkflowType:      toThriftWorkflowType(in.WorkflowType),
+		WorkflowType:      ToThriftWorkflowType(in.WorkflowType),
 		InitiatedEventId:  &in.InitiatedEventId,
 		StartedEventId:    &in.StartedEventId,
 	}
 }
 
 // toThriftChildWorkflowExecutionTerminatedEventAttributes ...
-func toThriftChildWorkflowExecutionTerminatedEventAttributes(in *common.ChildWorkflowExecutionTerminatedEventAttributes) *shared.ChildWorkflowExecutionTerminatedEventAttributes {
+func ToThriftChildWorkflowExecutionTerminatedEventAttributes(in *common.ChildWorkflowExecutionTerminatedEventAttributes) *shared.ChildWorkflowExecutionTerminatedEventAttributes {
 	if in == nil {
 		return nil
 	}
 	return &shared.ChildWorkflowExecutionTerminatedEventAttributes{
 		Domain:            &in.Domain,
 		WorkflowExecution: ToThriftWorkflowExecution(in.WorkflowExecution),
-		WorkflowType:      toThriftWorkflowType(in.WorkflowType),
+		WorkflowType:      ToThriftWorkflowType(in.WorkflowType),
 		InitiatedEventId:  &in.InitiatedEventId,
 		StartedEventId:    &in.StartedEventId,
 	}

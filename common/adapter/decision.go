@@ -1,0 +1,244 @@
+// Copyright (c) 2019 Temporal Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+package adapter
+
+import (
+	"go.temporal.io/temporal-proto/common"
+
+	"github.com/temporalio/temporal/.gen/go/shared"
+)
+
+// toThriftDecisions ...
+func ToThriftDecisions(in []*common.Decision) []*shared.Decision {
+	if in == nil {
+		return nil
+	}
+
+	var ret []*shared.Decision
+	for _, item := range in {
+		ret = append(ret, ToThriftDecision(item))
+	}
+	return ret
+}
+
+// toThriftDecision ...
+func ToThriftDecision(in *common.Decision) *shared.Decision {
+	if in == nil {
+		return nil
+	}
+	return &shared.Decision{
+		DecisionType:                                             ToThriftDecisionType(in.DecisionType),
+		ScheduleActivityTaskDecisionAttributes:                   ToThriftScheduleActivityTaskDecisionAttributes(in.GetScheduleActivityTaskDecisionAttributes()),
+		StartTimerDecisionAttributes:                             ToThriftStartTimerDecisionAttributes(in.GetStartTimerDecisionAttributes()),
+		CompleteWorkflowExecutionDecisionAttributes:              ToThriftCompleteWorkflowExecutionDecisionAttributes(in.GetCompleteWorkflowExecutionDecisionAttributes()),
+		FailWorkflowExecutionDecisionAttributes:                  ToThriftFailWorkflowExecutionDecisionAttributes(in.GetFailWorkflowExecutionDecisionAttributes()),
+		RequestCancelActivityTaskDecisionAttributes:              ToThriftRequestCancelActivityTaskDecisionAttributes(in.GetRequestCancelActivityTaskDecisionAttributes()),
+		CancelTimerDecisionAttributes:                            ToThriftCancelTimerDecisionAttributes(in.GetCancelTimerDecisionAttributes()),
+		CancelWorkflowExecutionDecisionAttributes:                ToThriftCancelWorkflowExecutionDecisionAttributes(in.GetCancelWorkflowExecutionDecisionAttributes()),
+		RequestCancelExternalWorkflowExecutionDecisionAttributes: ToThriftRequestCancelExternalWorkflowExecutionDecisionAttributes(in.GetRequestCancelExternalWorkflowExecutionDecisionAttributes()),
+		RecordMarkerDecisionAttributes:                           ToThriftRecordMarkerDecisionAttributes(in.GetRecordMarkerDecisionAttributes()),
+		ContinueAsNewWorkflowExecutionDecisionAttributes:         ToThriftContinueAsNewWorkflowExecutionDecisionAttributes(in.GetContinueAsNewWorkflowExecutionDecisionAttributes()),
+		StartChildWorkflowExecutionDecisionAttributes:            ToThriftStartChildWorkflowExecutionDecisionAttributes(in.GetStartChildWorkflowExecutionDecisionAttributes()),
+		SignalExternalWorkflowExecutionDecisionAttributes:        ToThriftSignalExternalWorkflowExecutionDecisionAttributes(in.GetSignalExternalWorkflowExecutionDecisionAttributes()),
+		UpsertWorkflowSearchAttributesDecisionAttributes:         ToThriftUpsertWorkflowSearchAttributesDecisionAttributes(in.GetUpsertWorkflowSearchAttributesDecisionAttributes()),
+	}
+}
+
+// toThriftScheduleActivityTaskDecisionAttributes ...
+func ToThriftScheduleActivityTaskDecisionAttributes(in *common.ScheduleActivityTaskDecisionAttributes) *shared.ScheduleActivityTaskDecisionAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.ScheduleActivityTaskDecisionAttributes{
+		ActivityId:                    &in.ActivityId,
+		ActivityType:                  ToThriftActivityType(in.ActivityType),
+		Domain:                        &in.Domain,
+		TaskList:                      ToThriftTaskList(in.TaskList),
+		Input:                         in.Input,
+		ScheduleToCloseTimeoutSeconds: &in.ScheduleToCloseTimeoutSeconds,
+		ScheduleToStartTimeoutSeconds: &in.ScheduleToStartTimeoutSeconds,
+		StartToCloseTimeoutSeconds:    &in.StartToCloseTimeoutSeconds,
+		HeartbeatTimeoutSeconds:       &in.HeartbeatTimeoutSeconds,
+		RetryPolicy:                   ToThriftRetryPolicy(in.RetryPolicy),
+		Header:                        ToThriftHeader(in.Header),
+	}
+}
+
+// toThriftRequestCancelActivityTaskDecisionAttributes ...
+func ToThriftRequestCancelActivityTaskDecisionAttributes(in *common.RequestCancelActivityTaskDecisionAttributes) *shared.RequestCancelActivityTaskDecisionAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.RequestCancelActivityTaskDecisionAttributes{
+		ActivityId: &in.ActivityId,
+	}
+}
+
+// toThriftStartTimerDecisionAttributes ...
+func ToThriftStartTimerDecisionAttributes(in *common.StartTimerDecisionAttributes) *shared.StartTimerDecisionAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.StartTimerDecisionAttributes{
+		TimerId:                   &in.TimerId,
+		StartToFireTimeoutSeconds: &in.StartToFireTimeoutSeconds,
+	}
+}
+
+// toThriftCompleteWorkflowExecutionDecisionAttributes ...
+func ToThriftCompleteWorkflowExecutionDecisionAttributes(in *common.CompleteWorkflowExecutionDecisionAttributes) *shared.CompleteWorkflowExecutionDecisionAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.CompleteWorkflowExecutionDecisionAttributes{
+		Result: in.Result,
+	}
+}
+
+// toThriftFailWorkflowExecutionDecisionAttributes ...
+func ToThriftFailWorkflowExecutionDecisionAttributes(in *common.FailWorkflowExecutionDecisionAttributes) *shared.FailWorkflowExecutionDecisionAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.FailWorkflowExecutionDecisionAttributes{
+		Reason:  &in.Reason,
+		Details: in.Details,
+	}
+}
+
+// toThriftCancelTimerDecisionAttributes ...
+func ToThriftCancelTimerDecisionAttributes(in *common.CancelTimerDecisionAttributes) *shared.CancelTimerDecisionAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.CancelTimerDecisionAttributes{
+		TimerId: &in.TimerId,
+	}
+}
+
+// toThriftCancelWorkflowExecutionDecisionAttributes ...
+func ToThriftCancelWorkflowExecutionDecisionAttributes(in *common.CancelWorkflowExecutionDecisionAttributes) *shared.CancelWorkflowExecutionDecisionAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.CancelWorkflowExecutionDecisionAttributes{
+		Details: in.Details,
+	}
+}
+
+// toThriftRequestCancelExternalWorkflowExecutionDecisionAttributes ...
+func ToThriftRequestCancelExternalWorkflowExecutionDecisionAttributes(in *common.RequestCancelExternalWorkflowExecutionDecisionAttributes) *shared.RequestCancelExternalWorkflowExecutionDecisionAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.RequestCancelExternalWorkflowExecutionDecisionAttributes{
+		Domain:            &in.Domain,
+		WorkflowId:        &in.WorkflowId,
+		RunId:             &in.RunId,
+		Control:           in.Control,
+		ChildWorkflowOnly: &in.ChildWorkflowOnly,
+	}
+}
+
+// toThriftSignalExternalWorkflowExecutionDecisionAttributes ...
+func ToThriftSignalExternalWorkflowExecutionDecisionAttributes(in *common.SignalExternalWorkflowExecutionDecisionAttributes) *shared.SignalExternalWorkflowExecutionDecisionAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.SignalExternalWorkflowExecutionDecisionAttributes{
+		Domain:            &in.Domain,
+		Execution:         ToThriftWorkflowExecution(in.Execution),
+		SignalName:        &in.SignalName,
+		Input:             in.Input,
+		Control:           in.Control,
+		ChildWorkflowOnly: &in.ChildWorkflowOnly,
+	}
+}
+
+// toThriftUpsertWorkflowSearchAttributesDecisionAttributes ...
+func ToThriftUpsertWorkflowSearchAttributesDecisionAttributes(in *common.UpsertWorkflowSearchAttributesDecisionAttributes) *shared.UpsertWorkflowSearchAttributesDecisionAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.UpsertWorkflowSearchAttributesDecisionAttributes{
+		SearchAttributes: ToThriftSearchAttributes(in.SearchAttributes),
+	}
+}
+
+// toThriftRecordMarkerDecisionAttributes ...
+func ToThriftRecordMarkerDecisionAttributes(in *common.RecordMarkerDecisionAttributes) *shared.RecordMarkerDecisionAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.RecordMarkerDecisionAttributes{
+		MarkerName: &in.MarkerName,
+		Details:    in.Details,
+		Header:     ToThriftHeader(in.Header),
+	}
+}
+
+// toThriftContinueAsNewWorkflowExecutionDecisionAttributes ...
+func ToThriftContinueAsNewWorkflowExecutionDecisionAttributes(in *common.ContinueAsNewWorkflowExecutionDecisionAttributes) *shared.ContinueAsNewWorkflowExecutionDecisionAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.ContinueAsNewWorkflowExecutionDecisionAttributes{
+		WorkflowType:                        ToThriftWorkflowType(in.WorkflowType),
+		TaskList:                            ToThriftTaskList(in.TaskList),
+		Input:                               in.Input,
+		ExecutionStartToCloseTimeoutSeconds: &in.ExecutionStartToCloseTimeoutSeconds,
+		TaskStartToCloseTimeoutSeconds:      &in.TaskStartToCloseTimeoutSeconds,
+		BackoffStartIntervalInSeconds:       &in.BackoffStartIntervalInSeconds,
+		RetryPolicy:                         ToThriftRetryPolicy(in.RetryPolicy),
+		Initiator:                           ToThriftContinueAsNewInitiator(in.Initiator),
+		FailureReason:                       &in.FailureReason,
+		FailureDetails:                      in.FailureDetails,
+		LastCompletionResult:                in.LastCompletionResult,
+		CronSchedule:                        &in.CronSchedule,
+		Header:                              ToThriftHeader(in.Header),
+		Memo:                                ToThriftMemo(in.Memo),
+		SearchAttributes:                    ToThriftSearchAttributes(in.SearchAttributes),
+	}
+}
+
+// toThriftStartChildWorkflowExecutionDecisionAttributes ...
+func ToThriftStartChildWorkflowExecutionDecisionAttributes(in *common.StartChildWorkflowExecutionDecisionAttributes) *shared.StartChildWorkflowExecutionDecisionAttributes {
+	if in == nil {
+		return nil
+	}
+	return &shared.StartChildWorkflowExecutionDecisionAttributes{
+		Domain:                              &in.Domain,
+		WorkflowId:                          &in.WorkflowId,
+		WorkflowType:                        ToThriftWorkflowType(in.WorkflowType),
+		TaskList:                            ToThriftTaskList(in.TaskList),
+		Input:                               in.Input,
+		ExecutionStartToCloseTimeoutSeconds: &in.ExecutionStartToCloseTimeoutSeconds,
+		TaskStartToCloseTimeoutSeconds:      &in.TaskStartToCloseTimeoutSeconds,
+		ParentClosePolicy:                   ToThriftParentClosePolicy(in.ParentClosePolicy),
+		Control:                             in.Control,
+		WorkflowIdReusePolicy:               ToThriftWorkflowIDReusePolicy(in.WorkflowIdReusePolicy),
+		RetryPolicy:                         ToThriftRetryPolicy(in.RetryPolicy),
+		CronSchedule:                        &in.CronSchedule,
+		Header:                              ToThriftHeader(in.Header),
+		Memo:                                ToThriftMemo(in.Memo),
+		SearchAttributes:                    ToThriftSearchAttributes(in.SearchAttributes),
+	}
+}

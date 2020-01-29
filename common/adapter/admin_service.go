@@ -65,7 +65,7 @@ func ToProtoAdminGetWorkflowExecutionRawHistoryResponse(in *admin.GetWorkflowExe
 	return &adminservice.GetWorkflowExecutionRawHistoryResponse{
 		NextPageToken:     in.GetNextPageToken(),
 		HistoryBatches:    ToProtoDataBlobs(in.GetHistoryBatches()),
-		ReplicationInfo:   toProtoReplicationInfos(in.GetReplicationInfo()),
+		ReplicationInfo:   ToProtoReplicationInfos(in.GetReplicationInfo()),
 		EventStoreVersion: in.GetEventStoreVersion(),
 	}
 }
@@ -78,7 +78,7 @@ func ToProtoGetWorkflowExecutionRawHistoryV2Response(in *admin.GetWorkflowExecut
 	return &adminservice.GetWorkflowExecutionRawHistoryV2Response{
 		NextPageToken:  in.GetNextPageToken(),
 		HistoryBatches: ToProtoDataBlobs(in.GetHistoryBatches()),
-		VersionHistory: toProtoVersionHistory(in.GetVersionHistory()),
+		VersionHistory: ToProtoVersionHistory(in.GetVersionHistory()),
 	}
 }
 
@@ -88,7 +88,7 @@ func ToProtoDescribeClusterResponse(in *admin.DescribeClusterResponse) *adminser
 		return nil
 	}
 	return &adminservice.DescribeClusterResponse{
-		SupportedClientVersions: toProtoSupportedClientVersions(in.GetSupportedClientVersions()),
+		SupportedClientVersions: ToProtoSupportedClientVersions(in.GetSupportedClientVersions()),
 		MembershipInfo:          ToProtoMembershipInfo(in.GetMembershipInfo()),
 	}
 }
@@ -176,7 +176,7 @@ func ToThriftAddSearchAttributeRequest(in *adminservice.AddSearchAttributeReques
 		return nil
 	}
 	return &admin.AddSearchAttributeRequest{
-		SearchAttribute: toThriftIndexedValueTypes(in.SearchAttribute),
+		SearchAttribute: ToThriftIndexedValueTypes(in.SearchAttribute),
 		SecurityToken:   &in.SecurityToken,
 	}
 }
@@ -247,7 +247,7 @@ func ToProtoGetReplicationMessagesResponse(in *replicator.GetReplicationMessages
 		return nil
 	}
 	return &adminservice.GetReplicationMessagesResponse{
-		MessagesByShard: toProtoReplicationMessagess(in.GetMessagesByShard()),
+		MessagesByShard: ToProtoReplicationMessagess(in.GetMessagesByShard()),
 	}
 }
 
@@ -257,7 +257,7 @@ func ToProtoGetDomainReplicationMessagesResponse(in *replicator.GetDomainReplica
 		return nil
 	}
 	return &adminservice.GetDomainReplicationMessagesResponse{
-		Messages: toProtoReplicationMessages(in.GetMessages()),
+		Messages: ToProtoReplicationMessages(in.GetMessages()),
 	}
 }
 
@@ -267,7 +267,7 @@ func ToThriftGetReplicationMessagesRequest(in *adminservice.GetReplicationMessag
 		return nil
 	}
 	return &replicator.GetReplicationMessagesRequest{
-		Tokens:      toThriftReplicationTokens(in.Tokens),
+		Tokens:      ToThriftReplicationTokens(in.Tokens),
 		ClusterName: &in.ClusterName,
 	}
 }
@@ -312,6 +312,6 @@ func ToProtoGetDLQReplicationMessagesResponse(in *replicator.GetDLQReplicationMe
 		return nil
 	}
 	return &adminservice.GetDLQReplicationMessagesResponse{
-		ReplicationTasks: toProtoReplicationTasks(in.GetReplicationTasks()),
+		ReplicationTasks: ToProtoReplicationTasks(in.GetReplicationTasks()),
 	}
 }

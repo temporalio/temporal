@@ -25,9 +25,9 @@ import (
 	"go.temporal.io/temporal-proto/enums"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/service/frontend/adapter"
 )
 
 var (
