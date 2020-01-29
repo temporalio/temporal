@@ -21,7 +21,7 @@
 syntax = "proto3";
 
 package historyservice;
-option go_package = "github.com/temporalio/temporal/proto/historyservice";
+option go_package = "github.com/temporalio/temporal/.gen/proto/historyservice";
 
 import "enums/enums.proto";
 import "common/common.proto";
@@ -31,8 +31,9 @@ import "common/workflow_execution.proto";
 import "common/domain.proto";
 import "common/replication.proto";
 
-// TODO: remove this dependency
+// TODO: remove these dependencies
 import "workflowservice/request_response.proto";
+import "adminservice/request_response.proto";
 
 message StartWorkflowExecutionRequest {
     string domainUUID = 1;
@@ -437,6 +438,14 @@ message GetReplicationMessagesResponse {
     map<int32, common.ReplicationMessages> messagesByShard = 1;
 }
 
+message GetDLQReplicationMessagesRequest {
+    repeated common.ReplicationTaskInfo taskInfos = 1;
+}
+
+message GetDLQReplicationMessagesResponse {
+    repeated common.ReplicationTask replicationTasks = 1;
+}
+
 message QueryWorkflowRequest {
     string domainUUID = 1;
     workflowservice.QueryWorkflowRequest request = 2;
@@ -448,7 +457,7 @@ message QueryWorkflowResponse {
 
 message ReapplyEventsRequest {
     string domainUUID = 1;
-    workflowservice.ReapplyEventsRequest request = 2;
+    adminservice.ReapplyEventsRequest request = 2;
 }
 
 message ReapplyEventsResponse {

@@ -65,7 +65,7 @@ func (tb *SetupSchemaTestBase) SetupSuiteBase(db DB) {
 
 // TearDownSuiteBase tears down the test suite
 func (tb *SetupSchemaTestBase) TearDownSuiteBase() {
-	tb.db.DropDatabase(tb.DBName)
+	tb.NoError(tb.db.DropDatabase(tb.DBName))
 	tb.db.Close()
 }
 
@@ -73,7 +73,7 @@ func (tb *SetupSchemaTestBase) TearDownSuiteBase() {
 func (tb *SetupSchemaTestBase) RunSetupTest(
 	app *cli.App, db DB, dbNameFlag string, sqlFileContent string, expectedTables []string) {
 	// test command fails without required arguments
-	app.Run([]string{"./tool", dbNameFlag, tb.DBName, "-q", "setup-schema"})
+	tb.NoError(app.Run([]string{"./tool", dbNameFlag, tb.DBName, "-q", "setup-schema"}))
 	tables, err := db.ListTables()
 	tb.Nil(err)
 	tb.Equal(0, len(tables))
@@ -86,10 +86,11 @@ func (tb *SetupSchemaTestBase) RunSetupTest(
 	tb.Nil(err)
 	defer os.Remove(sqlFile.Name())
 
-	sqlFile.WriteString(sqlFileContent)
+	_, err = sqlFile.WriteString(sqlFileContent)
+	tb.NoError(err)
 
 	// make sure command doesn't succeed without version or disable-version
-	app.Run([]string{"./tool", dbNameFlag, tb.DBName, "-q", "setup-schema", "-f", sqlFile.Name()})
+	tb.NoError(app.Run([]string{"./tool", dbNameFlag, tb.DBName, "-q", "setup-schema", "-f", sqlFile.Name()}))
 	tables, err = db.ListTables()
 	tb.Nil(err)
 	tb.Equal(0, len(tables))
@@ -101,9 +102,9 @@ func (tb *SetupSchemaTestBase) RunSetupTest(
 
 		// test overwrite with versioning works
 		if versioningEnabled {
-			app.Run([]string{"./tool", dbNameFlag, tb.DBName, "-q", "setup-schema", "-f", sqlFile.Name(), "-version", ver, "-o"})
+			tb.NoError(app.Run([]string{"./tool", dbNameFlag, tb.DBName, "-q", "setup-schema", "-f", sqlFile.Name(), "-version", ver, "-o"}))
 		} else {
-			app.Run([]string{"./tool", dbNameFlag, tb.DBName, "-q", "setup-schema", "-f", sqlFile.Name(), "-d", "-o"})
+			tb.NoError(app.Run([]string{"./tool", dbNameFlag, tb.DBName, "-q", "setup-schema", "-f", sqlFile.Name(), "-d", "-o"}))
 		}
 
 		expectedTables := getExpectedTables(versioningEnabled, expectedTables)

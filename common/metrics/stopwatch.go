@@ -47,7 +47,7 @@ func NewTestStopwatch() Stopwatch {
 
 // Stop reports time elapsed since the stopwatch start to the recorder.
 func (sw Stopwatch) Stop() {
-	d := time.Now().Sub(sw.start)
+	d := time.Since(sw.start)
 	for _, timer := range sw.timers {
 		timer.Record(d)
 	}

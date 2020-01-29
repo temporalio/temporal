@@ -58,7 +58,6 @@ type (
 		logger                  log.Logger
 		metricsClient           metrics.Client
 		parentClosePolicyClient parentclosepolicy.Client
-		maxReadAckLevel         maxReadAckLevel
 		*transferQueueProcessorBase
 		*queueProcessorBase
 		queueAckMgr
@@ -993,20 +992,15 @@ func (t *transferQueueActiveProcessorImpl) processResetWorkflow(
 		tag.WorkflowEventID(resetPoint.GetFirstDecisionCompletedId()),
 	)
 
-	var baseExecution workflow.WorkflowExecution
 	var baseContext workflowExecutionContext
 	var baseMutableState mutableState
 	var baseRelease releaseWorkflowExecutionFunc
 	if resetPoint.GetRunId() == executionInfo.RunID {
-		baseExecution = workflow.WorkflowExecution{
-			WorkflowId: common.StringPtr(task.WorkflowID),
-			RunId:      common.StringPtr(task.RunID),
-		}
 		baseContext = currentContext
 		baseMutableState = currentMutableState
 		baseRelease = currentRelease
 	} else {
-		baseExecution = workflow.WorkflowExecution{
+		baseExecution := workflow.WorkflowExecution{
 			WorkflowId: common.StringPtr(task.WorkflowID),
 			RunId:      common.StringPtr(resetPoint.GetRunId()),
 		}

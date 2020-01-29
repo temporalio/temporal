@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/temporal-proto/common"
 
 	"github.com/temporalio/temporal/.gen/go/admin"
+	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
@@ -56,8 +57,8 @@ func ToProtoDescribeHistoryHostResponse(in *shared.DescribeHistoryHostResponse) 
 	}
 }
 
-// ToProtoGetWorkflowExecutionRawHistoryResponse ...
-func ToProtoGetWorkflowExecutionRawHistoryResponse(in *admin.GetWorkflowExecutionRawHistoryResponse) *adminservice.GetWorkflowExecutionRawHistoryResponse {
+// ToProtoAdminGetWorkflowExecutionRawHistoryResponse ...
+func ToProtoAdminGetWorkflowExecutionRawHistoryResponse(in *admin.GetWorkflowExecutionRawHistoryResponse) *adminservice.GetWorkflowExecutionRawHistoryResponse {
 	if in == nil {
 		return nil
 	}
@@ -92,7 +93,7 @@ func ToProtoDescribeClusterResponse(in *admin.DescribeClusterResponse) *adminser
 	}
 }
 
-// ToThriftDescribeWorkflowExecutionRequest ...
+// ToThriftAdminDescribeWorkflowExecutionRequest ...
 func ToThriftAdminDescribeWorkflowExecutionRequest(in *adminservice.DescribeWorkflowExecutionRequest) *admin.DescribeWorkflowExecutionRequest {
 	if in == nil {
 		return nil
@@ -137,8 +138,8 @@ func ToThriftRemoveTaskRequest(in *adminservice.RemoveTaskRequest) *shared.Remov
 	}
 }
 
-// ToThriftGetWorkflowExecutionRawHistoryRequest ...
-func ToThriftGetWorkflowExecutionRawHistoryRequest(in *adminservice.GetWorkflowExecutionRawHistoryRequest) *admin.GetWorkflowExecutionRawHistoryRequest {
+// ToThriftAdminGetWorkflowExecutionRawHistoryRequest ...
+func ToThriftAdminGetWorkflowExecutionRawHistoryRequest(in *adminservice.GetWorkflowExecutionRawHistoryRequest) *admin.GetWorkflowExecutionRawHistoryRequest {
 	if in == nil {
 		return nil
 	}
@@ -238,4 +239,79 @@ func ToProtoHostInfos(in []*admin.HostInfo) []*common.HostInfo {
 		ret = append(ret, ToProtoHostInfo(item))
 	}
 	return ret
+}
+
+// ToProtoGetReplicationMessagesResponse ...
+func ToProtoGetReplicationMessagesResponse(in *replicator.GetReplicationMessagesResponse) *adminservice.GetReplicationMessagesResponse {
+	if in == nil {
+		return nil
+	}
+	return &adminservice.GetReplicationMessagesResponse{
+		MessagesByShard: toProtoReplicationMessagess(in.GetMessagesByShard()),
+	}
+}
+
+// ToProtoGetDomainReplicationMessagesResponse ...
+func ToProtoGetDomainReplicationMessagesResponse(in *replicator.GetDomainReplicationMessagesResponse) *adminservice.GetDomainReplicationMessagesResponse {
+	if in == nil {
+		return nil
+	}
+	return &adminservice.GetDomainReplicationMessagesResponse{
+		Messages: toProtoReplicationMessages(in.GetMessages()),
+	}
+}
+
+// ToThriftGetReplicationMessagesRequest ...
+func ToThriftGetReplicationMessagesRequest(in *adminservice.GetReplicationMessagesRequest) *replicator.GetReplicationMessagesRequest {
+	if in == nil {
+		return nil
+	}
+	return &replicator.GetReplicationMessagesRequest{
+		Tokens:      toThriftReplicationTokens(in.Tokens),
+		ClusterName: &in.ClusterName,
+	}
+}
+
+// ToThriftGetDomainReplicationMessagesRequest ...
+func ToThriftGetDomainReplicationMessagesRequest(in *adminservice.GetDomainReplicationMessagesRequest) *replicator.GetDomainReplicationMessagesRequest {
+	if in == nil {
+		return nil
+	}
+	return &replicator.GetDomainReplicationMessagesRequest{
+		LastRetrievedMessageId: &in.LastRetrievedMessageId,
+		LastProcessedMessageId: &in.LastProcessedMessageId,
+		ClusterName:            &in.ClusterName,
+	}
+}
+
+// ToThriftReapplyEventsRequest ...
+func ToThriftReapplyEventsRequest(in *adminservice.ReapplyEventsRequest) *shared.ReapplyEventsRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.ReapplyEventsRequest{
+		DomainName:        &in.DomainName,
+		WorkflowExecution: ToThriftWorkflowExecution(in.WorkflowExecution),
+		Events:            ToThriftDataBlob(in.Events),
+	}
+}
+
+// ToThriftGetDLQReplicationMessagesRequest ...
+func ToThriftGetDLQReplicationMessagesRequest(in *adminservice.GetDLQReplicationMessagesRequest) *replicator.GetDLQReplicationMessagesRequest {
+	if in == nil {
+		return nil
+	}
+	return &replicator.GetDLQReplicationMessagesRequest{
+		TaskInfos: ToThriftReplicationTaskInfos(in.TaskInfos),
+	}
+}
+
+// ToProtoGetDLQReplicationMessagesResponse ...
+func ToProtoGetDLQReplicationMessagesResponse(in *replicator.GetDLQReplicationMessagesResponse) *adminservice.GetDLQReplicationMessagesResponse {
+	if in == nil {
+		return nil
+	}
+	return &adminservice.GetDLQReplicationMessagesResponse{
+		ReplicationTasks: toProtoReplicationTasks(in.GetReplicationTasks()),
+	}
 }

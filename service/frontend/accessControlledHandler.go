@@ -27,11 +27,10 @@ import (
 	"go.uber.org/yarpc/encoding/protobuf"
 	"go.uber.org/yarpc/yarpcerrors"
 
-	"github.com/temporalio/temporal/common/authorization"
-
 	"github.com/temporalio/temporal/.gen/go/health"
 	"github.com/temporalio/temporal/.gen/go/health/metaserver"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/authorization"
 	"github.com/temporalio/temporal/common/resource"
 )
 
@@ -196,22 +195,6 @@ func (a *AccessControlledWorkflowHandler) DescribeWorkflowExecution(
 	return a.frontendHandler.DescribeWorkflowExecution(ctx, request)
 }
 
-// GetDomainReplicationMessages API call
-func (a *AccessControlledWorkflowHandler) GetDomainReplicationMessages(
-	ctx context.Context,
-	request *workflowservice.GetDomainReplicationMessagesRequest,
-) (*workflowservice.GetDomainReplicationMessagesResponse, error) {
-	return a.frontendHandler.GetDomainReplicationMessages(ctx, request)
-}
-
-// GetReplicationMessages API call
-func (a *AccessControlledWorkflowHandler) GetReplicationMessages(
-	ctx context.Context,
-	request *workflowservice.GetReplicationMessagesRequest,
-) (*workflowservice.GetReplicationMessagesResponse, error) {
-	return a.frontendHandler.GetReplicationMessages(ctx, request)
-}
-
 // GetSearchAttributes API call
 func (a *AccessControlledWorkflowHandler) GetSearchAttributes(
 	ctx context.Context,
@@ -239,6 +222,27 @@ func (a *AccessControlledWorkflowHandler) GetWorkflowExecutionHistory(
 	}
 
 	return a.frontendHandler.GetWorkflowExecutionHistory(ctx, request)
+}
+
+// GetWorkflowExecutionRawHistory API call
+func (a *AccessControlledWorkflowHandler) GetWorkflowExecutionRawHistory(
+	ctx context.Context,
+	request *workflowservice.GetWorkflowExecutionRawHistoryRequest,
+) (*workflowservice.GetWorkflowExecutionRawHistoryResponse, error) {
+
+	attr := &authorization.Attributes{
+		APIName:    "GetWorkflowExecutionRawHistory",
+		DomainName: request.GetDomain(),
+	}
+	isAuthorized, err := a.isAuthorized(ctx, attr)
+	if err != nil {
+		return nil, err
+	}
+	if !isAuthorized {
+		return nil, errUnauthorized
+	}
+
+	return a.frontendHandler.GetWorkflowExecutionRawHistory(ctx, request)
 }
 
 // ListArchivedWorkflowExecutions API call
@@ -406,14 +410,6 @@ func (a *AccessControlledWorkflowHandler) QueryWorkflow(
 	}
 
 	return a.frontendHandler.QueryWorkflow(ctx, request)
-}
-
-// ReapplyEvents API call
-func (a *AccessControlledWorkflowHandler) ReapplyEvents(
-	ctx context.Context,
-	request *workflowservice.ReapplyEventsRequest,
-) (*workflowservice.ReapplyEventsResponse, error) {
-	return a.frontendHandler.ReapplyEvents(ctx, request)
 }
 
 // GetClusterInfo API call

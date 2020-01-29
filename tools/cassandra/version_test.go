@@ -66,12 +66,12 @@ func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
 
 	defer s.createKeyspace(keyspace)()
 	defer s.createKeyspace(visKeyspace)()
-	RunTool([]string{
+	s.Nil(RunTool([]string{
 		"./tool", "-k", keyspace, "-q", "setup-schema", "-f", cqlFile, "-version", "10.0", "-o",
-	})
-	RunTool([]string{
+	}))
+	s.Nil(RunTool([]string{
 		"./tool", "-k", visKeyspace, "-q", "setup-schema", "-f", visCqlFile, "-version", "10.0", "-o",
-	})
+	}))
 
 	defaultCfg := config.Cassandra{
 		Hosts:    environment.GetCassandraAddress(),
@@ -153,9 +153,9 @@ func (s *VersionTestSuite) runCheckCompatibleVersion(
 	}
 
 	cqlFile := subdir + "/v" + actual + "/tmp.cql"
-	RunTool([]string{
+	s.NoError(RunTool([]string{
 		"./tool", "-k", keyspace, "-q", "setup-schema", "-f", cqlFile, "-version", actual, "-o",
-	})
+	}))
 	if expectedFail {
 		os.RemoveAll(subdir + "/v" + actual)
 	}

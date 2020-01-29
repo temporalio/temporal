@@ -102,11 +102,11 @@ func (adh *AdminHandlerGRPC) RemoveTask(ctx context.Context, request *adminservi
 func (adh *AdminHandlerGRPC) GetWorkflowExecutionRawHistory(ctx context.Context, request *adminservice.GetWorkflowExecutionRawHistoryRequest) (_ *adminservice.GetWorkflowExecutionRawHistoryResponse, retError error) {
 	defer log.CapturePanicGRPC(adh.adminHandlerThrift.GetLogger(), &retError)
 
-	resp, err := adh.adminHandlerThrift.GetWorkflowExecutionRawHistory(ctx, adapter.ToThriftGetWorkflowExecutionRawHistoryRequest(request))
+	resp, err := adh.adminHandlerThrift.GetWorkflowExecutionRawHistory(ctx, adapter.ToThriftAdminGetWorkflowExecutionRawHistoryRequest(request))
 	if err != nil {
 		return nil, adapter.ToProtoError(err)
 	}
-	return adapter.ToProtoGetWorkflowExecutionRawHistoryResponse(resp), nil
+	return adapter.ToProtoAdminGetWorkflowExecutionRawHistoryResponse(resp), nil
 }
 
 // GetWorkflowExecutionRawHistoryV2 ...
@@ -140,4 +140,48 @@ func (adh *AdminHandlerGRPC) DescribeCluster(ctx context.Context, _ *adminservic
 		return nil, adapter.ToProtoError(err)
 	}
 	return adapter.ToProtoDescribeClusterResponse(resp), nil
+}
+
+// GetReplicationMessages ...
+func (adh *AdminHandlerGRPC) GetReplicationMessages(ctx context.Context, request *adminservice.GetReplicationMessagesRequest) (_ *adminservice.GetReplicationMessagesResponse, retError error) {
+	defer log.CapturePanicGRPC(adh.adminHandlerThrift.GetLogger(), &retError)
+
+	resp, err := adh.adminHandlerThrift.GetReplicationMessages(ctx, adapter.ToThriftGetReplicationMessagesRequest(request))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return adapter.ToProtoGetReplicationMessagesResponse(resp), nil
+}
+
+// GetDomainReplicationMessages ...
+func (adh *AdminHandlerGRPC) GetDomainReplicationMessages(ctx context.Context, request *adminservice.GetDomainReplicationMessagesRequest) (_ *adminservice.GetDomainReplicationMessagesResponse, retError error) {
+	defer log.CapturePanicGRPC(adh.adminHandlerThrift.GetLogger(), &retError)
+
+	resp, err := adh.adminHandlerThrift.GetDomainReplicationMessages(ctx, adapter.ToThriftGetDomainReplicationMessagesRequest(request))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return adapter.ToProtoGetDomainReplicationMessagesResponse(resp), nil
+}
+
+// GetDLQReplicationMessages ...
+func (adh *AdminHandlerGRPC) GetDLQReplicationMessages(ctx context.Context, request *adminservice.GetDLQReplicationMessagesRequest) (_ *adminservice.GetDLQReplicationMessagesResponse, retError error) {
+	defer log.CapturePanicGRPC(adh.adminHandlerThrift.GetLogger(), &retError)
+
+	resp, err := adh.adminHandlerThrift.GetDLQReplicationMessages(ctx, adapter.ToThriftGetDLQReplicationMessagesRequest(request))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return adapter.ToProtoGetDLQReplicationMessagesResponse(resp), nil
+}
+
+// ReapplyEvents ...
+func (adh *AdminHandlerGRPC) ReapplyEvents(ctx context.Context, request *adminservice.ReapplyEventsRequest) (_ *adminservice.ReapplyEventsResponse, retError error) {
+	defer log.CapturePanicGRPC(adh.adminHandlerThrift.GetLogger(), &retError)
+
+	err := adh.adminHandlerThrift.ReapplyEvents(ctx, adapter.ToThriftReapplyEventsRequest(request))
+	if err != nil {
+		return nil, adapter.ToProtoError(err)
+	}
+	return &adminservice.ReapplyEventsResponse{}, nil
 }

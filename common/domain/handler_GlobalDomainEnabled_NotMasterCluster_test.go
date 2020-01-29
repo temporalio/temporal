@@ -50,7 +50,6 @@ type (
 
 		minRetentionDays     int
 		maxBadBinaryCount    int
-		logger               log.Logger
 		metadataMgr          persistence.MetadataManager
 		mockProducer         *mocks.KafkaProducer
 		mockDomainReplicator Replicator
@@ -417,6 +416,7 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestRegisterGetD
 			ClusterName: common.StringPtr(replicationConfig.ClusterName),
 		})
 	}
+	s.Equal(1, len(clusters))
 
 	err := s.handler.RegisterDomain(context.Background(), &shared.RegisterDomainRequest{
 		Name:           common.StringPtr(domainName),

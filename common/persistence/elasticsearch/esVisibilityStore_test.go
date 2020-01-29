@@ -448,7 +448,8 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 		Sorter:   []elastic.Sorter{elastic.NewFieldSort(es.StartTime).Desc(), tieBreakerSorter},
 	}
 	s.mockESClient.On("Search", mock.Anything, params).Return(nil, nil).Once()
-	s.visibilityStore.getSearchResult(request, token, nil, isOpen)
+	_, err := s.visibilityStore.getSearchResult(request, token, nil, isOpen)
+	s.NoError(err)
 
 	// test request latestTime overflow
 	request.LatestStartTime = math.MaxInt64
@@ -462,7 +463,8 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 		Sorter:   []elastic.Sorter{elastic.NewFieldSort(es.StartTime).Desc(), tieBreakerSorter},
 	}
 	s.mockESClient.On("Search", mock.Anything, param1).Return(nil, nil).Once()
-	s.visibilityStore.getSearchResult(request, token, nil, isOpen)
+	_, err = s.visibilityStore.getSearchResult(request, token, nil, isOpen)
+	s.NoError(err)
 	request.LatestStartTime = testLatestTime // revert
 
 	// test for closed
@@ -472,14 +474,16 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	params.Query = boolQuery
 	params.Sorter = []elastic.Sorter{elastic.NewFieldSort(es.CloseTime).Desc(), tieBreakerSorter}
 	s.mockESClient.On("Search", mock.Anything, params).Return(nil, nil).Once()
-	s.visibilityStore.getSearchResult(request, token, nil, isOpen)
+	_, err = s.visibilityStore.getSearchResult(request, token, nil, isOpen)
+	s.NoError(err)
 
 	// test for additional matchQuery
 	matchQuery := elastic.NewMatchQuery(es.CloseStatus, int32(0))
 	boolQuery = elastic.NewBoolQuery().Must(matchDomainQuery).Filter(rangeQuery).Must(matchQuery).Must(existClosedStatusQuery)
 	params.Query = boolQuery
 	s.mockESClient.On("Search", mock.Anything, params).Return(nil, nil).Once()
-	s.visibilityStore.getSearchResult(request, token, matchQuery, isOpen)
+	_, err = s.visibilityStore.getSearchResult(request, token, matchQuery, isOpen)
+	s.NoError(err)
 
 	// test for search after
 	runID := "runID"
@@ -490,7 +494,8 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	params.From = 0
 	params.SearchAfter = []interface{}{token.SortValue, token.TieBreaker}
 	s.mockESClient.On("Search", mock.Anything, params).Return(nil, nil).Once()
-	s.visibilityStore.getSearchResult(request, token, matchQuery, isOpen)
+	_, err = s.visibilityStore.getSearchResult(request, token, matchQuery, isOpen)
+	s.NoError(err)
 }
 
 func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
@@ -664,6 +669,7 @@ func (s *ESVisibilitySuite) TestShouldSearchAfter() {
 	s.True(shouldSearchAfter(token))
 }
 
+//nolint
 func (s *ESVisibilitySuite) TestGetESQueryDSL() {
 	request := &p.ListWorkflowExecutionsRequestV2{
 		DomainUUID: testDomainID,
@@ -1003,7 +1009,7 @@ func (s *ESVisibilitySuite) TestProcessAllValuesForKey() {
 		processedValue[value.String()] = struct{}{}
 		return nil
 	}
-	processAllValuesForKey(dsl, testKeyFilter, testProcessFunc)
+	s.NoError(processAllValuesForKey(dsl, testKeyFilter, testProcessFunc))
 
 	expectedProcessedValue := map[string]struct{}{
 		`"value1"`: struct{}{},

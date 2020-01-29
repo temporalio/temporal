@@ -146,7 +146,7 @@ func (c *canaryImpl) createDomain() error {
 	name := c.canaryDomain
 	desc := "Domain for running cadence canary workflows"
 	owner := "cadence-canary"
-	return c.canaryClient.createDomain(name, desc, owner, enums.ArchivalStatusDefault)
+	return c.canaryClient.createDomain(name, desc, owner, enums.ArchivalStatusDisabled)
 }
 
 func (c *canaryImpl) createArchivalDomain() error {
@@ -154,10 +154,11 @@ func (c *canaryImpl) createArchivalDomain() error {
 	desc := "Domain used by cadence canary workflows to verify archival"
 	owner := "cadence-canary"
 	archivalStatus := enums.ArchivalStatusEnabled
-	return c.canaryClient.createDomain(name, desc, owner, archivalStatus)
+	return c.archivalClient.createDomain(name, desc, owner, archivalStatus)
 }
 
 // Override worker options to create large number of pollers to improve the chances of activities getting sync matched
+//nolint:unused
 func overrideWorkerOptions(ctx context.Context) context.Context {
 	optionsOverride := make(map[string]map[string]string)
 	optionsOverride["worker-options"] = map[string]string{

@@ -207,8 +207,8 @@ func (s *attrValidatorSuite) TestValidateDomainReplicationConfigForGlobalDomain(
 	s.NoError(err)
 }
 
-func (s *attrValidatorSuite) TestValidateDomainReplicationConfigClustersDoesNotChange() {
-	err := s.validator.validateDomainReplicationConfigClustersDoesNotChange(
+func (s *attrValidatorSuite) TestValidateDomainReplicationConfigClustersDoesNotRemove() {
+	err := s.validator.validateDomainReplicationConfigClustersDoesNotRemove(
 		[]*persistence.ClusterReplicationConfig{
 			{ClusterName: cluster.TestCurrentClusterName},
 			{ClusterName: cluster.TestAlternativeClusterName},
@@ -220,7 +220,7 @@ func (s *attrValidatorSuite) TestValidateDomainReplicationConfigClustersDoesNotC
 	)
 	s.NoError(err)
 
-	err = s.validator.validateDomainReplicationConfigClustersDoesNotChange(
+	err = s.validator.validateDomainReplicationConfigClustersDoesNotRemove(
 		[]*persistence.ClusterReplicationConfig{
 			{ClusterName: cluster.TestCurrentClusterName},
 		},
@@ -229,9 +229,9 @@ func (s *attrValidatorSuite) TestValidateDomainReplicationConfigClustersDoesNotC
 			{ClusterName: cluster.TestAlternativeClusterName},
 		},
 	)
-	s.IsType(&shared.BadRequestError{}, err)
+	s.NoError(err)
 
-	err = s.validator.validateDomainReplicationConfigClustersDoesNotChange(
+	err = s.validator.validateDomainReplicationConfigClustersDoesNotRemove(
 		[]*persistence.ClusterReplicationConfig{
 			{ClusterName: cluster.TestCurrentClusterName},
 			{ClusterName: cluster.TestAlternativeClusterName},
@@ -242,7 +242,7 @@ func (s *attrValidatorSuite) TestValidateDomainReplicationConfigClustersDoesNotC
 	)
 	s.IsType(&shared.BadRequestError{}, err)
 
-	err = s.validator.validateDomainReplicationConfigClustersDoesNotChange(
+	err = s.validator.validateDomainReplicationConfigClustersDoesNotRemove(
 		[]*persistence.ClusterReplicationConfig{
 			{ClusterName: cluster.TestCurrentClusterName},
 		},

@@ -27,10 +27,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/workflowservice"
-	"go.temporal.io/temporal-proto/workflowservicemock"
 
+	"github.com/temporalio/temporal/.gen/proto/adminservice"
+	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
 	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/resource"
 )
 
 type (
@@ -39,8 +41,9 @@ type (
 		*require.Assertions
 		controller *gomock.Controller
 
+		mockResource           *resource.Test
 		config                 *Config
-		frontendClient         *workflowservicemock.MockWorkflowServiceClient
+		frontendClient         *adminservicemock.MockAdminServiceYARPCClient
 		replicationTaskFetcher *ReplicationTaskFetcherImpl
 	}
 )
@@ -62,9 +65,10 @@ func (s *replicationTaskFetcherSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 
+	s.mockResource = resource.NewTest(s.controller, metrics.History)
+	s.frontendClient = s.mockResource.RemoteAdminClient
 	logger := log.NewNoop()
 	s.config = NewDynamicConfigForTest()
-	s.frontendClient = workflowservicemock.NewMockWorkflowServiceClient(s.controller)
 
 	s.replicationTaskFetcher = newReplicationTaskFetcher(
 		logger,
@@ -89,7 +93,7 @@ func (s *replicationTaskFetcherSuite) TestGetMessages() {
 	requestByShard[0] = &request{
 		token: token,
 	}
-	replicationMessageRequest := &workflowservice.GetReplicationMessagesRequest{
+	replicationMessageRequest := &adminservice.GetReplicationMessagesRequest{
 		Tokens: []*commonproto.ReplicationToken{
 			token,
 		},
@@ -97,7 +101,7 @@ func (s *replicationTaskFetcherSuite) TestGetMessages() {
 	}
 	messageByShared := make(map[int32]*commonproto.ReplicationMessages)
 	messageByShared[0] = &commonproto.ReplicationMessages{}
-	expectedResponse := &workflowservice.GetReplicationMessagesResponse{
+	expectedResponse := &adminservice.GetReplicationMessagesResponse{
 		MessagesByShard: messageByShared,
 	}
 	s.frontendClient.EXPECT().GetReplicationMessages(gomock.Any(), replicationMessageRequest).Return(expectedResponse, nil)
@@ -118,7 +122,7 @@ func (s *replicationTaskFetcherSuite) TestFetchAndDistributeTasks() {
 		token:    token,
 		respChan: respChan,
 	}
-	replicationMessageRequest := &workflowservice.GetReplicationMessagesRequest{
+	replicationMessageRequest := &adminservice.GetReplicationMessagesRequest{
 		Tokens: []*commonproto.ReplicationToken{
 			token,
 		},
@@ -126,7 +130,7 @@ func (s *replicationTaskFetcherSuite) TestFetchAndDistributeTasks() {
 	}
 	messageByShared := make(map[int32]*commonproto.ReplicationMessages)
 	messageByShared[0] = &commonproto.ReplicationMessages{}
-	expectedResponse := &workflowservice.GetReplicationMessagesResponse{
+	expectedResponse := &adminservice.GetReplicationMessagesResponse{
 		MessagesByShard: messageByShared,
 	}
 	s.frontendClient.EXPECT().GetReplicationMessages(gomock.Any(), replicationMessageRequest).Return(expectedResponse, nil)

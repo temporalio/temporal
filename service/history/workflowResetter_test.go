@@ -46,7 +46,6 @@ type (
 
 		controller         *gomock.Controller
 		mockShard          *shardContextTest
-		mockEngine         *historyEngineImpl
 		mockStateRebuilder *MocknDCStateRebuilder
 
 		mockHistoryV2Mgr *mocks.HistoryV2Manager

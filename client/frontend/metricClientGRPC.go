@@ -134,6 +134,23 @@ func (c *metricClientGRPC) GetWorkflowExecutionHistory(
 	return resp, err
 }
 
+func (c *metricClientGRPC) GetWorkflowExecutionRawHistory(
+	ctx context.Context,
+	request *workflowservice.GetWorkflowExecutionRawHistoryRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.GetWorkflowExecutionRawHistoryResponse, error) {
+	c.metricsClient.IncCounter(metrics.FrontendClientGetWorkflowExecutionRawHistoryScope, metrics.CadenceClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientGetWorkflowExecutionRawHistoryScope, metrics.CadenceClientLatency)
+	resp, err := c.client.GetWorkflowExecutionRawHistory(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.FrontendClientGetWorkflowExecutionRawHistoryScope, metrics.CadenceClientFailures)
+	}
+	return resp, err
+}
+
 func (c *metricClientGRPC) ListArchivedWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.ListArchivedWorkflowExecutionsRequest,
@@ -688,57 +705,6 @@ func (c *metricClientGRPC) UpdateDomain(
 
 	if err != nil {
 		c.metricsClient.IncCounter(metrics.FrontendClientUpdateDomainScope, metrics.CadenceClientFailures)
-	}
-	return resp, err
-}
-
-func (c *metricClientGRPC) GetReplicationMessages(
-	ctx context.Context,
-	request *workflowservice.GetReplicationMessagesRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.GetReplicationMessagesResponse, error) {
-	c.metricsClient.IncCounter(metrics.FrontendClientGetReplicationTasksScope, metrics.CadenceClientRequests)
-
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientGetReplicationTasksScope, metrics.CadenceClientLatency)
-	resp, err := c.client.GetReplicationMessages(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientGetReplicationTasksScope, metrics.CadenceClientFailures)
-	}
-	return resp, err
-}
-
-func (c *metricClientGRPC) GetDomainReplicationMessages(
-	ctx context.Context,
-	request *workflowservice.GetDomainReplicationMessagesRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.GetDomainReplicationMessagesResponse, error) {
-	c.metricsClient.IncCounter(metrics.FrontendClientGetDomainReplicationTasksScope, metrics.CadenceClientRequests)
-
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientGetDomainReplicationTasksScope, metrics.CadenceClientLatency)
-	resp, err := c.client.GetDomainReplicationMessages(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientGetDomainReplicationTasksScope, metrics.CadenceClientFailures)
-	}
-	return resp, err
-}
-
-func (c *metricClientGRPC) ReapplyEvents(
-	ctx context.Context,
-	request *workflowservice.ReapplyEventsRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.ReapplyEventsResponse, error) {
-
-	c.metricsClient.IncCounter(metrics.FrontendClientReapplyEventsScope, metrics.CadenceClientRequests)
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientReapplyEventsScope, metrics.CadenceClientLatency)
-	resp, err := c.client.ReapplyEvents(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientReapplyEventsScope, metrics.CadenceClientFailures)
 	}
 	return resp, err
 }

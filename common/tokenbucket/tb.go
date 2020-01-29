@@ -52,8 +52,6 @@ type (
 		GetToken(priority, count int) (bool, time.Duration)
 	}
 
-	tokenBucketFactoryImpl struct{}
-
 	tokenBucketImpl struct {
 		sync.Mutex
 		tokens       int

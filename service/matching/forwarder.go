@@ -61,6 +61,7 @@ type (
 		limiter *quotas.DynamicRateLimiter
 
 		// cached metric scopes for API calls
+		//nolint
 		scope struct {
 			forwardTask  metrics.Scope
 			forwardQuery metrics.Scope
@@ -226,8 +227,7 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 			ForwardedFrom: &fwdr.taskListID.name,
 		})
 		if err != nil {
-			fwdr.handleErr(err)
-			return nil, err
+			return nil, fwdr.handleErr(err)
 		}
 		return newInternalStartedTask(&startedTaskInfo{decisionTaskInfo: resp}), nil
 	case persistence.TaskListTypeActivity:
@@ -244,8 +244,7 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 			ForwardedFrom: &fwdr.taskListID.name,
 		})
 		if err != nil {
-			fwdr.handleErr(err)
-			return nil, err
+			return nil, fwdr.handleErr(err)
 		}
 		return newInternalStartedTask(&startedTaskInfo{activityTaskInfo: resp}), nil
 	}

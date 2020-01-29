@@ -27,7 +27,6 @@ import (
 	"github.com/pborman/uuid"
 	"go.uber.org/yarpc"
 
-	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
 	"github.com/temporalio/temporal/common"
@@ -139,6 +138,22 @@ func (c *clientImpl) GetWorkflowExecutionHistory(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.GetWorkflowExecutionHistory(ctx, request, opts...)
+}
+
+func (c *clientImpl) GetWorkflowExecutionRawHistory(
+	ctx context.Context,
+	request *shared.GetWorkflowExecutionRawHistoryRequest,
+	opts ...yarpc.CallOption,
+) (*shared.GetWorkflowExecutionRawHistoryResponse, error) {
+
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.GetWorkflowExecutionRawHistory(ctx, request, opts...)
 }
 
 func (c *clientImpl) ListArchivedWorkflowExecutions(
@@ -659,52 +674,6 @@ func (c *clientImpl) getRandomClient() (workflowserviceclient.Interface, error) 
 	}
 
 	return client.(workflowserviceclient.Interface), nil
-}
-
-func (c *clientImpl) GetReplicationMessages(
-	ctx context.Context,
-	request *replicator.GetReplicationMessagesRequest,
-	opts ...yarpc.CallOption,
-) (*replicator.GetReplicationMessagesResponse, error) {
-	opts = common.AggregateYarpcOptions(ctx, opts...)
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.GetReplicationMessages(ctx, request, opts...)
-}
-
-func (c *clientImpl) GetDomainReplicationMessages(
-	ctx context.Context,
-	request *replicator.GetDomainReplicationMessagesRequest,
-	opts ...yarpc.CallOption,
-) (*replicator.GetDomainReplicationMessagesResponse, error) {
-	opts = common.AggregateYarpcOptions(ctx, opts...)
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.GetDomainReplicationMessages(ctx, request, opts...)
-}
-
-func (c *clientImpl) ReapplyEvents(
-	ctx context.Context,
-	request *shared.ReapplyEventsRequest,
-	opts ...yarpc.CallOption,
-) error {
-
-	opts = common.AggregateYarpcOptions(ctx, opts...)
-	client, err := c.getRandomClient()
-	if err != nil {
-		return err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.ReapplyEvents(ctx, request, opts...)
 }
 
 func (c *clientImpl) GetClusterInfo(

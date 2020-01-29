@@ -18,15 +18,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination domainReplicationQueue_mock.go -self_package github.com/temporalio/temporal/common/persistence
+
 package persistence
 
 import (
 	"errors"
 	"fmt"
 	"math"
+	"sync/atomic"
 	"time"
 
 	"github.com/temporalio/temporal/.gen/go/replicator"
+	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -34,7 +38,7 @@ import (
 )
 
 const (
-	purgeInterval = time.Minute
+	purgeInterval = 5 * time.Minute
 )
 
 var _ DomainReplicationQueue = (*domainReplicationQueueImpl)(nil)
@@ -54,6 +58,7 @@ func NewDomainReplicationQueue(
 		encoder:             codec.NewThriftRWEncoder(),
 		ackNotificationChan: make(chan bool),
 		done:                make(chan bool),
+		status:              common.DaemonStatusInitialized,
 	}
 }
 
@@ -67,8 +72,33 @@ type (
 		ackLevelUpdated     bool
 		ackNotificationChan chan bool
 		done                chan bool
+		status              int32
+	}
+
+	// DomainReplicationQueue is used to publish and list domain replication tasks
+	DomainReplicationQueue interface {
+		common.Daemon
+		Publish(message interface{}) error
+		PublishToDLQ(message interface{}) error
+		GetReplicationMessages(lastMessageID int, maxCount int) ([]*replicator.ReplicationTask, int, error)
+		UpdateAckLevel(lastProcessedMessageID int, clusterName string) error
+		GetAckLevels() (map[string]int, error)
 	}
 )
+
+func (q *domainReplicationQueueImpl) Start() {
+	if !atomic.CompareAndSwapInt32(&q.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
+		return
+	}
+	go q.purgeProcessor()
+}
+
+func (q *domainReplicationQueueImpl) Stop() {
+	if !atomic.CompareAndSwapInt32(&q.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
+		return
+	}
+	close(q.done)
+}
 
 func (q *domainReplicationQueueImpl) Publish(message interface{}) error {
 	task, ok := message.(*replicator.ReplicationTask)
@@ -83,10 +113,24 @@ func (q *domainReplicationQueueImpl) Publish(message interface{}) error {
 	return q.queue.EnqueueMessage(bytes)
 }
 
+func (q *domainReplicationQueueImpl) PublishToDLQ(message interface{}) error {
+	task, ok := message.(*replicator.ReplicationTask)
+	if !ok {
+		return errors.New("wrong message type")
+	}
+
+	bytes, err := q.encoder.Encode(task)
+	if err != nil {
+		return fmt.Errorf("failed to encode message: %v", err)
+	}
+	return q.queue.EnqueueMessageToDLQ(bytes)
+}
+
 func (q *domainReplicationQueueImpl) GetReplicationMessages(
 	lastMessageID int,
 	maxCount int,
 ) ([]*replicator.ReplicationTask, int, error) {
+
 	messages, err := q.queue.ReadMessages(lastMessageID, maxCount)
 	if err != nil {
 		return nil, lastMessageID, err
@@ -148,11 +192,8 @@ func (q *domainReplicationQueueImpl) purgeAckedMessages() error {
 	}
 
 	q.metricsClient.
-		Scope(metrics.FrontendDomainReplicationQueueScope).
+		Scope(metrics.PersistenceDomainReplicationQueueScope).
 		UpdateGauge(metrics.DomainReplicationTaskAckLevel, float64(minAckLevel))
-
-	q.ackLevelUpdated = false
-
 	return nil
 }
 
@@ -169,14 +210,12 @@ func (q *domainReplicationQueueImpl) purgeProcessor() {
 				err := q.purgeAckedMessages()
 				if err != nil {
 					q.logger.Warn("Failed to purge acked domain replication messages.", tag.Error(err))
+				} else {
+					q.ackLevelUpdated = false
 				}
 			}
 		case <-q.ackNotificationChan:
 			q.ackLevelUpdated = true
 		}
 	}
-}
-
-func (q *domainReplicationQueueImpl) Close() {
-	close(q.done)
 }

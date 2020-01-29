@@ -21,7 +21,7 @@
 syntax = "proto3";
 
 package historyservice;
-option go_package = "github.com/temporalio/temporal/proto/historyservice";
+option go_package = "github.com/temporalio/temporal/.gen/proto/historyservice";
 
 import "historyservice/request_response.proto";
 
@@ -178,11 +178,11 @@ service HistoryService {
     rpc ReplicateEventsV2 (ReplicateEventsV2Request) returns (ReplicateEventsV2Response) {
     }
 
-    // SyncShardStatus sync the status between shards
+    // SyncShardStatus sync the status between shards.
     rpc SyncShardStatus (SyncShardStatusRequest) returns (SyncShardStatusResponse) {
     }
 
-    // SyncActivity sync the activity status
+    // SyncActivity sync the activity status.
     rpc SyncActivity (SyncActivityRequest) returns (SyncActivityResponse) {
     }
 
@@ -190,25 +190,31 @@ service HistoryService {
     rpc DescribeMutableState (DescribeMutableStateRequest) returns (DescribeMutableStateResponse) {
     }
 
-    // DescribeHistoryHost returns information about the internal states of a history host
+    // DescribeHistoryHost returns information about the internal states of a history host.
     rpc DescribeHistoryHost (DescribeHistoryHostRequest) returns (DescribeHistoryHostResponse) {
     }
 
-    // CloseShard close the shard
+    // CloseShard close the shard.
     rpc CloseShard (CloseShardRequest) returns (CloseShardResponse) {
     }
 
-    // RemoveTask remove task based on type, taskid, shardid
+    // RemoveTask remove task based on type, taskid, shardid.
     rpc RemoveTask (RemoveTaskRequest) returns (RemoveTaskResponse) {
     }
+
+    // GetReplicationMessages return replication messages based on the read level
     rpc GetReplicationMessages (GetReplicationMessagesRequest) returns (GetReplicationMessagesResponse) {
     }
 
-    // QueryWorkflow returns query result for a specified workflow execution
+    // GetDLQReplicationMessages return replication messages based on dlq info
+    rpc GetDLQReplicationMessages(GetDLQReplicationMessagesRequest) returns(GetDLQReplicationMessagesResponse){
+    }
+
+    // QueryWorkflow returns query result for a specified workflow execution.
     rpc QueryWorkflow (QueryWorkflowRequest) returns (QueryWorkflowResponse) {
     }
 
-    // ReapplyEvents applies stale events to the current workflow and current run
+    // ReapplyEvents applies stale events to the current workflow and current run.
     rpc ReapplyEvents (ReapplyEventsRequest) returns (ReapplyEventsResponse) {
     }
 }

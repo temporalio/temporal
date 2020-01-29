@@ -439,16 +439,6 @@ func (c *taskListManagerImpl) allocTaskIDBlock(prevBlockEnd int64) (taskIDBlock,
 	return c.rangeIDToTaskIDBlock(state.rangeID), nil
 }
 
-func (c *taskListManagerImpl) getAckLevel() (ackLevel int64) {
-	return c.taskAckManager.getAckLevel()
-}
-
-func (c *taskListManagerImpl) getTaskListKind() int {
-	// there is no need to lock here,
-	// since c.taskListKind is assigned when taskListManager been created and never changed.
-	return c.taskListKind
-}
-
 // Retry operation on transient error. On rangeID update by another process calls c.Stop().
 func (c *taskListManagerImpl) executeWithRetry(
 	operation func() (interface{}, error)) (result interface{}, err error) {

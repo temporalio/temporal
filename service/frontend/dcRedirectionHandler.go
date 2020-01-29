@@ -273,6 +273,36 @@ func (handler *DCRedirectionHandlerImpl) GetWorkflowExecutionHistory(
 	return resp, err
 }
 
+// GetWorkflowExecutionRawHistory API call
+func (handler *DCRedirectionHandlerImpl) GetWorkflowExecutionRawHistory(
+	ctx context.Context,
+	request *workflowservice.GetWorkflowExecutionRawHistoryRequest,
+) (resp *workflowservice.GetWorkflowExecutionRawHistoryResponse, retError error) {
+
+	var apiName = "GetWorkflowExecutionRawHistory"
+	var err error
+	var cluster string
+
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionGetWorkflowExecutionRawHistoryScope)
+	defer func() {
+		handler.afterCall(scope, startTime, cluster, &retError)
+	}()
+
+	err = handler.redirectionPolicy.WithDomainNameRedirect(ctx, request.GetDomain(), apiName, func(targetDC string) error {
+		cluster = targetDC
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.GetWorkflowExecutionRawHistory(ctx, request)
+		default:
+			remoteClient := handler.GetRemoteFrontendClient(targetDC)
+			resp, err = remoteClient.GetWorkflowExecutionRawHistory(ctx, request)
+		}
+		return err
+	})
+
+	return resp, err
+}
+
 // ListArchivedWorkflowExecutions API call
 func (handler *DCRedirectionHandlerImpl) ListArchivedWorkflowExecutions(
 	ctx context.Context,
@@ -1160,30 +1190,6 @@ func (handler *DCRedirectionHandlerImpl) ListTaskListPartitions(
 	})
 
 	return resp, err
-}
-
-// GetReplicationMessages API call
-func (handler *DCRedirectionHandlerImpl) GetReplicationMessages(
-	ctx context.Context,
-	request *workflowservice.GetReplicationMessagesRequest,
-) (*workflowservice.GetReplicationMessagesResponse, error) {
-	return handler.frontendHandler.GetReplicationMessages(ctx, request)
-}
-
-// GetDomainReplicationMessages API call
-func (handler *DCRedirectionHandlerImpl) GetDomainReplicationMessages(
-	ctx context.Context,
-	request *workflowservice.GetDomainReplicationMessagesRequest,
-) (*workflowservice.GetDomainReplicationMessagesResponse, error) {
-	return handler.frontendHandler.GetDomainReplicationMessages(ctx, request)
-}
-
-// ReapplyEvents API call
-func (handler *DCRedirectionHandlerImpl) ReapplyEvents(
-	ctx context.Context,
-	request *workflowservice.ReapplyEventsRequest,
-) (*workflowservice.ReapplyEventsResponse, error) {
-	return handler.frontendHandler.ReapplyEvents(ctx, request)
 }
 
 // GetClusterInfo API call

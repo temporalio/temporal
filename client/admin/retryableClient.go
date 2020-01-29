@@ -173,3 +173,63 @@ func (c *retryableClient) DescribeCluster(
 	err := backoff.Retry(op, c.policy, c.isRetryable)
 	return resp, err
 }
+
+func (c *retryableClient) GetReplicationMessages(
+	ctx context.Context,
+	request *adminservice.GetReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (*adminservice.GetReplicationMessagesResponse, error) {
+	var resp *adminservice.GetReplicationMessagesResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.GetReplicationMessages(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) GetDomainReplicationMessages(
+	ctx context.Context,
+	request *adminservice.GetDomainReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (*adminservice.GetDomainReplicationMessagesResponse, error) {
+	var resp *adminservice.GetDomainReplicationMessagesResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.GetDomainReplicationMessages(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) GetDLQReplicationMessages(
+	ctx context.Context,
+	request *adminservice.GetDLQReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (*adminservice.GetDLQReplicationMessagesResponse, error) {
+	var resp *adminservice.GetDLQReplicationMessagesResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.GetDLQReplicationMessages(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) ReapplyEvents(
+	ctx context.Context,
+	request *adminservice.ReapplyEventsRequest,
+	opts ...yarpc.CallOption,
+) (*adminservice.ReapplyEventsResponse, error) {
+	var resp *adminservice.ReapplyEventsResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.ReapplyEvents(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}

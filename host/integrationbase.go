@@ -183,15 +183,6 @@ func (s *IntegrationBase) registerDomain(
 	return err
 }
 
-func (s *IntegrationBase) describeDomain(domain string) (*workflowservice.DescribeDomainResponse, error) {
-	ctx, cancel := createContextWithCancel(10 * time.Second)
-	defer cancel()
-
-	return s.engine.DescribeDomain(ctx, &workflowservice.DescribeDomainRequest{
-		Name: domain,
-	})
-}
-
 func (s *IntegrationBase) randomizeStr(id string) string {
 	return fmt.Sprintf("%v-%v", id, uuid.New())
 }

@@ -97,7 +97,6 @@ func (idMutex *idMutexImpl) LockID(identifier interface{}) {
 	mutexInfo.waitCount++
 	shard.Unlock()
 	mutexInfo.Lock()
-	return
 }
 
 // UnlockID unlock by specific identifier

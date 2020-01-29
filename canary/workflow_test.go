@@ -28,8 +28,6 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/mocks"
 	"go.temporal.io/temporal/testsuite"
 	"go.temporal.io/temporal/worker"
@@ -139,14 +137,6 @@ func (s *workflowTestSuite) TestLocalActivityWorkflow() {
 	err := s.env.GetWorkflowResult(&result)
 	s.NoError(err)
 	s.Equal("data%2 == 0 and data%5 == 0", result)
-}
-
-func newMockOpenWorkflowResponse(wfID string, runID string) *workflowservice.ListOpenWorkflowExecutionsResponse {
-	return &workflowservice.ListOpenWorkflowExecutionsResponse{
-		Executions: []*commonproto.WorkflowExecutionInfo{
-			{Execution: &commonproto.WorkflowExecution{WorkflowId: wfID, RunId: runID}},
-		},
-	}
 }
 
 func newTestWorkerOptions(ctx *activityContext) worker.Options {

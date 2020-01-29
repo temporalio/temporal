@@ -1,0 +1,53 @@
+// Copyright (c) 2019 Temporal Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+syntax = "proto3";
+
+package indexer;
+option go_package = "github.com/temporalio/temporal/.gen/proto/checksum";
+
+import "common/common.proto";
+
+message MutableStateChecksumPayload {
+    bool cancelRequested = 1;
+    int32 state = 2;
+    int32 closeStatus = 3;
+
+    int64 lastWriteVersion = 4;
+    int64 lastWriteEventId = 5;
+    int64 lastFirstEventId = 6;
+    int64 nextEventID = 7;
+    int64 lastProcessedEventId = 8;
+    int64 signalCount = 9;
+
+    int32 decisionAttempt = 10;
+    int64 decisionVersion = 11;
+    int64 decisionScheduledId = 12;
+    int64 decisionStartedId = 13;
+
+    repeated int64 pendingTimerStartedIds = 14;
+    repeated int64 pendingActivityScheduledIds = 15;
+    repeated int64 pendingSignalInitiatedIds = 16;
+    repeated int64 pendingReqCancelInitiatedIds = 17;
+    repeated int64 pendingChildInitiatedIds = 18;
+
+    string stickyTaskListName = 19;
+    common.VersionHistories VersionHistories = 20;
+}

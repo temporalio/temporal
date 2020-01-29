@@ -118,7 +118,7 @@ func (d *AttrValidatorImpl) validateDomainReplicationConfigForGlobalDomain(
 	return nil
 }
 
-func (d *AttrValidatorImpl) validateDomainReplicationConfigClustersDoesNotChange(
+func (d *AttrValidatorImpl) validateDomainReplicationConfigClustersDoesNotRemove(
 	clustersOld []*persistence.ClusterReplicationConfig,
 	clustersNew []*persistence.ClusterReplicationConfig,
 ) error {
@@ -132,13 +132,13 @@ func (d *AttrValidatorImpl) validateDomainReplicationConfigClustersDoesNotChange
 		clusterNamesNew[clusterConfig.ClusterName] = true
 	}
 
-	if len(clusterNamesNew) != len(clusterNamesOld) {
-		return errCannotModifyClustersFromDomain
+	if len(clusterNamesNew) < len(clusterNamesOld) {
+		return errCannotRemoveClustersFromDomain
 	}
 
 	for clusterName := range clusterNamesOld {
 		if _, ok := clusterNamesNew[clusterName]; !ok {
-			return errCannotModifyClustersFromDomain
+			return errCannotRemoveClustersFromDomain
 		}
 	}
 	return nil

@@ -25,7 +25,6 @@ import (
 
 	"go.uber.org/yarpc"
 
-	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/metrics"
 )
@@ -131,6 +130,24 @@ func (c *metricClient) GetWorkflowExecutionHistory(
 
 	if err != nil {
 		c.metricsClient.IncCounter(metrics.FrontendClientGetWorkflowExecutionHistoryScope, metrics.CadenceClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) GetWorkflowExecutionRawHistory(
+	ctx context.Context,
+	request *shared.GetWorkflowExecutionRawHistoryRequest,
+	opts ...yarpc.CallOption,
+) (*shared.GetWorkflowExecutionRawHistoryResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.FrontendClientGetWorkflowExecutionRawHistoryScope, metrics.CadenceClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientGetWorkflowExecutionRawHistoryScope, metrics.CadenceClientLatency)
+	resp, err := c.client.GetWorkflowExecutionRawHistory(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.FrontendClientGetWorkflowExecutionRawHistoryScope, metrics.CadenceClientFailures)
 	}
 	return resp, err
 }
@@ -690,57 +707,6 @@ func (c *metricClient) UpdateDomain(
 		c.metricsClient.IncCounter(metrics.FrontendClientUpdateDomainScope, metrics.CadenceClientFailures)
 	}
 	return resp, err
-}
-
-func (c *metricClient) GetReplicationMessages(
-	ctx context.Context,
-	request *replicator.GetReplicationMessagesRequest,
-	opts ...yarpc.CallOption,
-) (*replicator.GetReplicationMessagesResponse, error) {
-	c.metricsClient.IncCounter(metrics.FrontendClientGetReplicationTasksScope, metrics.CadenceClientRequests)
-
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientGetReplicationTasksScope, metrics.CadenceClientLatency)
-	resp, err := c.client.GetReplicationMessages(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientGetReplicationTasksScope, metrics.CadenceClientFailures)
-	}
-	return resp, err
-}
-
-func (c *metricClient) GetDomainReplicationMessages(
-	ctx context.Context,
-	request *replicator.GetDomainReplicationMessagesRequest,
-	opts ...yarpc.CallOption,
-) (*replicator.GetDomainReplicationMessagesResponse, error) {
-	c.metricsClient.IncCounter(metrics.FrontendClientGetDomainReplicationTasksScope, metrics.CadenceClientRequests)
-
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientGetDomainReplicationTasksScope, metrics.CadenceClientLatency)
-	resp, err := c.client.GetDomainReplicationMessages(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientGetDomainReplicationTasksScope, metrics.CadenceClientFailures)
-	}
-	return resp, err
-}
-
-func (c *metricClient) ReapplyEvents(
-	ctx context.Context,
-	request *shared.ReapplyEventsRequest,
-	opts ...yarpc.CallOption,
-) error {
-
-	c.metricsClient.IncCounter(metrics.FrontendClientReapplyEventsScope, metrics.CadenceClientRequests)
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientReapplyEventsScope, metrics.CadenceClientLatency)
-	err := c.client.ReapplyEvents(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientReapplyEventsScope, metrics.CadenceClientFailures)
-	}
-	return err
 }
 
 func (c *metricClient) GetClusterInfo(

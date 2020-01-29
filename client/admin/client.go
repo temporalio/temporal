@@ -171,7 +171,6 @@ func (c *clientImpl) DescribeCluster(
 	request *adminservice.DescribeClusterRequest,
 	opts ...yarpc.CallOption,
 ) (*adminservice.DescribeClusterResponse, error) {
-
 	opts = common.AggregateYarpcOptions(ctx, opts...)
 	client, err := c.getRandomClient()
 	if err != nil {
@@ -180,6 +179,66 @@ func (c *clientImpl) DescribeCluster(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.DescribeCluster(ctx, request, opts...)
+}
+
+func (c *clientImpl) GetReplicationMessages(
+	ctx context.Context,
+	request *adminservice.GetReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (*adminservice.GetReplicationMessagesResponse, error) {
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.GetReplicationMessages(ctx, request, opts...)
+}
+
+func (c *clientImpl) GetDomainReplicationMessages(
+	ctx context.Context,
+	request *adminservice.GetDomainReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (*adminservice.GetDomainReplicationMessagesResponse, error) {
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.GetDomainReplicationMessages(ctx, request, opts...)
+}
+
+func (c *clientImpl) GetDLQReplicationMessages(
+	ctx context.Context,
+	request *adminservice.GetDLQReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (*adminservice.GetDLQReplicationMessagesResponse, error) {
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.GetDLQReplicationMessages(ctx, request, opts...)
+}
+
+func (c *clientImpl) ReapplyEvents(
+	ctx context.Context,
+	request *adminservice.ReapplyEventsRequest,
+	opts ...yarpc.CallOption,
+) (*adminservice.ReapplyEventsResponse, error) {
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.ReapplyEvents(ctx, request, opts...)
 }
 
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {

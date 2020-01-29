@@ -69,8 +69,6 @@ type (
 	}
 )
 
-const domainRefreshInterval = time.Second * 11
-
 // NewService builds a new cadence-worker service
 func NewService(
 	params *service.BootstrapParams,
@@ -120,6 +118,7 @@ func NewConfig(params *service.BootstrapParams) *Config {
 			ReplicatorHistoryBufferRetryCount:  dc.GetIntProperty(dynamicconfig.WorkerReplicatorHistoryBufferRetryCount, 8),
 			ReplicationTaskMaxRetryCount:       dc.GetIntProperty(dynamicconfig.WorkerReplicationTaskMaxRetryCount, 400),
 			ReplicationTaskMaxRetryDuration:    dc.GetDurationProperty(dynamicconfig.WorkerReplicationTaskMaxRetryDuration, 15*time.Minute),
+			ReplicationTaskContextTimeout:      dc.GetDurationProperty(dynamicconfig.WorkerReplicationTaskContextDuration, 30*time.Second),
 		},
 		ArchiverConfig: &archiver.Config{
 			ArchiverConcurrency:           dc.GetIntProperty(dynamicconfig.WorkerArchiverConcurrency, 50),
@@ -253,6 +252,7 @@ func (s *Service) startReplicator() {
 		s.GetMetricsClient(),
 		s.GetHostInfo(),
 		s.GetWorkerServiceResolver(),
+		s.GetDomainReplicationQueue(),
 	)
 	if err := msgReplicator.Start(); err != nil {
 		msgReplicator.Stop()

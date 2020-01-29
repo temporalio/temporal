@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 // 
-// Copyright (c) 2019 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -27,7 +27,6 @@ package workflowserviceserver
 
 import (
 	context "context"
-	replicator "github.com/temporalio/temporal/.gen/go/replicator"
 	shared "github.com/temporalio/temporal/.gen/go/shared"
 	temporal "github.com/temporalio/temporal/.gen/go/temporal"
 	wire "go.uber.org/thriftrw/wire"
@@ -66,16 +65,6 @@ type Interface interface {
 		ctx context.Context,
 	) (*shared.ClusterInfo, error)
 
-	GetDomainReplicationMessages(
-		ctx context.Context,
-		Request *replicator.GetDomainReplicationMessagesRequest,
-	) (*replicator.GetDomainReplicationMessagesResponse, error)
-
-	GetReplicationMessages(
-		ctx context.Context,
-		Request *replicator.GetReplicationMessagesRequest,
-	) (*replicator.GetReplicationMessagesResponse, error)
-
 	GetSearchAttributes(
 		ctx context.Context,
 	) (*shared.GetSearchAttributesResponse, error)
@@ -84,6 +73,11 @@ type Interface interface {
 		ctx context.Context,
 		GetRequest *shared.GetWorkflowExecutionHistoryRequest,
 	) (*shared.GetWorkflowExecutionHistoryResponse, error)
+
+	GetWorkflowExecutionRawHistory(
+		ctx context.Context,
+		GetRequest *shared.GetWorkflowExecutionRawHistoryRequest,
+	) (*shared.GetWorkflowExecutionRawHistoryResponse, error)
 
 	ListArchivedWorkflowExecutions(
 		ctx context.Context,
@@ -129,11 +123,6 @@ type Interface interface {
 		ctx context.Context,
 		QueryRequest *shared.QueryWorkflowRequest,
 	) (*shared.QueryWorkflowResponse, error)
-
-	ReapplyEvents(
-		ctx context.Context,
-		ReapplyEventsRequest *shared.ReapplyEventsRequest,
-	) error
 
 	RecordActivityTaskHeartbeat(
 		ctx context.Context,
@@ -319,28 +308,6 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 			},
 
 			thrift.Method{
-				Name: "GetDomainReplicationMessages",
-				HandlerSpec: thrift.HandlerSpec{
-
-					Type:  transport.Unary,
-					Unary: thrift.UnaryHandler(h.GetDomainReplicationMessages),
-				},
-				Signature:    "GetDomainReplicationMessages(Request *replicator.GetDomainReplicationMessagesRequest) (*replicator.GetDomainReplicationMessagesResponse)",
-				ThriftModule: temporal.ThriftModule,
-			},
-
-			thrift.Method{
-				Name: "GetReplicationMessages",
-				HandlerSpec: thrift.HandlerSpec{
-
-					Type:  transport.Unary,
-					Unary: thrift.UnaryHandler(h.GetReplicationMessages),
-				},
-				Signature:    "GetReplicationMessages(Request *replicator.GetReplicationMessagesRequest) (*replicator.GetReplicationMessagesResponse)",
-				ThriftModule: temporal.ThriftModule,
-			},
-
-			thrift.Method{
 				Name: "GetSearchAttributes",
 				HandlerSpec: thrift.HandlerSpec{
 
@@ -359,6 +326,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 					Unary: thrift.UnaryHandler(h.GetWorkflowExecutionHistory),
 				},
 				Signature:    "GetWorkflowExecutionHistory(GetRequest *shared.GetWorkflowExecutionHistoryRequest) (*shared.GetWorkflowExecutionHistoryResponse)",
+				ThriftModule: temporal.ThriftModule,
+			},
+
+			thrift.Method{
+				Name: "GetWorkflowExecutionRawHistory",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.GetWorkflowExecutionRawHistory),
+				},
+				Signature:    "GetWorkflowExecutionRawHistory(GetRequest *shared.GetWorkflowExecutionRawHistoryRequest) (*shared.GetWorkflowExecutionRawHistoryResponse)",
 				ThriftModule: temporal.ThriftModule,
 			},
 
@@ -458,17 +436,6 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 					Unary: thrift.UnaryHandler(h.QueryWorkflow),
 				},
 				Signature:    "QueryWorkflow(QueryRequest *shared.QueryWorkflowRequest) (*shared.QueryWorkflowResponse)",
-				ThriftModule: temporal.ThriftModule,
-			},
-
-			thrift.Method{
-				Name: "ReapplyEvents",
-				HandlerSpec: thrift.HandlerSpec{
-
-					Type:  transport.Unary,
-					Unary: thrift.UnaryHandler(h.ReapplyEvents),
-				},
-				Signature:    "ReapplyEvents(ReapplyEventsRequest *shared.ReapplyEventsRequest)",
 				ThriftModule: temporal.ThriftModule,
 			},
 
@@ -705,7 +672,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 41)
+	procedures := make([]transport.Procedure, 0, 39)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -826,44 +793,6 @@ func (h handler) GetClusterInfo(ctx context.Context, body wire.Value) (thrift.Re
 	return response, err
 }
 
-func (h handler) GetDomainReplicationMessages(ctx context.Context, body wire.Value) (thrift.Response, error) {
-	var args temporal.WorkflowService_GetDomainReplicationMessages_Args
-	if err := args.FromWire(body); err != nil {
-		return thrift.Response{}, err
-	}
-
-	success, err := h.impl.GetDomainReplicationMessages(ctx, args.Request)
-
-	hadError := err != nil
-	result, err := temporal.WorkflowService_GetDomainReplicationMessages_Helper.WrapResponse(success, err)
-
-	var response thrift.Response
-	if err == nil {
-		response.IsApplicationError = hadError
-		response.Body = result
-	}
-	return response, err
-}
-
-func (h handler) GetReplicationMessages(ctx context.Context, body wire.Value) (thrift.Response, error) {
-	var args temporal.WorkflowService_GetReplicationMessages_Args
-	if err := args.FromWire(body); err != nil {
-		return thrift.Response{}, err
-	}
-
-	success, err := h.impl.GetReplicationMessages(ctx, args.Request)
-
-	hadError := err != nil
-	result, err := temporal.WorkflowService_GetReplicationMessages_Helper.WrapResponse(success, err)
-
-	var response thrift.Response
-	if err == nil {
-		response.IsApplicationError = hadError
-		response.Body = result
-	}
-	return response, err
-}
-
 func (h handler) GetSearchAttributes(ctx context.Context, body wire.Value) (thrift.Response, error) {
 	var args temporal.WorkflowService_GetSearchAttributes_Args
 	if err := args.FromWire(body); err != nil {
@@ -893,6 +822,25 @@ func (h handler) GetWorkflowExecutionHistory(ctx context.Context, body wire.Valu
 
 	hadError := err != nil
 	result, err := temporal.WorkflowService_GetWorkflowExecutionHistory_Helper.WrapResponse(success, err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) GetWorkflowExecutionRawHistory(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args temporal.WorkflowService_GetWorkflowExecutionRawHistory_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	success, err := h.impl.GetWorkflowExecutionRawHistory(ctx, args.GetRequest)
+
+	hadError := err != nil
+	result, err := temporal.WorkflowService_GetWorkflowExecutionRawHistory_Helper.WrapResponse(success, err)
 
 	var response thrift.Response
 	if err == nil {
@@ -1064,25 +1012,6 @@ func (h handler) QueryWorkflow(ctx context.Context, body wire.Value) (thrift.Res
 
 	hadError := err != nil
 	result, err := temporal.WorkflowService_QueryWorkflow_Helper.WrapResponse(success, err)
-
-	var response thrift.Response
-	if err == nil {
-		response.IsApplicationError = hadError
-		response.Body = result
-	}
-	return response, err
-}
-
-func (h handler) ReapplyEvents(ctx context.Context, body wire.Value) (thrift.Response, error) {
-	var args temporal.WorkflowService_ReapplyEvents_Args
-	if err := args.FromWire(body); err != nil {
-		return thrift.Response{}, err
-	}
-
-	err := h.impl.ReapplyEvents(ctx, args.ReapplyEventsRequest)
-
-	hadError := err != nil
-	result, err := temporal.WorkflowService_ReapplyEvents_Helper.WrapResponse(err)
 
 	var response thrift.Response
 	if err == nil {
