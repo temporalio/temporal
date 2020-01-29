@@ -22,8 +22,6 @@ require (
 	github.com/fortytw2/leaktest v1.3.0 // indirect
 	github.com/go-sql-driver/mysql v1.4.1
 	github.com/gocql/gocql v0.0.0-20191126110522-1982a06ad6b9
-	github.com/gogo/googleapis v1.2.0 // indirect
-	github.com/gogo/status v1.1.0 // indirect
 	github.com/golang/mock v1.3.1
 	github.com/google/uuid v1.1.1
 	github.com/hashicorp/go-version v1.2.0
@@ -60,20 +58,18 @@ require (
 	github.com/valyala/fastjson v1.4.1
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
 	go.opencensus.io v0.22.2 // indirect
-	go.uber.org/atomic v1.5.0
-	go.uber.org/cadence v0.9.1-0.20191023030824-883f86358883
-	go.uber.org/config v1.3.1
+	go.uber.org/atomic v1.5.1
+	go.uber.org/cadence v0.9.1-0.20200128004345-b282629d5ba9
 	go.uber.org/multierr v1.3.0
 	go.uber.org/net/metrics v1.2.0 // indirect
 	go.uber.org/thriftrw v1.20.2
 	go.uber.org/yarpc v1.42.0
 	go.uber.org/zap v1.12.0
-	golang.org/x/crypto v0.0.0-20190701094942-4def268fd1a4 // indirect
-	golang.org/x/net v0.0.0-20191101175033-0deb6923b6d9
+	golang.org/x/net v0.0.0-20200114155413-6afb5195e5aa
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
 	golang.org/x/sys v0.0.0-20191029155521-f43be2a4598c // indirect
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4
-	golang.org/x/tools v0.0.0-20191101175824-a860bcda08c7
+	golang.org/x/tools v0.0.0-20200127195909-ed30b9180dd3
 	google.golang.org/api v0.14.0
 	google.golang.org/appengine v1.6.1 // indirect
 	gopkg.in/jcmturner/goidentity.v3 v3.0.0 // indirect
