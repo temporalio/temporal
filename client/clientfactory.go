@@ -64,7 +64,7 @@ type (
 		NewMatchingClientWithTimeout(domainIDToName DomainIDToNameFunc, timeout time.Duration, longPollTimeout time.Duration) (matching.Client, error)
 		NewFrontendClientWithTimeout(timeout time.Duration, longPollTimeout time.Duration) (frontend.Client, error)
 
-		NewAdminClientWithTimeoutAndDispatcher(rpcName string, timeout time.Duration, dispatcher *yarpc.Dispatcher) (admin.Client, error)
+		NewAdminClientWithTimeout(rpcAddress string, timeout time.Duration) (admin.Client, error)
 		NewFrontendClientWithTimeoutAndDispatcher(rpcName string, timeout time.Duration, longPollTimeout time.Duration, dispatcher *yarpc.Dispatcher) (frontend.Client, error)
 		NewFrontendClientWithTimeoutGRPC(rpcAddress string, timeout time.Duration, longPollTimeout time.Duration) (frontend.ClientGRPC, error)
 	}
@@ -206,17 +206,17 @@ func (cf *rpcClientFactory) NewFrontendClientWithTimeout(
 	return client, nil
 }
 
-func (cf *rpcClientFactory) NewAdminClientWithTimeoutAndDispatcher(
-	rpcName string,
+func (cf *rpcClientFactory) NewAdminClientWithTimeout(
+	rpcAddress string,
 	timeout time.Duration,
-	dispatcher *yarpc.Dispatcher,
 ) (admin.Client, error) {
 	keyResolver := func(key string) (string, error) {
-		return clientKeyDispatcher, nil
+		return clientKeyConnection, nil
 	}
 
 	clientProvider := func(clientKey string) (interface{}, error) {
-		return adminservice.NewAdminServiceYARPCClient(dispatcher.ClientConfig(rpcName)), nil
+		connection := cf.rpcFactory.CreateGRPCConnection(rpcAddress)
+		return adminservice.NewAdminServiceClient(connection), nil
 	}
 
 	client := admin.NewClient(timeout, common.NewClientCache(keyResolver, clientProvider))

@@ -26,5 +26,5 @@ import (
 
 // Client is the interface exposed by admin service client
 type Client interface {
-	adminservice.AdminServiceYARPCClient
+	adminservice.AdminServiceClient
 }
