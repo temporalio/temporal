@@ -244,3 +244,13 @@ func ToThriftStartChildWorkflowExecutionDecisionAttributes(in *common.StartChild
 		SearchAttributes:                    ToThriftSearchAttributes(in.SearchAttributes),
 	}
 }
+
+func ToProtoTransientDecisionInfo(in *shared.TransientDecisionInfo) *common.TransientDecisionInfo {
+	if in == nil {
+		return nil
+	}
+	return &common.TransientDecisionInfo{
+		ScheduledEvent: ToProtoHistoryEvent(in.GetScheduledEvent()),
+		StartedEvent:   ToProtoHistoryEvent(in.GetStartedEvent()),
+	}
+}
