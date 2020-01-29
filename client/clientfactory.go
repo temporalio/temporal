@@ -28,7 +28,6 @@ import (
 
 	"github.com/temporalio/temporal/.gen/go/history/historyserviceclient"
 	"github.com/temporalio/temporal/.gen/go/matching/matchingserviceclient"
-	"github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/client/frontend"
@@ -42,7 +41,6 @@ import (
 )
 
 const (
-	frontendCaller = "cadence-frontend-client"
 	historyCaller  = "history-service-client"
 	matchingCaller = "matching-service-client"
 	crossDCCaller  = "cadence-xdc-client"
@@ -58,15 +56,13 @@ type (
 	Factory interface {
 		NewHistoryClient() (history.Client, error)
 		NewMatchingClient(domainIDToName DomainIDToNameFunc) (matching.Client, error)
-		NewFrontendClient() (frontend.Client, error)
+		NewFrontendClient(rpcAddress string) (frontend.Client, error)
 
 		NewHistoryClientWithTimeout(timeout time.Duration) (history.Client, error)
 		NewMatchingClientWithTimeout(domainIDToName DomainIDToNameFunc, timeout time.Duration, longPollTimeout time.Duration) (matching.Client, error)
-		NewFrontendClientWithTimeout(timeout time.Duration, longPollTimeout time.Duration) (frontend.Client, error)
+		NewFrontendClientWithTimeout(rpcAddress string, timeout time.Duration, longPollTimeout time.Duration) (frontend.Client, error)
 
 		NewAdminClientWithTimeoutAndDispatcher(rpcName string, timeout time.Duration, dispatcher *yarpc.Dispatcher) (admin.Client, error)
-		NewFrontendClientWithTimeoutAndDispatcher(rpcName string, timeout time.Duration, longPollTimeout time.Duration, dispatcher *yarpc.Dispatcher) (frontend.Client, error)
-		NewFrontendClientWithTimeoutGRPC(rpcAddress string, timeout time.Duration, longPollTimeout time.Duration) (frontend.ClientGRPC, error)
 	}
 
 	// DomainIDToNameFunc maps a domainID to domain name. Returns error when mapping is not possible.
@@ -109,8 +105,8 @@ func (cf *rpcClientFactory) NewMatchingClient(domainIDToName DomainIDToNameFunc)
 	return cf.NewMatchingClientWithTimeout(domainIDToName, matching.DefaultTimeout, matching.DefaultLongPollTimeout)
 }
 
-func (cf *rpcClientFactory) NewFrontendClient() (frontend.Client, error) {
-	return cf.NewFrontendClientWithTimeout(frontend.DefaultTimeout, frontend.DefaultLongPollTimeout)
+func (cf *rpcClientFactory) NewFrontendClient(rpcAddress string) (frontend.Client, error) {
+	return cf.NewFrontendClientWithTimeout(rpcAddress, frontend.DefaultTimeout, frontend.DefaultLongPollTimeout)
 }
 
 func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (history.Client, error) {
@@ -177,26 +173,17 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 }
 
 func (cf *rpcClientFactory) NewFrontendClientWithTimeout(
+	rpcAddress string,
 	timeout time.Duration,
 	longPollTimeout time.Duration,
 ) (frontend.Client, error) {
-
-	resolver, err := cf.monitor.GetResolver(common.FrontendServiceName)
-	if err != nil {
-		return nil, err
-	}
-
 	keyResolver := func(key string) (string, error) {
-		host, err := resolver.Lookup(key)
-		if err != nil {
-			return "", err
-		}
-		return host.GetAddress(), nil
+		return clientKeyConnection, nil
 	}
 
 	clientProvider := func(clientKey string) (interface{}, error) {
-		dispatcher := cf.rpcFactory.CreateTChannelDispatcherForOutbound(frontendCaller, common.FrontendServiceName, clientKey)
-		return workflowserviceclient.New(dispatcher.ClientConfig(common.FrontendServiceName)), nil
+		connection := cf.rpcFactory.CreateGRPCConnection(rpcAddress)
+		return workflowservice.NewWorkflowServiceClient(connection), nil
 	}
 
 	client := frontend.NewClient(timeout, longPollTimeout, common.NewClientCache(keyResolver, clientProvider))
@@ -222,48 +209,6 @@ func (cf *rpcClientFactory) NewAdminClientWithTimeoutAndDispatcher(
 	client := admin.NewClient(timeout, common.NewClientCache(keyResolver, clientProvider))
 	if cf.metricsClient != nil {
 		client = admin.NewMetricClient(client, cf.metricsClient)
-	}
-	return client, nil
-}
-
-func (cf *rpcClientFactory) NewFrontendClientWithTimeoutAndDispatcher(
-	rpcName string,
-	timeout time.Duration,
-	longPollTimeout time.Duration,
-	dispatcher *yarpc.Dispatcher,
-) (frontend.Client, error) {
-	keyResolver := func(key string) (string, error) {
-		return clientKeyDispatcher, nil
-	}
-
-	clientProvider := func(clientKey string) (interface{}, error) {
-		return workflowserviceclient.New(dispatcher.ClientConfig(rpcName)), nil
-	}
-
-	client := frontend.NewClient(timeout, longPollTimeout, common.NewClientCache(keyResolver, clientProvider))
-	if cf.metricsClient != nil {
-		client = frontend.NewMetricClient(client, cf.metricsClient)
-	}
-	return client, nil
-}
-
-func (cf *rpcClientFactory) NewFrontendClientWithTimeoutGRPC(
-	rpcAddress string,
-	timeout time.Duration,
-	longPollTimeout time.Duration,
-) (frontend.ClientGRPC, error) {
-	keyResolver := func(key string) (string, error) {
-		return clientKeyConnection, nil
-	}
-
-	clientProvider := func(clientKey string) (interface{}, error) {
-		connection := cf.rpcFactory.CreateGRPCConnection(rpcAddress)
-		return workflowservice.NewWorkflowServiceClient(connection), nil
-	}
-
-	client := frontend.NewClientGRPC(timeout, longPollTimeout, common.NewClientCache(keyResolver, clientProvider))
-	if cf.metricsClient != nil {
-		client = frontend.NewMetricClientGRPC(client, cf.metricsClient)
 	}
 	return client, nil
 }
