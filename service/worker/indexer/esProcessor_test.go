@@ -370,7 +370,7 @@ func (s *esProcessorSuite) TestIsResponseSuccess() {
 }
 
 func (s *esProcessorSuite) TestIsResponseRetriable() {
-	status := []int{408, 429, 503, 507}
+	status := []int{408, 429, 500, 503, 507}
 	for _, code := range status {
 		s.True(isResponseRetriable(code))
 	}
