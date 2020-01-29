@@ -49,9 +49,19 @@ func NewAdminHandlerGRPC(
 }
 
 // RegisterHandler register this handler, must be called before Start()
-// if DCRedirectionHandler is also used, use RegisterHandler in DCRedirectionHandler instead
 func (adh *AdminHandlerGRPC) RegisterHandler() {
 	adh.adminHandlerThrift.GetGRPCDispatcher().Register(adminservice.BuildAdminServiceYARPCProcedures(adh))
+}
+
+// Start starts the handler
+func (adh *AdminHandlerGRPC) Start() {
+	// Start domain replication queue cleanup
+	adh.adminHandlerThrift.Resource.GetDomainReplicationQueue().Start()
+}
+
+// Stop stops the handler
+func (adh *AdminHandlerGRPC) Stop() {
+	adh.adminHandlerThrift.Resource.GetDomainReplicationQueue().Stop()
 }
 
 // DescribeWorkflowExecution ...

@@ -31,7 +31,6 @@ import (
 	"go.uber.org/yarpc/yarpcerrors"
 
 	"github.com/temporalio/temporal/.gen/go/health"
-	"github.com/temporalio/temporal/.gen/go/health/metaserver"
 	h "github.com/temporalio/temporal/.gen/go/history"
 	m "github.com/temporalio/temporal/.gen/go/matching"
 	gen "github.com/temporalio/temporal/.gen/go/shared"
@@ -167,21 +166,6 @@ func NewWorkflowHandler(
 			config.SearchAttributesTotalSizeLimit,
 		),
 	}
-}
-
-// RegisterHandler register this handler, must be called before Start()
-// if DCRedirectionHandler is also used, use RegisterHandler in DCRedirectionHandler instead
-func (wh *WorkflowHandler) RegisterHandler() {
-	wh.GetDispatcher().Register(workflowserviceserver.New(wh))
-	wh.GetDispatcher().Register(metaserver.New(wh))
-}
-
-// Start starts the handler
-func (wh *WorkflowHandler) Start() {
-}
-
-// Stop stops the handler
-func (wh *WorkflowHandler) Stop() {
 }
 
 // Health is for health check

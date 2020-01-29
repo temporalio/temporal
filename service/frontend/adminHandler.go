@@ -90,22 +90,6 @@ func NewAdminHandler(
 	}
 }
 
-// RegisterHandler register this handler, must be called before Start()
-func (adh *AdminHandler) RegisterHandler() {
-	adh.GetDispatcher().Register(adminserviceserver.New(adh))
-}
-
-// Start starts the handler
-func (adh *AdminHandler) Start() {
-	// Start domain replication queue cleanup
-	adh.Resource.GetDomainReplicationQueue().Start()
-}
-
-// Stop stops the handler
-func (adh *AdminHandler) Stop() {
-	adh.Resource.GetDomainReplicationQueue().Stop()
-}
-
 // AddSearchAttribute add search attribute to whitelist
 func (adh *AdminHandler) AddSearchAttribute(
 	ctx context.Context,

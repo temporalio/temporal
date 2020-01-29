@@ -134,7 +134,7 @@ type Service struct {
 	config *Config
 	params *service.BootstrapParams
 
-	adminHandler *AdminHandler
+	adminHandlerGRPC *AdminHandlerGRPC
 }
 
 // NewService builds a new cadence-frontend service
@@ -230,18 +230,15 @@ func (s *Service) Start() {
 	wfHandlerGRPC := NewWorkflowHandlerGRPC(wfHandler)
 	dcRedirectionHandler := NewDCRedirectionHandler(wfHandlerGRPC, s.params.DCRedirectionPolicy)
 	accessControlledWorkflowHandler := NewAccessControlledHandlerImpl(dcRedirectionHandler, s.params.Authorizer)
-
 	accessControlledWorkflowHandler.RegisterHandler()
-	wfHandler.RegisterHandler()
 
-	s.adminHandler = NewAdminHandler(s, s.params, s.config)
-	adminHandlerGRPC := NewAdminHandlerGRPC(s.adminHandler)
-	adminHandlerGRPC.RegisterHandler()
-	s.adminHandler.RegisterHandler()
+	adminHandler := NewAdminHandler(s, s.params, s.config)
+	s.adminHandlerGRPC = NewAdminHandlerGRPC(adminHandler)
+	s.adminHandlerGRPC.RegisterHandler()
 
 	// must start resource first
 	s.Resource.Start()
-	s.adminHandler.Start()
+	s.adminHandlerGRPC.Start()
 
 	// base (service is not started in frontend or admin handler) in case of race condition in yarpc registration function
 
@@ -258,7 +255,7 @@ func (s *Service) Stop() {
 
 	close(s.stopC)
 
-	s.adminHandler.Stop()
+	s.adminHandlerGRPC.Stop()
 	s.Resource.Stop()
 
 	s.params.Logger.Info("frontend stopped")
