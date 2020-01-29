@@ -23,12 +23,13 @@ package client
 import (
 	"time"
 
+	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/yarpc"
 
-	"github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"
 	"github.com/temporalio/temporal/.gen/go/history/historyserviceclient"
 	"github.com/temporalio/temporal/.gen/go/matching/matchingserviceclient"
 	"github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
+	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/client/frontend"
 	"github.com/temporalio/temporal/client/history"
@@ -49,6 +50,7 @@ const (
 
 const (
 	clientKeyDispatcher = "client-key-dispatcher"
+	clientKeyConnection = "client-key-connection"
 )
 
 type (
@@ -64,6 +66,7 @@ type (
 
 		NewAdminClientWithTimeoutAndDispatcher(rpcName string, timeout time.Duration, dispatcher *yarpc.Dispatcher) (admin.Client, error)
 		NewFrontendClientWithTimeoutAndDispatcher(rpcName string, timeout time.Duration, longPollTimeout time.Duration, dispatcher *yarpc.Dispatcher) (frontend.Client, error)
+		NewFrontendClientWithTimeoutGRPC(rpcAddress string, timeout time.Duration, longPollTimeout time.Duration) (frontend.ClientGRPC, error)
 	}
 
 	// DomainIDToNameFunc maps a domainID to domain name. Returns error when mapping is not possible.
@@ -213,7 +216,7 @@ func (cf *rpcClientFactory) NewAdminClientWithTimeoutAndDispatcher(
 	}
 
 	clientProvider := func(clientKey string) (interface{}, error) {
-		return adminserviceclient.New(dispatcher.ClientConfig(rpcName)), nil
+		return adminservice.NewAdminServiceYARPCClient(dispatcher.ClientConfig(rpcName)), nil
 	}
 
 	client := admin.NewClient(timeout, common.NewClientCache(keyResolver, clientProvider))
@@ -240,6 +243,27 @@ func (cf *rpcClientFactory) NewFrontendClientWithTimeoutAndDispatcher(
 	client := frontend.NewClient(timeout, longPollTimeout, common.NewClientCache(keyResolver, clientProvider))
 	if cf.metricsClient != nil {
 		client = frontend.NewMetricClient(client, cf.metricsClient)
+	}
+	return client, nil
+}
+
+func (cf *rpcClientFactory) NewFrontendClientWithTimeoutGRPC(
+	rpcAddress string,
+	timeout time.Duration,
+	longPollTimeout time.Duration,
+) (frontend.ClientGRPC, error) {
+	keyResolver := func(key string) (string, error) {
+		return clientKeyConnection, nil
+	}
+
+	clientProvider := func(clientKey string) (interface{}, error) {
+		connection := cf.rpcFactory.CreateGRPCConnection(rpcAddress)
+		return workflowservice.NewWorkflowServiceClient(connection), nil
+	}
+
+	client := frontend.NewClientGRPC(timeout, longPollTimeout, common.NewClientCache(keyResolver, clientProvider))
+	if cf.metricsClient != nil {
+		client = frontend.NewMetricClientGRPC(client, cf.metricsClient)
 	}
 	return client, nil
 }

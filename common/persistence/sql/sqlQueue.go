@@ -55,7 +55,10 @@ func newQueue(
 	}, nil
 }
 
-func (q *sqlQueue) EnqueueMessage(messagePayload []byte) error {
+func (q *sqlQueue) EnqueueMessage(
+	messagePayload []byte,
+) error {
+
 	err := q.txExecute("EnqueueMessage", func(tx sqlplugin.Tx) error {
 		lastMessageID, err := tx.GetLastEnqueuedMessageIDForUpdate(q.queueType)
 		if err != nil {
@@ -75,7 +78,11 @@ func (q *sqlQueue) EnqueueMessage(messagePayload []byte) error {
 	return nil
 }
 
-func (q *sqlQueue) ReadMessages(lastMessageID, maxCount int) ([]*persistence.QueueMessage, error) {
+func (q *sqlQueue) ReadMessages(
+	lastMessageID int,
+	maxCount int,
+) ([]*persistence.QueueMessage, error) {
+
 	rows, err := q.db.GetMessagesFromQueue(q.queueType, lastMessageID, maxCount)
 	if err != nil {
 		return nil, err
@@ -88,11 +95,19 @@ func (q *sqlQueue) ReadMessages(lastMessageID, maxCount int) ([]*persistence.Que
 	return messages, nil
 }
 
-func newQueueRow(queueType common.QueueType, messageID int, payload []byte) *sqlplugin.QueueRow {
+func newQueueRow(
+	queueType common.QueueType,
+	messageID int,
+	payload []byte,
+) *sqlplugin.QueueRow {
+
 	return &sqlplugin.QueueRow{QueueType: queueType, MessageID: messageID, MessagePayload: payload}
 }
 
-func (q *sqlQueue) DeleteMessagesBefore(messageID int) error {
+func (q *sqlQueue) DeleteMessagesBefore(
+	messageID int,
+) error {
+
 	_, err := q.db.DeleteMessagesBefore(q.queueType, messageID)
 	if err != nil {
 		return &workflow.InternalServiceError{
@@ -102,7 +117,11 @@ func (q *sqlQueue) DeleteMessagesBefore(messageID int) error {
 	return nil
 }
 
-func (q *sqlQueue) UpdateAckLevel(messageID int, clusterName string) error {
+func (q *sqlQueue) UpdateAckLevel(
+	messageID int,
+	clusterName string,
+) error {
+
 	err := q.txExecute("UpdateAckLevel", func(tx sqlplugin.Tx) error {
 		clusterAckLevels, err := tx.GetAckLevels(q.queueType, true)
 		if err != nil {
@@ -144,4 +163,86 @@ func (q *sqlQueue) UpdateAckLevel(messageID int, clusterName string) error {
 
 func (q *sqlQueue) GetAckLevels() (map[string]int, error) {
 	return q.db.GetAckLevels(q.queueType, false)
+}
+
+func (q *sqlQueue) EnqueueMessageToDLQ(
+	messagePayload []byte,
+) error {
+
+	err := q.txExecute("EnqueueMessageToDLQ", func(tx sqlplugin.Tx) error {
+		// Use negative queue type as the dlq type
+		lastMessageID, err := tx.GetLastEnqueuedMessageIDForUpdate(-q.queueType)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				lastMessageID = -1
+			} else {
+				return fmt.Errorf("failed to get last enqueued message id from DLQ: %v", err)
+			}
+		}
+		// Use negative queue type as the dlq type
+		_, err = tx.InsertIntoQueue(newQueueRow(-q.queueType, lastMessageID+1, messagePayload))
+		return err
+	})
+	if err != nil {
+		return &workflow.InternalServiceError{Message: err.Error()}
+	}
+	return nil
+}
+
+func (q *sqlQueue) ReadMessagesFromDLQ(
+	firstMessageID int,
+	lastMessageID int,
+	maxCount int,
+) ([]*persistence.QueueMessage, error) {
+	// Use negative queue type as the dlq type
+	rows, err := q.db.GetMessagesBetween(-q.queueType, firstMessageID, lastMessageID, maxCount)
+	if err != nil {
+		return nil, &workflow.InternalServiceError{
+			Message: fmt.Sprintf("ReadMessagesFromDLQ operation failed. Error %v", err),
+		}
+	}
+
+	var messages []*persistence.QueueMessage
+	for _, row := range rows {
+		messages = append(messages, &persistence.QueueMessage{ID: row.MessageID, Payload: row.MessagePayload})
+	}
+	return messages, nil
+}
+
+func (q *sqlQueue) DeleteMessageFromDLQ(
+	messageID int,
+) error {
+	// Use negative queue type as the dlq type
+	_, err := q.db.DeleteMessage(-q.queueType, messageID)
+	if err != nil {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("DeleteMessagesFromDLQ operation failed. Error %v", err),
+		}
+	}
+	return nil
+}
+
+func (q *sqlQueue) DeleteDLQMessagesBefore(
+	messageID int,
+) error {
+	// Use negative queue type as the dlq type
+	_, err := q.db.DeleteMessagesBefore(-q.queueType, messageID)
+	if err != nil {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("RangeDeleteMessagesFromDLQ operation failed. Error %v", err),
+		}
+	}
+	return nil
+}
+
+func (q *sqlQueue) GetLastMessageIDFromDLQ() (int, error) {
+	// Use negative queue type as the dlq type
+	lastMessageID, err := q.db.GetLastEnqueuedMessageIDForUpdate(-q.queueType)
+	if err != nil {
+		return 0, &workflow.InternalServiceError{
+			Message: fmt.Sprintf("GetLastEnqueuedMessageIDForUpdate operation failed. Error %v", err),
+		}
+	}
+
+	return lastMessageID, err
 }

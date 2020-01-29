@@ -105,8 +105,8 @@ type (
 		nextEventID *int64
 
 		// used by NDC
-		lastEventID      *int64
-		lastEventVersion *int64
+		lastEventID      int64
+		lastEventVersion int64
 	}
 
 	pushActivityToMatchingInfo struct {
@@ -124,8 +124,8 @@ func newHistoryResendInfo(
 	lastEventVersion int64,
 ) *historyResendInfo {
 	return &historyResendInfo{
-		lastEventID:      common.Int64Ptr(lastEventID),
-		lastEventVersion: common.Int64Ptr(lastEventVersion),
+		lastEventID:      lastEventID,
+		lastEventVersion: lastEventVersion,
 	}
 }
 
@@ -134,7 +134,9 @@ func newHistoryResendInfoFor2DC(
 	nextEventID int64,
 ) *historyResendInfo {
 	return &historyResendInfo{
-		nextEventID: common.Int64Ptr(nextEventID),
+		nextEventID:      common.Int64Ptr(nextEventID),
+		lastEventID:      common.EmptyEventID,
+		lastEventVersion: common.EmptyVersion,
 	}
 }
 

@@ -27,18 +27,16 @@ import (
 )
 
 func (e *ESql) convertToScript(expr sqlparser.Expr) (script string, err error) {
-	switch expr.(type) {
+	switch expr := expr.(type) {
 	case *sqlparser.ColName:
-		exprColName := expr.(*sqlparser.ColName)
-		script, err = e.convertColName(exprColName)
+		script, err = e.convertColName(expr)
 		script = fmt.Sprintf(`doc['%v'].value`, script)
 	case *sqlparser.SQLVal:
 		script, err = e.convertValExpr(expr, true)
 	case *sqlparser.BinaryExpr:
 		script, err = e.convertBinaryExpr(expr)
 	case *sqlparser.ParenExpr:
-		parenExpr := expr.(*sqlparser.ParenExpr)
-		script, err = e.convertToScript(parenExpr.Expr)
+		script, err = e.convertToScript(expr.Expr)
 		script = fmt.Sprintf(`(%v)`, script)
 	default:
 		err = fmt.Errorf("esql: invalid expression type for scripting")

@@ -98,7 +98,7 @@ func (pdb *db) Exec(stmt string, args ...interface{}) error {
 // ListTables returns a list of tables in this database
 func (pdb *db) ListTables(database string) ([]string, error) {
 	var tables []string
-	err := pdb.db.Select(&tables, fmt.Sprintf(listTablesQuery))
+	err := pdb.db.Select(&tables, listTablesQuery)
 	return tables, err
 }
 

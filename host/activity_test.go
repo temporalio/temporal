@@ -149,7 +149,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 	_, err = poller.PollAndProcessDecisionTask(true, false)
 	s.Nil(err)
 	s.True(workflowComplete)
-	s.True(activityExecutedCount == 1)
+	s.Equal(1, activityExecutedCount)
 
 	// go over history and verify that the activity task scheduled event has header on it
 	events := s.getHistory(s.domainName, &commonproto.WorkflowExecution{

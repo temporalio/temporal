@@ -24,11 +24,10 @@ import (
 	"context"
 	"time"
 
+	"go.temporal.io/temporal-proto/workflowservice"
+
 	"github.com/temporalio/temporal/.gen/go/health"
 	"github.com/temporalio/temporal/.gen/go/health/metaserver"
-	"github.com/temporalio/temporal/.gen/go/replicator"
-	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/.gen/go/temporal/workflowserviceserver"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/metrics"
@@ -36,7 +35,7 @@ import (
 	"github.com/temporalio/temporal/common/service/config"
 )
 
-var _ workflowserviceserver.Interface = (*DCRedirectionHandlerImpl)(nil)
+var _ workflowservice.WorkflowServiceYARPCServer = (*DCRedirectionHandlerImpl)(nil)
 
 type (
 	// DCRedirectionHandlerImpl is simple wrapper over frontend service, doing redirection based on policy
@@ -47,7 +46,7 @@ type (
 		config             *Config
 		redirectionPolicy  DCRedirectionPolicy
 		tokenSerializer    common.TaskTokenSerializer
-		frontendHandler    workflowserviceserver.Interface
+		frontendHandler    workflowservice.WorkflowServiceYARPCServer
 
 		startFn func()
 		stopFn  func()
@@ -56,31 +55,31 @@ type (
 
 // NewDCRedirectionHandler creates a thrift handler for the cadence service, frontend
 func NewDCRedirectionHandler(
-	wfHandler *WorkflowHandler,
+	wfHandler *WorkflowHandlerGRPC,
 	policy config.DCRedirectionPolicy,
 ) *DCRedirectionHandlerImpl {
 	dcRedirectionPolicy := RedirectionPolicyGenerator(
-		wfHandler.GetClusterMetadata(),
-		wfHandler.config,
-		wfHandler.GetDomainCache(),
+		wfHandler.workflowHandlerThrift.GetClusterMetadata(),
+		wfHandler.workflowHandlerThrift.config,
+		wfHandler.workflowHandlerThrift.GetDomainCache(),
 		policy,
 	)
 
 	return &DCRedirectionHandlerImpl{
-		Resource:           wfHandler.Resource,
-		currentClusterName: wfHandler.GetClusterMetadata().GetCurrentClusterName(),
-		config:             wfHandler.config,
+		Resource:           wfHandler.workflowHandlerThrift.Resource,
+		currentClusterName: wfHandler.workflowHandlerThrift.GetClusterMetadata().GetCurrentClusterName(),
+		config:             wfHandler.workflowHandlerThrift.config,
 		redirectionPolicy:  dcRedirectionPolicy,
 		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
 		frontendHandler:    wfHandler,
-		startFn:            func() { wfHandler.Start() },
-		stopFn:             func() { wfHandler.Stop() },
+		startFn:            func() { wfHandler.workflowHandlerThrift.Start() },
+		stopFn:             func() { wfHandler.workflowHandlerThrift.Stop() },
 	}
 }
 
 // RegisterHandler register this handler, must be called before Start()
 func (handler *DCRedirectionHandlerImpl) RegisterHandler() {
-	handler.GetDispatcher().Register(workflowserviceserver.New(handler))
+	handler.GetGRPCDispatcher().Register(workflowservice.BuildWorkflowServiceYARPCProcedures(handler))
 	handler.GetDispatcher().Register(metaserver.New(handler))
 }
 
@@ -105,8 +104,8 @@ func (handler *DCRedirectionHandlerImpl) Health(ctx context.Context) (*health.He
 // DeprecateDomain API call
 func (handler *DCRedirectionHandlerImpl) DeprecateDomain(
 	ctx context.Context,
-	request *shared.DeprecateDomainRequest,
-) (retError error) {
+	request *workflowservice.DeprecateDomainRequest,
+) (resp *workflowservice.DeprecateDomainResponse, retError error) {
 
 	var cluster = handler.currentClusterName
 
@@ -121,8 +120,8 @@ func (handler *DCRedirectionHandlerImpl) DeprecateDomain(
 // DescribeDomain API call
 func (handler *DCRedirectionHandlerImpl) DescribeDomain(
 	ctx context.Context,
-	request *shared.DescribeDomainRequest,
-) (resp *shared.DescribeDomainResponse, retError error) {
+	request *workflowservice.DescribeDomainRequest,
+) (resp *workflowservice.DescribeDomainResponse, retError error) {
 
 	var cluster = handler.currentClusterName
 
@@ -137,8 +136,8 @@ func (handler *DCRedirectionHandlerImpl) DescribeDomain(
 // ListDomains API call
 func (handler *DCRedirectionHandlerImpl) ListDomains(
 	ctx context.Context,
-	request *shared.ListDomainsRequest,
-) (resp *shared.ListDomainsResponse, retError error) {
+	request *workflowservice.ListDomainsRequest,
+) (resp *workflowservice.ListDomainsResponse, retError error) {
 
 	var cluster = handler.currentClusterName
 
@@ -153,8 +152,8 @@ func (handler *DCRedirectionHandlerImpl) ListDomains(
 // RegisterDomain API call
 func (handler *DCRedirectionHandlerImpl) RegisterDomain(
 	ctx context.Context,
-	request *shared.RegisterDomainRequest,
-) (retError error) {
+	request *workflowservice.RegisterDomainRequest,
+) (resp *workflowservice.RegisterDomainResponse, retError error) {
 
 	var cluster = handler.currentClusterName
 
@@ -169,8 +168,8 @@ func (handler *DCRedirectionHandlerImpl) RegisterDomain(
 // UpdateDomain API call
 func (handler *DCRedirectionHandlerImpl) UpdateDomain(
 	ctx context.Context,
-	request *shared.UpdateDomainRequest,
-) (resp *shared.UpdateDomainResponse, retError error) {
+	request *workflowservice.UpdateDomainRequest,
+) (resp *workflowservice.UpdateDomainResponse, retError error) {
 
 	var cluster = handler.currentClusterName
 
@@ -187,8 +186,8 @@ func (handler *DCRedirectionHandlerImpl) UpdateDomain(
 // DescribeTaskList API call
 func (handler *DCRedirectionHandlerImpl) DescribeTaskList(
 	ctx context.Context,
-	request *shared.DescribeTaskListRequest,
-) (resp *shared.DescribeTaskListResponse, retError error) {
+	request *workflowservice.DescribeTaskListRequest,
+) (resp *workflowservice.DescribeTaskListResponse, retError error) {
 
 	var apiName = "DescribeTaskList"
 	var err error
@@ -217,8 +216,8 @@ func (handler *DCRedirectionHandlerImpl) DescribeTaskList(
 // DescribeWorkflowExecution API call
 func (handler *DCRedirectionHandlerImpl) DescribeWorkflowExecution(
 	ctx context.Context,
-	request *shared.DescribeWorkflowExecutionRequest,
-) (resp *shared.DescribeWorkflowExecutionResponse, retError error) {
+	request *workflowservice.DescribeWorkflowExecutionRequest,
+) (resp *workflowservice.DescribeWorkflowExecutionResponse, retError error) {
 
 	var apiName = "DescribeWorkflowExecution"
 	var err error
@@ -247,8 +246,8 @@ func (handler *DCRedirectionHandlerImpl) DescribeWorkflowExecution(
 // GetWorkflowExecutionHistory API call
 func (handler *DCRedirectionHandlerImpl) GetWorkflowExecutionHistory(
 	ctx context.Context,
-	request *shared.GetWorkflowExecutionHistoryRequest,
-) (resp *shared.GetWorkflowExecutionHistoryResponse, retError error) {
+	request *workflowservice.GetWorkflowExecutionHistoryRequest,
+) (resp *workflowservice.GetWorkflowExecutionHistoryResponse, retError error) {
 
 	var apiName = "GetWorkflowExecutionHistory"
 	var err error
@@ -274,11 +273,41 @@ func (handler *DCRedirectionHandlerImpl) GetWorkflowExecutionHistory(
 	return resp, err
 }
 
+// GetWorkflowExecutionRawHistory API call
+func (handler *DCRedirectionHandlerImpl) GetWorkflowExecutionRawHistory(
+	ctx context.Context,
+	request *workflowservice.GetWorkflowExecutionRawHistoryRequest,
+) (resp *workflowservice.GetWorkflowExecutionRawHistoryResponse, retError error) {
+
+	var apiName = "GetWorkflowExecutionRawHistory"
+	var err error
+	var cluster string
+
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionGetWorkflowExecutionRawHistoryScope)
+	defer func() {
+		handler.afterCall(scope, startTime, cluster, &retError)
+	}()
+
+	err = handler.redirectionPolicy.WithDomainNameRedirect(ctx, request.GetDomain(), apiName, func(targetDC string) error {
+		cluster = targetDC
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.GetWorkflowExecutionRawHistory(ctx, request)
+		default:
+			remoteClient := handler.GetRemoteFrontendClient(targetDC)
+			resp, err = remoteClient.GetWorkflowExecutionRawHistory(ctx, request)
+		}
+		return err
+	})
+
+	return resp, err
+}
+
 // ListArchivedWorkflowExecutions API call
 func (handler *DCRedirectionHandlerImpl) ListArchivedWorkflowExecutions(
 	ctx context.Context,
-	request *shared.ListArchivedWorkflowExecutionsRequest,
-) (resp *shared.ListArchivedWorkflowExecutionsResponse, retError error) {
+	request *workflowservice.ListArchivedWorkflowExecutionsRequest,
+) (resp *workflowservice.ListArchivedWorkflowExecutionsResponse, retError error) {
 
 	var apiName = "ListArchivedWorkflowExecutions"
 	var err error
@@ -307,8 +336,8 @@ func (handler *DCRedirectionHandlerImpl) ListArchivedWorkflowExecutions(
 // ListClosedWorkflowExecutions API call
 func (handler *DCRedirectionHandlerImpl) ListClosedWorkflowExecutions(
 	ctx context.Context,
-	request *shared.ListClosedWorkflowExecutionsRequest,
-) (resp *shared.ListClosedWorkflowExecutionsResponse, retError error) {
+	request *workflowservice.ListClosedWorkflowExecutionsRequest,
+) (resp *workflowservice.ListClosedWorkflowExecutionsResponse, retError error) {
 
 	var apiName = "ListClosedWorkflowExecutions"
 	var err error
@@ -337,8 +366,8 @@ func (handler *DCRedirectionHandlerImpl) ListClosedWorkflowExecutions(
 // ListOpenWorkflowExecutions API call
 func (handler *DCRedirectionHandlerImpl) ListOpenWorkflowExecutions(
 	ctx context.Context,
-	request *shared.ListOpenWorkflowExecutionsRequest,
-) (resp *shared.ListOpenWorkflowExecutionsResponse, retError error) {
+	request *workflowservice.ListOpenWorkflowExecutionsRequest,
+) (resp *workflowservice.ListOpenWorkflowExecutionsResponse, retError error) {
 
 	var apiName = "ListOpenWorkflowExecutions"
 	var err error
@@ -367,8 +396,8 @@ func (handler *DCRedirectionHandlerImpl) ListOpenWorkflowExecutions(
 // ListWorkflowExecutions API call
 func (handler *DCRedirectionHandlerImpl) ListWorkflowExecutions(
 	ctx context.Context,
-	request *shared.ListWorkflowExecutionsRequest,
-) (resp *shared.ListWorkflowExecutionsResponse, retError error) {
+	request *workflowservice.ListWorkflowExecutionsRequest,
+) (resp *workflowservice.ListWorkflowExecutionsResponse, retError error) {
 
 	var apiName = "ListWorkflowExecutions"
 	var err error
@@ -397,8 +426,8 @@ func (handler *DCRedirectionHandlerImpl) ListWorkflowExecutions(
 // ScanWorkflowExecutions API call
 func (handler *DCRedirectionHandlerImpl) ScanWorkflowExecutions(
 	ctx context.Context,
-	request *shared.ListWorkflowExecutionsRequest,
-) (resp *shared.ListWorkflowExecutionsResponse, retError error) {
+	request *workflowservice.ScanWorkflowExecutionsRequest,
+) (resp *workflowservice.ScanWorkflowExecutionsResponse, retError error) {
 
 	var apiName = "ScanWorkflowExecutions"
 	var err error
@@ -426,8 +455,8 @@ func (handler *DCRedirectionHandlerImpl) ScanWorkflowExecutions(
 // CountWorkflowExecutions API call
 func (handler *DCRedirectionHandlerImpl) CountWorkflowExecutions(
 	ctx context.Context,
-	request *shared.CountWorkflowExecutionsRequest,
-) (resp *shared.CountWorkflowExecutionsResponse, retError error) {
+	request *workflowservice.CountWorkflowExecutionsRequest,
+) (resp *workflowservice.CountWorkflowExecutionsResponse, retError error) {
 
 	var apiName = "CountWorkflowExecutions"
 	var err error
@@ -456,7 +485,8 @@ func (handler *DCRedirectionHandlerImpl) CountWorkflowExecutions(
 // GetSearchAttributes API call
 func (handler *DCRedirectionHandlerImpl) GetSearchAttributes(
 	ctx context.Context,
-) (resp *shared.GetSearchAttributesResponse, retError error) {
+	request *workflowservice.GetSearchAttributesRequest,
+) (resp *workflowservice.GetSearchAttributesResponse, retError error) {
 
 	var cluster = handler.currentClusterName
 
@@ -465,14 +495,14 @@ func (handler *DCRedirectionHandlerImpl) GetSearchAttributes(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	return handler.frontendHandler.GetSearchAttributes(ctx)
+	return handler.frontendHandler.GetSearchAttributes(ctx, request)
 }
 
 // PollForActivityTask API call
 func (handler *DCRedirectionHandlerImpl) PollForActivityTask(
 	ctx context.Context,
-	request *shared.PollForActivityTaskRequest,
-) (resp *shared.PollForActivityTaskResponse, retError error) {
+	request *workflowservice.PollForActivityTaskRequest,
+) (resp *workflowservice.PollForActivityTaskResponse, retError error) {
 
 	var apiName = "PollForActivityTask"
 	var err error
@@ -501,8 +531,8 @@ func (handler *DCRedirectionHandlerImpl) PollForActivityTask(
 // PollForDecisionTask API call
 func (handler *DCRedirectionHandlerImpl) PollForDecisionTask(
 	ctx context.Context,
-	request *shared.PollForDecisionTaskRequest,
-) (resp *shared.PollForDecisionTaskResponse, retError error) {
+	request *workflowservice.PollForDecisionTaskRequest,
+) (resp *workflowservice.PollForDecisionTaskResponse, retError error) {
 
 	var apiName = "PollForDecisionTask"
 	var err error
@@ -531,8 +561,8 @@ func (handler *DCRedirectionHandlerImpl) PollForDecisionTask(
 // QueryWorkflow API call
 func (handler *DCRedirectionHandlerImpl) QueryWorkflow(
 	ctx context.Context,
-	request *shared.QueryWorkflowRequest,
-) (resp *shared.QueryWorkflowResponse, retError error) {
+	request *workflowservice.QueryWorkflowRequest,
+) (resp *workflowservice.QueryWorkflowResponse, retError error) {
 
 	var apiName = "QueryWorkflow"
 	var err error
@@ -561,8 +591,8 @@ func (handler *DCRedirectionHandlerImpl) QueryWorkflow(
 // RecordActivityTaskHeartbeat API call
 func (handler *DCRedirectionHandlerImpl) RecordActivityTaskHeartbeat(
 	ctx context.Context,
-	request *shared.RecordActivityTaskHeartbeatRequest,
-) (resp *shared.RecordActivityTaskHeartbeatResponse, retError error) {
+	request *workflowservice.RecordActivityTaskHeartbeatRequest,
+) (resp *workflowservice.RecordActivityTaskHeartbeatResponse, retError error) {
 
 	var apiName = "RecordActivityTaskHeartbeat"
 	var err error
@@ -596,8 +626,8 @@ func (handler *DCRedirectionHandlerImpl) RecordActivityTaskHeartbeat(
 // RecordActivityTaskHeartbeatByID API call
 func (handler *DCRedirectionHandlerImpl) RecordActivityTaskHeartbeatByID(
 	ctx context.Context,
-	request *shared.RecordActivityTaskHeartbeatByIDRequest,
-) (resp *shared.RecordActivityTaskHeartbeatResponse, retError error) {
+	request *workflowservice.RecordActivityTaskHeartbeatByIDRequest,
+) (resp *workflowservice.RecordActivityTaskHeartbeatByIDResponse, retError error) {
 
 	var apiName = "RecordActivityTaskHeartbeatByID"
 	var err error
@@ -626,8 +656,8 @@ func (handler *DCRedirectionHandlerImpl) RecordActivityTaskHeartbeatByID(
 // RequestCancelWorkflowExecution API call
 func (handler *DCRedirectionHandlerImpl) RequestCancelWorkflowExecution(
 	ctx context.Context,
-	request *shared.RequestCancelWorkflowExecutionRequest,
-) (retError error) {
+	request *workflowservice.RequestCancelWorkflowExecutionRequest,
+) (resp *workflowservice.RequestCancelWorkflowExecutionResponse, retError error) {
 
 	var apiName = "RequestCancelWorkflowExecution"
 	var err error
@@ -642,22 +672,22 @@ func (handler *DCRedirectionHandlerImpl) RequestCancelWorkflowExecution(
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
-			err = handler.frontendHandler.RequestCancelWorkflowExecution(ctx, request)
+			resp, err = handler.frontendHandler.RequestCancelWorkflowExecution(ctx, request)
 		default:
 			remoteClient := handler.GetRemoteFrontendClient(targetDC)
-			err = remoteClient.RequestCancelWorkflowExecution(ctx, request)
+			resp, err = remoteClient.RequestCancelWorkflowExecution(ctx, request)
 		}
 		return err
 	})
 
-	return err
+	return resp, err
 }
 
 // ResetStickyTaskList API call
 func (handler *DCRedirectionHandlerImpl) ResetStickyTaskList(
 	ctx context.Context,
-	request *shared.ResetStickyTaskListRequest,
-) (resp *shared.ResetStickyTaskListResponse, retError error) {
+	request *workflowservice.ResetStickyTaskListRequest,
+) (resp *workflowservice.ResetStickyTaskListResponse, retError error) {
 
 	var apiName = "ResetStickyTaskList"
 	var err error
@@ -686,8 +716,8 @@ func (handler *DCRedirectionHandlerImpl) ResetStickyTaskList(
 // ResetWorkflowExecution API call
 func (handler *DCRedirectionHandlerImpl) ResetWorkflowExecution(
 	ctx context.Context,
-	request *shared.ResetWorkflowExecutionRequest,
-) (resp *shared.ResetWorkflowExecutionResponse, retError error) {
+	request *workflowservice.ResetWorkflowExecutionRequest,
+) (resp *workflowservice.ResetWorkflowExecutionResponse, retError error) {
 
 	var apiName = "ResetWorkflowExecution"
 	var err error
@@ -716,8 +746,8 @@ func (handler *DCRedirectionHandlerImpl) ResetWorkflowExecution(
 // RespondActivityTaskCanceled API call
 func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCanceled(
 	ctx context.Context,
-	request *shared.RespondActivityTaskCanceledRequest,
-) (retError error) {
+	request *workflowservice.RespondActivityTaskCanceledRequest,
+) (resp *workflowservice.RespondActivityTaskCanceledResponse, retError error) {
 
 	var apiName = "RespondActivityTaskCanceled"
 	var err error
@@ -730,29 +760,29 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCanceled(
 
 	token, err := handler.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
-		return err
+		return resp, err
 	}
 
 	err = handler.redirectionPolicy.WithDomainIDRedirect(ctx, token.DomainID, apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
-			err = handler.frontendHandler.RespondActivityTaskCanceled(ctx, request)
+			resp, err = handler.frontendHandler.RespondActivityTaskCanceled(ctx, request)
 		default:
 			remoteClient := handler.GetRemoteFrontendClient(targetDC)
-			err = remoteClient.RespondActivityTaskCanceled(ctx, request)
+			resp, err = remoteClient.RespondActivityTaskCanceled(ctx, request)
 		}
 		return err
 	})
 
-	return err
+	return resp, err
 }
 
 // RespondActivityTaskCanceledByID API call
 func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCanceledByID(
 	ctx context.Context,
-	request *shared.RespondActivityTaskCanceledByIDRequest,
-) (retError error) {
+	request *workflowservice.RespondActivityTaskCanceledByIDRequest,
+) (resp *workflowservice.RespondActivityTaskCanceledByIDResponse, retError error) {
 
 	var apiName = "RespondActivityTaskCanceledByID"
 	var err error
@@ -767,22 +797,22 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCanceledByID(
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
-			err = handler.frontendHandler.RespondActivityTaskCanceledByID(ctx, request)
+			resp, err = handler.frontendHandler.RespondActivityTaskCanceledByID(ctx, request)
 		default:
 			remoteClient := handler.GetRemoteFrontendClient(targetDC)
-			err = remoteClient.RespondActivityTaskCanceledByID(ctx, request)
+			resp, err = remoteClient.RespondActivityTaskCanceledByID(ctx, request)
 		}
 		return err
 	})
 
-	return err
+	return resp, err
 }
 
 // RespondActivityTaskCompleted API call
 func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCompleted(
 	ctx context.Context,
-	request *shared.RespondActivityTaskCompletedRequest,
-) (retError error) {
+	request *workflowservice.RespondActivityTaskCompletedRequest,
+) (resp *workflowservice.RespondActivityTaskCompletedResponse, retError error) {
 
 	var apiName = "RespondActivityTaskCompleted"
 	var err error
@@ -795,29 +825,29 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCompleted(
 
 	token, err := handler.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
-		return err
+		return resp, err
 	}
 
 	err = handler.redirectionPolicy.WithDomainIDRedirect(ctx, token.DomainID, apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
-			err = handler.frontendHandler.RespondActivityTaskCompleted(ctx, request)
+			resp, err = handler.frontendHandler.RespondActivityTaskCompleted(ctx, request)
 		default:
 			remoteClient := handler.GetRemoteFrontendClient(targetDC)
-			err = remoteClient.RespondActivityTaskCompleted(ctx, request)
+			resp, err = remoteClient.RespondActivityTaskCompleted(ctx, request)
 		}
 		return err
 	})
 
-	return err
+	return resp, err
 }
 
 // RespondActivityTaskCompletedByID API call
 func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCompletedByID(
 	ctx context.Context,
-	request *shared.RespondActivityTaskCompletedByIDRequest,
-) (retError error) {
+	request *workflowservice.RespondActivityTaskCompletedByIDRequest,
+) (resp *workflowservice.RespondActivityTaskCompletedByIDResponse, retError error) {
 
 	var apiName = "RespondActivityTaskCompletedByID"
 	var err error
@@ -832,22 +862,22 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCompletedByID(
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
-			err = handler.frontendHandler.RespondActivityTaskCompletedByID(ctx, request)
+			resp, err = handler.frontendHandler.RespondActivityTaskCompletedByID(ctx, request)
 		default:
 			remoteClient := handler.GetRemoteFrontendClient(targetDC)
-			err = remoteClient.RespondActivityTaskCompletedByID(ctx, request)
+			resp, err = remoteClient.RespondActivityTaskCompletedByID(ctx, request)
 		}
 		return err
 	})
 
-	return err
+	return resp, err
 }
 
 // RespondActivityTaskFailed API call
 func (handler *DCRedirectionHandlerImpl) RespondActivityTaskFailed(
 	ctx context.Context,
-	request *shared.RespondActivityTaskFailedRequest,
-) (retError error) {
+	request *workflowservice.RespondActivityTaskFailedRequest,
+) (resp *workflowservice.RespondActivityTaskFailedResponse, retError error) {
 
 	var apiName = "RespondActivityTaskFailed"
 	var err error
@@ -860,29 +890,29 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskFailed(
 
 	token, err := handler.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
-		return err
+		return resp, err
 	}
 
 	err = handler.redirectionPolicy.WithDomainIDRedirect(ctx, token.DomainID, apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
-			err = handler.frontendHandler.RespondActivityTaskFailed(ctx, request)
+			resp, err = handler.frontendHandler.RespondActivityTaskFailed(ctx, request)
 		default:
 			remoteClient := handler.GetRemoteFrontendClient(targetDC)
-			err = remoteClient.RespondActivityTaskFailed(ctx, request)
+			resp, err = remoteClient.RespondActivityTaskFailed(ctx, request)
 		}
 		return err
 	})
 
-	return err
+	return resp, err
 }
 
 // RespondActivityTaskFailedByID API call
 func (handler *DCRedirectionHandlerImpl) RespondActivityTaskFailedByID(
 	ctx context.Context,
-	request *shared.RespondActivityTaskFailedByIDRequest,
-) (retError error) {
+	request *workflowservice.RespondActivityTaskFailedByIDRequest,
+) (resp *workflowservice.RespondActivityTaskFailedByIDResponse, retError error) {
 
 	var apiName = "RespondActivityTaskFailedByID"
 	var err error
@@ -897,22 +927,22 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskFailedByID(
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
-			err = handler.frontendHandler.RespondActivityTaskFailedByID(ctx, request)
+			resp, err = handler.frontendHandler.RespondActivityTaskFailedByID(ctx, request)
 		default:
 			remoteClient := handler.GetRemoteFrontendClient(targetDC)
-			err = remoteClient.RespondActivityTaskFailedByID(ctx, request)
+			resp, err = remoteClient.RespondActivityTaskFailedByID(ctx, request)
 		}
 		return err
 	})
 
-	return err
+	return resp, err
 }
 
 // RespondDecisionTaskCompleted API call
 func (handler *DCRedirectionHandlerImpl) RespondDecisionTaskCompleted(
 	ctx context.Context,
-	request *shared.RespondDecisionTaskCompletedRequest,
-) (resp *shared.RespondDecisionTaskCompletedResponse, retError error) {
+	request *workflowservice.RespondDecisionTaskCompletedRequest,
+) (resp *workflowservice.RespondDecisionTaskCompletedResponse, retError error) {
 
 	var apiName = "RespondDecisionTaskCompleted"
 	var err error
@@ -946,8 +976,8 @@ func (handler *DCRedirectionHandlerImpl) RespondDecisionTaskCompleted(
 // RespondDecisionTaskFailed API call
 func (handler *DCRedirectionHandlerImpl) RespondDecisionTaskFailed(
 	ctx context.Context,
-	request *shared.RespondDecisionTaskFailedRequest,
-) (retError error) {
+	request *workflowservice.RespondDecisionTaskFailedRequest,
+) (resp *workflowservice.RespondDecisionTaskFailedResponse, retError error) {
 
 	var apiName = "RespondDecisionTaskFailed"
 	var err error
@@ -960,29 +990,29 @@ func (handler *DCRedirectionHandlerImpl) RespondDecisionTaskFailed(
 
 	token, err := handler.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
-		return err
+		return resp, err
 	}
 
 	err = handler.redirectionPolicy.WithDomainIDRedirect(ctx, token.DomainID, apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
-			err = handler.frontendHandler.RespondDecisionTaskFailed(ctx, request)
+			resp, err = handler.frontendHandler.RespondDecisionTaskFailed(ctx, request)
 		default:
 			remoteClient := handler.GetRemoteFrontendClient(targetDC)
-			err = remoteClient.RespondDecisionTaskFailed(ctx, request)
+			resp, err = remoteClient.RespondDecisionTaskFailed(ctx, request)
 		}
 		return err
 	})
 
-	return err
+	return resp, err
 }
 
 // RespondQueryTaskCompleted API call
 func (handler *DCRedirectionHandlerImpl) RespondQueryTaskCompleted(
 	ctx context.Context,
-	request *shared.RespondQueryTaskCompletedRequest,
-) (retError error) {
+	request *workflowservice.RespondQueryTaskCompletedRequest,
+) (resp *workflowservice.RespondQueryTaskCompletedResponse, retError error) {
 
 	var apiName = "RespondQueryTaskCompleted"
 	var err error
@@ -995,29 +1025,29 @@ func (handler *DCRedirectionHandlerImpl) RespondQueryTaskCompleted(
 
 	token, err := handler.tokenSerializer.DeserializeQueryTaskToken(request.TaskToken)
 	if err != nil {
-		return err
+		return resp, err
 	}
 
 	err = handler.redirectionPolicy.WithDomainIDRedirect(ctx, token.DomainID, apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
-			err = handler.frontendHandler.RespondQueryTaskCompleted(ctx, request)
+			resp, err = handler.frontendHandler.RespondQueryTaskCompleted(ctx, request)
 		default:
 			remoteClient := handler.GetRemoteFrontendClient(targetDC)
-			err = remoteClient.RespondQueryTaskCompleted(ctx, request)
+			resp, err = remoteClient.RespondQueryTaskCompleted(ctx, request)
 		}
 		return err
 	})
 
-	return err
+	return resp, err
 }
 
 // SignalWithStartWorkflowExecution API call
 func (handler *DCRedirectionHandlerImpl) SignalWithStartWorkflowExecution(
 	ctx context.Context,
-	request *shared.SignalWithStartWorkflowExecutionRequest,
-) (resp *shared.StartWorkflowExecutionResponse, retError error) {
+	request *workflowservice.SignalWithStartWorkflowExecutionRequest,
+) (resp *workflowservice.SignalWithStartWorkflowExecutionResponse, retError error) {
 
 	var apiName = "SignalWithStartWorkflowExecution"
 	var err error
@@ -1046,8 +1076,8 @@ func (handler *DCRedirectionHandlerImpl) SignalWithStartWorkflowExecution(
 // SignalWorkflowExecution API call
 func (handler *DCRedirectionHandlerImpl) SignalWorkflowExecution(
 	ctx context.Context,
-	request *shared.SignalWorkflowExecutionRequest,
-) (retError error) {
+	request *workflowservice.SignalWorkflowExecutionRequest,
+) (resp *workflowservice.SignalWorkflowExecutionResponse, retError error) {
 
 	var apiName = "SignalWorkflowExecution"
 	var err error
@@ -1062,21 +1092,21 @@ func (handler *DCRedirectionHandlerImpl) SignalWorkflowExecution(
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
-			err = handler.frontendHandler.SignalWorkflowExecution(ctx, request)
+			resp, err = handler.frontendHandler.SignalWorkflowExecution(ctx, request)
 		default:
 			remoteClient := handler.GetRemoteFrontendClient(targetDC)
-			err = remoteClient.SignalWorkflowExecution(ctx, request)
+			resp, err = remoteClient.SignalWorkflowExecution(ctx, request)
 		}
 		return err
 	})
-	return err
+	return resp, err
 }
 
 // StartWorkflowExecution API call
 func (handler *DCRedirectionHandlerImpl) StartWorkflowExecution(
 	ctx context.Context,
-	request *shared.StartWorkflowExecutionRequest,
-) (resp *shared.StartWorkflowExecutionResponse, retError error) {
+	request *workflowservice.StartWorkflowExecutionRequest,
+) (resp *workflowservice.StartWorkflowExecutionResponse, retError error) {
 
 	var apiName = "StartWorkflowExecution"
 	var err error
@@ -1105,8 +1135,8 @@ func (handler *DCRedirectionHandlerImpl) StartWorkflowExecution(
 // TerminateWorkflowExecution API call
 func (handler *DCRedirectionHandlerImpl) TerminateWorkflowExecution(
 	ctx context.Context,
-	request *shared.TerminateWorkflowExecutionRequest,
-) (retError error) {
+	request *workflowservice.TerminateWorkflowExecutionRequest,
+) (resp *workflowservice.TerminateWorkflowExecutionResponse, retError error) {
 
 	var apiName = "TerminateWorkflowExecution"
 	var err error
@@ -1121,22 +1151,22 @@ func (handler *DCRedirectionHandlerImpl) TerminateWorkflowExecution(
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
-			err = handler.frontendHandler.TerminateWorkflowExecution(ctx, request)
+			resp, err = handler.frontendHandler.TerminateWorkflowExecution(ctx, request)
 		default:
 			remoteClient := handler.GetRemoteFrontendClient(targetDC)
-			err = remoteClient.TerminateWorkflowExecution(ctx, request)
+			resp, err = remoteClient.TerminateWorkflowExecution(ctx, request)
 		}
 		return err
 	})
 
-	return err
+	return resp, err
 }
 
 // ListTaskListPartitions API call
 func (handler *DCRedirectionHandlerImpl) ListTaskListPartitions(
 	ctx context.Context,
-	request *shared.ListTaskListPartitionsRequest,
-) (resp *shared.ListTaskListPartitionsResponse, retError error) {
+	request *workflowservice.ListTaskListPartitionsRequest,
+) (resp *workflowservice.ListTaskListPartitionsResponse, retError error) {
 
 	var apiName = "ListTaskListPartitions"
 	var err error
@@ -1162,35 +1192,12 @@ func (handler *DCRedirectionHandlerImpl) ListTaskListPartitions(
 	return resp, err
 }
 
-// GetReplicationMessages API call
-func (handler *DCRedirectionHandlerImpl) GetReplicationMessages(
-	ctx context.Context,
-	request *replicator.GetReplicationMessagesRequest,
-) (*replicator.GetReplicationMessagesResponse, error) {
-	return handler.frontendHandler.GetReplicationMessages(ctx, request)
-}
-
-// GetDomainReplicationMessages API call
-func (handler *DCRedirectionHandlerImpl) GetDomainReplicationMessages(
-	ctx context.Context,
-	request *replicator.GetDomainReplicationMessagesRequest,
-) (*replicator.GetDomainReplicationMessagesResponse, error) {
-	return handler.frontendHandler.GetDomainReplicationMessages(ctx, request)
-}
-
-// ReapplyEvents API call
-func (handler *DCRedirectionHandlerImpl) ReapplyEvents(
-	ctx context.Context,
-	request *shared.ReapplyEventsRequest,
-) error {
-	return handler.frontendHandler.ReapplyEvents(ctx, request)
-}
-
 // GetClusterInfo API call
 func (handler *DCRedirectionHandlerImpl) GetClusterInfo(
 	ctx context.Context,
-) (*shared.ClusterInfo, error) {
-	return handler.frontendHandler.GetClusterInfo(ctx)
+	request *workflowservice.GetClusterInfoRequest,
+) (*workflowservice.GetClusterInfoResponse, error) {
+	return handler.frontendHandler.GetClusterInfo(ctx, request)
 }
 
 func (handler *DCRedirectionHandlerImpl) beforeCall(
@@ -1207,7 +1214,7 @@ func (handler *DCRedirectionHandlerImpl) afterCall(
 	retError *error,
 ) {
 
-	log.CapturePanic(handler.GetLogger(), retError)
+	log.CapturePanicGRPC(handler.GetLogger(), retError)
 
 	scope = scope.Tagged(metrics.TargetClusterTag(cluster))
 	scope.IncCounter(metrics.CadenceDcRedirectionClientRequests)

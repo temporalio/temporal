@@ -129,6 +129,7 @@ func (t *timerQueueStandbyProcessorImpl) Stop() {
 	t.timerQueueProcessorBase.Stop()
 }
 
+//nolint:unused
 func (t *timerQueueStandbyProcessorImpl) getTimerFiredCount() uint64 {
 	return t.timerQueueProcessorBase.getTimerFiredCount()
 }
@@ -152,6 +153,7 @@ func (t *timerQueueStandbyProcessorImpl) getAckLevel() timerKey {
 	return t.timerQueueProcessorBase.timerQueueAckMgr.getAckLevel()
 }
 
+//nolint:unused
 func (t *timerQueueStandbyProcessorImpl) getReadLevel() timerKey {
 	return t.timerQueueProcessorBase.timerQueueAckMgr.getReadLevel()
 }
@@ -254,7 +256,7 @@ func (t *timerQueueStandbyProcessorImpl) processUserTimerTimeout(
 			}
 			// since the user timer are already sorted, so if there is one timer which will not expired
 			// all user timer after this timer will not expired
-			break Loop
+			break Loop //nolint:staticcheck
 		}
 		// if there is no user timer expired, then we are good
 		return nil, nil
@@ -313,7 +315,7 @@ func (t *timerQueueStandbyProcessorImpl) processActivityTimeout(
 			}
 			// since the activity timer are already sorted, so if there is one timer which will not expired
 			// all activity timer after this timer will not expired
-			break Loop
+			break Loop //nolint:staticcheck
 		}
 
 		// for reason to update mutable state & generate a new activity task,
@@ -566,15 +568,15 @@ func (t *timerQueueStandbyProcessorImpl) fetchHistoryFromRemote(
 	defer stopwatch.Stop()
 
 	var err error
-	if resendInfo.lastEventID != nil && resendInfo.lastEventVersion != nil {
+	if resendInfo.lastEventID != common.EmptyEventID && resendInfo.lastEventVersion != common.EmptyVersion {
 		err = t.nDCHistoryResender.SendSingleWorkflowHistory(
 			timerTask.DomainID,
 			timerTask.WorkflowID,
 			timerTask.RunID,
 			resendInfo.lastEventID,
 			resendInfo.lastEventVersion,
-			nil,
-			nil,
+			common.EmptyEventID,
+			common.EmptyVersion,
 		)
 	} else if resendInfo.nextEventID != nil {
 		err = t.historyRereplicator.SendMultiWorkflowHistory(

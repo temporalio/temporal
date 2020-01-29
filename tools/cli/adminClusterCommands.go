@@ -28,10 +28,9 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/urfave/cli"
+	"go.temporal.io/temporal-proto/enums"
 
-	"github.com/temporalio/temporal/.gen/go/admin"
-	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/.gen/proto/adminservice"
 )
 
 // AdminAddSearchAttribute to whitelist search attribute
@@ -55,14 +54,14 @@ func AdminAddSearchAttribute(c *cli.Context) {
 	adminClient := cFactory.ServerAdminClient(c)
 	ctx, cancel := newContext(c)
 	defer cancel()
-	request := &admin.AddSearchAttributeRequest{
-		SearchAttribute: map[string]shared.IndexedValueType{
-			key: shared.IndexedValueType(valType),
+	request := &adminservice.AddSearchAttributeRequest{
+		SearchAttribute: map[string]enums.IndexedValueType{
+			key: enums.IndexedValueType(valType),
 		},
-		SecurityToken: common.StringPtr(c.String(FlagSecurityToken)),
+		SecurityToken: c.String(FlagSecurityToken),
 	}
 
-	err := adminClient.AddSearchAttribute(ctx, request)
+	_, err := adminClient.AddSearchAttribute(ctx, request)
 	if err != nil {
 		ErrorAndExit("Add search attribute failed.", err)
 	}
@@ -75,7 +74,7 @@ func AdminDescribeCluster(c *cli.Context) {
 
 	ctx, cancel := newContext(c)
 	defer cancel()
-	response, err := adminClient.DescribeCluster(ctx)
+	response, err := adminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
 	if err != nil {
 		ErrorAndExit("Operation DescribeCluster failed.", err)
 	}

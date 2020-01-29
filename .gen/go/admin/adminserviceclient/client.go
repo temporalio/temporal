@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 // 
-// Copyright (c) 2019 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -28,6 +28,7 @@ package adminserviceclient
 import (
 	context "context"
 	admin "github.com/temporalio/temporal/.gen/go/admin"
+	replicator "github.com/temporalio/temporal/.gen/go/replicator"
 	shared "github.com/temporalio/temporal/.gen/go/shared"
 	wire "go.uber.org/thriftrw/wire"
 	yarpc "go.uber.org/yarpc"
@@ -67,6 +68,24 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) (*admin.DescribeWorkflowExecutionResponse, error)
 
+	GetDLQReplicationMessages(
+		ctx context.Context,
+		Request *replicator.GetDLQReplicationMessagesRequest,
+		opts ...yarpc.CallOption,
+	) (*replicator.GetDLQReplicationMessagesResponse, error)
+
+	GetDomainReplicationMessages(
+		ctx context.Context,
+		Request *replicator.GetDomainReplicationMessagesRequest,
+		opts ...yarpc.CallOption,
+	) (*replicator.GetDomainReplicationMessagesResponse, error)
+
+	GetReplicationMessages(
+		ctx context.Context,
+		Request *replicator.GetReplicationMessagesRequest,
+		opts ...yarpc.CallOption,
+	) (*replicator.GetReplicationMessagesResponse, error)
+
 	GetWorkflowExecutionRawHistory(
 		ctx context.Context,
 		GetRequest *admin.GetWorkflowExecutionRawHistoryRequest,
@@ -78,6 +97,12 @@ type Interface interface {
 		GetRequest *admin.GetWorkflowExecutionRawHistoryV2Request,
 		opts ...yarpc.CallOption,
 	) (*admin.GetWorkflowExecutionRawHistoryV2Response, error)
+
+	ReapplyEvents(
+		ctx context.Context,
+		ReapplyEventsRequest *shared.ReapplyEventsRequest,
+		opts ...yarpc.CallOption,
+	) error
 
 	RemoveTask(
 		ctx context.Context,
@@ -224,6 +249,75 @@ func (c client) DescribeWorkflowExecution(
 	return
 }
 
+func (c client) GetDLQReplicationMessages(
+	ctx context.Context,
+	_Request *replicator.GetDLQReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (success *replicator.GetDLQReplicationMessagesResponse, err error) {
+
+	args := admin.AdminService_GetDLQReplicationMessages_Helper.Args(_Request)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result admin.AdminService_GetDLQReplicationMessages_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	success, err = admin.AdminService_GetDLQReplicationMessages_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) GetDomainReplicationMessages(
+	ctx context.Context,
+	_Request *replicator.GetDomainReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (success *replicator.GetDomainReplicationMessagesResponse, err error) {
+
+	args := admin.AdminService_GetDomainReplicationMessages_Helper.Args(_Request)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result admin.AdminService_GetDomainReplicationMessages_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	success, err = admin.AdminService_GetDomainReplicationMessages_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) GetReplicationMessages(
+	ctx context.Context,
+	_Request *replicator.GetReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (success *replicator.GetReplicationMessagesResponse, err error) {
+
+	args := admin.AdminService_GetReplicationMessages_Helper.Args(_Request)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result admin.AdminService_GetReplicationMessages_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	success, err = admin.AdminService_GetReplicationMessages_Helper.UnwrapResponse(&result)
+	return
+}
+
 func (c client) GetWorkflowExecutionRawHistory(
 	ctx context.Context,
 	_GetRequest *admin.GetWorkflowExecutionRawHistoryRequest,
@@ -267,6 +361,29 @@ func (c client) GetWorkflowExecutionRawHistoryV2(
 	}
 
 	success, err = admin.AdminService_GetWorkflowExecutionRawHistoryV2_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) ReapplyEvents(
+	ctx context.Context,
+	_ReapplyEventsRequest *shared.ReapplyEventsRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := admin.AdminService_ReapplyEvents_Helper.Args(_ReapplyEventsRequest)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result admin.AdminService_ReapplyEvents_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	err = admin.AdminService_ReapplyEvents_Helper.UnwrapResponse(&result)
 	return
 }
 

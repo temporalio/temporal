@@ -18,18 +18,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination replicationTaskFetcher_mock.go
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination replicationTaskFetcher_mock.go -self_package github.com/temporalio/temporal/service/history
 
 package history
 
 import (
-	"context"
 	"sync/atomic"
 	"time"
 
-	r "github.com/temporalio/temporal/.gen/go/replicator"
-	"github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
+	commonproto "go.temporal.io/temporal-proto/common"
+
+	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/client"
+	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cluster"
@@ -51,7 +52,7 @@ type (
 		sourceCluster  string
 		config         *Config
 		logger         log.Logger
-		remotePeer     workflowserviceclient.Interface
+		remotePeer     admin.Client
 		requestChan    chan *request
 		done           chan struct{}
 	}
@@ -96,7 +97,7 @@ func NewReplicationTaskFetchers(
 
 			currentCluster := clusterMetadata.GetCurrentClusterName()
 			if clusterName != currentCluster {
-				remoteFrontendClient := clientBean.GetRemoteFrontendClient(clusterName)
+				remoteFrontendClient := clientBean.GetRemoteAdminClient(clusterName)
 				fetcher := newReplicationTaskFetcher(
 					logger,
 					clusterName,
@@ -151,7 +152,7 @@ func newReplicationTaskFetcher(
 	sourceCluster string,
 	currentCluster string,
 	config *Config,
-	sourceFrontend workflowserviceclient.Interface,
+	sourceFrontend admin.Client,
 ) *ReplicationTaskFetcherImpl {
 
 	return &ReplicationTaskFetcherImpl{
@@ -259,18 +260,18 @@ func (f *ReplicationTaskFetcherImpl) fetchAndDistributeTasks(requestByShard map[
 
 func (f *ReplicationTaskFetcherImpl) getMessages(
 	requestByShard map[int32]*request,
-) (map[int32]*r.ReplicationMessages, error) {
-	var tokens []*r.ReplicationToken
+) (map[int32]*commonproto.ReplicationMessages, error) {
+	var tokens []*commonproto.ReplicationToken
 	for _, request := range requestByShard {
 		tokens = append(tokens, request.token)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), fetchTaskRequestTimeout)
+	ctx, cancel := createContextWithCancel(fetchTaskRequestTimeout)
 	defer cancel()
 
-	request := &r.GetReplicationMessagesRequest{
+	request := &adminservice.GetReplicationMessagesRequest{
 		Tokens:      tokens,
-		ClusterName: common.StringPtr(f.currentCluster),
+		ClusterName: f.currentCluster,
 	}
 	response, err := f.remotePeer.GetReplicationMessages(ctx, request)
 	if err != nil {

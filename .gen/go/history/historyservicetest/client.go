@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 // 
-// Copyright (c) 2019 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -194,6 +194,39 @@ func (mr *_MockClientRecorder) DescribeWorkflowExecution(
 ) *gomock.Call {
 	args := append([]interface{}{ctx, _DescribeRequest}, opts...)
 	return mr.mock.ctrl.RecordCall(mr.mock, "DescribeWorkflowExecution", args...)
+}
+
+// GetDLQReplicationMessages responds to a GetDLQReplicationMessages call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().GetDLQReplicationMessages(gomock.Any(), ...).Return(...)
+// 	... := client.GetDLQReplicationMessages(...)
+func (m *MockClient) GetDLQReplicationMessages(
+	ctx context.Context,
+	_Request *replicator.GetDLQReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (success *replicator.GetDLQReplicationMessagesResponse, err error) {
+
+	args := []interface{}{ctx, _Request}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "GetDLQReplicationMessages", args...)
+	success, _ = ret[i].(*replicator.GetDLQReplicationMessagesResponse)
+	i++
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) GetDLQReplicationMessages(
+	ctx interface{},
+	_Request interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _Request}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "GetDLQReplicationMessages", args...)
 }
 
 // GetMutableState responds to a GetMutableState call based on the mock expectations. This

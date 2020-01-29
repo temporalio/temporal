@@ -24,7 +24,6 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -175,11 +174,6 @@ func mustProcessPath(path string) bool {
 		}
 	}
 	return true
-}
-
-// returns true if the error type is an EOF
-func isEOF(err error) bool {
-	return err == io.EOF || err == io.ErrUnexpectedEOF
 }
 
 func commentOutLines(str string) (string, error) {

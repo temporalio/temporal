@@ -36,6 +36,7 @@ import (
 	r "github.com/temporalio/temporal/.gen/go/replicator"
 	gen "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/messaging"
@@ -745,7 +746,7 @@ func (h *Handler) PollMutableState(
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	scope := metrics.HistoryClientPollMutableStateScope
+	scope := metrics.HistoryPollMutableStateScope
 	h.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
@@ -1392,7 +1393,7 @@ func (h *Handler) SyncActivity(
 	defer sw.Stop()
 
 	domainID := syncActivityRequest.GetDomainId()
-	if syncActivityRequest.DomainId == nil || uuid.Parse(syncActivityRequest.GetDomainId()) == nil {
+	if syncActivityRequest.GetDomainId() == "" || uuid.Parse(syncActivityRequest.GetDomainId()) == nil {
 		return h.error(errDomainNotSet, scope, domainID, "")
 	}
 
@@ -1400,11 +1401,11 @@ func (h *Handler) SyncActivity(
 		return h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
-	if syncActivityRequest.WorkflowId == nil {
+	if syncActivityRequest.GetWorkflowId() == "" {
 		return h.error(errWorkflowIDNotSet, scope, domainID, "")
 	}
 
-	if syncActivityRequest.RunId == nil || uuid.Parse(syncActivityRequest.GetRunId()) == nil {
+	if syncActivityRequest.GetRunId() == "" || uuid.Parse(syncActivityRequest.GetRunId()) == nil {
 		return h.error(errRunIDNotValid, scope, domainID, "")
 	}
 
@@ -1477,6 +1478,79 @@ func (h *Handler) GetReplicationMessages(
 	h.GetLogger().Debug("GetReplicationMessages succeeded.")
 
 	return &r.GetReplicationMessagesResponse{MessagesByShard: messagesByShard}, nil
+}
+
+// GetDLQReplicationMessages is called by remote peers to get replicated messages for DLQ merging
+func (h *Handler) GetDLQReplicationMessages(
+	ctx context.Context,
+	request *r.GetDLQReplicationMessagesRequest,
+) (resp *r.GetDLQReplicationMessagesResponse, retError error) {
+	defer log.CapturePanic(h.GetLogger(), &retError)
+	h.startWG.Wait()
+
+	scope := metrics.HistoryGetDLQReplicationMessagesScope
+	h.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
+	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	taskInfoPerExecution := map[definition.WorkflowIdentifier][]*r.ReplicationTaskInfo{}
+	// do batch based on workflow ID and run ID
+	for _, taskInfo := range request.GetTaskInfos() {
+		identity := definition.NewWorkflowIdentifier(
+			taskInfo.GetDomainID(),
+			taskInfo.GetWorkflowID(),
+			taskInfo.GetRunID(),
+		)
+		if _, ok := taskInfoPerExecution[identity]; !ok {
+			taskInfoPerExecution[identity] = []*r.ReplicationTaskInfo{}
+		}
+		taskInfoPerExecution[identity] = append(taskInfoPerExecution[identity], taskInfo)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(len(taskInfoPerExecution))
+	tasksChan := make(chan *r.ReplicationTask, len(request.GetTaskInfos()))
+	handleTaskInfoPerExecution := func(taskInfos []*r.ReplicationTaskInfo) {
+		defer wg.Done()
+		if len(taskInfos) == 0 {
+			return
+		}
+
+		engine, err := h.controller.GetEngine(
+			taskInfos[0].GetWorkflowID(),
+		)
+		if err != nil {
+			h.GetLogger().Warn("History engine not found for workflow ID.", tag.Error(err))
+			return
+		}
+
+		tasks, err := engine.GetDLQReplicationMessages(
+			ctx,
+			taskInfos,
+		)
+		if err != nil {
+			h.GetLogger().Error("Failed to get dlq replication tasks.", tag.Error(err))
+			return
+		}
+
+		for _, task := range tasks {
+			tasksChan <- task
+		}
+	}
+
+	for _, replicationTaskInfos := range taskInfoPerExecution {
+		go handleTaskInfoPerExecution(replicationTaskInfos)
+	}
+	wg.Wait()
+	close(tasksChan)
+
+	replicationTasks := make([]*r.ReplicationTask, len(tasksChan))
+	for task := range tasksChan {
+		replicationTasks = append(replicationTasks, task)
+	}
+	return &r.GetDLQReplicationMessagesResponse{
+		ReplicationTasks: replicationTasks,
+	}, nil
 }
 
 // ReapplyEvents applies stale events to the current workflow and the current run

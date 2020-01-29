@@ -21,10 +21,13 @@
 package replicator
 
 import (
-	"github.com/temporalio/temporal/.gen/go/replicator"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/service/frontend/adapter"
 )
 
 var (
@@ -55,7 +58,7 @@ var (
 type (
 	// DomainReplicator is the interface which can replicate the domain
 	DomainReplicator interface {
-		HandleReceivingTask(task *replicator.DomainTaskAttributes) error
+		HandleReceivingTask(task *commonproto.DomainTaskAttributes) error
 	}
 
 	domainReplicatorImpl struct {
@@ -73,15 +76,15 @@ func NewDomainReplicator(metadataManagerV2 persistence.MetadataManager, logger l
 }
 
 // HandleReceiveTask handle receiving of the domain replication task
-func (domainReplicator *domainReplicatorImpl) HandleReceivingTask(task *replicator.DomainTaskAttributes) error {
+func (domainReplicator *domainReplicatorImpl) HandleReceivingTask(task *commonproto.DomainTaskAttributes) error {
 	if err := domainReplicator.validateDomainReplicationTask(task); err != nil {
 		return err
 	}
 
 	switch task.GetDomainOperation() {
-	case replicator.DomainOperationCreate:
+	case enums.DomainOperationCreate:
 		return domainReplicator.handleDomainCreationReplicationTask(task)
-	case replicator.DomainOperationUpdate:
+	case enums.DomainOperationUpdate:
 		return domainReplicator.handleDomainUpdateReplicationTask(task)
 	default:
 		return ErrInvalidDomainOperation
@@ -89,16 +92,16 @@ func (domainReplicator *domainReplicatorImpl) HandleReceivingTask(task *replicat
 }
 
 // handleDomainCreationReplicationTask handle the domain creation replication task
-func (domainReplicator *domainReplicatorImpl) handleDomainCreationReplicationTask(task *replicator.DomainTaskAttributes) error {
+func (domainReplicator *domainReplicatorImpl) handleDomainCreationReplicationTask(task *commonproto.DomainTaskAttributes) error {
 	// task already validated
-	status, err := domainReplicator.convertDomainStatusFromThrift(task.Info.Status)
+	status, err := domainReplicator.convertDomainStatusFromProto(task.Info.Status)
 	if err != nil {
 		return err
 	}
 
 	request := &persistence.CreateDomainRequest{
 		Info: &persistence.DomainInfo{
-			ID:          task.GetID(),
+			ID:          task.GetId(),
 			Name:        task.Info.GetName(),
 			Status:      status,
 			Description: task.Info.GetDescription(),
@@ -107,15 +110,15 @@ func (domainReplicator *domainReplicatorImpl) handleDomainCreationReplicationTas
 		},
 		Config: &persistence.DomainConfig{
 			Retention:                task.Config.GetWorkflowExecutionRetentionPeriodInDays(),
-			EmitMetric:               task.Config.GetEmitMetric(),
-			HistoryArchivalStatus:    task.Config.GetHistoryArchivalStatus(),
+			EmitMetric:               task.Config.GetEmitMetric().GetValue(),
+			HistoryArchivalStatus:    *adapter.ToThriftArchivalStatus(task.Config.GetHistoryArchivalStatus()),
 			HistoryArchivalURI:       task.Config.GetHistoryArchivalURI(),
-			VisibilityArchivalStatus: task.Config.GetVisibilityArchivalStatus(),
+			VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(task.Config.GetVisibilityArchivalStatus()),
 			VisibilityArchivalURI:    task.Config.GetVisibilityArchivalURI(),
 		},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: task.ReplicationConfig.GetActiveClusterName(),
-			Clusters:          domainReplicator.convertClusterReplicationConfigFromThrift(task.ReplicationConfig.Clusters),
+			Clusters:          domainReplicator.convertClusterReplicationConfigFromProto(task.ReplicationConfig.Clusters),
 		},
 		IsGlobalDomain:  true, // local domain will not be replicated
 		ConfigVersion:   task.GetConfigVersion(),
@@ -134,7 +137,7 @@ func (domainReplicator *domainReplicatorImpl) handleDomainCreationReplicationTas
 		})
 		switch getErr.(type) {
 		case nil:
-			if resp.Info.ID != task.GetID() {
+			if resp.Info.ID != task.GetId() {
 				return ErrNameUUIDCollision
 			}
 		case *shared.EntityNotExistsError:
@@ -146,7 +149,7 @@ func (domainReplicator *domainReplicatorImpl) handleDomainCreationReplicationTas
 		}
 
 		resp, getErr = domainReplicator.metadataManagerV2.GetDomain(&persistence.GetDomainRequest{
-			ID: task.GetID(),
+			ID: task.GetId(),
 		})
 		switch getErr.(type) {
 		case nil:
@@ -172,9 +175,9 @@ func (domainReplicator *domainReplicatorImpl) handleDomainCreationReplicationTas
 }
 
 // handleDomainUpdateReplicationTask handle the domain update replication task
-func (domainReplicator *domainReplicatorImpl) handleDomainUpdateReplicationTask(task *replicator.DomainTaskAttributes) error {
+func (domainReplicator *domainReplicatorImpl) handleDomainUpdateReplicationTask(task *commonproto.DomainTaskAttributes) error {
 	// task already validated
-	status, err := domainReplicator.convertDomainStatusFromThrift(task.Info.Status)
+	status, err := domainReplicator.convertDomainStatusFromProto(task.Info.Status)
 	if err != nil {
 		return err
 	}
@@ -214,7 +217,7 @@ func (domainReplicator *domainReplicatorImpl) handleDomainUpdateReplicationTask(
 	if resp.ConfigVersion < task.GetConfigVersion() {
 		recordUpdated = true
 		request.Info = &persistence.DomainInfo{
-			ID:          task.GetID(),
+			ID:          task.GetId(),
 			Name:        task.Info.GetName(),
 			Status:      status,
 			Description: task.Info.GetDescription(),
@@ -223,16 +226,16 @@ func (domainReplicator *domainReplicatorImpl) handleDomainUpdateReplicationTask(
 		}
 		request.Config = &persistence.DomainConfig{
 			Retention:                task.Config.GetWorkflowExecutionRetentionPeriodInDays(),
-			EmitMetric:               task.Config.GetEmitMetric(),
-			HistoryArchivalStatus:    task.Config.GetHistoryArchivalStatus(),
+			EmitMetric:               task.Config.GetEmitMetric().GetValue(),
+			HistoryArchivalStatus:    *adapter.ToThriftArchivalStatus(task.Config.GetHistoryArchivalStatus()),
 			HistoryArchivalURI:       task.Config.GetHistoryArchivalURI(),
-			VisibilityArchivalStatus: task.Config.GetVisibilityArchivalStatus(),
+			VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(task.Config.GetVisibilityArchivalStatus()),
 			VisibilityArchivalURI:    task.Config.GetVisibilityArchivalURI(),
 		}
 		if task.Config.GetBadBinaries() != nil {
-			request.Config.BadBinaries = *task.Config.GetBadBinaries()
+			request.Config.BadBinaries = *adapter.ToThriftBadBinaries(task.Config.GetBadBinaries())
 		}
-		request.ReplicationConfig.Clusters = domainReplicator.convertClusterReplicationConfigFromThrift(task.ReplicationConfig.Clusters)
+		request.ReplicationConfig.Clusters = domainReplicator.convertClusterReplicationConfigFromProto(task.ReplicationConfig.Clusters)
 		request.ConfigVersion = task.GetConfigVersion()
 	}
 	if resp.FailoverVersion < task.GetFailoverVersion() {
@@ -249,14 +252,12 @@ func (domainReplicator *domainReplicatorImpl) handleDomainUpdateReplicationTask(
 	return domainReplicator.metadataManagerV2.UpdateDomain(request)
 }
 
-func (domainReplicator *domainReplicatorImpl) validateDomainReplicationTask(task *replicator.DomainTaskAttributes) error {
+func (domainReplicator *domainReplicatorImpl) validateDomainReplicationTask(task *commonproto.DomainTaskAttributes) error {
 	if task == nil {
 		return ErrEmptyDomainReplicationTask
 	}
 
-	if task.DomainOperation == nil {
-		return ErrInvalidDomainOperation
-	} else if task.ID == nil {
+	if task.Id == "" {
 		return ErrInvalidDomainID
 	} else if task.Info == nil {
 		return ErrInvalidDomainInfo
@@ -264,17 +265,13 @@ func (domainReplicator *domainReplicatorImpl) validateDomainReplicationTask(task
 		return ErrInvalidDomainConfig
 	} else if task.ReplicationConfig == nil {
 		return ErrInvalidDomainReplicationConfig
-	} else if task.ConfigVersion == nil {
-		return ErrInvalidDomainConfigVersion
-	} else if task.FailoverVersion == nil {
-		return ErrInvalidDomainFailoverVersion
 	}
 	return nil
 }
 
-func (domainReplicator *domainReplicatorImpl) convertClusterReplicationConfigFromThrift(
-	input []*shared.ClusterReplicationConfiguration) []*persistence.ClusterReplicationConfig {
-	output := []*persistence.ClusterReplicationConfig{}
+func (domainReplicator *domainReplicatorImpl) convertClusterReplicationConfigFromProto(
+	input []*commonproto.ClusterReplicationConfiguration) []*persistence.ClusterReplicationConfig {
+	var output []*persistence.ClusterReplicationConfig
 	for _, cluster := range input {
 		clusterName := cluster.GetClusterName()
 		output = append(output, &persistence.ClusterReplicationConfig{ClusterName: clusterName})
@@ -282,15 +279,11 @@ func (domainReplicator *domainReplicatorImpl) convertClusterReplicationConfigFro
 	return output
 }
 
-func (domainReplicator *domainReplicatorImpl) convertDomainStatusFromThrift(input *shared.DomainStatus) (int, error) {
-	if input == nil {
-		return 0, ErrInvalidDomainStatus
-	}
-
-	switch *input {
-	case shared.DomainStatusRegistered:
+func (domainReplicator *domainReplicatorImpl) convertDomainStatusFromProto(input enums.DomainStatus) (int, error) {
+	switch input {
+	case enums.DomainStatusRegistered:
 		return persistence.DomainStatusRegistered, nil
-	case shared.DomainStatusDeprecated:
+	case enums.DomainStatusDeprecated:
 		return persistence.DomainStatusDeprecated, nil
 	default:
 		return 0, ErrInvalidDomainStatus

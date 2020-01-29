@@ -272,6 +272,9 @@ func readManifest(dirPath string) (*manifest, error) {
 	manifest.CurrVersion = currVer
 
 	minVer, err := parseValidateVersion(manifest.MinCompatibleVersion)
+	if err != nil {
+		return nil, err
+	}
 	if len(manifest.MinCompatibleVersion) == 0 {
 		return nil, fmt.Errorf("invalid MinCompatibleVersion in manifest")
 	}

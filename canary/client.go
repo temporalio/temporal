@@ -34,10 +34,6 @@ import (
 	"google.golang.org/grpc/codes"
 )
 
-const (
-	cadenceConfig = "cadence"
-)
-
 // cadenceClient is an abstraction on top of
 // the cadence library client that serves as
 // a union of all the client interfaces that
@@ -68,8 +64,7 @@ func (client *cadenceClient) createDomain(name string, desc string, owner string
 	}
 	err := client.Register(context.Background(), req)
 	if err != nil {
-		st := status.Convert(err)
-		if st.Code() == codes.AlreadyExists {
+		if status.Code(err) == codes.AlreadyExists {
 			return err
 		}
 	}

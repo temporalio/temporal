@@ -21,12 +21,12 @@
         enabled: true
         initialFailoverVersion: 0
         rpcName: "cadence-frontend"
-        rpcAddress: "127.0.0.1:7104"
+        rpcAddress: "127.0.0.1:7134"
       standby:
         enabled: true
         initialFailoverVersion: 1
         rpcName: "cadence-frontend"
-        rpcAddress: "127.0.0.1:8104"
+        rpcAddress: "127.0.0.1:8134"
   enablearchival: false
   workerconfig:
     enablearchiver: false
@@ -83,12 +83,12 @@
         enabled: true
         initialFailoverVersion: 0
         rpcName: "cadence-frontend"
-        rpcAddress: "127.0.0.1:7104"
+        rpcAddress: "127.0.0.1:7134"
       standby:
         enabled: true
         initialFailoverVersion: 1
         rpcName: "cadence-frontend"
-        rpcAddress: "127.0.0.1:8104"
+        rpcAddress: "127.0.0.1:8134"
   enablearchival: false
   workerconfig:
     enablearchiver: false

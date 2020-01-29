@@ -52,6 +52,7 @@ require (
 	github.com/sirupsen/logrus v1.4.2
 	github.com/stretchr/testify v1.4.0
 	github.com/uber-common/bark v1.2.1 // indirect
+	github.com/uber-go/atomic v1.4.0 // indirect
 	github.com/uber-go/kafka-client v0.2.3-0.20191018205945-8b3555b395f9
 	github.com/uber-go/tally v3.3.13+incompatible
 	github.com/uber/ringpop-go v0.8.5
@@ -59,10 +60,10 @@ require (
 	github.com/urfave/cli v1.20.0
 	github.com/valyala/fastjson v1.4.1
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
-	go.temporal.io/temporal v0.10.3
-	go.temporal.io/temporal-proto v0.0.0-20200107082912-100353b9ce5d
-	go.uber.org/atomic v1.5.0
-	go.uber.org/config v1.3.1
+	go.temporal.io/temporal v0.10.4
+	go.temporal.io/temporal-proto v0.0.0-20200128005619-937eafde1622
+	go.uber.org/atomic v1.5.1
+	go.uber.org/fx v1.10.0
 	go.uber.org/multierr v1.4.0
 	go.uber.org/thriftrw v1.20.2
 	go.uber.org/yarpc v1.42.1

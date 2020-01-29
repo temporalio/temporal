@@ -28,6 +28,10 @@ exception InternalServiceError {
   1: required string message
 }
 
+exception InternalDataInconsistencyError {
+  1: required string message
+}
+
 exception DomainAlreadyExistsError {
   1: required string message
 }
@@ -1620,3 +1624,16 @@ struct SupportedClientVersions{
 struct ClusterInfo{
   10: optional SupportedClientVersions supportedClientVersions
 }
+
+struct GetWorkflowExecutionRawHistoryRequest {
+  10: optional string domain
+  20: optional WorkflowExecution execution
+  30: optional i32 maximumPageSize
+  40: optional binary nextPageToken
+}
+
+struct GetWorkflowExecutionRawHistoryResponse {
+  10: optional list<DataBlob> rawHistory
+  20: optional binary nextPageToken
+}
+

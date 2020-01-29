@@ -30,6 +30,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 
 	h "github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/history/historyservicetest"
@@ -47,6 +49,7 @@ import (
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 	"github.com/temporalio/temporal/common/task"
 	"github.com/temporalio/temporal/common/xdc"
+	"github.com/temporalio/temporal/service/frontend/adapter"
 )
 
 type (
@@ -115,7 +118,8 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 	s.config = &Config{
-		ReplicatorTaskConcurrency: dynamicconfig.GetIntPropertyFn(10),
+		ReplicatorTaskConcurrency:     dynamicconfig.GetIntPropertyFn(10),
+		ReplicationTaskContextTimeout: dynamicconfig.GetDurationPropertyFn(30 * time.Second),
 	}
 	s.metricsClient = metrics.NewClient(tally.NoopScope, metrics.Worker)
 	s.msgEncoder = codec.NewThriftRWEncoder()
@@ -164,13 +168,13 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_BadEncoding() {
 }
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_Domain_Success() {
-	replicationAttr := &replicator.DomainTaskAttributes{
-		DomainOperation: replicator.DomainOperationUpdate.Ptr(),
-		ID:              common.StringPtr("some random domain ID"),
+	replicationAttr := &commonproto.DomainTaskAttributes{
+		DomainOperation: enums.DomainOperationUpdate,
+		Id:              "some random domain ID",
 	}
 	replicationTask := &replicator.ReplicationTask{
 		TaskType:             replicator.ReplicationTaskTypeDomain.Ptr(),
-		DomainTaskAttributes: replicationAttr,
+		DomainTaskAttributes: adapter.ToThriftDomainTaskAttributes(replicationAttr),
 	}
 	replicationTaskBinary, err := s.msgEncoder.Encode(replicationTask)
 	s.Nil(err)
@@ -182,13 +186,13 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_Domain_Success() 
 }
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_Domain_FailedThenSuccess() {
-	replicationAttr := &replicator.DomainTaskAttributes{
-		DomainOperation: replicator.DomainOperationUpdate.Ptr(),
-		ID:              common.StringPtr("some random domain ID"),
+	replicationAttr := &commonproto.DomainTaskAttributes{
+		DomainOperation: enums.DomainOperationUpdate,
+		Id:              "some random domain ID",
 	}
 	replicationTask := &replicator.ReplicationTask{
 		TaskType:             replicator.ReplicationTaskTypeDomain.Ptr(),
-		DomainTaskAttributes: replicationAttr,
+		DomainTaskAttributes: adapter.ToThriftDomainTaskAttributes(replicationAttr),
 	}
 	replicationTaskBinary, err := s.msgEncoder.Encode(replicationTask)
 	s.Nil(err)

@@ -30,12 +30,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 
-	"github.com/temporalio/temporal/.gen/go/admin/adminservicetest"
 	"github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/history/historyservicetest"
-	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -61,7 +62,7 @@ type (
 		replicationTaskFetcher *MockReplicationTaskFetcher
 		mockDomainCache        *cache.MockDomainCache
 		mockClientBean         *client.MockBean
-		adminClient            *adminservicetest.MockClient
+		adminClient            *adminservicemock.MockAdminServiceYARPCClient
 		clusterMetadata        *cluster.MockMetadata
 		executionManager       *mocks.ExecutionManager
 		requestChan            chan *request
@@ -205,8 +206,8 @@ func (s *replicationTaskProcessorSuite) TestHandleSyncShardStatus() {
 		Timestamp:     common.Int64Ptr(now.UnixNano()),
 	}).Return(nil).Times(1)
 
-	err := s.replicationTaskProcessor.handleSyncShardStatus(&replicator.SyncShardStatus{
-		Timestamp: common.Int64Ptr(now.UnixNano()),
+	err := s.replicationTaskProcessor.handleSyncShardStatus(&commonproto.SyncShardStatus{
+		Timestamp: now.UnixNano(),
 	})
 	s.NoError(err)
 }
@@ -218,24 +219,24 @@ func (s *replicationTaskProcessorSuite) TestProcessTaskOnce_DomainReplicationTas
 		}
 	}()
 
-	task := &replicator.ReplicationTask{
-		TaskType: replicator.ReplicationTaskTypeDomain.Ptr(),
+	task := &commonproto.ReplicationTask{
+		TaskType: enums.ReplicationTaskTypeDomain,
 	}
 	err := s.replicationTaskProcessor.processTaskOnce(task)
 	s.NoError(err)
 }
 
 func (s *replicationTaskProcessorSuite) TestProcessTaskOnce_SyncShardReplicationTask() {
-	task := &replicator.ReplicationTask{
-		TaskType: replicator.ReplicationTaskTypeSyncShardStatus.Ptr(),
+	task := &commonproto.ReplicationTask{
+		TaskType: enums.ReplicationTaskTypeSyncShardStatus,
 	}
 	err := s.replicationTaskProcessor.processTaskOnce(task)
 	s.NoError(err)
 }
 
 func (s *replicationTaskProcessorSuite) TestProcessTaskOnce_HistoryMetadataReplicationTask() {
-	task := &replicator.ReplicationTask{
-		TaskType: replicator.ReplicationTaskTypeHistoryMetadata.Ptr(),
+	task := &commonproto.ReplicationTask{
+		TaskType: enums.ReplicationTaskTypeHistoryMetadata,
 	}
 	err := s.replicationTaskProcessor.processTaskOnce(task)
 	s.NoError(err)
@@ -245,18 +246,27 @@ func (s *replicationTaskProcessorSuite) TestProcessTaskOnce_SyncActivityReplicat
 	domainID := uuid.New()
 	workflowID := uuid.New()
 	runID := uuid.New()
-	task := &replicator.ReplicationTask{
-		TaskType: replicator.ReplicationTaskTypeSyncActivity.Ptr(),
-		SyncActivityTaskAttributes: &replicator.SyncActivityTaskAttributes{
-			DomainId:   common.StringPtr(domainID),
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
-		},
+	task := &commonproto.ReplicationTask{
+		TaskType: enums.ReplicationTaskTypeSyncActivity,
+		Attributes: &commonproto.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: &commonproto.SyncActivityTaskAttributes{
+			DomainId:   domainID,
+			WorkflowId: workflowID,
+			RunId:      runID,
+		}},
 	}
 	request := &history.SyncActivityRequest{
-		DomainId:   common.StringPtr(domainID),
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(runID),
+		DomainId:           common.StringPtr(domainID),
+		WorkflowId:         common.StringPtr(workflowID),
+		RunId:              common.StringPtr(runID),
+		Version:            common.Int64Ptr(0),
+		ScheduledId:        common.Int64Ptr(0),
+		ScheduledTime:      common.Int64Ptr(0),
+		StartedId:          common.Int64Ptr(0),
+		StartedTime:        common.Int64Ptr(0),
+		LastHeartbeatTime:  common.Int64Ptr(0),
+		Attempt:            common.Int32Ptr(0),
+		LastFailureReason:  common.StringPtr(""),
+		LastWorkerIdentity: common.StringPtr(""),
 	}
 
 	s.mockDomainCache.EXPECT().
@@ -282,13 +292,13 @@ func (s *replicationTaskProcessorSuite) TestProcessTaskOnce_HistoryReplicationTa
 	domainID := uuid.New()
 	workflowID := uuid.New()
 	runID := uuid.New()
-	task := &replicator.ReplicationTask{
-		TaskType: replicator.ReplicationTaskTypeHistory.Ptr(),
-		HistoryTaskAttributes: &replicator.HistoryTaskAttributes{
-			DomainId:   common.StringPtr(domainID),
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
-		},
+	task := &commonproto.ReplicationTask{
+		TaskType: enums.ReplicationTaskTypeHistory,
+		Attributes: &commonproto.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: &commonproto.HistoryTaskAttributes{
+			DomainId:   domainID,
+			WorkflowId: workflowID,
+			RunId:      runID,
+		}},
 	}
 	request := &history.ReplicateEventsRequest{
 		DomainUUID: common.StringPtr(domainID),
@@ -298,6 +308,11 @@ func (s *replicationTaskProcessorSuite) TestProcessTaskOnce_HistoryReplicationTa
 		},
 		SourceCluster:     common.StringPtr("standby"),
 		ForceBufferEvents: common.BoolPtr(false),
+		FirstEventId:      common.Int64Ptr(0),
+		NextEventId:       common.Int64Ptr(0),
+		Version:           common.Int64Ptr(0),
+		ResetWorkflow:     common.BoolPtr(false),
+		NewRunNDC:         common.BoolPtr(false),
 	}
 
 	s.mockDomainCache.EXPECT().
@@ -323,13 +338,13 @@ func (s *replicationTaskProcessorSuite) TestProcessTaskOnce_HistoryV2Replication
 	domainID := uuid.New()
 	workflowID := uuid.New()
 	runID := uuid.New()
-	task := &replicator.ReplicationTask{
-		TaskType: replicator.ReplicationTaskTypeHistoryV2.Ptr(),
-		HistoryTaskV2Attributes: &replicator.HistoryTaskV2Attributes{
-			DomainId:   common.StringPtr(domainID),
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
-		},
+	task := &commonproto.ReplicationTask{
+		TaskType: enums.ReplicationTaskTypeHistoryV2,
+		Attributes: &commonproto.ReplicationTask_HistoryTaskV2Attributes{HistoryTaskV2Attributes: &commonproto.HistoryTaskV2Attributes{
+			DomainId:   domainID,
+			WorkflowId: workflowID,
+			RunId:      runID,
+		}},
 	}
 	request := &history.ReplicateEventsV2Request{
 		DomainUUID: common.StringPtr(domainID),
@@ -362,13 +377,13 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_SyncActivity
 	domainID := uuid.New()
 	workflowID := uuid.New()
 	runID := uuid.New()
-	task := &replicator.ReplicationTask{
-		TaskType: replicator.ReplicationTaskTypeSyncActivity.Ptr(),
-		SyncActivityTaskAttributes: &replicator.SyncActivityTaskAttributes{
-			DomainId:   common.StringPtr(domainID),
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
-		},
+	task := &commonproto.ReplicationTask{
+		TaskType: enums.ReplicationTaskTypeSyncActivity,
+		Attributes: &commonproto.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: &commonproto.SyncActivityTaskAttributes{
+			DomainId:   domainID,
+			WorkflowId: workflowID,
+			RunId:      runID,
+		}},
 	}
 	request := &persistence.PutReplicationTaskToDLQRequest{
 		SourceClusterName: "standby",
@@ -388,13 +403,13 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryRepli
 	domainID := uuid.New()
 	workflowID := uuid.New()
 	runID := uuid.New()
-	task := &replicator.ReplicationTask{
-		TaskType: replicator.ReplicationTaskTypeHistory.Ptr(),
-		HistoryTaskAttributes: &replicator.HistoryTaskAttributes{
-			DomainId:   common.StringPtr(domainID),
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
-		},
+	task := &commonproto.ReplicationTask{
+		TaskType: enums.ReplicationTaskTypeHistory,
+		Attributes: &commonproto.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: &commonproto.HistoryTaskAttributes{
+			DomainId:   domainID,
+			WorkflowId: workflowID,
+			RunId:      runID,
+		}},
 	}
 	request := &persistence.PutReplicationTaskToDLQRequest{
 		SourceClusterName: "standby",
@@ -424,17 +439,17 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryV2Rep
 	serializer := s.mockResource.GetPayloadSerializer()
 	data, err := serializer.SerializeBatchEvents(events, common.EncodingTypeThriftRW)
 	s.NoError(err)
-	task := &replicator.ReplicationTask{
-		TaskType: replicator.ReplicationTaskTypeHistoryV2.Ptr(),
-		HistoryTaskV2Attributes: &replicator.HistoryTaskV2Attributes{
-			DomainId:   common.StringPtr(domainID),
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
-			Events: &shared.DataBlob{
-				EncodingType: shared.EncodingTypeThriftRW.Ptr(),
+	task := &commonproto.ReplicationTask{
+		TaskType: enums.ReplicationTaskTypeHistoryV2,
+		Attributes: &commonproto.ReplicationTask_HistoryTaskV2Attributes{HistoryTaskV2Attributes: &commonproto.HistoryTaskV2Attributes{
+			DomainId:   domainID,
+			WorkflowId: workflowID,
+			RunId:      runID,
+			Events: &commonproto.DataBlob{
+				EncodingType: enums.EncodingTypeThriftRW,
 				Data:         data.Data,
 			},
-		},
+		}},
 	}
 	request := &persistence.PutReplicationTaskToDLQRequest{
 		SourceClusterName: "standby",

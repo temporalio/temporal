@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 //
-// Copyright (c) 2019 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -68,6 +68,32 @@ func (m *MockBean) Close() {
 func (mr *MockBeanMockRecorder) Close() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockBean)(nil).Close))
+}
+
+// GetClusterMetadataManager mocks base method
+func (m *MockBean) GetClusterMetadataManager() persistence.ClusterMetadataManager {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetClusterMetadataManager")
+	ret0, _ := ret[0].(persistence.ClusterMetadataManager)
+	return ret0
+}
+
+// GetClusterMetadataManager indicates an expected call of GetClusterMetadataManager
+func (mr *MockBeanMockRecorder) GetClusterMetadataManager() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterMetadataManager", reflect.TypeOf((*MockBean)(nil).GetClusterMetadataManager))
+}
+
+// SetClusterMetadataManager mocks base method
+func (m *MockBean) SetClusterMetadataManager(arg0 persistence.ClusterMetadataManager) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetClusterMetadataManager", arg0)
+}
+
+// SetClusterMetadataManager indicates an expected call of SetClusterMetadataManager
+func (mr *MockBeanMockRecorder) SetClusterMetadataManager(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetClusterMetadataManager", reflect.TypeOf((*MockBean)(nil).SetClusterMetadataManager), arg0)
 }
 
 // GetMetadataManager mocks base method

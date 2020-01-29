@@ -375,6 +375,9 @@ func (e *ESql) convertComparisionExpr(expr sqlparser.Expr, parent sqlparser.Expr
 	// use painless scripting query here
 	if scriptQuery {
 		lhsStr, err = e.convertToScript(lhsExpr)
+		if err != nil {
+			return "", err
+		}
 		rhsStr, err = e.convertToScript(rhsExpr)
 		if err != nil {
 			return "", err

@@ -58,6 +58,12 @@ type (
 		logger       log.Logger
 	}
 
+	clusterMetadataPersistenceClient struct {
+		metricClient metrics.Client
+		persistence  ClusterMetadataManager
+		logger       log.Logger
+	}
+
 	visibilityPersistenceClient struct {
 		metricClient metrics.Client
 		persistence  VisibilityManager
@@ -76,6 +82,7 @@ var _ ExecutionManager = (*workflowExecutionPersistenceClient)(nil)
 var _ TaskManager = (*taskPersistenceClient)(nil)
 var _ HistoryManager = (*historyV2PersistenceClient)(nil)
 var _ MetadataManager = (*metadataPersistenceClient)(nil)
+var _ ClusterMetadataManager = (*clusterMetadataPersistenceClient)(nil)
 var _ VisibilityManager = (*visibilityPersistenceClient)(nil)
 var _ Queue = (*queuePersistenceClient)(nil)
 
@@ -118,6 +125,15 @@ func NewHistoryV2PersistenceMetricsClient(persistence HistoryManager, metricClie
 // NewMetadataPersistenceMetricsClient creates a MetadataManager client to manage metadata
 func NewMetadataPersistenceMetricsClient(persistence MetadataManager, metricClient metrics.Client, logger log.Logger) MetadataManager {
 	return &metadataPersistenceClient{
+		persistence:  persistence,
+		metricClient: metricClient,
+		logger:       logger,
+	}
+}
+
+// NewClusterMetadataPersistenceMetricsClient creates a ClusterMetadataManager client to manage cluster metadata
+func NewClusterMetadataPersistenceMetricsClient(persistence ClusterMetadataManager, metricClient metrics.Client, logger log.Logger) ClusterMetadataManager {
+	return &clusterMetadataPersistenceClient{
 		persistence:  persistence,
 		metricClient: metricClient,
 		logger:       logger,
@@ -1211,6 +1227,112 @@ func (p *queuePersistenceClient) DeleteMessagesBefore(messageID int) error {
 	return err
 }
 
+func (p *queuePersistenceClient) EnqueueMessageToDLQ(message []byte) error {
+	p.metricClient.IncCounter(metrics.PersistenceEnqueueMessageToDLQScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceEnqueueMessageToDLQScope, metrics.PersistenceLatency)
+	err := p.persistence.EnqueueMessageToDLQ(message)
+	sw.Stop()
+
+	if err != nil {
+		p.metricClient.IncCounter(metrics.PersistenceEnqueueMessageToDLQScope, metrics.PersistenceFailures)
+	}
+
+	return err
+}
+
+func (p *queuePersistenceClient) ReadMessagesFromDLQ(firstMessageID int, lastMessageID int, maxCount int) ([]*QueueMessage, error) {
+	p.metricClient.IncCounter(metrics.PersistenceReadQueueMessagesFromDLQScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceReadQueueMessagesFromDLQScope, metrics.PersistenceLatency)
+	result, err := p.persistence.ReadMessagesFromDLQ(firstMessageID, lastMessageID, maxCount)
+	sw.Stop()
+
+	if err != nil {
+		p.metricClient.IncCounter(metrics.PersistenceReadQueueMessagesFromDLQScope, metrics.PersistenceFailures)
+	}
+
+	return result, err
+}
+
+func (p *queuePersistenceClient) DeleteMessageFromDLQ(messageID int) error {
+	p.metricClient.IncCounter(metrics.PersistenceDeleteQueueMessageFromDLQScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceDeleteQueueMessageFromDLQScope, metrics.PersistenceLatency)
+	err := p.persistence.DeleteMessageFromDLQ(messageID)
+	sw.Stop()
+
+	if err != nil {
+		p.metricClient.IncCounter(metrics.PersistenceDeleteQueueMessageFromDLQScope, metrics.PersistenceFailures)
+	}
+
+	return err
+}
+
+func (p *queuePersistenceClient) DeleteDLQMessagesBefore(messageID int) error {
+	p.metricClient.IncCounter(metrics.PersistenceDeleteDLQMessageBeforeScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceDeleteDLQMessageBeforeScope, metrics.PersistenceLatency)
+	err := p.persistence.DeleteDLQMessagesBefore(messageID)
+	sw.Stop()
+
+	if err != nil {
+		p.metricClient.IncCounter(metrics.PersistenceDeleteDLQMessageBeforeScope, metrics.PersistenceFailures)
+	}
+
+	return err
+}
+
+func (p *queuePersistenceClient) GetLastMessageIDFromDLQ() (int, error) {
+	p.metricClient.IncCounter(metrics.PersistenceGetLastMessageIDFromDLQScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceGetLastMessageIDFromDLQScope, metrics.PersistenceLatency)
+	lastMessageID, err := p.persistence.GetLastMessageIDFromDLQ()
+	sw.Stop()
+
+	if err != nil {
+		p.metricClient.IncCounter(metrics.PersistenceGetLastMessageIDFromDLQScope, metrics.PersistenceFailures)
+	}
+
+	return lastMessageID, err
+}
+
 func (p *queuePersistenceClient) Close() {
 	p.persistence.Close()
+}
+
+func (c *clusterMetadataPersistenceClient) Close() {
+	c.persistence.Close()
+}
+
+func (c *clusterMetadataPersistenceClient) GetImmutableClusterMetadata() (*GetImmutableClusterMetadataResponse, error) {
+	c.metricClient.IncCounter(metrics.PersistenceGetImmutableClusterMetadataScope, metrics.PersistenceRequests)
+
+	sw := c.metricClient.StartTimer(metrics.PersistenceGetImmutableClusterMetadataScope, metrics.PersistenceLatency)
+	result, err := c.persistence.GetImmutableClusterMetadata()
+	sw.Stop()
+
+	if err != nil {
+		c.metricClient.IncCounter(metrics.PersistenceGetImmutableClusterMetadataScope, metrics.PersistenceFailures)
+	}
+
+	return result, err
+}
+
+func (c *clusterMetadataPersistenceClient) GetName() string {
+	return c.persistence.GetName()
+}
+
+func (c *clusterMetadataPersistenceClient) InitializeImmutableClusterMetadata(request *InitializeImmutableClusterMetadataRequest) (*InitializeImmutableClusterMetadataResponse, error) {
+	c.metricClient.IncCounter(metrics.PersistenceInitImmutableClusterMetadataScope, metrics.PersistenceRequests)
+
+	sw := c.metricClient.StartTimer(metrics.PersistenceInitImmutableClusterMetadataScope, metrics.PersistenceLatency)
+	res, err := c.persistence.InitializeImmutableClusterMetadata(request)
+	sw.Stop()
+
+	if err != nil {
+		c.metricClient.IncCounter(metrics.PersistenceInitImmutableClusterMetadataScope, metrics.PersistenceFailures)
+	}
+
+	return res, err
 }

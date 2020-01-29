@@ -26,11 +26,12 @@ import (
 	"github.com/uber-go/tally"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal-proto/workflowservicemock"
+	"go.uber.org/yarpc"
+	"go.uber.org/zap"
 
-	"github.com/temporalio/temporal/.gen/go/admin/adminservicetest"
 	"github.com/temporalio/temporal/.gen/go/history/historyservicetest"
 	"github.com/temporalio/temporal/.gen/go/matching/matchingservicetest"
-	"github.com/temporalio/temporal/.gen/go/temporal/workflowservicetest"
+	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/client/frontend"
@@ -50,9 +51,6 @@ import (
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/persistence"
 	persistenceClient "github.com/temporalio/temporal/common/persistence/client"
-
-	"go.uber.org/yarpc"
-	"go.uber.org/zap"
 )
 
 type (
@@ -81,11 +79,11 @@ type (
 		// internal services clients
 
 		SDKClient            *workflowservicemock.MockWorkflowServiceClient
-		FrontendClient       *workflowservicetest.MockClient
+		FrontendClient       *workflowservicemock.MockWorkflowServiceClient
 		MatchingClient       *matchingservicetest.MockClient
 		HistoryClient        *historyservicetest.MockClient
-		RemoteAdminClient    *adminservicetest.MockClient
-		RemoteFrontendClient *workflowservicetest.MockClient
+		RemoteAdminClient    *adminservicemock.MockAdminServiceYARPCClient
+		RemoteFrontendClient *workflowservicemock.MockWorkflowServiceClient
 		ClientBean           *client.MockBean
 
 		// persistence clients
@@ -125,11 +123,11 @@ func NewTest(
 	}
 	logger := loggerimpl.NewLogger(zapLogger)
 
-	frontendClient := workflowservicetest.NewMockClient(controller)
+	frontendClient := workflowservicemock.NewMockWorkflowServiceClient(controller)
 	matchingClient := matchingservicetest.NewMockClient(controller)
 	historyClient := historyservicetest.NewMockClient(controller)
-	remoteFrontendClient := workflowservicetest.NewMockClient(controller)
-	remoteAdminClient := adminservicetest.NewMockClient(controller)
+	remoteFrontendClient := workflowservicemock.NewMockWorkflowServiceClient(controller)
+	remoteAdminClient := adminservicemock.NewMockAdminServiceYARPCClient(controller)
 	clientBean := client.NewMockBean(controller)
 	clientBean.EXPECT().GetFrontendClient().Return(frontendClient).AnyTimes()
 	clientBean.EXPECT().GetMatchingClient(gomock.Any()).Return(matchingClient, nil).AnyTimes()
@@ -143,6 +141,9 @@ func NewTest(
 	shardMgr := &mocks.ShardManager{}
 	historyMgr := &mocks.HistoryV2Manager{}
 	executionMgr := &mocks.ExecutionManager{}
+	domainReplicationQueue := persistence.NewMockDomainReplicationQueue(controller)
+	domainReplicationQueue.EXPECT().Start().AnyTimes()
+	domainReplicationQueue.EXPECT().Stop().AnyTimes()
 	persistenceBean := persistenceClient.NewMockBean(controller)
 	persistenceBean.EXPECT().GetMetadataManager().Return(metadataMgr).AnyTimes()
 	persistenceBean.EXPECT().GetTaskManager().Return(taskMgr).AnyTimes()
@@ -150,6 +151,7 @@ func NewTest(
 	persistenceBean.EXPECT().GetHistoryManager().Return(historyMgr).AnyTimes()
 	persistenceBean.EXPECT().GetShardManager().Return(shardMgr).AnyTimes()
 	persistenceBean.EXPECT().GetExecutionManager(gomock.Any()).Return(executionMgr, nil).AnyTimes()
+	persistenceBean.EXPECT().GetDomainReplicationQueue().Return(domainReplicationQueue).AnyTimes()
 
 	membershipMonitor := membership.NewMockMonitor(controller)
 	frontendServiceResolver := membership.NewMockServiceResolver(controller)
@@ -161,8 +163,10 @@ func NewTest(
 	membershipMonitor.EXPECT().GetResolver(common.HistoryServiceName).Return(historyServiceResolver, nil).AnyTimes()
 	membershipMonitor.EXPECT().GetResolver(common.WorkerServiceName).Return(workerServiceResolver, nil).AnyTimes()
 
+	scope := tally.NewTestScope("test", nil)
+
 	return &Test{
-		MetricsScope:    tally.NoopScope,
+		MetricsScope:    scope,
 		ClusterMetadata: cluster.NewMockMetadata(controller),
 
 		// other common resources
@@ -170,7 +174,7 @@ func NewTest(
 		DomainCache:       cache.NewMockDomainCache(controller),
 		TimeSource:        clock.NewRealTimeSource(),
 		PayloadSerializer: persistence.NewPayloadSerializer(),
-		MetricsClient:     metrics.NewClient(tally.NoopScope, serviceMetricsIndex),
+		MetricsClient:     metrics.NewClient(scope, serviceMetricsIndex),
 		ArchivalMetadata:  &archiver.MockArchivalMetadata{},
 		ArchiverProvider:  &provider.MockArchiverProvider{},
 
@@ -197,7 +201,7 @@ func NewTest(
 		MetadataMgr:            metadataMgr,
 		TaskMgr:                taskMgr,
 		VisibilityMgr:          visibilityMgr,
-		DomainReplicationQueue: nil,
+		DomainReplicationQueue: domainReplicationQueue,
 		ShardMgr:               shardMgr,
 		HistoryMgr:             historyMgr,
 		ExecutionMgr:           executionMgr,
@@ -313,12 +317,12 @@ func (s *Test) GetSDKClient() workflowservice.WorkflowServiceClient {
 }
 
 // GetFrontendRawClient for testing
-func (s *Test) GetFrontendRawClient() frontend.Client {
+func (s *Test) GetFrontendRawClient() frontend.ClientGRPC {
 	return s.FrontendClient
 }
 
 // GetFrontendClient for testing
-func (s *Test) GetFrontendClient() frontend.Client {
+func (s *Test) GetFrontendClient() frontend.ClientGRPC {
 	return s.FrontendClient
 }
 
@@ -353,7 +357,7 @@ func (s *Test) GetRemoteAdminClient(
 // GetRemoteFrontendClient for testing
 func (s *Test) GetRemoteFrontendClient(
 	cluster string,
-) frontend.Client {
+) frontend.ClientGRPC {
 
 	return s.RemoteFrontendClient
 }
@@ -383,7 +387,7 @@ func (s *Test) GetVisibilityManager() persistence.VisibilityManager {
 // GetDomainReplicationQueue for testing
 func (s *Test) GetDomainReplicationQueue() persistence.DomainReplicationQueue {
 	// user should implement this method for test
-	return nil
+	return s.DomainReplicationQueue
 }
 
 // GetShardManager for testing

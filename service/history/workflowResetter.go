@@ -64,7 +64,6 @@ type (
 		clusterMetadata   cluster.Metadata
 		historyV2Mgr      persistence.HistoryManager
 		historyCache      *historyCache
-		transactionMgr    nDCTransactionMgr
 		newStateRebuilder nDCStateRebuilderProvider
 		logger            log.Logger
 	}

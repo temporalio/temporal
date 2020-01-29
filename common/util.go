@@ -23,16 +23,18 @@ package common
 import (
 	"fmt"
 	"math/rand"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/dgryski/go-farm"
 	"github.com/gogo/protobuf/proto"
+	"github.com/gogo/status"
+	commonproto "go.temporal.io/temporal-proto/common"
 	"go.uber.org/yarpc/yarpcerrors"
 	"golang.org/x/net/context"
-
-	commonproto "go.temporal.io/temporal-proto/common"
+	"google.golang.org/grpc/codes"
 
 	h "github.com/temporalio/temporal/.gen/go/history"
 	m "github.com/temporalio/temporal/.gen/go/matching"
@@ -199,7 +201,7 @@ func IsServiceTransientError(err error) bool {
 
 // IsServiceNonRetryableError checks if the error is a non retryable error.
 func IsServiceNonRetryableError(err error) bool {
-	switch err.(type) {
+	switch err := err.(type) {
 	case *workflow.EntityNotExistsError:
 		return true
 	case *workflow.BadRequestError:
@@ -211,8 +213,7 @@ func IsServiceNonRetryableError(err error) bool {
 	case *workflow.CancellationAlreadyRequestedError:
 		return true
 	case *yarpcerrors.Status:
-		rpcErr := err.(*yarpcerrors.Status)
-		if rpcErr.Code() != yarpcerrors.CodeDeadlineExceeded {
+		if err.Code() != yarpcerrors.CodeDeadlineExceeded {
 			return true
 		}
 		return false
@@ -250,6 +251,26 @@ func IsWhitelistServiceTransientError(err error) bool {
 	return false
 }
 
+// IsWhitelistServiceTransientErrorGRPC checks if the error is a transient error.
+func IsWhitelistServiceTransientErrorGRPC(err error) bool {
+	if err == context.DeadlineExceeded {
+		return true
+	}
+
+	if st, ok := status.FromError(err); ok {
+		if st.Code() == codes.Internal ||
+			st.Code() == codes.ResourceExhausted ||
+			st.Code() == codes.Unavailable ||
+			st.Code() == codes.Unknown ||
+			st.Code() == codes.DeadlineExceeded {
+			// TODO: add *h.ShardOwnershipLostError handle here
+			return true
+		}
+	}
+
+	return false
+}
+
 // WorkflowIDToHistoryShard is used to map workflowID to a shardID
 func WorkflowIDToHistoryShard(workflowID string, numberOfShards int) int {
 	hash := farm.Fingerprint32([]byte(workflowID))
@@ -277,7 +298,7 @@ func IsValidContext(ctx context.Context) error {
 		}
 	}
 	deadline, ok := ctx.Deadline()
-	if ok && deadline.Sub(time.Now()) < contextExpireThreshold {
+	if ok && time.Until(deadline) < contextExpireThreshold {
 		return context.DeadlineExceeded
 	}
 	return nil
@@ -355,6 +376,14 @@ func MaxInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// SortInt64Slice sorts the given int64 slice.
+// Sort is not guaranteed to be stable.
+func SortInt64Slice(slice []int64) {
+	sort.Slice(slice, func(i int, j int) bool {
+		return slice[i] < slice[j]
+	})
 }
 
 // ValidateRetryPolicy validates a retry policy
@@ -437,7 +466,7 @@ func ValidateLongPollContextTimeout(
 	if err != nil {
 		return err
 	}
-	timeout := deadline.Sub(time.Now())
+	timeout := time.Until(deadline)
 	if timeout < MinLongPollTimeout {
 		err := ErrContextTimeoutTooShort
 		logger.Error("Context timeout is too short for long poll API.",

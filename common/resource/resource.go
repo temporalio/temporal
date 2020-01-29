@@ -76,14 +76,14 @@ type (
 		// internal services clients
 
 		GetSDKClient() workflowservice.WorkflowServiceClient
-		GetFrontendRawClient() frontend.Client
-		GetFrontendClient() frontend.Client
+		GetFrontendRawClient() frontend.ClientGRPC
+		GetFrontendClient() frontend.ClientGRPC
 		GetMatchingRawClient() matching.Client
 		GetMatchingClient() matching.Client
 		GetHistoryRawClient() history.Client
 		GetHistoryClient() history.Client
 		GetRemoteAdminClient(cluster string) admin.Client
-		GetRemoteFrontendClient(cluster string) frontend.Client
+		GetRemoteFrontendClient(cluster string) frontend.ClientGRPC
 		GetClientBean() client.Bean
 
 		// persistence clients

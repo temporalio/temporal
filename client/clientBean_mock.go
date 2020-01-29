@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 //
-// Copyright (c) 2019 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -116,10 +116,10 @@ func (mr *MockBeanMockRecorder) SetMatchingClient(client interface{}) *gomock.Ca
 }
 
 // GetFrontendClient mocks base method
-func (m *MockBean) GetFrontendClient() frontend.Client {
+func (m *MockBean) GetFrontendClient() frontend.ClientGRPC {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetFrontendClient")
-	ret0, _ := ret[0].(frontend.Client)
+	ret0, _ := ret[0].(frontend.ClientGRPC)
 	return ret0
 }
 
@@ -130,7 +130,7 @@ func (mr *MockBeanMockRecorder) GetFrontendClient() *gomock.Call {
 }
 
 // SetFrontendClient mocks base method
-func (m *MockBean) SetFrontendClient(client frontend.Client) {
+func (m *MockBean) SetFrontendClient(client frontend.ClientGRPC) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetFrontendClient", client)
 }
@@ -168,10 +168,10 @@ func (mr *MockBeanMockRecorder) SetRemoteAdminClient(cluster, client interface{}
 }
 
 // GetRemoteFrontendClient mocks base method
-func (m *MockBean) GetRemoteFrontendClient(cluster string) frontend.Client {
+func (m *MockBean) GetRemoteFrontendClient(cluster string) frontend.ClientGRPC {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetRemoteFrontendClient", cluster)
-	ret0, _ := ret[0].(frontend.Client)
+	ret0, _ := ret[0].(frontend.ClientGRPC)
 	return ret0
 }
 
@@ -182,7 +182,7 @@ func (mr *MockBeanMockRecorder) GetRemoteFrontendClient(cluster interface{}) *go
 }
 
 // SetRemoteFrontendClient mocks base method
-func (m *MockBean) SetRemoteFrontendClient(cluster string, client frontend.Client) {
+func (m *MockBean) SetRemoteFrontendClient(cluster string, client frontend.ClientGRPC) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetRemoteFrontendClient", cluster, client)
 }

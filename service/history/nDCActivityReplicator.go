@@ -243,10 +243,10 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 					domainID,
 					workflowID,
 					runID,
-					common.Int64Ptr(lcaItem.GetEventID()),
-					common.Int64Ptr(lcaItem.GetVersion()),
-					nil,
-					nil,
+					lcaItem.GetEventID(),
+					lcaItem.GetVersion(),
+					common.EmptyEventID,
+					common.EmptyVersion,
 				)
 			}
 		} else {
@@ -260,10 +260,10 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 					domainID,
 					workflowID,
 					runID,
-					common.Int64Ptr(lcaItem.GetEventID()),
-					common.Int64Ptr(lcaItem.GetVersion()),
-					nil,
-					nil,
+					lcaItem.GetEventID(),
+					lcaItem.GetVersion(),
+					common.EmptyEventID,
+					common.EmptyVersion,
 				)
 			}
 		}

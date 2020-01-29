@@ -27,13 +27,11 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/api/transport"
-	yarpcgrpc "go.uber.org/yarpc/transport/grpc"
 	"go.uber.org/yarpc/transport/tchannel"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
-	serverAdmin "github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"
-	serverFrontend "github.com/temporalio/temporal/.gen/go/temporal/workflowserviceclient"
+	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/common"
 )
 
@@ -44,14 +42,11 @@ const (
 
 // ClientFactory is used to construct rpc clients
 type ClientFactory interface {
-	ClientFrontendClient(c *cli.Context) workflowservice.WorkflowServiceClient
-	ServerFrontendClient(c *cli.Context) serverFrontend.Interface
-	ServerFrontendClientGRPC(c *cli.Context) workflowservice.WorkflowServiceYARPCClient
-	ServerAdminClient(c *cli.Context) serverAdmin.Interface
+	FrontendClient(c *cli.Context) workflowservice.WorkflowServiceClient
+	ServerAdminClient(c *cli.Context) adminservice.AdminServiceYARPCClient
 }
 
 type clientFactory struct {
-	hostPort   string
 	dispatcher *yarpc.Dispatcher
 	logger     *zap.Logger
 }
@@ -68,9 +63,15 @@ func NewClientFactory() ClientFactory {
 	}
 }
 
-// ClientFrontendClient builds a frontend client
-func (b *clientFactory) ClientFrontendClient(c *cli.Context) workflowservice.WorkflowServiceClient {
-	connection, err := grpc.Dial(localHostPortGRPC, grpc.WithInsecure())
+// FrontendClient builds a frontend client
+func (b *clientFactory) FrontendClient(c *cli.Context) workflowservice.WorkflowServiceClient {
+	hostPort := localHostPortGRPC
+
+	if addr := c.GlobalString(FlagAddress); addr != "" {
+		hostPort = addr
+	}
+
+	connection, err := grpc.Dial(hostPort, grpc.WithInsecure())
 	if err != nil {
 		b.logger.Fatal("Failed to create connection", zap.Error(err))
 		return nil
@@ -79,22 +80,10 @@ func (b *clientFactory) ClientFrontendClient(c *cli.Context) workflowservice.Wor
 	return workflowservice.NewWorkflowServiceClient(connection)
 }
 
-// ServerFrontendClient builds a frontend client (based on server side thrift interface)
-func (b *clientFactory) ServerFrontendClient(c *cli.Context) serverFrontend.Interface {
-	b.ensureDispatcher(c)
-	return serverFrontend.New(b.dispatcher.ClientConfig(cadenceFrontendService))
-}
-
-// ServerFrontendClient builds a frontend client (based on server side thrift interface)
-func (b *clientFactory) ServerFrontendClientGRPC(c *cli.Context) workflowservice.WorkflowServiceYARPCClient {
-	b.ensureDispatcher(c)
-	return workflowservice.NewWorkflowServiceYARPCClient(b.dispatcher.ClientConfig(cadenceFrontendService))
-}
-
 // ServerAdminClient builds an admin client (based on server side thrift interface)
-func (b *clientFactory) ServerAdminClient(c *cli.Context) serverAdmin.Interface {
+func (b *clientFactory) ServerAdminClient(c *cli.Context) adminservice.AdminServiceYARPCClient {
 	b.ensureDispatcher(c)
-	return serverAdmin.New(b.dispatcher.ClientConfig(cadenceFrontendService))
+	return adminservice.NewAdminServiceYARPCClient(b.dispatcher.ClientConfig(cadenceFrontendService))
 }
 
 func (b *clientFactory) ensureDispatcher(c *cli.Context) {
@@ -102,26 +91,16 @@ func (b *clientFactory) ensureDispatcher(c *cli.Context) {
 		return
 	}
 
-	if c.IsSet(FlagGRPC) {
-		b.hostPort = localHostPortGRPC
-	} else {
-		b.hostPort = localHostPort
-	}
-
+	hostPort := localHostPort
 	if addr := c.GlobalString(FlagAddress); addr != "" {
-		b.hostPort = addr
+		hostPort = addr
 	}
 
-	var unaryOutbound transport.UnaryOutbound
-	if c.IsSet(FlagGRPC) {
-		unaryOutbound = yarpcgrpc.NewTransport().NewSingleOutbound(b.hostPort)
-	} else {
-		ch, err := tchannel.NewChannelTransport(tchannel.ServiceName(cadenceClientName), tchannel.ListenAddr("127.0.0.1:0"))
-		if err != nil {
-			b.logger.Fatal("Failed to create transport channel", zap.Error(err))
-		}
-		unaryOutbound = ch.NewSingleOutbound(b.hostPort)
+	ch, err := tchannel.NewChannelTransport(tchannel.ServiceName(cadenceClientName), tchannel.ListenAddr("127.0.0.1:0"))
+	if err != nil {
+		b.logger.Fatal("Failed to create transport channel", zap.Error(err))
 	}
+	unaryOutbound := ch.NewSingleOutbound(hostPort)
 
 	b.dispatcher = yarpc.NewDispatcher(yarpc.Config{
 		Name: cadenceClientName,

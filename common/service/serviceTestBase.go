@@ -43,7 +43,6 @@ type (
 		hostInfo          *membership.HostInfo
 		clusterMetadata   cluster.Metadata
 		messagingClient   messaging.Client
-		kafkaClient       messaging.Client
 		clientBean        client.Bean
 		timeSource        clock.TimeSource
 		membershipMonitor membership.Monitor

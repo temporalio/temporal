@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination replicationTaskProcessor_mock.go
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination replicationTaskProcessor_mock.go -self_package github.com/uber/cadence/service/history
 
 package history
 
@@ -29,10 +29,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 	"go.uber.org/yarpc/yarpcerrors"
 
 	h "github.com/temporalio/temporal/.gen/go/history"
-	r "github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/go/shared"
 	hc "github.com/temporalio/temporal/client/history"
 	"github.com/temporalio/temporal/common"
@@ -43,6 +44,7 @@ import (
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/xdc"
+	"github.com/temporalio/temporal/service/frontend/adapter"
 )
 
 const (
@@ -82,7 +84,7 @@ type (
 		lastRetrievedMessageID int64
 
 		requestChan   chan<- *request
-		syncShardChan chan *r.SyncShardStatus
+		syncShardChan chan *commonproto.SyncShardStatus
 		done          chan struct{}
 	}
 
@@ -92,8 +94,8 @@ type (
 	}
 
 	request struct {
-		token    *r.ReplicationToken
-		respChan chan<- *r.ReplicationMessages
+		token    *commonproto.ReplicationToken
+		respChan chan<- *commonproto.ReplicationMessages
 	}
 )
 
@@ -154,7 +156,7 @@ func NewReplicationTaskProcessor(
 		taskRetryPolicy:        taskRetryPolicy,
 		noTaskRetrier:          noTaskRetrier,
 		requestChan:            replicationTaskFetcher.GetRequestChan(),
-		syncShardChan:          make(chan *r.SyncShardStatus),
+		syncShardChan:          make(chan *commonproto.SyncShardStatus),
 		done:                   make(chan struct{}),
 		lastProcessedMessageID: emptyMessageID,
 		lastRetrievedMessageID: emptyMessageID,
@@ -274,21 +276,21 @@ func (p *ReplicationTaskProcessorImpl) cleanupAckedReplicationTasks() error {
 	)
 }
 
-func (p *ReplicationTaskProcessorImpl) sendFetchMessageRequest() <-chan *r.ReplicationMessages {
-	respChan := make(chan *r.ReplicationMessages, 1)
+func (p *ReplicationTaskProcessorImpl) sendFetchMessageRequest() <-chan *commonproto.ReplicationMessages {
+	respChan := make(chan *commonproto.ReplicationMessages, 1)
 	// TODO: when we support prefetching, LastRetrievedMessageId can be different than LastProcessedMessageId
 	p.requestChan <- &request{
-		token: &r.ReplicationToken{
-			ShardID:                common.Int32Ptr(int32(p.shard.GetShardID())),
-			LastRetrievedMessageId: common.Int64Ptr(p.lastRetrievedMessageID),
-			LastProcessedMessageId: common.Int64Ptr(p.lastProcessedMessageID),
+		token: &commonproto.ReplicationToken{
+			ShardID:                int32(p.shard.GetShardID()),
+			LastRetrievedMessageId: p.lastRetrievedMessageID,
+			LastProcessedMessageId: p.lastProcessedMessageID,
 		},
 		respChan: respChan,
 	}
 	return respChan
 }
 
-func (p *ReplicationTaskProcessorImpl) processResponse(response *r.ReplicationMessages) {
+func (p *ReplicationTaskProcessorImpl) processResponse(response *commonproto.ReplicationMessages) {
 
 	p.syncShardChan <- response.GetSyncShardStatus()
 	// Note here we check replication tasks instead of hasMore. The expectation is that in a steady state
@@ -321,7 +323,7 @@ func (p *ReplicationTaskProcessorImpl) syncShardStatusLoop() {
 		p.config.ShardSyncMinInterval(),
 		p.config.ShardSyncTimerJitterCoefficient(),
 	))
-	var syncShardTask *r.SyncShardStatus
+	var syncShardTask *commonproto.SyncShardStatus
 	for {
 		select {
 		case syncShardRequest := <-p.syncShardChan:
@@ -345,7 +347,7 @@ func (p *ReplicationTaskProcessorImpl) syncShardStatusLoop() {
 }
 
 func (p *ReplicationTaskProcessorImpl) handleSyncShardStatus(
-	status *r.SyncShardStatus,
+	status *commonproto.SyncShardStatus,
 ) error {
 
 	if status == nil ||
@@ -359,11 +361,11 @@ func (p *ReplicationTaskProcessorImpl) handleSyncShardStatus(
 	return p.historyEngine.SyncShardStatus(ctx, &h.SyncShardStatusRequest{
 		SourceCluster: common.StringPtr(p.sourceCluster),
 		ShardId:       common.Int64Ptr(int64(p.shard.GetShardID())),
-		Timestamp:     status.Timestamp,
+		Timestamp:     &status.Timestamp,
 	})
 }
 
-func (p *ReplicationTaskProcessorImpl) processSingleTask(replicationTask *r.ReplicationTask) error {
+func (p *ReplicationTaskProcessorImpl) processSingleTask(replicationTask *commonproto.ReplicationTask) error {
 	err := backoff.Retry(func() error {
 		return p.processTaskOnce(replicationTask)
 	}, p.taskRetryPolicy, isTransientRetryableError)
@@ -381,24 +383,24 @@ func (p *ReplicationTaskProcessorImpl) processSingleTask(replicationTask *r.Repl
 	return nil
 }
 
-func (p *ReplicationTaskProcessorImpl) processTaskOnce(replicationTask *r.ReplicationTask) error {
+func (p *ReplicationTaskProcessorImpl) processTaskOnce(replicationTask *commonproto.ReplicationTask) error {
 	var err error
 	var scope int
 	switch replicationTask.GetTaskType() {
-	case r.ReplicationTaskTypeDomain:
+	case enums.ReplicationTaskTypeDomain:
 		// Domain replication task should be handled in worker (domainReplicationMessageProcessor)
 		panic("task type not supported")
-	case r.ReplicationTaskTypeSyncShardStatus:
+	case enums.ReplicationTaskTypeSyncShardStatus:
 		// Shard status will be sent as part of the Replication message without kafka
-	case r.ReplicationTaskTypeSyncActivity:
+	case enums.ReplicationTaskTypeSyncActivity:
 		scope = metrics.SyncActivityTaskScope
 		err = p.handleActivityTask(replicationTask)
-	case r.ReplicationTaskTypeHistory:
+	case enums.ReplicationTaskTypeHistory:
 		scope = metrics.HistoryReplicationTaskScope
 		err = p.handleHistoryReplicationTask(replicationTask)
-	case r.ReplicationTaskTypeHistoryMetadata:
+	case enums.ReplicationTaskTypeHistoryMetadata:
 		// Without kafka we should not have size limits so we don't necessary need this in the new replication scheme.
-	case r.ReplicationTaskTypeHistoryV2:
+	case enums.ReplicationTaskTypeHistoryV2:
 		scope = metrics.HistoryReplicationV2TaskScope
 		err = p.handleHistoryReplicationTaskV2(replicationTask)
 	default:
@@ -420,7 +422,7 @@ func (p *ReplicationTaskProcessorImpl) processTaskOnce(replicationTask *r.Replic
 	return err
 }
 
-func (p *ReplicationTaskProcessorImpl) putReplicationTaskToDLQ(replicationTask *r.ReplicationTask) error {
+func (p *ReplicationTaskProcessorImpl) putReplicationTaskToDLQ(replicationTask *commonproto.ReplicationTask) error {
 	request, err := p.generateDLQRequest(replicationTask)
 	if err != nil {
 		p.logger.Error("Failed to generate DLQ replication task.", tag.Error(err))
@@ -433,16 +435,17 @@ func (p *ReplicationTaskProcessorImpl) putReplicationTaskToDLQ(replicationTask *
 		err := p.shard.GetExecutionManager().PutReplicationTaskToDLQ(request)
 		if err != nil {
 			p.logger.Error("Failed to put replication task to DLQ.", tag.Error(err))
+			p.metricsClient.IncCounter(metrics.ReplicationTaskFetcherScope, metrics.ReplicationDLQFailed)
 		}
 		return err
 	}, p.dlqRetryPolicy, p.shouldRetryDLQ)
 }
 
 func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
-	replicationTask *r.ReplicationTask,
+	replicationTask *commonproto.ReplicationTask,
 ) (*persistence.PutReplicationTaskToDLQRequest, error) {
-	switch *replicationTask.TaskType {
-	case r.ReplicationTaskTypeSyncActivity:
+	switch replicationTask.TaskType {
+	case enums.ReplicationTaskTypeSyncActivity:
 		taskAttributes := replicationTask.GetSyncActivityTaskAttributes()
 		return &persistence.PutReplicationTaskToDLQRequest{
 			SourceClusterName: p.sourceCluster,
@@ -456,7 +459,7 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 			},
 		}, nil
 
-	case r.ReplicationTaskTypeHistory:
+	case enums.ReplicationTaskTypeHistory:
 		taskAttributes := replicationTask.GetHistoryTaskAttributes()
 		return &persistence.PutReplicationTaskToDLQRequest{
 			SourceClusterName: p.sourceCluster,
@@ -473,10 +476,10 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 				ResetWorkflow:       taskAttributes.GetResetWorkflow(),
 			},
 		}, nil
-	case r.ReplicationTaskTypeHistoryV2:
+	case enums.ReplicationTaskTypeHistoryV2:
 		taskAttributes := replicationTask.GetHistoryTaskV2Attributes()
 
-		eventsDataBlob := persistence.NewDataBlobFromThrift(taskAttributes.GetEvents())
+		eventsDataBlob := persistence.NewDataBlobFromProto(taskAttributes.GetEvents())
 		events, err := p.historySerializer.DeserializeBatchEvents(eventsDataBlob)
 		if err != nil {
 			return nil, err
@@ -529,7 +532,7 @@ func (p *ReplicationTaskProcessorImpl) shouldRetryDLQ(err error) bool {
 }
 
 func toPersistenceReplicationInfo(
-	info map[string]*shared.ReplicationInfo,
+	info map[string]*commonproto.ReplicationInfo,
 ) map[string]*persistence.ReplicationInfo {
 	replicationInfoMap := make(map[string]*persistence.ReplicationInfo)
 	for k, v := range info {
@@ -570,30 +573,30 @@ func (p *ReplicationTaskProcessorImpl) updateFailureMetric(scope int, err error)
 }
 
 func (p *ReplicationTaskProcessorImpl) handleActivityTask(
-	task *r.ReplicationTask,
+	task *commonproto.ReplicationTask,
 ) error {
 
-	attr := task.SyncActivityTaskAttributes
+	attr := task.GetSyncActivityTaskAttributes()
 	doContinue, err := p.filterTask(attr.GetDomainId())
 	if err != nil || !doContinue {
 		return err
 	}
 
 	request := &h.SyncActivityRequest{
-		DomainId:           attr.DomainId,
-		WorkflowId:         attr.WorkflowId,
-		RunId:              attr.RunId,
-		Version:            attr.Version,
-		ScheduledId:        attr.ScheduledId,
-		ScheduledTime:      attr.ScheduledTime,
-		StartedId:          attr.StartedId,
-		StartedTime:        attr.StartedTime,
-		LastHeartbeatTime:  attr.LastHeartbeatTime,
+		DomainId:           &attr.DomainId,
+		WorkflowId:         &attr.WorkflowId,
+		RunId:              &attr.RunId,
+		Version:            &attr.Version,
+		ScheduledId:        &attr.ScheduledId,
+		ScheduledTime:      &attr.ScheduledTime,
+		StartedId:          &attr.StartedId,
+		StartedTime:        &attr.StartedTime,
+		LastHeartbeatTime:  &attr.LastHeartbeatTime,
 		Details:            attr.Details,
-		Attempt:            attr.Attempt,
-		LastFailureReason:  attr.LastFailureReason,
-		LastWorkerIdentity: attr.LastWorkerIdentity,
-		VersionHistory:     attr.GetVersionHistory(),
+		Attempt:            &attr.Attempt,
+		LastFailureReason:  &attr.LastFailureReason,
+		LastWorkerIdentity: &attr.LastWorkerIdentity,
+		VersionHistory:     adapter.ToThriftVersionHistory(attr.GetVersionHistory()),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
 	defer cancel()
@@ -635,10 +638,10 @@ func (p *ReplicationTaskProcessorImpl) handleActivityTask(
 			retryV2Err.GetDomainId(),
 			retryV2Err.GetWorkflowId(),
 			retryV2Err.GetRunId(),
-			retryV2Err.StartEventId,
-			retryV2Err.StartEventVersion,
-			retryV2Err.EndEventId,
-			retryV2Err.EndEventVersion,
+			retryV2Err.GetStartEventId(),
+			retryV2Err.GetStartEventVersion(),
+			retryV2Err.GetEndEventId(),
+			retryV2Err.GetEndEventVersion(),
 		); resendErr != nil {
 			p.logger.Error("error resend history for sync activity", tag.Error(resendErr))
 			// should return the replication error, not the resending error
@@ -651,10 +654,10 @@ func (p *ReplicationTaskProcessorImpl) handleActivityTask(
 
 //TODO: remove this part after 2DC deprecation
 func (p *ReplicationTaskProcessorImpl) handleHistoryReplicationTask(
-	task *r.ReplicationTask,
+	task *commonproto.ReplicationTask,
 ) error {
 
-	attr := task.HistoryTaskAttributes
+	attr := task.GetHistoryTaskAttributes()
 	doContinue, err := p.filterTask(attr.GetDomainId())
 	if err != nil || !doContinue {
 		return err
@@ -662,20 +665,20 @@ func (p *ReplicationTaskProcessorImpl) handleHistoryReplicationTask(
 
 	request := &h.ReplicateEventsRequest{
 		SourceCluster: common.StringPtr(p.sourceCluster),
-		DomainUUID:    attr.DomainId,
+		DomainUUID:    &attr.DomainId,
 		WorkflowExecution: &shared.WorkflowExecution{
-			WorkflowId: attr.WorkflowId,
-			RunId:      attr.RunId,
+			WorkflowId: &attr.WorkflowId,
+			RunId:      &attr.RunId,
 		},
-		FirstEventId:      attr.FirstEventId,
-		NextEventId:       attr.NextEventId,
-		Version:           attr.Version,
-		ReplicationInfo:   attr.ReplicationInfo,
-		History:           attr.History,
-		NewRunHistory:     attr.NewRunHistory,
+		FirstEventId:      &attr.FirstEventId,
+		NextEventId:       &attr.NextEventId,
+		Version:           &attr.Version,
+		ReplicationInfo:   adapter.ToThriftReplicationInfos(attr.ReplicationInfo),
+		History:           adapter.ToThriftHistory(attr.History),
+		NewRunHistory:     adapter.ToThriftHistory(attr.NewRunHistory),
 		ForceBufferEvents: common.BoolPtr(false),
-		ResetWorkflow:     attr.ResetWorkflow,
-		NewRunNDC:         attr.NewRunNDC,
+		ResetWorkflow:     &attr.ResetWorkflow,
+		NewRunNDC:         &attr.NewRunNDC,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
 	defer cancel()
@@ -708,25 +711,25 @@ func (p *ReplicationTaskProcessorImpl) handleHistoryReplicationTask(
 }
 
 func (p *ReplicationTaskProcessorImpl) handleHistoryReplicationTaskV2(
-	task *r.ReplicationTask,
+	task *commonproto.ReplicationTask,
 ) error {
 
-	attr := task.HistoryTaskV2Attributes
+	attr := task.GetHistoryTaskV2Attributes()
 	doContinue, err := p.filterTask(attr.GetDomainId())
 	if err != nil || !doContinue {
 		return err
 	}
 
 	request := &h.ReplicateEventsV2Request{
-		DomainUUID: attr.DomainId,
+		DomainUUID: &attr.DomainId,
 		WorkflowExecution: &shared.WorkflowExecution{
-			WorkflowId: attr.WorkflowId,
-			RunId:      attr.RunId,
+			WorkflowId: &attr.WorkflowId,
+			RunId:      &attr.RunId,
 		},
-		VersionHistoryItems: attr.VersionHistoryItems,
-		Events:              attr.Events,
+		VersionHistoryItems: adapter.ToThriftVersionHistoryItems(attr.VersionHistoryItems),
+		Events:              adapter.ToThriftDataBlob(attr.Events),
 		// new run events does not need version history since there is no prior events
-		NewRunEvents: attr.NewRunEvents,
+		NewRunEvents: adapter.ToThriftDataBlob(attr.NewRunEvents),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
 	defer cancel()
@@ -744,10 +747,10 @@ func (p *ReplicationTaskProcessorImpl) handleHistoryReplicationTaskV2(
 		retryErr.GetDomainId(),
 		retryErr.GetWorkflowId(),
 		retryErr.GetRunId(),
-		retryErr.StartEventId,
-		retryErr.StartEventVersion,
-		retryErr.EndEventId,
-		retryErr.EndEventVersion,
+		retryErr.GetStartEventId(),
+		retryErr.GetStartEventVersion(),
+		retryErr.GetEndEventId(),
+		retryErr.GetEndEventVersion(),
 	); resendErr != nil {
 		p.logger.Error("error resend history for history event v2", tag.Error(resendErr))
 		// should return the replication error, not the resending error

@@ -41,7 +41,11 @@ const cassandraPersistenceName = "cassandra"
 func CreateCassandraKeyspace(s *gocql.Session, keyspace string, replicas int, overwrite bool) (err error) {
 	// if overwrite flag is set, drop the keyspace and create a new one
 	if overwrite {
-		DropCassandraKeyspace(s, keyspace)
+		err = DropCassandraKeyspace(s, keyspace)
+		if err != nil {
+			log.Error(`drop keyspace error`, err)
+			return
+		}
 	}
 	err = s.Query(fmt.Sprintf(`CREATE KEYSPACE IF NOT EXISTS %s WITH replication = {
 		'class' : 'SimpleStrategy', 'replication_factor' : %d}`, keyspace, replicas)).Exec()
@@ -90,8 +94,10 @@ func loadCassandraSchema(
 		if err != nil {
 			return fmt.Errorf("error reading contents of file %v:%v", file, err.Error())
 		}
-		tmpFile.WriteString(string(content))
-		tmpFile.WriteString("\n")
+		_, err = tmpFile.WriteString(string(content) + "\n")
+		if err != nil {
+			return fmt.Errorf("error writing string to file, err: %v", err.Error())
+		}
 	}
 
 	tmpFile.Close()

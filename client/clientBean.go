@@ -35,7 +35,7 @@ import (
 	"go.uber.org/yarpc/api/peer"
 	"go.uber.org/yarpc/api/transport"
 	"go.uber.org/yarpc/peer/roundrobin"
-	"go.uber.org/yarpc/transport/tchannel"
+	yarpcgrpc "go.uber.org/yarpc/transport/grpc"
 
 	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/client/frontend"
@@ -57,12 +57,12 @@ type (
 		SetHistoryClient(client history.Client)
 		GetMatchingClient(domainIDToName DomainIDToNameFunc) (matching.Client, error)
 		SetMatchingClient(client matching.Client)
-		GetFrontendClient() frontend.Client
-		SetFrontendClient(client frontend.Client)
+		GetFrontendClient() frontend.ClientGRPC
+		SetFrontendClient(client frontend.ClientGRPC)
 		GetRemoteAdminClient(cluster string) admin.Client
 		SetRemoteAdminClient(cluster string, client admin.Client)
-		GetRemoteFrontendClient(cluster string) frontend.Client
-		SetRemoteFrontendClient(cluster string, client frontend.Client)
+		GetRemoteFrontendClient(cluster string) frontend.ClientGRPC
+		SetRemoteFrontendClient(cluster string, client frontend.ClientGRPC)
 	}
 
 	// DispatcherProvider provides a diapatcher to a given address
@@ -74,9 +74,9 @@ type (
 		sync.Mutex
 		historyClient         history.Client
 		matchingClient        atomic.Value
-		frontendClient        frontend.Client
+		frontendClient        frontend.ClientGRPC
 		remoteAdminClients    map[string]admin.Client
-		remoteFrontendClients map[string]frontend.Client
+		remoteFrontendClients map[string]frontend.ClientGRPC
 		factory               Factory
 	}
 
@@ -111,7 +111,8 @@ func NewClientBean(factory Factory, dispatcherProvider DispatcherProvider, clust
 	}
 
 	remoteAdminClients := map[string]admin.Client{}
-	remoteFrontendClients := map[string]frontend.Client{}
+	remoteFrontendClients := map[string]frontend.ClientGRPC{}
+
 	for clusterName, info := range clusterMetadata.GetAllClusterInfo() {
 		if !info.Enabled {
 			continue
@@ -131,18 +132,17 @@ func NewClientBean(factory Factory, dispatcherProvider DispatcherProvider, clust
 			return nil, err
 		}
 
-		frontendClient, err := factory.NewFrontendClientWithTimeoutAndDispatcher(
-			info.RPCName,
+		remoteFrontendClient, err := factory.NewFrontendClientWithTimeoutGRPC(
+			info.RPCAddress,
 			frontend.DefaultTimeout,
 			frontend.DefaultLongPollTimeout,
-			dispatcher,
 		)
 		if err != nil {
 			return nil, err
 		}
 
 		remoteAdminClients[clusterName] = adminClient
-		remoteFrontendClients[clusterName] = frontendClient
+		remoteFrontendClients[clusterName] = remoteFrontendClient
 	}
 
 	return &clientBeanImpl{
@@ -179,12 +179,12 @@ func (h *clientBeanImpl) SetMatchingClient(
 	h.matchingClient.Store(client)
 }
 
-func (h *clientBeanImpl) GetFrontendClient() frontend.Client {
+func (h *clientBeanImpl) GetFrontendClient() frontend.ClientGRPC {
 	return h.frontendClient
 }
 
 func (h *clientBeanImpl) SetFrontendClient(
-	client frontend.Client,
+	client frontend.ClientGRPC,
 ) {
 
 	h.frontendClient = client
@@ -210,7 +210,7 @@ func (h *clientBeanImpl) SetRemoteAdminClient(
 	h.remoteAdminClients[cluster] = client
 }
 
-func (h *clientBeanImpl) GetRemoteFrontendClient(cluster string) frontend.Client {
+func (h *clientBeanImpl) GetRemoteFrontendClient(cluster string) frontend.ClientGRPC {
 	client, ok := h.remoteFrontendClients[cluster]
 	if !ok {
 		panic(fmt.Sprintf(
@@ -224,7 +224,7 @@ func (h *clientBeanImpl) GetRemoteFrontendClient(cluster string) frontend.Client
 
 func (h *clientBeanImpl) SetRemoteFrontendClient(
 	cluster string,
-	client frontend.Client,
+	client frontend.ClientGRPC,
 ) {
 
 	h.remoteFrontendClients[cluster] = client
@@ -256,22 +256,15 @@ func NewDNSYarpcDispatcherProvider(logger log.Logger, interval time.Duration) Di
 }
 
 func (p *dnsDispatcherProvider) Get(serviceName string, address string) (*yarpc.Dispatcher, error) {
-	tchanTransport, err := tchannel.NewTransport(
-		tchannel.ServiceName(serviceName),
-		// this aim to get rid of the annoying popup about accepting incoming network connections
-		tchannel.ListenAddr("127.0.0.1:0"),
-	)
-	if err != nil {
-		return nil, err
-	}
+	grpcTransport := yarpcgrpc.NewTransport()
 
-	peerList := roundrobin.New(tchanTransport)
+	peerList := roundrobin.New(grpcTransport)
 	peerListUpdater, err := newDNSUpdater(peerList, address, p.interval, p.logger)
 	if err != nil {
 		return nil, err
 	}
 	peerListUpdater.Start()
-	outbound := tchanTransport.NewOutbound(peerList)
+	outbound := grpcTransport.NewOutbound(peerList)
 
 	p.logger.Info("Creating RPC dispatcher outbound", tag.Service(serviceName), tag.Address(address))
 

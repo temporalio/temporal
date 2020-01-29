@@ -27,6 +27,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 
@@ -50,7 +52,8 @@ func TestDeliverBufferTasks(t *testing.T) {
 			rps := 0.1
 			tlm.matcher.UpdateRatelimit(&rps)
 			tlm.taskReader.taskBuffer <- &persistence.TaskInfo{}
-			tlm.matcher.ratelimit(context.Background()) // consume the token
+			_, err := tlm.matcher.ratelimit(context.Background()) // consume the token
+			assert.NoError(t, err)
 			tlm.taskReader.cancelFunc()
 		},
 	}

@@ -186,6 +186,9 @@ func (c *clientImpl) RemoveTask(
 	var client historyserviceclient.Interface
 	if request.ShardID != nil {
 		client, err = c.getClientForShardID(int(request.GetShardID()))
+		if err != nil {
+			return err
+		}
 	}
 	op := func(ctx context.Context, client historyserviceclient.Interface) error {
 		var err error
@@ -208,6 +211,9 @@ func (c *clientImpl) CloseShard(
 	var client historyserviceclient.Interface
 	if request.ShardID != nil {
 		client, err = c.getClientForShardID(int(request.GetShardID()))
+		if err != nil {
+			return err
+		}
 	}
 	op := func(ctx context.Context, client historyserviceclient.Interface) error {
 		var err error
@@ -811,6 +817,25 @@ func (c *clientImpl) GetReplicationMessages(
 	}
 
 	return response, nil
+}
+
+func (c *clientImpl) GetDLQReplicationMessages(
+	ctx context.Context,
+	request *replicator.GetDLQReplicationMessagesRequest,
+	opts ...yarpc.CallOption,
+) (*replicator.GetDLQReplicationMessagesResponse, error) {
+	// All workflow IDs are in the same shard per request
+	workflowID := request.GetTaskInfos()[0].GetWorkflowID()
+	client, err := c.getClientForWorkflowID(workflowID)
+	if err != nil {
+		return nil, err
+	}
+
+	return client.GetDLQReplicationMessages(
+		ctx,
+		request,
+		opts...,
+	)
 }
 
 func (c *clientImpl) ReapplyEvents(

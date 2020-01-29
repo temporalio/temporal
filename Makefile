@@ -1,4 +1,4 @@
-.PHONY: test bins clean cover cover_ci
+.PHONY: test bins clean cover cover_ci unit-test
 PROJECT_ROOT = github.com/temporalio/temporal
 
 export PATH := $(shell go env GOPATH)/bin:$(PATH)
@@ -27,6 +27,8 @@ THRIFTRW_SRCS = \
   idl/github.com/temporalio/temporal/shared.thrift \
   idl/github.com/temporalio/temporal/admin.thrift \
   idl/github.com/temporalio/temporal/sqlblobs.thrift \
+  idl/github.com/temporalio/temporal/checksum.thrift \
+  idl/github.com/temporalio/temporal/persistenceblobs.thrift \
 
 PROGS = cadence
 TEST_TIMEOUT = 20m
@@ -157,7 +159,7 @@ yarpc-install:
 clean_thrift:
 	rm -rf .gen/go
 
-thriftc: yarpc-install $(THRIFTRW_GEN_SRC)
+thriftc: yarpc-install $(THRIFTRW_GEN_SRC) copyright
 
 copyright: cmd/tools/copyright/licensegen.go
 	GOOS= GOARCH= go run ./cmd/tools/copyright/licensegen.go --verifyOnly
@@ -177,6 +179,10 @@ cadence: $(TOOLS_SRC)
 cadence-server: $(ALL_SRC)
 	@echo "compiling cadence-server with OS: $(GOOS), ARCH: $(GOARCH)"
 	go build -ldflags '$(GO_BUILD_LDFLAGS)' -i -o cadence-server cmd/server/main.go
+
+cadence-canary: $(ALL_SRC)
+	@echo "compiling cadence-canary with OS: $(GOOS), ARCH: $(GOARCH)"
+	go build -i -o cadence-canary cmd/canary/main.go
 
 go-generate:
 	GO111MODULE=off go get -u github.com/myitcv/gobin
@@ -204,7 +210,7 @@ fmt:
 	@echo "running goimports"
 	@goimports -local "github.com/temporalio/temporal" -w $(ALL_SRC)
 
-bins_nothrift: fmt lint copyright cadence-cassandra-tool cadence-sql-tool cadence cadence-server
+bins_nothrift: fmt lint copyright cadence-cassandra-tool cadence-sql-tool cadence cadence-server cadence-canary
 
 bins: proto thriftc bins_nothrift
 
@@ -212,6 +218,13 @@ test: bins
 	@rm -f test
 	@rm -f test.log
 	@for dir in $(TEST_DIRS); do \
+		go test -timeout $(TEST_TIMEOUT) -race -coverprofile=$@ "$$dir" $(TEST_TAG) | tee -a test.log; \
+	done;
+
+unit-test:
+	@rm -f test
+	@rm -f test.log
+	@for dir in $(PKG_TEST_DIRS); do \
 		go test -timeout $(TEST_TIMEOUT) -race -coverprofile=$@ "$$dir" $(TEST_TAG) | tee -a test.log; \
 	done;
 
@@ -225,7 +238,7 @@ test_xdc: bins
 		go test -timeout $(TEST_TIMEOUT) -coverprofile=$@ "$$dir" $(TEST_TAG) | tee -a test.log; \
 	done;
 
-cover_profile: clean bins_nothrift
+cover_profile: clean bins
 	@mkdir -p $(BUILD)
 	@mkdir -p $(COVER_ROOT)
 	@echo "mode: atomic" > $(UNIT_COVER_FILE)
@@ -237,7 +250,7 @@ cover_profile: clean bins_nothrift
 		cat $(BUILD)/"$$dir"/coverage.out | grep -v "^mode: \w\+" >> $(UNIT_COVER_FILE); \
 	done;
 
-cover_integration_profile: clean bins_nothrift
+cover_integration_profile: clean bins
 	@mkdir -p $(BUILD)
 	@mkdir -p $(COVER_ROOT)
 	@echo "mode: atomic" > $(INTEG_COVER_FILE)
@@ -247,7 +260,7 @@ cover_integration_profile: clean bins_nothrift
 	@time go test $(INTEG_TEST_ROOT) $(TEST_ARG) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_DIR)/coverage.out || exit 1;
 	@cat $(BUILD)/$(INTEG_TEST_DIR)/coverage.out | grep -v "^mode: \w\+" >> $(INTEG_COVER_FILE)
 
-cover_xdc_profile: clean bins_nothrift
+cover_xdc_profile: clean bins
 	@mkdir -p $(BUILD)
 	@mkdir -p $(COVER_ROOT)
 	@echo "mode: atomic" > $(INTEG_XDC_COVER_FILE)
@@ -257,7 +270,7 @@ cover_xdc_profile: clean bins_nothrift
 	@time go test -v -timeout $(TEST_TIMEOUT) $(INTEG_TEST_XDC_ROOT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_XDC_DIR)/coverage.out || exit 1;
 	@cat $(BUILD)/$(INTEG_TEST_XDC_DIR)/coverage.out | grep -v "^mode: \w\+" | grep -v "mode: set" >> $(INTEG_XDC_COVER_FILE)
 
-cover_ndc_profile: clean bins_nothrift
+cover_ndc_profile: clean bins
 	@mkdir -p $(BUILD)
 	@mkdir -p $(COVER_ROOT)
 	@echo "mode: atomic" > $(INTEG_NDC_COVER_FILE)
@@ -267,13 +280,14 @@ cover_ndc_profile: clean bins_nothrift
 	@time go test -v -timeout $(TEST_TIMEOUT) $(INTEG_TEST_NDC_ROOT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_NDC_DIR)/coverage.out -count=$(TEST_RUN_COUNT) || exit 1;
 	@cat $(BUILD)/$(INTEG_TEST_NDC_DIR)/coverage.out | grep -v "^mode: \w\+" | grep -v "mode: set" >> $(INTEG_NDC_COVER_FILE)
 
-$(COVER_ROOT)/cover.out: $(UNIT_COVER_FILE) $(INTEG_CASS_COVER_FILE) $(INTEG_XDC_CASS_COVER_FILE) $(INTEG_SQL_COVER_FILE) $(INTEG_XDC_SQL_COVER_FILE)
+#$(COVER_ROOT)/cover.out: $(UNIT_COVER_FILE) $(INTEG_CASS_COVER_FILE) $(INTEG_XDC_CASS_COVER_FILE) $(INTEG_SQL_COVER_FILE) $(INTEG_XDC_SQL_COVER_FILE)
+$(COVER_ROOT)/cover.out: $(UNIT_COVER_FILE) $(INTEG_CASS_COVER_FILE)
 	@echo "mode: atomic" > $(COVER_ROOT)/cover.out
 	cat $(UNIT_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP ".gen|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
 	cat $(INTEG_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP ".gen|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
-	cat $(INTEG_XDC_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP ".gen|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
-	cat $(INTEG_SQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP ".gen|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
-	cat $(INTEG_XDC_SQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP ".gen|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
+#	cat $(INTEG_XDC_CASS_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP ".gen|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
+#	cat $(INTEG_SQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP ".gen|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
+#	cat $(INTEG_XDC_SQL_COVER_FILE) | grep -v "^mode: \w\+" | grep -vP ".gen|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
 
 cover: $(COVER_ROOT)/cover.out
 	go tool cover -html=$(COVER_ROOT)/cover.out;
@@ -283,9 +297,10 @@ cover_ci: $(COVER_ROOT)/cover.out
 
 clean:
 	rm -f cadence
+	rm -f cadence-server
+	rm -f cadence-canary
 	rm -f cadence-sql-tool
 	rm -f cadence-cassandra-tool
-	rm -f cadence-server
 	rm -Rf $(BUILD)
 
 install-schema: bins
@@ -348,3 +363,6 @@ start-cdc-standby: bins
 
 start-cdc-other: bins
 	./cadence-server --zone other start
+
+start-canary: bins
+	./cadence-canary start

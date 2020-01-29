@@ -22,13 +22,10 @@ package archiver
 
 import (
 	"bytes"
-	"context"
 	"encoding/gob"
 	"time"
 
 	"github.com/dgryski/go-farm"
-
-	"go.temporal.io/temporal"
 	"go.temporal.io/temporal/activity"
 
 	"github.com/temporalio/temporal/common/log"
@@ -42,7 +39,7 @@ func MaxArchivalIterationTimeout() time.Duration {
 
 func hash(i interface{}) uint64 {
 	var b bytes.Buffer
-	gob.NewEncoder(&b).Encode(i)
+	gob.NewEncoder(&b).Encode(i) //nolint:errcheck
 	return farm.Fingerprint64(b.Bytes())
 }
 
@@ -101,22 +98,4 @@ func convertSearchAttributesToString(searchAttr map[string][]byte) map[string]st
 		searchAttrStr[k] = string(v)
 	}
 	return searchAttrStr
-}
-
-func contextExpired(ctx context.Context) bool {
-	select {
-	case <-ctx.Done():
-		return true
-	default:
-		return false
-	}
-}
-
-func errorDetails(err error) string {
-	var details string
-	if _, ok := err.(*temporal.CustomError); !ok {
-		return details
-	}
-	err.(*temporal.CustomError).Details(&details)
-	return details
 }

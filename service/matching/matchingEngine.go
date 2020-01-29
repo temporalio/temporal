@@ -74,7 +74,6 @@ type (
 		taskListsLock        sync.RWMutex                   // locks mutation of taskLists
 		taskLists            map[taskListID]taskListManager // Convert to LRU cache
 		config               *Config
-		queryMapLock         sync.Mutex
 		lockableQueryTaskMap lockableQueryTaskMap
 		domainCache          cache.DomainCache
 		versionChecker       client.VersionChecker
@@ -337,7 +336,7 @@ pollLoop:
 			})
 			if err != nil {
 				// will notify query client that the query task failed
-				e.deliverQueryResult(task.query.taskID, &queryResult{internalError: err})
+				e.deliverQueryResult(task.query.taskID, &queryResult{internalError: err}) //nolint:errcheck
 				return emptyPollForDecisionTaskResponse, nil
 			}
 

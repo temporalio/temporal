@@ -35,6 +35,12 @@ type (
 		CreateAdminDB(cfg *config.SQL) (AdminDB, error)
 	}
 
+	// ClusterMetadataRow represents a row in the cluster_metadata table
+	ClusterMetadataRow struct {
+		ImmutableData         []byte
+		ImmutableDataEncoding string
+	}
+
 	// DomainRow represents a row in domain table
 	DomainRow struct {
 		ID           UUID
@@ -496,6 +502,9 @@ type (
 
 	// tableCRUD defines the API for interacting with the database tables
 	tableCRUD interface {
+		InsertIfNotExistsIntoClusterMetadata(row *ClusterMetadataRow) (sql.Result, error)
+		GetClusterMetadata() (*ClusterMetadataRow, error)
+
 		InsertIntoDomain(rows *DomainRow) (sql.Result, error)
 		UpdateDomain(row *DomainRow) (sql.Result, error)
 		// SelectFromDomain returns domains that match filter criteria. Either ID or
@@ -687,7 +696,9 @@ type (
 		InsertIntoQueue(row *QueueRow) (sql.Result, error)
 		GetLastEnqueuedMessageIDForUpdate(queueType common.QueueType) (int, error)
 		GetMessagesFromQueue(queueType common.QueueType, lastMessageID, maxRows int) ([]QueueRow, error)
+		GetMessagesBetween(queueType common.QueueType, firstMessageID int, lastMessageID int, maxRows int) ([]QueueRow, error)
 		DeleteMessagesBefore(queueType common.QueueType, messageID int) (sql.Result, error)
+		DeleteMessage(queueType common.QueueType, messageID int) (sql.Result, error)
 		InsertAckLevel(queueType common.QueueType, messageID int, clusterName string) error
 		UpdateAckLevels(queueType common.QueueType, clusterAckLevels map[string]int) error
 		GetAckLevels(queueType common.QueueType, forUpdate bool) (map[string]int, error)

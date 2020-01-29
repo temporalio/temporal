@@ -28,7 +28,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/temporalio/temporal/client"
-	frontendclient "github.com/temporalio/temporal/client/frontend"
+	adminClient "github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/filestore"
@@ -79,7 +79,7 @@ type (
 		HistoryConfig         *HistoryConfig
 		ESConfig              *elasticsearch.Config
 		WorkerConfig          *WorkerConfig
-		MockFrontendClient    map[string]frontendclient.Client
+		MockAdminClient       map[string]adminClient.Client
 	}
 
 	// MessagingClientConfig is the config for messaging config
@@ -168,26 +168,27 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	pConfig := testBase.Config()
 	pConfig.NumHistoryShards = options.HistoryConfig.NumHistoryShards
 	cadenceParams := &CadenceParams{
-		ClusterMetadata:     clusterMetadata,
-		PersistenceConfig:   pConfig,
-		DispatcherProvider:  client.NewDNSYarpcDispatcherProvider(logger, 0),
-		MessagingClient:     messagingClient,
-		MetadataMgr:         testBase.MetadataManager,
-		ShardMgr:            testBase.ShardMgr,
-		HistoryV2Mgr:        testBase.HistoryV2Mgr,
-		ExecutionMgrFactory: testBase.ExecutionMgrFactory,
-		TaskMgr:             testBase.TaskMgr,
-		VisibilityMgr:       visibilityMgr,
-		Logger:              logger,
-		ClusterNo:           options.ClusterNo,
-		EnableNDC:           options.EnableNDC,
-		ESConfig:            options.ESConfig,
-		ESClient:            esClient,
-		ArchiverMetadata:    archiverBase.metadata,
-		ArchiverProvider:    archiverBase.provider,
-		HistoryConfig:       options.HistoryConfig,
-		WorkerConfig:        options.WorkerConfig,
-		MockFrontendClient:  options.MockFrontendClient,
+		ClusterMetadata:        clusterMetadata,
+		PersistenceConfig:      pConfig,
+		DispatcherProvider:     client.NewDNSYarpcDispatcherProvider(logger, 0),
+		MessagingClient:        messagingClient,
+		MetadataMgr:            testBase.MetadataManager,
+		ShardMgr:               testBase.ShardMgr,
+		HistoryV2Mgr:           testBase.HistoryV2Mgr,
+		ExecutionMgrFactory:    testBase.ExecutionMgrFactory,
+		domainReplicationQueue: testBase.DomainReplicationQueue,
+		TaskMgr:                testBase.TaskMgr,
+		VisibilityMgr:          visibilityMgr,
+		Logger:                 logger,
+		ClusterNo:              options.ClusterNo,
+		EnableNDC:              options.EnableNDC,
+		ESConfig:               options.ESConfig,
+		ESClient:               esClient,
+		ArchiverMetadata:       archiverBase.metadata,
+		ArchiverProvider:       archiverBase.provider,
+		HistoryConfig:          options.HistoryConfig,
+		WorkerConfig:           options.WorkerConfig,
+		MockAdminClient:        options.MockAdminClient,
 	}
 	cluster := NewCadence(cadenceParams)
 	if err := cluster.Start(); err != nil {

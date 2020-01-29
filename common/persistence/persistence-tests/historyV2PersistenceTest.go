@@ -53,8 +53,6 @@ type (
 
 const testForkRunID = "11220000-0000-f000-f000-000000000000"
 
-var defaultVisibilityTimestamp = p.UnixNanoToDBTimestamp(time.Now().UnixNano()) - 1
-
 var historyTestRetryPolicy = createHistoryTestRetryPolicy()
 
 func createHistoryTestRetryPolicy() backoff.RetryPolicy {
@@ -161,7 +159,7 @@ func (s *HistoryV2PersistenceSuite) TestScanAllTrees() {
 			}
 		}
 
-		if resp.NextPageToken == nil {
+		if len(resp.NextPageToken) == 0 {
 			break
 		}
 		pgToken = resp.NextPageToken
@@ -348,7 +346,7 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 	// is empty), the call should return an error.
 	req.MinEventID = 19
 	req.NextPageToken = nil
-	resp, err = s.HistoryV2Mgr.ReadHistoryBranch(req)
+	_, err = s.HistoryV2Mgr.ReadHistoryBranch(req)
 	s.IsType(&gen.EntityNotExistsError{}, err)
 
 	err = s.deleteHistoryBranch(bi2)

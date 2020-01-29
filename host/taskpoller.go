@@ -21,18 +21,11 @@
 package host
 
 import (
-	"context"
 	"testing"
-	"time"
-
-	"go.temporal.io/temporal-proto/enums"
-
-	"github.com/temporalio/temporal/common/client"
 
 	"github.com/stretchr/testify/require"
-	"go.uber.org/yarpc"
-
 	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/common"
@@ -280,9 +273,6 @@ Loop:
 				ForceCreateNewDecisionTask: forceCreateNewDecision,
 				QueryResults:               getQueryResults(response.GetQueries(), queryResult),
 			},
-			yarpc.WithHeader(common.LibraryVersionHeaderName, "0.0.1"),
-			yarpc.WithHeader(common.FeatureVersionHeaderName, client.GoWorkerConsistentQueryVersion),
-			yarpc.WithHeader(common.ClientImplHeaderName, client.GoSDK),
 		)
 
 		return false, newTask, err
@@ -310,23 +300,8 @@ func (p *TaskPoller) HandlePartialDecision(response *workflowservice.PollForDeci
 		p.Logger.Fatal("History Events are empty")
 	}
 
-	nextPageToken := response.NextPageToken
-	for nextPageToken != nil {
-		resp, err2 := p.Engine.GetWorkflowExecutionHistory(createContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-			Domain:        p.Domain,
-			Execution:     response.WorkflowExecution,
-			NextPageToken: nextPageToken,
-		})
-
-		if err2 != nil {
-			return nil, err2
-		}
-
-		events = append(events, resp.History.Events...)
-		nextPageToken = resp.NextPageToken
-	}
-
-	executionCtx, decisions, err := p.DecisionHandler(response.WorkflowExecution, response.WorkflowType, response.PreviousStartedEventId, response.StartedEventId, response.History)
+	executionCtx, decisions, err := p.DecisionHandler(response.WorkflowExecution, response.WorkflowType,
+		response.PreviousStartedEventId, response.StartedEventId, response.History)
 	if err != nil {
 		p.Logger.Info("Failing Decision. Decision handler failed with error: %v", tag.Error(err))
 		_, err = p.Engine.RespondDecisionTaskFailed(createContext(), &workflowservice.RespondDecisionTaskFailedRequest{
@@ -355,9 +330,6 @@ func (p *TaskPoller) HandlePartialDecision(response *workflowservice.PollForDeci
 			ReturnNewDecisionTask:      true,
 			ForceCreateNewDecisionTask: true,
 		},
-		yarpc.WithHeader(common.LibraryVersionHeaderName, "0.0.1"),
-		yarpc.WithHeader(common.FeatureVersionHeaderName, client.GoWorkerConsistentQueryVersion),
-		yarpc.WithHeader(common.ClientImplHeaderName, client.GoSDK),
 	)
 
 	return newTask, err
@@ -501,11 +473,6 @@ retry:
 	}
 
 	return matching.ErrNoTasks
-}
-
-func createContext() context.Context {
-	ctx, _ := context.WithTimeout(context.Background(), 90*time.Second)
-	return ctx
 }
 
 func getQueryResults(queries map[string]*commonproto.WorkflowQuery, queryResult *commonproto.WorkflowQueryResult) map[string]*commonproto.WorkflowQueryResult {

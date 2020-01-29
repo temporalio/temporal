@@ -1,1 +1,0 @@
-ALTER TYPE workflow_execution ADD history_size bigint;

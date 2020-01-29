@@ -19,7 +19,6 @@
 // THE SOFTWARE.
 
 include "shared.thrift"
-include "replicator.thrift"
 
 namespace java com.temporalio.temporal
 
@@ -530,6 +529,17 @@ service WorkflowService {
 	)
 
   /**
+  * Returns raw history in binary for specified workflow execution.
+  **/
+  shared.GetWorkflowExecutionRawHistoryResponse GetWorkflowExecutionRawHistory(1: shared.GetWorkflowExecutionRawHistoryRequest getRequest)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.EntityNotExistsError entityNotExistError,
+      3: shared.ServiceBusyError serviceBusyError,
+      4: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,
+    )
+
+  /**
   * DescribeWorkflowExecution returns information about the specified workflow execution.
   **/
   shared.DescribeWorkflowExecutionResponse DescribeWorkflowExecution(1: shared.DescribeWorkflowExecutionRequest describeRequest)
@@ -552,34 +562,6 @@ service WorkflowService {
       4: shared.LimitExceededError limitExceededError,
       5: shared.ServiceBusyError serviceBusyError,
       6: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,
-    )
-
-  replicator.GetReplicationMessagesResponse GetReplicationMessages(1: replicator.GetReplicationMessagesRequest request)
-    throws (
-      1: shared.BadRequestError badRequestError,
-      3: shared.LimitExceededError limitExceededError,
-      4: shared.ServiceBusyError serviceBusyError,
-      5: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,
-    )
-
-  replicator.GetDomainReplicationMessagesResponse GetDomainReplicationMessages(1: replicator.GetDomainReplicationMessagesRequest request)
-    throws (
-      1: shared.BadRequestError badRequestError,
-      3: shared.LimitExceededError limitExceededError,
-      4: shared.ServiceBusyError serviceBusyError,
-      5: shared.ClientVersionNotSupportedError clientVersionNotSupportedError,
-    )
-
-  /**
-  * ReapplyEvents applies stale events to the current workflow and current run
-  **/
-  void ReapplyEvents(1: shared.ReapplyEventsRequest reapplyEventsRequest)
-    throws (
-      1: shared.BadRequestError badRequestError,
-      3: shared.DomainNotActiveError domainNotActiveError,
-      4: shared.LimitExceededError limitExceededError,
-      5: shared.ServiceBusyError serviceBusyError,
-      6: shared.EntityNotExistsError entityNotExistError,
     )
 
   /**

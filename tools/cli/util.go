@@ -30,6 +30,7 @@ import (
 	"io/ioutil"
 	"os"
 	"reflect"
+	"regexp"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -41,14 +42,30 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal/client"
+	"google.golang.org/grpc/metadata"
+
+	"github.com/temporalio/temporal/common"
 )
 
 // JSONHistorySerializer is used to encode history event in JSON
 type JSONHistorySerializer struct{}
 
+var (
+	// call header to cadence server
+	headers = metadata.New(map[string]string{
+		common.LibraryVersionHeaderName: "1.0.0",
+		common.FeatureVersionHeaderName: "1.0.0",
+		common.ClientImplHeaderName:     "cli",
+		// TODO: remove these headers when server is vanilla gRPC (not YARPC)
+		"rpc-caller":   "temporal-cli",
+		"rpc-service":  "cadence-frontend",
+		"rpc-encoding": "proto",
+	})
+)
+
 // Serialize serializes history.
 func (j *JSONHistorySerializer) Serialize(h *commonproto.History) ([]byte, error) {
-	return json.Marshal(h.Events)
+	return json.Marshal(h)
 }
 
 // Deserialize deserializes history
@@ -473,8 +490,8 @@ func getEventAttributes(e *commonproto.HistoryEvent) interface{} {
 
 func isAttributeName(name string) bool {
 	name = "EventType" + name
-	for i := enums.EventType(0); i <= enums.EventType(41); i++ {
-		if name == i.String()+"EventAttributes" {
+	for i := 0; i < len(enums.EventType_name); i++ {
+		if name == enums.EventType(i).String()+"EventAttributes" {
 			return true
 		}
 	}
@@ -496,7 +513,7 @@ func prettyPrintJSONObject(o interface{}) {
 		fmt.Printf("Error when try to print pretty: %v\n", err)
 		fmt.Println(o)
 	}
-	os.Stdout.Write(b)
+	_, _ = os.Stdout.Write(b)
 	fmt.Println()
 }
 
@@ -526,12 +543,12 @@ func ErrorAndExit(msg string, err error) {
 
 func getWorkflowClient(c *cli.Context) client.Client {
 	domain := getRequiredGlobalOption(c, FlagDomain)
-	return client.NewClient(cFactory.ClientFrontendClient(c), domain, &client.Options{})
+	return client.NewClient(cFactory.FrontendClient(c), domain, &client.Options{})
 }
 
 func getWorkflowClientWithOptionalDomain(c *cli.Context) client.Client {
 	if !c.GlobalIsSet(FlagDomain) {
-		c.GlobalSet(FlagDomain, "system-domain")
+		_ = c.GlobalSet(FlagDomain, "system-domain")
 	}
 	return getWorkflowClient(c)
 }
@@ -590,11 +607,105 @@ func parseTime(timeStr string, defaultValue int64) int64 {
 
 	// treat as raw time
 	resultValue, err := strconv.ParseInt(timeStr, 10, 64)
-	if err != nil {
-		ErrorAndExit(fmt.Sprintf("Cannot parse time '%s', use UTC format '2006-01-02T15:04:05Z' or raw UnixNano directly.", timeStr), err)
+	if err == nil {
+		return resultValue
 	}
 
-	return resultValue
+	// treat as time range format
+	parsedTime, err = parseTimeRange(timeStr)
+	if err != nil {
+		ErrorAndExit(fmt.Sprintf("Cannot parse time '%s', use UTC format '2006-01-02T15:04:05Z', "+
+			"time range or raw UnixNano directly. See help for more details.", timeStr), err)
+	}
+	return parsedTime.UnixNano()
+}
+
+// parseTimeRange parses a given time duration string (in format X<time-duration>) and
+// returns parsed timestamp given that duration in the past from current time.
+// All valid values must contain a number followed by a time-duration, from the following list (long form/short form):
+// - second/s
+// - minute/m
+// - hour/h
+// - day/d
+// - week/w
+// - month/M
+// - year/y
+// For example, possible input values, and their result:
+// - "3d" or "3day" --> three days --> time.Now().Add(-3 * 24 * time.Hour)
+// - "2m" or "2minute" --> two minutes --> time.Now().Add(-2 * time.Minute)
+// - "1w" or "1week" --> one week --> time.Now().Add(-7 * 24 * time.Hour)
+// - "30s" or "30second" --> thirty seconds --> time.Now().Add(-30 * time.Second)
+// Note: Duration strings are case-sensitive, and should be used as mentioned above only.
+// Limitation: Value of numerical multiplier, X should be in b/w 0 - 1e6 (1 million), boundary values excluded i.e.
+// 0 < X < 1e6. Also, the maximum time in the past can be 1 January 1970 00:00:00 UTC (epoch time),
+// so giving "1000y" will result in epoch time.
+func parseTimeRange(timeRange string) (time.Time, error) {
+	match, err := regexp.MatchString(defaultDateTimeRangeShortRE, timeRange)
+	if !match { // fallback on to check if it's of longer notation
+		match, err = regexp.MatchString(defaultDateTimeRangeLongRE, timeRange)
+	}
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	re, _ := regexp.Compile(defaultDateTimeRangeNum)
+	idx := re.FindStringSubmatchIndex(timeRange)
+	if idx == nil {
+		return time.Time{}, fmt.Errorf("cannot parse timeRange %s", timeRange)
+	}
+
+	num, err := strconv.Atoi(timeRange[idx[0]:idx[1]])
+	if err != nil {
+		return time.Time{}, fmt.Errorf("cannot parse timeRange %s", timeRange)
+	}
+	if num >= 1e6 {
+		return time.Time{}, fmt.Errorf("invalid time-duation multiplier %d, allowed range is 0 < multiplier < 1000000", num)
+	}
+
+	dur, err := parseTimeDuration(timeRange[idx[1]:])
+	if err != nil {
+		return time.Time{}, fmt.Errorf("cannot parse timeRange %s", timeRange)
+	}
+
+	res := time.Now().Add(time.Duration(-num) * dur) // using server's local timezone
+	epochTime := time.Unix(0, 0)
+	if res.Before(epochTime) {
+		res = epochTime
+	}
+	return res, nil
+}
+
+// parseTimeDuration parses the given time duration in either short or long convention
+// and returns the time.Duration
+// Valid values (long notation/short notation):
+// - second/s
+// - minute/m
+// - hour/h
+// - day/d
+// - week/w
+// - month/M
+// - year/y
+// NOTE: the input "duration" is case-sensitive
+func parseTimeDuration(duration string) (dur time.Duration, err error) {
+	switch duration {
+	case "s", "second":
+		dur = time.Second
+	case "m", "minute":
+		dur = time.Minute
+	case "h", "hour":
+		dur = time.Hour
+	case "d", "day":
+		dur = day
+	case "w", "week":
+		dur = week
+	case "M", "month":
+		dur = month
+	case "y", "year":
+		dur = year
+	default:
+		err = fmt.Errorf("unknown time duration %s", duration)
+	}
+	return
 }
 
 func strToTaskListType(str string) enums.TaskListType {
@@ -613,19 +724,21 @@ func getCliIdentity() string {
 }
 
 func newContext(c *cli.Context) (context.Context, context.CancelFunc) {
-	contextTimeout := defaultContextTimeout
-	if c.GlobalInt(FlagContextTimeout) > 0 {
-		contextTimeout = time.Duration(c.GlobalInt(FlagContextTimeout)) * time.Second
-	}
-	return context.WithTimeout(context.Background(), contextTimeout)
+	return newContextWithTimeout(c, defaultContextTimeout)
 }
 
 func newContextForLongPoll(c *cli.Context) (context.Context, context.CancelFunc) {
-	contextTimeout := defaultContextTimeoutForLongPoll
+	return newContextWithTimeout(c, defaultContextTimeoutForLongPoll)
+}
+
+func newContextWithTimeout(c *cli.Context, defaultTimeout time.Duration) (context.Context, context.CancelFunc) {
+	contextTimeout := defaultTimeout
 	if c.GlobalIsSet(FlagContextTimeout) {
 		contextTimeout = time.Duration(c.GlobalInt(FlagContextTimeout)) * time.Second
 	}
-	return context.WithTimeout(context.Background(), contextTimeout)
+	ctx := metadata.NewOutgoingContext(context.Background(), headers)
+
+	return context.WithTimeout(ctx, contextTimeout)
 }
 
 // process and validate input provided through cmd or file
@@ -772,6 +885,6 @@ func showNextPage() bool {
 	fmt.Printf("Press %s to show next page, press %s to quit: ",
 		color.GreenString("Enter"), color.RedString("any other key then Enter"))
 	var input string
-	fmt.Scanln(&input)
+	_, _ = fmt.Scanln(&input)
 	return strings.Trim(input, " ") == ""
 }

@@ -23,7 +23,7 @@ package frontend
 import (
 	"sync/atomic"
 
-	mock "github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
@@ -129,13 +129,12 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int, enableReadFro
 type Service struct {
 	resource.Resource
 
-	status        int32
-	handler       *AccessControlledWorkflowHandler
-	wfHandlerGRPC *WorkflowHandlerGRPC
-	adminHandler  *AdminHandler
-	stopC         chan struct{}
-	config        *Config
-	params        *service.BootstrapParams
+	status int32
+	stopC  chan struct{}
+	config *Config
+	params *service.BootstrapParams
+
+	adminHandler *AdminHandler
 }
 
 // NewService builds a new cadence-frontend service
@@ -228,20 +227,20 @@ func (s *Service) Start() {
 	}
 
 	wfHandler := NewWorkflowHandler(s, s.config, replicationMessageSink)
-	dcRedirectionHandler := NewDCRedirectionHandler(wfHandler, s.params.DCRedirectionPolicy)
+	wfHandlerGRPC := NewWorkflowHandlerGRPC(wfHandler)
+	dcRedirectionHandler := NewDCRedirectionHandler(wfHandlerGRPC, s.params.DCRedirectionPolicy)
+	accessControlledWorkflowHandler := NewAccessControlledHandlerImpl(dcRedirectionHandler, s.params.Authorizer)
 
-	s.handler = NewAccessControlledHandlerImpl(dcRedirectionHandler, s.params.Authorizer)
-	s.handler.RegisterHandler()
-
-	s.wfHandlerGRPC = NewWorkflowHandlerGRPC(wfHandler)
-	s.wfHandlerGRPC.RegisterHandler()
+	accessControlledWorkflowHandler.RegisterHandler()
+	wfHandler.RegisterHandler()
 
 	s.adminHandler = NewAdminHandler(s, s.params, s.config)
+	adminHandlerGRPC := NewAdminHandlerGRPC(s.adminHandler)
+	adminHandlerGRPC.RegisterHandler()
 	s.adminHandler.RegisterHandler()
 
 	// must start resource first
 	s.Resource.Start()
-	s.handler.Start()
 	s.adminHandler.Start()
 
 	// base (service is not started in frontend or admin handler) in case of race condition in yarpc registration function
@@ -259,7 +258,6 @@ func (s *Service) Stop() {
 
 	close(s.stopC)
 
-	s.handler.Stop()
 	s.adminHandler.Stop()
 	s.Resource.Stop()
 

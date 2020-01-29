@@ -77,7 +77,7 @@ services:
       - mysql
       - postgres
     volumes:
-      - ../../:/cadence
+      - ../../:/temporal
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
@@ -102,7 +102,7 @@ services:
       - elasticsearch
       - kafka
     volumes:
-      - ../../:/cadence
+      - ../../:/temporal
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
@@ -128,7 +128,7 @@ services:
       - elasticsearch
       - kafka
     volumes:
-      - ../../:/cadence
+      - ../../:/temporal
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
@@ -154,7 +154,7 @@ services:
       - elasticsearch
       - kafka
     volumes:
-      - ../../:/cadence
+      - ../../:/temporal
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
@@ -181,7 +181,7 @@ services:
       - elasticsearch
       - kafka
     volumes:
-      - ../../:/cadence
+      - ../../:/temporal
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
@@ -212,7 +212,7 @@ services:
       - BUILDKITE_PULL_REQUEST_REPO
       - COVERALLS_TOKEN
     volumes:
-      - ../../:/cadence
+      - ../../:/temporal
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
 
 networks:

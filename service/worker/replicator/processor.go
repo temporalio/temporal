@@ -30,6 +30,7 @@ import (
 
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
+	"github.com/temporalio/temporal/service/frontend/adapter"
 
 	h "github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/replicator"
@@ -49,7 +50,6 @@ type (
 	replicationTaskProcessor struct {
 		currentCluster          string
 		sourceCluster           string
-		topicName               string
 		consumerName            string
 		client                  messaging.Client
 		consumer                messaging.Consumer
@@ -305,7 +305,7 @@ func (p *replicationTaskProcessor) handleDomainReplicationTask(task *replicator.
 		}
 	}()
 
-	err := p.domainReplicator.HandleReceivingTask(task.DomainTaskAttributes)
+	err := p.domainReplicator.HandleReceivingTask(adapter.ToProtoDomainTaskAttributes(task.GetDomainTaskAttributes()))
 	if err != nil {
 		return err
 	}
@@ -333,7 +333,7 @@ func (p *replicationTaskProcessor) handleSyncShardTask(task *replicator.Replicat
 		ShardId:       attr.ShardId,
 		Timestamp:     attr.Timestamp,
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), p.config.ReplicationTaskContextTimeout())
 	defer cancel()
 	return p.historyClient.SyncShardStatus(ctx, req)
 }

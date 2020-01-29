@@ -54,7 +54,7 @@ func (s *UpdateTaskTestSuite) TestReadSchemaDir() {
 
 	subDirs := []string{"v0.5", "v1.5", "v2.5", "v3.5", "v10.2", "abc", "2.0", "3.0"}
 	for _, d := range subDirs {
-		os.Mkdir(tmpDir+"/"+d, os.FileMode(0444))
+		s.NoError(os.Mkdir(tmpDir+"/"+d, os.FileMode(0444)))
 	}
 
 	_, err = readSchemaDir(tmpDir, "11.0", "11.2")

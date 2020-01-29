@@ -287,6 +287,8 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_SameStartIDAnd
 			},
 			StartEventId:      common.Int64Ptr(10),
 			StartEventVersion: common.Int64Ptr(100),
+			EndEventId:        common.Int64Ptr(common.EmptyEventID),
+			EndEventVersion:   common.Int64Ptr(common.EmptyVersion),
 			MaximumPageSize:   common.Int32Ptr(1),
 			NextPageToken:     nil,
 		})
@@ -342,8 +344,8 @@ func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistor
 			WorkflowId: common.StringPtr("workflowID"),
 			RunId:      common.StringPtr(uuid.New()),
 		},
-		StartEventId:      nil,
-		StartEventVersion: nil,
+		StartEventId:      common.Int64Ptr(common.EmptyEventID),
+		StartEventVersion: common.Int64Ptr(common.EmptyVersion),
 		EndEventId:        common.Int64Ptr(inputEndEventID),
 		EndEventVersion:   common.Int64Ptr(inputEndVersion),
 		MaximumPageSize:   common.Int32Ptr(10),
@@ -377,8 +379,8 @@ func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistor
 		},
 		StartEventId:      common.Int64Ptr(inputStartEventID),
 		StartEventVersion: common.Int64Ptr(inputStartVersion),
-		EndEventId:        nil,
-		EndEventVersion:   nil,
+		EndEventId:        common.Int64Ptr(common.EmptyEventID),
+		EndEventVersion:   common.Int64Ptr(common.EmptyVersion),
 		MaximumPageSize:   common.Int32Ptr(10),
 		NextPageToken:     nil,
 	}
@@ -446,7 +448,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 		{
 			Name:     "nil request",
 			Request:  nil,
-			Expected: &shared.BadRequestError{Message: "Request is not provided"},
+			Expected: &shared.BadRequestError{Message: "Request is nil."},
 		},
 		{
 			Name:     "empty request",

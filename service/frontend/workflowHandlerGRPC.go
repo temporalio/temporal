@@ -84,11 +84,11 @@ func (wh *WorkflowHandlerGRPC) DescribeDomain(ctx context.Context, request *work
 func (wh *WorkflowHandlerGRPC) ListDomains(ctx context.Context, request *workflowservice.ListDomainsRequest) (_ *workflowservice.ListDomainsResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
-	response, err := wh.workflowHandlerThrift.ListDomains(ctx, adapter.ToThriftListDomainRequest(request))
+	response, err := wh.workflowHandlerThrift.ListDomains(ctx, adapter.ToThriftListDomainsRequest(request))
 	if err != nil {
 		return nil, adapter.ToProtoError(err)
 	}
-	return adapter.ToProtoListDomainResponse(response), nil
+	return adapter.ToProtoListDomainsResponse(response), nil
 }
 
 // UpdateDomain is used to update the information and configuration for a registered domain.
@@ -425,11 +425,11 @@ func (wh *WorkflowHandlerGRPC) ListWorkflowExecutions(ctx context.Context, reque
 func (wh *WorkflowHandlerGRPC) ListArchivedWorkflowExecutions(ctx context.Context, request *workflowservice.ListArchivedWorkflowExecutionsRequest) (_ *workflowservice.ListArchivedWorkflowExecutionsResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
-	response, err := wh.workflowHandlerThrift.ListArchivedWorkflowExecutions(ctx, adapter.ToThriftArchivedWorkflowExecutionsRequest(request))
+	response, err := wh.workflowHandlerThrift.ListArchivedWorkflowExecutions(ctx, adapter.ToThriftListArchivedWorkflowExecutionsRequest(request))
 	if err != nil {
 		return nil, adapter.ToProtoError(err)
 	}
-	return adapter.ToProtoArchivedWorkflowExecutionsResponse(response), nil
+	return adapter.ToProtoListArchivedWorkflowExecutionsResponse(response), nil
 }
 
 // ScanWorkflowExecutions is a visibility API to list large amount of workflow executions in a specific domain without order.
@@ -529,37 +529,15 @@ func (wh *WorkflowHandlerGRPC) DescribeTaskList(ctx context.Context, request *wo
 	return adapter.ToProtoDescribeTaskListResponse(response), nil
 }
 
-// GetReplicationMessages returns new replication tasks since the read level provided in the token.
-func (wh *WorkflowHandlerGRPC) GetReplicationMessages(ctx context.Context, request *workflowservice.GetReplicationMessagesRequest) (_ *workflowservice.GetReplicationMessagesResponse, retError error) {
+// GetWorkflowExecutionRawHistory retrieves raw history directly from DB layer.
+func (wh *WorkflowHandlerGRPC) GetWorkflowExecutionRawHistory(ctx context.Context, request *workflowservice.GetWorkflowExecutionRawHistoryRequest) (_ *workflowservice.GetWorkflowExecutionRawHistoryResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
-	response, err := wh.workflowHandlerThrift.GetReplicationMessages(ctx, adapter.ToThriftGetReplicationMessagesRequest(request))
+	response, err := wh.workflowHandlerThrift.GetWorkflowExecutionRawHistory(ctx, adapter.ToThriftGetWorkflowExecutionRawHistoryRequest(request))
 	if err != nil {
 		return nil, adapter.ToProtoError(err)
 	}
-	return adapter.ToProtoGetReplicationMessagesResponse(response), nil
-}
-
-// GetDomainReplicationMessages returns new domain replication tasks since last retrieved task ID.
-func (wh *WorkflowHandlerGRPC) GetDomainReplicationMessages(ctx context.Context, request *workflowservice.GetDomainReplicationMessagesRequest) (_ *workflowservice.GetDomainReplicationMessagesResponse, retError error) {
-	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
-
-	response, err := wh.workflowHandlerThrift.GetDomainReplicationMessages(ctx, adapter.ToThriftGetDomainReplicationMessagesRequest(request))
-	if err != nil {
-		return nil, adapter.ToProtoError(err)
-	}
-	return adapter.ToProtoGetDomainReplicationMessagesResponse(response), nil
-}
-
-// ReapplyEvents applies stale events to the current workflow and current run
-func (wh *WorkflowHandlerGRPC) ReapplyEvents(ctx context.Context, request *workflowservice.ReapplyEventsRequest) (_ *workflowservice.ReapplyEventsResponse, retError error) {
-	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
-
-	err := wh.workflowHandlerThrift.ReapplyEvents(ctx, adapter.ToThriftReapplyEventsRequest(request))
-	if err != nil {
-		return nil, adapter.ToProtoError(err)
-	}
-	return &workflowservice.ReapplyEventsResponse{}, nil
+	return adapter.ToProtoGetWorkflowExecutionRawHistoryResponse(response), nil
 }
 
 // GetClusterInfo ...

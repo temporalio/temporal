@@ -23,6 +23,9 @@ package cli
 import (
 	"os"
 
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/workflowservice"
+
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
 	"go.temporal.io/temporal-proto/enums"
@@ -58,6 +61,44 @@ func DescribeTaskList(c *cli.Context) {
 	table.SetHeaderColor(tableHeaderBlue, tableHeaderBlue)
 	for _, poller := range pollers {
 		table.Append([]string{poller.GetIdentity(), convertTime(poller.GetLastAccessTime(), false)})
+	}
+	table.Render()
+}
+
+// ListTaskListPartitions gets all the tasklist partition and host information.
+func ListTaskListPartitions(c *cli.Context) {
+	frontendClient := cFactory.FrontendClient(c)
+	domain := getRequiredGlobalOption(c, FlagDomain)
+	taskList := getRequiredOption(c, FlagTaskList)
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+	request := &workflowservice.ListTaskListPartitionsRequest{
+		Domain:   domain,
+		TaskList: &commonproto.TaskList{Name: taskList},
+	}
+
+	response, err := frontendClient.ListTaskListPartitions(ctx, request)
+	if err != nil {
+		ErrorAndExit("Operation ListTaskListPartitions failed.", err)
+	}
+	if len(response.DecisionTaskListPartitions) > 0 {
+		printTaskListPartitions("Decision", response.DecisionTaskListPartitions)
+	}
+	if len(response.ActivityTaskListPartitions) > 0 {
+		printTaskListPartitions("Activity", response.ActivityTaskListPartitions)
+	}
+}
+
+func printTaskListPartitions(taskListType string, partitions []*commonproto.TaskListPartitionMetadata) {
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetBorder(false)
+	table.SetColumnSeparator("|")
+	table.SetHeader([]string{taskListType + "TaskListPartition", "Host"})
+	table.SetHeaderLine(false)
+	table.SetHeaderColor(tableHeaderBlue, tableHeaderBlue)
+	for _, partition := range partitions {
+		table.Append([]string{partition.GetKey(), partition.GetOwnerHostName()})
 	}
 	table.Render()
 }

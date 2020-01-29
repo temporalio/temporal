@@ -46,7 +46,6 @@ type (
 	}
 
 	nDCWorkflowImpl struct {
-		shard           ShardContext
 		domainCache     cache.DomainCache
 		clusterMetadata cluster.Metadata
 

@@ -27,6 +27,8 @@ import (
 	"net"
 	"sync"
 
+	adminClient "github.com/temporalio/temporal/client/admin"
+
 	"github.com/pborman/uuid"
 	"github.com/uber-go/tally"
 	"go.temporal.io/temporal-proto/workflowservice"
@@ -36,11 +38,10 @@ import (
 	"go.uber.org/yarpc/transport/tchannel"
 	"google.golang.org/grpc"
 
-	"github.com/temporalio/temporal/.gen/go/admin/adminserviceclient"
 	"github.com/temporalio/temporal/.gen/go/history/historyserviceclient"
 	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/client"
-	frontendclient "github.com/temporalio/temporal/client/frontend"
 	"github.com/temporalio/temporal/common"
 	carchiver "github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
@@ -71,8 +72,8 @@ import (
 type Cadence interface {
 	Start() error
 	Stop()
-	GetAdminClient() adminserviceclient.Interface
-	GetFrontendClient() workflowservice.WorkflowServiceYARPCClient
+	GetAdminClient() adminservice.AdminServiceYARPCClient
+	GetFrontendClient() workflowservice.WorkflowServiceClient
 	FrontendAddress() string
 	GetHistoryClient() historyserviceclient.Interface
 	GetExecutionManagerFactory() persistence.ExecutionManagerFactory
@@ -82,37 +83,37 @@ type (
 	cadenceImpl struct {
 		frontendService common.Daemon
 		matchingService common.Daemon
-		workerService   common.Daemon
 		historyServices []common.Daemon
 
-		adminClient         adminserviceclient.Interface
-		frontendClient      workflowservice.WorkflowServiceYARPCClient
-		historyClient       historyserviceclient.Interface
-		logger              log.Logger
-		clusterMetadata     cluster.Metadata
-		persistenceConfig   config.Persistence
-		dispatcherProvider  client.DispatcherProvider
-		messagingClient     messaging.Client
-		metadataMgr         persistence.MetadataManager
-		shardMgr            persistence.ShardManager
-		historyV2Mgr        persistence.HistoryManager
-		taskMgr             persistence.TaskManager
-		visibilityMgr       persistence.VisibilityManager
-		executionMgrFactory persistence.ExecutionManagerFactory
-		shutdownCh          chan struct{}
-		shutdownWG          sync.WaitGroup
-		clusterNo           int // cluster number
-		replicator          *replicator.Replicator
-		clientWorker        archiver.ClientWorker
-		indexer             *indexer.Indexer
-		enableNDC           bool
-		archiverMetadata    carchiver.ArchivalMetadata
-		archiverProvider    provider.ArchiverProvider
-		historyConfig       *HistoryConfig
-		esConfig            *elasticsearch.Config
-		esClient            elasticsearch.Client
-		workerConfig        *WorkerConfig
-		mockFrontendClient  map[string]frontendclient.Client
+		adminClient            adminservice.AdminServiceYARPCClient
+		frontendClient         workflowservice.WorkflowServiceClient
+		historyClient          historyserviceclient.Interface
+		logger                 log.Logger
+		clusterMetadata        cluster.Metadata
+		persistenceConfig      config.Persistence
+		dispatcherProvider     client.DispatcherProvider
+		messagingClient        messaging.Client
+		metadataMgr            persistence.MetadataManager
+		shardMgr               persistence.ShardManager
+		historyV2Mgr           persistence.HistoryManager
+		taskMgr                persistence.TaskManager
+		visibilityMgr          persistence.VisibilityManager
+		executionMgrFactory    persistence.ExecutionManagerFactory
+		domainReplicationQueue persistence.DomainReplicationQueue
+		shutdownCh             chan struct{}
+		shutdownWG             sync.WaitGroup
+		clusterNo              int // cluster number
+		replicator             *replicator.Replicator
+		clientWorker           archiver.ClientWorker
+		indexer                *indexer.Indexer
+		enableNDC              bool
+		archiverMetadata       carchiver.ArchivalMetadata
+		archiverProvider       provider.ArchiverProvider
+		historyConfig          *HistoryConfig
+		esConfig               *elasticsearch.Config
+		esClient               elasticsearch.Client
+		workerConfig           *WorkerConfig
+		mockAdminClient        map[string]adminClient.Client
 	}
 
 	// HistoryConfig contains configs for history service
@@ -135,6 +136,7 @@ type (
 		ExecutionMgrFactory           persistence.ExecutionManagerFactory
 		TaskMgr                       persistence.TaskManager
 		VisibilityMgr                 persistence.VisibilityManager
+		domainReplicationQueue        persistence.DomainReplicationQueue
 		Logger                        log.Logger
 		ClusterNo                     int
 		EnableNDC                     bool
@@ -145,7 +147,7 @@ type (
 		ESConfig                      *elasticsearch.Config
 		ESClient                      elasticsearch.Client
 		WorkerConfig                  *WorkerConfig
-		MockFrontendClient            map[string]frontendclient.Client
+		MockAdminClient               map[string]adminClient.Client
 	}
 
 	membershipFactoryImpl struct {
@@ -157,27 +159,28 @@ type (
 // NewCadence returns an instance that hosts full cadence in one process
 func NewCadence(params *CadenceParams) Cadence {
 	return &cadenceImpl{
-		logger:              params.Logger,
-		clusterMetadata:     params.ClusterMetadata,
-		persistenceConfig:   params.PersistenceConfig,
-		dispatcherProvider:  params.DispatcherProvider,
-		messagingClient:     params.MessagingClient,
-		metadataMgr:         params.MetadataMgr,
-		visibilityMgr:       params.VisibilityMgr,
-		shardMgr:            params.ShardMgr,
-		historyV2Mgr:        params.HistoryV2Mgr,
-		taskMgr:             params.TaskMgr,
-		executionMgrFactory: params.ExecutionMgrFactory,
-		shutdownCh:          make(chan struct{}),
-		clusterNo:           params.ClusterNo,
-		enableNDC:           params.EnableNDC,
-		esConfig:            params.ESConfig,
-		esClient:            params.ESClient,
-		archiverMetadata:    params.ArchiverMetadata,
-		archiverProvider:    params.ArchiverProvider,
-		historyConfig:       params.HistoryConfig,
-		workerConfig:        params.WorkerConfig,
-		mockFrontendClient:  params.MockFrontendClient,
+		logger:                 params.Logger,
+		clusterMetadata:        params.ClusterMetadata,
+		persistenceConfig:      params.PersistenceConfig,
+		dispatcherProvider:     params.DispatcherProvider,
+		messagingClient:        params.MessagingClient,
+		metadataMgr:            params.MetadataMgr,
+		visibilityMgr:          params.VisibilityMgr,
+		shardMgr:               params.ShardMgr,
+		historyV2Mgr:           params.HistoryV2Mgr,
+		taskMgr:                params.TaskMgr,
+		executionMgrFactory:    params.ExecutionMgrFactory,
+		domainReplicationQueue: params.domainReplicationQueue,
+		shutdownCh:             make(chan struct{}),
+		clusterNo:              params.ClusterNo,
+		enableNDC:              params.EnableNDC,
+		esConfig:               params.ESConfig,
+		esClient:               params.ESClient,
+		archiverMetadata:       params.ArchiverMetadata,
+		archiverProvider:       params.ArchiverProvider,
+		historyConfig:          params.HistoryConfig,
+		workerConfig:           params.WorkerConfig,
+		mockAdminClient:        params.MockAdminClient,
 	}
 }
 
@@ -187,7 +190,7 @@ func (c *cadenceImpl) enableWorker() bool {
 
 func (c *cadenceImpl) Start() error {
 	hosts := make(map[string][]string)
-	hosts[common.FrontendServiceName] = []string{c.FrontendAddress()}
+	hosts[common.FrontendServiceName] = []string{c.FrontendGRPCAddress()}
 	hosts[common.MatchingServiceName] = []string{c.MatchingServiceAddress()}
 	hosts[common.HistoryServiceName] = c.HistoryServiceAddress(0)
 	if c.enableWorker() {
@@ -468,11 +471,11 @@ func (c *cadenceImpl) WorkerPProfPort() int {
 	}
 }
 
-func (c *cadenceImpl) GetAdminClient() adminserviceclient.Interface {
+func (c *cadenceImpl) GetAdminClient() adminservice.AdminServiceYARPCClient {
 	return c.adminClient
 }
 
-func (c *cadenceImpl) GetFrontendClient() workflowservice.WorkflowServiceYARPCClient {
+func (c *cadenceImpl) GetFrontendClient() workflowservice.WorkflowServiceClient {
 	return c.frontendClient
 }
 
@@ -521,18 +524,18 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 		params.Logger.Fatal("unable to start frontend service", tag.Error(err))
 	}
 
-	if c.mockFrontendClient != nil {
+	if c.mockAdminClient != nil {
 		clientBean := frontendService.GetClientBean()
 		if clientBean != nil {
-			for serviceName, frontendClient := range c.mockFrontendClient {
-				clientBean.SetRemoteFrontendClient(serviceName, frontendClient)
+			for serviceName, client := range c.mockAdminClient {
+				clientBean.SetRemoteAdminClient(serviceName, client)
 			}
 		}
 	}
 
 	c.frontendService = frontendService
-	c.frontendClient = NewFrontendClient(frontendService.GetGRPCDispatcher())
-	c.adminClient = NewAdminClient(frontendService.GetDispatcher())
+	c.frontendClient = NewFrontendClient(params.RPCFactory.CreateGRPCConnection(c.FrontendGRPCAddress()))
+	c.adminClient = NewAdminClient(frontendService.GetGRPCDispatcher())
 	go frontendService.Start()
 
 	startWG.Done()
@@ -564,7 +567,7 @@ func (c *cadenceImpl) startHistory(
 		c.overrideHistoryDynamicConfig(integrationClient)
 		params.DynamicConfig = integrationClient
 
-		connection, err := grpc.Dial(c.FrontendAddress(), grpc.WithInsecure())
+		connection, err := grpc.Dial(c.FrontendGRPCAddress(), grpc.WithInsecure())
 		if err != nil {
 			c.logger.Fatal("Failed to create connection for history", tag.Error(err))
 		}
@@ -593,11 +596,11 @@ func (c *cadenceImpl) startHistory(
 			params.Logger.Fatal("unable to start history service", tag.Error(err))
 		}
 
-		if c.mockFrontendClient != nil {
+		if c.mockAdminClient != nil {
 			clientBean := historyService.GetClientBean()
 			if clientBean != nil {
-				for serviceName, client := range c.mockFrontendClient {
-					clientBean.SetRemoteFrontendClient(serviceName, client)
+				for serviceName, client := range c.mockAdminClient {
+					clientBean.SetRemoteAdminClient(serviceName, client)
 				}
 			}
 		}
@@ -645,11 +648,11 @@ func (c *cadenceImpl) startMatching(hosts map[string][]string, startWG *sync.Wai
 	if err != nil {
 		params.Logger.Fatal("unable to start matching service", tag.Error(err))
 	}
-	if c.mockFrontendClient != nil {
+	if c.mockAdminClient != nil {
 		clientBean := matchingService.GetClientBean()
 		if clientBean != nil {
-			for serviceName, frontendClient := range c.mockFrontendClient {
-				clientBean.SetRemoteFrontendClient(serviceName, frontendClient)
+			for serviceName, client := range c.mockAdminClient {
+				clientBean.SetRemoteAdminClient(serviceName, client)
 			}
 		}
 	}
@@ -684,7 +687,7 @@ func (c *cadenceImpl) startWorker(hosts map[string][]string, startWG *sync.WaitG
 		c.logger.Fatal("Failed to copy persistence config for worker", tag.Error(err))
 	}
 
-	connection, err := grpc.Dial(c.FrontendAddress(), grpc.WithInsecure())
+	connection, err := grpc.Dial(c.FrontendGRPCAddress(), grpc.WithInsecure())
 	if err != nil {
 		c.logger.Fatal("Failed to create connection for worker", tag.Error(err))
 	}
@@ -743,6 +746,7 @@ func (c *cadenceImpl) startWorkerReplicator(params *service.BootstrapParams, ser
 		service.GetMetricsClient(),
 		service.GetHostInfo(),
 		serviceResolver,
+		c.domainReplicationQueue,
 	)
 	if err := c.replicator.Start(); err != nil {
 		c.replicator.Stop()
@@ -996,6 +1000,16 @@ func (c *rpcFactoryImpl) CreateTChannelDispatcherForOutbound(callerName, service
 // CreateGRPCDispatcherForOutbound creates a dispatcher for outbound connection
 func (c *rpcFactoryImpl) CreateGRPCDispatcherForOutbound(callerName, serviceName, hostName string) *yarpc.Dispatcher {
 	return c.createDispatcherForOutbound(yarpcgrpc.NewTransport().NewSingleOutbound(hostName), callerName, serviceName, "gRPC")
+}
+
+// CreateGRPCConnection creates connection for gRPC calls
+func (c *rpcFactoryImpl) CreateGRPCConnection(hostName string) *grpc.ClientConn {
+	connection, err := grpc.Dial(hostName, grpc.WithInsecure())
+	if err != nil {
+		c.logger.Fatal("Failed to create gRPC connection", tag.Error(err))
+	}
+
+	return connection
 }
 
 func (c *rpcFactoryImpl) createDispatcherForOutbound(unaryOutbound transport.UnaryOutbound, callerName, serviceName, transportType string) *yarpc.Dispatcher {

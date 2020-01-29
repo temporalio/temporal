@@ -24,8 +24,12 @@ import (
 	"fmt"
 	"time"
 
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/checksum"
 )
 
 type (
@@ -51,6 +55,17 @@ type (
 		DeleteDomainByName(request *DeleteDomainByNameRequest) error
 		ListDomains(request *ListDomainsRequest) (*InternalListDomainsResponse, error)
 		GetMetadata() (*GetMetadataResponse, error)
+	}
+
+	// ClusterMetadataStore is a lower level of ClusterMetadataManager.
+	// There is no Internal constructs needed to abstract away at the interface level currently,
+	//  so we can reimplement the ClusterMetadataManager and leave this as a placeholder.
+	ClusterMetadataStore interface {
+		Closeable
+		GetName() string
+		// Initialize immutable metadata for the cluster. Takes no action if already initialized.
+		InitializeImmutableClusterMetadata(request *InternalInitializeImmutableClusterMetadataRequest) (*InternalInitializeImmutableClusterMetadataResponse, error)
+		GetImmutableClusterMetadata() (*InternalGetImmutableClusterMetadataResponse, error)
 	}
 
 	// ExecutionStore is used to manage workflow executions for Persistence layer
@@ -141,6 +156,11 @@ type (
 		DeleteMessagesBefore(messageID int) error
 		UpdateAckLevel(messageID int, clusterName string) error
 		GetAckLevels() (map[string]int, error)
+		EnqueueMessageToDLQ(messagePayload []byte) error
+		ReadMessagesFromDLQ(firstMessageID int, lastMessageID int, maxCount int) ([]*QueueMessage, error)
+		DeleteMessageFromDLQ(messageID int) error
+		DeleteDLQMessagesBefore(messageID int) error
+		GetLastMessageIDFromDLQ() (int, error)
 	}
 
 	// QueueMessage is the message that stores in the queue
@@ -244,6 +264,8 @@ type (
 		SignalInfos         map[int64]*SignalInfo
 		SignalRequestedIDs  map[string]struct{}
 		BufferedEvents      []*DataBlob
+
+		Checksum checksum.Checksum
 	}
 
 	// InternalActivityInfo details  for Persistence Interface
@@ -380,6 +402,8 @@ type (
 		ReplicationTasks []Task
 
 		Condition int64
+
+		Checksum checksum.Checksum
 	}
 
 	// InternalWorkflowSnapshot is used as generic workflow execution state snapshot for Persistence Interface
@@ -402,6 +426,8 @@ type (
 		ReplicationTasks []Task
 
 		Condition int64
+
+		Checksum checksum.Checksum
 	}
 
 	// InternalAppendHistoryEventsRequest is used to append new events to workflow execution history  for Persistence Interface
@@ -635,6 +661,27 @@ type (
 		Domains       []*InternalGetDomainResponse
 		NextPageToken []byte
 	}
+
+	// InternalInitializeImmutableClusterMetadataRequest is a request of InitializeImmutableClusterMetadata
+	// These values can only be set a single time upon cluster initialization.
+	InternalInitializeImmutableClusterMetadataRequest struct {
+		// Serialized ImmutableCusterMetadata to persist.
+		ImmutableClusterMetadata *DataBlob
+	}
+
+	// InternalInitializeImmutableClusterMetadataResponse is a request of InitializeImmutableClusterMetadata
+	InternalInitializeImmutableClusterMetadataResponse struct {
+		// Serialized ImmutableCusterMetadata that is currently persisted.
+		PersistedImmutableMetadata *DataBlob
+		RequestApplied             bool
+	}
+
+	// InternalGetImmutableClusterMetadataResponse is the response to GetImmutableClusterMetadata
+	// These values are set a single time upon cluster initialization.
+	InternalGetImmutableClusterMetadataResponse struct {
+		// Serialized ImmutableCusterMetadata.
+		ImmutableClusterMetadata *DataBlob
+	}
 )
 
 // NewDataBlob returns a new DataBlob
@@ -708,6 +755,26 @@ func NewDataBlobFromThrift(blob *workflow.DataBlob) *DataBlob {
 			Encoding: common.EncodingTypeThriftRW,
 			Data:     blob.Data,
 		}
+	default:
+		panic(fmt.Sprintf("NewDataBlobFromThrift seeing unsupported enconding type: %v", blob.GetEncodingType()))
+	}
+}
+
+// NewDataBlobFromProto convert data blob from Proto representation
+func NewDataBlobFromProto(blob *commonproto.DataBlob) *DataBlob {
+	switch blob.GetEncodingType() {
+	case enums.EncodingTypeJSON:
+		return &DataBlob{
+			Encoding: common.EncodingTypeJSON,
+			Data:     blob.Data,
+		}
+	case enums.EncodingTypeThriftRW:
+		return &DataBlob{
+			Encoding: common.EncodingTypeThriftRW,
+			Data:     blob.Data,
+		}
+	case enums.EncodingTypeProto:
+		panic("EncodingTypeProto is not supported")
 	default:
 		panic(fmt.Sprintf("NewDataBlobFromThrift seeing unsupported enconding type: %v", blob.GetEncodingType()))
 	}

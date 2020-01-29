@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 //
-// Copyright (c) 2019 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -57,7 +57,7 @@ func (m *MockNDCHistoryResender) EXPECT() *MockNDCHistoryResenderMockRecorder {
 }
 
 // SendSingleWorkflowHistory mocks base method
-func (m *MockNDCHistoryResender) SendSingleWorkflowHistory(domainID, workflowID, runID string, startEventID, startEventVersion, endEventID, endEventVersion *int64) error {
+func (m *MockNDCHistoryResender) SendSingleWorkflowHistory(domainID, workflowID, runID string, startEventID, startEventVersion, endEventID, endEventVersion int64) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SendSingleWorkflowHistory", domainID, workflowID, runID, startEventID, startEventVersion, endEventID, endEventVersion)
 	ret0, _ := ret[0].(error)

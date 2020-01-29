@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	persist "github.com/temporalio/temporal/.gen/go/persistenceblobs"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/codec"
@@ -56,6 +57,10 @@ type (
 		// serialize/deserialize version histories
 		SerializeVersionHistories(histories *workflow.VersionHistories, encodingType common.EncodingType) (*DataBlob, error)
 		DeserializeVersionHistories(data *DataBlob) (*workflow.VersionHistories, error)
+
+		// serialize/deserialize immutable cluster metadata
+		SerializeImmutableClusterMetadata(icm *persist.ImmutableClusterMetadata, encodingType common.EncodingType) (*DataBlob, error)
+		DeserializeImmutableClusterMetadata(data *DataBlob) (*persist.ImmutableClusterMetadata, error)
 	}
 
 	// CadenceSerializationError is an error type for cadence serialization
@@ -171,6 +176,19 @@ func (t *serializerImpl) DeserializeVersionHistories(data *DataBlob) (*workflow.
 	return &histories, err
 }
 
+func (t *serializerImpl) SerializeImmutableClusterMetadata(icm *persist.ImmutableClusterMetadata, encodingType common.EncodingType) (*DataBlob, error) {
+	if icm == nil {
+		icm = &persist.ImmutableClusterMetadata{}
+	}
+	return t.serialize(icm, encodingType)
+}
+
+func (t *serializerImpl) DeserializeImmutableClusterMetadata(data *DataBlob) (*persist.ImmutableClusterMetadata, error) {
+	var icm persist.ImmutableClusterMetadata
+	err := t.deserialize(data, &icm)
+	return &icm, err
+}
+
 func (t *serializerImpl) serialize(input interface{}, encodingType common.EncodingType) (*DataBlob, error) {
 	if input == nil {
 		return nil, nil
@@ -209,6 +227,8 @@ func (t *serializerImpl) thriftrwEncode(input interface{}) ([]byte, error) {
 		return t.thriftrwEncoder.Encode(input.(*workflow.BadBinaries))
 	case *workflow.VersionHistories:
 		return t.thriftrwEncoder.Encode(input.(*workflow.VersionHistories))
+	case *persist.ImmutableClusterMetadata:
+		return t.thriftrwEncoder.Encode(input.(*persist.ImmutableClusterMetadata))
 	default:
 		return nil, nil
 	}
@@ -239,36 +259,30 @@ func (t *serializerImpl) deserialize(data *DataBlob, target interface{}) error {
 }
 
 func (t *serializerImpl) thriftrwDecode(data []byte, target interface{}) error {
-	switch target.(type) {
+	switch target := target.(type) {
 	case *[]*workflow.HistoryEvent:
-		history := workflow.History{Events: *target.(*[]*workflow.HistoryEvent)}
+		history := workflow.History{Events: *target}
 		if err := t.thriftrwEncoder.Decode(data, &history); err != nil {
 			return err
 		}
-		*target.(*[]*workflow.HistoryEvent) = history.GetEvents()
+		*target = history.GetEvents()
 		return nil
 	case *workflow.HistoryEvent:
-		event := target.(*workflow.HistoryEvent)
-		return t.thriftrwEncoder.Decode(data, event)
+		return t.thriftrwEncoder.Decode(data, target)
 	case *workflow.Memo:
-		memo := target.(*workflow.Memo)
-		t.thriftrwEncoder.Decode(data, memo)
-		return nil
+		return t.thriftrwEncoder.Decode(data, target)
 	case *workflow.ResetPoints:
-		rp := target.(*workflow.ResetPoints)
-		t.thriftrwEncoder.Decode(data, rp)
-		return nil
+		return t.thriftrwEncoder.Decode(data, target)
 	case *workflow.BadBinaries:
-		rp := target.(*workflow.BadBinaries)
-		t.thriftrwEncoder.Decode(data, rp)
-		return nil
+		return t.thriftrwEncoder.Decode(data, target)
 	case *workflow.VersionHistories:
-		rp := target.(*workflow.VersionHistories)
-		t.thriftrwEncoder.Decode(data, rp)
-		return nil
+		return t.thriftrwEncoder.Decode(data, target)
+	case *persist.ImmutableClusterMetadata:
+		return t.thriftrwEncoder.Decode(data, target)
 	default:
 		return nil
 	}
+
 }
 
 // NewUnknownEncodingTypeError returns a new instance of encoding type error

@@ -21,23 +21,46 @@
 package canary
 
 import (
+	"fmt"
 	"sync"
 
+	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
+
+	"github.com/temporalio/temporal/common/log/loggerimpl"
 )
 
 type canaryRunner struct {
 	*RuntimeContext
-	config *Config
+	config *Canary
 }
 
-// New creates and returns a runnable which spins
+// NewCanaryRunner creates and returns a runnable which spins
 // up a set of canaries based on supplied config
-func newCanaryRunner(cfg *Config, runtime *RuntimeContext) Runnable {
-	return &canaryRunner{
-		RuntimeContext: runtime,
-		config:         cfg,
+func NewCanaryRunner(cfg *Config) (Runnable, error) {
+	logger := cfg.Log.NewZapLogger()
+
+	metricsScope := cfg.Metrics.NewScope(loggerimpl.NewLogger(logger))
+
+	if cfg.Cadence.HostNameAndPort == "" {
+		cfg.Cadence.HostNameAndPort = CadenceLocalHostPort
 	}
+
+	connection, err := grpc.Dial(cfg.Cadence.HostNameAndPort, grpc.WithInsecure())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create connection: %v", err)
+	}
+	runtimeContext := NewRuntimeContext(
+		logger,
+		metricsScope,
+		workflowservice.NewWorkflowServiceClient(connection),
+	)
+
+	return &canaryRunner{
+		RuntimeContext: runtimeContext,
+		config:         &cfg.Canary,
+	}, nil
 }
 
 // Run runs the canaries

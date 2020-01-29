@@ -71,6 +71,7 @@ type (
 		ExecutionManager       p.ExecutionManager
 		TaskMgr                p.TaskManager
 		HistoryV2Mgr           p.HistoryManager
+		ClusterMetadataManager p.ClusterMetadataManager
 		MetadataManager        p.MetadataManager
 		VisibilityMgr          p.VisibilityManager
 		DomainReplicationQueue p.DomainReplicationQueue
@@ -182,6 +183,9 @@ func (s *TestBase) Setup() {
 
 	s.TaskMgr, err = factory.NewTaskManager()
 	s.fatalOnError("NewTaskManager", err)
+
+	s.ClusterMetadataManager, err = factory.NewClusterMetadataManager()
+	s.fatalOnError("NewClusterMetadataManager", err)
 
 	s.MetadataManager, err = factory.NewMetadataManager()
 	s.fatalOnError("NewMetadataManager", err)
@@ -305,6 +309,7 @@ func (s *TestBase) CreateWorkflowExecutionWithBranchToken(domainID string, workf
 				},
 			},
 			TimerTasks: timerTasks,
+			Checksum:   testWorkflowChecksum,
 		},
 		RangeID: s.ShardInfo.RangeID,
 	})
@@ -367,6 +372,7 @@ func (s *TestBase) CreateWorkflowExecutionWithReplication(domainID string, workf
 			ReplicationState: state,
 			TransferTasks:    transferTasks,
 			ReplicationTasks: replicationTasks,
+			Checksum:         testWorkflowChecksum,
 		},
 		RangeID: s.ShardInfo.RangeID,
 	})
@@ -420,6 +426,7 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(domainID string, workflowExe
 			},
 			ExecutionStats: &p.ExecutionStats{},
 			TransferTasks:  transferTasks,
+			Checksum:       testWorkflowChecksum,
 		},
 		RangeID: s.ShardInfo.RangeID,
 	})
@@ -772,6 +779,7 @@ func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *p.Workflo
 			TimerTasks:       timerTasks,
 
 			Condition: condition,
+			Checksum:  testWorkflowChecksum,
 		},
 		Encoding: pickRandomEncoding(),
 	})
@@ -940,6 +948,7 @@ func (s *TestBase) ConflictResolveWorkflowExecution(prevRunID string, prevLastWr
 			RequestCancelInfos:  requestCancelInfos,
 			SignalInfos:         signalInfos,
 			SignalRequestedIDs:  ids,
+			Checksum:            testWorkflowChecksum,
 		},
 		Encoding: pickRandomEncoding(),
 	})
@@ -1314,7 +1323,7 @@ func (s *TestBase) ClearTransferQueue() {
 	counter := 0
 	for _, t := range tasks {
 		s.logger.Info("Deleting transfer task with ID", tag.TaskID(t.TaskID))
-		s.CompleteTransferTask(t.TaskID)
+		s.NoError(s.CompleteTransferTask(t.TaskID))
 		counter++
 	}
 
@@ -1333,7 +1342,7 @@ func (s *TestBase) ClearReplicationQueue() {
 	counter := 0
 	for _, t := range tasks {
 		s.logger.Info("Deleting replication task with ID", tag.TaskID(t.TaskID))
-		s.CompleteReplicationTask(t.TaskID)
+		s.NoError(s.CompleteReplicationTask(t.TaskID))
 		counter++
 	}
 

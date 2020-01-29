@@ -36,7 +36,6 @@ import (
 const (
 	smallWait         = 1
 	bigWait           = 30
-	signalDelaySecs   = 10
 	signalToTrigger   = "signalToTrigger"
 	signalBeforeReset = "signalBeforeReset"
 	signalAfterReset  = "signalAfterReset"

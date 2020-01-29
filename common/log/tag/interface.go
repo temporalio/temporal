@@ -62,12 +62,6 @@ func newInt32(key string, value int32) Tag {
 	}
 }
 
-func newDoubleTag(key string, value float64) Tag {
-	return Tag{
-		field: zap.Float64(key, value),
-	}
-}
-
 func newBoolTag(key string, value bool) Tag {
 	return Tag{
 		field: zap.Bool(key, value),

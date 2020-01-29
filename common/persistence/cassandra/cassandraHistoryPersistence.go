@@ -93,27 +93,6 @@ func newHistoryV2Persistence(
 	return &cassandraHistoryV2Persistence{cassandraStore: cassandraStore{session: session, logger: logger}}, nil
 }
 
-func convertCommonErrors(
-	operation string,
-	err error,
-) error {
-
-	if err == gocql.ErrNotFound {
-		return &workflow.EntityNotExistsError{
-			Message: fmt.Sprintf("%v failed. Error: %v ", operation, err),
-		}
-	} else if isTimeoutError(err) {
-		return &p.TimeoutError{Msg: fmt.Sprintf("%v timed out. Error: %v", operation, err)}
-	} else if isThrottlingError(err) {
-		return &workflow.ServiceBusyError{
-			Message: fmt.Sprintf("%v operation failed. Error: %v", operation, err),
-		}
-	}
-	return &workflow.InternalServiceError{
-		Message: fmt.Sprintf("%v operation failed. Error: %v", operation, err),
-	}
-}
-
 // AppendHistoryNodes upsert a batch of events as a single node to a history branch
 // Note that it's not allowed to append above the branch's ancestors' nodes, which means nodeID >= ForkNodeID
 func (h *cassandraHistoryV2Persistence) AppendHistoryNodes(

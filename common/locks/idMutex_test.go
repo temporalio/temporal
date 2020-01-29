@@ -49,7 +49,7 @@ func BenchmarkGolangMutex(b *testing.B) {
 	lock := &sync.Mutex{}
 	for i := 0; i < b.N; i++ {
 		lock.Lock()
-		lock.Unlock()
+		lock.Unlock() //nolint:staticcheck
 	}
 }
 

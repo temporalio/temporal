@@ -21,7 +21,7 @@
 package auth
 
 type (
-	// TLS describe TLS configuration (for Kafka, Cassandra)
+	// TLS describe TLS configuration (for Kafka, Cassandra, SQL)
 	TLS struct {
 		Enabled bool `yaml:"enabled"`
 

@@ -38,7 +38,6 @@ import (
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
-	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/service/config"
 )
@@ -52,7 +51,6 @@ type visibilityArchiverSuite struct {
 	suite.Suite
 
 	container          *archiver.VisibilityBootstrapContainer
-	logger             log.Logger
 	testArchivalURI    archiver.URI
 	testQueryDirectory string
 	visibilityRecords  []*visibilityRecord
