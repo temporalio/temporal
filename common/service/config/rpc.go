@@ -69,18 +69,14 @@ func (d *RPCFactory) GetGRPCDispatcher() *yarpc.Dispatcher {
 	defer d.Unlock()
 
 	if d.grpcDispatcher == nil {
-		hostAddress := fmt.Sprintf("%v:%v", d.getListenIP(), d.config.GRPCPort)
-		l, err := net.Listen("tcp", hostAddress)
-		if err != nil {
-			d.logger.Fatal("Failed create a gRPC listener", tag.Error(err), tag.Address(hostAddress))
-		}
+		listener := d.CreateListener()
 
 		d.grpcDispatcher = yarpc.NewDispatcher(yarpc.Config{
 			Name:     d.serviceName,
-			Inbounds: yarpc.Inbounds{yarpcgrpc.NewTransport().NewInbound(l)},
+			Inbounds: yarpc.Inbounds{yarpcgrpc.NewTransport().NewInbound(listener)},
 		})
 
-		d.logger.Info("Created gRPC dispatcher", tag.Service(d.serviceName), tag.Address(hostAddress))
+		d.logger.Info("Created gRPC dispatcher", tag.Service(d.serviceName))
 	}
 
 	return d.grpcDispatcher
@@ -187,4 +183,17 @@ func (d *RPCFactory) CreateGRPCConnection(hostName string) *grpc.ClientConn {
 	}
 
 	return connection
+}
+
+// CreateListener creates new listener for inbound
+func (d *RPCFactory) CreateListener() net.Listener {
+	hostAddress := fmt.Sprintf("%v:%v", d.getListenIP(), d.config.GRPCPort)
+	l, err := net.Listen("tcp", hostAddress)
+	if err != nil {
+		d.logger.Fatal("Failed create gRPC listener", tag.Error(err), tag.Service(d.serviceName), tag.Address(hostAddress))
+	}
+
+	d.logger.Info("Created gRPC listener", tag.Service(d.serviceName), tag.Address(hostAddress))
+
+	return l
 }

@@ -24,6 +24,7 @@ import (
 	"context"
 
 	"go.temporal.io/temporal-proto/workflowservice"
+	"google.golang.org/grpc"
 
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/log"
@@ -53,6 +54,10 @@ func NewWorkflowHandlerGRPC(
 // if DCRedirectionHandler is also used, use RegisterHandler in DCRedirectionHandler instead
 func (wh *WorkflowHandlerGRPC) RegisterHandler() {
 	wh.workflowHandlerThrift.GetGRPCDispatcher().Register(workflowservice.BuildWorkflowServiceYARPCProcedures(wh))
+}
+
+func (wh *WorkflowHandlerGRPC) RegisterServer(server *grpc.Server) {
+	workflowservice.RegisterWorkflowServiceServer(server, wh)
 }
 
 // RegisterDomain creates a new domain which can be used as a container for all resources.  Domain is a top level

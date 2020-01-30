@@ -24,6 +24,7 @@ import (
 	"sync/atomic"
 
 	"github.com/stretchr/testify/mock"
+	"google.golang.org/grpc"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
@@ -228,11 +229,19 @@ func (s *Service) Start() {
 
 	wfHandler := NewWorkflowHandler(s, s.config, replicationMessageSink)
 	wfHandlerGRPC := NewWorkflowHandlerGRPC(wfHandler)
-	dcRedirectionHandler := NewDCRedirectionHandler(wfHandlerGRPC, s.params.DCRedirectionPolicy)
-	accessControlledWorkflowHandler := NewAccessControlledHandlerImpl(dcRedirectionHandler, s.params.Authorizer)
+	//dcRedirectionHandler := NewDCRedirectionHandler(wfHandlerGRPC, s.params.DCRedirectionPolicy)
+	//accessControlledWorkflowHandler := NewAccessControlledHandlerImpl(dcRedirectionHandler, s.params.Authorizer)
 
-	accessControlledWorkflowHandler.RegisterHandler()
+	//accessControlledWorkflowHandler.RegisterHandler()
 	wfHandler.RegisterHandler()
+
+	wfServer := grpc.NewServer()
+	wfHandlerGRPC.RegisterServer(wfServer)
+	listener := s.params.RPCFactory.CreateListener()
+	if err := wfServer.Serve(listener); err != nil {
+		logger.Fatal("failed to serve", tag.Error(err))
+	}
+	//wfServer.Stop()
 
 	s.adminHandler = NewAdminHandler(s, s.params, s.config)
 	adminHandlerGRPC := NewAdminHandlerGRPC(s.adminHandler)
