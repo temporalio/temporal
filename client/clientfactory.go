@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"go.temporal.io/temporal-proto/workflowservice"
-	"go.uber.org/yarpc"
 
 	"github.com/temporalio/temporal/.gen/go/history/historyserviceclient"
 	"github.com/temporalio/temporal/.gen/go/matching/matchingserviceclient"
@@ -61,8 +60,7 @@ type (
 		NewHistoryClientWithTimeout(timeout time.Duration) (history.Client, error)
 		NewMatchingClientWithTimeout(domainIDToName DomainIDToNameFunc, timeout time.Duration, longPollTimeout time.Duration) (matching.Client, error)
 		NewFrontendClientWithTimeout(rpcAddress string, timeout time.Duration, longPollTimeout time.Duration) (frontend.Client, error)
-
-		NewAdminClientWithTimeoutAndDispatcher(rpcName string, timeout time.Duration, dispatcher *yarpc.Dispatcher) (admin.Client, error)
+		NewAdminClientWithTimeout(rpcAddress string, timeout time.Duration) (admin.Client, error)
 	}
 
 	// DomainIDToNameFunc maps a domainID to domain name. Returns error when mapping is not possible.
@@ -193,17 +191,17 @@ func (cf *rpcClientFactory) NewFrontendClientWithTimeout(
 	return client, nil
 }
 
-func (cf *rpcClientFactory) NewAdminClientWithTimeoutAndDispatcher(
-	rpcName string,
+func (cf *rpcClientFactory) NewAdminClientWithTimeout(
+	rpcAddress string,
 	timeout time.Duration,
-	dispatcher *yarpc.Dispatcher,
 ) (admin.Client, error) {
 	keyResolver := func(key string) (string, error) {
-		return clientKeyDispatcher, nil
+		return clientKeyConnection, nil
 	}
 
 	clientProvider := func(clientKey string) (interface{}, error) {
-		return adminservice.NewAdminServiceYARPCClient(dispatcher.ClientConfig(rpcName)), nil
+		connection := cf.rpcFactory.CreateGRPCConnection(rpcAddress)
+		return adminservice.NewAdminServiceClient(connection), nil
 	}
 
 	client := admin.NewClient(timeout, common.NewClientCache(keyResolver, clientProvider))
