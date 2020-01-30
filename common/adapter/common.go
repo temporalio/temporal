@@ -247,17 +247,6 @@ func ToThriftSearchAttributes(in *common.SearchAttributes) *shared.SearchAttribu
 	}
 }
 
-// ToThriftWorkflowExecution ...
-func ToThriftWorkflowExecution(in *common.WorkflowExecution) *shared.WorkflowExecution {
-	if in == nil {
-		return nil
-	}
-	return &shared.WorkflowExecution{
-		WorkflowId: &in.WorkflowId,
-		RunId:      &in.RunId,
-	}
-}
-
 func ToProtoWorkflowType(in *shared.WorkflowType) *common.WorkflowType {
 	if in == nil {
 		return nil
@@ -1384,6 +1373,28 @@ func ToThriftReplicationTaskInfos(in []*common.ReplicationTaskInfo) []*replicato
 	var ret []*replicator.ReplicationTaskInfo
 	for _, item := range in {
 		ret = append(ret, ToThriftReplicationTaskInfo(item))
+	}
+	return ret
+}
+
+func ToProtoVersionHistories(in *shared.VersionHistories) *common.VersionHistories {
+	if in == nil {
+		return nil
+	}
+	return &common.VersionHistories{
+		CurrentVersionHistoryIndex: in.GetCurrentVersionHistoryIndex(),
+		Histories:                  ToProtoVersionHistoryArray(in.GetHistories()),
+	}
+}
+
+func ToProtoVersionHistoryArray(in []*shared.VersionHistory) []*common.VersionHistory {
+	if in == nil {
+		return nil
+	}
+
+	var ret []*common.VersionHistory
+	for _, item := range in {
+		ret = append(ret, ToProtoVersionHistory(item))
 	}
 	return ret
 }
