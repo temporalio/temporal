@@ -234,6 +234,10 @@ message SignalWithStartWorkflowExecutionRequest {
     workflowservice.SignalWithStartWorkflowExecutionRequest signalWithStartRequest = 2;
 }
 
+message SignalWithStartWorkflowExecutionResponse {
+    string runId = 1;
+}
+
 message RemoveSignalMutableStateRequest {
     string domainUUID = 1;
     common.WorkflowExecution workflowExecution = 2;
