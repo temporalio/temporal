@@ -121,7 +121,7 @@ kafka:
       cluster: test
 
 publicClient:
-  hostPort: "localhost:7933"
+  hostPort: "localhost:7233"
 
 dynamicConfigClient:
   filepath: "config/dynamicconfig/development.yaml"

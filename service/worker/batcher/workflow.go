@@ -334,7 +334,7 @@ func startTaskProcessor(
 	taskCh chan taskDetail,
 	respCh chan error,
 	limiter *rate.Limiter,
-	client frontend.ClientGRPC,
+	client frontend.Client,
 ) {
 	batcher := ctx.Value(batcherContextKey).(*Batcher)
 	for {
@@ -422,7 +422,7 @@ func processTask(
 	limiter *rate.Limiter,
 	task taskDetail,
 	batchParams BatchParams,
-	client frontend.ClientGRPC,
+	client frontend.Client,
 	applyOnChild *bool,
 	procFn func(string, string) error,
 ) error {

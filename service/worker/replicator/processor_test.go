@@ -38,6 +38,7 @@ import (
 	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/codec"
@@ -49,7 +50,6 @@ import (
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 	"github.com/temporalio/temporal/common/task"
 	"github.com/temporalio/temporal/common/xdc"
-	"github.com/temporalio/temporal/service/frontend/adapter"
 )
 
 type (
