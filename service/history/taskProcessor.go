@@ -45,13 +45,17 @@ type (
 		processor taskExecutor
 		task      queueTaskInfo
 
-		attempt   int
-		startTime time.Time
-		logger    log.Logger
+		attempt      int
+		scheduleTime time.Time
+		startTime    time.Time
+		logger       log.Logger
 
 		// used by 2DC task life cycle
 		// TODO remove when NDC task life cycle is implemented
 		shouldProcessTask bool
+
+		// the size of the task queue when scheduling the task
+		queueSizeOnSchedule int
 	}
 
 	taskProcessor struct {
@@ -83,7 +87,7 @@ func newTaskInfo(
 		processor:         processor,
 		task:              task,
 		attempt:           0,
-		startTime:         time.Now(), // used for metrics
+		scheduleTime:      time.Now(), // used for metrics
 		logger:            logger,
 		shouldProcessTask: true,
 	}
@@ -167,7 +171,9 @@ func (t *taskProcessor) retryTasks() {
 func (t *taskProcessor) addTask(
 	task *taskInfo,
 ) bool {
-	// We have a timer to fire.
+	// We have a task to process.
+	task.queueSizeOnSchedule = len(t.tasksCh)
+
 	select {
 	case t.tasksCh <- task:
 	case <-t.shutdownCh:
@@ -180,6 +186,7 @@ func (t *taskProcessor) processTaskAndAck(
 	notificationChan <-chan struct{},
 	task *taskInfo,
 ) {
+	task.startTime = time.Now()
 
 	var scope int
 	var err error
@@ -228,6 +235,7 @@ FilterLoop:
 		default:
 			err = backoff.Retry(op, t.retryPolicy, retryCondition)
 			if err == nil {
+				t.metricsClient.RecordTimer(scope, metrics.TaskProcessingWithRetryLatency, time.Since(task.startTime))
 				t.ackTaskOnce(scope, task)
 				return
 			}
@@ -286,7 +294,7 @@ func (t *taskProcessor) handleTaskError(
 	// TODO remove this error check special case
 	//  since the new task life cycle will not give up until task processed / verified
 	if _, ok := err.(*workflow.DomainNotActiveError); ok {
-		if t.timeSource.Now().Sub(task.startTime) > 2*cache.DomainCacheRefreshInterval {
+		if t.timeSource.Now().Sub(task.scheduleTime) > 2*cache.DomainCacheRefreshInterval {
 			t.metricsClient.IncCounter(scope, metrics.TaskNotActiveCounter)
 			return nil
 		}
@@ -312,8 +320,10 @@ func (t *taskProcessor) ackTaskOnce(
 
 	task.processor.complete(task)
 	if task.shouldProcessTask {
+		t.metricsClient.RecordTimer(scope, metrics.TaskQueueSize, time.Duration(task.queueSizeOnSchedule))
+		t.metricsClient.RecordTimer(scope, metrics.TaskScheduleToStartLatency, task.startTime.Sub(task.scheduleTime))
 		t.metricsClient.RecordTimer(scope, metrics.TaskAttemptTimer, time.Duration(task.attempt))
-		t.metricsClient.RecordTimer(scope, metrics.TaskLatency, time.Since(task.startTime))
+		t.metricsClient.RecordTimer(scope, metrics.TaskLatency, time.Since(task.scheduleTime))
 		t.metricsClient.RecordTimer(
 			scope,
 			metrics.TaskQueueLatency,

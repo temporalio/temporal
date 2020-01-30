@@ -218,10 +218,10 @@ func (s *taskProcessorSuite) TestHandleTaskError_DomainNotActiveError() {
 	err := &workflow.DomainNotActiveError{}
 
 	taskInfo := newTaskInfo(s.mockProcessor, nil, s.logger)
-	taskInfo.startTime = time.Now().Add(-cache.DomainCacheRefreshInterval * time.Duration(2))
+	taskInfo.scheduleTime = time.Now().Add(-cache.DomainCacheRefreshInterval * time.Duration(2))
 	s.Nil(s.taskProcessor.handleTaskError(s.scope, taskInfo, s.notificationChan, err))
 
-	taskInfo.startTime = time.Now()
+	taskInfo.scheduleTime = time.Now()
 	s.Equal(err, s.taskProcessor.handleTaskError(s.scope, taskInfo, s.notificationChan, err))
 }
 

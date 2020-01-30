@@ -1493,6 +1493,9 @@ const (
 	TaskBatchCompleteCounter
 	TaskProcessingLatency
 	TaskQueueLatency
+	TaskProcessingWithRetryLatency
+	TaskScheduleToStartLatency
+	TaskQueueSize
 
 	AckLevelUpdateCounter
 	AckLevelUpdateFailedCounter
@@ -1824,6 +1827,9 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		TaskLimitExceededCounter:                          {metricName: "task_errors_limit_exceeded_counter", metricType: Counter},
 		TaskProcessingLatency:                             {metricName: "task_latency_processing", metricType: Timer},
 		TaskQueueLatency:                                  {metricName: "task_latency_queue", metricType: Timer},
+		TaskProcessingWithRetryLatency:                    {metricName: "task_processing_with_retry_latency", metricType: Timer},
+		TaskScheduleToStartLatency:                        {metricName: "task_schedule_to_start_latency", metricType: Timer},
+		TaskQueueSize:                                     {metricName: "task_queue_size", metricType: Timer},
 		TaskBatchCompleteCounter:                          {metricName: "task_batch_complete_counter", metricType: Counter},
 		AckLevelUpdateCounter:                             {metricName: "ack_level_update", metricType: Counter},
 		AckLevelUpdateFailedCounter:                       {metricName: "ack_level_update_failed", metricType: Counter},
