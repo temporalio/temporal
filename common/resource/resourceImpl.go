@@ -150,7 +150,11 @@ func New(
 	}
 
 	dispatcher := params.RPCFactory.GetTChannelDispatcher()
-	grpcDispatcher := params.RPCFactory.GetGRPCDispatcher()
+	var grpcDispatcher *yarpc.Dispatcher
+	if serviceName == common.HistoryServiceName || serviceName == common.MatchingServiceName {
+		grpcDispatcher = params.RPCFactory.GetGRPCDispatcher()
+	}
+
 	ringpopDispatcher := params.RPCFactory.GetRingpopDispatcher()
 
 	membershipMonitor, err := params.MembershipFactory.GetMembershipMonitor()

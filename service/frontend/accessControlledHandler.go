@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/yarpc/encoding/protobuf"
 	"go.uber.org/yarpc/yarpcerrors"
+	"google.golang.org/grpc"
 
 	"github.com/temporalio/temporal/.gen/go/health"
 	"github.com/temporalio/temporal/.gen/go/health/metaserver"
@@ -72,6 +73,11 @@ func NewAccessControlledHandlerImpl(wfHandler *DCRedirectionHandlerImpl, authori
 func (a *AccessControlledWorkflowHandler) RegisterHandler() {
 	a.GetGRPCDispatcher().Register(workflowservice.BuildWorkflowServiceYARPCProcedures(a))
 	a.GetDispatcher().Register(metaserver.New(a))
+}
+
+// RegisterServer register this handler at gRPC server
+func (a *AccessControlledWorkflowHandler) RegisterServer(server *grpc.Server) {
+	workflowservice.RegisterWorkflowServiceServer(server, a)
 }
 
 // Health callback for for health check

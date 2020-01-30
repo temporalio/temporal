@@ -227,30 +227,32 @@ func (s *Service) Start() {
 		replicationMessageSink.(*mocks.KafkaProducer).On("Publish", mock.Anything).Return(nil)
 	}
 
+	server := grpc.NewServer()
+
 	wfHandler := NewWorkflowHandler(s, s.config, replicationMessageSink)
 	wfHandlerGRPC := NewWorkflowHandlerGRPC(wfHandler)
-	//dcRedirectionHandler := NewDCRedirectionHandler(wfHandlerGRPC, s.params.DCRedirectionPolicy)
-	//accessControlledWorkflowHandler := NewAccessControlledHandlerImpl(dcRedirectionHandler, s.params.Authorizer)
-
+	dcRedirectionHandler := NewDCRedirectionHandler(wfHandlerGRPC, s.params.DCRedirectionPolicy)
+	accessControlledWorkflowHandler := NewAccessControlledHandlerImpl(dcRedirectionHandler, s.params.Authorizer)
 	//accessControlledWorkflowHandler.RegisterHandler()
+	accessControlledWorkflowHandler.RegisterServer(server)
 	wfHandler.RegisterHandler()
-
-	wfServer := grpc.NewServer()
-	wfHandlerGRPC.RegisterServer(wfServer)
-	listener := s.params.RPCFactory.CreateListener()
-	if err := wfServer.Serve(listener); err != nil {
-		logger.Fatal("failed to serve", tag.Error(err))
-	}
-	//wfServer.Stop()
 
 	s.adminHandler = NewAdminHandler(s, s.params, s.config)
 	adminHandlerGRPC := NewAdminHandlerGRPC(s.adminHandler)
-	adminHandlerGRPC.RegisterHandler()
+	//adminHandlerGRPC.RegisterHandler()
+	adminHandlerGRPC.RegisterServer(server)
 	s.adminHandler.RegisterHandler()
 
 	// must start resource first
 	s.Resource.Start()
 	s.adminHandler.Start()
+
+	listener := s.params.RPCFactory.CreateListener()
+	if err := server.Serve(listener); err != nil {
+		logger.Fatal("Failed to serve frontend listener", tag.Error(err))
+	}
+
+	//server.Stop()
 
 	// base (service is not started in frontend or admin handler) in case of race condition in yarpc registration function
 

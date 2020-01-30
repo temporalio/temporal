@@ -23,6 +23,8 @@ package frontend
 import (
 	"context"
 
+	"google.golang.org/grpc"
+
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/log"
@@ -52,6 +54,11 @@ func NewAdminHandlerGRPC(
 // if DCRedirectionHandler is also used, use RegisterHandler in DCRedirectionHandler instead
 func (adh *AdminHandlerGRPC) RegisterHandler() {
 	adh.adminHandlerThrift.GetGRPCDispatcher().Register(adminservice.BuildAdminServiceYARPCProcedures(adh))
+}
+
+// RegisterServer register this handler at gRPC server
+func (adh *AdminHandlerGRPC) RegisterServer(server *grpc.Server) {
+	adminservice.RegisterAdminServiceServer(server, adh)
 }
 
 // DescribeWorkflowExecution ...
