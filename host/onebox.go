@@ -72,7 +72,7 @@ import (
 type Cadence interface {
 	Start() error
 	Stop()
-	GetAdminClient() adminservice.AdminServiceYARPCClient
+	GetAdminClient() adminservice.AdminServiceClient
 	GetFrontendClient() workflowservice.WorkflowServiceClient
 	FrontendAddress() string
 	GetHistoryClient() historyserviceclient.Interface
@@ -85,7 +85,7 @@ type (
 		matchingService common.Daemon
 		historyServices []common.Daemon
 
-		adminClient            adminservice.AdminServiceYARPCClient
+		adminClient            adminservice.AdminServiceClient
 		frontendClient         workflowservice.WorkflowServiceClient
 		historyClient          historyserviceclient.Interface
 		logger                 log.Logger
@@ -471,7 +471,7 @@ func (c *cadenceImpl) WorkerPProfPort() int {
 	}
 }
 
-func (c *cadenceImpl) GetAdminClient() adminservice.AdminServiceYARPCClient {
+func (c *cadenceImpl) GetAdminClient() adminservice.AdminServiceClient {
 	return c.adminClient
 }
 
@@ -534,8 +534,9 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 	}
 
 	c.frontendService = frontendService
-	c.frontendClient = NewFrontendClient(params.RPCFactory.CreateGRPCConnection(c.FrontendGRPCAddress()))
-	c.adminClient = NewAdminClient(frontendService.GetGRPCDispatcher())
+	connection := params.RPCFactory.CreateGRPCConnection(c.FrontendGRPCAddress())
+	c.frontendClient = NewFrontendClient(connection)
+	c.adminClient = NewAdminClient(connection)
 	go frontendService.Start()
 
 	startWG.Done()

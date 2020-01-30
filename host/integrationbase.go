@@ -31,8 +31,6 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/workflowservice"
-	"go.uber.org/yarpc"
-	"go.uber.org/yarpc/transport/tchannel"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v2"
@@ -72,28 +70,14 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 
 	if clusterConfig.FrontendAddress != "" {
 		s.Logger.Info("Running integration test against specified frontend", tag.Address(TestFlags.FrontendAddr))
-		channel, err := tchannel.NewChannelTransport(tchannel.ServiceName("cadence-frontend"))
-		s.Require().NoError(err)
-		dispatcher := yarpc.NewDispatcher(yarpc.Config{
-			Name: "unittest",
-			Outbounds: yarpc.Outbounds{
-				"cadence-frontend": {Unary: channel.NewSingleOutbound(TestFlags.FrontendAddr)},
-			},
-			InboundMiddleware: yarpc.InboundMiddleware{
-				Unary: &versionMiddleware{},
-			},
-		})
-		if err := dispatcher.Start(); err != nil {
-			s.Logger.Fatal("Failed to create outbound transport channel", tag.Error(err))
-		}
 
 		connection, err := grpc.Dial(TestFlags.FrontendAddrGRPC, grpc.WithInsecure())
 		if err != nil {
-			s.Logger.Fatal("Failed to create gRPC connection", tag.Error(err))
+			s.Require().NoError(err)
 		}
 
 		s.engine = NewFrontendClient(connection)
-		s.adminClient = NewAdminClient(dispatcher)
+		s.adminClient = NewAdminClient(connection)
 	} else {
 		s.Logger.Info("Running integration test against test cluster")
 		cluster, err := NewCluster(clusterConfig, s.Logger)
