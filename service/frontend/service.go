@@ -135,7 +135,7 @@ type Service struct {
 	config *Config
 	params *service.BootstrapParams
 
-	adminHandler *AdminHandler
+	adminHandlerGRPC *AdminHandlerGRPC
 }
 
 // NewService builds a new cadence-frontend service
@@ -235,17 +235,17 @@ func (s *Service) Start() {
 	accessControlledWorkflowHandler := NewAccessControlledHandlerImpl(dcRedirectionHandler, s.params.Authorizer)
 	//accessControlledWorkflowHandler.RegisterHandler()
 	accessControlledWorkflowHandler.RegisterServer(server)
-	wfHandler.RegisterHandler()
+	wfHandler.RegisterHandler() // Thrift version
 
-	s.adminHandler = NewAdminHandler(s, s.params, s.config)
-	adminHandlerGRPC := NewAdminHandlerGRPC(s.adminHandler)
-	//adminHandlerGRPC.RegisterHandler()
-	adminHandlerGRPC.RegisterServer(server)
-	s.adminHandler.RegisterHandler()
+	adminHandler := NewAdminHandler(s, s.params, s.config)
+	s.adminHandlerGRPC = NewAdminHandlerGRPC(adminHandler)
+	//s.adminHandlerGRPC.RegisterHandler()
+	s.adminHandlerGRPC.RegisterServer(server)
+	adminHandler.RegisterHandler() // Thrift version
 
 	// must start resource first
 	s.Resource.Start()
-	s.adminHandler.Start()
+	s.adminHandlerGRPC.Start()
 
 	listener := s.params.RPCFactory.CreateListener()
 	if err := server.Serve(listener); err != nil {
@@ -269,7 +269,7 @@ func (s *Service) Stop() {
 
 	close(s.stopC)
 
-	s.adminHandler.Stop()
+	s.adminHandlerGRPC.Stop()
 	s.Resource.Stop()
 
 	s.params.Logger.Info("frontend stopped")

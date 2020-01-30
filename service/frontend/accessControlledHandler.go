@@ -43,9 +43,6 @@ type AccessControlledWorkflowHandler struct {
 
 	frontendHandler workflowservice.WorkflowServiceYARPCServer
 	authorizer      authorization.Authorizer
-
-	startFn func()
-	stopFn  func()
 }
 
 var _ workflowservice.WorkflowServiceYARPCServer = (*AccessControlledWorkflowHandler)(nil)
@@ -60,8 +57,6 @@ func NewAccessControlledHandlerImpl(wfHandler *DCRedirectionHandlerImpl, authori
 		Resource:        wfHandler.Resource,
 		frontendHandler: wfHandler,
 		authorizer:      authorizer,
-		startFn:         func() { wfHandler.Start() },
-		stopFn:          func() { wfHandler.Stop() },
 	}
 }
 
@@ -82,16 +77,6 @@ func (a *AccessControlledWorkflowHandler) RegisterServer(server *grpc.Server) {
 func (a *AccessControlledWorkflowHandler) Health(context.Context, *healthservice.HealthRequest) (*healthservice.HealthStatus, error) {
 	hs := &healthservice.HealthStatus{Ok: true, Msg: "Frontend health check endpoint (gRPC) reached."}
 	return hs, nil
-}
-
-// Start starts the handler
-func (a *AccessControlledWorkflowHandler) Start() {
-	a.startFn()
-}
-
-// Stop stops the handler
-func (a *AccessControlledWorkflowHandler) Stop() {
-	a.stopFn()
 }
 
 // CountWorkflowExecutions API call
