@@ -27,9 +27,7 @@ import (
 	"go.uber.org/yarpc/encoding/protobuf"
 	"go.uber.org/yarpc/yarpcerrors"
 
-	"github.com/temporalio/temporal/.gen/go/health"
-	"github.com/temporalio/temporal/.gen/go/health/metaserver"
-	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/.gen/proto/healthservice"
 	"github.com/temporalio/temporal/common/authorization"
 	"github.com/temporalio/temporal/common/resource"
 )
@@ -71,12 +69,11 @@ func NewAccessControlledHandlerImpl(wfHandler *DCRedirectionHandlerImpl, authori
 // RegisterHandler register this handler, must be called before Start()
 func (a *AccessControlledWorkflowHandler) RegisterHandler() {
 	a.GetGRPCDispatcher().Register(workflowservice.BuildWorkflowServiceYARPCProcedures(a))
-	a.GetDispatcher().Register(metaserver.New(a))
+	a.GetGRPCDispatcher().Register(healthservice.BuildMetaYARPCProcedures(a))
 }
 
-// Health callback for for health check
-func (a *AccessControlledWorkflowHandler) Health(ctx context.Context) (*health.HealthStatus, error) {
-	hs := &health.HealthStatus{Ok: true, Msg: common.StringPtr("auth is good")}
+func (a *AccessControlledWorkflowHandler) Health(context.Context, *healthservice.HealthRequest) (*healthservice.HealthStatus, error) {
+	hs := &healthservice.HealthStatus{Ok: true, Msg: "Frontend health check endpoint (gRPC) reached."}
 	return hs, nil
 }
 
