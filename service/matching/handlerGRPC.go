@@ -58,7 +58,7 @@ func (h *HandlerGRPC) RegisterHandler() {
 // Health is for health check
 func (h *HandlerGRPC) Health(ctx context.Context, _ *healthservice.HealthRequest) (_ *healthservice.HealthStatus, retError error) {
 	h.handlerThrift.startWG.Wait()
-	h.handlerThrift.GetLogger().Debug("Matching service health check endpoint reached.")
+	h.handlerThrift.GetLogger().Debug("Matching service health check endpoint (gRPC) reached.")
 	hs := &healthservice.HealthStatus{Ok: true, Msg: "matching good"}
 	return hs, nil
 }
