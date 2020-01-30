@@ -23,7 +23,7 @@ package admin
 import (
 	"context"
 
-	"go.uber.org/yarpc"
+	"google.golang.org/grpc"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/common/metrics"
@@ -47,7 +47,7 @@ func NewMetricClient(client Client, metricsClient metrics.Client) Client {
 func (c *metricClient) AddSearchAttribute(
 	ctx context.Context,
 	request *adminservice.AddSearchAttributeRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*adminservice.AddSearchAttributeResponse, error) {
 
 	c.metricsClient.IncCounter(metrics.AdminClientAddSearchAttributeScope, metrics.CadenceClientRequests)
@@ -65,7 +65,7 @@ func (c *metricClient) AddSearchAttribute(
 func (c *metricClient) DescribeHistoryHost(
 	ctx context.Context,
 	request *adminservice.DescribeHistoryHostRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*adminservice.DescribeHistoryHostResponse, error) {
 
 	c.metricsClient.IncCounter(metrics.AdminClientDescribeHistoryHostScope, metrics.CadenceClientRequests)
@@ -83,7 +83,7 @@ func (c *metricClient) DescribeHistoryHost(
 func (c *metricClient) RemoveTask(
 	ctx context.Context,
 	request *adminservice.RemoveTaskRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*adminservice.RemoveTaskResponse, error) {
 
 	c.metricsClient.IncCounter(metrics.AdminClientCloseShardScope, metrics.CadenceClientRequests)
@@ -101,7 +101,7 @@ func (c *metricClient) RemoveTask(
 func (c *metricClient) CloseShard(
 	ctx context.Context,
 	request *adminservice.CloseShardRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*adminservice.CloseShardResponse, error) {
 
 	c.metricsClient.IncCounter(metrics.AdminClientCloseShardScope, metrics.CadenceClientRequests)
@@ -119,7 +119,7 @@ func (c *metricClient) CloseShard(
 func (c *metricClient) DescribeWorkflowExecution(
 	ctx context.Context,
 	request *adminservice.DescribeWorkflowExecutionRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*adminservice.DescribeWorkflowExecutionResponse, error) {
 
 	c.metricsClient.IncCounter(metrics.AdminClientDescribeWorkflowExecutionScope, metrics.CadenceClientRequests)
@@ -137,7 +137,7 @@ func (c *metricClient) DescribeWorkflowExecution(
 func (c *metricClient) GetWorkflowExecutionRawHistory(
 	ctx context.Context,
 	request *adminservice.GetWorkflowExecutionRawHistoryRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*adminservice.GetWorkflowExecutionRawHistoryResponse, error) {
 
 	c.metricsClient.IncCounter(metrics.AdminClientGetWorkflowExecutionRawHistoryScope, metrics.CadenceClientRequests)
@@ -155,7 +155,7 @@ func (c *metricClient) GetWorkflowExecutionRawHistory(
 func (c *metricClient) GetWorkflowExecutionRawHistoryV2(
 	ctx context.Context,
 	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*adminservice.GetWorkflowExecutionRawHistoryV2Response, error) {
 
 	c.metricsClient.IncCounter(metrics.AdminClientGetWorkflowExecutionRawHistoryV2Scope, metrics.CadenceClientRequests)
@@ -173,7 +173,7 @@ func (c *metricClient) GetWorkflowExecutionRawHistoryV2(
 func (c *metricClient) DescribeCluster(
 	ctx context.Context,
 	request *adminservice.DescribeClusterRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*adminservice.DescribeClusterResponse, error) {
 
 	c.metricsClient.IncCounter(metrics.AdminClientDescribeClusterScope, metrics.CadenceClientRequests)
@@ -191,7 +191,7 @@ func (c *metricClient) DescribeCluster(
 func (c *metricClient) GetReplicationMessages(
 	ctx context.Context,
 	request *adminservice.GetReplicationMessagesRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*adminservice.GetReplicationMessagesResponse, error) {
 	c.metricsClient.IncCounter(metrics.FrontendClientGetReplicationTasksScope, metrics.CadenceClientRequests)
 
@@ -208,7 +208,7 @@ func (c *metricClient) GetReplicationMessages(
 func (c *metricClient) GetDomainReplicationMessages(
 	ctx context.Context,
 	request *adminservice.GetDomainReplicationMessagesRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*adminservice.GetDomainReplicationMessagesResponse, error) {
 	c.metricsClient.IncCounter(metrics.FrontendClientGetDomainReplicationTasksScope, metrics.CadenceClientRequests)
 
@@ -225,7 +225,7 @@ func (c *metricClient) GetDomainReplicationMessages(
 func (c *metricClient) GetDLQReplicationMessages(
 	ctx context.Context,
 	request *adminservice.GetDLQReplicationMessagesRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*adminservice.GetDLQReplicationMessagesResponse, error) {
 	c.metricsClient.IncCounter(metrics.FrontendClientGetDLQReplicationTasksScope, metrics.CadenceClientRequests)
 
@@ -242,7 +242,7 @@ func (c *metricClient) GetDLQReplicationMessages(
 func (c *metricClient) ReapplyEvents(
 	ctx context.Context,
 	request *adminservice.ReapplyEventsRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*adminservice.ReapplyEventsResponse, error) {
 
 	c.metricsClient.IncCounter(metrics.FrontendClientReapplyEventsScope, metrics.CadenceClientRequests)

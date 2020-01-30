@@ -57,26 +57,26 @@ type (
 		SetHistoryClient(client history.Client)
 		GetMatchingClient(domainIDToName DomainIDToNameFunc) (matching.Client, error)
 		SetMatchingClient(client matching.Client)
-		GetFrontendClient() frontend.ClientGRPC
-		SetFrontendClient(client frontend.ClientGRPC)
+		GetFrontendClient() frontend.Client
+		SetFrontendClient(client frontend.Client)
 		GetRemoteAdminClient(cluster string) admin.Client
 		SetRemoteAdminClient(cluster string, client admin.Client)
-		GetRemoteFrontendClient(cluster string) frontend.ClientGRPC
-		SetRemoteFrontendClient(cluster string, client frontend.ClientGRPC)
+		GetRemoteFrontendClient(cluster string) frontend.Client
+		SetRemoteFrontendClient(cluster string, client frontend.Client)
 	}
 
-	// DispatcherProvider provides a diapatcher to a given address
+	// DispatcherProvider provides a dispatcher to a given address
 	DispatcherProvider interface {
 		Get(name string, address string) (*yarpc.Dispatcher, error)
 	}
 
 	clientBeanImpl struct {
 		sync.Mutex
+		currentCluster        string
 		historyClient         history.Client
 		matchingClient        atomic.Value
-		frontendClient        frontend.ClientGRPC
 		remoteAdminClients    map[string]admin.Client
-		remoteFrontendClients map[string]frontend.ClientGRPC
+		remoteFrontendClients map[string]frontend.Client
 		factory               Factory
 	}
 
@@ -111,28 +111,22 @@ func NewClientBean(factory Factory, dispatcherProvider DispatcherProvider, clust
 	}
 
 	remoteAdminClients := map[string]admin.Client{}
-	remoteFrontendClients := map[string]frontend.ClientGRPC{}
+	remoteFrontendClients := map[string]frontend.Client{}
 
 	for clusterName, info := range clusterMetadata.GetAllClusterInfo() {
 		if !info.Enabled {
 			continue
 		}
 
-		dispatcher, err := dispatcherProvider.Get(info.RPCName, info.RPCAddress)
-		if err != nil {
-			return nil, err
-		}
-
-		adminClient, err := factory.NewAdminClientWithTimeoutAndDispatcher(
-			info.RPCName,
+		adminClient, err := factory.NewAdminClientWithTimeout(
+			info.RPCAddress,
 			admin.DefaultTimeout,
-			dispatcher,
 		)
 		if err != nil {
 			return nil, err
 		}
 
-		remoteFrontendClient, err := factory.NewFrontendClientWithTimeoutGRPC(
+		remoteFrontendClient, err := factory.NewFrontendClientWithTimeout(
 			info.RPCAddress,
 			frontend.DefaultTimeout,
 			frontend.DefaultLongPollTimeout,
@@ -146,9 +140,9 @@ func NewClientBean(factory Factory, dispatcherProvider DispatcherProvider, clust
 	}
 
 	return &clientBeanImpl{
+		currentCluster:        clusterMetadata.GetCurrentClusterName(),
 		factory:               factory,
 		historyClient:         historyClient,
-		frontendClient:        remoteFrontendClients[clusterMetadata.GetCurrentClusterName()],
 		remoteAdminClients:    remoteAdminClients,
 		remoteFrontendClients: remoteFrontendClients,
 	}, nil
@@ -161,7 +155,6 @@ func (h *clientBeanImpl) GetHistoryClient() history.Client {
 func (h *clientBeanImpl) SetHistoryClient(
 	client history.Client,
 ) {
-
 	h.historyClient = client
 }
 
@@ -175,19 +168,17 @@ func (h *clientBeanImpl) GetMatchingClient(domainIDToName DomainIDToNameFunc) (m
 func (h *clientBeanImpl) SetMatchingClient(
 	client matching.Client,
 ) {
-
 	h.matchingClient.Store(client)
 }
 
-func (h *clientBeanImpl) GetFrontendClient() frontend.ClientGRPC {
-	return h.frontendClient
+func (h *clientBeanImpl) GetFrontendClient() frontend.Client {
+	return h.remoteFrontendClients[h.currentCluster]
 }
 
 func (h *clientBeanImpl) SetFrontendClient(
-	client frontend.ClientGRPC,
+	client frontend.Client,
 ) {
-
-	h.frontendClient = client
+	h.remoteFrontendClients[h.currentCluster] = client
 }
 
 func (h *clientBeanImpl) GetRemoteAdminClient(cluster string) admin.Client {
@@ -206,11 +197,10 @@ func (h *clientBeanImpl) SetRemoteAdminClient(
 	cluster string,
 	client admin.Client,
 ) {
-
 	h.remoteAdminClients[cluster] = client
 }
 
-func (h *clientBeanImpl) GetRemoteFrontendClient(cluster string) frontend.ClientGRPC {
+func (h *clientBeanImpl) GetRemoteFrontendClient(cluster string) frontend.Client {
 	client, ok := h.remoteFrontendClients[cluster]
 	if !ok {
 		panic(fmt.Sprintf(
@@ -224,9 +214,8 @@ func (h *clientBeanImpl) GetRemoteFrontendClient(cluster string) frontend.Client
 
 func (h *clientBeanImpl) SetRemoteFrontendClient(
 	cluster string,
-	client frontend.ClientGRPC,
+	client frontend.Client,
 ) {
-
 	h.remoteFrontendClients[cluster] = client
 }
 

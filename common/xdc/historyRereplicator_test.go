@@ -38,13 +38,13 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/service/frontend/adapter"
 )
 
 type (
@@ -56,7 +56,7 @@ type (
 		targetClusterName string
 
 		mockClusterMetadata *mocks.ClusterMetadata
-		mockAdminClient     *adminservicemock.MockAdminServiceYARPCClient
+		mockAdminClient     *adminservicemock.MockAdminServiceClient
 		mockHistoryClient   *historyservicetest.MockClient
 		serializer          persistence.PayloadSerializer
 		logger              log.Logger
@@ -87,7 +87,7 @@ func (s *historyRereplicatorSuite) SetupTest() {
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
 
 	s.controller = gomock.NewController(s.T())
-	s.mockAdminClient = adminservicemock.NewMockAdminServiceYARPCClient(s.controller)
+	s.mockAdminClient = adminservicemock.NewMockAdminServiceClient(s.controller)
 	s.mockHistoryClient = historyservicetest.NewMockClient(s.controller)
 	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
 

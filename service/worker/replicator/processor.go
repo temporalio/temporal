@@ -28,9 +28,9 @@ import (
 
 	"go.uber.org/yarpc/yarpcerrors"
 
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
-	"github.com/temporalio/temporal/service/frontend/adapter"
 
 	h "github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/replicator"

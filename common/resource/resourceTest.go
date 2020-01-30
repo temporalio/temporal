@@ -82,7 +82,7 @@ type (
 		FrontendClient       *workflowservicemock.MockWorkflowServiceClient
 		MatchingClient       *matchingservicetest.MockClient
 		HistoryClient        *historyservicetest.MockClient
-		RemoteAdminClient    *adminservicemock.MockAdminServiceYARPCClient
+		RemoteAdminClient    *adminservicemock.MockAdminServiceClient
 		RemoteFrontendClient *workflowservicemock.MockWorkflowServiceClient
 		ClientBean           *client.MockBean
 
@@ -127,7 +127,7 @@ func NewTest(
 	matchingClient := matchingservicetest.NewMockClient(controller)
 	historyClient := historyservicetest.NewMockClient(controller)
 	remoteFrontendClient := workflowservicemock.NewMockWorkflowServiceClient(controller)
-	remoteAdminClient := adminservicemock.NewMockAdminServiceYARPCClient(controller)
+	remoteAdminClient := adminservicemock.NewMockAdminServiceClient(controller)
 	clientBean := client.NewMockBean(controller)
 	clientBean.EXPECT().GetFrontendClient().Return(frontendClient).AnyTimes()
 	clientBean.EXPECT().GetMatchingClient(gomock.Any()).Return(matchingClient, nil).AnyTimes()
@@ -317,12 +317,12 @@ func (s *Test) GetSDKClient() workflowservice.WorkflowServiceClient {
 }
 
 // GetFrontendRawClient for testing
-func (s *Test) GetFrontendRawClient() frontend.ClientGRPC {
+func (s *Test) GetFrontendRawClient() frontend.Client {
 	return s.FrontendClient
 }
 
 // GetFrontendClient for testing
-func (s *Test) GetFrontendClient() frontend.ClientGRPC {
+func (s *Test) GetFrontendClient() frontend.Client {
 	return s.FrontendClient
 }
 
@@ -357,7 +357,7 @@ func (s *Test) GetRemoteAdminClient(
 // GetRemoteFrontendClient for testing
 func (s *Test) GetRemoteFrontendClient(
 	cluster string,
-) frontend.ClientGRPC {
+) frontend.Client {
 
 	return s.RemoteFrontendClient
 }

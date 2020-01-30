@@ -127,7 +127,7 @@ service HistoryService {
     // If workflow is not running or not found, it will first try start workflow with given WorkflowIDResuePolicy,
     // and record WorkflowExecutionStarted and WorkflowExecutionSignaled event in case of success.
     // It will return `WorkflowExecutionAlreadyStartedError` if start workflow failed with given policy.
-    rpc SignalWithStartWorkflowExecution (SignalWithStartWorkflowExecutionRequest) returns (StartWorkflowExecutionResponse) {
+    rpc SignalWithStartWorkflowExecution (SignalWithStartWorkflowExecutionRequest) returns (SignalWithStartWorkflowExecutionResponse) {
     }
 
     // RemoveSignalMutableState is used to remove a signal request ID that was previously recorded.  This is currently

@@ -243,8 +243,6 @@ github.com/stretchr/testify v1.4.0 h1:2E4SXV/wtOkTonXsotYi4li6zVWxYlZuYNCXe9XRJy
 github.com/stretchr/testify v1.4.0/go.mod h1:j7eGeouHqKxXV5pUuKE4zz7dFj8WfuZ+81PSLYec5m4=
 github.com/uber-common/bark v1.2.1 h1:cREJ9b7CpTjwZr0/5wV82fXlitoCIEHHnt9WkQ4lIk0=
 github.com/uber-common/bark v1.2.1/go.mod h1:g0ZuPcD7XiExKHynr93Q742G/sbrdVQkghrqLGOoFuY=
-github.com/uber-go/atomic v1.4.0 h1:yOuPqEq4ovnhEjpHmfFwsqBXDYbQeT6Nb0bwD6XnD5o=
-github.com/uber-go/atomic v1.4.0/go.mod h1:/Ct5t2lcmbJ4OSe/waGBoaVvVqtO0bmtfVNex1PFV8g=
 github.com/uber-go/kafka-client v0.2.3-0.20191018205945-8b3555b395f9 h1:UHlXzsS9nReMag5DU98XlPFlQaLpR8mok9SQbNcrcTs=
 github.com/uber-go/kafka-client v0.2.3-0.20191018205945-8b3555b395f9/go.mod h1:ujM3r83bEYTsElQUqIkNOosx9b/4pNJ5xd7Q+DBpYFs=
 github.com/uber-go/mapdecode v1.0.0 h1:euUEFM9KnuCa1OBixz1xM+FIXmpixyay5DLymceOVrU=
@@ -253,9 +251,11 @@ github.com/uber-go/tally v3.3.13+incompatible h1:5ic2UsDwjcWsw9jvEdWEE2XsmGCLMTt
 github.com/uber-go/tally v3.3.13+incompatible/go.mod h1:YDTIBxdXyOU/sCWilKB4bgyufu1cEi0jdVnRdxvjnmU=
 github.com/uber/jaeger-client-go v2.15.0+incompatible h1:NP3qsSqNxh8VYr956ur1N/1C1PjvOJnJykCzcD5QHbk=
 github.com/uber/jaeger-client-go v2.15.0+incompatible/go.mod h1:WVhlPFC8FDjOFMMWRy2pZqQJSXxYSwNYOkTr/Z6d3Kk=
+github.com/uber/jaeger-client-go v2.22.1+incompatible h1:NHcubEkVbahf9t3p75TOCR83gdUHXjRJvjoBh1yACsM=
 github.com/uber/jaeger-client-go v2.22.1+incompatible/go.mod h1:WVhlPFC8FDjOFMMWRy2pZqQJSXxYSwNYOkTr/Z6d3Kk=
 github.com/uber/jaeger-lib v1.5.0 h1:OHbgr8l656Ub3Fw5k9SWnBfIEwvoHQ+W2y+Aa9D1Uyo=
 github.com/uber/jaeger-lib v1.5.0/go.mod h1:ComeNDZlWwrWnDv8aPp0Ba6+uUTzImX/AauajbLI56U=
+github.com/uber/jaeger-lib v2.2.0+incompatible h1:MxZXOiR2JuoANZ3J6DE/U0kSFv/eJ/GfSYVCjK7dyaw=
 github.com/uber/jaeger-lib v2.2.0+incompatible/go.mod h1:ComeNDZlWwrWnDv8aPp0Ba6+uUTzImX/AauajbLI56U=
 github.com/uber/ringpop-go v0.8.5 h1:aBa/SHmmFRcAXA63k7uBheoTL8tCmH7L+OgktB1AF/o=
 github.com/uber/ringpop-go v0.8.5/go.mod h1:zVI6eGO6L7pG14GkntHsSOfmUAWQ7B4lvmzly4IT4ls=
@@ -269,11 +269,8 @@ github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c/go.mod h1:lB8K/P019DLNhe
 github.com/xdg/stringprep v1.0.0/go.mod h1:Jhud4/sHMO4oL310DaZAKk9ZaJ08SJfe+sJh0HrGL1Y=
 github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2 h1:zzrxE1FKn5ryBNl9eKOeqQ58Y/Qpo3Q9QNxKHX5uzzQ=
 github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2/go.mod h1:hzfGeIUDq/j97IG+FhNqkowIyEcD88LrW6fyU3K3WqY=
-go.temporal.io/temporal v0.10.3 h1:uuZA/tbv7IIFl9rgR9aMJEiAmSp/pnspR8MWRNjsSkU=
-go.temporal.io/temporal v0.10.3/go.mod h1:dC56oH+e6QhhlGUU0u7eQpLRZ7TWr9Rgv1Z7ZLThbMs=
 go.temporal.io/temporal v0.10.4 h1:QdMwlZeVzEz6clAriyYYYQS9191U/PIl9qIu64D7gWA=
 go.temporal.io/temporal v0.10.4/go.mod h1:Anwk7/FlGKfsrAhklASJUQex0YY7Hy7n+EawVgKAQRI=
-go.temporal.io/temporal-proto v0.0.0-20200104005919-6abdf3300ac7/go.mod h1:Hcd8jaNNn/g6w3+8vHvTz1QIuodcT1skcUYD6gYoA80=
 go.temporal.io/temporal-proto v0.0.0-20200128005619-937eafde1622 h1:Wk+bWNGnkcnMVRVLz7O3opbmzOVmbrMc6Y8uvjZlu4Q=
 go.temporal.io/temporal-proto v0.0.0-20200128005619-937eafde1622/go.mod h1:fRYT1yXdFOKzWiD8cz/mb3vZzGfxxudPprEWAHkl75o=
 go.uber.org/atomic v1.5.0 h1:OI5t8sDa1Or+q8AeE+yKeB/SDYioSHAgcVljj9JIETY=

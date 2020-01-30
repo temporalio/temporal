@@ -411,7 +411,9 @@ func (s *Service) Start() {
 	logger.Info("history starting")
 
 	s.handler = NewHandler(s.Resource, s.config)
+	handlerGRPC := NewHandlerGRPC(s.handler)
 	s.handler.RegisterHandler()
+	handlerGRPC.RegisterHandler()
 
 	// must start resource first
 	s.Resource.Start()

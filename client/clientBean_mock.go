@@ -116,10 +116,10 @@ func (mr *MockBeanMockRecorder) SetMatchingClient(client interface{}) *gomock.Ca
 }
 
 // GetFrontendClient mocks base method
-func (m *MockBean) GetFrontendClient() frontend.ClientGRPC {
+func (m *MockBean) GetFrontendClient() frontend.Client {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetFrontendClient")
-	ret0, _ := ret[0].(frontend.ClientGRPC)
+	ret0, _ := ret[0].(frontend.Client)
 	return ret0
 }
 
@@ -130,7 +130,7 @@ func (mr *MockBeanMockRecorder) GetFrontendClient() *gomock.Call {
 }
 
 // SetFrontendClient mocks base method
-func (m *MockBean) SetFrontendClient(client frontend.ClientGRPC) {
+func (m *MockBean) SetFrontendClient(client frontend.Client) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetFrontendClient", client)
 }
@@ -168,10 +168,10 @@ func (mr *MockBeanMockRecorder) SetRemoteAdminClient(cluster, client interface{}
 }
 
 // GetRemoteFrontendClient mocks base method
-func (m *MockBean) GetRemoteFrontendClient(cluster string) frontend.ClientGRPC {
+func (m *MockBean) GetRemoteFrontendClient(cluster string) frontend.Client {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetRemoteFrontendClient", cluster)
-	ret0, _ := ret[0].(frontend.ClientGRPC)
+	ret0, _ := ret[0].(frontend.Client)
 	return ret0
 }
 
@@ -182,7 +182,7 @@ func (mr *MockBeanMockRecorder) GetRemoteFrontendClient(cluster interface{}) *go
 }
 
 // SetRemoteFrontendClient mocks base method
-func (m *MockBean) SetRemoteFrontendClient(cluster string, client frontend.ClientGRPC) {
+func (m *MockBean) SetRemoteFrontendClient(cluster string, client frontend.Client) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetRemoteFrontendClient", cluster, client)
 }

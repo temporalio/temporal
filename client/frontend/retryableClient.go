@@ -23,9 +23,9 @@ package frontend
 import (
 	"context"
 
-	"go.uber.org/yarpc"
+	"go.temporal.io/temporal-proto/workflowservice"
+	"google.golang.org/grpc"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/backoff"
 )
 
@@ -37,8 +37,8 @@ type retryableClient struct {
 	isRetryable backoff.IsRetryable
 }
 
-// NewRetryableClient creates a new instance of Client with retry policy
-func NewRetryableClient(client Client, policy backoff.RetryPolicy, isRetryable backoff.IsRetryable) Client {
+// NewRetryableClientGRPC creates a new instance of Client with retry policy
+func NewRetryableClientGRPC(client Client, policy backoff.RetryPolicy, isRetryable backoff.IsRetryable) Client {
 	return &retryableClient{
 		client:      client,
 		policy:      policy,
@@ -48,23 +48,25 @@ func NewRetryableClient(client Client, policy backoff.RetryPolicy, isRetryable b
 
 func (c *retryableClient) DeprecateDomain(
 	ctx context.Context,
-	request *shared.DeprecateDomainRequest,
-	opts ...yarpc.CallOption,
-) error {
-
+	request *workflowservice.DeprecateDomainRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DeprecateDomainResponse, error) {
+	var resp *workflowservice.DeprecateDomainResponse
 	op := func() error {
-		return c.client.DeprecateDomain(ctx, request, opts...)
+		var err error
+		resp, err = c.client.DeprecateDomain(ctx, request, opts...)
+		return err
 	}
-	return backoff.Retry(op, c.policy, c.isRetryable)
+
+	return resp, backoff.Retry(op, c.policy, c.isRetryable)
 }
 
 func (c *retryableClient) DescribeDomain(
 	ctx context.Context,
-	request *shared.DescribeDomainRequest,
-	opts ...yarpc.CallOption,
-) (*shared.DescribeDomainResponse, error) {
-
-	var resp *shared.DescribeDomainResponse
+	request *workflowservice.DescribeDomainRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DescribeDomainResponse, error) {
+	var resp *workflowservice.DescribeDomainResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.DescribeDomain(ctx, request, opts...)
@@ -76,11 +78,10 @@ func (c *retryableClient) DescribeDomain(
 
 func (c *retryableClient) DescribeTaskList(
 	ctx context.Context,
-	request *shared.DescribeTaskListRequest,
-	opts ...yarpc.CallOption,
-) (*shared.DescribeTaskListResponse, error) {
-
-	var resp *shared.DescribeTaskListResponse
+	request *workflowservice.DescribeTaskListRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DescribeTaskListResponse, error) {
+	var resp *workflowservice.DescribeTaskListResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.DescribeTaskList(ctx, request, opts...)
@@ -92,11 +93,10 @@ func (c *retryableClient) DescribeTaskList(
 
 func (c *retryableClient) DescribeWorkflowExecution(
 	ctx context.Context,
-	request *shared.DescribeWorkflowExecutionRequest,
-	opts ...yarpc.CallOption,
-) (*shared.DescribeWorkflowExecutionResponse, error) {
-
-	var resp *shared.DescribeWorkflowExecutionResponse
+	request *workflowservice.DescribeWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
+	var resp *workflowservice.DescribeWorkflowExecutionResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.DescribeWorkflowExecution(ctx, request, opts...)
@@ -108,11 +108,10 @@ func (c *retryableClient) DescribeWorkflowExecution(
 
 func (c *retryableClient) GetWorkflowExecutionHistory(
 	ctx context.Context,
-	request *shared.GetWorkflowExecutionHistoryRequest,
-	opts ...yarpc.CallOption,
-) (*shared.GetWorkflowExecutionHistoryResponse, error) {
-
-	var resp *shared.GetWorkflowExecutionHistoryResponse
+	request *workflowservice.GetWorkflowExecutionHistoryRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.GetWorkflowExecutionHistoryResponse, error) {
+	var resp *workflowservice.GetWorkflowExecutionHistoryResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.GetWorkflowExecutionHistory(ctx, request, opts...)
@@ -124,11 +123,10 @@ func (c *retryableClient) GetWorkflowExecutionHistory(
 
 func (c *retryableClient) GetWorkflowExecutionRawHistory(
 	ctx context.Context,
-	request *shared.GetWorkflowExecutionRawHistoryRequest,
-	opts ...yarpc.CallOption,
-) (*shared.GetWorkflowExecutionRawHistoryResponse, error) {
-
-	var resp *shared.GetWorkflowExecutionRawHistoryResponse
+	request *workflowservice.GetWorkflowExecutionRawHistoryRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.GetWorkflowExecutionRawHistoryResponse, error) {
+	var resp *workflowservice.GetWorkflowExecutionRawHistoryResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.GetWorkflowExecutionRawHistory(ctx, request, opts...)
@@ -140,11 +138,10 @@ func (c *retryableClient) GetWorkflowExecutionRawHistory(
 
 func (c *retryableClient) ListArchivedWorkflowExecutions(
 	ctx context.Context,
-	request *shared.ListArchivedWorkflowExecutionsRequest,
-	opts ...yarpc.CallOption,
-) (*shared.ListArchivedWorkflowExecutionsResponse, error) {
-
-	var resp *shared.ListArchivedWorkflowExecutionsResponse
+	request *workflowservice.ListArchivedWorkflowExecutionsRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ListArchivedWorkflowExecutionsResponse, error) {
+	var resp *workflowservice.ListArchivedWorkflowExecutionsResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.ListArchivedWorkflowExecutions(ctx, request, opts...)
@@ -156,11 +153,10 @@ func (c *retryableClient) ListArchivedWorkflowExecutions(
 
 func (c *retryableClient) ListClosedWorkflowExecutions(
 	ctx context.Context,
-	request *shared.ListClosedWorkflowExecutionsRequest,
-	opts ...yarpc.CallOption,
-) (*shared.ListClosedWorkflowExecutionsResponse, error) {
-
-	var resp *shared.ListClosedWorkflowExecutionsResponse
+	request *workflowservice.ListClosedWorkflowExecutionsRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ListClosedWorkflowExecutionsResponse, error) {
+	var resp *workflowservice.ListClosedWorkflowExecutionsResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.ListClosedWorkflowExecutions(ctx, request, opts...)
@@ -172,11 +168,10 @@ func (c *retryableClient) ListClosedWorkflowExecutions(
 
 func (c *retryableClient) ListDomains(
 	ctx context.Context,
-	request *shared.ListDomainsRequest,
-	opts ...yarpc.CallOption,
-) (*shared.ListDomainsResponse, error) {
-
-	var resp *shared.ListDomainsResponse
+	request *workflowservice.ListDomainsRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ListDomainsResponse, error) {
+	var resp *workflowservice.ListDomainsResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.ListDomains(ctx, request, opts...)
@@ -188,11 +183,10 @@ func (c *retryableClient) ListDomains(
 
 func (c *retryableClient) ListOpenWorkflowExecutions(
 	ctx context.Context,
-	request *shared.ListOpenWorkflowExecutionsRequest,
-	opts ...yarpc.CallOption,
-) (*shared.ListOpenWorkflowExecutionsResponse, error) {
-
-	var resp *shared.ListOpenWorkflowExecutionsResponse
+	request *workflowservice.ListOpenWorkflowExecutionsRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ListOpenWorkflowExecutionsResponse, error) {
+	var resp *workflowservice.ListOpenWorkflowExecutionsResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.ListOpenWorkflowExecutions(ctx, request, opts...)
@@ -204,11 +198,10 @@ func (c *retryableClient) ListOpenWorkflowExecutions(
 
 func (c *retryableClient) ListWorkflowExecutions(
 	ctx context.Context,
-	request *shared.ListWorkflowExecutionsRequest,
-	opts ...yarpc.CallOption,
-) (*shared.ListWorkflowExecutionsResponse, error) {
-
-	var resp *shared.ListWorkflowExecutionsResponse
+	request *workflowservice.ListWorkflowExecutionsRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ListWorkflowExecutionsResponse, error) {
+	var resp *workflowservice.ListWorkflowExecutionsResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.ListWorkflowExecutions(ctx, request, opts...)
@@ -220,11 +213,10 @@ func (c *retryableClient) ListWorkflowExecutions(
 
 func (c *retryableClient) ScanWorkflowExecutions(
 	ctx context.Context,
-	request *shared.ListWorkflowExecutionsRequest,
-	opts ...yarpc.CallOption,
-) (*shared.ListWorkflowExecutionsResponse, error) {
-
-	var resp *shared.ListWorkflowExecutionsResponse
+	request *workflowservice.ScanWorkflowExecutionsRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ScanWorkflowExecutionsResponse, error) {
+	var resp *workflowservice.ScanWorkflowExecutionsResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.ScanWorkflowExecutions(ctx, request, opts...)
@@ -236,11 +228,10 @@ func (c *retryableClient) ScanWorkflowExecutions(
 
 func (c *retryableClient) CountWorkflowExecutions(
 	ctx context.Context,
-	request *shared.CountWorkflowExecutionsRequest,
-	opts ...yarpc.CallOption,
-) (*shared.CountWorkflowExecutionsResponse, error) {
-
-	var resp *shared.CountWorkflowExecutionsResponse
+	request *workflowservice.CountWorkflowExecutionsRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.CountWorkflowExecutionsResponse, error) {
+	var resp *workflowservice.CountWorkflowExecutionsResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.CountWorkflowExecutions(ctx, request, opts...)
@@ -252,13 +243,13 @@ func (c *retryableClient) CountWorkflowExecutions(
 
 func (c *retryableClient) GetSearchAttributes(
 	ctx context.Context,
-	opts ...yarpc.CallOption,
-) (*shared.GetSearchAttributesResponse, error) {
-
-	var resp *shared.GetSearchAttributesResponse
+	request *workflowservice.GetSearchAttributesRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.GetSearchAttributesResponse, error) {
+	var resp *workflowservice.GetSearchAttributesResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.GetSearchAttributes(ctx, opts...)
+		resp, err = c.client.GetSearchAttributes(ctx, request, opts...)
 		return err
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)
@@ -267,11 +258,10 @@ func (c *retryableClient) GetSearchAttributes(
 
 func (c *retryableClient) PollForActivityTask(
 	ctx context.Context,
-	request *shared.PollForActivityTaskRequest,
-	opts ...yarpc.CallOption,
-) (*shared.PollForActivityTaskResponse, error) {
-
-	var resp *shared.PollForActivityTaskResponse
+	request *workflowservice.PollForActivityTaskRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.PollForActivityTaskResponse, error) {
+	var resp *workflowservice.PollForActivityTaskResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.PollForActivityTask(ctx, request, opts...)
@@ -283,11 +273,10 @@ func (c *retryableClient) PollForActivityTask(
 
 func (c *retryableClient) PollForDecisionTask(
 	ctx context.Context,
-	request *shared.PollForDecisionTaskRequest,
-	opts ...yarpc.CallOption,
-) (*shared.PollForDecisionTaskResponse, error) {
-
-	var resp *shared.PollForDecisionTaskResponse
+	request *workflowservice.PollForDecisionTaskRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.PollForDecisionTaskResponse, error) {
+	var resp *workflowservice.PollForDecisionTaskResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.PollForDecisionTask(ctx, request, opts...)
@@ -299,11 +288,10 @@ func (c *retryableClient) PollForDecisionTask(
 
 func (c *retryableClient) QueryWorkflow(
 	ctx context.Context,
-	request *shared.QueryWorkflowRequest,
-	opts ...yarpc.CallOption,
-) (*shared.QueryWorkflowResponse, error) {
-
-	var resp *shared.QueryWorkflowResponse
+	request *workflowservice.QueryWorkflowRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.QueryWorkflowResponse, error) {
+	var resp *workflowservice.QueryWorkflowResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.QueryWorkflow(ctx, request, opts...)
@@ -315,11 +303,10 @@ func (c *retryableClient) QueryWorkflow(
 
 func (c *retryableClient) RecordActivityTaskHeartbeat(
 	ctx context.Context,
-	request *shared.RecordActivityTaskHeartbeatRequest,
-	opts ...yarpc.CallOption,
-) (*shared.RecordActivityTaskHeartbeatResponse, error) {
-
-	var resp *shared.RecordActivityTaskHeartbeatResponse
+	request *workflowservice.RecordActivityTaskHeartbeatRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.RecordActivityTaskHeartbeatResponse, error) {
+	var resp *workflowservice.RecordActivityTaskHeartbeatResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.RecordActivityTaskHeartbeat(ctx, request, opts...)
@@ -331,11 +318,10 @@ func (c *retryableClient) RecordActivityTaskHeartbeat(
 
 func (c *retryableClient) RecordActivityTaskHeartbeatByID(
 	ctx context.Context,
-	request *shared.RecordActivityTaskHeartbeatByIDRequest,
-	opts ...yarpc.CallOption,
-) (*shared.RecordActivityTaskHeartbeatResponse, error) {
-
-	var resp *shared.RecordActivityTaskHeartbeatResponse
+	request *workflowservice.RecordActivityTaskHeartbeatByIDRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.RecordActivityTaskHeartbeatByIDResponse, error) {
+	var resp *workflowservice.RecordActivityTaskHeartbeatByIDResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.RecordActivityTaskHeartbeatByID(ctx, request, opts...)
@@ -347,35 +333,40 @@ func (c *retryableClient) RecordActivityTaskHeartbeatByID(
 
 func (c *retryableClient) RegisterDomain(
 	ctx context.Context,
-	request *shared.RegisterDomainRequest,
-	opts ...yarpc.CallOption,
-) error {
-
+	request *workflowservice.RegisterDomainRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.RegisterDomainResponse, error) {
+	var resp *workflowservice.RegisterDomainResponse
 	op := func() error {
-		return c.client.RegisterDomain(ctx, request, opts...)
+		var err error
+		resp, err = c.client.RegisterDomain(ctx, request, opts...)
+		return err
 	}
-	return backoff.Retry(op, c.policy, c.isRetryable)
+
+	return resp, backoff.Retry(op, c.policy, c.isRetryable)
 }
 
 func (c *retryableClient) RequestCancelWorkflowExecution(
 	ctx context.Context,
-	request *shared.RequestCancelWorkflowExecutionRequest,
-	opts ...yarpc.CallOption,
-) error {
-
+	request *workflowservice.RequestCancelWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.RequestCancelWorkflowExecutionResponse, error) {
+	var resp *workflowservice.RequestCancelWorkflowExecutionResponse
 	op := func() error {
-		return c.client.RequestCancelWorkflowExecution(ctx, request, opts...)
+		var err error
+		resp, err = c.client.RequestCancelWorkflowExecution(ctx, request, opts...)
+		return err
 	}
-	return backoff.Retry(op, c.policy, c.isRetryable)
+
+	return resp, backoff.Retry(op, c.policy, c.isRetryable)
 }
 
 func (c *retryableClient) ResetStickyTaskList(
 	ctx context.Context,
-	request *shared.ResetStickyTaskListRequest,
-	opts ...yarpc.CallOption,
-) (*shared.ResetStickyTaskListResponse, error) {
-
-	var resp *shared.ResetStickyTaskListResponse
+	request *workflowservice.ResetStickyTaskListRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ResetStickyTaskListResponse, error) {
+	var resp *workflowservice.ResetStickyTaskListResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.ResetStickyTaskList(ctx, request, opts...)
@@ -387,11 +378,10 @@ func (c *retryableClient) ResetStickyTaskList(
 
 func (c *retryableClient) ResetWorkflowExecution(
 	ctx context.Context,
-	request *shared.ResetWorkflowExecutionRequest,
-	opts ...yarpc.CallOption,
-) (*shared.ResetWorkflowExecutionResponse, error) {
-
-	var resp *shared.ResetWorkflowExecutionResponse
+	request *workflowservice.ResetWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ResetWorkflowExecutionResponse, error) {
+	var resp *workflowservice.ResetWorkflowExecutionResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.ResetWorkflowExecution(ctx, request, opts...)
@@ -403,83 +393,100 @@ func (c *retryableClient) ResetWorkflowExecution(
 
 func (c *retryableClient) RespondActivityTaskCanceled(
 	ctx context.Context,
-	request *shared.RespondActivityTaskCanceledRequest,
-	opts ...yarpc.CallOption,
-) error {
-
+	request *workflowservice.RespondActivityTaskCanceledRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.RespondActivityTaskCanceledResponse, error) {
+	var resp *workflowservice.RespondActivityTaskCanceledResponse
 	op := func() error {
-		return c.client.RespondActivityTaskCanceled(ctx, request, opts...)
+		var err error
+		resp, err = c.client.RespondActivityTaskCanceled(ctx, request, opts...)
+		return err
 	}
-	return backoff.Retry(op, c.policy, c.isRetryable)
+
+	return resp, backoff.Retry(op, c.policy, c.isRetryable)
 }
 
 func (c *retryableClient) RespondActivityTaskCanceledByID(
 	ctx context.Context,
-	request *shared.RespondActivityTaskCanceledByIDRequest,
-	opts ...yarpc.CallOption,
-) error {
-
+	request *workflowservice.RespondActivityTaskCanceledByIDRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.RespondActivityTaskCanceledByIDResponse, error) {
+	var resp *workflowservice.RespondActivityTaskCanceledByIDResponse
 	op := func() error {
-		return c.client.RespondActivityTaskCanceledByID(ctx, request, opts...)
+		var err error
+		resp, err = c.client.RespondActivityTaskCanceledByID(ctx, request, opts...)
+		return err
 	}
-	return backoff.Retry(op, c.policy, c.isRetryable)
+
+	return resp, backoff.Retry(op, c.policy, c.isRetryable)
 }
 
 func (c *retryableClient) RespondActivityTaskCompleted(
 	ctx context.Context,
-	request *shared.RespondActivityTaskCompletedRequest,
-	opts ...yarpc.CallOption,
-) error {
-
+	request *workflowservice.RespondActivityTaskCompletedRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.RespondActivityTaskCompletedResponse, error) {
+	var resp *workflowservice.RespondActivityTaskCompletedResponse
 	op := func() error {
-		return c.client.RespondActivityTaskCompleted(ctx, request, opts...)
+		var err error
+		resp, err = c.client.RespondActivityTaskCompleted(ctx, request, opts...)
+		return err
 	}
-	return backoff.Retry(op, c.policy, c.isRetryable)
+
+	return resp, backoff.Retry(op, c.policy, c.isRetryable)
 }
 
 func (c *retryableClient) RespondActivityTaskCompletedByID(
 	ctx context.Context,
-	request *shared.RespondActivityTaskCompletedByIDRequest,
-	opts ...yarpc.CallOption,
-) error {
-
+	request *workflowservice.RespondActivityTaskCompletedByIDRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.RespondActivityTaskCompletedByIDResponse, error) {
+	var resp *workflowservice.RespondActivityTaskCompletedByIDResponse
 	op := func() error {
-		return c.client.RespondActivityTaskCompletedByID(ctx, request, opts...)
+		var err error
+		resp, err = c.client.RespondActivityTaskCompletedByID(ctx, request, opts...)
+		return err
 	}
-	return backoff.Retry(op, c.policy, c.isRetryable)
+
+	return resp, backoff.Retry(op, c.policy, c.isRetryable)
 }
 
 func (c *retryableClient) RespondActivityTaskFailed(
 	ctx context.Context,
-	request *shared.RespondActivityTaskFailedRequest,
-	opts ...yarpc.CallOption,
-) error {
-
+	request *workflowservice.RespondActivityTaskFailedRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.RespondActivityTaskFailedResponse, error) {
+	var resp *workflowservice.RespondActivityTaskFailedResponse
 	op := func() error {
-		return c.client.RespondActivityTaskFailed(ctx, request, opts...)
+		var err error
+		resp, err = c.client.RespondActivityTaskFailed(ctx, request, opts...)
+		return err
 	}
-	return backoff.Retry(op, c.policy, c.isRetryable)
+
+	return resp, backoff.Retry(op, c.policy, c.isRetryable)
 }
 
 func (c *retryableClient) RespondActivityTaskFailedByID(
 	ctx context.Context,
-	request *shared.RespondActivityTaskFailedByIDRequest,
-	opts ...yarpc.CallOption,
-) error {
-
+	request *workflowservice.RespondActivityTaskFailedByIDRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.RespondActivityTaskFailedByIDResponse, error) {
+	var resp *workflowservice.RespondActivityTaskFailedByIDResponse
 	op := func() error {
-		return c.client.RespondActivityTaskFailedByID(ctx, request, opts...)
+		var err error
+		resp, err = c.client.RespondActivityTaskFailedByID(ctx, request, opts...)
+		return err
 	}
-	return backoff.Retry(op, c.policy, c.isRetryable)
+
+	return resp, backoff.Retry(op, c.policy, c.isRetryable)
 }
 
 func (c *retryableClient) RespondDecisionTaskCompleted(
 	ctx context.Context,
-	request *shared.RespondDecisionTaskCompletedRequest,
-	opts ...yarpc.CallOption,
-) (*shared.RespondDecisionTaskCompletedResponse, error) {
-
-	var resp *shared.RespondDecisionTaskCompletedResponse
+	request *workflowservice.RespondDecisionTaskCompletedRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.RespondDecisionTaskCompletedResponse, error) {
+	var resp *workflowservice.RespondDecisionTaskCompletedResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.RespondDecisionTaskCompleted(ctx, request, opts...)
@@ -491,35 +498,40 @@ func (c *retryableClient) RespondDecisionTaskCompleted(
 
 func (c *retryableClient) RespondDecisionTaskFailed(
 	ctx context.Context,
-	request *shared.RespondDecisionTaskFailedRequest,
-	opts ...yarpc.CallOption,
-) error {
-
+	request *workflowservice.RespondDecisionTaskFailedRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.RespondDecisionTaskFailedResponse, error) {
+	var resp *workflowservice.RespondDecisionTaskFailedResponse
 	op := func() error {
-		return c.client.RespondDecisionTaskFailed(ctx, request, opts...)
+		var err error
+		resp, err = c.client.RespondDecisionTaskFailed(ctx, request, opts...)
+		return err
 	}
-	return backoff.Retry(op, c.policy, c.isRetryable)
+
+	return resp, backoff.Retry(op, c.policy, c.isRetryable)
 }
 
 func (c *retryableClient) RespondQueryTaskCompleted(
 	ctx context.Context,
-	request *shared.RespondQueryTaskCompletedRequest,
-	opts ...yarpc.CallOption,
-) error {
-
+	request *workflowservice.RespondQueryTaskCompletedRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.RespondQueryTaskCompletedResponse, error) {
+	var resp *workflowservice.RespondQueryTaskCompletedResponse
 	op := func() error {
-		return c.client.RespondQueryTaskCompleted(ctx, request, opts...)
+		var err error
+		resp, err = c.client.RespondQueryTaskCompleted(ctx, request, opts...)
+		return err
 	}
-	return backoff.Retry(op, c.policy, c.isRetryable)
+
+	return resp, backoff.Retry(op, c.policy, c.isRetryable)
 }
 
 func (c *retryableClient) SignalWithStartWorkflowExecution(
 	ctx context.Context,
-	request *shared.SignalWithStartWorkflowExecutionRequest,
-	opts ...yarpc.CallOption,
-) (*shared.StartWorkflowExecutionResponse, error) {
-
-	var resp *shared.StartWorkflowExecutionResponse
+	request *workflowservice.SignalWithStartWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.SignalWithStartWorkflowExecutionResponse, error) {
+	var resp *workflowservice.SignalWithStartWorkflowExecutionResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.SignalWithStartWorkflowExecution(ctx, request, opts...)
@@ -531,23 +543,25 @@ func (c *retryableClient) SignalWithStartWorkflowExecution(
 
 func (c *retryableClient) SignalWorkflowExecution(
 	ctx context.Context,
-	request *shared.SignalWorkflowExecutionRequest,
-	opts ...yarpc.CallOption,
-) error {
-
+	request *workflowservice.SignalWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.SignalWorkflowExecutionResponse, error) {
+	var resp *workflowservice.SignalWorkflowExecutionResponse
 	op := func() error {
-		return c.client.SignalWorkflowExecution(ctx, request, opts...)
+		var err error
+		resp, err = c.client.SignalWorkflowExecution(ctx, request, opts...)
+		return err
 	}
-	return backoff.Retry(op, c.policy, c.isRetryable)
+
+	return resp, backoff.Retry(op, c.policy, c.isRetryable)
 }
 
 func (c *retryableClient) StartWorkflowExecution(
 	ctx context.Context,
-	request *shared.StartWorkflowExecutionRequest,
-	opts ...yarpc.CallOption,
-) (*shared.StartWorkflowExecutionResponse, error) {
-
-	var resp *shared.StartWorkflowExecutionResponse
+	request *workflowservice.StartWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.StartWorkflowExecutionResponse, error) {
+	var resp *workflowservice.StartWorkflowExecutionResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.StartWorkflowExecution(ctx, request, opts...)
@@ -559,23 +573,25 @@ func (c *retryableClient) StartWorkflowExecution(
 
 func (c *retryableClient) TerminateWorkflowExecution(
 	ctx context.Context,
-	request *shared.TerminateWorkflowExecutionRequest,
-	opts ...yarpc.CallOption,
-) error {
-
+	request *workflowservice.TerminateWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.TerminateWorkflowExecutionResponse, error) {
+	var resp *workflowservice.TerminateWorkflowExecutionResponse
 	op := func() error {
-		return c.client.TerminateWorkflowExecution(ctx, request, opts...)
+		var err error
+		resp, err = c.client.TerminateWorkflowExecution(ctx, request, opts...)
+		return err
 	}
-	return backoff.Retry(op, c.policy, c.isRetryable)
+
+	return resp, backoff.Retry(op, c.policy, c.isRetryable)
 }
 
 func (c *retryableClient) UpdateDomain(
 	ctx context.Context,
-	request *shared.UpdateDomainRequest,
-	opts ...yarpc.CallOption,
-) (*shared.UpdateDomainResponse, error) {
-
-	var resp *shared.UpdateDomainResponse
+	request *workflowservice.UpdateDomainRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateDomainResponse, error) {
+	var resp *workflowservice.UpdateDomainResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.UpdateDomain(ctx, request, opts...)
@@ -587,12 +603,13 @@ func (c *retryableClient) UpdateDomain(
 
 func (c *retryableClient) GetClusterInfo(
 	ctx context.Context,
-	opts ...yarpc.CallOption,
-) (*shared.ClusterInfo, error) {
-	var resp *shared.ClusterInfo
+	request *workflowservice.GetClusterInfoRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.GetClusterInfoResponse, error) {
+	var resp *workflowservice.GetClusterInfoResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.GetClusterInfo(ctx, opts...)
+		resp, err = c.client.GetClusterInfo(ctx, request, opts...)
 		return err
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)
@@ -601,10 +618,10 @@ func (c *retryableClient) GetClusterInfo(
 
 func (c *retryableClient) ListTaskListPartitions(
 	ctx context.Context,
-	request *shared.ListTaskListPartitionsRequest,
-	opts ...yarpc.CallOption,
-) (*shared.ListTaskListPartitionsResponse, error) {
-	var resp *shared.ListTaskListPartitionsResponse
+	request *workflowservice.ListTaskListPartitionsRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ListTaskListPartitionsResponse, error) {
+	var resp *workflowservice.ListTaskListPartitionsResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.ListTaskListPartitions(ctx, request, opts...)

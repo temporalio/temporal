@@ -26,7 +26,6 @@ import (
 
 	"go.temporal.io/temporal-proto/workflowservice"
 
-	"github.com/temporalio/temporal/.gen/go/health"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/metrics"
@@ -71,10 +70,9 @@ func NewDCRedirectionHandler(
 	}
 }
 
-// Health is for health check
-func (handler *DCRedirectionHandlerImpl) Health(ctx context.Context) (*health.HealthStatus, error) {
-	hs := &health.HealthStatus{Ok: true, Msg: common.StringPtr("dc redirection good")}
-	return hs, nil
+// RegisterHandler register this handler, must be called before Start()
+func (handler *DCRedirectionHandlerImpl) RegisterHandler() {
+	handler.GetGRPCDispatcher().Register(workflowservice.BuildWorkflowServiceYARPCProcedures(handler))
 }
 
 // Domain APIs, domain APIs does not require redirection

@@ -46,19 +46,19 @@ type cliAppSuite struct {
 	app               *cli.App
 	mockCtrl          *gomock.Controller
 	frontendClient    *workflowservicemock.MockWorkflowServiceClient
-	serverAdminClient *adminservicemock.MockAdminServiceYARPCClient
+	serverAdminClient *adminservicemock.MockAdminServiceClient
 }
 
 type clientFactoryMock struct {
 	frontendClient    workflowservice.WorkflowServiceClient
-	serverAdminClient adminservice.AdminServiceYARPCClient
+	serverAdminClient adminservice.AdminServiceClient
 }
 
 func (m *clientFactoryMock) FrontendClient(c *cli.Context) workflowservice.WorkflowServiceClient {
 	return m.frontendClient
 }
 
-func (m *clientFactoryMock) ServerAdminClient(c *cli.Context) adminservice.AdminServiceYARPCClient {
+func (m *clientFactoryMock) AdminClient(c *cli.Context) adminservice.AdminServiceClient {
 	return m.serverAdminClient
 }
 
@@ -83,7 +83,7 @@ func (s *cliAppSuite) SetupTest() {
 	s.mockCtrl = gomock.NewController(s.T())
 
 	s.frontendClient = workflowservicemock.NewMockWorkflowServiceClient(s.mockCtrl)
-	s.serverAdminClient = adminservicemock.NewMockAdminServiceYARPCClient(s.mockCtrl)
+	s.serverAdminClient = adminservicemock.NewMockAdminServiceClient(s.mockCtrl)
 	SetFactory(&clientFactoryMock{
 		frontendClient:    s.frontendClient,
 		serverAdminClient: s.serverAdminClient,

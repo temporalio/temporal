@@ -96,8 +96,8 @@ type (
 		// internal services clients
 
 		sdkClient         workflowservice.WorkflowServiceClient
-		frontendRawClient frontend.ClientGRPC
-		frontendClient    frontend.ClientGRPC
+		frontendRawClient frontend.Client
+		frontendClient    frontend.Client
 		matchingRawClient matching.Client
 		matchingClient    matching.Client
 		historyRawClient  history.Client
@@ -150,10 +150,7 @@ func New(
 	}
 
 	dispatcher := params.RPCFactory.GetTChannelDispatcher()
-	var grpcDispatcher *yarpc.Dispatcher
-	if serviceName == common.FrontendServiceName {
-		grpcDispatcher = params.RPCFactory.GetGRPCDispatcher()
-	}
+	grpcDispatcher := params.RPCFactory.GetGRPCDispatcher()
 	ringpopDispatcher := params.RPCFactory.GetRingpopDispatcher()
 
 	membershipMonitor, err := params.MembershipFactory.GetMembershipMonitor()
@@ -504,12 +501,12 @@ func (h *Impl) GetSDKClient() workflowservice.WorkflowServiceClient {
 }
 
 // GetFrontendRawClient return frontend client without retry policy
-func (h *Impl) GetFrontendRawClient() frontend.ClientGRPC {
+func (h *Impl) GetFrontendRawClient() frontend.Client {
 	return h.frontendRawClient
 }
 
 // GetFrontendClient return frontend client with retry policy
-func (h *Impl) GetFrontendClient() frontend.ClientGRPC {
+func (h *Impl) GetFrontendClient() frontend.Client {
 	return h.frontendClient
 }
 
@@ -544,7 +541,7 @@ func (h *Impl) GetRemoteAdminClient(
 // GetRemoteFrontendClient return remote frontend client for given cluster name
 func (h *Impl) GetRemoteFrontendClient(
 	cluster string,
-) frontend.ClientGRPC {
+) frontend.Client {
 
 	return h.clientBean.GetRemoteFrontendClient(cluster)
 }

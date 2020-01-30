@@ -33,12 +33,12 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/collection"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/service/frontend/adapter"
 )
 
 const (
@@ -239,7 +239,7 @@ func (n *NDCHistoryResenderImpl) getHistory(
 	}
 	domainName := domainEntry.GetInfo().Name
 
-	ctx, cancel := context.WithTimeout(context.Background(), resendContextTimeout)
+	ctx, cancel := createContextWithCancel(resendContextTimeout)
 	defer cancel()
 	response, err := n.adminClient.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 		Domain: domainName,

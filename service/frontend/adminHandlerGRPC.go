@@ -24,8 +24,8 @@ import (
 	"context"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/log"
-	"github.com/temporalio/temporal/service/frontend/adapter"
 )
 
 var _ adminservice.AdminServiceYARPCServer = (*AdminHandlerGRPC)(nil)

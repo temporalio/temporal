@@ -48,8 +48,8 @@ import (
 	"google.golang.org/grpc/codes"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/clock"
-	"github.com/temporalio/temporal/service/frontend/adapter"
 	"github.com/temporalio/temporal/service/history"
 )
 
