@@ -150,7 +150,7 @@ func AdminDescribeWorkflow(c *cli.Context) {
 }
 
 func describeMutableState(c *cli.Context) *adminservice.DescribeWorkflowExecutionResponse {
-	adminClient := cFactory.ServerAdminClient(c)
+	adminClient := cFactory.AdminClient(c)
 
 	domain := getRequiredGlobalOption(c, FlagDomain)
 	wid := getRequiredOption(c, FlagWorkflowID)
@@ -361,7 +361,7 @@ func AdminGetShardID(c *cli.Context) {
 
 // AdminRemoveTask describes history host
 func AdminRemoveTask(c *cli.Context) {
-	adminClient := cFactory.ServerAdminClient(c)
+	adminClient := cFactory.AdminClient(c)
 
 	sid := getRequiredIntOption(c, FlagShardID)
 	taskID := getRequiredInt64Option(c, FlagRemoveTaskID)
@@ -384,7 +384,7 @@ func AdminRemoveTask(c *cli.Context) {
 
 // AdminShardManagement describes history host
 func AdminShardManagement(c *cli.Context) {
-	adminClient := cFactory.ServerAdminClient(c)
+	adminClient := cFactory.AdminClient(c)
 	sid := getRequiredIntOption(c, FlagShardID)
 
 	ctx, cancel := newContext(c)
@@ -401,7 +401,7 @@ func AdminShardManagement(c *cli.Context) {
 
 // AdminDescribeHistoryHost describes history host
 func AdminDescribeHistoryHost(c *cli.Context) {
-	adminClient := cFactory.ServerAdminClient(c)
+	adminClient := cFactory.AdminClient(c)
 
 	wid := c.String(FlagWorkflowID)
 	sid := c.Int(FlagShardID)

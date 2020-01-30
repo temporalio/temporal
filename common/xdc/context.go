@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2020 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,13 +18,34 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package admin
+package xdc
 
 import (
-	"github.com/temporalio/temporal/.gen/proto/adminservice"
+	"context"
+	"time"
+
+	"google.golang.org/grpc/metadata"
+
+	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/client"
 )
 
-// Client is the interface exposed by admin service client
-type Client interface {
-	adminservice.AdminServiceClient
+var (
+	// call header to cadence server
+	headers = metadata.New(map[string]string{
+		common.LibraryVersionHeaderName: "1.0.0",
+		common.FeatureVersionHeaderName: client.GoWorkerConsistentQueryVersion,
+		common.ClientImplHeaderName:     client.GoSDK,
+		// TODO: remove these headers when server is vanilla gRPC (not YARPC)
+		"rpc-caller":   "temporal-xdc",
+		"rpc-service":  "cadence-frontend",
+		"rpc-encoding": "proto",
+	})
+)
+
+func createContextWithCancel(timeout time.Duration) (context.Context, context.CancelFunc) {
+	ctx := metadata.NewOutgoingContext(context.Background(), headers)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+
+	return ctx, cancel
 }

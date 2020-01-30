@@ -33,7 +33,7 @@ import (
 
 // AdminClient is the interface exposed by admin service client
 type AdminClient interface {
-	adminservice.AdminServiceYARPCClient
+	adminservice.AdminServiceClient
 }
 
 // FrontendClient is the interface exposed by frontend service client
@@ -47,8 +47,8 @@ type HistoryClient interface {
 }
 
 // NewAdminClient creates a client to cadence admin client
-func NewAdminClient(d *yarpc.Dispatcher) AdminClient {
-	return adminservice.NewAdminServiceYARPCClient(d.ClientConfig(common.FrontendServiceName))
+func NewAdminClient(connection *grpc.ClientConn) AdminClient {
+	return adminservice.NewAdminServiceClient(connection)
 }
 
 // NewFrontendClient creates a client to cadence frontend client

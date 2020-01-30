@@ -23,7 +23,7 @@ package admin
 import (
 	"context"
 
-	"go.uber.org/yarpc"
+	"google.golang.org/grpc"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/common/backoff"
@@ -49,7 +49,7 @@ func NewRetryableClient(client Client, policy backoff.RetryPolicy, isRetryable b
 func (c *retryableClient) AddSearchAttribute(
 	ctx context.Context,
 	request *adminservice.AddSearchAttributeRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*adminservice.AddSearchAttributeResponse, error) {
 
 	var resp *adminservice.AddSearchAttributeResponse
@@ -65,7 +65,7 @@ func (c *retryableClient) AddSearchAttribute(
 func (c *retryableClient) DescribeHistoryHost(
 	ctx context.Context,
 	request *adminservice.DescribeHistoryHostRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*adminservice.DescribeHistoryHostResponse, error) {
 
 	var resp *adminservice.DescribeHistoryHostResponse
@@ -81,7 +81,7 @@ func (c *retryableClient) DescribeHistoryHost(
 func (c *retryableClient) RemoveTask(
 	ctx context.Context,
 	request *adminservice.RemoveTaskRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*adminservice.RemoveTaskResponse, error) {
 
 	var resp *adminservice.RemoveTaskResponse
@@ -97,7 +97,7 @@ func (c *retryableClient) RemoveTask(
 func (c *retryableClient) CloseShard(
 	ctx context.Context,
 	request *adminservice.CloseShardRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*adminservice.CloseShardResponse, error) {
 
 	var resp *adminservice.CloseShardResponse
@@ -113,7 +113,7 @@ func (c *retryableClient) CloseShard(
 func (c *retryableClient) DescribeWorkflowExecution(
 	ctx context.Context,
 	request *adminservice.DescribeWorkflowExecutionRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*adminservice.DescribeWorkflowExecutionResponse, error) {
 
 	var resp *adminservice.DescribeWorkflowExecutionResponse
@@ -129,7 +129,7 @@ func (c *retryableClient) DescribeWorkflowExecution(
 func (c *retryableClient) GetWorkflowExecutionRawHistory(
 	ctx context.Context,
 	request *adminservice.GetWorkflowExecutionRawHistoryRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*adminservice.GetWorkflowExecutionRawHistoryResponse, error) {
 
 	var resp *adminservice.GetWorkflowExecutionRawHistoryResponse
@@ -145,7 +145,7 @@ func (c *retryableClient) GetWorkflowExecutionRawHistory(
 func (c *retryableClient) GetWorkflowExecutionRawHistoryV2(
 	ctx context.Context,
 	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*adminservice.GetWorkflowExecutionRawHistoryV2Response, error) {
 
 	var resp *adminservice.GetWorkflowExecutionRawHistoryV2Response
@@ -161,7 +161,7 @@ func (c *retryableClient) GetWorkflowExecutionRawHistoryV2(
 func (c *retryableClient) DescribeCluster(
 	ctx context.Context,
 	request *adminservice.DescribeClusterRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*adminservice.DescribeClusterResponse, error) {
 
 	var resp *adminservice.DescribeClusterResponse
@@ -177,7 +177,7 @@ func (c *retryableClient) DescribeCluster(
 func (c *retryableClient) GetReplicationMessages(
 	ctx context.Context,
 	request *adminservice.GetReplicationMessagesRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*adminservice.GetReplicationMessagesResponse, error) {
 	var resp *adminservice.GetReplicationMessagesResponse
 	op := func() error {
@@ -192,7 +192,7 @@ func (c *retryableClient) GetReplicationMessages(
 func (c *retryableClient) GetDomainReplicationMessages(
 	ctx context.Context,
 	request *adminservice.GetDomainReplicationMessagesRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*adminservice.GetDomainReplicationMessagesResponse, error) {
 	var resp *adminservice.GetDomainReplicationMessagesResponse
 	op := func() error {
@@ -207,7 +207,7 @@ func (c *retryableClient) GetDomainReplicationMessages(
 func (c *retryableClient) GetDLQReplicationMessages(
 	ctx context.Context,
 	request *adminservice.GetDLQReplicationMessagesRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*adminservice.GetDLQReplicationMessagesResponse, error) {
 	var resp *adminservice.GetDLQReplicationMessagesResponse
 	op := func() error {
@@ -222,7 +222,7 @@ func (c *retryableClient) GetDLQReplicationMessages(
 func (c *retryableClient) ReapplyEvents(
 	ctx context.Context,
 	request *adminservice.ReapplyEventsRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*adminservice.ReapplyEventsResponse, error) {
 	var resp *adminservice.ReapplyEventsResponse
 	op := func() error {
