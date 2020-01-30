@@ -72,6 +72,7 @@ func (a *AccessControlledWorkflowHandler) RegisterHandler() {
 	a.GetGRPCDispatcher().Register(healthservice.BuildMetaYARPCProcedures(a))
 }
 
+// Health is for health check
 func (a *AccessControlledWorkflowHandler) Health(context.Context, *healthservice.HealthRequest) (*healthservice.HealthStatus, error) {
 	hs := &healthservice.HealthStatus{Ok: true, Msg: "Frontend health check endpoint (gRPC) reached."}
 	return hs, nil
