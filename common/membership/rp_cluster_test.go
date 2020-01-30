@@ -48,9 +48,13 @@ type TestRingpopCluster struct {
 // NewTestRingpopCluster creates a new test cluster with the given name and cluster size
 // All the nodes in the test cluster will register themselves in Ringpop
 // with the specified name. This is only intended for unit tests.
-func NewTestRingpopCluster(ringPopApp string, size int, ipAddr string, seed string, serviceName string) *TestRingpopCluster {
+func NewTestRingpopCluster(ringPopApp string, size int, listenIpAddr string, seed string, serviceName string, broadcastIP string) *TestRingpopCluster {
+	logger, err := loggerimpl.NewDevelopment()
+	if err != nil {
+		logger.Error("Failed to create test logger", tag.Error(err))
+		return nil
+	}
 
-	logger := loggerimpl.NewNopLogger()
 	cluster := &TestRingpopCluster{
 		hostUUIDs:    make([]string, size),
 		hostAddrs:    make([]string, size),
@@ -67,14 +71,18 @@ func NewTestRingpopCluster(ringPopApp string, size int, ipAddr string, seed stri
 			logger.Error("Failed to create tchannel", tag.Error(err))
 			return nil
 		}
-		listenAddr := ipAddr + ":0"
+		listenAddr := listenIpAddr + ":0"
 		err = cluster.channels[i].ListenAndServe(listenAddr)
 		if err != nil {
 			logger.Error("tchannel listen failed", tag.Error(err))
 			return nil
 		}
 		cluster.hostUUIDs[i] = uuid.New()
-		cluster.hostAddrs[i] = cluster.channels[i].PeerInfo().HostPort
+		cluster.hostAddrs[i], err = ExternalAddressResolver(cluster.channels[i].PeerInfo(), &broadcastIP)
+		if err != nil {
+			logger.Error("tchannel hostport parse", tag.Error(err))
+			return nil
+		}
 		cluster.hostInfoList[i] = HostInfo{addr: cluster.hostAddrs[i]}
 	}
 
@@ -89,7 +97,11 @@ func NewTestRingpopCluster(ringPopApp string, size int, ipAddr string, seed stri
 	bOptions.JoinSize = 1
 
 	for i := 0; i < size; i++ {
-		ringPop, err := ringpop.New(ringPopApp, ringpop.Channel(cluster.channels[i]))
+		resolver := func() (string, error) {
+			return ExternalAddressResolver(cluster.channels[i].PeerInfo(), &broadcastIP)
+		}
+
+		ringPop, err := ringpop.New(ringPopApp, ringpop.Channel(cluster.channels[i]), ringpop.AddressResolverFunc(resolver))
 		if err != nil {
 			logger.Error("failed to create ringpop instance", tag.Error(err))
 			return nil
