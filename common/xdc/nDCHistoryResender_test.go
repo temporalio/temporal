@@ -54,7 +54,7 @@ type (
 
 		controller        *gomock.Controller
 		mockDomainCache   *cache.MockDomainCache
-		mockAdminClient   *adminservicemock.MockAdminServiceYARPCClient
+		mockAdminClient   *adminservicemock.MockAdminServiceClient
 		mockHistoryClient *historyservicetest.MockClient
 
 		domainID   string
@@ -85,7 +85,7 @@ func (s *nDCHistoryResenderSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockAdminClient = adminservicemock.NewMockAdminServiceYARPCClient(s.controller)
+	s.mockAdminClient = adminservicemock.NewMockAdminServiceClient(s.controller)
 	s.mockHistoryClient = historyservicetest.NewMockClient(s.controller)
 	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
 
