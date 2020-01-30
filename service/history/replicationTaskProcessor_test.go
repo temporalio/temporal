@@ -62,7 +62,7 @@ type (
 		replicationTaskFetcher *MockReplicationTaskFetcher
 		mockDomainCache        *cache.MockDomainCache
 		mockClientBean         *client.MockBean
-		adminClient            *adminservicemock.MockAdminServiceYARPCClient
+		adminClient            *adminservicemock.MockAdminServiceClient
 		clusterMetadata        *cluster.MockMetadata
 		executionManager       *mocks.ExecutionManager
 		requestChan            chan *request

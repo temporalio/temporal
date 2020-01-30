@@ -43,7 +43,7 @@ type (
 
 		mockResource           *resource.Test
 		config                 *Config
-		frontendClient         *adminservicemock.MockAdminServiceYARPCClient
+		frontendClient         *adminservicemock.MockAdminServiceClient
 		replicationTaskFetcher *ReplicationTaskFetcherImpl
 	}
 )
