@@ -218,6 +218,17 @@ func (factory *RingpopFactory) getRingpop() (*membership.RingPop, error) {
 	return ringPop, nil
 }
 
+func (factory *RingpopFactory) externalAddressResolver() (string, error) {
+	// This initial piece is copied from ringpop-go/ringpop.go/channelAddressResolver
+	var ch *tcg.Channel
+	var err error
+	if ch, err = factory.getChannel(factory.dispatcher); err != nil {
+		return "", err
+	}
+
+	return membership.ExternalAddressResolver(ch.PeerInfo(), &factory.config.BroadcastIP)
+}
+
 func (factory *RingpopFactory) createRingpop() (*membership.RingPop, error) {
 
 	var ch *tcg.Channel
@@ -226,7 +237,7 @@ func (factory *RingpopFactory) createRingpop() (*membership.RingPop, error) {
 		return nil, err
 	}
 
-	rp, err := ringpop.New(factory.config.Name, ringpop.Channel(ch))
+	rp, err := ringpop.New(factory.config.Name, ringpop.Channel(ch), ringpop.AddressResolverFunc(factory.externalAddressResolver))
 	if err != nil {
 		return nil, err
 	}
