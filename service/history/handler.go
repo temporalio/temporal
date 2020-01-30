@@ -550,6 +550,19 @@ func (h *Handler) RespondDecisionTaskFailed(
 		token.RunID,
 		token.ScheduleID))
 
+	if failedRequest != nil && failedRequest.GetCause() == gen.DecisionTaskFailedCauseUnhandledDecision {
+		h.GetLogger().Info("Non-Deterministic Error", tag.WorkflowDomainID(token.DomainID), tag.WorkflowID(token.WorkflowID), tag.WorkflowRunID(token.RunID))
+		domainName, err := h.GetDomainCache().GetDomainName(token.DomainID)
+		var domainTag metrics.Tag
+
+		if err == nil {
+			domainTag = metrics.DomainTag(domainName)
+		} else {
+			domainTag = metrics.DomainUnknownTag()
+		}
+
+		h.GetMetricsClient().Scope(scope, domainTag).IncCounter(metrics.CadenceErrNonDeterministicCounter)
+	}
 	err0 = validateTaskToken(token)
 	if err0 != nil {
 		return h.error(err0, scope, domainID, "")
