@@ -92,7 +92,7 @@ func newTimerQueueProcessorBase(
 		workerCount: shard.GetConfig().TimerTaskWorkerCount(),
 		queueSize:   shard.GetConfig().TimerTaskWorkerCount() * shard.GetConfig().TimerTaskBatchSize(),
 	}
-	taskProcessor := newTaskProcessor(options, shard, historyService.historyCache, logger)
+	taskProcessor := newTaskProcessor(options, shard, historyService.historyCache, log)
 	base := &timerQueueProcessorBase{
 		scope:            scope,
 		shard:            shard,

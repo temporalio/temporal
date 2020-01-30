@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -95,8 +95,6 @@ func newTaskProcessor(
 	logger log.Logger,
 ) *taskProcessor {
 
-	log := logger.WithTags(tag.ComponentTimerQueue)
-
 	workerNotificationChans := []chan struct{}{}
 	for index := 0; index < options.workerCount; index++ {
 		workerNotificationChans = append(workerNotificationChans, make(chan struct{}, 1))
@@ -108,7 +106,7 @@ func newTaskProcessor(
 		shutdownCh:              make(chan struct{}),
 		tasksCh:                 make(chan *taskInfo, options.queueSize),
 		config:                  shard.GetConfig(),
-		logger:                  log,
+		logger:                  logger,
 		metricsClient:           shard.GetMetricsClient(),
 		timeSource:              shard.GetTimeSource(),
 		workerNotificationChans: workerNotificationChans,
@@ -125,15 +123,15 @@ func (t *taskProcessor) start() {
 		notificationChan := t.workerNotificationChans[i]
 		go t.taskWorker(notificationChan)
 	}
-	t.logger.Info("Timer queue task processor started.")
+	t.logger.Info("Task processor started.")
 }
 
 func (t *taskProcessor) stop() {
 	close(t.shutdownCh)
 	if success := common.AwaitWaitGroup(&t.workerWG, time.Minute); !success {
-		t.logger.Warn("Timer queue task processor timedout on shutdown.")
+		t.logger.Warn("Task processor timed out on shutdown.")
 	}
-	t.logger.Info("Timer queue task processor shutdown.")
+	t.logger.Info("Task processor shutdown.")
 }
 
 func (t *taskProcessor) taskWorker(
