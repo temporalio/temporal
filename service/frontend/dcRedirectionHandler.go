@@ -70,11 +70,6 @@ func NewDCRedirectionHandler(
 	}
 }
 
-// RegisterHandler register this handler, must be called before Start()
-func (handler *DCRedirectionHandlerImpl) RegisterHandler() {
-	handler.GetGRPCDispatcher().Register(workflowservice.BuildWorkflowServiceYARPCProcedures(handler))
-}
-
 // Domain APIs, domain APIs does not require redirection
 
 // DeprecateDomain API call

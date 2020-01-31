@@ -54,8 +54,8 @@ func NewHandlerGRPC(
 
 // RegisterHandler register this handler, must be called before Start()
 func (h *HandlerGRPC) RegisterHandler() {
-	h.handlerThrift.Resource.GetGRPCDispatcher().Register(matchingservice.BuildMatchingServiceYARPCProcedures(h))
-	h.handlerThrift.Resource.GetGRPCDispatcher().Register(healthservice.BuildMetaYARPCProcedures(h))
+	//h.handlerThrift.Resource.GetGRPCListener().Register(matchingservice.BuildMatchingServiceYARPCProcedures(h))
+	//h.handlerThrift.Resource.GetGRPCListener().Register(healthservice.BuildMetaYARPCProcedures(h))
 }
 
 // Health is for health check

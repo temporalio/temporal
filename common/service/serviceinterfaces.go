@@ -21,6 +21,8 @@
 package service
 
 import (
+	"net"
+
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
@@ -59,7 +61,7 @@ type (
 
 		GetDispatcher() *yarpc.Dispatcher
 
-		GetGRPCDispatcher() *yarpc.Dispatcher
+		GetGRPCListener() net.Listener
 
 		GetMembershipMonitor() membership.Monitor
 

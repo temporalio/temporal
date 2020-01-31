@@ -50,11 +50,6 @@ func NewAdminHandlerGRPC(
 	return handler
 }
 
-// RegisterHandler register this handler, must be called before Start()
-func (adh *AdminHandlerGRPC) RegisterHandler() {
-	adh.adminHandlerThrift.GetGRPCDispatcher().Register(adminservice.BuildAdminServiceYARPCProcedures(adh))
-}
-
 // RegisterServer register this handler at gRPC server
 func (adh *AdminHandlerGRPC) RegisterServer(server *grpc.Server) {
 	adminservice.RegisterAdminServiceServer(server, adh)

@@ -901,6 +901,7 @@ type rpcFactoryImpl struct {
 
 	sync.Mutex
 	dispatcher        *yarpc.Dispatcher
+	listener          net.Listener
 	ringpopDispatcher *yarpc.Dispatcher
 }
 
@@ -914,20 +915,25 @@ func newRPCFactoryImpl(sName, hostPort, grpcHostPort, ringpopAddress string, log
 	}
 }
 
-func (c *rpcFactoryImpl) GetGRPCDispatcher() *yarpc.Dispatcher {
-	l := c.CreateListener()
-	t := yarpcgrpc.NewTransport()
+func (c *rpcFactoryImpl) GetGRPCListener() net.Listener {
+	if c.listener != nil {
+		return c.listener
+	}
 
-	return yarpc.NewDispatcher(yarpc.Config{
-		Name:     c.serviceName,
-		Inbounds: yarpc.Inbounds{t.NewInbound(l)},
-		Outbounds: yarpc.Outbounds{
-			c.serviceName: {Unary: t.NewSingleOutbound(c.grpcHostPort)},
-		},
-		InboundMiddleware: yarpc.InboundMiddleware{
-			Unary: &versionMiddleware{},
-		},
-	})
+	c.Lock()
+	defer c.Unlock()
+
+	if c.listener == nil {
+		var err error
+		c.listener, err = net.Listen("tcp", c.grpcHostPort)
+		if err != nil {
+			c.logger.Fatal("Failed create gRPC listener", tag.Error(err), tag.Service(c.serviceName), tag.Address(c.grpcHostPort))
+		}
+
+		c.logger.Info("Created gRPC listener", tag.Service(c.serviceName), tag.Address(c.grpcHostPort))
+	}
+
+	return c.listener
 }
 
 func (c *rpcFactoryImpl) GetTChannelDispatcher() *yarpc.Dispatcher {
@@ -1021,16 +1027,4 @@ func (c *rpcFactoryImpl) createDispatcherForOutbound(unaryOutbound transport.Una
 		c.logger.Fatal("Failed to start outbound dispatcher", tag.Error(err), tag.TransportType(transportType))
 	}
 	return d
-}
-
-// CreateListener creates new listener for inbound
-func (c *rpcFactoryImpl) CreateListener() net.Listener {
-	l, err := net.Listen("tcp", c.grpcHostPort)
-	if err != nil {
-		c.logger.Fatal("Failed create gRPC listener", tag.Error(err), tag.Service(c.serviceName), tag.Address(c.grpcHostPort))
-	}
-
-	c.logger.Info("Created gRPC listener", tag.Service(c.serviceName), tag.Address(c.grpcHostPort))
-
-	return l
 }

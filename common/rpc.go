@@ -56,12 +56,11 @@ type (
 	// RPCFactory Creates a dispatcher that knows how to transport requests.
 	RPCFactory interface {
 		GetTChannelDispatcher() *yarpc.Dispatcher
-		GetGRPCDispatcher() *yarpc.Dispatcher
+		GetGRPCListener() net.Listener
 		GetRingpopDispatcher() *yarpc.Dispatcher
 		CreateTChannelDispatcherForOutbound(callerName, serviceName, hostName string) *yarpc.Dispatcher
 		CreateGRPCDispatcherForOutbound(callerName, serviceName, hostName string) *yarpc.Dispatcher
 		CreateGRPCConnection(hostName string) *grpc.ClientConn
-		CreateListener() net.Listener
 	}
 )
 

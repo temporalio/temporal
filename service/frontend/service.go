@@ -136,6 +136,7 @@ type Service struct {
 	params *service.BootstrapParams
 
 	adminHandlerGRPC *AdminHandlerGRPC
+	server           *grpc.Server
 }
 
 // NewService builds a new cadence-frontend service
@@ -227,32 +228,28 @@ func (s *Service) Start() {
 		replicationMessageSink.(*mocks.KafkaProducer).On("Publish", mock.Anything).Return(nil)
 	}
 
-	server := grpc.NewServer()
+	s.server = grpc.NewServer()
 
 	wfHandler := NewWorkflowHandler(s, s.config, replicationMessageSink)
 	wfHandlerGRPC := NewWorkflowHandlerGRPC(wfHandler)
 	dcRedirectionHandler := NewDCRedirectionHandler(wfHandlerGRPC, s.params.DCRedirectionPolicy)
 	accessControlledWorkflowHandler := NewAccessControlledHandlerImpl(dcRedirectionHandler, s.params.Authorizer)
-	//accessControlledWorkflowHandler.RegisterHandler()
-	accessControlledWorkflowHandler.RegisterServer(server)
+	accessControlledWorkflowHandler.RegisterServer(s.server)
 	wfHandler.RegisterHandler() // Thrift version
 
 	adminHandler := NewAdminHandler(s, s.params, s.config)
 	s.adminHandlerGRPC = NewAdminHandlerGRPC(adminHandler)
-	//s.adminHandlerGRPC.RegisterHandler()
-	s.adminHandlerGRPC.RegisterServer(server)
+	s.adminHandlerGRPC.RegisterServer(s.server)
 	adminHandler.RegisterHandler() // Thrift version
 
 	// must start resource first
 	s.Resource.Start()
 	s.adminHandlerGRPC.Start()
 
-	listener := s.params.RPCFactory.CreateListener()
-	if err := server.Serve(listener); err != nil {
+	listener := s.params.RPCFactory.GetGRPCListener()
+	if err := s.server.Serve(listener); err != nil {
 		logger.Fatal("Failed to serve frontend listener", tag.Error(err))
 	}
-
-	//server.Stop()
 
 	// base (service is not started in frontend or admin handler) in case of race condition in yarpc registration function
 
@@ -268,6 +265,8 @@ func (s *Service) Stop() {
 	}
 
 	close(s.stopC)
+
+	s.server.Stop()
 
 	s.adminHandlerGRPC.Stop()
 	s.Resource.Stop()

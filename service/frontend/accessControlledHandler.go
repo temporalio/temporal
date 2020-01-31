@@ -62,12 +62,6 @@ func NewAccessControlledHandlerImpl(wfHandler *DCRedirectionHandlerImpl, authori
 
 // TODO(vancexu): refactor frontend handler
 
-// RegisterHandler register this handler, must be called before Start()
-func (a *AccessControlledWorkflowHandler) RegisterHandler() {
-	a.GetGRPCDispatcher().Register(workflowservice.BuildWorkflowServiceYARPCProcedures(a))
-	a.GetGRPCDispatcher().Register(healthservice.BuildMetaYARPCProcedures(a))
-}
-
 // RegisterServer register this handler at gRPC server
 func (a *AccessControlledWorkflowHandler) RegisterServer(server *grpc.Server) {
 	workflowservice.RegisterWorkflowServiceServer(server, a)

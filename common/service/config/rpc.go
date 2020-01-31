@@ -44,7 +44,7 @@ type RPCFactory struct {
 
 	sync.Mutex
 	dispatcher        *yarpc.Dispatcher
-	grpcDispatcher    *yarpc.Dispatcher
+	grpcListiner      net.Listener
 	ringpopDispatcher *yarpc.Dispatcher
 }
 
@@ -59,27 +59,27 @@ func newRPCFactory(cfg *RPC, sName string, logger log.Logger) *RPCFactory {
 	return factory
 }
 
-// GetGRPCDispatcher returns cached dispatcher for gRPC inbound or creates one
-func (d *RPCFactory) GetGRPCDispatcher() *yarpc.Dispatcher {
-	if d.grpcDispatcher != nil {
-		return d.grpcDispatcher
+// GetGRPCListener returns cached dispatcher for gRPC inbound or creates one
+func (d *RPCFactory) GetGRPCListener() net.Listener {
+	if d.grpcListiner != nil {
+		return d.grpcListiner
 	}
 
 	d.Lock()
 	defer d.Unlock()
 
-	if d.grpcDispatcher == nil {
-		listener := d.CreateListener()
+	if d.grpcListiner == nil {
+		hostAddress := fmt.Sprintf("%v:%v", d.getListenIP(), d.config.GRPCPort)
+		var err error
+		d.grpcListiner, err = net.Listen("tcp", hostAddress)
+		if err != nil {
+			d.logger.Fatal("Failed create gRPC listener", tag.Error(err), tag.Service(d.serviceName), tag.Address(hostAddress))
+		}
 
-		d.grpcDispatcher = yarpc.NewDispatcher(yarpc.Config{
-			Name:     d.serviceName,
-			Inbounds: yarpc.Inbounds{yarpcgrpc.NewTransport().NewInbound(listener)},
-		})
-
-		d.logger.Info("Created gRPC dispatcher", tag.Service(d.serviceName))
+		d.logger.Info("Created gRPC listener", tag.Service(d.serviceName), tag.Address(hostAddress))
 	}
 
-	return d.grpcDispatcher
+	return d.grpcListiner
 }
 
 // GetTChannelDispatcher return a cached dispatcher
@@ -183,17 +183,4 @@ func (d *RPCFactory) CreateGRPCConnection(hostName string) *grpc.ClientConn {
 	}
 
 	return connection
-}
-
-// CreateListener creates new listener for inbound
-func (d *RPCFactory) CreateListener() net.Listener {
-	hostAddress := fmt.Sprintf("%v:%v", d.getListenIP(), d.config.GRPCPort)
-	l, err := net.Listen("tcp", hostAddress)
-	if err != nil {
-		d.logger.Fatal("Failed create gRPC listener", tag.Error(err), tag.Service(d.serviceName), tag.Address(hostAddress))
-	}
-
-	d.logger.Info("Created gRPC listener", tag.Service(d.serviceName), tag.Address(hostAddress))
-
-	return l
 }

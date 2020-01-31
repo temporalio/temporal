@@ -21,6 +21,8 @@
 package resource
 
 import (
+	"net"
+
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/yarpc"
 
@@ -104,6 +106,6 @@ type (
 
 		// for registering handlers
 		GetDispatcher() *yarpc.Dispatcher
-		GetGRPCDispatcher() *yarpc.Dispatcher
+		GetGRPCListener() net.Listener
 	}
 )

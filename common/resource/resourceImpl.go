@@ -22,6 +22,7 @@ package resource
 
 import (
 	"math/rand"
+	"net"
 	"os"
 	"sync/atomic"
 	"time"
@@ -115,8 +116,8 @@ type (
 		throttledLogger log.Logger
 
 		// for registering handlers
-		dispatcher     *yarpc.Dispatcher
-		grpcDispatcher *yarpc.Dispatcher
+		dispatcher   *yarpc.Dispatcher
+		grpcListener net.Listener
 
 		// for ringpop listener
 		ringpopDispatcher *yarpc.Dispatcher
@@ -150,10 +151,7 @@ func New(
 	}
 
 	dispatcher := params.RPCFactory.GetTChannelDispatcher()
-	var grpcDispatcher *yarpc.Dispatcher
-	if serviceName == common.HistoryServiceName || serviceName == common.MatchingServiceName {
-		grpcDispatcher = params.RPCFactory.GetGRPCDispatcher()
-	}
+	grpcListener := params.RPCFactory.GetGRPCListener()
 
 	ringpopDispatcher := params.RPCFactory.GetRingpopDispatcher()
 
@@ -322,7 +320,7 @@ func New(
 		dispatcher: dispatcher,
 
 		// for registering grpc handlers
-		grpcDispatcher: grpcDispatcher,
+		grpcListener: grpcListener,
 
 		// for ringpop listener
 		ringpopDispatcher: ringpopDispatcher,
@@ -361,11 +359,6 @@ func (h *Impl) Start() {
 	if err := h.dispatcher.Start(); err != nil {
 		h.logger.WithTags(tag.Error(err)).Fatal("fail to start dispatcher")
 	}
-	if h.grpcDispatcher != nil {
-		if err := h.grpcDispatcher.Start(); err != nil {
-			h.logger.WithTags(tag.Error(err)).Fatal("fail to start grpc dispatcher")
-		}
-	}
 	if err := h.ringpopDispatcher.Start(); err != nil {
 		h.logger.WithTags(tag.Error(err)).Fatal("fail to start dispatcher")
 	}
@@ -399,11 +392,6 @@ func (h *Impl) Stop() {
 	h.membershipMonitor.Stop()
 	if err := h.ringpopDispatcher.Stop(); err != nil {
 		h.logger.WithTags(tag.Error(err)).Error("failed to stop ringpop dispatcher")
-	}
-	if h.grpcDispatcher != nil {
-		if err := h.grpcDispatcher.Stop(); err != nil {
-			h.logger.WithTags(tag.Error(err)).Error("failed to stop grpc dispatcher")
-		}
 	}
 	if err := h.dispatcher.Stop(); err != nil {
 		h.logger.WithTags(tag.Error(err)).Error("failed to stop dispatcher")
@@ -622,7 +610,7 @@ func (h *Impl) GetDispatcher() *yarpc.Dispatcher {
 	return h.dispatcher
 }
 
-// GetGRPCDispatcher return GRPC dispatcher, used for registering handlers
-func (h *Impl) GetGRPCDispatcher() *yarpc.Dispatcher {
-	return h.grpcDispatcher
+// GetGRPCListener return GRPC listener, used for registering handlers
+func (h *Impl) GetGRPCListener() net.Listener {
+	return h.grpcListener
 }

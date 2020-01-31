@@ -21,6 +21,8 @@
 package resource
 
 import (
+	"net"
+
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
 	"github.com/uber-go/tally"
@@ -430,8 +432,8 @@ func (s *Test) GetDispatcher() *yarpc.Dispatcher {
 	panic("user should implement this method for test")
 }
 
-// GetGRPCDispatcher for testing
-func (s *Test) GetGRPCDispatcher() *yarpc.Dispatcher {
+// GetGRPCListener for testing
+func (s *Test) GetGRPCListener() net.Listener {
 	panic("user should implement this method for test")
 }
 
