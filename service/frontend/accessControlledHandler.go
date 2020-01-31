@@ -71,6 +71,7 @@ func (a *AccessControlledWorkflowHandler) RegisterHandler() {
 // RegisterServer register this handler at gRPC server
 func (a *AccessControlledWorkflowHandler) RegisterServer(server *grpc.Server) {
 	workflowservice.RegisterWorkflowServiceServer(server, a)
+	healthservice.RegisterMetaServer(server, a)
 }
 
 // Health is for health check
