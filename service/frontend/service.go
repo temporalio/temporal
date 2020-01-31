@@ -131,7 +131,6 @@ type Service struct {
 	resource.Resource
 
 	status int32
-	stopC  chan struct{}
 	config *Config
 	params *service.BootstrapParams
 
@@ -195,7 +194,6 @@ func NewService(
 		Resource: serviceResource,
 		status:   common.DaemonStatusInitialized,
 		config:   serviceConfig,
-		stopC:    make(chan struct{}),
 		params:   params,
 	}, nil
 }
@@ -247,15 +245,12 @@ func (s *Service) Start() {
 	s.adminHandlerGRPC.Start()
 
 	listener := s.params.RPCFactory.GetGRPCListener()
+	logger.Info("Starting to serve on frontend listener")
 	if err := s.server.Serve(listener); err != nil {
-		logger.Fatal("Failed to serve frontend listener", tag.Error(err))
+		logger.Fatal("Failed to serve on frontend listener", tag.Error(err))
 	}
 
 	// base (service is not started in frontend or admin handler) in case of race condition in yarpc registration function
-
-	logger.Info("frontend started")
-
-	<-s.stopC
 }
 
 // Stop stops the service
@@ -263,8 +258,6 @@ func (s *Service) Stop() {
 	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
-
-	close(s.stopC)
 
 	s.server.Stop()
 
