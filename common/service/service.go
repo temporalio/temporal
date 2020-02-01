@@ -91,6 +91,7 @@ type (
 		hostName              string
 		hostInfo              *membership.HostInfo
 		tchannelDispatcher    *yarpc.Dispatcher
+		grpcDispatcher        *yarpc.Dispatcher
 		grpcListener          net.Listener
 		ringpopDispatcher     *yarpc.Dispatcher
 		membershipFactory     MembershipMonitorFactory
@@ -149,6 +150,11 @@ func New(params *BootstrapParams) Service {
 		sVice.logger.Fatal("Unable to create yarpc TChannel dispatcher")
 	}
 
+	sVice.grpcDispatcher = sVice.rpcFactory.GetGRPCDispatcher()
+	if sVice.grpcDispatcher == nil {
+		sVice.logger.Fatal("Unable to create yarpc gRPC dispatcher")
+	}
+
 	sVice.grpcListener = sVice.rpcFactory.GetGRPCListener()
 	if sVice.grpcListener == nil {
 		sVice.logger.Fatal("Unable to create gRPC listener")
@@ -196,6 +202,10 @@ func (h *serviceImpl) Start() {
 
 	if err := h.tchannelDispatcher.Start(); err != nil {
 		h.logger.WithTags(tag.Error(err)).Fatal("Failed to start yarpc TChannel dispatcher")
+	}
+
+	if err := h.grpcDispatcher.Start(); err != nil {
+		h.logger.WithTags(tag.Error(err)).Fatal("Failed to start yarpc gRPC dispatcher")
 	}
 
 	if err := h.ringpopDispatcher.Start(); err != nil {
@@ -248,6 +258,10 @@ func (h *serviceImpl) Stop() {
 		_ = h.tchannelDispatcher.Stop()
 	}
 
+	if h.grpcDispatcher != nil {
+		_ = h.grpcDispatcher.Stop()
+	}
+
 	h.runtimeMetricsReporter.Stop()
 }
 
@@ -281,6 +295,10 @@ func (h *serviceImpl) GetHostInfo() *membership.HostInfo {
 
 func (h *serviceImpl) GetDispatcher() *yarpc.Dispatcher {
 	return h.tchannelDispatcher
+}
+
+func (h *serviceImpl) GetGRPCDispatcher() *yarpc.Dispatcher {
+	return h.grpcDispatcher
 }
 
 func (h *serviceImpl) GetGRPCListener() net.Listener {

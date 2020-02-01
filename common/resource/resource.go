@@ -106,6 +106,7 @@ type (
 
 		// for registering handlers
 		GetDispatcher() *yarpc.Dispatcher
+		GetGRPCDispatcher() *yarpc.Dispatcher
 		GetGRPCListener() net.Listener
 	}
 )

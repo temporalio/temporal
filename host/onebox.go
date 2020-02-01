@@ -228,17 +228,17 @@ func (c *cadenceImpl) Stop() {
 	} else {
 		c.shutdownWG.Add(3)
 	}
+	c.frontendService.Stop()
+	for _, historyService := range c.historyServices {
+		historyService.Stop()
+	}
+	c.matchingService.Stop()
 	if c.workerConfig.EnableReplicator {
 		c.replicator.Stop()
 	}
 	if c.workerConfig.EnableArchiver {
 		c.clientWorker.Stop()
 	}
-	c.frontendService.Stop()
-	for _, historyService := range c.historyServices {
-		historyService.Stop()
-	}
-	c.matchingService.Stop()
 	close(c.shutdownCh)
 	c.shutdownWG.Wait()
 }
@@ -913,6 +913,26 @@ func newRPCFactoryImpl(sName, hostPort, grpcHostPort, ringpopAddress string, log
 		ringpopHostPort: ringpopAddress,
 		logger:          logger,
 	}
+}
+
+func (c *rpcFactoryImpl) GetGRPCDispatcher() *yarpc.Dispatcher {
+	l, err := net.Listen("tcp", c.grpcHostPort)
+	if err != nil {
+		c.logger.Fatal("Failed create a gRPC listener", tag.Error(err), tag.Address(c.grpcHostPort))
+	}
+
+	t := yarpcgrpc.NewTransport()
+
+	return yarpc.NewDispatcher(yarpc.Config{
+		Name:     c.serviceName,
+		Inbounds: yarpc.Inbounds{t.NewInbound(l)},
+		Outbounds: yarpc.Outbounds{
+			c.serviceName: {Unary: t.NewSingleOutbound(c.grpcHostPort)},
+		},
+		InboundMiddleware: yarpc.InboundMiddleware{
+			Unary: &versionMiddleware{},
+		},
+	})
 }
 
 func (c *rpcFactoryImpl) GetGRPCListener() net.Listener {
