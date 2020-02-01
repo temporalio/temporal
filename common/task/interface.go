@@ -34,6 +34,14 @@ type (
 		Submit(task Task) error
 	}
 
+	// Scheduler is the generic interface for scheduling tasks with priority
+	// and processing them
+	Scheduler interface {
+		common.Daemon
+		Submit(task PriorityTask) error
+		// TODO: add another method for non-blocking submit
+	}
+
 	// State represents the current state of a task
 	State int
 
@@ -51,6 +59,15 @@ type (
 		Nack()
 		// State returns the current task state
 		State() State
+	}
+
+	// PriorityTask is the interface for tasks which have and can be assigned a priority
+	PriorityTask interface {
+		Task
+		// Priority returns the priority of the task, or NoPriority if no priority was previously assigned
+		Priority() int
+		// SetPriority sets the priority of the task
+		SetPriority(int)
 	}
 
 	// SequentialTaskQueueFactory is the function which generate a new SequentialTaskQueue
@@ -80,4 +97,9 @@ const (
 	TaskStateAcked
 	// TaskStateNacked is the state for a task if it can not be processed
 	TaskStateNacked
+)
+
+const (
+	// NoPriority is the value returned if no priority is ever assigned to the task
+	NoPriority = -1
 )

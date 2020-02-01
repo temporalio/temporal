@@ -52,7 +52,7 @@ type (
 )
 
 var (
-	// ErrTaskProcessorClosed is the error return when submiting task to a stopped processor
+	// ErrTaskProcessorClosed is the error returned when submiting task to a stopped processor
 	ErrTaskProcessorClosed = errors.New("task processor has already shutdown")
 )
 

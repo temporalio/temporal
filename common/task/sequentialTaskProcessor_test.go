@@ -28,12 +28,11 @@ import (
 
 	"github.com/uber-go/tally"
 
-	"github.com/uber/cadence/common/metrics"
-
 	"github.com/stretchr/testify/suite"
 
 	"github.com/uber/cadence/common/collection"
 	"github.com/uber/cadence/common/log/loggerimpl"
+	"github.com/uber/cadence/common/metrics"
 )
 
 type (

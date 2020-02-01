@@ -588,6 +588,8 @@ const (
 	SequentialTaskProcessingScope
 	// ParallelTaskProcessingScope is used by parallel task processing logic
 	ParallelTaskProcessingScope
+	// TaskSchedulerScope is used by task scheduler logic
+	TaskSchedulerScope
 
 	// HistoryArchiverScope is used by history archivers
 	HistoryArchiverScope
@@ -1223,6 +1225,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		ElasticsearchDeleteWorkflowExecutionsScope:                 {operation: "DeleteWorkflowExecution"},
 		SequentialTaskProcessingScope:                              {operation: "SequentialTaskProcessing"},
 		ParallelTaskProcessingScope:                                {operation: "ParallelTaskProcessing"},
+		TaskSchedulerScope:                                         {operation: "TaskScheduler"},
 
 		HistoryArchiverScope:    {operation: "HistoryArchiver"},
 		VisibilityArchiverScope: {operation: "VisibilityArchiver"},
@@ -1492,6 +1495,9 @@ const (
 	ParallelTaskSubmitRequest
 	ParallelTaskSubmitLatency
 	ParallelTaskTaskProcessingLatency
+
+	PriorityTaskSubmitRequest
+	PriorityTaskSubmitLatency
 
 	HistoryArchiverArchiveNonRetryableErrorCount
 	HistoryArchiverArchiveTransientErrorCount
@@ -1840,6 +1846,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ParallelTaskSubmitRequest:                           {metricName: "paralleltask_submit_request", metricType: Counter},
 		ParallelTaskSubmitLatency:                           {metricName: "paralleltask_submit_latency", metricType: Timer},
 		ParallelTaskTaskProcessingLatency:                   {metricName: "paralleltask_task_processing_latency", metricType: Timer},
+		PriorityTaskSubmitRequest:                           {metricName: "prioritytask_submit_request", metricType: Counter},
+		PriorityTaskSubmitLatency:                           {metricName: "prioritytask_submit_latency", metricType: Timer},
 
 		HistoryArchiverArchiveNonRetryableErrorCount:              {metricName: "history_archiver_archive_non_retryable_error", metricType: Counter},
 		HistoryArchiverArchiveTransientErrorCount:                 {metricName: "history_archiver_archive_transient_error", metricType: Counter},

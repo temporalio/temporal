@@ -94,6 +94,67 @@ func (mr *MockProcessorMockRecorder) Submit(task interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Submit", reflect.TypeOf((*MockProcessor)(nil).Submit), task)
 }
 
+// MockScheduler is a mock of Scheduler interface
+type MockScheduler struct {
+	ctrl     *gomock.Controller
+	recorder *MockSchedulerMockRecorder
+}
+
+// MockSchedulerMockRecorder is the mock recorder for MockScheduler
+type MockSchedulerMockRecorder struct {
+	mock *MockScheduler
+}
+
+// NewMockScheduler creates a new mock instance
+func NewMockScheduler(ctrl *gomock.Controller) *MockScheduler {
+	mock := &MockScheduler{ctrl: ctrl}
+	mock.recorder = &MockSchedulerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use
+func (m *MockScheduler) EXPECT() *MockSchedulerMockRecorder {
+	return m.recorder
+}
+
+// Start mocks base method
+func (m *MockScheduler) Start() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Start")
+}
+
+// Start indicates an expected call of Start
+func (mr *MockSchedulerMockRecorder) Start() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockScheduler)(nil).Start))
+}
+
+// Stop mocks base method
+func (m *MockScheduler) Stop() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Stop")
+}
+
+// Stop indicates an expected call of Stop
+func (mr *MockSchedulerMockRecorder) Stop() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockScheduler)(nil).Stop))
+}
+
+// Submit mocks base method
+func (m *MockScheduler) Submit(task PriorityTask) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Submit", task)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Submit indicates an expected call of Submit
+func (mr *MockSchedulerMockRecorder) Submit(task interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Submit", reflect.TypeOf((*MockScheduler)(nil).Submit), task)
+}
+
 // MockTask is a mock of Task interface
 type MockTask struct {
 	ctrl     *gomock.Controller
@@ -195,6 +256,135 @@ func (m *MockTask) State() State {
 func (mr *MockTaskMockRecorder) State() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "State", reflect.TypeOf((*MockTask)(nil).State))
+}
+
+// MockPriorityTask is a mock of PriorityTask interface
+type MockPriorityTask struct {
+	ctrl     *gomock.Controller
+	recorder *MockPriorityTaskMockRecorder
+}
+
+// MockPriorityTaskMockRecorder is the mock recorder for MockPriorityTask
+type MockPriorityTaskMockRecorder struct {
+	mock *MockPriorityTask
+}
+
+// NewMockPriorityTask creates a new mock instance
+func NewMockPriorityTask(ctrl *gomock.Controller) *MockPriorityTask {
+	mock := &MockPriorityTask{ctrl: ctrl}
+	mock.recorder = &MockPriorityTaskMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use
+func (m *MockPriorityTask) EXPECT() *MockPriorityTaskMockRecorder {
+	return m.recorder
+}
+
+// Execute mocks base method
+func (m *MockPriorityTask) Execute() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Execute")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Execute indicates an expected call of Execute
+func (mr *MockPriorityTaskMockRecorder) Execute() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Execute", reflect.TypeOf((*MockPriorityTask)(nil).Execute))
+}
+
+// HandleErr mocks base method
+func (m *MockPriorityTask) HandleErr(err error) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandleErr", err)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// HandleErr indicates an expected call of HandleErr
+func (mr *MockPriorityTaskMockRecorder) HandleErr(err interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleErr", reflect.TypeOf((*MockPriorityTask)(nil).HandleErr), err)
+}
+
+// RetryErr mocks base method
+func (m *MockPriorityTask) RetryErr(err error) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RetryErr", err)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// RetryErr indicates an expected call of RetryErr
+func (mr *MockPriorityTaskMockRecorder) RetryErr(err interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetryErr", reflect.TypeOf((*MockPriorityTask)(nil).RetryErr), err)
+}
+
+// Ack mocks base method
+func (m *MockPriorityTask) Ack() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Ack")
+}
+
+// Ack indicates an expected call of Ack
+func (mr *MockPriorityTaskMockRecorder) Ack() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Ack", reflect.TypeOf((*MockPriorityTask)(nil).Ack))
+}
+
+// Nack mocks base method
+func (m *MockPriorityTask) Nack() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Nack")
+}
+
+// Nack indicates an expected call of Nack
+func (mr *MockPriorityTaskMockRecorder) Nack() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Nack", reflect.TypeOf((*MockPriorityTask)(nil).Nack))
+}
+
+// State mocks base method
+func (m *MockPriorityTask) State() State {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "State")
+	ret0, _ := ret[0].(State)
+	return ret0
+}
+
+// State indicates an expected call of State
+func (mr *MockPriorityTaskMockRecorder) State() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "State", reflect.TypeOf((*MockPriorityTask)(nil).State))
+}
+
+// Priority mocks base method
+func (m *MockPriorityTask) Priority() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Priority")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// Priority indicates an expected call of Priority
+func (mr *MockPriorityTaskMockRecorder) Priority() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Priority", reflect.TypeOf((*MockPriorityTask)(nil).Priority))
+}
+
+// SetPriority mocks base method
+func (m *MockPriorityTask) SetPriority(arg0 int) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetPriority", arg0)
+}
+
+// SetPriority indicates an expected call of SetPriority
+func (mr *MockPriorityTaskMockRecorder) SetPriority(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetPriority", reflect.TypeOf((*MockPriorityTask)(nil).SetPriority), arg0)
 }
 
 // MockSequentialTaskQueue is a mock of SequentialTaskQueue interface
