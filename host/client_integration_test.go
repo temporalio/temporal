@@ -92,6 +92,7 @@ func (s *clientIntegrationSuite) SetupSuite() {
 }
 
 func (s *clientIntegrationSuite) TearDownSuite() {
+	s.worker.Stop()
 	s.connectionCloser()
 	s.tearDownSuite()
 }

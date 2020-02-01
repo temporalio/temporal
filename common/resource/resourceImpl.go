@@ -151,7 +151,11 @@ func New(
 	}
 
 	dispatcher := params.RPCFactory.GetTChannelDispatcher()
-	grpcListener := params.RPCFactory.GetGRPCListener()
+
+	var grpcListener net.Listener
+	if serviceName == common.FrontendServiceName {
+		grpcListener = params.RPCFactory.GetGRPCListener()
+	}
 
 	ringpopDispatcher := params.RPCFactory.GetRingpopDispatcher()
 

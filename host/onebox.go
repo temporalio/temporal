@@ -228,17 +228,17 @@ func (c *cadenceImpl) Stop() {
 	} else {
 		c.shutdownWG.Add(3)
 	}
-	c.frontendService.Stop()
-	for _, historyService := range c.historyServices {
-		historyService.Stop()
-	}
-	c.matchingService.Stop()
 	if c.workerConfig.EnableReplicator {
 		c.replicator.Stop()
 	}
 	if c.workerConfig.EnableArchiver {
 		c.clientWorker.Stop()
 	}
+	c.frontendService.Stop()
+	for _, historyService := range c.historyServices {
+		historyService.Stop()
+	}
+	c.matchingService.Stop()
 	close(c.shutdownCh)
 	c.shutdownWG.Wait()
 }

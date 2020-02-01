@@ -259,7 +259,7 @@ func (s *Service) Stop() {
 		return
 	}
 
-	s.server.Stop()
+	s.server.GracefulStop()
 
 	s.adminHandlerGRPC.Stop()
 	s.Resource.Stop()
