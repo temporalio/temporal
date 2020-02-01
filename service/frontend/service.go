@@ -24,8 +24,11 @@ import (
 	"sync/atomic"
 
 	"github.com/stretchr/testify/mock"
+	"go.temporal.io/temporal-proto/workflowservice"
 	"google.golang.org/grpc"
 
+	"github.com/temporalio/temporal/.gen/proto/adminservice"
+	"github.com/temporalio/temporal/.gen/proto/healthservice"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/domain"
@@ -232,12 +235,18 @@ func (s *Service) Start() {
 	wfHandlerGRPC := NewWorkflowHandlerGRPC(wfHandler)
 	dcRedirectionHandler := NewDCRedirectionHandler(wfHandlerGRPC, s.params.DCRedirectionPolicy)
 	accessControlledWorkflowHandler := NewAccessControlledHandlerImpl(dcRedirectionHandler, s.params.Authorizer)
-	accessControlledWorkflowHandler.RegisterServer(s.server)
-	wfHandler.RegisterHandler() // Thrift version
+	workflowNilCheckHandler := NewWorkflowNilCheckHandler(accessControlledWorkflowHandler)
+
+	workflowservice.RegisterWorkflowServiceServer(s.server, workflowNilCheckHandler)
+	healthservice.RegisterMetaServer(s.server, accessControlledWorkflowHandler)
 
 	adminHandler := NewAdminHandler(s, s.params, s.config)
 	s.adminHandlerGRPC = NewAdminHandlerGRPC(adminHandler)
-	s.adminHandlerGRPC.RegisterServer(s.server)
+	adminNilCheckHandler := NewAdminNilCheckHandler(s.adminHandlerGRPC)
+
+	adminservice.RegisterAdminServiceServer(s.server, adminNilCheckHandler)
+
+	wfHandler.RegisterHandler()    // Thrift version
 	adminHandler.RegisterHandler() // Thrift version
 
 	// must start resource first

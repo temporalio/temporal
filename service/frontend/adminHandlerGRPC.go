@@ -23,14 +23,12 @@ package frontend
 import (
 	"context"
 
-	"google.golang.org/grpc"
-
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/log"
 )
 
-var _ adminservice.AdminServiceYARPCServer = (*AdminHandlerGRPC)(nil)
+var _ adminservice.AdminServiceServer = (*AdminHandlerGRPC)(nil)
 
 type (
 	// AdminHandlerGRPC - gRPC handler interface for workflow workflowservice
@@ -48,11 +46,6 @@ func NewAdminHandlerGRPC(
 	}
 
 	return handler
-}
-
-// RegisterServer register this handler at gRPC server
-func (adh *AdminHandlerGRPC) RegisterServer(server *grpc.Server) {
-	adminservice.RegisterAdminServiceServer(server, adh)
 }
 
 // Start starts the handler

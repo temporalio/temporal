@@ -33,7 +33,7 @@ import (
 	"github.com/temporalio/temporal/common/service/config"
 )
 
-var _ workflowservice.WorkflowServiceYARPCServer = (*DCRedirectionHandlerImpl)(nil)
+var _ workflowservice.WorkflowServiceServer = (*DCRedirectionHandlerImpl)(nil)
 
 type (
 	// DCRedirectionHandlerImpl is simple wrapper over frontend service, doing redirection based on policy

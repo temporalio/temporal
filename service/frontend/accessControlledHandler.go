@@ -23,10 +23,9 @@ package frontend
 import (
 	"context"
 
+	"github.com/gogo/status"
 	"go.temporal.io/temporal-proto/workflowservice"
-	"go.uber.org/yarpc/encoding/protobuf"
-	"go.uber.org/yarpc/yarpcerrors"
-	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 
 	"github.com/temporalio/temporal/.gen/proto/healthservice"
 	"github.com/temporalio/temporal/common/authorization"
@@ -35,7 +34,7 @@ import (
 
 // TODO(vancexu): add metrics
 
-var errUnauthorized = protobuf.NewError(yarpcerrors.CodePermissionDenied, "Request unauthorized.")
+var errUnauthorized = status.New(codes.PermissionDenied, "Request unauthorized.").Err()
 
 // AccessControlledWorkflowHandler frontend handler wrapper for authentication and authorization
 type AccessControlledWorkflowHandler struct {
@@ -45,7 +44,7 @@ type AccessControlledWorkflowHandler struct {
 	authorizer      authorization.Authorizer
 }
 
-var _ workflowservice.WorkflowServiceYARPCServer = (*AccessControlledWorkflowHandler)(nil)
+var _ workflowservice.WorkflowServiceServer = (*AccessControlledWorkflowHandler)(nil)
 
 // NewAccessControlledHandlerImpl creates frontend handler with authentication support
 func NewAccessControlledHandlerImpl(wfHandler *DCRedirectionHandlerImpl, authorizer authorization.Authorizer) *AccessControlledWorkflowHandler {
@@ -61,12 +60,6 @@ func NewAccessControlledHandlerImpl(wfHandler *DCRedirectionHandlerImpl, authori
 }
 
 // TODO(vancexu): refactor frontend handler
-
-// RegisterServer register this handler at gRPC server
-func (a *AccessControlledWorkflowHandler) RegisterServer(server *grpc.Server) {
-	workflowservice.RegisterWorkflowServiceServer(server, a)
-	healthservice.RegisterMetaServer(server, a)
-}
 
 // Health is for health check
 func (a *AccessControlledWorkflowHandler) Health(context.Context, *healthservice.HealthRequest) (*healthservice.HealthStatus, error) {
