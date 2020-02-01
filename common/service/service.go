@@ -150,14 +150,16 @@ func New(params *BootstrapParams) Service {
 		sVice.logger.Fatal("Unable to create yarpc TChannel dispatcher")
 	}
 
-	sVice.grpcDispatcher = sVice.rpcFactory.GetGRPCDispatcher()
-	if sVice.grpcDispatcher == nil {
-		sVice.logger.Fatal("Unable to create yarpc gRPC dispatcher")
-	}
-
-	sVice.grpcListener = sVice.rpcFactory.GetGRPCListener()
-	if sVice.grpcListener == nil {
-		sVice.logger.Fatal("Unable to create gRPC listener")
+	if sVice.sName == common.FrontendServiceName {
+		sVice.grpcListener = sVice.rpcFactory.GetGRPCListener()
+		if sVice.grpcListener == nil {
+			sVice.logger.Fatal("Unable to create gRPC listener")
+		}
+	} else {
+		sVice.grpcDispatcher = sVice.rpcFactory.GetGRPCDispatcher()
+		if sVice.grpcDispatcher == nil {
+			sVice.logger.Fatal("Unable to create yarpc gRPC dispatcher")
+		}
 	}
 
 	sVice.ringpopDispatcher = sVice.rpcFactory.GetRingpopDispatcher()
