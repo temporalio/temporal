@@ -417,6 +417,12 @@ func (wh *WorkflowHandler) PollForActivityTask(
 			return nil, wh.error(err, scope)
 		}
 	}
+
+	// TODO: remove this check after https://github.com/gogo/protobuf/issues/651 is resolved
+	if resp == nil {
+		resp = &gen.PollForActivityTaskResponse{}
+	}
+
 	return resp, nil
 }
 
@@ -507,7 +513,8 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 		}
 
 		// Must be cancellation error.  Does'nt matter what we return here.  Client already went away.
-		return nil, nil
+		// TODO: return nil after https://github.com/gogo/protobuf/issues/651 is resolved
+		return &gen.PollForDecisionTaskResponse{}, nil
 	}
 
 	tagsForErrorLog = append(tagsForErrorLog, []tag.Tag{tag.WorkflowID(
