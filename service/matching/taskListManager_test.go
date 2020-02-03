@@ -88,6 +88,53 @@ func TestDeliverBufferTasks_NoPollers(t *testing.T) {
 	wg.Wait()
 }
 
+func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+
+	tlm := createTestTaskListManager(controller)
+	tlm.db.rangeID = int64(1)
+	tlm.db.ackLevel = int64(0)
+	tlm.taskAckManager.setAckLevel(tlm.db.ackLevel)
+	tlm.taskAckManager.setReadLevel(tlm.db.ackLevel)
+	require.Equal(t, int64(0), tlm.taskAckManager.getAckLevel())
+	require.Equal(t, int64(0), tlm.taskAckManager.getReadLevel())
+
+	// Add all expired tasks
+	tasks := []*persistence.TaskInfo{
+		&persistence.TaskInfo{
+			TaskID:      11,
+			Expiry:      time.Now().Add(-time.Minute),
+			CreatedTime: time.Now().Add(-time.Hour),
+		},
+		&persistence.TaskInfo{
+			TaskID:      12,
+			Expiry:      time.Now().Add(-time.Minute),
+			CreatedTime: time.Now().Add(-time.Hour),
+		},
+	}
+
+	require.True(t, tlm.taskReader.addTasksToBuffer(tasks, time.Now(), time.NewTimer(time.Minute)))
+	require.Equal(t, int64(0), tlm.taskAckManager.getAckLevel())
+	require.Equal(t, int64(12), tlm.taskAckManager.getReadLevel())
+
+	// Now add a mix of valid and expired tasks
+	require.True(t, tlm.taskReader.addTasksToBuffer([]*persistence.TaskInfo{
+		&persistence.TaskInfo{
+			TaskID:      13,
+			Expiry:      time.Now().Add(-time.Minute),
+			CreatedTime: time.Now().Add(-time.Hour),
+		},
+		&persistence.TaskInfo{
+			TaskID:      14,
+			Expiry:      time.Now().Add(time.Hour),
+			CreatedTime: time.Now().Add(time.Minute),
+		},
+	}, time.Now(), time.NewTimer(time.Minute)))
+	require.Equal(t, int64(0), tlm.taskAckManager.getAckLevel())
+	require.Equal(t, int64(14), tlm.taskAckManager.getReadLevel())
+}
+
 func createTestTaskListManager(controller *gomock.Controller) *taskListManagerImpl {
 	return createTestTaskListManagerWithConfig(controller, defaultTestConfig())
 }
