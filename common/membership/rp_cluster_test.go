@@ -48,7 +48,7 @@ type TestRingpopCluster struct {
 // NewTestRingpopCluster creates a new test cluster with the given name and cluster size
 // All the nodes in the test cluster will register themselves in Ringpop
 // with the specified name. This is only intended for unit tests.
-func NewTestRingpopCluster(ringPopApp string, size int, listenIpAddr string, seed string, serviceName string, broadcastIP string) *TestRingpopCluster {
+func NewTestRingpopCluster(ringPopApp string, size int, listenIpAddr string, seed string, serviceName string, broadcastAddress string) *TestRingpopCluster {
 	logger, err := loggerimpl.NewDevelopment()
 	if err != nil {
 		logger.Error("Failed to create test logger", tag.Error(err))
@@ -78,9 +78,9 @@ func NewTestRingpopCluster(ringPopApp string, size int, listenIpAddr string, see
 			return nil
 		}
 		cluster.hostUUIDs[i] = uuid.New()
-		cluster.hostAddrs[i], err = ExternalAddressResolver(cluster.channels[i].PeerInfo(), &broadcastIP)
+		cluster.hostAddrs[i], err = BuildBroadcastHostPort(cluster.channels[i].PeerInfo(), broadcastAddress)
 		if err != nil {
-			logger.Error("tchannel hostport parse", tag.Error(err))
+			logger.Error("Failed to build broadcast hostport", tag.Error(err))
 			return nil
 		}
 		cluster.hostInfoList[i] = HostInfo{addr: cluster.hostAddrs[i]}
@@ -98,7 +98,7 @@ func NewTestRingpopCluster(ringPopApp string, size int, listenIpAddr string, see
 
 	for i := 0; i < size; i++ {
 		resolver := func() (string, error) {
-			return ExternalAddressResolver(cluster.channels[i].PeerInfo(), &broadcastIP)
+			return BuildBroadcastHostPort(cluster.channels[i].PeerInfo(), broadcastAddress)
 		}
 
 		ringPop, err := ringpop.New(ringPopApp, ringpop.Channel(cluster.channels[i]), ringpop.AddressResolverFunc(resolver))

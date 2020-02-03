@@ -301,7 +301,7 @@ func (r *ringpopServiceResolver) getLabelsMap() map[string]string {
 	return labels
 }
 
-func ExternalAddressResolver(listenerPeerInfo tchannel.LocalPeerInfo, broadcastIP *string) (string, error) {
+func BuildBroadcastHostPort(listenerPeerInfo tchannel.LocalPeerInfo, broadcastAddress string) (string, error) {
 	// Ephemeral port check copied from ringpop-go/ringpop.go/channelAddressResolver
 	// Check that TChannel is listening on a real hostport. By default,
 	// TChannel listens on an ephemeral host/port. The real port is then
@@ -313,17 +313,17 @@ func ExternalAddressResolver(listenerPeerInfo tchannel.LocalPeerInfo, broadcastI
 	}
 
 	// Broadcast IP override
-	if broadcastIP != nil && *broadcastIP != "" {
+	if broadcastAddress != "" {
 		// Parse listener hostport
 		_, port, err := net.SplitHostPort(listenerPeerInfo.HostPort)
 		if err != nil {
 			return "", err
 		}
 
-		// Parse supplied BroadcastIP override
-		ip := net.ParseIP(*broadcastIP)
+		// Parse supplied broadcastAddress override
+		ip := net.ParseIP(broadcastAddress)
 		if ip == nil || ip.To4() == nil {
-			return "", errors.New("broadcastIP set but unknown failure encountered while parsing")
+			return "", errors.New("broadcastAddress set but unknown failure encountered while parsing")
 		}
 
 		// If no errors, use the parsed IP with the port from our listener
