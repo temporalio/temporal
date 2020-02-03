@@ -375,7 +375,8 @@ func (h *Impl) Start() {
 	h.hostInfo = hostInfo
 
 	// The service is now started up
-	h.logger.Info("service started")
+	h.logger.Info("service started", tag.Address(hostInfo.GetAddress()))
+
 	// seed the random generator once for this service
 	rand.Seed(time.Now().UTC().UnixNano())
 }
