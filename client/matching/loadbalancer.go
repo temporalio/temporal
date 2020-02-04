@@ -25,7 +25,9 @@ import (
 	"math/rand"
 	"strings"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
+
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
@@ -42,7 +44,7 @@ type (
 		// performed
 		PickWritePartition(
 			domainID string,
-			taskList shared.TaskList,
+			taskList commonproto.TaskList,
 			taskListType int,
 			forwardedFrom string,
 		) string
@@ -52,7 +54,7 @@ type (
 		// forwardedFrom is non-empty, no load balancing should be done.
 		PickReadPartition(
 			domainID string,
-			taskList shared.TaskList,
+			taskList commonproto.TaskList,
 			taskListType int,
 			forwardedFrom string,
 		) string
@@ -84,7 +86,7 @@ func NewLoadBalancer(
 
 func (lb *defaultLoadBalancer) PickWritePartition(
 	domainID string,
-	taskList shared.TaskList,
+	taskList commonproto.TaskList,
 	taskListType int,
 	forwardedFrom string,
 ) string {
@@ -93,7 +95,7 @@ func (lb *defaultLoadBalancer) PickWritePartition(
 
 func (lb *defaultLoadBalancer) PickReadPartition(
 	domainID string,
-	taskList shared.TaskList,
+	taskList commonproto.TaskList,
 	taskListType int,
 	forwardedFrom string,
 ) string {
@@ -102,13 +104,13 @@ func (lb *defaultLoadBalancer) PickReadPartition(
 
 func (lb *defaultLoadBalancer) pickPartition(
 	domainID string,
-	taskList shared.TaskList,
+	taskList commonproto.TaskList,
 	taskListType int,
 	forwardedFrom string,
 	nPartitions dynamicconfig.IntPropertyFnWithTaskListInfoFilters,
 ) string {
 
-	if forwardedFrom != "" || taskList.GetKind() == shared.TaskListKindSticky {
+	if forwardedFrom != "" || taskList.GetKind() == enums.TaskListKindSticky {
 		return taskList.GetName()
 	}
 
