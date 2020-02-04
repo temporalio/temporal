@@ -233,7 +233,7 @@ Loop:
 
 		executionCtx, decisions, err := p.DecisionHandler(response.WorkflowExecution, response.WorkflowType, response.PreviousStartedEventId, response.StartedEventId, response.History)
 		if err != nil {
-			p.Logger.Info("Failing Decision. Decision handler failed with error", tag.Error(err))
+			p.Logger.Error("Failing Decision. Decision handler failed with error", tag.Error(err))
 			_, err = p.Engine.RespondDecisionTaskFailed(NewContext(), &workflowservice.RespondDecisionTaskFailedRequest{
 				TaskToken: response.TaskToken,
 				Cause:     enums.DecisionTaskFailedCauseWorkflowWorkerUnhandledFailure,
@@ -303,7 +303,7 @@ func (p *TaskPoller) HandlePartialDecision(response *workflowservice.PollForDeci
 	executionCtx, decisions, err := p.DecisionHandler(response.WorkflowExecution, response.WorkflowType,
 		response.PreviousStartedEventId, response.StartedEventId, response.History)
 	if err != nil {
-		p.Logger.Info("Failing Decision. Decision handler failed with error: %v", tag.Error(err))
+		p.Logger.Error("Failing Decision. Decision handler failed with error", tag.Error(err))
 		_, err = p.Engine.RespondDecisionTaskFailed(NewContext(), &workflowservice.RespondDecisionTaskFailedRequest{
 			TaskToken: response.TaskToken,
 			Cause:     enums.DecisionTaskFailedCauseWorkflowWorkerUnhandledFailure,
@@ -313,7 +313,7 @@ func (p *TaskPoller) HandlePartialDecision(response *workflowservice.PollForDeci
 		return nil, err
 	}
 
-	p.Logger.Info("Completing Decision.  Decisions: %v", tag.Value(decisions))
+	p.Logger.Info("Completing Decision", tag.Value(decisions))
 
 	// sticky tasklist
 	newTask, err := p.Engine.RespondDecisionTaskCompleted(
@@ -431,7 +431,7 @@ retry:
 			p.Logger.Info("Dropping Activity task: ")
 			return nil
 		}
-		p.Logger.Debug("Received Activity task: %v", tag.Value(response))
+		p.Logger.Debug("Received Activity task", tag.Value(response))
 
 		result, cancel, err2 := p.ActivityHandler(response.WorkflowExecution, response.ActivityType, response.ActivityId,
 			response.Input, response.TaskToken)

@@ -1033,8 +1033,8 @@ func createTableForListWorkflow(c *cli.Context, listAll bool, queryOpen bool) *t
 func listWorkflow(c *cli.Context, table *tablewriter.Table, queryOpen bool) func([]byte) ([]byte, int) {
 	wfClient := getWorkflowClient(c)
 
-	earliestTime := parseTime(c.String(FlagEarliestTime), 0)
-	latestTime := parseTime(c.String(FlagLatestTime), time.Now().UnixNano())
+	earliestTime := parseTime(c.String(FlagEarliestTime), 0, time.Now())
+	latestTime := parseTime(c.String(FlagLatestTime), time.Now().UnixNano(), time.Now())
 	workflowID := c.String(FlagWorkflowID)
 	workflowType := c.String(FlagWorkflowType)
 	printRawTime := c.Bool(FlagPrintRawTime)
@@ -1233,8 +1233,8 @@ func listClosedWorkflow(client client.Client, pageSize int, earliestTime, latest
 func getListResultInRaw(c *cli.Context, queryOpen bool, nextPageToken []byte) ([]*commonproto.WorkflowExecutionInfo, []byte) {
 	wfClient := getWorkflowClient(c)
 
-	earliestTime := parseTime(c.String(FlagEarliestTime), 0)
-	latestTime := parseTime(c.String(FlagLatestTime), time.Now().UnixNano())
+	earliestTime := parseTime(c.String(FlagEarliestTime), 0, time.Now())
+	latestTime := parseTime(c.String(FlagLatestTime), time.Now().UnixNano(), time.Now())
 	workflowID := c.String(FlagWorkflowID)
 	workflowType := c.String(FlagWorkflowType)
 	pageSize := c.Int(FlagPageSize)

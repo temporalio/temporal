@@ -1501,7 +1501,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			1,
 			token,
 		)
-		s.Nil(err)
+		s.NoError(err)
 		s.True(len(resp.HistoryBatches) <= 1)
 		batchCount++
 		token = resp.NextPageToken
@@ -1523,7 +1523,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			1,
 			token,
 		)
-		s.Nil(err)
+		s.NoError(err)
 		s.True(len(resp.HistoryBatches) <= 1)
 		batchCount++
 		token = resp.NextPageToken
@@ -1545,7 +1545,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			1,
 			token,
 		)
-		s.Nil(err)
+		s.NoError(err)
 		s.True(len(resp.HistoryBatches) <= 1)
 		batchCount++
 		token = resp.NextPageToken
@@ -1567,7 +1567,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			1,
 			token,
 		)
-		s.Nil(err)
+		s.NoError(err)
 		s.True(len(resp.HistoryBatches) <= 1)
 		batchCount++
 		token = resp.NextPageToken
@@ -1753,9 +1753,9 @@ func (s *nDCIntegrationTestSuite) applyEvents(
 		}
 
 		err := historyClient.ReplicateEventsV2(host.NewContext(), req)
-		s.Nil(err, "Failed to replicate history event")
+		s.NoError(err, "Failed to replicate history event")
 		err = historyClient.ReplicateEventsV2(host.NewContext(), req)
-		s.Nil(err, "Failed to dedup replicate history event")
+		s.NoError(err, "Failed to dedup replicate history event")
 	}
 }
 

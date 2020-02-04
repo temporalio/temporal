@@ -154,7 +154,7 @@ func (s *integrationSuite) getDomainID(domain string) string {
 	domainResp, err := s.engine.DescribeDomain(NewContext(), &workflowservice.DescribeDomainRequest{
 		Name: s.archivalDomainName,
 	})
-	s.Nil(err)
+	s.NoError(err)
 	return domainResp.DomainInfo.GetUuid()
 }
 
@@ -182,7 +182,7 @@ func (s *integrationSuite) isHistoryDeleted(domainID string, execution *commonpr
 	}
 	for i := 0; i < retryLimit; i++ {
 		resp, err := s.testCluster.testBase.HistoryV2Mgr.GetHistoryTree(request)
-		s.Nil(err)
+		s.NoError(err)
 		if len(resp.Branches) == 0 {
 			return true
 		}
@@ -231,7 +231,7 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, domain, domainID s
 		Identity:                            identity,
 	}
 	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
-	s.Nil(err)
+	s.NoError(err)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 	runIDs := make([]string, numRuns)
 
@@ -325,19 +325,19 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, domain, domainID s
 	for run := 0; run < numRuns; run++ {
 		for i := 0; i < numActivities; i++ {
 			_, err := poller.PollAndProcessDecisionTask(false, false)
-			s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
-			s.Nil(err)
+			s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+			s.NoError(err)
 			if i%2 == 0 {
 				err = poller.PollAndProcessActivityTask(false)
 			} else { // just for testing respondActivityTaskCompleteByID
 				err = poller.PollAndProcessActivityTaskWithID(false)
 			}
-			s.Logger.Info("PollAndProcessActivityTask", tag.Error(err))
-			s.Nil(err)
+			s.Logger.Error("PollAndProcessActivityTask", tag.Error(err))
+			s.NoError(err)
 		}
 
 		_, err = poller.PollAndProcessDecisionTask(true, false)
-		s.Nil(err)
+		s.NoError(err)
 	}
 
 	s.True(workflowComplete)

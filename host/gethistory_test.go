@@ -63,7 +63,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
-	s.Nil(err0)
+	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
@@ -133,7 +133,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 			WaitForNewEvent: isLongPoll,
 			NextPageToken:   token,
 		})
-		s.Nil(err)
+		s.NoError(err)
 
 		return responseInner.History.Events, responseInner.NextPageToken
 	}
@@ -154,7 +154,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	// make first decision to schedule activity, this should affect the long poll above
 	time.AfterFunc(time.Second*8, func() {
 		_, errDecision1 := poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errDecision1))
+		s.Logger.Error("PollAndProcessDecisionTask", tag.Error(errDecision1))
 	})
 	start = time.Now()
 	events, token = getHistory(s.domainName, workflowID, token, true)
@@ -166,11 +166,11 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	// finish the activity and poll all events
 	time.AfterFunc(time.Second*5, func() {
 		errActivity := poller.PollAndProcessActivityTask(false)
-		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errActivity))
+		s.Logger.Error("PollAndProcessDecisionTask", tag.Error(errActivity))
 	})
 	time.AfterFunc(time.Second*8, func() {
 		_, errDecision2 := poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errDecision2))
+		s.Logger.Error("PollAndProcessDecisionTask", tag.Error(errDecision2))
 	})
 	for token != nil {
 		events, token = getHistory(s.domainName, workflowID, token, true)
@@ -229,7 +229,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	}
 
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
-	s.Nil(err0)
+	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
@@ -321,7 +321,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	// make first decision to schedule activity, this should affect the long poll above
 	time.AfterFunc(time.Second*8, func() {
 		_, errDecision1 := poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errDecision1))
+		s.Logger.Error("PollAndProcessDecisionTask", tag.Error(errDecision1))
 	})
 	start = time.Now()
 	events, token = getHistory(s.domainName, workflowID, token, true)
@@ -333,11 +333,11 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	// finish the activity and poll all events
 	time.AfterFunc(time.Second*5, func() {
 		errActivity := poller.PollAndProcessActivityTask(false)
-		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errActivity))
+		s.Logger.Error("PollAndProcessDecisionTask", tag.Error(errActivity))
 	})
 	time.AfterFunc(time.Second*8, func() {
 		_, errDecision2 := poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errDecision2))
+		s.Logger.Error("PollAndProcessDecisionTask", tag.Error(errDecision2))
 	})
 	for token != nil {
 		events, token = getHistory(s.domainName, workflowID, token, true)
@@ -387,7 +387,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	}
 
 	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
-	s.Nil(err)
+	s.NoError(err)
 	execution := &commonproto.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      we.GetRunId(),
@@ -472,7 +472,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 				Encoding: common.EncodingTypeThriftRW,
 				Data:     blob.Data,
 			})
-			s.Nil(err)
+			s.NoError(err)
 			events = append(events, blobEvents...)
 		}
 		return events
@@ -482,13 +482,13 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	var token []byte
 
 	resp, err := getHistory(s.domainName, execution, common.FirstEventID, common.EndEventID, token)
-	s.Nil(err)
+	s.NoError(err)
 	s.True(len(resp.HistoryBatches) == pageSize)
 	blobs = append(blobs, resp.HistoryBatches...)
 	token = resp.NextPageToken
 	if token != nil {
 		resp, err := getHistory(s.domainName, execution, common.FirstEventID, common.EndEventID, token)
-		s.Nil(err)
+		s.NoError(err)
 		s.Equal(0, len(resp.HistoryBatches))
 		s.Nil(resp.NextPageToken)
 	}
@@ -502,7 +502,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	token = nil
 	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
 		resp, err = getHistory(s.domainName, execution, common.FirstEventID, common.EndEventID, token)
-		s.Nil(err)
+		s.NoError(err)
 		s.True(len(resp.HistoryBatches) <= pageSize)
 		blobs = append(blobs, resp.HistoryBatches...)
 		token = resp.NextPageToken
@@ -522,7 +522,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	beginingEventID := events[len(events)-1].GetEventId() + 1
 	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
 		resp, err = getHistory(s.domainName, execution, beginingEventID, common.EndEventID, token)
-		s.Nil(err)
+		s.NoError(err)
 		s.True(len(resp.HistoryBatches) <= pageSize)
 		blobs = append(blobs, resp.HistoryBatches...)
 		token = resp.NextPageToken
@@ -544,7 +544,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	beginingEventID = events[len(events)-1].GetEventId() + 1
 	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
 		resp, err = getHistory(s.domainName, execution, beginingEventID, common.EndEventID, token)
-		s.Nil(err)
+		s.NoError(err)
 		s.True(len(resp.HistoryBatches) <= pageSize)
 		blobs = append(blobs, resp.HistoryBatches...)
 		token = resp.NextPageToken
@@ -566,7 +566,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	token = nil
 	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
 		resp, err = getHistory(s.domainName, execution, 4, 7, token)
-		s.Nil(err)
+		s.NoError(err)
 		s.True(len(resp.HistoryBatches) <= pageSize)
 		blobs = append(blobs, resp.HistoryBatches...)
 		token = resp.NextPageToken
@@ -604,7 +604,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 	}
 
 	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
-	s.Nil(err)
+	s.NoError(err)
 	execution := &commonproto.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      we.GetRunId(),
@@ -699,28 +699,28 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 	var token []byte
 	// this should get the #4 batch, activity task started
 	resp, err := getHistory(s.domainName, execution, firstEventID, common.EndEventID, token)
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(1, len(resp.HistoryBatches))
 	token = resp.NextPageToken
 	s.NotEmpty(token)
 
 	// this should get the #5 batch, activity task completed and decision task scheduled
 	resp, err = getHistory(s.domainName, execution, firstEventID, common.EndEventID, token)
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(1, len(resp.HistoryBatches))
 	token = resp.NextPageToken
 	s.NotEmpty(token)
 
 	// this should get the #6 batch, decision task started
 	resp, err = getHistory(s.domainName, execution, firstEventID, common.EndEventID, token)
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(1, len(resp.HistoryBatches))
 	token = resp.NextPageToken
 	s.NotEmpty(token)
 
 	// this should get the #7 batch, decision task completed and workflow execution completed
 	resp, err = getHistory(s.domainName, execution, firstEventID, common.EndEventID, token)
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(1, len(resp.HistoryBatches))
 }
 
@@ -749,7 +749,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 	}
 
 	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
-	s.Nil(err)
+	s.NoError(err)
 	execution := &commonproto.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      we.GetRunId(),
@@ -835,7 +835,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 				Encoding: common.EncodingTypeThriftRW,
 				Data:     blob.Data,
 			})
-			s.Nil(err)
+			s.NoError(err)
 			events = append(events, blobEvents...)
 		}
 		return events
@@ -845,13 +845,13 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 	var token []byte
 
 	resp, err := getHistory(s.domainName, execution, token)
-	s.Nil(err)
+	s.NoError(err)
 	s.True(len(resp.RawHistory) == pageSize)
 	blobs = append(blobs, resp.RawHistory...)
 	token = resp.NextPageToken
 	if token != nil {
 		resp, err := getHistory(s.domainName, execution, token)
-		s.Nil(err)
+		s.NoError(err)
 		s.Equal(0, len(resp.RawHistory))
 		s.Nil(resp.NextPageToken)
 	}
@@ -866,7 +866,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 
 	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
 		resp, err = getHistory(s.domainName, execution, token)
-		s.Nil(err)
+		s.NoError(err)
 		s.True(len(resp.RawHistory) <= pageSize)
 		blobs = append(blobs, resp.RawHistory...)
 		token = resp.NextPageToken
@@ -885,7 +885,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 	poller.PollAndProcessActivityTask(false)
 	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
 		resp, err = getHistory(s.domainName, execution, token)
-		s.Nil(err)
+		s.NoError(err)
 		s.True(len(resp.RawHistory) <= pageSize)
 		blobs = append(blobs, resp.RawHistory...)
 		token = resp.NextPageToken
@@ -908,7 +908,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 
 	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
 		resp, err = getHistory(s.domainName, execution, token)
-		s.Nil(err)
+		s.NoError(err)
 		s.True(len(resp.RawHistory) <= pageSize)
 		blobs = append(blobs, resp.RawHistory...)
 		token = resp.NextPageToken

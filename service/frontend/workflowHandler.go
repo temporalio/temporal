@@ -1535,8 +1535,11 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 		}
 	}
 
-	completeRequest.WorkerVersionInfo = newWorkerVersionInfo(ctx)
-
+	headers := client.GetHeadersValue(ctx, common.ClientImplHeaderName, common.FeatureVersionHeaderName)
+	completeRequest.WorkerVersionInfo = &gen.WorkerVersionInfo{
+		Impl:           common.StringPtr(headers[0]),
+		FeatureVersion: common.StringPtr(headers[1]),
+	}
 	matchingRequest := &m.RespondQueryTaskCompletedRequest{
 		DomainUUID:       common.StringPtr(queryTaskToken.DomainID),
 		TaskList:         &gen.TaskList{Name: common.StringPtr(queryTaskToken.TaskList)},

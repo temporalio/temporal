@@ -257,7 +257,7 @@ func (s *clientIntegrationSuite) TestClientDataConverter_Failed() {
 	failedAct := 0
 	for iter.HasNext() {
 		event, err := iter.Next()
-		s.Nil(err)
+		s.NoError(err)
 		if event.GetEventType() == enums.EventTypeActivityTaskCompleted {
 			completedAct++
 		}

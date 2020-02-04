@@ -125,7 +125,7 @@ func GetTestClusterConfig(configFile string) (*TestClusterConfig, error) {
 	confContent = []byte(os.ExpandEnv(string(confContent)))
 	var options TestClusterConfig
 	if err := yaml.Unmarshal(confContent, &options); err != nil {
-		return nil, fmt.Errorf("failed to decode test cluster config %v", tag.Error(err))
+		return nil, fmt.Errorf("failed to decode test cluster config %v", err)
 	}
 
 	options.FrontendAddress = TestFlags.FrontendAddr
