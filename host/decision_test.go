@@ -64,7 +64,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 	}
 
 	resp0, err0 := s.engine.StartWorkflowExecution(createContext(), request)
-	s.Nil(err0)
+	s.NoError(err0)
 
 	we := &commonproto.WorkflowExecution{
 		WorkflowId: id,
@@ -79,7 +79,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 		TaskList: taskList,
 		Identity: identity,
 	})
-	s.Nil(err1)
+	s.NoError(err1)
 
 	s.Equal(int64(0), resp1.GetAttempt())
 	s.assertLastHistoryEvent(we, 3, enums.EventTypeDecisionTaskStarted)
@@ -106,10 +106,10 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 				TaskList: taskList,
 				Identity: identity,
 			})
-			s.Nil(err)
+			s.NoError(err)
 			taskToken = resp.GetTaskToken()
 		} else {
-			s.Nil(err2)
+			s.NoError(err2)
 			taskToken = resp2.DecisionTask.GetTaskToken()
 		}
 		time.Sleep(time.Second)
@@ -134,7 +134,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 		ReturnNewDecisionTask:      true,
 		ForceCreateNewDecisionTask: false,
 	})
-	s.Nil(err5)
+	s.NoError(err5)
 	s.Nil(resp5.DecisionTask)
 
 	s.assertLastHistoryEvent(we, 41, enums.EventTypeWorkflowExecutionCompleted)
@@ -170,7 +170,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 	}
 
 	resp0, err0 := s.engine.StartWorkflowExecution(createContext(), request)
-	s.Nil(err0)
+	s.NoError(err0)
 
 	we := &commonproto.WorkflowExecution{
 		WorkflowId: id,
@@ -185,7 +185,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 		TaskList: taskList,
 		Identity: identity,
 	})
-	s.Nil(err1)
+	s.NoError(err1)
 
 	s.Equal(int64(0), resp1.GetAttempt())
 	s.assertLastHistoryEvent(we, 3, enums.EventTypeDecisionTaskStarted)
@@ -200,7 +200,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 		ReturnNewDecisionTask:      true,
 		ForceCreateNewDecisionTask: true,
 	})
-	s.Nil(err2)
+	s.NoError(err2)
 
 	resp3, err3 := s.engine.RespondDecisionTaskCompleted(createContext(), &workflowservice.RespondDecisionTaskCompletedRequest{
 		TaskToken: resp2.DecisionTask.GetTaskToken(),
@@ -220,7 +220,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 		ReturnNewDecisionTask:      true,
 		ForceCreateNewDecisionTask: true,
 	})
-	s.Nil(err3)
+	s.NoError(err3)
 
 	resp4, err4 := s.engine.RespondDecisionTaskCompleted(createContext(), &workflowservice.RespondDecisionTaskCompletedRequest{
 		TaskToken: resp3.DecisionTask.GetTaskToken(),
@@ -240,7 +240,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 		ReturnNewDecisionTask:      true,
 		ForceCreateNewDecisionTask: true,
 	})
-	s.Nil(err4)
+	s.NoError(err4)
 
 	resp5, err5 := s.engine.RespondDecisionTaskCompleted(createContext(), &workflowservice.RespondDecisionTaskCompletedRequest{
 		TaskToken: resp4.DecisionTask.GetTaskToken(),
@@ -259,7 +259,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithLocalActivitiesResult() {
 		ReturnNewDecisionTask:      true,
 		ForceCreateNewDecisionTask: false,
 	})
-	s.Nil(err5)
+	s.NoError(err5)
 	s.Nil(resp5.DecisionTask)
 
 	expectedHistory := []enums.EventType{
@@ -306,7 +306,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeRegularDecisionSta
 	}
 
 	resp0, err0 := s.engine.StartWorkflowExecution(createContext(), request)
-	s.Nil(err0)
+	s.NoError(err0)
 
 	we := &commonproto.WorkflowExecution{
 		WorkflowId: id,
@@ -323,7 +323,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeRegularDecisionSta
 		Identity:          "integ test",
 		RequestId:         uuid.New(),
 	})
-	s.Nil(err0)
+	s.NoError(err0)
 	s.assertLastHistoryEvent(we, 3, enums.EventTypeWorkflowExecutionSignaled)
 
 	// start this transient decision, the attempt should be cleared and it becomes again a regular decision
@@ -332,7 +332,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeRegularDecisionSta
 		TaskList: taskList,
 		Identity: identity,
 	})
-	s.Nil(err1)
+	s.NoError(err1)
 
 	s.Equal(int64(0), resp1.GetAttempt())
 	s.assertLastHistoryEvent(we, 4, enums.EventTypeDecisionTaskStarted)
@@ -343,7 +343,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeRegularDecisionSta
 		WorkflowExecution: we,
 		Reason:            "test-reason",
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	expectedHistory := []enums.EventType{
 		enums.EventTypeWorkflowExecutionStarted,
@@ -379,7 +379,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 	}
 
 	resp0, err0 := s.engine.StartWorkflowExecution(createContext(), request)
-	s.Nil(err0)
+	s.NoError(err0)
 
 	we := &commonproto.WorkflowExecution{
 		WorkflowId: id,
@@ -394,7 +394,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 		TaskList: taskList,
 		Identity: identity,
 	})
-	s.Nil(err1)
+	s.NoError(err1)
 
 	s.assertLastHistoryEvent(we, 3, enums.EventTypeDecisionTaskStarted)
 
@@ -407,7 +407,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 		Identity:          "integ test",
 		RequestId:         uuid.New(),
 	})
-	s.Nil(err0)
+	s.NoError(err0)
 	s.assertLastHistoryEvent(we, 3, enums.EventTypeDecisionTaskStarted)
 
 	// then terminate the worklfow
@@ -416,7 +416,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 		WorkflowExecution: we,
 		Reason:            "test-reason",
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	expectedHistory := []enums.EventType{
 		enums.EventTypeWorkflowExecutionStarted,
@@ -452,7 +452,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 	}
 
 	resp0, err0 := s.engine.StartWorkflowExecution(createContext(), request)
-	s.Nil(err0)
+	s.NoError(err0)
 
 	we := &commonproto.WorkflowExecution{
 		WorkflowId: id,
@@ -469,7 +469,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 		TaskList: taskList,
 		Identity: identity,
 	})
-	s.Nil(err1)
+	s.NoError(err1)
 
 	s.assertLastHistoryEvent(we, 3, enums.EventTypeDecisionTaskStarted)
 
@@ -482,7 +482,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 		Identity:          "integ test",
 		RequestId:         uuid.New(),
 	})
-	s.Nil(err0)
+	s.NoError(err0)
 	s.assertLastHistoryEvent(we, 3, enums.EventTypeDecisionTaskStarted)
 
 	// fail this decision to flush buffer, and then another decision will be scheduled
@@ -491,7 +491,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 		Cause:     cause,
 		Identity:  "integ test",
 	})
-	s.Nil(err2)
+	s.NoError(err2)
 	s.assertLastHistoryEvent(we, 6, enums.EventTypeDecisionTaskScheduled)
 
 	// then terminate the worklfow
@@ -500,7 +500,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularDecisionStar
 		WorkflowExecution: we,
 		Reason:            "test-reason",
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	expectedHistory := []enums.EventType{
 		enums.EventTypeWorkflowExecutionStarted,
@@ -537,7 +537,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientDecisionS
 	}
 
 	resp0, err0 := s.engine.StartWorkflowExecution(createContext(), request)
-	s.Nil(err0)
+	s.NoError(err0)
 
 	we := &commonproto.WorkflowExecution{
 		WorkflowId: id,
@@ -553,7 +553,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientDecisionS
 			TaskList: taskList,
 			Identity: identity,
 		})
-		s.Nil(err1)
+		s.NoError(err1)
 		s.Equal(int64(i), resp1.GetAttempt())
 		if i == 0 {
 			// first time is regular decision
@@ -568,7 +568,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientDecisionS
 			Cause:     cause,
 			Identity:  "integ test",
 		})
-		s.Nil(err2)
+		s.NoError(err2)
 	}
 
 	s.assertLastHistoryEvent(we, 4, enums.EventTypeDecisionTaskFailed)
@@ -581,7 +581,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientDecisionS
 		Identity:          "integ test",
 		RequestId:         uuid.New(),
 	})
-	s.Nil(err0)
+	s.NoError(err0)
 	s.assertLastHistoryEvent(we, 5, enums.EventTypeWorkflowExecutionSignaled)
 
 	// start this transient decision, the attempt should be cleared and it becomes again a regular decision
@@ -590,7 +590,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientDecisionS
 		TaskList: taskList,
 		Identity: identity,
 	})
-	s.Nil(err1)
+	s.NoError(err1)
 
 	s.Equal(int64(0), resp1.GetAttempt())
 	s.assertLastHistoryEvent(we, 7, enums.EventTypeDecisionTaskStarted)
@@ -601,7 +601,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientDecisionS
 		WorkflowExecution: we,
 		Reason:            "test-reason",
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	expectedHistory := []enums.EventType{
 		enums.EventTypeWorkflowExecutionStarted,
@@ -640,7 +640,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 	}
 
 	resp0, err0 := s.engine.StartWorkflowExecution(createContext(), request)
-	s.Nil(err0)
+	s.NoError(err0)
 
 	we := &commonproto.WorkflowExecution{
 		WorkflowId: id,
@@ -656,7 +656,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 			TaskList: taskList,
 			Identity: identity,
 		})
-		s.Nil(err1)
+		s.NoError(err1)
 		s.Equal(int64(i), resp1.GetAttempt())
 		if i == 0 {
 			// first time is regular decision
@@ -671,7 +671,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 			Cause:     cause,
 			Identity:  "integ test",
 		})
-		s.Nil(err2)
+		s.NoError(err2)
 	}
 
 	s.assertLastHistoryEvent(we, 4, enums.EventTypeDecisionTaskFailed)
@@ -682,7 +682,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 		TaskList: taskList,
 		Identity: identity,
 	})
-	s.Nil(err1)
+	s.NoError(err1)
 
 	s.assertLastHistoryEvent(we, 4, enums.EventTypeDecisionTaskFailed)
 
@@ -695,7 +695,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 		Identity:          "integ test",
 		RequestId:         uuid.New(),
 	})
-	s.Nil(err0)
+	s.NoError(err0)
 	s.assertLastHistoryEvent(we, 4, enums.EventTypeDecisionTaskFailed)
 
 	// then terminate the worklfow
@@ -704,7 +704,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 		WorkflowExecution: we,
 		Reason:            "test-reason",
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	expectedHistory := []enums.EventType{
 		enums.EventTypeWorkflowExecutionStarted,
@@ -740,7 +740,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 	}
 
 	resp0, err0 := s.engine.StartWorkflowExecution(createContext(), request)
-	s.Nil(err0)
+	s.NoError(err0)
 
 	we := &commonproto.WorkflowExecution{
 		WorkflowId: id,
@@ -756,7 +756,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 			TaskList: taskList,
 			Identity: identity,
 		})
-		s.Nil(err1)
+		s.NoError(err1)
 		s.Equal(int64(i), resp1.GetAttempt())
 		if i == 0 {
 			// first time is regular decision
@@ -771,7 +771,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 			Cause:     cause,
 			Identity:  "integ test",
 		})
-		s.Nil(err2)
+		s.NoError(err2)
 	}
 
 	s.assertLastHistoryEvent(we, 4, enums.EventTypeDecisionTaskFailed)
@@ -782,7 +782,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 		TaskList: taskList,
 		Identity: identity,
 	})
-	s.Nil(err1)
+	s.NoError(err1)
 
 	s.assertLastHistoryEvent(we, 4, enums.EventTypeDecisionTaskFailed)
 
@@ -795,7 +795,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 		Identity:          "integ test",
 		RequestId:         uuid.New(),
 	})
-	s.Nil(err0)
+	s.NoError(err0)
 	s.assertLastHistoryEvent(we, 4, enums.EventTypeDecisionTaskFailed)
 
 	// fail this decision to flush buffer
@@ -804,7 +804,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 		Cause:     cause,
 		Identity:  "integ test",
 	})
-	s.Nil(err2)
+	s.NoError(err2)
 	s.assertLastHistoryEvent(we, 6, enums.EventTypeDecisionTaskScheduled)
 
 	// then terminate the worklfow
@@ -813,7 +813,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientDecisionSt
 		WorkflowExecution: we,
 		Reason:            "test-reason",
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	expectedHistory := []enums.EventType{
 		enums.EventTypeWorkflowExecutionStarted,
@@ -832,10 +832,10 @@ func (s *integrationSuite) assertHistory(we *commonproto.WorkflowExecution, expe
 		Domain:    s.domainName,
 		Execution: we,
 	})
-	s.Nil(err)
+	s.NoError(err)
 	history := historyResponse.History
 	data, err := json.MarshalIndent(history, "", "    ")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(len(expectedHistory), len(history.Events), string(data))
 	for i, e := range history.Events {
 		s.Equal(expectedHistory[i], e.GetEventType(), "%v, %v, %v", strconv.Itoa(i), e.GetEventType().String(), string(data))
@@ -847,10 +847,10 @@ func (s *integrationSuite) assertLastHistoryEvent(we *commonproto.WorkflowExecut
 		Domain:    s.domainName,
 		Execution: we,
 	})
-	s.Nil(err)
+	s.NoError(err)
 	history := historyResponse.History
 	data, err := json.MarshalIndent(history, "", "    ")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(count, len(history.Events), string(data))
 	s.Equal(eventType, history.Events[len(history.Events)-1].GetEventType(), string(data))
 }

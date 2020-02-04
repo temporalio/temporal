@@ -22,6 +22,7 @@ package resource
 
 import (
 	"math/rand"
+	"net"
 	"os"
 	"sync/atomic"
 	"time"
@@ -117,6 +118,7 @@ type (
 		// for registering handlers
 		dispatcher     *yarpc.Dispatcher
 		grpcDispatcher *yarpc.Dispatcher
+		grpcListener   net.Listener
 
 		// for ringpop listener
 		ringpopDispatcher *yarpc.Dispatcher
@@ -150,7 +152,15 @@ func New(
 	}
 
 	dispatcher := params.RPCFactory.GetTChannelDispatcher()
-	grpcDispatcher := params.RPCFactory.GetGRPCDispatcher()
+
+	var grpcListener net.Listener
+	var grpcDispatcher *yarpc.Dispatcher
+	if serviceName == common.FrontendServiceName {
+		grpcListener = params.RPCFactory.GetGRPCListener()
+	} else {
+		grpcDispatcher = params.RPCFactory.GetGRPCDispatcher()
+	}
+
 	ringpopDispatcher := params.RPCFactory.GetRingpopDispatcher()
 
 	membershipMonitor, err := params.MembershipFactory.GetMembershipMonitor()
@@ -319,6 +329,7 @@ func New(
 
 		// for registering grpc handlers
 		grpcDispatcher: grpcDispatcher,
+		grpcListener:   grpcListener,
 
 		// for ringpop listener
 		ringpopDispatcher: ringpopDispatcher,
@@ -375,7 +386,7 @@ func (h *Impl) Start() {
 	h.hostInfo = hostInfo
 
 	// The service is now started up
-	h.logger.Info("service started")
+	h.logger.Info("Service resources started", tag.Address(hostInfo.GetAddress()))
 	// seed the random generator once for this service
 	rand.Seed(time.Now().UTC().UnixNano())
 }
@@ -621,4 +632,9 @@ func (h *Impl) GetDispatcher() *yarpc.Dispatcher {
 // GetGRPCDispatcher return GRPC dispatcher, used for registering handlers
 func (h *Impl) GetGRPCDispatcher() *yarpc.Dispatcher {
 	return h.grpcDispatcher
+}
+
+// GetGRPCListener return GRPC listener, used for registering handlers
+func (h *Impl) GetGRPCListener() net.Listener {
+	return h.grpcListener
 }

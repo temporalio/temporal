@@ -218,6 +218,17 @@ func (factory *RingpopFactory) getRingpop() (*membership.RingPop, error) {
 	return ringPop, nil
 }
 
+func (factory *RingpopFactory) broadcastAddressResolver() (string, error) {
+	// This initial piece is copied from ringpop-go/ringpop.go/channelAddressResolver
+	var ch *tcg.Channel
+	var err error
+	if ch, err = factory.getChannel(factory.dispatcher); err != nil {
+		return "", err
+	}
+
+	return membership.BuildBroadcastHostPort(ch.PeerInfo(), factory.config.broadcastAddress)
+}
+
 func (factory *RingpopFactory) createRingpop() (*membership.RingPop, error) {
 
 	var ch *tcg.Channel
@@ -226,7 +237,7 @@ func (factory *RingpopFactory) createRingpop() (*membership.RingPop, error) {
 		return nil, err
 	}
 
-	rp, err := ringpop.New(factory.config.Name, ringpop.Channel(ch))
+	rp, err := ringpop.New(factory.config.Name, ringpop.Channel(ch), ringpop.AddressResolverFunc(factory.broadcastAddressResolver))
 	if err != nil {
 		return nil, err
 	}

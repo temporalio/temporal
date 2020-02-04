@@ -21,6 +21,8 @@
 package common
 
 import (
+	"net"
+
 	"go.uber.org/yarpc"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -55,6 +57,7 @@ type (
 	RPCFactory interface {
 		GetTChannelDispatcher() *yarpc.Dispatcher
 		GetGRPCDispatcher() *yarpc.Dispatcher
+		GetGRPCListener() net.Listener
 		GetRingpopDispatcher() *yarpc.Dispatcher
 		CreateTChannelDispatcherForOutbound(callerName, serviceName, hostName string) *yarpc.Dispatcher
 		CreateGRPCDispatcherForOutbound(callerName, serviceName, hostName string) *yarpc.Dispatcher

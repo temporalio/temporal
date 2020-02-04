@@ -45,6 +45,7 @@ type RPCFactory struct {
 	sync.Mutex
 	dispatcher        *yarpc.Dispatcher
 	grpcDispatcher    *yarpc.Dispatcher
+	grpcListiner      net.Listener
 	ringpopDispatcher *yarpc.Dispatcher
 }
 
@@ -84,6 +85,29 @@ func (d *RPCFactory) GetGRPCDispatcher() *yarpc.Dispatcher {
 	}
 
 	return d.grpcDispatcher
+}
+
+// GetGRPCListener returns cached dispatcher for gRPC inbound or creates one
+func (d *RPCFactory) GetGRPCListener() net.Listener {
+	if d.grpcListiner != nil {
+		return d.grpcListiner
+	}
+
+	d.Lock()
+	defer d.Unlock()
+
+	if d.grpcListiner == nil {
+		hostAddress := fmt.Sprintf("%v:%v", d.getListenIP(), d.config.GRPCPort)
+		var err error
+		d.grpcListiner, err = net.Listen("tcp", hostAddress)
+		if err != nil {
+			d.logger.Fatal("Failed create gRPC listener", tag.Error(err), tag.Service(d.serviceName), tag.Address(hostAddress))
+		}
+
+		d.logger.Info("Created gRPC listener", tag.Service(d.serviceName), tag.Address(hostAddress))
+	}
+
+	return d.grpcListiner
 }
 
 // GetTChannelDispatcher return a cached dispatcher

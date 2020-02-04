@@ -56,7 +56,7 @@ func CreateIndex(s suite.Suite, esClient *elastic.Client, indexName string) {
 	s.Require().NoError(err)
 	if exists {
 		deleteTestIndex, err := esClient.DeleteIndex(indexName).Do(createContext())
-		s.Require().Nil(err)
+		s.Require().NoError(err)
 		s.Require().True(deleteTestIndex.Acknowledged)
 	}
 
@@ -68,6 +68,6 @@ func CreateIndex(s suite.Suite, esClient *elastic.Client, indexName string) {
 // DeleteIndex delete test index
 func DeleteIndex(s suite.Suite, esClient *elastic.Client, indexName string) {
 	deleteTestIndex, err := esClient.DeleteIndex(indexName).Do(createContext())
-	s.Nil(err)
+	s.NoError(err)
 	s.True(deleteTestIndex.Acknowledged)
 }
