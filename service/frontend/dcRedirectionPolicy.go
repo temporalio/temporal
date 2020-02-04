@@ -24,11 +24,10 @@ import (
 	"context"
 	"fmt"
 
-	"go.uber.org/yarpc"
-
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
+	"github.com/temporalio/temporal/common/client"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/service/config"
 )
@@ -169,8 +168,7 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsDoma
 		return policy.currentClusterName, false
 	}
 
-	call := yarpc.CallFromContext(ctx)
-	enforceDCRedirection := call.Header(common.EnforceDCRedirection)
+	enforceDCRedirection := client.GetHeadersValue(ctx, common.EnforceDCRedirection)[0]
 	if !policy.config.EnableDomainNotActiveAutoForwarding(domainEntry.GetInfo().Name) && enforceDCRedirection != "true" {
 		// do not do dc redirection if auto-forwarding dynamic config and EnforceDCRedirection context flag is not enabled
 		return policy.currentClusterName, false
