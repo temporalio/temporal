@@ -594,7 +594,7 @@ func convertTime(unixNano int64, onlyTime bool) string {
 	return result
 }
 
-func parseTime(timeStr string, defaultValue int64) int64 {
+func parseTime(timeStr string, defaultValue int64, now time.Time) int64 {
 	if len(timeStr) == 0 {
 		return defaultValue
 	}
@@ -612,7 +612,7 @@ func parseTime(timeStr string, defaultValue int64) int64 {
 	}
 
 	// treat as time range format
-	parsedTime, err = parseTimeRange(timeStr)
+	parsedTime, err = parseTimeRange(timeStr, now)
 	if err != nil {
 		ErrorAndExit(fmt.Sprintf("Cannot parse time '%s', use UTC format '2006-01-02T15:04:05Z', "+
 			"time range or raw UnixNano directly. See help for more details.", timeStr), err)
@@ -639,7 +639,7 @@ func parseTime(timeStr string, defaultValue int64) int64 {
 // Limitation: Value of numerical multiplier, X should be in b/w 0 - 1e6 (1 million), boundary values excluded i.e.
 // 0 < X < 1e6. Also, the maximum time in the past can be 1 January 1970 00:00:00 UTC (epoch time),
 // so giving "1000y" will result in epoch time.
-func parseTimeRange(timeRange string) (time.Time, error) {
+func parseTimeRange(timeRange string, now time.Time) (time.Time, error) {
 	match, err := regexp.MatchString(defaultDateTimeRangeShortRE, timeRange)
 	if !match { // fallback on to check if it's of longer notation
 		match, err = regexp.MatchString(defaultDateTimeRangeLongRE, timeRange)
@@ -667,7 +667,7 @@ func parseTimeRange(timeRange string) (time.Time, error) {
 		return time.Time{}, fmt.Errorf("cannot parse timeRange %s", timeRange)
 	}
 
-	res := time.Now().Add(time.Duration(-num) * dur) // using server's local timezone
+	res := now.Add(time.Duration(-num) * dur) // using server's local timezone
 	epochTime := time.Unix(0, 0)
 	if res.Before(epochTime) {
 		res = epochTime
