@@ -28,7 +28,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 )
 
-var _ adminservice.AdminServiceYARPCServer = (*AdminHandlerGRPC)(nil)
+var _ adminservice.AdminServiceServer = (*AdminHandlerGRPC)(nil)
 
 type (
 	// AdminHandlerGRPC - gRPC handler interface for workflow workflowservice
@@ -48,10 +48,15 @@ func NewAdminHandlerGRPC(
 	return handler
 }
 
-// RegisterHandler register this handler, must be called before Start()
-// if DCRedirectionHandler is also used, use RegisterHandler in DCRedirectionHandler instead
-func (adh *AdminHandlerGRPC) RegisterHandler() {
-	adh.adminHandlerThrift.GetGRPCDispatcher().Register(adminservice.BuildAdminServiceYARPCProcedures(adh))
+// Start starts the handler
+func (adh *AdminHandlerGRPC) Start() {
+	// Start domain replication queue cleanup
+	adh.adminHandlerThrift.Resource.GetDomainReplicationQueue().Start()
+}
+
+// Stop stops the handler
+func (adh *AdminHandlerGRPC) Stop() {
+	adh.adminHandlerThrift.Resource.GetDomainReplicationQueue().Stop()
 }
 
 // DescribeWorkflowExecution ...
