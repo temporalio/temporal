@@ -238,6 +238,7 @@ func (s *Service) Start() {
 	workflowNilCheckHandler := NewWorkflowNilCheckHandler(accessControlledWorkflowHandler)
 
 	workflowservice.RegisterWorkflowServiceServer(s.server, workflowNilCheckHandler)
+	//s.GetGRPCDispatcher().Register(workflowservice.BuildWorkflowServiceYARPCProcedures(workflowNilCheckHandler))
 	healthservice.RegisterMetaServer(s.server, accessControlledWorkflowHandler)
 
 	adminHandler := NewAdminHandler(s, s.params, s.config)
@@ -245,6 +246,7 @@ func (s *Service) Start() {
 	adminNilCheckHandler := NewAdminNilCheckHandler(s.adminHandlerGRPC)
 
 	adminservice.RegisterAdminServiceServer(s.server, adminNilCheckHandler)
+	//s.GetGRPCDispatcher().Register(adminservice.BuildAdminServiceYARPCProcedures(adminNilCheckHandler))
 
 	wfHandler.RegisterHandler()    // Thrift version
 	adminHandler.RegisterHandler() // Thrift version
@@ -253,7 +255,7 @@ func (s *Service) Start() {
 	s.Resource.Start()
 	s.adminHandlerGRPC.Start()
 
-	listener := s.params.RPCFactory.GetGRPCListener()
+	listener := s.GetGRPCListener()
 	logger.Info("Starting to serve on frontend listener")
 	if err := s.server.Serve(listener); err != nil {
 		logger.Fatal("Failed to serve on frontend listener", tag.Error(err))
