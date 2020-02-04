@@ -777,8 +777,8 @@ func (wh *WorkflowHandlerGRPC) getHistory(
 	isFirstPage := len(nextPageToken) == 0
 	shardID := common.WorkflowIDToHistoryShard(execution.GetWorkflowId(), wh.config.NumHistoryShards)
 	var err error
-	var historyEvents []*shared.HistoryEvent
-	historyEvents, size, nextPageToken, err = persistence.ReadFullPageV2Events(wh.GetHistoryManager(), &persistence.ReadHistoryBranchRequest{
+	var persistenceHistoryEvents []*shared.HistoryEvent
+	persistenceHistoryEvents, size, nextPageToken, err = persistence.ReadFullPageV2Events(wh.GetHistoryManager(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
@@ -792,8 +792,10 @@ func (wh *WorkflowHandlerGRPC) getHistory(
 
 	scope.RecordTimer(metrics.HistorySize, time.Duration(size))
 
+	historyEvents := adapter.ToProtoHistoryEvents(persistenceHistoryEvents)
+
 	isLastPage := len(nextPageToken) == 0
-	if err := verifyHistoryIsComplete(
+	if err := wh.verifyHistoryIsComplete(
 		historyEvents,
 		firstEventID,
 		nextEventID-1,
@@ -922,7 +924,7 @@ func (wh *WorkflowHandlerGRPC) error(err error, scope metrics.Scope, tagsForErro
 	return frontendInternalServiceError("cadence internal uncategorized error, msg: %v", err.Error())
 }
 
-func (wh *WorkflowHandlerGRPC) validateTaskListType(t *commonproto.TaskListType, scope metrics.Scope) error {
+func (wh *WorkflowHandlerGRPC) validateTaskListType(t *enums.TaskListType, scope metrics.Scope) error {
 	if t == nil {
 		return wh.error(errTaskListTypeNotSet, scope)
 	}
@@ -966,11 +968,11 @@ func (wh *WorkflowHandlerGRPC) createPollForDecisionTaskResponse(
 	domainID string,
 	matchingResp *matchingservice.PollForDecisionTaskResponse,
 	branchToken []byte,
-) (*commonproto.PollForDecisionTaskResponse, error) {
+) (*workflowservice.PollForDecisionTaskResponse, error) {
 
 	if matchingResp.WorkflowExecution == nil {
 		// this will happen if there is no decision task to be send to worker / caller
-		return &commonproto.PollForDecisionTaskResponse{}, nil
+		return &workflowservice.PollForDecisionTaskResponse{}, nil
 	}
 
 	var history *commonproto.History
@@ -1033,7 +1035,7 @@ func (wh *WorkflowHandlerGRPC) createPollForDecisionTaskResponse(
 		}
 	}
 
-	resp := &commonproto.PollForDecisionTaskResponse{
+	resp := &workflowservice.PollForDecisionTaskResponse{
 		TaskToken:                 matchingResp.TaskToken,
 		WorkflowExecution:         matchingResp.WorkflowExecution,
 		WorkflowType:              matchingResp.WorkflowType,
@@ -1138,11 +1140,11 @@ func createServiceBusyError() *commonproto.ServiceBusyError {
 	return err
 }
 
-func isFailoverRequest(updateRequest *commonproto.UpdateDomainRequest) bool {
+func isFailoverRequest(updateRequest *workflowservice.UpdateDomainRequest) bool {
 	return updateRequest.ReplicationConfiguration != nil && updateRequest.ReplicationConfiguration.GetActiveClusterName() != ""
 }
 
-func (wh *WorkflowHandlerGRPC) historyArchived(ctx context.Context, request *commonproto.GetWorkflowExecutionHistoryRequest, domainID string) bool {
+func (wh *WorkflowHandlerGRPC) historyArchived(ctx context.Context, request *workflowservice.GetWorkflowExecutionHistoryRequest, domainID string) bool {
 	if request.GetExecution() == nil || request.GetExecution().GetRunId() == "" {
 		return false
 	}
@@ -1164,10 +1166,10 @@ func (wh *WorkflowHandlerGRPC) historyArchived(ctx context.Context, request *com
 
 func (wh *WorkflowHandlerGRPC) getArchivedHistory(
 	ctx context.Context,
-	request *commonproto.GetWorkflowExecutionHistoryRequest,
+	request *workflowservice.GetWorkflowExecutionHistoryRequest,
 	domainID string,
 	scope metrics.Scope,
-) (*commonproto.GetWorkflowExecutionHistoryResponse, error) {
+) (*workflowservice.GetWorkflowExecutionHistoryResponse, error) {
 	entry, err := wh.GetDomainCache().GetDomainByID(domainID)
 	if err != nil {
 		return nil, wh.error(err, scope)
@@ -1206,15 +1208,15 @@ func (wh *WorkflowHandlerGRPC) getArchivedHistory(
 	for _, batch := range resp.HistoryBatches {
 		history.Events = append(history.Events, batch.Events...)
 	}
-	return &commonproto.GetWorkflowExecutionHistoryResponse{
+	return &workflowservice.GetWorkflowExecutionHistoryResponse{
 		History:       history,
 		NextPageToken: resp.NextPageToken,
-		Archived:      common.BoolPtr(true),
+		Archived:      true,
 	}, nil
 }
 
-func (wh *WorkflowHandlerGRPC) convertIndexedKeyToThrift(keys map[string]interface{}) map[string]commonproto.IndexedValueType {
-	converted := make(map[string]commonproto.IndexedValueType)
+func (wh *WorkflowHandlerGRPC) convertIndexedKeyToThrift(keys map[string]interface{}) map[string]enums.IndexedValueType {
+	converted := make(map[string]enums.IndexedValueType)
 	for k, v := range keys {
 		converted[k] = common.ConvertIndexedValueTypeToThriftType(v, wh.GetLogger())
 	}
@@ -1233,7 +1235,7 @@ func (wh *WorkflowHandlerGRPC) allow(d domainGetter) bool {
 	}
 	return wh.rateLimiter.Allow(quotas.Info{Domain: domain})
 }
-func checkPermission(
+func (wh *WorkflowHandlerGRPC) checkPermission(
 	config *Config,
 	securityToken *string,
 ) error {
@@ -1247,14 +1249,6 @@ func checkPermission(
 		}
 	}
 	return nil
-}
-
-type domainWrapper struct {
-	domain string
-}
-
-func (d domainWrapper) GetDomain() string {
-	return d.domain
 }
 
 func (wh *WorkflowHandlerGRPC) cancelOutstandingPoll(ctx context.Context, err error, domainID string, taskListType int32,
