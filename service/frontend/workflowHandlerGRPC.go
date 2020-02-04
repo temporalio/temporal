@@ -29,7 +29,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 )
 
-var _ workflowservice.WorkflowServiceYARPCServer = (*WorkflowHandlerGRPC)(nil)
+var _ workflowservice.WorkflowServiceServer = (*WorkflowHandlerGRPC)(nil)
 
 type (
 	// WorkflowHandlerGRPC - gRPC handler interface for workflow workflowservice
@@ -38,7 +38,7 @@ type (
 	}
 )
 
-// NewWorkflowHandlerGRPC creates a thrift handler for the cadence workflowservice
+// NewWorkflowHandlerGRPC creates a gRPC handler for the cadence workflowservice
 func NewWorkflowHandlerGRPC(
 	workflowHandlerThrift *WorkflowHandler,
 ) *WorkflowHandlerGRPC {
@@ -47,12 +47,6 @@ func NewWorkflowHandlerGRPC(
 	}
 
 	return handler
-}
-
-// RegisterHandler register this handler, must be called before Start()
-// if DCRedirectionHandler is also used, use RegisterHandler in DCRedirectionHandler instead
-func (wh *WorkflowHandlerGRPC) RegisterHandler() {
-	wh.workflowHandlerThrift.GetGRPCDispatcher().Register(workflowservice.BuildWorkflowServiceYARPCProcedures(wh))
 }
 
 // RegisterDomain creates a new domain which can be used as a container for all resources.  Domain is a top level

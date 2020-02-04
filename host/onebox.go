@@ -72,7 +72,7 @@ import (
 type Cadence interface {
 	Start() error
 	Stop()
-	GetAdminClient() adminservice.AdminServiceYARPCClient
+	GetAdminClient() adminservice.AdminServiceClient
 	GetFrontendClient() workflowservice.WorkflowServiceClient
 	FrontendAddress() string
 	GetHistoryClient() historyserviceclient.Interface
@@ -85,7 +85,7 @@ type (
 		matchingService common.Daemon
 		historyServices []common.Daemon
 
-		adminClient            adminservice.AdminServiceYARPCClient
+		adminClient            adminservice.AdminServiceClient
 		frontendClient         workflowservice.WorkflowServiceClient
 		historyClient          historyserviceclient.Interface
 		logger                 log.Logger
@@ -471,7 +471,7 @@ func (c *cadenceImpl) WorkerPProfPort() int {
 	}
 }
 
-func (c *cadenceImpl) GetAdminClient() adminservice.AdminServiceYARPCClient {
+func (c *cadenceImpl) GetAdminClient() adminservice.AdminServiceClient {
 	return c.adminClient
 }
 
@@ -534,8 +534,9 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 	}
 
 	c.frontendService = frontendService
-	c.frontendClient = NewFrontendClient(params.RPCFactory.CreateGRPCConnection(c.FrontendGRPCAddress()))
-	c.adminClient = NewAdminClient(frontendService.GetGRPCDispatcher())
+	connection := params.RPCFactory.CreateGRPCConnection(c.FrontendGRPCAddress())
+	c.frontendClient = NewFrontendClient(connection)
+	c.adminClient = NewAdminClient(connection)
 	go frontendService.Start()
 
 	startWG.Done()
@@ -900,6 +901,7 @@ type rpcFactoryImpl struct {
 
 	sync.Mutex
 	dispatcher        *yarpc.Dispatcher
+	listener          net.Listener
 	ringpopDispatcher *yarpc.Dispatcher
 }
 
@@ -931,6 +933,27 @@ func (c *rpcFactoryImpl) GetGRPCDispatcher() *yarpc.Dispatcher {
 			Unary: &versionMiddleware{},
 		},
 	})
+}
+
+func (c *rpcFactoryImpl) GetGRPCListener() net.Listener {
+	if c.listener != nil {
+		return c.listener
+	}
+
+	c.Lock()
+	defer c.Unlock()
+
+	if c.listener == nil {
+		var err error
+		c.listener, err = net.Listen("tcp", c.grpcHostPort)
+		if err != nil {
+			c.logger.Fatal("Failed create gRPC listener", tag.Error(err), tag.Service(c.serviceName), tag.Address(c.grpcHostPort))
+		}
+
+		c.logger.Info("Created gRPC listener", tag.Service(c.serviceName), tag.Address(c.grpcHostPort))
+	}
+
+	return c.listener
 }
 
 func (c *rpcFactoryImpl) GetTChannelDispatcher() *yarpc.Dispatcher {

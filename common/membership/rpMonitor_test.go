@@ -44,7 +44,7 @@ func (s *RpoSuite) SetupTest() {
 }
 
 func (s *RpoSuite) TestRingpopMonitor() {
-	testService := NewTestRingpopCluster("rpm-test", 3, "127.0.0.1", "", "rpm-test")
+	testService := NewTestRingpopCluster("rpm-test", 3, "0.0.0.0", "", "rpm-test", "127.0.0.1")
 	s.NotNil(testService, "Failed to create test service")
 
 	logger := loggerimpl.NewNopLogger()

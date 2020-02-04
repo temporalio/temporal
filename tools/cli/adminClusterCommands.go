@@ -51,7 +51,7 @@ func AdminAddSearchAttribute(c *cli.Context) {
 		return
 	}
 
-	adminClient := cFactory.ServerAdminClient(c)
+	adminClient := cFactory.AdminClient(c)
 	ctx, cancel := newContext(c)
 	defer cancel()
 	request := &adminservice.AddSearchAttributeRequest{
@@ -70,7 +70,7 @@ func AdminAddSearchAttribute(c *cli.Context) {
 
 // AdminDescribeCluster is used to dump information about the cluster
 func AdminDescribeCluster(c *cli.Context) {
-	adminClient := cFactory.ServerAdminClient(c)
+	adminClient := cFactory.AdminClient(c)
 
 	ctx, cancel := newContext(c)
 	defer cancel()

@@ -121,9 +121,9 @@ func (s *nDCIntegrationTestSuite) SetupSuite() {
 	s.standByTaskID = 0
 	s.mockAdminClient = make(map[string]adminClient.Client)
 	controller := gomock.NewController(s.T())
-	mockStandbyClient := adminservicemock.NewMockAdminServiceYARPCClient(controller)
+	mockStandbyClient := adminservicemock.NewMockAdminServiceClient(controller)
 	mockStandbyClient.EXPECT().GetReplicationMessages(gomock.Any(), gomock.Any()).DoAndReturn(s.GetReplicationMessagesMock).AnyTimes()
-	mockOtherClient := adminservicemock.NewMockAdminServiceYARPCClient(controller)
+	mockOtherClient := adminservicemock.NewMockAdminServiceClient(controller)
 	mockOtherClient.EXPECT().GetReplicationMessages(gomock.Any(), gomock.Any()).Return(
 		&adminservice.GetReplicationMessagesResponse{
 			MessagesByShard: make(map[int32]*commonproto.ReplicationMessages),
@@ -979,7 +979,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_ZombieWorkflow() {
 	s.generator = test.InitializeHistoryEventGenerator(s.domainName, version)
 
 	// verify two batches of zombie workflow are call reapply API
-	s.mockAdminClient["standby"].(*adminservicemock.MockAdminServiceYARPCClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(&adminservice.ReapplyEventsResponse{}, nil).Times(2)
+	s.mockAdminClient["standby"].(*adminservicemock.MockAdminServiceClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(&adminservice.ReapplyEventsResponse{}, nil).Times(2)
 	for i := 0; i < 2 && s.generator.HasNextVertex(); i++ {
 		events := s.generator.GetNextVertices()
 		historyEvents := &shared.History{}
@@ -1077,7 +1077,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
 		historyClient,
 	)
 
-	s.mockAdminClient["standby"].(*adminservicemock.MockAdminServiceYARPCClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(&adminservice.ReapplyEventsResponse{}, nil).Times(1)
+	s.mockAdminClient["standby"].(*adminservicemock.MockAdminServiceClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(&adminservice.ReapplyEventsResponse{}, nil).Times(1)
 	// Handcraft a stale signal event
 	baseBranchLastEventBatch := baseBranch[len(baseBranch)-1].GetEvents()
 	baseBranchLastEvent := baseBranchLastEventBatch[len(baseBranchLastEventBatch)-1]
@@ -1501,7 +1501,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			1,
 			token,
 		)
-		s.Nil(err)
+		s.NoError(err)
 		s.True(len(resp.HistoryBatches) <= 1)
 		batchCount++
 		token = resp.NextPageToken
@@ -1523,7 +1523,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			1,
 			token,
 		)
-		s.Nil(err)
+		s.NoError(err)
 		s.True(len(resp.HistoryBatches) <= 1)
 		batchCount++
 		token = resp.NextPageToken
@@ -1545,7 +1545,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			1,
 			token,
 		)
-		s.Nil(err)
+		s.NoError(err)
 		s.True(len(resp.HistoryBatches) <= 1)
 		batchCount++
 		token = resp.NextPageToken
@@ -1567,7 +1567,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			1,
 			token,
 		)
-		s.Nil(err)
+		s.NoError(err)
 		s.True(len(resp.HistoryBatches) <= 1)
 		batchCount++
 		token = resp.NextPageToken
@@ -1753,9 +1753,9 @@ func (s *nDCIntegrationTestSuite) applyEvents(
 		}
 
 		err := historyClient.ReplicateEventsV2(s.createContext(), req)
-		s.Nil(err, "Failed to replicate history event")
+		s.NoError(err, "Failed to replicate history event")
 		err = historyClient.ReplicateEventsV2(s.createContext(), req)
-		s.Nil(err, "Failed to dedup replicate history event")
+		s.NoError(err, "Failed to dedup replicate history event")
 	}
 }
 
@@ -1830,6 +1830,6 @@ func (s *nDCIntegrationTestSuite) createContext() context.Context {
 }
 
 func (s *nDCIntegrationTestSuite) setupRemoteFrontendClients() {
-	s.mockAdminClient["standby"].(*adminservicemock.MockAdminServiceYARPCClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(&adminservice.ReapplyEventsResponse{}, nil).AnyTimes()
-	s.mockAdminClient["other"].(*adminservicemock.MockAdminServiceYARPCClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(&adminservice.ReapplyEventsResponse{}, nil).AnyTimes()
+	s.mockAdminClient["standby"].(*adminservicemock.MockAdminServiceClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(&adminservice.ReapplyEventsResponse{}, nil).AnyTimes()
+	s.mockAdminClient["other"].(*adminservicemock.MockAdminServiceClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(&adminservice.ReapplyEventsResponse{}, nil).AnyTimes()
 }

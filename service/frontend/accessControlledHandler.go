@@ -23,20 +23,18 @@ package frontend
 import (
 	"context"
 
+	"github.com/gogo/status"
 	"go.temporal.io/temporal-proto/workflowservice"
-	"go.uber.org/yarpc/encoding/protobuf"
-	"go.uber.org/yarpc/yarpcerrors"
+	"google.golang.org/grpc/codes"
 
-	"github.com/temporalio/temporal/.gen/go/health"
-	"github.com/temporalio/temporal/.gen/go/health/metaserver"
-	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/.gen/proto/healthservice"
 	"github.com/temporalio/temporal/common/authorization"
 	"github.com/temporalio/temporal/common/resource"
 )
 
 // TODO(vancexu): add metrics
 
-var errUnauthorized = protobuf.NewError(yarpcerrors.CodePermissionDenied, "Request unauthorized.")
+var errUnauthorized = status.New(codes.PermissionDenied, "Request unauthorized.").Err()
 
 // AccessControlledWorkflowHandler frontend handler wrapper for authentication and authorization
 type AccessControlledWorkflowHandler struct {
@@ -44,12 +42,9 @@ type AccessControlledWorkflowHandler struct {
 
 	frontendHandler workflowservice.WorkflowServiceYARPCServer
 	authorizer      authorization.Authorizer
-
-	startFn func()
-	stopFn  func()
 }
 
-var _ workflowservice.WorkflowServiceYARPCServer = (*AccessControlledWorkflowHandler)(nil)
+var _ workflowservice.WorkflowServiceServer = (*AccessControlledWorkflowHandler)(nil)
 
 // NewAccessControlledHandlerImpl creates frontend handler with authentication support
 func NewAccessControlledHandlerImpl(wfHandler *DCRedirectionHandlerImpl, authorizer authorization.Authorizer) *AccessControlledWorkflowHandler {
@@ -61,33 +56,15 @@ func NewAccessControlledHandlerImpl(wfHandler *DCRedirectionHandlerImpl, authori
 		Resource:        wfHandler.Resource,
 		frontendHandler: wfHandler,
 		authorizer:      authorizer,
-		startFn:         func() { wfHandler.Start() },
-		stopFn:          func() { wfHandler.Stop() },
 	}
 }
 
 // TODO(vancexu): refactor frontend handler
 
-// RegisterHandler register this handler, must be called before Start()
-func (a *AccessControlledWorkflowHandler) RegisterHandler() {
-	a.GetGRPCDispatcher().Register(workflowservice.BuildWorkflowServiceYARPCProcedures(a))
-	a.GetDispatcher().Register(metaserver.New(a))
-}
-
-// Health callback for for health check
-func (a *AccessControlledWorkflowHandler) Health(ctx context.Context) (*health.HealthStatus, error) {
-	hs := &health.HealthStatus{Ok: true, Msg: common.StringPtr("auth is good")}
+// Health is for health check
+func (a *AccessControlledWorkflowHandler) Health(context.Context, *healthservice.HealthRequest) (*healthservice.HealthStatus, error) {
+	hs := &healthservice.HealthStatus{Ok: true, Msg: "Frontend health check endpoint (gRPC) reached."}
 	return hs, nil
-}
-
-// Start starts the handler
-func (a *AccessControlledWorkflowHandler) Start() {
-	a.startFn()
-}
-
-// Stop stops the handler
-func (a *AccessControlledWorkflowHandler) Stop() {
-	a.stopFn()
 }
 
 // CountWorkflowExecutions API call

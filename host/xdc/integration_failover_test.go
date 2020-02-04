@@ -259,7 +259,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 		Identity:                            identity,
 	}
 	we, err := client1.StartWorkflowExecution(createContext(), startReq)
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(we.GetRunId())
 	rid := we.GetRunId()
 
@@ -343,8 +343,8 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 
 	// make some progress in cluster 1
 	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
-	s.Nil(err)
+	s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.NoError(err)
 
 	type QueryResult struct {
 		Resp *workflowservice.QueryWorkflowResponse
@@ -371,8 +371,8 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller.PollAndProcessDecisionTask(false, false)
-		s.logger.Info("PollAndProcessQueryTask", tag.Error(err))
-		s.Nil(errInner)
+		s.logger.Error("PollAndProcessQueryTask", tag.Error(err))
+		s.NoError(errInner)
 		if isQueryTask {
 			break
 		}
@@ -394,8 +394,8 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller2.PollAndProcessDecisionTask(false, false)
-		s.logger.Info("PollAndProcessQueryTask", tag.Error(err))
-		s.Nil(errInner)
+		s.logger.Error("PollAndProcessQueryTask", tag.Error(err))
+		s.NoError(errInner)
 		if isQueryTask {
 			break
 		}
@@ -442,7 +442,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 		}
 		time.Sleep(1 * time.Second)
 	}
-	s.Nil(err)
+	s.NoError(err)
 	s.True(eventsReplicated)
 
 	// Make sure query is still working after failover
@@ -452,8 +452,8 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller.PollAndProcessDecisionTask(false, false)
-		s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
-		s.Nil(errInner)
+		s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+		s.NoError(errInner)
 		if isQueryTask {
 			break
 		}
@@ -472,8 +472,8 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller2.PollAndProcessDecisionTask(false, false)
-		s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
-		s.Nil(errInner)
+		s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+		s.NoError(errInner)
 		if isQueryTask {
 			break
 		}
@@ -488,13 +488,13 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 
 	// make process in cluster 2
 	err = poller2.PollAndProcessActivityTask(false)
-	s.logger.Info("PollAndProcessActivityTask 2", tag.Error(err))
-	s.Nil(err)
+	s.logger.Error("PollAndProcessActivityTask 2", tag.Error(err))
+	s.NoError(err)
 
 	s.False(workflowComplete)
 	_, err = poller2.PollAndProcessDecisionTask(false, false)
-	s.logger.Info("PollAndProcessDecisionTask 2", tag.Error(err))
-	s.Nil(err)
+	s.logger.Error("PollAndProcessDecisionTask 2", tag.Error(err))
+	s.NoError(err)
 	s.True(workflowComplete)
 
 	// check history replicated in cluster 1
@@ -507,7 +507,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 		}
 		time.Sleep(1 * time.Second)
 	}
-	s.Nil(err)
+	s.NoError(err)
 	s.True(eventsReplicated)
 }
 
@@ -615,8 +615,8 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	}
 
 	_, err = poller1.PollAndProcessDecisionTaskWithAttemptAndRetry(false, false, false, true, 0, 5)
-	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
-	s.Nil(err)
+	s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.NoError(err)
 	s.True(firstDecisionMade)
 
 	// Send a signal in cluster
@@ -632,7 +632,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 		Input:      signalInput,
 		Identity:   identity1,
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	// Update domain to fail over
 	updateReq := &workflowservice.UpdateDomainRequest{
@@ -651,8 +651,8 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	time.Sleep(cacheRefreshInterval)
 
 	_, err = poller2.PollAndProcessDecisionTaskWithAttemptAndRetry(false, false, false, true, 0, 5)
-	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
-	s.Nil(err)
+	s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.NoError(err)
 	s.True(secondDecisionMade)
 
 	_, err = client2.SignalWorkflowExecution(createContext(), &workflowservice.SignalWorkflowExecutionRequest{
@@ -665,7 +665,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 		Input:      signalInput,
 		Identity:   identity2,
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	// Update domain to fail over back
 	updateReq = &workflowservice.UpdateDomainRequest{
@@ -681,8 +681,8 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	s.Equal(int64(10), updateResp.GetFailoverVersion())
 
 	_, err = poller1.PollAndProcessDecisionTask(true, false)
-	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
-	s.Nil(err)
+	s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.NoError(err)
 	s.True(workflowCompleted)
 }
 
@@ -734,7 +734,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 		WorkflowIdReusePolicy:               enums.WorkflowIdReusePolicyAllowDuplicate,
 	}
 	we, err := client1.StartWorkflowExecution(createContext(), startReq)
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(we.GetRunId())
 	s.logger.Info("StartWorkflowExecution in cluster 1: ", tag.WorkflowRunID(we.GetRunId()))
 
@@ -775,8 +775,8 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 
 	// Complete the workflow in cluster 1
 	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
-	s.Nil(err)
+	s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.NoError(err)
 	s.Equal(1, workflowCompleteTimes)
 
 	// update domain to fail over
@@ -815,13 +815,13 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	startReq.RequestId = uuid.New()
 	startReq.WorkflowIdReusePolicy = enums.WorkflowIdReusePolicyAllowDuplicate
 	we, err = client2.StartWorkflowExecution(createContext(), startReq)
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(we.GetRunId())
 	s.logger.Info("StartWorkflowExecution in cluster 2: ", tag.WorkflowRunID(we.GetRunId()))
 
 	_, err = poller2.PollAndProcessDecisionTask(false, false)
-	s.logger.Info("PollAndProcessDecisionTask 2", tag.Error(err))
-	s.Nil(err)
+	s.logger.Error("PollAndProcessDecisionTask 2", tag.Error(err))
+	s.NoError(err)
 	s.Equal(2, workflowCompleteTimes)
 }
 
@@ -923,8 +923,8 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 
 	// make some progress in cluster 1
 	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
-	s.Nil(err)
+	s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.NoError(err)
 
 	// update domain to fail over
 	updateReq := &workflowservice.UpdateDomainRequest{
@@ -954,7 +954,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 		Details:  terminateDetails,
 		Identity: identity,
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	// check terminate done
 	executionTerminated := false
@@ -967,7 +967,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 GetHistoryLoop:
 	for i := 0; i < 10; i++ {
 		historyResponse, err := client2.GetWorkflowExecutionHistory(createContext(), getHistoryReq)
-		s.Nil(err)
+		s.NoError(err)
 		history := historyResponse.History
 
 		lastEvent := history.Events[len(history.Events)-1]
@@ -1006,7 +1006,7 @@ GetHistoryLoop2:
 		}
 		time.Sleep(1 * time.Second)
 	}
-	s.Nil(err)
+	s.NoError(err)
 	s.True(eventsReplicated)
 }
 
@@ -1114,8 +1114,8 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 	// make some progress in cluster 1 and did some continueAsNew
 	for i := 0; i < 3; i++ {
 		_, err := poller.PollAndProcessDecisionTask(false, false)
-		s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
-		s.Nil(err, strconv.Itoa(i))
+		s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+		s.NoError(err, strconv.Itoa(i))
 	}
 
 	// update domain to fail over
@@ -1137,13 +1137,13 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 	// finish the rest in cluster 2
 	for i := 0; i < 2; i++ {
 		_, err := poller2.PollAndProcessDecisionTask(false, false)
-		s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
-		s.Nil(err, strconv.Itoa(i))
+		s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+		s.NoError(err, strconv.Itoa(i))
 	}
 
 	s.False(workflowComplete)
 	_, err = poller2.PollAndProcessDecisionTask(false, false)
-	s.Nil(err)
+	s.NoError(err)
 	s.True(workflowComplete)
 	s.Equal(previousRunID, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetContinuedExecutionRunId())
 }
@@ -1249,13 +1249,13 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 		Input:      signalInput,
 		Identity:   identity,
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	// Process signal in cluster 1
 	s.False(eventSignaled)
 	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
-	s.Nil(err)
+	s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.NoError(err)
 	s.True(eventSignaled)
 
 	// Update domain to fail over
@@ -1291,7 +1291,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 		}
 		time.Sleep(1 * time.Second)
 	}
-	s.Nil(err)
+	s.NoError(err)
 	s.True(eventsReplicated)
 
 	// Send another signal in cluster 2
@@ -1306,13 +1306,13 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 		Input:      signalInput2,
 		Identity:   identity,
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	// Process signal in cluster 2
 	eventSignaled = false
 	_, err = poller2.PollAndProcessDecisionTask(false, false)
-	s.logger.Info("PollAndProcessDecisionTask 2", tag.Error(err))
-	s.Nil(err)
+	s.logger.Error("PollAndProcessDecisionTask 2", tag.Error(err))
+	s.NoError(err)
 	s.True(eventSignaled)
 
 	// check history matched
@@ -1325,7 +1325,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 		}
 		time.Sleep(1 * time.Second)
 	}
-	s.Nil(err)
+	s.NoError(err)
 	s.True(eventsReplicated)
 }
 
@@ -1406,7 +1406,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 				Input:      signalInput,
 				Identity:   "",
 			})
-			s.Nil(err)
+			s.NoError(err)
 			return nil, []*commonproto.Decision{{
 				DecisionType: enums.DecisionTypeStartTimer,
 				Attributes: &commonproto.Decision_StartTimerDecisionAttributes{StartTimerDecisionAttributes: &commonproto.StartTimerDecisionAttributes{
@@ -1424,7 +1424,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 					RunId:      we.GetRunId(),
 				},
 			})
-			s.Nil(err)
+			s.NoError(err)
 			for _, event := range resp.History.Events {
 				if event.GetEventType() == enums.EventTypeTimerFired {
 					timerFired = true
@@ -1495,7 +1495,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 	for i := 1; i < 20; i++ {
 		if !workflowCompleted {
 			_, err = poller2.PollAndProcessDecisionTask(true, false)
-			s.Nil(err)
+			s.NoError(err)
 			time.Sleep(time.Second)
 		}
 	}
@@ -1601,7 +1601,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 		activity1Called = true
 		_, err = client1.RecordActivityTaskHeartbeat(createContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
 			TaskToken: taskToken, Details: heartbeatDetails})
-		s.Nil(err)
+		s.NoError(err)
 		time.Sleep(5 * time.Second)
 		return []byte("Activity Result."), false, nil
 	}
@@ -1647,7 +1647,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	}
 
 	_, err = poller1.PollAndProcessDecisionTask(false, false)
-	s.Nil(err)
+	s.NoError(err)
 	err = poller1.PollAndProcessActivityTask(false)
 	s.Equal(codes.NotFound, status.Code(err))
 
@@ -1671,7 +1671,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	// has heartbeat timeout. Also make sure the information is recorded when the activity state
 	// is "Scheduled"
 	dweResponse, err := describeWorkflowExecution(client2)
-	s.Nil(err)
+	s.NoError(err)
 	pendingActivities := dweResponse.GetPendingActivities()
 	s.Equal(1, len(pendingActivities))
 	s.Equal(enums.PendingActivityStateScheduled, pendingActivities[0].GetState())
@@ -1697,7 +1697,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 			WorkflowId: id,
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 	history := historyResponse.History
 
 	activityRetryFound := false
@@ -1806,7 +1806,7 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 
 	// this will fail the decision
 	_, err = poller1.PollAndProcessDecisionTask(false, false)
-	s.Nil(err)
+	s.NoError(err)
 
 	// Update domain to fail over
 	updateReq := &workflowservice.UpdateDomainRequest{
@@ -1828,7 +1828,7 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 	// after the failover has attempt 0
 	// for details see ReplicateTransientDecisionTaskScheduled
 	_, err = poller2.PollAndProcessDecisionTaskWithAttempt(false, false, false, false, 0)
-	s.Nil(err)
+	s.NoError(err)
 	s.True(workflowFinished)
 }
 
@@ -1920,7 +1920,7 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 	// Run twice to make sure cron schedule is passed to standby.
 	for i := 0; i < 2; i++ {
 		_, err = poller2.PollAndProcessDecisionTask(false, false)
-		s.Nil(err)
+		s.NoError(err)
 	}
 
 	_, err = client2.TerminateWorkflowExecution(createContext(), &workflowservice.TerminateWorkflowExecutionRequest{
@@ -1929,7 +1929,7 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 			WorkflowId: id,
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
@@ -2028,21 +2028,21 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 
 	// First attempt
 	_, err = poller2.PollAndProcessDecisionTask(false, false)
-	s.Nil(err)
+	s.NoError(err)
 	events := s.getHistory(client2, domainName, executions[0])
 	s.Equal(enums.EventTypeWorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
 	s.Equal(int32(0), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 
 	// second attempt
 	_, err = poller2.PollAndProcessDecisionTask(false, false)
-	s.Nil(err)
+	s.NoError(err)
 	events = s.getHistory(client2, domainName, executions[1])
 	s.Equal(enums.EventTypeWorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
 	s.Equal(int32(1), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 
 	// third attempt. Still failing, should stop retry.
 	_, err = poller2.PollAndProcessDecisionTask(false, false)
-	s.Nil(err)
+	s.NoError(err)
 	events = s.getHistory(client2, domainName, executions[2])
 	s.Equal(enums.EventTypeWorkflowExecutionFailed, events[len(events)-1].GetEventType())
 	s.Equal(int32(2), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
@@ -2054,7 +2054,7 @@ func (s *integrationClustersTestSuite) getHistory(client host.FrontendClient, do
 		Execution:       execution,
 		MaximumPageSize: 5, // Use small page size to force pagination code path
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	events := historyResponse.History.Events
 	for historyResponse.NextPageToken != nil {
@@ -2063,7 +2063,7 @@ func (s *integrationClustersTestSuite) getHistory(client host.FrontendClient, do
 			Execution:     execution,
 			NextPageToken: historyResponse.NextPageToken,
 		})
-		s.Nil(err)
+		s.NoError(err)
 		events = append(events, historyResponse.History.Events...)
 	}
 

@@ -27,8 +27,6 @@ import (
 
 	"github.com/temporalio/temporal/common/client"
 
-	"go.uber.org/yarpc"
-
 	h "github.com/temporalio/temporal/.gen/go/history"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
@@ -282,10 +280,10 @@ func (handler *decisionHandlerImpl) handleDecisionTaskCompleted(
 		RunId:      common.StringPtr(token.RunID),
 	}
 
-	call := yarpc.CallFromContext(ctx)
-	clientLibVersion := call.Header(common.LibraryVersionHeaderName)
-	clientFeatureVersion := call.Header(common.FeatureVersionHeaderName)
-	clientImpl := call.Header(common.ClientImplHeaderName)
+	headers := client.GetHeadersValue(ctx, common.LibraryVersionHeaderName, common.FeatureVersionHeaderName, common.ClientImplHeaderName)
+	clientLibVersion := headers[0]
+	clientFeatureVersion := headers[1]
+	clientImpl := headers[2]
 
 	context, release, err := handler.historyCache.getOrCreateWorkflowExecution(ctx, domainID, workflowExecution)
 	if err != nil {

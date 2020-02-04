@@ -160,6 +160,16 @@ func ToProtoHistoryRecordActivityTaskHeartbeatResponse(in *shared.RecordActivity
 }
 
 // ToProtoResetWorkflowExecutionResponse ...
+func ToProtoHistorySignalWithStartWorkflowExecutionResponse(in *shared.StartWorkflowExecutionResponse) *historyservice.SignalWithStartWorkflowExecutionResponse {
+	if in == nil {
+		return nil
+	}
+	return &historyservice.SignalWithStartWorkflowExecutionResponse{
+		RunId: in.GetRunId(),
+	}
+}
+
+// ToProtoResetWorkflowExecutionResponse ...
 func ToProtoHistoryResetWorkflowExecutionResponse(in *shared.ResetWorkflowExecutionResponse) *historyservice.ResetWorkflowExecutionResponse {
 	if in == nil {
 		return nil
