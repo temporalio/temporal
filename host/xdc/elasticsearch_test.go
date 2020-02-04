@@ -196,7 +196,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	}
 	startTime := time.Now().UnixNano()
 	we, err := client1.StartWorkflowExecution(createContext(), startReq)
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(we.GetRunId())
 
 	s.logger.Info("StartWorkflowExecution \n", tag.WorkflowRunID(we.GetRunId()))
@@ -216,7 +216,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 			startFilter.LatestTime = time.Now().UnixNano()
 
 			resp, err := client.ListWorkflowExecutions(createContext(), listRequest)
-			s.Nil(err)
+			s.NoError(err)
 			if len(resp.GetExecutions()) == 1 {
 				openExecution = resp.GetExecutions()[0]
 				break
@@ -263,8 +263,8 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	}
 
 	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
-	s.Nil(err)
+	s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.NoError(err)
 
 	time.Sleep(waitForESToSettle)
 
@@ -278,7 +278,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 		verified := false
 		for i := 0; i < numOfRetry; i++ {
 			resp, err := client.ListWorkflowExecutions(createContext(), listRequest)
-			s.Nil(err)
+			s.NoError(err)
 			if len(resp.GetExecutions()) == 1 {
 				execution := resp.GetExecutions()[0]
 				retrievedSearchAttr := execution.SearchAttributes
@@ -318,7 +318,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 		Details:  terminateDetails,
 		Identity: identity,
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	// check terminate done
 	executionTerminated := false
@@ -331,7 +331,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 GetHistoryLoop:
 	for i := 0; i < 10; i++ {
 		historyResponse, err := client1.GetWorkflowExecutionHistory(createContext(), getHistoryReq)
-		s.Nil(err)
+		s.NoError(err)
 		history := historyResponse.History
 
 		lastEvent := history.Events[len(history.Events)-1]
@@ -370,7 +370,7 @@ GetHistoryLoop2:
 		}
 		time.Sleep(waitTimeInMs * time.Millisecond)
 	}
-	s.Nil(err)
+	s.NoError(err)
 	s.True(eventsReplicated)
 
 	// test upsert result in standby
