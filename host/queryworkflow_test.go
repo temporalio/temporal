@@ -32,6 +32,7 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/workflowservice"
+	"go.uber.org/atomic"
 	"google.golang.org/grpc/codes"
 
 	"github.com/temporalio/temporal/common/log/tag"
@@ -579,7 +580,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	// decider logic
 	activityScheduled := false
 	activityData := int32(1)
-	handledSignal := false
+	handledSignal := &atomic.Bool{}
 	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
 
@@ -604,7 +605,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 		} else if previousStartedEventID > 0 {
 			for _, event := range history.Events[previousStartedEventID:] {
 				if event.GetEventType() == enums.EventTypeWorkflowExecutionSignaled {
-					handledSignal = true
+					handledSignal.Store(true)
 					return nil, []*commonproto.Decision{}, nil
 				}
 			}
@@ -659,7 +660,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	queryWorkflowFn := func(queryType string, rejectCondition enums.QueryRejectCondition) {
 		// before the query is answer the signal is not handled because the decision task is not dispatched
 		// to the worker yet
-		s.False(handledSignal)
+		s.False(handledSignal.Load())
 		queryResp, err := s.engine.QueryWorkflow(createContext(), &workflowservice.QueryWorkflowRequest{
 			Domain: s.domainName,
 			Execution: &commonproto.WorkflowExecution{
@@ -674,7 +675,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 		})
 		// after the query is answered the signal is handled because query is consistent and since
 		// signal came before query signal must be handled by the time query returns
-		s.True(handledSignal)
+		s.True(handledSignal.Load())
 		queryResultCh <- QueryResult{Resp: queryResp, Err: err}
 	}
 
@@ -921,7 +922,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 	// decider logic
 	activityScheduled := false
 	activityData := int32(1)
-	handledSignal := false
+	handledSignal := &atomic.Bool{}
 	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
 
@@ -948,7 +949,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 				if event.GetEventType() == enums.EventTypeWorkflowExecutionSignaled {
 					// wait for some time to force decision task to stay in started state while query is issued
 					<-time.After(5 * time.Second)
-					handledSignal = true
+					handledSignal.Store(true)
 					return nil, []*commonproto.Decision{}, nil
 				}
 			}
@@ -1001,7 +1002,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 	}
 	queryResultCh := make(chan QueryResult)
 	queryWorkflowFn := func(queryType string, rejectCondition enums.QueryRejectCondition) {
-		s.False(handledSignal)
+		s.False(handledSignal.Load())
 		queryResp, err := s.engine.QueryWorkflow(createContext(), &workflowservice.QueryWorkflowRequest{
 			Domain: s.domainName,
 			Execution: &commonproto.WorkflowExecution{
@@ -1014,7 +1015,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 			QueryRejectCondition:  rejectCondition,
 			QueryConsistencyLevel: enums.QueryConsistencyLevelStrong,
 		})
-		s.True(handledSignal)
+		s.True(handledSignal.Load())
 		queryResultCh <- QueryResult{Resp: queryResp, Err: err}
 	}
 
@@ -1108,7 +1109,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 	// decider logic
 	activityScheduled := false
 	activityData := int32(1)
-	handledSignal := false
+	handledSignal := &atomic.Bool{}
 	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
 		if !activityScheduled {
@@ -1134,7 +1135,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 				if event.GetEventType() == enums.EventTypeWorkflowExecutionSignaled {
 					// wait for some time to force decision task to stay in started state while query is issued
 					<-time.After(5 * time.Second)
-					handledSignal = true
+					handledSignal.Store(true)
 					return nil, []*commonproto.Decision{}, nil
 				}
 			}
@@ -1189,7 +1190,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 	}
 	queryResultCh := make(chan QueryResult)
 	queryWorkflowFn := func(queryType string, rejectCondition enums.QueryRejectCondition) {
-		s.False(handledSignal)
+		s.False(handledSignal.Load())
 		queryResp, err := s.engine.QueryWorkflow(createContext(), &workflowservice.QueryWorkflowRequest{
 			Domain: s.domainName,
 			Execution: &commonproto.WorkflowExecution{
@@ -1202,7 +1203,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 			QueryRejectCondition:  rejectCondition,
 			QueryConsistencyLevel: enums.QueryConsistencyLevelStrong,
 		})
-		s.True(handledSignal)
+		s.True(handledSignal.Load())
 		queryResultCh <- QueryResult{Resp: queryResp, Err: err}
 	}
 
