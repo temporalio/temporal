@@ -27,11 +27,9 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/yarpcerrors"
 
 	"github.com/temporalio/temporal/.gen/go/health"
-	"github.com/temporalio/temporal/.gen/go/health/metaserver"
 	h "github.com/temporalio/temporal/.gen/go/history"
 	m "github.com/temporalio/temporal/.gen/go/matching"
 	gen "github.com/temporalio/temporal/.gen/go/shared"
@@ -173,15 +171,6 @@ func NewWorkflowHandler(
 // if DCRedirectionHandler is also used, use RegisterHandler in DCRedirectionHandler instead
 func (wh *WorkflowHandler) RegisterHandler() {
 	wh.GetDispatcher().Register(workflowserviceserver.New(wh))
-	wh.GetDispatcher().Register(metaserver.New(wh))
-}
-
-// Start starts the handler
-func (wh *WorkflowHandler) Start() {
-}
-
-// Stop stops the handler
-func (wh *WorkflowHandler) Stop() {
 }
 
 // Health is for health check
@@ -427,6 +416,7 @@ func (wh *WorkflowHandler) PollForActivityTask(
 			return nil, wh.error(err, scope)
 		}
 	}
+
 	return resp, nil
 }
 
@@ -1543,11 +1533,10 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 		}
 	}
 
-	call := yarpc.CallFromContext(ctx)
-
+	headers := client.GetHeadersValue(ctx, common.ClientImplHeaderName, common.FeatureVersionHeaderName)
 	completeRequest.WorkerVersionInfo = &gen.WorkerVersionInfo{
-		Impl:           common.StringPtr(call.Header(common.ClientImplHeaderName)),
-		FeatureVersion: common.StringPtr(call.Header(common.FeatureVersionHeaderName)),
+		Impl:           common.StringPtr(headers[0]),
+		FeatureVersion: common.StringPtr(headers[1]),
 	}
 	matchingRequest := &m.RespondQueryTaskCompletedRequest{
 		DomainUUID:       common.StringPtr(queryTaskToken.DomainID),
