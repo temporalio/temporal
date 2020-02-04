@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	commonproto "go.temporal.io/temporal-proto/common"
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/yarpcerrors"
 
@@ -36,7 +37,9 @@ import (
 	m "github.com/temporalio/temporal/.gen/go/matching"
 	gen "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/go/temporal/workflowserviceserver"
+	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cache"
@@ -355,79 +358,7 @@ func (wh *WorkflowHandler) PollForActivityTask(
 	ctx context.Context,
 	pollRequest *gen.PollForActivityTaskRequest,
 ) (resp *gen.PollForActivityTaskResponse, retError error) {
-	defer log.CapturePanic(wh.GetLogger(), &retError)
-
-	callTime := time.Now()
-
-	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendPollForActivityTaskScope, pollRequest)
-	defer sw.Stop()
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, wh.error(err, scope)
-	}
-
-	if pollRequest == nil {
-		return nil, wh.error(errRequestNotSet, scope)
-	}
-
-	wh.GetLogger().Debug("Received PollForActivityTask")
-	if err := common.ValidateLongPollContextTimeout(
-		ctx,
-		"PollForActivityTask",
-		wh.GetThrottledLogger(),
-	); err != nil {
-		return nil, wh.error(err, scope)
-	}
-
-	if pollRequest.Domain == nil || pollRequest.GetDomain() == "" {
-		return nil, wh.error(errDomainNotSet, scope)
-	}
-
-	if len(pollRequest.GetDomain()) > wh.config.MaxIDLengthLimit() {
-		return nil, wh.error(errDomainTooLong, scope)
-	}
-
-	if err := wh.validateTaskList(pollRequest.TaskList, scope); err != nil {
-		return nil, err
-	}
-	if len(pollRequest.GetIdentity()) > wh.config.MaxIDLengthLimit() {
-		return nil, wh.error(errIdentityTooLong, scope)
-	}
-
-	domainID, err := wh.GetDomainCache().GetDomainID(pollRequest.GetDomain())
-	if err != nil {
-		return nil, wh.error(err, scope)
-	}
-
-	pollerID := uuid.New()
-	op := func() error {
-		var err error
-		resp, err = wh.GetMatchingClient().PollForActivityTask(ctx, &m.PollForActivityTaskRequest{
-			DomainUUID:  common.StringPtr(domainID),
-			PollerID:    common.StringPtr(pollerID),
-			PollRequest: pollRequest,
-		})
-		return err
-	}
-
-	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
-	if err != nil {
-		err = wh.cancelOutstandingPoll(ctx, err, domainID, persistence.TaskListTypeActivity, pollRequest.TaskList, pollerID)
-		if err != nil {
-			// For all other errors log an error and return it back to client.
-			ctxTimeout := "not-set"
-			ctxDeadline, ok := ctx.Deadline()
-			if ok {
-				ctxTimeout = ctxDeadline.Sub(callTime).String()
-			}
-			wh.GetLogger().Error("PollForActivityTask failed.",
-				tag.WorkflowTaskListName(pollRequest.GetTaskList().GetName()),
-				tag.Value(ctxTimeout),
-				tag.Error(err))
-			return nil, wh.error(err, scope)
-		}
-	}
-	return resp, nil
+	panic("not implemented")
 }
 
 // PollForDecisionTask - Poll for a decision task.
@@ -1549,10 +1480,10 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 		Impl:           common.StringPtr(call.Header(common.ClientImplHeaderName)),
 		FeatureVersion: common.StringPtr(call.Header(common.FeatureVersionHeaderName)),
 	}
-	matchingRequest := &m.RespondQueryTaskCompletedRequest{
-		DomainUUID:       common.StringPtr(queryTaskToken.DomainID),
-		TaskList:         &gen.TaskList{Name: common.StringPtr(queryTaskToken.TaskList)},
-		TaskID:           common.StringPtr(queryTaskToken.TaskID),
+	matchingRequest := &matchingservice.RespondQueryTaskCompletedRequest{
+		DomainUUID:       queryTaskToken.DomainID,
+		TaskList:         &commonproto.TaskList{Name: queryTaskToken.TaskList},
+		TaskID:           queryTaskToken.TaskID,
 		CompletedRequest: completeRequest,
 	}
 
@@ -3158,10 +3089,11 @@ func (wh *WorkflowHandler) ListTaskListPartitions(ctx context.Context, request *
 		return nil, err
 	}
 
-	resp, err := wh.GetMatchingClient().ListTaskListPartitions(ctx, &m.ListTaskListPartitionsRequest{
-		Domain:   request.Domain,
-		TaskList: request.TaskList,
+	resp, err := wh.GetMatchingClient().ListTaskListPartitions(ctx, &matchingservice.ListTaskListPartitionsRequest{
+		Domain:   *request.Domain,
+		TaskList: adapter.ToProtoTaskList(request.TaskList),
 	})
+
 	return resp, err
 }
 

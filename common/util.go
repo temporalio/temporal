@@ -199,6 +199,11 @@ func IsServiceTransientError(err error) bool {
 	return !IsServiceNonRetryableError(err)
 }
 
+// IsServiceTransientErrorGRPC checks if the error is a retryable error.
+func IsServiceTransientErrorGRPC(err error) bool {
+	return !IsServiceNonRetryableErrorGRPC(err)
+}
+
 // IsServiceNonRetryableError checks if the error is a non retryable error.
 func IsServiceNonRetryableError(err error) bool {
 	switch err := err.(type) {
@@ -217,6 +222,23 @@ func IsServiceNonRetryableError(err error) bool {
 			return true
 		}
 		return false
+	}
+
+	return false
+}
+
+// IsServiceNonRetryableError checks if the error is a non retryable error.
+func IsServiceNonRetryableErrorGRPC(err error) bool {
+	if err == context.DeadlineExceeded {
+		return true
+	}
+
+	if st, ok := status.FromError(err); ok {
+		if st.Code() == codes.NotFound ||
+			st.Code() == codes.InvalidArgument ||
+			st.Code() == codes.AlreadyExists {
+			return true
+		}
 	}
 
 	return false
@@ -253,6 +275,7 @@ func IsWhitelistServiceTransientError(err error) bool {
 
 // IsWhitelistServiceTransientErrorGRPC checks if the error is a transient error.
 func IsWhitelistServiceTransientErrorGRPC(err error) bool {
+	// TODO: wrong context package
 	if err == context.DeadlineExceeded {
 		return true
 	}

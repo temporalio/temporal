@@ -22,11 +22,32 @@ package frontend
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"time"
 
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/workflowservice"
+	"go.uber.org/yarpc/yarpcerrors"
 
+	"github.com/pborman/uuid"
+
+	h "github.com/temporalio/temporal/.gen/go/history"
+	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/matchingservice"
+	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
+	"github.com/temporalio/temporal/common/archiver"
+	"github.com/temporalio/temporal/common/backoff"
+	"github.com/temporalio/temporal/common/client"
+	"github.com/temporalio/temporal/common/elasticsearch/validator"
 	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/quotas"
+	"github.com/temporalio/temporal/common/resource"
 )
 
 var _ workflowservice.WorkflowServiceYARPCServer = (*WorkflowHandlerGRPC)(nil)
@@ -34,7 +55,27 @@ var _ workflowservice.WorkflowServiceYARPCServer = (*WorkflowHandlerGRPC)(nil)
 type (
 	// WorkflowHandlerGRPC - gRPC handler interface for workflow workflowservice
 	WorkflowHandlerGRPC struct {
+		resource.Resource
+
 		workflowHandlerThrift *WorkflowHandler
+
+		tokenSerializer           common.TaskTokenSerializer
+		rateLimiter               quotas.Policy
+		config                    *Config
+		versionChecker            client.VersionChecker
+		visibilityQueryValidator  *validator.VisibilityQueryValidator
+		searchAttributesValidator *validator.SearchAttributesValidator
+	}
+
+	getHistoryContinuationTokenGRPC struct {
+		RunID             string
+		FirstEventID      int64
+		NextEventID       int64
+		IsWorkflowRunning bool
+		PersistenceToken  []byte
+		TransientDecision *commonproto.TransientDecisionInfo
+		BranchToken       []byte
+		ReplicationInfo   map[string]*commonproto.ReplicationInfo
 	}
 )
 
@@ -190,11 +231,100 @@ func (wh *WorkflowHandlerGRPC) RespondDecisionTaskFailed(ctx context.Context, re
 func (wh *WorkflowHandlerGRPC) PollForActivityTask(ctx context.Context, request *workflowservice.PollForActivityTaskRequest) (_ *workflowservice.PollForActivityTaskResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
-	response, err := wh.workflowHandlerThrift.PollForActivityTask(ctx, adapter.ToThriftPollForActivityTaskRequest(request))
-	if err != nil {
-		return nil, adapter.ToProtoError(err)
+	callTime := time.Now()
+
+	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendPollForActivityTaskScope, request)
+	defer sw.Stop()
+
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+		return nil, wh.error(err, scope)
 	}
-	return adapter.ToProtoPollForActivityTaskResponse(response), nil
+
+	if request == nil {
+		return nil, wh.error(errRequestNotSet, scope)
+	}
+
+	wh.GetLogger().Debug("Received PollForActivityTask")
+	if err := common.ValidateLongPollContextTimeout(
+		ctx,
+		"PollForActivityTask",
+		wh.GetThrottledLogger(),
+	); err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	if request.GetDomain() == "" {
+		return nil, wh.error(errDomainNotSet, scope)
+	}
+
+	if len(request.GetDomain()) > wh.config.MaxIDLengthLimit() {
+		return nil, wh.error(errDomainTooLong, scope)
+	}
+
+	if err := wh.validateTaskList(request.TaskList, scope); err != nil {
+		return nil, err
+	}
+	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
+		return nil, wh.error(errIdentityTooLong, scope)
+	}
+
+	domainID, err := wh.GetDomainCache().GetDomainID(request.GetDomain())
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	pollerID := uuid.New()
+	var matchingResponse *matchingservice.PollForActivityTaskResponse
+	op := func() error {
+		var err error
+		matchingResponse, err = wh.GetMatchingClient().PollForActivityTask(ctx, &matchingservice.PollForActivityTaskRequest{
+			DomainUUID:  domainID,
+			PollerID:    pollerID,
+			PollRequest: request,
+		})
+		return err
+	}
+
+	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientErrorGRPC)
+	if err != nil {
+		err = wh.cancelOutstandingPoll(ctx, err, domainID, persistence.TaskListTypeActivity, request.TaskList, pollerID)
+		if err != nil {
+			// For all other errors log an error and return it back to client.
+			ctxTimeout := "not-set"
+			ctxDeadline, ok := ctx.Deadline()
+			if ok {
+				ctxTimeout = ctxDeadline.Sub(callTime).String()
+			}
+			wh.GetLogger().Error("PollForActivityTask failed.",
+				tag.WorkflowTaskListName(request.GetTaskList().GetName()),
+				tag.Value(ctxTimeout),
+				tag.Error(err))
+			return nil, wh.error(err, scope)
+		}
+	}
+
+	return convertMatchingResponse(matchingResponse), nil
+}
+
+func convertMatchingResponse(in *matchingservice.PollForActivityTaskResponse) *workflowservice.PollForActivityTaskResponse {
+	return &workflowservice.PollForActivityTaskResponse{
+		TaskToken:                       in.TaskToken,
+		WorkflowExecution:               in.WorkflowExecution,
+		ActivityId:                      in.ActivityId,
+		ActivityType:                    in.ActivityType,
+		Input:                           in.Input,
+		ScheduledTimestamp:              in.ScheduledTimestamp,
+		ScheduleToCloseTimeoutSeconds:   in.ScheduleToCloseTimeoutSeconds,
+		StartedTimestamp:                in.StartedTimestamp,
+		StartToCloseTimeoutSeconds:      in.StartToCloseTimeoutSeconds,
+		HeartbeatTimeoutSeconds:         in.HeartbeatTimeoutSeconds,
+		Attempt:                         in.Attempt,
+		ScheduledTimestampOfThisAttempt: in.ScheduledTimestampOfThisAttempt,
+		HeartbeatDetails:                in.HeartbeatDetails,
+		WorkflowType:                    in.WorkflowType,
+		WorkflowDomain:                  in.WorkflowDomain,
+		Header:                          in.Header,
+	}
 }
 
 // RecordActivityTaskHeartbeat is called by application worker while it is processing an ActivityTask.  If worker fails
@@ -554,4 +684,600 @@ func (wh *WorkflowHandlerGRPC) ListTaskListPartitions(ctx context.Context, reque
 		return nil, adapter.ToProtoError(err)
 	}
 	return adapter.ToProtoListTaskListPartitionsResponse(response), nil
+}
+
+//===============================================================================
+func (wh *WorkflowHandlerGRPC) getRawHistory(
+	scope metrics.Scope,
+	domainID string,
+	execution commonproto.WorkflowExecution,
+	firstEventID int64,
+	nextEventID int64,
+	pageSize int32,
+	nextPageToken []byte,
+	transientDecision *commonproto.TransientDecisionInfo,
+	branchToken []byte,
+) ([]*commonproto.DataBlob, []byte, error) {
+	var rawHistory []*commonproto.DataBlob
+	shardID := common.WorkflowIDToHistoryShard(execution.GetWorkflowId(), wh.config.NumHistoryShards)
+
+	resp, err := wh.GetHistoryManager().ReadRawHistoryBranch(&persistence.ReadHistoryBranchRequest{
+		BranchToken:   branchToken,
+		MinEventID:    firstEventID,
+		MaxEventID:    nextEventID,
+		PageSize:      int(pageSize),
+		NextPageToken: nextPageToken,
+		ShardID:       common.IntPtr(shardID),
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var encoding enums.EncodingType
+	for _, data := range resp.HistoryEventBlobs {
+		switch data.Encoding {
+		case common.EncodingTypeJSON:
+			encoding = enums.EncodingTypeJSON
+		case common.EncodingTypeThriftRW:
+			encoding = enums.EncodingTypeThriftRW
+		default:
+			panic(fmt.Sprintf("Invalid encoding type for raw history, encoding type: %s", data.Encoding))
+		}
+		rawHistory = append(rawHistory, &commonproto.DataBlob{
+			EncodingType: encoding,
+			Data:         data.Data,
+		})
+	}
+
+	if len(nextPageToken) == 0 && transientDecision != nil {
+		if err := wh.validateTransientDecisionEvents(nextEventID, transientDecision); err != nil {
+			scope.IncCounter(metrics.CadenceErrIncompleteHistoryCounter)
+			wh.GetLogger().Error("getHistory error",
+				tag.WorkflowDomainID(domainID),
+				tag.WorkflowID(execution.GetWorkflowId()),
+				tag.WorkflowRunID(execution.GetRunId()),
+				tag.Error(err))
+		}
+
+		blob, err := wh.GetPayloadSerializer().SerializeEvent(adapter.ToThriftHistoryEvent(transientDecision.ScheduledEvent), common.EncodingTypeThriftRW)
+		if err != nil {
+			return nil, nil, err
+		}
+		rawHistory = append(rawHistory, &commonproto.DataBlob{
+			EncodingType: enums.EncodingTypeThriftRW,
+			Data:         blob.Data,
+		})
+
+		blob, err = wh.GetPayloadSerializer().SerializeEvent(adapter.ToThriftHistoryEvent(transientDecision.StartedEvent), common.EncodingTypeThriftRW)
+		if err != nil {
+			return nil, nil, err
+		}
+		rawHistory = append(rawHistory, &commonproto.DataBlob{
+			EncodingType: enums.EncodingTypeThriftRW,
+			Data:         blob.Data,
+		})
+	}
+
+	return rawHistory, resp.NextPageToken, nil
+}
+
+func (wh *WorkflowHandlerGRPC) getHistory(
+	scope metrics.Scope,
+	domainID string,
+	execution commonproto.WorkflowExecution,
+	firstEventID, nextEventID int64,
+	pageSize int32,
+	nextPageToken []byte,
+	transientDecision *commonproto.TransientDecisionInfo,
+	branchToken []byte,
+) (*commonproto.History, []byte, error) {
+
+	var size int
+
+	isFirstPage := len(nextPageToken) == 0
+	shardID := common.WorkflowIDToHistoryShard(execution.GetWorkflowId(), wh.config.NumHistoryShards)
+	var err error
+	var historyEvents []*shared.HistoryEvent
+	historyEvents, size, nextPageToken, err = persistence.ReadFullPageV2Events(wh.GetHistoryManager(), &persistence.ReadHistoryBranchRequest{
+		BranchToken:   branchToken,
+		MinEventID:    firstEventID,
+		MaxEventID:    nextEventID,
+		PageSize:      int(pageSize),
+		NextPageToken: nextPageToken,
+		ShardID:       common.IntPtr(shardID),
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	scope.RecordTimer(metrics.HistorySize, time.Duration(size))
+
+	isLastPage := len(nextPageToken) == 0
+	if err := verifyHistoryIsComplete(
+		historyEvents,
+		firstEventID,
+		nextEventID-1,
+		isFirstPage,
+		isLastPage,
+		int(pageSize)); err != nil {
+		scope.IncCounter(metrics.CadenceErrIncompleteHistoryCounter)
+		wh.GetLogger().Error("getHistory: incomplete history",
+			tag.WorkflowDomainID(domainID),
+			tag.WorkflowID(execution.GetWorkflowId()),
+			tag.WorkflowRunID(execution.GetRunId()),
+			tag.Error(err))
+		return nil, nil, err
+	}
+
+	if len(nextPageToken) == 0 && transientDecision != nil {
+		if err := wh.validateTransientDecisionEvents(nextEventID, transientDecision); err != nil {
+			scope.IncCounter(metrics.CadenceErrIncompleteHistoryCounter)
+			wh.GetLogger().Error("getHistory error",
+				tag.WorkflowDomainID(domainID),
+				tag.WorkflowID(execution.GetWorkflowId()),
+				tag.WorkflowRunID(execution.GetRunId()),
+				tag.Error(err))
+		}
+		// Append the transient decision events once we are done enumerating everything from the events table
+		historyEvents = append(historyEvents, transientDecision.ScheduledEvent, transientDecision.StartedEvent)
+	}
+
+	executionHistory := &commonproto.History{}
+	executionHistory.Events = historyEvents
+	return executionHistory, nextPageToken, nil
+}
+
+func (wh *WorkflowHandlerGRPC) validateTransientDecisionEvents(
+	expectedNextEventID int64,
+	decision *commonproto.TransientDecisionInfo,
+) error {
+
+	if decision.ScheduledEvent.GetEventId() == expectedNextEventID &&
+		decision.StartedEvent.GetEventId() == expectedNextEventID+1 {
+		return nil
+	}
+
+	return fmt.Errorf(
+		"invalid transient decision: "+
+			"expectedScheduledEventID=%v expectedStartedEventID=%v but have scheduledEventID=%v startedEventID=%v",
+		expectedNextEventID,
+		expectedNextEventID+1,
+		decision.ScheduledEvent.GetEventId(),
+		decision.StartedEvent.GetEventId())
+}
+
+// startRequestProfile initiates recording of request metrics
+func (wh *WorkflowHandlerGRPC) startRequestProfile(scope int) (metrics.Scope, metrics.Stopwatch) {
+	metricsScope := wh.GetMetricsClient().Scope(scope).Tagged(metrics.DomainUnknownTag())
+	// timer should be emitted with the all tag
+	sw := metricsScope.StartTimer(metrics.CadenceLatency)
+	metricsScope.IncCounter(metrics.CadenceRequests)
+	return metricsScope, sw
+}
+
+// startRequestProfileWithDomain initiates recording of request metrics and returns a domain tagged scope
+func (wh *WorkflowHandlerGRPC) startRequestProfileWithDomain(scope int, d domainGetter) (metrics.Scope, metrics.Stopwatch) {
+	var metricsScope metrics.Scope
+	if d != nil {
+		metricsScope = wh.GetMetricsClient().Scope(scope).Tagged(metrics.DomainTag(d.GetDomain()))
+	} else {
+		metricsScope = wh.GetMetricsClient().Scope(scope).Tagged(metrics.DomainUnknownTag())
+	}
+	sw := metricsScope.StartTimer(metrics.CadenceLatency)
+	metricsScope.IncCounter(metrics.CadenceRequests)
+	return metricsScope, sw
+}
+
+// getDefaultScope returns a default scope to use for request metrics
+func (wh *WorkflowHandlerGRPC) getDefaultScope(scope int) metrics.Scope {
+	return wh.GetMetricsClient().Scope(scope).Tagged(metrics.DomainUnknownTag())
+}
+
+func (wh *WorkflowHandlerGRPC) error(err error, scope metrics.Scope, tagsForErrorLog ...tag.Tag) error {
+	switch err := err.(type) {
+	case *commonproto.InternalServiceError:
+		wh.GetLogger().WithTags(tagsForErrorLog...).Error("Internal service error", tag.Error(err))
+		scope.IncCounter(metrics.CadenceFailures)
+		return frontendInternalServiceError("cadence internal error, msg: %v", err.Message)
+	case *commonproto.BadRequestError:
+		scope.IncCounter(metrics.CadenceErrBadRequestCounter)
+		return err
+	case *commonproto.DomainNotActiveError:
+		scope.IncCounter(metrics.CadenceErrBadRequestCounter)
+		return err
+	case *commonproto.ServiceBusyError:
+		scope.IncCounter(metrics.CadenceErrServiceBusyCounter)
+		return err
+	case *commonproto.EntityNotExistsError:
+		scope.IncCounter(metrics.CadenceErrEntityNotExistsCounter)
+		return err
+	case *commonproto.WorkflowExecutionAlreadyStartedError:
+		scope.IncCounter(metrics.CadenceErrExecutionAlreadyStartedCounter)
+		return err
+	case *commonproto.DomainAlreadyExistsError:
+		scope.IncCounter(metrics.CadenceErrDomainAlreadyExistsCounter)
+		return err
+	case *commonproto.CancellationAlreadyRequestedError:
+		scope.IncCounter(metrics.CadenceErrCancellationAlreadyRequestedCounter)
+		return err
+	case *commonproto.QueryFailedError:
+		scope.IncCounter(metrics.CadenceErrQueryFailedCounter)
+		return err
+	case *commonproto.LimitExceededError:
+		scope.IncCounter(metrics.CadenceErrLimitExceededCounter)
+		return err
+	case *commonproto.ClientVersionNotSupportedError:
+		scope.IncCounter(metrics.CadenceErrClientVersionNotSupportedCounter)
+		return err
+	case *yarpcerrors.Status:
+		if err.Code() == yarpcerrors.CodeDeadlineExceeded {
+			scope.IncCounter(metrics.CadenceErrContextTimeoutCounter)
+			return err
+		}
+	}
+
+	wh.GetLogger().WithTags(tagsForErrorLog...).Error("Uncategorized error",
+		tag.Error(err))
+	scope.IncCounter(metrics.CadenceFailures)
+	return frontendInternalServiceError("cadence internal uncategorized error, msg: %v", err.Error())
+}
+
+func (wh *WorkflowHandlerGRPC) validateTaskListType(t *commonproto.TaskListType, scope metrics.Scope) error {
+	if t == nil {
+		return wh.error(errTaskListTypeNotSet, scope)
+	}
+	return nil
+}
+
+func (wh *WorkflowHandlerGRPC) validateTaskList(t *commonproto.TaskList, scope metrics.Scope) error {
+	if t == nil || t.GetName() == "" {
+		return wh.error(errTaskListNotSet, scope)
+	}
+	if len(t.GetName()) > wh.config.MaxIDLengthLimit() {
+		return wh.error(errTaskListTooLong, scope)
+	}
+	return nil
+}
+
+func (wh *WorkflowHandlerGRPC) validateExecutionAndEmitMetrics(w *commonproto.WorkflowExecution, scope metrics.Scope) error {
+	err := validateExecution(w)
+	if err != nil {
+		return wh.error(err, scope)
+	}
+	return nil
+}
+
+func (wh *WorkflowHandlerGRPC) validateExecution(w *commonproto.WorkflowExecution) error {
+	if w == nil {
+		return errExecutionNotSet
+	}
+	if w.GetWorkflowId() == "" {
+		return errWorkflowIDNotSet
+	}
+	if w.GetRunId() != "" && uuid.Parse(w.GetRunId()) == nil {
+		return errInvalidRunID
+	}
+	return nil
+}
+
+func (wh *WorkflowHandlerGRPC) createPollForDecisionTaskResponse(
+	ctx context.Context,
+	scope metrics.Scope,
+	domainID string,
+	matchingResp *matchingservice.PollForDecisionTaskResponse,
+	branchToken []byte,
+) (*commonproto.PollForDecisionTaskResponse, error) {
+
+	if matchingResp.WorkflowExecution == nil {
+		// this will happen if there is no decision task to be send to worker / caller
+		return &commonproto.PollForDecisionTaskResponse{}, nil
+	}
+
+	var history *commonproto.History
+	var continuation []byte
+	var err error
+
+	if matchingResp.GetStickyExecutionEnabled() && matchingResp.Query != nil {
+		// meaning sticky query, we should not return any events to worker
+		// since query task only check the current status
+		history = &commonproto.History{
+			Events: []*commonproto.HistoryEvent{},
+		}
+	} else {
+		// here we have 3 cases:
+		// 1. sticky && non query task
+		// 2. non sticky &&  non query task
+		// 3. non sticky && query task
+		// for 1, partial history have to be send back
+		// for 2 and 3, full history have to be send back
+
+		var persistenceToken []byte
+
+		firstEventID := common.FirstEventID
+		nextEventID := matchingResp.GetNextEventId()
+		if matchingResp.GetStickyExecutionEnabled() {
+			firstEventID = matchingResp.GetPreviousStartedEventId() + 1
+		}
+		domain, dErr := wh.GetDomainCache().GetDomainByID(domainID)
+		if dErr != nil {
+			return nil, dErr
+		}
+		scope = scope.Tagged(metrics.DomainTag(domain.GetInfo().Name))
+		history, persistenceToken, err = wh.getHistory(
+			scope,
+			domainID,
+			*matchingResp.GetWorkflowExecution(),
+			firstEventID,
+			nextEventID,
+			int32(wh.config.HistoryMaxPageSize(domain.GetInfo().Name)),
+			nil,
+			matchingResp.GetDecisionInfo(),
+			branchToken,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(persistenceToken) != 0 {
+			continuation, err = wh.serializeHistoryToken(&getHistoryContinuationTokenGRPC{
+				RunID:             matchingResp.WorkflowExecution.GetRunId(),
+				FirstEventID:      firstEventID,
+				NextEventID:       nextEventID,
+				PersistenceToken:  persistenceToken,
+				TransientDecision: matchingResp.GetDecisionInfo(),
+				BranchToken:       branchToken,
+			})
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	resp := &commonproto.PollForDecisionTaskResponse{
+		TaskToken:                 matchingResp.TaskToken,
+		WorkflowExecution:         matchingResp.WorkflowExecution,
+		WorkflowType:              matchingResp.WorkflowType,
+		PreviousStartedEventId:    matchingResp.PreviousStartedEventId,
+		StartedEventId:            matchingResp.StartedEventId,
+		Query:                     matchingResp.Query,
+		BacklogCountHint:          matchingResp.BacklogCountHint,
+		Attempt:                   matchingResp.Attempt,
+		History:                   history,
+		NextPageToken:             continuation,
+		WorkflowExecutionTaskList: matchingResp.WorkflowExecutionTaskList,
+		ScheduledTimestamp:        matchingResp.ScheduledTimestamp,
+		StartedTimestamp:          matchingResp.StartedTimestamp,
+		Queries:                   matchingResp.Queries,
+	}
+
+	return resp, nil
+}
+
+func (wh *WorkflowHandlerGRPC) verifyHistoryIsComplete(
+	events []*commonproto.HistoryEvent,
+	expectedFirstEventID int64,
+	expectedLastEventID int64,
+	isFirstPage bool,
+	isLastPage bool,
+	pageSize int,
+) error {
+
+	nEvents := len(events)
+	if nEvents == 0 {
+		if isLastPage {
+			// we seem to be returning a non-nil pageToken on the lastPage which
+			// in turn cases the client to call getHistory again - only to find
+			// there are no more events to consume - bail out if this is the case here
+			return nil
+		}
+		return fmt.Errorf("invalid history: contains zero events")
+	}
+
+	firstEventID := events[0].GetEventId()
+	lastEventID := events[nEvents-1].GetEventId()
+
+	if !isFirstPage { // atleast one page of history has been read previously
+		if firstEventID <= expectedFirstEventID {
+			// not first page and no events have been read in the previous pages - not possible
+			return &commonproto.InternalServiceError{
+				Message: fmt.Sprintf(
+					"invalid history: expected first eventID to be > %v but got %v", expectedFirstEventID, firstEventID),
+			}
+		}
+		expectedFirstEventID = firstEventID
+	}
+
+	if !isLastPage {
+		// estimate lastEventID based on pageSize. This is a lower bound
+		// since the persistence layer counts "batch of events" as a single page
+		expectedLastEventID = expectedFirstEventID + int64(pageSize) - 1
+	}
+
+	nExpectedEvents := expectedLastEventID - expectedFirstEventID + 1
+
+	if firstEventID == expectedFirstEventID &&
+		((isLastPage && lastEventID == expectedLastEventID && int64(nEvents) == nExpectedEvents) ||
+			(!isLastPage && lastEventID >= expectedLastEventID && int64(nEvents) >= nExpectedEvents)) {
+		return nil
+	}
+
+	return &commonproto.InternalServiceError{
+		Message: fmt.Sprintf(
+			"incomplete history: "+
+				"expected events [%v-%v] but got events [%v-%v] of length %v:"+
+				"isFirstPage=%v,isLastPage=%v,pageSize=%v",
+			expectedFirstEventID,
+			expectedLastEventID,
+			firstEventID,
+			lastEventID,
+			nEvents,
+			isFirstPage,
+			isLastPage,
+			pageSize),
+	}
+}
+
+func (wh *WorkflowHandlerGRPC) deserializeHistoryToken(bytes []byte) (*getHistoryContinuationTokenGRPC, error) {
+	token := &getHistoryContinuationTokenGRPC{}
+	err := json.Unmarshal(bytes, token)
+	return token, err
+}
+
+func (wh *WorkflowHandlerGRPC) serializeHistoryToken(token *getHistoryContinuationTokenGRPC) ([]byte, error) {
+	if token == nil {
+		return nil, nil
+	}
+
+	bytes, err := json.Marshal(token)
+	return bytes, err
+}
+
+func createServiceBusyError() *commonproto.ServiceBusyError {
+	err := &commonproto.ServiceBusyError{}
+	err.Message = "Too many outstanding requests to the cadence service"
+	return err
+}
+
+func isFailoverRequest(updateRequest *commonproto.UpdateDomainRequest) bool {
+	return updateRequest.ReplicationConfiguration != nil && updateRequest.ReplicationConfiguration.GetActiveClusterName() != ""
+}
+
+func (wh *WorkflowHandlerGRPC) historyArchived(ctx context.Context, request *commonproto.GetWorkflowExecutionHistoryRequest, domainID string) bool {
+	if request.GetExecution() == nil || request.GetExecution().GetRunId() == "" {
+		return false
+	}
+	getMutableStateRequest := &h.GetMutableStateRequest{
+		DomainUUID: common.StringPtr(domainID),
+		Execution:  request.Execution,
+	}
+	_, err := wh.GetHistoryClient().GetMutableState(ctx, getMutableStateRequest)
+	if err == nil {
+		return false
+	}
+	switch err.(type) {
+	case *commonproto.EntityNotExistsError:
+		// the only case in which history is assumed to be archived is if getting mutable state returns entity not found error
+		return true
+	}
+	return false
+}
+
+func (wh *WorkflowHandlerGRPC) getArchivedHistory(
+	ctx context.Context,
+	request *commonproto.GetWorkflowExecutionHistoryRequest,
+	domainID string,
+	scope metrics.Scope,
+) (*commonproto.GetWorkflowExecutionHistoryResponse, error) {
+	entry, err := wh.GetDomainCache().GetDomainByID(domainID)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	URIString := entry.GetConfig().HistoryArchivalURI
+	if URIString == "" {
+		// if URI is empty, it means the domain has never enabled for archival.
+		// the error is not "workflow has passed retention period", because
+		// we have no way to tell if the requested workflow exists or not.
+		return nil, wh.error(errHistoryNotFound, scope)
+	}
+
+	URI, err := archiver.NewURI(URIString)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	historyArchiver, err := wh.GetArchiverProvider().GetHistoryArchiver(URI.Scheme(), common.FrontendServiceName)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	resp, err := historyArchiver.Get(ctx, URI, &archiver.GetHistoryRequest{
+		DomainID:      domainID,
+		WorkflowID:    request.GetExecution().GetWorkflowId(),
+		RunID:         request.GetExecution().GetRunId(),
+		NextPageToken: request.GetNextPageToken(),
+		PageSize:      int(request.GetMaximumPageSize()),
+	})
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	history := &commonproto.History{}
+	for _, batch := range resp.HistoryBatches {
+		history.Events = append(history.Events, batch.Events...)
+	}
+	return &commonproto.GetWorkflowExecutionHistoryResponse{
+		History:       history,
+		NextPageToken: resp.NextPageToken,
+		Archived:      common.BoolPtr(true),
+	}, nil
+}
+
+func (wh *WorkflowHandlerGRPC) convertIndexedKeyToThrift(keys map[string]interface{}) map[string]commonproto.IndexedValueType {
+	converted := make(map[string]commonproto.IndexedValueType)
+	for k, v := range keys {
+		converted[k] = common.ConvertIndexedValueTypeToThriftType(v, wh.GetLogger())
+	}
+	return converted
+}
+
+func (wh *WorkflowHandlerGRPC) isListRequestPageSizeTooLarge(pageSize int32, domain string) bool {
+	return wh.config.EnableReadVisibilityFromES(domain) &&
+		pageSize > int32(wh.config.ESIndexMaxResultWindow())
+}
+
+func (wh *WorkflowHandlerGRPC) allow(d domainGetter) bool {
+	domain := ""
+	if d != nil {
+		domain = d.GetDomain()
+	}
+	return wh.rateLimiter.Allow(quotas.Info{Domain: domain})
+}
+func checkPermission(
+	config *Config,
+	securityToken *string,
+) error {
+	if config.EnableAdminProtection() {
+		if securityToken == nil || *securityToken == "" {
+			return errNoPermission
+		}
+		requiredToken := config.AdminOperationToken()
+		if *securityToken != requiredToken {
+			return errNoPermission
+		}
+	}
+	return nil
+}
+
+type domainWrapper struct {
+	domain string
+}
+
+func (d domainWrapper) GetDomain() string {
+	return d.domain
+}
+
+func (wh *WorkflowHandlerGRPC) cancelOutstandingPoll(ctx context.Context, err error, domainID string, taskListType int32,
+	taskList *commonproto.TaskList, pollerID string) error {
+	// First check if this err is due to context cancellation.  This means client connection to frontend is closed.
+	if ctx.Err() == context.Canceled {
+		// Our rpc stack does not propagates context cancellation to the other service.  Lets make an explicit
+		// call to matching to notify this poller is gone to prevent any tasks being dispatched to zombie pollers.
+		_, err = wh.GetMatchingClient().CancelOutstandingPoll(context.Background(), &matchingservice.CancelOutstandingPollRequest{
+			DomainUUID:   domainID,
+			TaskListType: taskListType,
+			TaskList:     taskList,
+			PollerID:     pollerID,
+		})
+		// We can not do much if this call fails.  Just log the error and move on
+		if err != nil {
+			wh.GetLogger().Warn("Failed to cancel outstanding poller.",
+				tag.WorkflowTaskListName(taskList.GetName()), tag.Error(err))
+		}
+
+		// Clear error as we don't want to report context cancellation error to count against our SLA
+		return nil
+	}
+
+	return err
 }
