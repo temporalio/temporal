@@ -239,7 +239,7 @@ func (s *nDCIntegrationTestSuite) verifyEventHistory(
 	// get replicated history events from passive side
 	passiveClient := s.active.GetFrontendClient()
 	replicatedHistory, err := passiveClient.GetWorkflowExecutionHistory(
-		s.createContext(),
+		host.NewContext(),
 		&workflowservice.GetWorkflowExecutionHistoryRequest{
 			Domain: s.domainName,
 			Execution: &commonproto.WorkflowExecution{
@@ -1137,7 +1137,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			WorkflowId: workflowID,
 			RunId:      runID,
 		}
-		return adminClient.GetWorkflowExecutionRawHistoryV2(s.createContext(), &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+		return adminClient.GetWorkflowExecutionRawHistoryV2(host.NewContext(), &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 			Domain:            domain,
 			Execution:         execution,
 			StartEventId:      startEventID,
@@ -1578,7 +1578,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 func (s *nDCIntegrationTestSuite) registerDomain() {
 	s.domainName = "test-simple-workflow-ndc-" + common.GenerateRandomString(5)
 	client1 := s.active.GetFrontendClient() // active
-	_, err := client1.RegisterDomain(s.createContext(), &workflowservice.RegisterDomainRequest{
+	_, err := client1.RegisterDomain(host.NewContext(), &workflowservice.RegisterDomainRequest{
 		Name:           s.domainName,
 		IsGlobalDomain: true,
 		Clusters:       clusterReplicationConfig,
@@ -1591,7 +1591,7 @@ func (s *nDCIntegrationTestSuite) registerDomain() {
 	descReq := &workflowservice.DescribeDomainRequest{
 		Name: s.domainName,
 	}
-	resp, err := client1.DescribeDomain(s.createContext(), descReq)
+	resp, err := client1.DescribeDomain(host.NewContext(), descReq)
 	s.Require().NoError(err)
 	s.Require().NotNil(resp)
 	s.domainID = resp.GetDomainInfo().GetUuid()
@@ -1752,9 +1752,9 @@ func (s *nDCIntegrationTestSuite) applyEvents(
 			NewRunEvents:        s.toThriftDataBlob(newRunEventBlob),
 		}
 
-		err := historyClient.ReplicateEventsV2(s.createContext(), req)
+		err := historyClient.ReplicateEventsV2(host.NewContext(), req)
 		s.NoError(err, "Failed to replicate history event")
-		err = historyClient.ReplicateEventsV2(s.createContext(), req)
+		err = historyClient.ReplicateEventsV2(host.NewContext(), req)
 		s.NoError(err, "Failed to dedup replicate history event")
 	}
 }
@@ -1823,10 +1823,6 @@ func (s *nDCIntegrationTestSuite) toThriftVersionHistoryItems(
 	}
 
 	return versionHistory.ToThrift().Items
-}
-
-func (s *nDCIntegrationTestSuite) createContext() context.Context {
-	return createContext()
 }
 
 func (s *nDCIntegrationTestSuite) setupRemoteFrontendClients() {

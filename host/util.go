@@ -45,29 +45,29 @@ func PutIndexTemplate(s suite.Suite, esClient *elastic.Client, templateConfigFil
 	// #nosec
 	template, err := ioutil.ReadFile(templateConfigFile)
 	s.Require().NoError(err)
-	putTemplate, err := esClient.IndexPutTemplate(templateName).BodyString(string(template)).Do(createContext())
+	putTemplate, err := esClient.IndexPutTemplate(templateName).BodyString(string(template)).Do(NewContext())
 	s.Require().NoError(err)
 	s.Require().True(putTemplate.Acknowledged)
 }
 
 // CreateIndex create test index
 func CreateIndex(s suite.Suite, esClient *elastic.Client, indexName string) {
-	exists, err := esClient.IndexExists(indexName).Do(createContext())
+	exists, err := esClient.IndexExists(indexName).Do(NewContext())
 	s.Require().NoError(err)
 	if exists {
-		deleteTestIndex, err := esClient.DeleteIndex(indexName).Do(createContext())
+		deleteTestIndex, err := esClient.DeleteIndex(indexName).Do(NewContext())
 		s.Require().NoError(err)
 		s.Require().True(deleteTestIndex.Acknowledged)
 	}
 
-	createTestIndex, err := esClient.CreateIndex(indexName).Do(createContext())
+	createTestIndex, err := esClient.CreateIndex(indexName).Do(NewContext())
 	s.Require().NoError(err)
 	s.Require().True(createTestIndex.Acknowledged)
 }
 
 // DeleteIndex delete test index
 func DeleteIndex(s suite.Suite, esClient *elastic.Client, indexName string) {
-	deleteTestIndex, err := esClient.DeleteIndex(indexName).Do(createContext())
+	deleteTestIndex, err := esClient.DeleteIndex(indexName).Do(NewContext())
 	s.NoError(err)
 	s.True(deleteTestIndex.Acknowledged)
 }

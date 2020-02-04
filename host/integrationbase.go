@@ -152,7 +152,7 @@ func (s *IntegrationBase) registerDomain(
 	visibilityArchivalStatus enums.ArchivalStatus,
 	visibilityArchivalURI string,
 ) error {
-	ctx, cancel := createContextWithCancel(10000 * time.Second)
+	ctx, cancel := NewContextWithCancel(10000 * time.Second)
 	defer cancel()
 	_, err := s.engine.RegisterDomain(ctx, &workflowservice.RegisterDomainRequest{
 		Name:                                   domain,
@@ -180,7 +180,7 @@ func (s *IntegrationBase) printWorkflowHistory(domain string, execution *commonp
 }
 
 func (s *IntegrationBase) getHistory(domain string, execution *commonproto.WorkflowExecution) []*commonproto.HistoryEvent {
-	historyResponse, err := s.engine.GetWorkflowExecutionHistory(createContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Domain:          domain,
 		Execution:       execution,
 		MaximumPageSize: 5, // Use small page size to force pagination code path
@@ -189,7 +189,7 @@ func (s *IntegrationBase) getHistory(domain string, execution *commonproto.Workf
 
 	events := historyResponse.History.Events
 	for historyResponse.NextPageToken != nil {
-		historyResponse, err = s.engine.GetWorkflowExecutionHistory(createContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		historyResponse, err = s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Domain:        domain,
 			Execution:     execution,
 			NextPageToken: historyResponse.NextPageToken,

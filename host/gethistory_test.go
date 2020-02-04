@@ -62,7 +62,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 		Identity:                            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
+	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -122,7 +122,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 
 	// this function poll events from history side
 	getHistory := func(domain string, workflowID string, token []byte, isLongPoll bool) ([]*commonproto.HistoryEvent, []byte) {
-		responseInner, err := s.engine.GetWorkflowExecutionHistory(createContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		responseInner, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Domain: domain,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: workflowID,
@@ -228,7 +228,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 		Identity:                            identity,
 	}
 
-	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
+	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -289,7 +289,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	// this function poll events from history side
 	getHistory := func(domain string, workflowID string, token []byte, isLongPoll bool) ([]*commonproto.HistoryEvent, []byte) {
 		closeEventOnly := enums.HistoryEventFilterTypeCloseEvent
-		responseInner, err := s.engine.GetWorkflowExecutionHistory(createContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		responseInner, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Domain: domain,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: workflowID,
@@ -386,7 +386,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 		Identity:                            identity,
 	}
 
-	we, err := s.engine.StartWorkflowExecution(createContext(), request)
+	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err)
 	execution := &commonproto.WorkflowExecution{
 		WorkflowId: workflowID,
@@ -453,7 +453,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	getHistory := func(domain string, execution *commonproto.WorkflowExecution, firstEventID int64, nextEventID int64,
 		token []byte) (*adminservice.GetWorkflowExecutionRawHistoryResponse, error) {
 
-		return s.adminClient.GetWorkflowExecutionRawHistory(createContext(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
+		return s.adminClient.GetWorkflowExecutionRawHistory(NewContext(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 			Domain:          domain,
 			Execution:       execution,
 			FirstEventId:    firstEventID,
@@ -603,7 +603,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 		Identity:                            identity,
 	}
 
-	we, err := s.engine.StartWorkflowExecution(createContext(), request)
+	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err)
 	execution := &commonproto.WorkflowExecution{
 		WorkflowId: workflowID,
@@ -668,7 +668,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 	getHistory := func(domain string, execution *commonproto.WorkflowExecution, firstEventID int64, nextEventID int64,
 		token []byte) (*adminservice.GetWorkflowExecutionRawHistoryResponse, error) {
 
-		return s.adminClient.GetWorkflowExecutionRawHistory(createContext(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
+		return s.adminClient.GetWorkflowExecutionRawHistory(NewContext(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 			Domain:          domain,
 			Execution:       execution,
 			FirstEventId:    firstEventID,
@@ -748,7 +748,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 		Identity:                            identity,
 	}
 
-	we, err := s.engine.StartWorkflowExecution(createContext(), request)
+	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err)
 	execution := &commonproto.WorkflowExecution{
 		WorkflowId: workflowID,
@@ -817,7 +817,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 	getHistory := func(domain string, execution *commonproto.WorkflowExecution,
 		token []byte) (*workflowservice.GetWorkflowExecutionRawHistoryResponse, error) {
 
-		return s.engine.GetWorkflowExecutionRawHistory(createContext(), &workflowservice.GetWorkflowExecutionRawHistoryRequest{
+		return s.engine.GetWorkflowExecutionRawHistory(NewContext(), &workflowservice.GetWorkflowExecutionRawHistoryRequest{
 			Domain:          domain,
 			Execution:       execution,
 			MaximumPageSize: int32(pageSize),

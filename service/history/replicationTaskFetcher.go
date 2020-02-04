@@ -266,7 +266,7 @@ func (f *ReplicationTaskFetcherImpl) getMessages(
 		tokens = append(tokens, request.token)
 	}
 
-	ctx, cancel := createContextWithCancel(fetchTaskRequestTimeout)
+	ctx, cancel := newContextWithCancel(fetchTaskRequestTimeout)
 	defer cancel()
 
 	request := &adminservice.GetReplicationMessagesRequest{

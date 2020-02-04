@@ -56,10 +56,6 @@ var (
 		common.LibraryVersionHeaderName: "1.0.0",
 		common.FeatureVersionHeaderName: "1.0.0",
 		common.ClientImplHeaderName:     "cli",
-		// TODO: remove these headers when server is vanilla gRPC (not YARPC)
-		"rpc-caller":   "temporal-cli",
-		"rpc-service":  "cadence-frontend",
-		"rpc-encoding": "proto",
 	})
 )
 
