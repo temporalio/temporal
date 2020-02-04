@@ -26,6 +26,7 @@ import (
 
 	"github.com/hashicorp/go-version"
 	"go.uber.org/yarpc"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
@@ -110,9 +111,9 @@ func (vc *versionChecker) ClientSupported(ctx context.Context, enableClientVersi
 		return nil
 	}
 
-	call := yarpc.CallFromContext(ctx)
-	clientFeatureVersion := call.Header(common.FeatureVersionHeaderName)
-	clientImpl := call.Header(common.ClientImplHeaderName)
+	headers := GetHeadersValue(ctx, common.FeatureVersionHeaderName, common.ClientImplHeaderName)
+	clientFeatureVersion := headers[0]
+	clientImpl := headers[1]
 
 	if clientFeatureVersion == "" {
 		return nil
@@ -129,6 +130,34 @@ func (vc *versionChecker) ClientSupported(ctx context.Context, enableClientVersi
 		return &shared.ClientVersionNotSupportedError{FeatureVersion: clientFeatureVersion, ClientImpl: clientImpl, SupportedVersions: supportedVersions.String()}
 	}
 	return nil
+}
+
+func GetHeadersValue(ctx context.Context, headerNames ...string) []string {
+	md, grpcHeader := metadata.FromIncomingContext(ctx)
+	var call *yarpc.Call
+	if !grpcHeader {
+		// backward compatibility with YARPC
+		call = yarpc.CallFromContext(ctx)
+		if call == nil {
+			return make([]string, len(headerNames))
+		}
+	}
+
+	var headerValues []string
+	for _, headerName := range headerNames {
+		if call != nil {
+			headerValues = append(headerValues, call.Header(headerName))
+		} else {
+			values := md.Get(headerName)
+			if len(values) > 0 {
+				headerValues = append(headerValues, values[0])
+			} else {
+				headerValues = append(headerValues, "")
+			}
+		}
+	}
+
+	return headerValues
 }
 
 // SupportsStickyQuery returns error if sticky query is not supported otherwise nil.

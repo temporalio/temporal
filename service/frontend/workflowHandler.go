@@ -27,9 +27,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/yarpcerrors"
-	"google.golang.org/grpc/metadata"
 
 	"github.com/temporalio/temporal/.gen/go/health"
 	h "github.com/temporalio/temporal/.gen/go/history"
@@ -1535,8 +1533,11 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 		}
 	}
 
-	completeRequest.WorkerVersionInfo = newWorkerVersionInfo(ctx)
-
+	headers := client.GetHeadersValue(ctx, common.ClientImplHeaderName, common.FeatureVersionHeaderName)
+	completeRequest.WorkerVersionInfo = &gen.WorkerVersionInfo{
+		Impl:           common.StringPtr(headers[0]),
+		FeatureVersion: common.StringPtr(headers[1]),
+	}
 	matchingRequest := &m.RespondQueryTaskCompletedRequest{
 		DomainUUID:       common.StringPtr(queryTaskToken.DomainID),
 		TaskList:         &gen.TaskList{Name: common.StringPtr(queryTaskToken.TaskList)},
@@ -1549,32 +1550,6 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 		return wh.error(err, scope)
 	}
 	return nil
-}
-
-func newWorkerVersionInfo(ctx context.Context) *gen.WorkerVersionInfo {
-	workerVersionInfo := &gen.WorkerVersionInfo{}
-
-	call := yarpc.CallFromContext(ctx)
-	if call != nil {
-		// YARPC path for Thrift version
-		workerVersionInfo.Impl = common.StringPtr(call.Header(common.ClientImplHeaderName))
-		workerVersionInfo.FeatureVersion = common.StringPtr(call.Header(common.FeatureVersionHeaderName))
-	} else {
-		// gRPC path for proto version
-		md, ok := metadata.FromIncomingContext(ctx)
-		if ok {
-			impls := md.Get(common.ClientImplHeaderName)
-			if len(impls) > 0 {
-				workerVersionInfo.Impl = common.StringPtr(impls[0])
-			}
-			featureVersions := md.Get(common.FeatureVersionHeaderName)
-			if len(featureVersions) > 0 {
-				workerVersionInfo.FeatureVersion = common.StringPtr(featureVersions[0])
-			}
-		}
-	}
-
-	return workerVersionInfo
 }
 
 // StartWorkflowExecution - Creates a new workflow execution
