@@ -129,7 +129,7 @@ func (s *integrationSuite) TestVisibilityArchival() {
 			Query:    fmt.Sprintf("CloseTime >= %v and CloseTime <= %v and WorkflowType = '%s'", startTime, endTime, workflowType),
 		}
 		for len(executions) == 0 || request.NextPageToken != nil {
-			response, err := s.engine.ListArchivedWorkflowExecutions(createContext(), request)
+			response, err := s.engine.ListArchivedWorkflowExecutions(NewContext(), request)
 			s.NoError(err)
 			s.NotNil(response)
 			executions = append(executions, response.GetExecutions()...)
@@ -151,7 +151,7 @@ func (s *integrationSuite) TestVisibilityArchival() {
 }
 
 func (s *integrationSuite) getDomainID(domain string) string {
-	domainResp, err := s.engine.DescribeDomain(createContext(), &workflowservice.DescribeDomainRequest{
+	domainResp, err := s.engine.DescribeDomain(NewContext(), &workflowservice.DescribeDomainRequest{
 		Name: s.archivalDomainName,
 	})
 	s.Nil(err)
@@ -165,7 +165,7 @@ func (s *integrationSuite) isHistoryArchived(domain string, execution *commonpro
 	}
 
 	for i := 0; i < retryLimit; i++ {
-		getHistoryResp, err := s.engine.GetWorkflowExecutionHistory(createContext(), request)
+		getHistoryResp, err := s.engine.GetWorkflowExecutionHistory(NewContext(), request)
 		if err == nil && getHistoryResp != nil && getHistoryResp.GetArchived() {
 			return true
 		}
@@ -230,7 +230,7 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, domain, domainID s
 		TaskStartToCloseTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
-	we, err := s.engine.StartWorkflowExecution(createContext(), request)
+	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.Nil(err)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 	runIDs := make([]string, numRuns)
