@@ -21,9 +21,14 @@
 package membership
 
 import (
+	"errors"
+	"net"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/uber/ringpop-go"
+	"github.com/uber/tchannel-go"
 
 	"github.com/dgryski/go-farm"
 	"github.com/uber/ringpop-go/events"
@@ -294,4 +299,36 @@ func (r *ringpopServiceResolver) getLabelsMap() map[string]string {
 	labels := make(map[string]string)
 	labels[RoleKey] = r.service
 	return labels
+}
+
+func BuildBroadcastHostPort(listenerPeerInfo tchannel.LocalPeerInfo, broadcastAddress string) (string, error) {
+	// Ephemeral port check copied from ringpop-go/ringpop.go/channelAddressResolver
+	// Check that TChannel is listening on a real hostport. By default,
+	// TChannel listens on an ephemeral host/port. The real port is then
+	// assigned by the OS when ListenAndServe is called. If the hostport is
+	// ephemeral, it means TChannel is not yet listening and the hostport
+	// cannot be resolved.
+	if listenerPeerInfo.IsEphemeralHostPort() {
+		return "", ringpop.ErrEphemeralAddress
+	}
+
+	// Broadcast IP override
+	if broadcastAddress != "" {
+		// Parse listener hostport
+		_, port, err := net.SplitHostPort(listenerPeerInfo.HostPort)
+		if err != nil {
+			return "", err
+		}
+
+		// Parse supplied broadcastAddress override
+		ip := net.ParseIP(broadcastAddress)
+		if ip == nil || ip.To4() == nil {
+			return "", errors.New("broadcastAddress set but unknown failure encountered while parsing")
+		}
+
+		// If no errors, use the parsed IP with the port from our listener
+		return ip.To4().String() + ":" + port, nil
+	}
+
+	return listenerPeerInfo.HostPort, nil
 }
