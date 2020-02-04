@@ -119,6 +119,10 @@ type (
 		MaxJoinDuration time.Duration `yaml:"maxJoinDuration"`
 		// Custom discovery provider, cannot be specified through yaml
 		DiscoveryProvider discovery.DiscoverProvider `yaml:"-"`
+		// broadcastAddress is used as the address that is communicated to remote nodes to connect on.
+		// This is generally used when BindOnIP would be the same across several nodes (ie: 0.0.0.0)
+		// and for nat traversal scenarios. Check net.ParseIP for supported syntax, only IPv4 is supported.
+		broadcastAddress string `yaml:"broadcastAddress"`
 	}
 
 	// Persistence contains the configuration for data store / persistence layer

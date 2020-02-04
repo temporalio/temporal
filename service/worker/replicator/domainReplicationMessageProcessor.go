@@ -137,7 +137,7 @@ func (p *domainReplicationMessageProcessor) getAndHandleDomainReplicationTasks()
 		return
 	}
 
-	ctx, cancel := createContextWithCancel(fetchTaskRequestTimeout)
+	ctx, cancel := newContextWithCancel(fetchTaskRequestTimeout)
 	request := &adminservice.GetDomainReplicationMessagesRequest{
 		LastRetrievedMessageId: p.lastRetrievedMessageID,
 		LastProcessedMessageId: p.lastProcessedMessageID,

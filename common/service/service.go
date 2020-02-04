@@ -22,6 +22,7 @@ package service
 
 import (
 	"math/rand"
+	"net"
 	"os"
 	"sync/atomic"
 	"time"
@@ -91,6 +92,7 @@ type (
 		hostInfo              *membership.HostInfo
 		tchannelDispatcher    *yarpc.Dispatcher
 		grpcDispatcher        *yarpc.Dispatcher
+		grpcListener          net.Listener
 		ringpopDispatcher     *yarpc.Dispatcher
 		membershipFactory     MembershipMonitorFactory
 		membershipMonitor     membership.Monitor
@@ -148,9 +150,16 @@ func New(params *BootstrapParams) Service {
 		sVice.logger.Fatal("Unable to create yarpc TChannel dispatcher")
 	}
 
-	sVice.grpcDispatcher = sVice.rpcFactory.GetGRPCDispatcher()
-	if sVice.grpcDispatcher == nil {
-		sVice.logger.Fatal("Unable to create yarpc gRPC dispatcher")
+	if sVice.sName == common.FrontendServiceName {
+		sVice.grpcListener = sVice.rpcFactory.GetGRPCListener()
+		if sVice.grpcListener == nil {
+			sVice.logger.Fatal("Unable to create gRPC listener")
+		}
+	} else {
+		sVice.grpcDispatcher = sVice.rpcFactory.GetGRPCDispatcher()
+		if sVice.grpcDispatcher == nil {
+			sVice.logger.Fatal("Unable to create yarpc gRPC dispatcher")
+		}
 	}
 
 	sVice.ringpopDispatcher = sVice.rpcFactory.GetRingpopDispatcher()
@@ -228,7 +237,7 @@ func (h *serviceImpl) Start() {
 	}
 
 	// The service is now started up
-	h.logger.Info("service started")
+	h.logger.Info("Service started")
 	// seed the random generator once for this service
 	rand.Seed(time.Now().UTC().UnixNano())
 }
@@ -292,6 +301,10 @@ func (h *serviceImpl) GetDispatcher() *yarpc.Dispatcher {
 
 func (h *serviceImpl) GetGRPCDispatcher() *yarpc.Dispatcher {
 	return h.grpcDispatcher
+}
+
+func (h *serviceImpl) GetGRPCListener() net.Listener {
+	return h.grpcListener
 }
 
 // GetClusterMetadata returns the service cluster metadata

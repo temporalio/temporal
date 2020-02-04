@@ -24,7 +24,11 @@ import (
 	"sync/atomic"
 
 	"github.com/stretchr/testify/mock"
+	"go.temporal.io/temporal-proto/workflowservice"
+	"google.golang.org/grpc"
 
+	"github.com/temporalio/temporal/.gen/proto/adminservice"
+	"github.com/temporalio/temporal/.gen/proto/healthservice"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/domain"
@@ -130,11 +134,11 @@ type Service struct {
 	resource.Resource
 
 	status int32
-	stopC  chan struct{}
 	config *Config
 	params *service.BootstrapParams
 
 	adminHandlerGRPC *AdminHandlerGRPC
+	server           *grpc.Server
 }
 
 // NewService builds a new cadence-frontend service
@@ -193,7 +197,6 @@ func NewService(
 		Resource: serviceResource,
 		status:   common.DaemonStatusInitialized,
 		config:   serviceConfig,
-		stopC:    make(chan struct{}),
 		params:   params,
 	}, nil
 }
@@ -226,25 +229,34 @@ func (s *Service) Start() {
 		replicationMessageSink.(*mocks.KafkaProducer).On("Publish", mock.Anything).Return(nil)
 	}
 
+	s.server = grpc.NewServer()
+
 	wfHandler := NewWorkflowHandler(s, s.config, replicationMessageSink)
 	wfHandlerGRPC := NewWorkflowHandlerGRPC(wfHandler)
 	dcRedirectionHandler := NewDCRedirectionHandler(wfHandlerGRPC, s.params.DCRedirectionPolicy)
 	accessControlledWorkflowHandler := NewAccessControlledHandlerImpl(dcRedirectionHandler, s.params.Authorizer)
-	accessControlledWorkflowHandler.RegisterHandler()
+	workflowNilCheckHandler := NewWorkflowNilCheckHandler(accessControlledWorkflowHandler)
+
+	workflowservice.RegisterWorkflowServiceServer(s.server, workflowNilCheckHandler)
+	healthservice.RegisterMetaServer(s.server, accessControlledWorkflowHandler)
 
 	adminHandler := NewAdminHandler(s, s.params, s.config)
 	s.adminHandlerGRPC = NewAdminHandlerGRPC(adminHandler)
-	s.adminHandlerGRPC.RegisterHandler()
+	adminNilCheckHandler := NewAdminNilCheckHandler(s.adminHandlerGRPC)
+
+	adminservice.RegisterAdminServiceServer(s.server, adminNilCheckHandler)
 
 	// must start resource first
 	s.Resource.Start()
 	s.adminHandlerGRPC.Start()
 
+	listener := s.GetGRPCListener()
+	logger.Info("Starting to serve on frontend listener")
+	if err := s.server.Serve(listener); err != nil {
+		logger.Fatal("Failed to serve on frontend listener", tag.Error(err))
+	}
+
 	// base (service is not started in frontend or admin handler) in case of race condition in yarpc registration function
-
-	logger.Info("frontend started")
-
-	<-s.stopC
 }
 
 // Stop stops the service
@@ -253,7 +265,7 @@ func (s *Service) Stop() {
 		return
 	}
 
-	close(s.stopC)
+	s.server.GracefulStop()
 
 	s.adminHandlerGRPC.Stop()
 	s.Resource.Stop()

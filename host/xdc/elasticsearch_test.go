@@ -151,20 +151,20 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 		IsGlobalDomain:                         true,
 		WorkflowExecutionRetentionPeriodInDays: 1,
 	}
-	_, err := client1.RegisterDomain(createContext(), regReq)
+	_, err := client1.RegisterDomain(host.NewContext(), regReq)
 	s.NoError(err)
 
 	descReq := &workflowservice.DescribeDomainRequest{
 		Name: domainName,
 	}
-	resp, err := client1.DescribeDomain(createContext(), descReq)
+	resp, err := client1.DescribeDomain(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
 	// Wait for domain cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
 	client2 := s.cluster2.GetFrontendClient() // standby
-	resp2, err := client2.DescribeDomain(createContext(), descReq)
+	resp2, err := client2.DescribeDomain(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp2)
 	s.Equal(resp, resp2)
@@ -195,8 +195,8 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 		SearchAttributes:                    searchAttr,
 	}
 	startTime := time.Now().UnixNano()
-	we, err := client1.StartWorkflowExecution(createContext(), startReq)
-	s.Nil(err)
+	we, err := client1.StartWorkflowExecution(host.NewContext(), startReq)
+	s.NoError(err)
 	s.NotNil(we.GetRunId())
 
 	s.logger.Info("StartWorkflowExecution \n", tag.WorkflowRunID(we.GetRunId()))
@@ -215,8 +215,8 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 		for i := 0; i < numOfRetry; i++ {
 			startFilter.LatestTime = time.Now().UnixNano()
 
-			resp, err := client.ListWorkflowExecutions(createContext(), listRequest)
-			s.Nil(err)
+			resp, err := client.ListWorkflowExecutions(host.NewContext(), listRequest)
+			s.NoError(err)
 			if len(resp.GetExecutions()) == 1 {
 				openExecution = resp.GetExecutions()[0]
 				break
@@ -263,8 +263,8 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	}
 
 	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
-	s.Nil(err)
+	s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.NoError(err)
 
 	time.Sleep(waitForESToSettle)
 
@@ -277,8 +277,8 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	testListResult = func(client host.FrontendClient) {
 		verified := false
 		for i := 0; i < numOfRetry; i++ {
-			resp, err := client.ListWorkflowExecutions(createContext(), listRequest)
-			s.Nil(err)
+			resp, err := client.ListWorkflowExecutions(host.NewContext(), listRequest)
+			s.NoError(err)
 			if len(resp.GetExecutions()) == 1 {
 				execution := resp.GetExecutions()[0]
 				retrievedSearchAttr := execution.SearchAttributes
@@ -309,7 +309,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	// terminate workflow
 	terminateReason := "force terminate to make sure standby process tasks"
 	terminateDetails := []byte("terminate details.")
-	_, err = client1.TerminateWorkflowExecution(createContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+	_, err = client1.TerminateWorkflowExecution(host.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Domain: domainName,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
@@ -318,7 +318,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 		Details:  terminateDetails,
 		Identity: identity,
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	// check terminate done
 	executionTerminated := false
@@ -330,8 +330,8 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	}
 GetHistoryLoop:
 	for i := 0; i < 10; i++ {
-		historyResponse, err := client1.GetWorkflowExecutionHistory(createContext(), getHistoryReq)
-		s.Nil(err)
+		historyResponse, err := client1.GetWorkflowExecutionHistory(host.NewContext(), getHistoryReq)
+		s.NoError(err)
 		history := historyResponse.History
 
 		lastEvent := history.Events[len(history.Events)-1]
@@ -355,7 +355,7 @@ GetHistoryLoop:
 	eventsReplicated := false
 GetHistoryLoop2:
 	for i := 0; i < numOfRetry; i++ {
-		historyResponse, err = client2.GetWorkflowExecutionHistory(createContext(), getHistoryReq)
+		historyResponse, err = client2.GetWorkflowExecutionHistory(host.NewContext(), getHistoryReq)
 		if err == nil {
 			history := historyResponse.History
 			lastEvent := history.Events[len(history.Events)-1]
@@ -370,7 +370,7 @@ GetHistoryLoop2:
 		}
 		time.Sleep(waitTimeInMs * time.Millisecond)
 	}
-	s.Nil(err)
+	s.NoError(err)
 	s.True(eventsReplicated)
 
 	// test upsert result in standby
