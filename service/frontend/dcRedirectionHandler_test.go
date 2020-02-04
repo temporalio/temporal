@@ -47,7 +47,7 @@ type (
 
 		controller               *gomock.Controller
 		mockResource             *resource.Test
-		mockFrontendHandler      *workflowservicemock.MockWorkflowServiceYARPCServer
+		mockFrontendHandler      *workflowservicemock.MockWorkflowServiceServer
 		mockRemoteFrontendClient *workflowservicemock.MockWorkflowServiceClient
 		mockClusterMetadata      *cluster.MockMetadata
 
@@ -97,7 +97,7 @@ func (s *dcRedirectionHandlerSuite) SetupTest() {
 
 	frontendHandlerGRPC := NewWorkflowHandlerGRPC(frontendHandler)
 
-	s.mockFrontendHandler = workflowservicemock.NewMockWorkflowServiceYARPCServer(s.controller)
+	s.mockFrontendHandler = workflowservicemock.NewMockWorkflowServiceServer(s.controller)
 	s.handler = NewDCRedirectionHandler(frontendHandlerGRPC, config.DCRedirectionPolicy{})
 	s.handler.frontendHandler = s.mockFrontendHandler
 	s.handler.redirectionPolicy = s.mockDCRedirectionPolicy
