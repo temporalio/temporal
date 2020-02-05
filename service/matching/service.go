@@ -90,17 +90,16 @@ func (s *Service) Start() {
 	logger.Info("matching starting")
 
 	s.handler = NewHandler(s, s.config)
-	handlerGRPC := NewHandlerGRPC(s.handler)
 	s.handler.RegisterHandler()
-
-	s.server = grpc.NewServer()
-
-	matchingservice.RegisterMatchingServiceServer(s.server, handlerGRPC)
-	healthservice.RegisterMetaServer(s.server, handlerGRPC)
 
 	// must start base service first
 	s.Resource.Start()
 	s.handler.Start()
+
+	s.server = grpc.NewServer()
+	handlerGRPC := NewHandlerGRPC(s.handler)
+	matchingservice.RegisterMatchingServiceServer(s.server, handlerGRPC)
+	healthservice.RegisterMetaServer(s.server, handlerGRPC)
 
 	listener := s.GetGRPCListener()
 	logger.Info("Starting to serve on matching listener")

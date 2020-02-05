@@ -37,8 +37,8 @@ type retryableClient struct {
 	isRetryable backoff.IsRetryable
 }
 
-// NewRetryableClientGRPC creates a new instance of Client with retry policy
-func NewRetryableClientGRPC(client Client, policy backoff.RetryPolicy, isRetryable backoff.IsRetryable) Client {
+// NewRetryableClient creates a new instance of Client with retry policy
+func NewRetryableClient(client Client, policy backoff.RetryPolicy, isRetryable backoff.IsRetryable) Client {
 	return &retryableClient{
 		client:      client,
 		policy:      policy,
