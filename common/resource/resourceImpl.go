@@ -155,7 +155,7 @@ func New(
 
 	var grpcListener net.Listener
 	var grpcDispatcher *yarpc.Dispatcher
-	if serviceName == common.FrontendServiceName {
+	if serviceName == common.FrontendServiceName || serviceName == common.MatchingServiceName {
 		grpcListener = params.RPCFactory.GetGRPCListener()
 	} else {
 		grpcDispatcher = params.RPCFactory.GetGRPCDispatcher()
