@@ -38,7 +38,7 @@ import (
 func AdminAddSearchAttribute(c *cli.Context) {
 	key := getRequiredOption(c, FlagSearchAttributesKey)
 	valType := getRequiredIntOption(c, FlagSearchAttributesType)
-	if valType < 0 || valType >= 5 {
+	if !isValueTypeValid(valType) {
 		ErrorAndExit("Unknown Search Attributes value type.", nil)
 	}
 
@@ -100,4 +100,8 @@ func intValTypeToString(valType int) string {
 	default:
 		return ""
 	}
+}
+
+func isValueTypeValid(valType int) bool {
+	return valType >= 0 && valType <= 5
 }
