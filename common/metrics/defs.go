@@ -1493,6 +1493,10 @@ const (
 	TaskBatchCompleteCounter
 	TaskProcessingLatency
 	TaskQueueLatency
+	ActivityTimeoutLatencyInMemory
+	ActivityTimeoutLatencyUpdateExecution
+	ActivityTimeoutLatencyProcessTimer
+	ActivityTimeoutNumTimer
 
 	AckLevelUpdateCounter
 	AckLevelUpdateFailedCounter
@@ -1823,6 +1827,10 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		TaskNotActiveCounter:                              {metricName: "task_errors_not_active_counter", metricType: Counter},
 		TaskLimitExceededCounter:                          {metricName: "task_errors_limit_exceeded_counter", metricType: Counter},
 		TaskProcessingLatency:                             {metricName: "task_latency_processing", metricType: Timer},
+		ActivityTimeoutLatencyInMemory:                    {metricName: "activity_timeout_latency_in_memory", metricType: Timer},
+		ActivityTimeoutLatencyUpdateExecution:             {metricName: "activity_timeout_latency_update_execution", metricType: Timer},
+		ActivityTimeoutLatencyProcessTimer:                {metricName: "activity_timeout_latency_process_timer", metricType: Timer},
+		ActivityTimeoutNumTimer:                           {metricName: "activity_timeout_num_timer", metricType: Timer},
 		TaskQueueLatency:                                  {metricName: "task_latency_queue", metricType: Timer},
 		TaskBatchCompleteCounter:                          {metricName: "task_batch_complete_counter", metricType: Counter},
 		AckLevelUpdateCounter:                             {metricName: "ack_level_update", metricType: Counter},
