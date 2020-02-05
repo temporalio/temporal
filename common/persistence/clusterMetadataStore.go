@@ -20,12 +20,19 @@
 package persistence
 
 import (
+	"errors"
+
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 )
 
 const (
 	clusterMetadataEncoding = common.EncodingTypeThriftRW
+)
+
+var (
+	// ErrInvalidMembershipExpiry is used when upserting new cluster membership with an invalid duration
+	ErrInvalidMembershipExpiry = errors.New("membershipExpiry duration should be atleast 1 second")
 )
 
 type (
@@ -94,4 +101,19 @@ func (m *clusterMetadataManagerImpl) GetImmutableClusterMetadata() (*GetImmutabl
 	}
 
 	return &GetImmutableClusterMetadataResponse{*icm}, nil
+}
+
+func (m *clusterMetadataManagerImpl) GetActiveClusterMembers(request *GetActiveClusterMembersRequest) (*GetActiveClusterMembersResponse, error) {
+	return m.persistence.GetActiveClusterMembers(request)
+}
+
+func (m *clusterMetadataManagerImpl) UpsertClusterMembership(request *UpsertClusterMembershipRequest) error {
+	if request.RecordExpiry.Seconds() < 1 {
+		return ErrInvalidMembershipExpiry
+	}
+	return m.persistence.UpsertClusterMembership(request)
+}
+
+func (m *clusterMetadataManagerImpl) PruneClusterMembership(request *PruneClusterMembershipRequest) error {
+	return m.persistence.PruneClusterMembership(request)
 }
