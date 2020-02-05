@@ -28,6 +28,7 @@ import (
 
 const constMetadataPartition = 0
 const (
+	// ****** CLUSTER_METADATA TABLE ******
 	// One time only for the immutable data, so lets just use insert ignore
 	insertClusterMetadataOneTimeOnlyQry = `INSERT IGNORE INTO 
 cluster_metadata (metadata_partition, immutable_data, immutable_data_encoding)
@@ -35,6 +36,19 @@ VALUES(?, ?, ?)`
 
 	getImmutableClusterMetadataQry = `SELECT immutable_data, immutable_data_encoding FROM 
 cluster_metadata WHERE metadata_partition = ?`
+
+	// ****** CLUSTER_MEMBERSHIP TABLE ******
+	templateUpsertActiveClusterMembership = `REPLACE INTO
+cluster_membership (host_id, rpc_address, session_start, last_heartbeat, record_expiry)
+VALUES(?, ?, ?, ?, ?)`
+
+	templatePruneStaleClusterMembership = `DELETE FROM
+cluster_membership 
+WHERE record_expiry < ? LIMIT ?`
+
+	templateGetActiveClusterMembership = `SELECT host_id, rpc_address, session_start, last_heartbeat, record_expiry
+FROM cluster_membership 
+WHERE last_heartbeat > ? AND record_expiry > ?`
 )
 
 // Does not follow traditional lock, select, read, insert as we only expect a single row.
@@ -52,4 +66,31 @@ func (mdb *db) GetClusterMetadata() (*sqlplugin.ClusterMetadataRow, error) {
 		return nil, err
 	}
 	return &row, err
+}
+
+func (mdb *db) UpsertClusterMembership(row *sqlplugin.ClusterMembershipRow) (sql.Result, error) {
+	return mdb.conn.Exec(templateUpsertActiveClusterMembership,
+		row.HostID,
+		row.RPCAddress,
+		mdb.converter.ToMySQLDateTime(row.SessionStart),
+		mdb.converter.ToMySQLDateTime(row.LastHeartbeat),
+		mdb.converter.ToMySQLDateTime(row.RecordExpiry))
+}
+
+func (mdb *db) GetActiveClusterMembers(filter *sqlplugin.ClusterMembershipFilter) ([]sqlplugin.ClusterMembershipRow, error) {
+	var rows []sqlplugin.ClusterMembershipRow
+	err := mdb.conn.Select(&rows,
+		templateGetActiveClusterMembership,
+		mdb.converter.ToMySQLDateTime(filter.HeartbeatSince),
+		mdb.converter.ToMySQLDateTime(filter.RecordExpiryCutoff))
+	if err != nil {
+		return nil, err
+	}
+	return rows, err
+}
+
+func (mdb *db) PruneClusterMembership(filter *sqlplugin.PruneClusterMembershipFilter) (sql.Result, error) {
+	return mdb.conn.Exec(templatePruneStaleClusterMembership,
+		mdb.converter.ToMySQLDateTime(filter.PruneRecordsBefore),
+		filter.MaxRecordsAffected)
 }
