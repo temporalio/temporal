@@ -90,11 +90,6 @@ func NewAdminHandler(
 	}
 }
 
-// RegisterHandler register this handler, must be called before Start()
-func (adh *AdminHandler) RegisterHandler() {
-	adh.GetDispatcher().Register(adminserviceserver.New(adh))
-}
-
 // AddSearchAttribute add search attribute to whitelist
 func (adh *AdminHandler) AddSearchAttribute(
 	ctx context.Context,

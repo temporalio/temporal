@@ -834,7 +834,8 @@ func (s *workflowHandlerSuite) TestHistoryArchived() {
 	}
 	s.False(wh.historyArchived(context.Background(), getHistoryRequest, "test-domain"))
 
-	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
+	// TODO: remove last 3 `gomock.Any()` after YARPC migration
+	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
 	getHistoryRequest = &shared.GetWorkflowExecutionHistoryRequest{
 		Execution: &shared.WorkflowExecution{
 			WorkflowId: common.StringPtr(testWorkflowID),
@@ -843,7 +844,7 @@ func (s *workflowHandlerSuite) TestHistoryArchived() {
 	}
 	s.False(wh.historyArchived(context.Background(), getHistoryRequest, "test-domain"))
 
-	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(nil, &shared.EntityNotExistsError{Message: "got archival indication error"}).Times(1)
+	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, &shared.EntityNotExistsError{Message: "got archival indication error"}).Times(1)
 	getHistoryRequest = &shared.GetWorkflowExecutionHistoryRequest{
 		Execution: &shared.WorkflowExecution{
 			WorkflowId: common.StringPtr(testWorkflowID),
@@ -852,7 +853,7 @@ func (s *workflowHandlerSuite) TestHistoryArchived() {
 	}
 	s.True(wh.historyArchived(context.Background(), getHistoryRequest, "test-domain"))
 
-	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(nil, errors.New("got non-archival indication error")).Times(1)
+	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, errors.New("got non-archival indication error")).Times(1)
 	getHistoryRequest = &shared.GetWorkflowExecutionHistoryRequest{
 		Execution: &shared.WorkflowExecution{
 			WorkflowId: common.StringPtr(testWorkflowID),

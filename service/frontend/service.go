@@ -246,9 +246,6 @@ func (s *Service) Start() {
 
 	adminservice.RegisterAdminServiceServer(s.server, adminNilCheckHandler)
 
-	wfHandler.RegisterHandler()    // Thrift version
-	adminHandler.RegisterHandler() // Thrift version
-
 	// must start resource first
 	s.Resource.Start()
 	s.adminHandlerGRPC.Start()
