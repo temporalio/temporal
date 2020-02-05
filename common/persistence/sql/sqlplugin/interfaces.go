@@ -41,6 +41,27 @@ type (
 		ImmutableDataEncoding string
 	}
 
+	// ClusterMembershipRow represents a row in the cluster_membership table
+	ClusterMembershipRow struct {
+		HostID        []byte
+		RPCAddress    string
+		SessionStart  time.Time
+		LastHeartbeat time.Time
+		RecordExpiry  time.Time
+	}
+
+	// ClusterMembershipFilter is used for GetActiveClusterMembership queries
+	ClusterMembershipFilter struct {
+		HeartbeatSince     time.Time
+		RecordExpiryCutoff time.Time
+	}
+
+	// PruneClusterMembershipFilter is used for PruneClusterMembership queries
+	PruneClusterMembershipFilter struct {
+		PruneRecordsBefore time.Time
+		MaxRecordsAffected int
+	}
+
 	// DomainRow represents a row in domain table
 	DomainRow struct {
 		ID           UUID
@@ -504,6 +525,9 @@ type (
 	tableCRUD interface {
 		InsertIfNotExistsIntoClusterMetadata(row *ClusterMetadataRow) (sql.Result, error)
 		GetClusterMetadata() (*ClusterMetadataRow, error)
+		GetActiveClusterMembers(filter *ClusterMembershipFilter) ([]ClusterMembershipRow, error)
+		UpsertClusterMembership(row *ClusterMembershipRow) (sql.Result, error)
+		PruneClusterMembership(filter *PruneClusterMembershipFilter) (sql.Result, error)
 
 		InsertIntoDomain(rows *DomainRow) (sql.Result, error)
 		UpdateDomain(row *DomainRow) (sql.Result, error)
