@@ -34,7 +34,7 @@ func ToProtoHistory(in *shared.History) *common.History {
 		return nil
 	}
 	return &common.History{
-		Events: ToProtoHistoryEvents(events),
+		Events: ToProtoHistoryEvents(in.Events),
 	}
 }
 
@@ -43,7 +43,7 @@ func ToProtoHistoryEvents(in []*shared.HistoryEvent) []*common.HistoryEvent {
 		return nil
 	}
 	var events []*common.HistoryEvent
-	for _, event := range in.Events {
+	for _, event := range in {
 		events = append(events, ToProtoHistoryEvent(event))
 	}
 	return events

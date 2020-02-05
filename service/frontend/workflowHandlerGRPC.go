@@ -39,6 +39,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/backoff"
+	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/client"
 	"github.com/temporalio/temporal/common/elasticsearch/validator"
 	"github.com/temporalio/temporal/common/log"
@@ -183,17 +184,17 @@ func (wh *WorkflowHandlerGRPC) GetWorkflowExecutionHistory(ctx context.Context, 
 func (wh *WorkflowHandlerGRPC) PollForDecisionTask(ctx context.Context, request *workflowservice.PollForDecisionTaskRequest) (_ *workflowservice.PollForDecisionTaskResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
-	tagsForErrorLog := []tag.Tag{tag.WorkflowDomainName(pollRequest.GetDomain())}
+	tagsForErrorLog := []tag.Tag{tag.WorkflowDomainName(request.GetDomain())}
 	callTime := time.Now()
 
-	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendPollForDecisionTaskScope, pollRequest)
+	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendPollForDecisionTaskScope, request)
 	defer sw.Stop()
 
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
 		return nil, wh.error(err, scope, tagsForErrorLog...)
 	}
 
-	if pollRequest == nil {
+	if request == nil {
 		return nil, wh.error(errRequestNotSet, scope, tagsForErrorLog...)
 	}
 
@@ -206,22 +207,22 @@ func (wh *WorkflowHandlerGRPC) PollForDecisionTask(ctx context.Context, request 
 		return nil, wh.error(err, scope, tagsForErrorLog...)
 	}
 
-	if pollRequest.Domain == nil || pollRequest.GetDomain() == "" {
+	if request.GetDomain() == "" {
 		return nil, wh.error(errDomainNotSet, scope, tagsForErrorLog...)
 	}
-	if len(pollRequest.GetDomain()) > wh.config.MaxIDLengthLimit() {
+	if len(request.GetDomain()) > wh.config.MaxIDLengthLimit() {
 		return nil, wh.error(errDomainTooLong, scope, tagsForErrorLog...)
 	}
 
-	if len(pollRequest.GetIdentity()) > wh.config.MaxIDLengthLimit() {
+	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return nil, wh.error(errIdentityTooLong, scope, tagsForErrorLog...)
 	}
 
-	if err := wh.validateTaskList(pollRequest.TaskList, scope); err != nil {
+	if err := wh.validateTaskList(request.TaskList, scope); err != nil {
 		return nil, err
 	}
 
-	domainName := pollRequest.GetDomain()
+	domainName := request.GetDomain()
 	domainEntry, err := wh.GetDomainCache().GetDomain(domainName)
 	if err != nil {
 		return nil, wh.error(err, scope, tagsForErrorLog...)
@@ -229,25 +230,25 @@ func (wh *WorkflowHandlerGRPC) PollForDecisionTask(ctx context.Context, request 
 	domainID := domainEntry.GetInfo().ID
 
 	wh.GetLogger().Debug("Poll for decision.", tag.WorkflowDomainName(domainName), tag.WorkflowDomainID(domainID))
-	if err := wh.checkBadBinary(domainEntry, pollRequest.GetBinaryChecksum()); err != nil {
+	if err := wh.checkBadBinary(domainEntry, request.GetBinaryChecksum()); err != nil {
 		return nil, wh.error(err, scope, tagsForErrorLog...)
 	}
 
 	pollerID := uuid.New()
-	var matchingResp *m.PollForDecisionTaskResponse
+	var matchingResp *matchingservice.PollForDecisionTaskResponse
 	op := func() error {
 		var err error
-		matchingResp, err = wh.GetMatchingClient().PollForDecisionTask(ctx, &m.PollForDecisionTaskRequest{
-			DomainUUID:  common.StringPtr(domainID),
-			PollerID:    common.StringPtr(pollerID),
-			PollRequest: pollRequest,
+		matchingResp, err = wh.GetMatchingClient().PollForDecisionTask(ctx, &matchingservice.PollForDecisionTaskRequest{
+			DomainUUID:  domainID,
+			PollerID:    pollerID,
+			PollRequest: request,
 		})
 		return err
 	}
 
-	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
+	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientErrorGRPC)
 	if err != nil {
-		err = wh.cancelOutstandingPoll(ctx, err, domainID, persistence.TaskListTypeDecision, pollRequest.TaskList, pollerID)
+		err = wh.cancelOutstandingPoll(ctx, err, domainID, persistence.TaskListTypeDecision, request.TaskList, pollerID)
 		if err != nil {
 			// For all other errors log an error and return it back to client.
 			ctxTimeout := "not-set"
@@ -256,7 +257,7 @@ func (wh *WorkflowHandlerGRPC) PollForDecisionTask(ctx context.Context, request 
 				ctxTimeout = ctxDeadline.Sub(callTime).String()
 			}
 			wh.GetLogger().Error("PollForDecisionTask failed.",
-				tag.WorkflowTaskListName(pollRequest.GetTaskList().GetName()),
+				tag.WorkflowTaskListName(request.GetTaskList().GetName()),
 				tag.Value(ctxTimeout),
 				tag.Error(err))
 			return nil, wh.error(err, scope)
@@ -269,7 +270,7 @@ func (wh *WorkflowHandlerGRPC) PollForDecisionTask(ctx context.Context, request 
 	tagsForErrorLog = append(tagsForErrorLog, []tag.Tag{tag.WorkflowID(
 		matchingResp.GetWorkflowExecution().GetWorkflowId()),
 		tag.WorkflowRunID(matchingResp.GetWorkflowExecution().GetRunId())}...)
-	resp, err = wh.createPollForDecisionTaskResponse(ctx, scope, domainID, matchingResp, matchingResp.GetBranchToken())
+	resp, err := wh.createPollForDecisionTaskResponse(ctx, scope, domainID, matchingResp, matchingResp.GetBranchToken())
 	if err != nil {
 		return nil, wh.error(err, scope, tagsForErrorLog...)
 	}
@@ -388,28 +389,24 @@ func (wh *WorkflowHandlerGRPC) PollForActivityTask(ctx context.Context, request 
 		}
 	}
 
-	return convertMatchingResponse(matchingResponse), nil
-}
-
-func convertMatchingResponse(in *matchingservice.PollForActivityTaskResponse) *workflowservice.PollForActivityTaskResponse {
 	return &workflowservice.PollForActivityTaskResponse{
-		TaskToken:                       in.TaskToken,
-		WorkflowExecution:               in.WorkflowExecution,
-		ActivityId:                      in.ActivityId,
-		ActivityType:                    in.ActivityType,
-		Input:                           in.Input,
-		ScheduledTimestamp:              in.ScheduledTimestamp,
-		ScheduleToCloseTimeoutSeconds:   in.ScheduleToCloseTimeoutSeconds,
-		StartedTimestamp:                in.StartedTimestamp,
-		StartToCloseTimeoutSeconds:      in.StartToCloseTimeoutSeconds,
-		HeartbeatTimeoutSeconds:         in.HeartbeatTimeoutSeconds,
-		Attempt:                         in.Attempt,
-		ScheduledTimestampOfThisAttempt: in.ScheduledTimestampOfThisAttempt,
-		HeartbeatDetails:                in.HeartbeatDetails,
-		WorkflowType:                    in.WorkflowType,
-		WorkflowDomain:                  in.WorkflowDomain,
-		Header:                          in.Header,
-	}
+		TaskToken:                       matchingResponse.TaskToken,
+		WorkflowExecution:               matchingResponse.WorkflowExecution,
+		ActivityId:                      matchingResponse.ActivityId,
+		ActivityType:                    matchingResponse.ActivityType,
+		Input:                           matchingResponse.Input,
+		ScheduledTimestamp:              matchingResponse.ScheduledTimestamp,
+		ScheduleToCloseTimeoutSeconds:   matchingResponse.ScheduleToCloseTimeoutSeconds,
+		StartedTimestamp:                matchingResponse.StartedTimestamp,
+		StartToCloseTimeoutSeconds:      matchingResponse.StartToCloseTimeoutSeconds,
+		HeartbeatTimeoutSeconds:         matchingResponse.HeartbeatTimeoutSeconds,
+		Attempt:                         matchingResponse.Attempt,
+		ScheduledTimestampOfThisAttempt: matchingResponse.ScheduledTimestampOfThisAttempt,
+		HeartbeatDetails:                matchingResponse.HeartbeatDetails,
+		WorkflowType:                    matchingResponse.WorkflowType,
+		WorkflowDomain:                  matchingResponse.WorkflowDomain,
+		Header:                          matchingResponse.Header,
+	}, nil
 }
 
 // RecordActivityTaskHeartbeat is called by application worker while it is processing an ActivityTask.  If worker fails
@@ -682,30 +679,30 @@ func (wh *WorkflowHandlerGRPC) RespondQueryTaskCompleted(ctx context.Context, re
 
 	scope := wh.getDefaultScope(metrics.FrontendRespondQueryTaskCompletedScope)
 	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return wh.error(err, scope)
+		return nil, wh.error(err, scope)
 	}
 
-	if completeRequest == nil {
-		return wh.error(errRequestNotSet, scope)
+	if request == nil {
+		return nil, wh.error(errRequestNotSet, scope)
 	}
 
 	// Count the request in the RPS, but we still accept it even if RPS is exceeded
 	wh.allow(nil)
 
-	if completeRequest.TaskToken == nil {
-		return wh.error(errTaskTokenNotSet, scope)
+	if request.TaskToken == nil {
+		return nil, wh.error(errTaskTokenNotSet, scope)
 	}
-	queryTaskToken, err := wh.tokenSerializer.DeserializeQueryTaskToken(completeRequest.TaskToken)
+	queryTaskToken, err := wh.tokenSerializer.DeserializeQueryTaskToken(request.TaskToken)
 	if err != nil {
-		return wh.error(err, scope)
+		return nil, wh.error(err, scope)
 	}
 	if queryTaskToken.DomainID == "" || queryTaskToken.TaskList == "" || queryTaskToken.TaskID == "" {
-		return wh.error(errInvalidTaskToken, scope)
+		return nil, wh.error(errInvalidTaskToken, scope)
 	}
 
 	domainEntry, err := wh.GetDomainCache().GetDomainByID(queryTaskToken.DomainID)
 	if err != nil {
-		return wh.error(err, scope)
+		return nil, wh.error(err, scope)
 	}
 
 	scope, sw := wh.startRequestProfileWithDomain(
@@ -720,7 +717,7 @@ func (wh *WorkflowHandlerGRPC) RespondQueryTaskCompleted(ctx context.Context, re
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(domainEntry.GetInfo().Name)
 
 	if err := common.CheckEventBlobSizeLimit(
-		len(completeRequest.GetQueryResult()),
+		len(request.GetQueryResult()),
 		sizeLimitWarn,
 		sizeLimitError,
 		queryTaskToken.DomainID,
@@ -729,31 +726,32 @@ func (wh *WorkflowHandlerGRPC) RespondQueryTaskCompleted(ctx context.Context, re
 		scope,
 		wh.GetThrottledLogger(),
 	); err != nil {
-		completeRequest = &gen.RespondQueryTaskCompletedRequest{
-			TaskToken:     completeRequest.TaskToken,
-			CompletedType: common.QueryTaskCompletedTypePtr(gen.QueryTaskCompletedTypeFailed),
+		request = &workflowservice.RespondQueryTaskCompletedRequest{
+			TaskToken:     request.TaskToken,
+			CompletedType: enums.QueryTaskCompletedTypeFailed,
 			QueryResult:   nil,
-			ErrorMessage:  common.StringPtr(err.Error()),
+			ErrorMessage:  err.Error(),
 		}
 	}
 
 	headers := client.GetHeadersValue(ctx, common.ClientImplHeaderName, common.FeatureVersionHeaderName)
-	completeRequest.WorkerVersionInfo = &gen.WorkerVersionInfo{
-		Impl:           common.StringPtr(headers[0]),
-		FeatureVersion: common.StringPtr(headers[1]),
+	request.WorkerVersionInfo = &commonproto.WorkerVersionInfo{
+		Impl:           headers[0],
+		FeatureVersion: headers[1],
 	}
 	matchingRequest := &matchingservice.RespondQueryTaskCompletedRequest{
 		DomainUUID:       queryTaskToken.DomainID,
 		TaskList:         &commonproto.TaskList{Name: queryTaskToken.TaskList},
 		TaskID:           queryTaskToken.TaskID,
-		CompletedRequest: completeRequest,
+		CompletedRequest: request,
 	}
 
-	err = wh.GetMatchingClient().RespondQueryTaskCompleted(ctx, matchingRequest)
+	_, err = wh.GetMatchingClient().RespondQueryTaskCompleted(ctx, matchingRequest)
 	if err != nil {
-		return wh.error(err, scope)
+		return nil, wh.error(err, scope)
 	}
-	return nil}
+	return &workflowservice.RespondQueryTaskCompletedResponse{}, nil
+}
 
 // ResetStickyTaskList resets the sticky tasklist related information in mutable state of a given workflow.
 // Things cleared are:
@@ -826,26 +824,25 @@ func (wh *WorkflowHandlerGRPC) DescribeTaskList(ctx context.Context, request *wo
 		return nil, err
 	}
 
-	if err := wh.validateTaskListType(request.TaskListType, scope); err != nil {
-		return nil, err
-	}
-
-	var response *gen.DescribeTaskListResponse
+	var matchingResponse *matchingservice.DescribeTaskListResponse
 	op := func() error {
 		var err error
-		response, err = wh.GetMatchingClient().DescribeTaskList(ctx, &m.DescribeTaskListRequest{
-			DomainUUID:  common.StringPtr(domainID),
+		matchingResponse, err = wh.GetMatchingClient().DescribeTaskList(ctx, &matchingservice.DescribeTaskListRequest{
+			DomainUUID:  domainID,
 			DescRequest: request,
 		})
 		return err
 	}
 
-	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
+	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientErrorGRPC)
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
 
-	return response, nil
+	return &workflowservice.DescribeTaskListResponse{
+		Pollers:        matchingResponse.Pollers,
+		TaskListStatus: matchingResponse.TaskListStatus,
+	}, nil
 }
 
 // GetWorkflowExecutionRawHistory retrieves raw history directly from DB layer.
@@ -859,7 +856,7 @@ func (wh *WorkflowHandlerGRPC) GetWorkflowExecutionRawHistory(ctx context.Contex
 	return adapter.ToProtoGetWorkflowExecutionRawHistoryResponse(response), nil
 }
 
-// GetClusterInfo ...
+// GetClusterInfo return information about Temporal deployment.
 func (wh *WorkflowHandlerGRPC) GetClusterInfo(ctx context.Context, _ *workflowservice.GetClusterInfoRequest) (_ *workflowservice.GetClusterInfoResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
@@ -870,7 +867,7 @@ func (wh *WorkflowHandlerGRPC) GetClusterInfo(ctx context.Context, _ *workflowse
 	return adapter.ToProtoGetClusterInfoResponse(response), nil
 }
 
-// ListTaskListPartitions ...
+// ListTaskListPartitions returns all the partition and host for a task list.
 func (wh *WorkflowHandlerGRPC) ListTaskListPartitions(ctx context.Context, request *workflowservice.ListTaskListPartitionsRequest) (_ *workflowservice.ListTaskListPartitionsResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
@@ -895,12 +892,15 @@ func (wh *WorkflowHandlerGRPC) ListTaskListPartitions(ctx context.Context, reque
 		return nil, err
 	}
 
-	resp, err := wh.GetMatchingClient().ListTaskListPartitions(ctx, &matchingservice.ListTaskListPartitionsRequest{
+	matchingResponse, err := wh.GetMatchingClient().ListTaskListPartitions(ctx, &matchingservice.ListTaskListPartitionsRequest{
 		Domain:   request.GetDomain(),
 		TaskList: request.TaskList,
 	})
 
-	return resp, err
+	return &workflowservice.ListTaskListPartitionsResponse{
+		ActivityTaskListPartitions: matchingResponse.ActivityTaskListPartitions,
+		DecisionTaskListPartitions: matchingResponse.DecisionTaskListPartitions,
+	}, err
 }
 
 //===============================================================================
@@ -1139,13 +1139,6 @@ func (wh *WorkflowHandlerGRPC) error(err error, scope metrics.Scope, tagsForErro
 	//	tag.Error(err))
 	//scope.IncCounter(metrics.CadenceFailures)
 	return frontendInternalServiceError("cadence internal uncategorized error, msg: %v", err.Error())
-}
-
-func (wh *WorkflowHandlerGRPC) validateTaskListType(t *enums.TaskListType, scope metrics.Scope) error {
-	if t == nil {
-		return wh.error(errTaskListTypeNotSet, scope)
-	}
-	return nil
 }
 
 func (wh *WorkflowHandlerGRPC) validateTaskList(t *commonproto.TaskList, scope metrics.Scope) error {
@@ -1412,4 +1405,16 @@ func (wh *WorkflowHandlerGRPC) cancelOutstandingPoll(ctx context.Context, err er
 	}
 
 	return err
+}
+
+func (wh *WorkflowHandlerGRPC) checkBadBinary(domainEntry *cache.DomainCacheEntry, binaryChecksum string) error {
+	if domainEntry.GetConfig().BadBinaries.Binaries != nil {
+		badBinaries := domainEntry.GetConfig().BadBinaries.Binaries
+		_, ok := badBinaries[binaryChecksum]
+		if ok {
+			wh.GetMetricsClient().IncCounter(metrics.FrontendPollForDecisionTaskScope, metrics.CadenceErrBadBinaryCounter)
+			return status.New(codes.InvalidArgument, fmt.Sprintf("binary %v already marked as bad deployment", binaryChecksum)).Err()
+		}
+	}
+	return nil
 }
