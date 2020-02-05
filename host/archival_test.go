@@ -288,7 +288,7 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, domain, domainID s
 		return []byte(strconv.Itoa(int(activityCounter))), []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -309,7 +309,7 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, domain, domainID s
 		binary.Read(buf, binary.LittleEndian, &in)
 		s.Equal(expectedActivityID, in)
 		expectedActivityID++
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{

@@ -171,7 +171,7 @@ func (s *integrationSuite) TestTerminateWorkflow() {
 		return []byte(strconv.Itoa(int(activityCounter))), []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -179,7 +179,7 @@ func (s *integrationSuite) TestTerminateWorkflow() {
 	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -197,8 +197,8 @@ func (s *integrationSuite) TestTerminateWorkflow() {
 	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
-	terminateReason := "terminate reason."
-	terminateDetails := []byte("terminate details.")
+	terminateReason := "terminate reason"
+	terminateDetails := []byte("terminate details")
 	_, err = s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Domain: s.domainName,
 		WorkflowExecution: &commonproto.WorkflowExecution{
@@ -226,7 +226,7 @@ GetHistoryLoop:
 
 		lastEvent := history.Events[len(history.Events)-1]
 		if lastEvent.EventType != enums.EventTypeWorkflowExecutionTerminated {
-			s.Logger.Warn("Execution not terminated yet.")
+			s.Logger.Warn("Execution not terminated yet")
 			time.Sleep(100 * time.Millisecond)
 			continue GetHistoryLoop
 		}
@@ -325,7 +325,7 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 		return []byte(strconv.Itoa(int(activityCounter))), []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -343,7 +343,7 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 		s.Equal(expectedActivity, in)
 		expectedActivity++
 
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -416,7 +416,7 @@ func (s *integrationSuite) TestCompleteDecisionTaskAndCreateNewOne() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -504,13 +504,13 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 			}}, nil
 		}
 
-		s.Logger.Info("Completing enums.")
+		s.Logger.Info("Completing enums")
 
 		workflowComplete = true
 		return []byte(strconv.Itoa(int(activityCounter))), []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -520,7 +520,7 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 		s.Equal(id, execution.WorkflowId)
 		s.Equal(activityName, activityType.Name)
 		s.Logger.Info("Activity ID", tag.WorkflowActivityID(activityID))
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -1157,7 +1157,7 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 		return []byte(strconv.Itoa(int(timerCounter))), []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -1249,7 +1249,7 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -1271,7 +1271,7 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 	s.NotNil(err)
 	st := status.Convert(err)
 	s.Equal(codes.NotFound, st.Code())
-	s.Equal("Decision task not found.", st.Message())
+	s.Equal("Decision task not found", st.Message())
 
 	// Process signal in decider
 	_, err = poller.PollAndProcessDecisionTask(true, false)
@@ -1353,7 +1353,7 @@ func (s *integrationSuite) TestBufferedEvents() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -1466,14 +1466,14 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
 
 	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -1551,7 +1551,7 @@ func (s *integrationSuite) TestVisibility() {
 		return []byte{}, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -1717,7 +1717,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 
 		if execution.WorkflowId == parentID {
 			if !childExecutionStarted {
-				s.Logger.Info("Starting child execution.")
+				s.Logger.Info("Starting child execution")
 				childExecutionStarted = true
 
 				return nil, []*commonproto.Decision{{
@@ -1747,7 +1747,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 						return nil, []*commonproto.Decision{{
 							DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 							Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-								Result: []byte("Done."),
+								Result: []byte("Done"),
 							}},
 						}}, nil
 					}
@@ -1771,7 +1771,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Child Done."),
+				Result: []byte("Child Done"),
 			}},
 		}}, nil
 	}
@@ -1833,7 +1833,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.Empty(completedAttributes.Domain)
 	s.Equal(childID, completedAttributes.WorkflowExecution.WorkflowId)
 	s.Equal(wtChild, completedAttributes.WorkflowType.Name)
-	s.Equal([]byte("Child Done."), completedAttributes.Result)
+	s.Equal([]byte("Child Done"), completedAttributes.Result)
 }
 
 func (s *integrationSuite) TestCronChildWorkflowExecution() {
@@ -1882,7 +1882,7 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 		s.Logger.Info("Processing decision task for ", tag.WorkflowID(execution.WorkflowId))
 
 		if !childExecutionStarted {
-			s.Logger.Info("Starting child execution.")
+			s.Logger.Info("Starting child execution")
 			childExecutionStarted = true
 			startChildWorkflowTS = time.Now()
 			return nil, []*commonproto.Decision{{
@@ -1905,7 +1905,7 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 				return nil, []*commonproto.Decision{{
 					DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 					Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-						Result: []byte("Done."),
+						Result: []byte("Done"),
 					}},
 				}}, nil
 			}
@@ -2078,7 +2078,7 @@ GetHistoryLoop:
 
 		lastEvent := history.Events[len(history.Events)-1]
 		if lastEvent.GetEventType() != enums.EventTypeWorkflowExecutionTimedOut {
-			s.Logger.Warn("Execution not timedout yet.")
+			s.Logger.Warn("Execution not timedout yet")
 			time.Sleep(200 * time.Millisecond)
 			continue GetHistoryLoop
 		}
@@ -2208,7 +2208,7 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -2217,7 +2217,7 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -2367,14 +2367,14 @@ func (s *integrationSuite) TestDescribeTaskList() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
 
 	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -2483,7 +2483,7 @@ func (s *integrationSuite) TestTransientDecisionTimeout() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -2583,7 +2583,7 @@ func (s *integrationSuite) TestNoTransientDecisionAfterFlushBufferedEvents() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -2766,7 +2766,7 @@ func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -2890,7 +2890,7 @@ func (s *integrationSuite) TestStickyTimeout_NonTransientDecision() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -2934,7 +2934,7 @@ WaitForStickyTimeoutLoop:
 		}
 		time.Sleep(time.Second)
 	}
-	s.True(stickyTimeout, "Decision not timed out.")
+	s.True(stickyTimeout, "Decision not timed out")
 
 	for i := 0; i < 3; i++ {
 		_, err = poller.PollAndProcessDecisionTaskWithAttempt(true, false, false, true, int64(i))
@@ -3046,7 +3046,7 @@ func (s *integrationSuite) TestStickyTasklistResetThenTimeout() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -3096,7 +3096,7 @@ WaitForStickyTimeoutLoop:
 		}
 		time.Sleep(time.Second)
 	}
-	s.True(stickyTimeout, "Decision not timed out.")
+	s.True(stickyTimeout, "Decision not timed out")
 
 	for i := 0; i < 3; i++ {
 		_, err = poller.PollAndProcessDecisionTaskWithAttempt(true, false, false, true, int64(i))
@@ -3225,14 +3225,14 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
 	// activity handler
 	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -3354,7 +3354,7 @@ func (s *integrationSuite) TestSignalWithStartWithMemo() {
 	}
 
 	signalName := "my signal"
-	signalInput := []byte("my signal input.")
+	signalInput := []byte("my signal input")
 	request := &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
 		Domain:                              s.domainName,
@@ -3453,7 +3453,7 @@ func (s *integrationSuite) TestCancelTimer() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -3585,7 +3585,7 @@ func (s *integrationSuite) TestCancelTimer_CancelFiredAndBuffered() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -3653,7 +3653,7 @@ func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, tas
 		return []byte(strconv.Itoa(1)), []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}

@@ -98,7 +98,7 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 
 	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -158,7 +158,7 @@ GetHistoryLoop:
 
 		lastEvent := history.Events[len(history.Events)-1]
 		if lastEvent.EventType != enums.EventTypeWorkflowExecutionCanceled {
-			s.Logger.Warn("Execution not cancelled yet.")
+			s.Logger.Warn("Execution not cancelled yet")
 			time.Sleep(100 * time.Millisecond)
 			continue GetHistoryLoop
 		}
@@ -248,7 +248,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 
 	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -339,7 +339,7 @@ CheckHistoryLoopForCancelSent:
 
 		lastEvent := history.Events[len(history.Events)-2]
 		if lastEvent.EventType != enums.EventTypeExternalWorkflowExecutionCancelRequested {
-			s.Logger.Info("Cancellation still not sent.")
+			s.Logger.Info("Cancellation still not sent")
 			time.Sleep(100 * time.Millisecond)
 			continue CheckHistoryLoopForCancelSent
 		}
@@ -375,7 +375,7 @@ GetHistoryLoop:
 
 		lastEvent := history.Events[len(history.Events)-1]
 		if lastEvent.EventType != enums.EventTypeWorkflowExecutionCanceled {
-			s.Logger.Warn("Execution not cancelled yet.")
+			s.Logger.Warn("Execution not cancelled yet")
 			time.Sleep(100 * time.Millisecond)
 			continue GetHistoryLoop
 		}
@@ -465,7 +465,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution_UnKnownTar
 
 	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -505,7 +505,7 @@ CheckHistoryLoopForCancelSent:
 
 		lastEvent := history.Events[len(history.Events)-2]
 		if lastEvent.EventType != enums.EventTypeRequestCancelExternalWorkflowExecutionFailed {
-			s.Logger.Info("Cancellaton not cancelled yet.")
+			s.Logger.Info("Cancellaton not cancelled yet")
 			time.Sleep(100 * time.Millisecond)
 			continue CheckHistoryLoopForCancelSent
 		}

@@ -295,7 +295,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 		return []byte(strconv.Itoa(int(activityCounter))), []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -303,7 +303,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	queryType := "test-query"
@@ -585,7 +585,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -621,7 +621,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 
 	// Send a signal in cluster
 	signalName := "my signal"
-	signalInput := []byte("my signal input.")
+	signalInput := []byte("my signal input")
 	_, err = client1.SignalWorkflowExecution(host.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Domain: domainName,
 		WorkflowExecution: &commonproto.WorkflowExecution{
@@ -746,7 +746,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -899,7 +899,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 		return []byte(strconv.Itoa(int(activityCounter))), []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -907,7 +907,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	poller := &host.TaskPoller{
@@ -943,8 +943,8 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	time.Sleep(cacheRefreshInterval)
 
 	// terminate workflow at cluster 2
-	terminateReason := "terminate reason."
-	terminateDetails := []byte("terminate details.")
+	terminateReason := "terminate reason"
+	terminateDetails := []byte("terminate details")
 	_, err = client2.TerminateWorkflowExecution(host.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Domain: domainName,
 		WorkflowExecution: &commonproto.WorkflowExecution{
@@ -972,7 +972,7 @@ GetHistoryLoop:
 
 		lastEvent := history.Events[len(history.Events)-1]
 		if lastEvent.EventType != enums.EventTypeWorkflowExecutionTerminated {
-			s.logger.Warn("Execution not terminated yet.")
+			s.logger.Warn("Execution not terminated yet")
 			time.Sleep(100 * time.Millisecond)
 			continue GetHistoryLoop
 		}
@@ -1086,7 +1086,7 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 		return []byte(strconv.Itoa(int(continueAsNewCounter))), []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -1211,7 +1211,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -1238,7 +1238,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 
 	// Send a signal in cluster 1
 	signalName := "my signal"
-	signalInput := []byte("my signal input.")
+	signalInput := []byte("my signal input")
 	_, err = client1.SignalWorkflowExecution(host.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Domain: domainName,
 		WorkflowExecution: &commonproto.WorkflowExecution{
@@ -1296,7 +1296,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 
 	// Send another signal in cluster 2
 	signalName2 := "my signal 2"
-	signalInput2 := []byte("my signal input 2.")
+	signalInput2 := []byte("my signal input 2")
 	_, err = client2.SignalWorkflowExecution(host.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Domain: domainName,
 		WorkflowExecution: &commonproto.WorkflowExecution{
@@ -1395,7 +1395,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 
 			// Send a signal in cluster
 			signalName := "my signal"
-			signalInput := []byte("my signal input.")
+			signalInput := []byte("my signal input")
 			_, err = client1.SignalWorkflowExecution(host.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 				Domain: domainName,
 				WorkflowExecution: &commonproto.WorkflowExecution{
@@ -1439,7 +1439,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -1588,7 +1588,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -1603,7 +1603,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 			TaskToken: taskToken, Details: heartbeatDetails})
 		s.NoError(err)
 		time.Sleep(5 * time.Second)
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	// activity handler
@@ -1611,7 +1611,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	atHandler2 := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 		activity2Called = true
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	poller1 := &host.TaskPoller{
@@ -1779,7 +1779,7 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}

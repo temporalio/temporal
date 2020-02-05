@@ -56,7 +56,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 			WorkflowId: id,
 			RunId:      uuid.New(),
 		},
-		SignalName: "failed signal.",
+		SignalName: "failed signal",
 		Input:      nil,
 		Identity:   identity,
 	})
@@ -120,7 +120,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -129,7 +129,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -150,7 +150,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 
 	// Send first signal using RunID
 	signalName := "my signal"
-	signalInput := []byte("my signal input.")
+	signalInput := []byte("my signal input")
 	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Domain: s.domainName,
 		WorkflowExecution: &commonproto.WorkflowExecution{
@@ -176,7 +176,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 
 	// Send another signal without RunID
 	signalName = "another signal"
-	signalInput = []byte("another signal input.")
+	signalInput = []byte("another signal input")
 	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Domain: s.domainName,
 		WorkflowExecution: &commonproto.WorkflowExecution{
@@ -218,7 +218,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 			WorkflowId: id,
 			RunId:      we.RunId,
 		},
-		SignalName: "failed signal 1.",
+		SignalName: "failed signal 1",
 		Input:      nil,
 		Identity:   identity,
 	})
@@ -296,7 +296,7 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -305,7 +305,7 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -326,7 +326,7 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 
 	// Send first signal
 	signalName := "my signal"
-	signalInput := []byte("my signal input.")
+	signalInput := []byte("my signal input")
 	requestID := uuid.New()
 	signalReqest := &workflowservice.SignalWorkflowExecutionRequest{
 		Domain: s.domainName,
@@ -413,7 +413,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 	activityCount := int32(1)
 	activityCounter := int32(0)
 	signalName := "my signal"
-	signalInput := []byte("my signal input.")
+	signalInput := []byte("my signal input")
 	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
 		if activityCounter < activityCount {
@@ -452,7 +452,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 
 	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -503,7 +503,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -555,7 +555,7 @@ CheckHistoryLoopForSignalSent:
 
 		signalRequestedEvent := history.Events[len(history.Events)-2]
 		if signalRequestedEvent.GetEventType() != enums.EventTypeExternalWorkflowExecutionSignaled {
-			s.Logger.Info("Signal still not sent.")
+			s.Logger.Info("Signal still not sent")
 			time.Sleep(100 * time.Millisecond)
 			continue CheckHistoryLoopForSignalSent
 		}
@@ -617,7 +617,7 @@ func (s *integrationSuite) TestSignalWorkflow_Cron_NoDecisionTaskCreated() {
 
 	// Send first signal using RunID
 	signalName := "my signal"
-	signalInput := []byte("my signal input.")
+	signalInput := []byte("my signal input")
 	_, err := s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Domain: s.domainName,
 		WorkflowExecution: &commonproto.WorkflowExecution{
@@ -639,7 +639,7 @@ func (s *integrationSuite) TestSignalWorkflow_Cron_NoDecisionTaskCreated() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -706,7 +706,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 	activityCount := int32(1)
 	activityCounter := int32(0)
 	signalName := "my signal"
-	signalInput := []byte("my signal input.")
+	signalInput := []byte("my signal input")
 	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
 		if activityCounter < activityCount {
@@ -745,7 +745,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 
 	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -796,7 +796,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -847,7 +847,7 @@ CheckHistoryLoopForSignalSent:
 
 		signalRequestedEvent := history.Events[len(history.Events)-2]
 		if signalRequestedEvent.GetEventType() != enums.EventTypeExternalWorkflowExecutionSignaled {
-			s.Logger.Info("Signal still not sent.")
+			s.Logger.Info("Signal still not sent")
 			time.Sleep(100 * time.Millisecond)
 			continue CheckHistoryLoopForSignalSent
 		}
@@ -905,7 +905,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_UnKnownTarget() {
 	activityCount := int32(1)
 	activityCounter := int32(0)
 	signalName := "my signal"
-	signalInput := []byte("my signal input.")
+	signalInput := []byte("my signal input")
 	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
 		if activityCounter < activityCount {
@@ -944,7 +944,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_UnKnownTarget() {
 
 	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -984,7 +984,7 @@ CheckHistoryLoopForCancelSent:
 
 		signalFailedEvent := history.Events[len(history.Events)-2]
 		if signalFailedEvent.GetEventType() != enums.EventTypeSignalExternalWorkflowExecutionFailed {
-			s.Logger.Info("Cancellaton not cancelled yet.")
+			s.Logger.Info("Cancellaton not cancelled yet")
 			time.Sleep(100 * time.Millisecond)
 			continue CheckHistoryLoopForCancelSent
 		}
@@ -1030,7 +1030,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_SignalSelf() {
 	activityCount := int32(1)
 	activityCounter := int32(0)
 	signalName := "my signal"
-	signalInput := []byte("my signal input.")
+	signalInput := []byte("my signal input")
 	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
 		if activityCounter < activityCount {
@@ -1069,7 +1069,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_SignalSelf() {
 
 	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -1109,7 +1109,7 @@ CheckHistoryLoopForCancelSent:
 
 		signalFailedEvent := history.Events[len(history.Events)-2]
 		if signalFailedEvent.GetEventType() != enums.EventTypeSignalExternalWorkflowExecutionFailed {
-			s.Logger.Info("Cancellaton not cancelled yet.")
+			s.Logger.Info("Cancellaton not cancelled yet")
 			time.Sleep(100 * time.Millisecond)
 			continue CheckHistoryLoopForCancelSent
 		}
@@ -1215,7 +1215,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -1224,7 +1224,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -1245,7 +1245,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 
 	// Send a signal
 	signalName := "my signal"
-	signalInput := []byte("my signal input.")
+	signalInput := []byte("my signal input")
 	wfIDReusePolicy := enums.WorkflowIdReusePolicyAllowDuplicate
 	sRequest := &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
@@ -1291,7 +1291,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 
 	// Send signal to terminated workflow
 	signalName = "signal to terminate"
-	signalInput = []byte("signal to terminate input.")
+	signalInput = []byte("signal to terminate input")
 	sRequest.SignalName = signalName
 	sRequest.SignalInput = signalInput
 	sRequest.WorkflowId = id
@@ -1318,7 +1318,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	// Send signal to not existed workflow
 	id = "integration-signal-with-start-workflow-test-non-exist"
 	signalName = "signal to non exist"
-	signalInput = []byte("signal to non exist input.")
+	signalInput = []byte("signal to non exist input")
 	sRequest.SignalName = signalName
 	sRequest.SignalInput = signalInput
 	sRequest.WorkflowId = id
@@ -1450,14 +1450,14 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 		return []byte(strconv.Itoa(int(activityCounter))), []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
 
 	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -1482,7 +1482,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 
 	// test policy WorkflowIdReusePolicyRejectDuplicate
 	signalName := "my signal"
-	signalInput := []byte("my signal input.")
+	signalInput := []byte("my signal input")
 	sRequest := &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		RequestId:                           uuid.New(),
 		Domain:                              s.domainName,

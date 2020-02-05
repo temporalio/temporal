@@ -108,7 +108,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 		return []byte(strconv.Itoa(int(continueAsNewCounter))), []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -192,7 +192,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 		return []byte(strconv.Itoa(int(continueAsNewCounter))), []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -229,7 +229,7 @@ GetHistoryLoop:
 
 		lastEvent := history.Events[len(history.Events)-1]
 		if lastEvent.GetEventType() != enums.EventTypeWorkflowExecutionTimedOut {
-			s.Logger.Warn("Execution not timedout yet.")
+			s.Logger.Warn("Execution not timedout yet")
 			time.Sleep(200 * time.Millisecond)
 			continue GetHistoryLoop
 		}
@@ -393,7 +393,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 			return nil, []*commonproto.Decision{{
 				DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 				Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-					Result: []byte("Child Done."),
+					Result: []byte("Child Done"),
 				}},
 			}}, nil
 		}
@@ -401,7 +401,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 		// Parent Decider Logic
 		if execution.GetWorkflowId() == parentID {
 			if !childExecutionStarted {
-				s.Logger.Info("Starting child execution.")
+				s.Logger.Info("Starting child execution")
 				childExecutionStarted = true
 				buf := new(bytes.Buffer)
 				s.Nil(binary.Write(buf, binary.LittleEndian, childData))
@@ -427,7 +427,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 						return nil, []*commonproto.Decision{{
 							DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 							Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-								Result: []byte("Done."),
+								Result: []byte("Done"),
 							}},
 						}}, nil
 					}
@@ -482,7 +482,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	s.NotEqual(startedEvent.GetChildWorkflowExecutionStartedEventAttributes().WorkflowExecution.RunId,
 		completedAttributes.WorkflowExecution.RunId)
 	s.Equal(wtChild, completedAttributes.WorkflowType.Name)
-	s.Equal([]byte("Child Done."), completedAttributes.Result)
+	s.Equal([]byte("Child Done"), completedAttributes.Result)
 
 	s.Logger.Info("Parent Workflow Execution History: ")
 }

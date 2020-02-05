@@ -139,7 +139,7 @@ Loop:
 		})
 
 		if err1 == history.ErrDuplicate {
-			p.Logger.Info("Duplicate Decision task: Polling again.")
+			p.Logger.Info("Duplicate Decision task: Polling again")
 			continue Loop
 		}
 
@@ -148,7 +148,7 @@ Loop:
 		}
 
 		if response == nil || len(response.TaskToken) == 0 {
-			p.Logger.Info("Empty Decision task: Polling again.")
+			p.Logger.Info("Empty Decision task: Polling again")
 			continue Loop
 		}
 
@@ -285,7 +285,7 @@ Loop:
 func (p *TaskPoller) HandlePartialDecision(response *workflowservice.PollForDecisionTaskResponse) (
 	*workflowservice.RespondDecisionTaskCompletedResponse, error) {
 	if response == nil || len(response.TaskToken) == 0 {
-		p.Logger.Info("Empty Decision task: Polling again.")
+		p.Logger.Info("Empty Decision task: Polling again")
 		return nil, nil
 	}
 
@@ -346,7 +346,7 @@ retry:
 		})
 
 		if err == history.ErrDuplicate {
-			p.Logger.Info("Duplicate Activity task: Polling again.")
+			p.Logger.Info("Duplicate Activity task: Polling again")
 			continue retry
 		}
 
@@ -355,7 +355,7 @@ retry:
 		}
 
 		if response == nil || len(response.TaskToken) == 0 {
-			p.Logger.Info("Empty Activity task: Polling again.")
+			p.Logger.Info("Empty Activity task: Polling again")
 			return nil
 		}
 
@@ -409,7 +409,7 @@ retry:
 		})
 
 		if err1 == history.ErrDuplicate {
-			p.Logger.Info("Duplicate Activity task: Polling again.")
+			p.Logger.Info("Duplicate Activity task: Polling again")
 			continue retry
 		}
 
@@ -418,7 +418,7 @@ retry:
 		}
 
 		if response == nil || len(response.TaskToken) == 0 {
-			p.Logger.Info("Empty Activity task: Polling again.")
+			p.Logger.Info("Empty Activity task: Polling again")
 			return nil
 		}
 
