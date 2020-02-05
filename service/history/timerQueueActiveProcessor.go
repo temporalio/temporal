@@ -21,13 +21,15 @@
 package history
 
 import (
+	"context"
 	"fmt"
 	"time"
 
 	"github.com/pborman/uuid"
+	commonproto "go.temporal.io/temporal-proto/common"
 
-	m "github.com/temporalio/temporal/.gen/go/matching"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/client/matching"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
@@ -551,7 +553,7 @@ func (t *timerQueueActiveProcessorImpl) processActivityRetryTimer(
 	task *persistence.TimerTaskInfo,
 ) (retError error) {
 
-	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
+	weCtx, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
 		t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(task),
 	)
 	if err != nil {
@@ -559,7 +561,7 @@ func (t *timerQueueActiveProcessorImpl) processActivityRetryTimer(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(weCtx, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
 	}
@@ -611,24 +613,26 @@ func (t *timerQueueActiveProcessorImpl) processActivityRetryTimer(
 		}
 	}
 
-	execution := workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(task.WorkflowID),
-		RunId:      common.StringPtr(task.RunID)}
-	taskList := &workflow.TaskList{
-		Name: common.StringPtr(activityInfo.TaskList),
+	execution := &commonproto.WorkflowExecution{
+		WorkflowId: task.WorkflowID,
+		RunId:      task.RunID}
+	taskList := &commonproto.TaskList{
+		Name: activityInfo.TaskList,
 	}
 	scheduleToStartTimeout := activityInfo.ScheduleToStartTimeout
 
 	release(nil) // release earlier as we don't need the lock anymore
 
-	return t.matchingClient.AddActivityTask(nil, &m.AddActivityTaskRequest{
-		DomainUUID:                    common.StringPtr(targetDomainID),
-		SourceDomainUUID:              common.StringPtr(domainID),
-		Execution:                     &execution,
+	_, retError = t.matchingClient.AddActivityTask(context.Background(), &matchingservice.AddActivityTaskRequest{
+		DomainUUID:                    targetDomainID,
+		SourceDomainUUID:              domainID,
+		Execution:                     execution,
 		TaskList:                      taskList,
-		ScheduleId:                    common.Int64Ptr(scheduledID),
-		ScheduleToStartTimeoutSeconds: common.Int32Ptr(scheduleToStartTimeout),
+		ScheduleId:                    scheduledID,
+		ScheduleToStartTimeoutSeconds: scheduleToStartTimeout,
 	})
+
+	return retError
 }
 
 func (t *timerQueueActiveProcessorImpl) processWorkflowTimeout(

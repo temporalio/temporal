@@ -24,10 +24,13 @@ import (
 	ctx "context"
 	"time"
 
-	m "github.com/temporalio/temporal/.gen/go/matching"
+	commonproto "go.temporal.io/temporal-proto/common"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/client/matching"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
@@ -144,16 +147,16 @@ func (t *transferQueueProcessorBase) pushActivity(
 		t.logger.Fatal("Cannot process non activity task", tag.TaskType(task.GetTaskType()))
 	}
 
-	err := t.matchingClient.AddActivityTask(ctx, &m.AddActivityTaskRequest{
-		DomainUUID:       common.StringPtr(task.TargetDomainID),
-		SourceDomainUUID: common.StringPtr(task.DomainID),
-		Execution: &workflow.WorkflowExecution{
-			WorkflowId: common.StringPtr(task.WorkflowID),
-			RunId:      common.StringPtr(task.RunID),
+	_, err := t.matchingClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
+		DomainUUID:       task.TargetDomainID,
+		SourceDomainUUID: task.DomainID,
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: task.WorkflowID,
+			RunId:      task.RunID,
 		},
-		TaskList:                      &workflow.TaskList{Name: &task.TaskList},
-		ScheduleId:                    &task.ScheduleID,
-		ScheduleToStartTimeoutSeconds: common.Int32Ptr(activityScheduleToStartTimeout),
+		TaskList:                      &commonproto.TaskList{Name: task.TaskList},
+		ScheduleId:                    task.ScheduleID,
+		ScheduleToStartTimeoutSeconds: activityScheduleToStartTimeout,
 	})
 
 	return err
@@ -172,15 +175,15 @@ func (t *transferQueueProcessorBase) pushDecision(
 		t.logger.Fatal("Cannot process non decision task", tag.TaskType(task.GetTaskType()))
 	}
 
-	err := t.matchingClient.AddDecisionTask(ctx, &m.AddDecisionTaskRequest{
-		DomainUUID: common.StringPtr(task.DomainID),
-		Execution: &workflow.WorkflowExecution{
-			WorkflowId: common.StringPtr(task.WorkflowID),
-			RunId:      common.StringPtr(task.RunID),
+	_, err := t.matchingClient.AddDecisionTask(ctx, &matchingservice.AddDecisionTaskRequest{
+		DomainUUID: task.DomainID,
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: task.WorkflowID,
+			RunId:      task.RunID,
 		},
-		TaskList:                      tasklist,
-		ScheduleId:                    common.Int64Ptr(task.ScheduleID),
-		ScheduleToStartTimeoutSeconds: common.Int32Ptr(decisionScheduleToStartTimeout),
+		TaskList:                      adapter.ToProtoTaskList(tasklist),
+		ScheduleId:                    task.ScheduleID,
+		ScheduleToStartTimeoutSeconds: decisionScheduleToStartTimeout,
 	})
 	return err
 }
