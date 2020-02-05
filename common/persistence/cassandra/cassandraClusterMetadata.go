@@ -21,6 +21,10 @@
 package cassandra
 
 import (
+	"time"
+
+	"github.com/pborman/uuid"
+
 	"github.com/gocql/gocql"
 
 	"github.com/temporalio/temporal/common"
@@ -33,6 +37,7 @@ import (
 const constMetadataPartition = 0
 
 const (
+	// ****** CLUSTER_METADATA TABLE ******
 	// This should insert the row only if it does not exist. Otherwise noop.
 	templateInitImmutableClusterMetadata = `INSERT INTO 
 cluster_metadata (metadata_partition, immutable_data, immutable_data_encoding) 
@@ -40,11 +45,21 @@ VALUES(?, ?, ?) IF NOT EXISTS`
 
 	// metadata_partition is constant and PK, this should only return one row.
 	templateGetImmutableClusterMetadata = `SELECT immutable_data, immutable_data_encoding FROM 
-cluster_metadata WHERE metadata_partition = ?`
+cluster_metadata 
+WHERE metadata_partition = ?`
 
 	immutablePayloadFieldName = `immutable_data`
 
 	immutableEncodingFieldName = immutablePayloadFieldName + `_encoding`
+
+	// ****** CLUSTER_MEMBERSHIP TABLE ******
+	templateUpsertActiveClusterMembership = `UPDATE
+cluster_membership USING TTL ? SET rpc_address = ?, session_start = ?, last_heartbeat = ?
+WHERE host_id = ?`
+
+	templateGetActiveClusterMembership = `SELECT host_id, rpc_address, session_start, last_heartbeat FROM
+cluster_membership 
+WHERE last_heartbeat > ? ALLOW FILTERING`
 )
 
 type (
@@ -147,4 +162,50 @@ func (m *cassandraClusterMetadata) GetImmutableClusterMetadata() (*p.InternalGet
 	return &p.InternalGetImmutableClusterMetadataResponse{
 		ImmutableClusterMetadata: p.NewDataBlob(immutableMetadata, common.EncodingType(encoding)),
 	}, nil
+}
+
+func (m *cassandraClusterMetadata) GetActiveClusterMembers(request *p.GetActiveClusterMembersRequest) (*p.GetActiveClusterMembersResponse, error) {
+	query := m.session.Query(templateGetActiveClusterMembership, time.Now().UTC().Add(-request.LastHeartbeatWithin))
+
+	// No paging enabled due to TTL on table
+	iter := query.Iter()
+	rowCount := iter.NumRows()
+	clusterMembers := make([]*p.ClusterMember, 0, rowCount)
+
+	cqlHostID := make([]byte, 0, 16)
+	rpcAddress := ""
+	sessionStart := time.Time{}
+	lastHeartbeat := time.Time{}
+
+	for iter.Scan(&cqlHostID, &rpcAddress, &sessionStart, &lastHeartbeat) {
+		member := p.ClusterMember{
+			HostID:         uuid.UUID(cqlHostID),
+			RPCAddress:     rpcAddress,
+			SessionStarted: sessionStart,
+			LastHeartbeat:  lastHeartbeat,
+		}
+		clusterMembers = append(clusterMembers, &member)
+	}
+
+	if err := iter.Close(); err != nil {
+		return nil, convertCommonErrors("GetActiveClusterMembers", err)
+	}
+
+	return &p.GetActiveClusterMembersResponse{ActiveMembers: clusterMembers}, nil
+}
+
+func (m *cassandraClusterMetadata) UpsertClusterMembership(request *p.UpsertClusterMembershipRequest) error {
+	query := m.session.Query(templateUpsertActiveClusterMembership, int64(request.RecordExpiry.Seconds()),
+		request.RPCAddress, request.SessionStarted, time.Now().UTC(), []byte(request.HostID))
+	err := query.Exec()
+
+	if err != nil {
+		return convertCommonErrors("UpsertClusterMembership", err)
+	}
+
+	return nil
+}
+
+func (m *cassandraClusterMetadata) PruneClusterMembership(request *p.PruneClusterMembershipRequest) error {
+	return nil
 }
