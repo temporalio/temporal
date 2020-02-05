@@ -263,7 +263,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	}
 
 	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	time.Sleep(waitForESToSettle)

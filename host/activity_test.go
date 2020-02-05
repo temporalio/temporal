@@ -862,7 +862,7 @@ func (s *integrationSuite) TestActivityTimeouts() {
 	for i := 0; i < 3; i++ {
 		go func() {
 			err = poller.PollAndProcessActivityTask(false)
-			s.Logger.Error("Activity Processing Completed.  Error", tag.Error(err))
+			s.Logger.Error("Activity Processing Completed", tag.Error(err))
 		}()
 	}
 
@@ -870,7 +870,7 @@ func (s *integrationSuite) TestActivityTimeouts() {
 	for i := 0; i < 10; i++ {
 		s.Logger.Info("Processing decision task", tag.Counter(i))
 		_, err := poller.PollAndProcessDecisionTask(false, false)
-		s.NoError(err, "Poll for decision task failed.")
+		s.NoError(err, "Poll for decision task failed")
 
 		if workflowComplete {
 			break
@@ -1044,7 +1044,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 	for i := 0; i < activityCount; i++ {
 		go func() {
 			err := poller.PollAndProcessActivityTask(false)
-			s.Logger.Error("Activity Processing Completed.", tag.Error(err))
+			s.Logger.Error("Activity Processing Completed", tag.Error(err))
 		}()
 	}
 
@@ -1052,7 +1052,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 	for i := 0; i < 10; i++ {
 		s.Logger.Info("Processing decision task", tag.Counter(i))
 		_, err := poller.PollAndProcessDecisionTask(false, false)
-		s.NoError(err, "Poll for decision task failed.")
+		s.NoError(err, "Poll for decision task failed")
 
 		if workflowComplete {
 			break

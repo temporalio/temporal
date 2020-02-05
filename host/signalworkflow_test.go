@@ -145,7 +145,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 
 	// Make first decision to schedule activity
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	// Send first signal using RunID
@@ -165,7 +165,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 
 	// Process signal in decider
 	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	s.False(workflowComplete)
@@ -190,7 +190,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 
 	// Process signal in decider
 	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	s.False(workflowComplete)
@@ -321,7 +321,7 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 
 	// Make first decision to schedule activity
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	// Send first signal
@@ -344,7 +344,7 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 
 	// Process signal in decider
 	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	s.False(workflowComplete)
@@ -360,7 +360,7 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 
 	// Process signal in decider
 	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	s.False(workflowComplete)
@@ -521,20 +521,20 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 
 	// Start both current and foreign workflows to make some progress.
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	_, err = foreignPoller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Error("foreign PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("foreign PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	err = foreignPoller.PollAndProcessActivityTask(false)
-	s.Logger.Error("foreign PollAndProcessActivityTask", tag.Error(err))
+	s.Logger.Info("foreign PollAndProcessActivityTask", tag.Error(err))
 	s.NoError(err)
 
 	// Signal the foreign workflow with this decision request.
 	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	// in source workflow
@@ -574,7 +574,7 @@ CheckHistoryLoopForSignalSent:
 
 	// process signal in decider for foreign workflow
 	_, err = foreignPoller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	s.False(workflowComplete)
@@ -656,7 +656,7 @@ func (s *integrationSuite) TestSignalWorkflow_Cron_NoDecisionTaskCreated() {
 
 	// Make first decision to schedule activity
 	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 	s.True(decisionTaskDelay > time.Second*2)
 }
@@ -814,20 +814,20 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 
 	// Start both current and foreign workflows to make some progress.
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	_, err = foreignPoller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Error("foreign PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("foreign PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	err = foreignPoller.PollAndProcessActivityTask(false)
-	s.Logger.Error("foreign PollAndProcessActivityTask", tag.Error(err))
+	s.Logger.Info("foreign PollAndProcessActivityTask", tag.Error(err))
 	s.NoError(err)
 
 	// Signal the foreign workflow with this decision request.
 	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	// in source workflow
@@ -866,7 +866,7 @@ CheckHistoryLoopForSignalSent:
 
 	// process signal in decider for foreign workflow
 	_, err = foreignPoller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	s.False(workflowComplete)
@@ -960,12 +960,12 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_UnKnownTarget() {
 
 	// Start workflows to make some progress.
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	// Signal the foreign workflow with this decision request.
 	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	signalSentFailed := false
@@ -1085,12 +1085,12 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_SignalSelf() {
 
 	// Start workflows to make some progress.
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	// Signal the foreign workflow with this decision request.
 	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	signalSentFailed := false
@@ -1240,7 +1240,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 
 	// Make first decision to schedule activity
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	// Send a signal
@@ -1268,7 +1268,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 
 	// Process signal in decider
 	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	s.False(workflowComplete)
@@ -1304,7 +1304,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 
 	// Process signal in decider
 	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	s.False(workflowComplete)
@@ -1329,7 +1329,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 
 	// Process signal in decider
 	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	s.False(workflowComplete)
@@ -1473,10 +1473,10 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 
 	// Start workflows, make some progress and complete workflow
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 	s.True(workflowComplete)
 

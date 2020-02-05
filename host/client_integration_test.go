@@ -285,7 +285,7 @@ func testParentWorkflow(ctx workflow.Context) (string, error) {
 	var result string
 	err := workflow.ExecuteChildWorkflow(ctx, testChildWorkflow, 0, 3).Get(ctx, &result)
 	if err != nil {
-		logger.Error("Parent execution received child execution failure.", zap.Error(err))
+		logger.Error("Parent execution received child execution failure", zap.Error(err))
 		return "", err
 	}
 
@@ -300,7 +300,7 @@ func testParentWorkflow(ctx workflow.Context) (string, error) {
 	var result1 string
 	err1 := workflow.ExecuteChildWorkflow(ctx1, testChildWorkflow, 0, 2).Get(ctx1, &result1)
 	if err1 != nil {
-		logger.Error("Parent execution received child execution 1 failure.", zap.Error(err1))
+		logger.Error("Parent execution received child execution 1 failure", zap.Error(err1))
 		return "", err1
 	}
 
@@ -313,7 +313,7 @@ func testChildWorkflow(ctx workflow.Context, totalCount, runCount int) (string, 
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Child workflow execution started.")
 	if runCount <= 0 {
-		logger.Error("Invalid valid for run count.", zap.Int("RunCount", runCount))
+		logger.Error("Invalid valid for run count", zap.Int("RunCount", runCount))
 		return "", errors.New("invalid run count")
 	}
 
@@ -321,7 +321,7 @@ func testChildWorkflow(ctx workflow.Context, totalCount, runCount int) (string, 
 	runCount--
 	if runCount == 0 {
 		result := fmt.Sprintf("Child workflow execution completed after %v runs", totalCount)
-		logger.Info("Child workflow completed.", zap.String("Result", result))
+		logger.Info("Child workflow completed", zap.String("Result", result))
 		return strconv.Itoa(totalCount), nil
 	}
 

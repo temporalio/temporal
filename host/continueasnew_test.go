@@ -125,7 +125,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 
 	for i := 0; i < 10; i++ {
 		_, err := poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.NoError(err, strconv.Itoa(i))
 	}
 
@@ -209,7 +209,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 
 	// process the decision and continue as new
 	_, err := poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	s.False(workflowComplete)
@@ -450,7 +450,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 
 	// Make first decision to start child execution
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 	s.True(childExecutionStarted)
 
@@ -458,7 +458,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	for i := 0; i < 11; i++ {
 		s.Logger.Warn("decision", tag.Counter(i))
 		_, err = poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.NoError(err)
 	}
 
@@ -467,13 +467,13 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 
 	// Process Child Execution final decision to complete it
 	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 	s.True(childComplete)
 
 	// Process ChildExecution completed event and complete parent execution
 	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 	s.NotNil(completedEvent)
 	completedAttributes := completedEvent.GetChildWorkflowExecutionCompletedEventAttributes()

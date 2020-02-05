@@ -145,17 +145,17 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedBySizeLimit() {
 
 	for i := int32(0); i < activityCount-1; i++ {
 		_, err := poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.NoError(err)
 
 		err = poller.PollAndProcessActivityTask(false)
-		s.Logger.Error("PollAndProcessActivityTask", tag.Error(err))
+		s.Logger.Info("PollAndProcessActivityTask", tag.Error(err))
 		s.NoError(err)
 	}
 
 	// process this decision will trigger history exceed limit error
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	// verify last event is terminated event

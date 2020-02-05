@@ -138,7 +138,7 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 
 	// Make first decision to schedule activity
 	_, err := poller.PollAndProcessDecisionTaskWithAttempt(false, false, false, true, int64(0))
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	type QueryResult struct {
@@ -166,7 +166,7 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller.PollAndProcessDecisionTaskWithSticky(false, false)
-		s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.NoError(errInner)
 		if isQueryTask {
 			break
@@ -184,7 +184,7 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller.PollAndProcessDecisionTaskWithSticky(false, false)
-		s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.NoError(errInner)
 		if isQueryTask {
 			break
@@ -297,7 +297,7 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 
 	// Make first decision to schedule activity
 	_, err := poller.PollAndProcessDecisionTaskWithAttempt(false, false, false, true, int64(0))
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	type QueryResult struct {
@@ -327,7 +327,7 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 		// here we poll on normal tasklist, to simulate a worker crash and restart
 		// on the server side, server will first try the sticky tasklist and then the normal tasklist
 		isQueryTask, errInner := poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.NoError(errInner)
 		if isQueryTask {
 			break
@@ -436,7 +436,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 
 	// Make first decision to schedule activity
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	type QueryResult struct {
@@ -465,7 +465,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.NoError(errInner)
 		if isQueryTask {
 			break
@@ -483,7 +483,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.NoError(errInner)
 		if isQueryTask {
 			break
@@ -504,7 +504,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.NoError(errInner)
 		if isQueryTask {
 			break
@@ -532,7 +532,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.NoError(errInner)
 		if isQueryTask {
 			break
@@ -649,7 +649,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 
 	// Make first decision to schedule activity
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	type QueryResult struct {
@@ -717,7 +717,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 			Answer:     []byte("consistent query result"),
 		})
 
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(errInner)
 	s.False(isQueryTask)
 
@@ -831,7 +831,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 
 	// Make first decision to schedule activity
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	type QueryResult struct {
@@ -993,7 +993,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 
 	// Make first decision to schedule activity
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	type QueryResult struct {
@@ -1181,7 +1181,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 
 	// Make first decision to schedule activity
 	_, err := poller.PollAndProcessDecisionTaskWithAttempt(false, false, false, true, int64(0))
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	type QueryResult struct {
