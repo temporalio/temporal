@@ -50,15 +50,12 @@ WORKDIR /temporal
 COPY go.mod ./
 COPY go.sum ./
 
-#Copy generated proto files
-COPY .gen/proto/ .gen/proto/
-
 RUN go mod download
 
 COPY . .
 
 
-RUN CGO_ENABLED=0 make copyright cadence-cassandra-tool cadence-sql-tool cadence cadence-server
+RUN CGO_ENABLED=0 make proto copyright cadence-cassandra-tool cadence-sql-tool cadence cadence-server
 
 # Download dockerize
 FROM alpine:3.11 AS dockerize

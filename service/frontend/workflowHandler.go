@@ -30,9 +30,9 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/yarpcerrors"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/temporalio/temporal/.gen/go/health"
-	"github.com/temporalio/temporal/.gen/go/health/metaserver"
 	h "github.com/temporalio/temporal/.gen/go/history"
 	m "github.com/temporalio/temporal/.gen/go/matching"
 	gen "github.com/temporalio/temporal/.gen/go/shared"
@@ -176,15 +176,6 @@ func NewWorkflowHandler(
 // if DCRedirectionHandler is also used, use RegisterHandler in DCRedirectionHandler instead
 func (wh *WorkflowHandler) RegisterHandler() {
 	wh.GetDispatcher().Register(workflowserviceserver.New(wh))
-	wh.GetDispatcher().Register(metaserver.New(wh))
-}
-
-// Start starts the handler
-func (wh *WorkflowHandler) Start() {
-}
-
-// Stop stops the handler
-func (wh *WorkflowHandler) Stop() {
 }
 
 // Health is for health check
@@ -1474,11 +1465,10 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 		}
 	}
 
-	call := yarpc.CallFromContext(ctx)
-
+	headers := client.GetHeadersValue(ctx, common.ClientImplHeaderName, common.FeatureVersionHeaderName)
 	completeRequest.WorkerVersionInfo = &gen.WorkerVersionInfo{
-		Impl:           common.StringPtr(call.Header(common.ClientImplHeaderName)),
-		FeatureVersion: common.StringPtr(call.Header(common.FeatureVersionHeaderName)),
+		Impl:           common.StringPtr(headers[0]),
+		FeatureVersion: common.StringPtr(headers[1]),
 	}
 	matchingRequest := &matchingservice.RespondQueryTaskCompletedRequest{
 		DomainUUID:       queryTaskToken.DomainID,
@@ -1492,6 +1482,32 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 		return wh.error(err, scope)
 	}
 	return nil
+}
+
+func newWorkerVersionInfo(ctx context.Context) *gen.WorkerVersionInfo {
+	workerVersionInfo := &gen.WorkerVersionInfo{}
+
+	call := yarpc.CallFromContext(ctx)
+	if call != nil {
+		// YARPC path for Thrift version
+		workerVersionInfo.Impl = common.StringPtr(call.Header(common.ClientImplHeaderName))
+		workerVersionInfo.FeatureVersion = common.StringPtr(call.Header(common.FeatureVersionHeaderName))
+	} else {
+		// gRPC path for proto version
+		md, ok := metadata.FromIncomingContext(ctx)
+		if ok {
+			impls := md.Get(common.ClientImplHeaderName)
+			if len(impls) > 0 {
+				workerVersionInfo.Impl = common.StringPtr(impls[0])
+			}
+			featureVersions := md.Get(common.FeatureVersionHeaderName)
+			if len(featureVersions) > 0 {
+				workerVersionInfo.FeatureVersion = common.StringPtr(featureVersions[0])
+			}
+		}
+	}
+
+	return workerVersionInfo
 }
 
 // StartWorkflowExecution - Creates a new workflow execution

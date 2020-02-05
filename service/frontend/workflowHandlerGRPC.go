@@ -50,7 +50,7 @@ import (
 	"github.com/temporalio/temporal/common/resource"
 )
 
-var _ workflowservice.WorkflowServiceYARPCServer = (*WorkflowHandlerGRPC)(nil)
+var _ workflowservice.WorkflowServiceServer = (*WorkflowHandlerGRPC)(nil)
 
 type (
 	// WorkflowHandlerGRPC - gRPC handler interface for workflow workflowservice

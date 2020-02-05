@@ -33,7 +33,7 @@ import (
 	"github.com/temporalio/temporal/common/service/config"
 )
 
-var _ workflowservice.WorkflowServiceYARPCServer = (*DCRedirectionHandlerImpl)(nil)
+var _ workflowservice.WorkflowServiceServer = (*DCRedirectionHandlerImpl)(nil)
 
 type (
 	// DCRedirectionHandlerImpl is simple wrapper over frontend service, doing redirection based on policy
@@ -45,9 +45,6 @@ type (
 		redirectionPolicy  DCRedirectionPolicy
 		tokenSerializer    common.TaskTokenSerializer
 		frontendHandler    workflowservice.WorkflowServiceYARPCServer
-
-		startFn func()
-		stopFn  func()
 	}
 )
 
@@ -70,24 +67,7 @@ func NewDCRedirectionHandler(
 		redirectionPolicy:  dcRedirectionPolicy,
 		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
 		frontendHandler:    wfHandler,
-		startFn:            func() { wfHandler.workflowHandlerThrift.Start() },
-		stopFn:             func() { wfHandler.workflowHandlerThrift.Stop() },
 	}
-}
-
-// RegisterHandler register this handler, must be called before Start()
-func (handler *DCRedirectionHandlerImpl) RegisterHandler() {
-	handler.GetGRPCDispatcher().Register(workflowservice.BuildWorkflowServiceYARPCProcedures(handler))
-}
-
-// Start starts the handler
-func (handler *DCRedirectionHandlerImpl) Start() {
-	handler.startFn()
-}
-
-// Stop stops the handler
-func (handler *DCRedirectionHandlerImpl) Stop() {
-	handler.stopFn()
 }
 
 // Domain APIs, domain APIs does not require redirection

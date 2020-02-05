@@ -136,20 +136,20 @@ func (s *integrationClustersTestSuite) TestDomainFailover() {
 		ActiveClusterName:                      clusterName[0],
 		WorkflowExecutionRetentionPeriodInDays: 7,
 	}
-	_, err := client1.RegisterDomain(createContext(), regReq)
+	_, err := client1.RegisterDomain(host.NewContext(), regReq)
 	s.NoError(err)
 
 	descReq := &workflowservice.DescribeDomainRequest{
 		Name: domainName,
 	}
-	resp, err := client1.DescribeDomain(createContext(), descReq)
+	resp, err := client1.DescribeDomain(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
 	// Wait for domain cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
 	client2 := s.cluster2.GetFrontendClient() // standby
-	resp2, err := client2.DescribeDomain(createContext(), descReq)
+	resp2, err := client2.DescribeDomain(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp2)
 	s.Equal(resp, resp2)
@@ -161,7 +161,7 @@ func (s *integrationClustersTestSuite) TestDomainFailover() {
 			ActiveClusterName: clusterName[1],
 		},
 	}
-	updateResp, err := client1.UpdateDomain(createContext(), updateReq)
+	updateResp, err := client1.UpdateDomain(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
@@ -170,7 +170,7 @@ func (s *integrationClustersTestSuite) TestDomainFailover() {
 	updated := false
 	var resp3 *workflowservice.DescribeDomainResponse
 	for i := 0; i < 30; i++ {
-		resp3, err = client2.DescribeDomain(createContext(), descReq)
+		resp3, err = client2.DescribeDomain(host.NewContext(), descReq)
 		s.NoError(err)
 		if resp3.ReplicationConfiguration.GetActiveClusterName() == clusterName[1] {
 			updated = true
@@ -202,7 +202,7 @@ func (s *integrationClustersTestSuite) TestDomainFailover() {
 	}
 	var we *workflowservice.StartWorkflowExecutionResponse
 	for i := 0; i < 30; i++ {
-		we, err = client2.StartWorkflowExecution(createContext(), startReq)
+		we, err = client2.StartWorkflowExecution(host.NewContext(), startReq)
 		if err == nil {
 			break
 		}
@@ -222,20 +222,20 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 		ActiveClusterName:                      clusterName[0],
 		WorkflowExecutionRetentionPeriodInDays: 1,
 	}
-	_, err := client1.RegisterDomain(createContext(), regReq)
+	_, err := client1.RegisterDomain(host.NewContext(), regReq)
 	s.NoError(err)
 
 	descReq := &workflowservice.DescribeDomainRequest{
 		Name: domainName,
 	}
-	resp, err := client1.DescribeDomain(createContext(), descReq)
+	resp, err := client1.DescribeDomain(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
 	// Wait for domain cache to pick the change
 	time.Sleep(cache.DomainCacheRefreshInterval)
 
 	client2 := s.cluster2.GetFrontendClient() // standby
-	resp2, err := client2.DescribeDomain(createContext(), descReq)
+	resp2, err := client2.DescribeDomain(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp2)
 	s.Equal(resp, resp2)
@@ -258,8 +258,8 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 		TaskStartToCloseTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
-	we, err := client1.StartWorkflowExecution(createContext(), startReq)
-	s.Nil(err)
+	we, err := client1.StartWorkflowExecution(host.NewContext(), startReq)
+	s.NoError(err)
 	s.NotNil(we.GetRunId())
 	rid := we.GetRunId()
 
@@ -343,8 +343,8 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 
 	// make some progress in cluster 1
 	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
-	s.Nil(err)
+	s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.NoError(err)
 
 	type QueryResult struct {
 		Resp *workflowservice.QueryWorkflowResponse
@@ -352,7 +352,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	}
 	queryResultCh := make(chan QueryResult)
 	queryWorkflowFn := func(client workflowservice.WorkflowServiceClient, queryType string) {
-		queryResp, err := client.QueryWorkflow(createContext(), &workflowservice.QueryWorkflowRequest{
+		queryResp, err := client.QueryWorkflow(host.NewContext(), &workflowservice.QueryWorkflowRequest{
 			Domain: domainName,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: id,
@@ -371,8 +371,8 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller.PollAndProcessDecisionTask(false, false)
-		s.logger.Info("PollAndProcessQueryTask", tag.Error(err))
-		s.Nil(errInner)
+		s.logger.Error("PollAndProcessQueryTask", tag.Error(err))
+		s.NoError(errInner)
 		if isQueryTask {
 			break
 		}
@@ -394,8 +394,8 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller2.PollAndProcessDecisionTask(false, false)
-		s.logger.Info("PollAndProcessQueryTask", tag.Error(err))
-		s.Nil(errInner)
+		s.logger.Error("PollAndProcessQueryTask", tag.Error(err))
+		s.NoError(errInner)
 		if isQueryTask {
 			break
 		}
@@ -415,7 +415,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 			ActiveClusterName: clusterName[1],
 		},
 	}
-	updateResp, err := client1.UpdateDomain(createContext(), updateReq)
+	updateResp, err := client1.UpdateDomain(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
@@ -435,14 +435,14 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	var historyResponse *workflowservice.GetWorkflowExecutionHistoryResponse
 	eventsReplicated := false
 	for i := 0; i < 15; i++ {
-		historyResponse, err = client2.GetWorkflowExecutionHistory(createContext(), getHistoryReq)
+		historyResponse, err = client2.GetWorkflowExecutionHistory(host.NewContext(), getHistoryReq)
 		if err == nil && len(historyResponse.History.Events) == 5 {
 			eventsReplicated = true
 			break
 		}
 		time.Sleep(1 * time.Second)
 	}
-	s.Nil(err)
+	s.NoError(err)
 	s.True(eventsReplicated)
 
 	// Make sure query is still working after failover
@@ -452,8 +452,8 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller.PollAndProcessDecisionTask(false, false)
-		s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
-		s.Nil(errInner)
+		s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+		s.NoError(errInner)
 		if isQueryTask {
 			break
 		}
@@ -472,8 +472,8 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller2.PollAndProcessDecisionTask(false, false)
-		s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
-		s.Nil(errInner)
+		s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+		s.NoError(errInner)
 		if isQueryTask {
 			break
 		}
@@ -488,26 +488,26 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 
 	// make process in cluster 2
 	err = poller2.PollAndProcessActivityTask(false)
-	s.logger.Info("PollAndProcessActivityTask 2", tag.Error(err))
-	s.Nil(err)
+	s.logger.Error("PollAndProcessActivityTask 2", tag.Error(err))
+	s.NoError(err)
 
 	s.False(workflowComplete)
 	_, err = poller2.PollAndProcessDecisionTask(false, false)
-	s.logger.Info("PollAndProcessDecisionTask 2", tag.Error(err))
-	s.Nil(err)
+	s.logger.Error("PollAndProcessDecisionTask 2", tag.Error(err))
+	s.NoError(err)
 	s.True(workflowComplete)
 
 	// check history replicated in cluster 1
 	eventsReplicated = false
 	for i := 0; i < 15; i++ {
-		historyResponse, err = client1.GetWorkflowExecutionHistory(createContext(), getHistoryReq)
+		historyResponse, err = client1.GetWorkflowExecutionHistory(host.NewContext(), getHistoryReq)
 		if err == nil && len(historyResponse.History.Events) == 11 {
 			eventsReplicated = true
 			break
 		}
 		time.Sleep(1 * time.Second)
 	}
-	s.Nil(err)
+	s.NoError(err)
 	s.True(eventsReplicated)
 }
 
@@ -521,13 +521,13 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 		ActiveClusterName:                      clusterName[0],
 		WorkflowExecutionRetentionPeriodInDays: 1,
 	}
-	_, err := client1.RegisterDomain(createContext(), regReq)
+	_, err := client1.RegisterDomain(host.NewContext(), regReq)
 	s.NoError(err)
 
 	descReq := &workflowservice.DescribeDomainRequest{
 		Name: domainName,
 	}
-	resp, err := client1.DescribeDomain(createContext(), descReq)
+	resp, err := client1.DescribeDomain(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
 	// Wait for domain cache to pick the change
@@ -560,7 +560,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 		TaskStartToCloseTimeoutSeconds:      60,
 		Identity:                            identity1,
 	}
-	we, err := client1.StartWorkflowExecution(createContext(), startReq)
+	we, err := client1.StartWorkflowExecution(host.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
 
@@ -615,14 +615,14 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	}
 
 	_, err = poller1.PollAndProcessDecisionTaskWithAttemptAndRetry(false, false, false, true, 0, 5)
-	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
-	s.Nil(err)
+	s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.NoError(err)
 	s.True(firstDecisionMade)
 
 	// Send a signal in cluster
 	signalName := "my signal"
 	signalInput := []byte("my signal input.")
-	_, err = client1.SignalWorkflowExecution(createContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err = client1.SignalWorkflowExecution(host.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Domain: domainName,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
@@ -632,7 +632,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 		Input:      signalInput,
 		Identity:   identity1,
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	// Update domain to fail over
 	updateReq := &workflowservice.UpdateDomainRequest{
@@ -641,7 +641,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 			ActiveClusterName: clusterName[1],
 		},
 	}
-	updateResp, err := client1.UpdateDomain(createContext(), updateReq)
+	updateResp, err := client1.UpdateDomain(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
@@ -651,11 +651,11 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	time.Sleep(cacheRefreshInterval)
 
 	_, err = poller2.PollAndProcessDecisionTaskWithAttemptAndRetry(false, false, false, true, 0, 5)
-	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
-	s.Nil(err)
+	s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.NoError(err)
 	s.True(secondDecisionMade)
 
-	_, err = client2.SignalWorkflowExecution(createContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err = client2.SignalWorkflowExecution(host.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Domain: domainName,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
@@ -665,7 +665,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 		Input:      signalInput,
 		Identity:   identity2,
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	// Update domain to fail over back
 	updateReq = &workflowservice.UpdateDomainRequest{
@@ -674,15 +674,15 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 			ActiveClusterName: clusterName[0],
 		},
 	}
-	updateResp, err = client2.UpdateDomain(createContext(), updateReq)
+	updateResp, err = client2.UpdateDomain(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[0], updateResp.ReplicationConfiguration.GetActiveClusterName())
 	s.Equal(int64(10), updateResp.GetFailoverVersion())
 
 	_, err = poller1.PollAndProcessDecisionTask(true, false)
-	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
-	s.Nil(err)
+	s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.NoError(err)
 	s.True(workflowCompleted)
 }
 
@@ -696,20 +696,20 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 		ActiveClusterName:                      clusterName[0],
 		WorkflowExecutionRetentionPeriodInDays: 1,
 	}
-	_, err := client1.RegisterDomain(createContext(), regReq)
+	_, err := client1.RegisterDomain(host.NewContext(), regReq)
 	s.NoError(err)
 
 	descReq := &workflowservice.DescribeDomainRequest{
 		Name: domainName,
 	}
-	resp, err := client1.DescribeDomain(createContext(), descReq)
+	resp, err := client1.DescribeDomain(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
 	// Wait for domain cache to pick the change
 	time.Sleep(cache.DomainCacheRefreshInterval)
 
 	client2 := s.cluster2.GetFrontendClient() // standby
-	resp2, err := client2.DescribeDomain(createContext(), descReq)
+	resp2, err := client2.DescribeDomain(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp2)
 	s.Equal(resp, resp2)
@@ -733,8 +733,8 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 		Identity:                            identity,
 		WorkflowIdReusePolicy:               enums.WorkflowIdReusePolicyAllowDuplicate,
 	}
-	we, err := client1.StartWorkflowExecution(createContext(), startReq)
-	s.Nil(err)
+	we, err := client1.StartWorkflowExecution(host.NewContext(), startReq)
+	s.NoError(err)
 	s.NotNil(we.GetRunId())
 	s.logger.Info("StartWorkflowExecution in cluster 1: ", tag.WorkflowRunID(we.GetRunId()))
 
@@ -775,8 +775,8 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 
 	// Complete the workflow in cluster 1
 	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
-	s.Nil(err)
+	s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.NoError(err)
 	s.Equal(1, workflowCompleteTimes)
 
 	// update domain to fail over
@@ -786,7 +786,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 			ActiveClusterName: clusterName[1],
 		},
 	}
-	updateResp, err := client1.UpdateDomain(createContext(), updateReq)
+	updateResp, err := client1.UpdateDomain(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
@@ -798,7 +798,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	// start the same workflow in cluster 2 is not allowed if policy is AllowDuplicateFailedOnly
 	startReq.RequestId = uuid.New()
 	startReq.WorkflowIdReusePolicy = enums.WorkflowIdReusePolicyAllowDuplicateFailedOnly
-	we, err = client2.StartWorkflowExecution(createContext(), startReq)
+	we, err = client2.StartWorkflowExecution(host.NewContext(), startReq)
 	st := status.Convert(err)
 	s.True(errordetails.IsWorkflowExecutionAlreadyStartedFailure(st))
 	s.Nil(we)
@@ -806,7 +806,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	// start the same workflow in cluster 2 is not allowed if policy is RejectDuplicate
 	startReq.RequestId = uuid.New()
 	startReq.WorkflowIdReusePolicy = enums.WorkflowIdReusePolicyRejectDuplicate
-	we, err = client2.StartWorkflowExecution(createContext(), startReq)
+	we, err = client2.StartWorkflowExecution(host.NewContext(), startReq)
 	st = status.Convert(err)
 	s.True(errordetails.IsWorkflowExecutionAlreadyStartedFailure(st))
 	s.Nil(we)
@@ -814,14 +814,14 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	// start the workflow in cluster 2
 	startReq.RequestId = uuid.New()
 	startReq.WorkflowIdReusePolicy = enums.WorkflowIdReusePolicyAllowDuplicate
-	we, err = client2.StartWorkflowExecution(createContext(), startReq)
-	s.Nil(err)
+	we, err = client2.StartWorkflowExecution(host.NewContext(), startReq)
+	s.NoError(err)
 	s.NotNil(we.GetRunId())
 	s.logger.Info("StartWorkflowExecution in cluster 2: ", tag.WorkflowRunID(we.GetRunId()))
 
 	_, err = poller2.PollAndProcessDecisionTask(false, false)
-	s.logger.Info("PollAndProcessDecisionTask 2", tag.Error(err))
-	s.Nil(err)
+	s.logger.Error("PollAndProcessDecisionTask 2", tag.Error(err))
+	s.NoError(err)
 	s.Equal(2, workflowCompleteTimes)
 }
 
@@ -835,13 +835,13 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 		ActiveClusterName:                      clusterName[0],
 		WorkflowExecutionRetentionPeriodInDays: 1,
 	}
-	_, err := client1.RegisterDomain(createContext(), regReq)
+	_, err := client1.RegisterDomain(host.NewContext(), regReq)
 	s.NoError(err)
 
 	descReq := &workflowservice.DescribeDomainRequest{
 		Name: domainName,
 	}
-	resp, err := client1.DescribeDomain(createContext(), descReq)
+	resp, err := client1.DescribeDomain(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
 	// Wait for domain cache to pick the change
@@ -867,7 +867,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 		TaskStartToCloseTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
-	we, err := client1.StartWorkflowExecution(createContext(), startReq)
+	we, err := client1.StartWorkflowExecution(host.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
 
@@ -923,8 +923,8 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 
 	// make some progress in cluster 1
 	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
-	s.Nil(err)
+	s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.NoError(err)
 
 	// update domain to fail over
 	updateReq := &workflowservice.UpdateDomainRequest{
@@ -933,7 +933,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 			ActiveClusterName: clusterName[1],
 		},
 	}
-	updateResp, err := client1.UpdateDomain(createContext(), updateReq)
+	updateResp, err := client1.UpdateDomain(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
@@ -945,7 +945,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	// terminate workflow at cluster 2
 	terminateReason := "terminate reason."
 	terminateDetails := []byte("terminate details.")
-	_, err = client2.TerminateWorkflowExecution(createContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+	_, err = client2.TerminateWorkflowExecution(host.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Domain: domainName,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
@@ -954,7 +954,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 		Details:  terminateDetails,
 		Identity: identity,
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	// check terminate done
 	executionTerminated := false
@@ -966,8 +966,8 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	}
 GetHistoryLoop:
 	for i := 0; i < 10; i++ {
-		historyResponse, err := client2.GetWorkflowExecutionHistory(createContext(), getHistoryReq)
-		s.Nil(err)
+		historyResponse, err := client2.GetWorkflowExecutionHistory(host.NewContext(), getHistoryReq)
+		s.NoError(err)
 		history := historyResponse.History
 
 		lastEvent := history.Events[len(history.Events)-1]
@@ -991,7 +991,7 @@ GetHistoryLoop:
 	eventsReplicated := false
 GetHistoryLoop2:
 	for i := 0; i < 15; i++ {
-		historyResponse, err = client1.GetWorkflowExecutionHistory(createContext(), getHistoryReq)
+		historyResponse, err = client1.GetWorkflowExecutionHistory(host.NewContext(), getHistoryReq)
 		if err == nil {
 			history := historyResponse.History
 			lastEvent := history.Events[len(history.Events)-1]
@@ -1006,7 +1006,7 @@ GetHistoryLoop2:
 		}
 		time.Sleep(1 * time.Second)
 	}
-	s.Nil(err)
+	s.NoError(err)
 	s.True(eventsReplicated)
 }
 
@@ -1020,13 +1020,13 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 		ActiveClusterName:                      clusterName[0],
 		WorkflowExecutionRetentionPeriodInDays: 1,
 	}
-	_, err := client1.RegisterDomain(createContext(), regReq)
+	_, err := client1.RegisterDomain(host.NewContext(), regReq)
 	s.NoError(err)
 
 	descReq := &workflowservice.DescribeDomainRequest{
 		Name: domainName,
 	}
-	resp, err := client1.DescribeDomain(createContext(), descReq)
+	resp, err := client1.DescribeDomain(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
 	// Wait for domain cache to pick the change
@@ -1052,7 +1052,7 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 		TaskStartToCloseTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
-	we, err := client1.StartWorkflowExecution(createContext(), startReq)
+	we, err := client1.StartWorkflowExecution(host.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
 
@@ -1114,8 +1114,8 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 	// make some progress in cluster 1 and did some continueAsNew
 	for i := 0; i < 3; i++ {
 		_, err := poller.PollAndProcessDecisionTask(false, false)
-		s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
-		s.Nil(err, strconv.Itoa(i))
+		s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+		s.NoError(err, strconv.Itoa(i))
 	}
 
 	// update domain to fail over
@@ -1125,7 +1125,7 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 			ActiveClusterName: clusterName[1],
 		},
 	}
-	updateResp, err := client1.UpdateDomain(createContext(), updateReq)
+	updateResp, err := client1.UpdateDomain(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
@@ -1137,13 +1137,13 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 	// finish the rest in cluster 2
 	for i := 0; i < 2; i++ {
 		_, err := poller2.PollAndProcessDecisionTask(false, false)
-		s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
-		s.Nil(err, strconv.Itoa(i))
+		s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+		s.NoError(err, strconv.Itoa(i))
 	}
 
 	s.False(workflowComplete)
 	_, err = poller2.PollAndProcessDecisionTask(false, false)
-	s.Nil(err)
+	s.NoError(err)
 	s.True(workflowComplete)
 	s.Equal(previousRunID, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetContinuedExecutionRunId())
 }
@@ -1158,13 +1158,13 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 		ActiveClusterName:                      clusterName[0],
 		WorkflowExecutionRetentionPeriodInDays: 1,
 	}
-	_, err := client1.RegisterDomain(createContext(), regReq)
+	_, err := client1.RegisterDomain(host.NewContext(), regReq)
 	s.NoError(err)
 
 	descReq := &workflowservice.DescribeDomainRequest{
 		Name: domainName,
 	}
-	resp, err := client1.DescribeDomain(createContext(), descReq)
+	resp, err := client1.DescribeDomain(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
 	// Wait for domain cache to pick the change
@@ -1190,7 +1190,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 		TaskStartToCloseTimeoutSeconds:      1,
 		Identity:                            identity,
 	}
-	we, err := client1.StartWorkflowExecution(createContext(), startReq)
+	we, err := client1.StartWorkflowExecution(host.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
 
@@ -1239,7 +1239,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	// Send a signal in cluster 1
 	signalName := "my signal"
 	signalInput := []byte("my signal input.")
-	_, err = client1.SignalWorkflowExecution(createContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err = client1.SignalWorkflowExecution(host.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Domain: domainName,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
@@ -1249,13 +1249,13 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 		Input:      signalInput,
 		Identity:   identity,
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	// Process signal in cluster 1
 	s.False(eventSignaled)
 	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
-	s.Nil(err)
+	s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.NoError(err)
 	s.True(eventSignaled)
 
 	// Update domain to fail over
@@ -1265,7 +1265,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 			ActiveClusterName: clusterName[1],
 		},
 	}
-	updateResp, err := client1.UpdateDomain(createContext(), updateReq)
+	updateResp, err := client1.UpdateDomain(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
@@ -1284,20 +1284,20 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	var historyResponse *workflowservice.GetWorkflowExecutionHistoryResponse
 	eventsReplicated := false
 	for i := 0; i < 15; i++ {
-		historyResponse, err = client2.GetWorkflowExecutionHistory(createContext(), getHistoryReq)
+		historyResponse, err = client2.GetWorkflowExecutionHistory(host.NewContext(), getHistoryReq)
 		if err == nil && len(historyResponse.History.Events) == 5 {
 			eventsReplicated = true
 			break
 		}
 		time.Sleep(1 * time.Second)
 	}
-	s.Nil(err)
+	s.NoError(err)
 	s.True(eventsReplicated)
 
 	// Send another signal in cluster 2
 	signalName2 := "my signal 2"
 	signalInput2 := []byte("my signal input 2.")
-	_, err = client2.SignalWorkflowExecution(createContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err = client2.SignalWorkflowExecution(host.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Domain: domainName,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
@@ -1306,26 +1306,26 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 		Input:      signalInput2,
 		Identity:   identity,
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	// Process signal in cluster 2
 	eventSignaled = false
 	_, err = poller2.PollAndProcessDecisionTask(false, false)
-	s.logger.Info("PollAndProcessDecisionTask 2", tag.Error(err))
-	s.Nil(err)
+	s.logger.Error("PollAndProcessDecisionTask 2", tag.Error(err))
+	s.NoError(err)
 	s.True(eventSignaled)
 
 	// check history matched
 	eventsReplicated = false
 	for i := 0; i < 15; i++ {
-		historyResponse, err = client2.GetWorkflowExecutionHistory(createContext(), getHistoryReq)
+		historyResponse, err = client2.GetWorkflowExecutionHistory(host.NewContext(), getHistoryReq)
 		if err == nil && len(historyResponse.History.Events) == 9 {
 			eventsReplicated = true
 			break
 		}
 		time.Sleep(1 * time.Second)
 	}
-	s.Nil(err)
+	s.NoError(err)
 	s.True(eventsReplicated)
 }
 
@@ -1339,13 +1339,13 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 		ActiveClusterName:                      clusterName[0],
 		WorkflowExecutionRetentionPeriodInDays: 1,
 	}
-	_, err := client1.RegisterDomain(createContext(), regReq)
+	_, err := client1.RegisterDomain(host.NewContext(), regReq)
 	s.NoError(err)
 
 	descReq := &workflowservice.DescribeDomainRequest{
 		Name: domainName,
 	}
-	resp, err := client1.DescribeDomain(createContext(), descReq)
+	resp, err := client1.DescribeDomain(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
 	// Wait for domain cache to pick the change
@@ -1373,7 +1373,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 	}
 	var we *workflowservice.StartWorkflowExecutionResponse
 	for i := 0; i < 10; i++ {
-		we, err = client1.StartWorkflowExecution(createContext(), startReq)
+		we, err = client1.StartWorkflowExecution(host.NewContext(), startReq)
 		if err == nil {
 			break
 		}
@@ -1396,7 +1396,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 			// Send a signal in cluster
 			signalName := "my signal"
 			signalInput := []byte("my signal input.")
-			_, err = client1.SignalWorkflowExecution(createContext(), &workflowservice.SignalWorkflowExecutionRequest{
+			_, err = client1.SignalWorkflowExecution(host.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 				Domain: domainName,
 				WorkflowExecution: &commonproto.WorkflowExecution{
 					WorkflowId: id,
@@ -1406,7 +1406,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 				Input:      signalInput,
 				Identity:   "",
 			})
-			s.Nil(err)
+			s.NoError(err)
 			return nil, []*commonproto.Decision{{
 				DecisionType: enums.DecisionTypeStartTimer,
 				Attributes: &commonproto.Decision_StartTimerDecisionAttributes{StartTimerDecisionAttributes: &commonproto.StartTimerDecisionAttributes{
@@ -1417,14 +1417,14 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 		}
 
 		if !timerFired {
-			resp, err := client2.GetWorkflowExecutionHistory(createContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+			resp, err := client2.GetWorkflowExecutionHistory(host.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 				Domain: domainName,
 				Execution: &commonproto.WorkflowExecution{
 					WorkflowId: id,
 					RunId:      we.GetRunId(),
 				},
 			})
-			s.Nil(err)
+			s.NoError(err)
 			for _, event := range resp.History.Events {
 				if event.GetEventType() == enums.EventTypeTimerFired {
 					timerFired = true
@@ -1483,7 +1483,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 			ActiveClusterName: clusterName[1],
 		},
 	}
-	updateResp, err := client1.UpdateDomain(createContext(), updateReq)
+	updateResp, err := client1.UpdateDomain(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
@@ -1495,7 +1495,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 	for i := 1; i < 20; i++ {
 		if !workflowCompleted {
 			_, err = poller2.PollAndProcessDecisionTask(true, false)
-			s.Nil(err)
+			s.NoError(err)
 			time.Sleep(time.Second)
 		}
 	}
@@ -1511,13 +1511,13 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 		ActiveClusterName:                      clusterName[0],
 		WorkflowExecutionRetentionPeriodInDays: 1,
 	}
-	_, err := client1.RegisterDomain(createContext(), regReq)
+	_, err := client1.RegisterDomain(host.NewContext(), regReq)
 	s.NoError(err)
 
 	descReq := &workflowservice.DescribeDomainRequest{
 		Name: domainName,
 	}
-	resp, err := client1.DescribeDomain(createContext(), descReq)
+	resp, err := client1.DescribeDomain(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
 	// Wait for domain cache to pick the change
@@ -1546,7 +1546,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	}
 	var we *workflowservice.StartWorkflowExecutionResponse
 	for i := 0; i < 10; i++ {
-		we, err = client1.StartWorkflowExecution(createContext(), startReq)
+		we, err = client1.StartWorkflowExecution(host.NewContext(), startReq)
 		if err == nil {
 			break
 		}
@@ -1599,9 +1599,9 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	atHandler1 := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 		activity1Called = true
-		_, err = client1.RecordActivityTaskHeartbeat(createContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
+		_, err = client1.RecordActivityTaskHeartbeat(host.NewContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
 			TaskToken: taskToken, Details: heartbeatDetails})
-		s.Nil(err)
+		s.NoError(err)
 		time.Sleep(5 * time.Second)
 		return []byte("Activity Result."), false, nil
 	}
@@ -1637,7 +1637,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	}
 
 	describeWorkflowExecution := func(client workflowservice.WorkflowServiceClient) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
-		return client.DescribeWorkflowExecution(createContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		return client.DescribeWorkflowExecution(host.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Domain: domainName,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: id,
@@ -1647,7 +1647,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	}
 
 	_, err = poller1.PollAndProcessDecisionTask(false, false)
-	s.Nil(err)
+	s.NoError(err)
 	err = poller1.PollAndProcessActivityTask(false)
 	s.Equal(codes.NotFound, status.Code(err))
 
@@ -1658,7 +1658,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 			ActiveClusterName: clusterName[1],
 		},
 	}
-	updateResp, err := client1.UpdateDomain(createContext(), updateReq)
+	updateResp, err := client1.UpdateDomain(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
@@ -1671,7 +1671,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	// has heartbeat timeout. Also make sure the information is recorded when the activity state
 	// is "Scheduled"
 	dweResponse, err := describeWorkflowExecution(client2)
-	s.Nil(err)
+	s.NoError(err)
 	pendingActivities := dweResponse.GetPendingActivities()
 	s.Equal(1, len(pendingActivities))
 	s.Equal(enums.PendingActivityStateScheduled, pendingActivities[0].GetState())
@@ -1691,13 +1691,13 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	s.True(activity1Called)
 	s.True(activity2Called)
 
-	historyResponse, err := client2.GetWorkflowExecutionHistory(createContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+	historyResponse, err := client2.GetWorkflowExecutionHistory(host.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Domain: domainName,
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 	history := historyResponse.History
 
 	activityRetryFound := false
@@ -1721,13 +1721,13 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 		ActiveClusterName:                      clusterName[0],
 		WorkflowExecutionRetentionPeriodInDays: 1,
 	}
-	_, err := client1.RegisterDomain(createContext(), regReq)
+	_, err := client1.RegisterDomain(host.NewContext(), regReq)
 	s.NoError(err)
 
 	descReq := &workflowservice.DescribeDomainRequest{
 		Name: domainName,
 	}
-	resp, err := client1.DescribeDomain(createContext(), descReq)
+	resp, err := client1.DescribeDomain(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
 	// Wait for domain cache to pick the change
@@ -1755,7 +1755,7 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 	}
 	var we *workflowservice.StartWorkflowExecutionResponse
 	for i := 0; i < 10; i++ {
-		we, err = client1.StartWorkflowExecution(createContext(), startReq)
+		we, err = client1.StartWorkflowExecution(host.NewContext(), startReq)
 		if err == nil {
 			break
 		}
@@ -1806,7 +1806,7 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 
 	// this will fail the decision
 	_, err = poller1.PollAndProcessDecisionTask(false, false)
-	s.Nil(err)
+	s.NoError(err)
 
 	// Update domain to fail over
 	updateReq := &workflowservice.UpdateDomainRequest{
@@ -1815,7 +1815,7 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 			ActiveClusterName: clusterName[1],
 		},
 	}
-	updateResp, err := client1.UpdateDomain(createContext(), updateReq)
+	updateResp, err := client1.UpdateDomain(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
@@ -1828,7 +1828,7 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 	// after the failover has attempt 0
 	// for details see ReplicateTransientDecisionTaskScheduled
 	_, err = poller2.PollAndProcessDecisionTaskWithAttempt(false, false, false, false, 0)
-	s.Nil(err)
+	s.NoError(err)
 	s.True(workflowFinished)
 }
 
@@ -1842,13 +1842,13 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 		ActiveClusterName:                      clusterName[0],
 		WorkflowExecutionRetentionPeriodInDays: 1,
 	}
-	_, err := client1.RegisterDomain(createContext(), regReq)
+	_, err := client1.RegisterDomain(host.NewContext(), regReq)
 	s.NoError(err)
 
 	descReq := &workflowservice.DescribeDomainRequest{
 		Name: domainName,
 	}
-	resp, err := client1.DescribeDomain(createContext(), descReq)
+	resp, err := client1.DescribeDomain(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
 	// Wait for domain cache to pick the change
@@ -1875,7 +1875,7 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 		Identity:                            identity,
 		CronSchedule:                        "@every 5s",
 	}
-	we, err := client1.StartWorkflowExecution(createContext(), startReq)
+	we, err := client1.StartWorkflowExecution(host.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
 
@@ -1908,7 +1908,7 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 			ActiveClusterName: clusterName[1],
 		},
 	}
-	updateResp, err := client1.UpdateDomain(createContext(), updateReq)
+	updateResp, err := client1.UpdateDomain(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
@@ -1920,16 +1920,16 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 	// Run twice to make sure cron schedule is passed to standby.
 	for i := 0; i < 2; i++ {
 		_, err = poller2.PollAndProcessDecisionTask(false, false)
-		s.Nil(err)
+		s.NoError(err)
 	}
 
-	_, err = client2.TerminateWorkflowExecution(createContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+	_, err = client2.TerminateWorkflowExecution(host.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Domain: domainName,
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: id,
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
@@ -1942,13 +1942,13 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 		ActiveClusterName:                      clusterName[0],
 		WorkflowExecutionRetentionPeriodInDays: 1,
 	}
-	_, err := client1.RegisterDomain(createContext(), regReq)
+	_, err := client1.RegisterDomain(host.NewContext(), regReq)
 	s.NoError(err)
 
 	descReq := &workflowservice.DescribeDomainRequest{
 		Name: domainName,
 	}
-	resp, err := client1.DescribeDomain(createContext(), descReq)
+	resp, err := client1.DescribeDomain(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
 	// Wait for domain cache to pick the change
@@ -1982,7 +1982,7 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 			ExpirationIntervalInSeconds: 100,
 		},
 	}
-	we, err := client1.StartWorkflowExecution(createContext(), startReq)
+	we, err := client1.StartWorkflowExecution(host.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
 
@@ -2017,7 +2017,7 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 			ActiveClusterName: clusterName[1],
 		},
 	}
-	updateResp, err := client1.UpdateDomain(createContext(), updateReq)
+	updateResp, err := client1.UpdateDomain(host.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
 	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
@@ -2028,42 +2028,42 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 
 	// First attempt
 	_, err = poller2.PollAndProcessDecisionTask(false, false)
-	s.Nil(err)
+	s.NoError(err)
 	events := s.getHistory(client2, domainName, executions[0])
 	s.Equal(enums.EventTypeWorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
 	s.Equal(int32(0), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 
 	// second attempt
 	_, err = poller2.PollAndProcessDecisionTask(false, false)
-	s.Nil(err)
+	s.NoError(err)
 	events = s.getHistory(client2, domainName, executions[1])
 	s.Equal(enums.EventTypeWorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
 	s.Equal(int32(1), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 
 	// third attempt. Still failing, should stop retry.
 	_, err = poller2.PollAndProcessDecisionTask(false, false)
-	s.Nil(err)
+	s.NoError(err)
 	events = s.getHistory(client2, domainName, executions[2])
 	s.Equal(enums.EventTypeWorkflowExecutionFailed, events[len(events)-1].GetEventType())
 	s.Equal(int32(2), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 }
 
 func (s *integrationClustersTestSuite) getHistory(client host.FrontendClient, domain string, execution *commonproto.WorkflowExecution) []*commonproto.HistoryEvent {
-	historyResponse, err := client.GetWorkflowExecutionHistory(createContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+	historyResponse, err := client.GetWorkflowExecutionHistory(host.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Domain:          domain,
 		Execution:       execution,
 		MaximumPageSize: 5, // Use small page size to force pagination code path
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	events := historyResponse.History.Events
 	for historyResponse.NextPageToken != nil {
-		historyResponse, err = client.GetWorkflowExecutionHistory(createContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		historyResponse, err = client.GetWorkflowExecutionHistory(host.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Domain:        domain,
 			Execution:     execution,
 			NextPageToken: historyResponse.NextPageToken,
 		})
-		s.Nil(err)
+		s.NoError(err)
 		events = append(events, historyResponse.History.Events...)
 	}
 

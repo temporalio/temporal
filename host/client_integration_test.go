@@ -207,7 +207,7 @@ func (s *clientIntegrationSuite) TestClientDataConverter() {
 		TaskList:                     s.taskList,
 		ExecutionStartToCloseTimeout: 60 * time.Second,
 	}
-	ctx, cancel := createContextWithCancel(60 * time.Second)
+	ctx, cancel := NewContextWithCancel(60 * time.Second)
 	defer cancel()
 	we, err := s.wfClient.ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
 	if err != nil {
@@ -238,7 +238,7 @@ func (s *clientIntegrationSuite) TestClientDataConverter_Failed() {
 		TaskList:                     s.taskList,
 		ExecutionStartToCloseTimeout: 60 * time.Second,
 	}
-	ctx, cancel := createContextWithCancel(60 * time.Second)
+	ctx, cancel := NewContextWithCancel(60 * time.Second)
 	defer cancel()
 	we, err := s.wfClient.ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
 	if err != nil {
@@ -257,7 +257,7 @@ func (s *clientIntegrationSuite) TestClientDataConverter_Failed() {
 	failedAct := 0
 	for iter.HasNext() {
 		event, err := iter.Next()
-		s.Nil(err)
+		s.NoError(err)
 		if event.GetEventType() == enums.EventTypeActivityTaskCompleted {
 			completedAct++
 		}
@@ -341,7 +341,7 @@ func (s *clientIntegrationSuite) TestClientDataConverter_WithChild() {
 		TaskList:                     s.taskList,
 		ExecutionStartToCloseTimeout: 60 * time.Second,
 	}
-	ctx, cancel := createContextWithCancel(60 * time.Second)
+	ctx, cancel := NewContextWithCancel(60 * time.Second)
 	defer cancel()
 	we, err := s.wfClient.ExecuteWorkflow(ctx, workflowOptions, testParentWorkflow)
 	if err != nil {
