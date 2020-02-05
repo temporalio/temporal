@@ -1449,6 +1449,37 @@ type (
 		persistenceblobs.ImmutableClusterMetadata
 	}
 
+	// GetActiveClusterMembersRequest is the response to GetActiveClusterMembers
+	GetActiveClusterMembersRequest struct {
+		LastHeartbeatWithin time.Duration
+	}
+
+	// GetActiveClusterMembersResponse is the response to GetActiveClusterMembers
+	GetActiveClusterMembersResponse struct {
+		ActiveMembers []*ClusterMember
+	}
+
+	// ClusterMember is used as a response to GetActiveClusterMembers
+	ClusterMember struct {
+		HostID         uuid.UUID
+		RPCAddress     string
+		SessionStarted time.Time
+		LastHeartbeat  time.Time
+	}
+
+	// UpsertClusterMembershipRequest is the request to UpsertClusterMembership
+	UpsertClusterMembershipRequest struct {
+		RPCAddress     string
+		SessionStarted time.Time
+		RecordExpiry   time.Duration
+		HostID         uuid.UUID
+	}
+
+	// PruneClusterMembershipRequest is the request to PruneClusterMembership
+	PruneClusterMembershipRequest struct {
+		MaxRecordsPruned int
+	}
+
 	// Closeable is an interface for any entity that supports a close operation to release resources
 	Closeable interface {
 		Close()
@@ -1576,6 +1607,9 @@ type (
 		GetName() string
 		InitializeImmutableClusterMetadata(request *InitializeImmutableClusterMetadataRequest) (*InitializeImmutableClusterMetadataResponse, error)
 		GetImmutableClusterMetadata() (*GetImmutableClusterMetadataResponse, error)
+		GetActiveClusterMembers(request *GetActiveClusterMembersRequest) (*GetActiveClusterMembersResponse, error)
+		UpsertClusterMembership(request *UpsertClusterMembershipRequest) error
+		PruneClusterMembership(request *PruneClusterMembershipRequest) error
 	}
 )
 
