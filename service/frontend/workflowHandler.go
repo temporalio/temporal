@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	commonproto "go.temporal.io/temporal-proto/common"
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/yarpcerrors"
 	"google.golang.org/grpc/metadata"
@@ -37,9 +36,7 @@ import (
 	m "github.com/temporalio/temporal/.gen/go/matching"
 	gen "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/go/temporal/workflowserviceserver"
-	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cache"
@@ -357,99 +354,7 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 	ctx context.Context,
 	pollRequest *gen.PollForDecisionTaskRequest,
 ) (resp *gen.PollForDecisionTaskResponse, retError error) {
-	defer log.CapturePanic(wh.GetLogger(), &retError)
-
-	tagsForErrorLog := []tag.Tag{tag.WorkflowDomainName(pollRequest.GetDomain())}
-	callTime := time.Now()
-
-	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendPollForDecisionTaskScope, pollRequest)
-	defer sw.Stop()
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, wh.error(err, scope, tagsForErrorLog...)
-	}
-
-	if pollRequest == nil {
-		return nil, wh.error(errRequestNotSet, scope, tagsForErrorLog...)
-	}
-
-	wh.GetLogger().Debug("Received PollForDecisionTask")
-	if err := common.ValidateLongPollContextTimeout(
-		ctx,
-		"PollForDecisionTask",
-		wh.GetThrottledLogger(),
-	); err != nil {
-		return nil, wh.error(err, scope, tagsForErrorLog...)
-	}
-
-	if pollRequest.Domain == nil || pollRequest.GetDomain() == "" {
-		return nil, wh.error(errDomainNotSet, scope, tagsForErrorLog...)
-	}
-	if len(pollRequest.GetDomain()) > wh.config.MaxIDLengthLimit() {
-		return nil, wh.error(errDomainTooLong, scope, tagsForErrorLog...)
-	}
-
-	if len(pollRequest.GetIdentity()) > wh.config.MaxIDLengthLimit() {
-		return nil, wh.error(errIdentityTooLong, scope, tagsForErrorLog...)
-	}
-
-	if err := wh.validateTaskList(pollRequest.TaskList, scope); err != nil {
-		return nil, err
-	}
-
-	domainName := pollRequest.GetDomain()
-	domainEntry, err := wh.GetDomainCache().GetDomain(domainName)
-	if err != nil {
-		return nil, wh.error(err, scope, tagsForErrorLog...)
-	}
-	domainID := domainEntry.GetInfo().ID
-
-	wh.GetLogger().Debug("Poll for decision.", tag.WorkflowDomainName(domainName), tag.WorkflowDomainID(domainID))
-	if err := wh.checkBadBinary(domainEntry, pollRequest.GetBinaryChecksum()); err != nil {
-		return nil, wh.error(err, scope, tagsForErrorLog...)
-	}
-
-	pollerID := uuid.New()
-	var matchingResp *m.PollForDecisionTaskResponse
-	op := func() error {
-		var err error
-		matchingResp, err = wh.GetMatchingClient().PollForDecisionTask(ctx, &m.PollForDecisionTaskRequest{
-			DomainUUID:  common.StringPtr(domainID),
-			PollerID:    common.StringPtr(pollerID),
-			PollRequest: pollRequest,
-		})
-		return err
-	}
-
-	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
-	if err != nil {
-		err = wh.cancelOutstandingPoll(ctx, err, domainID, persistence.TaskListTypeDecision, pollRequest.TaskList, pollerID)
-		if err != nil {
-			// For all other errors log an error and return it back to client.
-			ctxTimeout := "not-set"
-			ctxDeadline, ok := ctx.Deadline()
-			if ok {
-				ctxTimeout = ctxDeadline.Sub(callTime).String()
-			}
-			wh.GetLogger().Error("PollForDecisionTask failed.",
-				tag.WorkflowTaskListName(pollRequest.GetTaskList().GetName()),
-				tag.Value(ctxTimeout),
-				tag.Error(err))
-			return nil, wh.error(err, scope)
-		}
-
-		// Must be cancellation error.  Does'nt matter what we return here.  Client already went away.
-		return nil, nil
-	}
-
-	tagsForErrorLog = append(tagsForErrorLog, []tag.Tag{tag.WorkflowID(
-		matchingResp.GetWorkflowExecution().GetWorkflowId()),
-		tag.WorkflowRunID(matchingResp.GetWorkflowExecution().GetRunId())}...)
-	resp, err = wh.createPollForDecisionTaskResponse(ctx, scope, domainID, matchingResp, matchingResp.GetBranchToken())
-	if err != nil {
-		return nil, wh.error(err, scope, tagsForErrorLog...)
-	}
-	return resp, nil
+	panic("not implemented")
 }
 
 func (wh *WorkflowHandler) checkBadBinary(domainEntry *cache.DomainCacheEntry, binaryChecksum string) error {
@@ -464,31 +369,6 @@ func (wh *WorkflowHandler) checkBadBinary(domainEntry *cache.DomainCacheEntry, b
 		}
 	}
 	return nil
-}
-
-func (wh *WorkflowHandler) cancelOutstandingPoll(ctx context.Context, err error, domainID string, taskListType int32,
-	taskList *gen.TaskList, pollerID string) error {
-	// First check if this err is due to context cancellation.  This means client connection to frontend is closed.
-	if ctx.Err() == context.Canceled {
-		// Our rpc stack does not propagates context cancellation to the other service.  Lets make an explicit
-		// call to matching to notify this poller is gone to prevent any tasks being dispatched to zombie pollers.
-		err = wh.GetMatchingClient().CancelOutstandingPoll(context.Background(), &m.CancelOutstandingPollRequest{
-			DomainUUID:   common.StringPtr(domainID),
-			TaskListType: common.Int32Ptr(taskListType),
-			TaskList:     taskList,
-			PollerID:     common.StringPtr(pollerID),
-		})
-		// We can not do much if this call fails.  Just log the error and move on
-		if err != nil {
-			wh.GetLogger().Warn("Failed to cancel outstanding poller.",
-				tag.WorkflowTaskListName(taskList.GetName()), tag.Error(err))
-		}
-
-		// Clear error as we don't want to report context cancellation error to count against our SLA
-		return nil
-	}
-
-	return err
 }
 
 // RecordActivityTaskHeartbeat - Record Activity Task Heart beat.
@@ -1406,82 +1286,7 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 	ctx context.Context,
 	completeRequest *gen.RespondQueryTaskCompletedRequest,
 ) (retError error) {
-	defer log.CapturePanic(wh.GetLogger(), &retError)
-
-	scope := wh.getDefaultScope(metrics.FrontendRespondQueryTaskCompletedScope)
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return wh.error(err, scope)
-	}
-
-	if completeRequest == nil {
-		return wh.error(errRequestNotSet, scope)
-	}
-
-	// Count the request in the RPS, but we still accept it even if RPS is exceeded
-	wh.allow(nil)
-
-	if completeRequest.TaskToken == nil {
-		return wh.error(errTaskTokenNotSet, scope)
-	}
-	queryTaskToken, err := wh.tokenSerializer.DeserializeQueryTaskToken(completeRequest.TaskToken)
-	if err != nil {
-		return wh.error(err, scope)
-	}
-	if queryTaskToken.DomainID == "" || queryTaskToken.TaskList == "" || queryTaskToken.TaskID == "" {
-		return wh.error(errInvalidTaskToken, scope)
-	}
-
-	domainEntry, err := wh.GetDomainCache().GetDomainByID(queryTaskToken.DomainID)
-	if err != nil {
-		return wh.error(err, scope)
-	}
-
-	scope, sw := wh.startRequestProfileWithDomain(
-		metrics.FrontendRespondQueryTaskCompletedScope,
-		domainWrapper{
-			domain: domainEntry.GetInfo().Name,
-		},
-	)
-	defer sw.Stop()
-
-	sizeLimitError := wh.config.BlobSizeLimitError(domainEntry.GetInfo().Name)
-	sizeLimitWarn := wh.config.BlobSizeLimitWarn(domainEntry.GetInfo().Name)
-
-	if err := common.CheckEventBlobSizeLimit(
-		len(completeRequest.GetQueryResult()),
-		sizeLimitWarn,
-		sizeLimitError,
-		queryTaskToken.DomainID,
-		"",
-		"",
-		scope,
-		wh.GetThrottledLogger(),
-	); err != nil {
-		completeRequest = &gen.RespondQueryTaskCompletedRequest{
-			TaskToken:     completeRequest.TaskToken,
-			CompletedType: common.QueryTaskCompletedTypePtr(gen.QueryTaskCompletedTypeFailed),
-			QueryResult:   nil,
-			ErrorMessage:  common.StringPtr(err.Error()),
-		}
-	}
-
-	headers := client.GetHeadersValue(ctx, common.ClientImplHeaderName, common.FeatureVersionHeaderName)
-	completeRequest.WorkerVersionInfo = &gen.WorkerVersionInfo{
-		Impl:           common.StringPtr(headers[0]),
-		FeatureVersion: common.StringPtr(headers[1]),
-	}
-	matchingRequest := &matchingservice.RespondQueryTaskCompletedRequest{
-		DomainUUID:       queryTaskToken.DomainID,
-		TaskList:         &commonproto.TaskList{Name: queryTaskToken.TaskList},
-		TaskID:           queryTaskToken.TaskID,
-		CompletedRequest: completeRequest,
-	}
-
-	err = wh.GetMatchingClient().RespondQueryTaskCompleted(ctx, matchingRequest)
-	if err != nil {
-		return wh.error(err, scope)
-	}
-	return nil
+	panic("not impemented")
 }
 
 func newWorkerVersionInfo(ctx context.Context) *gen.WorkerVersionInfo {
@@ -3031,86 +2836,12 @@ func (wh *WorkflowHandler) DescribeTaskList(
 	ctx context.Context,
 	request *gen.DescribeTaskListRequest,
 ) (resp *gen.DescribeTaskListResponse, retError error) {
-	defer log.CapturePanic(wh.GetLogger(), &retError)
-
-	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendDescribeTaskListScope, request)
-	defer sw.Stop()
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, wh.error(err, scope)
-	}
-
-	if request == nil {
-		return nil, wh.error(errRequestNotSet, scope)
-	}
-
-	if ok := wh.allow(request); !ok {
-		return nil, wh.error(createServiceBusyError(), scope)
-	}
-
-	if request.GetDomain() == "" {
-		return nil, wh.error(errDomainNotSet, scope)
-	}
-	domainID, err := wh.GetDomainCache().GetDomainID(request.GetDomain())
-	if err != nil {
-		return nil, wh.error(err, scope)
-	}
-
-	if err := wh.validateTaskList(request.TaskList, scope); err != nil {
-		return nil, err
-	}
-
-	if err := wh.validateTaskListType(request.TaskListType, scope); err != nil {
-		return nil, err
-	}
-
-	var response *gen.DescribeTaskListResponse
-	op := func() error {
-		var err error
-		response, err = wh.GetMatchingClient().DescribeTaskList(ctx, &m.DescribeTaskListRequest{
-			DomainUUID:  common.StringPtr(domainID),
-			DescRequest: request,
-		})
-		return err
-	}
-
-	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
-	if err != nil {
-		return nil, wh.error(err, scope)
-	}
-
-	return response, nil
+	panic("not implemented")
 }
 
 // ListTaskListPartitions returns all the partition and host for a taskList
 func (wh *WorkflowHandler) ListTaskListPartitions(ctx context.Context, request *gen.ListTaskListPartitionsRequest) (resp *gen.ListTaskListPartitionsResponse, retError error) {
-	defer log.CapturePanic(wh.GetLogger(), &retError)
-
-	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendListTaskListPartitionsScope, request)
-	defer sw.Stop()
-
-	if request == nil {
-		return nil, wh.error(errRequestNotSet, scope)
-	}
-
-	if ok := wh.allow(request); !ok {
-		return nil, wh.error(createServiceBusyError(), scope)
-	}
-
-	if request.GetDomain() == "" {
-		return nil, wh.error(errDomainNotSet, scope)
-	}
-
-	if err := wh.validateTaskList(request.TaskList, scope); err != nil {
-		return nil, err
-	}
-
-	resp, err := wh.GetMatchingClient().ListTaskListPartitions(ctx, &matchingservice.ListTaskListPartitionsRequest{
-		Domain:   *request.Domain,
-		TaskList: adapter.ToProtoTaskList(request.TaskList),
-	})
-
-	return resp, err
+	panic("not implemented")
 }
 
 func (wh *WorkflowHandler) getRawHistory(

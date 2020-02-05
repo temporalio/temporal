@@ -32,6 +32,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/status"
 	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 	"go.uber.org/yarpc/yarpcerrors"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/codes"
@@ -554,6 +555,23 @@ func ConvertIndexedValueTypeToThriftType(fieldType interface{}, logger log.Logge
 		// Unknown fieldType, please make sure dynamic config return correct value type
 		logger.Error("unknown index value type", tag.Value(fieldType), tag.ValueType(t))
 		return fieldType.(workflow.IndexedValueType) // it will panic and been captured by logger
+	}
+}
+
+// ConvertIndexedValueTypeToProtoType takes fieldType as interface{} and convert to IndexedValueType.
+// Because different implementation of dynamic config client may lead to different types
+func ConvertIndexedValueTypeToProtoType(fieldType interface{}, logger log.Logger) enums.IndexedValueType {
+	switch t := fieldType.(type) {
+	case float64:
+		return enums.IndexedValueType(fieldType.(float64))
+	case int:
+		return enums.IndexedValueType(fieldType.(int))
+	case workflow.IndexedValueType:
+		return fieldType.(enums.IndexedValueType)
+	default:
+		// Unknown fieldType, please make sure dynamic config return correct value type
+		logger.Error("unknown index value type", tag.Value(fieldType), tag.ValueType(t))
+		return fieldType.(enums.IndexedValueType) // it will panic and been captured by logger
 	}
 }
 

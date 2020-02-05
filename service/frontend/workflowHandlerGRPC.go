@@ -26,19 +26,18 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gogo/status"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/workflowservice"
-	"go.uber.org/yarpc/yarpcerrors"
+	"google.golang.org/grpc/codes"
 
 	"github.com/pborman/uuid"
 
-	h "github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
-	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/client"
 	"github.com/temporalio/temporal/common/elasticsearch/validator"
@@ -184,11 +183,97 @@ func (wh *WorkflowHandlerGRPC) GetWorkflowExecutionHistory(ctx context.Context, 
 func (wh *WorkflowHandlerGRPC) PollForDecisionTask(ctx context.Context, request *workflowservice.PollForDecisionTaskRequest) (_ *workflowservice.PollForDecisionTaskResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
-	response, err := wh.workflowHandlerThrift.PollForDecisionTask(ctx, adapter.ToThriftPollForDecisionTaskRequest(request))
-	if err != nil {
-		return nil, adapter.ToProtoError(err)
+	tagsForErrorLog := []tag.Tag{tag.WorkflowDomainName(pollRequest.GetDomain())}
+	callTime := time.Now()
+
+	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendPollForDecisionTaskScope, pollRequest)
+	defer sw.Stop()
+
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+		return nil, wh.error(err, scope, tagsForErrorLog...)
 	}
-	return adapter.ToProtoPollForDecisionTaskResponse(response), nil
+
+	if pollRequest == nil {
+		return nil, wh.error(errRequestNotSet, scope, tagsForErrorLog...)
+	}
+
+	wh.GetLogger().Debug("Received PollForDecisionTask")
+	if err := common.ValidateLongPollContextTimeout(
+		ctx,
+		"PollForDecisionTask",
+		wh.GetThrottledLogger(),
+	); err != nil {
+		return nil, wh.error(err, scope, tagsForErrorLog...)
+	}
+
+	if pollRequest.Domain == nil || pollRequest.GetDomain() == "" {
+		return nil, wh.error(errDomainNotSet, scope, tagsForErrorLog...)
+	}
+	if len(pollRequest.GetDomain()) > wh.config.MaxIDLengthLimit() {
+		return nil, wh.error(errDomainTooLong, scope, tagsForErrorLog...)
+	}
+
+	if len(pollRequest.GetIdentity()) > wh.config.MaxIDLengthLimit() {
+		return nil, wh.error(errIdentityTooLong, scope, tagsForErrorLog...)
+	}
+
+	if err := wh.validateTaskList(pollRequest.TaskList, scope); err != nil {
+		return nil, err
+	}
+
+	domainName := pollRequest.GetDomain()
+	domainEntry, err := wh.GetDomainCache().GetDomain(domainName)
+	if err != nil {
+		return nil, wh.error(err, scope, tagsForErrorLog...)
+	}
+	domainID := domainEntry.GetInfo().ID
+
+	wh.GetLogger().Debug("Poll for decision.", tag.WorkflowDomainName(domainName), tag.WorkflowDomainID(domainID))
+	if err := wh.checkBadBinary(domainEntry, pollRequest.GetBinaryChecksum()); err != nil {
+		return nil, wh.error(err, scope, tagsForErrorLog...)
+	}
+
+	pollerID := uuid.New()
+	var matchingResp *m.PollForDecisionTaskResponse
+	op := func() error {
+		var err error
+		matchingResp, err = wh.GetMatchingClient().PollForDecisionTask(ctx, &m.PollForDecisionTaskRequest{
+			DomainUUID:  common.StringPtr(domainID),
+			PollerID:    common.StringPtr(pollerID),
+			PollRequest: pollRequest,
+		})
+		return err
+	}
+
+	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
+	if err != nil {
+		err = wh.cancelOutstandingPoll(ctx, err, domainID, persistence.TaskListTypeDecision, pollRequest.TaskList, pollerID)
+		if err != nil {
+			// For all other errors log an error and return it back to client.
+			ctxTimeout := "not-set"
+			ctxDeadline, ok := ctx.Deadline()
+			if ok {
+				ctxTimeout = ctxDeadline.Sub(callTime).String()
+			}
+			wh.GetLogger().Error("PollForDecisionTask failed.",
+				tag.WorkflowTaskListName(pollRequest.GetTaskList().GetName()),
+				tag.Value(ctxTimeout),
+				tag.Error(err))
+			return nil, wh.error(err, scope)
+		}
+
+		// Must be cancellation error.  Does'nt matter what we return here.  Client already went away.
+		return nil, nil
+	}
+
+	tagsForErrorLog = append(tagsForErrorLog, []tag.Tag{tag.WorkflowID(
+		matchingResp.GetWorkflowExecution().GetWorkflowId()),
+		tag.WorkflowRunID(matchingResp.GetWorkflowExecution().GetRunId())}...)
+	resp, err = wh.createPollForDecisionTaskResponse(ctx, scope, domainID, matchingResp, matchingResp.GetBranchToken())
+	if err != nil {
+		return nil, wh.error(err, scope, tagsForErrorLog...)
+	}
+	return resp, nil
 }
 
 // RespondDecisionTaskCompleted is called by application worker to complete a DecisionTask handed as a result of
@@ -595,12 +680,80 @@ func (wh *WorkflowHandlerGRPC) GetSearchAttributes(ctx context.Context, _ *workf
 func (wh *WorkflowHandlerGRPC) RespondQueryTaskCompleted(ctx context.Context, request *workflowservice.RespondQueryTaskCompletedRequest) (_ *workflowservice.RespondQueryTaskCompletedResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
-	err := wh.workflowHandlerThrift.RespondQueryTaskCompleted(ctx, adapter.ToThriftRespondQueryTaskCompletedRequest(request))
-	if err != nil {
-		return nil, adapter.ToProtoError(err)
+	scope := wh.getDefaultScope(metrics.FrontendRespondQueryTaskCompletedScope)
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+		return wh.error(err, scope)
 	}
-	return &workflowservice.RespondQueryTaskCompletedResponse{}, nil
-}
+
+	if completeRequest == nil {
+		return wh.error(errRequestNotSet, scope)
+	}
+
+	// Count the request in the RPS, but we still accept it even if RPS is exceeded
+	wh.allow(nil)
+
+	if completeRequest.TaskToken == nil {
+		return wh.error(errTaskTokenNotSet, scope)
+	}
+	queryTaskToken, err := wh.tokenSerializer.DeserializeQueryTaskToken(completeRequest.TaskToken)
+	if err != nil {
+		return wh.error(err, scope)
+	}
+	if queryTaskToken.DomainID == "" || queryTaskToken.TaskList == "" || queryTaskToken.TaskID == "" {
+		return wh.error(errInvalidTaskToken, scope)
+	}
+
+	domainEntry, err := wh.GetDomainCache().GetDomainByID(queryTaskToken.DomainID)
+	if err != nil {
+		return wh.error(err, scope)
+	}
+
+	scope, sw := wh.startRequestProfileWithDomain(
+		metrics.FrontendRespondQueryTaskCompletedScope,
+		domainWrapper{
+			domain: domainEntry.GetInfo().Name,
+		},
+	)
+	defer sw.Stop()
+
+	sizeLimitError := wh.config.BlobSizeLimitError(domainEntry.GetInfo().Name)
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(domainEntry.GetInfo().Name)
+
+	if err := common.CheckEventBlobSizeLimit(
+		len(completeRequest.GetQueryResult()),
+		sizeLimitWarn,
+		sizeLimitError,
+		queryTaskToken.DomainID,
+		"",
+		"",
+		scope,
+		wh.GetThrottledLogger(),
+	); err != nil {
+		completeRequest = &gen.RespondQueryTaskCompletedRequest{
+			TaskToken:     completeRequest.TaskToken,
+			CompletedType: common.QueryTaskCompletedTypePtr(gen.QueryTaskCompletedTypeFailed),
+			QueryResult:   nil,
+			ErrorMessage:  common.StringPtr(err.Error()),
+		}
+	}
+
+	headers := client.GetHeadersValue(ctx, common.ClientImplHeaderName, common.FeatureVersionHeaderName)
+	completeRequest.WorkerVersionInfo = &gen.WorkerVersionInfo{
+		Impl:           common.StringPtr(headers[0]),
+		FeatureVersion: common.StringPtr(headers[1]),
+	}
+	matchingRequest := &matchingservice.RespondQueryTaskCompletedRequest{
+		DomainUUID:       queryTaskToken.DomainID,
+		TaskList:         &commonproto.TaskList{Name: queryTaskToken.TaskList},
+		TaskID:           queryTaskToken.TaskID,
+		CompletedRequest: completeRequest,
+	}
+
+	err = wh.GetMatchingClient().RespondQueryTaskCompleted(ctx, matchingRequest)
+	if err != nil {
+		return wh.error(err, scope)
+	}
+	return nil}
 
 // ResetStickyTaskList resets the sticky tasklist related information in mutable state of a given workflow.
 // Things cleared are:
@@ -646,11 +799,53 @@ func (wh *WorkflowHandlerGRPC) DescribeWorkflowExecution(ctx context.Context, re
 func (wh *WorkflowHandlerGRPC) DescribeTaskList(ctx context.Context, request *workflowservice.DescribeTaskListRequest) (_ *workflowservice.DescribeTaskListResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
-	response, err := wh.workflowHandlerThrift.DescribeTaskList(ctx, adapter.ToThriftDescribeTaskListRequest(request))
-	if err != nil {
-		return nil, adapter.ToProtoError(err)
+	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendDescribeTaskListScope, request)
+	defer sw.Stop()
+
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+		return nil, wh.error(err, scope)
 	}
-	return adapter.ToProtoDescribeTaskListResponse(response), nil
+
+	if request == nil {
+		return nil, wh.error(errRequestNotSet, scope)
+	}
+
+	if ok := wh.allow(request); !ok {
+		return nil, wh.error(createServiceBusyError(), scope)
+	}
+
+	if request.GetDomain() == "" {
+		return nil, wh.error(errDomainNotSet, scope)
+	}
+	domainID, err := wh.GetDomainCache().GetDomainID(request.GetDomain())
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	if err := wh.validateTaskList(request.TaskList, scope); err != nil {
+		return nil, err
+	}
+
+	if err := wh.validateTaskListType(request.TaskListType, scope); err != nil {
+		return nil, err
+	}
+
+	var response *gen.DescribeTaskListResponse
+	op := func() error {
+		var err error
+		response, err = wh.GetMatchingClient().DescribeTaskList(ctx, &m.DescribeTaskListRequest{
+			DomainUUID:  common.StringPtr(domainID),
+			DescRequest: request,
+		})
+		return err
+	}
+
+	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	return response, nil
 }
 
 // GetWorkflowExecutionRawHistory retrieves raw history directly from DB layer.
@@ -679,11 +874,33 @@ func (wh *WorkflowHandlerGRPC) GetClusterInfo(ctx context.Context, _ *workflowse
 func (wh *WorkflowHandlerGRPC) ListTaskListPartitions(ctx context.Context, request *workflowservice.ListTaskListPartitionsRequest) (_ *workflowservice.ListTaskListPartitionsResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
-	response, err := wh.workflowHandlerThrift.ListTaskListPartitions(ctx, adapter.ToThriftListTaskListPartitionsRequest(request))
-	if err != nil {
-		return nil, adapter.ToProtoError(err)
+	defer log.CapturePanic(wh.GetLogger(), &retError)
+
+	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendListTaskListPartitionsScope, request)
+	defer sw.Stop()
+
+	if request == nil {
+		return nil, wh.error(errRequestNotSet, scope)
 	}
-	return adapter.ToProtoListTaskListPartitionsResponse(response), nil
+
+	if ok := wh.allow(request); !ok {
+		return nil, wh.error(createServiceBusyError(), scope)
+	}
+
+	if request.GetDomain() == "" {
+		return nil, wh.error(errDomainNotSet, scope)
+	}
+
+	if err := wh.validateTaskList(request.TaskList, scope); err != nil {
+		return nil, err
+	}
+
+	resp, err := wh.GetMatchingClient().ListTaskListPartitions(ctx, &matchingservice.ListTaskListPartitionsRequest{
+		Domain:   request.GetDomain(),
+		TaskList: request.TaskList,
+	})
+
+	return resp, err
 }
 
 //===============================================================================
@@ -876,51 +1093,51 @@ func (wh *WorkflowHandlerGRPC) getDefaultScope(scope int) metrics.Scope {
 }
 
 func (wh *WorkflowHandlerGRPC) error(err error, scope metrics.Scope, tagsForErrorLog ...tag.Tag) error {
-	switch err := err.(type) {
-	case *commonproto.InternalServiceError:
-		wh.GetLogger().WithTags(tagsForErrorLog...).Error("Internal service error", tag.Error(err))
-		scope.IncCounter(metrics.CadenceFailures)
-		return frontendInternalServiceError("cadence internal error, msg: %v", err.Message)
-	case *commonproto.BadRequestError:
-		scope.IncCounter(metrics.CadenceErrBadRequestCounter)
-		return err
-	case *commonproto.DomainNotActiveError:
-		scope.IncCounter(metrics.CadenceErrBadRequestCounter)
-		return err
-	case *commonproto.ServiceBusyError:
-		scope.IncCounter(metrics.CadenceErrServiceBusyCounter)
-		return err
-	case *commonproto.EntityNotExistsError:
-		scope.IncCounter(metrics.CadenceErrEntityNotExistsCounter)
-		return err
-	case *commonproto.WorkflowExecutionAlreadyStartedError:
-		scope.IncCounter(metrics.CadenceErrExecutionAlreadyStartedCounter)
-		return err
-	case *commonproto.DomainAlreadyExistsError:
-		scope.IncCounter(metrics.CadenceErrDomainAlreadyExistsCounter)
-		return err
-	case *commonproto.CancellationAlreadyRequestedError:
-		scope.IncCounter(metrics.CadenceErrCancellationAlreadyRequestedCounter)
-		return err
-	case *commonproto.QueryFailedError:
-		scope.IncCounter(metrics.CadenceErrQueryFailedCounter)
-		return err
-	case *commonproto.LimitExceededError:
-		scope.IncCounter(metrics.CadenceErrLimitExceededCounter)
-		return err
-	case *commonproto.ClientVersionNotSupportedError:
-		scope.IncCounter(metrics.CadenceErrClientVersionNotSupportedCounter)
-		return err
-	case *yarpcerrors.Status:
-		if err.Code() == yarpcerrors.CodeDeadlineExceeded {
-			scope.IncCounter(metrics.CadenceErrContextTimeoutCounter)
-			return err
-		}
-	}
-
-	wh.GetLogger().WithTags(tagsForErrorLog...).Error("Uncategorized error",
-		tag.Error(err))
-	scope.IncCounter(metrics.CadenceFailures)
+	//switch err := err.(type) {
+	//case *commonproto.InternalServiceError:
+	//	wh.GetLogger().WithTags(tagsForErrorLog...).Error("Internal service error", tag.Error(err))
+	//	scope.IncCounter(metrics.CadenceFailures)
+	//	return frontendInternalServiceError("cadence internal error, msg: %v", err.Message)
+	//case *commonproto.BadRequestError:
+	//	scope.IncCounter(metrics.CadenceErrBadRequestCounter)
+	//	return err
+	//case *commonproto.DomainNotActiveError:
+	//	scope.IncCounter(metrics.CadenceErrBadRequestCounter)
+	//	return err
+	//case *commonproto.ServiceBusyError:
+	//	scope.IncCounter(metrics.CadenceErrServiceBusyCounter)
+	//	return err
+	//case *commonproto.EntityNotExistsError:
+	//	scope.IncCounter(metrics.CadenceErrEntityNotExistsCounter)
+	//	return err
+	//case *commonproto.WorkflowExecutionAlreadyStartedError:
+	//	scope.IncCounter(metrics.CadenceErrExecutionAlreadyStartedCounter)
+	//	return err
+	//case *commonproto.DomainAlreadyExistsError:
+	//	scope.IncCounter(metrics.CadenceErrDomainAlreadyExistsCounter)
+	//	return err
+	//case *commonproto.CancellationAlreadyRequestedError:
+	//	scope.IncCounter(metrics.CadenceErrCancellationAlreadyRequestedCounter)
+	//	return err
+	//case *commonproto.QueryFailedError:
+	//	scope.IncCounter(metrics.CadenceErrQueryFailedCounter)
+	//	return err
+	//case *commonproto.LimitExceededError:
+	//	scope.IncCounter(metrics.CadenceErrLimitExceededCounter)
+	//	return err
+	//case *commonproto.ClientVersionNotSupportedError:
+	//	scope.IncCounter(metrics.CadenceErrClientVersionNotSupportedCounter)
+	//	return err
+	//case *yarpcerrors.Status:
+	//	if err.Code() == yarpcerrors.CodeDeadlineExceeded {
+	//		scope.IncCounter(metrics.CadenceErrContextTimeoutCounter)
+	//		return err
+	//	}
+	//}
+	//
+	//wh.GetLogger().WithTags(tagsForErrorLog...).Error("Uncategorized error",
+	//	tag.Error(err))
+	//scope.IncCounter(metrics.CadenceFailures)
 	return frontendInternalServiceError("cadence internal uncategorized error, msg: %v", err.Error())
 }
 
@@ -942,7 +1159,7 @@ func (wh *WorkflowHandlerGRPC) validateTaskList(t *commonproto.TaskList, scope m
 }
 
 func (wh *WorkflowHandlerGRPC) validateExecutionAndEmitMetrics(w *commonproto.WorkflowExecution, scope metrics.Scope) error {
-	err := validateExecution(w)
+	err := wh.validateExecution(w)
 	if err != nil {
 		return wh.error(err, scope)
 	}
@@ -1081,10 +1298,8 @@ func (wh *WorkflowHandlerGRPC) verifyHistoryIsComplete(
 	if !isFirstPage { // atleast one page of history has been read previously
 		if firstEventID <= expectedFirstEventID {
 			// not first page and no events have been read in the previous pages - not possible
-			return &commonproto.InternalServiceError{
-				Message: fmt.Sprintf(
-					"invalid history: expected first eventID to be > %v but got %v", expectedFirstEventID, firstEventID),
-			}
+			return status.New(codes.Internal, fmt.Sprintf(
+				"invalid history: expected first eventID to be > %v but got %v", expectedFirstEventID, firstEventID)).Err()
 		}
 		expectedFirstEventID = firstEventID
 	}
@@ -1103,8 +1318,8 @@ func (wh *WorkflowHandlerGRPC) verifyHistoryIsComplete(
 		return nil
 	}
 
-	return &commonproto.InternalServiceError{
-		Message: fmt.Sprintf(
+	return status.New(codes.Internal,
+		fmt.Sprintf(
 			"incomplete history: "+
 				"expected events [%v-%v] but got events [%v-%v] of length %v:"+
 				"isFirstPage=%v,isLastPage=%v,pageSize=%v",
@@ -1116,7 +1331,7 @@ func (wh *WorkflowHandlerGRPC) verifyHistoryIsComplete(
 			isFirstPage,
 			isLastPage,
 			pageSize),
-	}
+	).Err()
 }
 
 func (wh *WorkflowHandlerGRPC) deserializeHistoryToken(bytes []byte) (*getHistoryContinuationTokenGRPC, error) {
@@ -1134,91 +1349,14 @@ func (wh *WorkflowHandlerGRPC) serializeHistoryToken(token *getHistoryContinuati
 	return bytes, err
 }
 
-func createServiceBusyError() *commonproto.ServiceBusyError {
-	err := &commonproto.ServiceBusyError{}
-	err.Message = "Too many outstanding requests to the cadence service"
-	return err
-}
-
-func isFailoverRequest(updateRequest *workflowservice.UpdateDomainRequest) bool {
+func (wh *WorkflowHandlerGRPC) isFailoverRequest(updateRequest *workflowservice.UpdateDomainRequest) bool {
 	return updateRequest.ReplicationConfiguration != nil && updateRequest.ReplicationConfiguration.GetActiveClusterName() != ""
 }
 
-func (wh *WorkflowHandlerGRPC) historyArchived(ctx context.Context, request *workflowservice.GetWorkflowExecutionHistoryRequest, domainID string) bool {
-	if request.GetExecution() == nil || request.GetExecution().GetRunId() == "" {
-		return false
-	}
-	getMutableStateRequest := &h.GetMutableStateRequest{
-		DomainUUID: common.StringPtr(domainID),
-		Execution:  request.Execution,
-	}
-	_, err := wh.GetHistoryClient().GetMutableState(ctx, getMutableStateRequest)
-	if err == nil {
-		return false
-	}
-	switch err.(type) {
-	case *commonproto.EntityNotExistsError:
-		// the only case in which history is assumed to be archived is if getting mutable state returns entity not found error
-		return true
-	}
-	return false
-}
-
-func (wh *WorkflowHandlerGRPC) getArchivedHistory(
-	ctx context.Context,
-	request *workflowservice.GetWorkflowExecutionHistoryRequest,
-	domainID string,
-	scope metrics.Scope,
-) (*workflowservice.GetWorkflowExecutionHistoryResponse, error) {
-	entry, err := wh.GetDomainCache().GetDomainByID(domainID)
-	if err != nil {
-		return nil, wh.error(err, scope)
-	}
-
-	URIString := entry.GetConfig().HistoryArchivalURI
-	if URIString == "" {
-		// if URI is empty, it means the domain has never enabled for archival.
-		// the error is not "workflow has passed retention period", because
-		// we have no way to tell if the requested workflow exists or not.
-		return nil, wh.error(errHistoryNotFound, scope)
-	}
-
-	URI, err := archiver.NewURI(URIString)
-	if err != nil {
-		return nil, wh.error(err, scope)
-	}
-
-	historyArchiver, err := wh.GetArchiverProvider().GetHistoryArchiver(URI.Scheme(), common.FrontendServiceName)
-	if err != nil {
-		return nil, wh.error(err, scope)
-	}
-
-	resp, err := historyArchiver.Get(ctx, URI, &archiver.GetHistoryRequest{
-		DomainID:      domainID,
-		WorkflowID:    request.GetExecution().GetWorkflowId(),
-		RunID:         request.GetExecution().GetRunId(),
-		NextPageToken: request.GetNextPageToken(),
-		PageSize:      int(request.GetMaximumPageSize()),
-	})
-	if err != nil {
-		return nil, wh.error(err, scope)
-	}
-
-	history := &commonproto.History{}
-	for _, batch := range resp.HistoryBatches {
-		history.Events = append(history.Events, batch.Events...)
-	}
-	return &workflowservice.GetWorkflowExecutionHistoryResponse{
-		History:       history,
-		NextPageToken: resp.NextPageToken,
-		Archived:      true,
-	}, nil
-}
-
-func (wh *WorkflowHandlerGRPC) convertIndexedKeyToThrift(keys map[string]interface{}) map[string]enums.IndexedValueType {
+func (wh *WorkflowHandlerGRPC) convertIndexedKeyToProto(keys map[string]interface{}) map[string]enums.IndexedValueType {
 	converted := make(map[string]enums.IndexedValueType)
 	for k, v := range keys {
-		converted[k] = common.ConvertIndexedValueTypeToThriftType(v, wh.GetLogger())
+		converted[k] = common.ConvertIndexedValueTypeToProtoType(v, wh.GetLogger())
 	}
 	return converted
 }
