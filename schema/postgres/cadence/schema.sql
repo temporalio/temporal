@@ -260,3 +260,13 @@ CREATE TABLE cluster_metadata (
   immutable_data_encoding   VARCHAR(16) NOT NULL,
   PRIMARY KEY(metadata_partition)
 );
+
+CREATE TABLE cluster_membership
+(
+    host_id              BYTEA NOT NULL,
+    rpc_address          VARCHAR(15) NOT NULL,
+    session_start        TIMESTAMPTZ NOT NULL,
+    last_heartbeat       TIMESTAMPTZ NOT NULL,
+    record_expiry        TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (host_id)
+);
