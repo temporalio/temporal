@@ -92,6 +92,7 @@ func (c *Metrics) newM3Scope(logger log.Logger) tally.Scope {
 	scopeOpts := tally.ScopeOptions{
 		Tags:           c.Tags,
 		CachedReporter: reporter,
+		Prefix:         c.Prefix,
 	}
 	scope, _ := tally.NewRootScope(scopeOpts, time.Second)
 	return scope
@@ -114,6 +115,7 @@ func (c *Metrics) newStatsdScope(logger log.Logger) tally.Scope {
 	scopeOpts := tally.ScopeOptions{
 		Tags:     c.Tags,
 		Reporter: reporter,
+		Prefix:   c.Prefix,
 	}
 	scope, _ := tally.NewRootScope(scopeOpts, time.Second)
 	return scope
@@ -138,6 +140,7 @@ func (c *Metrics) newPrometheusScope(logger log.Logger) tally.Scope {
 		CachedReporter:  reporter,
 		Separator:       prometheus.DefaultSeparator,
 		SanitizeOptions: &sanitizeOptions,
+		Prefix:          c.Prefix,
 	}
 	scope, _ := tally.NewRootScope(scopeOpts, time.Second)
 	return scope
