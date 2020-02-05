@@ -41,9 +41,11 @@ import (
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/client"
+	"github.com/temporalio/temporal/common/domain"
 	"github.com/temporalio/temporal/common/elasticsearch/validator"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/messaging"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/quotas"
@@ -63,6 +65,7 @@ type (
 		rateLimiter               quotas.Policy
 		config                    *Config
 		versionChecker            client.VersionChecker
+		domainHandler             domain.Handler
 		visibilityQueryValidator  *validator.VisibilityQueryValidator
 		searchAttributesValidator *validator.SearchAttributesValidator
 	}
@@ -81,10 +84,43 @@ type (
 
 // NewWorkflowHandlerGRPC creates a gRPC handler for the cadence workflowservice
 func NewWorkflowHandlerGRPC(
+	resource resource.Resource,
 	workflowHandlerThrift *WorkflowHandler,
+	config *Config,
+	replicationMessageSink messaging.Producer,
 ) *WorkflowHandlerGRPC {
 	handler := &WorkflowHandlerGRPC{
+		Resource:              resource,
 		workflowHandlerThrift: workflowHandlerThrift,
+		config:                config,
+		tokenSerializer:       common.NewJSONTaskTokenSerializer(),
+		rateLimiter: quotas.NewMultiStageRateLimiter(
+			func() float64 {
+				return float64(config.RPS())
+			},
+			func(domain string) float64 {
+				return float64(config.DomainRPS(domain))
+			},
+		),
+		versionChecker: client.NewVersionChecker(),
+		domainHandler: domain.NewHandler(
+			config.MinRetentionDays(),
+			config.MaxBadBinaries,
+			resource.GetLogger(),
+			resource.GetMetadataManager(),
+			resource.GetClusterMetadata(),
+			domain.NewDomainReplicator(replicationMessageSink, resource.GetLogger()),
+			resource.GetArchivalMetadata(),
+			resource.GetArchiverProvider(),
+		),
+		visibilityQueryValidator: validator.NewQueryValidator(config.ValidSearchAttributes),
+		searchAttributesValidator: validator.NewSearchAttributesValidator(
+			resource.GetLogger(),
+			config.ValidSearchAttributes,
+			config.SearchAttributesNumberOfKeysLimit,
+			config.SearchAttributesSizeOfValueLimit,
+			config.SearchAttributesTotalSizeLimit,
+		),
 	}
 
 	return handler
@@ -1093,52 +1129,52 @@ func (wh *WorkflowHandlerGRPC) getDefaultScope(scope int) metrics.Scope {
 }
 
 func (wh *WorkflowHandlerGRPC) error(err error, scope metrics.Scope, tagsForErrorLog ...tag.Tag) error {
-	//switch err := err.(type) {
-	//case *commonproto.InternalServiceError:
-	//	wh.GetLogger().WithTags(tagsForErrorLog...).Error("Internal service error", tag.Error(err))
-	//	scope.IncCounter(metrics.CadenceFailures)
-	//	return frontendInternalServiceError("cadence internal error, msg: %v", err.Message)
-	//case *commonproto.BadRequestError:
-	//	scope.IncCounter(metrics.CadenceErrBadRequestCounter)
-	//	return err
-	//case *commonproto.DomainNotActiveError:
-	//	scope.IncCounter(metrics.CadenceErrBadRequestCounter)
-	//	return err
-	//case *commonproto.ServiceBusyError:
-	//	scope.IncCounter(metrics.CadenceErrServiceBusyCounter)
-	//	return err
-	//case *commonproto.EntityNotExistsError:
-	//	scope.IncCounter(metrics.CadenceErrEntityNotExistsCounter)
-	//	return err
-	//case *commonproto.WorkflowExecutionAlreadyStartedError:
-	//	scope.IncCounter(metrics.CadenceErrExecutionAlreadyStartedCounter)
-	//	return err
-	//case *commonproto.DomainAlreadyExistsError:
-	//	scope.IncCounter(metrics.CadenceErrDomainAlreadyExistsCounter)
-	//	return err
-	//case *commonproto.CancellationAlreadyRequestedError:
-	//	scope.IncCounter(metrics.CadenceErrCancellationAlreadyRequestedCounter)
-	//	return err
-	//case *commonproto.QueryFailedError:
-	//	scope.IncCounter(metrics.CadenceErrQueryFailedCounter)
-	//	return err
-	//case *commonproto.LimitExceededError:
-	//	scope.IncCounter(metrics.CadenceErrLimitExceededCounter)
-	//	return err
-	//case *commonproto.ClientVersionNotSupportedError:
-	//	scope.IncCounter(metrics.CadenceErrClientVersionNotSupportedCounter)
-	//	return err
-	//case *yarpcerrors.Status:
-	//	if err.Code() == yarpcerrors.CodeDeadlineExceeded {
-	//		scope.IncCounter(metrics.CadenceErrContextTimeoutCounter)
-	//		return err
-	//	}
-	//}
-	//
-	//wh.GetLogger().WithTags(tagsForErrorLog...).Error("Uncategorized error",
-	//	tag.Error(err))
-	//scope.IncCounter(metrics.CadenceFailures)
-	return frontendInternalServiceError("cadence internal uncategorized error, msg: %v", err.Error())
+	switch err := err.(type) {
+	case *shared.InternalServiceError:
+		wh.GetLogger().WithTags(tagsForErrorLog...).Error("Internal service error", tag.Error(err))
+		scope.IncCounter(metrics.CadenceFailures)
+		return frontendInternalServiceError("cadence internal error, msg: %v", err.Message)
+	case *shared.BadRequestError:
+		scope.IncCounter(metrics.CadenceErrBadRequestCounter)
+		return err
+	case *shared.DomainNotActiveError:
+		scope.IncCounter(metrics.CadenceErrBadRequestCounter)
+		return err
+	case *shared.ServiceBusyError:
+		scope.IncCounter(metrics.CadenceErrServiceBusyCounter)
+		return err
+	case *shared.EntityNotExistsError:
+		scope.IncCounter(metrics.CadenceErrEntityNotExistsCounter)
+		return err
+	case *shared.WorkflowExecutionAlreadyStartedError:
+		scope.IncCounter(metrics.CadenceErrExecutionAlreadyStartedCounter)
+		return err
+	case *shared.DomainAlreadyExistsError:
+		scope.IncCounter(metrics.CadenceErrDomainAlreadyExistsCounter)
+		return err
+	case *shared.CancellationAlreadyRequestedError:
+		scope.IncCounter(metrics.CadenceErrCancellationAlreadyRequestedCounter)
+		return err
+	case *shared.QueryFailedError:
+		scope.IncCounter(metrics.CadenceErrQueryFailedCounter)
+		return err
+	case *shared.LimitExceededError:
+		scope.IncCounter(metrics.CadenceErrLimitExceededCounter)
+		return err
+	case *shared.ClientVersionNotSupportedError:
+		scope.IncCounter(metrics.CadenceErrClientVersionNotSupportedCounter)
+		return err
+		//case *yarpcerrors.Status:
+		//	if err.Code() == yarpcerrors.CodeDeadlineExceeded {
+		//		scope.IncCounter(metrics.CadenceErrContextTimeoutCounter)
+		//		return err
+		//	}
+	}
+
+	wh.GetLogger().WithTags(tagsForErrorLog...).Error("Uncategorized error",
+		tag.Error(err))
+	scope.IncCounter(metrics.CadenceFailures)
+	return adapter.ToProtoError(frontendInternalServiceError("cadence internal uncategorized error, msg: %v", err.Error()))
 }
 
 func (wh *WorkflowHandlerGRPC) validateTaskList(t *commonproto.TaskList, scope metrics.Scope) error {
