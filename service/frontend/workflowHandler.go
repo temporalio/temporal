@@ -169,12 +169,6 @@ func NewWorkflowHandler(
 	}
 }
 
-// RegisterHandler register this handler, must be called before Start()
-// if DCRedirectionHandler is also used, use RegisterHandler in DCRedirectionHandler instead
-func (wh *WorkflowHandler) RegisterHandler() {
-	wh.GetDispatcher().Register(workflowserviceserver.New(wh))
-}
-
 // Health is for health check
 func (wh *WorkflowHandler) Health(ctx context.Context) (*health.HealthStatus, error) {
 	wh.GetLogger().Debug("Frontend health check endpoint reached.")
