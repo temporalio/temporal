@@ -469,5 +469,18 @@ INSERT INTO domains_by_name_v2 (
    -1
 ) IF NOT EXISTS;
 
+
 CREATE TYPE checksum (version int, flavor int, value blob);
 ALTER TABLE executions ADD checksum frozen<checksum>;
+
+CREATE TABLE cluster_membership
+(
+    host_id              uuid,
+    rpc_address          inet,
+    session_start        timestamp,
+    last_heartbeat       timestamp,
+    PRIMARY KEY (host_id)
+) WITH COMPACTION = {
+    'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
+  };
+
