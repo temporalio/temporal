@@ -425,6 +425,10 @@ func (wh *WorkflowHandlerGRPC) PollForActivityTask(ctx context.Context, request 
 		}
 	}
 
+	if matchingResponse == nil {
+		return nil, nil
+	}
+
 	return &workflowservice.PollForActivityTaskResponse{
 		TaskToken:                       matchingResponse.TaskToken,
 		WorkflowExecution:               matchingResponse.WorkflowExecution,
@@ -932,6 +936,10 @@ func (wh *WorkflowHandlerGRPC) ListTaskListPartitions(ctx context.Context, reque
 		Domain:   request.GetDomain(),
 		TaskList: request.TaskList,
 	})
+
+	if matchingResponse == nil {
+		return nil, err
+	}
 
 	return &workflowservice.ListTaskListPartitionsResponse{
 		ActivityTaskListPartitions: matchingResponse.ActivityTaskListPartitions,
