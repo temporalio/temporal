@@ -3435,7 +3435,7 @@ func (d domainWrapper) GetDomain() string {
 	return d.domain
 }
 
-// TODO: Remove this func after history and matching services gRPC migration is complete
+// TODO: Remove this func after history service gRPC migration is complete
 // It sets version headers in YARPC format
 func versionHeaders(ctx context.Context) []yarpc.CallOption {
 	headers := client.GetHeadersValue(ctx, common.LibraryVersionHeaderName, common.FeatureVersionHeaderName, common.ClientImplHeaderName)

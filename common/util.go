@@ -566,7 +566,7 @@ func ConvertIndexedValueTypeToProtoType(fieldType interface{}, logger log.Logger
 		return enums.IndexedValueType(fieldType.(float64))
 	case int:
 		return enums.IndexedValueType(fieldType.(int))
-	case workflow.IndexedValueType:
+	case enums.IndexedValueType:
 		return fieldType.(enums.IndexedValueType)
 	default:
 		// Unknown fieldType, please make sure dynamic config return correct value type
