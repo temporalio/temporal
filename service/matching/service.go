@@ -98,7 +98,8 @@ func (s *Service) Start() {
 
 	s.server = grpc.NewServer()
 	handlerGRPC := NewHandlerGRPC(s.handler)
-	matchingservice.RegisterMatchingServiceServer(s.server, handlerGRPC)
+	nilCheckHandler := NewNilCheckHandler(handlerGRPC)
+	matchingservice.RegisterMatchingServiceServer(s.server, nilCheckHandler)
 	healthservice.RegisterMetaServer(s.server, handlerGRPC)
 
 	listener := s.GetGRPCListener()
