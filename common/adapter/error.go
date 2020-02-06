@@ -37,6 +37,10 @@ func ToProtoError(in error) error {
 		return nil
 	}
 
+	if _, ok := status.FromError(in); ok {
+		return in
+	}
+
 	var st *status.Status
 	switch thriftError := in.(type) {
 	case *shared.InternalServiceError:

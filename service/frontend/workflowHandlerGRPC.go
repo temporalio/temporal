@@ -30,6 +30,7 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/workflowservice"
+	"go.uber.org/yarpc/yarpcerrors"
 	"google.golang.org/grpc/codes"
 
 	"github.com/pborman/uuid"
@@ -1137,6 +1138,10 @@ func (wh *WorkflowHandlerGRPC) getDefaultScope(scope int) metrics.Scope {
 }
 
 func (wh *WorkflowHandlerGRPC) error(err error, scope metrics.Scope, tagsForErrorLog ...tag.Tag) error {
+	return adapter.ToProtoError(wh.errorThrift(err, scope, tagsForErrorLog...))
+}
+
+func (wh *WorkflowHandlerGRPC) errorThrift(err error, scope metrics.Scope, tagsForErrorLog ...tag.Tag) error {
 	switch err := err.(type) {
 	case *shared.InternalServiceError:
 		wh.GetLogger().WithTags(tagsForErrorLog...).Error("Internal service error", tag.Error(err))
@@ -1172,17 +1177,26 @@ func (wh *WorkflowHandlerGRPC) error(err error, scope metrics.Scope, tagsForErro
 	case *shared.ClientVersionNotSupportedError:
 		scope.IncCounter(metrics.CadenceErrClientVersionNotSupportedCounter)
 		return err
-		//case *yarpcerrors.Status:
-		//	if err.Code() == yarpcerrors.CodeDeadlineExceeded {
-		//		scope.IncCounter(metrics.CadenceErrContextTimeoutCounter)
-		//		return err
-		//	}
+	case *yarpcerrors.Status:
+		if err.Code() == yarpcerrors.CodeDeadlineExceeded {
+			scope.IncCounter(metrics.CadenceErrContextTimeoutCounter)
+			return err
+		}
+	}
+
+	if st, ok := status.FromError(err); ok {
+		if st.Code() == codes.DeadlineExceeded {
+			scope.IncCounter(metrics.CadenceErrContextTimeoutCounter)
+			return err
+		}
+
+		return err
 	}
 
 	wh.GetLogger().WithTags(tagsForErrorLog...).Error("Uncategorized error",
 		tag.Error(err))
 	scope.IncCounter(metrics.CadenceFailures)
-	return adapter.ToProtoError(frontendInternalServiceError("cadence internal uncategorized error, msg: %v", err.Error()))
+	return frontendInternalServiceError("cadence internal uncategorized error, msg: %v", err.Error())
 }
 
 func (wh *WorkflowHandlerGRPC) validateTaskList(t *commonproto.TaskList, scope metrics.Scope) error {
