@@ -857,11 +857,11 @@ func (c *clusterMetadataRateLimitedPersistenceClient) GetImmutableClusterMetadat
 	return c.persistence.GetImmutableClusterMetadata()
 }
 
-func (c *clusterMetadataRateLimitedPersistenceClient) GetActiveClusterMembers(request *GetActiveClusterMembersRequest) (*GetActiveClusterMembersResponse, error) {
+func (c *clusterMetadataRateLimitedPersistenceClient) GetClusterMembers(request *GetClusterMembersRequest) (*GetClusterMembersResponse, error) {
 	if ok := c.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
-	return c.persistence.GetActiveClusterMembers(request)
+	return c.persistence.GetClusterMembers(request)
 }
 
 func (c *clusterMetadataRateLimitedPersistenceClient) UpsertClusterMembership(request *UpsertClusterMembershipRequest) error {

@@ -64,9 +64,9 @@ func (s *ClusterMetadataManagerSuite) TearDownSuite() {
 	s.TearDownWorkflowStore()
 }
 
-// TestClusterMembershipEmptyInitially verifies the GetActiveClusterMembers() works with an initial empty table
+// TestClusterMembershipEmptyInitially verifies the GetClusterMembers() works with an initial empty table
 func (s *ClusterMetadataManagerSuite) TestClusterMembershipEmptyInitially() {
-	resp, err := s.ClusterMetadataManager.GetActiveClusterMembers(&p.GetActiveClusterMembersRequest{LastHeartbeatWithin: time.Minute * 10})
+	resp, err := s.ClusterMetadataManager.GetClusterMembers(&p.GetClusterMembersRequest{LastHeartbeatWithin: time.Minute * 10})
 	s.Nil(err)
 	s.NotNil(resp)
 	s.Empty(resp.ActiveMembers)
@@ -83,8 +83,8 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanRead() {
 	err := s.ClusterMetadataManager.UpsertClusterMembership(req)
 	s.Nil(err)
 
-	resp, err := s.ClusterMetadataManager.GetActiveClusterMembers(
-		&p.GetActiveClusterMembersRequest{LastHeartbeatWithin: time.Minute * 10})
+	resp, err := s.ClusterMetadataManager.GetClusterMembers(
+		&p.GetClusterMembersRequest{LastHeartbeatWithin: time.Minute * 10})
 
 	s.Nil(err)
 	s.NotNil(resp)
@@ -110,8 +110,8 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertExpiresCorrectl
 	err = s.ClusterMetadataManager.PruneClusterMembership(&p.PruneClusterMembershipRequest{MaxRecordsPruned: 100})
 	s.NoError(err)
 
-	resp, err := s.ClusterMetadataManager.GetActiveClusterMembers(
-		&p.GetActiveClusterMembersRequest{LastHeartbeatWithin: time.Minute * 10})
+	resp, err := s.ClusterMetadataManager.GetClusterMembers(
+		&p.GetClusterMembersRequest{LastHeartbeatWithin: time.Minute * 10})
 
 	s.NoError(err)
 	s.NotNil(resp)
@@ -127,8 +127,8 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertExpiresCorrectl
 	err = s.ClusterMetadataManager.PruneClusterMembership(&p.PruneClusterMembershipRequest{MaxRecordsPruned: 100})
 	s.Nil(err)
 
-	resp, err = s.ClusterMetadataManager.GetActiveClusterMembers(
-		&p.GetActiveClusterMembersRequest{LastHeartbeatWithin: time.Minute * 10})
+	resp, err = s.ClusterMetadataManager.GetClusterMembers(
+		&p.GetClusterMembersRequest{LastHeartbeatWithin: time.Minute * 10})
 
 	s.Nil(err)
 	s.NotNil(resp)

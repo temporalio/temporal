@@ -87,12 +87,12 @@ func (s *sqlClusterMetadataManager) GetImmutableClusterMetadata() (*p.InternalGe
 	}, nil
 }
 
-func (s *sqlClusterMetadataManager) GetActiveClusterMembers(request *p.GetActiveClusterMembersRequest) (*p.GetActiveClusterMembersResponse, error) {
+func (s *sqlClusterMetadataManager) GetClusterMembers(request *p.GetClusterMembersRequest) (*p.GetClusterMembersResponse, error) {
 	now := time.Now().UTC()
-	rows, err := s.db.GetActiveClusterMembers(&sqlplugin.ClusterMembershipFilter{HeartbeatSince: now.Add(-request.LastHeartbeatWithin), RecordExpiryCutoff: now})
+	rows, err := s.db.GetClusterMembers(&sqlplugin.ClusterMembershipFilter{HeartbeatSince: now.Add(-request.LastHeartbeatWithin), RecordExpiryCutoff: now})
 
 	if err != nil {
-		return nil, convertCommonErrors("GetActiveClusterMembers", err)
+		return nil, convertCommonErrors("GetClusterMembers", err)
 	}
 
 	convertedRows := make([]*p.ClusterMember, 0, len(rows))
@@ -105,7 +105,7 @@ func (s *sqlClusterMetadataManager) GetActiveClusterMembers(request *p.GetActive
 		})
 	}
 
-	return &p.GetActiveClusterMembersResponse{ActiveMembers: convertedRows}, nil
+	return &p.GetClusterMembersResponse{ActiveMembers: convertedRows}, nil
 }
 
 func (s *sqlClusterMetadataManager) UpsertClusterMembership(request *p.UpsertClusterMembershipRequest) error {

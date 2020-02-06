@@ -103,8 +103,8 @@ func (m *clusterMetadataManagerImpl) GetImmutableClusterMetadata() (*GetImmutabl
 	return &GetImmutableClusterMetadataResponse{*icm}, nil
 }
 
-func (m *clusterMetadataManagerImpl) GetActiveClusterMembers(request *GetActiveClusterMembersRequest) (*GetActiveClusterMembersResponse, error) {
-	return m.persistence.GetActiveClusterMembers(request)
+func (m *clusterMetadataManagerImpl) GetClusterMembers(request *GetClusterMembersRequest) (*GetClusterMembersResponse, error) {
+	return m.persistence.GetClusterMembers(request)
 }
 
 func (m *clusterMetadataManagerImpl) UpsertClusterMembership(request *UpsertClusterMembershipRequest) error {

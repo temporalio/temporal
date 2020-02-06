@@ -46,7 +46,7 @@ VALUES(?, ?, ?, ?, ?)`
 cluster_membership 
 WHERE record_expiry < ? LIMIT ?`
 
-	templateGetActiveClusterMembership = `SELECT host_id, rpc_address, session_start, last_heartbeat, record_expiry
+	templateGetClusterMembership = `SELECT host_id, rpc_address, session_start, last_heartbeat, record_expiry
 FROM cluster_membership 
 WHERE last_heartbeat > ? AND record_expiry > ?`
 )
@@ -77,10 +77,10 @@ func (mdb *db) UpsertClusterMembership(row *sqlplugin.ClusterMembershipRow) (sql
 		mdb.converter.ToMySQLDateTime(row.RecordExpiry))
 }
 
-func (mdb *db) GetActiveClusterMembers(filter *sqlplugin.ClusterMembershipFilter) ([]sqlplugin.ClusterMembershipRow, error) {
+func (mdb *db) GetClusterMembers(filter *sqlplugin.ClusterMembershipFilter) ([]sqlplugin.ClusterMembershipRow, error) {
 	var rows []sqlplugin.ClusterMembershipRow
 	err := mdb.conn.Select(&rows,
-		templateGetActiveClusterMembership,
+		templateGetClusterMembership,
 		mdb.converter.ToMySQLDateTime(filter.HeartbeatSince),
 		mdb.converter.ToMySQLDateTime(filter.RecordExpiryCutoff))
 	if err != nil {

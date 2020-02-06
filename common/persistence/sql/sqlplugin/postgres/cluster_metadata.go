@@ -52,7 +52,7 @@ cluster_membership
 WHERE host_id = ANY(ARRAY(
 SELECT host_id FROM cluster_membership WHERE record_expiry < $1 LIMIT $2))`
 
-	templateGetActiveClusterMembership = `SELECT host_id, rpc_address, session_start, last_heartbeat, record_expiry 
+	templateGetClusterMembership = `SELECT host_id, rpc_address, session_start, last_heartbeat, record_expiry 
 FROM cluster_membership 
 WHERE last_heartbeat > $1 AND record_expiry > $2`
 )
@@ -83,10 +83,10 @@ func (pdb *db) UpsertClusterMembership(row *sqlplugin.ClusterMembershipRow) (sql
 		row.RecordExpiry)
 }
 
-func (pdb *db) GetActiveClusterMembers(filter *sqlplugin.ClusterMembershipFilter) ([]sqlplugin.ClusterMembershipRow, error) {
+func (pdb *db) GetClusterMembers(filter *sqlplugin.ClusterMembershipFilter) ([]sqlplugin.ClusterMembershipRow, error) {
 	var rows []sqlplugin.ClusterMembershipRow
 	err := pdb.conn.Select(&rows,
-		templateGetActiveClusterMembership,
+		templateGetClusterMembership,
 		filter.HeartbeatSince,
 		filter.RecordExpiryCutoff)
 

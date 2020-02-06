@@ -1449,17 +1449,17 @@ type (
 		persistenceblobs.ImmutableClusterMetadata
 	}
 
-	// GetActiveClusterMembersRequest is the response to GetActiveClusterMembers
-	GetActiveClusterMembersRequest struct {
+	// GetClusterMembersRequest is the response to GetClusterMembers
+	GetClusterMembersRequest struct {
 		LastHeartbeatWithin time.Duration
 	}
 
-	// GetActiveClusterMembersResponse is the response to GetActiveClusterMembers
-	GetActiveClusterMembersResponse struct {
+	// GetClusterMembersResponse is the response to GetClusterMembers
+	GetClusterMembersResponse struct {
 		ActiveMembers []*ClusterMember
 	}
 
-	// ClusterMember is used as a response to GetActiveClusterMembers
+	// ClusterMember is used as a response to GetClusterMembers
 	ClusterMember struct {
 		HostID         uuid.UUID
 		RPCAddress     string
@@ -1607,7 +1607,7 @@ type (
 		GetName() string
 		InitializeImmutableClusterMetadata(request *InitializeImmutableClusterMetadataRequest) (*InitializeImmutableClusterMetadataResponse, error)
 		GetImmutableClusterMetadata() (*GetImmutableClusterMetadataResponse, error)
-		GetActiveClusterMembers(request *GetActiveClusterMembersRequest) (*GetActiveClusterMembersResponse, error)
+		GetClusterMembers(request *GetClusterMembersRequest) (*GetClusterMembersResponse, error)
 		UpsertClusterMembership(request *UpsertClusterMembershipRequest) error
 		PruneClusterMembership(request *PruneClusterMembershipRequest) error
 	}

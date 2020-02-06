@@ -57,7 +57,7 @@ WHERE metadata_partition = ?`
 cluster_membership USING TTL ? SET rpc_address = ?, session_start = ?, last_heartbeat = ?
 WHERE host_id = ?`
 
-	templateGetActiveClusterMembership = `SELECT host_id, rpc_address, session_start, last_heartbeat FROM
+	templateGetClusterMembership = `SELECT host_id, rpc_address, session_start, last_heartbeat FROM
 cluster_membership 
 WHERE last_heartbeat > ? ALLOW FILTERING`
 )
@@ -164,8 +164,8 @@ func (m *cassandraClusterMetadata) GetImmutableClusterMetadata() (*p.InternalGet
 	}, nil
 }
 
-func (m *cassandraClusterMetadata) GetActiveClusterMembers(request *p.GetActiveClusterMembersRequest) (*p.GetActiveClusterMembersResponse, error) {
-	query := m.session.Query(templateGetActiveClusterMembership, time.Now().UTC().Add(-request.LastHeartbeatWithin))
+func (m *cassandraClusterMetadata) GetClusterMembers(request *p.GetClusterMembersRequest) (*p.GetClusterMembersResponse, error) {
+	query := m.session.Query(templateGetClusterMembership, time.Now().UTC().Add(-request.LastHeartbeatWithin))
 
 	// No paging enabled due to TTL on table
 	iter := query.Iter()
@@ -188,10 +188,10 @@ func (m *cassandraClusterMetadata) GetActiveClusterMembers(request *p.GetActiveC
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, convertCommonErrors("GetActiveClusterMembers", err)
+		return nil, convertCommonErrors("GetClusterMembers", err)
 	}
 
-	return &p.GetActiveClusterMembersResponse{ActiveMembers: clusterMembers}, nil
+	return &p.GetClusterMembersResponse{ActiveMembers: clusterMembers}, nil
 }
 
 func (m *cassandraClusterMetadata) UpsertClusterMembership(request *p.UpsertClusterMembershipRequest) error {

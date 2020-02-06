@@ -67,7 +67,7 @@ type (
 		InitializeImmutableClusterMetadata(request *InternalInitializeImmutableClusterMetadataRequest) (*InternalInitializeImmutableClusterMetadataResponse, error)
 		GetImmutableClusterMetadata() (*InternalGetImmutableClusterMetadataResponse, error)
 		// Membership APIs
-		GetActiveClusterMembers(request *GetActiveClusterMembersRequest) (*GetActiveClusterMembersResponse, error)
+		GetClusterMembers(request *GetClusterMembersRequest) (*GetClusterMembersResponse, error)
 		UpsertClusterMembership(request *UpsertClusterMembershipRequest) error
 		PruneClusterMembership(request *PruneClusterMembershipRequest) error
 	}

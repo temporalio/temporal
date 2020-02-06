@@ -50,7 +50,7 @@ type (
 		RecordExpiry  time.Time
 	}
 
-	// ClusterMembershipFilter is used for GetActiveClusterMembership queries
+	// ClusterMembershipFilter is used for GetClusterMembership queries
 	ClusterMembershipFilter struct {
 		HeartbeatSince     time.Time
 		RecordExpiryCutoff time.Time
@@ -525,7 +525,7 @@ type (
 	tableCRUD interface {
 		InsertIfNotExistsIntoClusterMetadata(row *ClusterMetadataRow) (sql.Result, error)
 		GetClusterMetadata() (*ClusterMetadataRow, error)
-		GetActiveClusterMembers(filter *ClusterMembershipFilter) ([]ClusterMembershipRow, error)
+		GetClusterMembers(filter *ClusterMembershipFilter) ([]ClusterMembershipRow, error)
 		UpsertClusterMembership(row *ClusterMembershipRow) (sql.Result, error)
 		PruneClusterMembership(filter *PruneClusterMembershipFilter) (sql.Result, error)
 
