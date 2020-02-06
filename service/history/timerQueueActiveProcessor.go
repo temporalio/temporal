@@ -366,6 +366,13 @@ func (t *timerQueueActiveProcessorImpl) processActivityTimeout(
 	}
 	defer func() { release(retError) }()
 
+	t.metricsClient.RecordTimer(
+		metrics.TimerActiveTaskActivityTimeoutScope,
+		metrics.ActivityTimeoutLatencyGetExecutionContext,
+		time.Since(startTime),
+	)
+
+	loadMSStartTime := time.Now()
 	mutableState, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
@@ -373,11 +380,22 @@ func (t *timerQueueActiveProcessorImpl) processActivityTimeout(
 	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
 		t.metricsClient.RecordTimer(
 			metrics.TimerActiveTaskActivityTimeoutScope,
+			metrics.ActivityTimeoutLatencyLoadMutableState,
+			time.Since(loadMSStartTime),
+		)
+		t.metricsClient.RecordTimer(
+			metrics.TimerActiveTaskActivityTimeoutScope,
 			metrics.ActivityTimeoutLatencyInMemory,
 			time.Since(startTime),
 		)
 		return nil
 	}
+
+	t.metricsClient.RecordTimer(
+		metrics.TimerActiveTaskActivityTimeoutScope,
+		metrics.ActivityTimeoutLatencyLoadMutableState,
+		time.Since(loadMSStartTime),
+	)
 
 	timerSequence := t.getTimerSequence(mutableState)
 	referenceTime := t.shard.GetTimeSource().Now()
@@ -394,15 +412,8 @@ func (t *timerQueueActiveProcessorImpl) processActivityTimeout(
 		updateMutableState = true
 	}
 
-	processTimerStartTime := time.Now()
-	activityTimers := timerSequence.loadAndSortActivityTimers()
-	t.metricsClient.RecordTimer(
-		metrics.TimerActiveTaskActivityTimeoutScope,
-		metrics.ActivityTimeoutNumTimer,
-		time.Duration(len(activityTimers)),
-	)
 Loop:
-	for _, timerSequenceID := range activityTimers {
+	for _, timerSequenceID := range timerSequence.loadAndSortActivityTimers() {
 		activityInfo, ok := mutableState.GetActivityInfo(timerSequenceID.eventID)
 		if !ok {
 			//  this case can happen since each activity can have 4 timers
@@ -456,15 +467,20 @@ Loop:
 	// ignore error cases when emitting these metrics, as error happens rarely
 	t.metricsClient.RecordTimer(
 		metrics.TimerActiveTaskActivityTimeoutScope,
-		metrics.ActivityTimeoutLatencyProcessTimer,
-		time.Since(processTimerStartTime),
-	)
-
-	t.metricsClient.RecordTimer(
-		metrics.TimerActiveTaskActivityTimeoutScope,
 		metrics.ActivityTimeoutLatencyInMemory,
 		time.Since(startTime),
 	)
+
+	if time.Since(startTime) > time.Millisecond*150 {
+		t.shard.GetThrottledLogger().Warn("Activity timeout timer task latency too high",
+			tag.TaskType(task.GetTaskType()),
+			tag.TaskID(task.GetTaskID()),
+			tag.WorkflowDomainID(task.GetDomainID()),
+			tag.WorkflowID(task.GetWorkflowID()),
+			tag.WorkflowRunID(task.GetRunID()),
+			tag.ShardID(t.shard.GetShardID()),
+		)
+	}
 
 	if !updateMutableState {
 		return nil
