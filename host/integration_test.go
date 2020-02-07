@@ -115,7 +115,7 @@ func (s *integrationSuite) TestStartWorkflowExecution() {
 	we2, err2 := s.engine.StartWorkflowExecution(NewContext(), newRequest)
 	s.NotNil(err2)
 	st2 := status.Convert(err2)
-	s.True(errordetails.IsWorkflowExecutionAlreadyStartedFailure(st2))
+	s.True(errordetails.IsWorkflowExecutionAlreadyStartedStatus(st2))
 	log.Errorf("Unable to start workflow execution: %v", err2)
 	s.Nil(we2)
 }

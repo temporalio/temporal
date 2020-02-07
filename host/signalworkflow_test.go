@@ -1503,7 +1503,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	s.Error(err)
 	st := status.Convert(err)
 	s.True(strings.Contains(st.Message(), "reject duplicate workflow ID"))
-	s.True(errordetails.IsWorkflowExecutionAlreadyStartedFailure(st))
+	s.True(errordetails.IsWorkflowExecutionAlreadyStartedStatus(st))
 
 	// test policy WorkflowIdReusePolicyAllowDuplicateFailedOnly
 	sRequest.WorkflowIdReusePolicy = enums.WorkflowIdReusePolicyAllowDuplicateFailedOnly
@@ -1513,7 +1513,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	s.Error(err)
 	st = status.Convert(err)
 	s.True(strings.Contains(st.Message(), "allow duplicate workflow ID if last run failed"))
-	s.True(errordetails.IsWorkflowExecutionAlreadyStartedFailure(st))
+	s.True(errordetails.IsWorkflowExecutionAlreadyStartedStatus(st))
 
 	// test policy WorkflowIdReusePolicyAllowDuplicate
 	sRequest.WorkflowIdReusePolicy = enums.WorkflowIdReusePolicyAllowDuplicate
