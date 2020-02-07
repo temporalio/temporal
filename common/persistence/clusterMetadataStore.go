@@ -114,7 +114,7 @@ func (m *clusterMetadataManagerImpl) UpsertClusterMembership(request *UpsertClus
 	if request.RecordExpiry.Seconds() < 1 {
 		return ErrInvalidMembershipExpiry
 	}
-	if request.Role == Unknown {
+	if request.Role == All {
 		return ErrIncompleteMembershipUpsert
 	}
 	if request.RPCAddress == nil {

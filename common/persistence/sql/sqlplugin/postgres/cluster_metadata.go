@@ -111,7 +111,7 @@ func (pdb *db) GetClusterMembers(filter *sqlplugin.ClusterMembershipFilter) ([]s
 		queryString.WriteString(strconv.Itoa(len(operands)))
 	}
 
-	if filter.RoleEquals != p.Unknown {
+	if filter.RoleEquals != p.All {
 		queryString.WriteString(templateWithRoleSuffix)
 		operands = append(operands, filter.RoleEquals)
 		queryString.WriteString(strconv.Itoa(len(operands)))

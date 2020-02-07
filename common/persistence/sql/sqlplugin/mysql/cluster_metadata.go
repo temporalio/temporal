@@ -102,7 +102,7 @@ func (mdb *db) GetClusterMembers(filter *sqlplugin.ClusterMembershipFilter) ([]s
 		operands = append(operands, filter.RPCAddressEquals)
 	}
 
-	if filter.RoleEquals != p.Unknown {
+	if filter.RoleEquals != p.All {
 		queryString.WriteString(templateWithRoleSuffix)
 		operands = append(operands, filter.RoleEquals)
 	}

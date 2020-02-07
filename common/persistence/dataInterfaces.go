@@ -1456,8 +1456,6 @@ type (
 		RPCAddressEquals    net.IP
 		HostIDEquals        uuid.UUID
 		RoleEquals          ServiceType
-		PageSize			int
-		NextPageToken		[]byte
 	}
 
 	// GetClusterMembersResponse is the response to GetClusterMembers
@@ -2553,7 +2551,7 @@ func NewGetReplicationTasksFromDLQRequest(
 type ServiceType int
 
 const (
-	Unknown ServiceType = iota
+	All ServiceType = iota
 	Frontend
 	History
 	Matching

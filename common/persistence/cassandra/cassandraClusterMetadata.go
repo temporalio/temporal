@@ -189,7 +189,7 @@ func (m *cassandraClusterMetadata) GetClusterMembers(request *p.GetClusterMember
 		operands = append(operands, request.RPCAddressEquals)
 	}
 
-	if request.RoleEquals != p.Unknown {
+	if request.RoleEquals != p.All {
 		queryString.WriteString(templateWithRoleSuffix)
 		operands = append(operands, request.RoleEquals)
 	}
@@ -211,7 +211,7 @@ func (m *cassandraClusterMetadata) GetClusterMembers(request *p.GetClusterMember
 	cqlHostID := make([]byte, 0, 16)
 	rpcAddress := net.IP{}
 	rpcPort := uint16(0)
-	role := p.Unknown
+	role := p.All
 	sessionStart := time.Time{}
 	lastHeartbeat := time.Time{}
 	ttl := 0
