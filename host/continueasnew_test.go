@@ -108,7 +108,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 		return []byte(strconv.Itoa(int(continueAsNewCounter))), []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -125,7 +125,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 
 	for i := 0; i < 10; i++ {
 		_, err := poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.NoError(err, strconv.Itoa(i))
 	}
 
@@ -192,7 +192,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 		return []byte(strconv.Itoa(int(continueAsNewCounter))), []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -209,7 +209,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 
 	// process the decision and continue as new
 	_, err := poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	s.False(workflowComplete)
@@ -229,7 +229,7 @@ GetHistoryLoop:
 
 		lastEvent := history.Events[len(history.Events)-1]
 		if lastEvent.GetEventType() != enums.EventTypeWorkflowExecutionTimedOut {
-			s.Logger.Warn("Execution not timedout yet.")
+			s.Logger.Warn("Execution not timedout yet")
 			time.Sleep(200 * time.Millisecond)
 			continue GetHistoryLoop
 		}
@@ -393,7 +393,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 			return nil, []*commonproto.Decision{{
 				DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 				Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-					Result: []byte("Child Done."),
+					Result: []byte("Child Done"),
 				}},
 			}}, nil
 		}
@@ -401,7 +401,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 		// Parent Decider Logic
 		if execution.GetWorkflowId() == parentID {
 			if !childExecutionStarted {
-				s.Logger.Info("Starting child execution.")
+				s.Logger.Info("Starting child execution")
 				childExecutionStarted = true
 				buf := new(bytes.Buffer)
 				s.Nil(binary.Write(buf, binary.LittleEndian, childData))
@@ -427,7 +427,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 						return nil, []*commonproto.Decision{{
 							DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 							Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-								Result: []byte("Done."),
+								Result: []byte("Done"),
 							}},
 						}}, nil
 					}
@@ -450,7 +450,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 
 	// Make first decision to start child execution
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 	s.True(childExecutionStarted)
 
@@ -458,7 +458,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	for i := 0; i < 11; i++ {
 		s.Logger.Warn("decision", tag.Counter(i))
 		_, err = poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.NoError(err)
 	}
 
@@ -467,13 +467,13 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 
 	// Process Child Execution final decision to complete it
 	_, err = poller.PollAndProcessDecisionTask(true, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 	s.True(childComplete)
 
 	// Process ChildExecution completed event and complete parent execution
 	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 	s.NotNil(completedEvent)
 	completedAttributes := completedEvent.GetChildWorkflowExecutionCompletedEventAttributes()
@@ -482,7 +482,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	s.NotEqual(startedEvent.GetChildWorkflowExecutionStartedEventAttributes().WorkflowExecution.RunId,
 		completedAttributes.WorkflowExecution.RunId)
 	s.Equal(wtChild, completedAttributes.WorkflowType.Name)
-	s.Equal([]byte("Child Done."), completedAttributes.Result)
+	s.Equal([]byte("Child Done"), completedAttributes.Result)
 
 	s.Logger.Info("Parent Workflow Execution History: ")
 }
