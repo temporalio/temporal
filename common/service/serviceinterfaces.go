@@ -61,8 +61,6 @@ type (
 
 		GetDispatcher() *yarpc.Dispatcher
 
-		GetGRPCDispatcher() *yarpc.Dispatcher
-
 		GetGRPCListener() net.Listener
 
 		GetMembershipMonitor() membership.Monitor
