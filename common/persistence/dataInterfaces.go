@@ -22,6 +22,7 @@ package persistence
 
 import (
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -1451,7 +1452,10 @@ type (
 
 	// GetClusterMembersRequest is the response to GetClusterMembers
 	GetClusterMembersRequest struct {
-		LastHeartbeatWithin time.Duration
+		LastHeartbeatWithin		time.Duration
+		RPCAddressEquals		net.IP
+		HostIDEquals			uuid.UUID
+		RoleEquals				ServiceType
 	}
 
 	// GetClusterMembersResponse is the response to GetClusterMembers
@@ -1461,18 +1465,23 @@ type (
 
 	// ClusterMember is used as a response to GetClusterMembers
 	ClusterMember struct {
-		HostID         uuid.UUID
-		RPCAddress     string
-		SessionStarted time.Time
-		LastHeartbeat  time.Time
+		Role          ServiceType
+		HostID        uuid.UUID
+		RPCAddress    net.IP
+		RPCPort       uint16
+		SessionStart  time.Time
+		LastHeartbeat time.Time
+		RecordExpiry  time.Time
 	}
 
 	// UpsertClusterMembershipRequest is the request to UpsertClusterMembership
 	UpsertClusterMembershipRequest struct {
-		RPCAddress     string
-		SessionStarted time.Time
-		RecordExpiry   time.Duration
-		HostID         uuid.UUID
+		Role         ServiceType
+		HostID       uuid.UUID
+		RPCAddress   net.IP
+		RPCPort      uint16
+		SessionStart time.Time
+		RecordExpiry time.Duration
 	}
 
 	// PruneClusterMembershipRequest is the request to PruneClusterMembership
@@ -2538,3 +2547,13 @@ func NewGetReplicationTasksFromDLQRequest(
 		},
 	}
 }
+
+type ServiceType int
+
+const (
+	Unknown ServiceType = iota
+	Frontend
+	History
+	Matching
+	Worker
+)

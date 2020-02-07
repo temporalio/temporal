@@ -24,6 +24,10 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/pborman/uuid"
+
+	"github.com/temporalio/temporal/common/persistence"
+
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/service/config"
 )
@@ -43,8 +47,10 @@ type (
 
 	// ClusterMembershipRow represents a row in the cluster_membership table
 	ClusterMembershipRow struct {
+		Role          persistence.ServiceType
 		HostID        []byte
 		RPCAddress    string
+		RPCPort       uint16
 		SessionStart  time.Time
 		LastHeartbeat time.Time
 		RecordExpiry  time.Time
@@ -52,8 +58,11 @@ type (
 
 	// ClusterMembershipFilter is used for GetClusterMembership queries
 	ClusterMembershipFilter struct {
-		HeartbeatSince     time.Time
-		RecordExpiryCutoff time.Time
+		RPCAddressEquals   string
+		HostIDEquals       uuid.UUID
+		RoleEquals         persistence.ServiceType
+		LastHeartbeatAfter time.Time
+		RecordExpiryAfter  time.Time
 	}
 
 	// PruneClusterMembershipFilter is used for PruneClusterMembership queries
