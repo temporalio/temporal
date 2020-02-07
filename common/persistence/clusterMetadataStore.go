@@ -33,6 +33,9 @@ const (
 var (
 	// ErrInvalidMembershipExpiry is used when upserting new cluster membership with an invalid duration
 	ErrInvalidMembershipExpiry = errors.New("membershipExpiry duration should be atleast 1 second")
+
+	// ErrIncompleteMembershipUpsert is used when upserting new cluster membership with missing fields
+	ErrIncompleteMembershipUpsert = errors.New("membership upserts require all fields")
 )
 
 type (
@@ -111,6 +114,19 @@ func (m *clusterMetadataManagerImpl) UpsertClusterMembership(request *UpsertClus
 	if request.RecordExpiry.Seconds() < 1 {
 		return ErrInvalidMembershipExpiry
 	}
+	if request.Role == Unknown {
+		return ErrIncompleteMembershipUpsert
+	}
+	if request.RPCAddress == nil {
+		return ErrIncompleteMembershipUpsert
+	}
+	if request.RPCPort == 0 {
+		return ErrIncompleteMembershipUpsert
+	}
+	if request.SessionStart.IsZero() {
+		return ErrIncompleteMembershipUpsert
+	}
+
 	return m.persistence.UpsertClusterMembership(request)
 }
 
