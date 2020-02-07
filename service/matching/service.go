@@ -23,8 +23,13 @@ package matching
 import (
 	"sync/atomic"
 
+	"google.golang.org/grpc"
+
+	"github.com/temporalio/temporal/.gen/proto/healthservice"
+	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
 	persistenceClient "github.com/temporalio/temporal/common/persistence/client"
 	"github.com/temporalio/temporal/common/resource"
@@ -38,8 +43,9 @@ type Service struct {
 
 	status  int32
 	handler *Handler
-	stopC   chan struct{}
 	config  *Config
+
+	server *grpc.Server
 }
 
 // NewService builds a new cadence-matching service
@@ -71,7 +77,6 @@ func NewService(
 		Resource: serviceResource,
 		status:   common.DaemonStatusInitialized,
 		config:   serviceConfig,
-		stopC:    make(chan struct{}),
 	}, nil
 }
 
@@ -85,17 +90,23 @@ func (s *Service) Start() {
 	logger.Info("matching starting")
 
 	s.handler = NewHandler(s, s.config)
-	handlerGRPC := NewHandlerGRPC(s.handler)
 	s.handler.RegisterHandler()
-	handlerGRPC.RegisterHandler()
 
 	// must start base service first
 	s.Resource.Start()
 	s.handler.Start()
 
-	logger.Info("matching started")
+	s.server = grpc.NewServer()
+	handlerGRPC := NewHandlerGRPC(s.handler)
+	nilCheckHandler := NewNilCheckHandler(handlerGRPC)
+	matchingservice.RegisterMatchingServiceServer(s.server, nilCheckHandler)
+	healthservice.RegisterMetaServer(s.server, handlerGRPC)
 
-	<-s.stopC
+	listener := s.GetGRPCListener()
+	logger.Info("Starting to serve on matching listener")
+	if err := s.server.Serve(listener); err != nil {
+		logger.Fatal("Failed to serve on matching listener", tag.Error(err))
+	}
 }
 
 // Stop stops the service
@@ -104,7 +115,7 @@ func (s *Service) Stop() {
 		return
 	}
 
-	close(s.stopC)
+	s.server.GracefulStop()
 
 	s.handler.Stop()
 	s.Resource.Stop()

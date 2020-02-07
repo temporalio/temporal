@@ -32,8 +32,9 @@ import (
 	"github.com/uber-go/tally"
 
 	"github.com/temporalio/temporal/.gen/go/history"
-	"github.com/temporalio/temporal/.gen/go/matching/matchingservicetest"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/matchingservice"
+	"github.com/temporalio/temporal/.gen/proto/matchingservicemock"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
@@ -60,7 +61,7 @@ type (
 		mockDomainCache          *cache.MockDomainCache
 		mockClusterMetadata      *cluster.MockMetadata
 		mockNDCHistoryResender   *xdc.MockNDCHistoryResender
-		mockMatchingClient       *matchingservicetest.MockClient
+		mockMatchingClient       *matchingservicemock.MockMatchingServiceClient
 
 		mockVisibilityMgr       *mocks.VisibilityManager
 		mockExecutionMgr        *mocks.ExecutionManager
@@ -291,7 +292,7 @@ func (s *transferQueueStandbyProcessorSuite) TestProcessActivityTask_Pending_Pus
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), gomock.Any()).Return(&matchingservice.AddActivityTaskResponse{}, nil).Times(1)
 
 	s.mockShard.SetCurrentTime(s.clusterName, now)
 	_, err = s.transferQueueStandbyProcessor.process(newTaskInfo(nil, transferTask, s.logger))
@@ -446,7 +447,7 @@ func (s *transferQueueStandbyProcessorSuite) TestProcessDecisionTask_Pending_Pus
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, di.ScheduleID, di.Version)
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockMatchingClient.EXPECT().AddDecisionTask(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	s.mockMatchingClient.EXPECT().AddDecisionTask(gomock.Any(), gomock.Any()).Return(&matchingservice.AddDecisionTaskResponse{}, nil).Times(1)
 
 	s.mockShard.SetCurrentTime(s.clusterName, now)
 	_, err = s.transferQueueStandbyProcessor.process(newTaskInfo(nil, transferTask, s.logger))

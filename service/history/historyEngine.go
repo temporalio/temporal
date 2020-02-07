@@ -30,18 +30,20 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gogo/status"
 	"github.com/pborman/uuid"
 	"go.temporal.io/temporal-proto/workflowservice"
-	"go.uber.org/yarpc/yarpcerrors"
 	"golang.org/x/net/context"
+	"google.golang.org/grpc/codes"
 
 	h "github.com/temporalio/temporal/.gen/go/history"
-	m "github.com/temporalio/temporal/.gen/go/matching"
 	r "github.com/temporalio/temporal/.gen/go/replicator"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	hc "github.com/temporalio/temporal/client/history"
 	"github.com/temporalio/temporal/client/matching"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/client"
 	"github.com/temporalio/temporal/common/clock"
@@ -908,10 +910,10 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 		supportsStickyQuery &&
 		e.config.EnableStickyQuery(queryRequest.GetDomain()) {
 
-		stickyMatchingRequest := &m.QueryWorkflowRequest{
-			DomainUUID:   common.StringPtr(domainID),
-			QueryRequest: queryRequest,
-			TaskList:     msResp.GetStickyTaskList(),
+		stickyMatchingRequest := &matchingservice.QueryWorkflowRequest{
+			DomainUUID:   domainID,
+			QueryRequest: adapter.ToProtoQueryWorkflowRequest(queryRequest),
+			TaskList:     adapter.ToProtoTaskList(msResp.GetStickyTaskList()),
 		}
 
 		// using a clean new context in case customer provide a context which has
@@ -923,9 +925,9 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 		cancel()
 		if err == nil {
 			scope.IncCounter(metrics.DirectQueryDispatchStickySuccessCount)
-			return &h.QueryWorkflowResponse{Response: matchingResp}, nil
+			return &h.QueryWorkflowResponse{Response: adapter.ToThriftQueryWorkflowResponse(matchingResp)}, nil
 		}
-		if yarpcError, ok := err.(*yarpcerrors.Status); !ok || yarpcError.Code() != yarpcerrors.CodeDeadlineExceeded {
+		if st, ok := status.FromError(err); !ok || st.Code() != codes.DeadlineExceeded {
 			e.logger.Error("query directly though matching on sticky failed, will not attempt query on non-sticky",
 				tag.WorkflowDomainName(queryRequest.GetDomain()),
 				tag.WorkflowID(queryRequest.Execution.GetWorkflowId()),
@@ -973,10 +975,10 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 		tag.WorkflowTaskListName(msResp.GetStickyTaskList().GetName()),
 		tag.WorkflowNextEventID(msResp.GetNextEventId()))
 
-	nonStickyMatchingRequest := &m.QueryWorkflowRequest{
-		DomainUUID:   common.StringPtr(domainID),
-		QueryRequest: queryRequest,
-		TaskList:     msResp.TaskList,
+	nonStickyMatchingRequest := &matchingservice.QueryWorkflowRequest{
+		DomainUUID:   domainID,
+		QueryRequest: adapter.ToProtoQueryWorkflowRequest(queryRequest),
+		TaskList:     adapter.ToProtoTaskList(msResp.TaskList),
 	}
 
 	nonStickyStopWatch := scope.StartTimer(metrics.DirectQueryDispatchNonStickyLatency)
@@ -992,7 +994,7 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 		return nil, err
 	}
 	scope.IncCounter(metrics.DirectQueryDispatchNonStickySuccessCount)
-	return &h.QueryWorkflowResponse{Response: matchingResp}, err
+	return &h.QueryWorkflowResponse{Response: adapter.ToThriftQueryWorkflowResponse(matchingResp)}, err
 }
 
 func (e *historyEngineImpl) getMutableState(

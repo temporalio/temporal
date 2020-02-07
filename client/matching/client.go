@@ -24,11 +24,9 @@ import (
 	"context"
 	"time"
 
-	"go.uber.org/yarpc"
+	"google.golang.org/grpc"
 
-	m "github.com/temporalio/temporal/.gen/go/matching"
-	"github.com/temporalio/temporal/.gen/go/matching/matchingserviceclient"
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/persistence"
 )
@@ -66,19 +64,18 @@ func NewClient(
 
 func (c *clientImpl) AddActivityTask(
 	ctx context.Context,
-	request *m.AddActivityTaskRequest,
-	opts ...yarpc.CallOption) error {
-	opts = common.AggregateYarpcOptions(ctx, opts...)
+	request *matchingservice.AddActivityTaskRequest,
+	opts ...grpc.CallOption) (*matchingservice.AddActivityTaskResponse, error) {
 	partition := c.loadBalancer.PickWritePartition(
 		request.GetDomainUUID(),
 		*request.GetTaskList(),
 		persistence.TaskListTypeActivity,
 		request.GetForwardedFrom(),
 	)
-	request.TaskList.Name = &partition
+	request.TaskList.Name = partition
 	client, err := c.getClientForTasklist(partition)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
@@ -87,19 +84,18 @@ func (c *clientImpl) AddActivityTask(
 
 func (c *clientImpl) AddDecisionTask(
 	ctx context.Context,
-	request *m.AddDecisionTaskRequest,
-	opts ...yarpc.CallOption) error {
-	opts = common.AggregateYarpcOptions(ctx, opts...)
+	request *matchingservice.AddDecisionTaskRequest,
+	opts ...grpc.CallOption) (*matchingservice.AddDecisionTaskResponse, error) {
 	partition := c.loadBalancer.PickWritePartition(
 		request.GetDomainUUID(),
 		*request.GetTaskList(),
 		persistence.TaskListTypeDecision,
 		request.GetForwardedFrom(),
 	)
-	request.TaskList.Name = &partition
+	request.TaskList.Name = partition
 	client, err := c.getClientForTasklist(request.TaskList.GetName())
 	if err != nil {
-		return err
+		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
@@ -108,16 +104,15 @@ func (c *clientImpl) AddDecisionTask(
 
 func (c *clientImpl) PollForActivityTask(
 	ctx context.Context,
-	request *m.PollForActivityTaskRequest,
-	opts ...yarpc.CallOption) (*workflow.PollForActivityTaskResponse, error) {
-	opts = common.AggregateYarpcOptions(ctx, opts...)
+	request *matchingservice.PollForActivityTaskRequest,
+	opts ...grpc.CallOption) (*matchingservice.PollForActivityTaskResponse, error) {
 	partition := c.loadBalancer.PickReadPartition(
 		request.GetDomainUUID(),
 		*request.PollRequest.GetTaskList(),
 		persistence.TaskListTypeActivity,
 		request.GetForwardedFrom(),
 	)
-	request.PollRequest.TaskList.Name = &partition
+	request.PollRequest.TaskList.Name = partition
 	client, err := c.getClientForTasklist(request.PollRequest.TaskList.GetName())
 	if err != nil {
 		return nil, err
@@ -129,16 +124,15 @@ func (c *clientImpl) PollForActivityTask(
 
 func (c *clientImpl) PollForDecisionTask(
 	ctx context.Context,
-	request *m.PollForDecisionTaskRequest,
-	opts ...yarpc.CallOption) (*m.PollForDecisionTaskResponse, error) {
-	opts = common.AggregateYarpcOptions(ctx, opts...)
+	request *matchingservice.PollForDecisionTaskRequest,
+	opts ...grpc.CallOption) (*matchingservice.PollForDecisionTaskResponse, error) {
 	partition := c.loadBalancer.PickReadPartition(
 		request.GetDomainUUID(),
 		*request.PollRequest.GetTaskList(),
 		persistence.TaskListTypeDecision,
 		request.GetForwardedFrom(),
 	)
-	request.PollRequest.TaskList.Name = &partition
+	request.PollRequest.TaskList.Name = partition
 	client, err := c.getClientForTasklist(request.PollRequest.TaskList.GetName())
 	if err != nil {
 		return nil, err
@@ -148,15 +142,14 @@ func (c *clientImpl) PollForDecisionTask(
 	return client.PollForDecisionTask(ctx, request, opts...)
 }
 
-func (c *clientImpl) QueryWorkflow(ctx context.Context, request *m.QueryWorkflowRequest, opts ...yarpc.CallOption) (*workflow.QueryWorkflowResponse, error) {
-	opts = common.AggregateYarpcOptions(ctx, opts...)
+func (c *clientImpl) QueryWorkflow(ctx context.Context, request *matchingservice.QueryWorkflowRequest, opts ...grpc.CallOption) (*matchingservice.QueryWorkflowResponse, error) {
 	partition := c.loadBalancer.PickReadPartition(
 		request.GetDomainUUID(),
 		*request.GetTaskList(),
 		persistence.TaskListTypeDecision,
 		request.GetForwardedFrom(),
 	)
-	request.TaskList.Name = &partition
+	request.TaskList.Name = partition
 	client, err := c.getClientForTasklist(request.TaskList.GetName())
 	if err != nil {
 		return nil, err
@@ -166,30 +159,27 @@ func (c *clientImpl) QueryWorkflow(ctx context.Context, request *m.QueryWorkflow
 	return client.QueryWorkflow(ctx, request, opts...)
 }
 
-func (c *clientImpl) RespondQueryTaskCompleted(ctx context.Context, request *m.RespondQueryTaskCompletedRequest, opts ...yarpc.CallOption) error {
-	opts = common.AggregateYarpcOptions(ctx, opts...)
+func (c *clientImpl) RespondQueryTaskCompleted(ctx context.Context, request *matchingservice.RespondQueryTaskCompletedRequest, opts ...grpc.CallOption) (*matchingservice.RespondQueryTaskCompletedResponse, error) {
 	client, err := c.getClientForTasklist(request.TaskList.GetName())
 	if err != nil {
-		return err
+		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.RespondQueryTaskCompleted(ctx, request, opts...)
 }
 
-func (c *clientImpl) CancelOutstandingPoll(ctx context.Context, request *m.CancelOutstandingPollRequest, opts ...yarpc.CallOption) error {
-	opts = common.AggregateYarpcOptions(ctx, opts...)
+func (c *clientImpl) CancelOutstandingPoll(ctx context.Context, request *matchingservice.CancelOutstandingPollRequest, opts ...grpc.CallOption) (*matchingservice.CancelOutstandingPollResponse, error) {
 	client, err := c.getClientForTasklist(request.TaskList.GetName())
 	if err != nil {
-		return err
+		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.CancelOutstandingPoll(ctx, request, opts...)
 }
 
-func (c *clientImpl) DescribeTaskList(ctx context.Context, request *m.DescribeTaskListRequest, opts ...yarpc.CallOption) (*workflow.DescribeTaskListResponse, error) {
-	opts = common.AggregateYarpcOptions(ctx, opts...)
+func (c *clientImpl) DescribeTaskList(ctx context.Context, request *matchingservice.DescribeTaskListRequest, opts ...grpc.CallOption) (*matchingservice.DescribeTaskListResponse, error) {
 	client, err := c.getClientForTasklist(request.DescRequest.TaskList.GetName())
 	if err != nil {
 		return nil, err
@@ -199,8 +189,7 @@ func (c *clientImpl) DescribeTaskList(ctx context.Context, request *m.DescribeTa
 	return client.DescribeTaskList(ctx, request, opts...)
 }
 
-func (c *clientImpl) ListTaskListPartitions(ctx context.Context, request *m.ListTaskListPartitionsRequest, opts ...yarpc.CallOption) (*workflow.ListTaskListPartitionsResponse, error) {
-	opts = common.AggregateYarpcOptions(ctx, opts...)
+func (c *clientImpl) ListTaskListPartitions(ctx context.Context, request *matchingservice.ListTaskListPartitionsRequest, opts ...grpc.CallOption) (*matchingservice.ListTaskListPartitionsResponse, error) {
 	client, err := c.getClientForTasklist(request.TaskList.GetName())
 	if err != nil {
 		return nil, err
@@ -224,10 +213,10 @@ func (c *clientImpl) createLongPollContext(parent context.Context) (context.Cont
 	return context.WithTimeout(parent, c.longPollTimeout)
 }
 
-func (c *clientImpl) getClientForTasklist(key string) (matchingserviceclient.Interface, error) {
+func (c *clientImpl) getClientForTasklist(key string) (matchingservice.MatchingServiceClient, error) {
 	client, err := c.clients.GetClientForKey(key)
 	if err != nil {
 		return nil, err
 	}
-	return client.(matchingserviceclient.Interface), nil
+	return client.(matchingservice.MatchingServiceClient), nil
 }

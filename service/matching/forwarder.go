@@ -25,9 +25,14 @@ import (
 	"errors"
 	"sync/atomic"
 
-	gen "github.com/temporalio/temporal/.gen/go/matching"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/workflowservice"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/client/matching"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/quotas"
@@ -139,29 +144,29 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 
 	switch fwdr.taskListID.taskType {
 	case persistence.TaskListTypeDecision:
-		err = fwdr.client.AddDecisionTask(ctx, &gen.AddDecisionTaskRequest{
-			DomainUUID: &task.event.DomainID,
-			Execution:  task.workflowExecution(),
-			TaskList: &shared.TaskList{
-				Name: &name,
-				Kind: &fwdr.taskListKind,
+		_, err = fwdr.client.AddDecisionTask(ctx, &matchingservice.AddDecisionTaskRequest{
+			DomainUUID: task.event.DomainID,
+			Execution:  adapter.ToProtoWorkflowExecution(task.workflowExecution()),
+			TaskList: &commonproto.TaskList{
+				Name: name,
+				Kind: enums.TaskListKind(fwdr.taskListKind),
 			},
-			ScheduleId:                    &task.event.ScheduleID,
-			ScheduleToStartTimeoutSeconds: &task.event.ScheduleToStartTimeout,
-			ForwardedFrom:                 &fwdr.taskListID.name,
+			ScheduleId:                    task.event.ScheduleID,
+			ScheduleToStartTimeoutSeconds: task.event.ScheduleToStartTimeout,
+			ForwardedFrom:                 fwdr.taskListID.name,
 		})
 	case persistence.TaskListTypeActivity:
-		err = fwdr.client.AddActivityTask(ctx, &gen.AddActivityTaskRequest{
-			DomainUUID:       &fwdr.taskListID.domainID,
-			SourceDomainUUID: &task.event.DomainID,
-			Execution:        task.workflowExecution(),
-			TaskList: &shared.TaskList{
-				Name: &name,
-				Kind: &fwdr.taskListKind,
+		_, err = fwdr.client.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
+			DomainUUID:       fwdr.taskListID.domainID,
+			SourceDomainUUID: task.event.DomainID,
+			Execution:        adapter.ToProtoWorkflowExecution(task.workflowExecution()),
+			TaskList: &commonproto.TaskList{
+				Name: name,
+				Kind: enums.TaskListKind(fwdr.taskListKind),
 			},
-			ScheduleId:                    &task.event.ScheduleID,
-			ScheduleToStartTimeoutSeconds: &task.event.ScheduleToStartTimeout,
-			ForwardedFrom:                 &fwdr.taskListID.name,
+			ScheduleId:                    task.event.ScheduleID,
+			ScheduleToStartTimeoutSeconds: task.event.ScheduleToStartTimeout,
+			ForwardedFrom:                 fwdr.taskListID.name,
 		})
 	default:
 		return errInvalidTaskListType
@@ -185,17 +190,17 @@ func (fwdr *Forwarder) ForwardQueryTask(
 		return nil, errNoParent
 	}
 
-	resp, err := fwdr.client.QueryWorkflow(ctx, &gen.QueryWorkflowRequest{
-		DomainUUID: task.query.request.DomainUUID,
-		TaskList: &shared.TaskList{
-			Name: &name,
-			Kind: &fwdr.taskListKind,
+	resp, err := fwdr.client.QueryWorkflow(ctx, &matchingservice.QueryWorkflowRequest{
+		DomainUUID: task.query.request.GetDomainUUID(),
+		TaskList: &commonproto.TaskList{
+			Name: name,
+			Kind: enums.TaskListKind(fwdr.taskListKind),
 		},
-		QueryRequest:  task.query.request.QueryRequest,
-		ForwardedFrom: &fwdr.taskListID.name,
+		QueryRequest:  adapter.ToProtoQueryWorkflowRequest(task.query.request.QueryRequest),
+		ForwardedFrom: fwdr.taskListID.name,
 	})
 
-	return resp, fwdr.handleErr(err)
+	return adapter.ToThriftQueryWorkflowResponse(resp), fwdr.handleErr(err)
 }
 
 // ForwardPoll forwards a poll request to parent task list partition if it exist
@@ -214,39 +219,39 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 
 	switch fwdr.taskListID.taskType {
 	case persistence.TaskListTypeDecision:
-		resp, err := fwdr.client.PollForDecisionTask(ctx, &gen.PollForDecisionTaskRequest{
-			DomainUUID: &fwdr.taskListID.domainID,
-			PollerID:   &pollerID,
-			PollRequest: &shared.PollForDecisionTaskRequest{
-				TaskList: &shared.TaskList{
-					Name: &name,
-					Kind: &fwdr.taskListKind,
+		resp, err := fwdr.client.PollForDecisionTask(ctx, &matchingservice.PollForDecisionTaskRequest{
+			DomainUUID: fwdr.taskListID.domainID,
+			PollerID:   pollerID,
+			PollRequest: &workflowservice.PollForDecisionTaskRequest{
+				TaskList: &commonproto.TaskList{
+					Name: name,
+					Kind: enums.TaskListKind(fwdr.taskListKind),
 				},
-				Identity: &identity,
+				Identity: identity,
 			},
-			ForwardedFrom: &fwdr.taskListID.name,
+			ForwardedFrom: fwdr.taskListID.name,
 		})
 		if err != nil {
 			return nil, fwdr.handleErr(err)
 		}
-		return newInternalStartedTask(&startedTaskInfo{decisionTaskInfo: resp}), nil
+		return newInternalStartedTask(&startedTaskInfo{decisionTaskInfo: adapter.ToThriftMatchingPollForDecisionTaskResponse(resp)}), nil
 	case persistence.TaskListTypeActivity:
-		resp, err := fwdr.client.PollForActivityTask(ctx, &gen.PollForActivityTaskRequest{
-			DomainUUID: &fwdr.taskListID.domainID,
-			PollerID:   &pollerID,
-			PollRequest: &shared.PollForActivityTaskRequest{
-				TaskList: &shared.TaskList{
-					Name: &name,
-					Kind: &fwdr.taskListKind,
+		resp, err := fwdr.client.PollForActivityTask(ctx, &matchingservice.PollForActivityTaskRequest{
+			DomainUUID: fwdr.taskListID.domainID,
+			PollerID:   pollerID,
+			PollRequest: &workflowservice.PollForActivityTaskRequest{
+				TaskList: &commonproto.TaskList{
+					Name: name,
+					Kind: enums.TaskListKind(fwdr.taskListKind),
 				},
-				Identity: &identity,
+				Identity: identity,
 			},
-			ForwardedFrom: &fwdr.taskListID.name,
+			ForwardedFrom: fwdr.taskListID.name,
 		})
 		if err != nil {
 			return nil, fwdr.handleErr(err)
 		}
-		return newInternalStartedTask(&startedTaskInfo{activityTaskInfo: resp}), nil
+		return newInternalStartedTask(&startedTaskInfo{activityTaskInfo: adapter.ToThriftMatchingPollForActivityTaskResponse(resp)}), nil
 	}
 
 	return nil, errInvalidTaskListType

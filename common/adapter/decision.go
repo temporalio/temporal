@@ -254,3 +254,12 @@ func ToProtoTransientDecisionInfo(in *shared.TransientDecisionInfo) *common.Tran
 		StartedEvent:   ToProtoHistoryEvent(in.GetStartedEvent()),
 	}
 }
+func ToThriftTransientDecisionInfo(in *common.TransientDecisionInfo) *shared.TransientDecisionInfo {
+	if in == nil {
+		return nil
+	}
+	return &shared.TransientDecisionInfo{
+		ScheduledEvent: ToThriftHistoryEvent(in.ScheduledEvent),
+		StartedEvent:   ToThriftHistoryEvent(in.StartedEvent),
+	}
+}
