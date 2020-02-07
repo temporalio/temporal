@@ -21,6 +21,7 @@
 package persistencetests
 
 import (
+	"net"
 	"os"
 	"testing"
 	"time"
@@ -54,7 +55,6 @@ func (s *ClusterMetadataManagerSuite) SetupSuite() {
 
 // SetupTest implementation
 func (s *ClusterMetadataManagerSuite) SetupTest() {
-	s.ClusterMetadataManager.PruneClusterMembership(&p.PruneClusterMembershipRequest{MaxRecordsPruned: 100})
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 }
@@ -75,11 +75,43 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipEmptyInitially() {
 // TestClusterMembershipUpsertCanRead verifies that we can UpsertClusterMembership and read our result
 func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanRead() {
 	req := &p.UpsertClusterMembershipRequest{
-		HostID:         []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-		RPCAddress:     "127.0.0.2",
-		SessionStarted: time.Now().UTC(),
-		RecordExpiry:   time.Second,
+		HostID:       []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+		RPCAddress:   net.ParseIP("127.0.0.2"),
+		RPCPort:      123,
+		Role:         p.Frontend,
+		SessionStart: time.Now().UTC(),
+		RecordExpiry: time.Second,
 	}
+
+	err := s.ClusterMetadataManager.UpsertClusterMembership(req)
+	s.Nil(err)
+
+	resp, err := s.ClusterMetadataManager.GetClusterMembers(&p.GetClusterMembersRequest{})
+
+	s.Nil(err)
+	s.NotNil(resp)
+	s.NotEmpty(resp.ActiveMembers)
+	s.Equal(len(resp.ActiveMembers), 1)
+	// Have to round to 1 second due to SQL implementations. Cassandra truncates at 1ms.
+	s.Equal(resp.ActiveMembers[0].SessionStart.Round(time.Second), req.SessionStart.Round(time.Second))
+	s.Equal(resp.ActiveMembers[0].RPCAddress.String(), req.RPCAddress.String())
+	s.Equal(resp.ActiveMembers[0].RPCPort, req.RPCPort)
+	s.True(resp.ActiveMembers[0].RecordExpiry.After(time.Now().UTC()))
+	s.Equal(resp.ActiveMembers[0].HostID, req.HostID)
+	s.Equal(resp.ActiveMembers[0].Role, req.Role)
+}
+
+// TestClusterMembershipUpsertCanRead verifies that we can UpsertClusterMembership and read our result
+func (s *ClusterMetadataManagerSuite) TestClusterMembershipReadFiltersCorrectly() {
+	req := &p.UpsertClusterMembershipRequest{
+		HostID:       []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+		RPCAddress:   net.ParseIP("127.0.0.2"),
+		RPCPort:      123,
+		Role:         p.Frontend,
+		SessionStart: time.Now().UTC(),
+		RecordExpiry: time.Minute * 10,
+	}
+
 	err := s.ClusterMetadataManager.UpsertClusterMembership(req)
 	s.Nil(err)
 
@@ -91,19 +123,56 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanRead() {
 	s.NotEmpty(resp.ActiveMembers)
 	s.Equal(len(resp.ActiveMembers), 1)
 	// Have to round to 1 second due to SQL implementations. Cassandra truncates at 1ms.
-	s.Equal(resp.ActiveMembers[0].SessionStarted.Round(time.Second), req.SessionStarted.Round(time.Second))
-	s.Equal(resp.ActiveMembers[0].RPCAddress, req.RPCAddress)
+	s.Equal(resp.ActiveMembers[0].SessionStart.Round(time.Second), req.SessionStart.Round(time.Second))
+	s.Equal(resp.ActiveMembers[0].RPCAddress.String(), req.RPCAddress.String())
+	s.Equal(resp.ActiveMembers[0].RPCPort, req.RPCPort)
+	s.True(resp.ActiveMembers[0].RecordExpiry.After(time.Now().UTC()))
 	s.Equal(resp.ActiveMembers[0].HostID, req.HostID)
+	s.Equal(resp.ActiveMembers[0].Role, req.Role)
+
+	time.Sleep(time.Second * 1)
+	resp, err = s.ClusterMetadataManager.GetClusterMembers(
+		&p.GetClusterMembersRequest{LastHeartbeatWithin: time.Millisecond })
+
+	s.Nil(err)
+	s.NotNil(resp)
+	s.Empty(resp.ActiveMembers)
+
+	resp, err = s.ClusterMetadataManager.GetClusterMembers(
+		&p.GetClusterMembersRequest{RoleEquals: p.Matching })
+
+	s.Nil(err)
+	s.NotNil(resp)
+	s.Empty(resp.ActiveMembers)
+
+	resp, err = s.ClusterMetadataManager.GetClusterMembers(
+		&p.GetClusterMembersRequest{RPCAddressEquals: req.RPCAddress })
+
+	s.Nil(err)
+	s.NotNil(resp)
+	s.NotEmpty(resp.ActiveMembers)
+	s.Equal(len(resp.ActiveMembers), 1)
+	// Have to round to 1 second due to SQL implementations. Cassandra truncates at 1ms.
+	s.Equal(resp.ActiveMembers[0].SessionStart.Round(time.Second), req.SessionStart.Round(time.Second))
+	s.Equal(resp.ActiveMembers[0].RPCAddress.String(), req.RPCAddress.String())
+	s.Equal(resp.ActiveMembers[0].RPCPort, req.RPCPort)
+	s.True(resp.ActiveMembers[0].RecordExpiry.After(time.Now().UTC()))
+	s.Equal(resp.ActiveMembers[0].HostID, req.HostID)
+	s.Equal(resp.ActiveMembers[0].Role, req.Role)
+
 }
 
 // TestClusterMembershipUpsertExpiresCorrectly verifies RecordExpiry functions properly for ClusterMembership records
 func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertExpiresCorrectly() {
 	req := &p.UpsertClusterMembershipRequest{
-		HostID:         []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-		RPCAddress:     "127.0.0.2",
-		SessionStarted: time.Now().UTC(),
-		RecordExpiry:   time.Second,
+		HostID:       []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+		RPCAddress:   net.ParseIP("127.0.0.2"),
+		RPCPort:      123,
+		Role:         p.Frontend,
+		SessionStart: time.Now().UTC(),
+		RecordExpiry: time.Second,
 	}
+
 	err := s.ClusterMetadataManager.UpsertClusterMembership(req)
 	s.NoError(err)
 
@@ -118,9 +187,12 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertExpiresCorrectl
 	s.NotEmpty(resp.ActiveMembers)
 	s.Equal(len(resp.ActiveMembers), 1)
 	// Have to round to 1 second due to SQL implementations. Cassandra truncates at 1ms.
-	s.Equal(resp.ActiveMembers[0].SessionStarted.Round(time.Second), req.SessionStarted.Round(time.Second))
-	s.Equal(resp.ActiveMembers[0].RPCAddress, req.RPCAddress)
+	s.Equal(resp.ActiveMembers[0].SessionStart.Round(time.Second), req.SessionStart.Round(time.Second))
+	s.Equal(resp.ActiveMembers[0].RPCAddress.String(), req.RPCAddress.String())
+	s.Equal(resp.ActiveMembers[0].RPCPort, req.RPCPort)
+	s.True(resp.ActiveMembers[0].RecordExpiry.After(time.Now().UTC()))
 	s.Equal(resp.ActiveMembers[0].HostID, req.HostID)
+	s.Equal(resp.ActiveMembers[0].Role, req.Role)
 
 	time.Sleep(time.Second * 2)
 
@@ -138,11 +210,14 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertExpiresCorrectl
 // TestClusterMembershipUpsertInvalidExpiry verifies we cannot specify a non-positive RecordExpiry duration
 func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertInvalidExpiry() {
 	req := &p.UpsertClusterMembershipRequest{
-		HostID:         []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-		RPCAddress:     "127.0.0.2",
-		SessionStarted: time.Now().UTC(),
-		RecordExpiry:   time.Second * 0,
+		HostID:       []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+		RPCAddress:   net.ParseIP("127.0.0.2"),
+		RPCPort:      123,
+		Role:         p.Frontend,
+		SessionStart: time.Now().UTC(),
+		RecordExpiry: time.Second * 0,
 	}
+
 	err := s.ClusterMetadataManager.UpsertClusterMembership(req)
 	s.NotNil(err)
 	s.IsType(err, p.ErrInvalidMembershipExpiry)
