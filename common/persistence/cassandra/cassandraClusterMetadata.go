@@ -21,6 +21,8 @@
 package cassandra
 
 import (
+	"net"
+	"strings"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -35,6 +37,7 @@ import (
 )
 
 const constMetadataPartition = 0
+const constMembershipPartition = 0
 
 const (
 	// ****** CLUSTER_METADATA TABLE ******
@@ -53,13 +56,19 @@ WHERE metadata_partition = ?`
 	immutableEncodingFieldName = immutablePayloadFieldName + `_encoding`
 
 	// ****** CLUSTER_MEMBERSHIP TABLE ******
-	templateUpsertActiveClusterMembership = `UPDATE
-cluster_membership USING TTL ? SET rpc_address = ?, session_start = ?, last_heartbeat = ?
-WHERE host_id = ?`
+	templateUpsertActiveClusterMembership = `INSERT INTO 
+cluster_membership (membership_partition, host_id, rpc_address, rpc_port, role, session_start, last_heartbeat) 
+VALUES (?, ?, ?, ?, ?, ?, ?) USING TTL ?`
 
-	templateGetClusterMembership = `SELECT host_id, rpc_address, session_start, last_heartbeat FROM
+	templateGetClusterMembership = `SELECT host_id, rpc_address, rpc_port, role, session_start, last_heartbeat, toTimestamp(now()) as now, TTL(session_start) as ttl_sec FROM
 cluster_membership 
-WHERE last_heartbeat > ? ALLOW FILTERING`
+WHERE membership_partition = ?`
+
+	templateWithRoleSuffix = ` AND role = ?`
+	templateWithHeartbeatSinceSuffix = ` AND last_heartbeat > ?`
+	templateWithRPCAddressSuffix = ` AND rpc_address = ?`
+	templateWithHostIDSuffix = ` AND host_id = ?`
+	templateAllowFiltering = ` ALLOW FILTERING`
 )
 
 type (
@@ -165,7 +174,34 @@ func (m *cassandraClusterMetadata) GetImmutableClusterMetadata() (*p.InternalGet
 }
 
 func (m *cassandraClusterMetadata) GetClusterMembers(request *p.GetClusterMembersRequest) (*p.GetClusterMembersResponse, error) {
-	query := m.session.Query(templateGetClusterMembership, time.Now().UTC().Add(-request.LastHeartbeatWithin))
+	var queryString strings.Builder
+	var operands []interface{}
+	queryString.WriteString(templateGetClusterMembership)
+	operands = append(operands, constMembershipPartition)
+
+	if request.HostIDEquals != nil {
+		queryString.WriteString(templateWithHostIDSuffix)
+		operands = append(operands, request.HostIDEquals)
+	}
+
+	if request.RPCAddressEquals != nil {
+		queryString.WriteString(templateWithRPCAddressSuffix)
+		operands = append(operands, request.RPCAddressEquals)
+	}
+
+	if request.RoleEquals != p.Unknown {
+		queryString.WriteString(templateWithRoleSuffix)
+		operands = append(operands, request.RoleEquals)
+	}
+
+	// LastHeartbeat needs to be the last one as it needs AllowFilteringSuffix
+	if request.LastHeartbeatWithin > 0 {
+		queryString.WriteString(templateWithHeartbeatSinceSuffix)
+		operands = append(operands, time.Now().UTC().Add(-request.LastHeartbeatWithin))
+	}
+
+	queryString.WriteString(templateAllowFiltering)
+	query := m.session.Query(queryString.String(), operands...)
 
 	// No paging enabled due to TTL on table
 	iter := query.Iter()
@@ -173,16 +209,23 @@ func (m *cassandraClusterMetadata) GetClusterMembers(request *p.GetClusterMember
 	clusterMembers := make([]*p.ClusterMember, 0, rowCount)
 
 	cqlHostID := make([]byte, 0, 16)
-	rpcAddress := ""
+	rpcAddress := net.IP{}
+	rpcPort := uint16(0)
+	role := p.Unknown
 	sessionStart := time.Time{}
 	lastHeartbeat := time.Time{}
+	ttl := 0
+	cassNow := time.Time{}
 
-	for iter.Scan(&cqlHostID, &rpcAddress, &sessionStart, &lastHeartbeat) {
+	for iter.Scan(&cqlHostID, &rpcAddress, &rpcPort, &role, &sessionStart, &lastHeartbeat, &cassNow, &ttl) {
 		member := p.ClusterMember{
-			HostID:         uuid.UUID(cqlHostID),
-			RPCAddress:     rpcAddress,
-			SessionStarted: sessionStart,
-			LastHeartbeat:  lastHeartbeat,
+			HostID:        uuid.UUID(cqlHostID),
+			RPCAddress:    rpcAddress,
+			RPCPort:       rpcPort,
+			Role:		   role,
+			SessionStart:  sessionStart,
+			LastHeartbeat: lastHeartbeat,
+			RecordExpiry:  cassNow.UTC().Add(time.Second * time.Duration(ttl)),
 		}
 		clusterMembers = append(clusterMembers, &member)
 	}
@@ -195,8 +238,8 @@ func (m *cassandraClusterMetadata) GetClusterMembers(request *p.GetClusterMember
 }
 
 func (m *cassandraClusterMetadata) UpsertClusterMembership(request *p.UpsertClusterMembershipRequest) error {
-	query := m.session.Query(templateUpsertActiveClusterMembership, int64(request.RecordExpiry.Seconds()),
-		request.RPCAddress, request.SessionStarted, time.Now().UTC(), []byte(request.HostID))
+	query := m.session.Query(templateUpsertActiveClusterMembership, constMembershipPartition, []byte(request.HostID),
+		request.RPCAddress, request.RPCPort, request.Role, request.SessionStart, time.Now().UTC(), int64(request.RecordExpiry.Seconds()))
 	err := query.Exec()
 
 	if err != nil {
