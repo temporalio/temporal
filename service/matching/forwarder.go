@@ -191,7 +191,7 @@ func (fwdr *Forwarder) ForwardQueryTask(
 	}
 
 	resp, err := fwdr.client.QueryWorkflow(ctx, &matchingservice.QueryWorkflowRequest{
-		DomainUUID: *task.query.request.DomainUUID,
+		DomainUUID: task.query.request.GetDomainUUID(),
 		TaskList: &commonproto.TaskList{
 			Name: name,
 			Kind: enums.TaskListKind(fwdr.taskListKind),

@@ -95,7 +95,7 @@ func (s *dcRedirectionHandlerSuite) SetupTest() {
 	s.config = NewConfig(dynamicconfig.NewCollection(dynamicconfig.NewNopClient(), s.mockResource.GetLogger()), 0, false)
 	frontendHandler := NewWorkflowHandler(s.mockResource, s.config, nil)
 
-	frontendHandlerGRPC := NewWorkflowHandlerGRPC(frontendHandler)
+	frontendHandlerGRPC := NewWorkflowHandlerGRPC(s.mockResource, frontendHandler, s.config, nil)
 
 	s.mockFrontendHandler = workflowservicemock.NewMockWorkflowServiceServer(s.controller)
 	s.handler = NewDCRedirectionHandler(frontendHandlerGRPC, config.DCRedirectionPolicy{})
