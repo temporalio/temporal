@@ -9,8 +9,15 @@ CREATE TABLE cluster_membership
 (
     host_id              BINARY(16) NOT NULL,
     rpc_address          VARCHAR(15) NOT NULL,
-    session_start        TIMESTAMP NOT NULL,
-    last_heartbeat       TIMESTAMP NOT NULL,
-    record_expiry        TIMESTAMP NOT NULL,
+    rpc_port             SMALLINT NOT NULL,
+    role                 TINYINT NOT NULL,
+    session_start        TIMESTAMP DEFAULT '1970-01-01 00:00:01',
+    last_heartbeat       TIMESTAMP DEFAULT '1970-01-01 00:00:01',
+    record_expiry        TIMESTAMP DEFAULT '1970-01-01 00:00:01',
+    INDEX (role, host_id),
+    INDEX (role, last_heartbeat),
+    INDEX (rpc_address, role),
+    INDEX (last_heartbeat),
+    INDEX (record_expiry),
     PRIMARY KEY (host_id)
 );
