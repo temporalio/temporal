@@ -140,11 +140,6 @@ func (s *serviceTestBase) GetDispatcher() *yarpc.Dispatcher {
 }
 
 // GetDispatcher returns the gRPC dispatcher used by service
-func (s *serviceTestBase) GetGRPCDispatcher() *yarpc.Dispatcher {
-	return nil
-}
-
-// GetDispatcher returns the gRPC dispatcher used by service
 func (s *serviceTestBase) GetGRPCListener() net.Listener {
 	return nil
 }

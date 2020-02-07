@@ -432,11 +432,6 @@ func (s *Test) GetDispatcher() *yarpc.Dispatcher {
 	panic("user should implement this method for test")
 }
 
-// GetGRPCDispatcher for testing
-func (s *Test) GetGRPCDispatcher() *yarpc.Dispatcher {
-	panic("user should implement this method for test")
-}
-
 // GetGRPCListener for testing
 func (s *Test) GetGRPCListener() net.Listener {
 	panic("user should implement this method for test")
