@@ -122,11 +122,11 @@ func (vc *versionChecker) ClientSupported(ctx context.Context, enableClientVersi
 	if !ok {
 		return nil
 	}
-	version, err := version.NewVersion(clientFeatureVersion)
+	cfVersion, err := version.NewVersion(clientFeatureVersion)
 	if err != nil {
 		return &shared.ClientVersionNotSupportedError{FeatureVersion: clientFeatureVersion, ClientImpl: clientImpl, SupportedVersions: supportedVersions.String()}
 	}
-	if !supportedVersions.Check(version) {
+	if !supportedVersions.Check(cfVersion) {
 		return &shared.ClientVersionNotSupportedError{FeatureVersion: clientFeatureVersion, ClientImpl: clientImpl, SupportedVersions: supportedVersions.String()}
 	}
 	return nil
@@ -173,26 +173,6 @@ func (vc *versionChecker) SupportsConsistentQuery(clientImpl string, clientFeatu
 }
 
 func (vc *versionChecker) featureSupported(clientImpl string, clientFeatureVersion string, feature string) error {
-	// Some older clients may not provide clientImpl.
-	// If this is the case special handling needs to be done to maintain backwards compatibility.
-	// This can be removed after it is sure there are no existing clients which do not provide clientImpl in RPC headers.
-	if clientImpl == "" {
-		switch feature {
-		case consistentQuery:
-			return &shared.ClientVersionNotSupportedError{FeatureVersion: clientFeatureVersion}
-		case stickyQuery:
-			version, err := version.NewVersion(clientFeatureVersion)
-			if err != nil {
-				return &shared.ClientVersionNotSupportedError{FeatureVersion: clientFeatureVersion}
-			}
-			if !vc.stickyQueryUnknownImplConstraints.Check(version) {
-				return &shared.ClientVersionNotSupportedError{FeatureVersion: clientFeatureVersion, SupportedVersions: vc.stickyQueryUnknownImplConstraints.String()}
-			}
-			return nil
-		default:
-			return ErrUnknownFeature
-		}
-	}
 	if clientFeatureVersion == "" {
 		return &shared.ClientVersionNotSupportedError{ClientImpl: clientImpl, FeatureVersion: clientFeatureVersion}
 	}
@@ -204,11 +184,11 @@ func (vc *versionChecker) featureSupported(clientImpl string, clientFeatureVersi
 	if !ok {
 		return &shared.ClientVersionNotSupportedError{ClientImpl: clientImpl, FeatureVersion: clientFeatureVersion}
 	}
-	version, err := version.NewVersion(clientFeatureVersion)
+	cfVersion, err := version.NewVersion(clientFeatureVersion)
 	if err != nil {
 		return &shared.ClientVersionNotSupportedError{FeatureVersion: clientFeatureVersion, ClientImpl: clientImpl, SupportedVersions: supportedVersions.String()}
 	}
-	if !supportedVersions.Check(version) {
+	if !supportedVersions.Check(cfVersion) {
 		return &shared.ClientVersionNotSupportedError{ClientImpl: clientImpl, FeatureVersion: clientFeatureVersion, SupportedVersions: supportedVersions.String()}
 	}
 	return nil
