@@ -27,7 +27,6 @@ import (
 
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/api/transport"
-	yarpcgrpc "go.uber.org/yarpc/transport/grpc"
 	"go.uber.org/yarpc/transport/tchannel"
 	"google.golang.org/grpc"
 
@@ -44,7 +43,6 @@ type RPCFactory struct {
 
 	sync.Mutex
 	dispatcher        *yarpc.Dispatcher
-	grpcDispatcher    *yarpc.Dispatcher
 	grpcListiner      net.Listener
 	ringpopDispatcher *yarpc.Dispatcher
 }
@@ -58,33 +56,6 @@ func (cfg *RPC) NewFactory(sName string, logger log.Logger) *RPCFactory {
 func newRPCFactory(cfg *RPC, sName string, logger log.Logger) *RPCFactory {
 	factory := &RPCFactory{config: cfg, serviceName: sName, logger: logger}
 	return factory
-}
-
-// GetGRPCDispatcher returns cached dispatcher for gRPC inbound or creates one
-func (d *RPCFactory) GetGRPCDispatcher() *yarpc.Dispatcher {
-	if d.grpcDispatcher != nil {
-		return d.grpcDispatcher
-	}
-
-	d.Lock()
-	defer d.Unlock()
-
-	if d.grpcDispatcher == nil {
-		hostAddress := fmt.Sprintf("%v:%v", d.getListenIP(), d.config.GRPCPort)
-		l, err := net.Listen("tcp", hostAddress)
-		if err != nil {
-			d.logger.Fatal("Failed create a gRPC listener", tag.Error(err), tag.Address(hostAddress))
-		}
-
-		d.grpcDispatcher = yarpc.NewDispatcher(yarpc.Config{
-			Name:     d.serviceName,
-			Inbounds: yarpc.Inbounds{yarpcgrpc.NewTransport().NewInbound(l)},
-		})
-
-		d.logger.Info("Created gRPC dispatcher", tag.Service(d.serviceName), tag.Address(hostAddress))
-	}
-
-	return d.grpcDispatcher
 }
 
 // GetGRPCListener returns cached dispatcher for gRPC inbound or creates one
@@ -156,11 +127,6 @@ func (d *RPCFactory) createInboundTChannelDispatcher(serviceName string, port in
 // CreateTChannelDispatcherForOutbound creates a dispatcher for outbound connection
 func (d *RPCFactory) CreateTChannelDispatcherForOutbound(callerName, serviceName, hostName string) *yarpc.Dispatcher {
 	return d.createDispatcherForOutbound(d.ch.NewSingleOutbound(hostName), callerName, serviceName, hostName, "TChannel")
-}
-
-// CreateGRPCDispatcherForOutbound creates a dispatcher for outbound connection
-func (d *RPCFactory) CreateGRPCDispatcherForOutbound(callerName, serviceName, hostName string) *yarpc.Dispatcher {
-	return d.createDispatcherForOutbound(yarpcgrpc.NewTransport().NewSingleOutbound(hostName), callerName, serviceName, hostName, "gRPC")
 }
 
 func (d *RPCFactory) createDispatcherForOutbound(unaryOutbound transport.UnaryOutbound, callerName, serviceName, hostName, transportType string) *yarpc.Dispatcher {
