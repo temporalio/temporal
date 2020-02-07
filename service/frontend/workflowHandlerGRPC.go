@@ -35,10 +35,12 @@ import (
 
 	"github.com/pborman/uuid"
 
+	"github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
+	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/client"
@@ -1401,6 +1403,77 @@ func (wh *WorkflowHandlerGRPC) serializeHistoryToken(token *getHistoryContinuati
 
 func (wh *WorkflowHandlerGRPC) isFailoverRequest(updateRequest *workflowservice.UpdateDomainRequest) bool {
 	return updateRequest.ReplicationConfiguration != nil && updateRequest.ReplicationConfiguration.GetActiveClusterName() != ""
+}
+
+func (wh *WorkflowHandlerGRPC) historyArchived(ctx context.Context, request *workflowservice.GetWorkflowExecutionHistoryRequest, domainID string) bool {
+	if request.GetExecution() == nil || request.GetExecution().GetRunId() == "" {
+		return false
+	}
+	getMutableStateRequest := &history.GetMutableStateRequest{
+		DomainUUID: common.StringPtr(domainID),
+		Execution:  adapter.ToThriftWorkflowExecution(request.Execution),
+	}
+	_, err := wh.GetHistoryClient().GetMutableState(ctx, getMutableStateRequest, versionHeaders(ctx)...)
+	if err == nil {
+		return false
+	}
+	switch err.(type) {
+	case *shared.EntityNotExistsError:
+		// the only case in which history is assumed to be archived is if getting mutable state returns entity not found error
+		return true
+	}
+	return false
+}
+
+func (wh *WorkflowHandlerGRPC) getArchivedHistory(
+	ctx context.Context,
+	request *workflowservice.GetWorkflowExecutionHistoryRequest,
+	domainID string,
+	scope metrics.Scope,
+) (*workflowservice.GetWorkflowExecutionHistoryResponse, error) {
+	entry, err := wh.GetDomainCache().GetDomainByID(domainID)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	URIString := entry.GetConfig().HistoryArchivalURI
+	if URIString == "" {
+		// if URI is empty, it means the domain has never enabled for archival.
+		// the error is not "workflow has passed retention period", because
+		// we have no way to tell if the requested workflow exists or not.
+		return nil, wh.error(errHistoryNotFound, scope)
+	}
+
+	URI, err := archiver.NewURI(URIString)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	historyArchiver, err := wh.GetArchiverProvider().GetHistoryArchiver(URI.Scheme(), common.FrontendServiceName)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	resp, err := historyArchiver.Get(ctx, URI, &archiver.GetHistoryRequest{
+		DomainID:      domainID,
+		WorkflowID:    request.GetExecution().GetWorkflowId(),
+		RunID:         request.GetExecution().GetRunId(),
+		NextPageToken: request.GetNextPageToken(),
+		PageSize:      int(request.GetMaximumPageSize()),
+	})
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	history := &commonproto.History{}
+	for _, batch := range resp.HistoryBatches {
+		history.Events = append(history.Events, adapter.ToProtoHistoryEvents(batch.Events)...)
+	}
+	return &workflowservice.GetWorkflowExecutionHistoryResponse{
+		History:       history,
+		NextPageToken: resp.NextPageToken,
+		Archived:      true,
+	}, nil
 }
 
 func (wh *WorkflowHandlerGRPC) convertIndexedKeyToProto(keys map[string]interface{}) map[string]enums.IndexedValueType {

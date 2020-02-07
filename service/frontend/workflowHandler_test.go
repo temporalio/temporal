@@ -149,19 +149,18 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 			EarliestTime: 0,
 			LatestTime:   time.Now().UnixNano(),
 		},
-		ExecutionFilter: &commonproto.WorkflowExecutionFilter{
+		Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &commonproto.WorkflowExecutionFilter{
 			WorkflowId: "wid",
-		},
+		}},
 	}
 	_, err := wh.ListOpenWorkflowExecutions(context.Background(), listRequest)
 	s.Error(err)
 	s.Equal(errNoPermission, err)
 
 	// test list open by workflow type
-	listRequest.ExecutionFilter = nil
-	listRequest.TypeFilter = &commonproto.WorkflowTypeFilter{
+	listRequest.Filters = &workflowservice.ListOpenWorkflowExecutionsRequest_TypeFilter{TypeFilter: &commonproto.WorkflowTypeFilter{
 		Name: "workflow-type",
-	}
+	}}
 	_, err = wh.ListOpenWorkflowExecutions(context.Background(), listRequest)
 	s.Error(err)
 	s.Equal(errNoPermission, err)
@@ -173,27 +172,25 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 			EarliestTime: 0,
 			LatestTime:   time.Now().UnixNano(),
 		},
-		ExecutionFilter: &commonproto.WorkflowExecutionFilter{
+		Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &commonproto.WorkflowExecutionFilter{
 			WorkflowId: "wid",
-		},
+		}},
 	}
 	_, err = wh.ListClosedWorkflowExecutions(context.Background(), listRequest2)
 	s.Error(err)
 	s.Equal(errNoPermission, err)
 
 	// test list close by workflow type
-	listRequest2.ExecutionFilter = nil
-	listRequest2.TypeFilter = &commonproto.WorkflowTypeFilter{
+	listRequest2.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_TypeFilter{TypeFilter: &commonproto.WorkflowTypeFilter{
 		Name: "workflow-type",
-	}
+	}}
 	_, err = wh.ListClosedWorkflowExecutions(context.Background(), listRequest2)
 	s.Error(err)
 	s.Equal(errNoPermission, err)
 
 	// test list close by workflow status
-	listRequest2.TypeFilter = nil
 	failedStatus := enums.WorkflowExecutionCloseStatusFailed
-	listRequest2.StatusFilter = &failedStatus
+	listRequest2.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_StatusFilter{StatusFilter: &commonproto.StatusFilter{CloseStatus: failedStatus}}
 	_, err = wh.ListClosedWorkflowExecutions(context.Background(), listRequest2)
 	s.Error(err)
 	s.Equal(errNoPermission, err)
@@ -930,25 +927,25 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(domainEntry, nil).AnyTimes()
 
 	nextPageToken := []byte{'1', '2', '3'}
-	historyBatch1 := &workflowservice.History{
-		Events: []*workflowservice.HistoryEvent{
-			&workflowservice.HistoryEvent{EventId: 1},
-			&workflowservice.HistoryEvent{EventId: 2},
+	historyBatch1 := &shared.History{
+		Events: []*shared.HistoryEvent{
+			&shared.HistoryEvent{EventId: common.Int64Ptr(1)},
+			&shared.HistoryEvent{EventId: common.Int64Ptr(2)},
 		},
 	}
-	historyBatch2 := &workflowservice.History{
-		Events: []*workflowservice.HistoryEvent{
-			&workflowservice.HistoryEvent{EventId: 3},
-			&workflowservice.HistoryEvent{EventId: 4},
-			&workflowservice.HistoryEvent{EventId: 5},
+	historyBatch2 := &shared.History{
+		Events: []*shared.HistoryEvent{
+			&shared.HistoryEvent{EventId: common.Int64Ptr(3)},
+			&shared.HistoryEvent{EventId: common.Int64Ptr(4)},
+			&shared.HistoryEvent{EventId: common.Int64Ptr(5)},
 		},
 	}
-	history := &workflowservice.History{}
+	history := &shared.History{}
 	history.Events = append(history.Events, historyBatch1.Events...)
 	history.Events = append(history.Events, historyBatch2.Events...)
 	s.mockHistoryArchiver.On("Get", mock.Anything, mock.Anything, mock.Anything).Return(&archiver.GetHistoryResponse{
 		NextPageToken:  nextPageToken,
-		HistoryBatches: []*workflowservice.History{historyBatch1, historyBatch2},
+		HistoryBatches: []*shared.History{historyBatch1, historyBatch2},
 	}, nil)
 	s.mockArchiverProvider.On("GetHistoryArchiver", mock.Anything, mock.Anything).Return(s.mockHistoryArchiver, nil)
 
@@ -968,23 +965,23 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 	firstEventID := int64(100)
 	nextEventID := int64(101)
 	branchToken := []byte{1}
-	we := workflowservice.WorkflowExecution{
+	we := commonproto.WorkflowExecution{
 		WorkflowId: "wid",
 		RunId:      "rid",
 	}
-	shardID := common.WorkflowIDToHistoryShard(*we.WorkflowId, numHistoryShards)
+	shardID := common.WorkflowIDToHistoryShard(we.WorkflowId, numHistoryShards)
 	req := &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
 		PageSize:      0,
 		NextPageToken: []byte{},
-		ShardID:       shardID,
+		ShardID:       common.IntPtr(shardID),
 	}
 	s.mockHistoryV2Mgr.On("ReadHistoryBranch", req).Return(&persistence.ReadHistoryBranchResponse{
-		HistoryEvents: []*workflowservice.HistoryEvent{
+		HistoryEvents: []*shared.HistoryEvent{
 			{
-				EventId: int64(100),
+				EventId: common.Int64Ptr(int64(100)),
 			},
 		},
 		NextPageToken:    []byte{},
@@ -1197,50 +1194,52 @@ func (s *workflowHandlerSuite) TestConvertIndexedKeyToThrift() {
 		"key4i": 3,
 		"key5i": 4,
 		"key6i": 5,
-		"key1t": workflowservice.IndexedValueTypeString,
-		"key2t": workflowservice.IndexedValueTypeKeyword,
-		"key3t": workflowservice.IndexedValueTypeInt,
-		"key4t": workflowservice.IndexedValueTypeDouble,
-		"key5t": workflowservice.IndexedValueTypeBool,
-		"key6t": workflowservice.IndexedValueTypeDatetime,
+		"key1t": enums.IndexedValueTypeString,
+		"key2t": enums.IndexedValueTypeKeyword,
+		"key3t": enums.IndexedValueTypeInt,
+		"key4t": enums.IndexedValueTypeDouble,
+		"key5t": enums.IndexedValueTypeBool,
+		"key6t": enums.IndexedValueTypeDatetime,
 	}
-	result := wh.convertIndexedKeyToThrift(m)
-	s.Equal(workflowservice.IndexedValueTypeString, result["key1"])
-	s.Equal(workflowservice.IndexedValueTypeKeyword, result["key2"])
-	s.Equal(workflowservice.IndexedValueTypeInt, result["key3"])
-	s.Equal(workflowservice.IndexedValueTypeDouble, result["key4"])
-	s.Equal(workflowservice.IndexedValueTypeBool, result["key5"])
-	s.Equal(workflowservice.IndexedValueTypeDatetime, result["key6"])
-	s.Equal(workflowservice.IndexedValueTypeString, result["key1i"])
-	s.Equal(workflowservice.IndexedValueTypeKeyword, result["key2i"])
-	s.Equal(workflowservice.IndexedValueTypeInt, result["key3i"])
-	s.Equal(workflowservice.IndexedValueTypeDouble, result["key4i"])
-	s.Equal(workflowservice.IndexedValueTypeBool, result["key5i"])
-	s.Equal(workflowservice.IndexedValueTypeDatetime, result["key6i"])
-	s.Equal(workflowservice.IndexedValueTypeString, result["key1t"])
-	s.Equal(workflowservice.IndexedValueTypeKeyword, result["key2t"])
-	s.Equal(workflowservice.IndexedValueTypeInt, result["key3t"])
-	s.Equal(workflowservice.IndexedValueTypeDouble, result["key4t"])
-	s.Equal(workflowservice.IndexedValueTypeBool, result["key5t"])
-	s.Equal(workflowservice.IndexedValueTypeDatetime, result["key6t"])
+	result := wh.convertIndexedKeyToProto(m)
+	s.Equal(enums.IndexedValueTypeString, result["key1"])
+	s.Equal(enums.IndexedValueTypeKeyword, result["key2"])
+	s.Equal(enums.IndexedValueTypeInt, result["key3"])
+	s.Equal(enums.IndexedValueTypeDouble, result["key4"])
+	s.Equal(enums.IndexedValueTypeBool, result["key5"])
+	s.Equal(enums.IndexedValueTypeDatetime, result["key6"])
+	s.Equal(enums.IndexedValueTypeString, result["key1i"])
+	s.Equal(enums.IndexedValueTypeKeyword, result["key2i"])
+	s.Equal(enums.IndexedValueTypeInt, result["key3i"])
+	s.Equal(enums.IndexedValueTypeDouble, result["key4i"])
+	s.Equal(enums.IndexedValueTypeBool, result["key5i"])
+	s.Equal(enums.IndexedValueTypeDatetime, result["key6i"])
+	s.Equal(enums.IndexedValueTypeString, result["key1t"])
+	s.Equal(enums.IndexedValueTypeKeyword, result["key2t"])
+	s.Equal(enums.IndexedValueTypeInt, result["key3t"])
+	s.Equal(enums.IndexedValueTypeDouble, result["key4t"])
+	s.Equal(enums.IndexedValueTypeBool, result["key5t"])
+	s.Equal(enums.IndexedValueTypeDatetime, result["key6t"])
 	s.Panics(func() {
-		wh.convertIndexedKeyToThrift(map[string]interface{}{
+		wh.convertIndexedKeyToProto(map[string]interface{}{
 			"invalidType": "unknown",
 		})
 	})
 }
 
 func (s *workflowHandlerSuite) TestVerifyHistoryIsComplete() {
-	events := make([]*workflowservice.HistoryEvent, 50)
+	wh := s.getWorkflowHandler(s.newConfig())
+
+	events := make([]*commonproto.HistoryEvent, 50)
 	for i := 0; i < len(events); i++ {
-		events[i] = &workflowservice.HistoryEvent{EventId: int64(i + 1)}
+		events[i] = &commonproto.HistoryEvent{EventId: int64(i + 1)}
 	}
-	var eventsWithHoles []*workflowservice.HistoryEvent
+	var eventsWithHoles []*commonproto.HistoryEvent
 	eventsWithHoles = append(eventsWithHoles, events[9:12]...)
 	eventsWithHoles = append(eventsWithHoles, events[20:31]...)
 
 	testCases := []struct {
-		events       []*workflowservice.HistoryEvent
+		events       []*commonproto.HistoryEvent
 		firstEventID int64
 		lastEventID  int64
 		isFirstPage  bool
@@ -1274,7 +1273,7 @@ func (s *workflowHandlerSuite) TestVerifyHistoryIsComplete() {
 	}
 
 	for i, tc := range testCases {
-		err := verifyHistoryIsComplete(tc.events, tc.firstEventID, tc.lastEventID, tc.isFirstPage, tc.isLastPage, tc.pageSize)
+		err := wh.verifyHistoryIsComplete(tc.events, tc.firstEventID, tc.lastEventID, tc.isFirstPage, tc.isLastPage, tc.pageSize)
 		if tc.isResultErr {
 			s.Error(err, "testcase %v failed", i)
 		} else {
