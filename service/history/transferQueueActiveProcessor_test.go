@@ -30,12 +30,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 
 	"github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/history/historyservicetest"
-	"github.com/temporalio/temporal/.gen/go/matching"
-	"github.com/temporalio/temporal/.gen/go/matching/matchingservicetest"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/matchingservice"
+	"github.com/temporalio/temporal/.gen/proto/matchingservicemock"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
@@ -64,7 +66,7 @@ type (
 		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MocktimerQueueProcessor
 		mockDomainCache          *cache.MockDomainCache
-		mockMatchingClient       *matchingservicetest.MockClient
+		mockMatchingClient       *matchingservicemock.MockMatchingServiceClient
 		mockHistoryClient        *historyservicetest.MockClient
 		mockClusterMetadata      *cluster.MockMetadata
 
@@ -259,7 +261,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessActivityTask_Success() {
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), s.createAddActivityTaskRequest(transferTask, ai)).Return(nil).Times(1)
+	s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), s.createAddActivityTaskRequest(transferTask, ai)).Return(&matchingservice.AddActivityTaskResponse{}, nil).Times(1)
 
 	_, err = s.transferQueueActiveProcessor.process(newTaskInfo(nil, transferTask, s.logger))
 	s.Nil(err)
@@ -362,7 +364,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_FirstDecisio
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, di.ScheduleID, di.Version)
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockMatchingClient.EXPECT().AddDecisionTask(gomock.Any(), s.createAddDecisionTaskRequest(transferTask, mutableState)).Return(nil).Times(1)
+	s.mockMatchingClient.EXPECT().AddDecisionTask(gomock.Any(), s.createAddDecisionTaskRequest(transferTask, mutableState)).Return(&matchingservice.AddDecisionTaskResponse{}, nil).Times(1)
 
 	_, err = s.transferQueueActiveProcessor.process(newTaskInfo(nil, transferTask, s.logger))
 	s.Nil(err)
@@ -415,7 +417,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_NonFirstDeci
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, di.ScheduleID, di.Version)
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockMatchingClient.EXPECT().AddDecisionTask(gomock.Any(), s.createAddDecisionTaskRequest(transferTask, mutableState)).Return(nil).Times(1)
+	s.mockMatchingClient.EXPECT().AddDecisionTask(gomock.Any(), s.createAddDecisionTaskRequest(transferTask, mutableState)).Return(&matchingservice.AddDecisionTaskResponse{}, nil).Times(1)
 
 	_, err = s.transferQueueActiveProcessor.process(newTaskInfo(nil, transferTask, s.logger))
 	s.Nil(err)
@@ -474,7 +476,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_Sticky_NonFi
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, di.ScheduleID, di.Version)
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockMatchingClient.EXPECT().AddDecisionTask(gomock.Any(), s.createAddDecisionTaskRequest(transferTask, mutableState)).Return(nil).Times(1)
+	s.mockMatchingClient.EXPECT().AddDecisionTask(gomock.Any(), s.createAddDecisionTaskRequest(transferTask, mutableState)).Return(&matchingservice.AddDecisionTaskResponse{}, nil).Times(1)
 
 	_, err = s.transferQueueActiveProcessor.process(newTaskInfo(nil, transferTask, s.logger))
 	s.Nil(err)
@@ -533,7 +535,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_DecisionNotS
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, di.ScheduleID, di.Version)
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockMatchingClient.EXPECT().AddDecisionTask(gomock.Any(), s.createAddDecisionTaskRequest(transferTask, mutableState)).Return(nil).Times(1)
+	s.mockMatchingClient.EXPECT().AddDecisionTask(gomock.Any(), s.createAddDecisionTaskRequest(transferTask, mutableState)).Return(&matchingservice.AddDecisionTaskResponse{}, nil).Times(1)
 
 	_, err = s.transferQueueActiveProcessor.process(newTaskInfo(nil, transferTask, s.logger))
 	s.Nil(err)
@@ -1850,47 +1852,43 @@ func (s *transferQueueActiveProcessorSuite) TestCopySearchAttributes() {
 func (s *transferQueueActiveProcessorSuite) createAddActivityTaskRequest(
 	task *persistence.TransferTaskInfo,
 	ai *persistence.ActivityInfo,
-) *matching.AddActivityTaskRequest {
-
-	execution := workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(task.WorkflowID),
-		RunId:      common.StringPtr(task.RunID),
-	}
-	taskList := &workflow.TaskList{Name: &task.TaskList}
-
-	return &matching.AddActivityTaskRequest{
-		DomainUUID:                    common.StringPtr(task.TargetDomainID),
-		SourceDomainUUID:              common.StringPtr(task.DomainID),
-		Execution:                     &execution,
-		TaskList:                      taskList,
-		ScheduleId:                    &task.ScheduleID,
-		ScheduleToStartTimeoutSeconds: common.Int32Ptr(ai.ScheduleToStartTimeout),
+) *matchingservice.AddActivityTaskRequest {
+	return &matchingservice.AddActivityTaskRequest{
+		DomainUUID:       task.TargetDomainID,
+		SourceDomainUUID: task.DomainID,
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: task.WorkflowID,
+			RunId:      task.RunID,
+		},
+		TaskList:                      &commonproto.TaskList{Name: task.TaskList},
+		ScheduleId:                    task.ScheduleID,
+		ScheduleToStartTimeoutSeconds: ai.ScheduleToStartTimeout,
 	}
 }
 
 func (s *transferQueueActiveProcessorSuite) createAddDecisionTaskRequest(
 	task *persistence.TransferTaskInfo,
 	mutableState mutableState,
-) *matching.AddDecisionTaskRequest {
+) *matchingservice.AddDecisionTaskRequest {
 
-	execution := workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(task.WorkflowID),
-		RunId:      common.StringPtr(task.RunID),
+	execution := commonproto.WorkflowExecution{
+		WorkflowId: task.WorkflowID,
+		RunId:      task.RunID,
 	}
-	taskList := &workflow.TaskList{Name: &task.TaskList}
+	taskList := &commonproto.TaskList{Name: task.TaskList}
 	executionInfo := mutableState.GetExecutionInfo()
 	timeout := executionInfo.WorkflowTimeout
 	if mutableState.GetExecutionInfo().TaskList != task.TaskList {
-		taskList.Kind = common.TaskListKindPtr(workflow.TaskListKindSticky)
+		taskList.Kind = enums.TaskListKindSticky
 		timeout = executionInfo.StickyScheduleToStartTimeout
 	}
 
-	return &matching.AddDecisionTaskRequest{
-		DomainUUID:                    common.StringPtr(task.DomainID),
+	return &matchingservice.AddDecisionTaskRequest{
+		DomainUUID:                    task.DomainID,
 		Execution:                     &execution,
 		TaskList:                      taskList,
-		ScheduleId:                    common.Int64Ptr(task.ScheduleID),
-		ScheduleToStartTimeoutSeconds: common.Int32Ptr(timeout),
+		ScheduleId:                    task.ScheduleID,
+		ScheduleToStartTimeoutSeconds: timeout,
 	}
 }
 

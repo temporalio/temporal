@@ -79,7 +79,7 @@ func ToProtoDomainConfiguration(in *shared.DomainConfiguration) *common.DomainCo
 		EmitMetric:                             ToProtoBool(in.EmitMetric),
 		BadBinaries:                            ToProtoBadBinaries(in.GetBadBinaries()),
 		HistoryArchivalStatus:                  ToProtoArchivalStatus(in.HistoryArchivalStatus),
-		HistoryArchivalURI:                     in.GetVisibilityArchivalURI(),
+		HistoryArchivalURI:                     in.GetHistoryArchivalURI(),
 		VisibilityArchivalStatus:               ToProtoArchivalStatus(in.VisibilityArchivalStatus),
 		VisibilityArchivalURI:                  in.GetVisibilityArchivalURI(),
 	}
@@ -623,6 +623,15 @@ func ToProtoQueryRejected(in *shared.QueryRejected) *common.QueryRejected {
 	}
 	return &common.QueryRejected{
 		CloseStatus: ToProtoWorkflowExecutionCloseStatus(in.CloseStatus),
+	}
+}
+
+func ToThriftQueryRejected(in *common.QueryRejected) *shared.QueryRejected {
+	if in == nil {
+		return nil
+	}
+	return &shared.QueryRejected{
+		CloseStatus: ToThriftWorkflowExecutionCloseStatus(in.CloseStatus),
 	}
 }
 
@@ -1396,5 +1405,18 @@ func ToProtoVersionHistoryArray(in []*shared.VersionHistory) []*common.VersionHi
 	for _, item := range in {
 		ret = append(ret, ToProtoVersionHistory(item))
 	}
+	return ret
+}
+
+func ToThriftWorkflowQueries(in map[string]*common.WorkflowQuery) map[string]*shared.WorkflowQuery {
+	if in == nil {
+		return nil
+	}
+
+	ret := make(map[string]*shared.WorkflowQuery, len(in))
+	for k, v := range in {
+		ret[k] = ToThriftWorkflowQuery(v)
+	}
+
 	return ret
 }

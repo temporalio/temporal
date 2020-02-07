@@ -31,11 +31,14 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/temporal-proto/enums"
 
 	gen "github.com/temporalio/temporal/.gen/go/matching"
-	"github.com/temporalio/temporal/.gen/go/matching/matchingservicetest"
 	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/matchingservice"
+	"github.com/temporalio/temporal/.gen/proto/matchingservicemock"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
 )
@@ -43,7 +46,7 @@ import (
 type ForwarderTestSuite struct {
 	suite.Suite
 	controller *gomock.Controller
-	client     *matchingservicetest.MockClient
+	client     *matchingservicemock.MockMatchingServiceClient
 	fwdr       *Forwarder
 	cfg        *forwarderConfig
 	taskList   *taskListID
@@ -55,7 +58,7 @@ func TestForwarderSuite(t *testing.T) {
 
 func (t *ForwarderTestSuite) SetupTest() {
 	t.controller = gomock.NewController(t.T())
-	t.client = matchingservicetest.NewMockClient(t.controller)
+	t.client = matchingservicemock.NewMockMatchingServiceClient(t.controller)
 	t.cfg = &forwarderConfig{
 		ForwarderMaxOutstandingPolls: func() int { return 1 },
 		ForwarderMaxRatePerSecond:    func() int { return 2 },
@@ -83,19 +86,19 @@ func (t *ForwarderTestSuite) TestForwardTaskError() {
 func (t *ForwarderTestSuite) TestForwardDecisionTask() {
 	t.usingTasklistPartition(persistence.TaskListTypeDecision)
 
-	var request *gen.AddDecisionTaskRequest
+	var request *matchingservice.AddDecisionTaskRequest
 	t.client.EXPECT().AddDecisionTask(gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *gen.AddDecisionTaskRequest) {
+		func(arg0 context.Context, arg1 *matchingservice.AddDecisionTaskRequest) {
 			request = arg1
 		},
-	).Return(nil).Times(1)
+	).Return(&matchingservice.AddDecisionTaskResponse{}, nil).Times(1)
 
 	taskInfo := t.newTaskInfo()
 	task := newInternalTask(taskInfo, nil, "", false)
 	t.NoError(t.fwdr.ForwardTask(context.Background(), task))
 	t.NotNil(request)
 	t.Equal(t.taskList.Parent(20), request.TaskList.GetName())
-	t.Equal(t.fwdr.taskListKind, request.TaskList.GetKind())
+	t.Equal(enums.TaskListKind(t.fwdr.taskListKind), request.TaskList.GetKind())
 	t.Equal(taskInfo.DomainID, request.GetDomainUUID())
 	t.Equal(taskInfo.WorkflowID, request.GetExecution().GetWorkflowId())
 	t.Equal(taskInfo.RunID, request.GetExecution().GetRunId())
@@ -107,19 +110,19 @@ func (t *ForwarderTestSuite) TestForwardDecisionTask() {
 func (t *ForwarderTestSuite) TestForwardActivityTask() {
 	t.usingTasklistPartition(persistence.TaskListTypeActivity)
 
-	var request *gen.AddActivityTaskRequest
+	var request *matchingservice.AddActivityTaskRequest
 	t.client.EXPECT().AddActivityTask(gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *gen.AddActivityTaskRequest) {
+		func(arg0 context.Context, arg1 *matchingservice.AddActivityTaskRequest) {
 			request = arg1
 		},
-	).Return(nil).Times(1)
+	).Return(&matchingservice.AddActivityTaskResponse{}, nil).Times(1)
 
 	taskInfo := t.newTaskInfo()
 	task := newInternalTask(taskInfo, nil, "", false)
 	t.NoError(t.fwdr.ForwardTask(context.Background(), task))
 	t.NotNil(request)
 	t.Equal(t.taskList.Parent(20), request.TaskList.GetName())
-	t.Equal(t.fwdr.taskListKind, request.TaskList.GetKind())
+	t.Equal(enums.TaskListKind(t.fwdr.taskListKind), request.TaskList.GetKind())
 	t.Equal(t.taskList.domainID, request.GetDomainUUID())
 	t.Equal(taskInfo.DomainID, request.GetSourceDomainUUID())
 	t.Equal(taskInfo.WorkflowID, request.GetExecution().GetWorkflowId())
@@ -133,7 +136,7 @@ func (t *ForwarderTestSuite) TestForwardTaskRateExceeded() {
 	t.usingTasklistPartition(persistence.TaskListTypeActivity)
 
 	rps := 2
-	t.client.EXPECT().AddActivityTask(gomock.Any(), gomock.Any()).Return(nil).Times(rps)
+	t.client.EXPECT().AddActivityTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddActivityTaskResponse{}, nil).Times(rps)
 	taskInfo := t.newTaskInfo()
 	task := newInternalTask(taskInfo, nil, "", false)
 	for i := 0; i < rps; i++ {
@@ -156,10 +159,10 @@ func (t *ForwarderTestSuite) TestForwardQueryTaskError() {
 func (t *ForwarderTestSuite) TestForwardQueryTask() {
 	t.usingTasklistPartition(persistence.TaskListTypeDecision)
 	task := newInternalQueryTask("id1", &gen.QueryWorkflowRequest{})
-	resp := &shared.QueryWorkflowResponse{}
-	var request *gen.QueryWorkflowRequest
+	resp := &matchingservice.QueryWorkflowResponse{}
+	var request *matchingservice.QueryWorkflowRequest
 	t.client.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *gen.QueryWorkflowRequest) {
+		func(arg0 context.Context, arg1 *matchingservice.QueryWorkflowRequest) {
 			request = arg1
 		},
 	).Return(resp, nil).Times(1)
@@ -167,15 +170,15 @@ func (t *ForwarderTestSuite) TestForwardQueryTask() {
 	gotResp, err := t.fwdr.ForwardQueryTask(context.Background(), task)
 	t.NoError(err)
 	t.Equal(t.taskList.Parent(20), request.TaskList.GetName())
-	t.Equal(t.fwdr.taskListKind, request.TaskList.GetKind())
-	t.True(task.query.request.QueryRequest == request.QueryRequest)
-	t.True(resp == gotResp)
+	t.Equal(enums.TaskListKind(t.fwdr.taskListKind), request.TaskList.GetKind())
+	t.Equal(task.query.request.QueryRequest, adapter.ToThriftQueryWorkflowRequest(request.QueryRequest))
+	t.Equal(resp, adapter.ToProtoMatchingQueryWorkflowResponse(gotResp))
 }
 
 func (t *ForwarderTestSuite) TestForwardQueryTaskRateNotEnforced() {
 	t.usingTasklistPartition(persistence.TaskListTypeActivity)
 	task := newInternalQueryTask("id1", &gen.QueryWorkflowRequest{})
-	resp := &shared.QueryWorkflowResponse{}
+	resp := &matchingservice.QueryWorkflowResponse{}
 	rps := 2
 	t.client.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Return(resp, nil).Times(rps + 1)
 	for i := 0; i < rps; i++ {
@@ -203,11 +206,11 @@ func (t *ForwarderTestSuite) TestForwardPollForDecision() {
 	pollerID := uuid.New()
 	ctx := context.WithValue(context.Background(), pollerIDKey, pollerID)
 	ctx = context.WithValue(ctx, identityKey, "id1")
-	resp := &gen.PollForDecisionTaskResponse{}
+	resp := &matchingservice.PollForDecisionTaskResponse{}
 
-	var request *gen.PollForDecisionTaskRequest
+	var request *matchingservice.PollForDecisionTaskRequest
 	t.client.EXPECT().PollForDecisionTask(gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *gen.PollForDecisionTaskRequest) {
+		func(arg0 context.Context, arg1 *matchingservice.PollForDecisionTaskRequest) {
 			request = arg1
 		},
 	).Return(resp, nil).Times(1)
@@ -220,8 +223,8 @@ func (t *ForwarderTestSuite) TestForwardPollForDecision() {
 	t.Equal(t.taskList.domainID, request.GetDomainUUID())
 	t.Equal("id1", request.GetPollRequest().GetIdentity())
 	t.Equal(t.taskList.Parent(20), request.GetPollRequest().GetTaskList().GetName())
-	t.Equal(t.fwdr.taskListKind, request.GetPollRequest().GetTaskList().GetKind())
-	t.True(resp == task.pollForDecisionResponse())
+	t.Equal(enums.TaskListKind(t.fwdr.taskListKind), request.GetPollRequest().GetTaskList().GetKind())
+	t.Equal(resp, adapter.ToProtoMatchingPollForDecisionTaskResponse(task.pollForDecisionResponse()))
 	t.Nil(task.pollForActivityResponse())
 }
 
@@ -231,11 +234,11 @@ func (t *ForwarderTestSuite) TestForwardPollForActivity() {
 	pollerID := uuid.New()
 	ctx := context.WithValue(context.Background(), pollerIDKey, pollerID)
 	ctx = context.WithValue(ctx, identityKey, "id1")
-	resp := &shared.PollForActivityTaskResponse{}
+	resp := &matchingservice.PollForActivityTaskResponse{}
 
-	var request *gen.PollForActivityTaskRequest
+	var request *matchingservice.PollForActivityTaskRequest
 	t.client.EXPECT().PollForActivityTask(gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *gen.PollForActivityTaskRequest) {
+		func(arg0 context.Context, arg1 *matchingservice.PollForActivityTaskRequest) {
 			request = arg1
 		},
 	).Return(resp, nil).Times(1)
@@ -248,8 +251,8 @@ func (t *ForwarderTestSuite) TestForwardPollForActivity() {
 	t.Equal(t.taskList.domainID, request.GetDomainUUID())
 	t.Equal("id1", request.GetPollRequest().GetIdentity())
 	t.Equal(t.taskList.Parent(20), request.GetPollRequest().GetTaskList().GetName())
-	t.Equal(t.fwdr.taskListKind, request.GetPollRequest().GetTaskList().GetKind())
-	t.True(resp == task.pollForActivityResponse())
+	t.Equal(enums.TaskListKind(t.fwdr.taskListKind), request.GetPollRequest().GetTaskList().GetKind())
+	t.Equal(resp, adapter.ToProtoMatchingPollForActivityTaskResponse(task.pollForActivityResponse()))
 	t.Nil(task.pollForDecisionResponse())
 }
 

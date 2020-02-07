@@ -23,6 +23,7 @@
 package adapter
 
 import (
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
@@ -862,5 +863,19 @@ func ToProtoGetWorkflowExecutionRawHistoryResponse(in *shared.GetWorkflowExecuti
 	return &workflowservice.GetWorkflowExecutionRawHistoryResponse{
 		RawHistory:    ToProtoDataBlobs(in.GetRawHistory()),
 		NextPageToken: in.GetNextPageToken(),
+	}
+}
+
+// ToProtoQueryWorkflowRequest ...
+func ToProtoQueryWorkflowRequest(in *shared.QueryWorkflowRequest) *workflowservice.QueryWorkflowRequest {
+	if in == nil {
+		return nil
+	}
+	return &workflowservice.QueryWorkflowRequest{
+		Domain:                in.GetDomain(),
+		Execution:             ToProtoWorkflowExecution(in.GetExecution()),
+		Query:                 ToProtoWorkflowQuery(in.GetQuery()),
+		QueryRejectCondition:  enums.QueryRejectCondition(in.GetQueryRejectCondition()),
+		QueryConsistencyLevel: enums.QueryConsistencyLevel(in.GetQueryConsistencyLevel()),
 	}
 }

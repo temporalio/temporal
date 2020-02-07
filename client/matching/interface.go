@@ -21,10 +21,10 @@
 package matching
 
 import (
-	"github.com/temporalio/temporal/.gen/go/matching/matchingserviceclient"
+	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 )
 
 // Client is the interface exposed by matching service client
 type Client interface {
-	matchingserviceclient.Interface
+	matchingservice.MatchingServiceClient
 }

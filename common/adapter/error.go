@@ -25,6 +25,7 @@ import (
 
 	"github.com/gogo/status"
 	"go.temporal.io/temporal-proto/errordetails"
+	"go.uber.org/yarpc/encoding/protobuf"
 	"go.uber.org/yarpc/yarpcerrors"
 	"google.golang.org/grpc/codes"
 
@@ -37,6 +38,10 @@ func ToProtoError(in error) error {
 		return nil
 	}
 
+	if _, ok := status.FromError(in); ok {
+		return in
+	}
+
 	var st *status.Status
 	switch thriftError := in.(type) {
 	case *shared.InternalServiceError:
@@ -45,12 +50,9 @@ func ToProtoError(in error) error {
 		switch thriftError.Message {
 		case "No permission to do this operation.":
 			st = status.New(codes.PermissionDenied, thriftError.Message)
-		case "Requested workflow history has passed retention period.":
-			st = status.New(codes.DeadlineExceeded, thriftError.Message)
 		default:
 			st = status.New(codes.InvalidArgument, thriftError.Message)
 		}
-
 	case *shared.DomainNotActiveError:
 		st = errordetails.NewDomainNotActiveStatus(thriftError.Message, thriftError.DomainName, thriftError.CurrentCluster, thriftError.ActiveCluster)
 	case *shared.ServiceBusyError:
@@ -80,4 +82,53 @@ func ToProtoError(in error) error {
 	}
 
 	return st.Err()
+}
+
+// ToThriftError converts gRPC error to Thrift error.
+func ToThriftError(st *status.Status) error {
+	if st == nil {
+		return nil
+	}
+
+	switch st.Code() {
+	case codes.Internal:
+		return &shared.InternalServiceError{Message: st.Message()}
+	case codes.InvalidArgument:
+		if f, ok := errordetails.GetDomainNotActiveFailure(st); ok {
+			return &shared.DomainNotActiveError{Message: st.Message(), DomainName: f.DomainName, ActiveCluster: f.ActiveCluster, CurrentCluster: f.CurrentCluster}
+		}
+		return &shared.BadRequestError{Message: st.Message()}
+	case codes.PermissionDenied:
+		return &shared.BadRequestError{Message: "No permission to do this operation."}
+	case codes.ResourceExhausted:
+		return &shared.ServiceBusyError{Message: st.Message()}
+	case codes.NotFound:
+		return &shared.EntityNotExistsError{Message: st.Message()}
+	case codes.AlreadyExists:
+		if f, ok := errordetails.GetWorkflowExecutionAlreadyStartedFailure(st); ok {
+			message := st.Message()
+			return &shared.WorkflowExecutionAlreadyStartedError{
+				Message:        &message,
+				StartRequestId: &f.StartRequestId,
+				RunId:          &f.RunId,
+			}
+		}
+		if st.Message() == "Domain already exists." {
+			return &shared.DomainAlreadyExistsError{Message: st.Message()}
+		}
+
+		return &shared.CancellationAlreadyRequestedError{Message: st.Message()}
+	case codes.FailedPrecondition:
+		if f, ok := errordetails.GetClientVersionNotSupportedFailure(st); ok {
+			return &shared.ClientVersionNotSupportedError{
+				FeatureVersion:    f.FeatureVersion,
+				ClientImpl:        f.ClientImpl,
+				SupportedVersions: f.SupportedVersions,
+			}
+		}
+	case codes.DeadlineExceeded:
+		return protobuf.NewError(yarpcerrors.CodeDeadlineExceeded, st.Message())
+	}
+
+	return &shared.InternalServiceError{Message: fmt.Sprintf("temporal internal uncategorized error, msg: %s", st.Message())}
 }
