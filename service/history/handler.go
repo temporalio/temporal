@@ -26,8 +26,10 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/gogo/status"
 	"github.com/pborman/uuid"
 	"go.uber.org/yarpc/yarpcerrors"
+	"google.golang.org/grpc/codes"
 
 	"github.com/temporalio/temporal/.gen/go/health"
 	"github.com/temporalio/temporal/.gen/go/health/metaserver"
@@ -36,6 +38,7 @@ import (
 	r "github.com/temporalio/temporal/.gen/go/replicator"
 	gen "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -1599,6 +1602,10 @@ func (h *Handler) ReapplyEvents(
 // HistoryEngine API calls to ShardOwnershipLost error return by HistoryService for client to be redirected to the
 // correct shard.
 func (h *Handler) convertError(err error) error {
+	if st, ok := status.FromError(err); ok {
+		return adapter.ToThriftError(st)
+	}
+
 	switch err.(type) {
 	case *persistence.ShardOwnershipLostError:
 		shardID := err.(*persistence.ShardOwnershipLostError).ShardID
@@ -1630,6 +1637,15 @@ func (h *Handler) updateErrorMetric(
 
 	if err == context.DeadlineExceeded || err == context.Canceled {
 		h.GetMetricsClient().IncCounter(scope, metrics.CadenceErrContextTimeoutCounter)
+		return
+	}
+
+	if st, ok := status.FromError(err); ok {
+		if st.Code() == codes.DeadlineExceeded {
+			h.GetMetricsClient().IncCounter(scope, metrics.CadenceErrContextTimeoutCounter)
+		}
+		h.GetMetricsClient().IncCounter(scope, metrics.CadenceFailures)
+
 		return
 	}
 

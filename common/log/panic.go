@@ -24,8 +24,8 @@ import (
 	"fmt"
 	"runtime/debug"
 
-	"go.uber.org/yarpc/encoding/protobuf"
-	"go.uber.org/yarpc/yarpcerrors"
+	"github.com/gogo/status"
+	"google.golang.org/grpc/codes"
 
 	"github.com/temporalio/temporal/common/log/tag"
 )
@@ -63,7 +63,7 @@ func CapturePanicGRPC(logger Logger, retError *error) {
 
 		logger.Error("Panic is captured", tag.SysStackTrace(st), tag.Error(err))
 
-		err = protobuf.NewError(yarpcerrors.CodeInternal, err.Error())
+		err = status.New(codes.Internal, err.Error()).Err()
 
 		*retError = err
 	}

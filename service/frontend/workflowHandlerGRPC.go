@@ -1138,6 +1138,14 @@ func (wh *WorkflowHandlerGRPC) getDefaultScope(scope int) metrics.Scope {
 }
 
 func (wh *WorkflowHandlerGRPC) error(err error, scope metrics.Scope, tagsForErrorLog ...tag.Tag) error {
+	if st, ok := status.FromError(err); ok {
+		if st.Code() == codes.DeadlineExceeded {
+			scope.IncCounter(metrics.CadenceErrContextTimeoutCounter)
+		}
+		scope.IncCounter(metrics.CadenceFailures)
+		return err
+	}
+
 	return adapter.ToProtoError(wh.errorThrift(err, scope, tagsForErrorLog...))
 }
 
@@ -1182,15 +1190,6 @@ func (wh *WorkflowHandlerGRPC) errorThrift(err error, scope metrics.Scope, tagsF
 			scope.IncCounter(metrics.CadenceErrContextTimeoutCounter)
 			return err
 		}
-	}
-
-	if st, ok := status.FromError(err); ok {
-		if st.Code() == codes.DeadlineExceeded {
-			scope.IncCounter(metrics.CadenceErrContextTimeoutCounter)
-			return err
-		}
-
-		return err
 	}
 
 	wh.GetLogger().WithTags(tagsForErrorLog...).Error("Uncategorized error",

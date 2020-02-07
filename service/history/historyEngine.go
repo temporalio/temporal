@@ -30,10 +30,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gogo/status"
 	"github.com/pborman/uuid"
 	"go.temporal.io/temporal-proto/workflowservice"
-	"go.uber.org/yarpc/yarpcerrors"
 	"golang.org/x/net/context"
+	"google.golang.org/grpc/codes"
 
 	h "github.com/temporalio/temporal/.gen/go/history"
 	r "github.com/temporalio/temporal/.gen/go/replicator"
@@ -926,7 +927,7 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 			scope.IncCounter(metrics.DirectQueryDispatchStickySuccessCount)
 			return &h.QueryWorkflowResponse{Response: adapter.ToThriftQueryWorkflowResponse(matchingResp)}, nil
 		}
-		if yarpcError, ok := err.(*yarpcerrors.Status); !ok || yarpcError.Code() != yarpcerrors.CodeDeadlineExceeded {
+		if st, ok := status.FromError(err); !ok || st.Code() != codes.DeadlineExceeded {
 			e.logger.Error("query directly though matching on sticky failed, will not attempt query on non-sticky",
 				tag.WorkflowDomainName(queryRequest.GetDomain()),
 				tag.WorkflowID(queryRequest.Execution.GetWorkflowId()),
