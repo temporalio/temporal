@@ -288,7 +288,7 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, domain, domainID s
 		return []byte(strconv.Itoa(int(activityCounter))), []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -309,7 +309,7 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, domain, domainID s
 		binary.Read(buf, binary.LittleEndian, &in)
 		s.Equal(expectedActivityID, in)
 		expectedActivityID++
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -325,14 +325,14 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tl, domain, domainID s
 	for run := 0; run < numRuns; run++ {
 		for i := 0; i < numActivities; i++ {
 			_, err := poller.PollAndProcessDecisionTask(false, false)
-			s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+			s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 			s.NoError(err)
 			if i%2 == 0 {
 				err = poller.PollAndProcessActivityTask(false)
 			} else { // just for testing respondActivityTaskCompleteByID
 				err = poller.PollAndProcessActivityTaskWithID(false)
 			}
-			s.Logger.Error("PollAndProcessActivityTask", tag.Error(err))
+			s.Logger.Info("PollAndProcessActivityTask", tag.Error(err))
 			s.NoError(err)
 		}
 

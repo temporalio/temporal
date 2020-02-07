@@ -97,7 +97,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -106,7 +106,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -154,7 +154,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	// make first decision to schedule activity, this should affect the long poll above
 	time.AfterFunc(time.Second*8, func() {
 		_, errDecision1 := poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Error("PollAndProcessDecisionTask", tag.Error(errDecision1))
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errDecision1))
 	})
 	start = time.Now()
 	events, token = getHistory(s.domainName, workflowID, token, true)
@@ -166,11 +166,11 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	// finish the activity and poll all events
 	time.AfterFunc(time.Second*5, func() {
 		errActivity := poller.PollAndProcessActivityTask(false)
-		s.Logger.Error("PollAndProcessDecisionTask", tag.Error(errActivity))
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errActivity))
 	})
 	time.AfterFunc(time.Second*8, func() {
 		_, errDecision2 := poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Error("PollAndProcessDecisionTask", tag.Error(errDecision2))
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errDecision2))
 	})
 	for token != nil {
 		events, token = getHistory(s.domainName, workflowID, token, true)
@@ -263,7 +263,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -272,7 +272,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -321,7 +321,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	// make first decision to schedule activity, this should affect the long poll above
 	time.AfterFunc(time.Second*8, func() {
 		_, errDecision1 := poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Error("PollAndProcessDecisionTask", tag.Error(errDecision1))
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errDecision1))
 	})
 	start = time.Now()
 	events, token = getHistory(s.domainName, workflowID, token, true)
@@ -333,11 +333,11 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	// finish the activity and poll all events
 	time.AfterFunc(time.Second*5, func() {
 		errActivity := poller.PollAndProcessActivityTask(false)
-		s.Logger.Error("PollAndProcessDecisionTask", tag.Error(errActivity))
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errActivity))
 	})
 	time.AfterFunc(time.Second*8, func() {
 		_, errDecision2 := poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Error("PollAndProcessDecisionTask", tag.Error(errDecision2))
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errDecision2))
 	})
 	for token != nil {
 		events, token = getHistory(s.domainName, workflowID, token, true)
@@ -425,7 +425,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -434,7 +434,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -642,7 +642,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -651,7 +651,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{
@@ -789,7 +789,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{
 				CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-					Result: []byte("Done."),
+					Result: []byte("Done"),
 				}},
 		}}, nil
 	}
@@ -798,7 +798,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	poller := &TaskPoller{

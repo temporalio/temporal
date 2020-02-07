@@ -263,7 +263,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	}
 
 	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	time.Sleep(waitForESToSettle)
@@ -308,7 +308,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 
 	// terminate workflow
 	terminateReason := "force terminate to make sure standby process tasks"
-	terminateDetails := []byte("terminate details.")
+	terminateDetails := []byte("terminate details")
 	_, err = client1.TerminateWorkflowExecution(host.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Domain: domainName,
 		WorkflowExecution: &commonproto.WorkflowExecution{
@@ -336,7 +336,7 @@ GetHistoryLoop:
 
 		lastEvent := history.Events[len(history.Events)-1]
 		if lastEvent.EventType != enums.EventTypeWorkflowExecutionTerminated {
-			s.logger.Warn("Execution not terminated yet.")
+			s.logger.Warn("Execution not terminated yet")
 			time.Sleep(100 * time.Millisecond)
 			continue GetHistoryLoop
 		}
