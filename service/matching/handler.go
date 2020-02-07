@@ -29,7 +29,6 @@ import (
 	"github.com/uber-go/tally"
 
 	"github.com/temporalio/temporal/.gen/go/health"
-	"github.com/temporalio/temporal/.gen/go/health/metaserver"
 	m "github.com/temporalio/temporal/.gen/go/matching"
 	"github.com/temporalio/temporal/.gen/go/matching/matchingserviceserver"
 	gen "github.com/temporalio/temporal/.gen/go/shared"
@@ -83,12 +82,6 @@ func NewHandler(
 	// prevent us from trying to serve requests before matching engine is started and ready
 	handler.startWG.Add(1)
 	return handler
-}
-
-// RegisterHandler register this handler, must be called before Start()
-func (h *Handler) RegisterHandler() {
-	h.Resource.GetDispatcher().Register(matchingserviceserver.New(h))
-	h.Resource.GetDispatcher().Register(metaserver.New(h))
 }
 
 // Start starts the handler
