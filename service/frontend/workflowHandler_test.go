@@ -38,6 +38,7 @@ import (
 	"github.com/temporalio/temporal/.gen/go/history/historyservicetest"
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
 	"github.com/temporalio/temporal/common/cache"
@@ -155,7 +156,7 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	}
 	_, err := wh.ListOpenWorkflowExecutions(context.Background(), listRequest)
 	s.Error(err)
-	s.Equal(errNoPermission, err)
+	s.Equal(stNoPermission.Err(), err)
 
 	// test list open by workflow type
 	listRequest.Filters = &workflowservice.ListOpenWorkflowExecutionsRequest_TypeFilter{TypeFilter: &commonproto.WorkflowTypeFilter{
@@ -163,7 +164,7 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	}}
 	_, err = wh.ListOpenWorkflowExecutions(context.Background(), listRequest)
 	s.Error(err)
-	s.Equal(errNoPermission, err)
+	s.Equal(stNoPermission.Err(), err)
 
 	// test list close by wid
 	listRequest2 := &workflowservice.ListClosedWorkflowExecutionsRequest{
@@ -178,7 +179,7 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	}
 	_, err = wh.ListClosedWorkflowExecutions(context.Background(), listRequest2)
 	s.Error(err)
-	s.Equal(errNoPermission, err)
+	s.Equal(stNoPermission.Err(), err)
 
 	// test list close by workflow type
 	listRequest2.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_TypeFilter{TypeFilter: &commonproto.WorkflowTypeFilter{
@@ -186,14 +187,14 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	}}
 	_, err = wh.ListClosedWorkflowExecutions(context.Background(), listRequest2)
 	s.Error(err)
-	s.Equal(errNoPermission, err)
+	s.Equal(stNoPermission.Err(), err)
 
 	// test list close by workflow status
 	failedStatus := enums.WorkflowExecutionCloseStatusFailed
 	listRequest2.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_StatusFilter{StatusFilter: &commonproto.StatusFilter{CloseStatus: failedStatus}}
 	_, err = wh.ListClosedWorkflowExecutions(context.Background(), listRequest2)
 	s.Error(err)
-	s.Equal(errNoPermission, err)
+	s.Equal(stNoPermission.Err(), err)
 }
 
 func (s *workflowHandlerSuite) TestPollForTask_Failed_ContextTimeoutTooShort() {
@@ -203,22 +204,22 @@ func (s *workflowHandlerSuite) TestPollForTask_Failed_ContextTimeoutTooShort() {
 	bgCtx := context.Background()
 	_, err := wh.PollForDecisionTask(bgCtx, &workflowservice.PollForDecisionTaskRequest{})
 	s.Error(err)
-	s.Equal(common.ErrContextTimeoutNotSet, err)
+	s.Equal(common.StContextTimeoutNotSet.Err(), err)
 
 	_, err = wh.PollForActivityTask(bgCtx, &workflowservice.PollForActivityTaskRequest{})
 	s.Error(err)
-	s.Equal(common.ErrContextTimeoutNotSet, err)
+	s.Equal(common.StContextTimeoutNotSet.Err(), err)
 
 	shortCtx, cancel := context.WithTimeout(bgCtx, common.MinLongPollTimeout-time.Millisecond)
 	defer cancel()
 
 	_, err = wh.PollForDecisionTask(shortCtx, &workflowservice.PollForDecisionTaskRequest{})
 	s.Error(err)
-	s.Equal(common.ErrContextTimeoutTooShort, err)
+	s.Equal(common.StContextTimeoutTooShort.Err(), err)
 
 	_, err = wh.PollForActivityTask(shortCtx, &workflowservice.PollForActivityTaskRequest{})
 	s.Error(err)
-	s.Equal(common.ErrContextTimeoutTooShort, err)
+	s.Equal(common.StContextTimeoutTooShort.Err(), err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_RequestIdNotSet() {
@@ -247,7 +248,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_RequestIdNotSet
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(errRequestIDNotSet, err)
+	s.Equal(stRequestIDNotSet.Err(), err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_StartRequestNotSet() {
@@ -257,7 +258,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_StartRequestNot
 
 	_, err := wh.StartWorkflowExecution(context.Background(), nil)
 	s.Error(err)
-	s.Equal(errRequestNotSet, err)
+	s.Equal(stRequestNotSet.Err(), err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_DomainNotSet() {
@@ -286,7 +287,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_DomainNotSet() 
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(errDomainNotSet, err)
+	s.Equal(stDomainNotSet.Err(), err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowIdNotSet() {
@@ -315,7 +316,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowIdNotSe
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(errWorkflowIDNotSet, err)
+	s.Equal(stWorkflowIDNotSet.Err(), err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowTypeNotSet() {
@@ -345,7 +346,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowTypeNot
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(errWorkflowTypeNotSet, err)
+	s.Equal(stWorkflowTypeNotSet.Err(), err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_TaskListNotSet() {
@@ -375,7 +376,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_TaskListNotSet(
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(errTaskListNotSet, err)
+	s.Equal(stTaskListNotSet.Err(), err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidExecutionStartToCloseTimeout() {
@@ -405,7 +406,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidExecutio
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(errInvalidExecutionStartToCloseTimeoutSeconds, err)
+	s.Equal(stInvalidExecutionStartToCloseTimeoutSeconds.Err(), err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidTaskStartToCloseTimeout() {
@@ -435,16 +436,14 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidTaskStar
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(errInvalidTaskStartToCloseTimeoutSeconds, err)
+	s.Equal(stInvalidTaskStartToCloseTimeoutSeconds.Err(), err)
 }
 
 func (s *workflowHandlerSuite) TestRegisterDomain_Failure_InvalidArchivalURI() {
 	s.mockClusterMetadata.EXPECT().IsGlobalDomainEnabled().Return(false)
-	// TODO: This stopped working after merge from Cadence
-	//s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName)
 	s.mockArchivalMetadata.On("GetHistoryConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI"))
 	s.mockArchivalMetadata.On("GetVisibilityConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI"))
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(nil, &workflowservice.EntityNotExistsError{})
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(nil, &shared.EntityNotExistsError{})
 	s.mockHistoryArchiver.On("ValidateURI", mock.Anything).Return(nil)
 	s.mockVisibilityArchiver.On("ValidateURI", mock.Anything).Return(errors.New("invalid URI"))
 	s.mockArchiverProvider.On("GetHistoryArchiver", mock.Anything, mock.Anything).Return(s.mockHistoryArchiver, nil)
@@ -468,7 +467,7 @@ func (s *workflowHandlerSuite) TestRegisterDomain_Success_EnabledWithNoArchivalU
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockArchivalMetadata.On("GetHistoryConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", testHistoryArchivalURI))
 	s.mockArchivalMetadata.On("GetVisibilityConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", testVisibilityArchivalURI))
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(nil, &workflowservice.EntityNotExistsError{})
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(nil, &shared.EntityNotExistsError{})
 	s.mockMetadataMgr.On("CreateDomain", mock.Anything).Return(&persistence.CreateDomainResponse{
 		ID: "test-id",
 	}, nil)
@@ -490,7 +489,7 @@ func (s *workflowHandlerSuite) TestRegisterDomain_Success_EnabledWithArchivalURI
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockArchivalMetadata.On("GetHistoryConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "invalidURI"))
 	s.mockArchivalMetadata.On("GetVisibilityConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "invalidURI"))
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(nil, &workflowservice.EntityNotExistsError{})
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(nil, &shared.EntityNotExistsError{})
 	s.mockMetadataMgr.On("CreateDomain", mock.Anything).Return(&persistence.CreateDomainResponse{
 		ID: "test-id",
 	}, nil)
@@ -517,7 +516,7 @@ func (s *workflowHandlerSuite) TestRegisterDomain_Success_ClusterNotConfiguredFo
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockArchivalMetadata.On("GetHistoryConfig").Return(archiver.NewDisabledArchvialConfig())
 	s.mockArchivalMetadata.On("GetVisibilityConfig").Return(archiver.NewDisabledArchvialConfig())
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(nil, &workflowservice.EntityNotExistsError{})
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(nil, &shared.EntityNotExistsError{})
 	s.mockMetadataMgr.On("CreateDomain", mock.Anything).Return(&persistence.CreateDomainResponse{
 		ID: "test-id",
 	}, nil)
@@ -540,7 +539,7 @@ func (s *workflowHandlerSuite) TestRegisterDomain_Success_NotEnabled() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockArchivalMetadata.On("GetHistoryConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
 	s.mockArchivalMetadata.On("GetVisibilityConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(nil, &workflowservice.EntityNotExistsError{})
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(nil, &shared.EntityNotExistsError{})
 	s.mockMetadataMgr.On("CreateDomain", mock.Anything).Return(&persistence.CreateDomainResponse{
 		ID: "test-id",
 	}, nil)
@@ -844,7 +843,7 @@ func (s *workflowHandlerSuite) TestHistoryArchived() {
 	}
 	s.False(wh.historyArchived(context.Background(), getHistoryRequest, "test-domain"))
 
-	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, &workflowservice.EntityNotExistsError{Message: "got archival indication error"}).Times(1)
+	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, &shared.EntityNotExistsError{Message: "got archival indication error"}).Times(1)
 	getHistoryRequest = &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: testWorkflowID,
@@ -955,7 +954,7 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 	s.NoError(err)
 	s.NotNil(resp)
 	s.NotNil(resp.History)
-	s.Equal(history, resp.History)
+	s.Equal(adapter.ToProtoHistory(history), resp.History)
 	s.Equal(nextPageToken, resp.NextPageToken)
 	s.True(resp.GetArchived())
 }

@@ -85,6 +85,40 @@ type (
 	}
 )
 
+var (
+	stDomainNotSet                               = status.New(codes.InvalidArgument, "Domain not set on request.")
+	stTaskTokenNotSet                            = status.New(codes.InvalidArgument, "Task token not set on request.")
+	stInvalidTaskToken                           = status.New(codes.InvalidArgument, "Invalid TaskToken.")
+	stTaskListNotSet                             = status.New(codes.InvalidArgument, "TaskList is not set on request.")
+	stTaskListTypeNotSet                         = status.New(codes.InvalidArgument, "TaskListType is not set on request.")
+	stExecutionNotSet                            = status.New(codes.InvalidArgument, "Execution is not set on request.")
+	stWorkflowIDNotSet                           = status.New(codes.InvalidArgument, "WorkflowId is not set on request.")
+	stActivityIDNotSet                           = status.New(codes.InvalidArgument, "ActivityID is not set on request.")
+	stInvalidRunID                               = status.New(codes.InvalidArgument, "Invalid RunId.")
+	stInvalidNextPageToken                       = status.New(codes.InvalidArgument, "Invalid NextPageToken.")
+	stNextPageTokenRunIDMismatch                 = status.New(codes.InvalidArgument, "RunID in the request does not match the NextPageToken.")
+	stQueryNotSet                                = status.New(codes.InvalidArgument, "WorkflowQuery is not set on request.")
+	stQueryTypeNotSet                            = status.New(codes.InvalidArgument, "QueryType is not set on request.")
+	stRequestNotSet                              = status.New(codes.InvalidArgument, "Request is nil.")
+	stNoPermission                               = status.New(codes.PermissionDenied, "No permission to do this operation.")
+	stRequestIDNotSet                            = status.New(codes.InvalidArgument, "RequestId is not set on request.")
+	stWorkflowTypeNotSet                         = status.New(codes.InvalidArgument, "WorkflowType is not set on request.")
+	stInvalidRetention                           = status.New(codes.InvalidArgument, "RetentionDays is invalid.")
+	stInvalidExecutionStartToCloseTimeoutSeconds = status.New(codes.InvalidArgument, "A valid ExecutionStartToCloseTimeoutSeconds is not set on request.")
+	stInvalidTaskStartToCloseTimeoutSeconds      = status.New(codes.InvalidArgument, "A valid TaskStartToCloseTimeoutSeconds is not set on request.")
+	stQueryDisallowedForDomain                   = status.New(codes.InvalidArgument, "Domain is not allowed to query, please contact cadence team to re-enable queries.")
+	stClusterNameNotSet                          = status.New(codes.InvalidArgument, "Cluster name is not set.")
+	stEmptyReplicationInfo                       = status.New(codes.InvalidArgument, "Replication task info is not set.")
+	stHistoryNotFound                            = status.New(codes.InvalidArgument, "Requested workflow history not found, may have passed retention period.")
+	stDomainTooLong                              = status.New(codes.InvalidArgument, "Domain length exceeds limit.")
+	stWorkflowTypeTooLong                        = status.New(codes.InvalidArgument, "WorkflowType length exceeds limit.")
+	stWorkflowIDTooLong                          = status.New(codes.InvalidArgument, "WorkflowID length exceeds limit.")
+	stSignalNameTooLong                          = status.New(codes.InvalidArgument, "SignalName length exceeds limit.")
+	stTaskListTooLong                            = status.New(codes.InvalidArgument, "TaskList length exceeds limit.")
+	stRequestIDTooLong                           = status.New(codes.InvalidArgument, "RequestID length exceeds limit.")
+	stIdentityTooLong                            = status.New(codes.InvalidArgument, "Identity length exceeds limit.")
+)
+
 // NewWorkflowHandlerGRPC creates a gRPC handler for the cadence workflowservice
 func NewWorkflowHandlerGRPC(
 	resource resource.Resource,

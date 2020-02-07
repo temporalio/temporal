@@ -98,6 +98,11 @@ var (
 	ErrContextTimeoutTooShort = &workflow.BadRequestError{Message: "Context timeout is too short."}
 	// ErrContextTimeoutNotSet is error for not setting a context timeout when calling a long poll API
 	ErrContextTimeoutNotSet = &workflow.BadRequestError{Message: "Context timeout is not set."}
+
+	// StContextTimeoutTooShort is error for setting a very short context timeout when calling a long poll API
+	StContextTimeoutTooShort = status.New(codes.InvalidArgument, "Context timeout is too short.")
+	// StContextTimeoutNotSet is error for not setting a context timeout when calling a long poll API
+	StContextTimeoutNotSet = status.New(codes.InvalidArgument, "Context timeout is not set.")
 )
 
 // AwaitWaitGroup calls Wait on the given wait

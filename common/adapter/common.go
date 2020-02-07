@@ -79,7 +79,7 @@ func ToProtoDomainConfiguration(in *shared.DomainConfiguration) *common.DomainCo
 		EmitMetric:                             ToProtoBool(in.EmitMetric),
 		BadBinaries:                            ToProtoBadBinaries(in.GetBadBinaries()),
 		HistoryArchivalStatus:                  ToProtoArchivalStatus(in.HistoryArchivalStatus),
-		HistoryArchivalURI:                     in.GetVisibilityArchivalURI(),
+		HistoryArchivalURI:                     in.GetHistoryArchivalURI(),
 		VisibilityArchivalStatus:               ToProtoArchivalStatus(in.VisibilityArchivalStatus),
 		VisibilityArchivalURI:                  in.GetVisibilityArchivalURI(),
 	}
