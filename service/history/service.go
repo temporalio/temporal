@@ -24,6 +24,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"google.golang.org/grpc"
+
+	"github.com/temporalio/temporal/.gen/proto/healthservice"
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
@@ -335,9 +339,10 @@ type Service struct {
 
 	status  int32
 	handler *Handler
-	stopC   chan struct{}
 	params  *service.BootstrapParams
 	config  *Config
+
+	server *grpc.Server
 }
 
 // NewService builds a new cadence-history service
@@ -394,7 +399,6 @@ func NewService(
 	return &Service{
 		Resource: serviceResource,
 		status:   common.DaemonStatusInitialized,
-		stopC:    make(chan struct{}),
 		params:   params,
 		config:   serviceConfig,
 	}, nil
@@ -411,17 +415,23 @@ func (s *Service) Start() {
 	logger.Info("history starting")
 
 	s.handler = NewHandler(s.Resource, s.config)
-	handlerGRPC := NewHandlerGRPC(s.handler)
 	s.handler.RegisterHandler()
-	handlerGRPC.RegisterHandler()
 
 	// must start resource first
 	s.Resource.Start()
 	s.handler.Start()
 
-	logger.Info("history started")
+	s.server = grpc.NewServer()
+	handlerGRPC := NewHandlerGRPC(s.handler)
+	nilCheckHandler := NewNilCheckHandler(handlerGRPC)
+	historyservice.RegisterHistoryServiceServer(s.server, nilCheckHandler)
+	healthservice.RegisterMetaServer(s.server, handlerGRPC)
 
-	<-s.stopC
+	listener := s.GetGRPCListener()
+	logger.Info("Starting to serve on history listener")
+	if err := s.server.Serve(listener); err != nil {
+		logger.Fatal("Failed to serve on history listener", tag.Error(err))
+	}
 }
 
 // Stop stops the service
@@ -430,7 +440,7 @@ func (s *Service) Stop() {
 		return
 	}
 
-	close(s.stopC)
+	s.server.GracefulStop()
 
 	s.handler.Stop()
 	s.Resource.Stop()

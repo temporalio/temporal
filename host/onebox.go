@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/api/transport"
-	yarpcgrpc "go.uber.org/yarpc/transport/grpc"
 	"go.uber.org/yarpc/transport/tchannel"
 	"google.golang.org/grpc"
 
@@ -915,26 +914,6 @@ func newRPCFactoryImpl(sName, hostPort, grpcHostPort, ringpopAddress string, log
 	}
 }
 
-func (c *rpcFactoryImpl) GetGRPCDispatcher() *yarpc.Dispatcher {
-	l, err := net.Listen("tcp", c.grpcHostPort)
-	if err != nil {
-		c.logger.Fatal("Failed create a gRPC listener", tag.Error(err), tag.Address(c.grpcHostPort))
-	}
-
-	t := yarpcgrpc.NewTransport()
-
-	return yarpc.NewDispatcher(yarpc.Config{
-		Name:     c.serviceName,
-		Inbounds: yarpc.Inbounds{t.NewInbound(l)},
-		Outbounds: yarpc.Outbounds{
-			c.serviceName: {Unary: t.NewSingleOutbound(c.grpcHostPort)},
-		},
-		InboundMiddleware: yarpc.InboundMiddleware{
-			Unary: &versionMiddleware{},
-		},
-	})
-}
-
 func (c *rpcFactoryImpl) GetGRPCListener() net.Listener {
 	if c.listener != nil {
 		return c.listener
@@ -1018,11 +997,6 @@ func (vm *versionMiddleware) Handle(ctx context.Context, req *transport.Request,
 func (c *rpcFactoryImpl) CreateTChannelDispatcherForOutbound(callerName, serviceName, hostName string) *yarpc.Dispatcher {
 	// Setup dispatcher(outbound) for onebox
 	return c.createDispatcherForOutbound(c.ch.NewSingleOutbound(hostName), callerName, serviceName, "TChannel")
-}
-
-// CreateGRPCDispatcherForOutbound creates a dispatcher for outbound connection
-func (c *rpcFactoryImpl) CreateGRPCDispatcherForOutbound(callerName, serviceName, hostName string) *yarpc.Dispatcher {
-	return c.createDispatcherForOutbound(yarpcgrpc.NewTransport().NewSingleOutbound(hostName), callerName, serviceName, "gRPC")
 }
 
 // CreateGRPCConnection creates connection for gRPC calls
