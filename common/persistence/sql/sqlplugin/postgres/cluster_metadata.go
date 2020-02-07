@@ -21,6 +21,10 @@ package postgres
 
 import (
 	"database/sql"
+	"strconv"
+	"strings"
+
+	p "github.com/temporalio/temporal/common/persistence"
 
 	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
 )
@@ -41,20 +45,25 @@ cluster_metadata WHERE metadata_partition = $1`
 
 	// ****** CLUSTER_MEMBERSHIP TABLE ******
 	templateUpsertActiveClusterMembership = `INSERT INTO
-cluster_membership (host_id, rpc_address, session_start, last_heartbeat, record_expiry)
-VALUES($1, $2, $3, $4, $5)
+cluster_membership (host_id, rpc_address, rpc_port, role, session_start, last_heartbeat, record_expiry)
+VALUES($1, $2, $3, $4, $5, $6, $7)
 ON CONFLICT(host_id)
 DO UPDATE SET 
-host_id = $1, rpc_address = $2, session_start = $3, last_heartbeat = $4, record_expiry = $5`
+host_id = $1, rpc_address = $2, rpc_port = $3, role = $4, session_start = $5, last_heartbeat = $6, record_expiry = $7`
 
 	templatePruneStaleClusterMembership = `DELETE FROM
 cluster_membership 
 WHERE host_id = ANY(ARRAY(
 SELECT host_id FROM cluster_membership WHERE record_expiry < $1 LIMIT $2))`
 
-	templateGetClusterMembership = `SELECT host_id, rpc_address, session_start, last_heartbeat, record_expiry 
-FROM cluster_membership 
-WHERE last_heartbeat > $1 AND record_expiry > $2`
+	templateGetClusterMembership = `SELECT host_id, rpc_address, rpc_port, role, session_start, last_heartbeat, record_expiry FROM
+cluster_membership`
+
+	templateWithRoleSuffix           = ` AND role = $`
+	templateWithHeartbeatSinceSuffix = ` AND last_heartbeat > $`
+	templateWithRecordExpirySuffix   = ` AND record_expiry > $`
+	templateWithRPCAddressSuffix     = ` AND rpc_address = $`
+	templateWithHostIDSuffix         = ` AND host_id = $`
 )
 
 // Does not follow traditional lock, select, read, insert as we only expect a single row.
@@ -78,17 +87,55 @@ func (pdb *db) UpsertClusterMembership(row *sqlplugin.ClusterMembershipRow) (sql
 	return pdb.conn.Exec(templateUpsertActiveClusterMembership,
 		row.HostID,
 		row.RPCAddress,
+		row.RPCPort,
+		row.Role,
 		row.SessionStart,
 		row.LastHeartbeat,
 		row.RecordExpiry)
 }
 
 func (pdb *db) GetClusterMembers(filter *sqlplugin.ClusterMembershipFilter) ([]sqlplugin.ClusterMembershipRow, error) {
+	var queryString strings.Builder
+	var operands []interface{}
+	queryString.WriteString(templateGetClusterMembership)
+
+	if filter.HostIDEquals != nil {
+		queryString.WriteString(templateWithHostIDSuffix)
+		operands = append(operands, filter.HostIDEquals)
+		queryString.WriteString(strconv.Itoa(len(operands)))
+	}
+
+	if filter.RPCAddressEquals != "" {
+		queryString.WriteString(templateWithRPCAddressSuffix)
+		operands = append(operands, filter.RPCAddressEquals)
+		queryString.WriteString(strconv.Itoa(len(operands)))
+	}
+
+	if filter.RoleEquals != p.Unknown {
+		queryString.WriteString(templateWithRoleSuffix)
+		operands = append(operands, filter.RoleEquals)
+		queryString.WriteString(strconv.Itoa(len(operands)))
+	}
+
+	if !filter.LastHeartbeatAfter.IsZero() {
+		queryString.WriteString(templateWithHeartbeatSinceSuffix)
+		operands = append(operands, filter.LastHeartbeatAfter)
+		queryString.WriteString(strconv.Itoa(len(operands)))
+	}
+
+	if !filter.RecordExpiryAfter.IsZero() {
+		queryString.WriteString(templateWithRecordExpirySuffix)
+		operands = append(operands, filter.RecordExpiryAfter)
+		queryString.WriteString(strconv.Itoa(len(operands)))
+	}
+
+	// All suffixes start with AND, replace the first occurrence with WHERE
+	compiledQryString := strings.Replace(queryString.String(), " AND ", " WHERE ", 1)
+
 	var rows []sqlplugin.ClusterMembershipRow
 	err := pdb.conn.Select(&rows,
-		templateGetClusterMembership,
-		filter.HeartbeatSince,
-		filter.RecordExpiryCutoff)
+		compiledQryString,
+		operands...)
 
 	if err != nil {
 		return nil, err
