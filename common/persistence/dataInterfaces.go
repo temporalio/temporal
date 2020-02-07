@@ -1452,10 +1452,12 @@ type (
 
 	// GetClusterMembersRequest is the response to GetClusterMembers
 	GetClusterMembersRequest struct {
-		LastHeartbeatWithin		time.Duration
-		RPCAddressEquals		net.IP
-		HostIDEquals			uuid.UUID
-		RoleEquals				ServiceType
+		LastHeartbeatWithin time.Duration
+		RPCAddressEquals    net.IP
+		HostIDEquals        uuid.UUID
+		RoleEquals          ServiceType
+		PageSize			int
+		NextPageToken		[]byte
 	}
 
 	// GetClusterMembersResponse is the response to GetClusterMembers

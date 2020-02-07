@@ -1076,7 +1076,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceInitImmutableClusterMetadataScope:             {operation: "InitializeImmutableClusterMetadata"},
 		PersistenceGetImmutableClusterMetadataScope:              {operation: "GetImmutableClusterMetadata"},
 		PersistencePruneClusterMembershipScope:                   {operation: "PruneClusterMembership"},
-		PersistenceGetClusterMembersScope:                  {operation: "GetClusterMembership"},
+		PersistenceGetClusterMembersScope:                        {operation: "GetClusterMembership"},
 		PersistenceUpsertClusterMembershipScope:                  {operation: "UpsertClusterMembership"},
 
 		ClusterMetadataArchivalConfigScope: {operation: "ArchivalConfig"},

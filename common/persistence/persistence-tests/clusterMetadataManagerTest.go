@@ -132,21 +132,21 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipReadFiltersCorrectly(
 
 	time.Sleep(time.Second * 1)
 	resp, err = s.ClusterMetadataManager.GetClusterMembers(
-		&p.GetClusterMembersRequest{LastHeartbeatWithin: time.Millisecond })
+		&p.GetClusterMembersRequest{LastHeartbeatWithin: time.Millisecond})
 
 	s.Nil(err)
 	s.NotNil(resp)
 	s.Empty(resp.ActiveMembers)
 
 	resp, err = s.ClusterMetadataManager.GetClusterMembers(
-		&p.GetClusterMembersRequest{RoleEquals: p.Matching })
+		&p.GetClusterMembersRequest{RoleEquals: p.Matching})
 
 	s.Nil(err)
 	s.NotNil(resp)
 	s.Empty(resp.ActiveMembers)
 
 	resp, err = s.ClusterMetadataManager.GetClusterMembers(
-		&p.GetClusterMembersRequest{RPCAddressEquals: req.RPCAddress })
+		&p.GetClusterMembersRequest{RPCAddressEquals: req.RPCAddress})
 
 	s.Nil(err)
 	s.NotNil(resp)

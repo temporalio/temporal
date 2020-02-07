@@ -64,11 +64,11 @@ VALUES (?, ?, ?, ?, ?, ?, ?) USING TTL ?`
 cluster_membership 
 WHERE membership_partition = ?`
 
-	templateWithRoleSuffix = ` AND role = ?`
+	templateWithRoleSuffix           = ` AND role = ?`
 	templateWithHeartbeatSinceSuffix = ` AND last_heartbeat > ?`
-	templateWithRPCAddressSuffix = ` AND rpc_address = ?`
-	templateWithHostIDSuffix = ` AND host_id = ?`
-	templateAllowFiltering = ` ALLOW FILTERING`
+	templateWithRPCAddressSuffix     = ` AND rpc_address = ?`
+	templateWithHostIDSuffix         = ` AND host_id = ?`
+	templateAllowFiltering           = ` ALLOW FILTERING`
 )
 
 type (
@@ -222,7 +222,7 @@ func (m *cassandraClusterMetadata) GetClusterMembers(request *p.GetClusterMember
 			HostID:        uuid.UUID(cqlHostID),
 			RPCAddress:    rpcAddress,
 			RPCPort:       rpcPort,
-			Role:		   role,
+			Role:          role,
 			SessionStart:  sessionStart,
 			LastHeartbeat: lastHeartbeat,
 			RecordExpiry:  cassNow.UTC().Add(time.Second * time.Duration(ttl)),
