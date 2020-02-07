@@ -38,11 +38,13 @@ var (
 	})
 )
 
+// NewContext create new context with default timeout.
 func NewContext() context.Context {
 	ctx, _ := NewContextWithCancel(90 * time.Second)
 	return ctx
 }
 
+// NewContextWithCancel create new context with timeout.
 func NewContextWithCancel(timeout time.Duration) (context.Context, context.CancelFunc) {
 	ctx := metadata.NewOutgoingContext(context.Background(), headers)
 	ctx, cancel := context.WithTimeout(ctx, timeout)

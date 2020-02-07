@@ -84,7 +84,7 @@ func ToProtoError(in error) error {
 	return st.Err()
 }
 
-// ToProtoError converts gRPC error to Thrift error.
+// ToThriftError converts gRPC error to Thrift error.
 func ToThriftError(st *status.Status) error {
 	if st == nil {
 		return nil
