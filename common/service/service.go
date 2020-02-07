@@ -150,7 +150,7 @@ func New(params *BootstrapParams) Service {
 		sVice.logger.Fatal("Unable to create yarpc TChannel dispatcher")
 	}
 
-	if sVice.sName == common.FrontendServiceName {
+	if sVice.sName == common.FrontendServiceName || sVice.sName == common.MatchingServiceName {
 		sVice.grpcListener = sVice.rpcFactory.GetGRPCListener()
 		if sVice.grpcListener == nil {
 			sVice.logger.Fatal("Unable to create gRPC listener")

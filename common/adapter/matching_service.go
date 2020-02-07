@@ -227,3 +227,65 @@ func ToThriftMatchingListTaskListPartitionsRequest(in *matchingservice.ListTaskL
 		TaskList: ToThriftTaskList(in.TaskList),
 	}
 }
+
+// ToThriftQueryWorkflowResponse ...
+func ToThriftQueryWorkflowResponse(in *matchingservice.QueryWorkflowResponse) *shared.QueryWorkflowResponse {
+	if in == nil {
+		return nil
+	}
+	return &shared.QueryWorkflowResponse{
+		QueryResult:   in.QueryResult,
+		QueryRejected: ToThriftQueryRejected(in.QueryRejected),
+	}
+}
+
+// ToThriftPollForDecisionTaskResponse ...
+func ToThriftMatchingPollForDecisionTaskResponse(in *matchingservice.PollForDecisionTaskResponse) *matching.PollForDecisionTaskResponse {
+	if in == nil {
+		return nil
+	}
+	return &matching.PollForDecisionTaskResponse{
+		TaskToken:                 in.TaskToken,
+		WorkflowExecution:         ToThriftWorkflowExecution(in.WorkflowExecution),
+		WorkflowType:              ToThriftWorkflowType(in.WorkflowType),
+		PreviousStartedEventId:    &in.PreviousStartedEventId,
+		StartedEventId:            &in.StartedEventId,
+		Attempt:                   &in.Attempt,
+		NextEventId:               &in.NextEventId,
+		BacklogCountHint:          &in.BacklogCountHint,
+		StickyExecutionEnabled:    &in.StickyExecutionEnabled,
+		Query:                     ToThriftWorkflowQuery(in.Query),
+		DecisionInfo:              ToThriftTransientDecisionInfo(in.DecisionInfo),
+		WorkflowExecutionTaskList: ToThriftTaskList(in.WorkflowExecutionTaskList),
+		EventStoreVersion:         &in.EventStoreVersion,
+		BranchToken:               in.BranchToken,
+		ScheduledTimestamp:        &in.ScheduledTimestamp,
+		StartedTimestamp:          &in.StartedTimestamp,
+		Queries:                   ToThriftWorkflowQueries(in.Queries),
+	}
+}
+
+// ToThriftPollForActivityTaskResponse ...
+func ToThriftMatchingPollForActivityTaskResponse(in *matchingservice.PollForActivityTaskResponse) *shared.PollForActivityTaskResponse {
+	if in == nil {
+		return nil
+	}
+	return &shared.PollForActivityTaskResponse{
+		TaskToken:                       in.TaskToken,
+		WorkflowExecution:               ToThriftWorkflowExecution(in.WorkflowExecution),
+		ActivityId:                      &in.ActivityId,
+		ActivityType:                    ToThriftActivityType(in.ActivityType),
+		Input:                           in.Input,
+		ScheduledTimestamp:              &in.ScheduledTimestamp,
+		ScheduleToCloseTimeoutSeconds:   &in.ScheduleToCloseTimeoutSeconds,
+		StartedTimestamp:                &in.StartedTimestamp,
+		StartToCloseTimeoutSeconds:      &in.StartToCloseTimeoutSeconds,
+		HeartbeatTimeoutSeconds:         &in.HeartbeatTimeoutSeconds,
+		Attempt:                         &in.Attempt,
+		ScheduledTimestampOfThisAttempt: &in.ScheduledTimestampOfThisAttempt,
+		HeartbeatDetails:                in.HeartbeatDetails,
+		WorkflowType:                    ToThriftWorkflowType(in.WorkflowType),
+		WorkflowDomain:                  &in.WorkflowDomain,
+		Header:                          ToThriftHeader(in.Header),
+	}
+}

@@ -877,7 +877,7 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -1107,5 +1107,5 @@ func (s *elasticsearchIntegrationSuite) verifyMaxResultWindowSize(indexName stri
 		}
 		time.Sleep(waitTimeInMs * time.Millisecond)
 	}
-	s.FailNow(fmt.Sprintf("ES max result window size hasn't reach target size within %v.", (numOfRetry*waitTimeInMs)*time.Millisecond))
+	s.FailNow(fmt.Sprintf("ES max result window size hasn't reach target size within %v", (numOfRetry*waitTimeInMs)*time.Millisecond))
 }

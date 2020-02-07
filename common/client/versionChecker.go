@@ -132,6 +132,7 @@ func (vc *versionChecker) ClientSupported(ctx context.Context, enableClientVersi
 	return nil
 }
 
+// GetHeadersValue returns header values for passed header names.
 func GetHeadersValue(ctx context.Context, headerNames ...string) []string {
 	md, grpcHeader := metadata.FromIncomingContext(ctx)
 	var call *yarpc.Call

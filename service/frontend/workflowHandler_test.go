@@ -31,10 +31,14 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/.gen/go/history/historyservicetest"
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
 	"github.com/temporalio/temporal/common/cache"
@@ -125,8 +129,8 @@ func (s *workflowHandlerSuite) TearDownTest() {
 	s.mockVisibilityArchiver.AssertExpectations(s.T())
 }
 
-func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandler {
-	return NewWorkflowHandler(s.mockResource, config, s.mockProducer)
+func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandlerGRPC {
+	return NewWorkflowHandlerGRPC(s.mockResource, NewWorkflowHandler(s.mockResource, config, s.mockProducer), config, s.mockProducer)
 }
 
 func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
@@ -140,60 +144,57 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	s.mockDomainCache.EXPECT().GetDomainID(gomock.Any()).Return(domainID, nil).AnyTimes()
 
 	// test list open by wid
-	listRequest := &shared.ListOpenWorkflowExecutionsRequest{
-		Domain: common.StringPtr(domain),
-		StartTimeFilter: &shared.StartTimeFilter{
-			EarliestTime: common.Int64Ptr(0),
-			LatestTime:   common.Int64Ptr(time.Now().UnixNano()),
+	listRequest := &workflowservice.ListOpenWorkflowExecutionsRequest{
+		Domain: domain,
+		StartTimeFilter: &commonproto.StartTimeFilter{
+			EarliestTime: 0,
+			LatestTime:   time.Now().UnixNano(),
 		},
-		ExecutionFilter: &shared.WorkflowExecutionFilter{
-			WorkflowId: common.StringPtr("wid"),
-		},
+		Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &commonproto.WorkflowExecutionFilter{
+			WorkflowId: "wid",
+		}},
 	}
 	_, err := wh.ListOpenWorkflowExecutions(context.Background(), listRequest)
 	s.Error(err)
-	s.Equal(errNoPermission, err)
+	s.Equal(stNoPermission.Err(), err)
 
 	// test list open by workflow type
-	listRequest.ExecutionFilter = nil
-	listRequest.TypeFilter = &shared.WorkflowTypeFilter{
-		Name: common.StringPtr("workflow-type"),
-	}
+	listRequest.Filters = &workflowservice.ListOpenWorkflowExecutionsRequest_TypeFilter{TypeFilter: &commonproto.WorkflowTypeFilter{
+		Name: "workflow-type",
+	}}
 	_, err = wh.ListOpenWorkflowExecutions(context.Background(), listRequest)
 	s.Error(err)
-	s.Equal(errNoPermission, err)
+	s.Equal(stNoPermission.Err(), err)
 
 	// test list close by wid
-	listRequest2 := &shared.ListClosedWorkflowExecutionsRequest{
-		Domain: common.StringPtr(domain),
-		StartTimeFilter: &shared.StartTimeFilter{
-			EarliestTime: common.Int64Ptr(0),
-			LatestTime:   common.Int64Ptr(time.Now().UnixNano()),
+	listRequest2 := &workflowservice.ListClosedWorkflowExecutionsRequest{
+		Domain: domain,
+		StartTimeFilter: &commonproto.StartTimeFilter{
+			EarliestTime: 0,
+			LatestTime:   time.Now().UnixNano(),
 		},
-		ExecutionFilter: &shared.WorkflowExecutionFilter{
-			WorkflowId: common.StringPtr("wid"),
-		},
+		Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &commonproto.WorkflowExecutionFilter{
+			WorkflowId: "wid",
+		}},
 	}
 	_, err = wh.ListClosedWorkflowExecutions(context.Background(), listRequest2)
 	s.Error(err)
-	s.Equal(errNoPermission, err)
+	s.Equal(stNoPermission.Err(), err)
 
 	// test list close by workflow type
-	listRequest2.ExecutionFilter = nil
-	listRequest2.TypeFilter = &shared.WorkflowTypeFilter{
-		Name: common.StringPtr("workflow-type"),
-	}
+	listRequest2.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_TypeFilter{TypeFilter: &commonproto.WorkflowTypeFilter{
+		Name: "workflow-type",
+	}}
 	_, err = wh.ListClosedWorkflowExecutions(context.Background(), listRequest2)
 	s.Error(err)
-	s.Equal(errNoPermission, err)
+	s.Equal(stNoPermission.Err(), err)
 
 	// test list close by workflow status
-	listRequest2.TypeFilter = nil
-	failedStatus := shared.WorkflowExecutionCloseStatusFailed
-	listRequest2.StatusFilter = &failedStatus
+	failedStatus := enums.WorkflowExecutionCloseStatusFailed
+	listRequest2.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_StatusFilter{StatusFilter: &commonproto.StatusFilter{CloseStatus: failedStatus}}
 	_, err = wh.ListClosedWorkflowExecutions(context.Background(), listRequest2)
 	s.Error(err)
-	s.Equal(errNoPermission, err)
+	s.Equal(stNoPermission.Err(), err)
 }
 
 func (s *workflowHandlerSuite) TestPollForTask_Failed_ContextTimeoutTooShort() {
@@ -201,24 +202,24 @@ func (s *workflowHandlerSuite) TestPollForTask_Failed_ContextTimeoutTooShort() {
 	wh := s.getWorkflowHandler(config)
 
 	bgCtx := context.Background()
-	_, err := wh.PollForDecisionTask(bgCtx, &shared.PollForDecisionTaskRequest{})
+	_, err := wh.PollForDecisionTask(bgCtx, &workflowservice.PollForDecisionTaskRequest{})
 	s.Error(err)
-	s.Equal(common.ErrContextTimeoutNotSet, err)
+	s.Equal(common.StContextTimeoutNotSet.Err(), err)
 
-	_, err = wh.PollForActivityTask(bgCtx, &shared.PollForActivityTaskRequest{})
+	_, err = wh.PollForActivityTask(bgCtx, &workflowservice.PollForActivityTaskRequest{})
 	s.Error(err)
-	s.Equal(common.ErrContextTimeoutNotSet, err)
+	s.Equal(common.StContextTimeoutNotSet.Err(), err)
 
 	shortCtx, cancel := context.WithTimeout(bgCtx, common.MinLongPollTimeout-time.Millisecond)
 	defer cancel()
 
-	_, err = wh.PollForDecisionTask(shortCtx, &shared.PollForDecisionTaskRequest{})
+	_, err = wh.PollForDecisionTask(shortCtx, &workflowservice.PollForDecisionTaskRequest{})
 	s.Error(err)
-	s.Equal(common.ErrContextTimeoutTooShort, err)
+	s.Equal(common.StContextTimeoutTooShort.Err(), err)
 
-	_, err = wh.PollForActivityTask(shortCtx, &shared.PollForActivityTaskRequest{})
+	_, err = wh.PollForActivityTask(shortCtx, &workflowservice.PollForActivityTaskRequest{})
 	s.Error(err)
-	s.Equal(common.ErrContextTimeoutTooShort, err)
+	s.Equal(common.StContextTimeoutTooShort.Err(), err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_RequestIdNotSet() {
@@ -226,28 +227,28 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_RequestIdNotSet
 	config.RPS = dc.GetIntPropertyFn(10)
 	wh := s.getWorkflowHandler(config)
 
-	startWorkflowExecutionRequest := &shared.StartWorkflowExecutionRequest{
-		Domain:     common.StringPtr("test-domain"),
-		WorkflowId: common.StringPtr("workflow-id"),
-		WorkflowType: &shared.WorkflowType{
-			Name: common.StringPtr("workflow-type"),
+	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
+		Domain:     "test-domain",
+		WorkflowId: "workflow-id",
+		WorkflowType: &commonproto.WorkflowType{
+			Name: "workflow-type",
 		},
-		TaskList: &shared.TaskList{
-			Name: common.StringPtr("task-list"),
+		TaskList: &commonproto.TaskList{
+			Name: "task-list",
 		},
-		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1),
-		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
-		RetryPolicy: &shared.RetryPolicy{
-			InitialIntervalInSeconds:    common.Int32Ptr(1),
-			BackoffCoefficient:          common.Float64Ptr(2),
-			MaximumIntervalInSeconds:    common.Int32Ptr(2),
-			MaximumAttempts:             common.Int32Ptr(1),
-			ExpirationIntervalInSeconds: common.Int32Ptr(1),
+		ExecutionStartToCloseTimeoutSeconds: 1,
+		TaskStartToCloseTimeoutSeconds:      1,
+		RetryPolicy: &commonproto.RetryPolicy{
+			InitialIntervalInSeconds:    1,
+			BackoffCoefficient:          2,
+			MaximumIntervalInSeconds:    2,
+			MaximumAttempts:             1,
+			ExpirationIntervalInSeconds: 1,
 		},
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(errRequestIDNotSet, err)
+	s.Equal(stRequestIDNotSet.Err(), err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_StartRequestNotSet() {
@@ -257,7 +258,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_StartRequestNot
 
 	_, err := wh.StartWorkflowExecution(context.Background(), nil)
 	s.Error(err)
-	s.Equal(errRequestNotSet, err)
+	s.Equal(stRequestNotSet.Err(), err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_DomainNotSet() {
@@ -265,28 +266,28 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_DomainNotSet() 
 	config.RPS = dc.GetIntPropertyFn(10)
 	wh := s.getWorkflowHandler(config)
 
-	startWorkflowExecutionRequest := &shared.StartWorkflowExecutionRequest{
-		WorkflowId: common.StringPtr("workflow-id"),
-		WorkflowType: &shared.WorkflowType{
-			Name: common.StringPtr("workflow-type"),
+	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
+		WorkflowId: "workflow-id",
+		WorkflowType: &commonproto.WorkflowType{
+			Name: "workflow-type",
 		},
-		TaskList: &shared.TaskList{
-			Name: common.StringPtr("task-list"),
+		TaskList: &commonproto.TaskList{
+			Name: "task-list",
 		},
-		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1),
-		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
-		RetryPolicy: &shared.RetryPolicy{
-			InitialIntervalInSeconds:    common.Int32Ptr(1),
-			BackoffCoefficient:          common.Float64Ptr(2),
-			MaximumIntervalInSeconds:    common.Int32Ptr(2),
-			MaximumAttempts:             common.Int32Ptr(1),
-			ExpirationIntervalInSeconds: common.Int32Ptr(1),
+		ExecutionStartToCloseTimeoutSeconds: 1,
+		TaskStartToCloseTimeoutSeconds:      1,
+		RetryPolicy: &commonproto.RetryPolicy{
+			InitialIntervalInSeconds:    1,
+			BackoffCoefficient:          2,
+			MaximumIntervalInSeconds:    2,
+			MaximumAttempts:             1,
+			ExpirationIntervalInSeconds: 1,
 		},
-		RequestId: common.StringPtr(uuid.New()),
+		RequestId: uuid.New(),
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(errDomainNotSet, err)
+	s.Equal(stDomainNotSet.Err(), err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowIdNotSet() {
@@ -294,28 +295,28 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowIdNotSe
 	config.RPS = dc.GetIntPropertyFn(10)
 	wh := s.getWorkflowHandler(config)
 
-	startWorkflowExecutionRequest := &shared.StartWorkflowExecutionRequest{
-		Domain: common.StringPtr("test-domain"),
-		WorkflowType: &shared.WorkflowType{
-			Name: common.StringPtr("workflow-type"),
+	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
+		Domain: "test-domain",
+		WorkflowType: &commonproto.WorkflowType{
+			Name: "workflow-type",
 		},
-		TaskList: &shared.TaskList{
-			Name: common.StringPtr("task-list"),
+		TaskList: &commonproto.TaskList{
+			Name: "task-list",
 		},
-		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1),
-		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
-		RetryPolicy: &shared.RetryPolicy{
-			InitialIntervalInSeconds:    common.Int32Ptr(1),
-			BackoffCoefficient:          common.Float64Ptr(2),
-			MaximumIntervalInSeconds:    common.Int32Ptr(2),
-			MaximumAttempts:             common.Int32Ptr(1),
-			ExpirationIntervalInSeconds: common.Int32Ptr(1),
+		ExecutionStartToCloseTimeoutSeconds: 1,
+		TaskStartToCloseTimeoutSeconds:      1,
+		RetryPolicy: &commonproto.RetryPolicy{
+			InitialIntervalInSeconds:    1,
+			BackoffCoefficient:          2,
+			MaximumIntervalInSeconds:    2,
+			MaximumAttempts:             1,
+			ExpirationIntervalInSeconds: 1,
 		},
-		RequestId: common.StringPtr(uuid.New()),
+		RequestId: uuid.New(),
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(errWorkflowIDNotSet, err)
+	s.Equal(stWorkflowIDNotSet.Err(), err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowTypeNotSet() {
@@ -323,29 +324,29 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowTypeNot
 	config.RPS = dc.GetIntPropertyFn(10)
 	wh := s.getWorkflowHandler(config)
 
-	startWorkflowExecutionRequest := &shared.StartWorkflowExecutionRequest{
-		Domain:     common.StringPtr("test-domain"),
-		WorkflowId: common.StringPtr("workflow-id"),
-		WorkflowType: &shared.WorkflowType{
-			Name: common.StringPtr(""),
+	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
+		Domain:     "test-domain",
+		WorkflowId: "workflow-id",
+		WorkflowType: &commonproto.WorkflowType{
+			Name: "",
 		},
-		TaskList: &shared.TaskList{
-			Name: common.StringPtr("task-list"),
+		TaskList: &commonproto.TaskList{
+			Name: "task-list",
 		},
-		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1),
-		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
-		RetryPolicy: &shared.RetryPolicy{
-			InitialIntervalInSeconds:    common.Int32Ptr(1),
-			BackoffCoefficient:          common.Float64Ptr(2),
-			MaximumIntervalInSeconds:    common.Int32Ptr(2),
-			MaximumAttempts:             common.Int32Ptr(1),
-			ExpirationIntervalInSeconds: common.Int32Ptr(1),
+		ExecutionStartToCloseTimeoutSeconds: 1,
+		TaskStartToCloseTimeoutSeconds:      1,
+		RetryPolicy: &commonproto.RetryPolicy{
+			InitialIntervalInSeconds:    1,
+			BackoffCoefficient:          2,
+			MaximumIntervalInSeconds:    2,
+			MaximumAttempts:             1,
+			ExpirationIntervalInSeconds: 1,
 		},
-		RequestId: common.StringPtr(uuid.New()),
+		RequestId: uuid.New(),
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(errWorkflowTypeNotSet, err)
+	s.Equal(stWorkflowTypeNotSet.Err(), err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_TaskListNotSet() {
@@ -353,29 +354,29 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_TaskListNotSet(
 	config.RPS = dc.GetIntPropertyFn(10)
 	wh := s.getWorkflowHandler(config)
 
-	startWorkflowExecutionRequest := &shared.StartWorkflowExecutionRequest{
-		Domain:     common.StringPtr("test-domain"),
-		WorkflowId: common.StringPtr("workflow-id"),
-		WorkflowType: &shared.WorkflowType{
-			Name: common.StringPtr("workflow-type"),
+	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
+		Domain:     "test-domain",
+		WorkflowId: "workflow-id",
+		WorkflowType: &commonproto.WorkflowType{
+			Name: "workflow-type",
 		},
-		TaskList: &shared.TaskList{
-			Name: common.StringPtr(""),
+		TaskList: &commonproto.TaskList{
+			Name: "",
 		},
-		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1),
-		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
-		RetryPolicy: &shared.RetryPolicy{
-			InitialIntervalInSeconds:    common.Int32Ptr(1),
-			BackoffCoefficient:          common.Float64Ptr(2),
-			MaximumIntervalInSeconds:    common.Int32Ptr(2),
-			MaximumAttempts:             common.Int32Ptr(1),
-			ExpirationIntervalInSeconds: common.Int32Ptr(1),
+		ExecutionStartToCloseTimeoutSeconds: 1,
+		TaskStartToCloseTimeoutSeconds:      1,
+		RetryPolicy: &commonproto.RetryPolicy{
+			InitialIntervalInSeconds:    1,
+			BackoffCoefficient:          2,
+			MaximumIntervalInSeconds:    2,
+			MaximumAttempts:             1,
+			ExpirationIntervalInSeconds: 1,
 		},
-		RequestId: common.StringPtr(uuid.New()),
+		RequestId: uuid.New(),
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(errTaskListNotSet, err)
+	s.Equal(stTaskListNotSet.Err(), err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidExecutionStartToCloseTimeout() {
@@ -383,29 +384,29 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidExecutio
 	config.RPS = dc.GetIntPropertyFn(10)
 	wh := s.getWorkflowHandler(config)
 
-	startWorkflowExecutionRequest := &shared.StartWorkflowExecutionRequest{
-		Domain:     common.StringPtr("test-domain"),
-		WorkflowId: common.StringPtr("workflow-id"),
-		WorkflowType: &shared.WorkflowType{
-			Name: common.StringPtr("workflow-type"),
+	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
+		Domain:     "test-domain",
+		WorkflowId: "workflow-id",
+		WorkflowType: &commonproto.WorkflowType{
+			Name: "workflow-type",
 		},
-		TaskList: &shared.TaskList{
-			Name: common.StringPtr("task-list"),
+		TaskList: &commonproto.TaskList{
+			Name: "task-list",
 		},
-		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(0),
-		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
-		RetryPolicy: &shared.RetryPolicy{
-			InitialIntervalInSeconds:    common.Int32Ptr(1),
-			BackoffCoefficient:          common.Float64Ptr(2),
-			MaximumIntervalInSeconds:    common.Int32Ptr(2),
-			MaximumAttempts:             common.Int32Ptr(1),
-			ExpirationIntervalInSeconds: common.Int32Ptr(1),
+		ExecutionStartToCloseTimeoutSeconds: 0,
+		TaskStartToCloseTimeoutSeconds:      1,
+		RetryPolicy: &commonproto.RetryPolicy{
+			InitialIntervalInSeconds:    1,
+			BackoffCoefficient:          2,
+			MaximumIntervalInSeconds:    2,
+			MaximumAttempts:             1,
+			ExpirationIntervalInSeconds: 1,
 		},
-		RequestId: common.StringPtr(uuid.New()),
+		RequestId: uuid.New(),
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(errInvalidExecutionStartToCloseTimeoutSeconds, err)
+	s.Equal(stInvalidExecutionStartToCloseTimeoutSeconds.Err(), err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidTaskStartToCloseTimeout() {
@@ -413,35 +414,33 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidTaskStar
 	config.RPS = dc.GetIntPropertyFn(10)
 	wh := s.getWorkflowHandler(config)
 
-	startWorkflowExecutionRequest := &shared.StartWorkflowExecutionRequest{
-		Domain:     common.StringPtr("test-domain"),
-		WorkflowId: common.StringPtr("workflow-id"),
-		WorkflowType: &shared.WorkflowType{
-			Name: common.StringPtr("workflow-type"),
+	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
+		Domain:     "test-domain",
+		WorkflowId: "workflow-id",
+		WorkflowType: &commonproto.WorkflowType{
+			Name: "workflow-type",
 		},
-		TaskList: &shared.TaskList{
-			Name: common.StringPtr("task-list"),
+		TaskList: &commonproto.TaskList{
+			Name: "task-list",
 		},
-		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1),
-		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(0),
-		RetryPolicy: &shared.RetryPolicy{
-			InitialIntervalInSeconds:    common.Int32Ptr(1),
-			BackoffCoefficient:          common.Float64Ptr(2),
-			MaximumIntervalInSeconds:    common.Int32Ptr(2),
-			MaximumAttempts:             common.Int32Ptr(1),
-			ExpirationIntervalInSeconds: common.Int32Ptr(1),
+		ExecutionStartToCloseTimeoutSeconds: 1,
+		TaskStartToCloseTimeoutSeconds:      0,
+		RetryPolicy: &commonproto.RetryPolicy{
+			InitialIntervalInSeconds:    1,
+			BackoffCoefficient:          2,
+			MaximumIntervalInSeconds:    2,
+			MaximumAttempts:             1,
+			ExpirationIntervalInSeconds: 1,
 		},
-		RequestId: common.StringPtr(uuid.New()),
+		RequestId: uuid.New(),
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(errInvalidTaskStartToCloseTimeoutSeconds, err)
+	s.Equal(stInvalidTaskStartToCloseTimeoutSeconds.Err(), err)
 }
 
 func (s *workflowHandlerSuite) TestRegisterDomain_Failure_InvalidArchivalURI() {
 	s.mockClusterMetadata.EXPECT().IsGlobalDomainEnabled().Return(false)
-	// TODO: This stopped working after merge from Cadence
-	//s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName)
 	s.mockArchivalMetadata.On("GetHistoryConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI"))
 	s.mockArchivalMetadata.On("GetVisibilityConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI"))
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(nil, &shared.EntityNotExistsError{})
@@ -453,12 +452,12 @@ func (s *workflowHandlerSuite) TestRegisterDomain_Failure_InvalidArchivalURI() {
 	wh := s.getWorkflowHandler(s.newConfig())
 
 	req := registerDomainRequest(
-		shared.ArchivalStatusEnabled.Ptr(),
-		common.StringPtr(testHistoryArchivalURI),
-		shared.ArchivalStatusEnabled.Ptr(),
-		common.StringPtr(testVisibilityArchivalURI),
+		enums.ArchivalStatusEnabled,
+		testHistoryArchivalURI,
+		enums.ArchivalStatusEnabled,
+		testVisibilityArchivalURI,
 	)
-	err := wh.RegisterDomain(context.Background(), req)
+	_, err := wh.RegisterDomain(context.Background(), req)
 	s.Error(err)
 }
 
@@ -479,8 +478,8 @@ func (s *workflowHandlerSuite) TestRegisterDomain_Success_EnabledWithNoArchivalU
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
-	req := registerDomainRequest(shared.ArchivalStatusEnabled.Ptr(), nil, shared.ArchivalStatusEnabled.Ptr(), nil)
-	err := wh.RegisterDomain(context.Background(), req)
+	req := registerDomainRequest(enums.ArchivalStatusEnabled, "", enums.ArchivalStatusEnabled, "")
+	_, err := wh.RegisterDomain(context.Background(), req)
 	s.NoError(err)
 }
 
@@ -502,12 +501,12 @@ func (s *workflowHandlerSuite) TestRegisterDomain_Success_EnabledWithArchivalURI
 	wh := s.getWorkflowHandler(s.newConfig())
 
 	req := registerDomainRequest(
-		shared.ArchivalStatusEnabled.Ptr(),
-		common.StringPtr(testHistoryArchivalURI),
-		shared.ArchivalStatusEnabled.Ptr(),
-		common.StringPtr(testVisibilityArchivalURI),
+		enums.ArchivalStatusEnabled,
+		testHistoryArchivalURI,
+		enums.ArchivalStatusEnabled,
+		testVisibilityArchivalURI,
 	)
-	err := wh.RegisterDomain(context.Background(), req)
+	_, err := wh.RegisterDomain(context.Background(), req)
 	s.NoError(err)
 }
 
@@ -525,12 +524,12 @@ func (s *workflowHandlerSuite) TestRegisterDomain_Success_ClusterNotConfiguredFo
 	wh := s.getWorkflowHandler(s.newConfig())
 
 	req := registerDomainRequest(
-		shared.ArchivalStatusEnabled.Ptr(),
-		common.StringPtr(testVisibilityArchivalURI),
-		shared.ArchivalStatusEnabled.Ptr(),
-		common.StringPtr("invalidURI"),
+		enums.ArchivalStatusEnabled,
+		testVisibilityArchivalURI,
+		enums.ArchivalStatusEnabled,
+		"invalidURI",
 	)
-	err := wh.RegisterDomain(context.Background(), req)
+	_, err := wh.RegisterDomain(context.Background(), req)
 	s.NoError(err)
 }
 
@@ -547,8 +546,8 @@ func (s *workflowHandlerSuite) TestRegisterDomain_Success_NotEnabled() {
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
-	req := registerDomainRequest(nil, nil, nil, nil)
-	err := wh.RegisterDomain(context.Background(), req)
+	req := registerDomainRequest(enums.ArchivalStatusDefault, "", enums.ArchivalStatusDefault, "")
+	_, err := wh.RegisterDomain(context.Background(), req)
 	s.NoError(err)
 }
 
@@ -561,17 +560,17 @@ func (s *workflowHandlerSuite) TestDescribeDomain_Success_ArchivalDisabled() {
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
-	req := &shared.DescribeDomainRequest{
-		Name: common.StringPtr("test-domain"),
+	req := &workflowservice.DescribeDomainRequest{
+		Name: "test-domain",
 	}
 	result, err := wh.DescribeDomain(context.Background(), req)
 
 	s.NoError(err)
 	s.NotNil(result)
 	s.NotNil(result.Configuration)
-	s.Equal(shared.ArchivalStatusDisabled, result.Configuration.GetHistoryArchivalStatus())
+	s.Equal(enums.ArchivalStatusDisabled, result.Configuration.GetHistoryArchivalStatus())
 	s.Equal("", result.Configuration.GetHistoryArchivalURI())
-	s.Equal(shared.ArchivalStatusDisabled, result.Configuration.GetVisibilityArchivalStatus())
+	s.Equal(enums.ArchivalStatusDisabled, result.Configuration.GetVisibilityArchivalStatus())
 	s.Equal("", result.Configuration.GetVisibilityArchivalURI())
 }
 
@@ -584,17 +583,17 @@ func (s *workflowHandlerSuite) TestDescribeDomain_Success_ArchivalEnabled() {
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
-	req := &shared.DescribeDomainRequest{
-		Name: common.StringPtr("test-domain"),
+	req := &workflowservice.DescribeDomainRequest{
+		Name: "test-domain",
 	}
 	result, err := wh.DescribeDomain(context.Background(), req)
 
 	s.NoError(err)
 	s.NotNil(result)
 	s.NotNil(result.Configuration)
-	s.Equal(shared.ArchivalStatusEnabled, result.Configuration.GetHistoryArchivalStatus())
+	s.Equal(enums.ArchivalStatusEnabled, result.Configuration.GetHistoryArchivalStatus())
 	s.Equal(testHistoryArchivalURI, result.Configuration.GetHistoryArchivalURI())
-	s.Equal(shared.ArchivalStatusEnabled, result.Configuration.GetVisibilityArchivalStatus())
+	s.Equal(enums.ArchivalStatusEnabled, result.Configuration.GetVisibilityArchivalStatus())
 	s.Equal(testVisibilityArchivalURI, result.Configuration.GetVisibilityArchivalURI())
 }
 
@@ -615,10 +614,10 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Failure_UpdateExistingArchivalUR
 	wh := s.getWorkflowHandler(s.newConfig())
 
 	updateReq := updateRequest(
-		nil,
-		nil,
-		common.StringPtr("updated visibility URI"),
-		nil,
+		"",
+		enums.ArchivalStatusDefault,
+		"updated visibility URI",
+		enums.ArchivalStatusDefault,
 	)
 	_, err := wh.UpdateDomain(context.Background(), updateReq)
 	s.Error(err)
@@ -640,10 +639,10 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Failure_InvalidArchivalURI() {
 	wh := s.getWorkflowHandler(s.newConfig())
 
 	updateReq := updateRequest(
-		common.StringPtr("testScheme://invalid/updated/history/URI"),
-		common.ArchivalStatusPtr(shared.ArchivalStatusEnabled),
-		nil,
-		nil,
+		"testScheme://invalid/updated/history/URI",
+		enums.ArchivalStatusEnabled,
+		"",
+		enums.ArchivalStatusDefault,
 	)
 	_, err := wh.UpdateDomain(context.Background(), updateReq)
 	s.Error(err)
@@ -671,18 +670,18 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Success_ArchivalEnabledToArchiva
 	wh := s.getWorkflowHandler(s.newConfig())
 
 	updateReq := updateRequest(
-		nil,
-		common.ArchivalStatusPtr(shared.ArchivalStatusDisabled),
-		nil,
-		common.ArchivalStatusPtr(shared.ArchivalStatusDisabled),
+		"",
+		enums.ArchivalStatusDisabled,
+		"",
+		enums.ArchivalStatusDisabled,
 	)
 	result, err := wh.UpdateDomain(context.Background(), updateReq)
 	s.NoError(err)
 	s.NotNil(result)
 	s.NotNil(result.Configuration)
-	s.Equal(shared.ArchivalStatusDisabled, result.Configuration.GetHistoryArchivalStatus())
+	s.Equal(enums.ArchivalStatusDisabled, result.Configuration.GetHistoryArchivalStatus())
 	s.Equal(testHistoryArchivalURI, result.Configuration.GetHistoryArchivalURI())
-	s.Equal(shared.ArchivalStatusDisabled, result.Configuration.GetVisibilityArchivalStatus())
+	s.Equal(enums.ArchivalStatusDisabled, result.Configuration.GetVisibilityArchivalStatus())
 	s.Equal(testVisibilityArchivalURI, result.Configuration.GetVisibilityArchivalURI())
 }
 
@@ -702,14 +701,14 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Success_ClusterNotConfiguredForA
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
-	updateReq := updateRequest(nil, common.ArchivalStatusPtr(shared.ArchivalStatusDisabled), nil, nil)
+	updateReq := updateRequest("", enums.ArchivalStatusDisabled, "", enums.ArchivalStatusDefault)
 	result, err := wh.UpdateDomain(context.Background(), updateReq)
 	s.NoError(err)
 	s.NotNil(result)
 	s.NotNil(result.Configuration)
-	s.Equal(shared.ArchivalStatusEnabled, result.Configuration.GetHistoryArchivalStatus())
+	s.Equal(enums.ArchivalStatusEnabled, result.Configuration.GetHistoryArchivalStatus())
 	s.Equal("some random history URI", result.Configuration.GetHistoryArchivalURI())
-	s.Equal(shared.ArchivalStatusEnabled, result.Configuration.GetVisibilityArchivalStatus())
+	s.Equal(enums.ArchivalStatusEnabled, result.Configuration.GetVisibilityArchivalStatus())
 	s.Equal("some random visibility URI", result.Configuration.GetVisibilityArchivalURI())
 }
 
@@ -735,18 +734,18 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Success_ArchivalEnabledToArchiva
 	wh := s.getWorkflowHandler(s.newConfig())
 
 	updateReq := updateRequest(
-		common.StringPtr(testHistoryArchivalURI),
-		common.ArchivalStatusPtr(shared.ArchivalStatusDisabled),
-		common.StringPtr(testVisibilityArchivalURI),
-		common.ArchivalStatusPtr(shared.ArchivalStatusDisabled),
+		testHistoryArchivalURI,
+		enums.ArchivalStatusDisabled,
+		testVisibilityArchivalURI,
+		enums.ArchivalStatusDisabled,
 	)
 	result, err := wh.UpdateDomain(context.Background(), updateReq)
 	s.NoError(err)
 	s.NotNil(result)
 	s.NotNil(result.Configuration)
-	s.Equal(shared.ArchivalStatusDisabled, result.Configuration.GetHistoryArchivalStatus())
+	s.Equal(enums.ArchivalStatusDisabled, result.Configuration.GetHistoryArchivalStatus())
 	s.Equal(testHistoryArchivalURI, result.Configuration.GetHistoryArchivalURI())
-	s.Equal(shared.ArchivalStatusDisabled, result.Configuration.GetVisibilityArchivalStatus())
+	s.Equal(enums.ArchivalStatusDisabled, result.Configuration.GetVisibilityArchivalStatus())
 	s.Equal(testVisibilityArchivalURI, result.Configuration.GetVisibilityArchivalURI())
 }
 
@@ -771,18 +770,18 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Success_ArchivalEnabledToEnabled
 	wh := s.getWorkflowHandler(s.newConfig())
 
 	updateReq := updateRequest(
-		common.StringPtr(testHistoryArchivalURI),
-		common.ArchivalStatusPtr(shared.ArchivalStatusEnabled),
-		common.StringPtr(testVisibilityArchivalURI),
-		common.ArchivalStatusPtr(shared.ArchivalStatusEnabled),
+		testHistoryArchivalURI,
+		enums.ArchivalStatusEnabled,
+		testVisibilityArchivalURI,
+		enums.ArchivalStatusEnabled,
 	)
 	result, err := wh.UpdateDomain(context.Background(), updateReq)
 	s.NoError(err)
 	s.NotNil(result)
 	s.NotNil(result.Configuration)
-	s.Equal(shared.ArchivalStatusEnabled, result.Configuration.GetHistoryArchivalStatus())
+	s.Equal(enums.ArchivalStatusEnabled, result.Configuration.GetHistoryArchivalStatus())
 	s.Equal(testHistoryArchivalURI, result.Configuration.GetHistoryArchivalURI())
-	s.Equal(shared.ArchivalStatusEnabled, result.Configuration.GetVisibilityArchivalStatus())
+	s.Equal(enums.ArchivalStatusEnabled, result.Configuration.GetVisibilityArchivalStatus())
 	s.Equal(testVisibilityArchivalURI, result.Configuration.GetVisibilityArchivalURI())
 }
 
@@ -808,56 +807,56 @@ func (s *workflowHandlerSuite) TestUpdateDomain_Success_ArchivalNeverEnabledToEn
 	wh := s.getWorkflowHandler(s.newConfig())
 
 	updateReq := updateRequest(
-		common.StringPtr(testHistoryArchivalURI),
-		common.ArchivalStatusPtr(shared.ArchivalStatusEnabled),
-		common.StringPtr(testVisibilityArchivalURI),
-		common.ArchivalStatusPtr(shared.ArchivalStatusEnabled),
+		testHistoryArchivalURI,
+		enums.ArchivalStatusEnabled,
+		testVisibilityArchivalURI,
+		enums.ArchivalStatusEnabled,
 	)
 	result, err := wh.UpdateDomain(context.Background(), updateReq)
 	s.NoError(err)
 	s.NotNil(result)
 	s.NotNil(result.Configuration)
-	s.Equal(shared.ArchivalStatusEnabled, result.Configuration.GetHistoryArchivalStatus())
+	s.Equal(enums.ArchivalStatusEnabled, result.Configuration.GetHistoryArchivalStatus())
 	s.Equal(testHistoryArchivalURI, result.Configuration.GetHistoryArchivalURI())
-	s.Equal(shared.ArchivalStatusEnabled, result.Configuration.GetVisibilityArchivalStatus())
+	s.Equal(enums.ArchivalStatusEnabled, result.Configuration.GetVisibilityArchivalStatus())
 	s.Equal(testVisibilityArchivalURI, result.Configuration.GetVisibilityArchivalURI())
 }
 
 func (s *workflowHandlerSuite) TestHistoryArchived() {
 	wh := s.getWorkflowHandler(s.newConfig())
 
-	getHistoryRequest := &shared.GetWorkflowExecutionHistoryRequest{}
+	getHistoryRequest := &workflowservice.GetWorkflowExecutionHistoryRequest{}
 	s.False(wh.historyArchived(context.Background(), getHistoryRequest, "test-domain"))
 
-	getHistoryRequest = &shared.GetWorkflowExecutionHistoryRequest{
-		Execution: &shared.WorkflowExecution{},
+	getHistoryRequest = &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Execution: &commonproto.WorkflowExecution{},
 	}
 	s.False(wh.historyArchived(context.Background(), getHistoryRequest, "test-domain"))
 
 	// TODO: remove last 3 `gomock.Any()` after YARPC migration
 	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
-	getHistoryRequest = &shared.GetWorkflowExecutionHistoryRequest{
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(testWorkflowID),
-			RunId:      common.StringPtr(testRunID),
+	getHistoryRequest = &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: testWorkflowID,
+			RunId:      testRunID,
 		},
 	}
 	s.False(wh.historyArchived(context.Background(), getHistoryRequest, "test-domain"))
 
 	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, &shared.EntityNotExistsError{Message: "got archival indication error"}).Times(1)
-	getHistoryRequest = &shared.GetWorkflowExecutionHistoryRequest{
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(testWorkflowID),
-			RunId:      common.StringPtr(testRunID),
+	getHistoryRequest = &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: testWorkflowID,
+			RunId:      testRunID,
 		},
 	}
 	s.True(wh.historyArchived(context.Background(), getHistoryRequest, "test-domain"))
 
 	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, errors.New("got non-archival indication error")).Times(1)
-	getHistoryRequest = &shared.GetWorkflowExecutionHistoryRequest{
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(testWorkflowID),
-			RunId:      common.StringPtr(testRunID),
+	getHistoryRequest = &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: testWorkflowID,
+			RunId:      testRunID,
 		},
 	}
 	s.False(wh.historyArchived(context.Background(), getHistoryRequest, "test-domain"))
@@ -955,7 +954,7 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 	s.NoError(err)
 	s.NotNil(resp)
 	s.NotNil(resp.History)
-	s.Equal(history, resp.History)
+	s.Equal(adapter.ToProtoHistory(history), resp.History)
 	s.Equal(nextPageToken, resp.NextPageToken)
 	s.True(resp.GetArchived())
 }
@@ -965,11 +964,11 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 	firstEventID := int64(100)
 	nextEventID := int64(101)
 	branchToken := []byte{1}
-	we := shared.WorkflowExecution{
-		WorkflowId: common.StringPtr("wid"),
-		RunId:      common.StringPtr("rid"),
+	we := commonproto.WorkflowExecution{
+		WorkflowId: "wid",
+		RunId:      "rid",
 	}
-	shardID := common.WorkflowIDToHistoryShard(*we.WorkflowId, numHistoryShards)
+	shardID := common.WorkflowIDToHistoryShard(we.WorkflowId, numHistoryShards)
 	req := &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
@@ -1001,7 +1000,7 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_InvalidRequest() {
 	wh := s.getWorkflowHandler(s.newConfig())
 
-	resp, err := wh.ListArchivedWorkflowExecutions(context.Background(), &shared.ListArchivedWorkflowExecutionsRequest{})
+	resp, err := wh.ListArchivedWorkflowExecutions(context.Background(), &workflowservice.ListArchivedWorkflowExecutionsRequest{})
 	s.Nil(resp)
 	s.Error(err)
 }
@@ -1089,7 +1088,7 @@ func (s *workflowHandlerSuite) TestGetSearchAttributes() {
 	wh := s.getWorkflowHandler(s.newConfig())
 
 	ctx := context.Background()
-	resp, err := wh.GetSearchAttributes(ctx)
+	resp, err := wh.GetSearchAttributes(ctx, &workflowservice.GetSearchAttributesRequest{})
 	s.NoError(err)
 	s.NotNil(resp)
 }
@@ -1101,24 +1100,24 @@ func (s *workflowHandlerSuite) TestListWorkflowExecutions() {
 	s.mockDomainCache.EXPECT().GetDomainID(gomock.Any()).Return(s.testDomainID, nil).AnyTimes()
 	s.mockVisibilityMgr.On("ListWorkflowExecutions", mock.Anything).Return(&persistence.ListWorkflowExecutionsResponse{}, nil).Once()
 
-	listRequest := &shared.ListWorkflowExecutionsRequest{
-		Domain:   common.StringPtr(s.testDomain),
-		PageSize: common.Int32Ptr(int32(config.ESIndexMaxResultWindow())),
+	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
+		Domain:   s.testDomain,
+		PageSize: int32(config.ESIndexMaxResultWindow()),
 	}
 	ctx := context.Background()
 
 	query := "WorkflowID = 'wid'"
-	listRequest.Query = common.StringPtr(query)
+	listRequest.Query = query
 	_, err := wh.ListWorkflowExecutions(ctx, listRequest)
 	s.NoError(err)
 	s.Equal(query, listRequest.GetQuery())
 
 	query = "InvalidKey = 'a'"
-	listRequest.Query = common.StringPtr(query)
+	listRequest.Query = query
 	_, err = wh.ListWorkflowExecutions(ctx, listRequest)
 	s.NotNil(err)
 
-	listRequest.PageSize = common.Int32Ptr(int32(config.ESIndexMaxResultWindow() + 1))
+	listRequest.PageSize = int32(config.ESIndexMaxResultWindow() + 1)
 	_, err = wh.ListWorkflowExecutions(ctx, listRequest)
 	s.NotNil(err)
 }
@@ -1130,24 +1129,28 @@ func (s *workflowHandlerSuite) TestScantWorkflowExecutions() {
 	s.mockDomainCache.EXPECT().GetDomainID(gomock.Any()).Return(s.testDomainID, nil).AnyTimes()
 	s.mockVisibilityMgr.On("ScanWorkflowExecutions", mock.Anything).Return(&persistence.ListWorkflowExecutionsResponse{}, nil).Once()
 
-	listRequest := &shared.ListWorkflowExecutionsRequest{
-		Domain:   common.StringPtr(s.testDomain),
-		PageSize: common.Int32Ptr(int32(config.ESIndexMaxResultWindow())),
+	scanRequest := &workflowservice.ScanWorkflowExecutionsRequest{
+		Domain:   s.testDomain,
+		PageSize: int32(config.ESIndexMaxResultWindow()),
+	}
+	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
+		Domain:   s.testDomain,
+		PageSize: int32(config.ESIndexMaxResultWindow()),
 	}
 	ctx := context.Background()
 
 	query := "WorkflowID = 'wid'"
-	listRequest.Query = common.StringPtr(query)
-	_, err := wh.ScanWorkflowExecutions(ctx, listRequest)
+	listRequest.Query = query
+	_, err := wh.ScanWorkflowExecutions(ctx, scanRequest)
 	s.NoError(err)
 	s.Equal(query, listRequest.GetQuery())
 
 	query = "InvalidKey = 'a'"
-	listRequest.Query = common.StringPtr(query)
-	_, err = wh.ScanWorkflowExecutions(ctx, listRequest)
+	listRequest.Query = query
+	_, err = wh.ScanWorkflowExecutions(ctx, scanRequest)
 	s.NotNil(err)
 
-	listRequest.PageSize = common.Int32Ptr(int32(config.ESIndexMaxResultWindow() + 1))
+	listRequest.PageSize = int32(config.ESIndexMaxResultWindow() + 1)
 	_, err = wh.ListWorkflowExecutions(ctx, listRequest)
 	s.NotNil(err)
 }
@@ -1158,19 +1161,19 @@ func (s *workflowHandlerSuite) TestCountWorkflowExecutions() {
 	s.mockDomainCache.EXPECT().GetDomainID(gomock.Any()).Return(s.testDomainID, nil).AnyTimes()
 	s.mockVisibilityMgr.On("CountWorkflowExecutions", mock.Anything).Return(&persistence.CountWorkflowExecutionsResponse{}, nil).Once()
 
-	countRequest := &shared.CountWorkflowExecutionsRequest{
-		Domain: common.StringPtr(s.testDomain),
+	countRequest := &workflowservice.CountWorkflowExecutionsRequest{
+		Domain: s.testDomain,
 	}
 	ctx := context.Background()
 
 	query := "WorkflowID = 'wid'"
-	countRequest.Query = common.StringPtr(query)
+	countRequest.Query = query
 	_, err := wh.CountWorkflowExecutions(ctx, countRequest)
 	s.NoError(err)
 	s.Equal(query, countRequest.GetQuery())
 
 	query = "InvalidKey = 'a'"
-	countRequest.Query = common.StringPtr(query)
+	countRequest.Query = query
 	_, err = wh.CountWorkflowExecutions(ctx, countRequest)
 	s.NotNil(err)
 }
@@ -1190,50 +1193,52 @@ func (s *workflowHandlerSuite) TestConvertIndexedKeyToThrift() {
 		"key4i": 3,
 		"key5i": 4,
 		"key6i": 5,
-		"key1t": shared.IndexedValueTypeString,
-		"key2t": shared.IndexedValueTypeKeyword,
-		"key3t": shared.IndexedValueTypeInt,
-		"key4t": shared.IndexedValueTypeDouble,
-		"key5t": shared.IndexedValueTypeBool,
-		"key6t": shared.IndexedValueTypeDatetime,
+		"key1t": enums.IndexedValueTypeString,
+		"key2t": enums.IndexedValueTypeKeyword,
+		"key3t": enums.IndexedValueTypeInt,
+		"key4t": enums.IndexedValueTypeDouble,
+		"key5t": enums.IndexedValueTypeBool,
+		"key6t": enums.IndexedValueTypeDatetime,
 	}
-	result := wh.convertIndexedKeyToThrift(m)
-	s.Equal(shared.IndexedValueTypeString, result["key1"])
-	s.Equal(shared.IndexedValueTypeKeyword, result["key2"])
-	s.Equal(shared.IndexedValueTypeInt, result["key3"])
-	s.Equal(shared.IndexedValueTypeDouble, result["key4"])
-	s.Equal(shared.IndexedValueTypeBool, result["key5"])
-	s.Equal(shared.IndexedValueTypeDatetime, result["key6"])
-	s.Equal(shared.IndexedValueTypeString, result["key1i"])
-	s.Equal(shared.IndexedValueTypeKeyword, result["key2i"])
-	s.Equal(shared.IndexedValueTypeInt, result["key3i"])
-	s.Equal(shared.IndexedValueTypeDouble, result["key4i"])
-	s.Equal(shared.IndexedValueTypeBool, result["key5i"])
-	s.Equal(shared.IndexedValueTypeDatetime, result["key6i"])
-	s.Equal(shared.IndexedValueTypeString, result["key1t"])
-	s.Equal(shared.IndexedValueTypeKeyword, result["key2t"])
-	s.Equal(shared.IndexedValueTypeInt, result["key3t"])
-	s.Equal(shared.IndexedValueTypeDouble, result["key4t"])
-	s.Equal(shared.IndexedValueTypeBool, result["key5t"])
-	s.Equal(shared.IndexedValueTypeDatetime, result["key6t"])
+	result := wh.convertIndexedKeyToProto(m)
+	s.Equal(enums.IndexedValueTypeString, result["key1"])
+	s.Equal(enums.IndexedValueTypeKeyword, result["key2"])
+	s.Equal(enums.IndexedValueTypeInt, result["key3"])
+	s.Equal(enums.IndexedValueTypeDouble, result["key4"])
+	s.Equal(enums.IndexedValueTypeBool, result["key5"])
+	s.Equal(enums.IndexedValueTypeDatetime, result["key6"])
+	s.Equal(enums.IndexedValueTypeString, result["key1i"])
+	s.Equal(enums.IndexedValueTypeKeyword, result["key2i"])
+	s.Equal(enums.IndexedValueTypeInt, result["key3i"])
+	s.Equal(enums.IndexedValueTypeDouble, result["key4i"])
+	s.Equal(enums.IndexedValueTypeBool, result["key5i"])
+	s.Equal(enums.IndexedValueTypeDatetime, result["key6i"])
+	s.Equal(enums.IndexedValueTypeString, result["key1t"])
+	s.Equal(enums.IndexedValueTypeKeyword, result["key2t"])
+	s.Equal(enums.IndexedValueTypeInt, result["key3t"])
+	s.Equal(enums.IndexedValueTypeDouble, result["key4t"])
+	s.Equal(enums.IndexedValueTypeBool, result["key5t"])
+	s.Equal(enums.IndexedValueTypeDatetime, result["key6t"])
 	s.Panics(func() {
-		wh.convertIndexedKeyToThrift(map[string]interface{}{
+		wh.convertIndexedKeyToProto(map[string]interface{}{
 			"invalidType": "unknown",
 		})
 	})
 }
 
 func (s *workflowHandlerSuite) TestVerifyHistoryIsComplete() {
-	events := make([]*shared.HistoryEvent, 50)
+	wh := s.getWorkflowHandler(s.newConfig())
+
+	events := make([]*commonproto.HistoryEvent, 50)
 	for i := 0; i < len(events); i++ {
-		events[i] = &shared.HistoryEvent{EventId: common.Int64Ptr(int64(i + 1))}
+		events[i] = &commonproto.HistoryEvent{EventId: int64(i + 1)}
 	}
-	var eventsWithHoles []*shared.HistoryEvent
+	var eventsWithHoles []*commonproto.HistoryEvent
 	eventsWithHoles = append(eventsWithHoles, events[9:12]...)
 	eventsWithHoles = append(eventsWithHoles, events[20:31]...)
 
 	testCases := []struct {
-		events       []*shared.HistoryEvent
+		events       []*commonproto.HistoryEvent
 		firstEventID int64
 		lastEventID  int64
 		isFirstPage  bool
@@ -1267,7 +1272,7 @@ func (s *workflowHandlerSuite) TestVerifyHistoryIsComplete() {
 	}
 
 	for i, tc := range testCases {
-		err := verifyHistoryIsComplete(tc.events, tc.firstEventID, tc.lastEventID, tc.isFirstPage, tc.isLastPage, tc.pageSize)
+		err := wh.verifyHistoryIsComplete(tc.events, tc.firstEventID, tc.lastEventID, tc.isFirstPage, tc.isLastPage, tc.pageSize)
 		if tc.isResultErr {
 			s.Error(err, "testcase %v failed", i)
 		} else {
@@ -1281,14 +1286,14 @@ func (s *workflowHandlerSuite) newConfig() *Config {
 }
 
 func updateRequest(
-	historyArchivalURI *string,
-	historyArchivalStatus *shared.ArchivalStatus,
-	visibilityArchivalURI *string,
-	visibilityArchivalStatus *shared.ArchivalStatus,
-) *shared.UpdateDomainRequest {
-	return &shared.UpdateDomainRequest{
-		Name: common.StringPtr("test-name"),
-		Configuration: &shared.DomainConfiguration{
+	historyArchivalURI string,
+	historyArchivalStatus enums.ArchivalStatus,
+	visibilityArchivalURI string,
+	visibilityArchivalStatus enums.ArchivalStatus,
+) *workflowservice.UpdateDomainRequest {
+	return &workflowservice.UpdateDomainRequest{
+		Name: "test-name",
+		Configuration: &commonproto.DomainConfiguration{
 			HistoryArchivalStatus:    historyArchivalStatus,
 			HistoryArchivalURI:       historyArchivalURI,
 			VisibilityArchivalStatus: visibilityArchivalStatus,
@@ -1332,47 +1337,47 @@ func persistenceGetDomainResponse(historyArchivalState, visibilityArchivalState 
 }
 
 func registerDomainRequest(
-	historyArchivalStatus *shared.ArchivalStatus,
-	historyArchivalURI *string,
-	visibilityArchivalStatus *shared.ArchivalStatus,
-	visibilityArchivalURI *string,
-) *shared.RegisterDomainRequest {
-	return &shared.RegisterDomainRequest{
-		Name:                                   common.StringPtr("test-domain"),
-		Description:                            common.StringPtr("test-description"),
-		OwnerEmail:                             common.StringPtr("test-owner-email"),
-		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(10),
-		EmitMetric:                             common.BoolPtr(true),
-		Clusters: []*shared.ClusterReplicationConfiguration{
+	historyArchivalStatus enums.ArchivalStatus,
+	historyArchivalURI string,
+	visibilityArchivalStatus enums.ArchivalStatus,
+	visibilityArchivalURI string,
+) *workflowservice.RegisterDomainRequest {
+	return &workflowservice.RegisterDomainRequest{
+		Name:                                   "test-domain",
+		Description:                            "test-description",
+		OwnerEmail:                             "test-owner-email",
+		WorkflowExecutionRetentionPeriodInDays: 10,
+		EmitMetric:                             true,
+		Clusters: []*commonproto.ClusterReplicationConfiguration{
 			{
-				ClusterName: common.StringPtr(cluster.TestCurrentClusterName),
+				ClusterName: cluster.TestCurrentClusterName,
 			},
 		},
-		ActiveClusterName:        common.StringPtr(cluster.TestCurrentClusterName),
+		ActiveClusterName:        cluster.TestCurrentClusterName,
 		Data:                     make(map[string]string),
-		SecurityToken:            common.StringPtr("token"),
+		SecurityToken:            "token",
 		HistoryArchivalStatus:    historyArchivalStatus,
 		HistoryArchivalURI:       historyArchivalURI,
 		VisibilityArchivalStatus: visibilityArchivalStatus,
 		VisibilityArchivalURI:    visibilityArchivalURI,
-		IsGlobalDomain:           common.BoolPtr(false),
+		IsGlobalDomain:           false,
 	}
 }
 
-func getHistoryRequest(nextPageToken []byte) *shared.GetWorkflowExecutionHistoryRequest {
-	return &shared.GetWorkflowExecutionHistoryRequest{
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(testWorkflowID),
-			RunId:      common.StringPtr(testRunID),
+func getHistoryRequest(nextPageToken []byte) *workflowservice.GetWorkflowExecutionHistoryRequest {
+	return &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: testWorkflowID,
+			RunId:      testRunID,
 		},
 		NextPageToken: nextPageToken,
 	}
 }
 
-func listArchivedWorkflowExecutionsTestRequest() *shared.ListArchivedWorkflowExecutionsRequest {
-	return &shared.ListArchivedWorkflowExecutionsRequest{
-		Domain:   common.StringPtr("some random domain name"),
-		PageSize: common.Int32Ptr(10),
-		Query:    common.StringPtr("some random query string"),
+func listArchivedWorkflowExecutionsTestRequest() *workflowservice.ListArchivedWorkflowExecutionsRequest {
+	return &workflowservice.ListArchivedWorkflowExecutionsRequest{
+		Domain:   "some random domain name",
+		PageSize: 10,
+		Query:    "some random query string",
 	}
 }

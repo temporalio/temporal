@@ -23,10 +23,9 @@ package matching
 import (
 	"context"
 
-	"go.uber.org/yarpc"
+	"google.golang.org/grpc"
 
-	m "github.com/temporalio/temporal/.gen/go/matching"
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/common/backoff"
 )
 
@@ -49,33 +48,42 @@ func NewRetryableClient(client Client, policy backoff.RetryPolicy, isRetryable b
 
 func (c *retryableClient) AddActivityTask(
 	ctx context.Context,
-	addRequest *m.AddActivityTaskRequest,
-	opts ...yarpc.CallOption) error {
+	addRequest *matchingservice.AddActivityTaskRequest,
+	opts ...grpc.CallOption) (*matchingservice.AddActivityTaskResponse, error) {
+
+	var resp *matchingservice.AddActivityTaskResponse
 	op := func() error {
-		return c.client.AddActivityTask(ctx, addRequest, opts...)
+		var err error
+		resp, err = c.client.AddActivityTask(ctx, addRequest, opts...)
+		return err
 	}
 
-	return backoff.Retry(op, c.policy, c.isRetryable)
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
 }
 
 func (c *retryableClient) AddDecisionTask(
 	ctx context.Context,
-	addRequest *m.AddDecisionTaskRequest,
-	opts ...yarpc.CallOption) error {
+	addRequest *matchingservice.AddDecisionTaskRequest,
+	opts ...grpc.CallOption) (*matchingservice.AddDecisionTaskResponse, error) {
 
+	var resp *matchingservice.AddDecisionTaskResponse
 	op := func() error {
-		return c.client.AddDecisionTask(ctx, addRequest, opts...)
+		var err error
+		resp, err = c.client.AddDecisionTask(ctx, addRequest, opts...)
+		return err
 	}
 
-	return backoff.Retry(op, c.policy, c.isRetryable)
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
 }
 
 func (c *retryableClient) PollForActivityTask(
 	ctx context.Context,
-	pollRequest *m.PollForActivityTaskRequest,
-	opts ...yarpc.CallOption) (*workflow.PollForActivityTaskResponse, error) {
+	pollRequest *matchingservice.PollForActivityTaskRequest,
+	opts ...grpc.CallOption) (*matchingservice.PollForActivityTaskResponse, error) {
 
-	var resp *workflow.PollForActivityTaskResponse
+	var resp *matchingservice.PollForActivityTaskResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.PollForActivityTask(ctx, pollRequest, opts...)
@@ -88,10 +96,10 @@ func (c *retryableClient) PollForActivityTask(
 
 func (c *retryableClient) PollForDecisionTask(
 	ctx context.Context,
-	pollRequest *m.PollForDecisionTaskRequest,
-	opts ...yarpc.CallOption) (*m.PollForDecisionTaskResponse, error) {
+	pollRequest *matchingservice.PollForDecisionTaskRequest,
+	opts ...grpc.CallOption) (*matchingservice.PollForDecisionTaskResponse, error) {
 
-	var resp *m.PollForDecisionTaskResponse
+	var resp *matchingservice.PollForDecisionTaskResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.PollForDecisionTask(ctx, pollRequest, opts...)
@@ -104,10 +112,10 @@ func (c *retryableClient) PollForDecisionTask(
 
 func (c *retryableClient) QueryWorkflow(
 	ctx context.Context,
-	queryRequest *m.QueryWorkflowRequest,
-	opts ...yarpc.CallOption) (*workflow.QueryWorkflowResponse, error) {
+	queryRequest *matchingservice.QueryWorkflowRequest,
+	opts ...grpc.CallOption) (*matchingservice.QueryWorkflowResponse, error) {
 
-	var resp *workflow.QueryWorkflowResponse
+	var resp *matchingservice.QueryWorkflowResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.QueryWorkflow(ctx, queryRequest, opts...)
@@ -120,34 +128,42 @@ func (c *retryableClient) QueryWorkflow(
 
 func (c *retryableClient) RespondQueryTaskCompleted(
 	ctx context.Context,
-	request *m.RespondQueryTaskCompletedRequest,
-	opts ...yarpc.CallOption) error {
+	request *matchingservice.RespondQueryTaskCompletedRequest,
+	opts ...grpc.CallOption) (*matchingservice.RespondQueryTaskCompletedResponse, error) {
 
+	var resp *matchingservice.RespondQueryTaskCompletedResponse
 	op := func() error {
-		return c.client.RespondQueryTaskCompleted(ctx, request, opts...)
+		var err error
+		resp, err = c.client.RespondQueryTaskCompleted(ctx, request, opts...)
+		return err
 	}
 
-	return backoff.Retry(op, c.policy, c.isRetryable)
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
 }
 
 func (c *retryableClient) CancelOutstandingPoll(
 	ctx context.Context,
-	request *m.CancelOutstandingPollRequest,
-	opts ...yarpc.CallOption) error {
+	request *matchingservice.CancelOutstandingPollRequest,
+	opts ...grpc.CallOption) (*matchingservice.CancelOutstandingPollResponse, error) {
 
+	var resp *matchingservice.CancelOutstandingPollResponse
 	op := func() error {
-		return c.client.CancelOutstandingPoll(ctx, request, opts...)
+		var err error
+		resp, err = c.client.CancelOutstandingPoll(ctx, request, opts...)
+		return err
 	}
 
-	return backoff.Retry(op, c.policy, c.isRetryable)
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
 }
 
 func (c *retryableClient) DescribeTaskList(
 	ctx context.Context,
-	request *m.DescribeTaskListRequest,
-	opts ...yarpc.CallOption) (*workflow.DescribeTaskListResponse, error) {
+	request *matchingservice.DescribeTaskListRequest,
+	opts ...grpc.CallOption) (*matchingservice.DescribeTaskListResponse, error) {
 
-	var resp *workflow.DescribeTaskListResponse
+	var resp *matchingservice.DescribeTaskListResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.DescribeTaskList(ctx, request, opts...)
@@ -160,10 +176,10 @@ func (c *retryableClient) DescribeTaskList(
 
 func (c *retryableClient) ListTaskListPartitions(
 	ctx context.Context,
-	request *m.ListTaskListPartitionsRequest,
-	opts ...yarpc.CallOption) (*workflow.ListTaskListPartitionsResponse, error) {
+	request *matchingservice.ListTaskListPartitionsRequest,
+	opts ...grpc.CallOption) (*matchingservice.ListTaskListPartitionsResponse, error) {
 
-	var resp *workflow.ListTaskListPartitionsResponse
+	var resp *matchingservice.ListTaskListPartitionsResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.ListTaskListPartitions(ctx, request, opts...)

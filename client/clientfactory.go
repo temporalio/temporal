@@ -26,8 +26,8 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/.gen/go/history/historyserviceclient"
-	"github.com/temporalio/temporal/.gen/go/matching/matchingserviceclient"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
+	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/client/frontend"
 	"github.com/temporalio/temporal/client/history"
@@ -152,8 +152,8 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 	}
 
 	clientProvider := func(clientKey string) (interface{}, error) {
-		dispatcher := cf.rpcFactory.CreateTChannelDispatcherForOutbound(matchingCaller, common.MatchingServiceName, clientKey)
-		return matchingserviceclient.New(dispatcher.ClientConfig(common.MatchingServiceName)), nil
+		connection := cf.rpcFactory.CreateGRPCConnection(clientKey)
+		return matchingservice.NewMatchingServiceClient(connection), nil
 	}
 
 	client := matching.NewClient(

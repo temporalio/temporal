@@ -32,6 +32,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/status"
 	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 	"go.uber.org/yarpc/yarpcerrors"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/codes"
@@ -97,6 +98,11 @@ var (
 	ErrContextTimeoutTooShort = &workflow.BadRequestError{Message: "Context timeout is too short."}
 	// ErrContextTimeoutNotSet is error for not setting a context timeout when calling a long poll API
 	ErrContextTimeoutNotSet = &workflow.BadRequestError{Message: "Context timeout is not set."}
+
+	// StContextTimeoutTooShort is error for setting a very short context timeout when calling a long poll API
+	StContextTimeoutTooShort = status.New(codes.InvalidArgument, "Context timeout is too short.")
+	// StContextTimeoutNotSet is error for not setting a context timeout when calling a long poll API
+	StContextTimeoutNotSet = status.New(codes.InvalidArgument, "Context timeout is not set.")
 )
 
 // AwaitWaitGroup calls Wait on the given wait
@@ -199,6 +205,11 @@ func IsServiceTransientError(err error) bool {
 	return !IsServiceNonRetryableError(err)
 }
 
+// IsServiceTransientErrorGRPC checks if the error is a retryable error.
+func IsServiceTransientErrorGRPC(err error) bool {
+	return !IsServiceNonRetryableErrorGRPC(err)
+}
+
 // IsServiceNonRetryableError checks if the error is a non retryable error.
 func IsServiceNonRetryableError(err error) bool {
 	switch err := err.(type) {
@@ -217,6 +228,23 @@ func IsServiceNonRetryableError(err error) bool {
 			return true
 		}
 		return false
+	}
+
+	return false
+}
+
+// IsServiceNonRetryableErrorGRPC checks if the error is a non retryable error.
+func IsServiceNonRetryableErrorGRPC(err error) bool {
+	if err == context.DeadlineExceeded {
+		return true
+	}
+
+	if st, ok := status.FromError(err); ok {
+		if st.Code() == codes.NotFound ||
+			st.Code() == codes.InvalidArgument ||
+			st.Code() == codes.AlreadyExists {
+			return true
+		}
 	}
 
 	return false
@@ -253,6 +281,7 @@ func IsWhitelistServiceTransientError(err error) bool {
 
 // IsWhitelistServiceTransientErrorGRPC checks if the error is a transient error.
 func IsWhitelistServiceTransientErrorGRPC(err error) bool {
+	// TODO: wrong context package
 	if err == context.DeadlineExceeded {
 		return true
 	}
@@ -531,6 +560,23 @@ func ConvertIndexedValueTypeToThriftType(fieldType interface{}, logger log.Logge
 		// Unknown fieldType, please make sure dynamic config return correct value type
 		logger.Error("unknown index value type", tag.Value(fieldType), tag.ValueType(t))
 		return fieldType.(workflow.IndexedValueType) // it will panic and been captured by logger
+	}
+}
+
+// ConvertIndexedValueTypeToProtoType takes fieldType as interface{} and convert to IndexedValueType.
+// Because different implementation of dynamic config client may lead to different types
+func ConvertIndexedValueTypeToProtoType(fieldType interface{}, logger log.Logger) enums.IndexedValueType {
+	switch t := fieldType.(type) {
+	case float64:
+		return enums.IndexedValueType(fieldType.(float64))
+	case int:
+		return enums.IndexedValueType(fieldType.(int))
+	case enums.IndexedValueType:
+		return fieldType.(enums.IndexedValueType)
+	default:
+		// Unknown fieldType, please make sure dynamic config return correct value type
+		logger.Error("unknown index value type", tag.Value(fieldType), tag.ValueType(t))
+		return fieldType.(enums.IndexedValueType) // it will panic and been captured by logger
 	}
 }
 

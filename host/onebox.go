@@ -191,7 +191,7 @@ func (c *cadenceImpl) enableWorker() bool {
 func (c *cadenceImpl) Start() error {
 	hosts := make(map[string][]string)
 	hosts[common.FrontendServiceName] = []string{c.FrontendGRPCAddress()}
-	hosts[common.MatchingServiceName] = []string{c.MatchingServiceAddress()}
+	hosts[common.MatchingServiceName] = []string{c.MatchingGRPCServiceAddress()}
 	hosts[common.HistoryServiceName] = c.HistoryServiceAddress(0)
 	if c.enableWorker() {
 		hosts[common.WorkerServiceName] = []string{c.WorkerServiceAddress()}

@@ -147,5 +147,5 @@ Loop:
 		}
 	}
 
-	s.Fail("Failed to get messages from DLQ.")
+	s.Fail("Failed to get messages from DLQ")
 }

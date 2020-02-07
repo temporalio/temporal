@@ -25,6 +25,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gogo/status"
 	"github.com/uber-go/tally"
 
 	"github.com/temporalio/temporal/.gen/go/health"
@@ -306,6 +307,12 @@ func (h *Handler) handleErr(err error, scope int) error {
 
 	if err == nil {
 		return nil
+	}
+
+	if _, ok := status.FromError(err); ok {
+		h.metricsClient.IncCounter(scope, metrics.CadenceFailures)
+
+		return err
 	}
 
 	switch err.(type) {

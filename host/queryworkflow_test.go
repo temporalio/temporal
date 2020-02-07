@@ -100,7 +100,7 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -109,7 +109,7 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	queryHandler := func(task *workflowservice.PollForDecisionTaskResponse) ([]byte, error) {
@@ -138,7 +138,7 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 
 	// Make first decision to schedule activity
 	_, err := poller.PollAndProcessDecisionTaskWithAttempt(false, false, false, true, int64(0))
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	type QueryResult struct {
@@ -166,7 +166,7 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller.PollAndProcessDecisionTaskWithSticky(false, false)
-		s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.NoError(errInner)
 		if isQueryTask {
 			break
@@ -184,7 +184,7 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller.PollAndProcessDecisionTaskWithSticky(false, false)
-		s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.NoError(errInner)
 		if isQueryTask {
 			break
@@ -259,7 +259,7 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -268,7 +268,7 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	queryHandler := func(task *workflowservice.PollForDecisionTaskResponse) ([]byte, error) {
@@ -297,7 +297,7 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 
 	// Make first decision to schedule activity
 	_, err := poller.PollAndProcessDecisionTaskWithAttempt(false, false, false, true, int64(0))
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	type QueryResult struct {
@@ -327,7 +327,7 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 		// here we poll on normal tasklist, to simulate a worker crash and restart
 		// on the server side, server will first try the sticky tasklist and then the normal tasklist
 		isQueryTask, errInner := poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.NoError(errInner)
 		if isQueryTask {
 			break
@@ -401,7 +401,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -409,7 +409,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	// activity handler
 	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	queryHandler := func(task *workflowservice.PollForDecisionTaskResponse) ([]byte, error) {
@@ -436,7 +436,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 
 	// Make first decision to schedule activity
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	type QueryResult struct {
@@ -465,7 +465,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.NoError(errInner)
 		if isQueryTask {
 			break
@@ -483,7 +483,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.NoError(errInner)
 		if isQueryTask {
 			break
@@ -504,7 +504,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.NoError(errInner)
 		if isQueryTask {
 			break
@@ -532,7 +532,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller.PollAndProcessDecisionTask(false, false)
-		s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.NoError(errInner)
 		if isQueryTask {
 			break
@@ -614,7 +614,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -622,7 +622,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	// activity handler
 	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	queryHandler := func(task *workflowservice.PollForDecisionTaskResponse) ([]byte, error) {
@@ -649,7 +649,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 
 	// Make first decision to schedule activity
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	type QueryResult struct {
@@ -682,7 +682,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	// send signal to ensure there is an outstanding decision task to dispatch query on
 	// otherwise query will just go through matching
 	signalName := "my signal"
-	signalInput := []byte("my signal input.")
+	signalInput := []byte("my signal input")
 	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Domain: s.domainName,
 		WorkflowExecution: &commonproto.WorkflowExecution{
@@ -717,7 +717,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 			Answer:     []byte("consistent query result"),
 		})
 
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(errInner)
 	s.False(isQueryTask)
 
@@ -796,7 +796,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -804,7 +804,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 	// activity handler
 	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	queryHandler := func(task *workflowservice.PollForDecisionTaskResponse) ([]byte, error) {
@@ -831,7 +831,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 
 	// Make first decision to schedule activity
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	type QueryResult struct {
@@ -858,7 +858,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 	}
 
 	signalName := "my signal"
-	signalInput := []byte("my signal input.")
+	signalInput := []byte("my signal input")
 	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Domain: s.domainName,
 		WorkflowExecution: &commonproto.WorkflowExecution{
@@ -958,7 +958,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -966,7 +966,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 	// activity handler
 	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	queryHandler := func(task *workflowservice.PollForDecisionTaskResponse) ([]byte, error) {
@@ -993,7 +993,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 
 	// Make first decision to schedule activity
 	_, err := poller.PollAndProcessDecisionTask(false, false)
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	type QueryResult struct {
@@ -1022,7 +1022,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 	// send a signal that will take 5 seconds to handle
 	// this causes the signal to still be outstanding at the time query arrives
 	signalName := "my signal"
-	signalInput := []byte("my signal input.")
+	signalInput := []byte("my signal input")
 	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Domain: s.domainName,
 		WorkflowExecution: &commonproto.WorkflowExecution{
@@ -1144,7 +1144,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -1152,7 +1152,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 	// activity handler
 	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	queryHandler := func(task *workflowservice.PollForDecisionTaskResponse) ([]byte, error) {
@@ -1181,7 +1181,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 
 	// Make first decision to schedule activity
 	_, err := poller.PollAndProcessDecisionTaskWithAttempt(false, false, false, true, int64(0))
-	s.Logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	type QueryResult struct {
@@ -1210,7 +1210,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 	// send a signal that will take 5 seconds to handle
 	// this causes the signal to still be outstanding at the time query arrives
 	signalName := "my signal"
-	signalInput := []byte("my signal input.")
+	signalInput := []byte("my signal input")
 	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Domain: s.domainName,
 		WorkflowExecution: &commonproto.WorkflowExecution{
@@ -1232,7 +1232,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewDecisionTask_Sticky()
 
 		// at this point there is a decision task started on the worker so this second signal will become buffered
 		signalName := "my signal"
-		signalInput := []byte("my signal input.")
+		signalInput := []byte("my signal input")
 		_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 			Domain: s.domainName,
 			WorkflowExecution: &commonproto.WorkflowExecution{

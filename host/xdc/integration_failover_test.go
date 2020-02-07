@@ -295,7 +295,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 		return []byte(strconv.Itoa(int(activityCounter))), []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -303,7 +303,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	queryType := "test-query"
@@ -343,7 +343,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 
 	// make some progress in cluster 1
 	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	type QueryResult struct {
@@ -371,7 +371,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller.PollAndProcessDecisionTask(false, false)
-		s.logger.Error("PollAndProcessQueryTask", tag.Error(err))
+		s.logger.Info("PollAndProcessQueryTask", tag.Error(err))
 		s.NoError(errInner)
 		if isQueryTask {
 			break
@@ -394,7 +394,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller2.PollAndProcessDecisionTask(false, false)
-		s.logger.Error("PollAndProcessQueryTask", tag.Error(err))
+		s.logger.Info("PollAndProcessQueryTask", tag.Error(err))
 		s.NoError(errInner)
 		if isQueryTask {
 			break
@@ -452,7 +452,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller.PollAndProcessDecisionTask(false, false)
-		s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+		s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.NoError(errInner)
 		if isQueryTask {
 			break
@@ -472,7 +472,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	for {
 		// loop until process the query task
 		isQueryTask, errInner := poller2.PollAndProcessDecisionTask(false, false)
-		s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+		s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.NoError(errInner)
 		if isQueryTask {
 			break
@@ -488,12 +488,12 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 
 	// make process in cluster 2
 	err = poller2.PollAndProcessActivityTask(false)
-	s.logger.Error("PollAndProcessActivityTask 2", tag.Error(err))
+	s.logger.Info("PollAndProcessActivityTask 2", tag.Error(err))
 	s.NoError(err)
 
 	s.False(workflowComplete)
 	_, err = poller2.PollAndProcessDecisionTask(false, false)
-	s.logger.Error("PollAndProcessDecisionTask 2", tag.Error(err))
+	s.logger.Info("PollAndProcessDecisionTask 2", tag.Error(err))
 	s.NoError(err)
 	s.True(workflowComplete)
 
@@ -585,7 +585,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -615,13 +615,13 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	}
 
 	_, err = poller1.PollAndProcessDecisionTaskWithAttemptAndRetry(false, false, false, true, 0, 5)
-	s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 	s.True(firstDecisionMade)
 
 	// Send a signal in cluster
 	signalName := "my signal"
-	signalInput := []byte("my signal input.")
+	signalInput := []byte("my signal input")
 	_, err = client1.SignalWorkflowExecution(host.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Domain: domainName,
 		WorkflowExecution: &commonproto.WorkflowExecution{
@@ -651,7 +651,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	time.Sleep(cacheRefreshInterval)
 
 	_, err = poller2.PollAndProcessDecisionTaskWithAttemptAndRetry(false, false, false, true, 0, 5)
-	s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 	s.True(secondDecisionMade)
 
@@ -681,7 +681,7 @@ func (s *integrationClustersTestSuite) TestStickyDecisionFailover() {
 	s.Equal(int64(10), updateResp.GetFailoverVersion())
 
 	_, err = poller1.PollAndProcessDecisionTask(true, false)
-	s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 	s.True(workflowCompleted)
 }
@@ -746,7 +746,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -775,7 +775,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 
 	// Complete the workflow in cluster 1
 	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 	s.Equal(1, workflowCompleteTimes)
 
@@ -820,7 +820,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	s.logger.Info("StartWorkflowExecution in cluster 2: ", tag.WorkflowRunID(we.GetRunId()))
 
 	_, err = poller2.PollAndProcessDecisionTask(false, false)
-	s.logger.Error("PollAndProcessDecisionTask 2", tag.Error(err))
+	s.logger.Info("PollAndProcessDecisionTask 2", tag.Error(err))
 	s.NoError(err)
 	s.Equal(2, workflowCompleteTimes)
 }
@@ -899,7 +899,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 		return []byte(strconv.Itoa(int(activityCounter))), []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -907,7 +907,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	poller := &host.TaskPoller{
@@ -923,7 +923,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 
 	// make some progress in cluster 1
 	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 
 	// update domain to fail over
@@ -943,8 +943,8 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	time.Sleep(cacheRefreshInterval)
 
 	// terminate workflow at cluster 2
-	terminateReason := "terminate reason."
-	terminateDetails := []byte("terminate details.")
+	terminateReason := "terminate reason"
+	terminateDetails := []byte("terminate details")
 	_, err = client2.TerminateWorkflowExecution(host.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Domain: domainName,
 		WorkflowExecution: &commonproto.WorkflowExecution{
@@ -972,7 +972,7 @@ GetHistoryLoop:
 
 		lastEvent := history.Events[len(history.Events)-1]
 		if lastEvent.EventType != enums.EventTypeWorkflowExecutionTerminated {
-			s.logger.Warn("Execution not terminated yet.")
+			s.logger.Warn("Execution not terminated yet")
 			time.Sleep(100 * time.Millisecond)
 			continue GetHistoryLoop
 		}
@@ -1086,7 +1086,7 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 		return []byte(strconv.Itoa(int(continueAsNewCounter))), []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -1114,7 +1114,7 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 	// make some progress in cluster 1 and did some continueAsNew
 	for i := 0; i < 3; i++ {
 		_, err := poller.PollAndProcessDecisionTask(false, false)
-		s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+		s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.NoError(err, strconv.Itoa(i))
 	}
 
@@ -1137,7 +1137,7 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 	// finish the rest in cluster 2
 	for i := 0; i < 2; i++ {
 		_, err := poller2.PollAndProcessDecisionTask(false, false)
-		s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+		s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 		s.NoError(err, strconv.Itoa(i))
 	}
 
@@ -1211,7 +1211,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -1238,7 +1238,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 
 	// Send a signal in cluster 1
 	signalName := "my signal"
-	signalInput := []byte("my signal input.")
+	signalInput := []byte("my signal input")
 	_, err = client1.SignalWorkflowExecution(host.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Domain: domainName,
 		WorkflowExecution: &commonproto.WorkflowExecution{
@@ -1254,7 +1254,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	// Process signal in cluster 1
 	s.False(eventSignaled)
 	_, err = poller.PollAndProcessDecisionTask(false, false)
-	s.logger.Error("PollAndProcessDecisionTask", tag.Error(err))
+	s.logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NoError(err)
 	s.True(eventSignaled)
 
@@ -1296,7 +1296,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 
 	// Send another signal in cluster 2
 	signalName2 := "my signal 2"
-	signalInput2 := []byte("my signal input 2.")
+	signalInput2 := []byte("my signal input 2")
 	_, err = client2.SignalWorkflowExecution(host.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Domain: domainName,
 		WorkflowExecution: &commonproto.WorkflowExecution{
@@ -1311,7 +1311,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	// Process signal in cluster 2
 	eventSignaled = false
 	_, err = poller2.PollAndProcessDecisionTask(false, false)
-	s.logger.Error("PollAndProcessDecisionTask 2", tag.Error(err))
+	s.logger.Info("PollAndProcessDecisionTask 2", tag.Error(err))
 	s.NoError(err)
 	s.True(eventSignaled)
 
@@ -1395,7 +1395,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 
 			// Send a signal in cluster
 			signalName := "my signal"
-			signalInput := []byte("my signal input.")
+			signalInput := []byte("my signal input")
 			_, err = client1.SignalWorkflowExecution(host.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 				Domain: domainName,
 				WorkflowExecution: &commonproto.WorkflowExecution{
@@ -1439,7 +1439,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -1588,7 +1588,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}
@@ -1603,7 +1603,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 			TaskToken: taskToken, Details: heartbeatDetails})
 		s.NoError(err)
 		time.Sleep(5 * time.Second)
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	// activity handler
@@ -1611,7 +1611,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	atHandler2 := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 		activity2Called = true
-		return []byte("Activity Result."), false, nil
+		return []byte("Activity Result"), false, nil
 	}
 
 	poller1 := &host.TaskPoller{
@@ -1779,7 +1779,7 @@ func (s *integrationClustersTestSuite) TestTransientDecisionFailover() {
 		return nil, []*commonproto.Decision{{
 			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
 			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
+				Result: []byte("Done"),
 			}},
 		}}, nil
 	}

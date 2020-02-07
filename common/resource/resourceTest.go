@@ -32,8 +32,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/temporalio/temporal/.gen/go/history/historyservicetest"
-	"github.com/temporalio/temporal/.gen/go/matching/matchingservicetest"
 	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
+	"github.com/temporalio/temporal/.gen/proto/matchingservicemock"
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/client/frontend"
@@ -82,7 +82,7 @@ type (
 
 		SDKClient            *workflowservicemock.MockWorkflowServiceClient
 		FrontendClient       *workflowservicemock.MockWorkflowServiceClient
-		MatchingClient       *matchingservicetest.MockClient
+		MatchingClient       *matchingservicemock.MockMatchingServiceClient
 		HistoryClient        *historyservicetest.MockClient
 		RemoteAdminClient    *adminservicemock.MockAdminServiceClient
 		RemoteFrontendClient *workflowservicemock.MockWorkflowServiceClient
@@ -126,7 +126,7 @@ func NewTest(
 	logger := loggerimpl.NewLogger(zapLogger)
 
 	frontendClient := workflowservicemock.NewMockWorkflowServiceClient(controller)
-	matchingClient := matchingservicetest.NewMockClient(controller)
+	matchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
 	historyClient := historyservicetest.NewMockClient(controller)
 	remoteFrontendClient := workflowservicemock.NewMockWorkflowServiceClient(controller)
 	remoteAdminClient := adminservicemock.NewMockAdminServiceClient(controller)

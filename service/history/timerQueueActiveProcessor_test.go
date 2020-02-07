@@ -30,12 +30,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+	commonproto "go.temporal.io/temporal-proto/common"
 
 	"github.com/temporalio/temporal/.gen/go/history"
-	"github.com/temporalio/temporal/.gen/go/matching"
-	"github.com/temporalio/temporal/.gen/go/matching/matchingservicetest"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/matchingservice"
+	"github.com/temporalio/temporal/.gen/proto/matchingservicemock"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
@@ -57,7 +59,7 @@ type (
 		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MocktimerQueueProcessor
 		mockDomainCache          *cache.MockDomainCache
-		mockMatchingClient       *matchingservicetest.MockClient
+		mockMatchingClient       *matchingservicemock.MockMatchingServiceClient
 		mockClusterMetadata      *cluster.MockMetadata
 
 		mockHistoryEngine *historyEngineImpl
@@ -906,16 +908,16 @@ func (s *timerQueueActiveProcessorSuite) TestWorkflowBackoffTimer_Noop() {
 
 func (s *timerQueueActiveProcessorSuite) TestActivityRetryTimer_Fire() {
 
-	execution := workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(uuid.New()),
+	execution := commonproto.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.New(),
 	}
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
 	mutableState := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
-		execution,
+		*adapter.ToThriftWorkflowExecution(&execution),
 		&history.StartWorkflowExecutionRequest{
 			DomainUUID: common.StringPtr(s.domainID),
 			StartRequest: &workflow.StartWorkflowExecutionRequest{
@@ -976,17 +978,17 @@ func (s *timerQueueActiveProcessorSuite) TestActivityRetryTimer_Fire() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockMatchingClient.EXPECT().AddActivityTask(
 		gomock.Any(),
-		&matching.AddActivityTaskRequest{
-			DomainUUID:       common.StringPtr(activityInfo.DomainID),
-			SourceDomainUUID: common.StringPtr(activityInfo.DomainID),
+		&matchingservice.AddActivityTaskRequest{
+			DomainUUID:       activityInfo.DomainID,
+			SourceDomainUUID: activityInfo.DomainID,
 			Execution:        &execution,
-			TaskList: &workflow.TaskList{
-				Name: common.StringPtr(activityInfo.TaskList),
+			TaskList: &commonproto.TaskList{
+				Name: activityInfo.TaskList,
 			},
-			ScheduleId:                    common.Int64Ptr(activityInfo.ScheduleID),
-			ScheduleToStartTimeoutSeconds: common.Int32Ptr(activityInfo.ScheduleToStartTimeout),
+			ScheduleId:                    activityInfo.ScheduleID,
+			ScheduleToStartTimeoutSeconds: activityInfo.ScheduleToStartTimeout,
 		},
-	).Return(nil).Times(1)
+	).Return(&matchingservice.AddActivityTaskResponse{}, nil).Times(1)
 
 	_, err = s.timerQueueActiveProcessor.process(newTaskInfo(nil, timerTask, s.logger))
 	s.NoError(err)

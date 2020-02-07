@@ -155,7 +155,7 @@ func New(
 
 	var grpcListener net.Listener
 	var grpcDispatcher *yarpc.Dispatcher
-	if serviceName == common.FrontendServiceName {
+	if serviceName == common.FrontendServiceName || serviceName == common.MatchingServiceName {
 		grpcListener = params.RPCFactory.GetGRPCListener()
 	} else {
 		grpcDispatcher = params.RPCFactory.GetGRPCDispatcher()
@@ -230,7 +230,7 @@ func New(
 	)
 
 	frontendRawClient := clientBean.GetFrontendClient()
-	frontendClient := frontend.NewRetryableClientGRPC(
+	frontendClient := frontend.NewRetryableClient(
 		frontendRawClient,
 		common.CreateFrontendServiceRetryPolicy(),
 		common.IsWhitelistServiceTransientErrorGRPC,
@@ -243,7 +243,7 @@ func New(
 	matchingClient := matching.NewRetryableClient(
 		matchingRawClient,
 		common.CreateMatchingServiceRetryPolicy(),
-		common.IsWhitelistServiceTransientError,
+		common.IsWhitelistServiceTransientErrorGRPC,
 	)
 
 	historyRawClient := clientBean.GetHistoryClient()
