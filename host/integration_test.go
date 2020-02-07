@@ -1271,7 +1271,7 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 	s.NotNil(err)
 	st := status.Convert(err)
 	s.Equal(codes.NotFound, st.Code())
-	s.Equal("Decision task not found", st.Message())
+	s.Equal("Decision task not found.", st.Message())
 
 	// Process signal in decider
 	_, err = poller.PollAndProcessDecisionTask(true, false)
