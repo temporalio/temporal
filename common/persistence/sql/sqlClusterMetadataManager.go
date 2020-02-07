@@ -20,6 +20,7 @@
 package sql
 
 import (
+	"net"
 	"time"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
@@ -89,7 +90,21 @@ func (s *sqlClusterMetadataManager) GetImmutableClusterMetadata() (*p.InternalGe
 
 func (s *sqlClusterMetadataManager) GetClusterMembers(request *p.GetClusterMembersRequest) (*p.GetClusterMembersResponse, error) {
 	now := time.Now().UTC()
-	rows, err := s.db.GetClusterMembers(&sqlplugin.ClusterMembershipFilter{HeartbeatSince: now.Add(-request.LastHeartbeatWithin), RecordExpiryCutoff: now})
+	filter := &sqlplugin.ClusterMembershipFilter{
+		HostIDEquals:       request.HostIDEquals,
+		RoleEquals:         request.RoleEquals,
+		RecordExpiryAfter:  now,
+	}
+
+	if request.LastHeartbeatWithin > 0 {
+		filter.LastHeartbeatAfter = now.Add(-request.LastHeartbeatWithin)
+	}
+
+	if request.RPCAddressEquals != nil {
+		filter.RPCAddressEquals = request.RPCAddressEquals.String()
+	}
+
+	rows, err := s.db.GetClusterMembers(filter)
 
 	if err != nil {
 		return nil, convertCommonErrors("GetClusterMembers", err)
@@ -98,10 +113,13 @@ func (s *sqlClusterMetadataManager) GetClusterMembers(request *p.GetClusterMembe
 	convertedRows := make([]*p.ClusterMember, 0, len(rows))
 	for _, row := range rows {
 		convertedRows = append(convertedRows, &p.ClusterMember{
-			HostID:         row.HostID,
-			RPCAddress:     row.RPCAddress,
-			SessionStarted: row.SessionStart,
-			LastHeartbeat:  row.LastHeartbeat,
+			HostID:        row.HostID,
+			Role:          row.Role,
+			RPCAddress:    net.ParseIP(row.RPCAddress),
+			RPCPort:       row.RPCPort,
+			SessionStart:  row.SessionStart,
+			LastHeartbeat: row.LastHeartbeat,
+			RecordExpiry:  row.RecordExpiry,
 		})
 	}
 
@@ -112,9 +130,11 @@ func (s *sqlClusterMetadataManager) UpsertClusterMembership(request *p.UpsertClu
 	now := time.Now().UTC()
 	recordExpiry := now.Add(request.RecordExpiry)
 	_, err := s.db.UpsertClusterMembership(&sqlplugin.ClusterMembershipRow{
-		HostID:        []byte(request.HostID),
-		RPCAddress:    request.RPCAddress,
-		SessionStart:  request.SessionStarted,
+		Role:          request.Role,
+		HostID:        request.HostID,
+		RPCAddress:    request.RPCAddress.String(),
+		RPCPort:       request.RPCPort,
+		SessionStart:  request.SessionStart,
 		LastHeartbeat: now,
 		RecordExpiry:  recordExpiry})
 
