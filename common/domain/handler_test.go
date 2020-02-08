@@ -31,9 +31,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/workflowservice"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
@@ -185,35 +186,35 @@ func (s *domainHandlerCommonSuite) TestMergeDomainData_Nil() {
 // test merging bad binaries
 func (s *domainHandlerCommonSuite) TestMergeBadBinaries_Overriding() {
 	out := s.handler.mergeBadBinaries(
-		map[string]*shared.BadBinaryInfo{
-			"k0": {Reason: common.StringPtr("reason0")},
+		map[string]*commonproto.BadBinaryInfo{
+			"k0": {Reason: "reason0"},
 		},
-		map[string]*shared.BadBinaryInfo{
-			"k0": {Reason: common.StringPtr("reason2")},
+		map[string]*commonproto.BadBinaryInfo{
+			"k0": {Reason: "reason2"},
 		}, nowInt64,
 	)
 
-	assert.True(s.T(), out.Equals(&shared.BadBinaries{
-		Binaries: map[string]*shared.BadBinaryInfo{
-			"k0": {Reason: common.StringPtr("reason2"), CreatedTimeNano: common.Int64Ptr(nowInt64)},
+	assert.True(s.T(), out.Equal(&commonproto.BadBinaries{
+		Binaries: map[string]*commonproto.BadBinaryInfo{
+			"k0": {Reason: "reason2", CreatedTimeNano: nowInt64},
 		},
 	}))
 }
 
 func (s *domainHandlerCommonSuite) TestMergeBadBinaries_Adding() {
 	out := s.handler.mergeBadBinaries(
-		map[string]*shared.BadBinaryInfo{
-			"k0": {Reason: common.StringPtr("reason0")},
+		map[string]*commonproto.BadBinaryInfo{
+			"k0": {Reason: "reason0"},
 		},
-		map[string]*shared.BadBinaryInfo{
-			"k1": {Reason: common.StringPtr("reason2")},
+		map[string]*commonproto.BadBinaryInfo{
+			"k1": {Reason: "reason2"},
 		}, nowInt64,
 	)
 
-	expected := &shared.BadBinaries{
-		Binaries: map[string]*shared.BadBinaryInfo{
-			"k0": {Reason: common.StringPtr("reason0")},
-			"k1": {Reason: common.StringPtr("reason2"), CreatedTimeNano: common.Int64Ptr(nowInt64)},
+	expected := &commonproto.BadBinaries{
+		Binaries: map[string]*commonproto.BadBinaryInfo{
+			"k0": {Reason: "reason0"},
+			"k1": {Reason: "reason2", CreatedTimeNano: nowInt64},
 		},
 	}
 	assert.Equal(s.T(), out.String(), expected.String())
@@ -221,19 +222,19 @@ func (s *domainHandlerCommonSuite) TestMergeBadBinaries_Adding() {
 
 func (s *domainHandlerCommonSuite) TestMergeBadBinaries_Merging() {
 	out := s.handler.mergeBadBinaries(
-		map[string]*shared.BadBinaryInfo{
-			"k0": {Reason: common.StringPtr("reason0")},
+		map[string]*commonproto.BadBinaryInfo{
+			"k0": {Reason: "reason0"},
 		},
-		map[string]*shared.BadBinaryInfo{
-			"k0": {Reason: common.StringPtr("reason1")},
-			"k1": {Reason: common.StringPtr("reason2")},
+		map[string]*commonproto.BadBinaryInfo{
+			"k0": {Reason: "reason1"},
+			"k1": {Reason: "reason2"},
 		}, nowInt64,
 	)
 
-	assert.True(s.T(), out.Equals(&shared.BadBinaries{
-		Binaries: map[string]*shared.BadBinaryInfo{
-			"k0": {Reason: common.StringPtr("reason1"), CreatedTimeNano: common.Int64Ptr(nowInt64)},
-			"k1": {Reason: common.StringPtr("reason2"), CreatedTimeNano: common.Int64Ptr(nowInt64)},
+	assert.True(s.T(), out.Equal(&commonproto.BadBinaries{
+		Binaries: map[string]*commonproto.BadBinaryInfo{
+			"k0": {Reason: "reason1", CreatedTimeNano: nowInt64},
+			"k1": {Reason: "reason2", CreatedTimeNano: nowInt64},
 		},
 	}))
 }
@@ -241,16 +242,16 @@ func (s *domainHandlerCommonSuite) TestMergeBadBinaries_Merging() {
 func (s *domainHandlerCommonSuite) TestMergeBadBinaries_Nil() {
 	out := s.handler.mergeBadBinaries(
 		nil,
-		map[string]*shared.BadBinaryInfo{
-			"k0": {Reason: common.StringPtr("reason1")},
-			"k1": {Reason: common.StringPtr("reason2")},
+		map[string]*commonproto.BadBinaryInfo{
+			"k0": {Reason: "reason1"},
+			"k1": {Reason: "reason2"},
 		}, nowInt64,
 	)
 
-	assert.True(s.T(), out.Equals(&shared.BadBinaries{
-		Binaries: map[string]*shared.BadBinaryInfo{
-			"k0": {Reason: common.StringPtr("reason1"), CreatedTimeNano: common.Int64Ptr(nowInt64)},
-			"k1": {Reason: common.StringPtr("reason2"), CreatedTimeNano: common.Int64Ptr(nowInt64)},
+	assert.True(s.T(), out.Equal(&commonproto.BadBinaries{
+		Binaries: map[string]*commonproto.BadBinaryInfo{
+			"k0": {Reason: "reason1", CreatedTimeNano: nowInt64},
+			"k1": {Reason: "reason2", CreatedTimeNano: nowInt64},
 		},
 	}))
 }
@@ -264,22 +265,23 @@ func (s *domainHandlerCommonSuite) TestListDomain() {
 	data1 := map[string]string{"some random key 1": "some random value 1"}
 	isGlobalDomain1 := false
 	activeClusterName1 := s.ClusterMetadata.GetCurrentClusterName()
-	var cluster1 []*shared.ClusterReplicationConfiguration
+	var cluster1 []*commonproto.ClusterReplicationConfiguration
 	for _, replicationConfig := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
-		cluster1 = append(cluster1, &shared.ClusterReplicationConfiguration{
-			ClusterName: common.StringPtr(replicationConfig.ClusterName),
+		cluster1 = append(cluster1, &commonproto.ClusterReplicationConfiguration{
+			ClusterName: replicationConfig.ClusterName,
 		})
 	}
-	err := s.handler.RegisterDomain(context.Background(), &shared.RegisterDomainRequest{
-		Name:                                   common.StringPtr(domainName1),
-		Description:                            common.StringPtr(description1),
-		OwnerEmail:                             common.StringPtr(email1),
-		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention1),
-		EmitMetric:                             common.BoolPtr(emitMetric1),
+	registerResp, err := s.handler.RegisterDomain(context.Background(), &workflowservice.RegisterDomainRequest{
+		Name:                                   domainName1,
+		Description:                            description1,
+		OwnerEmail:                             email1,
+		WorkflowExecutionRetentionPeriodInDays: retention1,
+		EmitMetric:                             emitMetric1,
 		Data:                                   data1,
-		IsGlobalDomain:                         common.BoolPtr(isGlobalDomain1),
+		IsGlobalDomain:                         isGlobalDomain1,
 	})
-	s.Nil(err)
+	s.NoError(err)
+	s.Nil(registerResp)
 
 	domainName2 := s.getRandomDomainName()
 	description2 := "some random description 2"
@@ -289,131 +291,135 @@ func (s *domainHandlerCommonSuite) TestListDomain() {
 	data2 := map[string]string{"some random key 2": "some random value 2"}
 	isGlobalDomain2 := true
 	activeClusterName2 := ""
-	var cluster2 []*shared.ClusterReplicationConfiguration
+	var cluster2 []*commonproto.ClusterReplicationConfiguration
 	for clusterName := range s.ClusterMetadata.GetAllClusterInfo() {
 		if clusterName != s.ClusterMetadata.GetCurrentClusterName() {
 			activeClusterName2 = clusterName
 		}
-		cluster2 = append(cluster2, &shared.ClusterReplicationConfiguration{
-			ClusterName: common.StringPtr(clusterName),
+		cluster2 = append(cluster2, &commonproto.ClusterReplicationConfiguration{
+			ClusterName: clusterName,
 		})
 	}
 	s.mockProducer.On("Publish", mock.Anything).Return(nil).Once()
-	err = s.handler.RegisterDomain(context.Background(), &shared.RegisterDomainRequest{
-		Name:                                   common.StringPtr(domainName2),
-		Description:                            common.StringPtr(description2),
-		OwnerEmail:                             common.StringPtr(email2),
-		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention2),
-		EmitMetric:                             common.BoolPtr(emitMetric2),
+	registerResp, err = s.handler.RegisterDomain(context.Background(), &workflowservice.RegisterDomainRequest{
+		Name:                                   domainName2,
+		Description:                            description2,
+		OwnerEmail:                             email2,
+		WorkflowExecutionRetentionPeriodInDays: retention2,
+		EmitMetric:                             emitMetric2,
 		Clusters:                               cluster2,
-		ActiveClusterName:                      common.StringPtr(activeClusterName2),
+		ActiveClusterName:                      activeClusterName2,
 		Data:                                   data2,
-		IsGlobalDomain:                         common.BoolPtr(isGlobalDomain2),
+		IsGlobalDomain:                         isGlobalDomain2,
 	})
-	s.Nil(err)
+	s.NoError(err)
+	s.Nil(registerResp)
 
-	domains := map[string]*shared.DescribeDomainResponse{}
+	domains := map[string]*workflowservice.DescribeDomainResponse{}
 	pagesize := int32(1)
 	var token []byte
 	for doPaging := true; doPaging; doPaging = len(token) > 0 {
-		resp, err := s.handler.ListDomains(context.Background(), &shared.ListDomainsRequest{
-			PageSize:      common.Int32Ptr(pagesize),
+		resp, err := s.handler.ListDomains(context.Background(), &workflowservice.ListDomainsRequest{
+			PageSize:      pagesize,
 			NextPageToken: token,
 		})
-		s.Nil(err)
+		s.NoError(err)
 		token = resp.NextPageToken
 		s.True(len(resp.Domains) <= int(pagesize))
 		if len(resp.Domains) > 0 {
-			s.NotEmpty(resp.Domains[0].DomainInfo.GetUUID())
-			resp.Domains[0].DomainInfo.UUID = common.StringPtr("")
+			s.NotEmpty(resp.Domains[0].DomainInfo.GetUuid())
+			resp.Domains[0].DomainInfo.Uuid = ""
 			domains[resp.Domains[0].DomainInfo.GetName()] = resp.Domains[0]
 		}
 	}
 	delete(domains, common.SystemLocalDomainName)
-	s.Equal(map[string]*shared.DescribeDomainResponse{
-		domainName1: &shared.DescribeDomainResponse{
-			DomainInfo: &shared.DomainInfo{
-				Name:        common.StringPtr(domainName1),
-				Status:      shared.DomainStatusRegistered.Ptr(),
-				Description: common.StringPtr(description1),
-				OwnerEmail:  common.StringPtr(email1),
+	s.Equal(map[string]*workflowservice.DescribeDomainResponse{
+		domainName1: &workflowservice.DescribeDomainResponse{
+			DomainInfo: &commonproto.DomainInfo{
+				Name:        domainName1,
+				Status:      enums.DomainStatusRegistered,
+				Description: description1,
+				OwnerEmail:  email1,
 				Data:        data1,
-				UUID:        common.StringPtr(""),
+				Uuid:        "",
 			},
-			Configuration: &shared.DomainConfiguration{
-				WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention1),
-				EmitMetric:                             common.BoolPtr(emitMetric1),
-				HistoryArchivalStatus:                  shared.ArchivalStatusDisabled.Ptr(),
-				HistoryArchivalURI:                     common.StringPtr(""),
-				VisibilityArchivalStatus:               shared.ArchivalStatusDisabled.Ptr(),
-				VisibilityArchivalURI:                  common.StringPtr(""),
-				BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
+			Configuration: &commonproto.DomainConfiguration{
+				WorkflowExecutionRetentionPeriodInDays: retention1,
+				EmitMetric:                             &commonproto.BoolValue{Value: emitMetric1},
+				HistoryArchivalStatus:                  enums.ArchivalStatusDisabled,
+				HistoryArchivalURI:                     "",
+				VisibilityArchivalStatus:               enums.ArchivalStatusDisabled,
+				VisibilityArchivalURI:                  "",
+				BadBinaries:                            &commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}},
 			},
-			ReplicationConfiguration: &shared.DomainReplicationConfiguration{
-				ActiveClusterName: common.StringPtr(activeClusterName1),
+			ReplicationConfiguration: &commonproto.DomainReplicationConfiguration{
+				ActiveClusterName: activeClusterName1,
 				Clusters:          cluster1,
 			},
-			FailoverVersion: common.Int64Ptr(common.EmptyVersion),
-			IsGlobalDomain:  common.BoolPtr(isGlobalDomain1),
+			FailoverVersion: common.EmptyVersion,
+			IsGlobalDomain:  isGlobalDomain1,
 		},
-		domainName2: &shared.DescribeDomainResponse{
-			DomainInfo: &shared.DomainInfo{
-				Name:        common.StringPtr(domainName2),
-				Status:      shared.DomainStatusRegistered.Ptr(),
-				Description: common.StringPtr(description2),
-				OwnerEmail:  common.StringPtr(email2),
+		domainName2: &workflowservice.DescribeDomainResponse{
+			DomainInfo: &commonproto.DomainInfo{
+				Name:        domainName2,
+				Status:      enums.DomainStatusRegistered,
+				Description: description2,
+				OwnerEmail:  email2,
 				Data:        data2,
-				UUID:        common.StringPtr(""),
+				Uuid:        "",
 			},
-			Configuration: &shared.DomainConfiguration{
-				WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention2),
-				EmitMetric:                             common.BoolPtr(emitMetric2),
-				HistoryArchivalStatus:                  shared.ArchivalStatusDisabled.Ptr(),
-				HistoryArchivalURI:                     common.StringPtr(""),
-				VisibilityArchivalStatus:               shared.ArchivalStatusDisabled.Ptr(),
-				VisibilityArchivalURI:                  common.StringPtr(""),
-				BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
+			Configuration: &commonproto.DomainConfiguration{
+				WorkflowExecutionRetentionPeriodInDays: retention2,
+				EmitMetric:                             &commonproto.BoolValue{Value: emitMetric2},
+				HistoryArchivalStatus:                  enums.ArchivalStatusDisabled,
+				HistoryArchivalURI:                     "",
+				VisibilityArchivalStatus:               enums.ArchivalStatusDisabled,
+				VisibilityArchivalURI:                  "",
+				BadBinaries:                            &commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}},
 			},
-			ReplicationConfiguration: &shared.DomainReplicationConfiguration{
-				ActiveClusterName: common.StringPtr(activeClusterName2),
+			ReplicationConfiguration: &commonproto.DomainReplicationConfiguration{
+				ActiveClusterName: activeClusterName2,
 				Clusters:          cluster2,
 			},
-			FailoverVersion: common.Int64Ptr(s.ClusterMetadata.GetNextFailoverVersion(activeClusterName2, 0)),
-			IsGlobalDomain:  common.BoolPtr(isGlobalDomain2),
+			FailoverVersion: s.ClusterMetadata.GetNextFailoverVersion(activeClusterName2, 0),
+			IsGlobalDomain:  isGlobalDomain2,
 		},
 	}, domains)
 }
 
 func (s *domainHandlerCommonSuite) TestRegisterDomain_InvalidRetentionPeriod() {
-	registerRequest := &workflow.RegisterDomainRequest{
-		Name:                                   common.StringPtr("random domain name"),
-		Description:                            common.StringPtr("random domain name"),
-		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(int32(0)),
-		IsGlobalDomain:                         common.BoolPtr(false),
+	registerRequest := &workflowservice.RegisterDomainRequest{
+		Name:                                   "random domain name",
+		Description:                            "random domain name",
+		WorkflowExecutionRetentionPeriodInDays: int32(0),
+		IsGlobalDomain:                         false,
 	}
-	err := s.handler.RegisterDomain(context.Background(), registerRequest)
+	resp, err := s.handler.RegisterDomain(context.Background(), registerRequest)
 	s.Equal(errInvalidRetentionPeriod, err)
+	s.Nil(resp)
 }
 
 func (s *domainHandlerCommonSuite) TestUpdateDomain_InvalidRetentionPeriod() {
 	domain := "random domain name"
-	registerRequest := &workflow.RegisterDomainRequest{
-		Name:                                   common.StringPtr(domain),
-		Description:                            common.StringPtr(domain),
-		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(int32(10)),
-		IsGlobalDomain:                         common.BoolPtr(false),
+	registerRequest := &workflowservice.RegisterDomainRequest{
+		Name:                                   domain,
+		Description:                            domain,
+		WorkflowExecutionRetentionPeriodInDays: int32(10),
+		IsGlobalDomain:                         false,
 	}
-	err := s.handler.RegisterDomain(context.Background(), registerRequest)
+	registerResp, err := s.handler.RegisterDomain(context.Background(), registerRequest)
 	s.NoError(err)
+	s.Nil(registerResp)
 
-	updateRequest := &workflow.UpdateDomainRequest{
-		Name: common.StringPtr(domain),
-		Configuration: &workflow.DomainConfiguration{
-			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(int32(-1)),
+	updateRequest := &workflowservice.UpdateDomainRequest{
+		Name: domain,
+		Configuration: &commonproto.DomainConfiguration{
+			WorkflowExecutionRetentionPeriodInDays: int32(-1),
 		},
 	}
-	_, err = s.handler.UpdateDomain(context.Background(), updateRequest)
+	resp, err := s.handler.UpdateDomain(context.Background(), updateRequest)
 	s.Equal(errInvalidRetentionPeriod, err)
+	s.Nil(resp)
 }
 
 func (s *domainHandlerCommonSuite) getRandomDomainName() string {
