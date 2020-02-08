@@ -24,7 +24,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
+	"go.temporal.io/temporal-proto/enums"
+
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
@@ -43,7 +44,7 @@ type (
 		ClusterConfiguredForArchival() bool
 		GetClusterStatus() ArchivalStatus
 		ReadEnabled() bool
-		GetDomainDefaultStatus() shared.ArchivalStatus
+		GetDomainDefaultStatus() enums.ArchivalStatus
 		GetDomainDefaultURI() string
 	}
 
@@ -56,7 +57,7 @@ type (
 		staticClusterStatus  ArchivalStatus
 		dynamicClusterStatus dynamicconfig.StringPropertyFn
 		enableRead           dynamicconfig.BoolPropertyFn
-		domainDefaultStatus  shared.ArchivalStatus
+		domainDefaultStatus  enums.ArchivalStatus
 		domainDefaultURI     string
 	}
 
@@ -145,7 +146,7 @@ func NewDisabledArchvialConfig() ArchivalConfig {
 		staticClusterStatus:  ArchivalDisabled,
 		dynamicClusterStatus: nil,
 		enableRead:           nil,
-		domainDefaultStatus:  shared.ArchivalStatusDisabled,
+		domainDefaultStatus:  enums.ArchivalStatusDisabled,
 		domainDefaultURI:     "",
 	}
 }
@@ -180,7 +181,7 @@ func (a *archivalConfig) ReadEnabled() bool {
 	return a.enableRead()
 }
 
-func (a *archivalConfig) GetDomainDefaultStatus() shared.ArchivalStatus {
+func (a *archivalConfig) GetDomainDefaultStatus() enums.ArchivalStatus {
 	return a.domainDefaultStatus
 }
 
@@ -201,13 +202,13 @@ func getClusterArchivalStatus(str string) (ArchivalStatus, error) {
 	return ArchivalDisabled, fmt.Errorf("invalid archival status of %v for cluster, valid status are: {\"\", \"disabled\", \"paused\", \"enabled\"}", str)
 }
 
-func getDomainArchivalStatus(str string) (shared.ArchivalStatus, error) {
+func getDomainArchivalStatus(str string) (enums.ArchivalStatus, error) {
 	str = strings.TrimSpace(strings.ToLower(str))
 	switch str {
 	case "", common.ArchivalDisabled:
-		return shared.ArchivalStatusDisabled, nil
+		return enums.ArchivalStatusDisabled, nil
 	case common.ArchivalEnabled:
-		return shared.ArchivalStatusEnabled, nil
+		return enums.ArchivalStatusEnabled, nil
 	}
-	return shared.ArchivalStatusDisabled, fmt.Errorf("invalid archival status of %v for domain, valid status are: {\"\", \"disabled\", \"enabled\"}", str)
+	return enums.ArchivalStatusDisabled, fmt.Errorf("invalid archival status of %v for domain, valid status are: {\"\", \"disabled\", \"enabled\"}", str)
 }

@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 	"google.golang.org/grpc/codes"
 
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/domain"
 )
 
@@ -387,7 +386,8 @@ func (d *domainCLIImpl) registerDomain(
 		return err
 	}
 
-	return d.domainHandler.RegisterDomain(ctx, adapter.ToThriftRegisterDomainRequest(request))
+	_, err := d.domainHandler.RegisterDomain(ctx, request)
+	return err
 }
 
 func (d *domainCLIImpl) updateDomain(
@@ -399,7 +399,7 @@ func (d *domainCLIImpl) updateDomain(
 		return err
 	}
 
-	_, err := d.domainHandler.UpdateDomain(ctx, adapter.ToThriftUpdateDomainRequest(request))
+	_, err := d.domainHandler.UpdateDomain(ctx, request)
 	return err
 }
 
@@ -412,8 +412,8 @@ func (d *domainCLIImpl) describeDomain(
 		return d.frontendClient.DescribeDomain(ctx, request)
 	}
 
-	resp, err := d.domainHandler.DescribeDomain(ctx, adapter.ToThriftDescribeDomainRequest(request))
-	return adapter.ToProtoDescribeDomainResponse(resp), err
+	resp, err := d.domainHandler.DescribeDomain(ctx, request)
+	return resp, err
 }
 
 func clustersToString(clusters []*commonproto.ClusterReplicationConfiguration) string {

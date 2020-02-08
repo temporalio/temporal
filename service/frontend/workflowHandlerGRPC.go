@@ -170,44 +170,116 @@ func NewWorkflowHandlerGRPC(
 func (wh *WorkflowHandlerGRPC) RegisterDomain(ctx context.Context, request *workflowservice.RegisterDomainRequest) (_ *workflowservice.RegisterDomainResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
-	err := wh.workflowHandlerThrift.RegisterDomain(ctx, adapter.ToThriftRegisterDomainRequest(request))
-	if err != nil {
-		return nil, adapter.ToProtoError(err)
+	scope, sw := wh.startRequestProfile(metrics.FrontendRegisterDomainScope)
+	defer sw.Stop()
+
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+		return nil, wh.error(err, scope)
 	}
-	return &workflowservice.RegisterDomainResponse{}, nil
+
+	if request == nil {
+		return nil, stRequestNotSet.Err()
+	}
+
+	if request.GetWorkflowExecutionRetentionPeriodInDays() > common.MaxWorkflowRetentionPeriodInDays {
+		return nil, stInvalidRetention.Err()
+	}
+
+	if err := wh.checkPermission(wh.config, request.SecurityToken); err != nil {
+		return nil, err
+	}
+
+	if request.GetName() == "" {
+		return nil, stDomainNotSet.Err()
+	}
+
+	resp, err := wh.domainHandler.RegisterDomain(ctx, request)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	return resp, nil
 }
 
 // DescribeDomain returns the information and configuration for a registered domain.
 func (wh *WorkflowHandlerGRPC) DescribeDomain(ctx context.Context, request *workflowservice.DescribeDomainRequest) (_ *workflowservice.DescribeDomainResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
-	response, err := wh.workflowHandlerThrift.DescribeDomain(ctx, adapter.ToThriftDescribeDomainRequest(request))
-	if err != nil {
-		return nil, adapter.ToProtoError(err)
+	scope, sw := wh.startRequestProfile(metrics.FrontendDescribeDomainScope)
+	defer sw.Stop()
+
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+		return nil, wh.error(err, scope)
 	}
-	return adapter.ToProtoDescribeDomainResponse(response), nil
+
+	if request == nil {
+		return nil, stRequestNotSet.Err()
+	}
+
+	if request.GetName() == "" && request.GetUuid() == "" {
+		return nil, stDomainNotSet.Err()
+	}
+
+	resp, err := wh.domainHandler.DescribeDomain(ctx, request)
+	if err != nil {
+		return resp, wh.error(err, scope)
+	}
+	return resp, err
 }
 
 // ListDomains returns the information and configuration for all domains.
 func (wh *WorkflowHandlerGRPC) ListDomains(ctx context.Context, request *workflowservice.ListDomainsRequest) (_ *workflowservice.ListDomainsResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
-	response, err := wh.workflowHandlerThrift.ListDomains(ctx, adapter.ToThriftListDomainsRequest(request))
-	if err != nil {
-		return nil, adapter.ToProtoError(err)
+	scope, sw := wh.startRequestProfile(metrics.FrontendListDomainsScope)
+	defer sw.Stop()
+
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+		return nil, wh.error(err, scope)
 	}
-	return adapter.ToProtoListDomainsResponse(response), nil
+
+	if request == nil {
+		return nil, stRequestNotSet.Err()
+	}
+
+	resp, err := wh.domainHandler.ListDomains(ctx, request)
+	if err != nil {
+		return resp, wh.error(err, scope)
+	}
+	return resp, err
 }
 
 // UpdateDomain is used to update the information and configuration for a registered domain.
 func (wh *WorkflowHandlerGRPC) UpdateDomain(ctx context.Context, request *workflowservice.UpdateDomainRequest) (_ *workflowservice.UpdateDomainResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
-	response, err := wh.workflowHandlerThrift.UpdateDomain(ctx, adapter.ToThriftUpdateDomainRequest(request))
-	if err != nil {
-		return nil, adapter.ToProtoError(err)
+	scope, sw := wh.startRequestProfile(metrics.FrontendUpdateDomainScope)
+	defer sw.Stop()
+
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+		return nil, wh.error(err, scope)
 	}
-	return adapter.ToProtoUpdateDomainResponse(response), nil
+
+	if request == nil {
+		return nil, stRequestNotSet.Err()
+	}
+
+	// don't require permission for failover request
+	if !wh.isFailoverRequest(request) {
+		if err := wh.checkPermission(wh.config, request.SecurityToken); err != nil {
+			return nil, err
+		}
+	}
+
+	if request.GetName() == "" {
+		return nil, stDomainNotSet.Err()
+	}
+
+	resp, err := wh.domainHandler.UpdateDomain(ctx, request)
+	if err != nil {
+		return resp, wh.error(err, scope)
+	}
+	return resp, err
 }
 
 // DeprecateDomain us used to update status of a registered domain to DEPRECATED.  Once the domain is deprecated
@@ -216,11 +288,30 @@ func (wh *WorkflowHandlerGRPC) UpdateDomain(ctx context.Context, request *workfl
 func (wh *WorkflowHandlerGRPC) DeprecateDomain(ctx context.Context, request *workflowservice.DeprecateDomainRequest) (_ *workflowservice.DeprecateDomainResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
-	err := wh.workflowHandlerThrift.DeprecateDomain(ctx, adapter.ToThriftDeprecateDomainRequest(request))
-	if err != nil {
-		return nil, adapter.ToProtoError(err)
+	scope, sw := wh.startRequestProfile(metrics.FrontendDeprecateDomainScope)
+	defer sw.Stop()
+
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+		return nil, wh.error(err, scope)
 	}
-	return &workflowservice.DeprecateDomainResponse{}, nil
+
+	if request == nil {
+		return nil, stRequestNotSet.Err()
+	}
+
+	if err := wh.checkPermission(wh.config, request.SecurityToken); err != nil {
+		return nil, err
+	}
+
+	if request.GetName() == "" {
+		return nil, stDomainNotSet.Err()
+	}
+
+	resp, err := wh.domainHandler.DeprecateDomain(ctx, request)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+	return resp, err
 }
 
 // StartWorkflowExecution starts a new long running workflow instance.  It will create the instance with
@@ -1532,15 +1623,15 @@ func (wh *WorkflowHandlerGRPC) allow(d domainGetter) bool {
 }
 func (wh *WorkflowHandlerGRPC) checkPermission(
 	config *Config,
-	securityToken *string,
+	securityToken string,
 ) error {
 	if config.EnableAdminProtection() {
-		if securityToken == nil || *securityToken == "" {
-			return errNoPermission
+		if securityToken == "" {
+			return stNoPermission.Err()
 		}
 		requiredToken := config.AdminOperationToken()
-		if *securityToken != requiredToken {
-			return errNoPermission
+		if securityToken != requiredToken {
+			return stNoPermission.Err()
 		}
 	}
 	return nil
