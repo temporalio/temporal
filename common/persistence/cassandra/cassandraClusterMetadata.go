@@ -25,6 +25,8 @@ import (
 	"strings"
 	"time"
 
+	workflow "github.com/temporalio/temporal/.gen/go/shared"
+
 	"github.com/pborman/uuid"
 
 	"github.com/gocql/gocql"
@@ -69,6 +71,7 @@ WHERE membership_partition = ?`
 	templateWithRPCAddressSuffix     = ` AND rpc_address = ?`
 	templateWithHostIDSuffix         = ` AND host_id = ?`
 	templateAllowFiltering           = ` ALLOW FILTERING`
+	templateWithSessionSuffix		 = ` AND session_start > ?`
 )
 
 type (
@@ -181,7 +184,7 @@ func (m *cassandraClusterMetadata) GetClusterMembers(request *p.GetClusterMember
 
 	if request.HostIDEquals != nil {
 		queryString.WriteString(templateWithHostIDSuffix)
-		operands = append(operands, request.HostIDEquals)
+		operands = append(operands, []byte(request.HostIDEquals))
 	}
 
 	if request.RPCAddressEquals != nil {
@@ -194,6 +197,11 @@ func (m *cassandraClusterMetadata) GetClusterMembers(request *p.GetClusterMember
 		operands = append(operands, request.RoleEquals)
 	}
 
+	if !request.SessionStartedAfter.IsZero() {
+		queryString.WriteString(templateWithSessionSuffix)
+		operands = append(operands, request.SessionStartedAfter)
+	}
+
 	// LastHeartbeat needs to be the last one as it needs AllowFilteringSuffix
 	if request.LastHeartbeatWithin > 0 {
 		queryString.WriteString(templateWithHeartbeatSinceSuffix)
@@ -204,7 +212,16 @@ func (m *cassandraClusterMetadata) GetClusterMembers(request *p.GetClusterMember
 	query := m.session.Query(queryString.String(), operands...)
 
 	// No paging enabled due to TTL on table
-	iter := query.Iter()
+	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
+
+	if iter == nil {
+		return nil, &workflow.InternalServiceError{
+			Message: "GetClusterMembers operation failed.  Not able to create query iterator.",
+		}
+	}
+
+	pagingToken := iter.PageState()
+
 	rowCount := iter.NumRows()
 	clusterMembers := make([]*p.ClusterMember, 0, rowCount)
 
@@ -234,7 +251,7 @@ func (m *cassandraClusterMetadata) GetClusterMembers(request *p.GetClusterMember
 		return nil, convertCommonErrors("GetClusterMembers", err)
 	}
 
-	return &p.GetClusterMembersResponse{ActiveMembers: clusterMembers}, nil
+	return &p.GetClusterMembersResponse{ActiveMembers: clusterMembers, NextPageToken: pagingToken}, nil
 }
 
 func (m *cassandraClusterMetadata) UpsertClusterMembership(request *p.UpsertClusterMembershipRequest) error {
