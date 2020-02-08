@@ -450,7 +450,7 @@ func (c *taskListManagerImpl) executeWithRetry(
 
 	var retryCount int64
 	err = backoff.Retry(op, persistenceOperationRetryPolicy, func(err error) bool {
-		c.logger.Debug(fmt.Sprintf("Retry executeWithRetry as task list range has changed. retryCount=%v, errType=%T", retryCount, err))
+		c.logger.Debug("Retry executeWithRetry as task list range has changed", tag.AttemptCount(retryCount), tag.Error(err))
 		if _, ok := err.(*persistence.ConditionFailedError); ok {
 			return false
 		}
@@ -459,7 +459,7 @@ func (c *taskListManagerImpl) executeWithRetry(
 
 	if _, ok := err.(*persistence.ConditionFailedError); ok {
 		c.domainScope().IncCounter(metrics.ConditionFailedErrorCounter)
-		c.logger.Debug(fmt.Sprintf("Stopping task list due to persistence condition failure. Err: %v", err))
+		c.logger.Debug("Stopping task list due to persistence condition failure", tag.Error(err))
 		c.Stop()
 	}
 	return

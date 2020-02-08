@@ -541,7 +541,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		s.NoError(err)
 		s.NotNil(result)
 		if len(result.TaskToken) == 0 {
-			s.logger.Debug(fmt.Sprintf("empty poll returned"))
+			s.logger.Debug("empty poll returned")
 			continue
 		}
 		s.EqualValues(activityID, *result.ActivityId)
@@ -681,7 +681,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		if len(result.TaskToken) == 0 {
 			// when ratelimit is set to zero, poller is expected to return empty result
 			// reset ratelimit, poll again and make sure task is returned this time
-			s.logger.Debug(fmt.Sprintf("empty poll returned"))
+			s.logger.Debug("empty poll returned")
 			s.Equal(float64(0), maxDispatch)
 			maxDispatch = _defaultTaskDispatchRPS
 			wg.Add(1)
@@ -767,7 +767,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivitiesWithZeroDisp
 	const taskCount = 100
 	s.matchingEngine.metricsClient = metrics.NewClient(tally.NewTestScope("test", nil), metrics.Matching)
 	throttleCt := s.concurrentPublishConsumeActivities(workerCount, taskCount, dispatchLimitFn)
-	s.logger.Info(fmt.Sprintf("Number of tasks throttled: %d", throttleCt))
+	s.logger.Info("Number of tasks throttled", tag.Counter(throttleCt))
 	// atleast once from 0 dispatch poll, and until TTL is hit at which time throttle limit is reset
 	// hard to predict exactly how many times, since the atomic.Value load might not have updated.
 	s.True(throttleCt >= 1)
@@ -874,7 +874,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 				s.NoError(err)
 				s.NotNil(result)
 				if len(result.TaskToken) == 0 {
-					s.logger.Debug(fmt.Sprintf("empty poll returned"))
+					s.logger.Debug("empty poll returned")
 					continue
 				}
 				s.EqualValues(activityID, *result.ActivityId)
@@ -995,7 +995,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 				}
 				s.NotNil(result)
 				if len(result.TaskToken) == 0 {
-					s.logger.Debug(fmt.Sprintf("empty poll returned"))
+					s.logger.Debug("empty poll returned")
 					continue
 				}
 				s.EqualValues(workflowExecution, *result.WorkflowExecution)
@@ -1137,10 +1137,10 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, taskRequest *gohistory.RecordActivityTaskStartedRequest) (*gohistory.RecordActivityTaskStartedResponse, error) {
 			if _, ok := startedTasks[*taskRequest.TaskId]; ok {
-				s.logger.Debug(fmt.Sprintf("From error function Mock Received DUPLICATED RecordActivityTaskStartedRequest for taskID=%v", taskRequest.TaskId))
+				s.logger.Debug("From error function Mock Received DUPLICATED RecordActivityTaskStartedRequest", tag.TaskID(*taskRequest.TaskId))
 				return nil, &workflow.EntityNotExistsError{Message: "already started"}
 			}
-			s.logger.Debug(fmt.Sprintf("Mock Received RecordActivityTaskStartedRequest for taskID=%v", taskRequest.TaskId))
+			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest", tag.TaskID(*taskRequest.TaskId))
 
 			startedTasks[*taskRequest.TaskId] = true
 			return &gohistory.RecordActivityTaskStartedResponse{
@@ -1172,7 +1172,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 				}
 				s.NotNil(result)
 				if len(result.TaskToken) == 0 {
-					s.logger.Debug(fmt.Sprintf("empty poll returned"))
+					s.logger.Debug("empty poll returned")
 					continue
 				}
 				s.EqualValues(activityID, *result.ActivityId)
@@ -1280,10 +1280,10 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 	s.mockHistoryClient.EXPECT().RecordDecisionTaskStarted(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, taskRequest *gohistory.RecordDecisionTaskStartedRequest) (*gohistory.RecordDecisionTaskStartedResponse, error) {
 			if _, ok := startedTasks[*taskRequest.TaskId]; ok {
-				s.logger.Debug(fmt.Sprintf("From error function Mock Received DUPLICATED RecordDecisionTaskStartedRequest for taskID=%v", taskRequest.TaskId))
+				s.logger.Debug("From error function Mock Received DUPLICATED RecordDecisionTaskStartedRequest", tag.TaskID(*taskRequest.TaskId))
 				return nil, &gohistory.EventAlreadyStartedError{Message: "already started"}
 			}
-			s.logger.Debug(fmt.Sprintf("Mock Received RecordDecisionTaskStartedRequest for taskID=%v", taskRequest.TaskId))
+			s.logger.Debug("Mock Received RecordDecisionTaskStartedRequest", tag.TaskID(*taskRequest.TaskId))
 			s.logger.Debug("Mock Received RecordDecisionTaskStartedRequest")
 			startedTasks[*taskRequest.TaskId] = true
 			return &gohistory.RecordDecisionTaskStartedResponse{
@@ -1308,7 +1308,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 				}
 				s.NotNil(result)
 				if len(result.TaskToken) == 0 {
-					s.logger.Debug(fmt.Sprintf("empty poll returned"))
+					s.logger.Debug("empty poll returned")
 					continue
 				}
 				s.EqualValues(workflowExecution, *result.WorkflowExecution)
@@ -1481,7 +1481,7 @@ func (s *matchingEngineSuite) TestTaskListManagerGetTaskBatch() {
 		s.NoError(err)
 		s.NotNil(result)
 		if len(result.TaskToken) == 0 {
-			s.logger.Debug(fmt.Sprintf("empty poll returned"))
+			s.logger.Debug("empty poll returned")
 			continue
 		}
 	}
@@ -1744,7 +1744,7 @@ func (m *testTaskManager) LeaseTaskList(request *persistence.LeaseTaskListReques
 	tlm.Lock()
 	defer tlm.Unlock()
 	tlm.rangeID++
-	m.logger.Debug(fmt.Sprintf("LeaseTaskList rangeID=%v", tlm.rangeID))
+	m.logger.Debug("LeaseTaskList", tag.ShardRangeID(tlm.rangeID))
 
 	return &persistence.LeaseTaskListResponse{
 		TaskListInfo: &persistence.TaskListInfo{
@@ -1760,7 +1760,7 @@ func (m *testTaskManager) LeaseTaskList(request *persistence.LeaseTaskListReques
 
 // UpdateTaskList provides a mock function with given fields: request
 func (m *testTaskManager) UpdateTaskList(request *persistence.UpdateTaskListRequest) (*persistence.UpdateTaskListResponse, error) {
-	m.logger.Debug(fmt.Sprintf("UpdateTaskList taskListInfo=%v, ackLevel=%v", request.TaskListInfo, request.TaskListInfo.AckLevel))
+	m.logger.Debug("UpdateTaskList", tag.TaskListInfo(request.TaskListInfo), tag.AckLevel(request.TaskListInfo.AckLevel))
 
 	tli := request.TaskListInfo
 	tlm := m.getTaskListManager(newTestTaskListID(tli.DomainID, tli.Name, tli.TaskType))
@@ -1778,7 +1778,7 @@ func (m *testTaskManager) UpdateTaskList(request *persistence.UpdateTaskListRequ
 
 // CompleteTask provides a mock function with given fields: request
 func (m *testTaskManager) CompleteTask(request *persistence.CompleteTaskRequest) error {
-	m.logger.Debug(fmt.Sprintf("CompleteTask taskID=%v, ackLevel=%v", request.TaskID, request.TaskList.AckLevel))
+	m.logger.Debug("CompleteTask", tag.TaskID(request.TaskID), tag.AckLevel(request.TaskList.AckLevel))
 	if request.TaskID <= 0 {
 		panic(fmt.Errorf("Invalid taskID=%v", request.TaskID))
 	}
@@ -1833,14 +1833,14 @@ func (m *testTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (
 
 	// First validate the entire batch
 	for _, task := range request.Tasks {
-		m.logger.Debug(fmt.Sprintf("testTaskManager.CreateTask taskID=%v, rangeID=%v", task.TaskID, rangeID))
+		m.logger.Debug("testTaskManager.CreateTask", tag.TaskID(task.TaskID), tag.ShardRangeID(rangeID))
 		if task.TaskID <= 0 {
 			panic(fmt.Errorf("Invalid taskID=%v", task.TaskID))
 		}
 
 		if tlm.rangeID != rangeID {
-			m.logger.Debug(fmt.Sprintf("testTaskManager.CreateTask ConditionFailedError taskID=%v, rangeID: %v, db rangeID: %v",
-				task.TaskID, rangeID, tlm.rangeID))
+			m.logger.Debug("testTaskManager.CreateTask ConditionFailedError",
+				tag.TaskID(task.TaskID), tag.ShardRangeID(rangeID), tag.ShardRangeID(tlm.rangeID))
 
 			return nil, &persistence.ConditionFailedError{
 				Msg: fmt.Sprintf("testTaskManager.CreateTask failed. TaskList: %v, taskType: %v, rangeID: %v, db rangeID: %v",
@@ -1875,7 +1875,7 @@ func (m *testTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (
 
 // GetTasks provides a mock function with given fields: request
 func (m *testTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persistence.GetTasksResponse, error) {
-	m.logger.Debug(fmt.Sprintf("testTaskManager.GetTasks readLevel=%v, maxReadLevel=%v", request.ReadLevel, request.MaxReadLevel))
+	m.logger.Debug("testTaskManager.GetTasks", tag.ReadLevel(request.ReadLevel), tag.ReadLevel(request.MaxReadLevel))
 
 	tlm := m.getTaskListManager(newTestTaskListID(request.DomainID, request.TaskList, request.TaskType))
 	tlm.Lock()

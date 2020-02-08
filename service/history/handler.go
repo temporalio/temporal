@@ -267,11 +267,11 @@ func (h *Handler) RecordDecisionTaskStarted(
 
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
-	h.GetLogger().Debug(fmt.Sprintf("RecordDecisionTaskStarted. DomainID: %v, WorkflowID: %v, RunID: %v, ScheduleID: %v",
-		recordRequest.GetDomainUUID(),
-		recordRequest.WorkflowExecution.GetWorkflowId(),
-		common.StringDefault(recordRequest.WorkflowExecution.RunId),
-		recordRequest.GetScheduleId()))
+	h.GetLogger().Debug("RecordDecisionTaskStarted",
+		tag.WorkflowDomainID(recordRequest.GetDomainUUID()),
+		tag.WorkflowID(recordRequest.WorkflowExecution.GetWorkflowId()),
+		tag.WorkflowRunID(common.StringDefault(recordRequest.WorkflowExecution.RunId)),
+		tag.WorkflowScheduleID(recordRequest.GetScheduleId()))
 
 	scope := metrics.HistoryRecordDecisionTaskStartedScope
 	h.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
@@ -492,11 +492,11 @@ func (h *Handler) RespondDecisionTaskCompleted(
 		return nil, h.error(err0, scope, domainID, "")
 	}
 
-	h.GetLogger().Debug(fmt.Sprintf("RespondDecisionTaskCompleted. DomainID: %v, WorkflowID: %v, RunID: %v, ScheduleID: %v",
-		token.DomainID,
-		token.WorkflowID,
-		token.RunID,
-		token.ScheduleID))
+	h.GetLogger().Debug("RespondDecisionTaskCompleted",
+		tag.WorkflowDomainID(token.DomainID),
+		tag.WorkflowID(token.WorkflowID),
+		tag.WorkflowRunID(token.RunID),
+		tag.WorkflowScheduleID(token.ScheduleID))
 
 	err0 = validateTaskToken(token)
 	if err0 != nil {
@@ -547,11 +547,11 @@ func (h *Handler) RespondDecisionTaskFailed(
 		return h.error(err0, scope, domainID, "")
 	}
 
-	h.GetLogger().Debug(fmt.Sprintf("RespondDecisionTaskFailed. DomainID: %v, WorkflowID: %v, RunID: %v, ScheduleID: %v",
-		token.DomainID,
-		token.WorkflowID,
-		token.RunID,
-		token.ScheduleID))
+	h.GetLogger().Debug("RespondDecisionTaskFailed",
+		tag.WorkflowDomainID(token.DomainID),
+		tag.WorkflowID(token.WorkflowID),
+		tag.WorkflowRunID(token.RunID),
+		tag.WorkflowScheduleID(token.ScheduleID))
 
 	err0 = validateTaskToken(token)
 	if err0 != nil {
@@ -838,11 +838,11 @@ func (h *Handler) RequestCancelWorkflowExecution(
 	}
 
 	cancelRequest := request.CancelRequest
-	h.GetLogger().Debug(fmt.Sprintf("RequestCancelWorkflowExecution. DomainID: %v/%v, WorkflowID: %v, RunID: %v.",
-		cancelRequest.GetDomain(),
-		request.GetDomainUUID(),
-		cancelRequest.WorkflowExecution.GetWorkflowId(),
-		cancelRequest.WorkflowExecution.GetRunId()))
+	h.GetLogger().Debug("RequestCancelWorkflowExecution",
+		tag.WorkflowDomainName(cancelRequest.GetDomain()),
+		tag.WorkflowDomainID(request.GetDomainUUID()),
+		tag.WorkflowID(cancelRequest.WorkflowExecution.GetWorkflowId()),
+		tag.WorkflowRunID(cancelRequest.WorkflowExecution.GetRunId()))
 
 	workflowID := cancelRequest.WorkflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(workflowID)

@@ -622,15 +622,13 @@ func (m *mutableStateDecisionTaskManagerImpl) UpdateDecision(
 
 	// NOTE: do not update tasklist in execution info
 
-	m.msb.logger.Debug(fmt.Sprintf(
-		"Decision Updated: {Schedule: %v, Started: %v, ID: %v, Timeout: %v, Attempt: %v, Timestamp: %v}",
-		decision.ScheduleID,
-		decision.StartedID,
-		decision.RequestID,
-		decision.DecisionTimeout,
-		decision.Attempt,
-		decision.StartedTimestamp,
-	))
+	m.msb.logger.Debug("Decision Updated",
+		tag.WorkflowScheduleID(decision.ScheduleID),
+		tag.WorkflowStartedID(decision.StartedID),
+		tag.DecisionRequestId(decision.RequestID),
+		tag.WorkflowDecisionTimeoutSeconds(decision.DecisionTimeout),
+		tag.Attempt(int32(decision.Attempt)),
+		tag.TimestampInt(decision.StartedTimestamp))
 }
 
 func (m *mutableStateDecisionTaskManagerImpl) HasPendingDecision() bool {

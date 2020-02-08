@@ -2298,6 +2298,7 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 		}
 		lastEvent = e
 	}
+	s.NotNil(lastEvent)
 	s.Equal(enums.EventTypeWorkflowExecutionCompleted, lastEvent.GetEventType())
 	s.Logger.Info(fmt.Sprintf("Last Decision Time: %v, Last Decision History Timestamp: %v, Complete Timestamp: %v",
 		time.Unix(0, lastDecisionTimestamp), time.Unix(0, lastDecisionStartedEvent.GetTimestamp()),

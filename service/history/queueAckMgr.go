@@ -21,7 +21,6 @@
 package history
 
 import (
-	"fmt"
 	"sort"
 	"sync"
 	"time"
@@ -120,7 +119,7 @@ TaskFilterLoop:
 		_, isLoaded := a.outstandingTasks[task.GetTaskID()]
 		if isLoaded {
 			// task already loaded
-			a.logger.Debug(fmt.Sprintf("Skipping transfer task: %v.", task))
+			a.logger.Debug("Skipping transfer task", tag.Task(task))
 			continue TaskFilterLoop
 		}
 
@@ -129,7 +128,7 @@ TaskFilterLoop:
 				tag.TaskID(task.GetTaskID()),
 				tag.ReadLevel(a.readLevel))
 		}
-		a.logger.Debug(fmt.Sprintf("Moving read level: %v", task.GetTaskID()))
+		a.logger.Debug("Moving read level", tag.TaskID(task.GetTaskID()))
 		a.readLevel = task.GetTaskID()
 		a.outstandingTasks[task.GetTaskID()] = false
 	}
@@ -167,7 +166,7 @@ func (a *queueAckMgrImpl) updateQueueAckLevel() {
 	a.Lock()
 	ackLevel := a.ackLevel
 
-	a.logger.Debug(fmt.Sprintf("Moving timer ack level from %v, with %v.", ackLevel, a.outstandingTasks))
+	a.logger.Debug("Moving timer ack level", tag.AckLevel(ackLevel), tag.Tasks(a.outstandingTasks))
 
 	// task ID is not sequancial, meaning there are a ton of missing chunks,
 	// so to optimize the performance, a sort is required
@@ -179,7 +178,7 @@ func (a *queueAckMgrImpl) updateQueueAckLevel() {
 
 	pendingTasks := len(taskIDs)
 	if pendingTasks > warnPendingTasks {
-		a.logger.Warn("Too many pending tasks.")
+		a.logger.Warn("Too many pending tasks")
 	}
 	switch a.options.MetricScope {
 	case metrics.ReplicatorQueueProcessorScope:
@@ -196,7 +195,7 @@ MoveAckLevelLoop:
 		if acked {
 			ackLevel = current
 			delete(a.outstandingTasks, current)
-			a.logger.Debug(fmt.Sprintf("Moving timer ack level to %v.", ackLevel))
+			a.logger.Debug("Moving timer ack level to", tag.AckLevel(ackLevel))
 		} else {
 			break MoveAckLevelLoop
 		}

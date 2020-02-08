@@ -219,13 +219,13 @@ func (r *historyReplicator) ApplyEvents(
 		if retError != nil {
 			switch retError.(type) {
 			case *shared.EntityNotExistsError:
-				logger.Debug(fmt.Sprintf("Encounter EntityNotExistsError: %v", retError))
+				logger.Debug("Encounter EntityNotExistsError", tag.Error(retError))
 				retError = ErrRetryEntityNotExists
 			case *shared.WorkflowExecutionAlreadyStartedError:
-				logger.Debug(fmt.Sprintf("Encounter WorkflowExecutionAlreadyStartedError: %v", retError))
+				logger.Debug("Encounter WorkflowExecutionAlreadyStartedError", tag.Error(retError))
 				retError = ErrRetryExecutionAlreadyStarted
 			case *persistence.WorkflowExecutionAlreadyStartedError:
-				logger.Debug(fmt.Sprintf("Encounter WorkflowExecutionAlreadyStartedError: %v", retError))
+				logger.Debug("Encounter WorkflowExecutionAlreadyStartedError", tag.Error(retError))
 				retError = ErrRetryExecutionAlreadyStarted
 			case *errors.InternalFailureError:
 				logError(logger, "Encounter InternalFailure.", retError)
@@ -259,7 +259,7 @@ func (r *historyReplicator) ApplyEvents(
 		_, err := context.loadWorkflowExecution()
 		if err == nil {
 			// Workflow execution already exist, looks like a duplicate start event, it is safe to ignore it
-			logger.Debug(fmt.Sprintf("Dropping stale replication task for start event."))
+			logger.Debug("Dropping stale replication task for start event.")
 			r.metricsClient.IncCounter(metrics.ReplicateHistoryEventsScope, metrics.DuplicateReplicationEventsCounter)
 			return nil
 		}
@@ -529,15 +529,14 @@ func (r *historyReplicator) ApplyOtherEvents(
 	if firstEventID < msBuilder.GetNextEventID() {
 		// duplicate replication task
 		replicationState := msBuilder.GetReplicationState()
-		logger.Debug(fmt.Sprintf("Dropping replication task.  State: {NextEvent: %v, Version: %v, LastWriteV: %v, LastWriteEvent: %v}",
-			msBuilder.GetNextEventID(), replicationState.CurrentVersion, replicationState.LastWriteVersion, replicationState.LastWriteEventID))
+		logger.Debug("Dropping replication task", tag.WorkflowNextEventID(msBuilder.GetNextEventID()), tag.ReplicationState(replicationState))
 		r.metricsClient.IncCounter(metrics.ReplicateHistoryEventsScope, metrics.DuplicateReplicationEventsCounter)
 		return nil
 	}
 	if firstEventID > msBuilder.GetNextEventID() {
 
 		if !msBuilder.IsWorkflowExecutionRunning() {
-			logger.Warn("Workflow already terminated due to conflict resolution.")
+			logger.Warn("Workflow already terminated due to conflict resolution")
 			return nil
 		}
 
@@ -1171,7 +1170,7 @@ func (r *historyReplicator) reapplyEventsToCurrentRunningWorkflow(
 		}
 	}
 
-	r.logger.Info(fmt.Sprintf("reapplying %v signals", numSignals))
+	r.logger.Info("reapplying signals", tag.Counter(numSignals))
 	return r.persistWorkflowMutation(context, msBuilder, []persistence.Task{}, []persistence.Task{})
 }
 

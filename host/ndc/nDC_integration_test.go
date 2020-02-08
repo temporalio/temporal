@@ -1598,7 +1598,7 @@ func (s *nDCIntegrationTestSuite) registerDomain() {
 	// Wait for domain cache to pick the change
 	time.Sleep(2 * cache.DomainCacheRefreshInterval)
 
-	s.logger.Info(fmt.Sprintf("Domain name: %v - ID: %v", s.domainName, s.domainID))
+	s.logger.Info("Registered domain", tag.WorkflowDomainName(s.domainName), tag.WorkflowDomainID(s.domainID))
 }
 
 func (s *nDCIntegrationTestSuite) generateNewRunHistory(
