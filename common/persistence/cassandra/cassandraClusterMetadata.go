@@ -211,7 +211,6 @@ func (m *cassandraClusterMetadata) GetClusterMembers(request *p.GetClusterMember
 	queryString.WriteString(templateAllowFiltering)
 	query := m.session.Query(queryString.String(), operands...)
 
-	// No paging enabled due to TTL on table
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
 	if iter == nil {
