@@ -44,7 +44,7 @@ type (
 		config             *Config
 		redirectionPolicy  DCRedirectionPolicy
 		tokenSerializer    common.TaskTokenSerializer
-		frontendHandler    workflowservice.WorkflowServiceYARPCServer
+		frontendHandler    workflowservice.WorkflowServiceServer
 	}
 )
 
