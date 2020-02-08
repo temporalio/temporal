@@ -20,10 +20,8 @@
 package sql
 
 import (
-	"encoding/json"
+	"encoding/binary"
 	"errors"
-	"fmt"
-	"math"
 	"net"
 	"time"
 
@@ -37,6 +35,10 @@ import (
 type sqlClusterMetadataManager struct {
 	sqlStore
 }
+
+var (
+	ErrPageTokenParse = errors.New("unable to parse page token")
+)
 
 var _ p.ClusterMetadataStore = (*sqlClusterMetadataManager)(nil)
 
@@ -93,11 +95,17 @@ func (s *sqlClusterMetadataManager) GetImmutableClusterMetadata() (*p.InternalGe
 }
 
 func (s *sqlClusterMetadataManager) GetClusterMembers(request *p.GetClusterMembersRequest) (*p.GetClusterMembersResponse, error) {
+	pageToken := uint64(0)
+	if len(request.NextPageToken) > 0 {
+		pageToken = binary.LittleEndian.Uint64(request.NextPageToken)
+	}
 	now := time.Now().UTC()
 	filter := &sqlplugin.ClusterMembershipFilter{
-		HostIDEquals:       request.HostIDEquals,
-		RoleEquals:         request.RoleEquals,
-		RecordExpiryAfter:  now,
+		HostIDEquals:        request.HostIDEquals,
+		RoleEquals:          request.RoleEquals,
+		RecordExpiryAfter:   now,
+		SessionStartedAfter: request.SessionStartedAfter,
+		MaxRecordCount:      request.PageSize,
 	}
 
 	if request.LastHeartbeatWithin > 0 {
@@ -106,6 +114,10 @@ func (s *sqlClusterMetadataManager) GetClusterMembers(request *p.GetClusterMembe
 
 	if request.RPCAddressEquals != nil {
 		filter.RPCAddressEquals = request.RPCAddressEquals.String()
+	}
+
+	if pageToken > 0 {
+		filter.InsertionOrderGreaterThan = pageToken
 	}
 
 	rows, err := s.db.GetClusterMembers(filter)
@@ -127,7 +139,13 @@ func (s *sqlClusterMetadataManager) GetClusterMembers(request *p.GetClusterMembe
 		})
 	}
 
-	return &p.GetClusterMembersResponse{ActiveMembers: convertedRows}, nil
+	var nextPageToken []byte
+	if request.PageSize > 0 && len(rows) == request.PageSize {
+		nextPageToken = make([]byte, 8)
+		binary.LittleEndian.PutUint64(nextPageToken, rows[len(rows)-1].InsertionOrder)
+	}
+
+	return &p.GetClusterMembersResponse{ActiveMembers: convertedRows, NextPageToken: nextPageToken}, nil
 }
 
 func (s *sqlClusterMetadataManager) UpsertClusterMembership(request *p.UpsertClusterMembershipRequest) error {
