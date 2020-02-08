@@ -27,6 +27,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	persistenceClient "github.com/temporalio/temporal/common/persistence/client"
+
 	"github.com/uber-go/tally"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/yarpc"
@@ -50,6 +52,12 @@ import (
 )
 
 type (
+	// MembershipFactoryInitializerFunc is used for deferred initialization of the MembershipFactory
+	// to allow for the PersistenceBean to be constructed further downstream.
+	MembershipFactoryInitializerFunc func(persistenceBean persistenceClient.Bean, logger log.Logger) (MembershipMonitorFactory, error)
+)
+
+type (
 	// BootstrapParams holds the set of parameters
 	// needed to bootstrap a service
 	BootstrapParams struct {
@@ -58,24 +66,24 @@ type (
 		Logger          log.Logger
 		ThrottledLogger log.Logger
 
-		MetricScope         tally.Scope
-		MembershipFactory   MembershipMonitorFactory
-		RPCFactory          common.RPCFactory
-		PProfInitializer    common.PProfInitializer
-		PersistenceConfig   config.Persistence
-		ClusterMetadata     cluster.Metadata
-		ReplicatorConfig    config.Replicator
-		MetricsClient       metrics.Client
-		MessagingClient     messaging.Client
-		ESClient            es.Client
-		ESConfig            *es.Config
-		DynamicConfig       dynamicconfig.Client
-		DispatcherProvider  client.DispatcherProvider
-		DCRedirectionPolicy config.DCRedirectionPolicy
-		PublicClient        workflowservice.WorkflowServiceClient
-		ArchivalMetadata    archiver.ArchivalMetadata
-		ArchiverProvider    provider.ArchiverProvider
-		Authorizer          authorization.Authorizer
+		MetricScope                  tally.Scope
+		MembershipFactoryInitializer MembershipFactoryInitializerFunc
+		RPCFactory                   common.RPCFactory
+		PProfInitializer             common.PProfInitializer
+		PersistenceConfig            config.Persistence
+		ClusterMetadata              cluster.Metadata
+		ReplicatorConfig             config.Replicator
+		MetricsClient                metrics.Client
+		MessagingClient              messaging.Client
+		ESClient                     es.Client
+		ESConfig                     *es.Config
+		DynamicConfig                dynamicconfig.Client
+		DispatcherProvider           client.DispatcherProvider
+		DCRedirectionPolicy          config.DCRedirectionPolicy
+		PublicClient                 workflowservice.WorkflowServiceClient
+		ArchivalMetadata             archiver.ArchivalMetadata
+		ArchiverProvider             provider.ArchiverProvider
+		Authorizer                   authorization.Authorizer
 	}
 
 	// MembershipMonitorFactory provides a bootstrapped membership monitor

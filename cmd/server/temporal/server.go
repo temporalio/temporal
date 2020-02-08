@@ -139,16 +139,17 @@ func (s *server) startService() common.Daemon {
 		}
 	}
 
-	params.MembershipFactory, err = s.cfg.Ringpop.NewFactory(
-		params.RPCFactory.GetRingpopDispatcher(),
-		params.Name,
-		servicePortMap,
-		params.Logger,
-	)
-
-	if err != nil {
-		log.Fatalf("error creating ringpop factory: %v", err)
-	}
+	params.MembershipFactoryInitializer =
+		func(persistenceBean persistenceClient.Bean, logger l.Logger) (service.MembershipMonitorFactory, error) {
+			return ringpop.NewRingpopFactory(
+				&s.cfg.Ringpop,
+				params.RPCFactory.GetRingpopDispatcher(),
+				params.Name,
+				servicePortMap,
+				logger,
+				persistenceBean.GetClusterMetadataManager(),
+			)
+		}
 
 	params.PProfInitializer = svcCfg.PProf.NewInitializer(params.Logger)
 
