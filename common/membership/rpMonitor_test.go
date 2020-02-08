@@ -24,6 +24,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/temporalio/temporal/common/primitives"
+
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
@@ -44,7 +46,8 @@ func (s *RpoSuite) SetupTest() {
 }
 
 func (s *RpoSuite) TestRingpopMonitor() {
-	testService := NewTestRingpopCluster("rpm-test", 3, "0.0.0.0", "", "rpm-test", "127.0.0.1")
+	serviceName := primitives.ServiceNameRolePrefix + primitives.HistoryService
+	testService := NewTestRingpopCluster(s.T(), "rpm-test", 3, "0.0.0.0", "", serviceName, "127.0.0.1")
 	s.NotNil(testService, "Failed to create test service")
 
 	logger := loggerimpl.NewNopLogger()
@@ -54,10 +57,10 @@ func (s *RpoSuite) TestRingpopMonitor() {
 	time.Sleep(time.Second)
 
 	listenCh := make(chan *ChangedEvent, 5)
-	err := rpm.AddListener("rpm-test", "test-listener", listenCh)
+	err := rpm.AddListener(serviceName, "test-listener", listenCh)
 	s.Nil(err, "AddListener failed")
 
-	host, err := rpm.Lookup("rpm-test", "key")
+	host, err := rpm.Lookup(serviceName, "key")
 	s.Nil(err, "Ringpop monitor failed to find host for key")
 	s.NotNil(host, "Ringpop monitor returned a nil host")
 
@@ -74,11 +77,11 @@ func (s *RpoSuite) TestRingpopMonitor() {
 		s.Fail("Timed out waiting for failure to be detected by ringpop")
 	}
 
-	host, err = rpm.Lookup("rpm-test", "key")
+	host, err = rpm.Lookup(serviceName, "key")
 	s.Nil(err, "Ringpop monitor failed to find host for key")
 	s.NotEqual(testService.hostAddrs[1], host.GetAddress(), "Ringpop monitor assigned key to dead host")
 
-	err = rpm.RemoveListener("rpm-test", "test-listener")
+	err = rpm.RemoveListener(serviceName, "test-listener")
 	s.Nil(err, "RemoveListener() failed")
 
 	rpm.Stop()
