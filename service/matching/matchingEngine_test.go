@@ -767,7 +767,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivitiesWithZeroDisp
 	const taskCount = 100
 	s.matchingEngine.metricsClient = metrics.NewClient(tally.NewTestScope("test", nil), metrics.Matching)
 	throttleCt := s.concurrentPublishConsumeActivities(workerCount, taskCount, dispatchLimitFn)
-	s.logger.Info("Number of tasks throttled", tag.Counter(throttleCt))
+	s.logger.Info("Number of tasks throttled", tag.Number(throttleCt))
 	// atleast once from 0 dispatch poll, and until TTL is hit at which time throttle limit is reset
 	// hard to predict exactly how many times, since the atomic.Value load might not have updated.
 	s.True(throttleCt >= 1)
@@ -1875,7 +1875,11 @@ func (m *testTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (
 
 // GetTasks provides a mock function with given fields: request
 func (m *testTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persistence.GetTasksResponse, error) {
-	m.logger.Debug("testTaskManager.GetTasks", tag.ReadLevel(request.ReadLevel), tag.ReadLevel(request.MaxReadLevel))
+	if request.MaxReadLevel != nil {
+		m.logger.Debug("testTaskManager.GetTasks", tag.ReadLevel(request.ReadLevel), tag.ReadLevel(*request.MaxReadLevel))
+	} else {
+		m.logger.Debug("testTaskManager.GetTasks", tag.ReadLevel(request.ReadLevel))
+	}
 
 	tlm := m.getTaskListManager(newTestTaskListID(request.DomainID, request.TaskList, request.TaskType))
 	tlm.Lock()
