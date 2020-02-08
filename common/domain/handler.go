@@ -28,10 +28,14 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
 	"github.com/temporalio/temporal/common/cluster"
@@ -46,24 +50,24 @@ type (
 	Handler interface {
 		DeprecateDomain(
 			ctx context.Context,
-			deprecateRequest *shared.DeprecateDomainRequest,
-		) error
+			deprecateRequest *workflowservice.DeprecateDomainRequest,
+		) (*workflowservice.DeprecateDomainResponse, error)
 		DescribeDomain(
 			ctx context.Context,
-			describeRequest *shared.DescribeDomainRequest,
-		) (*shared.DescribeDomainResponse, error)
+			describeRequest *workflowservice.DescribeDomainRequest,
+		) (*workflowservice.DescribeDomainResponse, error)
 		ListDomains(
 			ctx context.Context,
-			listRequest *shared.ListDomainsRequest,
-		) (*shared.ListDomainsResponse, error)
+			listRequest *workflowservice.ListDomainsRequest,
+		) (*workflowservice.ListDomainsResponse, error)
 		RegisterDomain(
 			ctx context.Context,
-			registerRequest *shared.RegisterDomainRequest,
-		) error
+			registerRequest *workflowservice.RegisterDomainRequest,
+		) (*workflowservice.RegisterDomainResponse, error)
 		UpdateDomain(
 			ctx context.Context,
-			updateRequest *shared.UpdateDomainRequest,
-		) (*shared.UpdateDomainResponse, error)
+			updateRequest *workflowservice.UpdateDomainRequest,
+		) (*workflowservice.UpdateDomainResponse, error)
 	}
 
 	// HandlerImpl is the domain operation handler implementation
@@ -106,23 +110,20 @@ func NewHandler(
 
 // RegisterDomain register a new domain
 func (d *HandlerImpl) RegisterDomain(
-	ctx context.Context,
-	registerRequest *shared.RegisterDomainRequest,
-) error {
+	_ context.Context,
+	registerRequest *workflowservice.RegisterDomainRequest,
+) (*workflowservice.RegisterDomainResponse, error) {
 
 	if !d.clusterMetadata.IsGlobalDomainEnabled() {
 		if registerRequest.GetIsGlobalDomain() {
-			return &shared.BadRequestError{Message: "Cannot register global domain when not enabled"}
+			return nil, &shared.BadRequestError{Message: "Cannot register global domain when not enabled"}
 		}
 
-		registerRequest.IsGlobalDomain = common.BoolPtr(false)
+		registerRequest.IsGlobalDomain = false
 	} else {
 		// cluster global domain enabled
-		if !registerRequest.IsSetIsGlobalDomain() {
-			return &shared.BadRequestError{Message: "Must specify whether domain is a global domain"}
-		}
 		if !d.clusterMetadata.IsMasterCluster() && registerRequest.GetIsGlobalDomain() {
-			return errNotMasterCluster
+			return nil, errNotMasterCluster
 		}
 	}
 
@@ -131,17 +132,17 @@ func (d *HandlerImpl) RegisterDomain(
 	switch err.(type) {
 	case nil:
 		// domain already exists, cannot proceed
-		return &shared.DomainAlreadyExistsError{Message: "Domain already exists."}
+		return nil, &shared.DomainAlreadyExistsError{Message: "Domain already exists."}
 	case *shared.EntityNotExistsError:
 		// domain does not exists, proceeds
 	default:
 		// other err
-		return err
+		return nil, err
 	}
 
 	var activeClusterName string
 	// input validation on cluster names
-	if registerRequest.IsSetActiveClusterName() && registerRequest.GetActiveClusterName() != "" {
+	if registerRequest.GetActiveClusterName() != "" {
 		activeClusterName = registerRequest.GetActiveClusterName()
 	} else {
 		activeClusterName = d.clusterMetadata.GetCurrentClusterName()
@@ -164,12 +165,12 @@ func (d *HandlerImpl) RegisterDomain(
 			clusterHistoryArchivalConfig.GetDomainDefaultURI(),
 		)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		nextHistoryArchivalState, _, err = currentHistoryArchivalState.getNextState(archivalEvent, d.validateHistoryArchivalURI)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -184,12 +185,12 @@ func (d *HandlerImpl) RegisterDomain(
 			clusterVisibilityArchivalConfig.GetDomainDefaultURI(),
 		)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		nextVisibilityArchivalState, _, err = currentVisibilityArchivalState.getNextState(archivalEvent, d.validateVisibilityArchivalURI)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -204,9 +205,9 @@ func (d *HandlerImpl) RegisterDomain(
 	config := &persistence.DomainConfig{
 		Retention:                registerRequest.GetWorkflowExecutionRetentionPeriodInDays(),
 		EmitMetric:               registerRequest.GetEmitMetric(),
-		HistoryArchivalStatus:    nextHistoryArchivalState.Status,
+		HistoryArchivalStatus:    *adapter.ToThriftArchivalStatus(nextHistoryArchivalState.Status),
 		HistoryArchivalURI:       nextHistoryArchivalState.URI,
-		VisibilityArchivalStatus: nextVisibilityArchivalState.Status,
+		VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(nextVisibilityArchivalState.Status),
 		VisibilityArchivalURI:    nextVisibilityArchivalState.URI,
 		BadBinaries:              shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
 	}
@@ -217,19 +218,19 @@ func (d *HandlerImpl) RegisterDomain(
 	isGlobalDomain := registerRequest.GetIsGlobalDomain()
 
 	if err := d.domainAttrValidator.validateDomainConfig(config); err != nil {
-		return err
+		return nil, err
 	}
 	if isGlobalDomain {
 		if err := d.domainAttrValidator.validateDomainReplicationConfigForGlobalDomain(
 			replicationConfig,
 		); err != nil {
-			return err
+			return nil, err
 		}
 	} else {
 		if err := d.domainAttrValidator.validateDomainReplicationConfigForLocalDomain(
 			replicationConfig,
 		); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -249,7 +250,7 @@ func (d *HandlerImpl) RegisterDomain(
 
 	domainResponse, err := d.metadataMgr.CreateDomain(domainRequest)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if domainRequest.IsGlobalDomain {
@@ -263,7 +264,7 @@ func (d *HandlerImpl) RegisterDomain(
 			domainRequest.IsGlobalDomain,
 		)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -272,14 +273,14 @@ func (d *HandlerImpl) RegisterDomain(
 		tag.WorkflowDomainID(domainResponse.ID),
 	)
 
-	return nil
+	return nil, nil
 }
 
 // ListDomains list all domains
 func (d *HandlerImpl) ListDomains(
 	ctx context.Context,
-	listRequest *shared.ListDomainsRequest,
-) (*shared.ListDomainsResponse, error) {
+	listRequest *workflowservice.ListDomainsRequest,
+) (*workflowservice.ListDomainsResponse, error) {
 
 	pageSize := 100
 	if listRequest.GetPageSize() != 0 {
@@ -295,17 +296,17 @@ func (d *HandlerImpl) ListDomains(
 		return nil, err
 	}
 
-	domains := []*shared.DescribeDomainResponse{}
+	var domains []*workflowservice.DescribeDomainResponse
 	for _, domain := range resp.Domains {
-		desc := &shared.DescribeDomainResponse{
-			IsGlobalDomain:  common.BoolPtr(domain.IsGlobalDomain),
-			FailoverVersion: common.Int64Ptr(domain.FailoverVersion),
+		desc := &workflowservice.DescribeDomainResponse{
+			IsGlobalDomain:  domain.IsGlobalDomain,
+			FailoverVersion: domain.FailoverVersion,
 		}
 		desc.DomainInfo, desc.Configuration, desc.ReplicationConfiguration = d.createResponse(ctx, domain.Info, domain.Config, domain.ReplicationConfig)
 		domains = append(domains, desc)
 	}
 
-	response := &shared.ListDomainsResponse{
+	response := &workflowservice.ListDomainsResponse{
 		Domains:       domains,
 		NextPageToken: resp.NextPageToken,
 	}
@@ -316,22 +317,22 @@ func (d *HandlerImpl) ListDomains(
 // DescribeDomain describe the domain
 func (d *HandlerImpl) DescribeDomain(
 	ctx context.Context,
-	describeRequest *shared.DescribeDomainRequest,
-) (*shared.DescribeDomainResponse, error) {
+	describeRequest *workflowservice.DescribeDomainRequest,
+) (*workflowservice.DescribeDomainResponse, error) {
 
 	// TODO, we should migrate the non global domain to new table, see #773
 	req := &persistence.GetDomainRequest{
 		Name: describeRequest.GetName(),
-		ID:   describeRequest.GetUUID(),
+		ID:   describeRequest.GetUuid(),
 	}
 	resp, err := d.metadataMgr.GetDomain(req)
 	if err != nil {
 		return nil, err
 	}
 
-	response := &shared.DescribeDomainResponse{
-		IsGlobalDomain:  common.BoolPtr(resp.IsGlobalDomain),
-		FailoverVersion: common.Int64Ptr(resp.FailoverVersion),
+	response := &workflowservice.DescribeDomainResponse{
+		IsGlobalDomain:  resp.IsGlobalDomain,
+		FailoverVersion: resp.FailoverVersion,
 	}
 	response.DomainInfo, response.Configuration, response.ReplicationConfiguration = d.createResponse(ctx, resp.Info, resp.Config, resp.ReplicationConfig)
 	return response, nil
@@ -340,8 +341,8 @@ func (d *HandlerImpl) DescribeDomain(
 // UpdateDomain update the domain
 func (d *HandlerImpl) UpdateDomain(
 	ctx context.Context,
-	updateRequest *shared.UpdateDomainRequest,
-) (*shared.UpdateDomainResponse, error) {
+	updateRequest *workflowservice.UpdateDomainRequest,
+) (*workflowservice.UpdateDomainResponse, error) {
 
 	// must get the metadata (notificationVersion) first
 	// this version can be regarded as the lock on the v2 domain table
@@ -366,7 +367,7 @@ func (d *HandlerImpl) UpdateDomain(
 	isGlobalDomain := getResponse.IsGlobalDomain
 
 	currentHistoryArchivalState := &ArchivalState{
-		Status: config.HistoryArchivalStatus,
+		Status: adapter.ToProtoArchivalStatus(&config.HistoryArchivalStatus),
 		URI:    config.HistoryArchivalURI,
 	}
 	nextHistoryArchivalState := currentHistoryArchivalState
@@ -385,7 +386,7 @@ func (d *HandlerImpl) UpdateDomain(
 	}
 
 	currentVisibilityArchivalState := &ArchivalState{
-		Status: config.VisibilityArchivalStatus,
+		Status: adapter.ToProtoArchivalStatus(&config.VisibilityArchivalStatus),
 		URI:    config.VisibilityArchivalURI,
 	}
 	nextVisibilityArchivalState := currentVisibilityArchivalState
@@ -428,7 +429,7 @@ func (d *HandlerImpl) UpdateDomain(
 		updatedConfig := updateRequest.Configuration
 		if updatedConfig.EmitMetric != nil {
 			configurationChanged = true
-			config.EmitMetric = updatedConfig.GetEmitMetric()
+			config.EmitMetric = updatedConfig.GetEmitMetric().GetValue()
 		}
 		if updatedConfig.GetWorkflowExecutionRetentionPeriodInDays() != 0 {
 			configurationChanged = true
@@ -436,18 +437,18 @@ func (d *HandlerImpl) UpdateDomain(
 		}
 		if historyArchivalConfigChanged {
 			configurationChanged = true
-			config.HistoryArchivalStatus = nextHistoryArchivalState.Status
+			config.HistoryArchivalStatus = *adapter.ToThriftArchivalStatus(nextHistoryArchivalState.Status)
 			config.HistoryArchivalURI = nextHistoryArchivalState.URI
 		}
 		if visibilityArchivalConfigChanged {
 			configurationChanged = true
-			config.VisibilityArchivalStatus = nextVisibilityArchivalState.Status
+			config.VisibilityArchivalStatus = *adapter.ToThriftArchivalStatus(nextVisibilityArchivalState.Status)
 			config.VisibilityArchivalURI = nextVisibilityArchivalState.URI
 		}
 		if updatedConfig.BadBinaries != nil {
 			maxLength := d.maxBadBinaryCount(updateRequest.GetName())
 			// only do merging
-			config.BadBinaries = d.mergeBadBinaries(config.BadBinaries.Binaries, updatedConfig.BadBinaries.Binaries, time.Now().UnixNano())
+			config.BadBinaries = *adapter.ToThriftBadBinaries(d.mergeBadBinaries(adapter.ToProtoBadBinaries(&config.BadBinaries).Binaries, updatedConfig.BadBinaries.Binaries, time.Now().UnixNano()))
 			if len(config.BadBinaries.Binaries) > maxLength {
 				return nil, &shared.BadRequestError{
 					Message: fmt.Sprintf("Total resetBinaries cannot exceed the max limit: %v", maxLength),
@@ -557,9 +558,9 @@ func (d *HandlerImpl) UpdateDomain(
 		}
 	}
 
-	response := &shared.UpdateDomainResponse{
-		IsGlobalDomain:  common.BoolPtr(isGlobalDomain),
-		FailoverVersion: common.Int64Ptr(failoverVersion),
+	response := &workflowservice.UpdateDomainResponse{
+		IsGlobalDomain:  isGlobalDomain,
+		FailoverVersion: failoverVersion,
 	}
 	response.DomainInfo, response.Configuration, response.ReplicationConfiguration = d.createResponse(ctx, info, config, replicationConfig)
 
@@ -573,13 +574,13 @@ func (d *HandlerImpl) UpdateDomain(
 // DeprecateDomain deprecates a domain
 func (d *HandlerImpl) DeprecateDomain(
 	ctx context.Context,
-	deprecateRequest *shared.DeprecateDomainRequest,
-) error {
+	deprecateRequest *workflowservice.DeprecateDomainRequest,
+) (*workflowservice.DeprecateDomainResponse, error) {
 
 	clusterMetadata := d.clusterMetadata
 	// TODO remove the IsGlobalDomainEnabled check once cross DC is public
 	if clusterMetadata.IsGlobalDomainEnabled() && !clusterMetadata.IsMasterCluster() {
-		return errNotMasterCluster
+		return nil, errNotMasterCluster
 	}
 
 	// must get the metadata (notificationVersion) first
@@ -588,12 +589,12 @@ func (d *HandlerImpl) DeprecateDomain(
 	// this call has to be made
 	metadata, err := d.metadataMgr.GetMetadata()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	notificationVersion := metadata.NotificationVersion
 	getResponse, err := d.metadataMgr.GetDomain(&persistence.GetDomainRequest{Name: deprecateRequest.GetName()})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	getResponse.ConfigVersion = getResponse.ConfigVersion + 1
@@ -609,9 +610,9 @@ func (d *HandlerImpl) DeprecateDomain(
 	}
 	err = d.metadataMgr.UpdateDomain(updateReq)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	return nil, nil
 }
 
 func (d *HandlerImpl) createResponse(
@@ -619,36 +620,36 @@ func (d *HandlerImpl) createResponse(
 	info *persistence.DomainInfo,
 	config *persistence.DomainConfig,
 	replicationConfig *persistence.DomainReplicationConfig,
-) (*shared.DomainInfo, *shared.DomainConfiguration, *shared.DomainReplicationConfiguration) {
+) (*commonproto.DomainInfo, *commonproto.DomainConfiguration, *commonproto.DomainReplicationConfiguration) {
 
-	infoResult := &shared.DomainInfo{
-		Name:        common.StringPtr(info.Name),
+	infoResult := &commonproto.DomainInfo{
+		Name:        info.Name,
 		Status:      getDomainStatus(info),
-		Description: common.StringPtr(info.Description),
-		OwnerEmail:  common.StringPtr(info.OwnerEmail),
+		Description: info.Description,
+		OwnerEmail:  info.OwnerEmail,
 		Data:        info.Data,
-		UUID:        common.StringPtr(info.ID),
+		Uuid:        info.ID,
 	}
 
-	configResult := &shared.DomainConfiguration{
-		EmitMetric:                             common.BoolPtr(config.EmitMetric),
-		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(config.Retention),
-		HistoryArchivalStatus:                  common.ArchivalStatusPtr(config.HistoryArchivalStatus),
-		HistoryArchivalURI:                     common.StringPtr(config.HistoryArchivalURI),
-		VisibilityArchivalStatus:               common.ArchivalStatusPtr(config.VisibilityArchivalStatus),
-		VisibilityArchivalURI:                  common.StringPtr(config.VisibilityArchivalURI),
-		BadBinaries:                            &config.BadBinaries,
+	configResult := &commonproto.DomainConfiguration{
+		EmitMetric:                             &commonproto.BoolValue{Value: config.EmitMetric},
+		WorkflowExecutionRetentionPeriodInDays: config.Retention,
+		HistoryArchivalStatus:                  adapter.ToProtoArchivalStatus(&config.HistoryArchivalStatus),
+		HistoryArchivalURI:                     config.HistoryArchivalURI,
+		VisibilityArchivalStatus:               adapter.ToProtoArchivalStatus(&config.VisibilityArchivalStatus),
+		VisibilityArchivalURI:                  config.VisibilityArchivalURI,
+		BadBinaries:                            adapter.ToProtoBadBinaries(&config.BadBinaries),
 	}
 
-	clusters := []*shared.ClusterReplicationConfiguration{}
+	var clusters []*commonproto.ClusterReplicationConfiguration
 	for _, cluster := range replicationConfig.Clusters {
-		clusters = append(clusters, &shared.ClusterReplicationConfiguration{
-			ClusterName: common.StringPtr(cluster.ClusterName),
+		clusters = append(clusters, &commonproto.ClusterReplicationConfiguration{
+			ClusterName: cluster.ClusterName,
 		})
 	}
 
-	replicationConfigResult := &shared.DomainReplicationConfiguration{
-		ActiveClusterName: common.StringPtr(replicationConfig.ActiveClusterName),
+	replicationConfigResult := &commonproto.DomainReplicationConfiguration{
+		ActiveClusterName: replicationConfig.ActiveClusterName,
 		Clusters:          clusters,
 	}
 
@@ -656,19 +657,19 @@ func (d *HandlerImpl) createResponse(
 }
 
 func (d *HandlerImpl) mergeBadBinaries(
-	old map[string]*shared.BadBinaryInfo,
-	new map[string]*shared.BadBinaryInfo,
+	old map[string]*commonproto.BadBinaryInfo,
+	new map[string]*commonproto.BadBinaryInfo,
 	createTimeNano int64,
-) shared.BadBinaries {
+) *commonproto.BadBinaries {
 
 	if old == nil {
-		old = map[string]*shared.BadBinaryInfo{}
+		old = map[string]*commonproto.BadBinaryInfo{}
 	}
 	for k, v := range new {
-		v.CreatedTimeNano = common.Int64Ptr(createTimeNano)
+		v.CreatedTimeNano = createTimeNano
 		old[k] = v
 	}
-	return shared.BadBinaries{
+	return &commonproto.BadBinaries{
 		Binaries: old,
 	}
 }
@@ -688,9 +689,9 @@ func (d *HandlerImpl) mergeDomainData(
 }
 
 func (d *HandlerImpl) toArchivalRegisterEvent(
-	status *shared.ArchivalStatus,
+	status enums.ArchivalStatus,
 	URI string,
-	defaultStatus shared.ArchivalStatus,
+	defaultStatus enums.ArchivalStatus,
 	defaultURI string,
 ) (*ArchivalEvent, error) {
 
@@ -699,8 +700,8 @@ func (d *HandlerImpl) toArchivalRegisterEvent(
 		URI:        URI,
 		defaultURI: defaultURI,
 	}
-	if event.status == nil {
-		event.status = defaultStatus.Ptr()
+	if event.status == enums.ArchivalStatusDefault {
+		event.status = defaultStatus
 	}
 	if err := event.validate(); err != nil {
 		return nil, err
@@ -709,7 +710,7 @@ func (d *HandlerImpl) toArchivalRegisterEvent(
 }
 
 func (d *HandlerImpl) toArchivalUpdateEvent(
-	status *shared.ArchivalStatus,
+	status enums.ArchivalStatus,
 	URI string,
 	defaultURI string,
 ) (*ArchivalEvent, error) {
@@ -753,18 +754,16 @@ func (d *HandlerImpl) validateVisibilityArchivalURI(URIString string) error {
 	return archiver.ValidateURI(URI)
 }
 
-func getDomainStatus(info *persistence.DomainInfo) *shared.DomainStatus {
+func getDomainStatus(info *persistence.DomainInfo) enums.DomainStatus {
 	switch info.Status {
 	case persistence.DomainStatusRegistered:
-		v := shared.DomainStatusRegistered
-		return &v
+		return enums.DomainStatusRegistered
 	case persistence.DomainStatusDeprecated:
-		v := shared.DomainStatusDeprecated
-		return &v
+		return enums.DomainStatusDeprecated
 	case persistence.DomainStatusDeleted:
-		v := shared.DomainStatusDeleted
-		return &v
+		return enums.DomainStatusDeleted
 	}
 
-	return nil
+	// TODO: panic, log, ...?
+	return enums.DomainStatusRegistered
 }

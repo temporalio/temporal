@@ -236,7 +236,7 @@ func IsServiceNonRetryableError(err error) bool {
 // IsServiceNonRetryableErrorGRPC checks if the error is a non retryable error.
 func IsServiceNonRetryableErrorGRPC(err error) bool {
 	if err == context.DeadlineExceeded {
-		return true
+		return false
 	}
 
 	if st, ok := status.FromError(err); ok {
