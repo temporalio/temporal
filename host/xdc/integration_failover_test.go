@@ -800,7 +800,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	startReq.WorkflowIdReusePolicy = enums.WorkflowIdReusePolicyAllowDuplicateFailedOnly
 	we, err = client2.StartWorkflowExecution(host.NewContext(), startReq)
 	st := status.Convert(err)
-	s.True(errordetails.IsWorkflowExecutionAlreadyStartedFailure(st))
+	s.True(errordetails.IsWorkflowExecutionAlreadyStartedStatus(st))
 	s.Nil(we)
 
 	// start the same workflow in cluster 2 is not allowed if policy is RejectDuplicate
@@ -808,7 +808,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	startReq.WorkflowIdReusePolicy = enums.WorkflowIdReusePolicyRejectDuplicate
 	we, err = client2.StartWorkflowExecution(host.NewContext(), startReq)
 	st = status.Convert(err)
-	s.True(errordetails.IsWorkflowExecutionAlreadyStartedFailure(st))
+	s.True(errordetails.IsWorkflowExecutionAlreadyStartedStatus(st))
 	s.Nil(we)
 
 	// start the workflow in cluster 2

@@ -40,7 +40,7 @@ var errUnauthorized = status.New(codes.PermissionDenied, "Request unauthorized."
 type AccessControlledWorkflowHandler struct {
 	resource.Resource
 
-	frontendHandler workflowservice.WorkflowServiceYARPCServer
+	frontendHandler workflowservice.WorkflowServiceServer
 	authorizer      authorization.Authorizer
 }
 
