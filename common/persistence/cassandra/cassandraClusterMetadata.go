@@ -71,7 +71,7 @@ WHERE membership_partition = ?`
 	templateWithRPCAddressSuffix     = ` AND rpc_address = ?`
 	templateWithHostIDSuffix         = ` AND host_id = ?`
 	templateAllowFiltering           = ` ALLOW FILTERING`
-	templateWithSessionSuffix		 = ` AND session_start > ?`
+	templateWithSessionSuffix        = ` AND session_start > ?`
 )
 
 type (
