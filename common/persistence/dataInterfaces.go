@@ -22,6 +22,7 @@ package persistence
 
 import (
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -1449,6 +1450,45 @@ type (
 		persistenceblobs.ImmutableClusterMetadata
 	}
 
+	// GetClusterMembersRequest is the response to GetClusterMembers
+	GetClusterMembersRequest struct {
+		LastHeartbeatWithin time.Duration
+		RPCAddressEquals    net.IP
+		HostIDEquals        uuid.UUID
+		RoleEquals          ServiceType
+	}
+
+	// GetClusterMembersResponse is the response to GetClusterMembers
+	GetClusterMembersResponse struct {
+		ActiveMembers []*ClusterMember
+	}
+
+	// ClusterMember is used as a response to GetClusterMembers
+	ClusterMember struct {
+		Role          ServiceType
+		HostID        uuid.UUID
+		RPCAddress    net.IP
+		RPCPort       uint16
+		SessionStart  time.Time
+		LastHeartbeat time.Time
+		RecordExpiry  time.Time
+	}
+
+	// UpsertClusterMembershipRequest is the request to UpsertClusterMembership
+	UpsertClusterMembershipRequest struct {
+		Role         ServiceType
+		HostID       uuid.UUID
+		RPCAddress   net.IP
+		RPCPort      uint16
+		SessionStart time.Time
+		RecordExpiry time.Duration
+	}
+
+	// PruneClusterMembershipRequest is the request to PruneClusterMembership
+	PruneClusterMembershipRequest struct {
+		MaxRecordsPruned int
+	}
+
 	// Closeable is an interface for any entity that supports a close operation to release resources
 	Closeable interface {
 		Close()
@@ -1576,6 +1616,9 @@ type (
 		GetName() string
 		InitializeImmutableClusterMetadata(request *InitializeImmutableClusterMetadataRequest) (*InitializeImmutableClusterMetadataResponse, error)
 		GetImmutableClusterMetadata() (*GetImmutableClusterMetadataResponse, error)
+		GetClusterMembers(request *GetClusterMembersRequest) (*GetClusterMembersResponse, error)
+		UpsertClusterMembership(request *UpsertClusterMembershipRequest) error
+		PruneClusterMembership(request *PruneClusterMembershipRequest) error
 	}
 )
 
@@ -2504,3 +2547,13 @@ func NewGetReplicationTasksFromDLQRequest(
 		},
 	}
 }
+
+type ServiceType int
+
+const (
+	All ServiceType = iota
+	Frontend
+	History
+	Matching
+	Worker
+)
