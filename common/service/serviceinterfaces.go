@@ -38,8 +38,8 @@ import (
 )
 
 type (
-	// Service is the interface which must be implemented by all the services
-	Service interface {
+	// OneboxService is the interface which must be implemented by all the services
+	OneboxService interface {
 		// GetHostName returns the name of host running the service
 		GetHostName() string
 

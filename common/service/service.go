@@ -92,8 +92,8 @@ type (
 		GetMembershipMonitor() (membership.Monitor, error)
 	}
 
-	// Service contains the objects specific to this service
-	serviceImpl struct {
+	// OneboxService contains the objects specific to onebox server intitialization
+	oneboxServiceImpl struct {
 		status                int32
 		sName                 string
 		hostName              string
@@ -112,43 +112,43 @@ type (
 		logger          log.Logger
 		throttledLogger log.Logger
 
-		metricsScope           tally.Scope
-		runtimeMetricsReporter *metrics.RuntimeMetricsReporter
-		metricsClient          metrics.Client
-		clusterMetadata        cluster.Metadata
-		messagingClient        messaging.Client
-		dynamicCollection      *dynamicconfig.Collection
-		dispatcherProvider     client.DispatcherProvider
-		archivalMetadata       archiver.ArchivalMetadata
-		archiverProvider       provider.ArchiverProvider
-		serializer             persistence.PayloadSerializer
+		metricsScope                 tally.Scope
+		runtimeMetricsReporter       *metrics.RuntimeMetricsReporter
+		metricsClient                metrics.Client
+		clusterMetadata              cluster.Metadata
+		messagingClient              messaging.Client
+		dynamicCollection            *dynamicconfig.Collection
+		dispatcherProvider           client.DispatcherProvider
+		archivalMetadata             archiver.ArchivalMetadata
+		archiverProvider             provider.ArchiverProvider
+		serializer                   persistence.PayloadSerializer
+		membershipFactoryInitializer MembershipFactoryInitializerFunc
 	}
 )
 
-var _ Service = (*serviceImpl)(nil)
+var _ OneboxService = (*oneboxServiceImpl)(nil)
 
-// New instantiates a Service Instance
-// TODO: have a better name for Service.
-func New(params *BootstrapParams) Service {
-	sVice := &serviceImpl{
-		status:                common.DaemonStatusInitialized,
-		sName:                 params.Name,
-		logger:                params.Logger,
-		throttledLogger:       params.ThrottledLogger,
-		rpcFactory:            params.RPCFactory,
-		membershipFactory:     params.MembershipFactory,
-		pprofInitializer:      params.PProfInitializer,
-		timeSource:            clock.NewRealTimeSource(),
-		metricsScope:          params.MetricScope,
-		numberOfHistoryShards: params.PersistenceConfig.NumHistoryShards,
-		clusterMetadata:       params.ClusterMetadata,
-		metricsClient:         params.MetricsClient,
-		messagingClient:       params.MessagingClient,
-		dispatcherProvider:    params.DispatcherProvider,
-		dynamicCollection:     dynamicconfig.NewCollection(params.DynamicConfig, params.Logger),
-		archivalMetadata:      params.ArchivalMetadata,
-		archiverProvider:      params.ArchiverProvider,
-		serializer:            persistence.NewPayloadSerializer(),
+// NewOneboxService instantiates a Service Instance
+func NewOneboxService(params *BootstrapParams) OneboxService {
+	sVice := &oneboxServiceImpl{
+		status:                       common.DaemonStatusInitialized,
+		sName:                        params.Name,
+		logger:                       params.Logger,
+		throttledLogger:              params.ThrottledLogger,
+		rpcFactory:                   params.RPCFactory,
+		membershipFactoryInitializer: params.MembershipFactoryInitializer,
+		pprofInitializer:             params.PProfInitializer,
+		timeSource:                   clock.NewRealTimeSource(),
+		metricsScope:                 params.MetricScope,
+		numberOfHistoryShards:        params.PersistenceConfig.NumHistoryShards,
+		clusterMetadata:              params.ClusterMetadata,
+		metricsClient:                params.MetricsClient,
+		messagingClient:              params.MessagingClient,
+		dispatcherProvider:           params.DispatcherProvider,
+		dynamicCollection:            dynamicconfig.NewCollection(params.DynamicConfig, params.Logger),
+		archivalMetadata:             params.ArchivalMetadata,
+		archiverProvider:             params.ArchiverProvider,
+		serializer:                   persistence.NewPayloadSerializer(),
 	}
 
 	sVice.runtimeMetricsReporter = metrics.NewRuntimeMetricsReporter(params.MetricScope, time.Minute, sVice.GetLogger(), params.InstanceID)
@@ -183,12 +183,12 @@ func (params *BootstrapParams) UpdateLoggerWithServiceName(name string) {
 }
 
 // GetHostName returns the name of host running the service
-func (h *serviceImpl) GetHostName() string {
+func (h *oneboxServiceImpl) GetHostName() string {
 	return h.hostName
 }
 
 // Start starts a yarpc service
-func (h *serviceImpl) Start() {
+func (h *oneboxServiceImpl) Start() {
 	if !atomic.CompareAndSwapInt32(&h.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
@@ -208,6 +208,11 @@ func (h *serviceImpl) Start() {
 
 	if err := h.ringpopDispatcher.Start(); err != nil {
 		h.logger.WithTags(tag.Error(err)).Fatal("Failed to start yarpc dispatcher for ringpop")
+	}
+
+	h.membershipFactory, err = h.membershipFactoryInitializer(nil, nil)
+	if err != nil {
+		h.logger.WithTags(tag.Error(err)).Fatal("Membership factory creation failed")
 	}
 
 	h.membershipMonitor, err = h.membershipFactory.GetMembershipMonitor()
@@ -239,7 +244,7 @@ func (h *serviceImpl) Start() {
 }
 
 // Stop closes the associated transport
-func (h *serviceImpl) Stop() {
+func (h *oneboxServiceImpl) Stop() {
 	if !atomic.CompareAndSwapInt32(&h.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
@@ -259,61 +264,61 @@ func (h *serviceImpl) Stop() {
 	h.runtimeMetricsReporter.Stop()
 }
 
-func (h *serviceImpl) GetLogger() log.Logger {
+func (h *oneboxServiceImpl) GetLogger() log.Logger {
 	return h.logger
 }
 
-func (h *serviceImpl) GetThrottledLogger() log.Logger {
+func (h *oneboxServiceImpl) GetThrottledLogger() log.Logger {
 	return h.throttledLogger
 }
 
-func (h *serviceImpl) GetMetricsClient() metrics.Client {
+func (h *oneboxServiceImpl) GetMetricsClient() metrics.Client {
 	return h.metricsClient
 }
 
-func (h *serviceImpl) GetClientBean() client.Bean {
+func (h *oneboxServiceImpl) GetClientBean() client.Bean {
 	return h.clientBean
 }
 
-func (h *serviceImpl) GetTimeSource() clock.TimeSource {
+func (h *oneboxServiceImpl) GetTimeSource() clock.TimeSource {
 	return h.timeSource
 }
 
-func (h *serviceImpl) GetMembershipMonitor() membership.Monitor {
+func (h *oneboxServiceImpl) GetMembershipMonitor() membership.Monitor {
 	return h.membershipMonitor
 }
 
-func (h *serviceImpl) GetHostInfo() *membership.HostInfo {
+func (h *oneboxServiceImpl) GetHostInfo() *membership.HostInfo {
 	return h.hostInfo
 }
 
-func (h *serviceImpl) GetDispatcher() *yarpc.Dispatcher {
+func (h *oneboxServiceImpl) GetDispatcher() *yarpc.Dispatcher {
 	return h.tchannelDispatcher
 }
 
-func (h *serviceImpl) GetGRPCListener() net.Listener {
+func (h *oneboxServiceImpl) GetGRPCListener() net.Listener {
 	return h.grpcListener
 }
 
 // GetClusterMetadata returns the service cluster metadata
-func (h *serviceImpl) GetClusterMetadata() cluster.Metadata {
+func (h *oneboxServiceImpl) GetClusterMetadata() cluster.Metadata {
 	return h.clusterMetadata
 }
 
 // GetMessagingClient returns the messaging client against Kafka
-func (h *serviceImpl) GetMessagingClient() messaging.Client {
+func (h *oneboxServiceImpl) GetMessagingClient() messaging.Client {
 	return h.messagingClient
 }
 
-func (h *serviceImpl) GetArchivalMetadata() archiver.ArchivalMetadata {
+func (h *oneboxServiceImpl) GetArchivalMetadata() archiver.ArchivalMetadata {
 	return h.archivalMetadata
 }
 
-func (h *serviceImpl) GetArchiverProvider() provider.ArchiverProvider {
+func (h *oneboxServiceImpl) GetArchiverProvider() provider.ArchiverProvider {
 	return h.archiverProvider
 }
 
-func (h *serviceImpl) GetPayloadSerializer() persistence.PayloadSerializer {
+func (h *oneboxServiceImpl) GetPayloadSerializer() persistence.PayloadSerializer {
 	return h.serializer
 }
 
