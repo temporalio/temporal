@@ -27,6 +27,7 @@ import (
 	"net"
 	"sync"
 
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	adminClient "github.com/temporalio/temporal/client/admin"
 
 	"github.com/pborman/uuid"
@@ -75,6 +76,7 @@ type Cadence interface {
 	GetFrontendClient() workflowservice.WorkflowServiceClient
 	FrontendAddress() string
 	GetHistoryClient() historyserviceclient.Interface
+	GetHistoryClientGRPC() historyservice.HistoryServiceClient
 	GetExecutionManagerFactory() persistence.ExecutionManagerFactory
 }
 
@@ -87,6 +89,7 @@ type (
 		adminClient            adminservice.AdminServiceClient
 		frontendClient         workflowservice.WorkflowServiceClient
 		historyClient          historyserviceclient.Interface
+		historyClientGRPC      historyservice.HistoryServiceClient
 		logger                 log.Logger
 		clusterMetadata        cluster.Metadata
 		persistenceConfig      config.Persistence
@@ -480,6 +483,10 @@ func (c *cadenceImpl) GetFrontendClient() workflowservice.WorkflowServiceClient 
 
 func (c *cadenceImpl) GetHistoryClient() historyserviceclient.Interface {
 	return c.historyClient
+}
+
+func (c *cadenceImpl) GetHistoryClientGRPC() historyservice.HistoryServiceClient {
+	return c.historyClientGRPC
 }
 
 func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.WaitGroup) {
