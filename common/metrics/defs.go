@@ -264,6 +264,12 @@ const (
 	PersistenceInitImmutableClusterMetadataScope
 	// PersistenceGetImmutableClusterMetadataScope tracks GetImmutableClusterMetadata calls made by service to persistence layer
 	PersistenceGetImmutableClusterMetadataScope
+	// PersistenceUpsertClusterMembershipScope tracks UpsertClusterMembership calls made by service to persistence layer
+	PersistenceUpsertClusterMembershipScope
+	// PersistencePruneClusterMembershipScope tracks PruneClusterMembership calls made by service to persistence layer
+	PersistencePruneClusterMembershipScope
+	// PersistenceGetClusterMembersScope tracks GetClusterMembers calls made by service to persistence layer
+	PersistenceGetClusterMembersScope
 	// HistoryClientStartWorkflowExecutionScope tracks RPC calls to history service
 	HistoryClientStartWorkflowExecutionScope
 	// HistoryClientRecordActivityTaskHeartbeatScope tracks RPC calls to history service
@@ -1069,6 +1075,9 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceDomainReplicationQueueScope:                   {operation: "DomainReplicationQueue"},
 		PersistenceInitImmutableClusterMetadataScope:             {operation: "InitializeImmutableClusterMetadata"},
 		PersistenceGetImmutableClusterMetadataScope:              {operation: "GetImmutableClusterMetadata"},
+		PersistencePruneClusterMembershipScope:                   {operation: "PruneClusterMembership"},
+		PersistenceGetClusterMembersScope:                        {operation: "GetClusterMembership"},
+		PersistenceUpsertClusterMembershipScope:                  {operation: "UpsertClusterMembership"},
 
 		ClusterMetadataArchivalConfigScope: {operation: "ArchivalConfig"},
 

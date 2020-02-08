@@ -90,7 +90,6 @@ func (s *Service) Start() {
 	logger.Info("matching starting")
 
 	s.handler = NewHandler(s, s.config)
-	s.handler.RegisterHandler()
 
 	// must start base service first
 	s.Resource.Start()
