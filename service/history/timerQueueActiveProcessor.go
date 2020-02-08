@@ -356,8 +356,6 @@ func (t *timerQueueActiveProcessorImpl) processActivityTimeout(
 	task *persistence.TimerTaskInfo,
 ) (retError error) {
 
-	startTime := time.Now()
-
 	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
 		t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(task),
 	)
@@ -366,36 +364,13 @@ func (t *timerQueueActiveProcessorImpl) processActivityTimeout(
 	}
 	defer func() { release(retError) }()
 
-	t.metricsClient.RecordTimer(
-		metrics.TimerActiveTaskActivityTimeoutScope,
-		metrics.ActivityTimeoutLatencyGetExecutionContext,
-		time.Since(startTime),
-	)
-
-	loadMSStartTime := time.Now()
 	mutableState, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
 	}
 	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
-		t.metricsClient.RecordTimer(
-			metrics.TimerActiveTaskActivityTimeoutScope,
-			metrics.ActivityTimeoutLatencyLoadMutableState,
-			time.Since(loadMSStartTime),
-		)
-		t.metricsClient.RecordTimer(
-			metrics.TimerActiveTaskActivityTimeoutScope,
-			metrics.ActivityTimeoutLatencyInMemory,
-			time.Since(startTime),
-		)
 		return nil
 	}
-
-	t.metricsClient.RecordTimer(
-		metrics.TimerActiveTaskActivityTimeoutScope,
-		metrics.ActivityTimeoutLatencyLoadMutableState,
-		time.Since(loadMSStartTime),
-	)
 
 	timerSequence := t.getTimerSequence(mutableState)
 	referenceTime := t.shard.GetTimeSource().Now()
@@ -415,9 +390,13 @@ func (t *timerQueueActiveProcessorImpl) processActivityTimeout(
 Loop:
 	for _, timerSequenceID := range timerSequence.loadAndSortActivityTimers() {
 		activityInfo, ok := mutableState.GetActivityInfo(timerSequenceID.eventID)
-		if !ok {
+		if !ok || timerSequenceID.attempt < activityInfo.Attempt {
+			// handle 2 cases:
+			// 1. !ok
 			//  this case can happen since each activity can have 4 timers
 			//  and one of those 4 timers may have fired in this loop
+			// 2. timerSequenceID.attempt < activityInfo.Attempt
+			//  retry could update activity attempt, should not timeouts new attempt
 			continue Loop
 		}
 
@@ -425,11 +404,6 @@ Loop:
 			// timer sequence IDs are sorted, once there is one timer
 			// sequence ID not expired, all after that wil not expired
 			break Loop
-		}
-
-		if timerSequenceID.attempt < activityInfo.Attempt {
-			//  retry could update activity attempt, should not timeouts new attempt
-			continue Loop
 		}
 
 		if timerSequenceID.timerType != timerTypeScheduleToStart {
@@ -464,37 +438,9 @@ Loop:
 		scheduleDecision = true
 	}
 
-	// ignore error cases when emitting these metrics, as error happens rarely
-	t.metricsClient.RecordTimer(
-		metrics.TimerActiveTaskActivityTimeoutScope,
-		metrics.ActivityTimeoutLatencyInMemory,
-		time.Since(startTime),
-	)
-
-	if time.Since(startTime) > time.Millisecond*150 {
-		t.shard.GetThrottledLogger().Warn("Activity timeout timer task latency too high",
-			tag.TaskType(task.GetTaskType()),
-			tag.TaskID(task.GetTaskID()),
-			tag.WorkflowDomainID(task.GetDomainID()),
-			tag.WorkflowID(task.GetWorkflowID()),
-			tag.WorkflowRunID(task.GetRunID()),
-			tag.ShardID(t.shard.GetShardID()),
-		)
-	}
-
 	if !updateMutableState {
 		return nil
 	}
-
-	updateStartTime := time.Now()
-	defer func() {
-		t.metricsClient.RecordTimer(
-			metrics.TimerActiveTaskActivityTimeoutScope,
-			metrics.ActivityTimeoutLatencyUpdateExecution,
-			time.Since(updateStartTime),
-		)
-	}()
-
 	return t.updateWorkflowExecution(context, mutableState, scheduleDecision)
 }
 
