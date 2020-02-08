@@ -66,6 +66,10 @@ type (
 		// Initialize immutable metadata for the cluster. Takes no action if already initialized.
 		InitializeImmutableClusterMetadata(request *InternalInitializeImmutableClusterMetadataRequest) (*InternalInitializeImmutableClusterMetadataResponse, error)
 		GetImmutableClusterMetadata() (*InternalGetImmutableClusterMetadataResponse, error)
+		// Membership APIs
+		GetClusterMembers(request *GetClusterMembersRequest) (*GetClusterMembersResponse, error)
+		UpsertClusterMembership(request *UpsertClusterMembershipRequest) error
+		PruneClusterMembership(request *PruneClusterMembershipRequest) error
 	}
 
 	// ExecutionStore is used to manage workflow executions for Persistence layer
@@ -681,6 +685,12 @@ type (
 	InternalGetImmutableClusterMetadataResponse struct {
 		// Serialized ImmutableCusterMetadata.
 		ImmutableClusterMetadata *DataBlob
+	}
+
+	// InternalUpsertClusterMembershipRequest is the request to UpsertClusterMembership
+	InternalUpsertClusterMembershipRequest struct {
+		ClusterMember
+		RecordExpiry time.Time
 	}
 )
 

@@ -20,8 +20,12 @@
 package sql
 
 import (
-	"database/sql"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"math"
+	"net"
+	"time"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
@@ -80,21 +84,81 @@ func (s *sqlClusterMetadataManager) GetImmutableClusterMetadata() (*p.InternalGe
 	row, err := s.db.GetClusterMetadata()
 
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, &shared.EntityNotExistsError{
-				Message: fmt.Sprintf("GetImmutableClusterMetadata failed. Error: %v", err),
-			}
-		}
-
-		return nil, &shared.InternalServiceError{
-			Message: fmt.Sprintf("GetImmutableClusterMetadata failed. Error: %v", err),
-		}
+		return nil, convertCommonErrors("GetImmutableClusterMetadata", err)
 	}
 
 	return &p.InternalGetImmutableClusterMetadataResponse{
 		ImmutableClusterMetadata: p.NewDataBlob(row.ImmutableData, common.EncodingType(row.ImmutableDataEncoding)),
 	}, nil
+}
 
+func (s *sqlClusterMetadataManager) GetClusterMembers(request *p.GetClusterMembersRequest) (*p.GetClusterMembersResponse, error) {
+	now := time.Now().UTC()
+	filter := &sqlplugin.ClusterMembershipFilter{
+		HostIDEquals:       request.HostIDEquals,
+		RoleEquals:         request.RoleEquals,
+		RecordExpiryAfter:  now,
+	}
+
+	if request.LastHeartbeatWithin > 0 {
+		filter.LastHeartbeatAfter = now.Add(-request.LastHeartbeatWithin)
+	}
+
+	if request.RPCAddressEquals != nil {
+		filter.RPCAddressEquals = request.RPCAddressEquals.String()
+	}
+
+	rows, err := s.db.GetClusterMembers(filter)
+
+	if err != nil {
+		return nil, convertCommonErrors("GetClusterMembers", err)
+	}
+
+	convertedRows := make([]*p.ClusterMember, 0, len(rows))
+	for _, row := range rows {
+		convertedRows = append(convertedRows, &p.ClusterMember{
+			HostID:        row.HostID,
+			Role:          row.Role,
+			RPCAddress:    net.ParseIP(row.RPCAddress),
+			RPCPort:       row.RPCPort,
+			SessionStart:  row.SessionStart,
+			LastHeartbeat: row.LastHeartbeat,
+			RecordExpiry:  row.RecordExpiry,
+		})
+	}
+
+	return &p.GetClusterMembersResponse{ActiveMembers: convertedRows}, nil
+}
+
+func (s *sqlClusterMetadataManager) UpsertClusterMembership(request *p.UpsertClusterMembershipRequest) error {
+	now := time.Now().UTC()
+	recordExpiry := now.Add(request.RecordExpiry)
+	_, err := s.db.UpsertClusterMembership(&sqlplugin.ClusterMembershipRow{
+		Role:          request.Role,
+		HostID:        request.HostID,
+		RPCAddress:    request.RPCAddress.String(),
+		RPCPort:       request.RPCPort,
+		SessionStart:  request.SessionStart,
+		LastHeartbeat: now,
+		RecordExpiry:  recordExpiry})
+
+	if err != nil {
+		return convertCommonErrors("UpsertClusterMembership", err)
+	}
+
+	return nil
+}
+
+func (s *sqlClusterMetadataManager) PruneClusterMembership(request *p.PruneClusterMembershipRequest) error {
+	_, err := s.db.PruneClusterMembership(&sqlplugin.PruneClusterMembershipFilter{
+		PruneRecordsBefore: time.Now().UTC(),
+		MaxRecordsAffected: request.MaxRecordsPruned})
+
+	if err != nil {
+		return convertCommonErrors("PruneClusterMembership", err)
+	}
+
+	return nil
 }
 
 func newClusterMetadataPersistence(db sqlplugin.DB,
