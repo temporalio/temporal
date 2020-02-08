@@ -181,36 +181,7 @@ func (wh *WorkflowHandler) Health(ctx context.Context) (*health.HealthStatus, er
 // acts as a sandbox and provides isolation for all resources within the domain.  All resources belongs to exactly one
 // domain.
 func (wh *WorkflowHandler) RegisterDomain(ctx context.Context, registerRequest *gen.RegisterDomainRequest) (retError error) {
-	defer log.CapturePanic(wh.GetLogger(), &retError)
-
-	scope, sw := wh.startRequestProfile(metrics.FrontendRegisterDomainScope)
-	defer sw.Stop()
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return wh.error(err, scope)
-	}
-
-	if registerRequest == nil {
-		return errRequestNotSet
-	}
-
-	if registerRequest.GetWorkflowExecutionRetentionPeriodInDays() > common.MaxWorkflowRetentionPeriodInDays {
-		return errInvalidRetention
-	}
-
-	if err := checkPermission(wh.config, registerRequest.SecurityToken); err != nil {
-		return err
-	}
-
-	if registerRequest.GetName() == "" {
-		return errDomainNotSet
-	}
-
-	err := wh.domainHandler.RegisterDomain(ctx, registerRequest)
-	if err != nil {
-		return wh.error(err, scope)
-	}
-	return nil
+	panic("not implemented")
 }
 
 // ListDomains returns the information and configuration for a registered domain.
@@ -218,24 +189,7 @@ func (wh *WorkflowHandler) ListDomains(
 	ctx context.Context,
 	listRequest *gen.ListDomainsRequest,
 ) (response *gen.ListDomainsResponse, retError error) {
-	defer log.CapturePanic(wh.GetLogger(), &retError)
-
-	scope, sw := wh.startRequestProfile(metrics.FrontendListDomainsScope)
-	defer sw.Stop()
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, wh.error(err, scope)
-	}
-
-	if listRequest == nil {
-		return nil, errRequestNotSet
-	}
-
-	resp, err := wh.domainHandler.ListDomains(ctx, listRequest)
-	if err != nil {
-		return resp, wh.error(err, scope)
-	}
-	return resp, err
+	panic("not implemented")
 }
 
 // DescribeDomain returns the information and configuration for a registered domain.
@@ -243,28 +197,7 @@ func (wh *WorkflowHandler) DescribeDomain(
 	ctx context.Context,
 	describeRequest *gen.DescribeDomainRequest,
 ) (response *gen.DescribeDomainResponse, retError error) {
-	defer log.CapturePanic(wh.GetLogger(), &retError)
-
-	scope, sw := wh.startRequestProfile(metrics.FrontendDescribeDomainScope)
-	defer sw.Stop()
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, wh.error(err, scope)
-	}
-
-	if describeRequest == nil {
-		return nil, errRequestNotSet
-	}
-
-	if describeRequest.GetName() == "" && describeRequest.GetUUID() == "" {
-		return nil, errDomainNotSet
-	}
-
-	resp, err := wh.domainHandler.DescribeDomain(ctx, describeRequest)
-	if err != nil {
-		return resp, wh.error(err, scope)
-	}
-	return resp, err
+	panic("not implemented")
 }
 
 // UpdateDomain is used to update the information and configuration for a registered domain.
@@ -272,67 +205,14 @@ func (wh *WorkflowHandler) UpdateDomain(
 	ctx context.Context,
 	updateRequest *gen.UpdateDomainRequest,
 ) (resp *gen.UpdateDomainResponse, retError error) {
-	defer log.CapturePanic(wh.GetLogger(), &retError)
-
-	scope, sw := wh.startRequestProfile(metrics.FrontendUpdateDomainScope)
-	defer sw.Stop()
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, wh.error(err, scope)
-	}
-
-	if updateRequest == nil {
-		return nil, errRequestNotSet
-	}
-
-	// don't require permission for failover request
-	if !isFailoverRequest(updateRequest) {
-		if err := checkPermission(wh.config, updateRequest.SecurityToken); err != nil {
-			return nil, err
-		}
-	}
-
-	if updateRequest.GetName() == "" {
-		return nil, errDomainNotSet
-	}
-
-	resp, err := wh.domainHandler.UpdateDomain(ctx, updateRequest)
-	if err != nil {
-		return resp, wh.error(err, scope)
-	}
-	return resp, err
+	panic("not implemented")
 }
 
 // DeprecateDomain us used to update status of a registered domain to DEPRECATED. Once the domain is deprecated
 // it cannot be used to start new workflow executions.  Existing workflow executions will continue to run on
 // deprecated domains.
 func (wh *WorkflowHandler) DeprecateDomain(ctx context.Context, deprecateRequest *gen.DeprecateDomainRequest) (retError error) {
-	defer log.CapturePanic(wh.GetLogger(), &retError)
-
-	scope, sw := wh.startRequestProfile(metrics.FrontendDeprecateDomainScope)
-	defer sw.Stop()
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return wh.error(err, scope)
-	}
-
-	if deprecateRequest == nil {
-		return errRequestNotSet
-	}
-
-	if err := checkPermission(wh.config, deprecateRequest.SecurityToken); err != nil {
-		return err
-	}
-
-	if deprecateRequest.GetName() == "" {
-		return errDomainNotSet
-	}
-
-	err := wh.domainHandler.DeprecateDomain(ctx, deprecateRequest)
-	if err != nil {
-		return wh.error(err, scope)
-	}
-	return err
+	panic("not implemented")
 }
 
 // PollForActivityTask - Poll for an activity task.

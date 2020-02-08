@@ -20,12 +20,22 @@
 package persistence
 
 import (
+	"errors"
+
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 )
 
 const (
 	clusterMetadataEncoding = common.EncodingTypeThriftRW
+)
+
+var (
+	// ErrInvalidMembershipExpiry is used when upserting new cluster membership with an invalid duration
+	ErrInvalidMembershipExpiry = errors.New("membershipExpiry duration should be atleast 1 second")
+
+	// ErrIncompleteMembershipUpsert is used when upserting new cluster membership with missing fields
+	ErrIncompleteMembershipUpsert = errors.New("membership upserts require all fields")
 )
 
 type (
@@ -94,4 +104,32 @@ func (m *clusterMetadataManagerImpl) GetImmutableClusterMetadata() (*GetImmutabl
 	}
 
 	return &GetImmutableClusterMetadataResponse{*icm}, nil
+}
+
+func (m *clusterMetadataManagerImpl) GetClusterMembers(request *GetClusterMembersRequest) (*GetClusterMembersResponse, error) {
+	return m.persistence.GetClusterMembers(request)
+}
+
+func (m *clusterMetadataManagerImpl) UpsertClusterMembership(request *UpsertClusterMembershipRequest) error {
+	if request.RecordExpiry.Seconds() < 1 {
+		return ErrInvalidMembershipExpiry
+	}
+	if request.Role == All {
+		return ErrIncompleteMembershipUpsert
+	}
+	if request.RPCAddress == nil {
+		return ErrIncompleteMembershipUpsert
+	}
+	if request.RPCPort == 0 {
+		return ErrIncompleteMembershipUpsert
+	}
+	if request.SessionStart.IsZero() {
+		return ErrIncompleteMembershipUpsert
+	}
+
+	return m.persistence.UpsertClusterMembership(request)
+}
+
+func (m *clusterMetadataManagerImpl) PruneClusterMembership(request *PruneClusterMembershipRequest) error {
+	return m.persistence.PruneClusterMembership(request)
 }

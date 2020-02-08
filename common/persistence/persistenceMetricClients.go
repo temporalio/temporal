@@ -1336,3 +1336,45 @@ func (c *clusterMetadataPersistenceClient) InitializeImmutableClusterMetadata(re
 
 	return res, err
 }
+
+func (c *clusterMetadataPersistenceClient) GetClusterMembers(request *GetClusterMembersRequest) (*GetClusterMembersResponse, error) {
+	c.metricClient.IncCounter(metrics.PersistenceGetClusterMembersScope, metrics.PersistenceRequests)
+
+	sw := c.metricClient.StartTimer(metrics.PersistenceGetClusterMembersScope, metrics.PersistenceLatency)
+	res, err := c.persistence.GetClusterMembers(request)
+	sw.Stop()
+
+	if err != nil {
+		c.metricClient.IncCounter(metrics.PersistenceGetClusterMembersScope, metrics.PersistenceFailures)
+	}
+
+	return res, err
+}
+
+func (c *clusterMetadataPersistenceClient) UpsertClusterMembership(request *UpsertClusterMembershipRequest) error {
+	c.metricClient.IncCounter(metrics.PersistenceUpsertClusterMembershipScope, metrics.PersistenceRequests)
+
+	sw := c.metricClient.StartTimer(metrics.PersistenceUpsertClusterMembershipScope, metrics.PersistenceLatency)
+	err := c.persistence.UpsertClusterMembership(request)
+	sw.Stop()
+
+	if err != nil {
+		c.metricClient.IncCounter(metrics.PersistenceUpsertClusterMembershipScope, metrics.PersistenceFailures)
+	}
+
+	return err
+}
+
+func (c *clusterMetadataPersistenceClient) PruneClusterMembership(request *PruneClusterMembershipRequest) error {
+	c.metricClient.IncCounter(metrics.PersistencePruneClusterMembershipScope, metrics.PersistenceRequests)
+
+	sw := c.metricClient.StartTimer(metrics.PersistencePruneClusterMembershipScope, metrics.PersistenceLatency)
+	err := c.persistence.PruneClusterMembership(request)
+	sw.Stop()
+
+	if err != nil {
+		c.metricClient.IncCounter(metrics.PersistencePruneClusterMembershipScope, metrics.PersistenceFailures)
+	}
+
+	return err
+}

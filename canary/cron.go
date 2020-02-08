@@ -90,7 +90,7 @@ func cronActivity(
 	if err != nil {
 		logger.Error("cronActivity: failed to start job", zap.Error(err))
 		st := status.Convert(err)
-		if errordetails.IsDomainNotActiveFailure(st) {
+		if errordetails.IsDomainNotActiveStatus(st) {
 			return err
 		}
 	} else {
@@ -123,9 +123,9 @@ func startJob(
 	if err != nil {
 		scope.Counter(startWorkflowFailureCount).Inc(1)
 		st := status.Convert(err)
-		if errordetails.IsWorkflowExecutionAlreadyStartedFailure(st) {
+		if errordetails.IsWorkflowExecutionAlreadyStartedStatus(st) {
 			scope.Counter(startWorkflowAlreadyStartedCount).Inc(1)
-		} else if errordetails.IsDomainNotActiveFailure(st) {
+		} else if errordetails.IsDomainNotActiveStatus(st) {
 			scope.Counter(startWorkflowDomainNotActiveCount).Inc(1)
 		}
 

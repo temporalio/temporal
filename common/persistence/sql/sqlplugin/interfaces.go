@@ -24,6 +24,10 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/pborman/uuid"
+
+	"github.com/temporalio/temporal/common/persistence"
+
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/service/config"
 )
@@ -39,6 +43,32 @@ type (
 	ClusterMetadataRow struct {
 		ImmutableData         []byte
 		ImmutableDataEncoding string
+	}
+
+	// ClusterMembershipRow represents a row in the cluster_membership table
+	ClusterMembershipRow struct {
+		Role          persistence.ServiceType
+		HostID        []byte
+		RPCAddress    string
+		RPCPort       uint16
+		SessionStart  time.Time
+		LastHeartbeat time.Time
+		RecordExpiry  time.Time
+	}
+
+	// ClusterMembershipFilter is used for GetClusterMembership queries
+	ClusterMembershipFilter struct {
+		RPCAddressEquals   string
+		HostIDEquals       uuid.UUID
+		RoleEquals         persistence.ServiceType
+		LastHeartbeatAfter time.Time
+		RecordExpiryAfter  time.Time
+	}
+
+	// PruneClusterMembershipFilter is used for PruneClusterMembership queries
+	PruneClusterMembershipFilter struct {
+		PruneRecordsBefore time.Time
+		MaxRecordsAffected int
 	}
 
 	// DomainRow represents a row in domain table
@@ -504,6 +534,9 @@ type (
 	tableCRUD interface {
 		InsertIfNotExistsIntoClusterMetadata(row *ClusterMetadataRow) (sql.Result, error)
 		GetClusterMetadata() (*ClusterMetadataRow, error)
+		GetClusterMembers(filter *ClusterMembershipFilter) ([]ClusterMembershipRow, error)
+		UpsertClusterMembership(row *ClusterMembershipRow) (sql.Result, error)
+		PruneClusterMembership(filter *PruneClusterMembershipFilter) (sql.Result, error)
 
 		InsertIntoDomain(rows *DomainRow) (sql.Result, error)
 		UpdateDomain(row *DomainRow) (sql.Result, error)

@@ -164,7 +164,7 @@ func (s *Scanner) startWorkflow(
 	cancel()
 	if err != nil {
 		st := status.Convert(err)
-		if errordetails.IsWorkflowExecutionAlreadyStartedFailure(st) {
+		if errordetails.IsWorkflowExecutionAlreadyStartedStatus(st) {
 			return nil
 		}
 		s.context.GetLogger().Error("error starting "+workflowType+" workflow", tag.Error(err))

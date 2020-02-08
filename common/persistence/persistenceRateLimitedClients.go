@@ -854,5 +854,26 @@ func (c *clusterMetadataRateLimitedPersistenceClient) GetImmutableClusterMetadat
 	if ok := c.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
-	return c.GetImmutableClusterMetadata()
+	return c.persistence.GetImmutableClusterMetadata()
+}
+
+func (c *clusterMetadataRateLimitedPersistenceClient) GetClusterMembers(request *GetClusterMembersRequest) (*GetClusterMembersResponse, error) {
+	if ok := c.rateLimiter.Allow(); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+	return c.persistence.GetClusterMembers(request)
+}
+
+func (c *clusterMetadataRateLimitedPersistenceClient) UpsertClusterMembership(request *UpsertClusterMembershipRequest) error {
+	if ok := c.rateLimiter.Allow(); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+	return c.persistence.UpsertClusterMembership(request)
+}
+
+func (c *clusterMetadataRateLimitedPersistenceClient) PruneClusterMembership(request *PruneClusterMembershipRequest) error {
+	if ok := c.rateLimiter.Allow(); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+	return c.persistence.PruneClusterMembership(request)
 }

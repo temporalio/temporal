@@ -22,6 +22,7 @@ package sql
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/binary"
 	"encoding/gob"
 	"fmt"
@@ -121,4 +122,19 @@ func deserializePageToken(payload []byte) (int64, error) {
 		return 0, fmt.Errorf("Invalid token of %v length", len(payload))
 	}
 	return int64(binary.LittleEndian.Uint64(payload)), nil
+}
+
+func convertCommonErrors(
+	operation string,
+	err error,
+) error {
+	if err == sql.ErrNoRows {
+		return &workflow.EntityNotExistsError{
+			Message: fmt.Sprintf("%v failed. Error: %v ", operation, err),
+		}
+	}
+
+	return &workflow.InternalServiceError{
+		Message: fmt.Sprintf("%v operation failed. Error: %v", operation, err),
+	}
 }

@@ -336,6 +336,11 @@ func Address(ad string) Tag {
 	return newStringTag("address", ad)
 }
 
+// HostID return tag for HostID
+func HostID(hid string) Tag {
+	return newStringTag("hostId", hid)
+}
+
 // Key returns tag for Key
 func Key(k string) Tag {
 	return newStringTag("key", k)
