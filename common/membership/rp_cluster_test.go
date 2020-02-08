@@ -71,7 +71,7 @@ func NewTestRingpopCluster(ringPopApp string, size int, listenIpAddr string, see
 			logger.Error("Failed to create tchannel", tag.Error(err))
 			return nil
 		}
-		listenAddr := listenIpAddr + ":0"
+		listenAddr := listenIPAddr + ":0"
 		err = cluster.channels[i].ListenAndServe(listenAddr)
 		if err != nil {
 			logger.Error("tchannel listen failed", tag.Error(err))
