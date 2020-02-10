@@ -197,7 +197,7 @@ func (s *nDCIntegrationTestSuite) TestSingleBranch() {
 	tasklist := "event-generator-taskList"
 
 	// active has initial version 0
-	historyClient := s.active.GetHistoryClientGRPC()
+	historyClient := s.active.GetHistoryClient()
 
 	versions := []int64{101, 1, 201, 301, 401, 601, 501, 801, 1001, 901, 701, 1101}
 	for _, version := range versions {
@@ -286,7 +286,7 @@ func (s *nDCIntegrationTestSuite) TestMultipleBranches() {
 	tasklist := "event-generator-taskList"
 
 	// active has initial version 0
-	historyClient := s.active.GetHistoryClientGRPC()
+	historyClient := s.active.GetHistoryClient()
 
 	versions := []int64{101, 1, 201}
 	for _, version := range versions {
@@ -374,7 +374,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 	identity := "worker-identity"
 
 	// active has initial version 0
-	historyClient := s.active.GetHistoryClientGRPC()
+	historyClient := s.active.GetHistoryClient()
 
 	eventsBatch1 := []*commonproto.History{
 		{Events: []*commonproto.HistoryEvent{
@@ -679,7 +679,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 	identity := "worker-identity"
 
 	// active has initial version 0
-	historyClient := s.active.GetHistoryClientGRPC()
+	historyClient := s.active.GetHistoryClient()
 
 	eventsBatch1 := []*commonproto.History{
 		{Events: []*commonproto.HistoryEvent{
@@ -945,7 +945,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_ZombieWorkflow() {
 	tasklist := "event-generator-taskList"
 
 	// active has initial version 0
-	historyClient := s.active.GetHistoryClientGRPC()
+	historyClient := s.active.GetHistoryClient()
 
 	version := int64(101)
 	runID := uuid.New()
@@ -1009,7 +1009,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
 	version := int64(101)
 	isWorkflowFinished := false
 
-	historyClient := s.active.GetHistoryClientGRPC()
+	historyClient := s.active.GetHistoryClient()
 
 	s.generator = test.InitializeHistoryEventGenerator(s.domainName, version)
 	baseBranch := []*commonproto.History{}
@@ -1118,7 +1118,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 	tasklist := "event-generator-taskList"
 	identity := "ndc-re-send-test"
 
-	historyClient := s.active.GetHistoryClientGRPC()
+	historyClient := s.active.GetHistoryClient()
 	adminClient := s.active.GetAdminClient()
 	getHistory := func(
 		domain string,
@@ -1709,7 +1709,7 @@ func (s *nDCIntegrationTestSuite) applyEvents(
 	tasklist string,
 	versionHistory *persistence.VersionHistory,
 	eventBatches []*commonproto.History,
-	historyClient host.HistoryClientGRPC,
+	historyClient host.HistoryClient,
 ) {
 	for _, batch := range eventBatches {
 		eventBlob, newRunEventBlob := s.generateEventBlobs(workflowID, runID, workflowType, tasklist, batch)
