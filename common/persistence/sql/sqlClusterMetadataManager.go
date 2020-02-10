@@ -21,7 +21,6 @@ package sql
 
 import (
 	"encoding/binary"
-	"errors"
 	"net"
 	"time"
 
@@ -35,10 +34,6 @@ import (
 type sqlClusterMetadataManager struct {
 	sqlStore
 }
-
-var (
-	ErrPageTokenParse = errors.New("unable to parse page token")
-)
 
 var _ p.ClusterMetadataStore = (*sqlClusterMetadataManager)(nil)
 
