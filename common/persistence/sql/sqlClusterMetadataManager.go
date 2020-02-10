@@ -20,10 +20,6 @@
 package sql
 
 import (
-	"encoding/json"
-	"errors"
-	"fmt"
-	"math"
 	"net"
 	"time"
 
@@ -95,9 +91,9 @@ func (s *sqlClusterMetadataManager) GetImmutableClusterMetadata() (*p.InternalGe
 func (s *sqlClusterMetadataManager) GetClusterMembers(request *p.GetClusterMembersRequest) (*p.GetClusterMembersResponse, error) {
 	now := time.Now().UTC()
 	filter := &sqlplugin.ClusterMembershipFilter{
-		HostIDEquals:       request.HostIDEquals,
-		RoleEquals:         request.RoleEquals,
-		RecordExpiryAfter:  now,
+		HostIDEquals:      request.HostIDEquals,
+		RoleEquals:        request.RoleEquals,
+		RecordExpiryAfter: now,
 	}
 
 	if request.LastHeartbeatWithin > 0 {

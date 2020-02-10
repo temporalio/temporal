@@ -241,7 +241,7 @@ func (s *Service) Start() {
 	healthservice.RegisterMetaServer(s.server, accessControlledWorkflowHandler)
 
 	adminHandler := NewAdminHandler(s, s.params, s.config)
-	s.adminHandlerGRPC = NewAdminHandlerGRPC(adminHandler)
+	s.adminHandlerGRPC = NewAdminHandlerGRPC(s, adminHandler, s.params, s.config)
 	adminNilCheckHandler := NewAdminNilCheckHandler(s.adminHandlerGRPC)
 
 	adminservice.RegisterAdminServiceServer(s.server, adminNilCheckHandler)

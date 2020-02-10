@@ -52,11 +52,6 @@ import (
 	"github.com/temporalio/temporal/common/resource"
 )
 
-const (
-	getDomainReplicationMessageBatchSize = 100
-	defaultLastMessageID                 = -1
-)
-
 var _ workflowserviceserver.Interface = (*WorkflowHandler)(nil)
 
 type (

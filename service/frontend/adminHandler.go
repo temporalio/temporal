@@ -25,7 +25,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/olivere/elastic"
@@ -33,10 +32,7 @@ import (
 	"github.com/pborman/uuid"
 
 	"github.com/temporalio/temporal/.gen/go/admin"
-	"github.com/temporalio/temporal/.gen/go/admin/adminserviceserver"
 	h "github.com/temporalio/temporal/.gen/go/history"
-	hist "github.com/temporalio/temporal/.gen/go/history"
-	"github.com/temporalio/temporal/.gen/go/replicator"
 	gen "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/client"
@@ -50,8 +46,6 @@ import (
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 	historyService "github.com/temporalio/temporal/service/history"
 )
-
-var _ adminserviceserver.Interface = (*AdminHandler)(nil)
 
 type (
 	// AdminHandler - Thrift handler interface for admin service
@@ -155,51 +149,6 @@ func (adh *AdminHandler) AddSearchAttribute(
 	}
 
 	return nil
-}
-
-// DescribeWorkflowExecution returns information about the specified workflow execution.
-func (adh *AdminHandler) DescribeWorkflowExecution(
-	ctx context.Context,
-	request *admin.DescribeWorkflowExecutionRequest,
-) (resp *admin.DescribeWorkflowExecutionResponse, retError error) {
-
-	defer log.CapturePanic(adh.GetLogger(), &retError)
-	scope, sw := adh.startRequestProfile(metrics.AdminDescribeWorkflowExecutionScope)
-	defer sw.Stop()
-
-	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
-	}
-
-	if err := validateExecution(request.Execution); err != nil {
-		return nil, adh.error(err, scope)
-	}
-
-	shardID := common.WorkflowIDToHistoryShard(*request.Execution.WorkflowId, adh.numberOfHistoryShards)
-	shardIDstr := string(shardID)
-	shardIDForOutput := strconv.Itoa(shardID)
-
-	historyHost, err := adh.GetMembershipMonitor().Lookup(common.HistoryServiceName, shardIDstr)
-	if err != nil {
-		return nil, adh.error(err, scope)
-	}
-
-	domainID, err := adh.GetDomainCache().GetDomainID(request.GetDomain())
-
-	historyAddr := historyHost.GetAddress()
-	resp2, err := adh.GetHistoryClient().DescribeMutableState(ctx, &hist.DescribeMutableStateRequest{
-		DomainUUID: &domainID,
-		Execution:  request.Execution,
-	})
-	if err != nil {
-		return &admin.DescribeWorkflowExecutionResponse{}, err
-	}
-	return &admin.DescribeWorkflowExecutionResponse{
-		ShardId:                common.StringPtr(shardIDForOutput),
-		HistoryAddr:            common.StringPtr(historyAddr),
-		MutableStateInDatabase: resp2.MutableStateInDatabase,
-		MutableStateInCache:    resp2.MutableStateInCache,
-	}, err
 }
 
 // RemoveTask returns information about the internal states of a history host
@@ -613,154 +562,6 @@ func (adh *AdminHandler) DescribeCluster(
 		},
 		MembershipInfo: membershipInfo,
 	}, nil
-}
-
-// GetReplicationMessages returns new replication tasks since the read level provided in the token.
-func (adh *AdminHandler) GetReplicationMessages(
-	ctx context.Context,
-	request *replicator.GetReplicationMessagesRequest,
-) (resp *replicator.GetReplicationMessagesResponse, err error) {
-
-	defer log.CapturePanic(adh.GetLogger(), &err)
-	scope, sw := adh.startRequestProfile(metrics.AdminGetReplicationMessagesScope)
-	defer sw.Stop()
-
-	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
-	}
-	if !request.IsSetClusterName() {
-		return nil, adh.error(errClusterNameNotSet, scope)
-	}
-
-	resp, err = adh.GetHistoryClient().GetReplicationMessages(ctx, request)
-	if err != nil {
-		return nil, adh.error(err, scope)
-	}
-	return resp, nil
-}
-
-// GetDomainReplicationMessages returns new domain replication tasks since last retrieved task ID.
-func (adh *AdminHandler) GetDomainReplicationMessages(
-	ctx context.Context,
-	request *replicator.GetDomainReplicationMessagesRequest,
-) (resp *replicator.GetDomainReplicationMessagesResponse, err error) {
-
-	defer log.CapturePanic(adh.GetLogger(), &err)
-	scope, sw := adh.startRequestProfile(metrics.AdminGetDomainReplicationMessagesScope)
-	defer sw.Stop()
-
-	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
-	}
-
-	if adh.GetDomainReplicationQueue() == nil {
-		return nil, adh.error(errors.New("domain replication queue not enabled for cluster"), scope)
-	}
-
-	lastMessageID := defaultLastMessageID
-	if request.IsSetLastRetrievedMessageId() {
-		lastMessageID = int(request.GetLastRetrievedMessageId())
-	}
-
-	if lastMessageID == defaultLastMessageID {
-		clusterAckLevels, err := adh.GetDomainReplicationQueue().GetAckLevels()
-		if err == nil {
-			if ackLevel, ok := clusterAckLevels[request.GetClusterName()]; ok {
-				lastMessageID = ackLevel
-			}
-		}
-	}
-
-	replicationTasks, lastMessageID, err := adh.GetDomainReplicationQueue().GetReplicationMessages(
-		lastMessageID, getDomainReplicationMessageBatchSize)
-	if err != nil {
-		return nil, adh.error(err, scope)
-	}
-
-	lastProcessedMessageID := defaultLastMessageID
-	if request.IsSetLastProcessedMessageId() {
-		lastProcessedMessageID = int(request.GetLastProcessedMessageId())
-	}
-
-	if lastProcessedMessageID != defaultLastMessageID {
-		err := adh.GetDomainReplicationQueue().UpdateAckLevel(lastProcessedMessageID, request.GetClusterName())
-		if err != nil {
-			adh.GetLogger().Warn("Failed to update domain replication queue ack level.",
-				tag.TaskID(int64(lastProcessedMessageID)),
-				tag.ClusterName(request.GetClusterName()))
-		}
-	}
-
-	return &replicator.GetDomainReplicationMessagesResponse{
-		Messages: &replicator.ReplicationMessages{
-			ReplicationTasks:       replicationTasks,
-			LastRetrievedMessageId: common.Int64Ptr(int64(lastMessageID)),
-		},
-	}, nil
-}
-
-// GetDLQReplicationMessages returns new replication tasks based on the dlq info.
-func (adh *AdminHandler) GetDLQReplicationMessages(
-	ctx context.Context,
-	request *replicator.GetDLQReplicationMessagesRequest,
-) (resp *replicator.GetDLQReplicationMessagesResponse, err error) {
-
-	defer log.CapturePanic(adh.GetLogger(), &err)
-	scope, sw := adh.startRequestProfile(metrics.AdminGetDLQReplicationMessagesScope)
-	defer sw.Stop()
-
-	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
-	}
-	if len(request.GetTaskInfos()) == 0 {
-		return nil, adh.error(errEmptyReplicationInfo, scope)
-	}
-
-	resp, err = adh.GetHistoryClient().GetDLQReplicationMessages(ctx, request)
-	if err != nil {
-		return nil, adh.error(err, scope)
-	}
-	return resp, nil
-}
-
-// ReapplyEvents applies stale events to the current workflow and the current run
-func (adh *AdminHandler) ReapplyEvents(
-	ctx context.Context,
-	request *gen.ReapplyEventsRequest,
-) (err error) {
-
-	defer log.CapturePanic(adh.GetLogger(), &err)
-	scope, sw := adh.startRequestProfile(metrics.AdminReapplyEventsScope)
-	defer sw.Stop()
-
-	if request == nil {
-		return adh.error(errRequestNotSet, scope)
-	}
-	if request.DomainName == nil || request.GetDomainName() == "" {
-		return adh.error(errDomainNotSet, scope)
-	}
-	if request.WorkflowExecution == nil {
-		return adh.error(errExecutionNotSet, scope)
-	}
-	if request.GetWorkflowExecution().GetWorkflowId() == "" {
-		return adh.error(errWorkflowIDNotSet, scope)
-	}
-	if request.GetEvents() == nil {
-		return adh.error(errWorkflowIDNotSet, scope)
-	}
-	domainEntry, err := adh.GetDomainCache().GetDomain(request.GetDomainName())
-	if err != nil {
-		return adh.error(err, scope)
-	}
-
-	err = adh.GetHistoryClient().ReapplyEvents(ctx, &h.ReapplyEventsRequest{
-		DomainUUID: common.StringPtr(domainEntry.GetInfo().ID),
-		Request:    request,
-	})
-	if err != nil {
-		return adh.error(err, scope)
-	}
-	return nil
 }
 
 func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(
