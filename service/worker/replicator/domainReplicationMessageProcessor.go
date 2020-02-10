@@ -30,6 +30,7 @@ import (
 	"github.com/uber/cadence/client/admin"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
+	"github.com/uber/cadence/common/domain"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/membership"
@@ -51,7 +52,7 @@ func newDomainReplicationMessageProcessor(
 	logger log.Logger,
 	remotePeer admin.Client,
 	metricsClient metrics.Client,
-	domainReplicator DomainReplicator,
+	taskExecutor domain.ReplicationTaskExecutor,
 	hostInfo *membership.HostInfo,
 	serviceResolver membership.ServiceResolver,
 	domainReplicationQueue persistence.DomainReplicationQueue,
@@ -67,7 +68,7 @@ func newDomainReplicationMessageProcessor(
 		sourceCluster:          sourceCluster,
 		logger:                 logger,
 		remotePeer:             remotePeer,
-		domainReplicator:       domainReplicator,
+		taskExecutor:           taskExecutor,
 		metricsClient:          metricsClient,
 		retryPolicy:            retryPolicy,
 		lastProcessedMessageID: -1,
@@ -85,7 +86,7 @@ type (
 		sourceCluster          string
 		logger                 log.Logger
 		remotePeer             admin.Client
-		domainReplicator       DomainReplicator
+		taskExecutor           domain.ReplicationTaskExecutor
 		metricsClient          metrics.Client
 		retryPolicy            backoff.RetryPolicy
 		lastProcessedMessageID int64
@@ -189,7 +190,7 @@ func (p *domainReplicationMessageProcessor) handleDomainReplicationTask(
 	sw := p.metricsClient.StartTimer(metrics.DomainReplicationTaskScope, metrics.ReplicatorLatency)
 	defer sw.Stop()
 
-	return p.domainReplicator.HandleReceivingTask(task.DomainTaskAttributes)
+	return p.taskExecutor.Execute(task.DomainTaskAttributes)
 }
 
 func (p *domainReplicationMessageProcessor) Stop() {

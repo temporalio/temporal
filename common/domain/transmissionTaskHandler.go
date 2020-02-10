@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -21,8 +21,6 @@
 package domain
 
 import (
-	"errors"
-
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
@@ -30,11 +28,6 @@ import (
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/persistence"
-)
-
-var (
-	// ErrInvalidDomainStatus is the error to indicate invalid domain status
-	ErrInvalidDomainStatus = errors.New("invalid domain status attribute")
 )
 
 // NOTE: the counterpart of domain replication receiving logic is in service/worker package

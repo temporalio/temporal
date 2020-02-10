@@ -252,14 +252,16 @@ const (
 	PersistenceDeleteQueueMessagesScope
 	// PersistenceDeleteQueueMessageFromDLQScope tracks DeleteMessageFromDLQ calls made by service to persistence layer
 	PersistenceDeleteQueueMessageFromDLQScope
-	// PersistenceDeleteDLQMessageBeforeScope tracks DeleteDLQMessageBefore calls made by service to persistence layer
-	PersistenceDeleteDLQMessageBeforeScope
-	// PersistenceGetLastMessageIDFromDLQScope tracks GetLastMessageIDFromDLQ calls made by service to persistence layer
-	PersistenceGetLastMessageIDFromDLQScope
+	// PersistenceRangeDeleteMessagesFromDLQScope tracks RangeDeleteMessagesFromDLQ calls made by service to persistence layer
+	PersistenceRangeDeleteMessagesFromDLQScope
 	// PersistenceUpdateAckLevelScope tracks UpdateAckLevel calls made by service to persistence layer
 	PersistenceUpdateAckLevelScope
 	// PersistenceGetAckLevelScope tracks GetAckLevel calls made by service to persistence layer
 	PersistenceGetAckLevelScope
+	// PersistenceUpdateDLQAckLevelScope tracks UpdateDLQAckLevel calls made by service to persistence layer
+	PersistenceUpdateDLQAckLevelScope
+	// PersistenceGetDLQAckLevelScope tracks GetDLQAckLevel calls made by service to persistence layer
+	PersistenceGetDLQAckLevelScope
 	// HistoryClientStartWorkflowExecutionScope tracks RPC calls to history service
 	HistoryClientStartWorkflowExecutionScope
 	// HistoryClientRecordActivityTaskHeartbeatScope tracks RPC calls to history service
@@ -438,6 +440,12 @@ const (
 	AdminClientGetWorkflowExecutionRawHistoryV2Scope
 	// AdminClientDescribeClusterScope tracks RPC calls to admin service
 	AdminClientDescribeClusterScope
+	// AdminClientReadDLQMessagesScope tracks RPC calls to admin service
+	AdminClientReadDLQMessagesScope
+	// AdminClientPurgeDLQMessagesScope tracks RPC calls to admin service
+	AdminClientPurgeDLQMessagesScope
+	// AdminClientMergeDLQMessagesScope tracks RPC calls to admin service
+	AdminClientMergeDLQMessagesScope
 	// DCRedirectionDeprecateDomainScope tracks RPC calls for dc redirection
 	DCRedirectionDeprecateDomainScope
 	// DCRedirectionDescribeDomainScope tracks RPC calls for dc redirection
@@ -639,6 +647,12 @@ const (
 	AdminRemoveTaskScope
 	//AdminCloseShardTaskScope is the metric scope for admin.AdminRemoveTaskScope
 	AdminCloseShardTaskScope
+	//AdminReadDLQMessagesScope is the metric scope for admin.AdminReadDLQMessagesScope
+	AdminReadDLQMessagesScope
+	//AdminPurgeDLQMessagesScope is the metric scope for admin.AdminPurgeDLQMessagesScope
+	AdminPurgeDLQMessagesScope
+	//AdminMergeDLQMessagesScope is the metric scope for admin.AdminMergeDLQMessagesScope
+	AdminMergeDLQMessagesScope
 
 	NumAdminScopes
 )
@@ -1062,10 +1076,11 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceReadQueueMessagesFromDLQScope:                 {operation: "ReadQueueMessagesFromDLQ"},
 		PersistenceDeleteQueueMessagesScope:                      {operation: "DeleteQueueMessages"},
 		PersistenceDeleteQueueMessageFromDLQScope:                {operation: "DeleteQueueMessageFromDLQ"},
-		PersistenceDeleteDLQMessageBeforeScope:                   {operation: "DeleteDLQMessagesBefore"},
-		PersistenceGetLastMessageIDFromDLQScope:                  {operation: "GetLastMessageIDFromDLQ"},
+		PersistenceRangeDeleteMessagesFromDLQScope:               {operation: "RangeDeleteMessagesFromDLQ"},
 		PersistenceUpdateAckLevelScope:                           {operation: "UpdateAckLevel"},
 		PersistenceGetAckLevelScope:                              {operation: "GetAckLevel"},
+		PersistenceUpdateDLQAckLevelScope:                        {operation: "UpdateDLQAckLevel"},
+		PersistenceGetDLQAckLevelScope:                           {operation: "GetDLQAckLevel"},
 		PersistenceDomainReplicationQueueScope:                   {operation: "DomainReplicationQueue"},
 
 		ClusterMetadataArchivalConfigScope: {operation: "ArchivalConfig"},
@@ -1159,6 +1174,9 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminClientGetWorkflowExecutionRawHistoryV2Scope:    {operation: "AdminClientGetWorkflowExecutionRawHistoryV2", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		AdminClientDescribeClusterScope:                     {operation: "AdminClientDescribeCluster", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		AdminClientCloseShardScope:                          {operation: "AdminClientCloseShard", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
+		AdminClientReadDLQMessagesScope:                     {operation: "AdminClientReadDLQMessages", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
+		AdminClientPurgeDLQMessagesScope:                    {operation: "AdminClientPurgeDLQMessages", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
+		AdminClientMergeDLQMessagesScope:                    {operation: "AdminClientMergeDLQMessages", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		DCRedirectionDeprecateDomainScope:                   {operation: "DCRedirectionDeprecateDomain", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionDescribeDomainScope:                    {operation: "DCRedirectionDescribeDomain", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionDescribeTaskListScope:                  {operation: "DCRedirectionDescribeTaskList", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
@@ -1242,6 +1260,9 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		// Admin API scope co-locates with with frontend
 		AdminRemoveTaskScope:                       {operation: "AdminRemoveTask"},
 		AdminCloseShardTaskScope:                   {operation: "AdminCloseShardTask"},
+		AdminReadDLQMessagesScope:                  {operation: "AdminReadDLQMessages"},
+		AdminPurgeDLQMessagesScope:                 {operation: "AdminPurgeDLQMessages"},
+		AdminMergeDLQMessagesScope:                 {operation: "AdminMergeDLQMessages"},
 		AdminDescribeHistoryHostScope:              {operation: "DescribeHistoryHost"},
 		AdminAddSearchAttributeScope:               {operation: "AddSearchAttribute"},
 		AdminDescribeWorkflowExecutionScope:        {operation: "DescribeWorkflowExecution"},

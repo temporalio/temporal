@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 // 
-// Copyright (c) 2019 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -97,6 +97,24 @@ type Interface interface {
 		GetRequest *admin.GetWorkflowExecutionRawHistoryV2Request,
 		opts ...yarpc.CallOption,
 	) (*admin.GetWorkflowExecutionRawHistoryV2Response, error)
+
+	MergeDLQMessages(
+		ctx context.Context,
+		Request *replicator.MergeDLQMessagesRequest,
+		opts ...yarpc.CallOption,
+	) (*replicator.MergeDLQMessagesResponse, error)
+
+	PurgeDLQMessages(
+		ctx context.Context,
+		Request *replicator.PurgeDLQMessagesRequest,
+		opts ...yarpc.CallOption,
+	) error
+
+	ReadDLQMessages(
+		ctx context.Context,
+		Request *replicator.ReadDLQMessagesRequest,
+		opts ...yarpc.CallOption,
+	) (*replicator.ReadDLQMessagesResponse, error)
 
 	ReapplyEvents(
 		ctx context.Context,
@@ -361,6 +379,75 @@ func (c client) GetWorkflowExecutionRawHistoryV2(
 	}
 
 	success, err = admin.AdminService_GetWorkflowExecutionRawHistoryV2_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) MergeDLQMessages(
+	ctx context.Context,
+	_Request *replicator.MergeDLQMessagesRequest,
+	opts ...yarpc.CallOption,
+) (success *replicator.MergeDLQMessagesResponse, err error) {
+
+	args := admin.AdminService_MergeDLQMessages_Helper.Args(_Request)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result admin.AdminService_MergeDLQMessages_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	success, err = admin.AdminService_MergeDLQMessages_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) PurgeDLQMessages(
+	ctx context.Context,
+	_Request *replicator.PurgeDLQMessagesRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := admin.AdminService_PurgeDLQMessages_Helper.Args(_Request)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result admin.AdminService_PurgeDLQMessages_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	err = admin.AdminService_PurgeDLQMessages_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) ReadDLQMessages(
+	ctx context.Context,
+	_Request *replicator.ReadDLQMessagesRequest,
+	opts ...yarpc.CallOption,
+) (success *replicator.ReadDLQMessagesResponse, err error) {
+
+	args := admin.AdminService_ReadDLQMessages_Helper.Args(_Request)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result admin.AdminService_ReadDLQMessages_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	success, err = admin.AdminService_ReadDLQMessages_Helper.UnwrapResponse(&result)
 	return
 }
 

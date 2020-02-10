@@ -115,6 +115,7 @@ var (
 	errQueryDisallowedForDomain                   = &gen.BadRequestError{Message: "Domain is not allowed to query, please contact cadence team to re-enable queries."}
 	errClusterNameNotSet                          = &gen.BadRequestError{Message: "Cluster name is not set."}
 	errEmptyReplicationInfo                       = &gen.BadRequestError{Message: "Replication task info is not set."}
+	errEmptyQueueType                             = &gen.BadRequestError{Message: "Queue type is not set."}
 
 	// err for archival
 	errHistoryNotFound = &gen.BadRequestError{Message: "Requested workflow history not found, may have passed retention period."}

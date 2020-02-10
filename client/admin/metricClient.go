@@ -256,3 +256,54 @@ func (c *metricClient) ReapplyEvents(
 	}
 	return err
 }
+
+func (c *metricClient) ReadDLQMessages(
+	ctx context.Context,
+	request *replicator.ReadDLQMessagesRequest,
+	opts ...yarpc.CallOption,
+) (*replicator.ReadDLQMessagesResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientReadDLQMessagesScope, metrics.CadenceClientRequests)
+	sw := c.metricsClient.StartTimer(metrics.AdminClientReadDLQMessagesScope, metrics.CadenceClientLatency)
+	resp, err := c.client.ReadDLQMessages(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientReadDLQMessagesScope, metrics.CadenceClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) PurgeDLQMessages(
+	ctx context.Context,
+	request *replicator.PurgeDLQMessagesRequest,
+	opts ...yarpc.CallOption,
+) error {
+
+	c.metricsClient.IncCounter(metrics.AdminClientPurgeDLQMessagesScope, metrics.CadenceClientRequests)
+	sw := c.metricsClient.StartTimer(metrics.AdminClientPurgeDLQMessagesScope, metrics.CadenceClientLatency)
+	err := c.client.PurgeDLQMessages(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientPurgeDLQMessagesScope, metrics.CadenceClientFailures)
+	}
+	return err
+}
+
+func (c *metricClient) MergeDLQMessages(
+	ctx context.Context,
+	request *replicator.MergeDLQMessagesRequest,
+	opts ...yarpc.CallOption,
+) (*replicator.MergeDLQMessagesResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientMergeDLQMessagesScope, metrics.CadenceClientRequests)
+	sw := c.metricsClient.StartTimer(metrics.AdminClientMergeDLQMessagesScope, metrics.CadenceClientLatency)
+	resp, err := c.client.MergeDLQMessages(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientMergeDLQMessagesScope, metrics.CadenceClientFailures)
+	}
+	return resp, err
+}

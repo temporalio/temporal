@@ -795,3 +795,82 @@ func newAdminClusterCommands() []cli.Command {
 		},
 	}
 }
+
+func newAdminDLQCommands() []cli.Command {
+	return []cli.Command{
+		{
+			Name:    "read",
+			Aliases: []string{"r"},
+			Usage:   "Read DLQ Messages",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagDLQTypeWithAlias,
+					Usage: "Type of DLQ to manage. (Options: domain, history)",
+				},
+				cli.IntFlag{
+					Name:  FlagShardIDWithAlias,
+					Usage: "ShardID",
+				},
+				cli.IntFlag{
+					Name:  FlagMaxMessageCountWithAlias,
+					Usage: "Max message size to fetch",
+				},
+				cli.IntFlag{
+					Name:  FlagLastMessageID,
+					Usage: "The upper boundary of the read message",
+				},
+				cli.StringFlag{
+					Name:  FlagOutputFilenameWithAlias,
+					Usage: "Output file to write to, if not provided output is written to stdout",
+				},
+			},
+			Action: func(c *cli.Context) {
+				AdminGetDLQMessages(c)
+			},
+		},
+		{
+			Name:    "purge",
+			Aliases: []string{"p"},
+			Usage:   "Delete DLQ messages with equal or smaller ids than the provided task id",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagDLQTypeWithAlias,
+					Usage: "Type of DLQ to manage. (Options: domain, history)",
+				},
+				cli.IntFlag{
+					Name:  FlagShardIDWithAlias,
+					Usage: "ShardID",
+				},
+				cli.IntFlag{
+					Name:  FlagLastMessageID,
+					Usage: "The upper boundary of the read message",
+				},
+			},
+			Action: func(c *cli.Context) {
+				AdminPurgeDLQMessages(c)
+			},
+		},
+		{
+			Name:    "merge",
+			Aliases: []string{"m"},
+			Usage:   "Merge DLQ messages with equal or smaller ids than the provided task id",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagDLQTypeWithAlias,
+					Usage: "Type of DLQ to manage. (Options: domain, history)",
+				},
+				cli.IntFlag{
+					Name:  FlagShardIDWithAlias,
+					Usage: "ShardID",
+				},
+				cli.IntFlag{
+					Name:  FlagLastMessageID,
+					Usage: "The upper boundary of the read message",
+				},
+			},
+			Action: func(c *cli.Context) {
+				AdminMergeDLQMessages(c)
+			},
+		},
+	}
+}

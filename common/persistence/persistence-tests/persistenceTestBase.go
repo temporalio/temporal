@@ -1376,7 +1376,10 @@ func (g *TestTransferTaskIDGenerator) GenerateTransferTaskID() (int64, error) {
 }
 
 // Publish is a utility method to add messages to the queue
-func (s *TestBase) Publish(message interface{}) error {
+func (s *TestBase) Publish(
+	message interface{},
+) error {
+
 	retryPolicy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
 	retryPolicy.SetBackoffCoefficient(1.5)
 	retryPolicy.SetMaximumAttempts(5)
@@ -1397,18 +1400,91 @@ func isMessageIDConflictError(err error) bool {
 }
 
 // GetReplicationMessages is a utility method to get messages from the queue
-func (s *TestBase) GetReplicationMessages(lastMessageID int, maxCount int) ([]*replicator.ReplicationTask, int, error) {
+func (s *TestBase) GetReplicationMessages(
+	lastMessageID int,
+	maxCount int,
+) ([]*replicator.ReplicationTask, int, error) {
+
 	return s.DomainReplicationQueue.GetReplicationMessages(lastMessageID, maxCount)
 }
 
 // UpdateAckLevel updates replication queue ack level
-func (s *TestBase) UpdateAckLevel(lastProcessedMessageID int, clusterName string) error {
+func (s *TestBase) UpdateAckLevel(
+	lastProcessedMessageID int,
+	clusterName string,
+) error {
+
 	return s.DomainReplicationQueue.UpdateAckLevel(lastProcessedMessageID, clusterName)
 }
 
 // GetAckLevels returns replication queue ack levels
 func (s *TestBase) GetAckLevels() (map[string]int, error) {
 	return s.DomainReplicationQueue.GetAckLevels()
+}
+
+// PublishToDomainDLQ is a utility method to add messages to the domain DLQ
+func (s *TestBase) PublishToDomainDLQ(
+	message interface{},
+) error {
+
+	retryPolicy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
+	retryPolicy.SetBackoffCoefficient(1.5)
+	retryPolicy.SetMaximumAttempts(5)
+
+	return backoff.Retry(
+		func() error {
+			return s.DomainReplicationQueue.PublishToDLQ(message)
+		},
+		retryPolicy,
+		func(e error) bool {
+			return common.IsPersistenceTransientError(e) || isMessageIDConflictError(e)
+		})
+}
+
+// GetMessagesFromDomainDLQ is a utility method to get messages from the domain DLQ
+func (s *TestBase) GetMessagesFromDomainDLQ(
+	firstMessageID int,
+	lastMessageID int,
+	pageSize int,
+	pageToken []byte,
+) ([]*replicator.ReplicationTask, []byte, error) {
+
+	return s.DomainReplicationQueue.GetMessagesFromDLQ(
+		firstMessageID,
+		lastMessageID,
+		pageSize,
+		pageToken,
+	)
+}
+
+// UpdateDomainDLQAckLevel updates domain dlq ack level
+func (s *TestBase) UpdateDomainDLQAckLevel(
+	lastProcessedMessageID int,
+) error {
+
+	return s.DomainReplicationQueue.UpdateDLQAckLevel(lastProcessedMessageID)
+}
+
+// GetDomainDLQAckLevel returns domain dlq ack level
+func (s *TestBase) GetDomainDLQAckLevel() (int, error) {
+	return s.DomainReplicationQueue.GetDLQAckLevel()
+}
+
+// DeleteMessageFromDomainDLQ deletes one message from domain DLQ
+func (s *TestBase) DeleteMessageFromDomainDLQ(
+	messageID int,
+) error {
+
+	return s.DomainReplicationQueue.DeleteMessageFromDLQ(messageID)
+}
+
+// RangeDeleteMessagesFromDomainDLQ deletes messages from domain DLQ
+func (s *TestBase) RangeDeleteMessagesFromDomainDLQ(
+	firstMessageID int,
+	lastMessageID int,
+) error {
+
+	return s.DomainReplicationQueue.RangeDeleteMessagesFromDLQ(firstMessageID, lastMessageID)
 }
 
 // GenerateTransferTaskIDs helper

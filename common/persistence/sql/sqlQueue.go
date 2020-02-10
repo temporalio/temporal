@@ -25,6 +25,8 @@ import (
 
 	"database/sql"
 
+	"go.uber.org/cadence/.gen/go/shared"
+
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/log"
@@ -192,12 +194,23 @@ func (q *sqlQueue) EnqueueMessageToDLQ(
 func (q *sqlQueue) ReadMessagesFromDLQ(
 	firstMessageID int,
 	lastMessageID int,
-	maxCount int,
-) ([]*persistence.QueueMessage, error) {
+	pageSize int,
+	pageToken []byte,
+) ([]*persistence.QueueMessage, []byte, error) {
+
+	if pageToken != nil && len(pageToken) != 0 {
+		lastReadMessageID, err := deserializePageToken(pageToken)
+		if err != nil {
+			return nil, nil, &shared.InternalServiceError{
+				Message: fmt.Sprintf("invalid next page token %v", pageToken)}
+		}
+		firstMessageID = int(lastReadMessageID)
+	}
+
 	// Use negative queue type as the dlq type
-	rows, err := q.db.GetMessagesBetween(-q.queueType, firstMessageID, lastMessageID, maxCount)
+	rows, err := q.db.GetMessagesBetween(-q.queueType, firstMessageID, lastMessageID, pageSize)
 	if err != nil {
-		return nil, &workflow.InternalServiceError{
+		return nil, nil, &workflow.InternalServiceError{
 			Message: fmt.Sprintf("ReadMessagesFromDLQ operation failed. Error %v", err),
 		}
 	}
@@ -206,7 +219,13 @@ func (q *sqlQueue) ReadMessagesFromDLQ(
 	for _, row := range rows {
 		messages = append(messages, &persistence.QueueMessage{ID: row.MessageID, Payload: row.MessagePayload})
 	}
-	return messages, nil
+
+	var newPagingToken []byte
+	if messages != nil && len(messages) >= pageSize {
+		lastReadMessageID := messages[len(messages)-1].ID
+		newPagingToken = serializePageToken(int64(lastReadMessageID))
+	}
+	return messages, newPagingToken, nil
 }
 
 func (q *sqlQueue) DeleteMessageFromDLQ(
@@ -216,17 +235,18 @@ func (q *sqlQueue) DeleteMessageFromDLQ(
 	_, err := q.db.DeleteMessage(-q.queueType, messageID)
 	if err != nil {
 		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("DeleteMessagesFromDLQ operation failed. Error %v", err),
+			Message: fmt.Sprintf("DeleteMessageFromDLQ operation failed. Error %v", err),
 		}
 	}
 	return nil
 }
 
-func (q *sqlQueue) DeleteDLQMessagesBefore(
-	messageID int,
+func (q *sqlQueue) RangeDeleteMessagesFromDLQ(
+	firstMessageID int,
+	lastMessageID int,
 ) error {
 	// Use negative queue type as the dlq type
-	_, err := q.db.DeleteMessagesBefore(-q.queueType, messageID)
+	_, err := q.db.RangeDeleteMessages(-q.queueType, firstMessageID, lastMessageID)
 	if err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("RangeDeleteMessagesFromDLQ operation failed. Error %v", err),
@@ -235,14 +255,55 @@ func (q *sqlQueue) DeleteDLQMessagesBefore(
 	return nil
 }
 
-func (q *sqlQueue) GetLastMessageIDFromDLQ() (int, error) {
-	// Use negative queue type as the dlq type
-	lastMessageID, err := q.db.GetLastEnqueuedMessageIDForUpdate(-q.queueType)
-	if err != nil {
-		return 0, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("GetLastEnqueuedMessageIDForUpdate operation failed. Error %v", err),
-		}
-	}
+func (q *sqlQueue) UpdateDLQAckLevel(
+	messageID int,
+	clusterName string,
+) error {
 
-	return lastMessageID, err
+	err := q.txExecute("UpdateDLQAckLevel", func(tx sqlplugin.Tx) error {
+		// Use negative queue type as the dlq type
+		clusterAckLevels, err := tx.GetAckLevels(-q.queueType, true)
+		if err != nil {
+			return &workflow.InternalServiceError{
+				Message: fmt.Sprintf("UpdateDLQAckLevel operation failed. Error %v", err),
+			}
+		}
+
+		if clusterAckLevels == nil {
+			// Use negative queue type as the dlq type
+			err := tx.InsertAckLevel(-q.queueType, messageID, clusterName)
+			if err != nil {
+				return &workflow.InternalServiceError{
+					Message: fmt.Sprintf("UpdateDLQAckLevel operation failed. Error %v", err),
+				}
+			}
+			return nil
+		}
+
+		// Ignore possibly delayed message
+		if clusterAckLevels[clusterName] > messageID {
+			return nil
+		}
+
+		clusterAckLevels[clusterName] = messageID
+		// Use negative queue type as the dlq type
+		err = tx.UpdateAckLevels(-q.queueType, clusterAckLevels)
+		if err != nil {
+			return &workflow.InternalServiceError{
+				Message: fmt.Sprintf("UpdateDLQAckLevel operation failed. Error %v", err),
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		return &workflow.InternalServiceError{Message: err.Error()}
+	}
+	return nil
+}
+
+func (q *sqlQueue) GetDLQAckLevels() (map[string]int, error) {
+
+	// Use negative queue type as the dlq type
+	return q.db.GetAckLevels(-q.queueType, false)
 }

@@ -47,8 +47,8 @@ func (pdb *db) IsDupEntryError(err error) bool {
 	return ok && sqlErr.Code == ErrDupEntry
 }
 
-// NewDB returns an instance of DB, which is a logical
-// connection to the underlying mysql database
+// newDB returns an instance of DB, which is a logical
+// connection to the underlying postgres database
 func newDB(xdb *sqlx.DB, tx *sqlx.Tx) *db {
 	mdb := &db{db: xdb, tx: tx}
 	mdb.conn = xdb

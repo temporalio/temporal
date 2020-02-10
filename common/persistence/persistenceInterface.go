@@ -143,10 +143,11 @@ type (
 		UpdateAckLevel(messageID int, clusterName string) error
 		GetAckLevels() (map[string]int, error)
 		EnqueueMessageToDLQ(messagePayload []byte) error
-		ReadMessagesFromDLQ(firstMessageID int, lastMessageID int, maxCount int) ([]*QueueMessage, error)
+		ReadMessagesFromDLQ(firstMessageID int, lastMessageID int, pageSize int, pageToken []byte) ([]*QueueMessage, []byte, error)
 		DeleteMessageFromDLQ(messageID int) error
-		DeleteDLQMessagesBefore(messageID int) error
-		GetLastMessageIDFromDLQ() (int, error)
+		RangeDeleteMessagesFromDLQ(firstMessageID int, lastMessageID int) error
+		UpdateDLQAckLevel(messageID int, clusterName string) error
+		GetDLQAckLevels() (map[string]int, error)
 	}
 
 	// QueueMessage is the message that stores in the queue

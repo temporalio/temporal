@@ -48,9 +48,8 @@ func (mdb *db) IsDupEntryError(err error) bool {
 	return ok && sqlErr.Number == ErrDupEntry
 }
 
-// NewDB returns an instance of DB, which is a logical
+// newDB returns an instance of DB, which is a logical
 // connection to the underlying mysql database
-// Fixme we need to ignore this Lint warning
 func newDB(xdb *sqlx.DB, tx *sqlx.Tx) *db {
 	mdb := &db{db: xdb, tx: tx}
 	mdb.conn = xdb

@@ -34,6 +34,7 @@ const (
 	templateGetMessagesQuery               = `SELECT message_id, message_payload FROM queue WHERE queue_type = ? and message_id > ? ORDER BY message_id ASC LIMIT ?`
 	templateGetMessagesBetweenQuery        = `SELECT message_id, message_payload FROM queue WHERE queue_type = ? and message_id > ? and message_id <= ? ORDER BY message_id ASC LIMIT ?`
 	templateDeleteMessagesBeforeQuery      = `DELETE FROM queue WHERE queue_type = ? and message_id < ?`
+	templateRangeDeleteMessagesQuery       = `DELETE FROM queue WHERE queue_type = ? and message_id > ? and message_id <= ?`
 	templateDeleteMessageQuery             = `DELETE FROM queue WHERE queue_type = ? and message_id = ?`
 	templateGetQueueMetadataQuery          = `SELECT data from queue_metadata WHERE queue_type = ?`
 	templateGetQueueMetadataForUpdateQuery = templateGetQueueMetadataQuery + ` FOR UPDATE`
@@ -70,6 +71,11 @@ func (mdb *db) GetMessagesBetween(queueType common.QueueType, firstMessageID int
 // DeleteMessagesBefore deletes messages before messageID from the queue
 func (mdb *db) DeleteMessagesBefore(queueType common.QueueType, messageID int) (sql.Result, error) {
 	return mdb.conn.Exec(templateDeleteMessagesBeforeQuery, queueType, messageID)
+}
+
+// RangeDeleteMessages deletes messages before messageID from the queue
+func (mdb *db) RangeDeleteMessages(queueType common.QueueType, exclusiveBeginMessageID int, inclusiveEndMessageID int) (sql.Result, error) {
+	return mdb.conn.Exec(templateRangeDeleteMessagesQuery, queueType, exclusiveBeginMessageID, inclusiveEndMessageID)
 }
 
 // DeleteMessage deletes message with a messageID from the queue

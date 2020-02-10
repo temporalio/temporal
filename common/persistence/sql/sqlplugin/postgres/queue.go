@@ -35,6 +35,7 @@ const (
 	templateGetMessagesBetweenQuery        = `SELECT message_id, message_payload FROM queue WHERE queue_type = $1 and messageid > $2 and message_id <= $3 ORDER BY message_id ASC LIMIT $4`
 	templateDeleteMessageQuery             = `DELETE FROM queue WHERE queue_type = $1 and message_id = $2`
 	templateDeleteMessagesBeforeQuery      = `DELETE FROM queue WHERE queue_type = $1 and message_id < $2`
+	templateRangeDeleteMessagesQuery       = `DELETE FROM queue WHERE queue_type = $1 and message_id > $2 and message_id <= $3`
 	templateGetQueueMetadataQuery          = `SELECT data from queue_metadata WHERE queue_type = $1`
 	templateGetQueueMetadataForUpdateQuery = templateGetQueueMetadataQuery + ` FOR UPDATE`
 	templateInsertQueueMetadataQuery       = `INSERT INTO queue_metadata (queue_type, data) VALUES(:queue_type, :data)`
@@ -70,6 +71,11 @@ func (pdb *db) GetMessagesBetween(queueType common.QueueType, firstMessageID int
 // DeleteMessagesBefore deletes messages before messageID from the queue
 func (pdb *db) DeleteMessagesBefore(queueType common.QueueType, messageID int) (sql.Result, error) {
 	return pdb.conn.Exec(templateDeleteMessagesBeforeQuery, queueType, messageID)
+}
+
+// RangeDeleteMessages deletes messages before messageID from the queue
+func (pdb *db) RangeDeleteMessages(queueType common.QueueType, exclusiveBeginMessageID int, inclusiveEndMessageID int) (sql.Result, error) {
+	return pdb.conn.Exec(templateRangeDeleteMessagesQuery, queueType, exclusiveBeginMessageID, inclusiveEndMessageID)
 }
 
 // DeleteMessage deletes message with a messageID from the queue

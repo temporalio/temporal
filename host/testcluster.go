@@ -35,6 +35,7 @@ import (
 	"github.com/uber/cadence/common/archiver/provider"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/definition"
+	"github.com/uber/cadence/common/domain"
 	"github.com/uber/cadence/common/elasticsearch"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
@@ -168,27 +169,28 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	pConfig := testBase.Config()
 	pConfig.NumHistoryShards = options.HistoryConfig.NumHistoryShards
 	cadenceParams := &CadenceParams{
-		ClusterMetadata:        clusterMetadata,
-		PersistenceConfig:      pConfig,
-		DispatcherProvider:     client.NewDNSYarpcDispatcherProvider(logger, 0),
-		MessagingClient:        messagingClient,
-		MetadataMgr:            testBase.MetadataManager,
-		ShardMgr:               testBase.ShardMgr,
-		HistoryV2Mgr:           testBase.HistoryV2Mgr,
-		ExecutionMgrFactory:    testBase.ExecutionMgrFactory,
-		domainReplicationQueue: testBase.DomainReplicationQueue,
-		TaskMgr:                testBase.TaskMgr,
-		VisibilityMgr:          visibilityMgr,
-		Logger:                 logger,
-		ClusterNo:              options.ClusterNo,
-		EnableNDC:              options.EnableNDC,
-		ESConfig:               options.ESConfig,
-		ESClient:               esClient,
-		ArchiverMetadata:       archiverBase.metadata,
-		ArchiverProvider:       archiverBase.provider,
-		HistoryConfig:          options.HistoryConfig,
-		WorkerConfig:           options.WorkerConfig,
-		MockAdminClient:        options.MockAdminClient,
+		ClusterMetadata:               clusterMetadata,
+		PersistenceConfig:             pConfig,
+		DispatcherProvider:            client.NewDNSYarpcDispatcherProvider(logger, 0),
+		MessagingClient:               messagingClient,
+		MetadataMgr:                   testBase.MetadataManager,
+		ShardMgr:                      testBase.ShardMgr,
+		HistoryV2Mgr:                  testBase.HistoryV2Mgr,
+		ExecutionMgrFactory:           testBase.ExecutionMgrFactory,
+		DomainReplicationQueue:        testBase.DomainReplicationQueue,
+		TaskMgr:                       testBase.TaskMgr,
+		VisibilityMgr:                 visibilityMgr,
+		Logger:                        logger,
+		ClusterNo:                     options.ClusterNo,
+		EnableNDC:                     options.EnableNDC,
+		ESConfig:                      options.ESConfig,
+		ESClient:                      esClient,
+		ArchiverMetadata:              archiverBase.metadata,
+		ArchiverProvider:              archiverBase.provider,
+		HistoryConfig:                 options.HistoryConfig,
+		WorkerConfig:                  options.WorkerConfig,
+		MockAdminClient:               options.MockAdminClient,
+		DomainReplicationTaskExecutor: domain.NewReplicationTaskExecutor(testBase.MetadataManager, logger),
 	}
 	cluster := NewCadence(cadenceParams)
 	if err := cluster.Start(); err != nil {

@@ -43,6 +43,8 @@ const (
 	FirstBlobPageToken = 1
 	// LastBlobNextPageToken is the next page token on the last blob for each history archival
 	LastBlobNextPageToken = -1
+	// EndMessageID is the id of the end message, here we use the int64 max
+	EndMessageID int64 = 1<<63 - 1
 )
 
 const (
@@ -79,6 +81,8 @@ const MaxTaskTimeout = 31622400
 const (
 	// GetHistoryMaxPageSize is the max page size for get history
 	GetHistoryMaxPageSize = 1000
+	// ReadDLQMessagesPageSize is the max page size for read DLQ messages
+	ReadDLQMessagesPageSize = 1000
 )
 
 const (

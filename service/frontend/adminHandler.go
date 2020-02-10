@@ -29,7 +29,6 @@ import (
 	"time"
 
 	"github.com/olivere/elastic"
-
 	"github.com/pborman/uuid"
 
 	"github.com/uber/cadence/.gen/go/admin"
@@ -39,8 +38,10 @@ import (
 	"github.com/uber/cadence/.gen/go/replicator"
 	gen "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/client"
 	"github.com/uber/cadence/common/definition"
+	"github.com/uber/cadence/common/domain"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
@@ -61,6 +62,7 @@ type (
 		numberOfHistoryShards int
 		params                *service.BootstrapParams
 		config                *Config
+		domainDLQHandler      domain.DLQMessageHandler
 	}
 
 	getWorkflowRawHistoryV2Token struct {
@@ -76,17 +78,31 @@ type (
 	}
 )
 
+var (
+	adminServiceRetryPolicy = common.CreateAdminServiceRetryPolicy()
+)
+
 // NewAdminHandler creates a thrift handler for the cadence admin service
 func NewAdminHandler(
 	resource resource.Resource,
 	params *service.BootstrapParams,
 	config *Config,
 ) *AdminHandler {
+
+	domainReplicationTaskExecutor := domain.NewReplicationTaskExecutor(
+		resource.GetMetadataManager(),
+		resource.GetLogger(),
+	)
 	return &AdminHandler{
 		Resource:              resource,
 		numberOfHistoryShards: params.PersistenceConfig.NumHistoryShards,
 		params:                params,
 		config:                config,
+		domainDLQHandler: domain.NewDLQMessageHandler(
+			domainReplicationTaskExecutor,
+			resource.GetDomainReplicationQueue(),
+			resource.GetLogger(),
+		),
 	}
 }
 
@@ -774,6 +790,170 @@ func (adh *AdminHandler) ReapplyEvents(
 		return adh.error(err, scope)
 	}
 	return nil
+}
+
+// ReadDLQMessages reads messages from DLQ
+func (adh *AdminHandler) ReadDLQMessages(
+	ctx context.Context,
+	request *replicator.ReadDLQMessagesRequest,
+) (resp *replicator.ReadDLQMessagesResponse, err error) {
+
+	defer log.CapturePanic(adh.GetLogger(), &err)
+	scope, sw := adh.startRequestProfile(metrics.AdminReadDLQMessagesScope)
+	defer sw.Stop()
+
+	if request == nil {
+		return nil, adh.error(errRequestNotSet, scope)
+	}
+
+	if !request.IsSetType() {
+		return nil, adh.error(errEmptyQueueType, scope)
+	}
+
+	if request.GetMaximumPageSize() <= 0 {
+		request.MaximumPageSize = common.Int32Ptr(common.ReadDLQMessagesPageSize)
+	}
+
+	if !request.IsSetInclusiveEndMessageID() {
+		request.InclusiveEndMessageID = common.Int64Ptr(common.EndMessageID)
+	}
+
+	var tasks []*replicator.ReplicationTask
+	var token []byte
+	var op func() error
+	switch request.GetType() {
+	case replicator.DLQTypeReplication:
+		return nil, &gen.BadRequestError{Message: "Not implement."}
+	case replicator.DLQTypeDomain:
+		op = func() error {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+				var err error
+				tasks, token, err = adh.domainDLQHandler.Read(
+					int(request.GetInclusiveEndMessageID()),
+					int(request.GetMaximumPageSize()),
+					request.GetNextPageToken())
+				return err
+			}
+		}
+	default:
+		return nil, &gen.BadRequestError{Message: "The DLQ type is not supported."}
+	}
+	err = backoff.Retry(op, adminServiceRetryPolicy, common.IsServiceTransientError)
+	if err != nil {
+		return nil, adh.error(err, scope)
+	}
+
+	return &replicator.ReadDLQMessagesResponse{
+		ReplicationTasks: tasks,
+		NextPageToken:    token,
+	}, nil
+}
+
+// PurgeDLQMessages purge messages from DLQ
+func (adh *AdminHandler) PurgeDLQMessages(
+	ctx context.Context,
+	request *replicator.PurgeDLQMessagesRequest,
+) (err error) {
+
+	defer log.CapturePanic(adh.GetLogger(), &err)
+	scope, sw := adh.startRequestProfile(metrics.AdminPurgeDLQMessagesScope)
+	defer sw.Stop()
+
+	if request == nil {
+		return adh.error(errRequestNotSet, scope)
+	}
+
+	if !request.IsSetType() {
+		return adh.error(errEmptyQueueType, scope)
+	}
+
+	if !request.IsSetInclusiveEndMessageID() {
+		request.InclusiveEndMessageID = common.Int64Ptr(common.EndMessageID)
+	}
+
+	var op func() error
+	switch request.GetType() {
+	case replicator.DLQTypeReplication:
+		return &gen.BadRequestError{Message: "Not implement."}
+	case replicator.DLQTypeDomain:
+		op = func() error {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+				return adh.domainDLQHandler.Purge(
+					int(request.GetInclusiveEndMessageID()),
+				)
+			}
+		}
+	default:
+		return &gen.BadRequestError{Message: "The DLQ type is not supported."}
+	}
+	err = backoff.Retry(op, adminServiceRetryPolicy, common.IsServiceTransientError)
+	if err != nil {
+		return adh.error(err, scope)
+	}
+
+	return nil
+}
+
+// MergeDLQMessages merges DLQ messages
+func (adh *AdminHandler) MergeDLQMessages(
+	ctx context.Context,
+	request *replicator.MergeDLQMessagesRequest,
+) (resp *replicator.MergeDLQMessagesResponse, err error) {
+
+	defer log.CapturePanic(adh.GetLogger(), &err)
+	scope, sw := adh.startRequestProfile(metrics.AdminMergeDLQMessagesScope)
+	defer sw.Stop()
+
+	if request == nil {
+		return nil, adh.error(errRequestNotSet, scope)
+	}
+
+	if !request.IsSetType() {
+		return nil, adh.error(errEmptyQueueType, scope)
+	}
+
+	if !request.IsSetInclusiveEndMessageID() {
+		request.InclusiveEndMessageID = common.Int64Ptr(common.EndMessageID)
+	}
+
+	var token []byte
+	var op func() error
+	switch request.GetType() {
+	case replicator.DLQTypeReplication:
+		return nil, &gen.BadRequestError{Message: "Not implement."}
+	case replicator.DLQTypeDomain:
+
+		op = func() error {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+				var err error
+				token, err = adh.domainDLQHandler.Merge(
+					int(request.GetInclusiveEndMessageID()),
+					int(request.GetMaximumPageSize()),
+					request.GetNextPageToken(),
+				)
+				return err
+			}
+		}
+	default:
+		return nil, &gen.BadRequestError{Message: "The DLQ type is not supported."}
+	}
+	err = backoff.Retry(op, adminServiceRetryPolicy, common.IsServiceTransientError)
+	if err != nil {
+		return nil, adh.error(err, scope)
+	}
+
+	return &replicator.MergeDLQMessagesResponse{
+		NextPageToken: token,
+	}, nil
 }
 
 func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(

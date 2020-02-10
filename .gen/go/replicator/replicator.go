@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 // 
-// Copyright (c) 2019 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -39,6 +39,177 @@ import (
 	strconv "strconv"
 	strings "strings"
 )
+
+type DLQType int32
+
+const (
+	DLQTypeReplication DLQType = 0
+	DLQTypeDomain      DLQType = 1
+)
+
+// DLQType_Values returns all recognized values of DLQType.
+func DLQType_Values() []DLQType {
+	return []DLQType{
+		DLQTypeReplication,
+		DLQTypeDomain,
+	}
+}
+
+// UnmarshalText tries to decode DLQType from a byte slice
+// containing its name.
+//
+//   var v DLQType
+//   err := v.UnmarshalText([]byte("Replication"))
+func (v *DLQType) UnmarshalText(value []byte) error {
+	switch s := string(value); s {
+	case "Replication":
+		*v = DLQTypeReplication
+		return nil
+	case "Domain":
+		*v = DLQTypeDomain
+		return nil
+	default:
+		val, err := strconv.ParseInt(s, 10, 32)
+		if err != nil {
+			return fmt.Errorf("unknown enum value %q for %q: %v", s, "DLQType", err)
+		}
+		*v = DLQType(val)
+		return nil
+	}
+}
+
+// MarshalText encodes DLQType to text.
+//
+// If the enum value is recognized, its name is returned. Otherwise,
+// its integer value is returned.
+//
+// This implements the TextMarshaler interface.
+func (v DLQType) MarshalText() ([]byte, error) {
+	switch int32(v) {
+	case 0:
+		return []byte("Replication"), nil
+	case 1:
+		return []byte("Domain"), nil
+	}
+	return []byte(strconv.FormatInt(int64(v), 10)), nil
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of DLQType.
+// Enums are logged as objects, where the value is logged with key "value", and
+// if this value's name is known, the name is logged with key "name".
+func (v DLQType) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	enc.AddInt32("value", int32(v))
+	switch int32(v) {
+	case 0:
+		enc.AddString("name", "Replication")
+	case 1:
+		enc.AddString("name", "Domain")
+	}
+	return nil
+}
+
+// Ptr returns a pointer to this enum value.
+func (v DLQType) Ptr() *DLQType {
+	return &v
+}
+
+// ToWire translates DLQType into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// Enums are represented as 32-bit integers over the wire.
+func (v DLQType) ToWire() (wire.Value, error) {
+	return wire.NewValueI32(int32(v)), nil
+}
+
+// FromWire deserializes DLQType from its Thrift-level
+// representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TI32)
+//   if err != nil {
+//     return DLQType(0), err
+//   }
+//
+//   var v DLQType
+//   if err := v.FromWire(x); err != nil {
+//     return DLQType(0), err
+//   }
+//   return v, nil
+func (v *DLQType) FromWire(w wire.Value) error {
+	*v = (DLQType)(w.GetI32())
+	return nil
+}
+
+// String returns a readable string representation of DLQType.
+func (v DLQType) String() string {
+	w := int32(v)
+	switch w {
+	case 0:
+		return "Replication"
+	case 1:
+		return "Domain"
+	}
+	return fmt.Sprintf("DLQType(%d)", w)
+}
+
+// Equals returns true if this DLQType value matches the provided
+// value.
+func (v DLQType) Equals(rhs DLQType) bool {
+	return v == rhs
+}
+
+// MarshalJSON serializes DLQType into JSON.
+//
+// If the enum value is recognized, its name is returned. Otherwise,
+// its integer value is returned.
+//
+// This implements json.Marshaler.
+func (v DLQType) MarshalJSON() ([]byte, error) {
+	switch int32(v) {
+	case 0:
+		return ([]byte)("\"Replication\""), nil
+	case 1:
+		return ([]byte)("\"Domain\""), nil
+	}
+	return ([]byte)(strconv.FormatInt(int64(v), 10)), nil
+}
+
+// UnmarshalJSON attempts to decode DLQType from its JSON
+// representation.
+//
+// This implementation supports both, numeric and string inputs. If a
+// string is provided, it must be a known enum name.
+//
+// This implements json.Unmarshaler.
+func (v *DLQType) UnmarshalJSON(text []byte) error {
+	d := json.NewDecoder(bytes.NewReader(text))
+	d.UseNumber()
+	t, err := d.Token()
+	if err != nil {
+		return err
+	}
+
+	switch w := t.(type) {
+	case json.Number:
+		x, err := w.Int64()
+		if err != nil {
+			return err
+		}
+		if x > math.MaxInt32 {
+			return fmt.Errorf("enum overflow from JSON %q for %q", text, "DLQType")
+		}
+		if x < math.MinInt32 {
+			return fmt.Errorf("enum underflow from JSON %q for %q", text, "DLQType")
+		}
+		*v = (DLQType)(x)
+		return nil
+	case string:
+		return v.UnmarshalText([]byte(w))
+	default:
+		return fmt.Errorf("invalid JSON value %q (%T) to unmarshal into %q", t, t, "DLQType")
+	}
+}
 
 type DomainOperation int32
 
@@ -3696,6 +3867,1362 @@ func (v *HistoryTaskV2Attributes) IsSetNewRunEvents() bool {
 	return v != nil && v.NewRunEvents != nil
 }
 
+type MergeDLQMessagesRequest struct {
+	Type                  *DLQType `json:"type,omitempty"`
+	ShardID               *int32   `json:"shardID,omitempty"`
+	SourceCluster         *string  `json:"sourceCluster,omitempty"`
+	InclusiveEndMessageID *int64   `json:"inclusiveEndMessageID,omitempty"`
+	MaximumPageSize       *int32   `json:"maximumPageSize,omitempty"`
+	NextPageToken         []byte   `json:"nextPageToken,omitempty"`
+}
+
+// ToWire translates a MergeDLQMessagesRequest struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *MergeDLQMessagesRequest) ToWire() (wire.Value, error) {
+	var (
+		fields [6]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.Type != nil {
+		w, err = v.Type.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.ShardID != nil {
+		w, err = wire.NewValueI32(*(v.ShardID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.SourceCluster != nil {
+		w, err = wire.NewValueString(*(v.SourceCluster)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.InclusiveEndMessageID != nil {
+		w, err = wire.NewValueI64(*(v.InclusiveEndMessageID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+	if v.MaximumPageSize != nil {
+		w, err = wire.NewValueI32(*(v.MaximumPageSize)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 50, Value: w}
+		i++
+	}
+	if v.NextPageToken != nil {
+		w, err = wire.NewValueBinary(v.NextPageToken), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 60, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _DLQType_Read(w wire.Value) (DLQType, error) {
+	var v DLQType
+	err := v.FromWire(w)
+	return v, err
+}
+
+// FromWire deserializes a MergeDLQMessagesRequest struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a MergeDLQMessagesRequest struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v MergeDLQMessagesRequest
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *MergeDLQMessagesRequest) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TI32 {
+				var x DLQType
+				x, err = _DLQType_Read(field.Value)
+				v.Type = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.ShardID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 30:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.SourceCluster = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 40:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.InclusiveEndMessageID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 50:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.MaximumPageSize = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 60:
+			if field.Value.Type() == wire.TBinary {
+				v.NextPageToken, err = field.Value.GetBinary(), error(nil)
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a MergeDLQMessagesRequest
+// struct.
+func (v *MergeDLQMessagesRequest) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [6]string
+	i := 0
+	if v.Type != nil {
+		fields[i] = fmt.Sprintf("Type: %v", *(v.Type))
+		i++
+	}
+	if v.ShardID != nil {
+		fields[i] = fmt.Sprintf("ShardID: %v", *(v.ShardID))
+		i++
+	}
+	if v.SourceCluster != nil {
+		fields[i] = fmt.Sprintf("SourceCluster: %v", *(v.SourceCluster))
+		i++
+	}
+	if v.InclusiveEndMessageID != nil {
+		fields[i] = fmt.Sprintf("InclusiveEndMessageID: %v", *(v.InclusiveEndMessageID))
+		i++
+	}
+	if v.MaximumPageSize != nil {
+		fields[i] = fmt.Sprintf("MaximumPageSize: %v", *(v.MaximumPageSize))
+		i++
+	}
+	if v.NextPageToken != nil {
+		fields[i] = fmt.Sprintf("NextPageToken: %v", v.NextPageToken)
+		i++
+	}
+
+	return fmt.Sprintf("MergeDLQMessagesRequest{%v}", strings.Join(fields[:i], ", "))
+}
+
+func _DLQType_EqualsPtr(lhs, rhs *DLQType) bool {
+	if lhs != nil && rhs != nil {
+
+		x := *lhs
+		y := *rhs
+		return x.Equals(y)
+	}
+	return lhs == nil && rhs == nil
+}
+
+// Equals returns true if all the fields of this MergeDLQMessagesRequest match the
+// provided MergeDLQMessagesRequest.
+//
+// This function performs a deep comparison.
+func (v *MergeDLQMessagesRequest) Equals(rhs *MergeDLQMessagesRequest) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !_DLQType_EqualsPtr(v.Type, rhs.Type) {
+		return false
+	}
+	if !_I32_EqualsPtr(v.ShardID, rhs.ShardID) {
+		return false
+	}
+	if !_String_EqualsPtr(v.SourceCluster, rhs.SourceCluster) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.InclusiveEndMessageID, rhs.InclusiveEndMessageID) {
+		return false
+	}
+	if !_I32_EqualsPtr(v.MaximumPageSize, rhs.MaximumPageSize) {
+		return false
+	}
+	if !((v.NextPageToken == nil && rhs.NextPageToken == nil) || (v.NextPageToken != nil && rhs.NextPageToken != nil && bytes.Equal(v.NextPageToken, rhs.NextPageToken))) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of MergeDLQMessagesRequest.
+func (v *MergeDLQMessagesRequest) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.Type != nil {
+		err = multierr.Append(err, enc.AddObject("type", *v.Type))
+	}
+	if v.ShardID != nil {
+		enc.AddInt32("shardID", *v.ShardID)
+	}
+	if v.SourceCluster != nil {
+		enc.AddString("sourceCluster", *v.SourceCluster)
+	}
+	if v.InclusiveEndMessageID != nil {
+		enc.AddInt64("inclusiveEndMessageID", *v.InclusiveEndMessageID)
+	}
+	if v.MaximumPageSize != nil {
+		enc.AddInt32("maximumPageSize", *v.MaximumPageSize)
+	}
+	if v.NextPageToken != nil {
+		enc.AddString("nextPageToken", base64.StdEncoding.EncodeToString(v.NextPageToken))
+	}
+	return err
+}
+
+// GetType returns the value of Type if it is set or its
+// zero value if it is unset.
+func (v *MergeDLQMessagesRequest) GetType() (o DLQType) {
+	if v != nil && v.Type != nil {
+		return *v.Type
+	}
+
+	return
+}
+
+// IsSetType returns true if Type is not nil.
+func (v *MergeDLQMessagesRequest) IsSetType() bool {
+	return v != nil && v.Type != nil
+}
+
+// GetShardID returns the value of ShardID if it is set or its
+// zero value if it is unset.
+func (v *MergeDLQMessagesRequest) GetShardID() (o int32) {
+	if v != nil && v.ShardID != nil {
+		return *v.ShardID
+	}
+
+	return
+}
+
+// IsSetShardID returns true if ShardID is not nil.
+func (v *MergeDLQMessagesRequest) IsSetShardID() bool {
+	return v != nil && v.ShardID != nil
+}
+
+// GetSourceCluster returns the value of SourceCluster if it is set or its
+// zero value if it is unset.
+func (v *MergeDLQMessagesRequest) GetSourceCluster() (o string) {
+	if v != nil && v.SourceCluster != nil {
+		return *v.SourceCluster
+	}
+
+	return
+}
+
+// IsSetSourceCluster returns true if SourceCluster is not nil.
+func (v *MergeDLQMessagesRequest) IsSetSourceCluster() bool {
+	return v != nil && v.SourceCluster != nil
+}
+
+// GetInclusiveEndMessageID returns the value of InclusiveEndMessageID if it is set or its
+// zero value if it is unset.
+func (v *MergeDLQMessagesRequest) GetInclusiveEndMessageID() (o int64) {
+	if v != nil && v.InclusiveEndMessageID != nil {
+		return *v.InclusiveEndMessageID
+	}
+
+	return
+}
+
+// IsSetInclusiveEndMessageID returns true if InclusiveEndMessageID is not nil.
+func (v *MergeDLQMessagesRequest) IsSetInclusiveEndMessageID() bool {
+	return v != nil && v.InclusiveEndMessageID != nil
+}
+
+// GetMaximumPageSize returns the value of MaximumPageSize if it is set or its
+// zero value if it is unset.
+func (v *MergeDLQMessagesRequest) GetMaximumPageSize() (o int32) {
+	if v != nil && v.MaximumPageSize != nil {
+		return *v.MaximumPageSize
+	}
+
+	return
+}
+
+// IsSetMaximumPageSize returns true if MaximumPageSize is not nil.
+func (v *MergeDLQMessagesRequest) IsSetMaximumPageSize() bool {
+	return v != nil && v.MaximumPageSize != nil
+}
+
+// GetNextPageToken returns the value of NextPageToken if it is set or its
+// zero value if it is unset.
+func (v *MergeDLQMessagesRequest) GetNextPageToken() (o []byte) {
+	if v != nil && v.NextPageToken != nil {
+		return v.NextPageToken
+	}
+
+	return
+}
+
+// IsSetNextPageToken returns true if NextPageToken is not nil.
+func (v *MergeDLQMessagesRequest) IsSetNextPageToken() bool {
+	return v != nil && v.NextPageToken != nil
+}
+
+type MergeDLQMessagesResponse struct {
+	NextPageToken []byte `json:"nextPageToken,omitempty"`
+}
+
+// ToWire translates a MergeDLQMessagesResponse struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *MergeDLQMessagesResponse) ToWire() (wire.Value, error) {
+	var (
+		fields [1]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.NextPageToken != nil {
+		w, err = wire.NewValueBinary(v.NextPageToken), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a MergeDLQMessagesResponse struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a MergeDLQMessagesResponse struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v MergeDLQMessagesResponse
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *MergeDLQMessagesResponse) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				v.NextPageToken, err = field.Value.GetBinary(), error(nil)
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a MergeDLQMessagesResponse
+// struct.
+func (v *MergeDLQMessagesResponse) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [1]string
+	i := 0
+	if v.NextPageToken != nil {
+		fields[i] = fmt.Sprintf("NextPageToken: %v", v.NextPageToken)
+		i++
+	}
+
+	return fmt.Sprintf("MergeDLQMessagesResponse{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this MergeDLQMessagesResponse match the
+// provided MergeDLQMessagesResponse.
+//
+// This function performs a deep comparison.
+func (v *MergeDLQMessagesResponse) Equals(rhs *MergeDLQMessagesResponse) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !((v.NextPageToken == nil && rhs.NextPageToken == nil) || (v.NextPageToken != nil && rhs.NextPageToken != nil && bytes.Equal(v.NextPageToken, rhs.NextPageToken))) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of MergeDLQMessagesResponse.
+func (v *MergeDLQMessagesResponse) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.NextPageToken != nil {
+		enc.AddString("nextPageToken", base64.StdEncoding.EncodeToString(v.NextPageToken))
+	}
+	return err
+}
+
+// GetNextPageToken returns the value of NextPageToken if it is set or its
+// zero value if it is unset.
+func (v *MergeDLQMessagesResponse) GetNextPageToken() (o []byte) {
+	if v != nil && v.NextPageToken != nil {
+		return v.NextPageToken
+	}
+
+	return
+}
+
+// IsSetNextPageToken returns true if NextPageToken is not nil.
+func (v *MergeDLQMessagesResponse) IsSetNextPageToken() bool {
+	return v != nil && v.NextPageToken != nil
+}
+
+type PurgeDLQMessagesRequest struct {
+	Type                  *DLQType `json:"type,omitempty"`
+	ShardID               *int32   `json:"shardID,omitempty"`
+	SourceCluster         *string  `json:"sourceCluster,omitempty"`
+	InclusiveEndMessageID *int64   `json:"inclusiveEndMessageID,omitempty"`
+}
+
+// ToWire translates a PurgeDLQMessagesRequest struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *PurgeDLQMessagesRequest) ToWire() (wire.Value, error) {
+	var (
+		fields [4]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.Type != nil {
+		w, err = v.Type.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.ShardID != nil {
+		w, err = wire.NewValueI32(*(v.ShardID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.SourceCluster != nil {
+		w, err = wire.NewValueString(*(v.SourceCluster)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.InclusiveEndMessageID != nil {
+		w, err = wire.NewValueI64(*(v.InclusiveEndMessageID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a PurgeDLQMessagesRequest struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a PurgeDLQMessagesRequest struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v PurgeDLQMessagesRequest
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *PurgeDLQMessagesRequest) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TI32 {
+				var x DLQType
+				x, err = _DLQType_Read(field.Value)
+				v.Type = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.ShardID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 30:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.SourceCluster = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 40:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.InclusiveEndMessageID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a PurgeDLQMessagesRequest
+// struct.
+func (v *PurgeDLQMessagesRequest) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [4]string
+	i := 0
+	if v.Type != nil {
+		fields[i] = fmt.Sprintf("Type: %v", *(v.Type))
+		i++
+	}
+	if v.ShardID != nil {
+		fields[i] = fmt.Sprintf("ShardID: %v", *(v.ShardID))
+		i++
+	}
+	if v.SourceCluster != nil {
+		fields[i] = fmt.Sprintf("SourceCluster: %v", *(v.SourceCluster))
+		i++
+	}
+	if v.InclusiveEndMessageID != nil {
+		fields[i] = fmt.Sprintf("InclusiveEndMessageID: %v", *(v.InclusiveEndMessageID))
+		i++
+	}
+
+	return fmt.Sprintf("PurgeDLQMessagesRequest{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this PurgeDLQMessagesRequest match the
+// provided PurgeDLQMessagesRequest.
+//
+// This function performs a deep comparison.
+func (v *PurgeDLQMessagesRequest) Equals(rhs *PurgeDLQMessagesRequest) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !_DLQType_EqualsPtr(v.Type, rhs.Type) {
+		return false
+	}
+	if !_I32_EqualsPtr(v.ShardID, rhs.ShardID) {
+		return false
+	}
+	if !_String_EqualsPtr(v.SourceCluster, rhs.SourceCluster) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.InclusiveEndMessageID, rhs.InclusiveEndMessageID) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of PurgeDLQMessagesRequest.
+func (v *PurgeDLQMessagesRequest) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.Type != nil {
+		err = multierr.Append(err, enc.AddObject("type", *v.Type))
+	}
+	if v.ShardID != nil {
+		enc.AddInt32("shardID", *v.ShardID)
+	}
+	if v.SourceCluster != nil {
+		enc.AddString("sourceCluster", *v.SourceCluster)
+	}
+	if v.InclusiveEndMessageID != nil {
+		enc.AddInt64("inclusiveEndMessageID", *v.InclusiveEndMessageID)
+	}
+	return err
+}
+
+// GetType returns the value of Type if it is set or its
+// zero value if it is unset.
+func (v *PurgeDLQMessagesRequest) GetType() (o DLQType) {
+	if v != nil && v.Type != nil {
+		return *v.Type
+	}
+
+	return
+}
+
+// IsSetType returns true if Type is not nil.
+func (v *PurgeDLQMessagesRequest) IsSetType() bool {
+	return v != nil && v.Type != nil
+}
+
+// GetShardID returns the value of ShardID if it is set or its
+// zero value if it is unset.
+func (v *PurgeDLQMessagesRequest) GetShardID() (o int32) {
+	if v != nil && v.ShardID != nil {
+		return *v.ShardID
+	}
+
+	return
+}
+
+// IsSetShardID returns true if ShardID is not nil.
+func (v *PurgeDLQMessagesRequest) IsSetShardID() bool {
+	return v != nil && v.ShardID != nil
+}
+
+// GetSourceCluster returns the value of SourceCluster if it is set or its
+// zero value if it is unset.
+func (v *PurgeDLQMessagesRequest) GetSourceCluster() (o string) {
+	if v != nil && v.SourceCluster != nil {
+		return *v.SourceCluster
+	}
+
+	return
+}
+
+// IsSetSourceCluster returns true if SourceCluster is not nil.
+func (v *PurgeDLQMessagesRequest) IsSetSourceCluster() bool {
+	return v != nil && v.SourceCluster != nil
+}
+
+// GetInclusiveEndMessageID returns the value of InclusiveEndMessageID if it is set or its
+// zero value if it is unset.
+func (v *PurgeDLQMessagesRequest) GetInclusiveEndMessageID() (o int64) {
+	if v != nil && v.InclusiveEndMessageID != nil {
+		return *v.InclusiveEndMessageID
+	}
+
+	return
+}
+
+// IsSetInclusiveEndMessageID returns true if InclusiveEndMessageID is not nil.
+func (v *PurgeDLQMessagesRequest) IsSetInclusiveEndMessageID() bool {
+	return v != nil && v.InclusiveEndMessageID != nil
+}
+
+type ReadDLQMessagesRequest struct {
+	Type                  *DLQType `json:"type,omitempty"`
+	ShardID               *int32   `json:"shardID,omitempty"`
+	SourceCluster         *string  `json:"sourceCluster,omitempty"`
+	InclusiveEndMessageID *int64   `json:"inclusiveEndMessageID,omitempty"`
+	MaximumPageSize       *int32   `json:"maximumPageSize,omitempty"`
+	NextPageToken         []byte   `json:"nextPageToken,omitempty"`
+}
+
+// ToWire translates a ReadDLQMessagesRequest struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *ReadDLQMessagesRequest) ToWire() (wire.Value, error) {
+	var (
+		fields [6]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.Type != nil {
+		w, err = v.Type.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.ShardID != nil {
+		w, err = wire.NewValueI32(*(v.ShardID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.SourceCluster != nil {
+		w, err = wire.NewValueString(*(v.SourceCluster)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.InclusiveEndMessageID != nil {
+		w, err = wire.NewValueI64(*(v.InclusiveEndMessageID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+	if v.MaximumPageSize != nil {
+		w, err = wire.NewValueI32(*(v.MaximumPageSize)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 50, Value: w}
+		i++
+	}
+	if v.NextPageToken != nil {
+		w, err = wire.NewValueBinary(v.NextPageToken), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 60, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a ReadDLQMessagesRequest struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a ReadDLQMessagesRequest struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v ReadDLQMessagesRequest
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *ReadDLQMessagesRequest) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TI32 {
+				var x DLQType
+				x, err = _DLQType_Read(field.Value)
+				v.Type = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.ShardID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 30:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.SourceCluster = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 40:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.InclusiveEndMessageID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 50:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.MaximumPageSize = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 60:
+			if field.Value.Type() == wire.TBinary {
+				v.NextPageToken, err = field.Value.GetBinary(), error(nil)
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a ReadDLQMessagesRequest
+// struct.
+func (v *ReadDLQMessagesRequest) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [6]string
+	i := 0
+	if v.Type != nil {
+		fields[i] = fmt.Sprintf("Type: %v", *(v.Type))
+		i++
+	}
+	if v.ShardID != nil {
+		fields[i] = fmt.Sprintf("ShardID: %v", *(v.ShardID))
+		i++
+	}
+	if v.SourceCluster != nil {
+		fields[i] = fmt.Sprintf("SourceCluster: %v", *(v.SourceCluster))
+		i++
+	}
+	if v.InclusiveEndMessageID != nil {
+		fields[i] = fmt.Sprintf("InclusiveEndMessageID: %v", *(v.InclusiveEndMessageID))
+		i++
+	}
+	if v.MaximumPageSize != nil {
+		fields[i] = fmt.Sprintf("MaximumPageSize: %v", *(v.MaximumPageSize))
+		i++
+	}
+	if v.NextPageToken != nil {
+		fields[i] = fmt.Sprintf("NextPageToken: %v", v.NextPageToken)
+		i++
+	}
+
+	return fmt.Sprintf("ReadDLQMessagesRequest{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this ReadDLQMessagesRequest match the
+// provided ReadDLQMessagesRequest.
+//
+// This function performs a deep comparison.
+func (v *ReadDLQMessagesRequest) Equals(rhs *ReadDLQMessagesRequest) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !_DLQType_EqualsPtr(v.Type, rhs.Type) {
+		return false
+	}
+	if !_I32_EqualsPtr(v.ShardID, rhs.ShardID) {
+		return false
+	}
+	if !_String_EqualsPtr(v.SourceCluster, rhs.SourceCluster) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.InclusiveEndMessageID, rhs.InclusiveEndMessageID) {
+		return false
+	}
+	if !_I32_EqualsPtr(v.MaximumPageSize, rhs.MaximumPageSize) {
+		return false
+	}
+	if !((v.NextPageToken == nil && rhs.NextPageToken == nil) || (v.NextPageToken != nil && rhs.NextPageToken != nil && bytes.Equal(v.NextPageToken, rhs.NextPageToken))) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of ReadDLQMessagesRequest.
+func (v *ReadDLQMessagesRequest) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.Type != nil {
+		err = multierr.Append(err, enc.AddObject("type", *v.Type))
+	}
+	if v.ShardID != nil {
+		enc.AddInt32("shardID", *v.ShardID)
+	}
+	if v.SourceCluster != nil {
+		enc.AddString("sourceCluster", *v.SourceCluster)
+	}
+	if v.InclusiveEndMessageID != nil {
+		enc.AddInt64("inclusiveEndMessageID", *v.InclusiveEndMessageID)
+	}
+	if v.MaximumPageSize != nil {
+		enc.AddInt32("maximumPageSize", *v.MaximumPageSize)
+	}
+	if v.NextPageToken != nil {
+		enc.AddString("nextPageToken", base64.StdEncoding.EncodeToString(v.NextPageToken))
+	}
+	return err
+}
+
+// GetType returns the value of Type if it is set or its
+// zero value if it is unset.
+func (v *ReadDLQMessagesRequest) GetType() (o DLQType) {
+	if v != nil && v.Type != nil {
+		return *v.Type
+	}
+
+	return
+}
+
+// IsSetType returns true if Type is not nil.
+func (v *ReadDLQMessagesRequest) IsSetType() bool {
+	return v != nil && v.Type != nil
+}
+
+// GetShardID returns the value of ShardID if it is set or its
+// zero value if it is unset.
+func (v *ReadDLQMessagesRequest) GetShardID() (o int32) {
+	if v != nil && v.ShardID != nil {
+		return *v.ShardID
+	}
+
+	return
+}
+
+// IsSetShardID returns true if ShardID is not nil.
+func (v *ReadDLQMessagesRequest) IsSetShardID() bool {
+	return v != nil && v.ShardID != nil
+}
+
+// GetSourceCluster returns the value of SourceCluster if it is set or its
+// zero value if it is unset.
+func (v *ReadDLQMessagesRequest) GetSourceCluster() (o string) {
+	if v != nil && v.SourceCluster != nil {
+		return *v.SourceCluster
+	}
+
+	return
+}
+
+// IsSetSourceCluster returns true if SourceCluster is not nil.
+func (v *ReadDLQMessagesRequest) IsSetSourceCluster() bool {
+	return v != nil && v.SourceCluster != nil
+}
+
+// GetInclusiveEndMessageID returns the value of InclusiveEndMessageID if it is set or its
+// zero value if it is unset.
+func (v *ReadDLQMessagesRequest) GetInclusiveEndMessageID() (o int64) {
+	if v != nil && v.InclusiveEndMessageID != nil {
+		return *v.InclusiveEndMessageID
+	}
+
+	return
+}
+
+// IsSetInclusiveEndMessageID returns true if InclusiveEndMessageID is not nil.
+func (v *ReadDLQMessagesRequest) IsSetInclusiveEndMessageID() bool {
+	return v != nil && v.InclusiveEndMessageID != nil
+}
+
+// GetMaximumPageSize returns the value of MaximumPageSize if it is set or its
+// zero value if it is unset.
+func (v *ReadDLQMessagesRequest) GetMaximumPageSize() (o int32) {
+	if v != nil && v.MaximumPageSize != nil {
+		return *v.MaximumPageSize
+	}
+
+	return
+}
+
+// IsSetMaximumPageSize returns true if MaximumPageSize is not nil.
+func (v *ReadDLQMessagesRequest) IsSetMaximumPageSize() bool {
+	return v != nil && v.MaximumPageSize != nil
+}
+
+// GetNextPageToken returns the value of NextPageToken if it is set or its
+// zero value if it is unset.
+func (v *ReadDLQMessagesRequest) GetNextPageToken() (o []byte) {
+	if v != nil && v.NextPageToken != nil {
+		return v.NextPageToken
+	}
+
+	return
+}
+
+// IsSetNextPageToken returns true if NextPageToken is not nil.
+func (v *ReadDLQMessagesRequest) IsSetNextPageToken() bool {
+	return v != nil && v.NextPageToken != nil
+}
+
+type ReadDLQMessagesResponse struct {
+	Type             *DLQType           `json:"type,omitempty"`
+	ReplicationTasks []*ReplicationTask `json:"replicationTasks,omitempty"`
+	NextPageToken    []byte             `json:"nextPageToken,omitempty"`
+}
+
+// ToWire translates a ReadDLQMessagesResponse struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *ReadDLQMessagesResponse) ToWire() (wire.Value, error) {
+	var (
+		fields [3]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.Type != nil {
+		w, err = v.Type.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.ReplicationTasks != nil {
+		w, err = wire.NewValueList(_List_ReplicationTask_ValueList(v.ReplicationTasks)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.NextPageToken != nil {
+		w, err = wire.NewValueBinary(v.NextPageToken), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a ReadDLQMessagesResponse struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a ReadDLQMessagesResponse struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v ReadDLQMessagesResponse
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *ReadDLQMessagesResponse) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TI32 {
+				var x DLQType
+				x, err = _DLQType_Read(field.Value)
+				v.Type = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TList {
+				v.ReplicationTasks, err = _List_ReplicationTask_Read(field.Value.GetList())
+				if err != nil {
+					return err
+				}
+
+			}
+		case 30:
+			if field.Value.Type() == wire.TBinary {
+				v.NextPageToken, err = field.Value.GetBinary(), error(nil)
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a ReadDLQMessagesResponse
+// struct.
+func (v *ReadDLQMessagesResponse) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [3]string
+	i := 0
+	if v.Type != nil {
+		fields[i] = fmt.Sprintf("Type: %v", *(v.Type))
+		i++
+	}
+	if v.ReplicationTasks != nil {
+		fields[i] = fmt.Sprintf("ReplicationTasks: %v", v.ReplicationTasks)
+		i++
+	}
+	if v.NextPageToken != nil {
+		fields[i] = fmt.Sprintf("NextPageToken: %v", v.NextPageToken)
+		i++
+	}
+
+	return fmt.Sprintf("ReadDLQMessagesResponse{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this ReadDLQMessagesResponse match the
+// provided ReadDLQMessagesResponse.
+//
+// This function performs a deep comparison.
+func (v *ReadDLQMessagesResponse) Equals(rhs *ReadDLQMessagesResponse) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !_DLQType_EqualsPtr(v.Type, rhs.Type) {
+		return false
+	}
+	if !((v.ReplicationTasks == nil && rhs.ReplicationTasks == nil) || (v.ReplicationTasks != nil && rhs.ReplicationTasks != nil && _List_ReplicationTask_Equals(v.ReplicationTasks, rhs.ReplicationTasks))) {
+		return false
+	}
+	if !((v.NextPageToken == nil && rhs.NextPageToken == nil) || (v.NextPageToken != nil && rhs.NextPageToken != nil && bytes.Equal(v.NextPageToken, rhs.NextPageToken))) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of ReadDLQMessagesResponse.
+func (v *ReadDLQMessagesResponse) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.Type != nil {
+		err = multierr.Append(err, enc.AddObject("type", *v.Type))
+	}
+	if v.ReplicationTasks != nil {
+		err = multierr.Append(err, enc.AddArray("replicationTasks", (_List_ReplicationTask_Zapper)(v.ReplicationTasks)))
+	}
+	if v.NextPageToken != nil {
+		enc.AddString("nextPageToken", base64.StdEncoding.EncodeToString(v.NextPageToken))
+	}
+	return err
+}
+
+// GetType returns the value of Type if it is set or its
+// zero value if it is unset.
+func (v *ReadDLQMessagesResponse) GetType() (o DLQType) {
+	if v != nil && v.Type != nil {
+		return *v.Type
+	}
+
+	return
+}
+
+// IsSetType returns true if Type is not nil.
+func (v *ReadDLQMessagesResponse) IsSetType() bool {
+	return v != nil && v.Type != nil
+}
+
+// GetReplicationTasks returns the value of ReplicationTasks if it is set or its
+// zero value if it is unset.
+func (v *ReadDLQMessagesResponse) GetReplicationTasks() (o []*ReplicationTask) {
+	if v != nil && v.ReplicationTasks != nil {
+		return v.ReplicationTasks
+	}
+
+	return
+}
+
+// IsSetReplicationTasks returns true if ReplicationTasks is not nil.
+func (v *ReadDLQMessagesResponse) IsSetReplicationTasks() bool {
+	return v != nil && v.ReplicationTasks != nil
+}
+
+// GetNextPageToken returns the value of NextPageToken if it is set or its
+// zero value if it is unset.
+func (v *ReadDLQMessagesResponse) GetNextPageToken() (o []byte) {
+	if v != nil && v.NextPageToken != nil {
+		return v.NextPageToken
+	}
+
+	return
+}
+
+// IsSetNextPageToken returns true if NextPageToken is not nil.
+func (v *ReadDLQMessagesResponse) IsSetNextPageToken() bool {
+	return v != nil && v.NextPageToken != nil
+}
+
 type ReplicationMessages struct {
 	ReplicationTasks       []*ReplicationTask `json:"replicationTasks,omitempty"`
 	LastRetrievedMessageId *int64             `json:"lastRetrievedMessageId,omitempty"`
@@ -6526,11 +8053,11 @@ var ThriftModule = &thriftreflect.ThriftModule{
 	Name:     "replicator",
 	Package:  "github.com/uber/cadence/.gen/go/replicator",
 	FilePath: "replicator.thrift",
-	SHA1:     "e9f6f3071e14a1a2dc3882d1823908fc4b2b266a",
+	SHA1:     "bbc99019851d06ddce17eeff72efa392eae738b1",
 	Includes: []*thriftreflect.ThriftModule{
 		shared.ThriftModule,
 	},
 	Raw: rawIDL,
 }
 
-const rawIDL = "// Copyright (c) 2017 Uber Technologies, Inc.\n//\n// Permission is hereby granted, free of charge, to any person obtaining a copy\n// of this software and associated documentation files (the \"Software\"), to deal\n// in the Software without restriction, including without limitation the rights\n// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n// copies of the Software, and to permit persons to whom the Software is\n// furnished to do so, subject to the following conditions:\n//\n// The above copyright notice and this permission notice shall be included in\n// all copies or substantial portions of the Software.\n//\n// THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n// THE SOFTWARE.\n\nnamespace java com.uber.cadence.replicator\n\ninclude \"shared.thrift\"\n\nenum ReplicationTaskType {\n  Domain\n  History\n  SyncShardStatus\n  SyncActivity\n  HistoryMetadata\n  HistoryV2\n}\n\nenum DomainOperation {\n  Create\n  Update\n}\n\nstruct DomainTaskAttributes {\n  05: optional DomainOperation domainOperation\n  10: optional string id\n  20: optional shared.DomainInfo info\n  30: optional shared.DomainConfiguration config\n  40: optional shared.DomainReplicationConfiguration replicationConfig\n  50: optional i64 (js.type = \"Long\") configVersion\n  60: optional i64 (js.type = \"Long\") failoverVersion\n}\n\nstruct HistoryTaskAttributes {\n  05: optional list<string> targetClusters\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") firstEventId\n  50: optional i64 (js.type = \"Long\") nextEventId\n  60: optional i64 (js.type = \"Long\") version\n  70: optional map<string, shared.ReplicationInfo> replicationInfo\n  80: optional shared.History history\n  90: optional shared.History newRunHistory\n  100: optional i32 eventStoreVersion\n  110: optional i32 newRunEventStoreVersion\n  120: optional bool resetWorkflow\n  130: optional bool newRunNDC\n}\n\nstruct HistoryMetadataTaskAttributes {\n  05: optional list<string> targetClusters\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") firstEventId\n  50: optional i64 (js.type = \"Long\") nextEventId\n}\n\nstruct SyncShardStatusTaskAttributes {\n  10: optional string sourceCluster\n  20: optional i64 (js.type = \"Long\") shardId\n  30: optional i64 (js.type = \"Long\") timestamp\n}\n\nstruct SyncActivityTaskAttributes {\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") version\n  50: optional i64 (js.type = \"Long\") scheduledId\n  60: optional i64 (js.type = \"Long\") scheduledTime\n  70: optional i64 (js.type = \"Long\") startedId\n  80: optional i64 (js.type = \"Long\") startedTime\n  90: optional i64 (js.type = \"Long\") lastHeartbeatTime\n  100: optional binary details\n  110: optional i32 attempt\n  120: optional string lastFailureReason\n  130: optional string lastWorkerIdentity\n  140: optional binary lastFailureDetails\n  150: optional shared.VersionHistory versionHistory\n}\n\nstruct HistoryTaskV2Attributes {\n  05: optional i64 (js.type = \"Long\") taskId\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional list<shared.VersionHistoryItem> versionHistoryItems\n  50: optional shared.DataBlob events\n  // new run events does not need version history since there is no prior events\n  70: optional shared.DataBlob newRunEvents\n}\n\nstruct ReplicationTask {\n  10: optional ReplicationTaskType taskType\n  11: optional i64 (js.type = \"Long\") sourceTaskId\n  20: optional DomainTaskAttributes domainTaskAttributes\n  30: optional HistoryTaskAttributes historyTaskAttributes  // TODO deprecate once NDC migration is done\n  40: optional SyncShardStatusTaskAttributes syncShardStatusTaskAttributes\n  50: optional SyncActivityTaskAttributes syncActivityTaskAttributes\n  60: optional HistoryMetadataTaskAttributes historyMetadataTaskAttributes // TODO deprecate once kafka deprecation is done\n  70: optional HistoryTaskV2Attributes historyTaskV2Attributes\n}\n\nstruct ReplicationToken {\n  10: optional i32 shardID\n  // lastRetrivedMessageId is where the next fetch should begin with\n  20: optional i64 (js.type = \"Long\") lastRetrievedMessageId\n  // lastProcessedMessageId is the last messageId that is processed on the passive side.\n  // This can be different than lastRetrievedMessageId if passive side supports prefetching messages.\n  30: optional i64 (js.type = \"Long\") lastProcessedMessageId\n}\n\nstruct SyncShardStatus {\n    10: optional i64 (js.type = \"Long\") timestamp\n}\n\nstruct ReplicationMessages {\n  10: optional list<ReplicationTask> replicationTasks\n  // This can be different than the last taskId in the above list, because sender can decide to skip tasks (e.g. for completed workflows).\n  20: optional i64 (js.type = \"Long\") lastRetrievedMessageId\n  30: optional bool hasMore // Hint for flow control\n  40: optional SyncShardStatus syncShardStatus\n}\n\nstruct ReplicationTaskInfo {\n  10: optional string domainID\n  20: optional string workflowID\n  30: optional string runID\n  40: optional i16 taskType\n  50: optional i64 (js.type = \"Long\") taskID\n  60: optional i64 (js.type = \"Long\") version\n  70: optional i64 (js.type = \"Long\") firstEventID\n  80: optional i64 (js.type = \"Long\") nextEventID\n  90: optional i64 (js.type = \"Long\") scheduledID\n}\n\nstruct GetReplicationMessagesRequest {\n  10: optional list<ReplicationToken> tokens\n  20: optional string clusterName\n}\n\nstruct GetReplicationMessagesResponse {\n  10: optional map<i32, ReplicationMessages> messagesByShard\n}\n\nstruct GetDomainReplicationMessagesRequest {\n  // lastRetrievedMessageId is where the next fetch should begin with\n  10: optional i64 (js.type = \"Long\") lastRetrievedMessageId\n  // lastProcessedMessageId is the last messageId that is processed on the passive side.\n  // This can be different than lastRetrievedMessageId if passive side supports prefetching messages.\n  20: optional i64 (js.type = \"Long\") lastProcessedMessageId\n  // clusterName is the name of the pulling cluster\n  30: optional string clusterName\n}\n\nstruct GetDomainReplicationMessagesResponse {\n  10: optional ReplicationMessages messages\n}\n\nstruct GetDLQReplicationMessagesRequest {\n  10: optional list<ReplicationTaskInfo> taskInfos\n}\n\nstruct GetDLQReplicationMessagesResponse {\n  10: optional list<ReplicationTask> replicationTasks\n}"
+const rawIDL = "// Copyright (c) 2017 Uber Technologies, Inc.\n//\n// Permission is hereby granted, free of charge, to any person obtaining a copy\n// of this software and associated documentation files (the \"Software\"), to deal\n// in the Software without restriction, including without limitation the rights\n// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n// copies of the Software, and to permit persons to whom the Software is\n// furnished to do so, subject to the following conditions:\n//\n// The above copyright notice and this permission notice shall be included in\n// all copies or substantial portions of the Software.\n//\n// THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n// THE SOFTWARE.\n\nnamespace java com.uber.cadence.replicator\n\ninclude \"shared.thrift\"\n\nenum ReplicationTaskType {\n  Domain\n  History\n  SyncShardStatus\n  SyncActivity\n  HistoryMetadata\n  HistoryV2\n}\n\nenum DomainOperation {\n  Create\n  Update\n}\n\nstruct DomainTaskAttributes {\n  05: optional DomainOperation domainOperation\n  10: optional string id\n  20: optional shared.DomainInfo info\n  30: optional shared.DomainConfiguration config\n  40: optional shared.DomainReplicationConfiguration replicationConfig\n  50: optional i64 (js.type = \"Long\") configVersion\n  60: optional i64 (js.type = \"Long\") failoverVersion\n}\n\nstruct HistoryTaskAttributes {\n  05: optional list<string> targetClusters\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") firstEventId\n  50: optional i64 (js.type = \"Long\") nextEventId\n  60: optional i64 (js.type = \"Long\") version\n  70: optional map<string, shared.ReplicationInfo> replicationInfo\n  80: optional shared.History history\n  90: optional shared.History newRunHistory\n  100: optional i32 eventStoreVersion\n  110: optional i32 newRunEventStoreVersion\n  120: optional bool resetWorkflow\n  130: optional bool newRunNDC\n}\n\nstruct HistoryMetadataTaskAttributes {\n  05: optional list<string> targetClusters\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") firstEventId\n  50: optional i64 (js.type = \"Long\") nextEventId\n}\n\nstruct SyncShardStatusTaskAttributes {\n  10: optional string sourceCluster\n  20: optional i64 (js.type = \"Long\") shardId\n  30: optional i64 (js.type = \"Long\") timestamp\n}\n\nstruct SyncActivityTaskAttributes {\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional i64 (js.type = \"Long\") version\n  50: optional i64 (js.type = \"Long\") scheduledId\n  60: optional i64 (js.type = \"Long\") scheduledTime\n  70: optional i64 (js.type = \"Long\") startedId\n  80: optional i64 (js.type = \"Long\") startedTime\n  90: optional i64 (js.type = \"Long\") lastHeartbeatTime\n  100: optional binary details\n  110: optional i32 attempt\n  120: optional string lastFailureReason\n  130: optional string lastWorkerIdentity\n  140: optional binary lastFailureDetails\n  150: optional shared.VersionHistory versionHistory\n}\n\nstruct HistoryTaskV2Attributes {\n  05: optional i64 (js.type = \"Long\") taskId\n  10: optional string domainId\n  20: optional string workflowId\n  30: optional string runId\n  40: optional list<shared.VersionHistoryItem> versionHistoryItems\n  50: optional shared.DataBlob events\n  // new run events does not need version history since there is no prior events\n  70: optional shared.DataBlob newRunEvents\n}\n\nstruct ReplicationTask {\n  10: optional ReplicationTaskType taskType\n  11: optional i64 (js.type = \"Long\") sourceTaskId\n  20: optional DomainTaskAttributes domainTaskAttributes\n  30: optional HistoryTaskAttributes historyTaskAttributes  // TODO deprecate once NDC migration is done\n  40: optional SyncShardStatusTaskAttributes syncShardStatusTaskAttributes\n  50: optional SyncActivityTaskAttributes syncActivityTaskAttributes\n  60: optional HistoryMetadataTaskAttributes historyMetadataTaskAttributes // TODO deprecate once kafka deprecation is done\n  70: optional HistoryTaskV2Attributes historyTaskV2Attributes\n}\n\nstruct ReplicationToken {\n  10: optional i32 shardID\n  // lastRetrivedMessageId is where the next fetch should begin with\n  20: optional i64 (js.type = \"Long\") lastRetrievedMessageId\n  // lastProcessedMessageId is the last messageId that is processed on the passive side.\n  // This can be different than lastRetrievedMessageId if passive side supports prefetching messages.\n  30: optional i64 (js.type = \"Long\") lastProcessedMessageId\n}\n\nstruct SyncShardStatus {\n    10: optional i64 (js.type = \"Long\") timestamp\n}\n\nstruct ReplicationMessages {\n  10: optional list<ReplicationTask> replicationTasks\n  // This can be different than the last taskId in the above list, because sender can decide to skip tasks (e.g. for completed workflows).\n  20: optional i64 (js.type = \"Long\") lastRetrievedMessageId\n  30: optional bool hasMore // Hint for flow control\n  40: optional SyncShardStatus syncShardStatus\n}\n\nstruct ReplicationTaskInfo {\n  10: optional string domainID\n  20: optional string workflowID\n  30: optional string runID\n  40: optional i16 taskType\n  50: optional i64 (js.type = \"Long\") taskID\n  60: optional i64 (js.type = \"Long\") version\n  70: optional i64 (js.type = \"Long\") firstEventID\n  80: optional i64 (js.type = \"Long\") nextEventID\n  90: optional i64 (js.type = \"Long\") scheduledID\n}\n\nstruct GetReplicationMessagesRequest {\n  10: optional list<ReplicationToken> tokens\n  20: optional string clusterName\n}\n\nstruct GetReplicationMessagesResponse {\n  10: optional map<i32, ReplicationMessages> messagesByShard\n}\n\nstruct GetDomainReplicationMessagesRequest {\n  // lastRetrievedMessageId is where the next fetch should begin with\n  10: optional i64 (js.type = \"Long\") lastRetrievedMessageId\n  // lastProcessedMessageId is the last messageId that is processed on the passive side.\n  // This can be different than lastRetrievedMessageId if passive side supports prefetching messages.\n  20: optional i64 (js.type = \"Long\") lastProcessedMessageId\n  // clusterName is the name of the pulling cluster\n  30: optional string clusterName\n}\n\nstruct GetDomainReplicationMessagesResponse {\n  10: optional ReplicationMessages messages\n}\n\nstruct GetDLQReplicationMessagesRequest {\n  10: optional list<ReplicationTaskInfo> taskInfos\n}\n\nstruct GetDLQReplicationMessagesResponse {\n  10: optional list<ReplicationTask> replicationTasks\n}\n\nenum DLQType {\n  Replication,\n  Domain,\n}\n\nstruct ReadDLQMessagesRequest{\n  10: optional DLQType type\n  20: optional i32 shardID\n  30: optional string sourceCluster\n  40: optional i64 (js.type = \"Long\") inclusiveEndMessageID\n  50: optional i32 maximumPageSize\n  60: optional binary nextPageToken\n}\n\nstruct ReadDLQMessagesResponse{\n  10: optional DLQType type\n  20: optional list<ReplicationTask> replicationTasks\n  30: optional binary nextPageToken\n}\n\nstruct PurgeDLQMessagesRequest{\n  10: optional DLQType type\n  20: optional i32 shardID\n  30: optional string sourceCluster\n  40: optional i64 (js.type = \"Long\") inclusiveEndMessageID\n}\n\nstruct MergeDLQMessagesRequest{\n  10: optional DLQType type\n  20: optional i32 shardID\n  30: optional string sourceCluster\n  40: optional i64 (js.type = \"Long\") inclusiveEndMessageID\n  50: optional i32 maximumPageSize\n  60: optional binary nextPageToken\n}\n\nstruct MergeDLQMessagesResponse{\n  10: optional binary nextPageToken\n}\n"

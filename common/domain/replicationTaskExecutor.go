@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,7 +18,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package replicator
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination replicationTaskHandler_mock.go
+
+package domain
 
 import (
 	"github.com/uber/cadence/.gen/go/replicator"
@@ -53,45 +55,49 @@ var (
 // NOTE: the counterpart of domain replication transmission logic is in service/fropntend package
 
 type (
-	// DomainReplicator is the interface which can replicate the domain
-	DomainReplicator interface {
-		HandleReceivingTask(task *replicator.DomainTaskAttributes) error
+	// ReplicationTaskExecutor is the interface which is to execute domain replication task
+	ReplicationTaskExecutor interface {
+		Execute(task *replicator.DomainTaskAttributes) error
 	}
 
-	domainReplicatorImpl struct {
+	domainReplicationTaskExecutorImpl struct {
 		metadataManagerV2 persistence.MetadataManager
 		logger            log.Logger
 	}
 )
 
-// NewDomainReplicator create a new instance odf domain replicator
-func NewDomainReplicator(metadataManagerV2 persistence.MetadataManager, logger log.Logger) DomainReplicator {
-	return &domainReplicatorImpl{
+// NewReplicationTaskExecutor create a new instance of domain replicator
+func NewReplicationTaskExecutor(
+	metadataManagerV2 persistence.MetadataManager,
+	logger log.Logger,
+) ReplicationTaskExecutor {
+
+	return &domainReplicationTaskExecutorImpl{
 		metadataManagerV2: metadataManagerV2,
 		logger:            logger,
 	}
 }
 
-// HandleReceiveTask handle receiving of the domain replication task
-func (domainReplicator *domainReplicatorImpl) HandleReceivingTask(task *replicator.DomainTaskAttributes) error {
-	if err := domainReplicator.validateDomainReplicationTask(task); err != nil {
+// Execute handles receiving of the domain replication task
+func (h *domainReplicationTaskExecutorImpl) Execute(task *replicator.DomainTaskAttributes) error {
+	if err := h.validateDomainReplicationTask(task); err != nil {
 		return err
 	}
 
 	switch task.GetDomainOperation() {
 	case replicator.DomainOperationCreate:
-		return domainReplicator.handleDomainCreationReplicationTask(task)
+		return h.handleDomainCreationReplicationTask(task)
 	case replicator.DomainOperationUpdate:
-		return domainReplicator.handleDomainUpdateReplicationTask(task)
+		return h.handleDomainUpdateReplicationTask(task)
 	default:
 		return ErrInvalidDomainOperation
 	}
 }
 
-// handleDomainCreationReplicationTask handle the domain creation replication task
-func (domainReplicator *domainReplicatorImpl) handleDomainCreationReplicationTask(task *replicator.DomainTaskAttributes) error {
+// handleDomainCreationReplicationTask handles the domain creation replication task
+func (h *domainReplicationTaskExecutorImpl) handleDomainCreationReplicationTask(task *replicator.DomainTaskAttributes) error {
 	// task already validated
-	status, err := domainReplicator.convertDomainStatusFromThrift(task.Info.Status)
+	status, err := h.convertDomainStatusFromThrift(task.Info.Status)
 	if err != nil {
 		return err
 	}
@@ -115,21 +121,21 @@ func (domainReplicator *domainReplicatorImpl) handleDomainCreationReplicationTas
 		},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: task.ReplicationConfig.GetActiveClusterName(),
-			Clusters:          domainReplicator.convertClusterReplicationConfigFromThrift(task.ReplicationConfig.Clusters),
+			Clusters:          h.convertClusterReplicationConfigFromThrift(task.ReplicationConfig.Clusters),
 		},
 		IsGlobalDomain:  true, // local domain will not be replicated
 		ConfigVersion:   task.GetConfigVersion(),
 		FailoverVersion: task.GetFailoverVersion(),
 	}
 
-	_, err = domainReplicator.metadataManagerV2.CreateDomain(request)
+	_, err = h.metadataManagerV2.CreateDomain(request)
 	if err != nil {
 		// SQL and Cassandra handle domain UUID collision differently
 		// here, whenever seeing a error replicating a domain
 		// do a check if there is a name / UUID collision
 
 		recordExists := true
-		resp, getErr := domainReplicator.metadataManagerV2.GetDomain(&persistence.GetDomainRequest{
+		resp, getErr := h.metadataManagerV2.GetDomain(&persistence.GetDomainRequest{
 			Name: task.Info.GetName(),
 		})
 		switch getErr.(type) {
@@ -145,7 +151,7 @@ func (domainReplicator *domainReplicatorImpl) handleDomainCreationReplicationTas
 			return err
 		}
 
-		resp, getErr = domainReplicator.metadataManagerV2.GetDomain(&persistence.GetDomainRequest{
+		resp, getErr = h.metadataManagerV2.GetDomain(&persistence.GetDomainRequest{
 			ID: task.GetID(),
 		})
 		switch getErr.(type) {
@@ -171,16 +177,16 @@ func (domainReplicator *domainReplicatorImpl) handleDomainCreationReplicationTas
 	return err
 }
 
-// handleDomainUpdateReplicationTask handle the domain update replication task
-func (domainReplicator *domainReplicatorImpl) handleDomainUpdateReplicationTask(task *replicator.DomainTaskAttributes) error {
+// handleDomainUpdateReplicationTask handles the domain update replication task
+func (h *domainReplicationTaskExecutorImpl) handleDomainUpdateReplicationTask(task *replicator.DomainTaskAttributes) error {
 	// task already validated
-	status, err := domainReplicator.convertDomainStatusFromThrift(task.Info.Status)
+	status, err := h.convertDomainStatusFromThrift(task.Info.Status)
 	if err != nil {
 		return err
 	}
 
 	// first we need to get the current notification version since we need to it for conditional update
-	metadata, err := domainReplicator.metadataManagerV2.GetMetadata()
+	metadata, err := h.metadataManagerV2.GetMetadata()
 	if err != nil {
 		return err
 	}
@@ -188,14 +194,14 @@ func (domainReplicator *domainReplicatorImpl) handleDomainUpdateReplicationTask(
 
 	// plus, we need to check whether the config version is <= the config version set in the input
 	// plus, we need to check whether the failover version is <= the failover version set in the input
-	resp, err := domainReplicator.metadataManagerV2.GetDomain(&persistence.GetDomainRequest{
+	resp, err := h.metadataManagerV2.GetDomain(&persistence.GetDomainRequest{
 		Name: task.Info.GetName(),
 	})
 	if err != nil {
 		if _, ok := err.(*shared.EntityNotExistsError); ok {
 			// this can happen if the create domain replication task is to processed.
 			// e.g. new cluster which does not have anything
-			return domainReplicator.handleDomainCreationReplicationTask(task)
+			return h.handleDomainCreationReplicationTask(task)
 		}
 		return err
 	}
@@ -232,7 +238,7 @@ func (domainReplicator *domainReplicatorImpl) handleDomainUpdateReplicationTask(
 		if task.Config.GetBadBinaries() != nil {
 			request.Config.BadBinaries = *task.Config.GetBadBinaries()
 		}
-		request.ReplicationConfig.Clusters = domainReplicator.convertClusterReplicationConfigFromThrift(task.ReplicationConfig.Clusters)
+		request.ReplicationConfig.Clusters = h.convertClusterReplicationConfigFromThrift(task.ReplicationConfig.Clusters)
 		request.ConfigVersion = task.GetConfigVersion()
 	}
 	if resp.FailoverVersion < task.GetFailoverVersion() {
@@ -246,10 +252,10 @@ func (domainReplicator *domainReplicatorImpl) handleDomainUpdateReplicationTask(
 		return nil
 	}
 
-	return domainReplicator.metadataManagerV2.UpdateDomain(request)
+	return h.metadataManagerV2.UpdateDomain(request)
 }
 
-func (domainReplicator *domainReplicatorImpl) validateDomainReplicationTask(task *replicator.DomainTaskAttributes) error {
+func (h *domainReplicationTaskExecutorImpl) validateDomainReplicationTask(task *replicator.DomainTaskAttributes) error {
 	if task == nil {
 		return ErrEmptyDomainReplicationTask
 	}
@@ -272,7 +278,7 @@ func (domainReplicator *domainReplicatorImpl) validateDomainReplicationTask(task
 	return nil
 }
 
-func (domainReplicator *domainReplicatorImpl) convertClusterReplicationConfigFromThrift(
+func (h *domainReplicationTaskExecutorImpl) convertClusterReplicationConfigFromThrift(
 	input []*shared.ClusterReplicationConfiguration) []*persistence.ClusterReplicationConfig {
 	output := []*persistence.ClusterReplicationConfig{}
 	for _, cluster := range input {
@@ -282,7 +288,7 @@ func (domainReplicator *domainReplicatorImpl) convertClusterReplicationConfigFro
 	return output
 }
 
-func (domainReplicator *domainReplicatorImpl) convertDomainStatusFromThrift(input *shared.DomainStatus) (int, error) {
+func (h *domainReplicationTaskExecutorImpl) convertDomainStatusFromThrift(input *shared.DomainStatus) (int, error) {
 	if input == nil {
 		return 0, ErrInvalidDomainStatus
 	}

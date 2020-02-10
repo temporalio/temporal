@@ -27,6 +27,7 @@ import (
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/definition"
+	"github.com/uber/cadence/common/domain"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/persistence"
@@ -241,6 +242,10 @@ func (s *Service) startScanner() {
 }
 
 func (s *Service) startReplicator() {
+	domainReplicationTaskExecutor := domain.NewReplicationTaskExecutor(
+		s.GetMetadataManager(),
+		s.GetLogger(),
+	)
 	msgReplicator := replicator.NewReplicator(
 		s.GetClusterMetadata(),
 		s.GetMetadataManager(),
@@ -253,6 +258,7 @@ func (s *Service) startReplicator() {
 		s.GetHostInfo(),
 		s.GetWorkerServiceResolver(),
 		s.GetDomainReplicationQueue(),
+		domainReplicationTaskExecutor,
 	)
 	if err := msgReplicator.Start(); err != nil {
 		msgReplicator.Stop()
