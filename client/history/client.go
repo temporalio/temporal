@@ -38,11 +38,6 @@ import (
 
 var _ Client = (*clientImpl)(nil)
 
-const (
-	// DefaultTimeout is the default timeout used to make calls
-	DefaultTimeout = time.Second * 30
-)
-
 type clientImpl struct {
 	numberOfShards  int
 	tokenSerializer common.TaskTokenSerializer

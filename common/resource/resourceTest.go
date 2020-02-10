@@ -33,6 +33,7 @@ import (
 
 	"github.com/temporalio/temporal/.gen/go/history/historyservicetest"
 	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
+	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
 	"github.com/temporalio/temporal/.gen/proto/matchingservicemock"
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/client/admin"
@@ -84,6 +85,7 @@ type (
 		FrontendClient       *workflowservicemock.MockWorkflowServiceClient
 		MatchingClient       *matchingservicemock.MockMatchingServiceClient
 		HistoryClient        *historyservicetest.MockClient
+		HistoryClientGRPC    *historyservicemock.MockHistoryServiceClient
 		RemoteAdminClient    *adminservicemock.MockAdminServiceClient
 		RemoteFrontendClient *workflowservicemock.MockWorkflowServiceClient
 		ClientBean           *client.MockBean
@@ -128,12 +130,14 @@ func NewTest(
 	frontendClient := workflowservicemock.NewMockWorkflowServiceClient(controller)
 	matchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
 	historyClient := historyservicetest.NewMockClient(controller)
+	historyClientGRPC := historyservicemock.NewMockHistoryServiceClient(controller)
 	remoteFrontendClient := workflowservicemock.NewMockWorkflowServiceClient(controller)
 	remoteAdminClient := adminservicemock.NewMockAdminServiceClient(controller)
 	clientBean := client.NewMockBean(controller)
 	clientBean.EXPECT().GetFrontendClient().Return(frontendClient).AnyTimes()
 	clientBean.EXPECT().GetMatchingClient(gomock.Any()).Return(matchingClient, nil).AnyTimes()
 	clientBean.EXPECT().GetHistoryClient().Return(historyClient).AnyTimes()
+	clientBean.EXPECT().GetHistoryClientGRPC().Return(historyClientGRPC).AnyTimes()
 	clientBean.EXPECT().GetRemoteAdminClient(gomock.Any()).Return(remoteAdminClient).AnyTimes()
 	clientBean.EXPECT().GetRemoteFrontendClient(gomock.Any()).Return(remoteFrontendClient).AnyTimes()
 
@@ -194,6 +198,7 @@ func NewTest(
 		FrontendClient:       frontendClient,
 		MatchingClient:       matchingClient,
 		HistoryClient:        historyClient,
+		HistoryClientGRPC:    historyClientGRPC,
 		RemoteAdminClient:    remoteAdminClient,
 		RemoteFrontendClient: remoteFrontendClient,
 		ClientBean:           clientBean,
@@ -346,6 +351,11 @@ func (s *Test) GetHistoryRawClient() history.Client {
 // GetHistoryClient for testing
 func (s *Test) GetHistoryClient() history.Client {
 	return s.HistoryClient
+}
+
+// GetHistoryClientGRPC for testing
+func (s *Test) GetHistoryClientGRPC() history.ClientGRPC {
+	return s.HistoryClientGRPC
 }
 
 // GetRemoteAdminClient for testing

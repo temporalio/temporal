@@ -103,6 +103,7 @@ type (
 		matchingClient    matching.Client
 		historyRawClient  history.Client
 		historyClient     history.Client
+		historyClientGRPC history.ClientGRPC
 		clientBean        client.Bean
 
 		// persistence clients
@@ -245,6 +246,13 @@ func New(
 		common.IsWhitelistServiceTransientError,
 	)
 
+	historyRawClientGRPC := clientBean.GetHistoryClientGRPC()
+	historyClientGRPC := history.NewRetryableClientGRPC(
+		historyRawClientGRPC,
+		common.CreateHistoryServiceRetryPolicy(),
+		common.IsWhitelistServiceTransientErrorGRPC,
+	)
+
 	historyArchiverBootstrapContainer := &archiver.HistoryBootstrapContainer{
 		HistoryV2Manager: persistenceBean.GetHistoryManager(),
 		Logger:           logger,
@@ -304,6 +312,7 @@ func New(
 		matchingClient:    matchingClient,
 		historyRawClient:  historyRawClient,
 		historyClient:     historyClient,
+		historyClientGRPC: historyClientGRPC,
 		clientBean:        clientBean,
 
 		// persistence clients
@@ -520,6 +529,11 @@ func (h *Impl) GetHistoryRawClient() history.Client {
 // GetHistoryClient return history client with retry policy
 func (h *Impl) GetHistoryClient() history.Client {
 	return h.historyClient
+}
+
+// GetHistoryClientGRPC return history client with retry policy
+func (h *Impl) GetHistoryClientGRPC() history.ClientGRPC {
+	return h.historyClientGRPC
 }
 
 // GetRemoteAdminClient return remote admin client for given cluster name
