@@ -28,6 +28,7 @@ import (
 
 	"github.com/temporalio/temporal/.gen/go/history/historyserviceclient"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common"
 )
 
@@ -46,6 +47,11 @@ type HistoryClient interface {
 	historyserviceclient.Interface
 }
 
+// HistoryClientGRPC is the interface exposed by history service client
+type HistoryClientGRPC interface {
+	historyservice.HistoryServiceClient
+}
+
 // NewAdminClient creates a client to cadence admin client
 func NewAdminClient(connection *grpc.ClientConn) AdminClient {
 	return adminservice.NewAdminServiceClient(connection)
@@ -59,4 +65,9 @@ func NewFrontendClient(connection *grpc.ClientConn) workflowservice.WorkflowServ
 // NewHistoryClient creates a client to cadence history service client
 func NewHistoryClient(d *yarpc.Dispatcher) HistoryClient {
 	return historyserviceclient.New(d.ClientConfig(common.HistoryServiceName))
+}
+
+// NewHistoryClient creates a client to cadence history service client
+func NewHistoryClientGRPC(connection *grpc.ClientConn) HistoryClientGRPC {
+	return historyservice.NewHistoryServiceClient(connection)
 }

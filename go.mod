@@ -71,7 +71,7 @@ require (
 	github.com/valyala/fastjson v1.4.1
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
 	go.temporal.io/temporal v0.10.5
-	go.temporal.io/temporal-proto v0.0.0-20200207215554-ecd0f5ea1703
+	go.temporal.io/temporal-proto v0.0.0-20200208031322-262b4376cc67
 	go.uber.org/atomic v1.5.1
 	go.uber.org/fx v1.10.0
 	go.uber.org/multierr v1.4.0
