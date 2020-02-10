@@ -617,6 +617,12 @@ func (c *cadenceImpl) startHistory(
 		// depends on the fact that there's only one history host.
 		// Need to change those tests and modify the interface for getting history client.
 		c.historyClient = NewHistoryClient(historyService.GetDispatcher())
+		historyConnection, err := grpc.Dial(c.HistoryServiceAddress(3)[0], grpc.WithInsecure())
+		if err != nil {
+			c.logger.Fatal("Failed to create connection for history", tag.Error(err))
+		}
+
+		c.historyClientGRPC = NewHistoryClientGRPC(historyConnection)
 		c.historyServices = append(c.historyServices, historyService)
 
 		go historyService.Start()

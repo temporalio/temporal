@@ -41,10 +41,9 @@ import (
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
-	"github.com/temporalio/temporal/.gen/go/history"
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	adminClient "github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
@@ -198,19 +197,19 @@ func (s *nDCIntegrationTestSuite) TestSingleBranch() {
 	tasklist := "event-generator-taskList"
 
 	// active has initial version 0
-	historyClient := s.active.GetHistoryClient()
+	historyClient := s.active.GetHistoryClientGRPC()
 
 	versions := []int64{101, 1, 201, 301, 401, 601, 501, 801, 1001, 901, 701, 1101}
 	for _, version := range versions {
 		runID := uuid.New()
-		var historyBatch []*shared.History
+		var historyBatch []*commonproto.History
 		s.generator = test.InitializeHistoryEventGenerator(s.domainName, version)
 
 		for s.generator.HasNextVertex() {
 			events := s.generator.GetNextVertices()
-			historyEvents := &shared.History{}
+			historyEvents := &commonproto.History{}
 			for _, event := range events {
-				historyEvents.Events = append(historyEvents.Events, event.GetData().(*shared.HistoryEvent))
+				historyEvents.Events = append(historyEvents.Events, event.GetData().(*commonproto.HistoryEvent))
 			}
 			historyBatch = append(historyBatch, historyEvents)
 		}
@@ -234,7 +233,7 @@ func (s *nDCIntegrationTestSuite) TestSingleBranch() {
 func (s *nDCIntegrationTestSuite) verifyEventHistory(
 	workflowID string,
 	runID string,
-	historyBatch []*shared.History,
+	historyBatch []*commonproto.History,
 ) error {
 	// get replicated history events from passive side
 	passiveClient := s.active.GetFrontendClient()
@@ -287,48 +286,48 @@ func (s *nDCIntegrationTestSuite) TestMultipleBranches() {
 	tasklist := "event-generator-taskList"
 
 	// active has initial version 0
-	historyClient := s.active.GetHistoryClient()
+	historyClient := s.active.GetHistoryClientGRPC()
 
 	versions := []int64{101, 1, 201}
 	for _, version := range versions {
 		runID := uuid.New()
 
-		baseBranch := []*shared.History{}
+		var baseBranch []*commonproto.History
 		baseGenerator := test.InitializeHistoryEventGenerator(s.domainName, version)
 		baseGenerator.SetVersion(version)
 
 		for i := 0; i < 10 && baseGenerator.HasNextVertex(); i++ {
 			events := baseGenerator.GetNextVertices()
-			historyEvents := &shared.History{}
+			historyEvents := &commonproto.History{}
 			for _, event := range events {
-				historyEvents.Events = append(historyEvents.Events, event.GetData().(*shared.HistoryEvent))
+				historyEvents.Events = append(historyEvents.Events, event.GetData().(*commonproto.HistoryEvent))
 			}
 			baseBranch = append(baseBranch, historyEvents)
 		}
 		baseVersionHistory := s.eventBatchesToVersionHistory(nil, baseBranch)
 
-		branch1 := []*shared.History{}
+		var branch1 []*commonproto.History
 		branchVersionHistory1 := baseVersionHistory.Duplicate()
 		branchGenerator1 := baseGenerator.DeepCopy()
 		for i := 0; i < 10 && branchGenerator1.HasNextVertex(); i++ {
 			events := branchGenerator1.GetNextVertices()
-			historyEvents := &shared.History{}
+			historyEvents := &commonproto.History{}
 			for _, event := range events {
-				historyEvents.Events = append(historyEvents.Events, event.GetData().(*shared.HistoryEvent))
+				historyEvents.Events = append(historyEvents.Events, event.GetData().(*commonproto.HistoryEvent))
 			}
 			branch1 = append(branch1, historyEvents)
 		}
 		branchVersionHistory1 = s.eventBatchesToVersionHistory(branchVersionHistory1, branch1)
 
-		branch2 := []*shared.History{}
+		var branch2 []*commonproto.History
 		branchVersionHistory2 := baseVersionHistory.Duplicate()
 		branchGenerator2 := baseGenerator.DeepCopy()
 		branchGenerator2.SetVersion(branchGenerator2.GetVersion() + 1)
 		for i := 0; i < 10 && branchGenerator2.HasNextVertex(); i++ {
 			events := branchGenerator2.GetNextVertices()
-			historyEvents := &shared.History{}
+			historyEvents := &commonproto.History{}
 			for _, event := range events {
-				historyEvents.Events = append(historyEvents.Events, event.GetData().(*shared.HistoryEvent))
+				historyEvents.Events = append(historyEvents.Events, event.GetData().(*commonproto.HistoryEvent))
 			}
 			branch2 = append(branch2, historyEvents)
 		}
@@ -375,253 +374,253 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 	identity := "worker-identity"
 
 	// active has initial version 0
-	historyClient := s.active.GetHistoryClient()
+	historyClient := s.active.GetHistoryClientGRPC()
 
-	eventsBatch1 := []*shared.History{
-		{Events: []*shared.HistoryEvent{
+	eventsBatch1 := []*commonproto.History{
+		{Events: []*commonproto.HistoryEvent{
 			{
-				EventId:   common.Int64Ptr(1),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeWorkflowExecutionStarted.Ptr(),
-				WorkflowExecutionStartedEventAttributes: &shared.WorkflowExecutionStartedEventAttributes{
-					WorkflowType:                        &shared.WorkflowType{Name: common.StringPtr(workflowType)},
-					TaskList:                            &shared.TaskList{Name: common.StringPtr(tasklist)},
+				EventId:   1,
+				Version:   21,
+				EventType: enums.EventTypeWorkflowExecutionStarted,
+				Attributes: &commonproto.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &commonproto.WorkflowExecutionStartedEventAttributes{
+					WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
+					TaskList:                            &commonproto.TaskList{Name: tasklist},
 					Input:                               nil,
-					ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1000),
-					TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1000),
-					FirstDecisionTaskBackoffSeconds:     common.Int32Ptr(100),
-				},
+					ExecutionStartToCloseTimeoutSeconds: 1000,
+					TaskStartToCloseTimeoutSeconds:      1000,
+					FirstDecisionTaskBackoffSeconds:     100,
+				}},
 			},
 			{
-				EventId:   common.Int64Ptr(2),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeDecisionTaskScheduled.Ptr(),
-				DecisionTaskScheduledEventAttributes: &shared.DecisionTaskScheduledEventAttributes{
-					TaskList:                   &shared.TaskList{Name: common.StringPtr(tasklist)},
-					StartToCloseTimeoutSeconds: common.Int32Ptr(1000),
-					Attempt:                    common.Int64Ptr(0),
-				},
-			},
-		}},
-		{Events: []*shared.HistoryEvent{
-			{
-				EventId:   common.Int64Ptr(3),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeDecisionTaskStarted.Ptr(),
-				DecisionTaskStartedEventAttributes: &shared.DecisionTaskStartedEventAttributes{
-					ScheduledEventId: common.Int64Ptr(2),
-					Identity:         common.StringPtr(identity),
-					RequestId:        common.StringPtr(uuid.New()),
-				},
+				EventId:   2,
+				Version:   21,
+				EventType: enums.EventTypeDecisionTaskScheduled,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
+					TaskList:                   &commonproto.TaskList{Name: tasklist},
+					StartToCloseTimeoutSeconds: 1000,
+					Attempt:                    0,
+				}},
 			},
 		}},
-		{Events: []*shared.HistoryEvent{
+		{Events: []*commonproto.HistoryEvent{
 			{
-				EventId:   common.Int64Ptr(4),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeDecisionTaskCompleted.Ptr(),
-				DecisionTaskCompletedEventAttributes: &shared.DecisionTaskCompletedEventAttributes{
-					ScheduledEventId: common.Int64Ptr(2),
-					StartedEventId:   common.Int64Ptr(3),
-					Identity:         common.StringPtr(identity),
-				},
+				EventId:   3,
+				Version:   21,
+				EventType: enums.EventTypeDecisionTaskStarted,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+					ScheduledEventId: 2,
+					Identity:         identity,
+					RequestId:        uuid.New(),
+				}},
+			},
+		}},
+		{Events: []*commonproto.HistoryEvent{
+			{
+				EventId:   4,
+				Version:   21,
+				EventType: enums.EventTypeDecisionTaskCompleted,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+					ScheduledEventId: 2,
+					StartedEventId:   3,
+					Identity:         identity,
+				}},
 			},
 			{
-				EventId:   common.Int64Ptr(5),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeMarkerRecorded.Ptr(),
-				MarkerRecordedEventAttributes: &shared.MarkerRecordedEventAttributes{
-					MarkerName:                   common.StringPtr("some marker name"),
+				EventId:   5,
+				Version:   21,
+				EventType: enums.EventTypeMarkerRecorded,
+				Attributes: &commonproto.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &commonproto.MarkerRecordedEventAttributes{
+					MarkerName:                   "some marker name",
 					Details:                      []byte("some marker details"),
-					DecisionTaskCompletedEventId: common.Int64Ptr(4),
-				},
+					DecisionTaskCompletedEventId: 4,
+				}},
 			},
 			{
-				EventId:   common.Int64Ptr(6),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeActivityTaskScheduled.Ptr(),
-				ActivityTaskScheduledEventAttributes: &shared.ActivityTaskScheduledEventAttributes{
-					DecisionTaskCompletedEventId:  common.Int64Ptr(4),
-					ActivityId:                    common.StringPtr("0"),
-					ActivityType:                  &shared.ActivityType{Name: common.StringPtr("activity-type")},
-					TaskList:                      &shared.TaskList{Name: common.StringPtr(tasklist)},
+				EventId:   6,
+				Version:   21,
+				EventType: enums.EventTypeActivityTaskScheduled,
+				Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+					DecisionTaskCompletedEventId:  4,
+					ActivityId:                    "0",
+					ActivityType:                  &commonproto.ActivityType{Name: "activity-type"},
+					TaskList:                      &commonproto.TaskList{Name: tasklist},
 					Input:                         nil,
-					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(20),
-					ScheduleToStartTimeoutSeconds: common.Int32Ptr(20),
-					StartToCloseTimeoutSeconds:    common.Int32Ptr(20),
-					HeartbeatTimeoutSeconds:       common.Int32Ptr(20),
-				},
+					ScheduleToCloseTimeoutSeconds: 20,
+					ScheduleToStartTimeoutSeconds: 20,
+					StartToCloseTimeoutSeconds:    20,
+					HeartbeatTimeoutSeconds:       20,
+				}},
 			},
 		}},
-		{Events: []*shared.HistoryEvent{
+		{Events: []*commonproto.HistoryEvent{
 			{
-				EventId:   common.Int64Ptr(7),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeActivityTaskStarted.Ptr(),
-				ActivityTaskStartedEventAttributes: &shared.ActivityTaskStartedEventAttributes{
-					ScheduledEventId: common.Int64Ptr(6),
-					Identity:         common.StringPtr(identity),
-					RequestId:        common.StringPtr(uuid.New()),
-					Attempt:          common.Int32Ptr(0),
-				},
+				EventId:   7,
+				Version:   21,
+				EventType: enums.EventTypeActivityTaskStarted,
+				Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{
+					ScheduledEventId: 6,
+					Identity:         identity,
+					RequestId:        uuid.New(),
+					Attempt:          0,
+				}},
 			},
 		}},
-		{Events: []*shared.HistoryEvent{
+		{Events: []*commonproto.HistoryEvent{
 			{
-				EventId:   common.Int64Ptr(8),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
-				WorkflowExecutionSignaledEventAttributes: &shared.WorkflowExecutionSignaledEventAttributes{
-					SignalName: common.StringPtr("some signal name 1"),
+				EventId:   8,
+				Version:   21,
+				EventType: enums.EventTypeWorkflowExecutionSignaled,
+				Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+					SignalName: "some signal name 1",
 					Input:      []byte("some signal details 1"),
-					Identity:   common.StringPtr(identity),
-				},
+					Identity:   identity,
+				}},
 			},
 			{
-				EventId:   common.Int64Ptr(9),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeDecisionTaskScheduled.Ptr(),
-				DecisionTaskScheduledEventAttributes: &shared.DecisionTaskScheduledEventAttributes{
-					TaskList:                   &shared.TaskList{Name: common.StringPtr(tasklist)},
-					StartToCloseTimeoutSeconds: common.Int32Ptr(1000),
-					Attempt:                    common.Int64Ptr(0),
-				},
-			},
-		}},
-		{Events: []*shared.HistoryEvent{
-			{
-				EventId:   common.Int64Ptr(10),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeDecisionTaskStarted.Ptr(),
-				DecisionTaskStartedEventAttributes: &shared.DecisionTaskStartedEventAttributes{
-					ScheduledEventId: common.Int64Ptr(9),
-					Identity:         common.StringPtr(identity),
-					RequestId:        common.StringPtr(uuid.New()),
-				},
+				EventId:   9,
+				Version:   21,
+				EventType: enums.EventTypeDecisionTaskScheduled,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
+					TaskList:                   &commonproto.TaskList{Name: tasklist},
+					StartToCloseTimeoutSeconds: 1000,
+					Attempt:                    0,
+				}},
 			},
 		}},
-		{Events: []*shared.HistoryEvent{
+		{Events: []*commonproto.HistoryEvent{
 			{
-				EventId:   common.Int64Ptr(11),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeDecisionTaskCompleted.Ptr(),
-				DecisionTaskCompletedEventAttributes: &shared.DecisionTaskCompletedEventAttributes{
-					ScheduledEventId: common.Int64Ptr(9),
-					StartedEventId:   common.Int64Ptr(10),
-					Identity:         common.StringPtr(identity),
-				},
+				EventId:   10,
+				Version:   21,
+				EventType: enums.EventTypeDecisionTaskStarted,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+					ScheduledEventId: 9,
+					Identity:         identity,
+					RequestId:        uuid.New(),
+				}},
+			},
+		}},
+		{Events: []*commonproto.HistoryEvent{
+			{
+				EventId:   11,
+				Version:   21,
+				EventType: enums.EventTypeDecisionTaskCompleted,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+					ScheduledEventId: 9,
+					StartedEventId:   10,
+					Identity:         identity,
+				}},
 			},
 			{
-				EventId:   common.Int64Ptr(12),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
-				WorkflowExecutionSignaledEventAttributes: &shared.WorkflowExecutionSignaledEventAttributes{
-					SignalName: common.StringPtr("some signal name 2"),
+				EventId:   12,
+				Version:   21,
+				EventType: enums.EventTypeWorkflowExecutionSignaled,
+				Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+					SignalName: "some signal name 2",
 					Input:      []byte("some signal details 2"),
-					Identity:   common.StringPtr(identity),
-				},
+					Identity:   identity,
+				}},
 			},
 			{
-				EventId:   common.Int64Ptr(13),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeDecisionTaskScheduled.Ptr(),
-				DecisionTaskScheduledEventAttributes: &shared.DecisionTaskScheduledEventAttributes{
-					TaskList:                   &shared.TaskList{Name: common.StringPtr(tasklist)},
-					StartToCloseTimeoutSeconds: common.Int32Ptr(1000),
-					Attempt:                    common.Int64Ptr(0),
-				},
+				EventId:   13,
+				Version:   21,
+				EventType: enums.EventTypeDecisionTaskScheduled,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
+					TaskList:                   &commonproto.TaskList{Name: tasklist},
+					StartToCloseTimeoutSeconds: 1000,
+					Attempt:                    0,
+				}},
 			},
 			{
-				EventId:   common.Int64Ptr(14),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeDecisionTaskStarted.Ptr(),
-				DecisionTaskStartedEventAttributes: &shared.DecisionTaskStartedEventAttributes{
-					ScheduledEventId: common.Int64Ptr(13),
-					Identity:         common.StringPtr(identity),
-					RequestId:        common.StringPtr(uuid.New()),
-				},
-			},
-		}},
-	}
-
-	eventsBatch2 := []*shared.History{
-		{Events: []*shared.HistoryEvent{
-			{
-				EventId:   common.Int64Ptr(15),
-				Version:   common.Int64Ptr(31),
-				EventType: shared.EventTypeWorkflowExecutionTimedOut.Ptr(),
-				WorkflowExecutionTimedOutEventAttributes: &shared.WorkflowExecutionTimedOutEventAttributes{
-					TimeoutType: shared.TimeoutTypeStartToClose.Ptr(),
-				},
+				EventId:   14,
+				Version:   21,
+				EventType: enums.EventTypeDecisionTaskStarted,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+					ScheduledEventId: 13,
+					Identity:         identity,
+					RequestId:        uuid.New(),
+				}},
 			},
 		}},
 	}
 
-	eventsBatch3 := []*shared.History{
-		{Events: []*shared.HistoryEvent{
+	eventsBatch2 := []*commonproto.History{
+		{Events: []*commonproto.HistoryEvent{
 			{
-				EventId:   common.Int64Ptr(15),
-				Version:   common.Int64Ptr(30),
-				EventType: shared.EventTypeDecisionTaskTimedOut.Ptr(),
-				DecisionTaskTimedOutEventAttributes: &shared.DecisionTaskTimedOutEventAttributes{
-					ScheduledEventId: common.Int64Ptr(13),
-					StartedEventId:   common.Int64Ptr(14),
-					TimeoutType:      shared.TimeoutTypeStartToClose.Ptr(),
-				},
-			},
-			{
-				EventId:   common.Int64Ptr(16),
-				Version:   common.Int64Ptr(30),
-				EventType: shared.EventTypeActivityTaskTimedOut.Ptr(),
-				ActivityTaskTimedOutEventAttributes: &shared.ActivityTaskTimedOutEventAttributes{
-					ScheduledEventId: common.Int64Ptr(6),
-					StartedEventId:   common.Int64Ptr(7),
-					TimeoutType:      shared.TimeoutTypeStartToClose.Ptr(),
-				},
-			},
-			{
-				EventId:   common.Int64Ptr(17),
-				Version:   common.Int64Ptr(30),
-				EventType: shared.EventTypeDecisionTaskScheduled.Ptr(),
-				DecisionTaskScheduledEventAttributes: &shared.DecisionTaskScheduledEventAttributes{
-					TaskList:                   &shared.TaskList{Name: common.StringPtr(tasklist)},
-					StartToCloseTimeoutSeconds: common.Int32Ptr(1000),
-					Attempt:                    common.Int64Ptr(0),
-				},
+				EventId:   15,
+				Version:   31,
+				EventType: enums.EventTypeWorkflowExecutionTimedOut,
+				Attributes: &commonproto.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{WorkflowExecutionTimedOutEventAttributes: &commonproto.WorkflowExecutionTimedOutEventAttributes{
+					TimeoutType: enums.TimeoutTypeStartToClose,
+				}},
 			},
 		}},
-		{Events: []*shared.HistoryEvent{
+	}
+
+	eventsBatch3 := []*commonproto.History{
+		{Events: []*commonproto.HistoryEvent{
 			{
-				EventId:   common.Int64Ptr(18),
-				Version:   common.Int64Ptr(30),
-				EventType: shared.EventTypeDecisionTaskStarted.Ptr(),
-				DecisionTaskStartedEventAttributes: &shared.DecisionTaskStartedEventAttributes{
-					ScheduledEventId: common.Int64Ptr(17),
-					Identity:         common.StringPtr(identity),
-					RequestId:        common.StringPtr(uuid.New()),
-				},
+				EventId:   15,
+				Version:   30,
+				EventType: enums.EventTypeDecisionTaskTimedOut,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskTimedOutEventAttributes{DecisionTaskTimedOutEventAttributes: &commonproto.DecisionTaskTimedOutEventAttributes{
+					ScheduledEventId: 13,
+					StartedEventId:   14,
+					TimeoutType:      enums.TimeoutTypeStartToClose,
+				}},
+			},
+			{
+				EventId:   16,
+				Version:   30,
+				EventType: enums.EventTypeActivityTaskTimedOut,
+				Attributes: &commonproto.HistoryEvent_ActivityTaskTimedOutEventAttributes{ActivityTaskTimedOutEventAttributes: &commonproto.ActivityTaskTimedOutEventAttributes{
+					ScheduledEventId: 6,
+					StartedEventId:   7,
+					TimeoutType:      enums.TimeoutTypeStartToClose,
+				}},
+			},
+			{
+				EventId:   17,
+				Version:   30,
+				EventType: enums.EventTypeDecisionTaskScheduled,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
+					TaskList:                   &commonproto.TaskList{Name: tasklist},
+					StartToCloseTimeoutSeconds: 1000,
+					Attempt:                    0,
+				}},
 			},
 		}},
-		{Events: []*shared.HistoryEvent{
+		{Events: []*commonproto.HistoryEvent{
 			{
-				EventId:   common.Int64Ptr(19),
-				Version:   common.Int64Ptr(30),
-				EventType: shared.EventTypeDecisionTaskCompleted.Ptr(),
-				DecisionTaskCompletedEventAttributes: &shared.DecisionTaskCompletedEventAttributes{
-					ScheduledEventId: common.Int64Ptr(8),
-					StartedEventId:   common.Int64Ptr(9),
-					Identity:         common.StringPtr(identity),
-				},
+				EventId:   18,
+				Version:   30,
+				EventType: enums.EventTypeDecisionTaskStarted,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+					ScheduledEventId: 17,
+					Identity:         identity,
+					RequestId:        uuid.New(),
+				}},
+			},
+		}},
+		{Events: []*commonproto.HistoryEvent{
+			{
+				EventId:   19,
+				Version:   30,
+				EventType: enums.EventTypeDecisionTaskCompleted,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+					ScheduledEventId: 8,
+					StartedEventId:   9,
+					Identity:         identity,
+				}},
 			},
 			{
-				EventId:   common.Int64Ptr(20),
-				Version:   common.Int64Ptr(30),
-				EventType: shared.EventTypeWorkflowExecutionFailed.Ptr(),
-				WorkflowExecutionFailedEventAttributes: &shared.WorkflowExecutionFailedEventAttributes{
-					DecisionTaskCompletedEventId: common.Int64Ptr(19),
-					Reason:                       common.StringPtr("some random reason"),
+				EventId:   20,
+				Version:   30,
+				EventType: enums.EventTypeWorkflowExecutionFailed,
+				Attributes: &commonproto.HistoryEvent_WorkflowExecutionFailedEventAttributes{WorkflowExecutionFailedEventAttributes: &commonproto.WorkflowExecutionFailedEventAttributes{
+					DecisionTaskCompletedEventId: 19,
+					Reason:                       "some random reason",
 					Details:                      nil,
-				},
+				}},
 			},
 		}},
 	}
@@ -680,217 +679,217 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 	identity := "worker-identity"
 
 	// active has initial version 0
-	historyClient := s.active.GetHistoryClient()
+	historyClient := s.active.GetHistoryClientGRPC()
 
-	eventsBatch1 := []*shared.History{
-		{Events: []*shared.HistoryEvent{
+	eventsBatch1 := []*commonproto.History{
+		{Events: []*commonproto.HistoryEvent{
 			{
-				EventId:   common.Int64Ptr(1),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeWorkflowExecutionStarted.Ptr(),
-				WorkflowExecutionStartedEventAttributes: &shared.WorkflowExecutionStartedEventAttributes{
-					WorkflowType:                        &shared.WorkflowType{Name: common.StringPtr(workflowType)},
-					TaskList:                            &shared.TaskList{Name: common.StringPtr(tasklist)},
+				EventId:   1,
+				Version:   21,
+				EventType: enums.EventTypeWorkflowExecutionStarted,
+				Attributes: &commonproto.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &commonproto.WorkflowExecutionStartedEventAttributes{
+					WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
+					TaskList:                            &commonproto.TaskList{Name: tasklist},
 					Input:                               nil,
-					ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1000),
-					TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1000),
-					FirstDecisionTaskBackoffSeconds:     common.Int32Ptr(100),
-				},
+					ExecutionStartToCloseTimeoutSeconds: 1000,
+					TaskStartToCloseTimeoutSeconds:      1000,
+					FirstDecisionTaskBackoffSeconds:     100,
+				}},
 			},
 			{
-				EventId:   common.Int64Ptr(2),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeDecisionTaskScheduled.Ptr(),
-				DecisionTaskScheduledEventAttributes: &shared.DecisionTaskScheduledEventAttributes{
-					TaskList:                   &shared.TaskList{Name: common.StringPtr(tasklist)},
-					StartToCloseTimeoutSeconds: common.Int32Ptr(1000),
-					Attempt:                    common.Int64Ptr(0),
-				},
-			},
-		}},
-		{Events: []*shared.HistoryEvent{
-			{
-				EventId:   common.Int64Ptr(3),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeDecisionTaskStarted.Ptr(),
-				DecisionTaskStartedEventAttributes: &shared.DecisionTaskStartedEventAttributes{
-					ScheduledEventId: common.Int64Ptr(2),
-					Identity:         common.StringPtr(identity),
-					RequestId:        common.StringPtr(uuid.New()),
-				},
+				EventId:   2,
+				Version:   21,
+				EventType: enums.EventTypeDecisionTaskScheduled,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
+					TaskList:                   &commonproto.TaskList{Name: tasklist},
+					StartToCloseTimeoutSeconds: 1000,
+					Attempt:                    0,
+				}},
 			},
 		}},
-		{Events: []*shared.HistoryEvent{
+		{Events: []*commonproto.HistoryEvent{
 			{
-				EventId:   common.Int64Ptr(4),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeDecisionTaskCompleted.Ptr(),
-				DecisionTaskCompletedEventAttributes: &shared.DecisionTaskCompletedEventAttributes{
-					ScheduledEventId: common.Int64Ptr(2),
-					StartedEventId:   common.Int64Ptr(3),
-					Identity:         common.StringPtr(identity),
-				},
+				EventId:   3,
+				Version:   21,
+				EventType: enums.EventTypeDecisionTaskStarted,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+					ScheduledEventId: 2,
+					Identity:         identity,
+					RequestId:        uuid.New(),
+				}},
+			},
+		}},
+		{Events: []*commonproto.HistoryEvent{
+			{
+				EventId:   4,
+				Version:   21,
+				EventType: enums.EventTypeDecisionTaskCompleted,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+					ScheduledEventId: 2,
+					StartedEventId:   3,
+					Identity:         identity,
+				}},
 			},
 			{
-				EventId:   common.Int64Ptr(5),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeMarkerRecorded.Ptr(),
-				MarkerRecordedEventAttributes: &shared.MarkerRecordedEventAttributes{
-					MarkerName:                   common.StringPtr("some marker name"),
+				EventId:   5,
+				Version:   21,
+				EventType: enums.EventTypeMarkerRecorded,
+				Attributes: &commonproto.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &commonproto.MarkerRecordedEventAttributes{
+					MarkerName:                   "some marker name",
 					Details:                      []byte("some marker details"),
-					DecisionTaskCompletedEventId: common.Int64Ptr(4),
-				},
+					DecisionTaskCompletedEventId: 4,
+				}},
 			},
 			{
-				EventId:   common.Int64Ptr(6),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeActivityTaskScheduled.Ptr(),
-				ActivityTaskScheduledEventAttributes: &shared.ActivityTaskScheduledEventAttributes{
-					DecisionTaskCompletedEventId:  common.Int64Ptr(4),
-					ActivityId:                    common.StringPtr("0"),
-					ActivityType:                  &shared.ActivityType{Name: common.StringPtr("activity-type")},
-					TaskList:                      &shared.TaskList{Name: common.StringPtr(tasklist)},
+				EventId:   6,
+				Version:   21,
+				EventType: enums.EventTypeActivityTaskScheduled,
+				Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+					DecisionTaskCompletedEventId:  4,
+					ActivityId:                    "0",
+					ActivityType:                  &commonproto.ActivityType{Name: "activity-type"},
+					TaskList:                      &commonproto.TaskList{Name: tasklist},
 					Input:                         nil,
-					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(20),
-					ScheduleToStartTimeoutSeconds: common.Int32Ptr(20),
-					StartToCloseTimeoutSeconds:    common.Int32Ptr(20),
-					HeartbeatTimeoutSeconds:       common.Int32Ptr(20),
-				},
+					ScheduleToCloseTimeoutSeconds: 20,
+					ScheduleToStartTimeoutSeconds: 20,
+					StartToCloseTimeoutSeconds:    20,
+					HeartbeatTimeoutSeconds:       20,
+				}},
 			},
 		}},
-		{Events: []*shared.HistoryEvent{
+		{Events: []*commonproto.HistoryEvent{
 			{
-				EventId:   common.Int64Ptr(7),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeActivityTaskStarted.Ptr(),
-				ActivityTaskStartedEventAttributes: &shared.ActivityTaskStartedEventAttributes{
-					ScheduledEventId: common.Int64Ptr(6),
-					Identity:         common.StringPtr(identity),
-					RequestId:        common.StringPtr(uuid.New()),
-					Attempt:          common.Int32Ptr(0),
-				},
+				EventId:   7,
+				Version:   21,
+				EventType: enums.EventTypeActivityTaskStarted,
+				Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{
+					ScheduledEventId: 6,
+					Identity:         identity,
+					RequestId:        uuid.New(),
+					Attempt:          0,
+				}},
 			},
 		}},
-		{Events: []*shared.HistoryEvent{
+		{Events: []*commonproto.HistoryEvent{
 			{
-				EventId:   common.Int64Ptr(8),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
-				WorkflowExecutionSignaledEventAttributes: &shared.WorkflowExecutionSignaledEventAttributes{
-					SignalName: common.StringPtr("some signal name 1"),
+				EventId:   8,
+				Version:   21,
+				EventType: enums.EventTypeWorkflowExecutionSignaled,
+				Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+					SignalName: "some signal name 1",
 					Input:      []byte("some signal details 1"),
-					Identity:   common.StringPtr(identity),
-				},
+					Identity:   identity,
+				}},
 			},
 			{
-				EventId:   common.Int64Ptr(9),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeDecisionTaskScheduled.Ptr(),
-				DecisionTaskScheduledEventAttributes: &shared.DecisionTaskScheduledEventAttributes{
-					TaskList:                   &shared.TaskList{Name: common.StringPtr(tasklist)},
-					StartToCloseTimeoutSeconds: common.Int32Ptr(1000),
-					Attempt:                    common.Int64Ptr(0),
-				},
-			},
-		}},
-		{Events: []*shared.HistoryEvent{
-			{
-				EventId:   common.Int64Ptr(10),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeDecisionTaskStarted.Ptr(),
-				DecisionTaskStartedEventAttributes: &shared.DecisionTaskStartedEventAttributes{
-					ScheduledEventId: common.Int64Ptr(9),
-					Identity:         common.StringPtr(identity),
-					RequestId:        common.StringPtr(uuid.New()),
-				},
+				EventId:   9,
+				Version:   21,
+				EventType: enums.EventTypeDecisionTaskScheduled,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
+					TaskList:                   &commonproto.TaskList{Name: tasklist},
+					StartToCloseTimeoutSeconds: 1000,
+					Attempt:                    0,
+				}},
 			},
 		}},
-		{Events: []*shared.HistoryEvent{
+		{Events: []*commonproto.HistoryEvent{
 			{
-				EventId:   common.Int64Ptr(11),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeDecisionTaskCompleted.Ptr(),
-				DecisionTaskCompletedEventAttributes: &shared.DecisionTaskCompletedEventAttributes{
-					ScheduledEventId: common.Int64Ptr(9),
-					StartedEventId:   common.Int64Ptr(10),
-					Identity:         common.StringPtr(identity),
-				},
+				EventId:   10,
+				Version:   21,
+				EventType: enums.EventTypeDecisionTaskStarted,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+					ScheduledEventId: 9,
+					Identity:         identity,
+					RequestId:        uuid.New(),
+				}},
+			},
+		}},
+		{Events: []*commonproto.HistoryEvent{
+			{
+				EventId:   11,
+				Version:   21,
+				EventType: enums.EventTypeDecisionTaskCompleted,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+					ScheduledEventId: 9,
+					StartedEventId:   10,
+					Identity:         identity,
+				}},
 			},
 			{
-				EventId:   common.Int64Ptr(12),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
-				WorkflowExecutionSignaledEventAttributes: &shared.WorkflowExecutionSignaledEventAttributes{
-					SignalName: common.StringPtr("some signal name 2"),
+				EventId:   12,
+				Version:   21,
+				EventType: enums.EventTypeWorkflowExecutionSignaled,
+				Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+					SignalName: "some signal name 2",
 					Input:      []byte("some signal details 2"),
-					Identity:   common.StringPtr(identity),
-				},
+					Identity:   identity,
+				}},
 			},
 			{
-				EventId:   common.Int64Ptr(13),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeDecisionTaskScheduled.Ptr(),
-				DecisionTaskScheduledEventAttributes: &shared.DecisionTaskScheduledEventAttributes{
-					TaskList:                   &shared.TaskList{Name: common.StringPtr(tasklist)},
-					StartToCloseTimeoutSeconds: common.Int32Ptr(1000),
-					Attempt:                    common.Int64Ptr(0),
-				},
+				EventId:   13,
+				Version:   21,
+				EventType: enums.EventTypeDecisionTaskScheduled,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
+					TaskList:                   &commonproto.TaskList{Name: tasklist},
+					StartToCloseTimeoutSeconds: 1000,
+					Attempt:                    0,
+				}},
 			},
 			{
-				EventId:   common.Int64Ptr(14),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeDecisionTaskStarted.Ptr(),
-				DecisionTaskStartedEventAttributes: &shared.DecisionTaskStartedEventAttributes{
-					ScheduledEventId: common.Int64Ptr(13),
-					Identity:         common.StringPtr(identity),
-					RequestId:        common.StringPtr(uuid.New()),
-				},
+				EventId:   14,
+				Version:   21,
+				EventType: enums.EventTypeDecisionTaskStarted,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+					ScheduledEventId: 13,
+					Identity:         identity,
+					RequestId:        uuid.New(),
+				}},
 			},
 		}},
 	}
 
-	eventsBatch2 := []*shared.History{
-		{Events: []*shared.HistoryEvent{
+	eventsBatch2 := []*commonproto.History{
+		{Events: []*commonproto.HistoryEvent{
 			{
-				EventId:   common.Int64Ptr(15),
-				Version:   common.Int64Ptr(32),
-				EventType: shared.EventTypeDecisionTaskCompleted.Ptr(),
-				DecisionTaskCompletedEventAttributes: &shared.DecisionTaskCompletedEventAttributes{
-					ScheduledEventId: common.Int64Ptr(8),
-					StartedEventId:   common.Int64Ptr(9),
-					Identity:         common.StringPtr(identity),
-				},
+				EventId:   15,
+				Version:   32,
+				EventType: enums.EventTypeDecisionTaskCompleted,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+					ScheduledEventId: 8,
+					StartedEventId:   9,
+					Identity:         identity,
+				}},
 			},
 		}},
 		// need to keep the workflow open for testing
 	}
 
-	eventsBatch3 := []*shared.History{
-		{Events: []*shared.HistoryEvent{
+	eventsBatch3 := []*commonproto.History{
+		{Events: []*commonproto.HistoryEvent{
 			{
-				EventId:   common.Int64Ptr(15),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeDecisionTaskCompleted.Ptr(),
-				DecisionTaskCompletedEventAttributes: &shared.DecisionTaskCompletedEventAttributes{
-					ScheduledEventId: common.Int64Ptr(8),
-					StartedEventId:   common.Int64Ptr(9),
-					Identity:         common.StringPtr(identity),
-				},
+				EventId:   15,
+				Version:   21,
+				EventType: enums.EventTypeDecisionTaskCompleted,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+					ScheduledEventId: 8,
+					StartedEventId:   9,
+					Identity:         identity,
+				}},
 			},
 			{
-				EventId:   common.Int64Ptr(16),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeWorkflowExecutionContinuedAsNew.Ptr(),
-				WorkflowExecutionContinuedAsNewEventAttributes: &shared.WorkflowExecutionContinuedAsNewEventAttributes{
-					NewExecutionRunId:                   common.StringPtr(uuid.New()),
-					WorkflowType:                        &shared.WorkflowType{Name: common.StringPtr(workflowType)},
-					TaskList:                            &shared.TaskList{Name: common.StringPtr(tasklist)},
+				EventId:   16,
+				Version:   21,
+				EventType: enums.EventTypeWorkflowExecutionContinuedAsNew,
+				Attributes: &commonproto.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &commonproto.WorkflowExecutionContinuedAsNewEventAttributes{
+					NewExecutionRunId:                   uuid.New(),
+					WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
+					TaskList:                            &commonproto.TaskList{Name: tasklist},
 					Input:                               nil,
-					ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1000),
-					TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1000),
-					DecisionTaskCompletedEventId:        common.Int64Ptr(19),
-					Initiator:                           shared.ContinueAsNewInitiatorDecider.Ptr(),
-				},
+					ExecutionStartToCloseTimeoutSeconds: 1000,
+					TaskStartToCloseTimeoutSeconds:      1000,
+					DecisionTaskCompletedEventId:        19,
+					Initiator:                           enums.ContinueAsNewInitiatorDecider,
+				}},
 			},
 		}},
 	}
@@ -946,18 +945,18 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_ZombieWorkflow() {
 	tasklist := "event-generator-taskList"
 
 	// active has initial version 0
-	historyClient := s.active.GetHistoryClient()
+	historyClient := s.active.GetHistoryClientGRPC()
 
 	version := int64(101)
 	runID := uuid.New()
-	historyBatch := []*shared.History{}
+	historyBatch := []*commonproto.History{}
 	s.generator = test.InitializeHistoryEventGenerator(s.domainName, version)
 
 	for s.generator.HasNextVertex() {
 		events := s.generator.GetNextVertices()
-		historyEvents := &shared.History{}
+		historyEvents := &commonproto.History{}
 		for _, event := range events {
-			historyEvents.Events = append(historyEvents.Events, event.GetData().(*shared.HistoryEvent))
+			historyEvents.Events = append(historyEvents.Events, event.GetData().(*commonproto.HistoryEvent))
 		}
 		historyBatch = append(historyBatch, historyEvents)
 	}
@@ -975,16 +974,16 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_ZombieWorkflow() {
 
 	version = int64(1)
 	runID = uuid.New()
-	historyBatch = []*shared.History{}
+	historyBatch = []*commonproto.History{}
 	s.generator = test.InitializeHistoryEventGenerator(s.domainName, version)
 
 	// verify two batches of zombie workflow are call reapply API
 	s.mockAdminClient["standby"].(*adminservicemock.MockAdminServiceClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(&adminservice.ReapplyEventsResponse{}, nil).Times(2)
 	for i := 0; i < 2 && s.generator.HasNextVertex(); i++ {
 		events := s.generator.GetNextVertices()
-		historyEvents := &shared.History{}
+		historyEvents := &commonproto.History{}
 		for _, event := range events {
-			historyEvents.Events = append(historyEvents.Events, event.GetData().(*shared.HistoryEvent))
+			historyEvents.Events = append(historyEvents.Events, event.GetData().(*commonproto.HistoryEvent))
 		}
 		historyBatch = append(historyBatch, historyEvents)
 	}
@@ -1010,25 +1009,25 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
 	version := int64(101)
 	isWorkflowFinished := false
 
-	historyClient := s.active.GetHistoryClient()
+	historyClient := s.active.GetHistoryClientGRPC()
 
 	s.generator = test.InitializeHistoryEventGenerator(s.domainName, version)
-	baseBranch := []*shared.History{}
+	baseBranch := []*commonproto.History{}
 	var taskID int64
 	for i := 0; i < 4 && s.generator.HasNextVertex(); i++ {
 		events := s.generator.GetNextVertices()
-		historyEvents := &shared.History{}
+		historyEvents := &commonproto.History{}
 		for _, event := range events {
-			historyEvent := event.GetData().(*shared.HistoryEvent)
+			historyEvent := event.GetData().(*commonproto.HistoryEvent)
 			taskID = historyEvent.GetTaskId()
 			historyEvents.Events = append(historyEvents.Events, historyEvent)
 			switch historyEvent.GetEventType() {
-			case shared.EventTypeWorkflowExecutionCompleted,
-				shared.EventTypeWorkflowExecutionFailed,
-				shared.EventTypeWorkflowExecutionTimedOut,
-				shared.EventTypeWorkflowExecutionTerminated,
-				shared.EventTypeWorkflowExecutionContinuedAsNew,
-				shared.EventTypeWorkflowExecutionCanceled:
+			case enums.EventTypeWorkflowExecutionCompleted,
+				enums.EventTypeWorkflowExecutionFailed,
+				enums.EventTypeWorkflowExecutionTimedOut,
+				enums.EventTypeWorkflowExecutionTerminated,
+				enums.EventTypeWorkflowExecutionContinuedAsNew,
+				enums.EventTypeWorkflowExecutionCanceled:
 				isWorkflowFinished = true
 			}
 		}
@@ -1053,14 +1052,14 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
 	)
 
 	newGenerator := s.generator.DeepCopy()
-	newBranch := []*shared.History{}
+	newBranch := []*commonproto.History{}
 	newVersionHistory := versionHistory.Duplicate()
 	newGenerator.SetVersion(newGenerator.GetVersion() + 1) // simulate events from other cluster
 	for i := 0; i < 4 && newGenerator.HasNextVertex(); i++ {
 		events := newGenerator.GetNextVertices()
-		historyEvents := &shared.History{}
+		historyEvents := &commonproto.History{}
 		for _, event := range events {
-			history := event.GetData().(*shared.HistoryEvent)
+			history := event.GetData().(*commonproto.HistoryEvent)
 			taskID = history.GetTaskId()
 			historyEvents.Events = append(historyEvents.Events, history)
 		}
@@ -1081,20 +1080,20 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
 	// Handcraft a stale signal event
 	baseBranchLastEventBatch := baseBranch[len(baseBranch)-1].GetEvents()
 	baseBranchLastEvent := baseBranchLastEventBatch[len(baseBranchLastEventBatch)-1]
-	staleBranch := []*shared.History{
+	staleBranch := []*commonproto.History{
 		{
-			Events: []*shared.HistoryEvent{
+			Events: []*commonproto.HistoryEvent{
 				{
-					EventId:   common.Int64Ptr(baseBranchLastEvent.GetEventId() + 1),
-					EventType: common.EventTypePtr(shared.EventTypeWorkflowExecutionSignaled),
-					Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-					Version:   common.Int64Ptr(baseBranchLastEvent.GetVersion()), // dummy event from other cluster
-					TaskId:    common.Int64Ptr(taskID),
-					WorkflowExecutionSignaledEventAttributes: &shared.WorkflowExecutionSignaledEventAttributes{
-						SignalName: common.StringPtr("signal"),
+					EventId:   baseBranchLastEvent.GetEventId() + 1,
+					EventType: enums.EventTypeWorkflowExecutionSignaled,
+					Timestamp: time.Now().UnixNano(),
+					Version:   baseBranchLastEvent.GetVersion(), // dummy event from other cluster
+					TaskId:    taskID,
+					Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+						SignalName: "signal",
 						Input:      []byte{},
-						Identity:   common.StringPtr("ndc_integration_test"),
-					},
+						Identity:   "ndc_integration_test",
+					}},
 				},
 			},
 		},
@@ -1119,7 +1118,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 	tasklist := "event-generator-taskList"
 	identity := "ndc-re-send-test"
 
-	historyClient := s.active.GetHistoryClient()
+	historyClient := s.active.GetHistoryClientGRPC()
 	adminClient := s.active.GetAdminClient()
 	getHistory := func(
 		domain string,
@@ -1149,282 +1148,282 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 		})
 	}
 
-	eventsBatch1 := []*shared.History{
-		{Events: []*shared.HistoryEvent{
+	eventsBatch1 := []*commonproto.History{
+		{Events: []*commonproto.HistoryEvent{
 			{
-				EventId:   common.Int64Ptr(1),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeWorkflowExecutionStarted.Ptr(),
-				WorkflowExecutionStartedEventAttributes: &shared.WorkflowExecutionStartedEventAttributes{
-					WorkflowType:                        &shared.WorkflowType{Name: common.StringPtr(workflowType)},
-					TaskList:                            &shared.TaskList{Name: common.StringPtr(tasklist)},
+				EventId:   1,
+				Version:   21,
+				EventType: enums.EventTypeWorkflowExecutionStarted,
+				Attributes: &commonproto.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &commonproto.WorkflowExecutionStartedEventAttributes{
+					WorkflowType:                        &commonproto.WorkflowType{Name: workflowType},
+					TaskList:                            &commonproto.TaskList{Name: tasklist},
 					Input:                               nil,
-					ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1000),
-					TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1000),
-					FirstDecisionTaskBackoffSeconds:     common.Int32Ptr(100),
-				},
+					ExecutionStartToCloseTimeoutSeconds: 1000,
+					TaskStartToCloseTimeoutSeconds:      1000,
+					FirstDecisionTaskBackoffSeconds:     100,
+				}},
 			},
 			{
-				EventId:   common.Int64Ptr(2),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeDecisionTaskScheduled.Ptr(),
-				DecisionTaskScheduledEventAttributes: &shared.DecisionTaskScheduledEventAttributes{
-					TaskList:                   &shared.TaskList{Name: common.StringPtr(tasklist)},
-					StartToCloseTimeoutSeconds: common.Int32Ptr(1000),
-					Attempt:                    common.Int64Ptr(0),
-				},
-			},
-		}},
-		{Events: []*shared.HistoryEvent{
-			{
-				EventId:   common.Int64Ptr(3),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeDecisionTaskStarted.Ptr(),
-				DecisionTaskStartedEventAttributes: &shared.DecisionTaskStartedEventAttributes{
-					ScheduledEventId: common.Int64Ptr(2),
-					Identity:         common.StringPtr(identity),
-					RequestId:        common.StringPtr(uuid.New()),
-				},
+				EventId:   2,
+				Version:   21,
+				EventType: enums.EventTypeDecisionTaskScheduled,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
+					TaskList:                   &commonproto.TaskList{Name: tasklist},
+					StartToCloseTimeoutSeconds: 1000,
+					Attempt:                    0,
+				}},
 			},
 		}},
-		{Events: []*shared.HistoryEvent{
+		{Events: []*commonproto.HistoryEvent{
 			{
-				EventId:   common.Int64Ptr(4),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeDecisionTaskCompleted.Ptr(),
-				DecisionTaskCompletedEventAttributes: &shared.DecisionTaskCompletedEventAttributes{
-					ScheduledEventId: common.Int64Ptr(2),
-					StartedEventId:   common.Int64Ptr(3),
-					Identity:         common.StringPtr(identity),
-				},
+				EventId:   3,
+				Version:   21,
+				EventType: enums.EventTypeDecisionTaskStarted,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+					ScheduledEventId: 2,
+					Identity:         identity,
+					RequestId:        uuid.New(),
+				}},
+			},
+		}},
+		{Events: []*commonproto.HistoryEvent{
+			{
+				EventId:   4,
+				Version:   21,
+				EventType: enums.EventTypeDecisionTaskCompleted,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+					ScheduledEventId: 2,
+					StartedEventId:   3,
+					Identity:         identity,
+				}},
 			},
 			{
-				EventId:   common.Int64Ptr(5),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeMarkerRecorded.Ptr(),
-				MarkerRecordedEventAttributes: &shared.MarkerRecordedEventAttributes{
-					MarkerName:                   common.StringPtr("some marker name"),
+				EventId:   5,
+				Version:   21,
+				EventType: enums.EventTypeMarkerRecorded,
+				Attributes: &commonproto.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &commonproto.MarkerRecordedEventAttributes{
+					MarkerName:                   "some marker name",
 					Details:                      []byte("some marker details"),
-					DecisionTaskCompletedEventId: common.Int64Ptr(4),
-				},
+					DecisionTaskCompletedEventId: 4,
+				}},
 			},
 			{
-				EventId:   common.Int64Ptr(6),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeActivityTaskScheduled.Ptr(),
-				ActivityTaskScheduledEventAttributes: &shared.ActivityTaskScheduledEventAttributes{
-					DecisionTaskCompletedEventId:  common.Int64Ptr(4),
-					ActivityId:                    common.StringPtr("0"),
-					ActivityType:                  &shared.ActivityType{Name: common.StringPtr("activity-type")},
-					TaskList:                      &shared.TaskList{Name: common.StringPtr(tasklist)},
+				EventId:   6,
+				Version:   21,
+				EventType: enums.EventTypeActivityTaskScheduled,
+				Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+					DecisionTaskCompletedEventId:  4,
+					ActivityId:                    "0",
+					ActivityType:                  &commonproto.ActivityType{Name: "activity-type"},
+					TaskList:                      &commonproto.TaskList{Name: tasklist},
 					Input:                         nil,
-					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(20),
-					ScheduleToStartTimeoutSeconds: common.Int32Ptr(20),
-					StartToCloseTimeoutSeconds:    common.Int32Ptr(20),
-					HeartbeatTimeoutSeconds:       common.Int32Ptr(20),
-				},
+					ScheduleToCloseTimeoutSeconds: 20,
+					ScheduleToStartTimeoutSeconds: 20,
+					StartToCloseTimeoutSeconds:    20,
+					HeartbeatTimeoutSeconds:       20,
+				}},
 			},
 		}},
-		{Events: []*shared.HistoryEvent{
+		{Events: []*commonproto.HistoryEvent{
 			{
-				EventId:   common.Int64Ptr(7),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeActivityTaskStarted.Ptr(),
-				ActivityTaskStartedEventAttributes: &shared.ActivityTaskStartedEventAttributes{
-					ScheduledEventId: common.Int64Ptr(6),
-					Identity:         common.StringPtr(identity),
-					RequestId:        common.StringPtr(uuid.New()),
-					Attempt:          common.Int32Ptr(0),
-				},
+				EventId:   7,
+				Version:   21,
+				EventType: enums.EventTypeActivityTaskStarted,
+				Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{
+					ScheduledEventId: 6,
+					Identity:         identity,
+					RequestId:        uuid.New(),
+					Attempt:          0,
+				}},
 			},
 		}},
-		{Events: []*shared.HistoryEvent{
+		{Events: []*commonproto.HistoryEvent{
 			{
-				EventId:   common.Int64Ptr(8),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
-				WorkflowExecutionSignaledEventAttributes: &shared.WorkflowExecutionSignaledEventAttributes{
-					SignalName: common.StringPtr("some signal name 1"),
+				EventId:   8,
+				Version:   21,
+				EventType: enums.EventTypeWorkflowExecutionSignaled,
+				Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+					SignalName: "some signal name 1",
 					Input:      []byte("some signal details 1"),
-					Identity:   common.StringPtr(identity),
-				},
+					Identity:   identity,
+				}},
 			},
 			{
-				EventId:   common.Int64Ptr(9),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeDecisionTaskScheduled.Ptr(),
-				DecisionTaskScheduledEventAttributes: &shared.DecisionTaskScheduledEventAttributes{
-					TaskList:                   &shared.TaskList{Name: common.StringPtr(tasklist)},
-					StartToCloseTimeoutSeconds: common.Int32Ptr(1000),
-					Attempt:                    common.Int64Ptr(0),
-				},
-			},
-		}},
-		{Events: []*shared.HistoryEvent{
-			{
-				EventId:   common.Int64Ptr(10),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeDecisionTaskStarted.Ptr(),
-				DecisionTaskStartedEventAttributes: &shared.DecisionTaskStartedEventAttributes{
-					ScheduledEventId: common.Int64Ptr(9),
-					Identity:         common.StringPtr(identity),
-					RequestId:        common.StringPtr(uuid.New()),
-				},
+				EventId:   9,
+				Version:   21,
+				EventType: enums.EventTypeDecisionTaskScheduled,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
+					TaskList:                   &commonproto.TaskList{Name: tasklist},
+					StartToCloseTimeoutSeconds: 1000,
+					Attempt:                    0,
+				}},
 			},
 		}},
-		{Events: []*shared.HistoryEvent{
+		{Events: []*commonproto.HistoryEvent{
 			{
-				EventId:   common.Int64Ptr(11),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeDecisionTaskCompleted.Ptr(),
-				DecisionTaskCompletedEventAttributes: &shared.DecisionTaskCompletedEventAttributes{
-					ScheduledEventId: common.Int64Ptr(9),
-					StartedEventId:   common.Int64Ptr(10),
-					Identity:         common.StringPtr(identity),
-				},
+				EventId:   10,
+				Version:   21,
+				EventType: enums.EventTypeDecisionTaskStarted,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+					ScheduledEventId: 9,
+					Identity:         identity,
+					RequestId:        uuid.New(),
+				}},
+			},
+		}},
+		{Events: []*commonproto.HistoryEvent{
+			{
+				EventId:   11,
+				Version:   21,
+				EventType: enums.EventTypeDecisionTaskCompleted,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+					ScheduledEventId: 9,
+					StartedEventId:   10,
+					Identity:         identity,
+				}},
 			},
 			{
-				EventId:   common.Int64Ptr(12),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
-				WorkflowExecutionSignaledEventAttributes: &shared.WorkflowExecutionSignaledEventAttributes{
-					SignalName: common.StringPtr("some signal name 2"),
+				EventId:   12,
+				Version:   21,
+				EventType: enums.EventTypeWorkflowExecutionSignaled,
+				Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+					SignalName: "some signal name 2",
 					Input:      []byte("some signal details 2"),
-					Identity:   common.StringPtr(identity),
-				},
+					Identity:   identity,
+				}},
 			},
 			{
-				EventId:   common.Int64Ptr(13),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeDecisionTaskScheduled.Ptr(),
-				DecisionTaskScheduledEventAttributes: &shared.DecisionTaskScheduledEventAttributes{
-					TaskList:                   &shared.TaskList{Name: common.StringPtr(tasklist)},
-					StartToCloseTimeoutSeconds: common.Int32Ptr(1000),
-					Attempt:                    common.Int64Ptr(0),
-				},
+				EventId:   13,
+				Version:   21,
+				EventType: enums.EventTypeDecisionTaskScheduled,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
+					TaskList:                   &commonproto.TaskList{Name: tasklist},
+					StartToCloseTimeoutSeconds: 1000,
+					Attempt:                    0,
+				}},
 			},
 			{
-				EventId:   common.Int64Ptr(14),
-				Version:   common.Int64Ptr(21),
-				EventType: shared.EventTypeDecisionTaskStarted.Ptr(),
-				DecisionTaskStartedEventAttributes: &shared.DecisionTaskStartedEventAttributes{
-					ScheduledEventId: common.Int64Ptr(13),
-					Identity:         common.StringPtr(identity),
-					RequestId:        common.StringPtr(uuid.New()),
-				},
+				EventId:   14,
+				Version:   21,
+				EventType: enums.EventTypeDecisionTaskStarted,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+					ScheduledEventId: 13,
+					Identity:         identity,
+					RequestId:        uuid.New(),
+				}},
 			},
 		}},
 	}
 
-	eventsBatch2 := []*shared.History{
-		{Events: []*shared.HistoryEvent{
+	eventsBatch2 := []*commonproto.History{
+		{Events: []*commonproto.HistoryEvent{
 			{
-				EventId:   common.Int64Ptr(15),
-				Version:   common.Int64Ptr(31),
-				EventType: shared.EventTypeDecisionTaskCompleted.Ptr(),
-				DecisionTaskCompletedEventAttributes: &shared.DecisionTaskCompletedEventAttributes{
-					ScheduledEventId: common.Int64Ptr(9),
-					StartedEventId:   common.Int64Ptr(10),
-					Identity:         common.StringPtr(identity),
-				},
+				EventId:   15,
+				Version:   31,
+				EventType: enums.EventTypeDecisionTaskCompleted,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+					ScheduledEventId: 9,
+					StartedEventId:   10,
+					Identity:         identity,
+				}},
 			},
 			{
-				EventId:   common.Int64Ptr(16),
-				Version:   common.Int64Ptr(31),
-				EventType: shared.EventTypeActivityTaskScheduled.Ptr(),
-				ActivityTaskScheduledEventAttributes: &shared.ActivityTaskScheduledEventAttributes{
-					DecisionTaskCompletedEventId:  common.Int64Ptr(4),
-					ActivityId:                    common.StringPtr("0"),
-					ActivityType:                  &shared.ActivityType{Name: common.StringPtr("activity-type")},
-					TaskList:                      &shared.TaskList{Name: common.StringPtr(tasklist)},
+				EventId:   16,
+				Version:   31,
+				EventType: enums.EventTypeActivityTaskScheduled,
+				Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+					DecisionTaskCompletedEventId:  4,
+					ActivityId:                    "0",
+					ActivityType:                  &commonproto.ActivityType{Name: "activity-type"},
+					TaskList:                      &commonproto.TaskList{Name: tasklist},
 					Input:                         nil,
-					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(20),
-					ScheduleToStartTimeoutSeconds: common.Int32Ptr(20),
-					StartToCloseTimeoutSeconds:    common.Int32Ptr(20),
-					HeartbeatTimeoutSeconds:       common.Int32Ptr(20),
-				},
+					ScheduleToCloseTimeoutSeconds: 20,
+					ScheduleToStartTimeoutSeconds: 20,
+					StartToCloseTimeoutSeconds:    20,
+					HeartbeatTimeoutSeconds:       20,
+				}},
 			},
 		}},
 	}
 
-	eventsBatch3 := []*shared.History{
-		{Events: []*shared.HistoryEvent{
+	eventsBatch3 := []*commonproto.History{
+		{Events: []*commonproto.HistoryEvent{
 			{
-				EventId:   common.Int64Ptr(15),
-				Version:   common.Int64Ptr(30),
-				EventType: shared.EventTypeDecisionTaskTimedOut.Ptr(),
-				DecisionTaskTimedOutEventAttributes: &shared.DecisionTaskTimedOutEventAttributes{
-					ScheduledEventId: common.Int64Ptr(13),
-					StartedEventId:   common.Int64Ptr(14),
-					TimeoutType:      shared.TimeoutTypeStartToClose.Ptr(),
-				},
+				EventId:   15,
+				Version:   30,
+				EventType: enums.EventTypeDecisionTaskTimedOut,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskTimedOutEventAttributes{DecisionTaskTimedOutEventAttributes: &commonproto.DecisionTaskTimedOutEventAttributes{
+					ScheduledEventId: 13,
+					StartedEventId:   14,
+					TimeoutType:      enums.TimeoutTypeStartToClose,
+				}},
 			},
 			{
-				EventId:   common.Int64Ptr(16),
-				Version:   common.Int64Ptr(30),
-				EventType: shared.EventTypeActivityTaskTimedOut.Ptr(),
-				ActivityTaskTimedOutEventAttributes: &shared.ActivityTaskTimedOutEventAttributes{
-					ScheduledEventId: common.Int64Ptr(6),
-					StartedEventId:   common.Int64Ptr(7),
-					TimeoutType:      shared.TimeoutTypeStartToClose.Ptr(),
-				},
+				EventId:   16,
+				Version:   30,
+				EventType: enums.EventTypeActivityTaskTimedOut,
+				Attributes: &commonproto.HistoryEvent_ActivityTaskTimedOutEventAttributes{ActivityTaskTimedOutEventAttributes: &commonproto.ActivityTaskTimedOutEventAttributes{
+					ScheduledEventId: 6,
+					StartedEventId:   7,
+					TimeoutType:      enums.TimeoutTypeStartToClose,
+				}},
 			},
 			{
-				EventId:   common.Int64Ptr(17),
-				Version:   common.Int64Ptr(30),
-				EventType: shared.EventTypeDecisionTaskScheduled.Ptr(),
-				DecisionTaskScheduledEventAttributes: &shared.DecisionTaskScheduledEventAttributes{
-					TaskList:                   &shared.TaskList{Name: common.StringPtr(tasklist)},
-					StartToCloseTimeoutSeconds: common.Int32Ptr(1000),
-					Attempt:                    common.Int64Ptr(0),
-				},
-			},
-		}},
-		{Events: []*shared.HistoryEvent{
-			{
-				EventId:   common.Int64Ptr(18),
-				Version:   common.Int64Ptr(30),
-				EventType: shared.EventTypeDecisionTaskStarted.Ptr(),
-				DecisionTaskStartedEventAttributes: &shared.DecisionTaskStartedEventAttributes{
-					ScheduledEventId: common.Int64Ptr(17),
-					Identity:         common.StringPtr(identity),
-					RequestId:        common.StringPtr(uuid.New()),
-				},
+				EventId:   17,
+				Version:   30,
+				EventType: enums.EventTypeDecisionTaskScheduled,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
+					TaskList:                   &commonproto.TaskList{Name: tasklist},
+					StartToCloseTimeoutSeconds: 1000,
+					Attempt:                    0,
+				}},
 			},
 		}},
-		{Events: []*shared.HistoryEvent{
+		{Events: []*commonproto.HistoryEvent{
 			{
-				EventId:   common.Int64Ptr(19),
-				Version:   common.Int64Ptr(30),
-				EventType: shared.EventTypeDecisionTaskCompleted.Ptr(),
-				DecisionTaskCompletedEventAttributes: &shared.DecisionTaskCompletedEventAttributes{
-					ScheduledEventId: common.Int64Ptr(8),
-					StartedEventId:   common.Int64Ptr(9),
-					Identity:         common.StringPtr(identity),
-				},
+				EventId:   18,
+				Version:   30,
+				EventType: enums.EventTypeDecisionTaskStarted,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+					ScheduledEventId: 17,
+					Identity:         identity,
+					RequestId:        uuid.New(),
+				}},
+			},
+		}},
+		{Events: []*commonproto.HistoryEvent{
+			{
+				EventId:   19,
+				Version:   30,
+				EventType: enums.EventTypeDecisionTaskCompleted,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+					ScheduledEventId: 8,
+					StartedEventId:   9,
+					Identity:         identity,
+				}},
 			},
 			{
-				EventId:   common.Int64Ptr(20),
-				Version:   common.Int64Ptr(30),
-				EventType: shared.EventTypeWorkflowExecutionFailed.Ptr(),
-				WorkflowExecutionFailedEventAttributes: &shared.WorkflowExecutionFailedEventAttributes{
-					DecisionTaskCompletedEventId: common.Int64Ptr(19),
-					Reason:                       common.StringPtr("some random reason"),
+				EventId:   20,
+				Version:   30,
+				EventType: enums.EventTypeWorkflowExecutionFailed,
+				Attributes: &commonproto.HistoryEvent_WorkflowExecutionFailedEventAttributes{WorkflowExecutionFailedEventAttributes: &commonproto.WorkflowExecutionFailedEventAttributes{
+					DecisionTaskCompletedEventId: 19,
+					Reason:                       "some random reason",
 					Details:                      nil,
-				},
+				}},
 			},
 		}},
 	}
 
-	eventsBatch4 := []*shared.History{
-		{Events: []*shared.HistoryEvent{
+	eventsBatch4 := []*commonproto.History{
+		{Events: []*commonproto.HistoryEvent{
 			{
-				EventId:   common.Int64Ptr(17),
-				Version:   common.Int64Ptr(32),
-				EventType: shared.EventTypeWorkflowExecutionTimedOut.Ptr(),
-				WorkflowExecutionTimedOutEventAttributes: &shared.WorkflowExecutionTimedOutEventAttributes{
-					TimeoutType: shared.TimeoutTypeStartToClose.Ptr(),
-				},
+				EventId:   17,
+				Version:   32,
+				EventType: enums.EventTypeWorkflowExecutionTimedOut,
+				Attributes: &commonproto.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{WorkflowExecutionTimedOutEventAttributes: &commonproto.WorkflowExecutionTimedOutEventAttributes{
+					TimeoutType: enums.TimeoutTypeStartToClose,
+				}},
 			},
 		}},
 	}
@@ -1602,7 +1601,7 @@ func (s *nDCIntegrationTestSuite) registerDomain() {
 }
 
 func (s *nDCIntegrationTestSuite) generateNewRunHistory(
-	event *shared.HistoryEvent,
+	event *commonproto.HistoryEvent,
 	domain string,
 	workflowID string,
 	runID string,
@@ -1618,69 +1617,42 @@ func (s *nDCIntegrationTestSuite) generateNewRunHistory(
 		return nil
 	}
 
-	event.WorkflowExecutionContinuedAsNewEventAttributes.NewExecutionRunId = common.StringPtr(uuid.New())
+	event.GetWorkflowExecutionContinuedAsNewEventAttributes().NewExecutionRunId = uuid.New()
 
-	newRunFirstEvent := &shared.HistoryEvent{
-		EventId:   common.Int64Ptr(common.FirstEventID),
-		Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-		EventType: common.EventTypePtr(shared.EventTypeWorkflowExecutionStarted),
-		Version:   common.Int64Ptr(version),
-		TaskId:    common.Int64Ptr(1),
-		WorkflowExecutionStartedEventAttributes: &shared.WorkflowExecutionStartedEventAttributes{
-			WorkflowType:         common.WorkflowTypePtr(shared.WorkflowType{Name: common.StringPtr(workflowType)}),
-			ParentWorkflowDomain: common.StringPtr(domain),
-			ParentWorkflowExecution: &shared.WorkflowExecution{
-				WorkflowId: common.StringPtr(uuid.New()),
-				RunId:      common.StringPtr(uuid.New()),
+	newRunFirstEvent := &commonproto.HistoryEvent{
+		EventId:   common.FirstEventID,
+		Timestamp: time.Now().UnixNano(),
+		EventType: enums.EventTypeWorkflowExecutionStarted,
+		Version:   version,
+		TaskId:    1,
+		Attributes: &commonproto.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &commonproto.WorkflowExecutionStartedEventAttributes{
+			WorkflowType:         &commonproto.WorkflowType{Name: workflowType},
+			ParentWorkflowDomain: domain,
+			ParentWorkflowExecution: &commonproto.WorkflowExecution{
+				WorkflowId: uuid.New(),
+				RunId:      uuid.New(),
 			},
-			ParentInitiatedEventId: common.Int64Ptr(event.GetEventId()),
-			TaskList: common.TaskListPtr(shared.TaskList{
-				Name: common.StringPtr(taskList),
-				Kind: common.TaskListKindPtr(shared.TaskListKindNormal),
-			}),
-			ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(10),
-			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(10),
-			ContinuedExecutionRunId:             common.StringPtr(runID),
-			Initiator:                           shared.ContinueAsNewInitiatorCronSchedule.Ptr(),
-			OriginalExecutionRunId:              common.StringPtr(runID),
-			Identity:                            common.StringPtr("NDC-test"),
-			FirstExecutionRunId:                 common.StringPtr(runID),
-			Attempt:                             common.Int32Ptr(0),
-			ExpirationTimestamp:                 common.Int64Ptr(time.Now().Add(time.Minute).UnixNano()),
-		},
+			ParentInitiatedEventId: event.GetEventId(),
+			TaskList: &commonproto.TaskList{
+				Name: taskList,
+				Kind: enums.TaskListKindNormal,
+			},
+			ExecutionStartToCloseTimeoutSeconds: 10,
+			TaskStartToCloseTimeoutSeconds:      10,
+			ContinuedExecutionRunId:             runID,
+			Initiator:                           enums.ContinueAsNewInitiatorCronSchedule,
+			OriginalExecutionRunId:              runID,
+			Identity:                            "NDC-test",
+			FirstExecutionRunId:                 runID,
+			Attempt:                             0,
+			ExpirationTimestamp:                 time.Now().Add(time.Minute).UnixNano(),
+		}},
 	}
 
-	eventBlob, err := s.serializer.SerializeBatchEvents([]*shared.HistoryEvent{newRunFirstEvent}, common.EncodingTypeThriftRW)
+	eventBlob, err := s.serializer.SerializeBatchEvents(adapter.ToThriftHistoryEvents([]*commonproto.HistoryEvent{newRunFirstEvent}), common.EncodingTypeThriftRW)
 	s.NoError(err)
 
 	return eventBlob
-}
-
-func (s *nDCIntegrationTestSuite) toThriftDataBlob(
-	blob *persistence.DataBlob,
-) *shared.DataBlob {
-
-	if blob == nil {
-		return nil
-	}
-
-	var encodingType shared.EncodingType
-	switch blob.GetEncoding() {
-	case common.EncodingTypeThriftRW:
-		encodingType = shared.EncodingTypeThriftRW
-	case common.EncodingTypeJSON,
-		common.EncodingTypeGob,
-		common.EncodingTypeUnknown,
-		common.EncodingTypeEmpty:
-		panic(fmt.Sprintf("unsupported encoding type: %v", blob.GetEncoding()))
-	default:
-		panic(fmt.Sprintf("unknown encoding type: %v", blob.GetEncoding()))
-	}
-
-	return &shared.DataBlob{
-		EncodingType: encodingType.Ptr(),
-		Data:         blob.Data,
-	}
 }
 
 func (s *nDCIntegrationTestSuite) toProtoDataBlob(
@@ -1715,7 +1687,7 @@ func (s *nDCIntegrationTestSuite) generateEventBlobs(
 	runID string,
 	workflowType string,
 	tasklist string,
-	batch *shared.History,
+	batch *commonproto.History,
 ) (*persistence.DataBlob, *persistence.DataBlob) {
 	// TODO temporary code to generate next run first event
 	//  we should generate these as part of modeled based testing
@@ -1725,7 +1697,7 @@ func (s *nDCIntegrationTestSuite) generateEventBlobs(
 	)
 	// must serialize events batch after attempt on continue as new as generateNewRunHistory will
 	// modify the NewExecutionRunId attr
-	eventBlob, err := s.serializer.SerializeBatchEvents(batch.Events, common.EncodingTypeThriftRW)
+	eventBlob, err := s.serializer.SerializeBatchEvents(adapter.ToThriftHistoryEvents(batch.Events), common.EncodingTypeThriftRW)
 	s.NoError(err)
 	return eventBlob, newRunEventBlob
 }
@@ -1736,26 +1708,28 @@ func (s *nDCIntegrationTestSuite) applyEvents(
 	workflowType string,
 	tasklist string,
 	versionHistory *persistence.VersionHistory,
-	eventBatches []*shared.History,
-	historyClient host.HistoryClient,
+	eventBatches []*commonproto.History,
+	historyClient host.HistoryClientGRPC,
 ) {
 	for _, batch := range eventBatches {
 		eventBlob, newRunEventBlob := s.generateEventBlobs(workflowID, runID, workflowType, tasklist, batch)
-		req := &history.ReplicateEventsV2Request{
-			DomainUUID: common.StringPtr(s.domainID),
-			WorkflowExecution: &shared.WorkflowExecution{
-				WorkflowId: common.StringPtr(workflowID),
-				RunId:      common.StringPtr(runID),
+		req := &historyservice.ReplicateEventsV2Request{
+			DomainUUID: s.domainID,
+			WorkflowExecution: &commonproto.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      runID,
 			},
-			VersionHistoryItems: s.toThriftVersionHistoryItems(versionHistory),
-			Events:              s.toThriftDataBlob(eventBlob),
-			NewRunEvents:        s.toThriftDataBlob(newRunEventBlob),
+			VersionHistoryItems: s.toProtoVersionHistoryItems(versionHistory),
+			Events:              s.toProtoDataBlob(eventBlob),
+			NewRunEvents:        s.toProtoDataBlob(newRunEventBlob),
 		}
 
-		err := historyClient.ReplicateEventsV2(host.NewContext(), req)
+		resp, err := historyClient.ReplicateEventsV2(host.NewContext(), req)
 		s.NoError(err, "Failed to replicate history event")
-		err = historyClient.ReplicateEventsV2(host.NewContext(), req)
+		s.Equal(&historyservice.ReplicateEventsV2Response{}, resp)
+		resp, err = historyClient.ReplicateEventsV2(host.NewContext(), req)
 		s.NoError(err, "Failed to dedup replicate history event")
+		s.Equal(&historyservice.ReplicateEventsV2Response{}, resp)
 	}
 }
 
@@ -1765,7 +1739,7 @@ func (s *nDCIntegrationTestSuite) applyEventsThroughFetcher(
 	workflowType string,
 	tasklist string,
 	versionHistory *persistence.VersionHistory,
-	eventBatches []*shared.History,
+	eventBatches []*commonproto.History,
 ) {
 	for _, batch := range eventBatches {
 		eventBlob, newRunEventBlob := s.generateEventBlobs(workflowID, runID, workflowType, tasklist, batch)
@@ -1779,7 +1753,7 @@ func (s *nDCIntegrationTestSuite) applyEventsThroughFetcher(
 				DomainId:            s.domainID,
 				WorkflowId:          workflowID,
 				RunId:               runID,
-				VersionHistoryItems: adapter.ToProtoVersionHistoryItems(s.toThriftVersionHistoryItems(versionHistory)),
+				VersionHistoryItems: s.toProtoVersionHistoryItems(versionHistory),
 				Events:              s.toProtoDataBlob(eventBlob),
 				NewRunEvents:        s.toProtoDataBlob(newRunEventBlob),
 			}},
@@ -1793,7 +1767,7 @@ func (s *nDCIntegrationTestSuite) applyEventsThroughFetcher(
 
 func (s *nDCIntegrationTestSuite) eventBatchesToVersionHistory(
 	versionHistory *persistence.VersionHistory,
-	eventBatches []*shared.History,
+	eventBatches []*commonproto.History,
 ) *persistence.VersionHistory {
 
 	// TODO temporary code to generate version history
@@ -1815,14 +1789,14 @@ func (s *nDCIntegrationTestSuite) eventBatchesToVersionHistory(
 	return versionHistory
 }
 
-func (s *nDCIntegrationTestSuite) toThriftVersionHistoryItems(
+func (s *nDCIntegrationTestSuite) toProtoVersionHistoryItems(
 	versionHistory *persistence.VersionHistory,
-) []*shared.VersionHistoryItem {
+) []*commonproto.VersionHistoryItem {
 	if versionHistory == nil {
 		return nil
 	}
 
-	return versionHistory.ToThrift().Items
+	return versionHistory.ToProto().Items
 }
 
 func (s *nDCIntegrationTestSuite) setupRemoteFrontendClients() {
