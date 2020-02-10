@@ -163,6 +163,9 @@ func (t *timerSequenceImpl) createNextActivityTimer() (bool, error) {
 	}
 	// mark timer task mask as indication that timer task is generated
 	activityInfo.TimerTaskStatus |= timerTypeToTimerMask(firstTimerTask.timerType)
+	if firstTimerTask.timerType == timerTypeHeartbeat {
+		activityInfo.LastHeartbeatTimeoutVisibility = firstTimerTask.timestamp.Unix()
+	}
 	if err := t.mutableState.UpdateActivity(activityInfo); err != nil {
 		return false, err
 	}
