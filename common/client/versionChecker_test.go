@@ -138,7 +138,7 @@ func (s *VersionCheckerSuite) TestSupportsStickyQuery() {
 		{
 			clientImpl:           "",
 			clientFeatureVersion: "1.0.0",
-			expectErr:            false,
+			expectErr:            true,
 		},
 		{
 			clientImpl: GoSDK,

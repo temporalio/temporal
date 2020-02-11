@@ -25,12 +25,10 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/temporalio/temporal/common/persistence"
-
 	"github.com/pborman/uuid"
+	commonproto "go.temporal.io/temporal-proto/common"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/persistence"
 	test "github.com/temporalio/temporal/common/testing"
 )
 
@@ -41,14 +39,14 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageApplication() {
 	workflowType := "event-generator-workflow-type"
 	tasklist := "event-generator-taskList"
 
-	var historyBatch []*shared.History
+	var historyBatch []*commonproto.History
 	s.generator = test.InitializeHistoryEventGenerator(s.domainName, 1)
 
 	for s.generator.HasNextVertex() {
 		events := s.generator.GetNextVertices()
-		historyEvents := &shared.History{}
+		historyEvents := &commonproto.History{}
 		for _, event := range events {
-			historyEvents.Events = append(historyEvents.Events, event.GetData().(*shared.HistoryEvent))
+			historyEvents.Events = append(historyEvents.Events, event.GetData().(*commonproto.HistoryEvent))
 		}
 		historyBatch = append(historyBatch, historyEvents)
 	}
@@ -84,20 +82,20 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageDLQ() {
 	workflowType := "event-generator-workflow-type"
 	tasklist := "event-generator-taskList"
 
-	var historyBatch []*shared.History
+	var historyBatch []*commonproto.History
 	s.generator = test.InitializeHistoryEventGenerator(s.domainName, 1)
 
 	events := s.generator.GetNextVertices()
-	historyEvents := &shared.History{}
+	historyEvents := &commonproto.History{}
 	for _, event := range events {
-		historyEvents.Events = append(historyEvents.Events, event.GetData().(*shared.HistoryEvent))
+		historyEvents.Events = append(historyEvents.Events, event.GetData().(*commonproto.HistoryEvent))
 	}
 	historyBatch = append(historyBatch, historyEvents)
 
 	versionHistory := s.eventBatchesToVersionHistory(nil, historyBatch)
 
 	s.NotNil(historyBatch)
-	historyBatch[0].Events[1].Version = common.Int64Ptr(2)
+	historyBatch[0].Events[1].Version = 2
 
 	s.applyEventsThroughFetcher(
 		workflowID,

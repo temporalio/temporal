@@ -54,6 +54,7 @@ type (
 	// Bean in an collection of clients
 	Bean interface {
 		GetHistoryClient() history.Client
+		GetHistoryClientGRPC() history.ClientGRPC
 		SetHistoryClient(client history.Client)
 		GetMatchingClient(domainIDToName DomainIDToNameFunc) (matching.Client, error)
 		SetMatchingClient(client matching.Client)
@@ -74,6 +75,7 @@ type (
 		sync.Mutex
 		currentCluster        string
 		historyClient         history.Client
+		historyClientGRPC     history.ClientGRPC
 		matchingClient        atomic.Value
 		remoteAdminClients    map[string]admin.Client
 		remoteFrontendClients map[string]frontend.Client
@@ -106,6 +108,11 @@ type (
 func NewClientBean(factory Factory, dispatcherProvider DispatcherProvider, clusterMetadata cluster.Metadata) (Bean, error) {
 
 	historyClient, err := factory.NewHistoryClient()
+	if err != nil {
+		return nil, err
+	}
+
+	historyClientGRPC, err := factory.NewHistoryClientGRPC()
 	if err != nil {
 		return nil, err
 	}
@@ -143,6 +150,7 @@ func NewClientBean(factory Factory, dispatcherProvider DispatcherProvider, clust
 		currentCluster:        clusterMetadata.GetCurrentClusterName(),
 		factory:               factory,
 		historyClient:         historyClient,
+		historyClientGRPC:     historyClientGRPC,
 		remoteAdminClients:    remoteAdminClients,
 		remoteFrontendClients: remoteFrontendClients,
 	}, nil
@@ -150,6 +158,10 @@ func NewClientBean(factory Factory, dispatcherProvider DispatcherProvider, clust
 
 func (h *clientBeanImpl) GetHistoryClient() history.Client {
 	return h.historyClient
+}
+
+func (h *clientBeanImpl) GetHistoryClientGRPC() history.ClientGRPC {
+	return h.historyClientGRPC
 }
 
 func (h *clientBeanImpl) SetHistoryClient(
