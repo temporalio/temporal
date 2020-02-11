@@ -49,14 +49,21 @@ VALUES(?, ?, ?, ?, ?, ?, ?)`
 cluster_membership 
 WHERE record_expiry < ? LIMIT ?`
 
-	templateGetClusterMembership = `SELECT host_id, rpc_address, rpc_port, role, session_start, last_heartbeat, record_expiry FROM
+	templateGetClusterMembership = `SELECT host_id, rpc_address, rpc_port, role, session_start, last_heartbeat, record_expiry, insertion_order FROM
 cluster_membership`
 
+	// ClusterMembership WHERE Suffixes
 	templateWithRoleSuffix           = ` AND role = ?`
 	templateWithHeartbeatSinceSuffix = ` AND last_heartbeat > ?`
 	templateWithRecordExpirySuffix   = ` AND record_expiry > ?`
 	templateWithRPCAddressSuffix     = ` AND rpc_address = ?`
 	templateWithHostIDSuffix         = ` AND host_id = ?`
+	templateWithSessionStartSuffix   = ` AND session_start > ?`
+	templateWithInsertionOrderSuffix = ` AND insertion_order > ?`
+
+	// Generic SELECT Suffixes
+	templateWithLimitSuffix            = ` LIMIT ?`
+	templateWithOrderByInsertionSuffix = ` ORDER BY insertion_order ASC`
 )
 
 // Does not follow traditional lock, select, read, insert as we only expect a single row.
@@ -115,6 +122,23 @@ func (mdb *db) GetClusterMembers(filter *sqlplugin.ClusterMembershipFilter) ([]s
 	if !filter.RecordExpiryAfter.IsZero() {
 		queryString.WriteString(templateWithRecordExpirySuffix)
 		operands = append(operands, filter.RecordExpiryAfter)
+	}
+
+	if !filter.SessionStartedAfter.IsZero() {
+		queryString.WriteString(templateWithSessionStartSuffix)
+		operands = append(operands, filter.SessionStartedAfter)
+	}
+
+	if filter.InsertionOrderGreaterThan > 0 {
+		queryString.WriteString(templateWithInsertionOrderSuffix)
+		operands = append(operands, filter.InsertionOrderGreaterThan)
+	}
+
+	queryString.WriteString(templateWithOrderByInsertionSuffix)
+
+	if filter.MaxRecordCount > 0 {
+		queryString.WriteString(templateWithLimitSuffix)
+		operands = append(operands, filter.MaxRecordCount)
 	}
 
 	// All suffixes start with AND, replace the first occurrence with WHERE

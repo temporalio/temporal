@@ -26,6 +26,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pborman/uuid"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 
@@ -73,7 +75,7 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipEmptyInitially() {
 }
 
 // TestClusterMembershipUpsertCanRead verifies that we can UpsertClusterMembership and read our result
-func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanRead() {
+func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanReadAny() {
 	req := &p.UpsertClusterMembershipRequest{
 		HostID:       []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
 		RPCAddress:   net.ParseIP("127.0.0.2"),
@@ -91,33 +93,47 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanRead() {
 	s.Nil(err)
 	s.NotNil(resp)
 	s.NotEmpty(resp.ActiveMembers)
-	s.Equal(len(resp.ActiveMembers), 1)
-	// Have to round to 1 second due to SQL implementations. Cassandra truncates at 1ms.
-	s.Equal(resp.ActiveMembers[0].SessionStart.Round(time.Second), req.SessionStart.Round(time.Second))
-	s.Equal(resp.ActiveMembers[0].RPCAddress.String(), req.RPCAddress.String())
-	s.Equal(resp.ActiveMembers[0].RPCPort, req.RPCPort)
-	s.True(resp.ActiveMembers[0].RecordExpiry.After(time.Now().UTC()))
-	s.Equal(resp.ActiveMembers[0].HostID, req.HostID)
-	s.Equal(resp.ActiveMembers[0].Role, req.Role)
 }
 
 // TestClusterMembershipUpsertCanRead verifies that we can UpsertClusterMembership and read our result
-func (s *ClusterMetadataManagerSuite) TestClusterMembershipReadFiltersCorrectly() {
-	req := &p.UpsertClusterMembershipRequest{
-		HostID:       []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-		RPCAddress:   net.ParseIP("127.0.0.2"),
-		RPCPort:      123,
-		Role:         p.Frontend,
-		SessionStart: time.Now().UTC(),
-		RecordExpiry: time.Minute * 10,
+func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanPageRead() {
+	hostID := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
+	for i := 0; i < 1000; i++ {
+		req := &p.UpsertClusterMembershipRequest{
+			HostID:       hostID,
+			RPCAddress:   net.ParseIP("127.0.0.2"),
+			RPCPort:      123,
+			Role:         p.Frontend,
+			SessionStart: time.Now().UTC(),
+			RecordExpiry: time.Second * 2,
+		}
+
+		err := s.ClusterMetadataManager.UpsertClusterMembership(req)
+		s.NoError(err)
+		hostID = uuid.NewUUID()
 	}
 
-	err := s.ClusterMetadataManager.UpsertClusterMembership(req)
-	s.Nil(err)
+	hostCount := 0
+	var nextPageToken []byte
+	for {
+		resp, err := s.ClusterMetadataManager.GetClusterMembers(&p.GetClusterMembersRequest{PageSize: 99, NextPageToken: nextPageToken})
+		s.NoError(err)
+		nextPageToken = resp.NextPageToken
+		hostCount += len(resp.ActiveMembers)
 
-	resp, err := s.ClusterMetadataManager.GetClusterMembers(
-		&p.GetClusterMembersRequest{LastHeartbeatWithin: time.Minute * 10})
+		if nextPageToken == nil {
+			break
+		}
+	}
 
+	s.Equal(hostCount, 1000)
+
+	time.Sleep(time.Second * 2)
+	err := s.ClusterMetadataManager.PruneClusterMembership(&p.PruneClusterMembershipRequest{MaxRecordsPruned: 1000})
+	s.NoError(err)
+}
+
+func (s *ClusterMetadataManagerSuite) validateUpsert(req *p.UpsertClusterMembershipRequest, resp *p.GetClusterMembersResponse, err error) {
 	s.Nil(err)
 	s.NotNil(resp)
 	s.NotEmpty(resp.ActiveMembers)
@@ -129,10 +145,31 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipReadFiltersCorrectly(
 	s.True(resp.ActiveMembers[0].RecordExpiry.After(time.Now().UTC()))
 	s.Equal(resp.ActiveMembers[0].HostID, req.HostID)
 	s.Equal(resp.ActiveMembers[0].Role, req.Role)
+}
+
+// TestClusterMembershipReadFiltersCorrectly verifies that we can UpsertClusterMembership and read our result using filters
+func (s *ClusterMetadataManagerSuite) TestClusterMembershipReadFiltersCorrectly() {
+	now := time.Now().UTC()
+	req := &p.UpsertClusterMembershipRequest{
+		HostID:       []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+		RPCAddress:   net.ParseIP("127.0.0.2"),
+		RPCPort:      123,
+		Role:         p.Frontend,
+		SessionStart: now,
+		RecordExpiry: time.Second * 10,
+	}
+
+	err := s.ClusterMetadataManager.UpsertClusterMembership(req)
+	s.Nil(err)
+
+	resp, err := s.ClusterMetadataManager.GetClusterMembers(
+		&p.GetClusterMembersRequest{LastHeartbeatWithin: time.Minute * 10, HostIDEquals: req.HostID})
+
+	s.validateUpsert(req, resp, err)
 
 	time.Sleep(time.Second * 1)
 	resp, err = s.ClusterMetadataManager.GetClusterMembers(
-		&p.GetClusterMembersRequest{LastHeartbeatWithin: time.Millisecond})
+		&p.GetClusterMembersRequest{LastHeartbeatWithin: time.Millisecond, HostIDEquals: req.HostID})
 
 	s.Nil(err)
 	s.NotNil(resp)
@@ -146,26 +183,23 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipReadFiltersCorrectly(
 	s.Empty(resp.ActiveMembers)
 
 	resp, err = s.ClusterMetadataManager.GetClusterMembers(
-		&p.GetClusterMembersRequest{RPCAddressEquals: req.RPCAddress})
+		&p.GetClusterMembersRequest{SessionStartedAfter: time.Now().UTC()})
 
 	s.Nil(err)
 	s.NotNil(resp)
-	s.NotEmpty(resp.ActiveMembers)
-	s.Equal(len(resp.ActiveMembers), 1)
-	// Have to round to 1 second due to SQL implementations. Cassandra truncates at 1ms.
-	s.Equal(resp.ActiveMembers[0].SessionStart.Round(time.Second), req.SessionStart.Round(time.Second))
-	s.Equal(resp.ActiveMembers[0].RPCAddress.String(), req.RPCAddress.String())
-	s.Equal(resp.ActiveMembers[0].RPCPort, req.RPCPort)
-	s.True(resp.ActiveMembers[0].RecordExpiry.After(time.Now().UTC()))
-	s.Equal(resp.ActiveMembers[0].HostID, req.HostID)
-	s.Equal(resp.ActiveMembers[0].Role, req.Role)
+	s.Empty(resp.ActiveMembers)
+
+	resp, err = s.ClusterMetadataManager.GetClusterMembers(
+		&p.GetClusterMembersRequest{SessionStartedAfter: now.Add(-time.Minute), RPCAddressEquals: req.RPCAddress, HostIDEquals: req.HostID})
+
+	s.validateUpsert(req, resp, err)
 
 }
 
 // TestClusterMembershipUpsertExpiresCorrectly verifies RecordExpiry functions properly for ClusterMembership records
 func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertExpiresCorrectly() {
 	req := &p.UpsertClusterMembershipRequest{
-		HostID:       []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+		HostID:       uuid.NewUUID(),
 		RPCAddress:   net.ParseIP("127.0.0.2"),
 		RPCPort:      123,
 		Role:         p.Frontend,
@@ -180,7 +214,7 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertExpiresCorrectl
 	s.NoError(err)
 
 	resp, err := s.ClusterMetadataManager.GetClusterMembers(
-		&p.GetClusterMembersRequest{LastHeartbeatWithin: time.Minute * 10})
+		&p.GetClusterMembersRequest{LastHeartbeatWithin: time.Minute * 10, HostIDEquals: req.HostID})
 
 	s.NoError(err)
 	s.NotNil(resp)
