@@ -24,6 +24,8 @@ import (
 	"bytes"
 	"fmt"
 
+	commonproto "go.temporal.io/temporal-proto/common"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 )
@@ -69,6 +71,15 @@ func (item *VersionHistoryItem) ToThrift() *shared.VersionHistoryItem {
 	return &shared.VersionHistoryItem{
 		EventID: common.Int64Ptr(item.EventID),
 		Version: common.Int64Ptr(item.Version),
+	}
+}
+
+// ToProto returns proto format of version history item
+func (item *VersionHistoryItem) ToProto() *commonproto.VersionHistoryItem {
+
+	return &commonproto.VersionHistoryItem{
+		EventID: item.EventID,
+		Version: item.Version,
 	}
 }
 
@@ -146,6 +157,23 @@ func (v *VersionHistory) ToThrift() *shared.VersionHistory {
 		Items:       items,
 	}
 	return tHistory
+}
+
+// ToProto returns proto format of version history
+func (v *VersionHistory) ToProto() *commonproto.VersionHistory {
+
+	token := make([]byte, len(v.BranchToken))
+	copy(token, v.BranchToken)
+	var items []*commonproto.VersionHistoryItem
+	for _, item := range v.Items {
+		items = append(items, item.ToProto())
+	}
+
+	pHistory := &commonproto.VersionHistory{
+		BranchToken: token,
+		Items:       items,
+	}
+	return pHistory
 }
 
 // DuplicateUntilLCAItem duplicate the version history up until LCA item
