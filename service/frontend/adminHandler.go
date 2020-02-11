@@ -59,7 +59,7 @@ const (
 )
 
 type (
-	// AdminHandler - gRPC handler interface for workflow workflowservice
+	// AdminHandler - gRPC handler interface for adminservice
 	AdminHandler struct {
 		resource.Resource
 
@@ -106,6 +106,70 @@ func (adh *AdminHandler) Stop() {
 	adh.Resource.GetDomainReplicationQueue().Stop()
 }
 
+// AddSearchAttribute add search attribute to whitelist
+func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *adminservice.AddSearchAttributeRequest) (_ *adminservice.AddSearchAttributeResponse, retError error) {
+	defer log.CapturePanicGRPC(adh.GetLogger(), &retError)
+
+	scope, sw := adh.startRequestProfile(metrics.AdminAddSearchAttributeScope)
+	defer sw.Stop()
+
+	// validate request
+	if request == nil {
+		return nil, adh.error(errRequestNotSet, scope)
+	}
+	if err := adh.checkPermission(adh.config, request.SecurityToken); err != nil {
+		return nil, adh.error(errNoPermission, scope)
+	}
+	if len(request.GetSearchAttribute()) == 0 {
+		return nil, adh.error(&shared.BadRequestError{Message: "SearchAttributes are not provided"}, scope)
+	}
+	if err := adh.validateConfigForAdvanceVisibility(); err != nil {
+		return nil, adh.error(&shared.BadRequestError{Message: fmt.Sprintf("AdvancedVisibilityStore is not configured for this Cadence Cluster")}, scope)
+	}
+
+	searchAttr := request.GetSearchAttribute()
+	currentValidAttr, _ := adh.params.DynamicConfig.GetMapValue(
+		dynamicconfig.ValidSearchAttributes, nil, definition.GetDefaultIndexedKeys())
+	for k, v := range searchAttr {
+		if definition.IsSystemIndexedKey(k) {
+			return nil, adh.error(&shared.BadRequestError{Message: fmt.Sprintf("Key [%s] is reserved by system", k)}, scope)
+		}
+		if _, exist := currentValidAttr[k]; exist {
+			return nil, adh.error(&shared.BadRequestError{Message: fmt.Sprintf("Key [%s] is already whitelist", k)}, scope)
+		}
+
+		currentValidAttr[k] = int(v)
+	}
+
+	// update dynamic config
+	err := adh.params.DynamicConfig.UpdateValue(dynamicconfig.ValidSearchAttributes, currentValidAttr)
+	if err != nil {
+		return nil, adh.error(&shared.InternalServiceError{Message: fmt.Sprintf("Failed to update dynamic config, err: %v", err)}, scope)
+	}
+
+	// update elasticsearch mapping, new added field will not be able to remove or update
+	index := adh.params.ESConfig.GetVisibilityIndex()
+	for k, v := range searchAttr {
+		valueType := adh.convertIndexedValueTypeToESDataType(v)
+		if len(valueType) == 0 {
+			return nil, adh.error(&shared.BadRequestError{Message: fmt.Sprintf("Unknown value type, %v", v)}, scope)
+		}
+		err := adh.params.ESClient.PutMapping(ctx, index, definition.Attr, k, valueType)
+		if elastic.IsNotFound(err) {
+			err = adh.params.ESClient.CreateIndex(ctx, index)
+			if err != nil {
+				return nil, adh.error(&shared.InternalServiceError{Message: fmt.Sprintf("Failed to create ES index, err: %v", err)}, scope)
+			}
+			err = adh.params.ESClient.PutMapping(ctx, index, definition.Attr, k, valueType)
+		}
+		if err != nil {
+			return nil, adh.error(&shared.InternalServiceError{Message: fmt.Sprintf("Failed to update ES mapping, err: %v", err)}, scope)
+		}
+	}
+
+	return &adminservice.AddSearchAttributeResponse{}, nil
+}
+
 // DescribeWorkflowExecution returns information about the specified workflow execution.
 func (adh *AdminHandler) DescribeWorkflowExecution(ctx context.Context, request *adminservice.DescribeWorkflowExecutionRequest) (_ *adminservice.DescribeWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanicGRPC(adh.GetLogger(), &retError)
@@ -149,6 +213,38 @@ func (adh *AdminHandler) DescribeWorkflowExecution(ctx context.Context, request 
 	}, err
 }
 
+// RemoveTask returns information about the internal states of a history host
+func (adh *AdminHandler) RemoveTask(ctx context.Context, request *adminservice.RemoveTaskRequest) (_ *adminservice.RemoveTaskResponse, retError error) {
+	defer log.CapturePanicGRPC(adh.GetLogger(), &retError)
+
+	scope, sw := adh.startRequestProfile(metrics.AdminRemoveTaskScope)
+	defer sw.Stop()
+
+	if request == nil {
+		return nil, adh.error(errRequestNotSet, scope)
+	}
+	_, err := adh.GetHistoryClientGRPC().RemoveTask(ctx, &historyservice.RemoveTaskRequest{
+		ShardID: request.GetShardID(),
+		Type:    request.GetType(),
+		TaskID:  request.GetTaskID(),
+	})
+	return &adminservice.RemoveTaskResponse{}, err
+}
+
+// CloseShard returns information about the internal states of a history host
+func (adh *AdminHandler) CloseShard(ctx context.Context, request *adminservice.CloseShardRequest) (_ *adminservice.CloseShardResponse, retError error) {
+	defer log.CapturePanicGRPC(adh.GetLogger(), &retError)
+
+	scope, sw := adh.startRequestProfile(metrics.AdminCloseShardTaskScope)
+	defer sw.Stop()
+
+	if request == nil {
+		return nil, adh.error(errRequestNotSet, scope)
+	}
+	_, err := adh.GetHistoryClientGRPC().CloseShard(ctx, &historyservice.CloseShardRequest{ShardID: request.GetShardID()})
+	return &adminservice.CloseShardResponse{}, err
+}
+
 // DescribeHistoryHost returns information about the internal states of a history host
 func (adh *AdminHandler) DescribeHistoryHost(ctx context.Context, request *adminservice.DescribeHistoryHostRequest) (_ *adminservice.DescribeHistoryHostResponse, retError error) {
 	defer log.CapturePanicGRPC(adh.GetLogger(), &retError)
@@ -183,38 +279,6 @@ func (adh *AdminHandler) DescribeHistoryHost(ctx context.Context, request *admin
 		ShardControllerStatus: resp.GetShardControllerStatus(),
 		Address:               resp.GetAddress(),
 	}, err
-}
-
-// CloseShard returns information about the internal states of a history host
-func (adh *AdminHandler) CloseShard(ctx context.Context, request *adminservice.CloseShardRequest) (_ *adminservice.CloseShardResponse, retError error) {
-	defer log.CapturePanicGRPC(adh.GetLogger(), &retError)
-
-	scope, sw := adh.startRequestProfile(metrics.AdminCloseShardTaskScope)
-	defer sw.Stop()
-
-	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
-	}
-	_, err := adh.GetHistoryClientGRPC().CloseShard(ctx, &historyservice.CloseShardRequest{ShardID: request.GetShardID()})
-	return &adminservice.CloseShardResponse{}, err
-}
-
-// RemoveTask returns information about the internal states of a history host
-func (adh *AdminHandler) RemoveTask(ctx context.Context, request *adminservice.RemoveTaskRequest) (_ *adminservice.RemoveTaskResponse, retError error) {
-	defer log.CapturePanicGRPC(adh.GetLogger(), &retError)
-
-	scope, sw := adh.startRequestProfile(metrics.AdminRemoveTaskScope)
-	defer sw.Stop()
-
-	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
-	}
-	_, err := adh.GetHistoryClientGRPC().RemoveTask(ctx, &historyservice.RemoveTaskRequest{
-		ShardID: request.GetShardID(),
-		Type:    request.GetType(),
-		TaskID:  request.GetTaskID(),
-	})
-	return &adminservice.RemoveTaskResponse{}, err
 }
 
 // GetWorkflowExecutionRawHistory - retrieves the history of workflow execution
@@ -502,70 +566,6 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	}
 
 	return result, nil
-}
-
-// AddSearchAttribute add search attribute to whitelist
-func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *adminservice.AddSearchAttributeRequest) (_ *adminservice.AddSearchAttributeResponse, retError error) {
-	defer log.CapturePanicGRPC(adh.GetLogger(), &retError)
-
-	scope, sw := adh.startRequestProfile(metrics.AdminAddSearchAttributeScope)
-	defer sw.Stop()
-
-	// validate request
-	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
-	}
-	if err := adh.checkPermission(adh.config, request.SecurityToken); err != nil {
-		return nil, adh.error(errNoPermission, scope)
-	}
-	if len(request.GetSearchAttribute()) == 0 {
-		return nil, adh.error(&shared.BadRequestError{Message: "SearchAttributes are not provided"}, scope)
-	}
-	if err := adh.validateConfigForAdvanceVisibility(); err != nil {
-		return nil, adh.error(&shared.BadRequestError{Message: fmt.Sprintf("AdvancedVisibilityStore is not configured for this Cadence Cluster")}, scope)
-	}
-
-	searchAttr := request.GetSearchAttribute()
-	currentValidAttr, _ := adh.params.DynamicConfig.GetMapValue(
-		dynamicconfig.ValidSearchAttributes, nil, definition.GetDefaultIndexedKeys())
-	for k, v := range searchAttr {
-		if definition.IsSystemIndexedKey(k) {
-			return nil, adh.error(&shared.BadRequestError{Message: fmt.Sprintf("Key [%s] is reserved by system", k)}, scope)
-		}
-		if _, exist := currentValidAttr[k]; exist {
-			return nil, adh.error(&shared.BadRequestError{Message: fmt.Sprintf("Key [%s] is already whitelist", k)}, scope)
-		}
-
-		currentValidAttr[k] = int(v)
-	}
-
-	// update dynamic config
-	err := adh.params.DynamicConfig.UpdateValue(dynamicconfig.ValidSearchAttributes, currentValidAttr)
-	if err != nil {
-		return nil, adh.error(&shared.InternalServiceError{Message: fmt.Sprintf("Failed to update dynamic config, err: %v", err)}, scope)
-	}
-
-	// update elasticsearch mapping, new added field will not be able to remove or update
-	index := adh.params.ESConfig.GetVisibilityIndex()
-	for k, v := range searchAttr {
-		valueType := adh.convertIndexedValueTypeToESDataType(v)
-		if len(valueType) == 0 {
-			return nil, adh.error(&shared.BadRequestError{Message: fmt.Sprintf("Unknown value type, %v", v)}, scope)
-		}
-		err := adh.params.ESClient.PutMapping(ctx, index, definition.Attr, k, valueType)
-		if elastic.IsNotFound(err) {
-			err = adh.params.ESClient.CreateIndex(ctx, index)
-			if err != nil {
-				return nil, adh.error(&shared.InternalServiceError{Message: fmt.Sprintf("Failed to create ES index, err: %v", err)}, scope)
-			}
-			err = adh.params.ESClient.PutMapping(ctx, index, definition.Attr, k, valueType)
-		}
-		if err != nil {
-			return nil, adh.error(&shared.InternalServiceError{Message: fmt.Sprintf("Failed to update ES mapping, err: %v", err)}, scope)
-		}
-	}
-
-	return &adminservice.AddSearchAttributeResponse{}, nil
 }
 
 // DescribeCluster return information about cadence deployment
