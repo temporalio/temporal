@@ -21,7 +21,6 @@
 package membership
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
@@ -90,7 +89,7 @@ func NewTestRingpopCluster(ringPopApp string, size int, listenIpAddr string, see
 	if cluster.seedNode == "" {
 		cluster.seedNode = cluster.hostAddrs[0]
 	}
-	logger.Info(fmt.Sprintf("seedNode: %v", cluster.seedNode))
+	logger.Info("seedNode", tag.Name(cluster.seedNode))
 	bOptions := new(swim.BootstrapOptions)
 	bOptions.DiscoverProvider = statichosts.New(cluster.seedNode) // just use the first addr as the seed
 	bOptions.MaxJoinDuration = time.Duration(time.Second * 2)
