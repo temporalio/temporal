@@ -27,8 +27,8 @@ import (
 	"net"
 	"sync"
 
-	persistenceClient "github.com/temporalio/temporal/common/persistence/client"
-
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
+  persistenceClient "github.com/temporalio/temporal/common/persistence/client"
 	adminClient "github.com/temporalio/temporal/client/admin"
 
 	"github.com/pborman/uuid"
@@ -39,7 +39,6 @@ import (
 	"go.uber.org/yarpc/transport/tchannel"
 	"google.golang.org/grpc"
 
-	"github.com/temporalio/temporal/.gen/go/history/historyserviceclient"
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/client"
@@ -76,7 +75,7 @@ type Cadence interface {
 	GetAdminClient() adminservice.AdminServiceClient
 	GetFrontendClient() workflowservice.WorkflowServiceClient
 	FrontendAddress() string
-	GetHistoryClient() historyserviceclient.Interface
+	GetHistoryClient() historyservice.HistoryServiceClient
 	GetExecutionManagerFactory() persistence.ExecutionManagerFactory
 }
 
@@ -88,7 +87,7 @@ type (
 
 		adminClient            adminservice.AdminServiceClient
 		frontendClient         workflowservice.WorkflowServiceClient
-		historyClient          historyserviceclient.Interface
+		historyClient          historyservice.HistoryServiceClient
 		logger                 log.Logger
 		clusterMetadata        cluster.Metadata
 		persistenceConfig      config.Persistence
@@ -480,7 +479,7 @@ func (c *cadenceImpl) GetFrontendClient() workflowservice.WorkflowServiceClient 
 	return c.frontendClient
 }
 
-func (c *cadenceImpl) GetHistoryClient() historyserviceclient.Interface {
+func (c *cadenceImpl) GetHistoryClient() historyservice.HistoryServiceClient {
 	return c.historyClient
 }
 
@@ -615,7 +614,12 @@ func (c *cadenceImpl) startHistory(
 		// However current interface for getting history client doesn't specify which client it needs and the tests that use this API
 		// depends on the fact that there's only one history host.
 		// Need to change those tests and modify the interface for getting history client.
-		c.historyClient = NewHistoryClient(historyService.GetDispatcher())
+		historyConnection, err := grpc.Dial(c.HistoryServiceAddress(3)[0], grpc.WithInsecure())
+		if err != nil {
+			c.logger.Fatal("Failed to create connection for history", tag.Error(err))
+		}
+
+		c.historyClient = NewHistoryClient(historyConnection)
 		c.historyServices = append(c.historyServices, historyService)
 
 		go historyService.Start()
