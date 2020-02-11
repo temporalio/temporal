@@ -289,11 +289,6 @@ func (tc *TestCluster) GetHistoryClient() HistoryClient {
 	return tc.host.GetHistoryClient()
 }
 
-// GetHistoryClient returns a history client from the test cluster
-func (tc *TestCluster) GetHistoryClientGRPC() HistoryClientGRPC {
-	return tc.host.GetHistoryClientGRPC()
-}
-
 // GetExecutionManagerFactory returns an execution manager factory from the test cluster
 func (tc *TestCluster) GetExecutionManagerFactory() persistence.ExecutionManagerFactory {
 	return tc.host.GetExecutionManagerFactory()
