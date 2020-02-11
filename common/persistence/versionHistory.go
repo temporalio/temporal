@@ -529,6 +529,21 @@ func (h *VersionHistories) ToThrift() *shared.VersionHistories {
 	}
 }
 
+// ToProto return thrift format of version histories
+func (h *VersionHistories) ToProto() *commonproto.VersionHistories {
+
+	currentVersionHistoryIndex := h.CurrentVersionHistoryIndex
+	var histories []*commonproto.VersionHistory
+	for _, history := range h.Histories {
+		histories = append(histories, history.ToProto())
+	}
+
+	return &commonproto.VersionHistories{
+		CurrentVersionHistoryIndex: int32(currentVersionHistoryIndex),
+		Histories:                  histories,
+	}
+}
+
 // GetVersionHistory get the version history according to index provided
 func (h *VersionHistories) GetVersionHistory(
 	branchIndex int,
