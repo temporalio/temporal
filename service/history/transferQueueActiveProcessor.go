@@ -583,7 +583,7 @@ func (t *transferQueueActiveProcessorImpl) processCancelExecution(
 		targetDomain,
 		requestCancelInfo,
 	); err != nil {
-		t.logger.Debug(fmt.Sprintf("Failed to cancel external workflow execution. Error: %v", err))
+		t.logger.Debug("Failed to cancel external workflow execution", tag.Error(err))
 
 		// Check to see if the error is non-transient, in which case add RequestCancelFailed
 		// event and complete transfer task by setting the err = nil
@@ -600,11 +600,10 @@ func (t *transferQueueActiveProcessorImpl) processCancelExecution(
 		)
 	}
 
-	t.logger.Debug(fmt.Sprintf(
-		"RequestCancel successfully recorded to external workflow execution.  WorkflowID: %v, RunID: %v",
-		task.TargetWorkflowID,
-		task.TargetRunID,
-	))
+	t.logger.Debug("RequestCancel successfully recorded to external workflow execution",
+		tag.WorkflowID(task.TargetWorkflowID),
+		tag.WorkflowRunID(task.TargetRunID),
+	)
 
 	// Record ExternalWorkflowExecutionCancelRequested in source execution
 	return t.requestCancelExternalExecutionCompleted(
@@ -673,7 +672,7 @@ func (t *transferQueueActiveProcessorImpl) processSignalExecution(
 		targetDomain,
 		signalInfo,
 	); err != nil {
-		t.logger.Debug(fmt.Sprintf("Failed to signal external workflow execution. Error: %v", err))
+		t.logger.Debug("Failed to signal external workflow execution", tag.Error(err))
 
 		// Check to see if the error is non-transient, in which case add SignalFailed
 		// event and complete transfer task by setting the err = nil
@@ -691,11 +690,10 @@ func (t *transferQueueActiveProcessorImpl) processSignalExecution(
 		)
 	}
 
-	t.logger.Debug(fmt.Sprintf(
-		"Signal successfully recorded to external workflow execution.  WorkflowID: %v, RunID: %v",
-		task.TargetWorkflowID,
-		task.TargetRunID,
-	))
+	t.logger.Debug("Signal successfully recorded to external workflow execution",
+		tag.WorkflowID(task.TargetWorkflowID),
+		tag.WorkflowRunID(task.TargetRunID),
+	)
 
 	err = t.signalExternalExecutionCompleted(
 		task,
@@ -803,7 +801,7 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(
 		adapter.ToProtoStartChildWorkflowExecutionInitiatedEventAttributes(attributes),
 	)
 	if err != nil {
-		t.logger.Debug(fmt.Sprintf("Failed to start child workflow execution. Error: %v", err))
+		t.logger.Debug("Failed to start child workflow execution", tag.Error(err))
 
 		// Check to see if the error is non-transient, in which case add StartChildWorkflowExecutionFailed
 		// event and complete transfer task by setting the err = nil
@@ -814,8 +812,8 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(
 		return err
 	}
 
-	t.logger.Debug(fmt.Sprintf("Child Execution started successfully.  WorkflowID: %v, RunID: %v",
-		*attributes.WorkflowId, childRunID))
+	t.logger.Debug("Child Execution started successfully",
+		tag.WorkflowID(*attributes.WorkflowId), tag.WorkflowRunID(childRunID))
 
 	// Child execution is successfully started, record ChildExecutionStartedEvent in parent execution
 	err = t.recordChildExecutionStarted(task, context, attributes, childRunID)

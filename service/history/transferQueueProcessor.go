@@ -316,7 +316,7 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 		}
 	}
 
-	t.logger.Debug(fmt.Sprintf("Start completing transfer task from: %v, to %v.", lowerAckLevel, upperAckLevel))
+	t.logger.Debug("Start completing transfer task", tag.AckLevel(lowerAckLevel), tag.AckLevel(upperAckLevel))
 	if lowerAckLevel >= upperAckLevel {
 		return nil
 	}

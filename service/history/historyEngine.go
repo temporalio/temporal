@@ -1651,8 +1651,8 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 
 			cancelRequested = ai.CancelRequested
 
-			e.logger.Debug(fmt.Sprintf("Activity HeartBeat: scheduleEventID: %v, ActivityInfo: %+v, CancelRequested: %v",
-				scheduleID, ai, cancelRequested))
+			e.logger.Debug("Activity HeartBeat: scheduleEventID: %v, ActivityInfo: %+v, CancelRequested: %v",
+				tag.WorkflowScheduleID(scheduleID), tag.ActivityInfo(ai), tag.Bool(cancelRequested))
 
 			// Save progress and last HB reported time.
 			mutableState.UpdateActivityProgress(ai, request)

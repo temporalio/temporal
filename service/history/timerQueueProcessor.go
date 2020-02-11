@@ -291,7 +291,7 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 		}
 	}
 
-	t.logger.Debug(fmt.Sprintf("Start completing timer task from: %v, to %v.", lowerAckLevel, upperAckLevel))
+	t.logger.Debug("Start completing timer task", tag.AckLevel(lowerAckLevel), tag.AckLevel(upperAckLevel))
 	if !compareTimerIDLess(&lowerAckLevel, &upperAckLevel) {
 		return nil
 	}

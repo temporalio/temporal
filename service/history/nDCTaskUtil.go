@@ -47,17 +47,17 @@ func verifyTaskVersion(
 	// the first return value is whether this task is valid for further processing
 	domainEntry, err := shard.GetDomainCache().GetDomainByID(domainID)
 	if err != nil {
-		logger.Debug(fmt.Sprintf("Cannot find domainID: %v, err: %v.", domainID, err))
+		logger.Debug("Cannot find domainID", tag.WorkflowDomainID(domainID), tag.Error(err))
 		return false, err
 	}
 	if !domainEntry.IsGlobalDomain() {
-		logger.Debug(fmt.Sprintf("DomainID: %v is not active, task: %v version check pass", domainID, task))
+		logger.Debug("DomainID is not active, task version check pass", tag.WorkflowDomainID(domainID), tag.Task(task))
 		return true, nil
 	} else if version != taskVersion {
-		logger.Debug(fmt.Sprintf("DomainID: %v is active, task: %v version != target version: %v.", domainID, task, version))
+		logger.Debug("DomainID is active, task version != target version", tag.WorkflowDomainID(domainID), tag.Task(task), tag.TaskVersion(version))
 		return false, nil
 	}
-	logger.Debug(fmt.Sprintf("DomainID: %v is active, task: %v version == target version: %v.", domainID, task, version))
+	logger.Debug("DomainID is active, task version == target version", tag.WorkflowDomainID(domainID), tag.Task(task), tag.TaskVersion(version))
 	return true, nil
 }
 
