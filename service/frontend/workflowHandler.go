@@ -3286,22 +3286,6 @@ func (wh *WorkflowHandler) GetClusterInfo(
 	}, nil
 }
 
-func checkPermission(
-	config *Config,
-	securityToken *string,
-) error {
-	if config.EnableAdminProtection() {
-		if securityToken == nil || *securityToken == "" {
-			return errNoPermission
-		}
-		requiredToken := config.AdminOperationToken()
-		if *securityToken != requiredToken {
-			return errNoPermission
-		}
-	}
-	return nil
-}
-
 type domainWrapper struct {
 	domain string
 }

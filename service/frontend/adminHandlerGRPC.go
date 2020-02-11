@@ -22,10 +22,14 @@ package frontend
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/gogo/status"
+	"github.com/olivere/elastic"
 	"github.com/pborman/uuid"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
@@ -35,12 +39,16 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
+	"github.com/temporalio/temporal/common/client"
+	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/resource"
 	"github.com/temporalio/temporal/common/service"
+	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"github.com/temporalio/temporal/service/history"
 )
 
 var _ adminservice.AdminServiceServer = (*AdminHandlerGRPC)(nil)
@@ -132,81 +140,480 @@ func (adh *AdminHandlerGRPC) DescribeWorkflowExecution(ctx context.Context, requ
 	}, err
 }
 
-// DescribeHistoryHost ...
+// DescribeHistoryHost returns information about the internal states of a history host
 func (adh *AdminHandlerGRPC) DescribeHistoryHost(ctx context.Context, request *adminservice.DescribeHistoryHostRequest) (_ *adminservice.DescribeHistoryHostResponse, retError error) {
 	defer log.CapturePanicGRPC(adh.GetLogger(), &retError)
 
-	resp, err := adh.adminHandlerThrift.DescribeHistoryHost(ctx, adapter.ToThriftDescribeHistoryHostRequest(request))
-	if err != nil {
-		return nil, adapter.ToProtoError(err)
+	scope, sw := adh.startRequestProfile(metrics.AdminDescribeHistoryHostScope)
+	defer sw.Stop()
+
+	if request == nil || request.ExecutionForHost == nil {
+		return nil, adh.error(errRequestNotSet, scope)
 	}
-	return adapter.ToProtoDescribeHistoryHostResponse(resp), nil
+
+	if request.ExecutionForHost != nil {
+		if err := adh.validateExecution(request.ExecutionForHost); err != nil {
+			return nil, adh.error(err, scope)
+		}
+	}
+
+	resp, err := adh.GetHistoryClientGRPC().DescribeHistoryHost(ctx, &historyservice.DescribeHistoryHostRequest{
+		HostAddress:      request.GetHostAddress(),
+		ShardIdForHost:   request.GetShardIdForHost(),
+		ExecutionForHost: request.GetExecutionForHost(),
+	})
+
+	if resp == nil {
+		return nil, err
+	}
+
+	return &adminservice.DescribeHistoryHostResponse{
+		NumberOfShards:        resp.GetNumberOfShards(),
+		ShardIDs:              resp.GetShardIDs(),
+		DomainCache:           resp.GetDomainCache(),
+		ShardControllerStatus: resp.GetShardControllerStatus(),
+		Address:               resp.GetAddress(),
+	}, err
 }
 
-// CloseShard ...
+// CloseShard returns information about the internal states of a history host
 func (adh *AdminHandlerGRPC) CloseShard(ctx context.Context, request *adminservice.CloseShardRequest) (_ *adminservice.CloseShardResponse, retError error) {
 	defer log.CapturePanicGRPC(adh.GetLogger(), &retError)
 
-	err := adh.adminHandlerThrift.CloseShard(ctx, adapter.ToThriftCloseShardRequest(request))
-	if err != nil {
-		return nil, adapter.ToProtoError(err)
+	scope, sw := adh.startRequestProfile(metrics.AdminCloseShardTaskScope)
+	defer sw.Stop()
+
+	if request == nil {
+		return nil, adh.error(errRequestNotSet, scope)
 	}
-	return &adminservice.CloseShardResponse{}, nil
+	_, err := adh.GetHistoryClientGRPC().CloseShard(ctx, &historyservice.CloseShardRequest{ShardID: request.GetShardID()})
+	return &adminservice.CloseShardResponse{}, err
 }
 
-// RemoveTask ...
+// RemoveTask returns information about the internal states of a history host
 func (adh *AdminHandlerGRPC) RemoveTask(ctx context.Context, request *adminservice.RemoveTaskRequest) (_ *adminservice.RemoveTaskResponse, retError error) {
 	defer log.CapturePanicGRPC(adh.GetLogger(), &retError)
 
-	err := adh.adminHandlerThrift.RemoveTask(ctx, adapter.ToThriftRemoveTaskRequest(request))
-	if err != nil {
-		return nil, adapter.ToProtoError(err)
+	scope, sw := adh.startRequestProfile(metrics.AdminRemoveTaskScope)
+	defer sw.Stop()
+
+	if request == nil {
+		return nil, adh.error(errRequestNotSet, scope)
 	}
-	return &adminservice.RemoveTaskResponse{}, nil
+	_, err := adh.GetHistoryClientGRPC().RemoveTask(ctx, &historyservice.RemoveTaskRequest{
+		ShardID: request.GetShardID(),
+		Type:    request.GetType(),
+		TaskID:  request.GetTaskID(),
+	})
+	return &adminservice.RemoveTaskResponse{}, err
 }
 
-// GetWorkflowExecutionRawHistory ...
+// GetWorkflowExecutionRawHistory - retrieves the history of workflow execution
 func (adh *AdminHandlerGRPC) GetWorkflowExecutionRawHistory(ctx context.Context, request *adminservice.GetWorkflowExecutionRawHistoryRequest) (_ *adminservice.GetWorkflowExecutionRawHistoryResponse, retError error) {
 	defer log.CapturePanicGRPC(adh.GetLogger(), &retError)
 
-	resp, err := adh.adminHandlerThrift.GetWorkflowExecutionRawHistory(ctx, adapter.ToThriftAdminGetWorkflowExecutionRawHistoryRequest(request))
+	scope, sw := adh.startRequestProfile(metrics.AdminGetWorkflowExecutionRawHistoryScope)
+	defer sw.Stop()
+
+	var err error
+	var size int
+
+	domainID, err := adh.GetDomainCache().GetDomainID(request.GetDomain())
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adh.error(err, scope)
 	}
-	return adapter.ToProtoAdminGetWorkflowExecutionRawHistoryResponse(resp), nil
+	scope = scope.Tagged(metrics.DomainTag(request.GetDomain()))
+
+	execution := request.Execution
+	if len(execution.GetWorkflowId()) == 0 {
+		return nil, &shared.BadRequestError{Message: "Invalid WorkflowID."}
+	}
+	// TODO currently, this API is only going to be used by re-send history events
+	// to remote cluster if kafka is lossy again, in the future, this API can be used
+	// by CLI and client, then empty runID (meaning the current workflow) should be allowed
+	if len(execution.GetRunId()) == 0 || uuid.Parse(execution.GetRunId()) == nil {
+		return nil, &shared.BadRequestError{Message: "Invalid RunID."}
+	}
+
+	pageSize := int(request.GetMaximumPageSize())
+	if pageSize <= 0 {
+		return nil, &shared.BadRequestError{Message: "Invalid PageSize."}
+	}
+
+	var token *getHistoryContinuationTokenGRPC
+	// initialize or validate the token
+	// token will be used as a source of truth
+	if request.NextPageToken != nil {
+		token, err = adh.deserializeHistoryToken(request.NextPageToken)
+		if err != nil {
+			return nil, err
+		}
+
+		if execution.GetRunId() != token.RunID ||
+			// we guarantee to use the first event ID provided in the request
+			request.GetFirstEventId() != token.FirstEventID ||
+			// the next event ID in the request must be <= next event ID from mutable state, when initialized
+			// so as long as customer do not change next event ID during pagination,
+			// next event ID in the token <= next event ID in the request.
+			request.GetNextEventId() < token.NextEventID {
+			return nil, &shared.BadRequestError{Message: "Invalid pagination token."}
+		}
+
+		// for the rest variables in the token, since we do not do hmac,
+		// the only thing can be done is to trust the token:
+		// IsWorkflowRunning: not used
+		// TransientDecision: not used
+		// PersistenceToken: trust
+		// ReplicationInfo: trust
+
+	} else {
+		firstEventID := request.GetFirstEventId()
+		nextEventID := request.GetNextEventId()
+		if firstEventID < 0 || firstEventID > nextEventID {
+			return nil, &shared.BadRequestError{Message: "Invalid FirstEventID && NextEventID combination."}
+		}
+
+		response, err := adh.GetHistoryClientGRPC().GetMutableState(ctx, &historyservice.GetMutableStateRequest{
+			DomainUUID: domainID,
+			Execution:  execution,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		// check if the input next event ID is > actual next event ID in the mutable state
+		// since we should not leak invalid events
+		if nextEventID > response.GetNextEventId() {
+			nextEventID = response.GetNextEventId()
+		}
+		token = &getHistoryContinuationTokenGRPC{
+			RunID:            execution.GetRunId(),
+			BranchToken:      response.CurrentBranchToken,
+			FirstEventID:     firstEventID,
+			NextEventID:      nextEventID,
+			PersistenceToken: nil, // this is the initialized value
+			ReplicationInfo:  response.ReplicationInfo,
+		}
+	}
+
+	if token.FirstEventID >= token.NextEventID {
+		return &adminservice.GetWorkflowExecutionRawHistoryResponse{
+			HistoryBatches:  []*commonproto.DataBlob{},
+			ReplicationInfo: token.ReplicationInfo,
+			NextPageToken:   nil, // no further pagination
+		}, nil
+	}
+
+	// TODO need to deal with transient decision if to be used by client getting history
+	var historyBatches []*shared.History
+	shardID := common.WorkflowIDToHistoryShard(execution.GetWorkflowId(), adh.numberOfHistoryShards)
+	_, historyBatches, token.PersistenceToken, size, err = history.PaginateHistory(
+		adh.GetHistoryManager(),
+		true, // this means that we are getting history by batch
+		token.BranchToken,
+		token.FirstEventID,
+		token.NextEventID,
+		token.PersistenceToken,
+		pageSize,
+		common.IntPtr(shardID),
+	)
+	if err != nil {
+		if _, ok := err.(*shared.EntityNotExistsError); ok {
+			// when no events can be returned from DB, DB layer will return
+			// EntityNotExistsError, this API shall return empty response
+			return &adminservice.GetWorkflowExecutionRawHistoryResponse{
+				HistoryBatches:  []*commonproto.DataBlob{},
+				ReplicationInfo: token.ReplicationInfo,
+				NextPageToken:   nil, // no further pagination
+			}, nil
+		}
+		return nil, err
+	}
+
+	// N.B. - Dual emit is required here so that we can see aggregate timer stats across all
+	// domains along with the individual domains stats
+	adh.GetMetricsClient().RecordTimer(metrics.AdminGetWorkflowExecutionRawHistoryScope, metrics.HistorySize, time.Duration(size))
+	scope.RecordTimer(metrics.HistorySize, time.Duration(size))
+
+	var blobs []*commonproto.DataBlob
+	for _, historyBatch := range historyBatches {
+		blob, err := adh.GetPayloadSerializer().SerializeBatchEvents(historyBatch.Events, common.EncodingTypeThriftRW)
+		if err != nil {
+			return nil, err
+		}
+		blobs = append(blobs, &commonproto.DataBlob{
+			EncodingType: enums.EncodingTypeThriftRW,
+			Data:         blob.Data,
+		})
+	}
+
+	result := &adminservice.GetWorkflowExecutionRawHistoryResponse{
+		HistoryBatches:  blobs,
+		ReplicationInfo: token.ReplicationInfo,
+	}
+	if len(token.PersistenceToken) == 0 {
+		result.NextPageToken = nil
+	} else {
+		result.NextPageToken, err = adh.serializeHistoryToken(token)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return result, nil
 }
 
-// GetWorkflowExecutionRawHistoryV2 ...
+// GetWorkflowExecutionRawHistoryV2 - retrieves the history of workflow execution
 func (adh *AdminHandlerGRPC) GetWorkflowExecutionRawHistoryV2(ctx context.Context, request *adminservice.GetWorkflowExecutionRawHistoryV2Request) (_ *adminservice.GetWorkflowExecutionRawHistoryV2Response, retError error) {
 	defer log.CapturePanicGRPC(adh.GetLogger(), &retError)
 
-	resp, err := adh.adminHandlerThrift.GetWorkflowExecutionRawHistoryV2(ctx, adapter.ToThriftGetWorkflowExecutionRawHistoryV2Request(request))
-	if err != nil {
-		return nil, adapter.ToProtoError(err)
+	scope, sw := adh.startRequestProfile(metrics.AdminGetWorkflowExecutionRawHistoryV2Scope)
+	defer sw.Stop()
+
+	if err := adh.validateGetWorkflowExecutionRawHistoryV2Request(
+		request,
+	); err != nil {
+		return nil, adh.error(err, scope)
 	}
-	return adapter.ToProtoGetWorkflowExecutionRawHistoryV2Response(resp), nil
+	domainID, err := adh.GetDomainCache().GetDomainID(request.GetDomain())
+	if err != nil {
+		return nil, adh.error(err, scope)
+	}
+	scope = scope.Tagged(metrics.DomainTag(request.GetDomain()))
+
+	execution := request.Execution
+	var pageToken *getWorkflowRawHistoryV2Token
+	var targetVersionHistory *persistence.VersionHistory
+	if request.NextPageToken == nil {
+		response, err := adh.GetHistoryClientGRPC().GetMutableState(ctx, &historyservice.GetMutableStateRequest{
+			DomainUUID: domainID,
+			Execution:  execution,
+		})
+		if err != nil {
+			return nil, adh.error(err, scope)
+		}
+
+		versionHistories := persistence.NewVersionHistoriesFromProto(
+			response.GetVersionHistories(),
+		)
+		targetVersionHistory, err = adh.setRequestDefaultValueAndGetTargetVersionHistory(
+			request,
+			versionHistories,
+		)
+		if err != nil {
+			return nil, adh.error(err, scope)
+		}
+
+		pageToken = adh.generatePaginationToken(request, versionHistories)
+	} else {
+		pageToken, err = adh.deserializeRawHistoryToken(request.NextPageToken)
+		if err != nil {
+			return nil, adh.error(err, scope)
+		}
+		versionHistories := pageToken.VersionHistories
+		if versionHistories == nil {
+			return nil, adh.error(&shared.BadRequestError{Message: "Invalid version histories."}, scope)
+		}
+		targetVersionHistory, err = adh.setRequestDefaultValueAndGetTargetVersionHistory(
+			request,
+			persistence.NewVersionHistoriesFromThrift(versionHistories),
+		)
+		if err != nil {
+			return nil, adh.error(err, scope)
+		}
+	}
+
+	if err := adh.validatePaginationToken(
+		request,
+		pageToken,
+	); err != nil {
+		return nil, adh.error(err, scope)
+	}
+
+	if pageToken.StartEventID+1 == pageToken.EndEventID {
+		// API is exclusive-exclusive. Return empty response here.
+		return &adminservice.GetWorkflowExecutionRawHistoryV2Response{
+			HistoryBatches: []*commonproto.DataBlob{},
+			NextPageToken:  nil, // no further pagination
+			VersionHistory: targetVersionHistory.ToProto(),
+		}, nil
+	}
+	pageSize := int(request.GetMaximumPageSize())
+	shardID := common.WorkflowIDToHistoryShard(
+		execution.GetWorkflowId(),
+		adh.numberOfHistoryShards,
+	)
+	rawHistoryResponse, err := adh.GetHistoryManager().ReadRawHistoryBranch(&persistence.ReadHistoryBranchRequest{
+		BranchToken: targetVersionHistory.GetBranchToken(),
+		// GetWorkflowExecutionRawHistoryV2 is exclusive exclusive.
+		// ReadRawHistoryBranch is inclusive exclusive.
+		MinEventID:    pageToken.StartEventID + 1,
+		MaxEventID:    pageToken.EndEventID,
+		PageSize:      pageSize,
+		NextPageToken: pageToken.PersistenceToken,
+		ShardID:       common.IntPtr(shardID),
+	})
+	if err != nil {
+		if _, ok := err.(*shared.EntityNotExistsError); ok {
+			// when no events can be returned from DB, DB layer will return
+			// EntityNotExistsError, this API shall return empty response
+			return &adminservice.GetWorkflowExecutionRawHistoryV2Response{
+				HistoryBatches: []*commonproto.DataBlob{},
+				NextPageToken:  nil, // no further pagination
+				VersionHistory: targetVersionHistory.ToProto(),
+			}, nil
+		}
+		return nil, err
+	}
+
+	pageToken.PersistenceToken = rawHistoryResponse.NextPageToken
+	size := rawHistoryResponse.Size
+	// N.B. - Dual emit is required here so that we can see aggregate timer stats across all
+	// domains along with the individual domains stats
+	adh.GetMetricsClient().RecordTimer(metrics.AdminGetWorkflowExecutionRawHistoryScope, metrics.HistorySize, time.Duration(size))
+	scope.RecordTimer(metrics.HistorySize, time.Duration(size))
+
+	rawBlobs := rawHistoryResponse.HistoryEventBlobs
+	var blobs []*commonproto.DataBlob
+	for _, blob := range rawBlobs {
+		blobs = append(blobs, blob.ToProto())
+	}
+
+	result := &adminservice.GetWorkflowExecutionRawHistoryV2Response{
+		HistoryBatches: blobs,
+		VersionHistory: targetVersionHistory.ToProto(),
+	}
+	if len(pageToken.PersistenceToken) == 0 {
+		result.NextPageToken = nil
+	} else {
+		result.NextPageToken, err = adh.serializeRawHistoryToken(pageToken)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return result, nil
 }
 
-// AddSearchAttribute ...
+// AddSearchAttribute add search attribute to whitelist
 func (adh *AdminHandlerGRPC) AddSearchAttribute(ctx context.Context, request *adminservice.AddSearchAttributeRequest) (_ *adminservice.AddSearchAttributeResponse, retError error) {
 	defer log.CapturePanicGRPC(adh.GetLogger(), &retError)
 
-	err := adh.adminHandlerThrift.AddSearchAttribute(ctx, adapter.ToThriftAddSearchAttributeRequest(request))
-	if err != nil {
-		return nil, adapter.ToProtoError(err)
+	scope, sw := adh.startRequestProfile(metrics.AdminAddSearchAttributeScope)
+	defer sw.Stop()
+
+	// validate request
+	if request == nil {
+		return nil, adh.error(errRequestNotSet, scope)
 	}
+	if err := adh.checkPermission(adh.config, request.SecurityToken); err != nil {
+		return nil, adh.error(errNoPermission, scope)
+	}
+	if len(request.GetSearchAttribute()) == 0 {
+		return nil, adh.error(&shared.BadRequestError{Message: "SearchAttributes are not provided"}, scope)
+	}
+	if err := adh.validateConfigForAdvanceVisibility(); err != nil {
+		return nil, adh.error(&shared.BadRequestError{Message: fmt.Sprintf("AdvancedVisibilityStore is not configured for this Cadence Cluster")}, scope)
+	}
+
+	searchAttr := request.GetSearchAttribute()
+	currentValidAttr, _ := adh.params.DynamicConfig.GetMapValue(
+		dynamicconfig.ValidSearchAttributes, nil, definition.GetDefaultIndexedKeys())
+	for k, v := range searchAttr {
+		if definition.IsSystemIndexedKey(k) {
+			return nil, adh.error(&shared.BadRequestError{Message: fmt.Sprintf("Key [%s] is reserved by system", k)}, scope)
+		}
+		if _, exist := currentValidAttr[k]; exist {
+			return nil, adh.error(&shared.BadRequestError{Message: fmt.Sprintf("Key [%s] is already whitelist", k)}, scope)
+		}
+
+		currentValidAttr[k] = int(v)
+	}
+
+	// update dynamic config
+	err := adh.params.DynamicConfig.UpdateValue(dynamicconfig.ValidSearchAttributes, currentValidAttr)
+	if err != nil {
+		return nil, adh.error(&shared.InternalServiceError{Message: fmt.Sprintf("Failed to update dynamic config, err: %v", err)}, scope)
+	}
+
+	// update elasticsearch mapping, new added field will not be able to remove or update
+	index := adh.params.ESConfig.GetVisibilityIndex()
+	for k, v := range searchAttr {
+		valueType := adh.convertIndexedValueTypeToESDataType(v)
+		if len(valueType) == 0 {
+			return nil, adh.error(&shared.BadRequestError{Message: fmt.Sprintf("Unknown value type, %v", v)}, scope)
+		}
+		err := adh.params.ESClient.PutMapping(ctx, index, definition.Attr, k, valueType)
+		if elastic.IsNotFound(err) {
+			err = adh.params.ESClient.CreateIndex(ctx, index)
+			if err != nil {
+				return nil, adh.error(&shared.InternalServiceError{Message: fmt.Sprintf("Failed to create ES index, err: %v", err)}, scope)
+			}
+			err = adh.params.ESClient.PutMapping(ctx, index, definition.Attr, k, valueType)
+		}
+		if err != nil {
+			return nil, adh.error(&shared.InternalServiceError{Message: fmt.Sprintf("Failed to update ES mapping, err: %v", err)}, scope)
+		}
+	}
+
 	return &adminservice.AddSearchAttributeResponse{}, nil
 }
 
-// DescribeCluster ...
+// DescribeCluster return information about cadence deployment
 func (adh *AdminHandlerGRPC) DescribeCluster(ctx context.Context, _ *adminservice.DescribeClusterRequest) (_ *adminservice.DescribeClusterResponse, retError error) {
 	defer log.CapturePanicGRPC(adh.GetLogger(), &retError)
 
-	resp, err := adh.adminHandlerThrift.DescribeCluster(ctx)
-	if err != nil {
-		return nil, adapter.ToProtoError(err)
+	scope, sw := adh.startRequestProfile(metrics.AdminGetWorkflowExecutionRawHistoryV2Scope)
+	defer sw.Stop()
+
+	membershipInfo := &commonproto.MembershipInfo{}
+	if monitor := adh.GetMembershipMonitor(); monitor != nil {
+		currentHost, err := monitor.WhoAmI()
+		if err != nil {
+			return nil, adh.error(err, scope)
+		}
+
+		membershipInfo.CurrentHost = &commonproto.HostInfo{
+			Identity: currentHost.Identity(),
+		}
+
+		members, err := monitor.GetReachableMembers()
+		if err != nil {
+			return nil, adh.error(err, scope)
+		}
+
+		membershipInfo.ReachableMembers = members
+
+		var rings []*commonproto.RingInfo
+		for _, role := range []string{common.FrontendServiceName, common.HistoryServiceName, common.MatchingServiceName, common.WorkerServiceName} {
+			resolver, err := monitor.GetResolver(role)
+			if err != nil {
+				return nil, adh.error(err, scope)
+			}
+
+			var servers []*commonproto.HostInfo
+			for _, server := range resolver.Members() {
+				servers = append(servers, &commonproto.HostInfo{
+					Identity: server.Identity(),
+				})
+			}
+
+			rings = append(rings, &commonproto.RingInfo{
+				Role:        role,
+				MemberCount: int32(resolver.MemberCount()),
+				Members:     servers,
+			})
+		}
+		membershipInfo.Rings = rings
 	}
-	return adapter.ToProtoDescribeClusterResponse(resp), nil
+
+	return &adminservice.DescribeClusterResponse{
+		SupportedClientVersions: &commonproto.SupportedClientVersions{
+			GoSdk:   client.SupportedGoSDKVersion,
+			JavaSdk: client.SupportedJavaSDKVersion,
+		},
+		MembershipInfo: membershipInfo,
+	}, nil
 }
 
 // GetReplicationMessages returns new replication tasks since the read level provided in the token.
@@ -571,4 +978,50 @@ func (adh *AdminHandlerGRPC) validateExecution(w *commonproto.WorkflowExecution)
 		return errInvalidRunID
 	}
 	return nil
+}
+
+func (adh *AdminHandlerGRPC) checkPermission(
+	config *Config,
+	securityToken string,
+) error {
+	if config.EnableAdminProtection() {
+		if securityToken == "" {
+			return errNoPermission
+		}
+		requiredToken := config.AdminOperationToken()
+		if securityToken != requiredToken {
+			return errNoPermission
+		}
+	}
+	return nil
+}
+
+func (adh *AdminHandlerGRPC) serializeRawHistoryToken(token *getWorkflowRawHistoryV2Token) ([]byte, error) {
+	if token == nil {
+		return nil, nil
+	}
+
+	bytes, err := json.Marshal(token)
+	return bytes, err
+}
+
+func (adh *AdminHandlerGRPC) deserializeRawHistoryToken(bytes []byte) (*getWorkflowRawHistoryV2Token, error) {
+	token := &getWorkflowRawHistoryV2Token{}
+	err := json.Unmarshal(bytes, token)
+	return token, err
+}
+
+func (adh *AdminHandlerGRPC) deserializeHistoryToken(bytes []byte) (*getHistoryContinuationTokenGRPC, error) {
+	token := &getHistoryContinuationTokenGRPC{}
+	err := json.Unmarshal(bytes, token)
+	return token, err
+}
+
+func (adh *AdminHandlerGRPC) serializeHistoryToken(token *getHistoryContinuationTokenGRPC) ([]byte, error) {
+	if token == nil {
+		return nil, nil
+	}
+
+	bytes, err := json.Marshal(token)
+	return bytes, err
 }
