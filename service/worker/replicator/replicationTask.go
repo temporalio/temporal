@@ -24,11 +24,13 @@ import (
 	"context"
 	"time"
 
+	"github.com/gogo/status"
 	commonproto "go.temporal.io/temporal-proto/common"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/client/history"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
@@ -519,6 +521,10 @@ func (t *workflowReplicationTask) convertRetryTaskError(
 	err error,
 ) (*shared.RetryTaskError, bool) {
 
+	if st, ok := status.FromError(err); ok {
+		err = adapter.ToThriftError(st)
+	}
+
 	retError, ok := err.(*shared.RetryTaskError)
 	return retError, ok
 }
@@ -526,6 +532,10 @@ func (t *workflowReplicationTask) convertRetryTaskError(
 func (t *workflowReplicationTask) convertRetryTaskV2Error(
 	err error,
 ) (*shared.RetryTaskV2Error, bool) {
+
+	if st, ok := status.FromError(err); ok {
+		err = adapter.ToThriftError(st)
+	}
 
 	retError, ok := err.(*shared.RetryTaskV2Error)
 	return retError, ok

@@ -25,9 +25,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gogo/status"
 	"github.com/pborman/uuid"
 	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/errordetails"
 	"go.temporal.io/temporal-proto/workflowservice"
+	"google.golang.org/grpc/codes"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
@@ -518,8 +521,7 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(
 		})
 
 		// Check to see if the error is non-transient, in which case reset the error and continue with processing
-		switch err.(type) {
-		case *shared.EntityNotExistsError:
+		if status.Code(err) == codes.NotFound {
 			err = nil
 		}
 	}
@@ -571,7 +573,7 @@ func (t *transferQueueActiveProcessorImpl) processCancelExecution(
 	if task.DomainID == task.TargetDomainID && task.WorkflowID == task.TargetWorkflowID {
 		// it does not matter if the run ID is a mismatch
 		err = t.requestCancelExternalExecutionFailed(task, context, targetDomain, task.TargetWorkflowID, task.TargetRunID)
-		if _, ok := err.(*shared.EntityNotExistsError); ok {
+		if status.Code(err) == codes.NotFound {
 			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
 			return nil
 		}
@@ -587,7 +589,7 @@ func (t *transferQueueActiveProcessorImpl) processCancelExecution(
 
 		// Check to see if the error is non-transient, in which case add RequestCancelFailed
 		// event and complete transfer task by setting the err = nil
-		if !common.IsServiceNonRetryableError(err) {
+		if !common.IsServiceNonRetryableErrorGRPC(err) {
 			// for retryable error just return
 			return err
 		}
@@ -676,7 +678,7 @@ func (t *transferQueueActiveProcessorImpl) processSignalExecution(
 
 		// Check to see if the error is non-transient, in which case add SignalFailed
 		// event and complete transfer task by setting the err = nil
-		if !common.IsServiceNonRetryableError(err) {
+		if !common.IsServiceNonRetryableErrorGRPC(err) {
 			// for retryable error just return
 			return err
 		}
@@ -747,7 +749,7 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(
 	// Get parent domain name
 	var domain string
 	if domainEntry, err := t.shard.GetDomainCache().GetDomainByID(task.DomainID); err != nil {
-		if _, ok := err.(*shared.EntityNotExistsError); !ok {
+		if status.Code(err) != codes.NotFound {
 			return err
 		}
 		// it is possible that the domain got deleted. Use domainID instead as this is only needed for the history event
@@ -759,7 +761,7 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(
 	// Get target domain name
 	var targetDomain string
 	if domainEntry, err := t.shard.GetDomainCache().GetDomainByID(task.TargetDomainID); err != nil {
-		if _, ok := err.(*shared.EntityNotExistsError); !ok {
+		if status.Code(err) != codes.NotFound {
 			return err
 		}
 		// it is possible that the domain got deleted. Use domainID instead as this is only needed for the history event
@@ -805,10 +807,10 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(
 
 		// Check to see if the error is non-transient, in which case add StartChildWorkflowExecutionFailed
 		// event and complete transfer task by setting the err = nil
-		switch err.(type) {
-		case *shared.WorkflowExecutionAlreadyStartedError:
+		if errordetails.IsWorkflowExecutionAlreadyStartedStatus(status.Convert(err)) {
 			err = t.recordStartChildExecutionFailed(task, context, attributes)
 		}
+
 		return err
 	}
 
@@ -1112,7 +1114,7 @@ func (t *transferQueueActiveProcessorImpl) createFirstDecisionTask(
 	})
 
 	if err != nil {
-		if _, ok := err.(*shared.EntityNotExistsError); ok {
+		if status.Code(err) == codes.NotFound {
 			// Maybe child workflow execution already timedout or terminated
 			// Safe to discard the error and complete this transfer task
 			return nil
@@ -1337,9 +1339,9 @@ func (t *transferQueueActiveProcessorImpl) requestCancelExternalExecutionWithRet
 		return err
 	}
 
-	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientErrorGRPC)
 
-	if _, ok := err.(*shared.CancellationAlreadyRequestedError); ok {
+	if status.Code(err) == codes.AlreadyExists {
 		// err is CancellationAlreadyRequestedError
 		// this could happen if target workflow cancellation is already requested
 		// mark as success
@@ -1383,7 +1385,7 @@ func (t *transferQueueActiveProcessorImpl) signalExternalExecutionWithRetry(
 		return err
 	}
 
-	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientErrorGRPC)
 }
 
 func (t *transferQueueActiveProcessorImpl) startWorkflowWithRetry(
@@ -1439,7 +1441,7 @@ func (t *transferQueueActiveProcessorImpl) startWorkflowWithRetry(
 		return err
 	}
 
-	err = backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	err = backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientErrorGRPC)
 	if err != nil {
 		return "", err
 	}
@@ -1591,7 +1593,7 @@ func (t *transferQueueActiveProcessorImpl) processParentClosePolicy(
 			domainName,
 			childInfo,
 		); err != nil {
-			if _, ok := err.(*shared.EntityNotExistsError); !ok {
+			if status.Code(err) != codes.NotFound {
 				scope.IncCounter(metrics.ParentClosePolicyProcessorFailures)
 				return err
 			}
