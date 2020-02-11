@@ -56,14 +56,21 @@ cluster_membership
 WHERE host_id = ANY(ARRAY(
 SELECT host_id FROM cluster_membership WHERE record_expiry < $1 LIMIT $2))`
 
-	templateGetClusterMembership = `SELECT host_id, rpc_address, rpc_port, role, session_start, last_heartbeat, record_expiry FROM
+	templateGetClusterMembership = `SELECT host_id, rpc_address, rpc_port, role, session_start, last_heartbeat, record_expiry, insertion_order FROM
 cluster_membership`
 
+	// ClusterMembership WHERE Suffixes
 	templateWithRoleSuffix           = ` AND role = $`
 	templateWithHeartbeatSinceSuffix = ` AND last_heartbeat > $`
 	templateWithRecordExpirySuffix   = ` AND record_expiry > $`
 	templateWithRPCAddressSuffix     = ` AND rpc_address = $`
 	templateWithHostIDSuffix         = ` AND host_id = $`
+	templateWithSessionStartSuffix   = ` AND session_start > $`
+	templateWithInsertionOrderSuffix = ` AND insertion_order > $`
+
+	// Generic SELECT Suffixes
+	templateWithLimitSuffix            = ` LIMIT $`
+	templateWithOrderByInsertionSuffix = ` ORDER BY insertion_order ASC`
 )
 
 // Does not follow traditional lock, select, read, insert as we only expect a single row.
@@ -126,6 +133,26 @@ func (pdb *db) GetClusterMembers(filter *sqlplugin.ClusterMembershipFilter) ([]s
 	if !filter.RecordExpiryAfter.IsZero() {
 		queryString.WriteString(templateWithRecordExpirySuffix)
 		operands = append(operands, filter.RecordExpiryAfter)
+		queryString.WriteString(strconv.Itoa(len(operands)))
+	}
+
+	if !filter.SessionStartedAfter.IsZero() {
+		queryString.WriteString(templateWithSessionStartSuffix)
+		operands = append(operands, filter.SessionStartedAfter)
+		queryString.WriteString(strconv.Itoa(len(operands)))
+	}
+
+	if filter.InsertionOrderGreaterThan > 0 {
+		queryString.WriteString(templateWithInsertionOrderSuffix)
+		operands = append(operands, filter.InsertionOrderGreaterThan)
+		queryString.WriteString(strconv.Itoa(len(operands)))
+	}
+
+	queryString.WriteString(templateWithOrderByInsertionSuffix)
+
+	if filter.MaxRecordCount > 0 {
+		queryString.WriteString(templateWithLimitSuffix)
+		operands = append(operands, filter.MaxRecordCount)
 		queryString.WriteString(strconv.Itoa(len(operands)))
 	}
 

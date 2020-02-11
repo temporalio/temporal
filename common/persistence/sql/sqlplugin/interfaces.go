@@ -24,8 +24,6 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/pborman/uuid"
-
 	"github.com/temporalio/temporal/common/persistence"
 
 	"github.com/temporalio/temporal/common"
@@ -47,22 +45,26 @@ type (
 
 	// ClusterMembershipRow represents a row in the cluster_membership table
 	ClusterMembershipRow struct {
-		Role          persistence.ServiceType
-		HostID        []byte
-		RPCAddress    string
-		RPCPort       uint16
-		SessionStart  time.Time
-		LastHeartbeat time.Time
-		RecordExpiry  time.Time
+		Role           persistence.ServiceType
+		HostID         []byte
+		RPCAddress     string
+		RPCPort        uint16
+		SessionStart   time.Time
+		LastHeartbeat  time.Time
+		RecordExpiry   time.Time
+		InsertionOrder uint64
 	}
 
 	// ClusterMembershipFilter is used for GetClusterMembership queries
 	ClusterMembershipFilter struct {
-		RPCAddressEquals   string
-		HostIDEquals       uuid.UUID
-		RoleEquals         persistence.ServiceType
-		LastHeartbeatAfter time.Time
-		RecordExpiryAfter  time.Time
+		RPCAddressEquals          string
+		HostIDEquals              []byte
+		RoleEquals                persistence.ServiceType
+		LastHeartbeatAfter        time.Time
+		RecordExpiryAfter         time.Time
+		SessionStartedAfter       time.Time
+		MaxRecordCount            int
+		InsertionOrderGreaterThan uint64
 	}
 
 	// PruneClusterMembershipFilter is used for PruneClusterMembership queries
