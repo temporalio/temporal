@@ -1456,11 +1456,15 @@ type (
 		RPCAddressEquals    net.IP
 		HostIDEquals        uuid.UUID
 		RoleEquals          ServiceType
+		SessionStartedAfter time.Time
+		NextPageToken       []byte
+		PageSize            int
 	}
 
 	// GetClusterMembersResponse is the response to GetClusterMembers
 	GetClusterMembersResponse struct {
 		ActiveMembers []*ClusterMember
+		NextPageToken []byte
 	}
 
 	// ClusterMember is used as a response to GetClusterMembers

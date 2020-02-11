@@ -270,6 +270,7 @@ CREATE TABLE cluster_membership
     session_start        TIMESTAMP DEFAULT '1970-01-01 00:00:01',
     last_heartbeat       TIMESTAMP DEFAULT '1970-01-01 00:00:01',
     record_expiry        TIMESTAMP DEFAULT '1970-01-01 00:00:01',
+    insertion_order      BIGSERIAL NOT NULL UNIQUE,
     PRIMARY KEY (host_id)
 );
 

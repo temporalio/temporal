@@ -24,6 +24,8 @@ import (
 	"bytes"
 	"fmt"
 
+	commonproto "go.temporal.io/temporal-proto/common"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 )
@@ -57,6 +59,18 @@ func NewVersionHistoryItemFromThrift(
 	return NewVersionHistoryItem(input.GetEventID(), input.GetVersion())
 }
 
+// NewVersionHistoryItemFromProto create a new version history item from thrift object
+func NewVersionHistoryItemFromProto(
+	input *commonproto.VersionHistoryItem,
+) *VersionHistoryItem {
+
+	if input == nil {
+		panic("version history item is null")
+	}
+
+	return NewVersionHistoryItem(input.GetEventID(), input.GetVersion())
+}
+
 // Duplicate duplicate VersionHistoryItem
 func (item *VersionHistoryItem) Duplicate() *VersionHistoryItem {
 
@@ -69,6 +83,15 @@ func (item *VersionHistoryItem) ToThrift() *shared.VersionHistoryItem {
 	return &shared.VersionHistoryItem{
 		EventID: common.Int64Ptr(item.EventID),
 		Version: common.Int64Ptr(item.Version),
+	}
+}
+
+// ToProto returns proto format of version history item
+func (item *VersionHistoryItem) ToProto() *commonproto.VersionHistoryItem {
+
+	return &commonproto.VersionHistoryItem{
+		EventID: item.EventID,
+		Version: item.Version,
 	}
 }
 
@@ -125,6 +148,22 @@ func NewVersionHistoryFromThrift(
 	return NewVersionHistory(input.BranchToken, items)
 }
 
+// NewVersionHistoryFromProto create a new version history from thrift object
+func NewVersionHistoryFromProto(
+	input *commonproto.VersionHistory,
+) *VersionHistory {
+
+	if input == nil {
+		panic("version history is null")
+	}
+
+	var items []*VersionHistoryItem
+	for _, item := range input.Items {
+		items = append(items, NewVersionHistoryItemFromProto(item))
+	}
+	return NewVersionHistory(input.BranchToken, items)
+}
+
 // Duplicate duplicate VersionHistory
 func (v *VersionHistory) Duplicate() *VersionHistory {
 
@@ -146,6 +185,23 @@ func (v *VersionHistory) ToThrift() *shared.VersionHistory {
 		Items:       items,
 	}
 	return tHistory
+}
+
+// ToProto returns proto format of version history
+func (v *VersionHistory) ToProto() *commonproto.VersionHistory {
+
+	token := make([]byte, len(v.BranchToken))
+	copy(token, v.BranchToken)
+	var items []*commonproto.VersionHistoryItem
+	for _, item := range v.Items {
+		items = append(items, item.ToProto())
+	}
+
+	pHistory := &commonproto.VersionHistory{
+		BranchToken: token,
+		Items:       items,
+	}
+	return pHistory
 }
 
 // DuplicateUntilLCAItem duplicate the version history up until LCA item
@@ -414,6 +470,35 @@ func NewVersionHistoriesFromThrift(
 	return versionHistories
 }
 
+// NewVersionHistoriesFromProto create a new version histories from thrift object
+func NewVersionHistoriesFromProto(
+	input *commonproto.VersionHistories,
+) *VersionHistories {
+
+	if input == nil {
+		panic("version histories is null")
+	}
+	if len(input.Histories) == 0 {
+		panic("version histories cannot have empty")
+	}
+
+	currentVersionHistoryIndex := int(input.GetCurrentVersionHistoryIndex())
+
+	versionHistories := NewVersionHistories(NewVersionHistoryFromProto(input.Histories[0]))
+	for i := 1; i < len(input.Histories); i++ {
+		_, _, err := versionHistories.AddVersionHistory(NewVersionHistoryFromProto(input.Histories[i]))
+		if err != nil {
+			panic(fmt.Sprintf("unable to initialize version histories: %v", err))
+		}
+	}
+
+	if currentVersionHistoryIndex != versionHistories.CurrentVersionHistoryIndex {
+		panic("unable to initialize version histories: current index mismatch")
+	}
+
+	return versionHistories
+}
+
 // Duplicate duplicate VersionHistories
 func (h *VersionHistories) Duplicate() *VersionHistories {
 
@@ -440,6 +525,21 @@ func (h *VersionHistories) ToThrift() *shared.VersionHistories {
 
 	return &shared.VersionHistories{
 		CurrentVersionHistoryIndex: common.Int32Ptr(int32(currentVersionHistoryIndex)),
+		Histories:                  histories,
+	}
+}
+
+// ToProto return thrift format of version histories
+func (h *VersionHistories) ToProto() *commonproto.VersionHistories {
+
+	currentVersionHistoryIndex := h.CurrentVersionHistoryIndex
+	var histories []*commonproto.VersionHistory
+	for _, history := range h.Histories {
+		histories = append(histories, history.ToProto())
+	}
+
+	return &commonproto.VersionHistories{
+		CurrentVersionHistoryIndex: int32(currentVersionHistoryIndex),
 		Histories:                  histories,
 	}
 }
