@@ -26,8 +26,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 	"go.uber.org/yarpc/yarpcerrors"
 
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
@@ -63,7 +66,7 @@ type (
 		domainReplicator        DomainReplicator
 		historyRereplicator     xdc.HistoryRereplicator
 		nDCHistoryResender      xdc.NDCHistoryResender
-		historyClient           history.Client
+		historyClient           history.ClientGRPC
 		domainCache             cache.DomainCache
 		msgEncoder              codec.BinaryEncoder
 		timeSource              clock.TimeSource
@@ -95,12 +98,12 @@ func newReplicationTaskProcessor(
 	domainReplicator DomainReplicator,
 	historyRereplicator xdc.HistoryRereplicator,
 	nDCHistoryResender xdc.NDCHistoryResender,
-	historyClient history.Client,
+	historyClient history.ClientGRPC,
 	domainCache cache.DomainCache,
 	sequentialTaskProcessor task.SequentialTaskProcessor,
 ) *replicationTaskProcessor {
 
-	retryableHistoryClient := history.NewRetryableClient(historyClient, common.CreateHistoryServiceRetryPolicy(),
+	retryableHistoryClient := history.NewRetryableClientGRPC(historyClient, common.CreateHistoryServiceRetryPolicy(),
 		common.IsWhitelistServiceTransientError)
 
 	return &replicationTaskProcessor{
@@ -205,33 +208,34 @@ func (p *replicationTaskProcessor) messageProcessLoop(workerWG *sync.WaitGroup, 
 
 func (p *replicationTaskProcessor) decodeMsgAndSubmit(msg messaging.Message) {
 	logger := p.initLogger(msg)
-	replicationTask, err := p.decodeAndValidateMsg(msg, logger)
+	replicationTaskThrift, err := p.decodeAndValidateMsg(msg, logger)
 	if err != nil {
 		p.nackMsg(msg, err, logger)
 		return
 	}
+	replicationTask := adapter.ToProtoReplicationTask(replicationTaskThrift)
 
 SubmitLoop:
 	for {
 		var scope int
 		switch replicationTask.GetTaskType() {
-		case replicator.ReplicationTaskTypeDomain:
-			logger = logger.WithTags(tag.WorkflowDomainID(replicationTask.DomainTaskAttributes.GetID()))
+		case enums.ReplicationTaskTypeDomain:
+			logger = logger.WithTags(tag.WorkflowDomainID(replicationTask.GetDomainTaskAttributes().GetId()))
 			scope = metrics.DomainReplicationTaskScope
 			err = p.handleDomainReplicationTask(replicationTask, msg, logger)
-		case replicator.ReplicationTaskTypeSyncShardStatus:
+		case enums.ReplicationTaskTypeSyncShardStatus:
 			scope = metrics.SyncShardTaskScope
 			err = p.handleSyncShardTask(replicationTask, msg, logger)
-		case replicator.ReplicationTaskTypeSyncActivity:
+		case enums.ReplicationTaskTypeSyncActivity:
 			scope = metrics.SyncActivityTaskScope
 			err = p.handleActivityTask(replicationTask, msg, logger)
-		case replicator.ReplicationTaskTypeHistory:
+		case enums.ReplicationTaskTypeHistory:
 			scope = metrics.HistoryReplicationTaskScope
 			err = p.handleHistoryReplicationTask(replicationTask, msg, logger)
-		case replicator.ReplicationTaskTypeHistoryMetadata:
+		case enums.ReplicationTaskTypeHistoryMetadata:
 			scope = metrics.HistoryMetadataReplicationTaskScope
 			err = p.handleHistoryMetadataReplicationTask(replicationTask, msg, logger)
-		case replicator.ReplicationTaskTypeHistoryV2:
+		case enums.ReplicationTaskTypeHistoryV2:
 			scope = metrics.HistoryReplicationV2TaskScope
 			err = p.handleHistoryReplicationV2Task(replicationTask, msg, logger)
 		default:
@@ -294,7 +298,7 @@ func (p *replicationTaskProcessor) decodeAndValidateMsg(msg messaging.Message, l
 	return &replicationTask, nil
 }
 
-func (p *replicationTaskProcessor) handleDomainReplicationTask(task *replicator.ReplicationTask, msg messaging.Message, logger log.Logger) (retError error) {
+func (p *replicationTaskProcessor) handleDomainReplicationTask(task *commonproto.ReplicationTask, msg messaging.Message, logger log.Logger) (retError error) {
 	p.metricsClient.IncCounter(metrics.DomainReplicationTaskScope, metrics.ReplicatorMessages)
 	sw := p.metricsClient.StartTimer(metrics.DomainReplicationTaskScope, metrics.ReplicatorLatency)
 	defer sw.Stop()
@@ -305,14 +309,14 @@ func (p *replicationTaskProcessor) handleDomainReplicationTask(task *replicator.
 		}
 	}()
 
-	err := p.domainReplicator.HandleReceivingTask(adapter.ToProtoDomainTaskAttributes(task.GetDomainTaskAttributes()))
+	err := p.domainReplicator.HandleReceivingTask(task.GetDomainTaskAttributes())
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (p *replicationTaskProcessor) handleSyncShardTask(task *replicator.ReplicationTask, msg messaging.Message, logger log.Logger) (retError error) {
+func (p *replicationTaskProcessor) handleSyncShardTask(task *commonproto.ReplicationTask, msg messaging.Message, logger log.Logger) (retError error) {
 	p.metricsClient.IncCounter(metrics.SyncShardTaskScope, metrics.ReplicatorMessages)
 	sw := p.metricsClient.StartTimer(metrics.SyncShardTaskScope, metrics.ReplicatorLatency)
 	defer sw.Stop()
@@ -323,28 +327,29 @@ func (p *replicationTaskProcessor) handleSyncShardTask(task *replicator.Replicat
 		}
 	}()
 
-	attr := task.SyncShardStatusTaskAttributes
+	attr := task.GetSyncShardStatusTaskAttributes()
 	if time.Now().Sub(time.Unix(0, attr.GetTimestamp())) > dropSyncShardTaskTimeThreshold {
 		return nil
 	}
 
-	req := &h.SyncShardStatusRequest{
+	req := &historyservice.SyncShardStatusRequest{
 		SourceCluster: attr.SourceCluster,
 		ShardId:       attr.ShardId,
 		Timestamp:     attr.Timestamp,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), p.config.ReplicationTaskContextTimeout())
 	defer cancel()
-	return p.historyClient.SyncShardStatus(ctx, req)
+	_, err := p.historyClient.SyncShardStatus(ctx, req)
+	return err
 }
 
 func (p *replicationTaskProcessor) handleActivityTask(
-	task *replicator.ReplicationTask,
+	task *commonproto.ReplicationTask,
 	msg messaging.Message,
 	logger log.Logger,
 ) error {
 
-	doContinue, err := p.filterTask(task.SyncActivityTaskAttributes.GetDomainId())
+	doContinue, err := p.filterTask(task.GetSyncActivityTaskAttributes().GetDomainId())
 	if err != nil || !doContinue {
 		return err
 	}
@@ -364,12 +369,12 @@ func (p *replicationTaskProcessor) handleActivityTask(
 }
 
 func (p *replicationTaskProcessor) handleHistoryReplicationTask(
-	task *replicator.ReplicationTask,
+	task *commonproto.ReplicationTask,
 	msg messaging.Message,
 	logger log.Logger,
 ) error {
 
-	doContinue, err := p.filterTask(task.HistoryTaskAttributes.GetDomainId())
+	doContinue, err := p.filterTask(task.GetHistoryTaskAttributes().GetDomainId())
 	if err != nil || !doContinue {
 		return err
 	}
@@ -389,12 +394,12 @@ func (p *replicationTaskProcessor) handleHistoryReplicationTask(
 }
 
 func (p *replicationTaskProcessor) handleHistoryMetadataReplicationTask(
-	task *replicator.ReplicationTask,
+	task *commonproto.ReplicationTask,
 	msg messaging.Message,
 	logger log.Logger,
 ) error {
 
-	doContinue, err := p.filterTask(task.HistoryMetadataTaskAttributes.GetDomainId())
+	doContinue, err := p.filterTask(task.GetHistoryMetadataTaskAttributes().GetDomainId())
 	if err != nil || !doContinue {
 		return err
 	}
@@ -414,12 +419,12 @@ func (p *replicationTaskProcessor) handleHistoryMetadataReplicationTask(
 }
 
 func (p *replicationTaskProcessor) handleHistoryReplicationV2Task(
-	task *replicator.ReplicationTask,
+	task *commonproto.ReplicationTask,
 	msg messaging.Message,
 	logger log.Logger,
 ) error {
 
-	doContinue, err := p.filterTask(task.HistoryTaskV2Attributes.GetDomainId())
+	doContinue, err := p.filterTask(task.GetHistoryTaskV2Attributes().GetDomainId())
 	if err != nil || !doContinue {
 		return err
 	}

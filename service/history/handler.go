@@ -154,7 +154,7 @@ func (h *Handler) CreateEngine(
 		shardContext,
 		h.GetVisibilityManager(),
 		h.GetMatchingClient(),
-		h.GetHistoryClient(),
+		h.GetHistoryClientGRPC(),
 		h.GetSDKClient(),
 		h.historyEventNotifier,
 		h.publisher,

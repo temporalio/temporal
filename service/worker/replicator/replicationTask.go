@@ -24,11 +24,11 @@ import (
 	"context"
 	"time"
 
-	h "github.com/temporalio/temporal/.gen/go/history"
-	"github.com/temporalio/temporal/.gen/go/replicator"
+	commonproto "go.temporal.io/temporal-proto/common"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/client/history"
-	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
@@ -51,20 +51,20 @@ type (
 
 		config        *Config
 		timeSource    clock.TimeSource
-		historyClient history.Client
+		historyClient history.ClientGRPC
 		metricsClient metrics.Client
 	}
 
 	activityReplicationTask struct {
 		workflowReplicationTask
-		req                 *h.SyncActivityRequest
+		req                 *historyservice.SyncActivityRequest
 		historyRereplicator xdc.HistoryRereplicator
 		nDCHistoryResender  xdc.NDCHistoryResender
 	}
 
 	historyReplicationTask struct {
 		workflowReplicationTask
-		req                 *h.ReplicateEventsRequest
+		req                 *historyservice.ReplicateEventsRequest
 		historyRereplicator xdc.HistoryRereplicator
 	}
 
@@ -78,7 +78,7 @@ type (
 
 	historyReplicationV2Task struct {
 		workflowReplicationTask
-		req                *h.ReplicateEventsV2Request
+		req                *historyservice.ReplicateEventsV2Request
 		nDCHistoryResender xdc.NDCHistoryResender
 	}
 )
@@ -93,18 +93,18 @@ const (
 )
 
 func newActivityReplicationTask(
-	task *replicator.ReplicationTask,
+	task *commonproto.ReplicationTask,
 	msg messaging.Message,
 	logger log.Logger,
 	config *Config,
 	timeSource clock.TimeSource,
-	historyClient history.Client,
+	historyClient history.ClientGRPC,
 	metricsClient metrics.Client,
 	historyRereplicator xdc.HistoryRereplicator,
 	nDCHistoryResender xdc.NDCHistoryResender,
 ) *activityReplicationTask {
 
-	attr := task.SyncActivityTaskAttributes
+	attr := task.GetSyncActivityTaskAttributes()
 
 	logger = logger.WithTags(tag.WorkflowDomainID(attr.GetDomainId()),
 		tag.WorkflowID(attr.GetWorkflowId()),
@@ -127,7 +127,7 @@ func newActivityReplicationTask(
 			historyClient: historyClient,
 			metricsClient: metricsClient,
 		},
-		req: &h.SyncActivityRequest{
+		req: &historyservice.SyncActivityRequest{
 			DomainId:           attr.DomainId,
 			WorkflowId:         attr.WorkflowId,
 			RunId:              attr.RunId,
@@ -150,18 +150,18 @@ func newActivityReplicationTask(
 }
 
 func newHistoryReplicationTask(
-	task *replicator.ReplicationTask,
+	task *commonproto.ReplicationTask,
 	msg messaging.Message,
 	sourceCluster string,
 	logger log.Logger,
 	config *Config,
 	timeSource clock.TimeSource,
-	historyClient history.Client,
+	historyClient history.ClientGRPC,
 	metricsClient metrics.Client,
 	historyRereplicator xdc.HistoryRereplicator,
 ) *historyReplicationTask {
 
-	attr := task.HistoryTaskAttributes
+	attr := task.GetHistoryTaskAttributes()
 	logger = logger.WithTags(tag.WorkflowDomainID(attr.GetDomainId()),
 		tag.WorkflowID(attr.GetWorkflowId()),
 		tag.WorkflowRunID(attr.GetRunId()),
@@ -184,10 +184,10 @@ func newHistoryReplicationTask(
 			historyClient: historyClient,
 			metricsClient: metricsClient,
 		},
-		req: &h.ReplicateEventsRequest{
-			SourceCluster: common.StringPtr(sourceCluster),
+		req: &historyservice.ReplicateEventsRequest{
+			SourceCluster: sourceCluster,
 			DomainUUID:    attr.DomainId,
-			WorkflowExecution: &shared.WorkflowExecution{
+			WorkflowExecution: &commonproto.WorkflowExecution{
 				WorkflowId: attr.WorkflowId,
 				RunId:      attr.RunId,
 			},
@@ -197,7 +197,7 @@ func newHistoryReplicationTask(
 			ReplicationInfo:   attr.ReplicationInfo,
 			History:           attr.History,
 			NewRunHistory:     attr.NewRunHistory,
-			ForceBufferEvents: common.BoolPtr(false),
+			ForceBufferEvents: false,
 			ResetWorkflow:     attr.ResetWorkflow,
 			NewRunNDC:         attr.NewRunNDC,
 		},
@@ -206,18 +206,18 @@ func newHistoryReplicationTask(
 }
 
 func newHistoryMetadataReplicationTask(
-	task *replicator.ReplicationTask,
+	task *commonproto.ReplicationTask,
 	msg messaging.Message,
 	sourceCluster string,
 	logger log.Logger,
 	config *Config,
 	timeSource clock.TimeSource,
-	historyClient history.Client,
+	historyClient history.ClientGRPC,
 	metricsClient metrics.Client,
 	historyRereplicator xdc.HistoryRereplicator,
 ) *historyMetadataReplicationTask {
 
-	attr := task.HistoryMetadataTaskAttributes
+	attr := task.GetHistoryMetadataTaskAttributes()
 	logger = logger.WithTags(tag.WorkflowDomainID(attr.GetDomainId()),
 		tag.WorkflowID(attr.GetWorkflowId()),
 		tag.WorkflowRunID(attr.GetRunId()),
@@ -247,17 +247,17 @@ func newHistoryMetadataReplicationTask(
 }
 
 func newHistoryReplicationV2Task(
-	task *replicator.ReplicationTask,
+	task *commonproto.ReplicationTask,
 	msg messaging.Message,
 	logger log.Logger,
 	config *Config,
 	timeSource clock.TimeSource,
-	historyClient history.Client,
+	historyClient history.ClientGRPC,
 	metricsClient metrics.Client,
 	nDCHistoryResender xdc.NDCHistoryResender,
 ) *historyReplicationV2Task {
 
-	attr := task.HistoryTaskV2Attributes
+	attr := task.GetHistoryTaskV2Attributes()
 	logger = logger.WithTags(tag.WorkflowDomainID(attr.GetDomainId()),
 		tag.WorkflowID(attr.GetWorkflowId()),
 		tag.WorkflowRunID(attr.GetRunId()),
@@ -278,9 +278,9 @@ func newHistoryReplicationV2Task(
 			historyClient: historyClient,
 			metricsClient: metricsClient,
 		},
-		req: &h.ReplicateEventsV2Request{
+		req: &historyservice.ReplicateEventsV2Request{
 			DomainUUID: attr.DomainId,
-			WorkflowExecution: &shared.WorkflowExecution{
+			WorkflowExecution: &commonproto.WorkflowExecution{
 				WorkflowId: attr.WorkflowId,
 				RunId:      attr.RunId,
 			},
@@ -295,7 +295,8 @@ func newHistoryReplicationV2Task(
 func (t *activityReplicationTask) Execute() error {
 	ctx, cancel := context.WithTimeout(context.Background(), t.config.ReplicationTaskContextTimeout())
 	defer cancel()
-	return t.historyClient.SyncActivity(ctx, t.req)
+	_, err := t.historyClient.SyncActivity(ctx, t.req)
+	return err
 }
 
 func (t *activityReplicationTask) HandleErr(
@@ -359,7 +360,8 @@ func (t *activityReplicationTask) HandleErr(
 func (t *historyReplicationTask) Execute() error {
 	ctx, cancel := context.WithTimeout(context.Background(), t.config.ReplicationTaskContextTimeout())
 	defer cancel()
-	return t.historyClient.ReplicateEvents(ctx, t.req)
+	_, err := t.historyClient.ReplicateEvents(ctx, t.req)
+	return err
 }
 
 func (t *historyReplicationTask) HandleErr(
@@ -441,7 +443,8 @@ func (t *historyMetadataReplicationTask) HandleErr(
 func (t *historyReplicationV2Task) Execute() error {
 	ctx, cancel := context.WithTimeout(context.Background(), t.config.ReplicationTaskContextTimeout())
 	defer cancel()
-	return t.historyClient.ReplicateEventsV2(ctx, t.req)
+	_, err := t.historyClient.ReplicateEventsV2(ctx, t.req)
+	return err
 }
 
 func (t *historyReplicationV2Task) HandleErr(err error) error {

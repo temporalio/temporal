@@ -24,7 +24,7 @@ import (
 	"context"
 	"fmt"
 
-	h "github.com/temporalio/temporal/.gen/go/history"
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/client/history"
@@ -50,7 +50,7 @@ type (
 		clusterMetadata        cluster.Metadata
 		domainReplicator       DomainReplicator
 		clientBean             client.Bean
-		historyClient          history.Client
+		historyClient          history.ClientGRPC
 		config                 *Config
 		client                 messaging.Client
 		processors             []*replicationTaskProcessor
@@ -100,7 +100,7 @@ func NewReplicator(
 		clusterMetadata:        clusterMetadata,
 		domainReplicator:       NewDomainReplicator(metadataManagerV2, logger),
 		clientBean:             clientBean,
-		historyClient:          clientBean.GetHistoryClient(),
+		historyClient:          clientBean.GetHistoryClientGRPC(),
 		config:                 config,
 		client:                 client,
 		logger:                 logger,
@@ -158,7 +158,7 @@ func (r *Replicator) createKafkaProcessors(currentClusterName string, clusterNam
 		common.CreateAdminServiceRetryPolicy(),
 		common.IsWhitelistServiceTransientError,
 	)
-	historyClient := history.NewRetryableClient(
+	historyClient := history.NewRetryableClientGRPC(
 		r.historyClient,
 		common.CreateHistoryServiceRetryPolicy(),
 		common.IsWhitelistServiceTransientError,
@@ -168,8 +168,9 @@ func (r *Replicator) createKafkaProcessors(currentClusterName string, clusterNam
 		currentClusterName,
 		r.domainCache,
 		adminClient,
-		func(ctx context.Context, request *h.ReplicateRawEventsRequest) error {
-			return historyClient.ReplicateRawEvents(ctx, request)
+		func(ctx context.Context, request *historyservice.ReplicateRawEventsRequest) error {
+			_, err := historyClient.ReplicateRawEvents(ctx, request)
+			return err
 		},
 		r.historySerializer,
 		r.config.ReplicationTaskContextTimeout(),
@@ -178,8 +179,9 @@ func (r *Replicator) createKafkaProcessors(currentClusterName string, clusterNam
 	nDCHistoryReplicator := xdc.NewNDCHistoryResender(
 		r.domainCache,
 		adminClient,
-		func(ctx context.Context, request *h.ReplicateEventsV2Request) error {
-			return historyClient.ReplicateEventsV2(ctx, request)
+		func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
+			_, err := historyClient.ReplicateEventsV2(ctx, request)
+			return err
 		},
 		r.historySerializer,
 		logger,
