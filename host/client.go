@@ -21,15 +21,12 @@
 package host
 
 import (
-	"go.uber.org/yarpc"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/temporal-proto/workflowservice"
 
-	"github.com/temporalio/temporal/.gen/go/history/historyserviceclient"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/common"
 )
 
 // AdminClient is the interface exposed by admin service client
@@ -44,11 +41,6 @@ type FrontendClient interface {
 
 // HistoryClient is the interface exposed by history service client
 type HistoryClient interface {
-	historyserviceclient.Interface
-}
-
-// HistoryClientGRPC is the interface exposed by history service client
-type HistoryClientGRPC interface {
 	historyservice.HistoryServiceClient
 }
 
@@ -63,11 +55,6 @@ func NewFrontendClient(connection *grpc.ClientConn) workflowservice.WorkflowServ
 }
 
 // NewHistoryClient creates a client to cadence history service client
-func NewHistoryClient(d *yarpc.Dispatcher) HistoryClient {
-	return historyserviceclient.New(d.ClientConfig(common.HistoryServiceName))
-}
-
-// NewHistoryClient creates a client to cadence history service client
-func NewHistoryClientGRPC(connection *grpc.ClientConn) HistoryClientGRPC {
+func NewHistoryClient(connection *grpc.ClientConn) HistoryClient {
 	return historyservice.NewHistoryServiceClient(connection)
 }
