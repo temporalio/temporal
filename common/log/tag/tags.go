@@ -49,6 +49,11 @@ func Timestamp(timestamp time.Time) Tag {
 	return newTimeTag("timestamp", timestamp)
 }
 
+// TimestampInt returns tag for Timestamp
+func TimestampInt(timestamp int64) Tag {
+	return newInt64("timestamp", timestamp)
+}
+
 ///////////////////  Workflow tags defined here: ( wf is short for workflow) ///////////////////
 
 // WorkflowAction returns tag for WorkflowAction
@@ -465,6 +470,16 @@ func ShardTimerAcks(shardTimerAcks interface{}) Tag {
 
 // task queue processor
 
+// Task returns tag for Task
+func Task(task interface{}) Tag {
+	return newObjectTag("queue-task", task)
+}
+
+// AckLevel returns tag for upper ack level
+func Tasks(s interface{}) Tag {
+	return newObjectTag("tasks", s)
+}
+
 // TaskID returns tag for TaskID
 func TaskID(taskID int64) Tag {
 	return newInt64("queue-task-id", taskID)
@@ -473,6 +488,11 @@ func TaskID(taskID int64) Tag {
 // TaskType returns tag for TaskType for queue processor
 func TaskType(taskType int) Tag {
 	return newInt("queue-task-type", taskType)
+}
+
+// TaskVersion returns tag for TaskVersion
+func TaskVersion(taskVersion int64) Tag {
+	return newInt64("queue-task-version", taskVersion)
 }
 
 // NumberProcessed returns tag for NumberProcessed
@@ -765,4 +785,29 @@ func ArchivalBlobstoreContextTimeout(blobstoreContextTimeout time.Duration) Tag 
 // TransportType returns tag for transportType
 func TransportType(transportType string) Tag {
 	return newStringTag("transport-type", transportType)
+}
+
+// ActivityInfo returns tag for activity info
+func ActivityInfo(activityInfo interface{}) Tag {
+	return newObjectTag("activity-info", activityInfo)
+}
+
+// DecisionRequestId returns tag for decision RequestId
+func DecisionRequestId(s string) Tag {
+	return newStringTag("decision-request-id", s)
+}
+
+// AckLevel returns tag for ack level
+func AckLevel(s interface{}) Tag {
+	return newObjectTag("ack-level", s)
+}
+
+// QueryLevel returns tag for query level
+func QueryLevel(s time.Time) Tag {
+	return newTimeTag("query-level", s)
+}
+
+// TaskListInfo returns tag for task list info
+func TaskListInfo(s interface{}) Tag {
+	return newObjectTag("task-list-info", s)
 }

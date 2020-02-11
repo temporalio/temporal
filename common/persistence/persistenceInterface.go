@@ -752,6 +752,24 @@ func (d *DataBlob) ToThrift() *workflow.DataBlob {
 	}
 }
 
+// ToProto convert data blob to thrift representation
+func (d *DataBlob) ToProto() *commonproto.DataBlob {
+	switch d.Encoding {
+	case common.EncodingTypeJSON:
+		return &commonproto.DataBlob{
+			EncodingType: enums.EncodingTypeJSON,
+			Data:         d.Data,
+		}
+	case common.EncodingTypeThriftRW:
+		return &commonproto.DataBlob{
+			EncodingType: enums.EncodingTypeThriftRW,
+			Data:         d.Data,
+		}
+	default:
+		panic(fmt.Sprintf("DataBlob seeing unsupported enconding type: %v", d.Encoding))
+	}
+}
+
 // NewDataBlobFromThrift convert data blob from thrift representation
 func NewDataBlobFromThrift(blob *workflow.DataBlob) *DataBlob {
 	switch blob.GetEncodingType() {

@@ -360,8 +360,8 @@ pollLoop:
 		if err != nil {
 			switch err.(type) {
 			case *workflow.EntityNotExistsError, *h.EventAlreadyStartedError:
-				e.logger.Debug(fmt.Sprintf("Duplicated decision task taskList=%v, taskID=%v",
-					taskListName, task.event.TaskID))
+				e.logger.Debug("Duplicated decision task",
+					tag.Name(taskListName), tag.TaskID(task.event.TaskID))
 				task.finish(nil)
 			default:
 				task.finish(err)
@@ -383,7 +383,7 @@ func (e *matchingEngineImpl) PollForActivityTask(ctx context.Context, req *m.Pol
 	pollerID := req.GetPollerID()
 	request := req.PollRequest
 	taskListName := request.TaskList.GetName()
-	e.logger.Debug(fmt.Sprintf("Received PollForActivityTask for taskList=%v", taskListName))
+	e.logger.Debug("Received PollForActivityTask for taskList", tag.Name(taskListName))
 pollLoop:
 	for {
 		err := common.IsValidContext(ctx)
@@ -425,8 +425,7 @@ pollLoop:
 		if err != nil {
 			switch err.(type) {
 			case *workflow.EntityNotExistsError, *h.EventAlreadyStartedError:
-				e.logger.Debug(fmt.Sprintf("Duplicated activity task taskList=%v, taskID=%v",
-					taskListName, task.event.TaskID))
+				e.logger.Debug("Duplicated activity task", tag.Name(taskListName), tag.TaskID(task.event.TaskID))
 				task.finish(nil)
 			default:
 				task.finish(err)

@@ -137,8 +137,8 @@ type Service struct {
 	config *Config
 	params *service.BootstrapParams
 
-	adminHandlerGRPC *AdminHandlerGRPC
-	server           *grpc.Server
+	adminHandler *AdminHandler
+	server       *grpc.Server
 }
 
 // NewService builds a new cadence-frontend service
@@ -240,15 +240,14 @@ func (s *Service) Start() {
 	workflowservice.RegisterWorkflowServiceServer(s.server, workflowNilCheckHandler)
 	healthservice.RegisterMetaServer(s.server, accessControlledWorkflowHandler)
 
-	adminHandler := NewAdminHandler(s, s.params, s.config)
-	s.adminHandlerGRPC = NewAdminHandlerGRPC(adminHandler)
-	adminNilCheckHandler := NewAdminNilCheckHandler(s.adminHandlerGRPC)
+	s.adminHandler = NewAdminHandler(s, s.params, s.config)
+	adminNilCheckHandler := NewAdminNilCheckHandler(s.adminHandler)
 
 	adminservice.RegisterAdminServiceServer(s.server, adminNilCheckHandler)
 
 	// must start resource first
 	s.Resource.Start()
-	s.adminHandlerGRPC.Start()
+	s.adminHandler.Start()
 
 	listener := s.GetGRPCListener()
 	logger.Info("Starting to serve on frontend listener")
@@ -267,7 +266,7 @@ func (s *Service) Stop() {
 
 	s.server.GracefulStop()
 
-	s.adminHandlerGRPC.Stop()
+	s.adminHandler.Stop()
 	s.Resource.Stop()
 
 	s.params.Logger.Info("frontend stopped")

@@ -21,7 +21,6 @@
 package history
 
 import (
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -899,7 +898,7 @@ func (s *shardContextImpl) renewRangeLocked(isStealing bool) error {
 
 func (s *shardContextImpl) updateMaxReadLevelLocked(rl int64) {
 	if rl > s.transferMaxReadLevel {
-		s.logger.Debug(fmt.Sprintf("Updating MaxReadLevel: %v", rl))
+		s.logger.Debug("Updating MaxReadLevel", tag.MaxLevel(rl))
 		s.transferMaxReadLevel = rl
 	}
 }
@@ -1025,7 +1024,7 @@ func (s *shardContextImpl) allocateTransferIDsLocked(
 		if err != nil {
 			return err
 		}
-		s.logger.Debug(fmt.Sprintf("Assigning task ID: %v", id))
+		s.logger.Debug("Assigning task ID", tag.TaskID(id))
 		task.SetTaskID(id)
 		*transferMaxReadLevel = id
 	}
@@ -1070,8 +1069,8 @@ func (s *shardContextImpl) allocateTimerIDsLocked(
 		}
 		task.SetTaskID(seqNum)
 		visibilityTs := task.GetVisibilityTimestamp()
-		s.logger.Debug(fmt.Sprintf("Assigning new timer (timestamp: %v, seq: %v)) ackLeveL: %v",
-			visibilityTs, task.GetTaskID(), s.shardInfo.TimerAckLevel))
+		s.logger.Debug("Assigning new timer",
+			tag.Timestamp(visibilityTs), tag.TaskID(task.GetTaskID()), tag.AckLevel(s.shardInfo.TimerAckLevel))
 	}
 	return nil
 }

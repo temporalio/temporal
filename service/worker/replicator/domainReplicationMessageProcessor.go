@@ -21,7 +21,6 @@
 package replicator
 
 import (
-	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -128,12 +127,12 @@ func (p *domainReplicationMessageProcessor) getAndHandleDomainReplicationTasks()
 	// processing will be protected by version check.
 	info, err := p.serviceResolver.Lookup(p.sourceCluster)
 	if err != nil {
-		p.logger.Info("Failed to lookup host info. Skip current run.")
+		p.logger.Info("Failed to lookup host info. Skip current run")
 		return
 	}
 
 	if info.Identity() != p.hostInfo.Identity() {
-		p.logger.Info(fmt.Sprintf("Worker not responsible for source cluster %v.", p.sourceCluster))
+		p.logger.Info("Worker not responsible for source cluster", tag.ClusterName(p.sourceCluster))
 		return
 	}
 
@@ -150,7 +149,7 @@ func (p *domainReplicationMessageProcessor) getAndHandleDomainReplicationTasks()
 		return
 	}
 
-	p.logger.Debug("Successfully fetched domain replication tasks.", tag.Counter(len(response.Messages.ReplicationTasks)))
+	p.logger.Debug("Successfully fetched domain replication tasks", tag.Counter(len(response.Messages.ReplicationTasks)))
 
 	for taskIndex := range response.Messages.ReplicationTasks {
 		task := response.Messages.ReplicationTasks[taskIndex]

@@ -52,11 +52,6 @@ import (
 	"github.com/temporalio/temporal/common/resource"
 )
 
-const (
-	getDomainReplicationMessageBatchSize = 100
-	defaultLastMessageID                 = -1
-)
-
 var _ workflowserviceserver.Interface = (*WorkflowHandler)(nil)
 
 type (
@@ -3289,22 +3284,6 @@ func (wh *WorkflowHandler) GetClusterInfo(
 			JavaSdk: common.StringPtr(client.SupportedJavaSDKVersion),
 		},
 	}, nil
-}
-
-func checkPermission(
-	config *Config,
-	securityToken *string,
-) error {
-	if config.EnableAdminProtection() {
-		if securityToken == nil || *securityToken == "" {
-			return errNoPermission
-		}
-		requiredToken := config.AdminOperationToken()
-		if *securityToken != requiredToken {
-			return errNoPermission
-		}
-	}
-	return nil
 }
 
 type domainWrapper struct {

@@ -22,7 +22,9 @@ package host
 
 import (
 	"fmt"
+	"strings"
 
+	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/membership"
 )
 
@@ -36,7 +38,17 @@ func newSimpleMonitor(serviceName string, hosts map[string][]string) membership.
 	resolvers := make(map[string]membership.ServiceResolver, len(hosts))
 	for service, hostList := range hosts {
 		resolvers[service] = newSimpleResolver(service, hostList)
+
+		// TODO: temporary hack for integration tests
+		if service == common.HistoryServiceName {
+			var grpcHostList []string
+			for _, host := range hostList {
+				grpcHostList = append(grpcHostList, strings.Replace(host, "201", "231", 1))
+			}
+			resolvers[common.HistoryServiceName+"GRPC"] = newSimpleResolver(service, grpcHostList)
+		}
 	}
+
 	hostInfo := membership.NewHostInfo(hosts[serviceName][0], map[string]string{membership.RoleKey: serviceName})
 	return &simpleMonitor{hostInfo, resolvers}
 }

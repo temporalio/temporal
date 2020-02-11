@@ -21,7 +21,6 @@
 package history
 
 import (
-	"fmt"
 	"math"
 	"sort"
 	"sync"
@@ -210,8 +209,8 @@ func (t *timerQueueAckMgrImpl) readTimerTasks() ([]*persistence.TimerTaskInfo, *
 			return nil, nil, false, err
 		}
 		morePage = len(pageToken) != 0
-		t.logger.Debug(fmt.Sprintf("readTimerTasks: minQueryLevel: (%s)), maxQueryLevel: (%s), count: %v, more timer: %v",
-			minQueryLevel, maxQueryLevel, len(tasks), morePage))
+		t.logger.Debug("readTimerTasks",
+			tag.QueryLevel(minQueryLevel), tag.QueryLevel(maxQueryLevel), tag.Counter(len(tasks)), tag.Bool(morePage))
 	}
 
 	t.Lock()
@@ -233,8 +232,8 @@ TaskFilterLoop:
 		_, isLoaded := t.outstandingTasks[timerKey]
 		if isLoaded {
 			// timer already loaded
-			t.logger.Debug(fmt.Sprintf("Skipping timer task: %v. WorkflowID: %v, RunID: %v, Type: %v",
-				timerKey, task.WorkflowID, task.RunID, task.TaskType))
+			t.logger.Debug("Skipping timer task",
+				tag.Task(timerKey), tag.WorkflowID(task.WorkflowID), tag.WorkflowRunID(task.RunID), tag.TaskType(task.TaskType))
 			continue TaskFilterLoop
 		}
 
@@ -244,7 +243,7 @@ TaskFilterLoop:
 			break TaskFilterLoop
 		}
 
-		t.logger.Debug(fmt.Sprintf("Moving timer read level: %v", timerKey))
+		t.logger.Debug("Moving timer read level", tag.Task(timerKey))
 		t.readLevel = timerKey
 
 		t.outstandingTasks[timerKey] = false
@@ -257,7 +256,7 @@ TaskFilterLoop:
 		} else {
 			t.minQueryLevel = t.maxQueryLevel
 		}
-		t.logger.Debug(fmt.Sprintf("Moved timer minQueryLevel: (%s)", t.minQueryLevel))
+		t.logger.Debug("Moved timer minQueryLevel", tag.QueryLevel(t.minQueryLevel))
 		t.pageToken = nil
 	}
 	t.Unlock()
@@ -324,7 +323,7 @@ func (t *timerQueueAckMgrImpl) updateAckLevel() {
 	ackLevel := t.ackLevel
 	outstandingTasks := t.outstandingTasks
 
-	t.logger.Debug(fmt.Sprintf("Moving timer ack level from %v, with %v.", ackLevel, outstandingTasks))
+	t.logger.Debug("Moving timer ack level", tag.AckLevel(ackLevel), tag.Tasks(outstandingTasks))
 
 	// Timer Sequence IDs can have holes in the middle. So we sort the map to get the order to
 	// check. TODO: we can maintain a sorted slice as well.
@@ -351,7 +350,7 @@ MoveAckLevelLoop:
 		if acked {
 			ackLevel = current
 			delete(outstandingTasks, current)
-			t.logger.Debug(fmt.Sprintf("Moving timer ack level to %v.", ackLevel))
+			t.logger.Debug("Moving timer ack level", tag.AckLevel(ackLevel))
 		} else {
 			break MoveAckLevelLoop
 		}
@@ -362,7 +361,7 @@ MoveAckLevelLoop:
 		t.Unlock()
 		// this means in failover mode, all possible failover timer tasks
 		// are processed and we are free to shutdown
-		t.logger.Debug(fmt.Sprintf("Timer ack manager shutdown."))
+		t.logger.Debug("Timer ack manager shutdown")
 		t.finishedChan <- struct{}{}
 		err := t.timerQueueShutdown()
 		if err != nil {

@@ -141,7 +141,8 @@ func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (
 }
 
 func (cf *rpcClientFactory) NewHistoryClientWithTimeoutGRPC(timeout time.Duration) (history.ClientGRPC, error) {
-	resolver, err := cf.monitor.GetResolver(common.HistoryServiceName)
+	// TODO: temporary hack for integration tests
+	resolver, err := cf.monitor.GetResolver(common.HistoryServiceName + "GRPC")
 	if err != nil {
 		return nil, err
 	}
