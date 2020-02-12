@@ -42,7 +42,7 @@ var _ ShardContext = (*shardContextTest)(nil)
 
 func newTestShardContext(
 	ctrl *gomock.Controller,
-	shardInfo *persistence.ShardInfo,
+	shardInfo *persistence.ShardInfoWithFailover,
 	config *Config,
 ) *shardContextTest {
 	resource := resource.NewTest(ctrl, metrics.History)

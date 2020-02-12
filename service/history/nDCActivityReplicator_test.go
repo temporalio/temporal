@@ -97,7 +97,7 @@ func (s *activityReplicatorSuite) SetupTest() {
 
 	s.mockShard = newTestShardContext(
 		s.controller,
-		&persistence.ShardInfo{
+		&persistence.ShardInfoWithFailover{
 			ShardInfo: persistenceblobs.ShardInfo{
 				ShardID:          0,
 				RangeID:          1,

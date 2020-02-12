@@ -99,7 +99,7 @@ func (s *engine2Suite) SetupTest() {
 
 	s.mockShard = newTestShardContext(
 		s.controller,
-		&p.ShardInfo{
+		&p.ShardInfoWithFailover{
 			ShardInfo: persistenceblobs.ShardInfo{
 				ShardID:          0,
 				RangeID:          1,

@@ -119,7 +119,7 @@ func (s *transferQueueStandbyProcessorSuite) SetupTest() {
 
 	s.mockShard = newTestShardContext(
 		s.controller,
-		&persistence.ShardInfo{
+		&persistence.ShardInfoWithFailover{
 			ShardInfo: persistenceblobs.ShardInfo{
 				RangeID:          1,
 				TransferAckLevel: 0,

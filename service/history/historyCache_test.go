@@ -68,7 +68,7 @@ func (s *historyCacheSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockShard = newTestShardContext(
 		s.controller,
-		&persistence.ShardInfo{
+		&persistence.ShardInfoWithFailover{
 			ShardInfo: persistenceblobs.ShardInfo{
 				ShardID:          0,
 				RangeID:          1,

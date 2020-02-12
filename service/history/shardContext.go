@@ -124,7 +124,7 @@ type (
 
 		sync.RWMutex
 		lastUpdated               time.Time
-		shardInfo                 *persistence.ShardInfo
+		shardInfo                 *persistence.ShardInfoWithFailover
 		transferSequenceNumber    int64
 		maxTransferSequenceNumber int64
 		transferMaxReadLevel      int64
@@ -1127,7 +1127,7 @@ func (s *shardContextImpl) GetLastUpdatedTime() time.Time {
 func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContext,
 	error) {
 
-	var shardInfo *persistence.ShardInfo
+	var shardInfo *persistence.ShardInfoWithFailover
 
 	retryPolicy := backoff.NewExponentialRetryPolicy(50 * time.Millisecond)
 	retryPolicy.SetMaximumInterval(time.Second)
@@ -1147,7 +1147,7 @@ func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContex
 			ShardID: int32(shardItem.shardID),
 		})
 		if err == nil {
-			shardInfo = &persistence.ShardInfo{ShardInfo: *resp.ShardInfo}
+			shardInfo = &persistence.ShardInfoWithFailover{ShardInfo: *resp.ShardInfo}
 			return nil
 		}
 		if _, ok := err.(*shared.EntityNotExistsError); !ok {
@@ -1155,7 +1155,7 @@ func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContex
 		}
 
 		// EntityNotExistsError error
-		shardInfo = &persistence.ShardInfo{
+		shardInfo = &persistence.ShardInfoWithFailover{
 			ShardInfo: persistenceblobs.ShardInfo{
 				ShardID:          int32(shardItem.shardID),
 				RangeID:          0,
@@ -1225,7 +1225,7 @@ func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContex
 	return context, nil
 }
 
-func copyShardInfo(shardInfo *persistence.ShardInfo) *persistence.ShardInfo {
+func copyShardInfo(shardInfo *persistence.ShardInfoWithFailover) *persistence.ShardInfoWithFailover {
 	transferFailoverLevels := map[string]persistence.TransferFailoverLevel{}
 	for k, v := range shardInfo.TransferFailoverLevels {
 		transferFailoverLevels[k] = v
@@ -1246,7 +1246,7 @@ func copyShardInfo(shardInfo *persistence.ShardInfo) *persistence.ShardInfo {
 	for k, v := range shardInfo.ClusterReplicationLevel {
 		clusterReplicationLevel[k] = v
 	}
-	shardInfoCopy := &persistence.ShardInfo{
+	shardInfoCopy := &persistence.ShardInfoWithFailover{
 		ShardInfo: persistenceblobs.ShardInfo{
 			ShardID:                   shardInfo.ShardID,
 			Owner:                     shardInfo.Owner,

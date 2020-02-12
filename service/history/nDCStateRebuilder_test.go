@@ -79,7 +79,7 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 
 	s.mockShard = newTestShardContext(
 		s.controller,
-		&persistence.ShardInfo{
+		&persistence.ShardInfoWithFailover{
 			ShardInfo: persistenceblobs.ShardInfo{
 				ShardID:          10,
 				RangeID:          1,

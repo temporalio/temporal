@@ -102,7 +102,7 @@ func (s *resetorSuite) SetupTest() {
 
 	s.mockShard = newTestShardContext(
 		s.controller,
-		&p.ShardInfo{
+		&p.ShardInfoWithFailover{
 			ShardInfo: persistenceblobs.ShardInfo{
 				ShardID:          int32(shardID),
 				RangeID:          1,

@@ -100,7 +100,7 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 	s.mockShard = &shardContextImpl{
 		shardID:                   0,
 		Resource:                  s.mockResource,
-		shardInfo:                 &persistence.ShardInfo{ShardInfo: persistenceblobs.ShardInfo{RangeID: 1, TransferAckLevel: 0}},
+		shardInfo:                 &persistence.ShardInfoWithFailover{ShardInfo: persistenceblobs.ShardInfo{RangeID: 1, TransferAckLevel: 0}},
 		transferSequenceNumber:    1,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   make(chan int, 100),

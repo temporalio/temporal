@@ -235,8 +235,8 @@ type (
 		Msg string
 	}
 
-	// ShardInfo describes a shard
-	ShardInfo struct {
+	// ShardInfoWithFailover describes a shard
+	ShardInfoWithFailover struct {
 		pblobs.ShardInfo
 		TransferFailoverLevels map[string]TransferFailoverLevel // uuid -> TransferFailoverLevel
 		TimerFailoverLevels    map[string]TimerFailoverLevel    // uuid -> TimerFailoverLevel

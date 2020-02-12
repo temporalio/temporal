@@ -95,7 +95,7 @@ func (s *queueAckMgrSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockShard = newTestShardContext(
 		s.controller,
-		&p.ShardInfo{
+		&p.ShardInfoWithFailover{
 			ShardInfo: persistenceblobs.ShardInfo{
 				ShardID: 0,
 				RangeID: 1,
@@ -284,7 +284,7 @@ func (s *queueFailoverAckMgrSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockShard = newTestShardContext(
 		s.controller,
-		&p.ShardInfo{
+		&p.ShardInfoWithFailover{
 			ShardInfo: persistenceblobs.ShardInfo{
 				ShardID: 0,
 				RangeID: 1,

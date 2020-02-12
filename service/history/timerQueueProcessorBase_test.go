@@ -96,7 +96,7 @@ func (s *timerQueueProcessorBaseSuite) SetupTest() {
 
 	s.mockShard = newTestShardContext(
 		s.controller,
-		&persistence.ShardInfo{
+		&persistence.ShardInfoWithFailover{
 			ShardInfo: persistenceblobs.ShardInfo{
 				ShardID:          int32(shardID),
 				RangeID:          1,
