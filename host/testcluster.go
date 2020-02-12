@@ -201,7 +201,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 func setupShards(testBase persistencetests.TestBase, numHistoryShards int, logger log.Logger) {
 	// shard 0 is always created, we create additional shards if needed
 	for shardID := 1; shardID < numHistoryShards; shardID++ {
-		err := testBase.CreateShard(shardID, "", 0)
+		err := testBase.CreateShard(int32(shardID), "", 0)
 		if err != nil {
 			logger.Fatal("Failed to create shard", tag.Error(err))
 		}

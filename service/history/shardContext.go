@@ -25,6 +25,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/gogo/protobuf/types"
+
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
@@ -864,7 +868,7 @@ func (s *shardContextImpl) renewRangeLocked(isStealing bool) error {
 	}
 
 	err := s.GetShardManager().UpdateShard(&persistence.UpdateShardRequest{
-		ShardInfo:       updatedShardInfo,
+		ShardInfo:       &updatedShardInfo.ShardInfo,
 		PreviousRangeID: s.shardInfo.RangeID})
 	if err != nil {
 		// Shard is stolen, trigger history engine shutdown
@@ -889,7 +893,7 @@ func (s *shardContextImpl) renewRangeLocked(isStealing bool) error {
 	s.shardInfo = updatedShardInfo
 
 	s.logger.Info("Range updated for shardID",
-		tag.ShardID(s.shardInfo.ShardID),
+		tag.ShardID(int(s.shardInfo.ShardID)),
 		tag.ShardRangeID(s.shardInfo.RangeID),
 		tag.Number(s.transferSequenceNumber),
 		tag.NextNumber(s.maxTransferSequenceNumber))
@@ -913,7 +917,7 @@ func (s *shardContextImpl) updateShardInfoLocked() error {
 	s.emitShardInfoMetricsLogsLocked()
 
 	err = s.GetShardManager().UpdateShard(&persistence.UpdateShardRequest{
-		ShardInfo:       updatedShardInfo,
+		ShardInfo:       &updatedShardInfo.ShardInfo,
 		PreviousRangeID: s.shardInfo.RangeID,
 	})
 
@@ -1123,10 +1127,10 @@ func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContex
 
 	getShard := func() error {
 		resp, err := shardItem.GetShardManager().GetShard(&persistence.GetShardRequest{
-			ShardID: shardItem.shardID,
+			ShardID: int32(shardItem.shardID),
 		})
 		if err == nil {
-			shardInfo = resp.ShardInfo
+			shardInfo = &persistence.ShardInfo{ShardInfo: *resp.ShardInfo}
 			return nil
 		}
 		if _, ok := err.(*shared.EntityNotExistsError); !ok {
@@ -1135,11 +1139,13 @@ func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContex
 
 		// EntityNotExistsError error
 		shardInfo = &persistence.ShardInfo{
-			ShardID:          shardItem.shardID,
-			RangeID:          0,
-			TransferAckLevel: 0,
+			ShardInfo: persistenceblobs.ShardInfo{
+				ShardID:          int32(shardItem.shardID),
+				RangeID:          0,
+				TransferAckLevel: 0,
+			},
 		}
-		return shardItem.GetShardManager().CreateShard(&persistence.CreateShardRequest{ShardInfo: shardInfo})
+		return shardItem.GetShardManager().CreateShard(&persistence.CreateShardRequest{ShardInfo: &shardInfo.ShardInfo})
 	}
 
 	err := backoff.Retry(getShard, retryPolicy, retryPredicate)
@@ -1215,7 +1221,7 @@ func copyShardInfo(shardInfo *persistence.ShardInfo) *persistence.ShardInfo {
 	for k, v := range shardInfo.ClusterTransferAckLevel {
 		clusterTransferAckLevel[k] = v
 	}
-	clusterTimerAckLevel := make(map[string]time.Time)
+	clusterTimerAckLevel := make(map[string]*types.Timestamp)
 	for k, v := range shardInfo.ClusterTimerAckLevel {
 		clusterTimerAckLevel[k] = v
 	}
@@ -1224,20 +1230,22 @@ func copyShardInfo(shardInfo *persistence.ShardInfo) *persistence.ShardInfo {
 		clusterReplicationLevel[k] = v
 	}
 	shardInfoCopy := &persistence.ShardInfo{
-		ShardID:                   shardInfo.ShardID,
-		Owner:                     shardInfo.Owner,
-		RangeID:                   shardInfo.RangeID,
-		StolenSinceRenew:          shardInfo.StolenSinceRenew,
-		ReplicationAckLevel:       shardInfo.ReplicationAckLevel,
-		TransferAckLevel:          shardInfo.TransferAckLevel,
-		TimerAckLevel:             shardInfo.TimerAckLevel,
-		TransferFailoverLevels:    transferFailoverLevels,
-		TimerFailoverLevels:       timerFailoverLevels,
-		ClusterTransferAckLevel:   clusterTransferAckLevel,
-		ClusterTimerAckLevel:      clusterTimerAckLevel,
-		DomainNotificationVersion: shardInfo.DomainNotificationVersion,
-		ClusterReplicationLevel:   clusterReplicationLevel,
-		UpdatedAt:                 shardInfo.UpdatedAt,
+		ShardInfo: persistenceblobs.ShardInfo{
+			ShardID:                   shardInfo.ShardID,
+			Owner:                     shardInfo.Owner,
+			RangeID:                   shardInfo.RangeID,
+			StolenSinceRenew:          shardInfo.StolenSinceRenew,
+			ReplicationAckLevel:       shardInfo.ReplicationAckLevel,
+			TransferAckLevel:          shardInfo.TransferAckLevel,
+			TimerAckLevel:             shardInfo.TimerAckLevel,
+			ClusterTransferAckLevel:   clusterTransferAckLevel,
+			ClusterTimerAckLevel:      clusterTimerAckLevel,
+			DomainNotificationVersion: shardInfo.DomainNotificationVersion,
+			ClusterReplicationLevel:   clusterReplicationLevel,
+			UpdatedAt:                 shardInfo.UpdatedAt,
+		},
+		TransferFailoverLevels: transferFailoverLevels,
+		TimerFailoverLevels:    timerFailoverLevels,
 	}
 
 	return shardInfoCopy

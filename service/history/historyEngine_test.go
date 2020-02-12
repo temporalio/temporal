@@ -28,6 +28,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
@@ -195,9 +197,10 @@ func (s *engineSuite) SetupTest() {
 	s.mockShard = newTestShardContext(
 		s.controller,
 		&persistence.ShardInfo{
-			RangeID:          1,
-			TransferAckLevel: 0,
-		},
+			ShardInfo: persistenceblobs.ShardInfo{
+				RangeID:          1,
+				TransferAckLevel: 0,
+			}},
 		s.config,
 	)
 	s.eventsCache = newEventsCache(s.mockShard)

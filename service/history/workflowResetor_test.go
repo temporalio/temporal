@@ -27,6 +27,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -101,10 +103,11 @@ func (s *resetorSuite) SetupTest() {
 	s.mockShard = newTestShardContext(
 		s.controller,
 		&p.ShardInfo{
-			ShardID:          shardID,
-			RangeID:          1,
-			TransferAckLevel: 0,
-		},
+			ShardInfo: persistenceblobs.ShardInfo{
+				ShardID:          int32(shardID),
+				RangeID:          1,
+				TransferAckLevel: 0,
+			}},
 		s.config,
 	)
 
