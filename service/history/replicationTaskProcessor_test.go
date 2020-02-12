@@ -34,9 +34,9 @@ import (
 	"go.temporal.io/temporal-proto/enums"
 
 	"github.com/temporalio/temporal/.gen/go/history"
-	"github.com/temporalio/temporal/.gen/go/history/historyservicetest"
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
+	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -58,7 +58,7 @@ type (
 		mockShard              ShardContext
 		mockEngine             *MockEngine
 		config                 *Config
-		historyClient          *historyservicetest.MockClient
+		historyClient          *historyservicemock.MockHistoryServiceClient
 		replicationTaskFetcher *MockReplicationTaskFetcher
 		mockDomainCache        *cache.MockDomainCache
 		mockClientBean         *client.MockBean
@@ -109,7 +109,7 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 	}
 	s.mockEngine = NewMockEngine(s.controller)
 	s.config = NewDynamicConfigForTest()
-	s.historyClient = historyservicetest.NewMockClient(s.controller)
+	s.historyClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.requestChan = make(chan *request, 10)
 

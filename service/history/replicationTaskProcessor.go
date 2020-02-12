@@ -35,6 +35,7 @@ import (
 
 	h "github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	hc "github.com/temporalio/temporal/client/history"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
@@ -104,7 +105,7 @@ func NewReplicationTaskProcessor(
 	shard ShardContext,
 	historyEngine Engine,
 	config *Config,
-	historyClient hc.Client,
+	historyClient hc.ClientGRPC,
 	metricsClient metrics.Client,
 	replicationTaskFetcher ReplicationTaskFetcher,
 ) *ReplicationTaskProcessorImpl {
@@ -123,8 +124,9 @@ func NewReplicationTaskProcessor(
 	nDCHistoryResender := xdc.NewNDCHistoryResender(
 		shard.GetDomainCache(),
 		shard.GetService().GetClientBean().GetRemoteAdminClient(replicationTaskFetcher.GetSourceCluster()),
-		func(ctx context.Context, request *h.ReplicateEventsV2Request) error {
-			return historyClient.ReplicateEventsV2(ctx, request)
+		func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
+			_, err := historyClient.ReplicateEventsV2(ctx, request)
+			return err
 		},
 		shard.GetService().GetPayloadSerializer(),
 		shard.GetLogger(),
@@ -133,8 +135,9 @@ func NewReplicationTaskProcessor(
 		replicationTaskFetcher.GetSourceCluster(),
 		shard.GetDomainCache(),
 		shard.GetService().GetClientBean().GetRemoteAdminClient(replicationTaskFetcher.GetSourceCluster()),
-		func(ctx context.Context, request *h.ReplicateRawEventsRequest) error {
-			return historyClient.ReplicateRawEvents(ctx, request)
+		func(ctx context.Context, request *historyservice.ReplicateRawEventsRequest) error {
+			_, err := historyClient.ReplicateRawEvents(ctx, request)
+			return err
 		},
 		shard.GetService().GetPayloadSerializer(),
 		replicationTimeout,

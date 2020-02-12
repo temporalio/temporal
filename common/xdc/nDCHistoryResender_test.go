@@ -31,14 +31,14 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/errordetails"
 
-	"github.com/temporalio/temporal/.gen/go/history"
-	"github.com/temporalio/temporal/.gen/go/history/historyservicetest"
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
+	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
@@ -55,7 +55,7 @@ type (
 		controller        *gomock.Controller
 		mockDomainCache   *cache.MockDomainCache
 		mockAdminClient   *adminservicemock.MockAdminServiceClient
-		mockHistoryClient *historyservicetest.MockClient
+		mockHistoryClient *historyservicemock.MockHistoryServiceClient
 
 		domainID   string
 		domainName string
@@ -86,7 +86,7 @@ func (s *nDCHistoryResenderSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockAdminClient = adminservicemock.NewMockAdminServiceClient(s.controller)
-	s.mockHistoryClient = historyservicetest.NewMockClient(s.controller)
+	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
 	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
 
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
@@ -115,8 +115,9 @@ func (s *nDCHistoryResenderSuite) SetupTest() {
 	s.rereplicator = NewNDCHistoryResender(
 		s.mockDomainCache,
 		s.mockAdminClient,
-		func(ctx context.Context, request *history.ReplicateEventsV2Request) error {
-			return s.mockHistoryClient.ReplicateEventsV2(ctx, request)
+		func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
+			_, err := s.mockHistoryClient.ReplicateEventsV2(ctx, request)
+			return err
 		},
 		persistence.NewPayloadSerializer(),
 		s.logger,
@@ -202,15 +203,15 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 
 	s.mockHistoryClient.EXPECT().ReplicateEventsV2(
 		gomock.Any(),
-		&history.ReplicateEventsV2Request{
-			DomainUUID: common.StringPtr(s.domainID),
-			WorkflowExecution: &shared.WorkflowExecution{
-				WorkflowId: common.StringPtr(workflowID),
-				RunId:      common.StringPtr(runID),
+		&historyservice.ReplicateEventsV2Request{
+			DomainUUID: s.domainID,
+			WorkflowExecution: &commonproto.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      runID,
 			},
-			VersionHistoryItems: adapter.ToThriftVersionHistoryItems(versionHistoryItems),
-			Events:              adapter.ToThriftDataBlob(blob),
-		}).Return(nil).Times(2)
+			VersionHistoryItems: versionHistoryItems,
+			Events:              blob,
+		}).Return(nil, nil).Times(2)
 
 	err := s.rereplicator.SendSingleWorkflowHistory(
 		s.domainID,
@@ -239,14 +240,14 @@ func (s *nDCHistoryResenderSuite) TestCreateReplicateRawEventsRequest() {
 		},
 	}
 
-	s.Equal(&history.ReplicateEventsV2Request{
-		DomainUUID: common.StringPtr(s.domainID),
-		WorkflowExecution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
+	s.Equal(&historyservice.ReplicateEventsV2Request{
+		DomainUUID: s.domainID,
+		WorkflowExecution: &commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
 		},
-		VersionHistoryItems: adapter.ToThriftVersionHistoryItems(versionHistoryItems),
-		Events:              adapter.ToThriftDataBlob(blob),
+		VersionHistoryItems: versionHistoryItems,
+		Events:              blob,
 	}, s.rereplicator.createReplicationRawRequest(
 		s.domainID,
 		workflowID,
@@ -258,24 +259,24 @@ func (s *nDCHistoryResenderSuite) TestCreateReplicateRawEventsRequest() {
 func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
-	item := &shared.VersionHistoryItem{
-		EventID: common.Int64Ptr(1),
-		Version: common.Int64Ptr(1),
+	item := &commonproto.VersionHistoryItem{
+		EventID: 1,
+		Version: 1,
 	}
-	request := &history.ReplicateEventsV2Request{
-		DomainUUID: common.StringPtr(s.domainID),
-		WorkflowExecution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
+	request := &historyservice.ReplicateEventsV2Request{
+		DomainUUID: s.domainID,
+		WorkflowExecution: &commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
 		},
-		Events: &shared.DataBlob{
-			EncodingType: shared.EncodingTypeThriftRW.Ptr(),
+		Events: &commonproto.DataBlob{
+			EncodingType: enums.EncodingTypeThriftRW,
 			Data:         []byte("some random history blob"),
 		},
-		VersionHistoryItems: []*shared.VersionHistoryItem{item},
+		VersionHistoryItems: []*commonproto.VersionHistoryItem{item},
 	}
 
-	s.mockHistoryClient.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(nil).Times(1)
+	s.mockHistoryClient.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(nil, nil).Times(1)
 	err := s.rereplicator.sendReplicationRawRequest(request)
 	s.Nil(err)
 }
@@ -283,29 +284,34 @@ func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest() {
 func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest_Err() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
-	item := &shared.VersionHistoryItem{
-		EventID: common.Int64Ptr(1),
-		Version: common.Int64Ptr(1),
+	item := &commonproto.VersionHistoryItem{
+		EventID: 1,
+		Version: 1,
 	}
-	request := &history.ReplicateEventsV2Request{
-		DomainUUID: common.StringPtr(s.domainID),
-		WorkflowExecution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
+	request := &historyservice.ReplicateEventsV2Request{
+		DomainUUID: s.domainID,
+		WorkflowExecution: &commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
 		},
-		Events: &shared.DataBlob{
-			EncodingType: shared.EncodingTypeThriftRW.Ptr(),
+		Events: &commonproto.DataBlob{
+			EncodingType: enums.EncodingTypeThriftRW,
 			Data:         []byte("some random history blob"),
 		},
-		VersionHistoryItems: []*shared.VersionHistoryItem{item},
+		VersionHistoryItems: []*commonproto.VersionHistoryItem{item},
 	}
-	retryErr := &shared.RetryTaskV2Error{
-		DomainId:   common.StringPtr(s.domainID),
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(runID),
-	}
+	retryErr := errordetails.NewRetryTaskV2Status(
+		"",
+		s.domainID,
+		workflowID,
+		runID,
+		common.EmptyEventID,
+		common.EmptyVersion,
+		common.EmptyEventID,
+		common.EmptyVersion,
+	).Err()
 
-	s.mockHistoryClient.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(retryErr).Times(1)
+	s.mockHistoryClient.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(nil, retryErr).Times(1)
 	err := s.rereplicator.sendReplicationRawRequest(request)
 	s.Equal(retryErr, err)
 }

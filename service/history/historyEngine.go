@@ -200,7 +200,7 @@ func NewEngineWithShardContext(
 	shard ShardContext,
 	visibilityMgr persistence.VisibilityManager,
 	matching matching.Client,
-	historyClient hc.Client,
+	historyClient hc.ClientGRPC,
 	publicClient workflowservice.WorkflowServiceClient,
 	historyEventNotifier historyEventNotifier,
 	publisher messaging.Producer,

@@ -28,12 +28,9 @@ import (
 
 	commonproto "go.temporal.io/temporal-proto/common"
 
-	"github.com/temporalio/temporal/.gen/go/history"
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/client/admin"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/collection"
 	"github.com/temporalio/temporal/common/log"
@@ -48,7 +45,7 @@ const (
 type (
 	// nDCHistoryReplicationFn provides the functionality to deliver replication raw history request to history
 	// the provided func should be thread safe
-	nDCHistoryReplicationFn func(ctx context.Context, request *history.ReplicateEventsV2Request) error
+	nDCHistoryReplicationFn func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error
 
 	// NDCHistoryResender is the interface for resending history events to remote
 	NDCHistoryResender interface {
@@ -195,22 +192,22 @@ func (n *NDCHistoryResenderImpl) createReplicationRawRequest(
 	runID string,
 	historyBlob *commonproto.DataBlob,
 	versionHistoryItems []*commonproto.VersionHistoryItem,
-) *history.ReplicateEventsV2Request {
+) *historyservice.ReplicateEventsV2Request {
 
-	request := &history.ReplicateEventsV2Request{
-		DomainUUID: common.StringPtr(domainID),
-		WorkflowExecution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
+	request := &historyservice.ReplicateEventsV2Request{
+		DomainUUID: domainID,
+		WorkflowExecution: &commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
 		},
-		Events:              adapter.ToThriftDataBlob(historyBlob),
-		VersionHistoryItems: adapter.ToThriftVersionHistoryItems(versionHistoryItems),
+		Events:              historyBlob,
+		VersionHistoryItems: versionHistoryItems,
 	}
 	return request
 }
 
 func (n *NDCHistoryResenderImpl) sendReplicationRawRequest(
-	request *history.ReplicateEventsV2Request,
+	request *historyservice.ReplicateEventsV2Request,
 ) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), resendContextTimeout)

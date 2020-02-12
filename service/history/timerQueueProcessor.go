@@ -29,9 +29,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	h "github.com/temporalio/temporal/.gen/go/history"
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/client/matching"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
@@ -96,8 +97,8 @@ func newTimerQueueProcessor(
 				currentClusterName,
 				shard.GetDomainCache(),
 				shard.GetService().GetClientBean().GetRemoteAdminClient(clusterName),
-				func(ctx context.Context, request *h.ReplicateRawEventsRequest) error {
-					return historyService.ReplicateRawEvents(ctx, request)
+				func(ctx context.Context, request *historyservice.ReplicateRawEventsRequest) error {
+					return historyService.ReplicateRawEvents(ctx, adapter.ToThriftReplicateRawEventsRequest(request))
 				},
 				shard.GetService().GetPayloadSerializer(),
 				historyRereplicationTimeout,
@@ -106,8 +107,8 @@ func newTimerQueueProcessor(
 			nDCHistoryResender := xdc.NewNDCHistoryResender(
 				shard.GetDomainCache(),
 				shard.GetService().GetClientBean().GetRemoteAdminClient(clusterName),
-				func(ctx context.Context, request *h.ReplicateEventsV2Request) error {
-					return historyService.ReplicateEventsV2(ctx, request)
+				func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
+					return historyService.ReplicateEventsV2(ctx, adapter.ToThriftReplicateEventsV2Request(request))
 				},
 				shard.GetService().GetPayloadSerializer(),
 				logger,

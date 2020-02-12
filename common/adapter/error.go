@@ -29,6 +29,7 @@ import (
 	"go.uber.org/yarpc/yarpcerrors"
 	"google.golang.org/grpc/codes"
 
+	"github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/shared"
 )
 
@@ -71,6 +72,12 @@ func ToProtoError(in error) error {
 		st = status.New(codes.ResourceExhausted, thriftError.Message)
 	case *shared.ClientVersionNotSupportedError:
 		st = errordetails.NewClientVersionNotSupportedStatus("Client version is not supported.", thriftError.FeatureVersion, thriftError.ClientImpl, thriftError.SupportedVersions)
+	case *history.ShardOwnershipLostError:
+		st = errordetails.NewShardOwnershipLostStatus(*thriftError.Message, *thriftError.Owner)
+	case *shared.RetryTaskError:
+		st = errordetails.NewRetryTaskStatus(thriftError.Message, *thriftError.DomainId, *thriftError.WorkflowId, *thriftError.RunId, *thriftError.NextEventId)
+	case *shared.RetryTaskV2Error:
+		st = errordetails.NewRetryTaskV2Status(thriftError.Message, *thriftError.DomainId, *thriftError.WorkflowId, *thriftError.RunId, *thriftError.StartEventId, *thriftError.StartEventVersion, *thriftError.EndEventId, *thriftError.EndEventVersion)
 	case *yarpcerrors.Status:
 		if thriftError.Code() == yarpcerrors.CodeDeadlineExceeded {
 			st = status.New(codes.DeadlineExceeded, thriftError.Message())
@@ -124,6 +131,37 @@ func ToThriftError(st *status.Status) error {
 				FeatureVersion:    f.FeatureVersion,
 				ClientImpl:        f.ClientImpl,
 				SupportedVersions: f.SupportedVersions,
+			}
+		}
+	case codes.Aborted:
+		if f, ok := errordetails.GetShardOwnershipLostFailure(st); ok {
+			message := st.Message()
+			return &history.ShardOwnershipLostError{
+				Message: &message,
+				Owner:   &f.Owner,
+			}
+		}
+		if f, ok := errordetails.GetRetryTaskFailure(st); ok {
+			message := st.Message()
+			return &shared.RetryTaskError{
+				Message:     message,
+				DomainId:    &f.DomainId,
+				WorkflowId:  &f.WorkflowId,
+				RunId:       &f.RunId,
+				NextEventId: &f.NextEventId,
+			}
+		}
+		if f, ok := errordetails.GetRetryTaskV2Failure(st); ok {
+			message := st.Message()
+			return &shared.RetryTaskV2Error{
+				Message:           message,
+				DomainId:          &f.DomainId,
+				WorkflowId:        &f.WorkflowId,
+				RunId:             &f.RunId,
+				StartEventId:      &f.StartEventId,
+				StartEventVersion: &f.StartEventVersion,
+				EndEventId:        &f.EndEventId,
+				EndEventVersion:   &f.EndEventVersion,
 			}
 		}
 	case codes.DeadlineExceeded:

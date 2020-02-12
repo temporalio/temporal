@@ -195,6 +195,16 @@ func IsPersistenceTransientError(err error) bool {
 	return false
 }
 
+// IsPersistenceTransientError checks if the error is a transient persistence error
+func IsPersistenceTransientErrorGRPC(err error) bool {
+	code := status.Code(err)
+	if code == codes.Internal || code == codes.ResourceExhausted {
+		return true
+	}
+
+	return false
+}
+
 // IsKafkaTransientError check if the error is a transient kafka error
 func IsKafkaTransientError(err error) bool {
 	return true

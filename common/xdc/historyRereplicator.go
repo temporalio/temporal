@@ -24,15 +24,16 @@ import (
 	"context"
 	"time"
 
+	"github.com/gogo/status"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/errordetails"
 
-	"github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/errors"
 	"github.com/temporalio/temporal/common/log"
@@ -57,7 +58,7 @@ const (
 
 type (
 	// historyReplicationFn provides the functionality to deliver replication raw history request to history
-	historyReplicationFn func(ctx context.Context, request *history.ReplicateRawEventsRequest) error
+	historyReplicationFn func(ctx context.Context, request *historyservice.ReplicateRawEventsRequest) error
 
 	// HistoryRereplicator is the interface for resending history events to remote
 	HistoryRereplicator interface {
@@ -196,7 +197,7 @@ func (c *historyRereplicationContext) sendSingleWorkflowHistory(domainID string,
 		return "", nil
 	}
 
-	var pendingRequest *history.ReplicateRawEventsRequest // pending replication request to history, initialized to nil
+	var pendingRequest *historyservice.ReplicateRawEventsRequest // pending replication request to history, initialized to nil
 
 	var replicationInfo map[string]*commonproto.ReplicationInfo
 
@@ -231,7 +232,7 @@ func (c *historyRereplicationContext) sendSingleWorkflowHistory(domainID string,
 	// after this for loop, there shall be one request not sent yet
 	// this request contains the last event, possible continue as new event
 	lastBatch := pendingRequest.History
-	nextRunID, err := c.getNextRunID(adapter.ToProtoDataBlob(lastBatch))
+	nextRunID, err := c.getNextRunID(lastBatch)
 	if err != nil {
 		return "", err
 	}
@@ -247,7 +248,7 @@ func (c *historyRereplicationContext) sendSingleWorkflowHistory(domainID string,
 
 		batch := response.HistoryBatches[0]
 
-		pendingRequest.NewRunHistory = adapter.ToThriftDataBlob(batch)
+		pendingRequest.NewRunHistory = batch
 	}
 
 	return nextRunID, c.sendReplicationRawRequest(pendingRequest)
@@ -281,23 +282,23 @@ func (c *historyRereplicationContext) createReplicationRawRequest(
 	domainID string, workflowID string, runID string,
 	historyBlob *commonproto.DataBlob,
 	replicationInfo map[string]*commonproto.ReplicationInfo,
-) *history.ReplicateRawEventsRequest {
+) *historyservice.ReplicateRawEventsRequest {
 
-	request := &history.ReplicateRawEventsRequest{
-		DomainUUID: common.StringPtr(domainID),
-		WorkflowExecution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
+	request := &historyservice.ReplicateRawEventsRequest{
+		DomainUUID: domainID,
+		WorkflowExecution: &commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
 		},
-		ReplicationInfo: adapter.ToThriftReplicationInfos(replicationInfo),
-		History:         adapter.ToThriftDataBlob(historyBlob),
+		ReplicationInfo: replicationInfo,
+		History:         historyBlob,
 		// NewRunHistory this will be handled separately
 	}
 
 	return request
 }
 
-func (c *historyRereplicationContext) sendReplicationRawRequest(request *history.ReplicateRawEventsRequest) error {
+func (c *historyRereplicationContext) sendReplicationRawRequest(request *historyservice.ReplicateRawEventsRequest) error {
 
 	if request == nil {
 		return nil
@@ -318,8 +319,19 @@ func (c *historyRereplicationContext) sendReplicationRawRequest(request *history
 	// sometimes there can be case when the first re-replication call
 	// trigger an history reset and this reset can leave a hole in target
 	// workflow, we should amend that hole and continue
-	retryErr, ok := err.(*shared.RetryTaskError)
-	if !ok {
+	var retryFailure *errordetails.RetryTaskFailure
+	if retryErr, ok := err.(*shared.RetryTaskError); ok {
+		retryFailure = &errordetails.RetryTaskFailure{
+			DomainId:    retryErr.GetDomainId(),
+			WorkflowId:  retryErr.GetWorkflowId(),
+			RunId:       retryErr.GetRunId(),
+			NextEventId: retryErr.GetNextEventId(),
+		}
+	} else {
+		retryFailure, _ = errordetails.GetRetryTaskFailure(status.Convert(err))
+	}
+
+	if retryFailure == nil {
 		logger.Error("error sending history", tag.Error(err))
 		return err
 	}
@@ -327,17 +339,17 @@ func (c *historyRereplicationContext) sendReplicationRawRequest(request *history
 		logger.Error("encounter RetryTaskError not in first call")
 		return err
 	}
-	if retryErr.GetRunId() != c.beginningRunID {
+	if retryFailure.GetRunId() != c.beginningRunID {
 		logger.Error("encounter RetryTaskError with non expected run ID")
 		return err
 	}
-	if retryErr.GetNextEventId() >= c.beginningFirstEventID {
+	if retryFailure.GetNextEventId() >= c.beginningFirstEventID {
 		logger.Error("encounter RetryTaskError with larger event ID")
 		return err
 	}
 
-	_, err = c.sendSingleWorkflowHistory(c.domainID, c.workflowID, retryErr.GetRunId(),
-		retryErr.GetNextEventId(), c.beginningFirstEventID)
+	_, err = c.sendSingleWorkflowHistory(c.domainID, c.workflowID, retryFailure.GetRunId(),
+		retryFailure.GetNextEventId(), c.beginningFirstEventID)
 	if err != nil {
 		logger.Error("error sending history", tag.Error(err))
 		return err
