@@ -25,9 +25,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"github.com/temporalio/temporal/common/primitives"
 	"math"
 	"time"
+
+	"github.com/temporalio/temporal/common/primitives"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 

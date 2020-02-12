@@ -22,8 +22,9 @@ package sqlplugin
 
 import (
 	"database/sql"
-	"github.com/temporalio/temporal/common/primitives"
 	"time"
+
+	"github.com/temporalio/temporal/common/primitives"
 
 	"github.com/temporalio/temporal/common/persistence"
 

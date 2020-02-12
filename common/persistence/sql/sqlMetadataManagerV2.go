@@ -23,6 +23,7 @@ package sql
 import (
 	"database/sql"
 	"fmt"
+
 	"github.com/temporalio/temporal/common/primitives"
 
 	workflow "github.com/temporalio/temporal/.gen/go/shared"

@@ -24,8 +24,9 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
-	"github.com/temporalio/temporal/common/primitives"
 	"time"
+
+	"github.com/temporalio/temporal/common/primitives"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 

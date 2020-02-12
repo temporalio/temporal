@@ -23,9 +23,10 @@ package sql
 import (
 	"database/sql"
 	"fmt"
-	"github.com/temporalio/temporal/common/primitives"
 	"math"
 	"time"
+
+	"github.com/temporalio/temporal/common/primitives"
 
 	"github.com/dgryski/go-farm"
 
