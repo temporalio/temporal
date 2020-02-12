@@ -28,6 +28,7 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/client"
 	"github.com/temporalio/temporal/common/persistence"
 )
 
@@ -200,17 +201,18 @@ func (c *clientImpl) ListTaskListPartitions(ctx context.Context, request *matchi
 }
 
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
-	if parent == nil {
-		return context.WithTimeout(context.Background(), c.timeout)
-	}
-	return context.WithTimeout(parent, c.timeout)
+	return c.createContextWithTimeout(parent, c.timeout)
 }
 
 func (c *clientImpl) createLongPollContext(parent context.Context) (context.Context, context.CancelFunc) {
+	return c.createContextWithTimeout(parent, c.longPollTimeout)
+}
+
+func (c *clientImpl) createContextWithTimeout(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
 	if parent == nil {
-		return context.WithTimeout(context.Background(), c.longPollTimeout)
+		return context.WithTimeout(context.Background(), timeout)
 	}
-	return context.WithTimeout(parent, c.longPollTimeout)
+	return context.WithTimeout(client.PropagateHeaders(parent), timeout)
 }
 
 func (c *clientImpl) getClientForTasklist(key string) (matchingservice.MatchingServiceClient, error) {
