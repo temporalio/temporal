@@ -423,7 +423,7 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		DomainID:            domainID,
 		WorkflowID:          "some random workflow ID",
 		RunID:               uuid.New(),
-		VisibilityTimestamp: time.Now().Add(-5 * time.Second),
+		VisibilityTimestamp: time.Now().UTC().Add(-5 * time.Second),
 		TaskID:              int64(59),
 		TaskType:            1,
 		TimeoutType:         2,
