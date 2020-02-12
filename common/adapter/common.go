@@ -1420,3 +1420,13 @@ func ToThriftWorkflowQueries(in map[string]*common.WorkflowQuery) map[string]*sh
 
 	return ret
 }
+
+// ToProtoTaskListMetadata ...
+func ToProtoTaskListMetadata(in *shared.TaskListMetadata) *common.TaskListMetadata {
+	if in == nil {
+		return nil
+	}
+	return &common.TaskListMetadata{
+		MaxTasksPerSecond: in.GetMaxTasksPerSecond(),
+	}
+}

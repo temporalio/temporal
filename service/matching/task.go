@@ -21,8 +21,11 @@
 package matching
 
 import (
+	commonproto "go.temporal.io/temporal-proto/common"
+
 	m "github.com/temporalio/temporal/.gen/go/matching"
 	s "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/persistence"
 )
 
@@ -109,18 +112,18 @@ func (task *internalTask) isForwarded() bool {
 	return task.forwardedFrom != ""
 }
 
-func (task *internalTask) workflowExecution() *s.WorkflowExecution {
+func (task *internalTask) workflowExecution() *commonproto.WorkflowExecution {
 	switch {
 	case task.event != nil:
-		return &s.WorkflowExecution{WorkflowId: &task.event.WorkflowID, RunId: &task.event.RunID}
+		return &commonproto.WorkflowExecution{WorkflowId: task.event.WorkflowID, RunId: task.event.RunID}
 	case task.query != nil:
-		return task.query.request.GetQueryRequest().GetExecution()
+		return adapter.ToProtoWorkflowExecution(task.query.request.GetQueryRequest().GetExecution())
 	case task.started != nil && task.started.decisionTaskInfo != nil:
-		return task.started.decisionTaskInfo.WorkflowExecution
+		return adapter.ToProtoWorkflowExecution(task.started.decisionTaskInfo.WorkflowExecution)
 	case task.started != nil && task.started.activityTaskInfo != nil:
-		return task.started.activityTaskInfo.WorkflowExecution
+		return adapter.ToProtoWorkflowExecution(task.started.activityTaskInfo.WorkflowExecution)
 	}
-	return &s.WorkflowExecution{}
+	return &commonproto.WorkflowExecution{}
 }
 
 // pollForDecisionResponse returns the poll response for a decision task that is

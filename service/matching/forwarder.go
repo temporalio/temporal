@@ -146,7 +146,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 	case persistence.TaskListTypeDecision:
 		_, err = fwdr.client.AddDecisionTask(ctx, &matchingservice.AddDecisionTaskRequest{
 			DomainUUID: task.event.DomainID,
-			Execution:  adapter.ToProtoWorkflowExecution(task.workflowExecution()),
+			Execution:  task.workflowExecution(),
 			TaskList: &commonproto.TaskList{
 				Name: name,
 				Kind: enums.TaskListKind(fwdr.taskListKind),
@@ -159,7 +159,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 		_, err = fwdr.client.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 			DomainUUID:       fwdr.taskListID.domainID,
 			SourceDomainUUID: task.event.DomainID,
-			Execution:        adapter.ToProtoWorkflowExecution(task.workflowExecution()),
+			Execution:        task.workflowExecution(),
 			TaskList: &commonproto.TaskList{
 				Name: name,
 				Kind: enums.TaskListKind(fwdr.taskListKind),
