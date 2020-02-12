@@ -33,10 +33,10 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 
-	h "github.com/temporalio/temporal/.gen/go/history"
-	"github.com/temporalio/temporal/.gen/go/history/historyservicetest"
 	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
+	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
@@ -58,7 +58,7 @@ type (
 		*require.Assertions
 
 		controller        *gomock.Controller
-		mockHistoryClient *historyservicetest.MockClient
+		mockHistoryClient *historyservicemock.MockHistoryServiceClient
 		mockDomainCache   *cache.MockDomainCache
 		mockNDCResender   *xdc.MockNDCHistoryResender
 
@@ -96,7 +96,7 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.controller = gomock.NewController(s.T())
-	s.mockHistoryClient = historyservicetest.NewMockClient(s.controller)
+	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
 	s.mockDomainCache = cache.NewMockDomainCache(s.controller)
 	s.mockNDCResender = xdc.NewMockNDCHistoryResender(s.controller)
 	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(
@@ -205,27 +205,27 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_Domain_FailedThen
 }
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_Success() {
-	replicationAttr := &replicator.SyncShardStatusTaskAttributes{
-		SourceCluster: common.StringPtr("some random source cluster"),
-		ShardId:       common.Int64Ptr(2333),
-		Timestamp:     common.Int64Ptr(time.Now().UnixNano()),
+	replicationAttr := &commonproto.SyncShardStatusTaskAttributes{
+		SourceCluster: "some random source cluster",
+		ShardId:       2333,
+		Timestamp:     time.Now().UnixNano(),
 	}
-	replicationTask := &replicator.ReplicationTask{
-		TaskType:                      replicator.ReplicationTaskTypeSyncShardStatus.Ptr(),
-		SyncShardStatusTaskAttributes: replicationAttr,
+	replicationTask := &commonproto.ReplicationTask{
+		TaskType:   enums.ReplicationTaskTypeSyncShardStatus,
+		Attributes: &commonproto.ReplicationTask_SyncShardStatusTaskAttributes{SyncShardStatusTaskAttributes: replicationAttr},
 	}
-	replicationTaskBinary, err := s.msgEncoder.Encode(replicationTask)
+	replicationTaskBinary, err := s.msgEncoder.Encode(adapter.ToThriftReplicationTask(replicationTask))
 	s.Nil(err)
 	s.mockMsg.On("Value").Return(replicationTaskBinary)
 	s.mockHistoryClient.EXPECT().SyncShardStatus(
 		gomock.Any(),
-		&h.SyncShardStatusRequest{
+		&historyservice.SyncShardStatusRequest{
 			SourceCluster: replicationAttr.SourceCluster,
 			ShardId:       replicationAttr.ShardId,
 			Timestamp:     replicationAttr.Timestamp,
 		},
-	).Return(nil).Times(1)
-	s.mockMsg.On("Ack").Return(nil).Once()
+	).Return(nil, nil).Times(1)
+	s.mockMsg.On("Ack").Return(nil, nil).Once()
 
 	s.processor.decodeMsgAndSubmit(s.mockMsg)
 }
@@ -249,27 +249,27 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_Success
 }
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_FailedThenSuccess() {
-	replicationAttr := &replicator.SyncShardStatusTaskAttributes{
-		SourceCluster: common.StringPtr("some random source cluster"),
-		ShardId:       common.Int64Ptr(2333),
-		Timestamp:     common.Int64Ptr(time.Now().UnixNano()),
+	replicationAttr := &commonproto.SyncShardStatusTaskAttributes{
+		SourceCluster: "some random source cluster",
+		ShardId:       2333,
+		Timestamp:     time.Now().UnixNano(),
 	}
-	replicationTask := &replicator.ReplicationTask{
-		TaskType:                      replicator.ReplicationTaskTypeSyncShardStatus.Ptr(),
-		SyncShardStatusTaskAttributes: replicationAttr,
+	replicationTask := &commonproto.ReplicationTask{
+		TaskType:   enums.ReplicationTaskTypeSyncShardStatus,
+		Attributes: &commonproto.ReplicationTask_SyncShardStatusTaskAttributes{SyncShardStatusTaskAttributes: replicationAttr},
 	}
-	replicationTaskBinary, err := s.msgEncoder.Encode(replicationTask)
+	replicationTaskBinary, err := s.msgEncoder.Encode(adapter.ToThriftReplicationTask(replicationTask))
 	s.Nil(err)
 	s.mockMsg.On("Value").Return(replicationTaskBinary)
-	s.mockHistoryClient.EXPECT().SyncShardStatus(gomock.Any(), gomock.Any()).Return(errors.New("some random error")).Times(1)
+	s.mockHistoryClient.EXPECT().SyncShardStatus(gomock.Any(), gomock.Any()).Return(nil, errors.New("some random error")).Times(1)
 	s.mockHistoryClient.EXPECT().SyncShardStatus(
 		gomock.Any(),
-		&h.SyncShardStatusRequest{
+		&historyservice.SyncShardStatusRequest{
 			SourceCluster: replicationAttr.SourceCluster,
 			ShardId:       replicationAttr.ShardId,
 			Timestamp:     replicationAttr.Timestamp,
 		},
-	).Return(nil).Times(1)
+	).Return(nil, nil).Times(1)
 	s.mockMsg.On("Ack").Return(nil).Once()
 
 	s.processor.decodeMsgAndSubmit(s.mockMsg)

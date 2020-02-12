@@ -28,12 +28,13 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 	"go.uber.org/zap"
 
-	h "github.com/temporalio/temporal/.gen/go/history"
-	"github.com/temporalio/temporal/.gen/go/history/historyservicetest"
-	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
+	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
@@ -55,7 +56,7 @@ type (
 
 		mockTimeSource    *clock.EventTimeSource
 		mockMsg           *messageMocks.Message
-		mockHistoryClient *historyservicetest.MockClient
+		mockHistoryClient *historyservicemock.MockHistoryServiceClient
 		mockRereplicator  *xdc.MockHistoryRereplicator
 		mockNDCResender   *xdc.MockNDCHistoryResender
 
@@ -71,7 +72,7 @@ type (
 
 		mockTimeSource    *clock.EventTimeSource
 		mockMsg           *messageMocks.Message
-		mockHistoryClient *historyservicetest.MockClient
+		mockHistoryClient *historyservicemock.MockHistoryServiceClient
 		mockRereplicator  *xdc.MockHistoryRereplicator
 		mockNDCResender   *xdc.MockNDCHistoryResender
 
@@ -87,7 +88,7 @@ type (
 
 		mockTimeSource    *clock.EventTimeSource
 		mockMsg           *messageMocks.Message
-		mockHistoryClient *historyservicetest.MockClient
+		mockHistoryClient *historyservicemock.MockHistoryServiceClient
 		mockRereplicator  *xdc.MockHistoryRereplicator
 
 		controller *gomock.Controller
@@ -131,7 +132,7 @@ func (s *activityReplicationTaskSuite) SetupTest() {
 	s.mockTimeSource = clock.NewEventTimeSource()
 	s.mockMsg = &messageMocks.Message{}
 	s.controller = gomock.NewController(s.T())
-	s.mockHistoryClient = historyservicetest.NewMockClient(s.controller)
+	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
 	s.mockRereplicator = &xdc.MockHistoryRereplicator{}
 	s.mockNDCResender = &xdc.MockNDCHistoryResender{}
 }
@@ -165,7 +166,7 @@ func (s *historyReplicationTaskSuite) SetupTest() {
 	s.mockTimeSource = clock.NewEventTimeSource()
 	s.mockMsg = &messageMocks.Message{}
 	s.controller = gomock.NewController(s.T())
-	s.mockHistoryClient = historyservicetest.NewMockClient(s.controller)
+	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
 	s.mockRereplicator = &xdc.MockHistoryRereplicator{}
 	s.mockNDCResender = &xdc.MockNDCHistoryResender{}
 }
@@ -198,7 +199,7 @@ func (s *historyMetadataReplicationTaskSuite) SetupTest() {
 	s.mockTimeSource = clock.NewEventTimeSource()
 	s.mockMsg = &messageMocks.Message{}
 	s.controller = gomock.NewController(s.T())
-	s.mockHistoryClient = historyservicetest.NewMockClient(s.controller)
+	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
 	s.mockRereplicator = &xdc.MockHistoryRereplicator{}
 }
 
@@ -211,7 +212,7 @@ func (s *historyMetadataReplicationTaskSuite) TearDownTest() {
 
 func (s *activityReplicationTaskSuite) TestNewActivityReplicationTask() {
 	replicationTask := s.getActivityReplicationTask()
-	replicationAttr := replicationTask.SyncActivityTaskAttributes
+	replicationAttr := replicationTask.GetSyncActivityTaskAttributes()
 
 	task := newActivityReplicationTask(
 		replicationTask,
@@ -245,7 +246,7 @@ func (s *activityReplicationTaskSuite) TestNewActivityReplicationTask() {
 				historyClient: s.mockHistoryClient,
 				metricsClient: s.metricsClient,
 			},
-			req: &h.SyncActivityRequest{
+			req: &historyservice.SyncActivityRequest{
 				DomainId:           replicationAttr.DomainId,
 				WorkflowId:         replicationAttr.WorkflowId,
 				RunId:              replicationAttr.RunId,
@@ -281,7 +282,7 @@ func (s *activityReplicationTaskSuite) TestExecute() {
 		s.mockNDCResender)
 
 	randomErr := errors.New("some random error")
-	s.mockHistoryClient.EXPECT().SyncActivity(gomock.Any(), task.req).Return(randomErr).Times(1)
+	s.mockHistoryClient.EXPECT().SyncActivity(gomock.Any(), task.req).Return(nil, randomErr).Times(1)
 	err := task.Execute()
 	s.Equal(randomErr, err)
 }
@@ -353,7 +354,7 @@ func (s *activityReplicationTaskSuite) TestHandleErr_EnoughAttempt_RetryErr() {
 		retryErr.GetRunId(), retryErr.GetNextEventId(),
 		task.queueID.RunID, task.taskID+1,
 	).Return(nil).Once()
-	s.mockHistoryClient.EXPECT().SyncActivity(gomock.Any(), task.req).Return(nil).Times(1)
+	s.mockHistoryClient.EXPECT().SyncActivity(gomock.Any(), task.req).Return(nil, nil).Times(1)
 	err = task.HandleErr(retryErr)
 	s.Nil(err)
 }
@@ -455,7 +456,7 @@ func (s *activityReplicationTaskSuite) TestNack() {
 
 func (s *historyReplicationTaskSuite) TestNewHistoryReplicationTask() {
 	replicationTask := s.getHistoryReplicationTask()
-	replicationAttr := replicationTask.HistoryTaskAttributes
+	replicationAttr := replicationTask.GetHistoryTaskAttributes()
 
 	task := newHistoryReplicationTask(replicationTask, s.mockMsg, s.sourceCluster, s.logger,
 		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator)
@@ -480,10 +481,10 @@ func (s *historyReplicationTaskSuite) TestNewHistoryReplicationTask() {
 				historyClient: s.mockHistoryClient,
 				metricsClient: s.metricsClient,
 			},
-			req: &h.ReplicateEventsRequest{
-				SourceCluster: common.StringPtr(s.sourceCluster),
+			req: &historyservice.ReplicateEventsRequest{
+				SourceCluster: s.sourceCluster,
 				DomainUUID:    replicationAttr.DomainId,
-				WorkflowExecution: &shared.WorkflowExecution{
+				WorkflowExecution: &commonproto.WorkflowExecution{
 					WorkflowId: replicationAttr.WorkflowId,
 					RunId:      replicationAttr.RunId,
 				},
@@ -493,7 +494,7 @@ func (s *historyReplicationTaskSuite) TestNewHistoryReplicationTask() {
 				ReplicationInfo:   replicationAttr.ReplicationInfo,
 				History:           replicationAttr.History,
 				NewRunHistory:     replicationAttr.NewRunHistory,
-				ForceBufferEvents: common.BoolPtr(false),
+				ForceBufferEvents: false,
 				ResetWorkflow:     replicationAttr.ResetWorkflow,
 				NewRunNDC:         replicationAttr.NewRunNDC,
 			},
@@ -508,7 +509,7 @@ func (s *historyReplicationTaskSuite) TestExecute() {
 		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator)
 
 	randomErr := errors.New("some random error")
-	s.mockHistoryClient.EXPECT().ReplicateEvents(gomock.Any(), task.req).Return(randomErr).Times(1)
+	s.mockHistoryClient.EXPECT().ReplicateEvents(gomock.Any(), task.req).Return(nil, randomErr).Times(1)
 	err := task.Execute()
 	s.Equal(randomErr, err)
 }
@@ -556,7 +557,7 @@ func (s *historyReplicationTaskSuite) TestHandleErr_EnoughAttempt_RetryErr() {
 		retryErr.GetRunId(), retryErr.GetNextEventId(),
 		task.queueID.RunID, task.taskID,
 	).Return(nil).Once()
-	s.mockHistoryClient.EXPECT().ReplicateEvents(gomock.Any(), task.req).Return(nil).Times(1)
+	s.mockHistoryClient.EXPECT().ReplicateEvents(gomock.Any(), task.req).Return(nil, nil).Times(1)
 	err = task.HandleErr(retryErr)
 	s.Nil(err)
 }
@@ -611,7 +612,7 @@ func (s *historyReplicationTaskSuite) TestNack() {
 
 func (s *historyMetadataReplicationTaskSuite) TestNewHistoryMetadataReplicationTask() {
 	replicationTask := s.getHistoryMetadataReplicationTask()
-	replicationAttr := replicationTask.HistoryMetadataTaskAttributes
+	replicationAttr := replicationTask.GetHistoryMetadataTaskAttributes()
 
 	task := newHistoryMetadataReplicationTask(replicationTask, s.mockMsg, s.sourceCluster, s.logger,
 		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator)
@@ -748,76 +749,76 @@ func (s *historyMetadataReplicationTaskSuite) TestNack() {
 	task.Nack()
 }
 
-func (s *activityReplicationTaskSuite) getActivityReplicationTask() *replicator.ReplicationTask {
-	replicationAttr := &replicator.SyncActivityTaskAttributes{
-		DomainId:           common.StringPtr("some random domain ID"),
-		WorkflowId:         common.StringPtr("some random workflow ID"),
-		RunId:              common.StringPtr("some random run ID"),
-		Version:            common.Int64Ptr(1394),
-		ScheduledId:        common.Int64Ptr(728),
-		ScheduledTime:      common.Int64Ptr(time.Now().UnixNano()),
-		StartedId:          common.Int64Ptr(1015),
-		StartedTime:        common.Int64Ptr(time.Now().UnixNano()),
-		LastHeartbeatTime:  common.Int64Ptr(time.Now().UnixNano()),
+func (s *activityReplicationTaskSuite) getActivityReplicationTask() *commonproto.ReplicationTask {
+	replicationAttr := &commonproto.SyncActivityTaskAttributes{
+		DomainId:           "some random domain ID",
+		WorkflowId:         "some random workflow ID",
+		RunId:              "some random run ID",
+		Version:            1394,
+		ScheduledId:        728,
+		ScheduledTime:      time.Now().UnixNano(),
+		StartedId:          1015,
+		StartedTime:        time.Now().UnixNano(),
+		LastHeartbeatTime:  time.Now().UnixNano(),
 		Details:            []byte("some random detail"),
-		Attempt:            common.Int32Ptr(59),
-		LastFailureReason:  common.StringPtr("some random failure reason"),
-		LastWorkerIdentity: common.StringPtr("some random worker identity"),
+		Attempt:            59,
+		LastFailureReason:  "some random failure reason",
+		LastWorkerIdentity: "some random worker identity",
 		LastFailureDetails: []byte("some random failure details"),
 	}
-	replicationTask := &replicator.ReplicationTask{
-		TaskType:                   replicator.ReplicationTaskTypeSyncActivity.Ptr(),
-		SyncActivityTaskAttributes: replicationAttr,
+	replicationTask := &commonproto.ReplicationTask{
+		TaskType:   enums.ReplicationTaskTypeSyncActivity,
+		Attributes: &commonproto.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: replicationAttr},
 	}
 	return replicationTask
 }
 
-func (s *historyReplicationTaskSuite) getHistoryReplicationTask() *replicator.ReplicationTask {
-	replicationAttr := &replicator.HistoryTaskAttributes{
+func (s *historyReplicationTaskSuite) getHistoryReplicationTask() *commonproto.ReplicationTask {
+	replicationAttr := &commonproto.HistoryTaskAttributes{
 		TargetClusters: []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
-		DomainId:       common.StringPtr("some random domain ID"),
-		WorkflowId:     common.StringPtr("some random workflow ID"),
-		RunId:          common.StringPtr("some random run ID"),
-		Version:        common.Int64Ptr(1394),
-		FirstEventId:   common.Int64Ptr(728),
-		NextEventId:    common.Int64Ptr(1015),
-		ReplicationInfo: map[string]*shared.ReplicationInfo{
-			cluster.TestCurrentClusterName: &shared.ReplicationInfo{
-				Version:     common.Int64Ptr(0644),
-				LastEventId: common.Int64Ptr(0755),
+		DomainId:       "some random domain ID",
+		WorkflowId:     "some random workflow ID",
+		RunId:          "some random run ID",
+		Version:        1394,
+		FirstEventId:   728,
+		NextEventId:    1015,
+		ReplicationInfo: map[string]*commonproto.ReplicationInfo{
+			cluster.TestCurrentClusterName: {
+				Version:     0644,
+				LastEventId: 0755,
 			},
-			cluster.TestAlternativeClusterName: &shared.ReplicationInfo{
-				Version:     common.Int64Ptr(0755),
-				LastEventId: common.Int64Ptr(0644),
+			cluster.TestAlternativeClusterName: {
+				Version:     0755,
+				LastEventId: 0644,
 			},
 		},
-		History: &shared.History{
-			Events: []*shared.HistoryEvent{&shared.HistoryEvent{EventId: common.Int64Ptr(1)}},
+		History: &commonproto.History{
+			Events: []*commonproto.HistoryEvent{{EventId: 1}},
 		},
-		NewRunHistory: &shared.History{
-			Events: []*shared.HistoryEvent{&shared.HistoryEvent{EventId: common.Int64Ptr(2)}},
+		NewRunHistory: &commonproto.History{
+			Events: []*commonproto.HistoryEvent{{EventId: 2}},
 		},
-		ResetWorkflow: common.BoolPtr(true),
+		ResetWorkflow: true,
 	}
-	replicationTask := &replicator.ReplicationTask{
-		TaskType:              replicator.ReplicationTaskTypeHistory.Ptr(),
-		HistoryTaskAttributes: replicationAttr,
+	replicationTask := &commonproto.ReplicationTask{
+		TaskType:   enums.ReplicationTaskTypeHistory,
+		Attributes: &commonproto.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: replicationAttr},
 	}
 	return replicationTask
 }
 
-func (s *historyMetadataReplicationTaskSuite) getHistoryMetadataReplicationTask() *replicator.ReplicationTask {
-	replicationAttr := &replicator.HistoryMetadataTaskAttributes{
+func (s *historyMetadataReplicationTaskSuite) getHistoryMetadataReplicationTask() *commonproto.ReplicationTask {
+	replicationAttr := &commonproto.HistoryMetadataTaskAttributes{
 		TargetClusters: []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
-		DomainId:       common.StringPtr("some random domain ID"),
-		WorkflowId:     common.StringPtr("some random workflow ID"),
-		RunId:          common.StringPtr("some random run ID"),
-		FirstEventId:   common.Int64Ptr(728),
-		NextEventId:    common.Int64Ptr(1015),
+		DomainId:       "some random domain ID",
+		WorkflowId:     "some random workflow ID",
+		RunId:          "some random run ID",
+		FirstEventId:   728,
+		NextEventId:    1015,
 	}
-	replicationTask := &replicator.ReplicationTask{
-		TaskType:                      replicator.ReplicationTaskTypeHistoryMetadata.Ptr(),
-		HistoryMetadataTaskAttributes: replicationAttr,
+	replicationTask := &commonproto.ReplicationTask{
+		TaskType:   enums.ReplicationTaskTypeHistoryMetadata,
+		Attributes: &commonproto.ReplicationTask_HistoryMetadataTaskAttributes{HistoryMetadataTaskAttributes: replicationAttr},
 	}
 	return replicationTask
 }

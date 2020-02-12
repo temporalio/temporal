@@ -24,8 +24,10 @@ import (
 	"context"
 	"time"
 
+	"github.com/gogo/status"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/errordetails"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
@@ -317,8 +319,19 @@ func (c *historyRereplicationContext) sendReplicationRawRequest(request *history
 	// sometimes there can be case when the first re-replication call
 	// trigger an history reset and this reset can leave a hole in target
 	// workflow, we should amend that hole and continue
-	retryErr, ok := err.(*shared.RetryTaskError)
-	if !ok {
+	var retryFailure *errordetails.RetryTaskFailure
+	if retryErr, ok := err.(*shared.RetryTaskError); ok {
+		retryFailure = &errordetails.RetryTaskFailure{
+			DomainId:    retryErr.GetDomainId(),
+			WorkflowId:  retryErr.GetWorkflowId(),
+			RunId:       retryErr.GetRunId(),
+			NextEventId: retryErr.GetNextEventId(),
+		}
+	} else {
+		retryFailure, _ = errordetails.GetRetryTaskFailure(status.Convert(err))
+	}
+
+	if retryFailure == nil {
 		logger.Error("error sending history", tag.Error(err))
 		return err
 	}
@@ -326,17 +339,17 @@ func (c *historyRereplicationContext) sendReplicationRawRequest(request *history
 		logger.Error("encounter RetryTaskError not in first call")
 		return err
 	}
-	if retryErr.GetRunId() != c.beginningRunID {
+	if retryFailure.GetRunId() != c.beginningRunID {
 		logger.Error("encounter RetryTaskError with non expected run ID")
 		return err
 	}
-	if retryErr.GetNextEventId() >= c.beginningFirstEventID {
+	if retryFailure.GetNextEventId() >= c.beginningFirstEventID {
 		logger.Error("encounter RetryTaskError with larger event ID")
 		return err
 	}
 
-	_, err = c.sendSingleWorkflowHistory(c.domainID, c.workflowID, retryErr.GetRunId(),
-		retryErr.GetNextEventId(), c.beginningFirstEventID)
+	_, err = c.sendSingleWorkflowHistory(c.domainID, c.workflowID, retryFailure.GetRunId(),
+		retryFailure.GetNextEventId(), c.beginningFirstEventID)
 	if err != nil {
 		logger.Error("error sending history", tag.Error(err))
 		return err
