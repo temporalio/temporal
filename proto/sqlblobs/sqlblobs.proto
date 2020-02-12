@@ -256,20 +256,3 @@ message TimerTaskInfo {
     int64 scheduleAttempt = 7;
     int64 eventID = 8;
 }
-
-message ReplicationTaskInfo {
-    bytes domainID = 1;
-    string workflowID = 2;
-    bytes runID = 3;
-    int32 taskType = 4;
-    int64 version = 5;
-    int64 firstEventID = 6;
-    int64 nextEventID = 7;
-    int64 scheduledID = 8;
-    int32 eventStoreVersion = 9;
-    int32 newRunEventStoreVersion = 10;
-    bytes branch_token = 11;
-    map<string, ReplicationInfo> lastReplicationInfo = 12;
-    bytes newRunBranchToken = 13;
-    bool resetWorkflow = 14;
-}
