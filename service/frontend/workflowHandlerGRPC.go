@@ -2011,7 +2011,7 @@ func (wh *WorkflowHandlerGRPC) SignalWithStartWorkflowExecution(ctx context.Cont
 		return err
 	}
 
-	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
+	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientErrorGRPC)
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
