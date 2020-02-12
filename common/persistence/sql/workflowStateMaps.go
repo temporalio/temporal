@@ -23,6 +23,7 @@ package sql
 import (
 	"database/sql"
 	"fmt"
+	"github.com/temporalio/temporal/common/primitives"
 	"time"
 
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
@@ -37,9 +38,9 @@ func updateActivityInfos(
 	activityInfos []*persistence.InternalActivityInfo,
 	deleteInfos []int64,
 	shardID int,
-	domainID sqlplugin.UUID,
+	domainID primitives.UUID,
 	workflowID string,
-	runID sqlplugin.UUID,
+	runID primitives.UUID,
 ) error {
 
 	if len(activityInfos) > 0 {
@@ -139,9 +140,9 @@ func updateActivityInfos(
 func getActivityInfoMap(
 	db sqlplugin.DB,
 	shardID int,
-	domainID sqlplugin.UUID,
+	domainID primitives.UUID,
 	workflowID string,
-	runID sqlplugin.UUID,
+	runID primitives.UUID,
 ) (map[int64]*persistence.InternalActivityInfo, error) {
 
 	rows, err := db.SelectFromActivityInfoMaps(&sqlplugin.ActivityInfoMapsFilter{
@@ -208,9 +209,9 @@ func getActivityInfoMap(
 func deleteActivityInfoMap(
 	tx sqlplugin.Tx,
 	shardID int,
-	domainID sqlplugin.UUID,
+	domainID primitives.UUID,
 	workflowID string,
-	runID sqlplugin.UUID,
+	runID primitives.UUID,
 ) error {
 
 	if _, err := tx.DeleteFromActivityInfoMaps(&sqlplugin.ActivityInfoMapsFilter{
@@ -231,9 +232,9 @@ func updateTimerInfos(
 	timerInfos []*persistence.TimerInfo,
 	deleteInfos []string,
 	shardID int,
-	domainID sqlplugin.UUID,
+	domainID primitives.UUID,
 	workflowID string,
-	runID sqlplugin.UUID,
+	runID primitives.UUID,
 ) error {
 
 	if len(timerInfos) > 0 {
@@ -300,9 +301,9 @@ func updateTimerInfos(
 func getTimerInfoMap(
 	db sqlplugin.DB,
 	shardID int,
-	domainID sqlplugin.UUID,
+	domainID primitives.UUID,
 	workflowID string,
-	runID sqlplugin.UUID,
+	runID primitives.UUID,
 ) (map[string]*persistence.TimerInfo, error) {
 
 	rows, err := db.SelectFromTimerInfoMaps(&sqlplugin.TimerInfoMapsFilter{
@@ -340,9 +341,9 @@ func getTimerInfoMap(
 func deleteTimerInfoMap(
 	tx sqlplugin.Tx,
 	shardID int,
-	domainID sqlplugin.UUID,
+	domainID primitives.UUID,
 	workflowID string,
-	runID sqlplugin.UUID,
+	runID primitives.UUID,
 ) error {
 
 	if _, err := tx.DeleteFromTimerInfoMaps(&sqlplugin.TimerInfoMapsFilter{
@@ -363,9 +364,9 @@ func updateChildExecutionInfos(
 	childExecutionInfos []*persistence.InternalChildExecutionInfo,
 	deleteInfos *int64,
 	shardID int,
-	domainID sqlplugin.UUID,
+	domainID primitives.UUID,
 	workflowID string,
-	runID sqlplugin.UUID,
+	runID primitives.UUID,
 ) error {
 
 	if len(childExecutionInfos) > 0 {
@@ -383,7 +384,7 @@ func updateChildExecutionInfos(
 				StartedEventEncoding:   &startEncoding,
 				StartedID:              &v.StartedID,
 				StartedWorkflowID:      &v.StartedWorkflowID,
-				StartedRunID:           sqlplugin.MustParseUUID(v.StartedRunID),
+				StartedRunID:           primitives.MustParseUUID(v.StartedRunID),
 				CreateRequestID:        &v.CreateRequestID,
 				DomainName:             &v.DomainName,
 				WorkflowTypeName:       &v.WorkflowTypeName,
@@ -429,9 +430,9 @@ func updateChildExecutionInfos(
 func getChildExecutionInfoMap(
 	db sqlplugin.DB,
 	shardID int,
-	domainID sqlplugin.UUID,
+	domainID primitives.UUID,
 	workflowID string,
-	runID sqlplugin.UUID,
+	runID primitives.UUID,
 ) (map[int64]*persistence.InternalChildExecutionInfo, error) {
 
 	rows, err := db.SelectFromChildExecutionInfoMaps(&sqlplugin.ChildExecutionInfoMapsFilter{
@@ -458,7 +459,7 @@ func getChildExecutionInfoMap(
 			Version:               rowInfo.GetVersion(),
 			StartedID:             rowInfo.GetStartedID(),
 			StartedWorkflowID:     rowInfo.GetStartedWorkflowID(),
-			StartedRunID:          sqlplugin.UUID(rowInfo.GetStartedRunID()).String(),
+			StartedRunID:          primitives.UUID(rowInfo.GetStartedRunID()).String(),
 			CreateRequestID:       rowInfo.GetCreateRequestID(),
 			DomainName:            rowInfo.GetDomainName(),
 			WorkflowTypeName:      rowInfo.GetWorkflowTypeName(),
@@ -479,9 +480,9 @@ func getChildExecutionInfoMap(
 func deleteChildExecutionInfoMap(
 	tx sqlplugin.Tx,
 	shardID int,
-	domainID sqlplugin.UUID,
+	domainID primitives.UUID,
 	workflowID string,
-	runID sqlplugin.UUID,
+	runID primitives.UUID,
 ) error {
 
 	if _, err := tx.DeleteFromChildExecutionInfoMaps(&sqlplugin.ChildExecutionInfoMapsFilter{
@@ -502,9 +503,9 @@ func updateRequestCancelInfos(
 	requestCancelInfos []*persistence.RequestCancelInfo,
 	deleteInfo *int64,
 	shardID int,
-	domainID sqlplugin.UUID,
+	domainID primitives.UUID,
 	workflowID string,
-	runID sqlplugin.UUID,
+	runID primitives.UUID,
 ) error {
 
 	if len(requestCancelInfos) > 0 {
@@ -567,9 +568,9 @@ func updateRequestCancelInfos(
 func getRequestCancelInfoMap(
 	db sqlplugin.DB,
 	shardID int,
-	domainID sqlplugin.UUID,
+	domainID primitives.UUID,
 	workflowID string,
-	runID sqlplugin.UUID,
+	runID primitives.UUID,
 ) (map[int64]*persistence.RequestCancelInfo, error) {
 
 	rows, err := db.SelectFromRequestCancelInfoMaps(&sqlplugin.RequestCancelInfoMapsFilter{
@@ -604,9 +605,9 @@ func getRequestCancelInfoMap(
 func deleteRequestCancelInfoMap(
 	tx sqlplugin.Tx,
 	shardID int,
-	domainID sqlplugin.UUID,
+	domainID primitives.UUID,
 	workflowID string,
-	runID sqlplugin.UUID,
+	runID primitives.UUID,
 ) error {
 
 	if _, err := tx.DeleteFromRequestCancelInfoMaps(&sqlplugin.RequestCancelInfoMapsFilter{
@@ -627,9 +628,9 @@ func updateSignalInfos(
 	signalInfos []*persistence.SignalInfo,
 	deleteInfo *int64,
 	shardID int,
-	domainID sqlplugin.UUID,
+	domainID primitives.UUID,
 	workflowID string,
-	runID sqlplugin.UUID,
+	runID primitives.UUID,
 ) error {
 
 	if len(signalInfos) > 0 {
@@ -695,9 +696,9 @@ func updateSignalInfos(
 func getSignalInfoMap(
 	db sqlplugin.DB,
 	shardID int,
-	domainID sqlplugin.UUID,
+	domainID primitives.UUID,
 	workflowID string,
-	runID sqlplugin.UUID,
+	runID primitives.UUID,
 ) (map[int64]*persistence.SignalInfo, error) {
 
 	rows, err := db.SelectFromSignalInfoMaps(&sqlplugin.SignalInfoMapsFilter{
@@ -735,9 +736,9 @@ func getSignalInfoMap(
 func deleteSignalInfoMap(
 	tx sqlplugin.Tx,
 	shardID int,
-	domainID sqlplugin.UUID,
+	domainID primitives.UUID,
 	workflowID string,
-	runID sqlplugin.UUID,
+	runID primitives.UUID,
 ) error {
 
 	if _, err := tx.DeleteFromSignalInfoMaps(&sqlplugin.SignalInfoMapsFilter{

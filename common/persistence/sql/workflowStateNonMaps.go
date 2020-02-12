@@ -23,6 +23,7 @@ package sql
 import (
 	"database/sql"
 	"fmt"
+	"github.com/temporalio/temporal/common/primitives"
 
 	"github.com/temporalio/temporal/common"
 
@@ -36,9 +37,9 @@ func updateSignalsRequested(
 	signalRequestedIDs []string,
 	deleteSignalRequestID string,
 	shardID int,
-	domainID sqlplugin.UUID,
+	domainID primitives.UUID,
 	workflowID string,
-	runID sqlplugin.UUID,
+	runID primitives.UUID,
 ) error {
 
 	if len(signalRequestedIDs) > 0 {
@@ -79,9 +80,9 @@ func updateSignalsRequested(
 func getSignalsRequested(
 	db sqlplugin.DB,
 	shardID int,
-	domainID sqlplugin.UUID,
+	domainID primitives.UUID,
 	workflowID string,
-	runID sqlplugin.UUID,
+	runID primitives.UUID,
 ) (map[string]struct{}, error) {
 
 	rows, err := db.SelectFromSignalsRequestedSets(&sqlplugin.SignalsRequestedSetsFilter{
@@ -105,9 +106,9 @@ func getSignalsRequested(
 func deleteSignalsRequestedSet(
 	tx sqlplugin.Tx,
 	shardID int,
-	domainID sqlplugin.UUID,
+	domainID primitives.UUID,
 	workflowID string,
-	runID sqlplugin.UUID,
+	runID primitives.UUID,
 ) error {
 
 	if _, err := tx.DeleteFromSignalsRequestedSets(&sqlplugin.SignalsRequestedSetsFilter{
@@ -127,9 +128,9 @@ func updateBufferedEvents(
 	tx sqlplugin.Tx,
 	batch *p.DataBlob,
 	shardID int,
-	domainID sqlplugin.UUID,
+	domainID primitives.UUID,
 	workflowID string,
-	runID sqlplugin.UUID,
+	runID primitives.UUID,
 ) error {
 
 	if batch == nil {
@@ -155,9 +156,9 @@ func updateBufferedEvents(
 func getBufferedEvents(
 	db sqlplugin.DB,
 	shardID int,
-	domainID sqlplugin.UUID,
+	domainID primitives.UUID,
 	workflowID string,
-	runID sqlplugin.UUID,
+	runID primitives.UUID,
 ) ([]*p.DataBlob, error) {
 
 	rows, err := db.SelectFromBufferedEvents(&sqlplugin.BufferedEventsFilter{
@@ -181,9 +182,9 @@ func getBufferedEvents(
 func deleteBufferedEvents(
 	tx sqlplugin.Tx,
 	shardID int,
-	domainID sqlplugin.UUID,
+	domainID primitives.UUID,
 	workflowID string,
-	runID sqlplugin.UUID,
+	runID primitives.UUID,
 ) error {
 
 	if _, err := tx.DeleteFromBufferedEvents(&sqlplugin.BufferedEventsFilter{
