@@ -33,6 +33,7 @@ import (
 	"github.com/gogo/status"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/yarpc/yarpcerrors"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/codes"
@@ -427,7 +428,7 @@ func SortInt64Slice(slice []int64) {
 }
 
 // ValidateRetryPolicy validates a retry policy
-func ValidateRetryPolicy(policy *workflow.RetryPolicy) error {
+func ValidateRetryPolicy(policy *commonproto.RetryPolicy) error {
 	if policy == nil {
 		// nil policy is valid which means no retry
 		return nil
@@ -459,19 +460,19 @@ func ValidateRetryPolicy(policy *workflow.RetryPolicy) error {
 // CreateHistoryStartWorkflowRequest create a start workflow request for history
 func CreateHistoryStartWorkflowRequest(
 	domainID string,
-	startRequest *workflow.StartWorkflowExecutionRequest,
-) *h.StartWorkflowExecutionRequest {
+	startRequest *workflowservice.StartWorkflowExecutionRequest,
+) *historyservice.StartWorkflowExecutionRequest {
 	now := time.Now()
-	histRequest := &h.StartWorkflowExecutionRequest{
-		DomainUUID:   StringPtr(domainID),
+	histRequest := &historyservice.StartWorkflowExecutionRequest{
+		DomainUUID:   domainID,
 		StartRequest: startRequest,
 	}
 	if startRequest.RetryPolicy != nil && startRequest.RetryPolicy.GetExpirationIntervalInSeconds() > 0 {
 		expirationInSeconds := startRequest.RetryPolicy.GetExpirationIntervalInSeconds()
 		deadline := now.Add(time.Second * time.Duration(expirationInSeconds))
-		histRequest.ExpirationTimestamp = Int64Ptr(deadline.Round(time.Millisecond).UnixNano())
+		histRequest.ExpirationTimestamp = deadline.Round(time.Millisecond).UnixNano()
 	}
-	histRequest.FirstDecisionTaskBackoffSeconds = Int32Ptr(backoff.GetBackoffForNextScheduleInSeconds(startRequest.GetCronSchedule(), now, now))
+	histRequest.FirstDecisionTaskBackoffSeconds = backoff.GetBackoffForNextScheduleInSeconds(startRequest.GetCronSchedule(), now, now)
 	return histRequest
 }
 

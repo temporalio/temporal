@@ -32,6 +32,7 @@ import (
 
 	"github.com/gogo/status"
 	"github.com/pborman/uuid"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/codes"
@@ -690,7 +691,7 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 
 	// expectedNextEventID is 0 when caller want to get the current next event ID without blocking
 	expectedNextEventID := common.FirstEventID
-	if request.ExpectedNextEventId != nil {
+	if request.ExpectedNextEventId != nil && *request.ExpectedNextEventId != common.EmptyEventID {
 		expectedNextEventID = request.GetExpectedNextEventId()
 	}
 
@@ -2558,7 +2559,7 @@ func validateStartWorkflowExecutionRequest(
 		return &workflow.BadRequestError{Message: "WorkflowType exceeds length limit."}
 	}
 
-	return common.ValidateRetryPolicy(request.RetryPolicy)
+	return common.ValidateRetryPolicy(adapter.ToProtoRetryPolicy(request.RetryPolicy))
 }
 
 func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
@@ -2642,25 +2643,25 @@ func getStartRequest(
 	request *workflow.SignalWithStartWorkflowExecutionRequest,
 ) *h.StartWorkflowExecutionRequest {
 
-	req := &workflow.StartWorkflowExecutionRequest{
-		Domain:                              request.Domain,
-		WorkflowId:                          request.WorkflowId,
-		WorkflowType:                        request.WorkflowType,
-		TaskList:                            request.TaskList,
-		Input:                               request.Input,
-		ExecutionStartToCloseTimeoutSeconds: request.ExecutionStartToCloseTimeoutSeconds,
-		TaskStartToCloseTimeoutSeconds:      request.TaskStartToCloseTimeoutSeconds,
-		Identity:                            request.Identity,
-		RequestId:                           request.RequestId,
-		WorkflowIdReusePolicy:               request.WorkflowIdReusePolicy,
-		RetryPolicy:                         request.RetryPolicy,
-		CronSchedule:                        request.CronSchedule,
-		Memo:                                request.Memo,
-		SearchAttributes:                    request.SearchAttributes,
-		Header:                              request.Header,
+	req := &workflowservice.StartWorkflowExecutionRequest{
+		Domain:                              request.GetDomain(),
+		WorkflowId:                          request.GetWorkflowId(),
+		WorkflowType:                        adapter.ToProtoWorkflowType(request.GetWorkflowType()),
+		TaskList:                            adapter.ToProtoTaskList(request.GetTaskList()),
+		Input:                               request.GetInput(),
+		ExecutionStartToCloseTimeoutSeconds: request.GetExecutionStartToCloseTimeoutSeconds(),
+		TaskStartToCloseTimeoutSeconds:      request.GetTaskStartToCloseTimeoutSeconds(),
+		Identity:                            request.GetIdentity(),
+		RequestId:                           request.GetRequestId(),
+		WorkflowIdReusePolicy:               enums.WorkflowIdReusePolicy(request.GetWorkflowIdReusePolicy()),
+		RetryPolicy:                         adapter.ToProtoRetryPolicy(request.GetRetryPolicy()),
+		CronSchedule:                        request.GetCronSchedule(),
+		Memo:                                adapter.ToProtoMemo(request.GetMemo()),
+		SearchAttributes:                    adapter.ToProtoSearchAttributes(request.GetSearchAttributes()),
+		Header:                              adapter.ToProtoHeader(request.GetHeader()),
 	}
 
-	startRequest := common.CreateHistoryStartWorkflowRequest(domainID, req)
+	startRequest := adapter.ToThriftHistoryStartWorkflowExecutionRequest(common.CreateHistoryStartWorkflowRequest(domainID, req))
 	return startRequest
 }
 
