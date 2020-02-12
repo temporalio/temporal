@@ -80,8 +80,8 @@ github.com/go-logfmt/logfmt v0.4.0/go.mod h1:3RMwSq7FuexP4Kalkev3ejPJsZTpXXBr9+V
 github.com/go-sql-driver/mysql v1.4.1 h1:g24URVg0OFbNUTx9qqY1IRZ9D9z3iPyi5zKhQZpNwpA=
 github.com/go-sql-driver/mysql v1.4.1/go.mod h1:zAC/RDZ24gD3HViQzih4MyKcchzm+sOG5ZlKdlhCg5w=
 github.com/go-stack/stack v1.8.0/go.mod h1:v0f6uXyyMGvRgIKkXu+yp6POWl0qKG85gN/melR3HDY=
-github.com/gocql/gocql v0.0.0-20171220143535-56a164ee9f31 h1:kPjRO/S+4pjIgvub1+xsaQ6xudIgvVPoJYGGkJ7Qx8E=
-github.com/gocql/gocql v0.0.0-20171220143535-56a164ee9f31/go.mod h1:GjP0ITc4WbMO5dEWwikPqq0ZWbloAO6CO6g0VAK7tTc=
+github.com/gocql/gocql v0.0.0-20200203083758-81b8263d9fe5 h1:ZZVxQRCm4ewuoqqLBJ7LHpsk4OGx2PkyCsRKLq4oHgE=
+github.com/gocql/gocql v0.0.0-20200203083758-81b8263d9fe5/go.mod h1:DL0ekTmBSTdlNF25Orwt/JMzqIq3EJ4MVa/J/uK64OY=
 github.com/gogo/googleapis v0.0.0-20180223154316-0cd9801be74a/go.mod h1:gf4bu3Q80BeJ6H1S1vYPm8/ELATdvryBaNFGgqEef3s=
 github.com/gogo/googleapis v1.3.1 h1:CzMaKrvF6Qa7XtRii064vKBQiyvmY8H8vG1xa1/W1JA=
 github.com/gogo/googleapis v1.3.1/go.mod h1:d+q1s/xVJxZGKWwC/6UfPIF33J+G1Tq4GYv9Y+Tg/EU=
@@ -103,6 +103,7 @@ github.com/golang/protobuf v1.3.2 h1:6nsPYzhq5kReh6QImI3k5qWzO4PEbvbIW2cwSfR/6xs
 github.com/golang/protobuf v1.3.2/go.mod h1:6lQm79b+lXiMfvg/cZm0SGofjICqVBUtrP5yJMmIC1U=
 github.com/golang/protobuf v1.3.3 h1:gyjaxf+svBWX08ZjK86iN9geUJF0H6gp2IRKX6Nf6/I=
 github.com/golang/protobuf v1.3.3/go.mod h1:vzj43D7+SQXF/4pzW/hwtAqwc6iTitCiVSaWz5lYuqw=
+github.com/golang/snappy v0.0.0-20170215233205-553a64147049/go.mod h1:/XxbfmMg8lxefKM7IXC3fBNl/7bRcc72aCRzEWrmP2Q=
 github.com/golang/snappy v0.0.1 h1:Qgr9rKW7uDUkrbSmQeiDsGa8SjGyCOGtuasMWwvp2P4=
 github.com/golang/snappy v0.0.1/go.mod h1:/XxbfmMg8lxefKM7IXC3fBNl/7bRcc72aCRzEWrmP2Q=
 github.com/google/go-cmp v0.2.0/go.mod h1:oXzfMopK8JAjlY9xF4vHSVASa0yLyX7SntLO5aqRK0M=
@@ -270,8 +271,6 @@ go.temporal.io/temporal v0.10.5 h1:P0LN9szx3PEM/nrdKNUc/AzemQzETxo0g/9oBIS5FvY=
 go.temporal.io/temporal v0.10.5/go.mod h1:RfYYEjAY6y7G1S8yl5QkNwURNyMxG6Y3FmhPaI/EFyg=
 go.temporal.io/temporal-proto v0.0.0-20200207215554-ecd0f5ea1703 h1:AQ2wfE06D9yxR7etg35diiW9GrZHQSIHZiNY9dGfKs4=
 go.temporal.io/temporal-proto v0.0.0-20200207215554-ecd0f5ea1703/go.mod h1:SszgPhzKZvtDenZxaN68OKKj1RD1uVmDOHUn1RnTctk=
-go.temporal.io/temporal-proto v0.0.0-20200208031322-262b4376cc67 h1:A/Q+F59g6IdGqAan9TH/LlvHrMCPl/ynL99ox/f0LOs=
-go.temporal.io/temporal-proto v0.0.0-20200208031322-262b4376cc67/go.mod h1:SszgPhzKZvtDenZxaN68OKKj1RD1uVmDOHUn1RnTctk=
 go.temporal.io/temporal-proto v0.0.0-20200211220322-aef097c349a6 h1:0QDjFlfDSRWDSCo1HiK7RIjqzeXOqI7C24hhEdqG7L0=
 go.temporal.io/temporal-proto v0.0.0-20200211220322-aef097c349a6/go.mod h1:SszgPhzKZvtDenZxaN68OKKj1RD1uVmDOHUn1RnTctk=
 go.uber.org/atomic v1.5.0 h1:OI5t8sDa1Or+q8AeE+yKeB/SDYioSHAgcVljj9JIETY=
