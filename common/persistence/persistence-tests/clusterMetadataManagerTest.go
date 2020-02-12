@@ -98,7 +98,7 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanReadAny() {
 // TestClusterMembershipUpsertCanRead verifies that we can UpsertClusterMembership and read our result
 func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanPageRead() {
 	hostID := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 100; i++ {
 		req := &p.UpsertClusterMembershipRequest{
 			HostID:       hostID,
 			RPCAddress:   net.ParseIP("127.0.0.2"),
@@ -116,7 +116,7 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanPageRead() {
 	hostCount := 0
 	var nextPageToken []byte
 	for {
-		resp, err := s.ClusterMetadataManager.GetClusterMembers(&p.GetClusterMembersRequest{PageSize: 99, NextPageToken: nextPageToken})
+		resp, err := s.ClusterMetadataManager.GetClusterMembers(&p.GetClusterMembersRequest{PageSize: 9, NextPageToken: nextPageToken})
 		s.NoError(err)
 		nextPageToken = resp.NextPageToken
 		hostCount += len(resp.ActiveMembers)
@@ -126,7 +126,7 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanPageRead() {
 		}
 	}
 
-	s.Equal(hostCount, 1000)
+	s.Equal(hostCount, 100)
 
 	time.Sleep(time.Second * 2)
 	err := s.ClusterMetadataManager.PruneClusterMembership(&p.PruneClusterMembershipRequest{MaxRecordsPruned: 1000})
