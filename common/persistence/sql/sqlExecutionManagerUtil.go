@@ -26,6 +26,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/go/sqlblobs"
 	"github.com/temporalio/temporal/common"
@@ -851,7 +853,7 @@ func createReplicationTasks(
 		nextEventID := common.EmptyEventID
 		version := common.EmptyVersion
 		activityScheduleID := common.EmptyEventID
-		var lastReplicationInfo map[string]*sqlblobs.ReplicationInfo
+		var lastReplicationInfo map[string]*persistenceblobs.ReplicationInfo
 
 		var branchToken, newRunBranchToken []byte
 		var resetWorkflow bool
@@ -870,15 +872,15 @@ func createReplicationTasks(
 			branchToken = historyReplicationTask.BranchToken
 			newRunBranchToken = historyReplicationTask.NewRunBranchToken
 			resetWorkflow = historyReplicationTask.ResetWorkflow
-			lastReplicationInfo = make(map[string]*sqlblobs.ReplicationInfo, len(historyReplicationTask.LastReplicationInfo))
+			lastReplicationInfo = make(map[string]*persistenceblobs.ReplicationInfo, len(historyReplicationTask.LastReplicationInfo))
 			for k, v := range historyReplicationTask.LastReplicationInfo {
-				lastReplicationInfo[k] = &sqlblobs.ReplicationInfo{Version: &v.Version, LastEventID: &v.LastEventID}
+				lastReplicationInfo[k] = &persistenceblobs.ReplicationInfo{Version: v.Version, LastEventID: v.LastEventID}
 			}
 
 		case p.ReplicationTaskTypeSyncActivity:
 			version = task.GetVersion()
 			activityScheduleID = task.(*p.SyncActivityTask).ScheduledID
-			lastReplicationInfo = map[string]*sqlblobs.ReplicationInfo{}
+			lastReplicationInfo = map[string]*persistenceblobs.ReplicationInfo{}
 
 		default:
 			return &workflow.InternalServiceError{
@@ -886,21 +888,21 @@ func createReplicationTasks(
 			}
 		}
 
-		blob, err := replicationTaskInfoToBlob(&sqlblobs.ReplicationTaskInfo{
+		blob, err := ReplicationTaskInfoToBlob(&persistenceblobs.ReplicationTaskInfo{
 			DomainID:                domainID,
-			WorkflowID:              &workflowID,
+			WorkflowID:              workflowID,
 			RunID:                   runID,
-			TaskType:                common.Int16Ptr(int16(task.GetType())),
-			FirstEventID:            &firstEventID,
-			NextEventID:             &nextEventID,
-			Version:                 &version,
+			TaskType:                int32(task.GetType()),
+			FirstEventID:            firstEventID,
+			NextEventID:             nextEventID,
+			Version:                 version,
 			LastReplicationInfo:     lastReplicationInfo,
-			ScheduledID:             &activityScheduleID,
-			EventStoreVersion:       common.Int32Ptr(p.EventStoreVersion),
-			NewRunEventStoreVersion: common.Int32Ptr(p.EventStoreVersion),
+			ScheduledID:             activityScheduleID,
+			EventStoreVersion:       p.EventStoreVersion,
+			NewRunEventStoreVersion: p.EventStoreVersion,
 			BranchToken:             branchToken,
 			NewRunBranchToken:       newRunBranchToken,
-			ResetWorkflow:           &resetWorkflow,
+			ResetWorkflow:           resetWorkflow,
 		})
 		if err != nil {
 			return err

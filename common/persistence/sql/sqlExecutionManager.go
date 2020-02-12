@@ -28,8 +28,9 @@ import (
 	"math"
 	"time"
 
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/.gen/go/sqlblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/collection"
 	"github.com/temporalio/temporal/common/log"
@@ -956,7 +957,7 @@ func (m *sqlExecutionManager) populateGetReplicationTasksResponse(
 
 	var tasks = make([]*p.ReplicationTaskInfo, len(rows))
 	for i, row := range rows {
-		info, err := replicationTaskInfoFromBlob(row.Data, row.DataEncoding)
+		info, err := ReplicationTaskInfoFromBlob(row.Data, row.DataEncoding)
 		if err != nil {
 			return nil, err
 		}
@@ -1172,19 +1173,19 @@ func (m *sqlExecutionManager) RangeCompleteTimerTask(
 
 func (m *sqlExecutionManager) PutReplicationTaskToDLQ(request *p.PutReplicationTaskToDLQRequest) error {
 	replicationTask := request.TaskInfo
-	blob, err := replicationTaskInfoToBlob(&sqlblobs.ReplicationTaskInfo{
+	blob, err := ReplicationTaskInfoToBlob(&persistenceblobs.ReplicationTaskInfo{
 		DomainID:            sqlplugin.MustParseUUID(replicationTask.DomainID),
-		WorkflowID:          &replicationTask.WorkflowID,
+		WorkflowID:          replicationTask.WorkflowID,
 		RunID:               sqlplugin.MustParseUUID(replicationTask.RunID),
-		TaskType:            common.Int16Ptr(int16(replicationTask.TaskType)),
-		FirstEventID:        &replicationTask.FirstEventID,
-		NextEventID:         &replicationTask.NextEventID,
-		Version:             &replicationTask.Version,
+		TaskType:            int32(replicationTask.TaskType),
+		FirstEventID:        replicationTask.FirstEventID,
+		NextEventID:         replicationTask.NextEventID,
+		Version:             replicationTask.Version,
 		LastReplicationInfo: toSqldbReplicationInfo(replicationTask.LastReplicationInfo),
-		ScheduledID:         &replicationTask.ScheduledID,
+		ScheduledID:         replicationTask.ScheduledID,
 		BranchToken:         replicationTask.BranchToken,
 		NewRunBranchToken:   replicationTask.NewRunBranchToken,
-		ResetWorkflow:       &replicationTask.ResetWorkflow,
+		ResetWorkflow:       replicationTask.ResetWorkflow,
 	})
 	if err != nil {
 		return err
@@ -1211,12 +1212,12 @@ func (m *sqlExecutionManager) PutReplicationTaskToDLQ(request *p.PutReplicationT
 	return nil
 }
 
-func toSqldbReplicationInfo(info map[string]*p.ReplicationInfo) map[string]*sqlblobs.ReplicationInfo {
-	replicationInfoMap := make(map[string]*sqlblobs.ReplicationInfo)
+func toSqldbReplicationInfo(info map[string]*p.ReplicationInfo) map[string]*persistenceblobs.ReplicationInfo {
+	replicationInfoMap := make(map[string]*persistenceblobs.ReplicationInfo)
 	for k, v := range info {
-		replicationInfoMap[k] = &sqlblobs.ReplicationInfo{
-			Version:     common.Int64Ptr(v.Version),
-			LastEventID: common.Int64Ptr(v.LastEventID),
+		replicationInfoMap[k] = &persistenceblobs.ReplicationInfo{
+			Version:     v.Version,
+			LastEventID: v.LastEventID,
 		}
 	}
 
