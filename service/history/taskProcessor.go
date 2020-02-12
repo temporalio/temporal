@@ -42,6 +42,7 @@ type (
 	}
 
 	taskInfo struct {
+		// TODO: change to queueTaskExecutor
 		processor taskExecutor
 		task      queueTaskInfo
 

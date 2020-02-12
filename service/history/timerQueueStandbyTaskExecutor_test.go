@@ -45,7 +45,7 @@ import (
 )
 
 type (
-	timerQueueStandbyProcessorSuite struct {
+	timerQueueStandbyTaskExecutorSuite struct {
 		suite.Suite
 		*require.Assertions
 
@@ -71,20 +71,20 @@ type (
 		fetchHistoryDuration time.Duration
 		discardDuration      time.Duration
 
-		timerQueueStandbyProcessor *timerQueueStandbyProcessorImpl
+		timerQueueStandbyTaskExecutor *timerQueueStandbyTaskExecutor
 	}
 )
 
-func TestTimerQueueStandbyProcessorSuite(t *testing.T) {
-	s := new(timerQueueStandbyProcessorSuite)
+func TestTimerQueueStandbyTaskExecutorSuite(t *testing.T) {
+	s := new(timerQueueStandbyTaskExecutorSuite)
 	suite.Run(t, s)
 }
 
-func (s *timerQueueStandbyProcessorSuite) SetupSuite() {
+func (s *timerQueueStandbyTaskExecutorSuite) SetupSuite() {
 
 }
 
-func (s *timerQueueStandbyProcessorSuite) SetupTest() {
+func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	config := NewDynamicConfigForTest()
@@ -149,24 +149,26 @@ func (s *timerQueueStandbyProcessorSuite) SetupTest() {
 	}
 	s.mockShard.SetEngine(h)
 
-	s.timerQueueStandbyProcessor = newTimerQueueStandbyProcessor(
+	s.timerQueueStandbyTaskExecutor = newTimerQueueStandbyTaskExecutor(
 		s.mockShard,
 		h,
-		s.clusterName,
-		newTaskAllocator(s.mockShard),
 		s.mockHistoryRereplicator,
 		s.mockNDCHistoryResender,
 		s.logger,
-	)
+		s.mockShard.GetMetricsClient(),
+		s.clusterName,
+		config,
+		// newTaskAllocator(s.mockShard),
+	).(*timerQueueStandbyTaskExecutor)
 }
 
-func (s *timerQueueStandbyProcessorSuite) TearDownTest() {
+func (s *timerQueueStandbyTaskExecutorSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockShard.Finish(s.T())
 	s.mockHistoryRereplicator.AssertExpectations(s.T())
 }
 
-func (s *timerQueueStandbyProcessorSuite) TestProcessUserTimerTimeout_Pending() {
+func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Pending() {
 
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
@@ -228,7 +230,7 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessUserTimerTimeout_Pending() 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
-	_, err = s.timerQueueStandbyProcessor.process(newTaskInfo(nil, timerTask, s.logger))
+	err = s.timerQueueStandbyTaskExecutor.execute(newTaskInfo(nil, timerTask, s.logger))
 	s.Equal(ErrTaskRetry, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.fetchHistoryDuration))
@@ -237,15 +239,15 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessUserTimerTimeout_Pending() 
 		timerTask.RunID, nextEventID,
 		timerTask.RunID, common.EndEventID,
 	).Return(nil).Once()
-	_, err = s.timerQueueStandbyProcessor.process(newTaskInfo(nil, timerTask, s.logger))
+	err = s.timerQueueStandbyTaskExecutor.execute(newTaskInfo(nil, timerTask, s.logger))
 	s.Equal(ErrTaskRetry, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.discardDuration))
-	_, err = s.timerQueueStandbyProcessor.process(newTaskInfo(nil, timerTask, s.logger))
+	err = s.timerQueueStandbyTaskExecutor.execute(newTaskInfo(nil, timerTask, s.logger))
 	s.Equal(ErrTaskDiscarded, err)
 }
 
-func (s *timerQueueStandbyProcessorSuite) TestProcessUserTimerTimeout_Success() {
+func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Success() {
 
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
@@ -302,11 +304,11 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessUserTimerTimeout_Success() 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Once()
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
-	_, err = s.timerQueueStandbyProcessor.process(newTaskInfo(nil, timerTask, s.logger))
+	err = s.timerQueueStandbyTaskExecutor.execute(newTaskInfo(nil, timerTask, s.logger))
 	s.Nil(err)
 }
 
-func (s *timerQueueStandbyProcessorSuite) TestProcessUserTimerTimeout_Multiple() {
+func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Multiple() {
 
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
@@ -367,11 +369,11 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessUserTimerTimeout_Multiple()
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Once()
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
-	_, err = s.timerQueueStandbyProcessor.process(newTaskInfo(nil, timerTask, s.logger))
+	err = s.timerQueueStandbyTaskExecutor.execute(newTaskInfo(nil, timerTask, s.logger))
 	s.Nil(err)
 }
 
-func (s *timerQueueStandbyProcessorSuite) TestProcessActivityTimeout_Pending() {
+func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Pending() {
 
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
@@ -430,7 +432,7 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessActivityTimeout_Pending() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Once()
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
-	_, err = s.timerQueueStandbyProcessor.process(newTaskInfo(nil, timerTask, s.logger))
+	err = s.timerQueueStandbyTaskExecutor.execute(newTaskInfo(nil, timerTask, s.logger))
 	s.Equal(ErrTaskRetry, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.fetchHistoryDuration))
@@ -439,15 +441,15 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessActivityTimeout_Pending() {
 		timerTask.RunID, nextEventID,
 		timerTask.RunID, common.EndEventID,
 	).Return(nil).Once()
-	_, err = s.timerQueueStandbyProcessor.process(newTaskInfo(nil, timerTask, s.logger))
+	err = s.timerQueueStandbyTaskExecutor.execute(newTaskInfo(nil, timerTask, s.logger))
 	s.Equal(ErrTaskRetry, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.discardDuration))
-	_, err = s.timerQueueStandbyProcessor.process(newTaskInfo(nil, timerTask, s.logger))
+	err = s.timerQueueStandbyTaskExecutor.execute(newTaskInfo(nil, timerTask, s.logger))
 	s.Equal(ErrTaskDiscarded, err)
 }
 
-func (s *timerQueueStandbyProcessorSuite) TestProcessActivityTimeout_Success() {
+func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Success() {
 
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
@@ -509,11 +511,11 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessActivityTimeout_Success() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Once()
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
-	_, err = s.timerQueueStandbyProcessor.process(newTaskInfo(nil, timerTask, s.logger))
+	err = s.timerQueueStandbyTaskExecutor.execute(newTaskInfo(nil, timerTask, s.logger))
 	s.Nil(err)
 }
 
-func (s *timerQueueStandbyProcessorSuite) TestProcessActivityTimeout_Multiple_CanUpdate() {
+func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple_CanUpdate() {
 
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
@@ -621,11 +623,11 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessActivityTimeout_Multiple_Ca
 	})).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
-	_, err = s.timerQueueStandbyProcessor.process(newTaskInfo(nil, timerTask, s.logger))
+	err = s.timerQueueStandbyTaskExecutor.execute(newTaskInfo(nil, timerTask, s.logger))
 	s.Nil(err)
 }
 
-func (s *timerQueueStandbyProcessorSuite) TestProcessDecisionTimeout_Pending() {
+func (s *timerQueueStandbyTaskExecutorSuite) TestProcessDecisionTimeout_Pending() {
 
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
@@ -669,7 +671,7 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessDecisionTimeout_Pending() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Once()
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
-	_, err = s.timerQueueStandbyProcessor.process(newTaskInfo(nil, timerTask, s.logger))
+	err = s.timerQueueStandbyTaskExecutor.execute(newTaskInfo(nil, timerTask, s.logger))
 	s.Equal(ErrTaskRetry, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.fetchHistoryDuration))
@@ -678,15 +680,15 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessDecisionTimeout_Pending() {
 		timerTask.RunID, nextEventID,
 		timerTask.RunID, common.EndEventID,
 	).Return(nil).Once()
-	_, err = s.timerQueueStandbyProcessor.process(newTaskInfo(nil, timerTask, s.logger))
+	err = s.timerQueueStandbyTaskExecutor.execute(newTaskInfo(nil, timerTask, s.logger))
 	s.Equal(ErrTaskRetry, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.discardDuration))
-	_, err = s.timerQueueStandbyProcessor.process(newTaskInfo(nil, timerTask, s.logger))
+	err = s.timerQueueStandbyTaskExecutor.execute(newTaskInfo(nil, timerTask, s.logger))
 	s.Equal(ErrTaskDiscarded, err)
 }
 
-func (s *timerQueueStandbyProcessorSuite) TestProcessDecisionTimeout_ScheduleToStartTimer() {
+func (s *timerQueueStandbyTaskExecutorSuite) TestProcessDecisionTimeout_ScheduleToStartTimer() {
 
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
@@ -708,11 +710,11 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessDecisionTimeout_ScheduleToS
 	}
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
-	_, err := s.timerQueueStandbyProcessor.process(newTaskInfo(nil, timerTask, s.logger))
+	err := s.timerQueueStandbyTaskExecutor.execute(newTaskInfo(nil, timerTask, s.logger))
 	s.Equal(nil, err)
 }
 
-func (s *timerQueueStandbyProcessorSuite) TestProcessDecisionTimeout_Success() {
+func (s *timerQueueStandbyTaskExecutorSuite) TestProcessDecisionTimeout_Success() {
 
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
@@ -757,11 +759,11 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessDecisionTimeout_Success() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Once()
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
-	_, err = s.timerQueueStandbyProcessor.process(newTaskInfo(nil, timerTask, s.logger))
+	err = s.timerQueueStandbyTaskExecutor.execute(newTaskInfo(nil, timerTask, s.logger))
 	s.Nil(err)
 }
 
-func (s *timerQueueStandbyProcessorSuite) TestProcessWorkflowBackoffTimer_Pending() {
+func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Pending() {
 
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
@@ -800,7 +802,7 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessWorkflowBackoffTimer_Pendin
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Once()
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
-	_, err = s.timerQueueStandbyProcessor.process(newTaskInfo(nil, timerTask, s.logger))
+	err = s.timerQueueStandbyTaskExecutor.execute(newTaskInfo(nil, timerTask, s.logger))
 	s.Equal(ErrTaskRetry, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, time.Now().Add(s.fetchHistoryDuration))
@@ -809,15 +811,15 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessWorkflowBackoffTimer_Pendin
 		timerTask.RunID, nextEventID,
 		timerTask.RunID, common.EndEventID,
 	).Return(nil).Once()
-	_, err = s.timerQueueStandbyProcessor.process(newTaskInfo(nil, timerTask, s.logger))
+	err = s.timerQueueStandbyTaskExecutor.execute(newTaskInfo(nil, timerTask, s.logger))
 	s.Equal(ErrTaskRetry, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, time.Now().Add(s.discardDuration))
-	_, err = s.timerQueueStandbyProcessor.process(newTaskInfo(nil, timerTask, s.logger))
+	err = s.timerQueueStandbyTaskExecutor.execute(newTaskInfo(nil, timerTask, s.logger))
 	s.Equal(ErrTaskDiscarded, err)
 }
 
-func (s *timerQueueStandbyProcessorSuite) TestProcessWorkflowBackoffTimer_Success() {
+func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Success() {
 
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
@@ -857,11 +859,11 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessWorkflowBackoffTimer_Succes
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Once()
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
-	_, err = s.timerQueueStandbyProcessor.process(newTaskInfo(nil, timerTask, s.logger))
+	err = s.timerQueueStandbyTaskExecutor.execute(newTaskInfo(nil, timerTask, s.logger))
 	s.Nil(err)
 }
 
-func (s *timerQueueStandbyProcessorSuite) TestProcessWorkflowTimeout_Pending() {
+func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Pending() {
 
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
@@ -906,7 +908,7 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessWorkflowTimeout_Pending() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Once()
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
-	_, err = s.timerQueueStandbyProcessor.process(newTaskInfo(nil, timerTask, s.logger))
+	err = s.timerQueueStandbyTaskExecutor.execute(newTaskInfo(nil, timerTask, s.logger))
 	s.Equal(ErrTaskRetry, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.fetchHistoryDuration))
@@ -915,15 +917,15 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessWorkflowTimeout_Pending() {
 		timerTask.RunID, nextEventID,
 		timerTask.RunID, common.EndEventID,
 	).Return(nil).Once()
-	_, err = s.timerQueueStandbyProcessor.process(newTaskInfo(nil, timerTask, s.logger))
+	err = s.timerQueueStandbyTaskExecutor.execute(newTaskInfo(nil, timerTask, s.logger))
 	s.Equal(ErrTaskRetry, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.discardDuration))
-	_, err = s.timerQueueStandbyProcessor.process(newTaskInfo(nil, timerTask, s.logger))
+	err = s.timerQueueStandbyTaskExecutor.execute(newTaskInfo(nil, timerTask, s.logger))
 	s.Equal(ErrTaskDiscarded, err)
 }
 
-func (s *timerQueueStandbyProcessorSuite) TestProcessWorkflowTimeout_Success() {
+func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Success() {
 
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
@@ -968,11 +970,11 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessWorkflowTimeout_Success() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Once()
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
-	_, err = s.timerQueueStandbyProcessor.process(newTaskInfo(nil, timerTask, s.logger))
+	err = s.timerQueueStandbyTaskExecutor.execute(newTaskInfo(nil, timerTask, s.logger))
 	s.Nil(err)
 }
 
-func (s *timerQueueStandbyProcessorSuite) TestProcessRetryTimeout() {
+func (s *timerQueueStandbyTaskExecutorSuite) TestProcessRetryTimeout() {
 
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
@@ -1008,11 +1010,11 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessRetryTimeout() {
 	}
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
-	_, err = s.timerQueueStandbyProcessor.process(newTaskInfo(nil, timerTask, s.logger))
+	err = s.timerQueueStandbyTaskExecutor.execute(newTaskInfo(nil, timerTask, s.logger))
 	s.Nil(err)
 }
 
-func (s *timerQueueStandbyProcessorSuite) createPersistenceMutableState(
+func (s *timerQueueStandbyTaskExecutorSuite) createPersistenceMutableState(
 	ms mutableState,
 	lastEventID int64,
 	lastEventVersion int64,
