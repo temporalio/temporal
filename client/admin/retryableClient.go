@@ -263,3 +263,15 @@ func (c *retryableClient) MergeDLQMessages(
 	err := backoff.Retry(op, c.policy, c.isRetryable)
 	return resp, err
 }
+
+func (c *retryableClient) RefreshWorkflowTasks(
+	ctx context.Context,
+	request *shared.RefreshWorkflowTasksRequest,
+	opts ...yarpc.CallOption,
+) error {
+
+	op := func() error {
+		return c.client.RefreshWorkflowTasks(ctx, request, opts...)
+	}
+	return backoff.Retry(op, c.policy, c.isRetryable)
+}

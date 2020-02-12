@@ -594,3 +594,20 @@ func (c *metricClient) ReapplyEvents(
 	}
 	return err
 }
+
+func (c *metricClient) RefreshWorkflowTasks(
+	ctx context.Context,
+	request *h.RefreshWorkflowTasksRequest,
+	opts ...yarpc.CallOption,
+) error {
+
+	c.metricsClient.IncCounter(metrics.HistoryClientRefreshWorkflowTasksScope, metrics.CadenceClientRequests)
+	sw := c.metricsClient.StartTimer(metrics.HistoryClientRefreshWorkflowTasksScope, metrics.CadenceClientLatency)
+	err := c.client.RefreshWorkflowTasks(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.HistoryClientRefreshWorkflowTasksScope, metrics.CadenceClientFailures)
+	}
+	return err
+}

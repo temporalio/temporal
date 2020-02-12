@@ -956,6 +956,35 @@ func (adh *AdminHandler) MergeDLQMessages(
 	}, nil
 }
 
+func (adh *AdminHandler) RefreshWorkflowTasks(
+	ctx context.Context,
+	request *gen.RefreshWorkflowTasksRequest,
+) (err error) {
+	defer log.CapturePanic(adh.GetLogger(), &err)
+	scope, sw := adh.startRequestProfile(metrics.AdminRefreshWorkflowTasksScope)
+	defer sw.Stop()
+
+	if request == nil {
+		return adh.error(errRequestNotSet, scope)
+	}
+	if err := validateExecution(request.Execution); err != nil {
+		return adh.error(err, scope)
+	}
+	domainEntry, err := adh.GetDomainCache().GetDomain(request.GetDomain())
+	if err != nil {
+		return adh.error(err, scope)
+	}
+
+	err = adh.GetHistoryClient().RefreshWorkflowTasks(ctx, &h.RefreshWorkflowTasksRequest{
+		DomainUIID: common.StringPtr(domainEntry.GetInfo().ID),
+		Request:    request,
+	})
+	if err != nil {
+		return adh.error(err, scope)
+	}
+	return nil
+}
+
 func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(
 	request *admin.GetWorkflowExecutionRawHistoryV2Request,
 ) error {

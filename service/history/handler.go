@@ -1608,6 +1608,40 @@ func (h *Handler) ReapplyEvents(
 	return nil
 }
 
+// RefreshWorkflowTasks refreshes all the tasks of a workflow
+func (h *Handler) RefreshWorkflowTasks(
+	ctx context.Context,
+	request *hist.RefreshWorkflowTasksRequest) (retError error) {
+
+	scope := metrics.HistoryRefreshWorkflowTasksScope
+	h.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
+	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	domainID := request.GetDomainUIID()
+	execution := request.GetRequest().GetExecution()
+	workflowID := execution.GetWorkflowId()
+	engine, err := h.controller.GetEngine(workflowID)
+	if err != nil {
+		return h.error(err, scope, domainID, workflowID)
+	}
+
+	err = engine.RefreshWorkflowTasks(
+		ctx,
+		domainID,
+		gen.WorkflowExecution{
+			WorkflowId: execution.WorkflowId,
+			RunId:      execution.RunId,
+		},
+	)
+
+	if err != nil {
+		return h.error(err, scope, domainID, workflowID)
+	}
+
+	return nil
+}
+
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various
 // HistoryEngine API calls to ShardOwnershipLost error return by HistoryService for client to be redirected to the
 // correct shard.

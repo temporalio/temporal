@@ -11700,6 +11700,589 @@ func (v *AdminService_ReapplyEvents_Result) EnvelopeType() wire.EnvelopeType {
 	return wire.Reply
 }
 
+// AdminService_RefreshWorkflowTasks_Args represents the arguments for the AdminService.RefreshWorkflowTasks function.
+//
+// The arguments for RefreshWorkflowTasks are sent and received over the wire as this struct.
+type AdminService_RefreshWorkflowTasks_Args struct {
+	Request *shared.RefreshWorkflowTasksRequest `json:"request,omitempty"`
+}
+
+// ToWire translates a AdminService_RefreshWorkflowTasks_Args struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *AdminService_RefreshWorkflowTasks_Args) ToWire() (wire.Value, error) {
+	var (
+		fields [1]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.Request != nil {
+		w, err = v.Request.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 1, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _RefreshWorkflowTasksRequest_Read(w wire.Value) (*shared.RefreshWorkflowTasksRequest, error) {
+	var v shared.RefreshWorkflowTasksRequest
+	err := v.FromWire(w)
+	return &v, err
+}
+
+// FromWire deserializes a AdminService_RefreshWorkflowTasks_Args struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a AdminService_RefreshWorkflowTasks_Args struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v AdminService_RefreshWorkflowTasks_Args
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *AdminService_RefreshWorkflowTasks_Args) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 1:
+			if field.Value.Type() == wire.TStruct {
+				v.Request, err = _RefreshWorkflowTasksRequest_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a AdminService_RefreshWorkflowTasks_Args
+// struct.
+func (v *AdminService_RefreshWorkflowTasks_Args) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [1]string
+	i := 0
+	if v.Request != nil {
+		fields[i] = fmt.Sprintf("Request: %v", v.Request)
+		i++
+	}
+
+	return fmt.Sprintf("AdminService_RefreshWorkflowTasks_Args{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this AdminService_RefreshWorkflowTasks_Args match the
+// provided AdminService_RefreshWorkflowTasks_Args.
+//
+// This function performs a deep comparison.
+func (v *AdminService_RefreshWorkflowTasks_Args) Equals(rhs *AdminService_RefreshWorkflowTasks_Args) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !((v.Request == nil && rhs.Request == nil) || (v.Request != nil && rhs.Request != nil && v.Request.Equals(rhs.Request))) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of AdminService_RefreshWorkflowTasks_Args.
+func (v *AdminService_RefreshWorkflowTasks_Args) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.Request != nil {
+		err = multierr.Append(err, enc.AddObject("request", v.Request))
+	}
+	return err
+}
+
+// GetRequest returns the value of Request if it is set or its
+// zero value if it is unset.
+func (v *AdminService_RefreshWorkflowTasks_Args) GetRequest() (o *shared.RefreshWorkflowTasksRequest) {
+	if v != nil && v.Request != nil {
+		return v.Request
+	}
+
+	return
+}
+
+// IsSetRequest returns true if Request is not nil.
+func (v *AdminService_RefreshWorkflowTasks_Args) IsSetRequest() bool {
+	return v != nil && v.Request != nil
+}
+
+// MethodName returns the name of the Thrift function as specified in
+// the IDL, for which this struct represent the arguments.
+//
+// This will always be "RefreshWorkflowTasks" for this struct.
+func (v *AdminService_RefreshWorkflowTasks_Args) MethodName() string {
+	return "RefreshWorkflowTasks"
+}
+
+// EnvelopeType returns the kind of value inside this struct.
+//
+// This will always be Call for this struct.
+func (v *AdminService_RefreshWorkflowTasks_Args) EnvelopeType() wire.EnvelopeType {
+	return wire.Call
+}
+
+// AdminService_RefreshWorkflowTasks_Helper provides functions that aid in handling the
+// parameters and return values of the AdminService.RefreshWorkflowTasks
+// function.
+var AdminService_RefreshWorkflowTasks_Helper = struct {
+	// Args accepts the parameters of RefreshWorkflowTasks in-order and returns
+	// the arguments struct for the function.
+	Args func(
+		request *shared.RefreshWorkflowTasksRequest,
+	) *AdminService_RefreshWorkflowTasks_Args
+
+	// IsException returns true if the given error can be thrown
+	// by RefreshWorkflowTasks.
+	//
+	// An error can be thrown by RefreshWorkflowTasks only if the
+	// corresponding exception type was mentioned in the 'throws'
+	// section for it in the Thrift file.
+	IsException func(error) bool
+
+	// WrapResponse returns the result struct for RefreshWorkflowTasks
+	// given the error returned by it. The provided error may
+	// be nil if RefreshWorkflowTasks did not fail.
+	//
+	// This allows mapping errors returned by RefreshWorkflowTasks into a
+	// serializable result struct. WrapResponse returns a
+	// non-nil error if the provided error cannot be thrown by
+	// RefreshWorkflowTasks
+	//
+	//   err := RefreshWorkflowTasks(args)
+	//   result, err := AdminService_RefreshWorkflowTasks_Helper.WrapResponse(err)
+	//   if err != nil {
+	//     return fmt.Errorf("unexpected error from RefreshWorkflowTasks: %v", err)
+	//   }
+	//   serialize(result)
+	WrapResponse func(error) (*AdminService_RefreshWorkflowTasks_Result, error)
+
+	// UnwrapResponse takes the result struct for RefreshWorkflowTasks
+	// and returns the erorr returned by it (if any).
+	//
+	// The error is non-nil only if RefreshWorkflowTasks threw an
+	// exception.
+	//
+	//   result := deserialize(bytes)
+	//   err := AdminService_RefreshWorkflowTasks_Helper.UnwrapResponse(result)
+	UnwrapResponse func(*AdminService_RefreshWorkflowTasks_Result) error
+}{}
+
+func init() {
+	AdminService_RefreshWorkflowTasks_Helper.Args = func(
+		request *shared.RefreshWorkflowTasksRequest,
+	) *AdminService_RefreshWorkflowTasks_Args {
+		return &AdminService_RefreshWorkflowTasks_Args{
+			Request: request,
+		}
+	}
+
+	AdminService_RefreshWorkflowTasks_Helper.IsException = func(err error) bool {
+		switch err.(type) {
+		case *shared.BadRequestError:
+			return true
+		case *shared.DomainNotActiveError:
+			return true
+		case *shared.ServiceBusyError:
+			return true
+		case *shared.EntityNotExistsError:
+			return true
+		default:
+			return false
+		}
+	}
+
+	AdminService_RefreshWorkflowTasks_Helper.WrapResponse = func(err error) (*AdminService_RefreshWorkflowTasks_Result, error) {
+		if err == nil {
+			return &AdminService_RefreshWorkflowTasks_Result{}, nil
+		}
+
+		switch e := err.(type) {
+		case *shared.BadRequestError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for AdminService_RefreshWorkflowTasks_Result.BadRequestError")
+			}
+			return &AdminService_RefreshWorkflowTasks_Result{BadRequestError: e}, nil
+		case *shared.DomainNotActiveError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for AdminService_RefreshWorkflowTasks_Result.DomainNotActiveError")
+			}
+			return &AdminService_RefreshWorkflowTasks_Result{DomainNotActiveError: e}, nil
+		case *shared.ServiceBusyError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for AdminService_RefreshWorkflowTasks_Result.ServiceBusyError")
+			}
+			return &AdminService_RefreshWorkflowTasks_Result{ServiceBusyError: e}, nil
+		case *shared.EntityNotExistsError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for AdminService_RefreshWorkflowTasks_Result.EntityNotExistError")
+			}
+			return &AdminService_RefreshWorkflowTasks_Result{EntityNotExistError: e}, nil
+		}
+
+		return nil, err
+	}
+	AdminService_RefreshWorkflowTasks_Helper.UnwrapResponse = func(result *AdminService_RefreshWorkflowTasks_Result) (err error) {
+		if result.BadRequestError != nil {
+			err = result.BadRequestError
+			return
+		}
+		if result.DomainNotActiveError != nil {
+			err = result.DomainNotActiveError
+			return
+		}
+		if result.ServiceBusyError != nil {
+			err = result.ServiceBusyError
+			return
+		}
+		if result.EntityNotExistError != nil {
+			err = result.EntityNotExistError
+			return
+		}
+		return
+	}
+
+}
+
+// AdminService_RefreshWorkflowTasks_Result represents the result of a AdminService.RefreshWorkflowTasks function call.
+//
+// The result of a RefreshWorkflowTasks execution is sent and received over the wire as this struct.
+type AdminService_RefreshWorkflowTasks_Result struct {
+	BadRequestError      *shared.BadRequestError      `json:"badRequestError,omitempty"`
+	DomainNotActiveError *shared.DomainNotActiveError `json:"domainNotActiveError,omitempty"`
+	ServiceBusyError     *shared.ServiceBusyError     `json:"serviceBusyError,omitempty"`
+	EntityNotExistError  *shared.EntityNotExistsError `json:"entityNotExistError,omitempty"`
+}
+
+// ToWire translates a AdminService_RefreshWorkflowTasks_Result struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *AdminService_RefreshWorkflowTasks_Result) ToWire() (wire.Value, error) {
+	var (
+		fields [4]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.BadRequestError != nil {
+		w, err = v.BadRequestError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 1, Value: w}
+		i++
+	}
+	if v.DomainNotActiveError != nil {
+		w, err = v.DomainNotActiveError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 2, Value: w}
+		i++
+	}
+	if v.ServiceBusyError != nil {
+		w, err = v.ServiceBusyError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 3, Value: w}
+		i++
+	}
+	if v.EntityNotExistError != nil {
+		w, err = v.EntityNotExistError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 4, Value: w}
+		i++
+	}
+
+	if i > 1 {
+		return wire.Value{}, fmt.Errorf("AdminService_RefreshWorkflowTasks_Result should have at most one field: got %v fields", i)
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a AdminService_RefreshWorkflowTasks_Result struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a AdminService_RefreshWorkflowTasks_Result struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v AdminService_RefreshWorkflowTasks_Result
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *AdminService_RefreshWorkflowTasks_Result) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 1:
+			if field.Value.Type() == wire.TStruct {
+				v.BadRequestError, err = _BadRequestError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 2:
+			if field.Value.Type() == wire.TStruct {
+				v.DomainNotActiveError, err = _DomainNotActiveError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 3:
+			if field.Value.Type() == wire.TStruct {
+				v.ServiceBusyError, err = _ServiceBusyError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 4:
+			if field.Value.Type() == wire.TStruct {
+				v.EntityNotExistError, err = _EntityNotExistsError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	count := 0
+	if v.BadRequestError != nil {
+		count++
+	}
+	if v.DomainNotActiveError != nil {
+		count++
+	}
+	if v.ServiceBusyError != nil {
+		count++
+	}
+	if v.EntityNotExistError != nil {
+		count++
+	}
+	if count > 1 {
+		return fmt.Errorf("AdminService_RefreshWorkflowTasks_Result should have at most one field: got %v fields", count)
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a AdminService_RefreshWorkflowTasks_Result
+// struct.
+func (v *AdminService_RefreshWorkflowTasks_Result) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [4]string
+	i := 0
+	if v.BadRequestError != nil {
+		fields[i] = fmt.Sprintf("BadRequestError: %v", v.BadRequestError)
+		i++
+	}
+	if v.DomainNotActiveError != nil {
+		fields[i] = fmt.Sprintf("DomainNotActiveError: %v", v.DomainNotActiveError)
+		i++
+	}
+	if v.ServiceBusyError != nil {
+		fields[i] = fmt.Sprintf("ServiceBusyError: %v", v.ServiceBusyError)
+		i++
+	}
+	if v.EntityNotExistError != nil {
+		fields[i] = fmt.Sprintf("EntityNotExistError: %v", v.EntityNotExistError)
+		i++
+	}
+
+	return fmt.Sprintf("AdminService_RefreshWorkflowTasks_Result{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this AdminService_RefreshWorkflowTasks_Result match the
+// provided AdminService_RefreshWorkflowTasks_Result.
+//
+// This function performs a deep comparison.
+func (v *AdminService_RefreshWorkflowTasks_Result) Equals(rhs *AdminService_RefreshWorkflowTasks_Result) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !((v.BadRequestError == nil && rhs.BadRequestError == nil) || (v.BadRequestError != nil && rhs.BadRequestError != nil && v.BadRequestError.Equals(rhs.BadRequestError))) {
+		return false
+	}
+	if !((v.DomainNotActiveError == nil && rhs.DomainNotActiveError == nil) || (v.DomainNotActiveError != nil && rhs.DomainNotActiveError != nil && v.DomainNotActiveError.Equals(rhs.DomainNotActiveError))) {
+		return false
+	}
+	if !((v.ServiceBusyError == nil && rhs.ServiceBusyError == nil) || (v.ServiceBusyError != nil && rhs.ServiceBusyError != nil && v.ServiceBusyError.Equals(rhs.ServiceBusyError))) {
+		return false
+	}
+	if !((v.EntityNotExistError == nil && rhs.EntityNotExistError == nil) || (v.EntityNotExistError != nil && rhs.EntityNotExistError != nil && v.EntityNotExistError.Equals(rhs.EntityNotExistError))) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of AdminService_RefreshWorkflowTasks_Result.
+func (v *AdminService_RefreshWorkflowTasks_Result) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.BadRequestError != nil {
+		err = multierr.Append(err, enc.AddObject("badRequestError", v.BadRequestError))
+	}
+	if v.DomainNotActiveError != nil {
+		err = multierr.Append(err, enc.AddObject("domainNotActiveError", v.DomainNotActiveError))
+	}
+	if v.ServiceBusyError != nil {
+		err = multierr.Append(err, enc.AddObject("serviceBusyError", v.ServiceBusyError))
+	}
+	if v.EntityNotExistError != nil {
+		err = multierr.Append(err, enc.AddObject("entityNotExistError", v.EntityNotExistError))
+	}
+	return err
+}
+
+// GetBadRequestError returns the value of BadRequestError if it is set or its
+// zero value if it is unset.
+func (v *AdminService_RefreshWorkflowTasks_Result) GetBadRequestError() (o *shared.BadRequestError) {
+	if v != nil && v.BadRequestError != nil {
+		return v.BadRequestError
+	}
+
+	return
+}
+
+// IsSetBadRequestError returns true if BadRequestError is not nil.
+func (v *AdminService_RefreshWorkflowTasks_Result) IsSetBadRequestError() bool {
+	return v != nil && v.BadRequestError != nil
+}
+
+// GetDomainNotActiveError returns the value of DomainNotActiveError if it is set or its
+// zero value if it is unset.
+func (v *AdminService_RefreshWorkflowTasks_Result) GetDomainNotActiveError() (o *shared.DomainNotActiveError) {
+	if v != nil && v.DomainNotActiveError != nil {
+		return v.DomainNotActiveError
+	}
+
+	return
+}
+
+// IsSetDomainNotActiveError returns true if DomainNotActiveError is not nil.
+func (v *AdminService_RefreshWorkflowTasks_Result) IsSetDomainNotActiveError() bool {
+	return v != nil && v.DomainNotActiveError != nil
+}
+
+// GetServiceBusyError returns the value of ServiceBusyError if it is set or its
+// zero value if it is unset.
+func (v *AdminService_RefreshWorkflowTasks_Result) GetServiceBusyError() (o *shared.ServiceBusyError) {
+	if v != nil && v.ServiceBusyError != nil {
+		return v.ServiceBusyError
+	}
+
+	return
+}
+
+// IsSetServiceBusyError returns true if ServiceBusyError is not nil.
+func (v *AdminService_RefreshWorkflowTasks_Result) IsSetServiceBusyError() bool {
+	return v != nil && v.ServiceBusyError != nil
+}
+
+// GetEntityNotExistError returns the value of EntityNotExistError if it is set or its
+// zero value if it is unset.
+func (v *AdminService_RefreshWorkflowTasks_Result) GetEntityNotExistError() (o *shared.EntityNotExistsError) {
+	if v != nil && v.EntityNotExistError != nil {
+		return v.EntityNotExistError
+	}
+
+	return
+}
+
+// IsSetEntityNotExistError returns true if EntityNotExistError is not nil.
+func (v *AdminService_RefreshWorkflowTasks_Result) IsSetEntityNotExistError() bool {
+	return v != nil && v.EntityNotExistError != nil
+}
+
+// MethodName returns the name of the Thrift function as specified in
+// the IDL, for which this struct represent the result.
+//
+// This will always be "RefreshWorkflowTasks" for this struct.
+func (v *AdminService_RefreshWorkflowTasks_Result) MethodName() string {
+	return "RefreshWorkflowTasks"
+}
+
+// EnvelopeType returns the kind of value inside this struct.
+//
+// This will always be Reply for this struct.
+func (v *AdminService_RefreshWorkflowTasks_Result) EnvelopeType() wire.EnvelopeType {
+	return wire.Reply
+}
+
 // AdminService_RemoveTask_Args represents the arguments for the AdminService.RemoveTask function.
 //
 // The arguments for RemoveTask are sent and received over the wire as this struct.

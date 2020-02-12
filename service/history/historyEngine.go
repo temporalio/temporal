@@ -102,6 +102,7 @@ type (
 		GetDLQReplicationMessages(ctx ctx.Context, taskInfos []*r.ReplicationTaskInfo) ([]*r.ReplicationTask, error)
 		QueryWorkflow(ctx ctx.Context, request *h.QueryWorkflowRequest) (*h.QueryWorkflowResponse, error)
 		ReapplyEvents(ctx ctx.Context, domainUUID string, workflowID string, runID string, events []*workflow.HistoryEvent) error
+		RefreshWorkflowTasks(ctx ctx.Context, domainUUID string, execution workflow.WorkflowExecution) error
 
 		NotifyNewHistoryEvent(event *historyEventNotification)
 		NotifyNewTransferTasks(tasks []persistence.Task)
@@ -2910,6 +2911,54 @@ func (e *historyEngineImpl) ReapplyEvents(
 			}
 			return postActions, nil
 		})
+}
+
+func (e *historyEngineImpl) RefreshWorkflowTasks(
+	ctx ctx.Context,
+	domainUUID string,
+	execution workflow.WorkflowExecution,
+) (retError error) {
+
+	domainEntry, err := e.getActiveDomainEntry(common.StringPtr(domainUUID))
+	if err != nil {
+		return err
+	}
+	domainID := domainEntry.GetInfo().ID
+
+	context, release, err := e.historyCache.getOrCreateWorkflowExecution(ctx, domainID, execution)
+	if err != nil {
+		return err
+	}
+	defer func() { release(retError) }()
+
+	mutableState, err := context.loadWorkflowExecution()
+	if err != nil {
+		return err
+	}
+
+	if !mutableState.IsWorkflowExecutionRunning() {
+		return nil
+	}
+
+	mutableStateTaskRefresher := newMutableStateTaskRefresher(
+		e.shard.GetConfig(),
+		e.shard.GetDomainCache(),
+		e.shard.GetEventsCache(),
+		e.shard.GetLogger(),
+	)
+
+	now := e.shard.GetTimeSource().Now()
+
+	err = mutableStateTaskRefresher.refreshTasks(now, mutableState)
+	if err != nil {
+		return err
+	}
+
+	err = context.updateWorkflowExecutionAsActive(now)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (e *historyEngineImpl) loadWorkflowOnce(

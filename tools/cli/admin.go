@@ -116,6 +116,24 @@ func newAdminWorkflowCommands() []cli.Command {
 			},
 		},
 		{
+			Name:    "refresh-tasks",
+			Aliases: []string{"rt"},
+			Usage:   "Refreshes all the tasks of a workflow",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagWorkflowIDWithAlias,
+					Usage: "WorkflowID",
+				},
+				cli.StringFlag{
+					Name:  FlagRunIDWithAlias,
+					Usage: "RunID",
+				},
+			},
+			Action: func(c *cli.Context) {
+				AdminRefreshWorkflowTasks(c)
+			},
+		},
+		{
 			Name:    "delete",
 			Aliases: []string{"del"},
 			Usage:   "Delete current workflow execution and the mutableState record",

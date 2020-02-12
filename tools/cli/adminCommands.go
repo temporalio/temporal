@@ -438,3 +438,28 @@ func AdminDescribeHistoryHost(c *cli.Context) {
 	}
 	prettyPrintJSONObject(resp)
 }
+
+// AdminRefreshWorkflowTasks refreshes all the tasks of a workflow
+func AdminRefreshWorkflowTasks(c *cli.Context) {
+	adminClient := cFactory.ServerAdminClient(c)
+
+	domain := getRequiredGlobalOption(c, FlagDomain)
+	wid := getRequiredOption(c, FlagWorkflowID)
+	rid := c.String(FlagRunID)
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	err := adminClient.RefreshWorkflowTasks(ctx, &shared.RefreshWorkflowTasksRequest{
+		Domain: common.StringPtr(domain),
+		Execution: &shared.WorkflowExecution{
+			WorkflowId: common.StringPtr(wid),
+			RunId:      common.StringPtr(rid),
+		},
+	})
+	if err != nil {
+		ErrorAndExit("Refresh workflow task failed", err)
+	} else {
+		fmt.Println("Refresh workflow task succeeded.")
+	}
+}

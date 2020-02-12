@@ -122,6 +122,12 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) error
 
+	RefreshWorkflowTasks(
+		ctx context.Context,
+		Request *shared.RefreshWorkflowTasksRequest,
+		opts ...yarpc.CallOption,
+	) error
+
 	RemoveTask(
 		ctx context.Context,
 		Request *shared.RemoveTaskRequest,
@@ -471,6 +477,29 @@ func (c client) ReapplyEvents(
 	}
 
 	err = admin.AdminService_ReapplyEvents_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) RefreshWorkflowTasks(
+	ctx context.Context,
+	_Request *shared.RefreshWorkflowTasksRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := admin.AdminService_RefreshWorkflowTasks_Helper.Args(_Request)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result admin.AdminService_RefreshWorkflowTasks_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	err = admin.AdminService_RefreshWorkflowTasks_Helper.UnwrapResponse(&result)
 	return
 }
 

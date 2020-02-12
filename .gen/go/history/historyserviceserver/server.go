@@ -107,6 +107,11 @@ type Interface interface {
 		AddRequest *history.RecordDecisionTaskStartedRequest,
 	) (*history.RecordDecisionTaskStartedResponse, error)
 
+	RefreshWorkflowTasks(
+		ctx context.Context,
+		Request *history.RefreshWorkflowTasksRequest,
+	) error
+
 	RemoveSignalMutableState(
 		ctx context.Context,
 		RemoveRequest *history.RemoveSignalMutableStateRequest,
@@ -374,6 +379,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 			},
 
 			thrift.Method{
+				Name: "RefreshWorkflowTasks",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.RefreshWorkflowTasks),
+				},
+				Signature:    "RefreshWorkflowTasks(Request *history.RefreshWorkflowTasksRequest)",
+				ThriftModule: history.ThriftModule,
+			},
+
+			thrift.Method{
 				Name: "RemoveSignalMutableState",
 				HandlerSpec: thrift.HandlerSpec{
 
@@ -595,7 +611,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 34)
+	procedures := make([]transport.Procedure, 0, 35)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -859,6 +875,25 @@ func (h handler) RecordDecisionTaskStarted(ctx context.Context, body wire.Value)
 
 	hadError := err != nil
 	result, err := history.HistoryService_RecordDecisionTaskStarted_Helper.WrapResponse(success, err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) RefreshWorkflowTasks(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args history.HistoryService_RefreshWorkflowTasks_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	err := h.impl.RefreshWorkflowTasks(ctx, args.Request)
+
+	hadError := err != nil
+	result, err := history.HistoryService_RefreshWorkflowTasks_Helper.WrapResponse(err)
 
 	var response thrift.Response
 	if err == nil {

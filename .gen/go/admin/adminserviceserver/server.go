@@ -106,6 +106,11 @@ type Interface interface {
 		ReapplyEventsRequest *shared.ReapplyEventsRequest,
 	) error
 
+	RefreshWorkflowTasks(
+		ctx context.Context,
+		Request *shared.RefreshWorkflowTasksRequest,
+	) error
+
 	RemoveTask(
 		ctx context.Context,
 		Request *shared.RemoveTaskRequest,
@@ -274,6 +279,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 					Unary: thrift.UnaryHandler(h.ReapplyEvents),
 				},
 				Signature:    "ReapplyEvents(ReapplyEventsRequest *shared.ReapplyEventsRequest)",
+				ThriftModule: admin.ThriftModule,
+			},
+
+			thrift.Method{
+				Name: "RefreshWorkflowTasks",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.RefreshWorkflowTasks),
+				},
+				Signature:    "RefreshWorkflowTasks(Request *shared.RefreshWorkflowTasksRequest)",
 				ThriftModule: admin.ThriftModule,
 			},
 
@@ -554,6 +570,25 @@ func (h handler) ReapplyEvents(ctx context.Context, body wire.Value) (thrift.Res
 
 	hadError := err != nil
 	result, err := admin.AdminService_ReapplyEvents_Helper.WrapResponse(err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) RefreshWorkflowTasks(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args admin.AdminService_RefreshWorkflowTasks_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	err := h.impl.RefreshWorkflowTasks(ctx, args.Request)
+
+	hadError := err != nil
+	result, err := admin.AdminService_RefreshWorkflowTasks_Helper.WrapResponse(err)
 
 	var response thrift.Response
 	if err == nil {

@@ -322,6 +322,8 @@ const (
 	HistoryClientQueryWorkflowScope
 	// HistoryClientReapplyEventsScope tracks RPC calls to history service
 	HistoryClientReapplyEventsScope
+	// HistoryClientRefreshWorkflowTasksScope tracks RPC calls to history service
+	HistoryClientRefreshWorkflowTasksScope
 	// MatchingClientPollForDecisionTaskScope tracks RPC calls to matching service
 	MatchingClientPollForDecisionTaskScope
 	// MatchingClientPollForActivityTaskScope tracks RPC calls to matching service
@@ -446,6 +448,8 @@ const (
 	AdminClientPurgeDLQMessagesScope
 	// AdminClientMergeDLQMessagesScope tracks RPC calls to admin service
 	AdminClientMergeDLQMessagesScope
+	// AdminClientRefreshWorkflowTasksScope tracks RPC calls to admin service
+	AdminClientRefreshWorkflowTasksScope
 	// DCRedirectionDeprecateDomainScope tracks RPC calls for dc redirection
 	DCRedirectionDeprecateDomainScope
 	// DCRedirectionDescribeDomainScope tracks RPC calls for dc redirection
@@ -643,6 +647,8 @@ const (
 	AdminGetDLQReplicationMessagesScope
 	// AdminReapplyEventsScope is the metric scope for admin.ReapplyEvents
 	AdminReapplyEventsScope
+	// AdminRefreshWorkflowTasksScope is the metric scope for admin.RefreshWorkflowTasks
+	AdminRefreshWorkflowTasksScope
 	// AdminRemoveTaskScope is the metric scope for admin.AdminRemoveTaskScope
 	AdminRemoveTaskScope
 	//AdminCloseShardTaskScope is the metric scope for admin.AdminRemoveTaskScope
@@ -801,6 +807,8 @@ const (
 	HistoryShardControllerScope
 	// HistoryReapplyEventsScope is the scope used by event reapplication
 	HistoryReapplyEventsScope
+	// HistoryRefreshWorkflowTasksScope is the scope used by refresh workflow tasks API
+	HistoryRefreshWorkflowTasksScope
 	// TransferQueueProcessorScope is the scope used by all metric emitted by transfer queue processor
 	TransferQueueProcessorScope
 	// TransferActiveQueueProcessorScope is the scope used by all metric emitted by transfer queue processor
@@ -1115,6 +1123,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryClientGetDLQReplicationTasksScope:            {operation: "HistoryClientGetDLQReplicationTasksScope", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientQueryWorkflowScope:                     {operation: "HistoryClientQueryWorkflowScope", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientReapplyEventsScope:                     {operation: "HistoryClientReapplyEventsScope", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientRefreshWorkflowTasksScope:              {operation: "HistoryClientRefreshWorkflowTasksScope", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		MatchingClientPollForDecisionTaskScope:              {operation: "MatchingClientPollForDecisionTask", tags: map[string]string{CadenceRoleTagName: MatchingRoleTagValue}},
 		MatchingClientPollForActivityTaskScope:              {operation: "MatchingClientPollForActivityTask", tags: map[string]string{CadenceRoleTagName: MatchingRoleTagValue}},
 		MatchingClientAddActivityTaskScope:                  {operation: "MatchingClientAddActivityTask", tags: map[string]string{CadenceRoleTagName: MatchingRoleTagValue}},
@@ -1173,6 +1182,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminClientGetWorkflowExecutionRawHistoryScope:      {operation: "AdminClientGetWorkflowExecutionRawHistory", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		AdminClientGetWorkflowExecutionRawHistoryV2Scope:    {operation: "AdminClientGetWorkflowExecutionRawHistoryV2", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		AdminClientDescribeClusterScope:                     {operation: "AdminClientDescribeCluster", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
+		AdminClientRefreshWorkflowTasksScope:                {operation: "AdminClientRefreshWorkflowTasks", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		AdminClientCloseShardScope:                          {operation: "AdminClientCloseShard", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		AdminClientReadDLQMessagesScope:                     {operation: "AdminClientReadDLQMessages", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 		AdminClientPurgeDLQMessagesScope:                    {operation: "AdminClientPurgeDLQMessages", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
@@ -1272,6 +1282,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminGetDomainReplicationMessagesScope:     {operation: "GetDomainReplicationMessages"},
 		AdminGetDLQReplicationMessagesScope:        {operation: "AdminGetDLQReplicationMessages"},
 		AdminReapplyEventsScope:                    {operation: "ReapplyEvents"},
+		AdminRefreshWorkflowTasksScope:             {operation: "RefreshWorkflowTasks"},
 
 		FrontendStartWorkflowExecutionScope:           {operation: "StartWorkflowExecution"},
 		FrontendPollForDecisionTaskScope:              {operation: "PollForDecisionTask"},
@@ -1347,6 +1358,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryGetDLQReplicationMessagesScope:                  {operation: "GetDLQReplicationMessages"},
 		HistoryShardControllerScope:                            {operation: "ShardController"},
 		HistoryReapplyEventsScope:                              {operation: "EventReapplication"},
+		HistoryRefreshWorkflowTasksScope:                       {operation: "RefreshWorkflowTasks"},
 		TransferQueueProcessorScope:                            {operation: "TransferQueueProcessor"},
 		TransferActiveQueueProcessorScope:                      {operation: "TransferActiveQueueProcessor"},
 		TransferStandbyQueueProcessorScope:                     {operation: "TransferStandbyQueueProcessor"},
