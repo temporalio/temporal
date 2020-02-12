@@ -14,9 +14,8 @@ persistence:
 
 ringpop:
   name: cadence_active
-  bootstrapMode: hosts
-  bootstrapHosts: ["127.0.0.1:7933", "127.0.0.1:7934", "127.0.0.1:7935", "127.0.0.1:7940"]
   maxJoinDuration: 30s
+  broadcastAddress: "127.0.0.1"
 
 services:
   frontend:

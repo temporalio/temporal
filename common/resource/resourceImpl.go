@@ -127,7 +127,6 @@ type (
 
 		pprofInitializer       common.PProfInitializer
 		runtimeMetricsReporter *metrics.RuntimeMetricsReporter
-		membershipFactory      service.MembershipMonitorFactory
 		rpcFactory             common.RPCFactory
 	}
 )
@@ -156,7 +155,22 @@ func New(
 
 	ringpopDispatcher := params.RPCFactory.GetRingpopDispatcher()
 
-	membershipMonitor, err := params.MembershipFactory.GetMembershipMonitor()
+	persistenceBean, err := persistenceClient.NewBeanFromFactory(persistenceClient.NewFactory(
+		&params.PersistenceConfig,
+		params.ClusterMetadata.GetCurrentClusterName(),
+		params.MetricsClient,
+		logger,
+	))
+	if err != nil {
+		return nil, err
+	}
+
+	membershipFactory, err := params.MembershipFactoryInitializer(persistenceBean, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	membershipMonitor, err := membershipFactory.GetMembershipMonitor()
 	if err != nil {
 		return nil, err
 	}
@@ -198,15 +212,6 @@ func New(
 		return nil, err
 	}
 
-	persistenceBean, err := persistenceClient.NewBeanFromFactory(persistenceClient.NewFactory(
-		&params.PersistenceConfig,
-		params.ClusterMetadata.GetCurrentClusterName(),
-		params.MetricsClient,
-		logger,
-	))
-	if err != nil {
-		return nil, err
-	}
 	visibilityMgr, err := visibilityManagerInitializer(
 		persistenceBean,
 		logger,
@@ -342,8 +347,7 @@ func New(
 			logger,
 			params.InstanceID,
 		),
-		membershipFactory: params.MembershipFactory,
-		rpcFactory:        params.RPCFactory,
+		rpcFactory: params.RPCFactory,
 	}
 	return impl, nil
 }

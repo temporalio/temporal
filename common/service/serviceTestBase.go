@@ -57,7 +57,7 @@ type (
 	}
 )
 
-var _ Service = (*serviceTestBase)(nil)
+var _ OneboxService = (*serviceTestBase)(nil)
 
 const (
 	testHostName = "test_host"
@@ -76,7 +76,7 @@ func NewTestService(
 	archivalMetadata archiver.ArchivalMetadata,
 	archiverProvider provider.ArchiverProvider,
 	serializer persistence.PayloadSerializer,
-) Service {
+) OneboxService {
 
 	zapLogger, err := zap.NewDevelopment()
 	if err != nil {

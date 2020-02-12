@@ -22,6 +22,9 @@ package membership
 
 import (
 	"sync/atomic"
+	"time"
+
+	"github.com/uber/ringpop-go/discovery/statichosts"
 
 	"github.com/uber/ringpop-go"
 	"github.com/uber/ringpop-go/swim"
@@ -36,27 +39,27 @@ type (
 	RingPop struct {
 		status int32
 		*ringpop.Ringpop
-		bootParams *swim.BootstrapOptions
-		logger     log.Logger
+		logger          log.Logger
+		maxJoinDuration time.Duration
 	}
 )
 
 // NewRingPop create a new ring pop wrapper
 func NewRingPop(
 	ringPop *ringpop.Ringpop,
-	bootParams *swim.BootstrapOptions,
+	maxJoinDuration time.Duration,
 	logger log.Logger,
 ) *RingPop {
 	return &RingPop{
-		status:     common.DaemonStatusInitialized,
-		Ringpop:    ringPop,
-		bootParams: bootParams,
-		logger:     logger,
+		status:          common.DaemonStatusInitialized,
+		Ringpop:         ringPop,
+		maxJoinDuration: maxJoinDuration,
+		logger:          logger,
 	}
 }
 
 // Start start ring pop
-func (r *RingPop) Start() {
+func (r *RingPop) Start(bootstrapHostPorts []string) {
 	if !atomic.CompareAndSwapInt32(
 		&r.status,
 		common.DaemonStatusInitialized,
@@ -65,7 +68,12 @@ func (r *RingPop) Start() {
 		return
 	}
 
-	_, err := r.Ringpop.Bootstrap(r.bootParams)
+	bootParams := &swim.BootstrapOptions{
+		MaxJoinDuration:  r.maxJoinDuration,
+		DiscoverProvider: statichosts.New(bootstrapHostPorts...),
+	}
+
+	_, err := r.Ringpop.Bootstrap(bootParams)
 	if err != nil {
 		r.logger.Fatal("unable to bootstrap ringpop", tag.Error(err))
 	}

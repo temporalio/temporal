@@ -301,6 +301,8 @@ func (r *ringpopServiceResolver) getLabelsMap() map[string]string {
 	return labels
 }
 
+// BuildBroadcastHostPort return the listener hostport from an existing tchannel
+// and overrides the address with broadcastAddress if specified
 func BuildBroadcastHostPort(listenerPeerInfo tchannel.LocalPeerInfo, broadcastAddress string) (string, error) {
 	// Ephemeral port check copied from ringpop-go/ringpop.go/channelAddressResolver
 	// Check that TChannel is listening on a real hostport. By default,
