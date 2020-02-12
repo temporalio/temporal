@@ -23,11 +23,10 @@ package sql
 import (
 	"database/sql"
 	"fmt"
-	"time"
+
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/.gen/go/sqlblobs"
-	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
@@ -87,46 +86,12 @@ func (m *sqlShardManager) GetShard(request *persistence.GetShardRequest) (*persi
 		}
 	}
 
-	shardInfo, err := shardInfoFromBlob(row.Data, row.DataEncoding)
+	shardInfo, err := ShardInfoFromBlob(row.Data, row.DataEncoding, m.currentClusterName)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(shardInfo.ClusterTransferAckLevel) == 0 {
-		shardInfo.ClusterTransferAckLevel = map[string]int64{
-			m.currentClusterName: shardInfo.GetTransferAckLevel(),
-		}
-	}
-
-	timerAckLevel := make(map[string]time.Time, len(shardInfo.ClusterTimerAckLevel))
-	for k, v := range shardInfo.ClusterTimerAckLevel {
-		timerAckLevel[k] = time.Unix(0, v)
-	}
-
-	if len(timerAckLevel) == 0 {
-		timerAckLevel = map[string]time.Time{
-			m.currentClusterName: time.Unix(0, shardInfo.GetTimerAckLevelNanos()),
-		}
-	}
-
-	if shardInfo.ClusterReplicationLevel == nil {
-		shardInfo.ClusterReplicationLevel = make(map[string]int64)
-	}
-
-	resp := &persistence.GetShardResponse{ShardInfo: &persistence.ShardInfo{
-		ShardID:                   int(row.ShardID),
-		RangeID:                   row.RangeID,
-		Owner:                     shardInfo.GetOwner(),
-		StolenSinceRenew:          int(shardInfo.GetStolenSinceRenew()),
-		UpdatedAt:                 time.Unix(0, shardInfo.GetUpdatedAtNanos()),
-		ReplicationAckLevel:       shardInfo.GetReplicationAckLevel(),
-		TransferAckLevel:          shardInfo.GetTransferAckLevel(),
-		TimerAckLevel:             time.Unix(0, shardInfo.GetTimerAckLevelNanos()),
-		ClusterTransferAckLevel:   shardInfo.ClusterTransferAckLevel,
-		ClusterTimerAckLevel:      timerAckLevel,
-		DomainNotificationVersion: shardInfo.GetDomainNotificationVersion(),
-		ClusterReplicationLevel:   shardInfo.ClusterReplicationLevel,
-	}}
+	resp := &persistence.GetShardResponse{ShardInfo: shardInfo}
 
 	return resp, nil
 }
@@ -139,7 +104,7 @@ func (m *sqlShardManager) UpdateShard(request *persistence.UpdateShardRequest) e
 		}
 	}
 	return m.txExecute("UpdateShard", func(tx sqlplugin.Tx) error {
-		if err := lockShard(tx, request.ShardInfo.ShardID, request.PreviousRangeID); err != nil {
+		if err := lockShard(tx, int(request.ShardInfo.ShardID), request.PreviousRangeID); err != nil {
 			return err
 		}
 		result, err := tx.UpdateShards(row)
@@ -204,26 +169,8 @@ func readLockShard(tx sqlplugin.Tx, shardID int, oldRangeID int64) error {
 	return nil
 }
 
-func shardInfoToShardsRow(s persistence.ShardInfo) (*sqlplugin.ShardsRow, error) {
-	timerAckLevels := make(map[string]int64, len(s.ClusterTimerAckLevel))
-	for k, v := range s.ClusterTimerAckLevel {
-		timerAckLevels[k] = v.UnixNano()
-	}
-
-	shardInfo := &sqlblobs.ShardInfo{
-		StolenSinceRenew:          common.Int32Ptr(int32(s.StolenSinceRenew)),
-		UpdatedAtNanos:            common.Int64Ptr(s.UpdatedAt.UnixNano()),
-		ReplicationAckLevel:       common.Int64Ptr(s.ReplicationAckLevel),
-		TransferAckLevel:          common.Int64Ptr(s.TransferAckLevel),
-		TimerAckLevelNanos:        common.Int64Ptr(s.TimerAckLevel.UnixNano()),
-		ClusterTransferAckLevel:   s.ClusterTransferAckLevel,
-		ClusterTimerAckLevel:      timerAckLevels,
-		DomainNotificationVersion: common.Int64Ptr(s.DomainNotificationVersion),
-		Owner:                     &s.Owner,
-		ClusterReplicationLevel:   s.ClusterReplicationLevel,
-	}
-
-	blob, err := shardInfoToBlob(shardInfo)
+func shardInfoToShardsRow(s persistenceblobs.ShardInfo) (*sqlplugin.ShardsRow, error) {
+	blob, err := ShardInfoToBlob(&s)
 	if err != nil {
 		return nil, err
 	}
