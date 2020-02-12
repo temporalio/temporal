@@ -29,6 +29,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/membership"
 
 	"github.com/pborman/uuid"
@@ -692,7 +693,11 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(
 		}
 	}
 
-	response := common.CreateMatchingPollForDecisionTaskResponse(historyResponse, task.workflowExecution(), token)
+	response := adapter.ToThriftMatchingPollForDecisionTaskResponse(
+		common.CreateMatchingPollForDecisionTaskResponse(
+			adapter.ToProtoRecordDecisionTaskStartedResponse(historyResponse),
+			adapter.ToProtoWorkflowExecution(task.workflowExecution()),
+			token))
 	if task.query != nil {
 		response.Query = task.query.request.QueryRequest.Query
 	}

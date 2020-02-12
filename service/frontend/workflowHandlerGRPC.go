@@ -27,16 +27,15 @@ import (
 	"time"
 
 	"github.com/gogo/status"
+	"github.com/pborman/uuid"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/yarpc/yarpcerrors"
 	"google.golang.org/grpc/codes"
 
-	"github.com/pborman/uuid"
-
-	"github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
@@ -450,11 +449,78 @@ func (wh *WorkflowHandlerGRPC) PollForDecisionTask(ctx context.Context, request 
 func (wh *WorkflowHandlerGRPC) RespondDecisionTaskCompleted(ctx context.Context, request *workflowservice.RespondDecisionTaskCompletedRequest) (_ *workflowservice.RespondDecisionTaskCompletedResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
-	response, err := wh.workflowHandlerThrift.RespondDecisionTaskCompleted(ctx, adapter.ToThriftRespondDecisionTaskCompletedRequest(request))
-	if err != nil {
-		return nil, adapter.ToProtoError(err)
+	scope := wh.getDefaultScope(metrics.FrontendRespondDecisionTaskCompletedScope)
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+		return nil, wh.error(err, scope)
 	}
-	return adapter.ToProtoRespondDecisionTaskCompletedResponse(response), nil
+
+	if request == nil {
+		return nil, wh.error(errRequestNotSet, scope)
+	}
+
+	// Count the request in the RPS, but we still accept it even if RPS is exceeded
+	wh.allow(nil)
+
+	if request.TaskToken == nil {
+		return nil, wh.error(errTaskTokenNotSet, scope)
+	}
+	taskToken, err := wh.tokenSerializer.Deserialize(request.TaskToken)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+	if taskToken.DomainID == "" {
+		return nil, wh.error(errDomainNotSet, scope)
+	}
+
+	domainEntry, err := wh.GetDomainCache().GetDomainByID(taskToken.DomainID)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	scope, sw := wh.startRequestProfileWithDomain(
+		metrics.FrontendRespondDecisionTaskCompletedScope,
+		domainWrapper{
+			domain: domainEntry.GetInfo().Name,
+		},
+	)
+	defer sw.Stop()
+
+	histResp, err := wh.GetHistoryClientGRPC().RespondDecisionTaskCompleted(ctx, &historyservice.RespondDecisionTaskCompletedRequest{
+		DomainUUID:      taskToken.DomainID,
+		CompleteRequest: request},
+	)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
+		return nil, wh.error(errIdentityTooLong, scope)
+	}
+
+	completedResp := &workflowservice.RespondDecisionTaskCompletedResponse{}
+	if request.GetReturnNewDecisionTask() && histResp != nil && histResp.StartedResponse != nil {
+		taskToken := &common.TaskToken{
+			DomainID:        taskToken.DomainID,
+			WorkflowID:      taskToken.WorkflowID,
+			RunID:           taskToken.RunID,
+			ScheduleID:      histResp.StartedResponse.GetScheduledEventId(),
+			ScheduleAttempt: histResp.StartedResponse.GetAttempt(),
+		}
+		token, _ := wh.tokenSerializer.Serialize(taskToken)
+		workflowExecution := &commonproto.WorkflowExecution{
+			WorkflowId: taskToken.WorkflowID,
+			RunId:      taskToken.RunID,
+		}
+		matchingResp := common.CreateMatchingPollForDecisionTaskResponse(histResp.StartedResponse, workflowExecution, token)
+
+		newDecisionTask, err := wh.createPollForDecisionTaskResponse(ctx, scope, taskToken.DomainID, matchingResp, matchingResp.GetBranchToken())
+		if err != nil {
+			return nil, wh.error(err, scope)
+		}
+		completedResp.DecisionTask = newDecisionTask
+	}
+
+	return completedResp, nil
 }
 
 // RespondDecisionTaskFailed is called by application worker to indicate failure.  This results in
@@ -464,10 +530,71 @@ func (wh *WorkflowHandlerGRPC) RespondDecisionTaskCompleted(ctx context.Context,
 func (wh *WorkflowHandlerGRPC) RespondDecisionTaskFailed(ctx context.Context, request *workflowservice.RespondDecisionTaskFailedRequest) (_ *workflowservice.RespondDecisionTaskFailedResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
-	err := wh.workflowHandlerThrift.RespondDecisionTaskFailed(ctx, adapter.ToThriftRespondDecisionTaskFailedRequest(request))
-	if err != nil {
-		return nil, adapter.ToProtoError(err)
+	scope := wh.getDefaultScope(metrics.FrontendRespondDecisionTaskFailedScope)
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+		return nil, wh.error(err, scope)
 	}
+
+	if request == nil {
+		return nil, wh.error(errRequestNotSet, scope)
+	}
+
+	// Count the request in the RPS, but we still accept it even if RPS is exceeded
+	wh.allow(nil)
+
+	if request.TaskToken == nil {
+		return nil, wh.error(errTaskTokenNotSet, scope)
+	}
+	taskToken, err := wh.tokenSerializer.Deserialize(request.TaskToken)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+	if taskToken.DomainID == "" {
+		return nil, wh.error(errDomainNotSet, scope)
+	}
+
+	domainEntry, err := wh.GetDomainCache().GetDomainByID(taskToken.DomainID)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	scope, sw := wh.startRequestProfileWithDomain(
+		metrics.FrontendRespondDecisionTaskFailedScope,
+		domainWrapper{
+			domain: domainEntry.GetInfo().Name,
+		},
+	)
+	defer sw.Stop()
+
+	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
+		return nil, wh.error(errIdentityTooLong, scope)
+	}
+
+	sizeLimitError := wh.config.BlobSizeLimitError(domainEntry.GetInfo().Name)
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(domainEntry.GetInfo().Name)
+
+	if err := common.CheckEventBlobSizeLimit(
+		len(request.Details),
+		sizeLimitWarn,
+		sizeLimitError,
+		taskToken.DomainID,
+		taskToken.WorkflowID,
+		taskToken.RunID,
+		scope,
+		wh.GetThrottledLogger(),
+	); err != nil {
+		// details exceed, we would just truncate the size for decision task failed as the details is not used anywhere by client code
+		request.Details = request.Details[0:sizeLimitError]
+	}
+
+	_, err = wh.GetHistoryClientGRPC().RespondDecisionTaskFailed(ctx, &historyservice.RespondDecisionTaskFailedRequest{
+		DomainUUID:    taskToken.DomainID,
+		FailedRequest: request,
+	})
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
 	return &workflowservice.RespondDecisionTaskFailedResponse{}, nil
 }
 
@@ -585,11 +712,83 @@ func (wh *WorkflowHandlerGRPC) PollForActivityTask(ctx context.Context, request 
 func (wh *WorkflowHandlerGRPC) RecordActivityTaskHeartbeat(ctx context.Context, request *workflowservice.RecordActivityTaskHeartbeatRequest) (_ *workflowservice.RecordActivityTaskHeartbeatResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
-	response, err := wh.workflowHandlerThrift.RecordActivityTaskHeartbeat(ctx, adapter.ToThriftRecordActivityTaskHeartbeatRequest(request))
-	if err != nil {
-		return nil, adapter.ToProtoError(err)
+	scope := wh.getDefaultScope(metrics.FrontendRecordActivityTaskHeartbeatScope)
+
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+		return nil, wh.error(err, scope)
 	}
-	return adapter.ToProtoRecordActivityTaskHeartbeatResponse(response), nil
+
+	if request == nil {
+		return nil, wh.error(errRequestNotSet, scope)
+	}
+
+	// Count the request in the RPS, but we still accept it even if RPS is exceeded
+	wh.allow(nil)
+
+	wh.GetLogger().Debug("Received RecordActivityTaskHeartbeat")
+	if request.TaskToken == nil {
+		return nil, wh.error(errTaskTokenNotSet, scope)
+	}
+	taskToken, err := wh.tokenSerializer.Deserialize(request.TaskToken)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+	if taskToken.DomainID == "" {
+		return nil, wh.error(errDomainNotSet, scope)
+	}
+
+	domainEntry, err := wh.GetDomainCache().GetDomainByID(taskToken.DomainID)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	scope, sw := wh.startRequestProfileWithDomain(
+		metrics.FrontendRecordActivityTaskHeartbeatScope,
+		domainWrapper{
+			domain: domainEntry.GetInfo().Name,
+		},
+	)
+	defer sw.Stop()
+
+	sizeLimitError := wh.config.BlobSizeLimitError(domainEntry.GetInfo().Name)
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(domainEntry.GetInfo().Name)
+
+	if err := common.CheckEventBlobSizeLimit(
+		len(request.Details),
+		sizeLimitWarn,
+		sizeLimitError,
+		taskToken.DomainID,
+		taskToken.WorkflowID,
+		taskToken.RunID,
+		scope,
+		wh.GetThrottledLogger(),
+	); err != nil {
+		// heartbeat details exceed size limit, we would fail the activity immediately with explicit error reason
+		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
+			TaskToken: request.TaskToken,
+			Reason:    common.FailureReasonHeartbeatExceedsLimit,
+			Details:   request.Details[0:sizeLimitError],
+			Identity:  request.Identity,
+		}
+		_, err = wh.GetHistoryClientGRPC().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
+			DomainUUID:    taskToken.DomainID,
+			FailedRequest: failRequest,
+		})
+		if err != nil {
+			return nil, wh.error(err, scope)
+		}
+		return &workflowservice.RecordActivityTaskHeartbeatResponse{CancelRequested: true}, nil
+	} else {
+		resp, err := wh.GetHistoryClientGRPC().RecordActivityTaskHeartbeat(ctx, &historyservice.RecordActivityTaskHeartbeatRequest{
+			DomainUUID:       taskToken.DomainID,
+			HeartbeatRequest: request,
+		})
+		if err != nil {
+			return nil, wh.error(err, scope)
+		}
+
+		return &workflowservice.RecordActivityTaskHeartbeatResponse{CancelRequested: resp.GetCancelRequested()}, nil
+	}
 }
 
 // RecordActivityTaskHeartbeatByID is called by application worker while it is processing an ActivityTask.  If worker fails
@@ -600,11 +799,103 @@ func (wh *WorkflowHandlerGRPC) RecordActivityTaskHeartbeat(ctx context.Context, 
 func (wh *WorkflowHandlerGRPC) RecordActivityTaskHeartbeatByID(ctx context.Context, request *workflowservice.RecordActivityTaskHeartbeatByIDRequest) (_ *workflowservice.RecordActivityTaskHeartbeatByIDResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
-	response, err := wh.workflowHandlerThrift.RecordActivityTaskHeartbeatByID(ctx, adapter.ToThriftRecordActivityTaskHeartbeatByIDRequest(request))
-	if err != nil {
-		return nil, adapter.ToProtoError(err)
+	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendRecordActivityTaskHeartbeatByIDScope, request)
+	defer sw.Stop()
+
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+		return nil, wh.error(err, scope)
 	}
-	return adapter.ToProtoRecordActivityTaskHeartbeatByIDResponse(response), nil
+
+	if request == nil {
+		return nil, wh.error(errRequestNotSet, scope)
+	}
+
+	// Count the request in the RPS, but we still accept it even if RPS is exceeded
+	wh.allow(nil)
+
+	wh.GetLogger().Debug("Received RecordActivityTaskHeartbeatByID")
+	domainID, err := wh.GetDomainCache().GetDomainID(request.GetDomain())
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+	workflowID := request.GetWorkflowID()
+	runID := request.GetRunID() // runID is optional so can be empty
+	activityID := request.GetActivityID()
+
+	if domainID == "" {
+		return nil, wh.error(errDomainNotSet, scope)
+	}
+	if workflowID == "" {
+		return nil, wh.error(errWorkflowIDNotSet, scope)
+	}
+	if activityID == "" {
+		return nil, wh.error(errActivityIDNotSet, scope)
+	}
+
+	taskToken := &common.TaskToken{
+		DomainID:   domainID,
+		RunID:      runID,
+		WorkflowID: workflowID,
+		ScheduleID: common.EmptyEventID,
+		ActivityID: activityID,
+	}
+	token, err := wh.tokenSerializer.Serialize(taskToken)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	domainEntry, err := wh.GetDomainCache().GetDomainByID(taskToken.DomainID)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	// add domain tag to scope, so further metrics will have the domain tag
+	scope = scope.Tagged(metrics.DomainTag(domainEntry.GetInfo().Name))
+
+	sizeLimitError := wh.config.BlobSizeLimitError(domainEntry.GetInfo().Name)
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(domainEntry.GetInfo().Name)
+
+	if err := common.CheckEventBlobSizeLimit(
+		len(request.Details),
+		sizeLimitWarn,
+		sizeLimitError,
+		taskToken.DomainID,
+		taskToken.WorkflowID,
+		taskToken.RunID,
+		scope,
+		wh.GetThrottledLogger(),
+	); err != nil {
+		// heartbeat details exceed size limit, we would fail the activity immediately with explicit error reason
+		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
+			TaskToken: token,
+			Reason:    common.FailureReasonHeartbeatExceedsLimit,
+			Details:   request.Details[0:sizeLimitError],
+			Identity:  request.Identity,
+		}
+		_, err = wh.GetHistoryClientGRPC().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
+			DomainUUID:    taskToken.DomainID,
+			FailedRequest: failRequest,
+		})
+		if err != nil {
+			return nil, wh.error(err, scope)
+		}
+		return &workflowservice.RecordActivityTaskHeartbeatByIDResponse{CancelRequested: true}, nil
+	} else {
+		req := &workflowservice.RecordActivityTaskHeartbeatRequest{
+			TaskToken: token,
+			Details:   request.Details,
+			Identity:  request.Identity,
+		}
+
+		resp, err := wh.GetHistoryClientGRPC().RecordActivityTaskHeartbeat(ctx, &historyservice.RecordActivityTaskHeartbeatRequest{
+			DomainUUID:       taskToken.DomainID,
+			HeartbeatRequest: req,
+		})
+		if err != nil {
+			return nil, wh.error(err, scope)
+		}
+		return &workflowservice.RecordActivityTaskHeartbeatByIDResponse{CancelRequested: resp.GetCancelRequested()}, nil
+	}
 }
 
 // RespondActivityTaskCompleted is called by application worker when it is done processing an ActivityTask.  It will
@@ -615,10 +906,82 @@ func (wh *WorkflowHandlerGRPC) RecordActivityTaskHeartbeatByID(ctx context.Conte
 func (wh *WorkflowHandlerGRPC) RespondActivityTaskCompleted(ctx context.Context, request *workflowservice.RespondActivityTaskCompletedRequest) (_ *workflowservice.RespondActivityTaskCompletedResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
-	err := wh.workflowHandlerThrift.RespondActivityTaskCompleted(ctx, adapter.ToThriftRespondActivityTaskCompletedRequest(request))
-	if err != nil {
-		return nil, adapter.ToProtoError(err)
+	scope := wh.getDefaultScope(metrics.FrontendRespondActivityTaskCompletedScope)
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+		return nil, wh.error(err, scope)
 	}
+
+	if request == nil {
+		return nil, wh.error(errRequestNotSet, scope)
+	}
+
+	// Count the request in the RPS, but we still accept it even if RPS is exceeded
+	wh.allow(nil)
+
+	if request.TaskToken == nil {
+		return nil, wh.error(errTaskTokenNotSet, scope)
+	}
+	taskToken, err := wh.tokenSerializer.Deserialize(request.TaskToken)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+	if taskToken.DomainID == "" {
+		return nil, wh.error(errDomainNotSet, scope)
+	}
+
+	domainEntry, err := wh.GetDomainCache().GetDomainByID(taskToken.DomainID)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
+		return nil, wh.error(errIdentityTooLong, scope)
+	}
+
+	scope, sw := wh.startRequestProfileWithDomain(
+		metrics.FrontendRespondActivityTaskCompletedScope,
+		domainWrapper{
+			domain: domainEntry.GetInfo().Name,
+		},
+	)
+	defer sw.Stop()
+
+	sizeLimitError := wh.config.BlobSizeLimitError(domainEntry.GetInfo().Name)
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(domainEntry.GetInfo().Name)
+
+	if err := common.CheckEventBlobSizeLimit(
+		len(request.Result),
+		sizeLimitWarn,
+		sizeLimitError,
+		taskToken.DomainID,
+		taskToken.WorkflowID,
+		taskToken.RunID,
+		scope,
+		wh.GetThrottledLogger(),
+	); err != nil {
+		// result exceeds blob size limit, we would record it as failure
+		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
+			TaskToken: request.TaskToken,
+			Reason:    common.FailureReasonCompleteResultExceedsLimit,
+			Details:   request.Result[0:sizeLimitError],
+			Identity:  request.Identity,
+		}
+		_, err = wh.GetHistoryClientGRPC().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
+			DomainUUID:    taskToken.DomainID,
+			FailedRequest: failRequest,
+		})
+		if err != nil {
+			return nil, wh.error(err, scope)
+		}
+	} else {
+		_, err = wh.GetHistoryClientGRPC().RespondActivityTaskCompleted(ctx, &historyservice.RespondActivityTaskCompletedRequest{
+			DomainUUID:      taskToken.DomainID,
+			CompleteRequest: request,
+		})
+		if err != nil {
+			return nil, wh.error(err, scope)
+		}
+	}
+
 	return &workflowservice.RespondActivityTaskCompletedResponse{}, nil
 }
 
@@ -630,10 +993,105 @@ func (wh *WorkflowHandlerGRPC) RespondActivityTaskCompleted(ctx context.Context,
 func (wh *WorkflowHandlerGRPC) RespondActivityTaskCompletedByID(ctx context.Context, request *workflowservice.RespondActivityTaskCompletedByIDRequest) (_ *workflowservice.RespondActivityTaskCompletedByIDResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
-	err := wh.workflowHandlerThrift.RespondActivityTaskCompletedByID(ctx, adapter.ToThriftRespondActivityTaskCompletedByIDRequest(request))
-	if err != nil {
-		return nil, adapter.ToProtoError(err)
+	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendRespondActivityTaskCompletedByIDScope, request)
+	defer sw.Stop()
+
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+		return nil, wh.error(err, scope)
 	}
+
+	if request == nil {
+		return nil, wh.error(errRequestNotSet, scope)
+	}
+
+	// Count the request in the RPS, but we still accept it even if RPS is exceeded
+	wh.allow(nil)
+
+	domainID, err := wh.GetDomainCache().GetDomainID(request.GetDomain())
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+	workflowID := request.GetWorkflowID()
+	runID := request.GetRunID() // runID is optional so can be empty
+	activityID := request.GetActivityID()
+
+	if domainID == "" {
+		return nil, wh.error(errDomainNotSet, scope)
+	}
+	if workflowID == "" {
+		return nil, wh.error(errWorkflowIDNotSet, scope)
+	}
+	if activityID == "" {
+		return nil, wh.error(errActivityIDNotSet, scope)
+	}
+
+	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
+		return nil, wh.error(errIdentityTooLong, scope)
+	}
+
+	taskToken := &common.TaskToken{
+		DomainID:   domainID,
+		RunID:      runID,
+		WorkflowID: workflowID,
+		ScheduleID: common.EmptyEventID,
+		ActivityID: activityID,
+	}
+	token, err := wh.tokenSerializer.Serialize(taskToken)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	domainEntry, err := wh.GetDomainCache().GetDomainByID(taskToken.DomainID)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	// add domain tag to scope, so further metrics will have the domain tag
+	scope = scope.Tagged(metrics.DomainTag(domainEntry.GetInfo().Name))
+
+	sizeLimitError := wh.config.BlobSizeLimitError(domainEntry.GetInfo().Name)
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(domainEntry.GetInfo().Name)
+
+	if err := common.CheckEventBlobSizeLimit(
+		len(request.Result),
+		sizeLimitWarn,
+		sizeLimitError,
+		taskToken.DomainID,
+		taskToken.WorkflowID,
+		taskToken.RunID,
+		scope,
+		wh.GetThrottledLogger(),
+	); err != nil {
+		// result exceeds blob size limit, we would record it as failure
+		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
+			TaskToken: token,
+			Reason:    common.FailureReasonCompleteResultExceedsLimit,
+			Details:   request.Result[0:sizeLimitError],
+			Identity:  request.Identity,
+		}
+		_, err = wh.GetHistoryClientGRPC().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
+			DomainUUID:    taskToken.DomainID,
+			FailedRequest: failRequest,
+		})
+		if err != nil {
+			return nil, wh.error(err, scope)
+		}
+	} else {
+		req := &workflowservice.RespondActivityTaskCompletedRequest{
+			TaskToken: token,
+			Result:    request.Result,
+			Identity:  request.Identity,
+		}
+
+		_, err = wh.GetHistoryClientGRPC().RespondActivityTaskCompleted(ctx, &historyservice.RespondActivityTaskCompletedRequest{
+			DomainUUID:      taskToken.DomainID,
+			CompleteRequest: req,
+		})
+		if err != nil {
+			return nil, wh.error(err, scope)
+		}
+	}
+
 	return &workflowservice.RespondActivityTaskCompletedByIDResponse{}, nil
 }
 
@@ -645,9 +1103,70 @@ func (wh *WorkflowHandlerGRPC) RespondActivityTaskCompletedByID(ctx context.Cont
 func (wh *WorkflowHandlerGRPC) RespondActivityTaskFailed(ctx context.Context, request *workflowservice.RespondActivityTaskFailedRequest) (_ *workflowservice.RespondActivityTaskFailedResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
-	err := wh.workflowHandlerThrift.RespondActivityTaskFailed(ctx, adapter.ToThriftRespondActivityTaskFailedRequest(request))
+	scope := wh.getDefaultScope(metrics.FrontendRespondActivityTaskFailedScope)
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	if request == nil {
+		return nil, wh.error(errRequestNotSet, scope)
+	}
+
+	// Count the request in the RPS, but we still accept it even if RPS is exceeded
+	wh.allow(nil)
+
+	if request.TaskToken == nil {
+		return nil, wh.error(errTaskTokenNotSet, scope)
+	}
+	taskToken, err := wh.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, wh.error(err, scope)
+	}
+	if taskToken.DomainID == "" {
+		return nil, wh.error(errDomainNotSet, scope)
+	}
+
+	domainEntry, err := wh.GetDomainCache().GetDomainByID(taskToken.DomainID)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	scope, sw := wh.startRequestProfileWithDomain(
+		metrics.FrontendRespondActivityTaskFailedScope,
+		domainWrapper{
+			domain: domainEntry.GetInfo().Name,
+		},
+	)
+	defer sw.Stop()
+
+	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
+		return nil, wh.error(errIdentityTooLong, scope)
+	}
+
+	sizeLimitError := wh.config.BlobSizeLimitError(domainEntry.GetInfo().Name)
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(domainEntry.GetInfo().Name)
+
+	if err := common.CheckEventBlobSizeLimit(
+		len(request.Details),
+		sizeLimitWarn,
+		sizeLimitError,
+		taskToken.DomainID,
+		taskToken.WorkflowID,
+		taskToken.RunID,
+		scope,
+		wh.GetThrottledLogger(),
+	); err != nil {
+		// details exceeds blob size limit, we would truncate the details and put a specific error reason
+		request.Reason = common.FailureReasonFailureDetailsExceedsLimit
+		request.Details = request.Details[0:sizeLimitError]
+	}
+
+	_, err = wh.GetHistoryClientGRPC().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
+		DomainUUID:    taskToken.DomainID,
+		FailedRequest: request,
+	})
+	if err != nil {
+		return nil, wh.error(err, scope)
 	}
 	return &workflowservice.RespondActivityTaskFailedResponse{}, nil
 }
@@ -660,9 +1179,92 @@ func (wh *WorkflowHandlerGRPC) RespondActivityTaskFailed(ctx context.Context, re
 func (wh *WorkflowHandlerGRPC) RespondActivityTaskFailedByID(ctx context.Context, request *workflowservice.RespondActivityTaskFailedByIDRequest) (_ *workflowservice.RespondActivityTaskFailedByIDResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
-	err := wh.workflowHandlerThrift.RespondActivityTaskFailedByID(ctx, adapter.ToThriftRespondActivityTaskFailedByIDRequest(request))
+	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendRespondActivityTaskFailedByIDScope, request)
+	defer sw.Stop()
+
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	if request == nil {
+		return nil, wh.error(errRequestNotSet, scope)
+	}
+
+	// Count the request in the RPS, but we still accept it even if RPS is exceeded
+	wh.allow(nil)
+
+	domainID, err := wh.GetDomainCache().GetDomainID(request.GetDomain())
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, wh.error(err, scope)
+	}
+	workflowID := request.GetWorkflowID()
+	runID := request.GetRunID() // runID is optional so can be empty
+	activityID := request.GetActivityID()
+
+	if domainID == "" {
+		return nil, wh.error(errDomainNotSet, scope)
+	}
+	if workflowID == "" {
+		return nil, wh.error(errWorkflowIDNotSet, scope)
+	}
+	if activityID == "" {
+		return nil, wh.error(errActivityIDNotSet, scope)
+	}
+	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
+		return nil, wh.error(errIdentityTooLong, scope)
+	}
+
+	taskToken := &common.TaskToken{
+		DomainID:   domainID,
+		RunID:      runID,
+		WorkflowID: workflowID,
+		ScheduleID: common.EmptyEventID,
+		ActivityID: activityID,
+	}
+	token, err := wh.tokenSerializer.Serialize(taskToken)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	domainEntry, err := wh.GetDomainCache().GetDomainByID(taskToken.DomainID)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	// add domain tag to scope, so further metrics will have the domain tag
+	scope = scope.Tagged(metrics.DomainTag(domainEntry.GetInfo().Name))
+
+	sizeLimitError := wh.config.BlobSizeLimitError(domainEntry.GetInfo().Name)
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(domainEntry.GetInfo().Name)
+
+	if err := common.CheckEventBlobSizeLimit(
+		len(request.Details),
+		sizeLimitWarn,
+		sizeLimitError,
+		taskToken.DomainID,
+		taskToken.WorkflowID,
+		taskToken.RunID,
+		scope,
+		wh.GetThrottledLogger(),
+	); err != nil {
+		// details exceeds blob size limit, we would truncate the details and put a specific error reason
+		request.Reason = common.FailureReasonFailureDetailsExceedsLimit
+		request.Details = request.Details[0:sizeLimitError]
+	}
+
+	req := &workflowservice.RespondActivityTaskFailedRequest{
+		TaskToken: token,
+		Reason:    request.Reason,
+		Details:   request.Details,
+		Identity:  request.Identity,
+	}
+
+	_, err = wh.GetHistoryClientGRPC().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
+		DomainUUID:    taskToken.DomainID,
+		FailedRequest: req,
+	})
+	if err != nil {
+		return nil, wh.error(err, scope)
 	}
 	return &workflowservice.RespondActivityTaskFailedByIDResponse{}, nil
 }
@@ -675,10 +1277,83 @@ func (wh *WorkflowHandlerGRPC) RespondActivityTaskFailedByID(ctx context.Context
 func (wh *WorkflowHandlerGRPC) RespondActivityTaskCanceled(ctx context.Context, request *workflowservice.RespondActivityTaskCanceledRequest) (_ *workflowservice.RespondActivityTaskCanceledResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
-	err := wh.workflowHandlerThrift.RespondActivityTaskCanceled(ctx, adapter.ToThriftRespondActivityTaskCanceledRequest(request))
-	if err != nil {
-		return nil, adapter.ToProtoError(err)
+	scope := wh.getDefaultScope(metrics.FrontendRespondActivityTaskCanceledScope)
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+		return nil, wh.error(err, scope)
 	}
+
+	if request == nil {
+		return nil, wh.error(errRequestNotSet, scope)
+	}
+
+	// Count the request in the RPS, but we still accept it even if RPS is exceeded
+	wh.allow(nil)
+
+	if request.TaskToken == nil {
+		return nil, wh.error(errTaskTokenNotSet, scope)
+	}
+	taskToken, err := wh.tokenSerializer.Deserialize(request.TaskToken)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+	if taskToken.DomainID == "" {
+		return nil, wh.error(errDomainNotSet, scope)
+	}
+
+	domainEntry, err := wh.GetDomainCache().GetDomainByID(taskToken.DomainID)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	scope, sw := wh.startRequestProfileWithDomain(
+		metrics.FrontendRespondActivityTaskCanceledScope,
+		domainWrapper{
+			domain: domainEntry.GetInfo().Name,
+		},
+	)
+	defer sw.Stop()
+
+	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
+		return nil, wh.error(errIdentityTooLong, scope)
+	}
+
+	sizeLimitError := wh.config.BlobSizeLimitError(domainEntry.GetInfo().Name)
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(domainEntry.GetInfo().Name)
+
+	if err := common.CheckEventBlobSizeLimit(
+		len(request.Details),
+		sizeLimitWarn,
+		sizeLimitError,
+		taskToken.DomainID,
+		taskToken.WorkflowID,
+		taskToken.RunID,
+		scope,
+		wh.GetThrottledLogger(),
+	); err != nil {
+		// details exceeds blob size limit, we would record it as failure
+		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
+			TaskToken: request.TaskToken,
+			Reason:    common.FailureReasonCancelDetailsExceedsLimit,
+			Details:   request.Details[0:sizeLimitError],
+			Identity:  request.Identity,
+		}
+		_, err = wh.GetHistoryClientGRPC().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
+			DomainUUID:    taskToken.DomainID,
+			FailedRequest: failRequest,
+		})
+		if err != nil {
+			return nil, wh.error(err, scope)
+		}
+	} else {
+		_, err = wh.GetHistoryClientGRPC().RespondActivityTaskCanceled(ctx, &historyservice.RespondActivityTaskCanceledRequest{
+			DomainUUID:    taskToken.DomainID,
+			CancelRequest: request,
+		})
+		if err != nil {
+			return nil, wh.error(err, scope)
+		}
+	}
+
 	return &workflowservice.RespondActivityTaskCanceledResponse{}, nil
 }
 
@@ -690,10 +1365,104 @@ func (wh *WorkflowHandlerGRPC) RespondActivityTaskCanceled(ctx context.Context, 
 func (wh *WorkflowHandlerGRPC) RespondActivityTaskCanceledByID(ctx context.Context, request *workflowservice.RespondActivityTaskCanceledByIDRequest) (_ *workflowservice.RespondActivityTaskCanceledByIDResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.workflowHandlerThrift.GetLogger(), &retError)
 
-	err := wh.workflowHandlerThrift.RespondActivityTaskCanceledByID(ctx, adapter.ToThriftRespondActivityTaskCanceledByIDRequest(request))
-	if err != nil {
-		return nil, adapter.ToProtoError(err)
+	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendRespondActivityTaskCanceledScope, request)
+	defer sw.Stop()
+
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+		return nil, wh.error(err, scope)
 	}
+
+	if request == nil {
+		return nil, wh.error(errRequestNotSet, scope)
+	}
+
+	// Count the request in the RPS, but we still accept it even if RPS is exceeded
+	wh.allow(nil)
+
+	domainID, err := wh.GetDomainCache().GetDomainID(request.GetDomain())
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+	workflowID := request.GetWorkflowID()
+	runID := request.GetRunID() // runID is optional so can be empty
+	activityID := request.GetActivityID()
+
+	if domainID == "" {
+		return nil, wh.error(errDomainNotSet, scope)
+	}
+	if workflowID == "" {
+		return nil, wh.error(errWorkflowIDNotSet, scope)
+	}
+	if activityID == "" {
+		return nil, wh.error(errActivityIDNotSet, scope)
+	}
+	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
+		return nil, wh.error(errIdentityTooLong, scope)
+	}
+
+	taskToken := &common.TaskToken{
+		DomainID:   domainID,
+		RunID:      runID,
+		WorkflowID: workflowID,
+		ScheduleID: common.EmptyEventID,
+		ActivityID: activityID,
+	}
+	token, err := wh.tokenSerializer.Serialize(taskToken)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	domainEntry, err := wh.GetDomainCache().GetDomainByID(taskToken.DomainID)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	// add domain tag to scope, so further metrics will have the domain tag
+	scope = scope.Tagged(metrics.DomainTag(domainEntry.GetInfo().Name))
+
+	sizeLimitError := wh.config.BlobSizeLimitError(domainEntry.GetInfo().Name)
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(domainEntry.GetInfo().Name)
+
+	if err := common.CheckEventBlobSizeLimit(
+		len(request.Details),
+		sizeLimitWarn,
+		sizeLimitError,
+		taskToken.DomainID,
+		taskToken.WorkflowID,
+		taskToken.RunID,
+		scope,
+		wh.GetThrottledLogger(),
+	); err != nil {
+		// details exceeds blob size limit, we would record it as failure
+		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
+			TaskToken: token,
+			Reason:    common.FailureReasonCancelDetailsExceedsLimit,
+			Details:   request.Details[0:sizeLimitError],
+			Identity:  request.Identity,
+		}
+		_, err = wh.GetHistoryClientGRPC().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
+			DomainUUID:    taskToken.DomainID,
+			FailedRequest: failRequest,
+		})
+		if err != nil {
+			return nil, wh.error(err, scope)
+		}
+	} else {
+		req := &workflowservice.RespondActivityTaskCanceledRequest{
+			TaskToken: token,
+			Details:   request.Details,
+			Identity:  request.Identity,
+		}
+
+		_, err = wh.GetHistoryClientGRPC().RespondActivityTaskCanceled(ctx, &historyservice.RespondActivityTaskCanceledRequest{
+			DomainUUID:    taskToken.DomainID,
+			CancelRequest: req,
+		})
+		if err != nil {
+			return nil, wh.error(err, scope)
+		}
+	}
+
 	return &workflowservice.RespondActivityTaskCanceledByIDResponse{}, nil
 }
 
@@ -1534,19 +2303,19 @@ func (wh *WorkflowHandlerGRPC) historyArchived(ctx context.Context, request *wor
 	if request.GetExecution() == nil || request.GetExecution().GetRunId() == "" {
 		return false
 	}
-	getMutableStateRequest := &history.GetMutableStateRequest{
-		DomainUUID: common.StringPtr(domainID),
-		Execution:  adapter.ToThriftWorkflowExecution(request.Execution),
+	getMutableStateRequest := &historyservice.GetMutableStateRequest{
+		DomainUUID: domainID,
+		Execution:  request.Execution,
 	}
-	_, err := wh.GetHistoryClient().GetMutableState(ctx, getMutableStateRequest, versionHeaders(ctx)...)
+	_, err := wh.GetHistoryClientGRPC().GetMutableState(ctx, getMutableStateRequest)
 	if err == nil {
 		return false
 	}
-	switch err.(type) {
-	case *shared.EntityNotExistsError:
+	if status.Code(err) == codes.NotFound {
 		// the only case in which history is assumed to be archived is if getting mutable state returns entity not found error
 		return true
 	}
+
 	return false
 }
 
