@@ -24,6 +24,10 @@ import (
 	"log"
 	"time"
 
+	"github.com/temporalio/temporal/common/primitives"
+
+	"github.com/temporalio/temporal/common/service/config/ringpop"
+
 	"google.golang.org/grpc"
 
 	persist "github.com/temporalio/temporal/.gen/go/persistenceblobs"
@@ -63,13 +67,6 @@ type (
 		doneC  chan struct{}
 		daemon common.Daemon
 	}
-)
-
-const (
-	frontendService = "frontend"
-	historyService  = "history"
-	matchingService = "matching"
-	workerService   = "worker"
 )
 
 // newServer returns a new instance of a daemon
@@ -115,7 +112,7 @@ func (s *server) startService() common.Daemon {
 	var err error
 
 	params := service.BootstrapParams{}
-	params.Name = getServiceName(s.name)
+	params.Name = primitives.GetServiceNameFromRole(s.name)
 	params.Logger = loggerimpl.NewLogger(s.cfg.Log.NewZapLogger())
 	params.PersistenceConfig = s.cfg.Persistence
 
@@ -134,7 +131,7 @@ func (s *server) startService() common.Daemon {
 	// services to correct addresses used by clients through ServiceResolver lookup API
 	servicePortMap := make(map[string]int)
 	for roleName, svcCfg := range s.cfg.Services {
-		serviceName := getServiceName(roleName)
+		serviceName := primitives.GetServiceNameFromRole(roleName)
 		if serviceName == common.FrontendServiceName || serviceName == common.MatchingServiceName {
 			servicePortMap[serviceName] = svcCfg.RPC.GRPCPort
 		} else {
@@ -142,16 +139,17 @@ func (s *server) startService() common.Daemon {
 		}
 	}
 
-	params.MembershipFactory, err = s.cfg.Ringpop.NewFactory(
-		params.RPCFactory.GetRingpopDispatcher(),
-		params.Name,
-		servicePortMap,
-		params.Logger,
-	)
-
-	if err != nil {
-		log.Fatalf("error creating ringpop factory: %v", err)
-	}
+	params.MembershipFactoryInitializer =
+		func(persistenceBean persistenceClient.Bean, logger l.Logger) (service.MembershipMonitorFactory, error) {
+			return ringpop.NewRingpopFactory(
+				&s.cfg.Ringpop,
+				params.RPCFactory.GetRingpopDispatcher(),
+				params.Name,
+				servicePortMap,
+				logger,
+				persistenceBean.GetClusterMetadataManager(),
+			)
+		}
 
 	params.PProfInitializer = svcCfg.PProf.NewInitializer(params.Logger)
 
@@ -243,13 +241,13 @@ func (s *server) startService() common.Daemon {
 	var daemon common.Daemon
 
 	switch s.name {
-	case frontendService:
+	case primitives.FrontendService:
 		daemon, err = frontend.NewService(&params)
-	case historyService:
+	case primitives.HistoryService:
 		daemon, err = history.NewService(&params)
-	case matchingService:
+	case primitives.MatchingService:
 		daemon, err = matching.NewService(&params)
-	case workerService:
+	case primitives.WorkerService:
 		daemon, err = worker.NewService(&params)
 	}
 	if err != nil {
@@ -329,9 +327,4 @@ func logImmutableMismatch(l l.Logger, key string, ignored interface{}, value int
 func execute(d common.Daemon, doneC chan struct{}) {
 	d.Start()
 	close(doneC)
-}
-
-// getServiceName converts the role name used in config to service name used by ringpop ring
-func getServiceName(role string) string {
-	return "cadence-" + role
 }

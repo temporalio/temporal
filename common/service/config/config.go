@@ -26,7 +26,6 @@ import (
 
 	"github.com/uber-go/tally/m3"
 	"github.com/uber-go/tally/prometheus"
-	"github.com/uber/ringpop-go/discovery"
 
 	"github.com/temporalio/temporal/common/auth"
 	"github.com/temporalio/temporal/common/elasticsearch"
@@ -109,20 +108,12 @@ type (
 	Ringpop struct {
 		// Name to be used in ringpop advertisement
 		Name string `yaml:"name" validate:"nonzero"`
-		// BootstrapMode is a enum that defines the ringpop bootstrap method
-		BootstrapMode BootstrapMode `yaml:"bootstrapMode"`
-		// BootstrapHosts is a list of seed hosts to be used for ringpop bootstrap
-		BootstrapHosts []string `yaml:"bootstrapHosts"`
-		// BootstrapFile is the file path to be used for ringpop bootstrap
-		BootstrapFile string `yaml:"bootstrapFile"`
 		// MaxJoinDuration is the max wait time to join the ring
 		MaxJoinDuration time.Duration `yaml:"maxJoinDuration"`
-		// Custom discovery provider, cannot be specified through yaml
-		DiscoveryProvider discovery.DiscoverProvider `yaml:"-"`
-		// broadcastAddress is used as the address that is communicated to remote nodes to connect on.
+		// BroadcastAddress is used as the address that is communicated to remote nodes to connect on.
 		// This is generally used when BindOnIP would be the same across several nodes (ie: 0.0.0.0)
 		// and for nat traversal scenarios. Check net.ParseIP for supported syntax, only IPv4 is supported.
-		broadcastAddress string `yaml:"broadcastAddress"`
+		BroadcastAddress string `yaml:"broadcastAddress"`
 	}
 
 	// Persistence contains the configuration for data store / persistence layer
@@ -397,9 +388,6 @@ type (
 		// URI is the domain default URI for visibility archiver
 		URI string `yaml:"URI"`
 	}
-
-	// BootstrapMode is an enum type for ringpop bootstrap mode
-	BootstrapMode int
 )
 
 // Validate validates this config

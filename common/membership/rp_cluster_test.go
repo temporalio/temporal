@@ -22,7 +22,13 @@ package membership
 
 import (
 	"strings"
+	"testing"
 	"time"
+
+	"github.com/golang/mock/gomock"
+
+	"github.com/temporalio/temporal/common/mocks"
+	"github.com/temporalio/temporal/common/persistence"
 
 	"github.com/pborman/uuid"
 	"github.com/uber/ringpop-go"
@@ -47,12 +53,26 @@ type TestRingpopCluster struct {
 // NewTestRingpopCluster creates a new test cluster with the given name and cluster size
 // All the nodes in the test cluster will register themselves in Ringpop
 // with the specified name. This is only intended for unit tests.
-func NewTestRingpopCluster(ringPopApp string, size int, listenIpAddr string, seed string, serviceName string, broadcastAddress string) *TestRingpopCluster {
+func NewTestRingpopCluster(
+	t *testing.T,
+	ringPopApp string,
+	size int,
+	listenIPAddr string,
+	seed string,
+	serviceName string,
+	broadcastAddress string,
+) *TestRingpopCluster {
 	logger, err := loggerimpl.NewDevelopment()
 	if err != nil {
 		logger.Error("Failed to create test logger", tag.Error(err))
 		return nil
 	}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockMgr := mocks.NewMockClusterMetadataManager(ctrl)
+	mockMgr.EXPECT().PruneClusterMembership(gomock.Any()).Return(nil).AnyTimes()
+	mockMgr.EXPECT().UpsertClusterMembership(gomock.Any()).Return(nil).AnyTimes()
 
 	cluster := &TestRingpopCluster{
 		hostUUIDs:    make([]string, size),
@@ -70,7 +90,7 @@ func NewTestRingpopCluster(ringPopApp string, size int, listenIpAddr string, see
 			logger.Error("Failed to create tchannel", tag.Error(err))
 			return nil
 		}
-		listenAddr := listenIpAddr + ":0"
+		listenAddr := listenIPAddr + ":0"
 		err = cluster.channels[i].ListenAndServe(listenAddr)
 		if err != nil {
 			logger.Error("tchannel listen failed", tag.Error(err))
@@ -95,6 +115,18 @@ func NewTestRingpopCluster(ringPopApp string, size int, listenIpAddr string, see
 	bOptions.MaxJoinDuration = time.Duration(time.Second * 2)
 	bOptions.JoinSize = 1
 
+	seedAddress, seedPort, err := SplitHostPortTyped(cluster.seedNode)
+	seedMember := &persistence.ClusterMember{
+		HostID:        uuid.NewUUID(),
+		RPCAddress:    seedAddress,
+		RPCPort:       seedPort,
+		SessionStart:  time.Now().UTC(),
+		LastHeartbeat: time.Now().UTC(),
+	}
+
+	mockMgr.EXPECT().GetClusterMembers(gomock.Any()).
+		Return(&persistence.GetClusterMembersResponse{ActiveMembers: []*persistence.ClusterMember{seedMember}}, nil).AnyTimes()
+
 	for i := 0; i < size; i++ {
 		resolver := func() (string, error) {
 			return BuildBroadcastHostPort(cluster.channels[i].PeerInfo(), broadcastAddress)
@@ -105,11 +137,14 @@ func NewTestRingpopCluster(ringPopApp string, size int, listenIpAddr string, see
 			logger.Error("failed to create ringpop instance", tag.Error(err))
 			return nil
 		}
+		rpWrapper := NewRingPop(ringPop, time.Second*2, logger)
 		cluster.rings[i] = NewRingpopMonitor(
 			serviceName,
 			map[string]int{serviceName: 0},
-			NewRingPop(ringPop, bOptions, logger),
+			rpWrapper,
 			logger,
+			mockMgr,
+			resolver,
 		)
 		cluster.rings[i].Start()
 	}

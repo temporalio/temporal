@@ -22,22 +22,39 @@ package membership
 
 import (
 	"fmt"
+	"net"
+	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
+
+	"github.com/temporalio/temporal/common/primitives"
+
+	"github.com/pborman/uuid"
+
+	"github.com/temporalio/temporal/common/persistence"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 )
 
+const (
+	upsertMembershipRecordExpiryDefault = time.Hour * 48
+	healthyHostLastHeartbeatCutoff      = time.Minute * 5
+)
+
 type ringpopMonitor struct {
 	status int32
 
-	serviceName string
-	services    map[string]int
-	rp          *RingPop
-	rings       map[string]*ringpopServiceResolver
-	logger      log.Logger
+	serviceName               string
+	services                  map[string]int
+	rp                        *RingPop
+	rings                     map[string]*ringpopServiceResolver
+	logger                    log.Logger
+	metadataManager           persistence.ClusterMetadataManager
+	broadcastHostPortResolver func() (string, error)
+	hostID                    uuid.UUID
 }
 
 var _ Monitor = (*ringpopMonitor)(nil)
@@ -48,15 +65,20 @@ func NewRingpopMonitor(
 	services map[string]int,
 	rp *RingPop,
 	logger log.Logger,
+	metadataManager persistence.ClusterMetadataManager,
+	broadcastHostPortResolver func() (string, error),
 ) Monitor {
 
 	rpo := &ringpopMonitor{
-		status:      common.DaemonStatusInitialized,
-		serviceName: serviceName,
-		services:    services,
-		rp:          rp,
-		logger:      logger,
-		rings:       make(map[string]*ringpopServiceResolver),
+		broadcastHostPortResolver: broadcastHostPortResolver,
+		metadataManager:           metadataManager,
+		status:                    common.DaemonStatusInitialized,
+		serviceName:               serviceName,
+		services:                  services,
+		rp:                        rp,
+		logger:                    logger,
+		rings:                     make(map[string]*ringpopServiceResolver),
+		hostID:                    uuid.NewUUID(),
 	}
 	for service, port := range services {
 		rpo.rings[service] = newRingpopServiceResolver(service, port, rp, logger)
@@ -73,7 +95,20 @@ func (rpo *ringpopMonitor) Start() {
 		return
 	}
 
-	rpo.rp.Start()
+	broadcastAddress, err := rpo.broadcastHostPortResolver()
+	if err != nil {
+		rpo.logger.Fatal("unable to resolve broadcast address", tag.Error(err))
+	}
+
+	// TODO - Note this presents a small race condition as we write our identity before we bootstrap ringpop.
+	// This is a current limitation of the current structure of the ringpop library as
+	// we must know our seed nodes before bootsrapping
+	bootstrapHostPorts, err := rpo.startHeartbeatAndFetchBootstrapHosts(broadcastAddress)
+	if err != nil {
+		rpo.logger.Fatal("unable to initialize membership heartbeats", tag.Error(err))
+	}
+
+	rpo.rp.Start(bootstrapHostPorts)
 
 	labels, err := rpo.rp.Labels()
 	if err != nil {
@@ -87,6 +122,158 @@ func (rpo *ringpopMonitor) Start() {
 	for _, ring := range rpo.rings {
 		ring.Start()
 	}
+}
+
+func serviceNameToServiceTypeEnum(name string) (persistence.ServiceType, error) {
+	role := strings.Replace(name, primitives.ServiceNameRolePrefix, "", 1)
+
+	switch role {
+	case primitives.FrontendService:
+		return persistence.Frontend, nil
+	case primitives.HistoryService:
+		return persistence.History, nil
+	case primitives.MatchingService:
+		return persistence.Matching, nil
+	case primitives.WorkerService:
+		return persistence.Worker, nil
+	default:
+		return persistence.All, fmt.Errorf("unable to parse servicename '%s'", name)
+	}
+}
+
+func (rpo *ringpopMonitor) upsertMyMembership(request *persistence.UpsertClusterMembershipRequest) error {
+	err := rpo.metadataManager.UpsertClusterMembership(request)
+
+	if err == nil {
+		rpo.logger.Debug("Membership heartbeat upserted successfully",
+			tag.Address(request.RPCAddress.String()),
+			tag.Port(int(request.RPCPort)),
+			tag.HostID(request.HostID.String()))
+	}
+
+	return err
+}
+
+// SplitHostPortTyped expands upon net.SplitHostPort by providing type parsing.
+func SplitHostPortTyped(hostPort string) (net.IP, uint16, error) {
+	ipstr, portstr, err := net.SplitHostPort(hostPort)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	broadcastAddress := net.ParseIP(ipstr)
+	broadcastPort, err := strconv.ParseUint(portstr, 10, 16)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return broadcastAddress, uint16(broadcastPort), nil
+}
+
+func (rpo *ringpopMonitor) startHeartbeatAndFetchBootstrapHosts(broadcastHostport string) ([]string, error) {
+	// Start by cleaning up expired records to avoid growth
+	err := rpo.metadataManager.PruneClusterMembership(&persistence.PruneClusterMembershipRequest{MaxRecordsPruned: 10})
+
+	sessionStarted := time.Now().UTC()
+
+	// Parse and validate broadcast hostport
+	broadcastAddress, broadcastPort, err := SplitHostPortTyped(broadcastHostport)
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse and validate existing service name
+	role, err := serviceNameToServiceTypeEnum(rpo.serviceName)
+	if err != nil {
+		return nil, err
+	}
+
+	req := &persistence.UpsertClusterMembershipRequest{
+		Role:         role,
+		RPCAddress:   broadcastAddress,
+		RPCPort:      broadcastPort,
+		SessionStart: sessionStarted,
+		RecordExpiry: upsertMembershipRecordExpiryDefault,
+		HostID:       rpo.hostID,
+	}
+
+	// Upsert before fetching bootstrap hosts.
+	// This makes us discoverable by other Temporal cluster members
+	// Expire in 48 hours to allow for inspection of table by humans for debug scenarios.
+	// For bootstrapping, we filter to a much shorter duration on the
+	// read side by filtering on the last time a heartbeat was seen.
+	err = rpo.upsertMyMembership(req)
+
+	if err == nil {
+		rpo.logger.Info("Membership heartbeat upserted successfully",
+			tag.Address(broadcastAddress.String()),
+			tag.Port(int(broadcastPort)),
+			tag.HostID(rpo.hostID.String()))
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	bootstrapHostPorts, err := fetchCurrentBootstrapHostports(rpo.metadataManager)
+	if err != nil {
+		return nil, err
+	}
+
+	rpo.startHeartbeatUpsertLoop(req)
+	return bootstrapHostPorts, err
+}
+
+func fetchCurrentBootstrapHostports(manager persistence.ClusterMetadataManager) ([]string, error) {
+	pageSize := 1000
+	set := make(map[string]struct{})
+
+	var nextPageToken []byte
+
+	for {
+		// Get active hosts in last 5 minutes - Limit page size to 1000.
+		resp, err := manager.GetClusterMembers(
+			&persistence.GetClusterMembersRequest{
+				LastHeartbeatWithin: healthyHostLastHeartbeatCutoff,
+				PageSize:            pageSize,
+				NextPageToken:       nextPageToken,
+			})
+
+		if err != nil {
+			return nil, err
+		}
+
+		// Dedupe on hostport
+		for _, host := range resp.ActiveMembers {
+			set[net.JoinHostPort(host.RPCAddress.String(), strconv.Itoa(int(host.RPCPort)))] = struct{}{}
+		}
+
+		// Stop iterating once we have either 500 unique ip:port combos or there is no more results.
+		if nextPageToken == nil || len(set) >= 500 {
+			bootstrapHostPorts := make([]string, 0, len(set))
+			for k := range set {
+				bootstrapHostPorts = append(bootstrapHostPorts, k)
+			}
+			return bootstrapHostPorts, nil
+		}
+
+	}
+}
+
+func (rpo *ringpopMonitor) startHeartbeatUpsertLoop(request *persistence.UpsertClusterMembershipRequest) {
+	loopUpsertMembership := func() {
+		for {
+			err := rpo.upsertMyMembership(request)
+
+			if err != nil {
+				rpo.logger.Error("Membership upsert failed.", tag.Error(err))
+			}
+
+			time.Sleep(time.Second * 30)
+		}
+	}
+
+	go loopUpsertMembership()
 }
 
 func (rpo *ringpopMonitor) Stop() {

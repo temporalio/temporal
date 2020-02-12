@@ -14,8 +14,6 @@ persistence:
 
 ringpop:
   name: cadence_other
-  bootstrapMode: hosts
-  bootstrapHosts: ["127.0.0.1:9933", "127.0.0.1:9934", "127.0.0.1:9935", "127.0.0.1:9940"]
   maxJoinDuration: 30s
 
 services:

@@ -27,6 +27,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/temporalio/temporal/common/primitives"
+
 	"github.com/urfave/cli"
 
 	"github.com/temporalio/temporal/common"
@@ -36,7 +38,7 @@ import (
 )
 
 // validServices is the list of all valid cadence services
-var validServices = []string{frontendService, historyService, matchingService, workerService}
+var validServices = []string{primitives.FrontendService, primitives.HistoryService, primitives.MatchingService, primitives.WorkerService}
 
 // startHandler is the handler for the cli start command
 func startHandler(c *cli.Context) {
