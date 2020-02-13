@@ -63,7 +63,7 @@ const (
 	EncodingTypeGob      EncodingType = "gob"
 	EncodingTypeUnknown  EncodingType = "unknow"
 	EncodingTypeEmpty    EncodingType = ""
-	EncodingTypeProto    EncodingType = "proto3"
+	EncodingTypeProto3   EncodingType = "proto3"
 )
 
 type (

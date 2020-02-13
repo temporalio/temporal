@@ -69,17 +69,17 @@ func decodeErr(encoding common.EncodingType, err error) error {
 }
 
 func protoRWEncode(m protoMarshal) (p.DataBlob, error) {
-	blob := p.DataBlob{Encoding: common.EncodingTypeProto}
+	blob := p.DataBlob{Encoding: common.EncodingTypeProto3}
 	data, err := m.Marshal()
 	if err != nil {
-		return blob, encodeErr(common.EncodingTypeProto, err)
+		return blob, encodeErr(common.EncodingTypeProto3, err)
 	}
 	blob.Data = data
 	return blob, nil
 }
 
 func protoRWDecode(b []byte, proto string, result protoMarshal) error {
-	if err := validateProto(proto, common.EncodingTypeProto); err != nil {
+	if err := validateProto(proto, common.EncodingTypeProto3); err != nil {
 		return err
 	}
 	return decodeErr(common.EncodingTypeThriftRW, result.Unmarshal(b))
@@ -122,13 +122,13 @@ func ShardInfoFromBlob(b []byte, proto string, clusterName string) (*persistence
 		return nil, err
 	}
 
-	if shardInfo.GetClusterTransferAckLevel() == nil || len(shardInfo.GetClusterTransferAckLevel()) == 0 {
+	if len(shardInfo.GetClusterTransferAckLevel()) == 0 {
 		shardInfo.ClusterTransferAckLevel = map[string]int64{
 			clusterName: shardInfo.GetTransferAckLevel(),
 		}
 	}
 
-	if shardInfo.GetClusterTimerAckLevel() == nil || len(shardInfo.GetClusterTimerAckLevel()) == 0 {
+	if len(shardInfo.GetClusterTimerAckLevel()) == 0 {
 		shardInfo.ClusterTimerAckLevel = map[string]*types.Timestamp{
 			clusterName: shardInfo.GetTimerAckLevel(),
 		}
