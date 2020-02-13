@@ -24,6 +24,10 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/gogo/protobuf/types"
+
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+
 	"go.uber.org/thriftrw/protocol"
 	"go.uber.org/thriftrw/wire"
 
@@ -38,59 +42,103 @@ type thriftRWType interface {
 	FromWire(w wire.Value) error
 }
 
-func validateProto(p string) error {
-	if common.EncodingType(p) != common.EncodingTypeThriftRW {
+type protoMarshal interface {
+	Marshal() ([]byte, error)
+	Unmarshal([]byte) error
+}
+
+func validateProto(p string, expected common.EncodingType) error {
+	if common.EncodingType(p) != expected {
 		return fmt.Errorf("invalid encoding type: %v", p)
 	}
 	return nil
 }
 
-func encodeErr(err error) error {
+func encodeErr(encoding common.EncodingType, err error) error {
 	if err == nil {
 		return nil
 	}
-	return fmt.Errorf("error serializing struct to thrift blob: %v", err)
+	return fmt.Errorf("error serializing struct to blob using encoding - %v - : %v", encoding, err)
 }
 
-func decodeErr(err error) error {
+func decodeErr(encoding common.EncodingType, err error) error {
 	if err == nil {
 		return nil
 	}
-	return fmt.Errorf("error deserializing blob to thrift struct: %v", err)
+	return fmt.Errorf("error deserializing blob to blob using encoding - %v - : %v", encoding, err)
+}
+
+func protoRWEncode(m protoMarshal) (p.DataBlob, error) {
+	blob := p.DataBlob{Encoding: common.EncodingTypeProto3}
+	data, err := m.Marshal()
+	if err != nil {
+		return blob, encodeErr(common.EncodingTypeProto3, err)
+	}
+	blob.Data = data
+	return blob, nil
+}
+
+func protoRWDecode(b []byte, proto string, result protoMarshal) error {
+	if err := validateProto(proto, common.EncodingTypeProto3); err != nil {
+		return err
+	}
+	return decodeErr(common.EncodingTypeThriftRW, result.Unmarshal(b))
 }
 
 func thriftRWEncode(t thriftRWType) (p.DataBlob, error) {
 	blob := p.DataBlob{Encoding: common.EncodingTypeThriftRW}
 	value, err := t.ToWire()
 	if err != nil {
-		return blob, encodeErr(err)
+		return blob, encodeErr(common.EncodingTypeThriftRW, err)
 	}
 	var b bytes.Buffer
 	if err := protocol.Binary.Encode(value, &b); err != nil {
-		return blob, encodeErr(err)
+		return blob, encodeErr(common.EncodingTypeThriftRW, err)
 	}
 	blob.Data = b.Bytes()
 	return blob, nil
 }
 
 func thriftRWDecode(b []byte, proto string, result thriftRWType) error {
-	if err := validateProto(proto); err != nil {
+	if err := validateProto(proto, common.EncodingTypeThriftRW); err != nil {
 		return err
 	}
 	value, err := protocol.Binary.Decode(bytes.NewReader(b), wire.TStruct)
 	if err != nil {
-		return decodeErr(err)
+		return decodeErr(common.EncodingTypeThriftRW, err)
 	}
-	return decodeErr(result.FromWire(value))
+	return decodeErr(common.EncodingTypeThriftRW, result.FromWire(value))
 }
 
-func shardInfoToBlob(info *sqlblobs.ShardInfo) (p.DataBlob, error) {
-	return thriftRWEncode(info)
+func ShardInfoToBlob(info *persistenceblobs.ShardInfo) (p.DataBlob, error) {
+	return protoRWEncode(info)
 }
 
-func shardInfoFromBlob(b []byte, proto string) (*sqlblobs.ShardInfo, error) {
-	result := &sqlblobs.ShardInfo{}
-	return result, thriftRWDecode(b, proto, result)
+func ShardInfoFromBlob(b []byte, proto string, clusterName string) (*persistenceblobs.ShardInfo, error) {
+	shardInfo := &persistenceblobs.ShardInfo{}
+	err := protoRWDecode(b, proto, shardInfo)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if len(shardInfo.GetClusterTransferAckLevel()) == 0 {
+		shardInfo.ClusterTransferAckLevel = map[string]int64{
+			clusterName: shardInfo.GetTransferAckLevel(),
+		}
+	}
+
+	if len(shardInfo.GetClusterTimerAckLevel()) == 0 {
+		shardInfo.ClusterTimerAckLevel = map[string]*types.Timestamp{
+			clusterName: shardInfo.GetTimerAckLevel(),
+		}
+	}
+
+	if shardInfo.GetClusterReplicationLevel() == nil {
+		shardInfo.ClusterReplicationLevel = make(map[string]int64)
+	}
+
+	return shardInfo, nil
 }
 
 func domainInfoToBlob(info *sqlblobs.DomainInfo) (p.DataBlob, error) {

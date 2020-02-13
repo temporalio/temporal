@@ -72,7 +72,7 @@ type (
 
 	matchingEngineImpl struct {
 		taskManager          persistence.TaskManager
-		historyService       history.ClientGRPC
+		historyService       history.Client
 		matchingClient       matching.Client
 		tokenSerializer      common.TaskTokenSerializer
 		logger               log.Logger
@@ -107,7 +107,7 @@ var _ Engine = (*matchingEngineImpl)(nil) // Asserts that interface is indeed im
 
 // NewEngine creates an instance of matching engine
 func NewEngine(taskManager persistence.TaskManager,
-	historyService history.ClientGRPC,
+	historyService history.Client,
 	matchingClient matching.Client,
 	config *Config,
 	logger log.Logger,

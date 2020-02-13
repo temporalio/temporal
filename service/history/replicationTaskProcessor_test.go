@@ -25,6 +25,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
@@ -98,7 +100,7 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 	s.mockShard = &shardContextImpl{
 		shardID:                   0,
 		Resource:                  s.mockResource,
-		shardInfo:                 &persistence.ShardInfo{ShardID: 0, RangeID: 1, TransferAckLevel: 0},
+		shardInfo:                 &persistence.ShardInfoWithFailover{ShardInfo: &persistenceblobs.ShardInfo{RangeID: 1, TransferAckLevel: 0}},
 		transferSequenceNumber:    1,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   make(chan int, 100),

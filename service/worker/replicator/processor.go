@@ -66,7 +66,7 @@ type (
 		domainReplicator        DomainReplicator
 		historyRereplicator     xdc.HistoryRereplicator
 		nDCHistoryResender      xdc.NDCHistoryResender
-		historyClient           history.ClientGRPC
+		historyClient           history.Client
 		domainCache             cache.DomainCache
 		msgEncoder              codec.BinaryEncoder
 		timeSource              clock.TimeSource
@@ -98,12 +98,12 @@ func newReplicationTaskProcessor(
 	domainReplicator DomainReplicator,
 	historyRereplicator xdc.HistoryRereplicator,
 	nDCHistoryResender xdc.NDCHistoryResender,
-	historyClient history.ClientGRPC,
+	historyClient history.Client,
 	domainCache cache.DomainCache,
 	sequentialTaskProcessor task.SequentialTaskProcessor,
 ) *replicationTaskProcessor {
 
-	retryableHistoryClient := history.NewRetryableClientGRPC(historyClient, common.CreateHistoryServiceRetryPolicy(),
+	retryableHistoryClient := history.NewRetryableClient(historyClient, common.CreateHistoryServiceRetryPolicy(),
 		common.IsWhitelistServiceTransientErrorGRPC)
 
 	return &replicationTaskProcessor{

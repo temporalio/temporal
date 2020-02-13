@@ -26,6 +26,8 @@ import (
 	"strings"
 	"time"
 
+	pblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+
 	"github.com/temporalio/temporal/.gen/go/persistenceblobs"
 
 	"github.com/temporalio/temporal/common/checksum"
@@ -233,22 +235,11 @@ type (
 		Msg string
 	}
 
-	// ShardInfo describes a shard
-	ShardInfo struct {
-		ShardID                   int
-		Owner                     string
-		RangeID                   int64
-		StolenSinceRenew          int
-		UpdatedAt                 time.Time
-		ReplicationAckLevel       int64
-		TransferAckLevel          int64
-		TimerAckLevel             time.Time
-		ClusterTransferAckLevel   map[string]int64
-		ClusterTimerAckLevel      map[string]time.Time
-		TransferFailoverLevels    map[string]TransferFailoverLevel // uuid -> TransferFailoverLevel
-		TimerFailoverLevels       map[string]TimerFailoverLevel    // uuid -> TimerFailoverLevel
-		ClusterReplicationLevel   map[string]int64                 // cluster -> last replicated taskID
-		DomainNotificationVersion int64
+	// ShardInfoWithFailover describes a shard
+	ShardInfoWithFailover struct {
+		*pblobs.ShardInfo
+		TransferFailoverLevels map[string]TransferFailoverLevel // uuid -> TransferFailoverLevel
+		TimerFailoverLevels    map[string]TimerFailoverLevel    // uuid -> TimerFailoverLevel
 	}
 
 	// TransferFailoverLevel contains corresponding start / end level
@@ -724,22 +715,22 @@ type (
 
 	// CreateShardRequest is used to create a shard in executions table
 	CreateShardRequest struct {
-		ShardInfo *ShardInfo
+		ShardInfo *pblobs.ShardInfo
 	}
 
 	// GetShardRequest is used to get shard information
 	GetShardRequest struct {
-		ShardID int
+		ShardID int32
 	}
 
 	// GetShardResponse is the response to GetShard
 	GetShardResponse struct {
-		ShardInfo *ShardInfo
+		ShardInfo *pblobs.ShardInfo
 	}
 
 	// UpdateShardRequest  is used to update shard information
 	UpdateShardRequest struct {
-		ShardInfo       *ShardInfo
+		ShardInfo       *pblobs.ShardInfo
 		PreviousRangeID int64
 	}
 

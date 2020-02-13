@@ -109,7 +109,7 @@ func (s *workflowHandlerSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockResource = resource.NewTest(s.controller, metrics.Frontend)
 	s.mockDomainCache = s.mockResource.DomainCache
-	s.mockHistoryClient = s.mockResource.HistoryClientGRPC
+	s.mockHistoryClient = s.mockResource.HistoryClient
 	s.mockClusterMetadata = s.mockResource.ClusterMetadata
 	s.mockMetadataMgr = s.mockResource.MetadataMgr
 	s.mockHistoryV2Mgr = s.mockResource.HistoryMgr

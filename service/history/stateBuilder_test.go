@@ -24,6 +24,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
@@ -83,11 +85,12 @@ func (s *stateBuilderSuite) SetupTest() {
 
 	s.mockShard = newTestShardContext(
 		s.controller,
-		&persistence.ShardInfo{
-			ShardID:          0,
-			RangeID:          1,
-			TransferAckLevel: 0,
-		},
+		&persistence.ShardInfoWithFailover{
+			ShardInfo: &persistenceblobs.ShardInfo{
+				ShardID:          0,
+				RangeID:          1,
+				TransferAckLevel: 0,
+			}},
 		NewDynamicConfigForTest(),
 	)
 

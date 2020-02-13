@@ -191,7 +191,7 @@ func (c *cadenceImpl) Start() error {
 	hosts := make(map[string][]string)
 	hosts[common.FrontendServiceName] = []string{c.FrontendGRPCAddress()}
 	hosts[common.MatchingServiceName] = []string{c.MatchingGRPCServiceAddress()}
-	hosts[common.HistoryServiceName] = c.HistoryServiceAddress(0)
+	hosts[common.HistoryServiceName] = c.HistoryServiceAddress(3)
 	if c.enableWorker() {
 		hosts[common.WorkerServiceName] = []string{c.WorkerServiceAddress()}
 	}
@@ -552,7 +552,7 @@ func (c *cadenceImpl) startHistory(
 	pprofPorts := c.HistoryPProfPort()
 	ringpopPorts := c.HistoryServiceAddress(2)
 	grpcPorts := c.HistoryServiceAddress(3)
-	for i, hostport := range c.HistoryServiceAddress(0) {
+	for i, hostport := range c.HistoryServiceAddress(3) {
 		params := new(resource.BootstrapParams)
 		params.Name = common.HistoryServiceName
 		params.Logger = c.logger

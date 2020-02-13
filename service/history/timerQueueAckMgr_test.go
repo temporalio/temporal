@@ -24,6 +24,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/types"
+
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+
 	gomock "github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
@@ -100,13 +104,14 @@ func (s *timerQueueAckMgrSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockShard = newTestShardContext(
 		s.controller,
-		&persistence.ShardInfo{
-			ShardID: 0,
-			RangeID: 1,
-			ClusterTimerAckLevel: map[string]time.Time{
-				cluster.TestCurrentClusterName:     time.Now().Add(-8 * time.Second),
-				cluster.TestAlternativeClusterName: time.Now().Add(-10 * time.Second),
-			},
+		&persistence.ShardInfoWithFailover{
+			ShardInfo: &persistenceblobs.ShardInfo{
+				ShardID: 0,
+				RangeID: 1,
+				ClusterTimerAckLevel: map[string]*types.Timestamp{
+					cluster.TestCurrentClusterName:     gogoProtoTimestampNowAddDuration(-8),
+					cluster.TestAlternativeClusterName: gogoProtoTimestampNowAddDuration(-10),
+				}},
 		},
 		config,
 	)
@@ -418,7 +423,7 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		DomainID:            domainID,
 		WorkflowID:          "some random workflow ID",
 		RunID:               uuid.New(),
-		VisibilityTimestamp: time.Now().Add(-5 * time.Second),
+		VisibilityTimestamp: time.Now().UTC().Add(-5 * time.Second),
 		TaskID:              int64(59),
 		TaskType:            1,
 		TimeoutType:         2,
@@ -524,6 +529,12 @@ func (s *timerQueueFailoverAckMgrSuite) TearDownSuite() {
 
 }
 
+func gogoProtoTimestampNowAddDuration(seconds int) *types.Timestamp {
+	t := types.TimestampNow()
+	t.Seconds += int64(seconds)
+	return t
+}
+
 func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
@@ -533,13 +544,14 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockShard = newTestShardContext(
 		s.controller,
-		&persistence.ShardInfo{
-			ShardID: 0,
-			RangeID: 1,
-			ClusterTimerAckLevel: map[string]time.Time{
-				cluster.TestCurrentClusterName:     time.Now(),
-				cluster.TestAlternativeClusterName: time.Now().Add(-10 * time.Second),
-			},
+		&persistence.ShardInfoWithFailover{
+			ShardInfo: &persistenceblobs.ShardInfo{
+				ShardID: 0,
+				RangeID: 1,
+				ClusterTimerAckLevel: map[string]*types.Timestamp{
+					cluster.TestCurrentClusterName:     types.TimestampNow(),
+					cluster.TestAlternativeClusterName: gogoProtoTimestampNowAddDuration(-10),
+				}},
 			TimerFailoverLevels: make(map[string]persistence.TimerFailoverLevel),
 		},
 		config,

@@ -40,19 +40,6 @@ message HistoryBranch {
     repeated HistoryBranchRange ancestors = 3;
 }
 
-message ShardInfo {
-    int32 stolenSinceRenew = 1;
-    int64 updatedAtNanos = 2;
-    int64 replicationAckLevel = 3;
-    int64 transferAckLevel = 4;
-    int64 timerAckLevelNanos = 5;
-    int64 domainNotificationVersion = 6;
-    map<string, int64> clusterTransferAckLevel = 7;
-    map<string, int64> clusterTimerAckLevel = 8;
-    string owner = 9;
-    map<string, int64> clusterReplicationLevel = 10;
-}
-
 message DomainInfo {
     string name = 1;
     string description = 2;

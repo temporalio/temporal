@@ -23,11 +23,9 @@ package history
 import (
 	"context"
 
-	"go.uber.org/yarpc"
+	"google.golang.org/grpc"
 
-	h "github.com/temporalio/temporal/.gen/go/history"
-	"github.com/temporalio/temporal/.gen/go/replicator"
-	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common/backoff"
 )
 
@@ -50,10 +48,10 @@ func NewRetryableClient(client Client, policy backoff.RetryPolicy, isRetryable b
 
 func (c *retryableClient) StartWorkflowExecution(
 	ctx context.Context,
-	request *h.StartWorkflowExecutionRequest,
-	opts ...yarpc.CallOption) (*shared.StartWorkflowExecutionResponse, error) {
+	request *historyservice.StartWorkflowExecutionRequest,
+	opts ...grpc.CallOption) (*historyservice.StartWorkflowExecutionResponse, error) {
 
-	var resp *shared.StartWorkflowExecutionResponse
+	var resp *historyservice.StartWorkflowExecutionResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.StartWorkflowExecution(ctx, request, opts...)
@@ -66,10 +64,10 @@ func (c *retryableClient) StartWorkflowExecution(
 
 func (c *retryableClient) DescribeHistoryHost(
 	ctx context.Context,
-	request *shared.DescribeHistoryHostRequest,
-	opts ...yarpc.CallOption) (*shared.DescribeHistoryHostResponse, error) {
+	request *historyservice.DescribeHistoryHostRequest,
+	opts ...grpc.CallOption) (*historyservice.DescribeHistoryHostResponse, error) {
 
-	var resp *shared.DescribeHistoryHostResponse
+	var resp *historyservice.DescribeHistoryHostResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.DescribeHistoryHost(ctx, request, opts...)
@@ -82,38 +80,42 @@ func (c *retryableClient) DescribeHistoryHost(
 
 func (c *retryableClient) CloseShard(
 	ctx context.Context,
-	request *shared.CloseShardRequest,
-	opts ...yarpc.CallOption) error {
+	request *historyservice.CloseShardRequest,
+	opts ...grpc.CallOption) (*historyservice.CloseShardResponse, error) {
 
+	var resp *historyservice.CloseShardResponse
 	op := func() error {
-		err := c.client.CloseShard(ctx, request, opts...)
+		var err error
+		resp, err = c.client.CloseShard(ctx, request, opts...)
 		return err
 	}
 
 	err := backoff.Retry(op, c.policy, c.isRetryable)
-	return err
+	return resp, err
 }
 
 func (c *retryableClient) RemoveTask(
 	ctx context.Context,
-	request *shared.RemoveTaskRequest,
-	opts ...yarpc.CallOption) error {
+	request *historyservice.RemoveTaskRequest,
+	opts ...grpc.CallOption) (*historyservice.RemoveTaskResponse, error) {
 
+	var resp *historyservice.RemoveTaskResponse
 	op := func() error {
-		err := c.client.RemoveTask(ctx, request, opts...)
+		var err error
+		resp, err = c.client.RemoveTask(ctx, request, opts...)
 		return err
 	}
 
 	err := backoff.Retry(op, c.policy, c.isRetryable)
-	return err
+	return resp, err
 }
 
 func (c *retryableClient) DescribeMutableState(
 	ctx context.Context,
-	request *h.DescribeMutableStateRequest,
-	opts ...yarpc.CallOption) (*h.DescribeMutableStateResponse, error) {
+	request *historyservice.DescribeMutableStateRequest,
+	opts ...grpc.CallOption) (*historyservice.DescribeMutableStateResponse, error) {
 
-	var resp *h.DescribeMutableStateResponse
+	var resp *historyservice.DescribeMutableStateResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.DescribeMutableState(ctx, request, opts...)
@@ -126,10 +128,10 @@ func (c *retryableClient) DescribeMutableState(
 
 func (c *retryableClient) GetMutableState(
 	ctx context.Context,
-	request *h.GetMutableStateRequest,
-	opts ...yarpc.CallOption) (*h.GetMutableStateResponse, error) {
+	request *historyservice.GetMutableStateRequest,
+	opts ...grpc.CallOption) (*historyservice.GetMutableStateResponse, error) {
 
-	var resp *h.GetMutableStateResponse
+	var resp *historyservice.GetMutableStateResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.GetMutableState(ctx, request, opts...)
@@ -142,10 +144,10 @@ func (c *retryableClient) GetMutableState(
 
 func (c *retryableClient) PollMutableState(
 	ctx context.Context,
-	request *h.PollMutableStateRequest,
-	opts ...yarpc.CallOption) (*h.PollMutableStateResponse, error) {
+	request *historyservice.PollMutableStateRequest,
+	opts ...grpc.CallOption) (*historyservice.PollMutableStateResponse, error) {
 
-	var resp *h.PollMutableStateResponse
+	var resp *historyservice.PollMutableStateResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.PollMutableState(ctx, request, opts...)
@@ -158,10 +160,10 @@ func (c *retryableClient) PollMutableState(
 
 func (c *retryableClient) ResetStickyTaskList(
 	ctx context.Context,
-	request *h.ResetStickyTaskListRequest,
-	opts ...yarpc.CallOption) (*h.ResetStickyTaskListResponse, error) {
+	request *historyservice.ResetStickyTaskListRequest,
+	opts ...grpc.CallOption) (*historyservice.ResetStickyTaskListResponse, error) {
 
-	var resp *h.ResetStickyTaskListResponse
+	var resp *historyservice.ResetStickyTaskListResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.ResetStickyTaskList(ctx, request, opts...)
@@ -174,10 +176,10 @@ func (c *retryableClient) ResetStickyTaskList(
 
 func (c *retryableClient) DescribeWorkflowExecution(
 	ctx context.Context,
-	request *h.DescribeWorkflowExecutionRequest,
-	opts ...yarpc.CallOption) (*shared.DescribeWorkflowExecutionResponse, error) {
+	request *historyservice.DescribeWorkflowExecutionRequest,
+	opts ...grpc.CallOption) (*historyservice.DescribeWorkflowExecutionResponse, error) {
 
-	var resp *shared.DescribeWorkflowExecutionResponse
+	var resp *historyservice.DescribeWorkflowExecutionResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.DescribeWorkflowExecution(ctx, request, opts...)
@@ -190,10 +192,10 @@ func (c *retryableClient) DescribeWorkflowExecution(
 
 func (c *retryableClient) RecordDecisionTaskStarted(
 	ctx context.Context,
-	request *h.RecordDecisionTaskStartedRequest,
-	opts ...yarpc.CallOption) (*h.RecordDecisionTaskStartedResponse, error) {
+	request *historyservice.RecordDecisionTaskStartedRequest,
+	opts ...grpc.CallOption) (*historyservice.RecordDecisionTaskStartedResponse, error) {
 
-	var resp *h.RecordDecisionTaskStartedResponse
+	var resp *historyservice.RecordDecisionTaskStartedResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.RecordDecisionTaskStarted(ctx, request, opts...)
@@ -206,10 +208,10 @@ func (c *retryableClient) RecordDecisionTaskStarted(
 
 func (c *retryableClient) RecordActivityTaskStarted(
 	ctx context.Context,
-	request *h.RecordActivityTaskStartedRequest,
-	opts ...yarpc.CallOption) (*h.RecordActivityTaskStartedResponse, error) {
+	request *historyservice.RecordActivityTaskStartedRequest,
+	opts ...grpc.CallOption) (*historyservice.RecordActivityTaskStartedResponse, error) {
 
-	var resp *h.RecordActivityTaskStartedResponse
+	var resp *historyservice.RecordActivityTaskStartedResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.RecordActivityTaskStarted(ctx, request, opts...)
@@ -222,10 +224,10 @@ func (c *retryableClient) RecordActivityTaskStarted(
 
 func (c *retryableClient) RespondDecisionTaskCompleted(
 	ctx context.Context,
-	request *h.RespondDecisionTaskCompletedRequest,
-	opts ...yarpc.CallOption) (*h.RespondDecisionTaskCompletedResponse, error) {
+	request *historyservice.RespondDecisionTaskCompletedRequest,
+	opts ...grpc.CallOption) (*historyservice.RespondDecisionTaskCompletedResponse, error) {
 
-	var resp *h.RespondDecisionTaskCompletedResponse
+	var resp *historyservice.RespondDecisionTaskCompletedResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.RespondDecisionTaskCompleted(ctx, request, opts...)
@@ -238,58 +240,74 @@ func (c *retryableClient) RespondDecisionTaskCompleted(
 
 func (c *retryableClient) RespondDecisionTaskFailed(
 	ctx context.Context,
-	request *h.RespondDecisionTaskFailedRequest,
-	opts ...yarpc.CallOption) error {
+	request *historyservice.RespondDecisionTaskFailedRequest,
+	opts ...grpc.CallOption) (*historyservice.RespondDecisionTaskFailedResponse, error) {
 
+	var resp *historyservice.RespondDecisionTaskFailedResponse
 	op := func() error {
-		return c.client.RespondDecisionTaskFailed(ctx, request, opts...)
+		var err error
+		resp, err = c.client.RespondDecisionTaskFailed(ctx, request, opts...)
+		return err
 	}
 
-	return backoff.Retry(op, c.policy, c.isRetryable)
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
 }
 
 func (c *retryableClient) RespondActivityTaskCompleted(
 	ctx context.Context,
-	request *h.RespondActivityTaskCompletedRequest,
-	opts ...yarpc.CallOption) error {
+	request *historyservice.RespondActivityTaskCompletedRequest,
+	opts ...grpc.CallOption) (*historyservice.RespondActivityTaskCompletedResponse, error) {
 
+	var resp *historyservice.RespondActivityTaskCompletedResponse
 	op := func() error {
-		return c.client.RespondActivityTaskCompleted(ctx, request, opts...)
+		var err error
+		resp, err = c.client.RespondActivityTaskCompleted(ctx, request, opts...)
+		return err
 	}
 
-	return backoff.Retry(op, c.policy, c.isRetryable)
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
 }
 
 func (c *retryableClient) RespondActivityTaskFailed(
 	ctx context.Context,
-	request *h.RespondActivityTaskFailedRequest,
-	opts ...yarpc.CallOption) error {
+	request *historyservice.RespondActivityTaskFailedRequest,
+	opts ...grpc.CallOption) (*historyservice.RespondActivityTaskFailedResponse, error) {
 
+	var resp *historyservice.RespondActivityTaskFailedResponse
 	op := func() error {
-		return c.client.RespondActivityTaskFailed(ctx, request, opts...)
+		var err error
+		resp, err = c.client.RespondActivityTaskFailed(ctx, request, opts...)
+		return err
 	}
 
-	return backoff.Retry(op, c.policy, c.isRetryable)
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
 }
 
 func (c *retryableClient) RespondActivityTaskCanceled(
 	ctx context.Context,
-	request *h.RespondActivityTaskCanceledRequest,
-	opts ...yarpc.CallOption) error {
+	request *historyservice.RespondActivityTaskCanceledRequest,
+	opts ...grpc.CallOption) (*historyservice.RespondActivityTaskCanceledResponse, error) {
 
+	var resp *historyservice.RespondActivityTaskCanceledResponse
 	op := func() error {
-		return c.client.RespondActivityTaskCanceled(ctx, request, opts...)
+		var err error
+		resp, err = c.client.RespondActivityTaskCanceled(ctx, request, opts...)
+		return err
 	}
 
-	return backoff.Retry(op, c.policy, c.isRetryable)
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
 }
 
 func (c *retryableClient) RecordActivityTaskHeartbeat(
 	ctx context.Context,
-	request *h.RecordActivityTaskHeartbeatRequest,
-	opts ...yarpc.CallOption) (*shared.RecordActivityTaskHeartbeatResponse, error) {
+	request *historyservice.RecordActivityTaskHeartbeatRequest,
+	opts ...grpc.CallOption) (*historyservice.RecordActivityTaskHeartbeatResponse, error) {
 
-	var resp *shared.RecordActivityTaskHeartbeatResponse
+	var resp *historyservice.RecordActivityTaskHeartbeatResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.RecordActivityTaskHeartbeat(ctx, request, opts...)
@@ -302,34 +320,42 @@ func (c *retryableClient) RecordActivityTaskHeartbeat(
 
 func (c *retryableClient) RequestCancelWorkflowExecution(
 	ctx context.Context,
-	request *h.RequestCancelWorkflowExecutionRequest,
-	opts ...yarpc.CallOption) error {
+	request *historyservice.RequestCancelWorkflowExecutionRequest,
+	opts ...grpc.CallOption) (*historyservice.RequestCancelWorkflowExecutionResponse, error) {
 
+	var resp *historyservice.RequestCancelWorkflowExecutionResponse
 	op := func() error {
-		return c.client.RequestCancelWorkflowExecution(ctx, request, opts...)
+		var err error
+		resp, err = c.client.RequestCancelWorkflowExecution(ctx, request, opts...)
+		return err
 	}
 
-	return backoff.Retry(op, c.policy, c.isRetryable)
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
 }
 
 func (c *retryableClient) SignalWorkflowExecution(
 	ctx context.Context,
-	request *h.SignalWorkflowExecutionRequest,
-	opts ...yarpc.CallOption) error {
+	request *historyservice.SignalWorkflowExecutionRequest,
+	opts ...grpc.CallOption) (*historyservice.SignalWorkflowExecutionResponse, error) {
 
+	var resp *historyservice.SignalWorkflowExecutionResponse
 	op := func() error {
-		return c.client.SignalWorkflowExecution(ctx, request, opts...)
+		var err error
+		resp, err = c.client.SignalWorkflowExecution(ctx, request, opts...)
+		return err
 	}
 
-	return backoff.Retry(op, c.policy, c.isRetryable)
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
 }
 
 func (c *retryableClient) SignalWithStartWorkflowExecution(
 	ctx context.Context,
-	request *h.SignalWithStartWorkflowExecutionRequest,
-	opts ...yarpc.CallOption) (*shared.StartWorkflowExecutionResponse, error) {
+	request *historyservice.SignalWithStartWorkflowExecutionRequest,
+	opts ...grpc.CallOption) (*historyservice.SignalWithStartWorkflowExecutionResponse, error) {
 
-	var resp *shared.StartWorkflowExecutionResponse
+	var resp *historyservice.SignalWithStartWorkflowExecutionResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.SignalWithStartWorkflowExecution(ctx, request, opts...)
@@ -342,34 +368,42 @@ func (c *retryableClient) SignalWithStartWorkflowExecution(
 
 func (c *retryableClient) RemoveSignalMutableState(
 	ctx context.Context,
-	request *h.RemoveSignalMutableStateRequest,
-	opts ...yarpc.CallOption) error {
+	request *historyservice.RemoveSignalMutableStateRequest,
+	opts ...grpc.CallOption) (*historyservice.RemoveSignalMutableStateResponse, error) {
 
+	var resp *historyservice.RemoveSignalMutableStateResponse
 	op := func() error {
-		return c.client.RemoveSignalMutableState(ctx, request, opts...)
+		var err error
+		resp, err = c.client.RemoveSignalMutableState(ctx, request, opts...)
+		return err
 	}
 
-	return backoff.Retry(op, c.policy, c.isRetryable)
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
 }
 
 func (c *retryableClient) TerminateWorkflowExecution(
 	ctx context.Context,
-	request *h.TerminateWorkflowExecutionRequest,
-	opts ...yarpc.CallOption) error {
+	request *historyservice.TerminateWorkflowExecutionRequest,
+	opts ...grpc.CallOption) (*historyservice.TerminateWorkflowExecutionResponse, error) {
 
+	var resp *historyservice.TerminateWorkflowExecutionResponse
 	op := func() error {
-		return c.client.TerminateWorkflowExecution(ctx, request, opts...)
+		var err error
+		resp, err = c.client.TerminateWorkflowExecution(ctx, request, opts...)
+		return err
 	}
 
-	return backoff.Retry(op, c.policy, c.isRetryable)
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
 }
 
 func (c *retryableClient) ResetWorkflowExecution(
 	ctx context.Context,
-	request *h.ResetWorkflowExecutionRequest,
-	opts ...yarpc.CallOption) (*shared.ResetWorkflowExecutionResponse, error) {
+	request *historyservice.ResetWorkflowExecutionRequest,
+	opts ...grpc.CallOption) (*historyservice.ResetWorkflowExecutionResponse, error) {
 
-	var resp *shared.ResetWorkflowExecutionResponse
+	var resp *historyservice.ResetWorkflowExecutionResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.ResetWorkflowExecution(ctx, request, opts...)
@@ -382,94 +416,121 @@ func (c *retryableClient) ResetWorkflowExecution(
 
 func (c *retryableClient) ScheduleDecisionTask(
 	ctx context.Context,
-	request *h.ScheduleDecisionTaskRequest,
-	opts ...yarpc.CallOption) error {
+	request *historyservice.ScheduleDecisionTaskRequest,
+	opts ...grpc.CallOption) (*historyservice.ScheduleDecisionTaskResponse, error) {
 
+	var resp *historyservice.ScheduleDecisionTaskResponse
 	op := func() error {
-		return c.client.ScheduleDecisionTask(ctx, request, opts...)
+		var err error
+		resp, err = c.client.ScheduleDecisionTask(ctx, request, opts...)
+		return err
 	}
 
-	return backoff.Retry(op, c.policy, c.isRetryable)
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
 }
 
 func (c *retryableClient) RecordChildExecutionCompleted(
 	ctx context.Context,
-	request *h.RecordChildExecutionCompletedRequest,
-	opts ...yarpc.CallOption) error {
+	request *historyservice.RecordChildExecutionCompletedRequest,
+	opts ...grpc.CallOption) (*historyservice.RecordChildExecutionCompletedResponse, error) {
 
+	var resp *historyservice.RecordChildExecutionCompletedResponse
 	op := func() error {
-		return c.client.RecordChildExecutionCompleted(ctx, request, opts...)
+		var err error
+		resp, err = c.client.RecordChildExecutionCompleted(ctx, request, opts...)
+		return err
 	}
 
-	return backoff.Retry(op, c.policy, c.isRetryable)
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
 }
 
 func (c *retryableClient) ReplicateEvents(
 	ctx context.Context,
-	request *h.ReplicateEventsRequest,
-	opts ...yarpc.CallOption) error {
+	request *historyservice.ReplicateEventsRequest,
+	opts ...grpc.CallOption) (*historyservice.ReplicateEventsResponse, error) {
 
+	var resp *historyservice.ReplicateEventsResponse
 	op := func() error {
-		return c.client.ReplicateEvents(ctx, request, opts...)
+		var err error
+		resp, err = c.client.ReplicateEvents(ctx, request, opts...)
+		return err
 	}
 
-	return backoff.Retry(op, c.policy, c.isRetryable)
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
 }
 
 func (c *retryableClient) ReplicateRawEvents(
 	ctx context.Context,
-	request *h.ReplicateRawEventsRequest,
-	opts ...yarpc.CallOption) error {
+	request *historyservice.ReplicateRawEventsRequest,
+	opts ...grpc.CallOption) (*historyservice.ReplicateRawEventsResponse, error) {
 
+	var resp *historyservice.ReplicateRawEventsResponse
 	op := func() error {
-		return c.client.ReplicateRawEvents(ctx, request, opts...)
+		var err error
+		resp, err = c.client.ReplicateRawEvents(ctx, request, opts...)
+		return err
 	}
 
-	return backoff.Retry(op, c.policy, c.isRetryable)
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
 }
 
 func (c *retryableClient) ReplicateEventsV2(
 	ctx context.Context,
-	request *h.ReplicateEventsV2Request,
-	opts ...yarpc.CallOption) error {
+	request *historyservice.ReplicateEventsV2Request,
+	opts ...grpc.CallOption) (*historyservice.ReplicateEventsV2Response, error) {
 
+	var resp *historyservice.ReplicateEventsV2Response
 	op := func() error {
-		return c.client.ReplicateEventsV2(ctx, request, opts...)
+		var err error
+		resp, err = c.client.ReplicateEventsV2(ctx, request, opts...)
+		return err
 	}
 
-	return backoff.Retry(op, c.policy, c.isRetryable)
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
 }
 
 func (c *retryableClient) SyncShardStatus(
 	ctx context.Context,
-	request *h.SyncShardStatusRequest,
-	opts ...yarpc.CallOption) error {
+	request *historyservice.SyncShardStatusRequest,
+	opts ...grpc.CallOption) (*historyservice.SyncShardStatusResponse, error) {
 
+	var resp *historyservice.SyncShardStatusResponse
 	op := func() error {
-		return c.client.SyncShardStatus(ctx, request, opts...)
+		var err error
+		resp, err = c.client.SyncShardStatus(ctx, request, opts...)
+		return err
 	}
 
-	return backoff.Retry(op, c.policy, c.isRetryable)
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
 }
 
 func (c *retryableClient) SyncActivity(
 	ctx context.Context,
-	request *h.SyncActivityRequest,
-	opts ...yarpc.CallOption) error {
+	request *historyservice.SyncActivityRequest,
+	opts ...grpc.CallOption) (*historyservice.SyncActivityResponse, error) {
 
+	var resp *historyservice.SyncActivityResponse
 	op := func() error {
-		return c.client.SyncActivity(ctx, request, opts...)
+		var err error
+		resp, err = c.client.SyncActivity(ctx, request, opts...)
+		return err
 	}
 
-	return backoff.Retry(op, c.policy, c.isRetryable)
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
 }
 
 func (c *retryableClient) GetReplicationMessages(
 	ctx context.Context,
-	request *replicator.GetReplicationMessagesRequest,
-	opts ...yarpc.CallOption,
-) (*replicator.GetReplicationMessagesResponse, error) {
-	var resp *replicator.GetReplicationMessagesResponse
+	request *historyservice.GetReplicationMessagesRequest,
+	opts ...grpc.CallOption) (*historyservice.GetReplicationMessagesResponse, error) {
+	var resp *historyservice.GetReplicationMessagesResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.GetReplicationMessages(ctx, request, opts...)
@@ -482,10 +543,9 @@ func (c *retryableClient) GetReplicationMessages(
 
 func (c *retryableClient) GetDLQReplicationMessages(
 	ctx context.Context,
-	request *replicator.GetDLQReplicationMessagesRequest,
-	opts ...yarpc.CallOption,
-) (*replicator.GetDLQReplicationMessagesResponse, error) {
-	var resp *replicator.GetDLQReplicationMessagesResponse
+	request *historyservice.GetDLQReplicationMessagesRequest,
+	opts ...grpc.CallOption) (*historyservice.GetDLQReplicationMessagesResponse, error) {
+	var resp *historyservice.GetDLQReplicationMessagesResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.GetDLQReplicationMessages(ctx, request, opts...)
@@ -498,10 +558,9 @@ func (c *retryableClient) GetDLQReplicationMessages(
 
 func (c *retryableClient) QueryWorkflow(
 	ctx context.Context,
-	request *h.QueryWorkflowRequest,
-	opts ...yarpc.CallOption,
-) (*h.QueryWorkflowResponse, error) {
-	var resp *h.QueryWorkflowResponse
+	request *historyservice.QueryWorkflowRequest,
+	opts ...grpc.CallOption) (*historyservice.QueryWorkflowResponse, error) {
+	var resp *historyservice.QueryWorkflowResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.QueryWorkflow(ctx, request, opts...)
@@ -514,13 +573,16 @@ func (c *retryableClient) QueryWorkflow(
 
 func (c *retryableClient) ReapplyEvents(
 	ctx context.Context,
-	request *h.ReapplyEventsRequest,
-	opts ...yarpc.CallOption,
-) error {
+	request *historyservice.ReapplyEventsRequest,
+	opts ...grpc.CallOption) (*historyservice.ReapplyEventsResponse, error) {
 
+	var resp *historyservice.ReapplyEventsResponse
 	op := func() error {
-		return c.client.ReapplyEvents(ctx, request, opts...)
+		var err error
+		resp, err = c.client.ReapplyEvents(ctx, request, opts...)
+		return err
 	}
 
-	return backoff.Retry(op, c.policy, c.isRetryable)
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
 }

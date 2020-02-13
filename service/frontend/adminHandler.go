@@ -196,7 +196,7 @@ func (adh *AdminHandler) DescribeWorkflowExecution(ctx context.Context, request 
 	domainID, err := adh.GetDomainCache().GetDomainID(request.GetDomain())
 
 	historyAddr := historyHost.GetAddress()
-	resp2, err := adh.GetHistoryClientGRPC().DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
+	resp2, err := adh.GetHistoryClient().DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
 		DomainUUID: domainID,
 		Execution:  request.Execution,
 	})
@@ -222,7 +222,7 @@ func (adh *AdminHandler) RemoveTask(ctx context.Context, request *adminservice.R
 	if request == nil {
 		return nil, adh.error(errRequestNotSet, scope)
 	}
-	_, err := adh.GetHistoryClientGRPC().RemoveTask(ctx, &historyservice.RemoveTaskRequest{
+	_, err := adh.GetHistoryClient().RemoveTask(ctx, &historyservice.RemoveTaskRequest{
 		ShardID: request.GetShardID(),
 		Type:    request.GetType(),
 		TaskID:  request.GetTaskID(),
@@ -240,7 +240,7 @@ func (adh *AdminHandler) CloseShard(ctx context.Context, request *adminservice.C
 	if request == nil {
 		return nil, adh.error(errRequestNotSet, scope)
 	}
-	_, err := adh.GetHistoryClientGRPC().CloseShard(ctx, &historyservice.CloseShardRequest{ShardID: request.GetShardID()})
+	_, err := adh.GetHistoryClient().CloseShard(ctx, &historyservice.CloseShardRequest{ShardID: request.GetShardID()})
 	return &adminservice.CloseShardResponse{}, err
 }
 
@@ -261,7 +261,7 @@ func (adh *AdminHandler) DescribeHistoryHost(ctx context.Context, request *admin
 		}
 	}
 
-	resp, err := adh.GetHistoryClientGRPC().DescribeHistoryHost(ctx, &historyservice.DescribeHistoryHostRequest{
+	resp, err := adh.GetHistoryClient().DescribeHistoryHost(ctx, &historyservice.DescribeHistoryHostRequest{
 		HostAddress:      request.GetHostAddress(),
 		ShardIdForHost:   request.GetShardIdForHost(),
 		ExecutionForHost: request.GetExecutionForHost(),
@@ -345,7 +345,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 			return nil, &shared.BadRequestError{Message: "Invalid FirstEventID && NextEventID combination."}
 		}
 
-		response, err := adh.GetHistoryClientGRPC().GetMutableState(ctx, &historyservice.GetMutableStateRequest{
+		response, err := adh.GetHistoryClient().GetMutableState(ctx, &historyservice.GetMutableStateRequest{
 			DomainUUID: domainID,
 			Execution:  execution,
 		})
@@ -457,7 +457,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	var pageToken *getWorkflowRawHistoryV2Token
 	var targetVersionHistory *persistence.VersionHistory
 	if request.NextPageToken == nil {
-		response, err := adh.GetHistoryClientGRPC().GetMutableState(ctx, &historyservice.GetMutableStateRequest{
+		response, err := adh.GetHistoryClient().GetMutableState(ctx, &historyservice.GetMutableStateRequest{
 			DomainUUID: domainID,
 			Execution:  execution,
 		})
@@ -638,7 +638,7 @@ func (adh *AdminHandler) GetReplicationMessages(ctx context.Context, request *ad
 		return nil, adh.error(errClusterNameNotSet, scope)
 	}
 
-	resp, err := adh.GetHistoryClientGRPC().GetReplicationMessages(ctx, &historyservice.GetReplicationMessagesRequest{
+	resp, err := adh.GetHistoryClient().GetReplicationMessages(ctx, &historyservice.GetReplicationMessagesRequest{
 		Tokens:      request.GetTokens(),
 		ClusterName: request.GetClusterName(),
 	})
@@ -710,7 +710,7 @@ func (adh *AdminHandler) GetDLQReplicationMessages(ctx context.Context, request 
 		return nil, adh.error(errEmptyReplicationInfo, scope)
 	}
 
-	resp, err := adh.GetHistoryClientGRPC().GetDLQReplicationMessages(ctx, &historyservice.GetDLQReplicationMessagesRequest{TaskInfos: request.GetTaskInfos()})
+	resp, err := adh.GetHistoryClient().GetDLQReplicationMessages(ctx, &historyservice.GetDLQReplicationMessagesRequest{TaskInfos: request.GetTaskInfos()})
 	if err != nil {
 		return nil, adh.error(err, scope)
 	}
@@ -743,7 +743,7 @@ func (adh *AdminHandler) ReapplyEvents(ctx context.Context, request *adminservic
 		return nil, adh.error(err, scope)
 	}
 
-	_, err = adh.GetHistoryClientGRPC().ReapplyEvents(ctx, &historyservice.ReapplyEventsRequest{
+	_, err = adh.GetHistoryClient().ReapplyEvents(ctx, &historyservice.ReapplyEventsRequest{
 		DomainUUID: domainEntry.GetInfo().ID,
 		Request:    request,
 	})

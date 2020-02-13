@@ -1764,58 +1764,6 @@ func updateBufferedEvents(
 	}
 }
 
-func createShardInfo(
-	currentCluster string,
-	result map[string]interface{},
-) *p.ShardInfo {
-
-	info := &p.ShardInfo{}
-	for k, v := range result {
-		switch k {
-		case "shard_id":
-			info.ShardID = v.(int)
-		case "owner":
-			info.Owner = v.(string)
-		case "range_id":
-			info.RangeID = v.(int64)
-		case "stolen_since_renew":
-			info.StolenSinceRenew = v.(int)
-		case "updated_at":
-			info.UpdatedAt = v.(time.Time)
-		case "replication_ack_level":
-			info.ReplicationAckLevel = v.(int64)
-		case "transfer_ack_level":
-			info.TransferAckLevel = v.(int64)
-		case "timer_ack_level":
-			info.TimerAckLevel = v.(time.Time)
-		case "cluster_transfer_ack_level":
-			info.ClusterTransferAckLevel = v.(map[string]int64)
-		case "cluster_timer_ack_level":
-			info.ClusterTimerAckLevel = v.(map[string]time.Time)
-		case "domain_notification_version":
-			info.DomainNotificationVersion = v.(int64)
-		case "cluster_replication_level":
-			info.ClusterReplicationLevel = v.(map[string]int64)
-		}
-	}
-
-	if info.ClusterTransferAckLevel == nil {
-		info.ClusterTransferAckLevel = map[string]int64{
-			currentCluster: info.TransferAckLevel,
-		}
-	}
-	if info.ClusterTimerAckLevel == nil {
-		info.ClusterTimerAckLevel = map[string]time.Time{
-			currentCluster: info.TimerAckLevel,
-		}
-	}
-	if info.ClusterReplicationLevel == nil {
-		info.ClusterReplicationLevel = make(map[string]int64)
-	}
-
-	return info
-}
-
 func createWorkflowExecutionInfo(
 	result map[string]interface{},
 ) *p.InternalWorkflowExecutionInfo {

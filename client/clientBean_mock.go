@@ -28,13 +28,15 @@
 package client
 
 import (
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
+	yarpc "go.uber.org/yarpc"
+
 	admin "github.com/temporalio/temporal/client/admin"
 	frontend "github.com/temporalio/temporal/client/frontend"
 	history "github.com/temporalio/temporal/client/history"
 	matching "github.com/temporalio/temporal/client/matching"
-	yarpc "go.uber.org/yarpc"
-	reflect "reflect"
 )
 
 // MockBean is a mock of Bean interface
@@ -72,20 +74,6 @@ func (m *MockBean) GetHistoryClient() history.Client {
 func (mr *MockBeanMockRecorder) GetHistoryClient() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryClient", reflect.TypeOf((*MockBean)(nil).GetHistoryClient))
-}
-
-// GetHistoryClientGRPC mocks base method
-func (m *MockBean) GetHistoryClientGRPC() history.ClientGRPC {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetHistoryClientGRPC")
-	ret0, _ := ret[0].(history.ClientGRPC)
-	return ret0
-}
-
-// GetHistoryClientGRPC indicates an expected call of GetHistoryClientGRPC
-func (mr *MockBeanMockRecorder) GetHistoryClientGRPC() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryClientGRPC", reflect.TypeOf((*MockBean)(nil).GetHistoryClientGRPC))
 }
 
 // SetHistoryClient mocks base method

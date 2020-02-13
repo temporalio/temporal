@@ -25,6 +25,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/gogo/protobuf/types"
+
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
@@ -120,7 +124,7 @@ type (
 
 		sync.RWMutex
 		lastUpdated               time.Time
-		shardInfo                 *persistence.ShardInfo
+		shardInfo                 *persistence.ShardInfoWithFailover
 		transferSequenceNumber    int64
 		maxTransferSequenceNumber int64
 		transferMaxReadLevel      int64
@@ -269,14 +273,20 @@ func (s *shardContextImpl) GetTimerAckLevel() time.Time {
 	s.RLock()
 	defer s.RUnlock()
 
-	return s.shardInfo.TimerAckLevel
+	goTime, _ := types.TimestampFromProto(s.shardInfo.TimerAckLevel)
+	return goTime
 }
 
 func (s *shardContextImpl) UpdateTimerAckLevel(ackLevel time.Time) error {
 	s.Lock()
 	defer s.Unlock()
 
-	s.shardInfo.TimerAckLevel = ackLevel
+	pTime, err := types.TimestampProto(ackLevel)
+	if err != nil {
+		return err
+	}
+
+	s.shardInfo.TimerAckLevel = pTime
 	s.shardInfo.StolenSinceRenew = 0
 	return s.updateShardInfoLocked()
 }
@@ -287,18 +297,27 @@ func (s *shardContextImpl) GetTimerClusterAckLevel(cluster string) time.Time {
 
 	// if we can find corresponding ack level
 	if ackLevel, ok := s.shardInfo.ClusterTimerAckLevel[cluster]; ok {
-		return ackLevel
+
+		goTime, _ := types.TimestampFromProto(ackLevel)
+
+		return goTime
 	}
 	// otherwise, default to existing ack level, which belongs to local cluster
 	// this can happen if you add more cluster
-	return s.shardInfo.TimerAckLevel
+	goTime, _ := types.TimestampFromProto(s.shardInfo.TimerAckLevel)
+	return goTime
 }
 
 func (s *shardContextImpl) UpdateTimerClusterAckLevel(cluster string, ackLevel time.Time) error {
 	s.Lock()
 	defer s.Unlock()
 
-	s.shardInfo.ClusterTimerAckLevel[cluster] = ackLevel
+	pTime, err := types.TimestampProto(ackLevel)
+	if err != nil {
+		return err
+	}
+
+	s.shardInfo.ClusterTimerAckLevel[cluster] = pTime
 	s.shardInfo.StolenSinceRenew = 0
 	return s.updateShardInfoLocked()
 }
@@ -864,7 +883,7 @@ func (s *shardContextImpl) renewRangeLocked(isStealing bool) error {
 	}
 
 	err := s.GetShardManager().UpdateShard(&persistence.UpdateShardRequest{
-		ShardInfo:       updatedShardInfo,
+		ShardInfo:       updatedShardInfo.ShardInfo,
 		PreviousRangeID: s.shardInfo.RangeID})
 	if err != nil {
 		// Shard is stolen, trigger history engine shutdown
@@ -889,7 +908,7 @@ func (s *shardContextImpl) renewRangeLocked(isStealing bool) error {
 	s.shardInfo = updatedShardInfo
 
 	s.logger.Info("Range updated for shardID",
-		tag.ShardID(s.shardInfo.ShardID),
+		tag.ShardID(int(s.shardInfo.ShardID)),
 		tag.ShardRangeID(s.shardInfo.RangeID),
 		tag.Number(s.transferSequenceNumber),
 		tag.NextNumber(s.maxTransferSequenceNumber))
@@ -913,7 +932,7 @@ func (s *shardContextImpl) updateShardInfoLocked() error {
 	s.emitShardInfoMetricsLogsLocked()
 
 	err = s.GetShardManager().UpdateShard(&persistence.UpdateShardRequest{
-		ShardInfo:       updatedShardInfo,
+		ShardInfo:       updatedShardInfo.ShardInfo,
 		PreviousRangeID: s.shardInfo.RangeID,
 	})
 
@@ -944,21 +963,23 @@ func (s *shardContextImpl) emitShardInfoMetricsLogsLocked() {
 	}
 	diffTransferLevel := maxTransferLevel - minTransferLevel
 
-	minTimerLevel := s.shardInfo.ClusterTimerAckLevel[currentCluster]
-	maxTimerLevel := s.shardInfo.ClusterTimerAckLevel[currentCluster]
+	minTimerLevel, _ := types.TimestampFromProto(s.shardInfo.ClusterTimerAckLevel[currentCluster])
+	maxTimerLevel, _ := types.TimestampFromProto(s.shardInfo.ClusterTimerAckLevel[currentCluster])
 	for _, v := range s.shardInfo.ClusterTimerAckLevel {
-		if v.Before(minTimerLevel) {
-			minTimerLevel = v
+		t, _ := types.TimestampFromProto(v)
+		if t.Before(minTimerLevel) {
+			minTimerLevel = t
 		}
-		if v.After(maxTimerLevel) {
-			maxTimerLevel = v
+		if t.After(maxTimerLevel) {
+			maxTimerLevel = t
 		}
 	}
 	diffTimerLevel := maxTimerLevel.Sub(minTimerLevel)
 
 	replicationLag := s.transferMaxReadLevel - s.shardInfo.ReplicationAckLevel
 	transferLag := s.transferMaxReadLevel - s.shardInfo.TransferAckLevel
-	timerLag := time.Since(s.shardInfo.TimerAckLevel)
+	timerAckLevel, _ := types.TimestampFromProto(s.shardInfo.TimerAckLevel)
+	timerLag := time.Since(timerAckLevel)
 
 	transferFailoverInProgress := len(s.shardInfo.TransferFailoverLevels)
 	timerFailoverInProgress := len(s.shardInfo.TimerFailoverLevels)
@@ -1094,7 +1115,7 @@ func (s *shardContextImpl) GetCurrentTime(cluster string) time.Time {
 	if cluster != s.GetClusterMetadata().GetCurrentClusterName() {
 		return s.remoteClusterCurrentTime[cluster]
 	}
-	return s.GetTimeSource().Now()
+	return s.GetTimeSource().Now().UTC()
 }
 
 func (s *shardContextImpl) GetLastUpdatedTime() time.Time {
@@ -1106,7 +1127,7 @@ func (s *shardContextImpl) GetLastUpdatedTime() time.Time {
 func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContext,
 	error) {
 
-	var shardInfo *persistence.ShardInfo
+	var shardInfo *persistence.ShardInfoWithFailover
 
 	retryPolicy := backoff.NewExponentialRetryPolicy(50 * time.Millisecond)
 	retryPolicy.SetMaximumInterval(time.Second)
@@ -1123,10 +1144,10 @@ func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContex
 
 	getShard := func() error {
 		resp, err := shardItem.GetShardManager().GetShard(&persistence.GetShardRequest{
-			ShardID: shardItem.shardID,
+			ShardID: int32(shardItem.shardID),
 		})
 		if err == nil {
-			shardInfo = resp.ShardInfo
+			shardInfo = &persistence.ShardInfoWithFailover{ShardInfo: resp.ShardInfo}
 			return nil
 		}
 		if _, ok := err.(*shared.EntityNotExistsError); !ok {
@@ -1134,12 +1155,14 @@ func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContex
 		}
 
 		// EntityNotExistsError error
-		shardInfo = &persistence.ShardInfo{
-			ShardID:          shardItem.shardID,
-			RangeID:          0,
-			TransferAckLevel: 0,
+		shardInfo = &persistence.ShardInfoWithFailover{
+			ShardInfo: &persistenceblobs.ShardInfo{
+				ShardID:          int32(shardItem.shardID),
+				RangeID:          0,
+				TransferAckLevel: 0,
+			},
 		}
-		return shardItem.GetShardManager().CreateShard(&persistence.CreateShardRequest{ShardInfo: shardInfo})
+		return shardItem.GetShardManager().CreateShard(&persistence.CreateShardRequest{ShardInfo: shardInfo.ShardInfo})
 	}
 
 	err := backoff.Retry(getShard, retryPolicy, retryPredicate)
@@ -1160,16 +1183,16 @@ func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContex
 			continue
 		}
 
+		currentReadTime, _ := types.TimestampFromProto(shardInfo.TimerAckLevel)
 		if clusterName != shardItem.GetClusterMetadata().GetCurrentClusterName() {
 			if currentTime, ok := shardInfo.ClusterTimerAckLevel[clusterName]; ok {
-				remoteClusterCurrentTime[clusterName] = currentTime
-				timerMaxReadLevelMap[clusterName] = currentTime
-			} else {
-				remoteClusterCurrentTime[clusterName] = shardInfo.TimerAckLevel
-				timerMaxReadLevelMap[clusterName] = shardInfo.TimerAckLevel
+				currentReadTime, _ = types.TimestampFromProto(currentTime)
 			}
+
+			remoteClusterCurrentTime[clusterName] = currentReadTime
+			timerMaxReadLevelMap[clusterName] = currentReadTime
 		} else { // active cluster
-			timerMaxReadLevelMap[clusterName] = shardInfo.TimerAckLevel
+			timerMaxReadLevelMap[clusterName] = currentReadTime
 		}
 	}
 
@@ -1202,7 +1225,7 @@ func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContex
 	return context, nil
 }
 
-func copyShardInfo(shardInfo *persistence.ShardInfo) *persistence.ShardInfo {
+func copyShardInfo(shardInfo *persistence.ShardInfoWithFailover) *persistence.ShardInfoWithFailover {
 	transferFailoverLevels := map[string]persistence.TransferFailoverLevel{}
 	for k, v := range shardInfo.TransferFailoverLevels {
 		transferFailoverLevels[k] = v
@@ -1215,7 +1238,7 @@ func copyShardInfo(shardInfo *persistence.ShardInfo) *persistence.ShardInfo {
 	for k, v := range shardInfo.ClusterTransferAckLevel {
 		clusterTransferAckLevel[k] = v
 	}
-	clusterTimerAckLevel := make(map[string]time.Time)
+	clusterTimerAckLevel := make(map[string]*types.Timestamp)
 	for k, v := range shardInfo.ClusterTimerAckLevel {
 		clusterTimerAckLevel[k] = v
 	}
@@ -1223,21 +1246,23 @@ func copyShardInfo(shardInfo *persistence.ShardInfo) *persistence.ShardInfo {
 	for k, v := range shardInfo.ClusterReplicationLevel {
 		clusterReplicationLevel[k] = v
 	}
-	shardInfoCopy := &persistence.ShardInfo{
-		ShardID:                   shardInfo.ShardID,
-		Owner:                     shardInfo.Owner,
-		RangeID:                   shardInfo.RangeID,
-		StolenSinceRenew:          shardInfo.StolenSinceRenew,
-		ReplicationAckLevel:       shardInfo.ReplicationAckLevel,
-		TransferAckLevel:          shardInfo.TransferAckLevel,
-		TimerAckLevel:             shardInfo.TimerAckLevel,
-		TransferFailoverLevels:    transferFailoverLevels,
-		TimerFailoverLevels:       timerFailoverLevels,
-		ClusterTransferAckLevel:   clusterTransferAckLevel,
-		ClusterTimerAckLevel:      clusterTimerAckLevel,
-		DomainNotificationVersion: shardInfo.DomainNotificationVersion,
-		ClusterReplicationLevel:   clusterReplicationLevel,
-		UpdatedAt:                 shardInfo.UpdatedAt,
+	shardInfoCopy := &persistence.ShardInfoWithFailover{
+		ShardInfo: &persistenceblobs.ShardInfo{
+			ShardID:                   shardInfo.ShardID,
+			Owner:                     shardInfo.Owner,
+			RangeID:                   shardInfo.RangeID,
+			StolenSinceRenew:          shardInfo.StolenSinceRenew,
+			ReplicationAckLevel:       shardInfo.ReplicationAckLevel,
+			TransferAckLevel:          shardInfo.TransferAckLevel,
+			TimerAckLevel:             shardInfo.TimerAckLevel,
+			ClusterTransferAckLevel:   clusterTransferAckLevel,
+			ClusterTimerAckLevel:      clusterTimerAckLevel,
+			DomainNotificationVersion: shardInfo.DomainNotificationVersion,
+			ClusterReplicationLevel:   clusterReplicationLevel,
+			UpdatedAt:                 shardInfo.UpdatedAt,
+		},
+		TransferFailoverLevels: transferFailoverLevels,
+		TimerFailoverLevels:    timerFailoverLevels,
 	}
 
 	return shardInfoCopy

@@ -26,14 +26,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/status"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+	commonproto "go.temporal.io/temporal-proto/common"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
 
-	"github.com/temporalio/temporal/.gen/go/history"
-	"github.com/temporalio/temporal/.gen/go/history/historyservicetest"
-	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
+	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
@@ -63,13 +65,13 @@ func (s *ScavengerTestSuite) SetupTest() {
 	s.metric = metrics.NewClient(tally.NoopScope, metrics.Worker)
 }
 
-func (s *ScavengerTestSuite) createTestScavenger(rps int) (*mocks.HistoryV2Manager, *historyservicetest.MockClient, *Scavenger, *gomock.Controller) {
+func (s *ScavengerTestSuite) createTestScavenger(rps int) (*mocks.HistoryV2Manager, *historyservicemock.MockHistoryServiceClient, *Scavenger, *gomock.Controller) {
 	db := &mocks.HistoryV2Manager{}
 	controller := gomock.NewController(s.T())
-	workflowClient := historyservicetest.NewMockClient(controller)
-	scvgr := NewScavenger(db, 100, workflowClient, ScavengerHeartbeatDetails{}, s.metric, s.logger)
+	historyClient := historyservicemock.NewMockHistoryServiceClient(controller)
+	scvgr := NewScavenger(db, 100, historyClient, ScavengerHeartbeatDetails{}, s.metric, s.logger)
 	scvgr.isInTest = true
-	return db, workflowClient, scvgr, controller
+	return db, historyClient, scvgr, controller
 }
 
 func (s *ScavengerTestSuite) TestAllSkipTasksTwoPages() {
@@ -219,32 +221,32 @@ func (s *ScavengerTestSuite) TestNoGarbageTwoPages() {
 		},
 	}, nil).Once()
 
-	client.EXPECT().DescribeMutableState(gomock.Any(), &history.DescribeMutableStateRequest{
-		DomainUUID: common.StringPtr("domainID1"),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr("workflowID1"),
-			RunId:      common.StringPtr("runID1"),
+	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+		DomainUUID: "domainID1",
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: "workflowID1",
+			RunId:      "runID1",
 		},
 	}).Return(nil, nil)
-	client.EXPECT().DescribeMutableState(gomock.Any(), &history.DescribeMutableStateRequest{
-		DomainUUID: common.StringPtr("domainID2"),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr("workflowID2"),
-			RunId:      common.StringPtr("runID2"),
+	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+		DomainUUID: "domainID2",
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: "workflowID2",
+			RunId:      "runID2",
 		},
 	}).Return(nil, nil)
-	client.EXPECT().DescribeMutableState(gomock.Any(), &history.DescribeMutableStateRequest{
-		DomainUUID: common.StringPtr("domainID3"),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr("workflowID3"),
-			RunId:      common.StringPtr("runID3"),
+	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+		DomainUUID: "domainID3",
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: "workflowID3",
+			RunId:      "runID3",
 		},
 	}).Return(nil, nil)
-	client.EXPECT().DescribeMutableState(gomock.Any(), &history.DescribeMutableStateRequest{
-		DomainUUID: common.StringPtr("domainID4"),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr("workflowID4"),
-			RunId:      common.StringPtr("runID4"),
+	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+		DomainUUID: "domainID4",
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: "workflowID4",
+			RunId:      "runID4",
 		},
 	}).Return(nil, nil)
 
@@ -299,34 +301,34 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 		},
 	}, nil).Once()
 
-	client.EXPECT().DescribeMutableState(gomock.Any(), &history.DescribeMutableStateRequest{
-		DomainUUID: common.StringPtr("domainID1"),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr("workflowID1"),
-			RunId:      common.StringPtr("runID1"),
+	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+		DomainUUID: "domainID1",
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: "workflowID1",
+			RunId:      "runID1",
 		},
-	}).Return(nil, &shared.EntityNotExistsError{})
-	client.EXPECT().DescribeMutableState(gomock.Any(), &history.DescribeMutableStateRequest{
-		DomainUUID: common.StringPtr("domainID2"),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr("workflowID2"),
-			RunId:      common.StringPtr("runID2"),
+	}).Return(nil, status.Error(codes.NotFound, ""))
+	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+		DomainUUID: "domainID2",
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: "workflowID2",
+			RunId:      "runID2",
 		},
-	}).Return(nil, &shared.EntityNotExistsError{})
-	client.EXPECT().DescribeMutableState(gomock.Any(), &history.DescribeMutableStateRequest{
-		DomainUUID: common.StringPtr("domainID3"),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr("workflowID3"),
-			RunId:      common.StringPtr("runID3"),
+	}).Return(nil, status.Error(codes.NotFound, ""))
+	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+		DomainUUID: "domainID3",
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: "workflowID3",
+			RunId:      "runID3",
 		},
-	}).Return(nil, &shared.EntityNotExistsError{})
-	client.EXPECT().DescribeMutableState(gomock.Any(), &history.DescribeMutableStateRequest{
-		DomainUUID: common.StringPtr("domainID4"),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr("workflowID4"),
-			RunId:      common.StringPtr("runID4"),
+	}).Return(nil, status.Error(codes.NotFound, ""))
+	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+		DomainUUID: "domainID4",
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: "workflowID4",
+			RunId:      "runID4",
 		},
-	}).Return(nil, &shared.EntityNotExistsError{})
+	}).Return(nil, status.Error(codes.NotFound, ""))
 
 	branchToken1, err := p.NewHistoryBranchTokenByBranchID("treeID1", "branchID1")
 	s.Nil(err)
@@ -415,26 +417,26 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 		},
 	}, nil).Once()
 
-	client.EXPECT().DescribeMutableState(gomock.Any(), &history.DescribeMutableStateRequest{
-		DomainUUID: common.StringPtr("domainID3"),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr("workflowID3"),
-			RunId:      common.StringPtr("runID3"),
+	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+		DomainUUID: "domainID3",
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: "workflowID3",
+			RunId:      "runID3",
 		},
-	}).Return(nil, &shared.EntityNotExistsError{})
+	}).Return(nil, status.Error(codes.NotFound, ""))
 
-	client.EXPECT().DescribeMutableState(gomock.Any(), &history.DescribeMutableStateRequest{
-		DomainUUID: common.StringPtr("domainID4"),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr("workflowID4"),
-			RunId:      common.StringPtr("runID4"),
+	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+		DomainUUID: "domainID4",
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: "workflowID4",
+			RunId:      "runID4",
 		},
-	}).Return(nil, &shared.EntityNotExistsError{})
-	client.EXPECT().DescribeMutableState(gomock.Any(), &history.DescribeMutableStateRequest{
-		DomainUUID: common.StringPtr("domainID5"),
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr("workflowID5"),
-			RunId:      common.StringPtr("runID5"),
+	}).Return(nil, status.Error(codes.NotFound, ""))
+	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+		DomainUUID: "domainID5",
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: "workflowID5",
+			RunId:      "runID5",
 		},
 	}).Return(nil, nil)
 

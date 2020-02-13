@@ -66,7 +66,7 @@ type (
 		historyService        *historyEngineImpl
 		visibilityMgr         persistence.VisibilityManager
 		matchingClient        matching.Client
-		historyClient         history.ClientGRPC
+		historyClient         history.Client
 		ackLevel              int64
 		logger                log.Logger
 		isStarted             int32
@@ -82,7 +82,7 @@ func newTransferQueueProcessor(
 	historyService *historyEngineImpl,
 	visibilityMgr persistence.VisibilityManager,
 	matchingClient matching.Client,
-	historyClient history.ClientGRPC,
+	historyClient history.Client,
 	logger log.Logger,
 ) *transferQueueProcessorImpl {
 

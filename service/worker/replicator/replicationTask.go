@@ -53,7 +53,7 @@ type (
 
 		config        *Config
 		timeSource    clock.TimeSource
-		historyClient history.ClientGRPC
+		historyClient history.Client
 		metricsClient metrics.Client
 	}
 
@@ -100,7 +100,7 @@ func newActivityReplicationTask(
 	logger log.Logger,
 	config *Config,
 	timeSource clock.TimeSource,
-	historyClient history.ClientGRPC,
+	historyClient history.Client,
 	metricsClient metrics.Client,
 	historyRereplicator xdc.HistoryRereplicator,
 	nDCHistoryResender xdc.NDCHistoryResender,
@@ -158,7 +158,7 @@ func newHistoryReplicationTask(
 	logger log.Logger,
 	config *Config,
 	timeSource clock.TimeSource,
-	historyClient history.ClientGRPC,
+	historyClient history.Client,
 	metricsClient metrics.Client,
 	historyRereplicator xdc.HistoryRereplicator,
 ) *historyReplicationTask {
@@ -214,7 +214,7 @@ func newHistoryMetadataReplicationTask(
 	logger log.Logger,
 	config *Config,
 	timeSource clock.TimeSource,
-	historyClient history.ClientGRPC,
+	historyClient history.Client,
 	metricsClient metrics.Client,
 	historyRereplicator xdc.HistoryRereplicator,
 ) *historyMetadataReplicationTask {
@@ -254,7 +254,7 @@ func newHistoryReplicationV2Task(
 	logger log.Logger,
 	config *Config,
 	timeSource clock.TimeSource,
-	historyClient history.ClientGRPC,
+	historyClient history.Client,
 	metricsClient metrics.Client,
 	nDCHistoryResender xdc.NDCHistoryResender,
 ) *historyReplicationV2Task {

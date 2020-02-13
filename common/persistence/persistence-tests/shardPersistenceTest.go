@@ -25,6 +25,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/types"
+
+	pblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
@@ -73,7 +77,7 @@ func (s *ShardPersistenceSuite) TestCreateShard() {
 
 // TestGetShard test
 func (s *ShardPersistenceSuite) TestGetShard() {
-	shardID := 20
+	shardID := int32(20)
 	owner := "test_get_shard"
 	rangeID := int64(131)
 	err0 := s.CreateShard(shardID, owner, rangeID)
@@ -85,7 +89,7 @@ func (s *ShardPersistenceSuite) TestGetShard() {
 	s.Equal(shardID, shardInfo.ShardID)
 	s.Equal(owner, shardInfo.Owner)
 	s.Equal(rangeID, shardInfo.RangeID)
-	s.Equal(0, shardInfo.StolenSinceRenew)
+	s.Equal(int32(0), shardInfo.StolenSinceRenew)
 
 	_, err2 := s.GetShard(4766)
 	s.NotNil(err2)
@@ -95,7 +99,7 @@ func (s *ShardPersistenceSuite) TestGetShard() {
 
 // TestUpdateShard test
 func (s *ShardPersistenceSuite) TestUpdateShard() {
-	shardID := 30
+	shardID := int32(30)
 	owner := "test_update_shard"
 	rangeID := int64(141)
 	err0 := s.CreateShard(shardID, owner, rangeID)
@@ -107,13 +111,13 @@ func (s *ShardPersistenceSuite) TestUpdateShard() {
 	s.Equal(shardID, shardInfo.ShardID)
 	s.Equal(owner, shardInfo.Owner)
 	s.Equal(rangeID, shardInfo.RangeID)
-	s.Equal(0, shardInfo.StolenSinceRenew)
+	s.Equal(int32(0), shardInfo.StolenSinceRenew)
 
 	updatedOwner := "updatedOwner"
 	updatedRangeID := int64(142)
 	updatedTransferAckLevel := int64(1000)
 	updatedReplicationAckLevel := int64(2000)
-	updatedStolenSinceRenew := 10
+	updatedStolenSinceRenew := int32(10)
 	updatedInfo := copyShardInfo(shardInfo)
 	updatedInfo.Owner = updatedOwner
 	updatedInfo.RangeID = updatedRangeID
@@ -121,7 +125,7 @@ func (s *ShardPersistenceSuite) TestUpdateShard() {
 	updatedInfo.ReplicationAckLevel = updatedReplicationAckLevel
 	updatedInfo.StolenSinceRenew = updatedStolenSinceRenew
 	updatedTimerAckLevel := time.Now()
-	updatedInfo.TimerAckLevel = updatedTimerAckLevel
+	updatedInfo.TimerAckLevel, _ = types.TimestampProto(updatedTimerAckLevel)
 	err2 := s.UpdateShard(updatedInfo, shardInfo.RangeID)
 	s.Nil(err2)
 
@@ -133,7 +137,8 @@ func (s *ShardPersistenceSuite) TestUpdateShard() {
 	s.Equal(updatedTransferAckLevel, info1.TransferAckLevel)
 	s.Equal(updatedReplicationAckLevel, info1.ReplicationAckLevel)
 	s.Equal(updatedStolenSinceRenew, info1.StolenSinceRenew)
-	s.EqualTimes(updatedTimerAckLevel, info1.TimerAckLevel)
+	info1timerAckLevelTime, _ := types.TimestampFromProto(info1.TimerAckLevel)
+	s.EqualTimes(updatedTimerAckLevel, info1timerAckLevelTime)
 
 	failedUpdateInfo := copyShardInfo(shardInfo)
 	failedUpdateInfo.Owner = "failed_owner"
@@ -152,11 +157,13 @@ func (s *ShardPersistenceSuite) TestUpdateShard() {
 	s.Equal(updatedTransferAckLevel, info2.TransferAckLevel)
 	s.Equal(updatedReplicationAckLevel, info2.ReplicationAckLevel)
 	s.Equal(updatedStolenSinceRenew, info2.StolenSinceRenew)
-	s.EqualTimes(updatedTimerAckLevel, info1.TimerAckLevel)
+
+	info1timerAckLevelTime, _ = types.TimestampFromProto(info1.TimerAckLevel)
+	s.EqualTimes(updatedTimerAckLevel, info1timerAckLevelTime)
 }
 
-func copyShardInfo(sourceInfo *p.ShardInfo) *p.ShardInfo {
-	return &p.ShardInfo{
+func copyShardInfo(sourceInfo *pblobs.ShardInfo) *pblobs.ShardInfo {
+	return &pblobs.ShardInfo{
 		ShardID:             sourceInfo.ShardID,
 		Owner:               sourceInfo.Owner,
 		RangeID:             sourceInfo.RangeID,

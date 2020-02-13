@@ -1,24 +1,3 @@
-CREATE TYPE shard (
-  shard_id                    int,
-  owner                       text, -- Host identifier processing the shard
-  -- Range identifier used for generating ack ids for tasks within shard.
-  -- Also used for optimistic concurrency and all writes to a shard are conditional on this value.
-  range_id                    bigint,
-  -- This field keeps track of number of times owner for a shard changes before updating range_id or ack_levels
-  stolen_since_renew          int,
-  updated_at                  timestamp,
-  replication_ack_level       bigint,
-  transfer_ack_level          bigint, -- TO BE DEPRECATED, IN FAVOR OF cluster_transfer_ack_level
-  timer_ack_level             timestamp, -- TO BE DEPRECATED, IN FAVOR OF cluster_timer_ack_level
-  -- Mapping of cluster to corresponding transfer ack level
-  cluster_transfer_ack_level  map<text, bigint>,
-  -- Mapping of cluster to corresponding timer ack level
-  cluster_timer_ack_level     map<text, timestamp>,
-  domain_notification_version bigint, -- the global domain change version this shard is aware of
-  -- Mapping of (remote) cluster to corresponding replication level (last replicated task_id)
-  cluster_replication_level   map<text, bigint>,
-);
-
 --- Workflow execution and mutable state ---
 CREATE TYPE workflow_execution (
   domain_id                        uuid,
@@ -317,7 +296,8 @@ CREATE TABLE executions (
   current_run_id                 uuid,
   visibility_ts                  timestamp, -- unique identifier for timer tasks for an execution
   task_id                        bigint, -- unique identifier for transfer and timer tasks for an execution
-  shard                          frozen<shard>,
+  shard                          blob,
+  shard_encoding                 text,
   execution                      frozen<workflow_execution>,
   transfer                       frozen<transfer_task>,
   replication                    frozen<replication_task>,
