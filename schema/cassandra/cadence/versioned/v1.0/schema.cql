@@ -111,19 +111,6 @@ CREATE TYPE replication_task (
   reset_workflow             boolean, -- whether the task is for resetWorkflowExecution
 );
 
-CREATE TYPE timer_task (
-  domain_id        uuid,
-  workflow_id      text,
-  run_id           uuid,
-  visibility_ts    timestamp,
-  task_id          bigint,
-  type             int,  -- enum TaskType {DecisionTaskTimeout, ActivityTaskTimeout, UserTimer}
-  timeout_type     int, -- enum TimeoutType in IDL {START_TO_CLOSE, SCHEDULE_TO_START, SCHEDULE_TO_CLOSE, HEARTBEAT}
-  event_id         bigint, -- Corresponds to event ID in history that is responsible for this timer.
-  schedule_attempt bigint, -- Used to retry failed decision tasks using mutable state
-  version          bigint, -- the failover version when this task is created, used to compare against the mutable state, in case the events got overwritten
-);
-
 -- Workflow activity in progress mutable state
 CREATE TYPE activity_info (
   version                   bigint,
@@ -296,7 +283,8 @@ CREATE TABLE executions (
   transfer                       frozen<transfer_task>,
   replication                    blob,
   replication_encoding           text,
-  timer                          frozen<timer_task>,
+  timer                          blob,
+  timer_encoding                 text,
   next_event_id                  bigint,  -- This is needed to make conditional updates on session history
   range_id                       bigint, -- Increasing sequence identifier for transfer queue, checkpointed into shard info
   activity_map                   map<bigint, frozen<activity_info>>,
