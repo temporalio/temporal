@@ -32,7 +32,6 @@ import (
 	"google.golang.org/grpc/codes"
 
 	"github.com/temporalio/temporal/.gen/go/health"
-	"github.com/temporalio/temporal/.gen/go/health/metaserver"
 	hist "github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/history/historyserviceserver"
 	r "github.com/temporalio/temporal/.gen/go/replicator"
@@ -101,12 +100,6 @@ func NewHandler(
 	return handler
 }
 
-// RegisterHandler register this handler, must be called before Start()
-func (h *Handler) RegisterHandler() {
-	h.GetDispatcher().Register(historyserviceserver.New(h))
-	h.GetDispatcher().Register(metaserver.New(h))
-}
-
 // Start starts the handler
 func (h *Handler) Start() {
 	if h.GetClusterMetadata().IsGlobalDomainEnabled() {
@@ -154,7 +147,7 @@ func (h *Handler) CreateEngine(
 		shardContext,
 		h.GetVisibilityManager(),
 		h.GetMatchingClient(),
-		h.GetHistoryClientGRPC(),
+		h.GetHistoryClient(),
 		h.GetSDKClient(),
 		h.historyEventNotifier,
 		h.publisher,

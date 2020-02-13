@@ -32,8 +32,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/temporalio/temporal/.gen/go/history"
-	"github.com/temporalio/temporal/.gen/go/history/historyservicetest"
 	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
@@ -63,13 +63,13 @@ func (s *ScavengerTestSuite) SetupTest() {
 	s.metric = metrics.NewClient(tally.NoopScope, metrics.Worker)
 }
 
-func (s *ScavengerTestSuite) createTestScavenger(rps int) (*mocks.HistoryV2Manager, *historyservicetest.MockClient, *Scavenger, *gomock.Controller) {
+func (s *ScavengerTestSuite) createTestScavenger(rps int) (*mocks.HistoryV2Manager, *historyservicemock.MockHistoryServiceClient, *Scavenger, *gomock.Controller) {
 	db := &mocks.HistoryV2Manager{}
 	controller := gomock.NewController(s.T())
-	workflowClient := historyservicetest.NewMockClient(controller)
-	scvgr := NewScavenger(db, 100, workflowClient, ScavengerHeartbeatDetails{}, s.metric, s.logger)
+	historyClient := historyservicemock.NewMockHistoryServiceClient(controller)
+	scvgr := NewScavenger(db, 100, historyClient, ScavengerHeartbeatDetails{}, s.metric, s.logger)
 	scvgr.isInTest = true
-	return db, workflowClient, scvgr, controller
+	return db, historyClient, scvgr, controller
 }
 
 func (s *ScavengerTestSuite) TestAllSkipTasksTwoPages() {

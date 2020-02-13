@@ -135,7 +135,7 @@ func (s *matchingEngineSuite) newMatchingEngine(
 }
 
 func newMatchingEngine(
-	config *Config, taskMgr persistence.TaskManager, mockHistoryClient history.ClientGRPC,
+	config *Config, taskMgr persistence.TaskManager, mockHistoryClient history.Client,
 	logger log.Logger, mockDomainCache cache.DomainCache,
 ) *matchingEngineImpl {
 	return &matchingEngineImpl{

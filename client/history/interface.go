@@ -21,16 +21,10 @@
 package history
 
 import (
-	"github.com/temporalio/temporal/.gen/go/history/historyserviceclient"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 )
 
 // Client is the interface exposed by history service client
 type Client interface {
-	historyserviceclient.Interface
-}
-
-// Client is the interface exposed by history service client
-type ClientGRPC interface {
 	historyservice.HistoryServiceClient
 }

@@ -58,7 +58,7 @@ type (
 		domainCache             cache.DomainCache
 		historyService          *historyEngineImpl
 		options                 *QueueProcessorOptions
-		historyClient           history.ClientGRPC
+		historyClient           history.Client
 		cache                   *historyCache
 		transferTaskFilter      taskFilter
 		logger                  log.Logger
@@ -75,7 +75,7 @@ func newTransferQueueActiveProcessor(
 	historyService *historyEngineImpl,
 	visibilityMgr persistence.VisibilityManager,
 	matchingClient matching.Client,
-	historyClient history.ClientGRPC,
+	historyClient history.Client,
 	taskAllocator taskAllocator,
 	logger log.Logger,
 ) *transferQueueActiveProcessorImpl {
@@ -158,7 +158,7 @@ func newTransferQueueFailoverProcessor(
 	historyService *historyEngineImpl,
 	visibilityMgr persistence.VisibilityManager,
 	matchingClient matching.Client,
-	historyClient history.ClientGRPC,
+	historyClient history.Client,
 	domainIDs map[string]struct{},
 	standbyClusterName string,
 	minLevel int64,

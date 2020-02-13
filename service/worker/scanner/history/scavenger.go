@@ -24,18 +24,17 @@ import (
 	"context"
 	"time"
 
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal/activity"
 	"golang.org/x/time/rate"
 
-	"go.temporal.io/temporal/activity"
-
-	"github.com/temporalio/temporal/.gen/go/history"
-	"github.com/temporalio/temporal/.gen/go/history/historyserviceclient"
 	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
-	p "github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/persistence"
 )
 
 type (
@@ -50,8 +49,8 @@ type (
 
 	// Scavenger is the type that holds the state for history scavenger daemon
 	Scavenger struct {
-		db       p.HistoryManager
-		client   historyserviceclient.Interface
+		db       persistence.HistoryManager
+		client   historyservice.HistoryServiceClient
 		hbd      ScavengerHeartbeatDetails
 		rps      int
 		limiter  *rate.Limiter
@@ -92,9 +91,9 @@ const (
 //  - describe the corresponding workflow execution
 //  - deletion of history itself, if there are no workflow execution
 func NewScavenger(
-	db p.HistoryManager,
+	db persistence.HistoryManager,
 	rps int,
-	client historyserviceclient.Interface,
+	client historyservice.HistoryServiceClient,
 	hbd ScavengerHeartbeatDetails,
 	metricsClient metrics.Client,
 	logger log.Logger,
@@ -124,7 +123,7 @@ func (s *Scavenger) Run(ctx context.Context) (ScavengerHeartbeatDetails, error) 
 	}
 
 	for {
-		resp, err := s.db.GetAllHistoryTreeBranches(&p.GetAllHistoryTreeBranchesRequest{
+		resp, err := s.db.GetAllHistoryTreeBranches(&persistence.GetAllHistoryTreeBranchesRequest{
 			PageSize:      pageSize,
 			NextPageToken: s.hbd.NextPageToken,
 		})
@@ -144,7 +143,7 @@ func (s *Scavenger) Run(ctx context.Context) (ScavengerHeartbeatDetails, error) 
 				continue
 			}
 
-			domainID, wid, rid, err := p.SplitHistoryGarbageCleanupInfo(br.Info)
+			domainID, wid, rid, err := persistence.SplitHistoryGarbageCleanupInfo(br.Info)
 			if err != nil {
 				batchCount--
 				errorsOnSplitting++
@@ -232,11 +231,11 @@ func (s *Scavenger) startTaskProcessor(
 
 			// this checks if the mutableState still exists
 			// if not then the history branch is garbage, we need to delete the history branch
-			_, err = s.client.DescribeMutableState(ctx, &history.DescribeMutableStateRequest{
-				DomainUUID: common.StringPtr(task.domainID),
-				Execution: &shared.WorkflowExecution{
-					WorkflowId: common.StringPtr(task.workflowID),
-					RunId:      common.StringPtr(task.runID),
+			_, err = s.client.DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
+				DomainUUID: task.domainID,
+				Execution: &commonproto.WorkflowExecution{
+					WorkflowId: task.workflowID,
+					RunId:      task.runID,
 				},
 			})
 
@@ -244,7 +243,7 @@ func (s *Scavenger) startTaskProcessor(
 				if _, ok := err.(*shared.EntityNotExistsError); ok {
 					//deleting history branch
 					var branchToken []byte
-					branchToken, err = p.NewHistoryBranchTokenByBranchID(task.treeID, task.branchID)
+					branchToken, err = persistence.NewHistoryBranchTokenByBranchID(task.treeID, task.branchID)
 					if err != nil {
 						respCh <- err
 						s.logger.Error("encounter error when creating branch token",
@@ -252,7 +251,7 @@ func (s *Scavenger) startTaskProcessor(
 						continue
 					}
 
-					err = s.db.DeleteHistoryBranch(&p.DeleteHistoryBranchRequest{
+					err = s.db.DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
 						BranchToken: branchToken,
 						// This is a required argument but it is not needed for Cassandra.
 						// Since this scanner is only for Cassandra,

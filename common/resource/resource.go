@@ -84,7 +84,6 @@ type (
 		GetMatchingClient() matching.Client
 		GetHistoryRawClient() history.Client
 		GetHistoryClient() history.Client
-		GetHistoryClientGRPC() history.ClientGRPC
 		GetRemoteAdminClient(cluster string) admin.Client
 		GetRemoteFrontendClient(cluster string) frontend.Client
 		GetClientBean() client.Bean
