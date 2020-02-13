@@ -50,7 +50,7 @@ type (
 
 // NewDCRedirectionHandler creates a thrift handler for the cadence service, frontend
 func NewDCRedirectionHandler(
-	wfHandler *WorkflowHandlerGRPC,
+	wfHandler *WorkflowHandler,
 	policy config.DCRedirectionPolicy,
 ) *DCRedirectionHandlerImpl {
 	dcRedirectionPolicy := RedirectionPolicyGenerator(

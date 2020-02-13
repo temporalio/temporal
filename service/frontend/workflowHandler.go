@@ -54,11 +54,11 @@ import (
 	"github.com/temporalio/temporal/common/resource"
 )
 
-var _ workflowservice.WorkflowServiceServer = (*WorkflowHandlerGRPC)(nil)
+var _ workflowservice.WorkflowServiceServer = (*WorkflowHandler)(nil)
 
 type (
-	// WorkflowHandlerGRPC - gRPC handler interface for workflow workflowservice
-	WorkflowHandlerGRPC struct {
+	// WorkflowHandler - gRPC handler interface for workflowservice
+	WorkflowHandler struct {
 		resource.Resource
 
 		tokenSerializer           common.TaskTokenSerializer
@@ -70,7 +70,7 @@ type (
 		searchAttributesValidator *validator.SearchAttributesValidator
 	}
 
-	getHistoryContinuationTokenGRPC struct {
+	getHistoryContinuationToken struct {
 		RunID             string
 		FirstEventID      int64
 		NextEventID       int64
@@ -124,13 +124,13 @@ var (
 	frontendServiceRetryPolicy = common.CreateFrontendServiceRetryPolicy()
 )
 
-// NewWorkflowHandlerGRPC creates a gRPC handler for the cadence workflowservice
-func NewWorkflowHandlerGRPC(
+// NewWorkflowHandler creates a gRPC handler for workflowservice
+func NewWorkflowHandler(
 	resource resource.Resource,
 	config *Config,
 	replicationMessageSink messaging.Producer,
-) *WorkflowHandlerGRPC {
-	handler := &WorkflowHandlerGRPC{
+) *WorkflowHandler {
+	handler := &WorkflowHandler{
 		Resource:        resource,
 		config:          config,
 		tokenSerializer: common.NewJSONTaskTokenSerializer(),
@@ -170,7 +170,7 @@ func NewWorkflowHandlerGRPC(
 // entity within Cadence, used as a container for all resources like workflow executions, tasklists, etc.  Domain
 // acts as a sandbox and provides isolation for all resources within the domain.  All resources belongs to exactly one
 // domain.
-func (wh *WorkflowHandlerGRPC) RegisterDomain(ctx context.Context, request *workflowservice.RegisterDomainRequest) (_ *workflowservice.RegisterDomainResponse, retError error) {
+func (wh *WorkflowHandler) RegisterDomain(ctx context.Context, request *workflowservice.RegisterDomainRequest) (_ *workflowservice.RegisterDomainResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfile(metrics.FrontendRegisterDomainScope)
@@ -205,7 +205,7 @@ func (wh *WorkflowHandlerGRPC) RegisterDomain(ctx context.Context, request *work
 }
 
 // DescribeDomain returns the information and configuration for a registered domain.
-func (wh *WorkflowHandlerGRPC) DescribeDomain(ctx context.Context, request *workflowservice.DescribeDomainRequest) (_ *workflowservice.DescribeDomainResponse, retError error) {
+func (wh *WorkflowHandler) DescribeDomain(ctx context.Context, request *workflowservice.DescribeDomainRequest) (_ *workflowservice.DescribeDomainResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfile(metrics.FrontendDescribeDomainScope)
@@ -231,7 +231,7 @@ func (wh *WorkflowHandlerGRPC) DescribeDomain(ctx context.Context, request *work
 }
 
 // ListDomains returns the information and configuration for all domains.
-func (wh *WorkflowHandlerGRPC) ListDomains(ctx context.Context, request *workflowservice.ListDomainsRequest) (_ *workflowservice.ListDomainsResponse, retError error) {
+func (wh *WorkflowHandler) ListDomains(ctx context.Context, request *workflowservice.ListDomainsRequest) (_ *workflowservice.ListDomainsResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfile(metrics.FrontendListDomainsScope)
@@ -253,7 +253,7 @@ func (wh *WorkflowHandlerGRPC) ListDomains(ctx context.Context, request *workflo
 }
 
 // UpdateDomain is used to update the information and configuration for a registered domain.
-func (wh *WorkflowHandlerGRPC) UpdateDomain(ctx context.Context, request *workflowservice.UpdateDomainRequest) (_ *workflowservice.UpdateDomainResponse, retError error) {
+func (wh *WorkflowHandler) UpdateDomain(ctx context.Context, request *workflowservice.UpdateDomainRequest) (_ *workflowservice.UpdateDomainResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfile(metrics.FrontendUpdateDomainScope)
@@ -288,7 +288,7 @@ func (wh *WorkflowHandlerGRPC) UpdateDomain(ctx context.Context, request *workfl
 // DeprecateDomain us used to update status of a registered domain to DEPRECATED.  Once the domain is deprecated
 // it cannot be used to start new workflow executions.  Existing workflow executions will continue to run on
 // deprecated domains.
-func (wh *WorkflowHandlerGRPC) DeprecateDomain(ctx context.Context, request *workflowservice.DeprecateDomainRequest) (_ *workflowservice.DeprecateDomainResponse, retError error) {
+func (wh *WorkflowHandler) DeprecateDomain(ctx context.Context, request *workflowservice.DeprecateDomainRequest) (_ *workflowservice.DeprecateDomainResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfile(metrics.FrontendDeprecateDomainScope)
@@ -321,7 +321,7 @@ func (wh *WorkflowHandlerGRPC) DeprecateDomain(ctx context.Context, request *wor
 // 'WorkflowExecutionStarted' event in history and also schedule the first DecisionTask for the worker to make the
 // first decision for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already
 // exists with same workflowId.
-func (wh *WorkflowHandlerGRPC) StartWorkflowExecution(ctx context.Context, request *workflowservice.StartWorkflowExecutionRequest) (_ *workflowservice.StartWorkflowExecutionResponse, retError error) {
+func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *workflowservice.StartWorkflowExecutionRequest) (_ *workflowservice.StartWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendStartWorkflowExecutionScope, request.GetDomain())
@@ -439,7 +439,7 @@ func (wh *WorkflowHandlerGRPC) StartWorkflowExecution(ctx context.Context, reque
 
 // GetWorkflowExecutionHistory returns the history of specified workflow execution.  It fails with 'EntityNotExistError' if speficied workflow
 // execution in unknown to the service.
-func (wh *WorkflowHandlerGRPC) GetWorkflowExecutionHistory(ctx context.Context, request *workflowservice.GetWorkflowExecutionHistoryRequest) (_ *workflowservice.GetWorkflowExecutionHistoryResponse, retError error) {
+func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, request *workflowservice.GetWorkflowExecutionHistoryRequest) (_ *workflowservice.GetWorkflowExecutionHistoryResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendGetWorkflowExecutionHistoryScope, request.GetDomain())
@@ -524,7 +524,7 @@ func (wh *WorkflowHandlerGRPC) GetWorkflowExecutionHistory(ctx context.Context, 
 	isLongPoll := request.GetWaitForNewEvent()
 	isCloseEventOnly := request.GetHistoryEventFilterType() == enums.HistoryEventFilterTypeCloseEvent
 	execution := request.Execution
-	token := &getHistoryContinuationTokenGRPC{}
+	token := &getHistoryContinuationToken{}
 
 	var runID string
 	lastFirstEventID := common.FirstEventID
@@ -653,7 +653,7 @@ func (wh *WorkflowHandlerGRPC) GetWorkflowExecutionHistory(ctx context.Context, 
 // Application is then expected to call 'RespondDecisionTaskCompleted' API when it is done processing the DecisionTask.
 // It will also create a 'DecisionTaskStarted' event in the history for that session before handing off DecisionTask to
 // application worker.
-func (wh *WorkflowHandlerGRPC) PollForDecisionTask(ctx context.Context, request *workflowservice.PollForDecisionTaskRequest) (_ *workflowservice.PollForDecisionTaskResponse, retError error) {
+func (wh *WorkflowHandler) PollForDecisionTask(ctx context.Context, request *workflowservice.PollForDecisionTaskRequest) (_ *workflowservice.PollForDecisionTaskResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	tagsForErrorLog := []tag.Tag{tag.WorkflowDomainName(request.GetDomain())}
@@ -755,7 +755,7 @@ func (wh *WorkflowHandlerGRPC) PollForDecisionTask(ctx context.Context, request 
 // event in the history for that session.  Use the 'taskToken' provided as response of PollForDecisionTask API call
 // for completing the DecisionTask.
 // The response could contain a new decision task if there is one or if the request asking for one.
-func (wh *WorkflowHandlerGRPC) RespondDecisionTaskCompleted(ctx context.Context, request *workflowservice.RespondDecisionTaskCompletedRequest) (_ *workflowservice.RespondDecisionTaskCompletedResponse, retError error) {
+func (wh *WorkflowHandler) RespondDecisionTaskCompleted(ctx context.Context, request *workflowservice.RespondDecisionTaskCompletedRequest) (_ *workflowservice.RespondDecisionTaskCompletedResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope := wh.getDefaultScope(metrics.FrontendRespondDecisionTaskCompletedScope)
@@ -833,7 +833,7 @@ func (wh *WorkflowHandlerGRPC) RespondDecisionTaskCompleted(ctx context.Context,
 // DecisionTaskFailedEvent written to the history and a new DecisionTask created.  This API can be used by client to
 // either clear sticky tasklist or report any panics during DecisionTask processing.  Cadence will only append first
 // DecisionTaskFailed event to the history of workflow execution for consecutive failures.
-func (wh *WorkflowHandlerGRPC) RespondDecisionTaskFailed(ctx context.Context, request *workflowservice.RespondDecisionTaskFailedRequest) (_ *workflowservice.RespondDecisionTaskFailedResponse, retError error) {
+func (wh *WorkflowHandler) RespondDecisionTaskFailed(ctx context.Context, request *workflowservice.RespondDecisionTaskFailedRequest) (_ *workflowservice.RespondDecisionTaskFailedResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope := wh.getDefaultScope(metrics.FrontendRespondDecisionTaskFailedScope)
@@ -908,7 +908,7 @@ func (wh *WorkflowHandlerGRPC) RespondDecisionTaskFailed(ctx context.Context, re
 // Application also needs to call 'RecordActivityTaskHeartbeat' API within 'heartbeatTimeoutSeconds' interval to
 // prevent the task from getting timed out.  An event 'ActivityTaskStarted' event is also written to workflow execution
 // history before the ActivityTask is dispatched to application worker.
-func (wh *WorkflowHandlerGRPC) PollForActivityTask(ctx context.Context, request *workflowservice.PollForActivityTaskRequest) (_ *workflowservice.PollForActivityTaskResponse, retError error) {
+func (wh *WorkflowHandler) PollForActivityTask(ctx context.Context, request *workflowservice.PollForActivityTaskRequest) (_ *workflowservice.PollForActivityTaskResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	callTime := time.Now()
@@ -1012,7 +1012,7 @@ func (wh *WorkflowHandlerGRPC) PollForActivityTask(ctx context.Context, request 
 // 'ActivityTaskTimedOut' event will be written to the workflow history.  Calling 'RecordActivityTaskHeartbeat' will
 // fail with 'EntityNotExistsError' in such situations.  Use the 'taskToken' provided as response of
 // PollForActivityTask API call for heartbeating.
-func (wh *WorkflowHandlerGRPC) RecordActivityTaskHeartbeat(ctx context.Context, request *workflowservice.RecordActivityTaskHeartbeatRequest) (_ *workflowservice.RecordActivityTaskHeartbeatResponse, retError error) {
+func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, request *workflowservice.RecordActivityTaskHeartbeatRequest) (_ *workflowservice.RecordActivityTaskHeartbeatResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope := wh.getDefaultScope(metrics.FrontendRecordActivityTaskHeartbeatScope)
@@ -1096,7 +1096,7 @@ func (wh *WorkflowHandlerGRPC) RecordActivityTaskHeartbeat(ctx context.Context, 
 // 'ActivityTaskTimedOut' event will be written to the workflow history.  Calling 'RecordActivityTaskHeartbeatByID' will
 // fail with 'EntityNotExistsError' in such situations.  Instead of using 'taskToken' like in RecordActivityTaskHeartbeat,
 // use Domain, WorkflowID and ActivityID
-func (wh *WorkflowHandlerGRPC) RecordActivityTaskHeartbeatByID(ctx context.Context, request *workflowservice.RecordActivityTaskHeartbeatByIDRequest) (_ *workflowservice.RecordActivityTaskHeartbeatByIDResponse, retError error) {
+func (wh *WorkflowHandler) RecordActivityTaskHeartbeatByID(ctx context.Context, request *workflowservice.RecordActivityTaskHeartbeatByIDRequest) (_ *workflowservice.RecordActivityTaskHeartbeatByIDResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendRecordActivityTaskHeartbeatByIDScope, request.GetDomain())
@@ -1203,7 +1203,7 @@ func (wh *WorkflowHandlerGRPC) RecordActivityTaskHeartbeatByID(ctx context.Conte
 // created for the workflow so new decisions could be made.  Use the 'taskToken' provided as response of
 // PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
 // anymore due to activity timeout.
-func (wh *WorkflowHandlerGRPC) RespondActivityTaskCompleted(ctx context.Context, request *workflowservice.RespondActivityTaskCompletedRequest) (_ *workflowservice.RespondActivityTaskCompletedResponse, retError error) {
+func (wh *WorkflowHandler) RespondActivityTaskCompleted(ctx context.Context, request *workflowservice.RespondActivityTaskCompletedRequest) (_ *workflowservice.RespondActivityTaskCompletedResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope := wh.getDefaultScope(metrics.FrontendRespondActivityTaskCompletedScope)
@@ -1288,7 +1288,7 @@ func (wh *WorkflowHandlerGRPC) RespondActivityTaskCompleted(ctx context.Context,
 // created for the workflow so new decisions could be made.  Similar to RespondActivityTaskCompleted but use Domain,
 // WorkflowID and ActivityID instead of 'taskToken' for completion. It fails with 'EntityNotExistsError'
 // if the these IDs are not valid anymore due to activity timeout.
-func (wh *WorkflowHandlerGRPC) RespondActivityTaskCompletedByID(ctx context.Context, request *workflowservice.RespondActivityTaskCompletedByIDRequest) (_ *workflowservice.RespondActivityTaskCompletedByIDResponse, retError error) {
+func (wh *WorkflowHandler) RespondActivityTaskCompletedByID(ctx context.Context, request *workflowservice.RespondActivityTaskCompletedByIDRequest) (_ *workflowservice.RespondActivityTaskCompletedByIDResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendRespondActivityTaskCompletedByIDScope, request.GetDomain())
@@ -1398,7 +1398,7 @@ func (wh *WorkflowHandlerGRPC) RespondActivityTaskCompletedByID(ctx context.Cont
 // created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of
 // PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
 // anymore due to activity timeout.
-func (wh *WorkflowHandlerGRPC) RespondActivityTaskFailed(ctx context.Context, request *workflowservice.RespondActivityTaskFailedRequest) (_ *workflowservice.RespondActivityTaskFailedResponse, retError error) {
+func (wh *WorkflowHandler) RespondActivityTaskFailed(ctx context.Context, request *workflowservice.RespondActivityTaskFailedRequest) (_ *workflowservice.RespondActivityTaskFailedResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope := wh.getDefaultScope(metrics.FrontendRespondActivityTaskFailedScope)
@@ -1472,7 +1472,7 @@ func (wh *WorkflowHandlerGRPC) RespondActivityTaskFailed(ctx context.Context, re
 // created for the workflow instance so new decisions could be made.  Similar to RespondActivityTaskFailed but use
 // Domain, WorkflowID and ActivityID instead of 'taskToken' for completion. It fails with 'EntityNotExistsError'
 // if the these IDs are not valid anymore due to activity timeout.
-func (wh *WorkflowHandlerGRPC) RespondActivityTaskFailedByID(ctx context.Context, request *workflowservice.RespondActivityTaskFailedByIDRequest) (_ *workflowservice.RespondActivityTaskFailedByIDResponse, retError error) {
+func (wh *WorkflowHandler) RespondActivityTaskFailedByID(ctx context.Context, request *workflowservice.RespondActivityTaskFailedByIDRequest) (_ *workflowservice.RespondActivityTaskFailedByIDResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendRespondActivityTaskFailedByIDScope, request.GetDomain())
@@ -1570,7 +1570,7 @@ func (wh *WorkflowHandlerGRPC) RespondActivityTaskFailedByID(ctx context.Context
 // created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of
 // PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
 // anymore due to activity timeout.
-func (wh *WorkflowHandlerGRPC) RespondActivityTaskCanceled(ctx context.Context, request *workflowservice.RespondActivityTaskCanceledRequest) (_ *workflowservice.RespondActivityTaskCanceledResponse, retError error) {
+func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, request *workflowservice.RespondActivityTaskCanceledRequest) (_ *workflowservice.RespondActivityTaskCanceledResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope := wh.getDefaultScope(metrics.FrontendRespondActivityTaskCanceledScope)
@@ -1656,7 +1656,7 @@ func (wh *WorkflowHandlerGRPC) RespondActivityTaskCanceled(ctx context.Context, 
 // created for the workflow instance so new decisions could be made.  Similar to RespondActivityTaskCanceled but use
 // Domain, WorkflowID and ActivityID instead of 'taskToken' for completion. It fails with 'EntityNotExistsError'
 // if the these IDs are not valid anymore due to activity timeout.
-func (wh *WorkflowHandlerGRPC) RespondActivityTaskCanceledByID(ctx context.Context, request *workflowservice.RespondActivityTaskCanceledByIDRequest) (_ *workflowservice.RespondActivityTaskCanceledByIDResponse, retError error) {
+func (wh *WorkflowHandler) RespondActivityTaskCanceledByID(ctx context.Context, request *workflowservice.RespondActivityTaskCanceledByIDRequest) (_ *workflowservice.RespondActivityTaskCanceledByIDResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendRespondActivityTaskCanceledScope, request.GetDomain())
@@ -1764,7 +1764,7 @@ func (wh *WorkflowHandlerGRPC) RespondActivityTaskCanceledByID(ctx context.Conte
 // It will result in a new 'WorkflowExecutionCancelRequested' event being written to the workflow history and a new DecisionTask
 // created for the workflow instance so new decisions could be made. It fails with 'EntityNotExistsError' if the workflow is not valid
 // anymore due to completion or doesn't exist.
-func (wh *WorkflowHandlerGRPC) RequestCancelWorkflowExecution(ctx context.Context, request *workflowservice.RequestCancelWorkflowExecutionRequest) (_ *workflowservice.RequestCancelWorkflowExecutionResponse, retError error) {
+func (wh *WorkflowHandler) RequestCancelWorkflowExecution(ctx context.Context, request *workflowservice.RequestCancelWorkflowExecutionRequest) (_ *workflowservice.RequestCancelWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendRequestCancelWorkflowExecutionScope, request.GetDomain())
@@ -1808,7 +1808,7 @@ func (wh *WorkflowHandlerGRPC) RequestCancelWorkflowExecution(ctx context.Contex
 
 // SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in
 // WorkflowExecutionSignaled event recorded in the history and a decision task being created for the execution.
-func (wh *WorkflowHandlerGRPC) SignalWorkflowExecution(ctx context.Context, request *workflowservice.SignalWorkflowExecutionRequest) (_ *workflowservice.SignalWorkflowExecutionResponse, retError error) {
+func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request *workflowservice.SignalWorkflowExecutionRequest) (_ *workflowservice.SignalWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendSignalWorkflowExecutionScope, request.GetDomain())
@@ -1886,7 +1886,7 @@ func (wh *WorkflowHandlerGRPC) SignalWorkflowExecution(ctx context.Context, requ
 // and a decision task being created for the execution.
 // If the workflow is not running or not found, this results in WorkflowExecutionStarted and WorkflowExecutionSignaled
 // events being recorded in history, and a decision task being created for the execution
-func (wh *WorkflowHandlerGRPC) SignalWithStartWorkflowExecution(ctx context.Context, request *workflowservice.SignalWithStartWorkflowExecutionRequest) (_ *workflowservice.SignalWithStartWorkflowExecutionResponse, retError error) {
+func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context, request *workflowservice.SignalWithStartWorkflowExecutionRequest) (_ *workflowservice.SignalWithStartWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendSignalWithStartWorkflowExecutionScope, request.GetDomain())
@@ -2021,7 +2021,7 @@ func (wh *WorkflowHandlerGRPC) SignalWithStartWorkflowExecution(ctx context.Cont
 
 // ResetWorkflowExecution reset an existing workflow execution to DecisionTaskCompleted event(exclusive).
 // And it will immediately terminating the current execution instance.
-func (wh *WorkflowHandlerGRPC) ResetWorkflowExecution(ctx context.Context, request *workflowservice.ResetWorkflowExecutionRequest) (_ *workflowservice.ResetWorkflowExecutionResponse, retError error) {
+func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *workflowservice.ResetWorkflowExecutionRequest) (_ *workflowservice.ResetWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendResetWorkflowExecutionScope, request.GetDomain())
@@ -2065,7 +2065,7 @@ func (wh *WorkflowHandlerGRPC) ResetWorkflowExecution(ctx context.Context, reque
 
 // TerminateWorkflowExecution terminates an existing workflow execution by recording WorkflowExecutionTerminated event
 // in the history and immediately terminating the execution instance.
-func (wh *WorkflowHandlerGRPC) TerminateWorkflowExecution(ctx context.Context, request *workflowservice.TerminateWorkflowExecutionRequest) (_ *workflowservice.TerminateWorkflowExecutionResponse, retError error) {
+func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx context.Context, request *workflowservice.TerminateWorkflowExecutionRequest) (_ *workflowservice.TerminateWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendTerminateWorkflowExecutionScope, request.GetDomain())
@@ -2108,7 +2108,7 @@ func (wh *WorkflowHandlerGRPC) TerminateWorkflowExecution(ctx context.Context, r
 }
 
 // ListOpenWorkflowExecutions is a visibility API to list the open executions in a specific domain.
-func (wh *WorkflowHandlerGRPC) ListOpenWorkflowExecutions(ctx context.Context, request *workflowservice.ListOpenWorkflowExecutionsRequest) (_ *workflowservice.ListOpenWorkflowExecutionsResponse, retError error) {
+func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, request *workflowservice.ListOpenWorkflowExecutionsRequest) (_ *workflowservice.ListOpenWorkflowExecutionsResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendListOpenWorkflowExecutionsScope, request.GetDomain())
@@ -2201,7 +2201,7 @@ func (wh *WorkflowHandlerGRPC) ListOpenWorkflowExecutions(ctx context.Context, r
 }
 
 // ListClosedWorkflowExecutions is a visibility API to list the closed executions in a specific domain.
-func (wh *WorkflowHandlerGRPC) ListClosedWorkflowExecutions(ctx context.Context, request *workflowservice.ListClosedWorkflowExecutionsRequest) (_ *workflowservice.ListClosedWorkflowExecutionsResponse, retError error) {
+func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, request *workflowservice.ListClosedWorkflowExecutionsRequest) (_ *workflowservice.ListClosedWorkflowExecutionsResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendListClosedWorkflowExecutionsScope, request.GetDomain())
@@ -2305,7 +2305,7 @@ func (wh *WorkflowHandlerGRPC) ListClosedWorkflowExecutions(ctx context.Context,
 }
 
 // ListWorkflowExecutions is a visibility API to list workflow executions in a specific domain.
-func (wh *WorkflowHandlerGRPC) ListWorkflowExecutions(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (_ *workflowservice.ListWorkflowExecutionsResponse, retError error) {
+func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (_ *workflowservice.ListWorkflowExecutionsResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendListWorkflowExecutionsScope, request.GetDomain())
@@ -2365,7 +2365,7 @@ func (wh *WorkflowHandlerGRPC) ListWorkflowExecutions(ctx context.Context, reque
 }
 
 // ListArchivedWorkflowExecutions is a visibility API to list archived workflow executions in a specific domain.
-func (wh *WorkflowHandlerGRPC) ListArchivedWorkflowExecutions(ctx context.Context, request *workflowservice.ListArchivedWorkflowExecutionsRequest) (_ *workflowservice.ListArchivedWorkflowExecutionsResponse, retError error) {
+func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, request *workflowservice.ListArchivedWorkflowExecutionsRequest) (_ *workflowservice.ListArchivedWorkflowExecutionsResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendListArchivedWorkflowExecutionsScope, request.GetDomain())
@@ -2450,7 +2450,7 @@ func (wh *WorkflowHandlerGRPC) ListArchivedWorkflowExecutions(ctx context.Contex
 }
 
 // ScanWorkflowExecutions is a visibility API to list large amount of workflow executions in a specific domain without order.
-func (wh *WorkflowHandlerGRPC) ScanWorkflowExecutions(ctx context.Context, request *workflowservice.ScanWorkflowExecutionsRequest) (_ *workflowservice.ScanWorkflowExecutionsResponse, retError error) {
+func (wh *WorkflowHandler) ScanWorkflowExecutions(ctx context.Context, request *workflowservice.ScanWorkflowExecutionsRequest) (_ *workflowservice.ScanWorkflowExecutionsResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendScanWorkflowExecutionsScope, request.GetDomain())
@@ -2511,7 +2511,7 @@ func (wh *WorkflowHandlerGRPC) ScanWorkflowExecutions(ctx context.Context, reque
 }
 
 // CountWorkflowExecutions is a visibility API to count of workflow executions in a specific domain.
-func (wh *WorkflowHandlerGRPC) CountWorkflowExecutions(ctx context.Context, request *workflowservice.CountWorkflowExecutionsRequest) (_ *workflowservice.CountWorkflowExecutionsResponse, retError error) {
+func (wh *WorkflowHandler) CountWorkflowExecutions(ctx context.Context, request *workflowservice.CountWorkflowExecutionsRequest) (_ *workflowservice.CountWorkflowExecutionsResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendCountWorkflowExecutionsScope, request.GetDomain())
@@ -2560,7 +2560,7 @@ func (wh *WorkflowHandlerGRPC) CountWorkflowExecutions(ctx context.Context, requ
 }
 
 // GetSearchAttributes is a visibility API to get all legal keys that could be used in list APIs
-func (wh *WorkflowHandlerGRPC) GetSearchAttributes(ctx context.Context, _ *workflowservice.GetSearchAttributesRequest) (_ *workflowservice.GetSearchAttributesResponse, retError error) {
+func (wh *WorkflowHandler) GetSearchAttributes(ctx context.Context, _ *workflowservice.GetSearchAttributesRequest) (_ *workflowservice.GetSearchAttributesResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfile(metrics.FrontendGetSearchAttributesScope)
@@ -2580,7 +2580,7 @@ func (wh *WorkflowHandlerGRPC) GetSearchAttributes(ctx context.Context, _ *workf
 // RespondQueryTaskCompleted is called by application worker to complete a QueryTask (which is a DecisionTask for query)
 // as a result of 'PollForDecisionTask' API call. Completing a QueryTask will unblock the client call to 'QueryWorkflow'
 // API and return the query result to client as a response to 'QueryWorkflow' API call.
-func (wh *WorkflowHandlerGRPC) RespondQueryTaskCompleted(ctx context.Context, request *workflowservice.RespondQueryTaskCompletedRequest) (_ *workflowservice.RespondQueryTaskCompletedResponse, retError error) {
+func (wh *WorkflowHandler) RespondQueryTaskCompleted(ctx context.Context, request *workflowservice.RespondQueryTaskCompletedRequest) (_ *workflowservice.RespondQueryTaskCompletedResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope := wh.getDefaultScope(metrics.FrontendRespondQueryTaskCompletedScope)
@@ -2664,7 +2664,7 @@ func (wh *WorkflowHandlerGRPC) RespondQueryTaskCompleted(ctx context.Context, re
 // 3. ClientLibraryVersion
 // 4. ClientFeatureVersion
 // 5. ClientImpl
-func (wh *WorkflowHandlerGRPC) ResetStickyTaskList(ctx context.Context, request *workflowservice.ResetStickyTaskListRequest) (_ *workflowservice.ResetStickyTaskListResponse, retError error) {
+func (wh *WorkflowHandler) ResetStickyTaskList(ctx context.Context, request *workflowservice.ResetStickyTaskListRequest) (_ *workflowservice.ResetStickyTaskListResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendResetStickyTaskListScope, request.GetDomain())
@@ -2702,7 +2702,7 @@ func (wh *WorkflowHandlerGRPC) ResetStickyTaskList(ctx context.Context, request 
 }
 
 // QueryWorkflow returns query result for a specified workflow execution
-func (wh *WorkflowHandlerGRPC) QueryWorkflow(ctx context.Context, request *workflowservice.QueryWorkflowRequest) (_ *workflowservice.QueryWorkflowResponse, retError error) {
+func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflowservice.QueryWorkflowRequest) (_ *workflowservice.QueryWorkflowResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendQueryWorkflowScope, request.GetDomain())
@@ -2767,7 +2767,7 @@ func (wh *WorkflowHandlerGRPC) QueryWorkflow(ctx context.Context, request *workf
 }
 
 // DescribeWorkflowExecution returns information about the specified workflow execution.
-func (wh *WorkflowHandlerGRPC) DescribeWorkflowExecution(ctx context.Context, request *workflowservice.DescribeWorkflowExecutionRequest) (_ *workflowservice.DescribeWorkflowExecutionResponse, retError error) {
+func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, request *workflowservice.DescribeWorkflowExecutionRequest) (_ *workflowservice.DescribeWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendDescribeWorkflowExecutionScope, request.GetDomain())
@@ -2816,7 +2816,7 @@ func (wh *WorkflowHandlerGRPC) DescribeWorkflowExecution(ctx context.Context, re
 
 // DescribeTaskList returns information about the target tasklist, right now this API returns the
 // pollers which polled this tasklist in last few minutes.
-func (wh *WorkflowHandlerGRPC) DescribeTaskList(ctx context.Context, request *workflowservice.DescribeTaskListRequest) (_ *workflowservice.DescribeTaskListResponse, retError error) {
+func (wh *WorkflowHandler) DescribeTaskList(ctx context.Context, request *workflowservice.DescribeTaskListRequest) (_ *workflowservice.DescribeTaskListResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendDescribeTaskListScope, request.GetDomain())
@@ -2868,7 +2868,7 @@ func (wh *WorkflowHandlerGRPC) DescribeTaskList(ctx context.Context, request *wo
 }
 
 // GetWorkflowExecutionRawHistory retrieves raw history directly from DB layer.
-func (wh *WorkflowHandlerGRPC) GetWorkflowExecutionRawHistory(ctx context.Context, request *workflowservice.GetWorkflowExecutionRawHistoryRequest) (_ *workflowservice.GetWorkflowExecutionRawHistoryResponse, retError error) {
+func (wh *WorkflowHandler) GetWorkflowExecutionRawHistory(ctx context.Context, request *workflowservice.GetWorkflowExecutionRawHistoryRequest) (_ *workflowservice.GetWorkflowExecutionRawHistoryResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendGetWorkflowExecutionRawHistoryScope, request.GetDomain())
@@ -2940,7 +2940,7 @@ func (wh *WorkflowHandlerGRPC) GetWorkflowExecutionRawHistory(ctx context.Contex
 	}
 
 	execution := request.Execution
-	token := &getHistoryContinuationTokenGRPC{}
+	token := &getHistoryContinuationToken{}
 
 	var runID string
 	var nextEventID int64
@@ -3013,7 +3013,7 @@ func (wh *WorkflowHandlerGRPC) GetWorkflowExecutionRawHistory(ctx context.Contex
 }
 
 // GetClusterInfo return information about Temporal deployment.
-func (wh *WorkflowHandlerGRPC) GetClusterInfo(ctx context.Context, _ *workflowservice.GetClusterInfoRequest) (_ *workflowservice.GetClusterInfoResponse, retError error) {
+func (wh *WorkflowHandler) GetClusterInfo(ctx context.Context, _ *workflowservice.GetClusterInfoRequest) (_ *workflowservice.GetClusterInfoResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
 
 	scope := wh.getDefaultScope(metrics.FrontendClientGetClusterInfoScope)
@@ -3030,10 +3030,8 @@ func (wh *WorkflowHandlerGRPC) GetClusterInfo(ctx context.Context, _ *workflowse
 }
 
 // ListTaskListPartitions returns all the partition and host for a task list.
-func (wh *WorkflowHandlerGRPC) ListTaskListPartitions(ctx context.Context, request *workflowservice.ListTaskListPartitionsRequest) (_ *workflowservice.ListTaskListPartitionsResponse, retError error) {
+func (wh *WorkflowHandler) ListTaskListPartitions(ctx context.Context, request *workflowservice.ListTaskListPartitionsRequest) (_ *workflowservice.ListTaskListPartitionsResponse, retError error) {
 	defer log.CapturePanicGRPC(wh.GetLogger(), &retError)
-
-	defer log.CapturePanic(wh.GetLogger(), &retError)
 
 	scope, sw := wh.startRequestProfileWithDomain(metrics.FrontendListTaskListPartitionsScope, request.GetDomain())
 	defer sw.Stop()
@@ -3070,7 +3068,7 @@ func (wh *WorkflowHandlerGRPC) ListTaskListPartitions(ctx context.Context, reque
 }
 
 //===============================================================================
-func (wh *WorkflowHandlerGRPC) getRawHistory(
+func (wh *WorkflowHandler) getRawHistory(
 	scope metrics.Scope,
 	domainID string,
 	execution commonproto.WorkflowExecution,
@@ -3144,7 +3142,7 @@ func (wh *WorkflowHandlerGRPC) getRawHistory(
 	return rawHistory, resp.NextPageToken, nil
 }
 
-func (wh *WorkflowHandlerGRPC) getHistory(
+func (wh *WorkflowHandler) getHistory(
 	scope metrics.Scope,
 	domainID string,
 	execution commonproto.WorkflowExecution,
@@ -3212,7 +3210,7 @@ func (wh *WorkflowHandlerGRPC) getHistory(
 	return executionHistory, nextPageToken, nil
 }
 
-func (wh *WorkflowHandlerGRPC) validateTransientDecisionEvents(
+func (wh *WorkflowHandler) validateTransientDecisionEvents(
 	expectedNextEventID int64,
 	decision *commonproto.TransientDecisionInfo,
 ) error {
@@ -3232,7 +3230,7 @@ func (wh *WorkflowHandlerGRPC) validateTransientDecisionEvents(
 }
 
 // startRequestProfile initiates recording of request metrics
-func (wh *WorkflowHandlerGRPC) startRequestProfile(scope int) (metrics.Scope, metrics.Stopwatch) {
+func (wh *WorkflowHandler) startRequestProfile(scope int) (metrics.Scope, metrics.Stopwatch) {
 	metricsScope := wh.GetMetricsClient().Scope(scope).Tagged(metrics.DomainUnknownTag())
 	// timer should be emitted with the all tag
 	sw := metricsScope.StartTimer(metrics.CadenceLatency)
@@ -3241,7 +3239,7 @@ func (wh *WorkflowHandlerGRPC) startRequestProfile(scope int) (metrics.Scope, me
 }
 
 // startRequestProfileWithDomain initiates recording of request metrics and returns a domain tagged scope
-func (wh *WorkflowHandlerGRPC) startRequestProfileWithDomain(scope int, domain string) (metrics.Scope, metrics.Stopwatch) {
+func (wh *WorkflowHandler) startRequestProfileWithDomain(scope int, domain string) (metrics.Scope, metrics.Stopwatch) {
 	var metricsScope metrics.Scope
 	if domain != "" {
 		metricsScope = wh.GetMetricsClient().Scope(scope).Tagged(metrics.DomainTag(domain))
@@ -3254,11 +3252,11 @@ func (wh *WorkflowHandlerGRPC) startRequestProfileWithDomain(scope int, domain s
 }
 
 // getDefaultScope returns a default scope to use for request metrics
-func (wh *WorkflowHandlerGRPC) getDefaultScope(scope int) metrics.Scope {
+func (wh *WorkflowHandler) getDefaultScope(scope int) metrics.Scope {
 	return wh.GetMetricsClient().Scope(scope).Tagged(metrics.DomainUnknownTag())
 }
 
-func (wh *WorkflowHandlerGRPC) error(err error, scope metrics.Scope, tagsForErrorLog ...tag.Tag) error {
+func (wh *WorkflowHandler) error(err error, scope metrics.Scope, tagsForErrorLog ...tag.Tag) error {
 	if st, ok := status.FromError(err); ok {
 		if st.Code() == codes.DeadlineExceeded {
 			scope.IncCounter(metrics.CadenceErrContextTimeoutCounter)
@@ -3270,7 +3268,7 @@ func (wh *WorkflowHandlerGRPC) error(err error, scope metrics.Scope, tagsForErro
 	return adapter.ToProtoError(wh.errorThrift(err, scope, tagsForErrorLog...))
 }
 
-func (wh *WorkflowHandlerGRPC) errorThrift(err error, scope metrics.Scope, tagsForErrorLog ...tag.Tag) error {
+func (wh *WorkflowHandler) errorThrift(err error, scope metrics.Scope, tagsForErrorLog ...tag.Tag) error {
 	switch err := err.(type) {
 	case *shared.InternalServiceError:
 		wh.GetLogger().WithTags(tagsForErrorLog...).Error("Internal service error", tag.Error(err))
@@ -3319,7 +3317,7 @@ func (wh *WorkflowHandlerGRPC) errorThrift(err error, scope metrics.Scope, tagsF
 	return &shared.InternalServiceError{Message: fmt.Sprintf("Internal uncategorized error: %v", err)}
 }
 
-func (wh *WorkflowHandlerGRPC) validateTaskList(t *commonproto.TaskList, scope metrics.Scope) error {
+func (wh *WorkflowHandler) validateTaskList(t *commonproto.TaskList, scope metrics.Scope) error {
 	if t == nil || t.GetName() == "" {
 		return wh.error(errTaskListNotSet, scope)
 	}
@@ -3329,7 +3327,7 @@ func (wh *WorkflowHandlerGRPC) validateTaskList(t *commonproto.TaskList, scope m
 	return nil
 }
 
-func (wh *WorkflowHandlerGRPC) validateExecutionAndEmitMetrics(w *commonproto.WorkflowExecution, scope metrics.Scope) error {
+func (wh *WorkflowHandler) validateExecutionAndEmitMetrics(w *commonproto.WorkflowExecution, scope metrics.Scope) error {
 	err := wh.validateExecution(w)
 	if err != nil {
 		return wh.error(err, scope)
@@ -3337,7 +3335,7 @@ func (wh *WorkflowHandlerGRPC) validateExecutionAndEmitMetrics(w *commonproto.Wo
 	return nil
 }
 
-func (wh *WorkflowHandlerGRPC) validateExecution(w *commonproto.WorkflowExecution) error {
+func (wh *WorkflowHandler) validateExecution(w *commonproto.WorkflowExecution) error {
 	if w == nil {
 		return errExecutionNotSet
 	}
@@ -3350,7 +3348,7 @@ func (wh *WorkflowHandlerGRPC) validateExecution(w *commonproto.WorkflowExecutio
 	return nil
 }
 
-func (wh *WorkflowHandlerGRPC) createPollForDecisionTaskResponse(
+func (wh *WorkflowHandler) createPollForDecisionTaskResponse(
 	ctx context.Context,
 	scope metrics.Scope,
 	domainID string,
@@ -3409,7 +3407,7 @@ func (wh *WorkflowHandlerGRPC) createPollForDecisionTaskResponse(
 		}
 
 		if len(persistenceToken) != 0 {
-			continuation, err = wh.serializeHistoryToken(&getHistoryContinuationTokenGRPC{
+			continuation, err = wh.serializeHistoryToken(&getHistoryContinuationToken{
 				RunID:             matchingResp.WorkflowExecution.GetRunId(),
 				FirstEventID:      firstEventID,
 				NextEventID:       nextEventID,
@@ -3443,7 +3441,7 @@ func (wh *WorkflowHandlerGRPC) createPollForDecisionTaskResponse(
 	return resp, nil
 }
 
-func (wh *WorkflowHandlerGRPC) verifyHistoryIsComplete(
+func (wh *WorkflowHandler) verifyHistoryIsComplete(
 	events []*commonproto.HistoryEvent,
 	expectedFirstEventID int64,
 	expectedLastEventID int64,
@@ -3503,13 +3501,13 @@ func (wh *WorkflowHandlerGRPC) verifyHistoryIsComplete(
 		pageSize)}
 }
 
-func (wh *WorkflowHandlerGRPC) deserializeHistoryToken(bytes []byte) (*getHistoryContinuationTokenGRPC, error) {
-	token := &getHistoryContinuationTokenGRPC{}
+func (wh *WorkflowHandler) deserializeHistoryToken(bytes []byte) (*getHistoryContinuationToken, error) {
+	token := &getHistoryContinuationToken{}
 	err := json.Unmarshal(bytes, token)
 	return token, err
 }
 
-func (wh *WorkflowHandlerGRPC) serializeHistoryToken(token *getHistoryContinuationTokenGRPC) ([]byte, error) {
+func (wh *WorkflowHandler) serializeHistoryToken(token *getHistoryContinuationToken) ([]byte, error) {
 	if token == nil {
 		return nil, nil
 	}
@@ -3518,11 +3516,11 @@ func (wh *WorkflowHandlerGRPC) serializeHistoryToken(token *getHistoryContinuati
 	return bytes, err
 }
 
-func (wh *WorkflowHandlerGRPC) isFailoverRequest(updateRequest *workflowservice.UpdateDomainRequest) bool {
+func (wh *WorkflowHandler) isFailoverRequest(updateRequest *workflowservice.UpdateDomainRequest) bool {
 	return updateRequest.ReplicationConfiguration != nil && updateRequest.ReplicationConfiguration.GetActiveClusterName() != ""
 }
 
-func (wh *WorkflowHandlerGRPC) historyArchived(ctx context.Context, request *workflowservice.GetWorkflowExecutionHistoryRequest, domainID string) bool {
+func (wh *WorkflowHandler) historyArchived(ctx context.Context, request *workflowservice.GetWorkflowExecutionHistoryRequest, domainID string) bool {
 	if request.GetExecution() == nil || request.GetExecution().GetRunId() == "" {
 		return false
 	}
@@ -3542,7 +3540,7 @@ func (wh *WorkflowHandlerGRPC) historyArchived(ctx context.Context, request *wor
 	return false
 }
 
-func (wh *WorkflowHandlerGRPC) getArchivedHistory(
+func (wh *WorkflowHandler) getArchivedHistory(
 	ctx context.Context,
 	request *workflowservice.GetWorkflowExecutionHistoryRequest,
 	domainID string,
@@ -3593,7 +3591,7 @@ func (wh *WorkflowHandlerGRPC) getArchivedHistory(
 	}, nil
 }
 
-func (wh *WorkflowHandlerGRPC) convertIndexedKeyToProto(keys map[string]interface{}) map[string]enums.IndexedValueType {
+func (wh *WorkflowHandler) convertIndexedKeyToProto(keys map[string]interface{}) map[string]enums.IndexedValueType {
 	converted := make(map[string]enums.IndexedValueType)
 	for k, v := range keys {
 		converted[k] = common.ConvertIndexedValueTypeToProtoType(v, wh.GetLogger())
@@ -3601,15 +3599,15 @@ func (wh *WorkflowHandlerGRPC) convertIndexedKeyToProto(keys map[string]interfac
 	return converted
 }
 
-func (wh *WorkflowHandlerGRPC) isListRequestPageSizeTooLarge(pageSize int32, domain string) bool {
+func (wh *WorkflowHandler) isListRequestPageSizeTooLarge(pageSize int32, domain string) bool {
 	return wh.config.EnableReadVisibilityFromES(domain) &&
 		pageSize > int32(wh.config.ESIndexMaxResultWindow())
 }
 
-func (wh *WorkflowHandlerGRPC) allow(domain string) bool {
+func (wh *WorkflowHandler) allow(domain string) bool {
 	return wh.rateLimiter.Allow(quotas.Info{Domain: domain})
 }
-func (wh *WorkflowHandlerGRPC) checkPermission(
+func (wh *WorkflowHandler) checkPermission(
 	config *Config,
 	securityToken string,
 ) error {
@@ -3625,7 +3623,7 @@ func (wh *WorkflowHandlerGRPC) checkPermission(
 	return nil
 }
 
-func (wh *WorkflowHandlerGRPC) cancelOutstandingPoll(ctx context.Context, err error, domainID string, taskListType int32,
+func (wh *WorkflowHandler) cancelOutstandingPoll(ctx context.Context, err error, domainID string, taskListType int32,
 	taskList *commonproto.TaskList, pollerID string) error {
 	// First check if this err is due to context cancellation.  This means client connection to frontend is closed.
 	if ctx.Err() == context.Canceled {
@@ -3650,7 +3648,7 @@ func (wh *WorkflowHandlerGRPC) cancelOutstandingPoll(ctx context.Context, err er
 	return err
 }
 
-func (wh *WorkflowHandlerGRPC) checkBadBinary(domainEntry *cache.DomainCacheEntry, binaryChecksum string) error {
+func (wh *WorkflowHandler) checkBadBinary(domainEntry *cache.DomainCacheEntry, binaryChecksum string) error {
 	if domainEntry.GetConfig().BadBinaries.Binaries != nil {
 		badBinaries := domainEntry.GetConfig().BadBinaries.Binaries
 		_, ok := badBinaries[binaryChecksum]

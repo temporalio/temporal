@@ -131,8 +131,8 @@ func (s *workflowHandlerSuite) TearDownTest() {
 	s.mockVisibilityArchiver.AssertExpectations(s.T())
 }
 
-func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandlerGRPC {
-	return NewWorkflowHandlerGRPC(s.mockResource, config, s.mockProducer)
+func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandler {
+	return NewWorkflowHandler(s.mockResource, config, s.mockProducer)
 }
 
 func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {

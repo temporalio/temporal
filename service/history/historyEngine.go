@@ -1930,7 +1930,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 			)
 		}
 		policy := workflow.WorkflowIdReusePolicyAllowDuplicate
-		// TODO: nil check!
+		// TODO: nil check and wrong default value
 		if request.WorkflowIdReusePolicy != nil {
 			policy = *request.WorkflowIdReusePolicy
 		}
