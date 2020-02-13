@@ -95,7 +95,7 @@ func (s *engine3Suite) SetupTest() {
 
 	s.mockShard = newTestShardContext(
 		s.controller,
-		&p.ShardInfoWithFailover{ShardInfo: pblobs.ShardInfo{
+		&p.ShardInfoWithFailover{ShardInfo: &pblobs.ShardInfo{
 			ShardID:          0,
 			RangeID:          1,
 			TransferAckLevel: 0,
