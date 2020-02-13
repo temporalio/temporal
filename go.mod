@@ -8,7 +8,7 @@ require (
 	github.com/anmitsu/go-shlex v0.0.0-20161002113705-648efa622239 // indirect
 	github.com/apache/thrift v0.0.0-20161221203622-b2a4d4ae21c7
 	github.com/benbjohnson/clock v1.0.0 // indirect
-	github.com/bitly/go-hostpool v0.0.0-20171023180738-a3a6125de932 // indirect
+	github.com/bitly/go-hostpool v0.1.0 // indirect
 	github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869 // indirect
 	github.com/bmizerany/perks v0.0.0-20141205001514-d9a9656a3a4b // indirect
 	github.com/bsm/sarama-cluster v2.1.13+incompatible
@@ -73,7 +73,7 @@ require (
 	go.temporal.io/temporal v0.10.5
 	go.temporal.io/temporal-proto v0.0.0-20200211220322-aef097c349a6
 	go.uber.org/atomic v1.5.1
-	go.uber.org/fx v1.10.0
+	go.uber.org/fx v1.10.0 // indirect
 	go.uber.org/multierr v1.4.0
 	go.uber.org/net/metrics v1.2.0 // indirect
 	go.uber.org/thriftrw v1.20.2

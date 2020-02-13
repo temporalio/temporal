@@ -26,6 +26,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/gogo/protobuf/types"
+
+	pblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 
@@ -75,7 +79,7 @@ type (
 		MetadataManager        p.MetadataManager
 		VisibilityMgr          p.VisibilityManager
 		DomainReplicationQueue p.DomainReplicationQueue
-		ShardInfo              *p.ShardInfo
+		ShardInfo              *pblobs.ShardInfo
 		TaskIDGenerator        TransferTaskIDGenerator
 		ClusterMetadata        cluster.Metadata
 		ReadLevel              int64
@@ -170,7 +174,7 @@ func (s *TestBase) Config() config.Persistence {
 // Setup sets up the test base, must be called as part of SetupSuite
 func (s *TestBase) Setup() {
 	var err error
-	shardID := 10
+	shardID := int32(10)
 	clusterName := s.ClusterMetadata.GetCurrentClusterName()
 
 	s.DefaultTestCluster.SetupTestDatabase()
@@ -197,7 +201,7 @@ func (s *TestBase) Setup() {
 	s.fatalOnError("NewShardManager", err)
 
 	s.ExecutionMgrFactory = factory
-	s.ExecutionManager, err = factory.NewExecutionManager(shardID)
+	s.ExecutionManager, err = factory.NewExecutionManager(int(shardID))
 	s.fatalOnError("NewExecutionManager", err)
 
 	visibilityFactory := factory
@@ -213,13 +217,13 @@ func (s *TestBase) Setup() {
 
 	s.ReadLevel = 0
 	s.ReplicationReadLevel = 0
-	s.ShardInfo = &p.ShardInfo{
+	s.ShardInfo = &pblobs.ShardInfo{
 		ShardID:                 shardID,
 		RangeID:                 0,
 		TransferAckLevel:        0,
 		ReplicationAckLevel:     0,
-		TimerAckLevel:           time.Time{},
-		ClusterTimerAckLevel:    map[string]time.Time{clusterName: time.Time{}},
+		TimerAckLevel:           &types.Timestamp{},
+		ClusterTimerAckLevel:    map[string]*types.Timestamp{clusterName: {}},
 		ClusterTransferAckLevel: map[string]int64{clusterName: 0},
 	}
 
@@ -239,8 +243,8 @@ func (s *TestBase) fatalOnError(msg string, err error) {
 }
 
 // CreateShard is a utility method to create the shard using persistence layer
-func (s *TestBase) CreateShard(shardID int, owner string, rangeID int64) error {
-	info := &p.ShardInfo{
+func (s *TestBase) CreateShard(shardID int32, owner string, rangeID int64) error {
+	info := &pblobs.ShardInfo{
 		ShardID: shardID,
 		Owner:   owner,
 		RangeID: rangeID,
@@ -252,7 +256,7 @@ func (s *TestBase) CreateShard(shardID int, owner string, rangeID int64) error {
 }
 
 // GetShard is a utility method to get the shard using persistence layer
-func (s *TestBase) GetShard(shardID int) (*p.ShardInfo, error) {
+func (s *TestBase) GetShard(shardID int32) (*pblobs.ShardInfo, error) {
 	response, err := s.ShardMgr.GetShard(&p.GetShardRequest{
 		ShardID: shardID,
 	})
@@ -265,7 +269,7 @@ func (s *TestBase) GetShard(shardID int) (*p.ShardInfo, error) {
 }
 
 // UpdateShard is a utility method to update the shard using persistence layer
-func (s *TestBase) UpdateShard(updatedInfo *p.ShardInfo, previousRangeID int64) error {
+func (s *TestBase) UpdateShard(updatedInfo *pblobs.ShardInfo, previousRangeID int64) error {
 	return s.ShardMgr.UpdateShard(&p.UpdateShardRequest{
 		ShardInfo:       updatedInfo,
 		PreviousRangeID: previousRangeID,
@@ -1352,7 +1356,7 @@ func (s *TestBase) ClearReplicationQueue() {
 
 // EqualTimesWithPrecision assertion that two times are equal within precision
 func (s *TestBase) EqualTimesWithPrecision(t1, t2 time.Time, precision time.Duration) {
-	s.True(timeComparator(t1, t2, precision),
+	s.True(timeComparatorGo(t1, t2, precision),
 		"Not equal: \n"+
 			"expected: %s\n"+
 			"actual  : %s%s", t1, t2,

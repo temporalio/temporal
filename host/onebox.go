@@ -28,8 +28,8 @@ import (
 	"sync"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
-  persistenceClient "github.com/temporalio/temporal/common/persistence/client"
 	adminClient "github.com/temporalio/temporal/client/admin"
+	persistenceClient "github.com/temporalio/temporal/common/persistence/client"
 
 	"github.com/pborman/uuid"
 	"github.com/uber-go/tally"

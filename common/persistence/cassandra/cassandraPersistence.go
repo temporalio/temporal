@@ -25,6 +25,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gogo/protobuf/types"
+
+	"github.com/temporalio/temporal/common/persistence/sql"
+
 	"github.com/temporalio/temporal/common/cassandra"
 
 	"github.com/gocql/gocql"
@@ -99,21 +103,6 @@ const (
 )
 
 const (
-	templateShardType = `{` +
-		`shard_id: ?, ` +
-		`owner: ?, ` +
-		`range_id: ?, ` +
-		`stolen_since_renew: ?, ` +
-		`updated_at: ?, ` +
-		`replication_ack_level: ?, ` +
-		`transfer_ack_level: ?, ` +
-		`timer_ack_level: ?, ` +
-		`cluster_transfer_ack_level: ?, ` +
-		`cluster_timer_ack_level: ?, ` +
-		`domain_notification_version: ?, ` +
-		`cluster_replication_level: ? ` +
-		`}`
-
 	templateWorkflowExecutionType = `{` +
 		`domain_id: ?, ` +
 		`workflow_id: ?, ` +
@@ -332,10 +321,10 @@ const (
 		`}`
 
 	templateCreateShardQuery = `INSERT INTO executions (` +
-		`shard_id, type, domain_id, workflow_id, run_id, visibility_ts, task_id, shard, range_id)` +
-		`VALUES(?, ?, ?, ?, ?, ?, ?, ` + templateShardType + `, ?) IF NOT EXISTS`
+		`shard_id, type, domain_id, workflow_id, run_id, visibility_ts, task_id, shard, shard_encoding, range_id)` +
+		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?) IF NOT EXISTS`
 
-	templateGetShardQuery = `SELECT shard ` +
+	templateGetShardQuery = `SELECT shard, shard_encoding ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
@@ -346,7 +335,7 @@ const (
 		`and task_id = ?`
 
 	templateUpdateShardQuery = `UPDATE executions ` +
-		`SET shard = ` + templateShardType + `, range_id = ? ` +
+		`SET shard = ?, shard_encoding = ?, range_id = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and domain_id = ? ` +
@@ -939,8 +928,14 @@ func (d *cassandraPersistence) GetShardID() int {
 }
 
 func (d *cassandraPersistence) CreateShard(request *p.CreateShardRequest) error {
-	cqlNowTimestamp := p.UnixNanoToDBTimestamp(time.Now().UnixNano())
 	shardInfo := request.ShardInfo
+	shardInfo.UpdatedAt = types.TimestampNow()
+	data, err := sql.ShardInfoToBlob(shardInfo)
+
+	if err != nil {
+		return convertCommonErrors("CreateShard", err)
+	}
+
 	query := d.session.Query(templateCreateShardQuery,
 		shardInfo.ShardID,
 		rowTypeShard,
@@ -949,38 +944,24 @@ func (d *cassandraPersistence) CreateShard(request *p.CreateShardRequest) error 
 		rowTypeShardRunID,
 		defaultVisibilityTimestamp,
 		rowTypeShardTaskID,
-		shardInfo.ShardID,
-		shardInfo.Owner,
-		shardInfo.RangeID,
-		shardInfo.StolenSinceRenew,
-		cqlNowTimestamp,
-		shardInfo.ReplicationAckLevel,
-		shardInfo.TransferAckLevel,
-		shardInfo.TimerAckLevel,
-		shardInfo.ClusterTransferAckLevel,
-		shardInfo.ClusterTimerAckLevel,
-		shardInfo.DomainNotificationVersion,
-		shardInfo.ClusterReplicationLevel,
+		data.Data,
+		data.Encoding,
 		shardInfo.RangeID)
 
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
-		if isThrottlingError(err) {
-			return &workflow.ServiceBusyError{
-				Message: fmt.Sprintf("CreateShard operation failed. Error: %v", err),
-			}
-		}
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("CreateShard operation failed. Error: %v", err),
-		}
+		return convertCommonErrors("CreateShard", err)
 	}
 
 	if !applied {
-		shard := previous["shard"].(map[string]interface{})
+		data := previous["shard"].([]byte)
+		encoding := previous["shard_encoding"].(string)
+		shard, _ := sql.ShardInfoFromBlob(data, encoding, d.currentClusterName)
+
 		return &p.ShardAlreadyExistError{
 			Msg: fmt.Sprintf("Shard already exists in executions table.  ShardId: %v, RangeId: %v",
-				shard["shard_id"], shard["range_id"]),
+				shard.ShardID, shard.RangeID),
 		}
 	}
 
@@ -998,66 +979,47 @@ func (d *cassandraPersistence) GetShard(request *p.GetShardRequest) (*p.GetShard
 		defaultVisibilityTimestamp,
 		rowTypeShardTaskID)
 
-	result := make(map[string]interface{})
-	if err := query.MapScan(result); err != nil {
-		if err == gocql.ErrNotFound {
-			return nil, &workflow.EntityNotExistsError{
-				Message: fmt.Sprintf("Shard not found.  ShardId: %v", shardID),
-			}
-		} else if isThrottlingError(err) {
-			return nil, &workflow.ServiceBusyError{
-				Message: fmt.Sprintf("GetShard operation failed. Error: %v", err),
-			}
-		}
-
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("GetShard operation failed. Error: %v", err),
-		}
+	var data []byte
+	var encoding string
+	if err := query.Scan(&data, &encoding); err != nil {
+		return nil, convertCommonErrors("GetShard", err)
 	}
 
-	info := createShardInfo(d.currentClusterName, result["shard"].(map[string]interface{}))
+	info, err := sql.ShardInfoFromBlob(data, encoding, d.currentClusterName)
+
+	if err != nil {
+		return nil, convertCommonErrors("GetShard", err)
+	}
 
 	return &p.GetShardResponse{ShardInfo: info}, nil
 }
 
 func (d *cassandraPersistence) UpdateShard(request *p.UpdateShardRequest) error {
-	cqlNowTimestamp := p.UnixNanoToDBTimestamp(time.Now().UnixNano())
 	shardInfo := request.ShardInfo
+	shardInfo.UpdatedAt = types.TimestampNow()
+	data, err := sql.ShardInfoToBlob(shardInfo)
+
+	if err != nil {
+		return convertCommonErrors("UpdateShard", err)
+	}
 
 	query := d.session.Query(templateUpdateShardQuery,
-		shardInfo.ShardID,
-		shardInfo.Owner,
+		data.Data,
+		data.Encoding,
 		shardInfo.RangeID,
-		shardInfo.StolenSinceRenew,
-		cqlNowTimestamp,
-		shardInfo.ReplicationAckLevel,
-		shardInfo.TransferAckLevel,
-		shardInfo.TimerAckLevel,
-		shardInfo.ClusterTransferAckLevel,
-		shardInfo.ClusterTimerAckLevel,
-		shardInfo.DomainNotificationVersion,
-		shardInfo.ClusterReplicationLevel,
-		shardInfo.RangeID,
-		shardInfo.ShardID,
+		shardInfo.ShardID, // Where
 		rowTypeShard,
 		rowTypeShardDomainID,
 		rowTypeShardWorkflowID,
 		rowTypeShardRunID,
 		defaultVisibilityTimestamp,
 		rowTypeShardTaskID,
-		request.PreviousRangeID)
+		request.PreviousRangeID) // If
 
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
-		if isThrottlingError(err) {
-			return &workflow.ServiceBusyError{
-				Message: fmt.Sprintf("UpdateShard operation failed. Error: %v", err),
-			}
-		}
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("UpdateShard operation failed. Error: %v", err),
-		}
+		return convertCommonErrors("UpdateShard", err)
 	}
 
 	if !applied {

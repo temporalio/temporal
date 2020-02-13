@@ -31,6 +31,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/types"
+
+	pblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+
 	"github.com/temporalio/temporal/common/checksum"
 
 	"github.com/pborman/uuid"
@@ -2325,7 +2329,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksComplete() {
 	s.NotNil(txTasks, "expected valid list of tasks.")
 	s.Equal(len(tasks), len(txTasks))
 	for index := range tasks {
-		s.True(timeComparator(tasks[index].GetVisibilityTimestamp(), txTasks[index].VisibilityTimestamp, TimePrecision))
+		s.True(timeComparatorGo(tasks[index].GetVisibilityTimestamp(), txTasks[index].VisibilityTimestamp, TimePrecision))
 	}
 	s.Equal(p.TransferTaskTypeActivityTask, txTasks[0].TaskType)
 	s.Equal(p.TransferTaskTypeDecisionTask, txTasks[1].TaskType)
@@ -2423,7 +2427,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksRangeComplete() {
 	s.NotNil(txTasks, "expected valid list of tasks.")
 	s.Equal(len(tasks), len(txTasks))
 	for index := range tasks {
-		s.True(timeComparator(tasks[index].GetVisibilityTimestamp(), txTasks[index].VisibilityTimestamp, TimePrecision))
+		s.True(timeComparatorGo(tasks[index].GetVisibilityTimestamp(), txTasks[index].VisibilityTimestamp, TimePrecision))
 	}
 	s.Equal(p.TransferTaskTypeActivityTask, txTasks[0].TaskType)
 	s.Equal(p.TransferTaskTypeDecisionTask, txTasks[1].TaskType)
@@ -5098,14 +5102,14 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 
 // TestCreateGetShardBackfill test
 func (s *ExecutionManagerSuite) TestCreateGetShardBackfill() {
-	shardID := 4
+	shardID := int32(4)
 	rangeID := int64(59)
 
 	// test create && get
 	currentReplicationAck := int64(27)
 	currentClusterTransferAck := int64(21)
 	currentClusterTimerAck := timestampConvertor(time.Now().Add(-10 * time.Second))
-	shardInfo := &p.ShardInfo{
+	shardInfo := &pblobs.ShardInfo{
 		ShardID:                 shardID,
 		Owner:                   "some random owner",
 		RangeID:                 rangeID,
@@ -5124,7 +5128,7 @@ func (s *ExecutionManagerSuite) TestCreateGetShardBackfill() {
 	shardInfo.ClusterTransferAckLevel = map[string]int64{
 		s.ClusterMetadata.GetCurrentClusterName(): currentClusterTransferAck,
 	}
-	shardInfo.ClusterTimerAckLevel = map[string]time.Time{
+	shardInfo.ClusterTimerAckLevel = map[string]*types.Timestamp{
 		s.ClusterMetadata.GetCurrentClusterName(): currentClusterTimerAck,
 	}
 	resp, err := s.ShardMgr.GetShard(&p.GetShardRequest{ShardID: shardID})
@@ -5132,7 +5136,8 @@ func (s *ExecutionManagerSuite) TestCreateGetShardBackfill() {
 	s.True(timeComparator(shardInfo.UpdatedAt, resp.ShardInfo.UpdatedAt, TimePrecision))
 	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], TimePrecision))
 	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], TimePrecision))
-	s.Equal(shardInfo.TimerAckLevel.UnixNano(), resp.ShardInfo.TimerAckLevel.UnixNano())
+	s.Equal(shardInfo.TimerAckLevel.Nanos, resp.ShardInfo.TimerAckLevel.Nanos)
+	s.Equal(shardInfo.TimerAckLevel.Seconds, resp.ShardInfo.TimerAckLevel.Seconds)
 	resp.ShardInfo.TimerAckLevel = shardInfo.TimerAckLevel
 	resp.ShardInfo.UpdatedAt = shardInfo.UpdatedAt
 	resp.ShardInfo.ClusterTimerAckLevel = shardInfo.ClusterTimerAckLevel
@@ -5141,7 +5146,7 @@ func (s *ExecutionManagerSuite) TestCreateGetShardBackfill() {
 
 // TestCreateGetUpdateGetShard test
 func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
-	shardID := 8
+	shardID := int32(8)
 	rangeID := int64(59)
 
 	// test create && get
@@ -5151,7 +5156,7 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 	currentClusterTimerAck := timestampConvertor(time.Now().Add(-10 * time.Second))
 	alternativeClusterTimerAck := timestampConvertor(time.Now().Add(-20 * time.Second))
 	domainNotificationVersion := int64(8192)
-	shardInfo := &p.ShardInfo{
+	shardInfo := &pblobs.ShardInfo{
 		ShardID:             shardID,
 		Owner:               "some random owner",
 		RangeID:             rangeID,
@@ -5164,7 +5169,7 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 			cluster.TestCurrentClusterName:     currentClusterTransferAck,
 			cluster.TestAlternativeClusterName: alternativeClusterTransferAck,
 		},
-		ClusterTimerAckLevel: map[string]time.Time{
+		ClusterTimerAckLevel: map[string]*types.Timestamp{
 			cluster.TestCurrentClusterName:     currentClusterTimerAck,
 			cluster.TestAlternativeClusterName: alternativeClusterTimerAck,
 		},
@@ -5180,7 +5185,8 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 	s.True(timeComparator(shardInfo.UpdatedAt, resp.ShardInfo.UpdatedAt, TimePrecision))
 	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], TimePrecision))
 	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], TimePrecision))
-	s.Equal(shardInfo.TimerAckLevel.UnixNano(), resp.ShardInfo.TimerAckLevel.UnixNano())
+	s.Equal(shardInfo.TimerAckLevel.Nanos, resp.ShardInfo.TimerAckLevel.Nanos)
+	s.Equal(shardInfo.TimerAckLevel.Seconds, resp.ShardInfo.TimerAckLevel.Seconds)
 	resp.ShardInfo.TimerAckLevel = shardInfo.TimerAckLevel
 	resp.ShardInfo.UpdatedAt = shardInfo.UpdatedAt
 	resp.ShardInfo.ClusterTimerAckLevel = shardInfo.ClusterTimerAckLevel
@@ -5193,7 +5199,7 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 	currentClusterTimerAck = timestampConvertor(time.Now().Add(-100 * time.Second))
 	alternativeClusterTimerAck = timestampConvertor(time.Now().Add(-200 * time.Second))
 	domainNotificationVersion = int64(16384)
-	shardInfo = &p.ShardInfo{
+	shardInfo = &pblobs.ShardInfo{
 		ShardID:             shardID,
 		Owner:               "some random owner",
 		RangeID:             int64(28),
@@ -5206,7 +5212,7 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 			cluster.TestCurrentClusterName:     currentClusterTransferAck,
 			cluster.TestAlternativeClusterName: alternativeClusterTransferAck,
 		},
-		ClusterTimerAckLevel: map[string]time.Time{
+		ClusterTimerAckLevel: map[string]*types.Timestamp{
 			cluster.TestCurrentClusterName:     currentClusterTimerAck,
 			cluster.TestAlternativeClusterName: alternativeClusterTimerAck,
 		},
@@ -5224,7 +5230,8 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 	s.True(timeComparator(shardInfo.UpdatedAt, resp.ShardInfo.UpdatedAt, TimePrecision))
 	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], TimePrecision))
 	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], TimePrecision))
-	s.Equal(shardInfo.TimerAckLevel.UnixNano(), resp.ShardInfo.TimerAckLevel.UnixNano())
+	s.Equal(shardInfo.TimerAckLevel.Nanos, resp.ShardInfo.TimerAckLevel.Nanos)
+	s.Equal(shardInfo.TimerAckLevel.Seconds, resp.ShardInfo.TimerAckLevel.Seconds)
 	resp.ShardInfo.UpdatedAt = shardInfo.UpdatedAt
 	resp.ShardInfo.TimerAckLevel = shardInfo.TimerAckLevel
 	resp.ShardInfo.ClusterTimerAckLevel = shardInfo.ClusterTimerAckLevel
@@ -5272,14 +5279,23 @@ func copyExecutionStats(sourceStats *p.ExecutionStats) *p.ExecutionStats {
 // Note: cassandra only provide millisecond precision timestamp
 // ref: https://docs.datastax.com/en/cql/3.3/cql/cql_reference/timestamp_type_r.html
 // so to use equal function, we need to do conversion, getting rid of sub milliseconds
-func timestampConvertor(t time.Time) time.Time {
-	return time.Unix(
+func timestampConvertor(t time.Time) *types.Timestamp {
+	r, _ := types.TimestampProto(time.Unix(
 		0,
 		p.DBTimestampToUnixNano(p.UnixNanoToDBTimestamp(t.UnixNano())),
-	).UTC()
+	).UTC())
+
+	return r
 }
 
-func timeComparator(t1, t2 time.Time, timeTolerance time.Duration) bool {
+func timeComparator(r1, r2 *types.Timestamp, timeTolerance time.Duration) bool {
+	t1, _ := types.TimestampFromProto(r1)
+	t2, _ := types.TimestampFromProto(r2)
+
+	return timeComparatorGo(t1, t2, timeTolerance)
+}
+
+func timeComparatorGo(t1, t2 time.Time, timeTolerance time.Duration) bool {
 	diff := t2.Sub(t1)
 	if diff.Nanoseconds() <= timeTolerance.Nanoseconds() {
 		return true

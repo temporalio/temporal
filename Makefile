@@ -112,7 +112,7 @@ PROTO_ROOT := proto
 # Note: using "shell find" instead of "wildcard" because "wildcard" caches directory structure.
 PROTO_DIRS = $(sort $(dir $(shell find $(PROTO_ROOT) -name "*.proto" | grep -v temporal-proto)))
 PROTO_SERVICES = $(shell find $(PROTO_ROOT) -name "*service.proto" | grep -v temporal-proto)
-PROTO_IMPORT := $(PROTO_ROOT):$(PROTO_ROOT)/temporal-proto
+PROTO_IMPORT := $(PROTO_ROOT):$(PROTO_ROOT)/temporal-proto:$(GOPATH)/src/github.com/gogo/protobuf/protobuf
 PROTO_GEN := .gen/proto
 
 $(PROTO_GEN):
@@ -129,7 +129,7 @@ install-proto-submodule:
 
 protoc: $(PROTO_GEN)
 #   run protoc separately for each directory because of different package names
-	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_IMPORT) --gogoslick_out=plugins=grpc,paths=source_relative:$(PROTO_GEN) $(PROTO_DIR)*.proto;)
+	$(foreach PROTO_DIR,$(PROTO_DIRS),protoc --proto_path=$(PROTO_IMPORT) --gogoslick_out=Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,plugins=grpc,paths=source_relative:$(PROTO_GEN) $(PROTO_DIR)*.proto;)
 
 # All GRPC generated service files pathes relative to PROTO_ROOT
 PROTO_GRPC_SERVICES = $(patsubst $(PROTO_GEN)/%,%,$(shell find $(PROTO_GEN) -name "service.pb.go"))
