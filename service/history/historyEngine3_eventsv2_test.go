@@ -25,6 +25,8 @@ import (
 	"testing"
 	"time"
 
+	pblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
@@ -93,11 +95,11 @@ func (s *engine3Suite) SetupTest() {
 
 	s.mockShard = newTestShardContext(
 		s.controller,
-		&p.ShardInfo{
+		&p.ShardInfoWithFailover{ShardInfo: &pblobs.ShardInfo{
 			ShardID:          0,
 			RangeID:          1,
 			TransferAckLevel: 0,
-		},
+		}},
 		s.config,
 	)
 

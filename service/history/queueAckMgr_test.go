@@ -24,6 +24,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/types"
+
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+
 	gomock "github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
@@ -91,13 +95,14 @@ func (s *queueAckMgrSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockShard = newTestShardContext(
 		s.controller,
-		&p.ShardInfo{
-			ShardID: 0,
-			RangeID: 1,
-			ClusterTimerAckLevel: map[string]time.Time{
-				cluster.TestCurrentClusterName:     time.Now().Add(-8 * time.Second),
-				cluster.TestAlternativeClusterName: time.Now().Add(-10 * time.Second),
-			},
+		&p.ShardInfoWithFailover{
+			ShardInfo: &persistenceblobs.ShardInfo{
+				ShardID: 0,
+				RangeID: 1,
+				ClusterTimerAckLevel: map[string]*types.Timestamp{
+					cluster.TestCurrentClusterName:     gogoProtoTimestampNowAddDuration(-8),
+					cluster.TestAlternativeClusterName: gogoProtoTimestampNowAddDuration(-10),
+				}},
 		},
 		config,
 	)
@@ -279,13 +284,14 @@ func (s *queueFailoverAckMgrSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockShard = newTestShardContext(
 		s.controller,
-		&p.ShardInfo{
-			ShardID: 0,
-			RangeID: 1,
-			ClusterTimerAckLevel: map[string]time.Time{
-				cluster.TestCurrentClusterName:     time.Now(),
-				cluster.TestAlternativeClusterName: time.Now().Add(-10 * time.Second),
-			},
+		&p.ShardInfoWithFailover{
+			ShardInfo: &persistenceblobs.ShardInfo{
+				ShardID: 0,
+				RangeID: 1,
+				ClusterTimerAckLevel: map[string]*types.Timestamp{
+					cluster.TestCurrentClusterName:     types.TimestampNow(),
+					cluster.TestAlternativeClusterName: gogoProtoTimestampNowAddDuration(-10),
+				}},
 		},
 		config,
 	)

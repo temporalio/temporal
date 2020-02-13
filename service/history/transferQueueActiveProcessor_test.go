@@ -24,6 +24,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+
 	"github.com/gogo/status"
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -141,11 +143,12 @@ func (s *transferQueueActiveProcessorSuite) SetupTest() {
 
 	s.mockShard = newTestShardContext(
 		s.controller,
-		&persistence.ShardInfo{
-			ShardID:          0,
-			RangeID:          1,
-			TransferAckLevel: 0,
-		},
+		&persistence.ShardInfoWithFailover{
+			ShardInfo: &persistenceblobs.ShardInfo{
+				ShardID:          0,
+				RangeID:          1,
+				TransferAckLevel: 0,
+			}},
 		NewDynamicConfigForTest(),
 	)
 	s.mockShard.eventsCache = newEventsCache(s.mockShard)
