@@ -29,6 +29,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/common/primitives"
+
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.uber.org/yarpc/yarpcerrors"
@@ -452,10 +455,10 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 		taskAttributes := replicationTask.GetSyncActivityTaskAttributes()
 		return &persistence.PutReplicationTaskToDLQRequest{
 			SourceClusterName: p.sourceCluster,
-			TaskInfo: &persistence.ReplicationTaskInfo{
-				DomainID:    taskAttributes.GetDomainId(),
+			TaskInfo: &persistenceblobs.ReplicationTaskInfo{
+				DomainID:    primitives.MustParseUUID(taskAttributes.GetDomainId()),
 				WorkflowID:  taskAttributes.GetWorkflowId(),
-				RunID:       taskAttributes.GetRunId(),
+				RunID:       primitives.MustParseUUID(taskAttributes.GetRunId()),
 				TaskID:      replicationTask.GetSourceTaskId(),
 				TaskType:    persistence.ReplicationTaskTypeSyncActivity,
 				ScheduledID: taskAttributes.GetScheduledId(),
@@ -466,16 +469,16 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 		taskAttributes := replicationTask.GetHistoryTaskAttributes()
 		return &persistence.PutReplicationTaskToDLQRequest{
 			SourceClusterName: p.sourceCluster,
-			TaskInfo: &persistence.ReplicationTaskInfo{
-				DomainID:            taskAttributes.GetDomainId(),
+			TaskInfo: &persistenceblobs.ReplicationTaskInfo{
+				DomainID:            primitives.MustParseUUID(taskAttributes.GetDomainId()),
 				WorkflowID:          taskAttributes.GetWorkflowId(),
-				RunID:               taskAttributes.GetRunId(),
+				RunID:               primitives.MustParseUUID(taskAttributes.GetRunId()),
 				TaskID:              replicationTask.GetSourceTaskId(),
 				TaskType:            persistence.ReplicationTaskTypeHistory,
 				FirstEventID:        taskAttributes.GetFirstEventId(),
 				NextEventID:         taskAttributes.GetNextEventId(),
 				Version:             taskAttributes.GetVersion(),
-				LastReplicationInfo: toPersistenceReplicationInfo(taskAttributes.GetReplicationInfo()),
+				LastReplicationInfo: taskAttributes.GetReplicationInfo(),
 				ResetWorkflow:       taskAttributes.GetResetWorkflow(),
 			},
 		}, nil
@@ -495,10 +498,10 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 
 		return &persistence.PutReplicationTaskToDLQRequest{
 			SourceClusterName: p.sourceCluster,
-			TaskInfo: &persistence.ReplicationTaskInfo{
-				DomainID:     taskAttributes.GetDomainId(),
+			TaskInfo: &persistenceblobs.ReplicationTaskInfo{
+				DomainID:     primitives.MustParseUUID(taskAttributes.GetDomainId()),
 				WorkflowID:   taskAttributes.GetWorkflowId(),
-				RunID:        taskAttributes.GetRunId(),
+				RunID:        primitives.MustParseUUID(taskAttributes.GetRunId()),
 				TaskID:       replicationTask.GetSourceTaskId(),
 				TaskType:     persistence.ReplicationTaskTypeHistory,
 				FirstEventID: events[0].GetEventId(),

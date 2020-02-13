@@ -1062,8 +1062,8 @@ Loop:
 }
 
 // GetReplicationTasks is a utility method to get tasks from replication task queue
-func (s *TestBase) GetReplicationTasks(batchSize int, getAll bool) ([]*p.ReplicationTaskInfo, error) {
-	result := []*p.ReplicationTaskInfo{}
+func (s *TestBase) GetReplicationTasks(batchSize int, getAll bool) ([]*pblobs.ReplicationTaskInfo, error) {
+	result := []*pblobs.ReplicationTaskInfo{}
 	var token []byte
 
 Loop:

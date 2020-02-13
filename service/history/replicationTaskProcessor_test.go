@@ -376,20 +376,20 @@ func (s *replicationTaskProcessorSuite) TestProcessTaskOnce_HistoryV2Replication
 }
 
 func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_SyncActivityReplicationTask() {
-	domainID := uuid.New()
+	domainID := uuid.NewRandom()
 	workflowID := uuid.New()
-	runID := uuid.New()
+	runID := uuid.NewRandom()
 	task := &commonproto.ReplicationTask{
 		TaskType: enums.ReplicationTaskTypeSyncActivity,
 		Attributes: &commonproto.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: &commonproto.SyncActivityTaskAttributes{
-			DomainId:   domainID,
+			DomainId:   domainID.String(),
 			WorkflowId: workflowID,
-			RunId:      runID,
+			RunId:      runID.String(),
 		}},
 	}
 	request := &persistence.PutReplicationTaskToDLQRequest{
 		SourceClusterName: "standby",
-		TaskInfo: &persistence.ReplicationTaskInfo{
+		TaskInfo: &persistenceblobs.ReplicationTaskInfo{
 			DomainID:   domainID,
 			WorkflowID: workflowID,
 			RunID:      runID,
@@ -402,25 +402,24 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_SyncActivity
 }
 
 func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryReplicationTask() {
-	domainID := uuid.New()
+	domainID := uuid.NewRandom()
 	workflowID := uuid.New()
-	runID := uuid.New()
+	runID := uuid.NewRandom()
 	task := &commonproto.ReplicationTask{
 		TaskType: enums.ReplicationTaskTypeHistory,
 		Attributes: &commonproto.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: &commonproto.HistoryTaskAttributes{
-			DomainId:   domainID,
+			DomainId:   domainID.String(),
 			WorkflowId: workflowID,
-			RunId:      runID,
+			RunId:      runID.String(),
 		}},
 	}
 	request := &persistence.PutReplicationTaskToDLQRequest{
 		SourceClusterName: "standby",
-		TaskInfo: &persistence.ReplicationTaskInfo{
-			DomainID:            domainID,
-			WorkflowID:          workflowID,
-			RunID:               runID,
-			TaskType:            persistence.ReplicationTaskTypeHistory,
-			LastReplicationInfo: make(map[string]*persistence.ReplicationInfo),
+		TaskInfo: &persistenceblobs.ReplicationTaskInfo{
+			DomainID:   domainID,
+			WorkflowID: workflowID,
+			RunID:      runID,
+			TaskType:   persistence.ReplicationTaskTypeHistory,
 		},
 	}
 	s.executionManager.On("PutReplicationTaskToDLQ", request).Return(nil)
@@ -429,9 +428,9 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryRepli
 }
 
 func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryV2ReplicationTask() {
-	domainID := uuid.New()
+	domainID := uuid.NewRandom()
 	workflowID := uuid.New()
-	runID := uuid.New()
+	runID := uuid.NewRandom()
 	events := []*shared.HistoryEvent{
 		{
 			EventId: common.Int64Ptr(1),
@@ -444,9 +443,9 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryV2Rep
 	task := &commonproto.ReplicationTask{
 		TaskType: enums.ReplicationTaskTypeHistoryV2,
 		Attributes: &commonproto.ReplicationTask_HistoryTaskV2Attributes{HistoryTaskV2Attributes: &commonproto.HistoryTaskV2Attributes{
-			DomainId:   domainID,
+			DomainId:   domainID.String(),
 			WorkflowId: workflowID,
-			RunId:      runID,
+			RunId:      runID.String(),
 			Events: &commonproto.DataBlob{
 				EncodingType: enums.EncodingTypeThriftRW,
 				Data:         data.Data,
@@ -455,7 +454,7 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryV2Rep
 	}
 	request := &persistence.PutReplicationTaskToDLQRequest{
 		SourceClusterName: "standby",
-		TaskInfo: &persistence.ReplicationTaskInfo{
+		TaskInfo: &persistenceblobs.ReplicationTaskInfo{
 			DomainID:     domainID,
 			WorkflowID:   workflowID,
 			RunID:        runID,
