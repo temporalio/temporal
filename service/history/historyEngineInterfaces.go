@@ -28,6 +28,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/definition"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/task"
 )
 
 type (
@@ -74,6 +75,13 @@ type (
 		GetDomainID() string
 	}
 
+	queueTask interface {
+		task.PriorityTask
+		queueTaskInfo
+		GetQueueType() queueType
+		// TODO: add a method for getting task shardID
+	}
+
 	queueTaskExecutor interface {
 		execute(taskInfo *taskInfo) error
 	}
@@ -113,4 +121,12 @@ type (
 		WatchHistoryEvent(identifier definition.WorkflowIdentifier) (string, chan *historyEventNotification, error)
 		UnwatchHistoryEvent(identifier definition.WorkflowIdentifier, subscriberID string) error
 	}
+
+	queueType int
+)
+
+const (
+	transferQueueType queueType = iota + 1
+	timerQueueType
+	replicationQueueType
 )

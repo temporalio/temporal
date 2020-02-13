@@ -25,8 +25,6 @@ import (
 
 	"github.com/uber/cadence/common/cassandra"
 
-	"github.com/uber/cadence/common"
-
 	"github.com/gocql/gocql"
 
 	"github.com/uber/cadence/common/log"
@@ -94,7 +92,7 @@ func (f *Factory) NewVisibilityStore() (p.VisibilityStore, error) {
 }
 
 // NewQueue returns a new queue backed by cassandra
-func (f *Factory) NewQueue(queueType common.QueueType) (p.Queue, error) {
+func (f *Factory) NewQueue(queueType p.QueueType) (p.Queue, error) {
 	return newQueue(f.cfg, f.logger, queueType)
 }
 

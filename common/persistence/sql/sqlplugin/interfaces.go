@@ -24,7 +24,7 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/config"
 )
 
@@ -483,14 +483,14 @@ type (
 
 	// QueueRow represents a row in queue table
 	QueueRow struct {
-		QueueType      common.QueueType
+		QueueType      persistence.QueueType
 		MessageID      int
 		MessagePayload []byte
 	}
 
 	// QueueMetadataRow represents a row in queue_metadata table
 	QueueMetadataRow struct {
-		QueueType common.QueueType
+		QueueType persistence.QueueType
 		Data      []byte
 	}
 
@@ -691,15 +691,15 @@ type (
 		DeleteFromVisibility(filter *VisibilityFilter) (sql.Result, error)
 
 		InsertIntoQueue(row *QueueRow) (sql.Result, error)
-		GetLastEnqueuedMessageIDForUpdate(queueType common.QueueType) (int, error)
-		GetMessagesFromQueue(queueType common.QueueType, lastMessageID, maxRows int) ([]QueueRow, error)
-		GetMessagesBetween(queueType common.QueueType, firstMessageID int, lastMessageID int, maxRows int) ([]QueueRow, error)
-		DeleteMessagesBefore(queueType common.QueueType, messageID int) (sql.Result, error)
-		RangeDeleteMessages(queueType common.QueueType, exclusiveBeginMessageID int, inclusiveEndMessageID int) (sql.Result, error)
-		DeleteMessage(queueType common.QueueType, messageID int) (sql.Result, error)
-		InsertAckLevel(queueType common.QueueType, messageID int, clusterName string) error
-		UpdateAckLevels(queueType common.QueueType, clusterAckLevels map[string]int) error
-		GetAckLevels(queueType common.QueueType, forUpdate bool) (map[string]int, error)
+		GetLastEnqueuedMessageIDForUpdate(queueType persistence.QueueType) (int, error)
+		GetMessagesFromQueue(queueType persistence.QueueType, lastMessageID, maxRows int) ([]QueueRow, error)
+		GetMessagesBetween(queueType persistence.QueueType, firstMessageID int, lastMessageID int, maxRows int) ([]QueueRow, error)
+		DeleteMessagesBefore(queueType persistence.QueueType, messageID int) (sql.Result, error)
+		RangeDeleteMessages(queueType persistence.QueueType, exclusiveBeginMessageID int, inclusiveEndMessageID int) (sql.Result, error)
+		DeleteMessage(queueType persistence.QueueType, messageID int) (sql.Result, error)
+		InsertAckLevel(queueType persistence.QueueType, messageID int, clusterName string) error
+		UpdateAckLevels(queueType persistence.QueueType, clusterAckLevels map[string]int) error
+		GetAckLevels(queueType persistence.QueueType, forUpdate bool) (map[string]int, error)
 	}
 
 	// adminCRUD defines admin operations for CLI and test suites
