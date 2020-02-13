@@ -29,11 +29,17 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gogo/status"
+	"go.temporal.io/temporal-proto/workflowservice"
+	"google.golang.org/grpc/codes"
+
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
+	"github.com/temporalio/temporal/.gen/proto/matchingservice"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/membership"
 
 	"github.com/pborman/uuid"
 
-	h "github.com/temporalio/temporal/.gen/go/history"
 	m "github.com/temporalio/temporal/.gen/go/matching"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/client/history"
@@ -66,7 +72,7 @@ type (
 
 	matchingEngineImpl struct {
 		taskManager          persistence.TaskManager
-		historyService       history.Client
+		historyService       history.ClientGRPC
 		matchingClient       matching.Client
 		tokenSerializer      common.TaskTokenSerializer
 		logger               log.Logger
@@ -101,7 +107,7 @@ var _ Engine = (*matchingEngineImpl)(nil) // Asserts that interface is indeed im
 
 // NewEngine creates an instance of matching engine
 func NewEngine(taskManager persistence.TaskManager,
-	historyService history.Client,
+	historyService history.ClientGRPC,
 	matchingClient matching.Client,
 	config *Config,
 	logger log.Logger,
@@ -330,8 +336,8 @@ pollLoop:
 
 			// for query task, we don't need to update history to record decision task started. but we need to know
 			// the NextEventID so front end knows what are the history events to load for this decision task.
-			mutableStateResp, err := e.historyService.GetMutableState(ctx, &h.GetMutableStateRequest{
-				DomainUUID: req.DomainUUID,
+			mutableStateResp, err := e.historyService.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
+				DomainUUID: req.GetDomainUUID(),
 				Execution:  task.workflowExecution(),
 			})
 			if err != nil {
@@ -345,25 +351,34 @@ pollLoop:
 			if len(mutableStateResp.StickyTaskList.GetName()) != 0 && supportsSticky {
 				isStickyEnabled = true
 			}
-			resp := &h.RecordDecisionTaskStartedResponse{
+			resp := &historyservice.RecordDecisionTaskStartedResponse{
 				PreviousStartedEventId:    mutableStateResp.PreviousStartedEventId,
 				NextEventId:               mutableStateResp.NextEventId,
 				WorkflowType:              mutableStateResp.WorkflowType,
-				StickyExecutionEnabled:    common.BoolPtr(isStickyEnabled),
+				StickyExecutionEnabled:    isStickyEnabled,
 				WorkflowExecutionTaskList: mutableStateResp.TaskList,
 				BranchToken:               mutableStateResp.CurrentBranchToken,
+				StartedEventId:            common.EmptyEventID,
 			}
 			return e.createPollForDecisionTaskResponse(task, resp), nil
 		}
 
-		resp, err := e.recordDecisionTaskStarted(ctx, request, task)
+		resp, err := e.recordDecisionTaskStarted(ctx, adapter.ToProtoPollForDecisionTaskRequest(request), task)
 		if err != nil {
-			switch err.(type) {
-			case *workflow.EntityNotExistsError, *h.EventAlreadyStartedError:
-				e.logger.Debug("Duplicated decision task",
-					tag.Name(taskListName), tag.TaskID(task.event.TaskID))
+			//switch err.(type) {
+			//case *workflow.EntityNotExistsError, *h.EventAlreadyStartedError:
+			//	e.logger.Debug("Duplicated decision task",
+			//		tag.Name(taskListName), tag.TaskID(task.event.TaskID))
+			//	task.finish(nil)
+			//default:
+			//	task.finish(err)
+			//}
+
+			code := status.Code(err)
+			if code == codes.NotFound || code == codes.AlreadyExists {
+				e.logger.Debug("Duplicated decision task", tag.Name(taskListName), tag.TaskID(task.event.TaskID))
 				task.finish(nil)
-			default:
+			} else {
 				task.finish(err)
 			}
 
@@ -421,20 +436,28 @@ pollLoop:
 			return task.pollForActivityResponse(), nil
 		}
 
-		resp, err := e.recordActivityTaskStarted(ctx, request, task)
+		resp, err := e.recordActivityTaskStarted(ctx, adapter.ToProtoPollForActivityTaskRequest(request), task)
 		if err != nil {
-			switch err.(type) {
-			case *workflow.EntityNotExistsError, *h.EventAlreadyStartedError:
+			//switch err.(type) {
+			//case *workflow.EntityNotExistsError, *h.EventAlreadyStartedError:
+			//	e.logger.Debug("Duplicated activity task", tag.Name(taskListName), tag.TaskID(task.event.TaskID))
+			//	task.finish(nil)
+			//default:
+			//	task.finish(err)
+			//}
+
+			code := status.Code(err)
+			if code == codes.NotFound || code == codes.AlreadyExists {
 				e.logger.Debug("Duplicated activity task", tag.Name(taskListName), tag.TaskID(task.event.TaskID))
 				task.finish(nil)
-			default:
+			} else {
 				task.finish(err)
 			}
 
 			continue pollLoop
 		}
 		task.finish(nil)
-		return e.createPollForActivityTaskResponse(task, resp), nil
+		return adapter.ToThriftMatchingPollForActivityTaskResponse(e.createPollForActivityTaskResponse(task, resp)), nil
 	}
 }
 
@@ -664,7 +687,7 @@ func (e *matchingEngineImpl) unloadTaskList(id *taskListID) {
 // Populate the decision task response based on context and scheduled/started events.
 func (e *matchingEngineImpl) createPollForDecisionTaskResponse(
 	task *internalTask,
-	historyResponse *h.RecordDecisionTaskStartedResponse,
+	historyResponse *historyservice.RecordDecisionTaskStartedResponse,
 ) *m.PollForDecisionTaskResponse {
 
 	var token []byte
@@ -692,7 +715,11 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(
 		}
 	}
 
-	response := common.CreateMatchingPollForDecisionTaskResponse(historyResponse, task.workflowExecution(), token)
+	response := adapter.ToThriftMatchingPollForDecisionTaskResponse(
+		common.CreateMatchingPollForDecisionTaskResponse(
+			historyResponse,
+			task.workflowExecution(),
+			token))
 	if task.query != nil {
 		response.Query = task.query.request.QueryRequest.Query
 	}
@@ -703,34 +730,21 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(
 // Populate the activity task response based on context and scheduled/started events.
 func (e *matchingEngineImpl) createPollForActivityTaskResponse(
 	task *internalTask,
-	historyResponse *h.RecordActivityTaskStartedResponse,
-) *workflow.PollForActivityTaskResponse {
+	historyResponse *historyservice.RecordActivityTaskStartedResponse,
+) *matchingservice.PollForActivityTaskResponse {
 
 	scheduledEvent := historyResponse.ScheduledEvent
-	if scheduledEvent.ActivityTaskScheduledEventAttributes == nil {
+	if scheduledEvent.GetActivityTaskScheduledEventAttributes() == nil {
 		panic("GetActivityTaskScheduledEventAttributes is not set")
 	}
-	attributes := scheduledEvent.ActivityTaskScheduledEventAttributes
-	if attributes.ActivityId == nil {
+	attributes := scheduledEvent.GetActivityTaskScheduledEventAttributes()
+	if attributes.ActivityId == "" {
 		panic("ActivityTaskScheduledEventAttributes.ActivityID is not set")
 	}
 	if task.responseC == nil {
 		scope := e.metricsClient.Scope(metrics.MatchingPollForActivityTaskScope)
 		scope.Tagged(metrics.DomainTag(task.domainName)).RecordTimer(metrics.AsyncMatchLatency, time.Since(task.event.CreatedTime))
 	}
-
-	response := &workflow.PollForActivityTaskResponse{}
-	response.ActivityId = attributes.ActivityId
-	response.ActivityType = attributes.ActivityType
-	response.Header = attributes.Header
-	response.Input = attributes.Input
-	response.WorkflowExecution = task.workflowExecution()
-	response.ScheduledTimestampOfThisAttempt = historyResponse.ScheduledTimestampOfThisAttempt
-	response.ScheduledTimestamp = common.Int64Ptr(*scheduledEvent.Timestamp)
-	response.ScheduleToCloseTimeoutSeconds = common.Int32Ptr(*attributes.ScheduleToCloseTimeoutSeconds)
-	response.StartedTimestamp = historyResponse.StartedTimestamp
-	response.StartToCloseTimeoutSeconds = common.Int32Ptr(*attributes.StartToCloseTimeoutSeconds)
-	response.HeartbeatTimeoutSeconds = common.Int32Ptr(*attributes.HeartbeatTimeoutSeconds)
 
 	token := &common.TaskToken{
 		DomainID:        task.event.DomainID,
@@ -740,38 +754,58 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(
 		ScheduleAttempt: historyResponse.GetAttempt(),
 	}
 
-	response.TaskToken, _ = e.tokenSerializer.Serialize(token)
-	response.Attempt = common.Int32Ptr(int32(token.ScheduleAttempt))
-	response.HeartbeatDetails = historyResponse.HeartbeatDetails
-	response.WorkflowType = historyResponse.WorkflowType
-	response.WorkflowDomain = historyResponse.WorkflowDomain
-	return response
+	taskToken, _ := e.tokenSerializer.Serialize(token)
+
+	return &matchingservice.PollForActivityTaskResponse{
+		ActivityId:                      attributes.ActivityId,
+		ActivityType:                    attributes.ActivityType,
+		Header:                          attributes.Header,
+		Input:                           attributes.Input,
+		WorkflowExecution:               task.workflowExecution(),
+		ScheduledTimestampOfThisAttempt: historyResponse.ScheduledTimestampOfThisAttempt,
+		ScheduledTimestamp:              scheduledEvent.Timestamp,
+		ScheduleToCloseTimeoutSeconds:   attributes.ScheduleToCloseTimeoutSeconds,
+		StartedTimestamp:                historyResponse.StartedTimestamp,
+		StartToCloseTimeoutSeconds:      attributes.StartToCloseTimeoutSeconds,
+		HeartbeatTimeoutSeconds:         attributes.HeartbeatTimeoutSeconds,
+		TaskToken:                       taskToken,
+		Attempt:                         int32(token.ScheduleAttempt),
+		HeartbeatDetails:                historyResponse.HeartbeatDetails,
+		WorkflowType:                    historyResponse.WorkflowType,
+		WorkflowDomain:                  historyResponse.WorkflowDomain,
+	}
 }
 
 func (e *matchingEngineImpl) recordDecisionTaskStarted(
 	ctx context.Context,
-	pollReq *workflow.PollForDecisionTaskRequest,
+	pollReq *workflowservice.PollForDecisionTaskRequest,
 	task *internalTask,
-) (*h.RecordDecisionTaskStartedResponse, error) {
-	request := &h.RecordDecisionTaskStartedRequest{
-		DomainUUID:        &task.event.DomainID,
+) (*historyservice.RecordDecisionTaskStartedResponse, error) {
+	request := &historyservice.RecordDecisionTaskStartedRequest{
+		DomainUUID:        task.event.DomainID,
 		WorkflowExecution: task.workflowExecution(),
-		ScheduleId:        &task.event.ScheduleID,
-		TaskId:            &task.event.TaskID,
-		RequestId:         common.StringPtr(uuid.New()),
+		ScheduleId:        task.event.ScheduleID,
+		TaskId:            task.event.TaskID,
+		RequestId:         uuid.New(),
 		PollRequest:       pollReq,
 	}
-	var resp *h.RecordDecisionTaskStartedResponse
+	var resp *historyservice.RecordDecisionTaskStartedResponse
 	op := func() error {
 		var err error
 		resp, err = e.historyService.RecordDecisionTaskStarted(ctx, request)
 		return err
 	}
 	err := backoff.Retry(op, historyServiceOperationRetryPolicy, func(err error) bool {
-		switch err.(type) {
-		case *workflow.EntityNotExistsError, *h.EventAlreadyStartedError:
+		//switch err.(type) {
+		//case *workflow.EntityNotExistsError, *h.EventAlreadyStartedError:
+		//	return false
+		//}
+		//return true
+		code := status.Code(err)
+		if code == codes.NotFound || code == codes.AlreadyExists {
 			return false
 		}
+
 		return true
 	})
 	return resp, err
@@ -779,29 +813,36 @@ func (e *matchingEngineImpl) recordDecisionTaskStarted(
 
 func (e *matchingEngineImpl) recordActivityTaskStarted(
 	ctx context.Context,
-	pollReq *workflow.PollForActivityTaskRequest,
+	pollReq *workflowservice.PollForActivityTaskRequest,
 	task *internalTask,
-) (*h.RecordActivityTaskStartedResponse, error) {
-	request := &h.RecordActivityTaskStartedRequest{
-		DomainUUID:        &task.event.DomainID,
+) (*historyservice.RecordActivityTaskStartedResponse, error) {
+	request := &historyservice.RecordActivityTaskStartedRequest{
+		DomainUUID:        task.event.DomainID,
 		WorkflowExecution: task.workflowExecution(),
-		ScheduleId:        &task.event.ScheduleID,
-		TaskId:            &task.event.TaskID,
-		RequestId:         common.StringPtr(uuid.New()),
+		ScheduleId:        task.event.ScheduleID,
+		TaskId:            task.event.TaskID,
+		RequestId:         uuid.New(),
 		PollRequest:       pollReq,
 	}
-	var resp *h.RecordActivityTaskStartedResponse
+	var resp *historyservice.RecordActivityTaskStartedResponse
 	op := func() error {
 		var err error
 		resp, err = e.historyService.RecordActivityTaskStarted(ctx, request)
 		return err
 	}
 	err := backoff.Retry(op, historyServiceOperationRetryPolicy, func(err error) bool {
-		switch err.(type) {
-		case *workflow.EntityNotExistsError, *h.EventAlreadyStartedError:
+		//switch err.(type) {
+		//case *workflow.EntityNotExistsError, *h.EventAlreadyStartedError:
+		//	return false
+		//}
+		//return true
+		code := status.Code(err)
+		if code == codes.NotFound || code == codes.AlreadyExists {
 			return false
 		}
+
 		return true
+
 	})
 	return resp, err
 }

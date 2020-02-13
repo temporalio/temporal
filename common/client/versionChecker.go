@@ -149,16 +149,45 @@ func GetHeadersValue(ctx context.Context, headerNames ...string) []string {
 		if call != nil {
 			headerValues = append(headerValues, call.Header(headerName))
 		} else {
-			values := md.Get(headerName)
-			if len(values) > 0 {
-				headerValues = append(headerValues, values[0])
-			} else {
-				headerValues = append(headerValues, "")
-			}
+			headerValues = append(headerValues, getSingleHeaderValue(md, headerName))
 		}
 	}
 
 	return headerValues
+}
+
+func getSingleHeaderValue(md metadata.MD, headerName string) string {
+	values := md.Get(headerName)
+	if len(values) > 0 {
+		return values[0]
+	} else {
+		return ""
+	}
+}
+
+func PropagateHeaders(ctx context.Context) context.Context {
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		outgoingMetadata := copyIncomingHeadersToOutgoing(md,
+			common.LibraryVersionHeaderName,
+			common.FeatureVersionHeaderName,
+			common.ClientImplHeaderName)
+		if outgoingMetadata.Len() > 0 {
+			ctx = metadata.NewOutgoingContext(ctx, outgoingMetadata)
+		}
+	}
+
+	return ctx
+}
+
+func copyIncomingHeadersToOutgoing(source metadata.MD, headerNames ...string) metadata.MD {
+	outgoingMetadata := metadata.New(map[string]string{})
+	for _, headerName := range headerNames {
+		if values := source.Get(headerName); len(values) > 0 {
+			outgoingMetadata.Append(headerName, values...)
+		}
+	}
+
+	return outgoingMetadata
 }
 
 // SupportsStickyQuery returns error if sticky query is not supported otherwise nil.

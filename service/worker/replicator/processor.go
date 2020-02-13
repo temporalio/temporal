@@ -104,7 +104,7 @@ func newReplicationTaskProcessor(
 ) *replicationTaskProcessor {
 
 	retryableHistoryClient := history.NewRetryableClientGRPC(historyClient, common.CreateHistoryServiceRetryPolicy(),
-		common.IsWhitelistServiceTransientError)
+		common.IsWhitelistServiceTransientErrorGRPC)
 
 	return &replicationTaskProcessor{
 		currentCluster:          currentCluster,

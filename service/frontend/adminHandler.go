@@ -313,7 +313,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 		return nil, &shared.BadRequestError{Message: "Invalid PageSize."}
 	}
 
-	var token *getHistoryContinuationTokenGRPC
+	var token *getHistoryContinuationToken
 	// initialize or validate the token
 	// token will be used as a source of truth
 	if request.NextPageToken != nil {
@@ -359,7 +359,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 		if nextEventID > response.GetNextEventId() {
 			nextEventID = response.GetNextEventId()
 		}
-		token = &getHistoryContinuationTokenGRPC{
+		token = &getHistoryContinuationToken{
 			RunID:            execution.GetRunId(),
 			BranchToken:      response.CurrentBranchToken,
 			FirstEventID:     firstEventID,
@@ -1020,13 +1020,13 @@ func (adh *AdminHandler) deserializeRawHistoryToken(bytes []byte) (*getWorkflowR
 	return token, err
 }
 
-func (adh *AdminHandler) deserializeHistoryToken(bytes []byte) (*getHistoryContinuationTokenGRPC, error) {
-	token := &getHistoryContinuationTokenGRPC{}
+func (adh *AdminHandler) deserializeHistoryToken(bytes []byte) (*getHistoryContinuationToken, error) {
+	token := &getHistoryContinuationToken{}
 	err := json.Unmarshal(bytes, token)
 	return token, err
 }
 
-func (adh *AdminHandler) serializeHistoryToken(token *getHistoryContinuationTokenGRPC) ([]byte, error) {
+func (adh *AdminHandler) serializeHistoryToken(token *getHistoryContinuationToken) ([]byte, error) {
 	if token == nil {
 		return nil, nil
 	}

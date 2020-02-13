@@ -232,8 +232,7 @@ func (s *Service) Start() {
 	s.server = grpc.NewServer()
 
 	wfHandler := NewWorkflowHandler(s, s.config, replicationMessageSink)
-	wfHandlerGRPC := NewWorkflowHandlerGRPC(s, wfHandler, s.config, replicationMessageSink)
-	dcRedirectionHandler := NewDCRedirectionHandler(wfHandlerGRPC, s.params.DCRedirectionPolicy)
+	dcRedirectionHandler := NewDCRedirectionHandler(wfHandler, s.params.DCRedirectionPolicy)
 	accessControlledWorkflowHandler := NewAccessControlledHandlerImpl(dcRedirectionHandler, s.params.Authorizer)
 	workflowNilCheckHandler := NewWorkflowNilCheckHandler(accessControlledWorkflowHandler)
 

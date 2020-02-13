@@ -156,12 +156,12 @@ func (r *Replicator) createKafkaProcessors(currentClusterName string, clusterNam
 	adminClient := admin.NewRetryableClient(
 		r.clientBean.GetRemoteAdminClient(clusterName),
 		common.CreateAdminServiceRetryPolicy(),
-		common.IsWhitelistServiceTransientError,
+		common.IsWhitelistServiceTransientErrorGRPC,
 	)
 	historyClient := history.NewRetryableClientGRPC(
 		r.historyClient,
 		common.CreateHistoryServiceRetryPolicy(),
-		common.IsWhitelistServiceTransientError,
+		common.IsWhitelistServiceTransientErrorGRPC,
 	)
 	logger := r.logger.WithTags(tag.ComponentReplicationTaskProcessor, tag.SourceCluster(clusterName), tag.KafkaConsumerName(consumerName))
 	historyRereplicator := xdc.NewHistoryRereplicator(

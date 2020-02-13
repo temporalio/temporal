@@ -24,9 +24,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/temporal-proto/workflowservice"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
@@ -44,91 +43,91 @@ func (s *queryValidatorSuite) TestValidateListRequestForQuery() {
 	validSearchAttr := dynamicconfig.GetMapPropertyFn(definition.GetDefaultIndexedKeys())
 	qv := NewQueryValidator(validSearchAttr)
 
-	listRequest := &shared.ListWorkflowExecutionsRequest{}
+	listRequest := &workflowservice.ListWorkflowExecutionsRequest{}
 	s.Nil(qv.ValidateListRequestForQuery(listRequest))
 	s.Equal("", listRequest.GetQuery())
 
 	query := "WorkflowID = 'wid'"
-	listRequest.Query = common.StringPtr(query)
+	listRequest.Query = query
 	s.Nil(qv.ValidateListRequestForQuery(listRequest))
 	s.Equal(query, listRequest.GetQuery())
 
 	query = "CustomStringField = 'custom'"
-	listRequest.Query = common.StringPtr(query)
+	listRequest.Query = query
 	s.Nil(qv.ValidateListRequestForQuery(listRequest))
 	s.Equal("`Attr.CustomStringField` = 'custom'", listRequest.GetQuery())
 
 	query = "WorkflowID = 'wid' and ((CustomStringField = 'custom') or CustomIntField between 1 and 10)"
-	listRequest.Query = common.StringPtr(query)
+	listRequest.Query = query
 	s.Nil(qv.ValidateListRequestForQuery(listRequest))
 	s.Equal("WorkflowID = 'wid' and ((`Attr.CustomStringField` = 'custom') or `Attr.CustomIntField` between 1 and 10)", listRequest.GetQuery())
 
 	query = "Invalid SQL"
-	listRequest.Query = common.StringPtr(query)
+	listRequest.Query = query
 	s.Equal("BadRequestError{Message: Invalid query.}", qv.ValidateListRequestForQuery(listRequest).Error())
 
 	query = "InvalidWhereExpr"
-	listRequest.Query = common.StringPtr(query)
+	listRequest.Query = query
 	s.Equal("BadRequestError{Message: invalid where clause}", qv.ValidateListRequestForQuery(listRequest).Error())
 
 	// Invalid comparison
 	query = "WorkflowID = 'wid' and 1 < 2"
-	listRequest.Query = common.StringPtr(query)
+	listRequest.Query = query
 	s.Equal("BadRequestError{Message: invalid comparison expression}", qv.ValidateListRequestForQuery(listRequest).Error())
 
 	// Invalid range
 	query = "1 between 1 and 2 or WorkflowID = 'wid'"
-	listRequest.Query = common.StringPtr(query)
+	listRequest.Query = query
 	s.Equal("BadRequestError{Message: invalid range expression}", qv.ValidateListRequestForQuery(listRequest).Error())
 
 	// Invalid search attribute in comparison
 	query = "Invalid = 'a' and 1 < 2"
-	listRequest.Query = common.StringPtr(query)
+	listRequest.Query = query
 	s.Equal("BadRequestError{Message: invalid search attribute}", qv.ValidateListRequestForQuery(listRequest).Error())
 
 	// Invalid search attribute in range
 	query = "Invalid between 1 and 2 or WorkflowID = 'wid'"
-	listRequest.Query = common.StringPtr(query)
+	listRequest.Query = query
 	s.Equal("BadRequestError{Message: invalid search attribute}", qv.ValidateListRequestForQuery(listRequest).Error())
 
 	// only order by
 	query = "order by CloseTime desc"
-	listRequest.Query = common.StringPtr(query)
+	listRequest.Query = query
 	s.Nil(qv.ValidateListRequestForQuery(listRequest))
 	s.Equal(" "+query, listRequest.GetQuery())
 
 	// only order by search attribute
 	query = "order by CustomIntField desc"
-	listRequest.Query = common.StringPtr(query)
+	listRequest.Query = query
 	s.Nil(qv.ValidateListRequestForQuery(listRequest))
 	s.Equal(" order by `Attr.CustomIntField` desc", listRequest.GetQuery())
 
 	// condition + order by
 	query = "WorkflowID = 'wid' order by CloseTime desc"
-	listRequest.Query = common.StringPtr(query)
+	listRequest.Query = query
 	s.Nil(qv.ValidateListRequestForQuery(listRequest))
 	s.Equal(query, listRequest.GetQuery())
 
 	// invalid order by attribute
 	query = "order by InvalidField desc"
-	listRequest.Query = common.StringPtr(query)
+	listRequest.Query = query
 	s.Equal("BadRequestError{Message: invalid order by attribute}", qv.ValidateListRequestForQuery(listRequest).Error())
 
 	// invalid order by attribute expr
 	query = "order by 123"
-	listRequest.Query = common.StringPtr(query)
+	listRequest.Query = query
 	s.Equal("BadRequestError{Message: invalid order by expression}", qv.ValidateListRequestForQuery(listRequest).Error())
 
 	// security SQL injection
 	query = "WorkflowID = 'wid'; SELECT * FROM important_table;"
-	listRequest.Query = common.StringPtr(query)
+	listRequest.Query = query
 	s.Equal("BadRequestError{Message: Invalid query.}", qv.ValidateListRequestForQuery(listRequest).Error())
 
 	query = "WorkflowID = 'wid' and (RunID = 'rid' or 1 = 1)"
-	listRequest.Query = common.StringPtr(query)
+	listRequest.Query = query
 	s.NotNil(qv.ValidateListRequestForQuery(listRequest))
 
 	query = "WorkflowID = 'wid' union select * from dummy"
-	listRequest.Query = common.StringPtr(query)
+	listRequest.Query = query
 	s.NotNil(qv.ValidateListRequestForQuery(listRequest))
 }

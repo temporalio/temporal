@@ -26,6 +26,7 @@ import (
 	"strings"
 
 	"github.com/xwb1989/sqlparser"
+	"go.temporal.io/temporal-proto/workflowservice"
 
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
@@ -47,25 +48,35 @@ func NewQueryValidator(validSearchAttributes dynamicconfig.MapPropertyFn) *Visib
 
 // ValidateListRequestForQuery validate that search attributes in listRequest query is legal,
 // and add prefix for custom keys
-func (qv *VisibilityQueryValidator) ValidateListRequestForQuery(listRequest *workflow.ListWorkflowExecutionsRequest) error {
+func (qv *VisibilityQueryValidator) ValidateListRequestForQuery(listRequest *workflowservice.ListWorkflowExecutionsRequest) error {
 	whereClause := listRequest.GetQuery()
 	newQuery, err := qv.validateListOrCountRequestForQuery(whereClause)
 	if err != nil {
 		return err
 	}
-	listRequest.Query = common.StringPtr(newQuery)
+	listRequest.Query = newQuery
+	return nil
+}
+
+func (qv *VisibilityQueryValidator) ValidateScanRequestForQuery(listRequest *workflowservice.ScanWorkflowExecutionsRequest) error {
+	whereClause := listRequest.GetQuery()
+	newQuery, err := qv.validateListOrCountRequestForQuery(whereClause)
+	if err != nil {
+		return err
+	}
+	listRequest.Query = newQuery
 	return nil
 }
 
 // ValidateCountRequestForQuery validate that search attributes in countRequest query is legal,
 // and add prefix for custom keys
-func (qv *VisibilityQueryValidator) ValidateCountRequestForQuery(countRequest *workflow.CountWorkflowExecutionsRequest) error {
+func (qv *VisibilityQueryValidator) ValidateCountRequestForQuery(countRequest *workflowservice.CountWorkflowExecutionsRequest) error {
 	whereClause := countRequest.GetQuery()
 	newQuery, err := qv.validateListOrCountRequestForQuery(whereClause)
 	if err != nil {
 		return err
 	}
-	countRequest.Query = common.StringPtr(newQuery)
+	countRequest.Query = newQuery
 	return nil
 }
 

@@ -50,20 +50,20 @@ type (
 
 // NewDCRedirectionHandler creates a thrift handler for the cadence service, frontend
 func NewDCRedirectionHandler(
-	wfHandler *WorkflowHandlerGRPC,
+	wfHandler *WorkflowHandler,
 	policy config.DCRedirectionPolicy,
 ) *DCRedirectionHandlerImpl {
 	dcRedirectionPolicy := RedirectionPolicyGenerator(
-		wfHandler.workflowHandlerThrift.GetClusterMetadata(),
-		wfHandler.workflowHandlerThrift.config,
-		wfHandler.workflowHandlerThrift.GetDomainCache(),
+		wfHandler.GetClusterMetadata(),
+		wfHandler.config,
+		wfHandler.GetDomainCache(),
 		policy,
 	)
 
 	return &DCRedirectionHandlerImpl{
-		Resource:           wfHandler.workflowHandlerThrift.Resource,
-		currentClusterName: wfHandler.workflowHandlerThrift.GetClusterMetadata().GetCurrentClusterName(),
-		config:             wfHandler.workflowHandlerThrift.config,
+		Resource:           wfHandler.Resource,
+		currentClusterName: wfHandler.GetClusterMetadata().GetCurrentClusterName(),
+		config:             wfHandler.config,
 		redirectionPolicy:  dcRedirectionPolicy,
 		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
 		frontendHandler:    wfHandler,

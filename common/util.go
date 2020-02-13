@@ -33,13 +33,15 @@ import (
 	"github.com/gogo/status"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/yarpc/yarpcerrors"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/codes"
 
 	h "github.com/temporalio/temporal/.gen/go/history"
-	m "github.com/temporalio/temporal/.gen/go/matching"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
+	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -98,11 +100,6 @@ var (
 	ErrContextTimeoutTooShort = &workflow.BadRequestError{Message: "Context timeout is too short."}
 	// ErrContextTimeoutNotSet is error for not setting a context timeout when calling a long poll API
 	ErrContextTimeoutNotSet = &workflow.BadRequestError{Message: "Context timeout is not set."}
-
-	// StContextTimeoutTooShort is error for setting a very short context timeout when calling a long poll API
-	StContextTimeoutTooShort = status.New(codes.InvalidArgument, "Context timeout is too short.")
-	// StContextTimeoutNotSet is error for not setting a context timeout when calling a long poll API
-	StContextTimeoutNotSet = status.New(codes.InvalidArgument, "Context timeout is not set.")
 )
 
 // AwaitWaitGroup calls Wait on the given wait
@@ -355,25 +352,25 @@ func GenerateRandomString(n int) string {
 }
 
 // CreateMatchingPollForDecisionTaskResponse create response for matching's PollForDecisionTask
-func CreateMatchingPollForDecisionTaskResponse(historyResponse *h.RecordDecisionTaskStartedResponse, workflowExecution *workflow.WorkflowExecution, token []byte) *m.PollForDecisionTaskResponse {
-	matchingResp := &m.PollForDecisionTaskResponse{
-		WorkflowExecution:         workflowExecution,
+func CreateMatchingPollForDecisionTaskResponse(historyResponse *historyservice.RecordDecisionTaskStartedResponse, workflowExecution *commonproto.WorkflowExecution, token []byte) *matchingservice.PollForDecisionTaskResponse {
+	matchingResp := &matchingservice.PollForDecisionTaskResponse{
 		TaskToken:                 token,
-		Attempt:                   Int64Ptr(historyResponse.GetAttempt()),
+		WorkflowExecution:         workflowExecution,
 		WorkflowType:              historyResponse.WorkflowType,
+		PreviousStartedEventId:    historyResponse.PreviousStartedEventId,
 		StartedEventId:            historyResponse.StartedEventId,
-		StickyExecutionEnabled:    historyResponse.StickyExecutionEnabled,
+		Attempt:                   historyResponse.GetAttempt(),
 		NextEventId:               historyResponse.NextEventId,
+		StickyExecutionEnabled:    historyResponse.StickyExecutionEnabled,
 		DecisionInfo:              historyResponse.DecisionInfo,
 		WorkflowExecutionTaskList: historyResponse.WorkflowExecutionTaskList,
+		EventStoreVersion:         historyResponse.EventStoreVersion,
 		BranchToken:               historyResponse.BranchToken,
 		ScheduledTimestamp:        historyResponse.ScheduledTimestamp,
 		StartedTimestamp:          historyResponse.StartedTimestamp,
 		Queries:                   historyResponse.Queries,
 	}
-	if historyResponse.GetPreviousStartedEventId() != EmptyEventID {
-		matchingResp.PreviousStartedEventId = historyResponse.PreviousStartedEventId
-	}
+
 	return matchingResp
 }
 
@@ -426,7 +423,7 @@ func SortInt64Slice(slice []int64) {
 }
 
 // ValidateRetryPolicy validates a retry policy
-func ValidateRetryPolicy(policy *workflow.RetryPolicy) error {
+func ValidateRetryPolicy(policy *commonproto.RetryPolicy) error {
 	if policy == nil {
 		// nil policy is valid which means no retry
 		return nil
@@ -458,19 +455,19 @@ func ValidateRetryPolicy(policy *workflow.RetryPolicy) error {
 // CreateHistoryStartWorkflowRequest create a start workflow request for history
 func CreateHistoryStartWorkflowRequest(
 	domainID string,
-	startRequest *workflow.StartWorkflowExecutionRequest,
-) *h.StartWorkflowExecutionRequest {
+	startRequest *workflowservice.StartWorkflowExecutionRequest,
+) *historyservice.StartWorkflowExecutionRequest {
 	now := time.Now()
-	histRequest := &h.StartWorkflowExecutionRequest{
-		DomainUUID:   StringPtr(domainID),
+	histRequest := &historyservice.StartWorkflowExecutionRequest{
+		DomainUUID:   domainID,
 		StartRequest: startRequest,
 	}
 	if startRequest.RetryPolicy != nil && startRequest.RetryPolicy.GetExpirationIntervalInSeconds() > 0 {
 		expirationInSeconds := startRequest.RetryPolicy.GetExpirationIntervalInSeconds()
 		deadline := now.Add(time.Second * time.Duration(expirationInSeconds))
-		histRequest.ExpirationTimestamp = Int64Ptr(deadline.Round(time.Millisecond).UnixNano())
+		histRequest.ExpirationTimestamp = deadline.Round(time.Millisecond).UnixNano()
 	}
-	histRequest.FirstDecisionTaskBackoffSeconds = Int32Ptr(backoff.GetBackoffForNextScheduleInSeconds(startRequest.GetCronSchedule(), now, now))
+	histRequest.FirstDecisionTaskBackoffSeconds = backoff.GetBackoffForNextScheduleInSeconds(startRequest.GetCronSchedule(), now, now)
 	return histRequest
 }
 
@@ -581,8 +578,8 @@ func ConvertIndexedValueTypeToProtoType(fieldType interface{}, logger log.Logger
 		return enums.IndexedValueType(fieldType.(float64))
 	case int:
 		return enums.IndexedValueType(fieldType.(int))
-	case enums.IndexedValueType:
-		return fieldType.(enums.IndexedValueType)
+	case workflow.IndexedValueType:
+		return enums.IndexedValueType(fieldType.(workflow.IndexedValueType))
 	default:
 		// Unknown fieldType, please make sure dynamic config return correct value type
 		logger.Error("unknown index value type", tag.Value(fieldType), tag.ValueType(t))
