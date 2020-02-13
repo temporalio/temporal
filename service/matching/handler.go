@@ -70,7 +70,7 @@ func NewHandler(
 		}),
 		engine: NewEngine(
 			resource.GetTaskManager(),
-			resource.GetHistoryClient(),
+			resource.GetHistoryClientGRPC(),
 			resource.GetMatchingRawClient(), // Use non retry client inside matching
 			config,
 			resource.GetLogger(),

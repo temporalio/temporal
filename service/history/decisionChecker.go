@@ -28,6 +28,7 @@ import (
 
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/elasticsearch/validator"
@@ -213,7 +214,7 @@ func (v *decisionAttrValidator) validateActivityScheduleAttributes(
 		return &workflow.BadRequestError{Message: "ActivityType is not set on decision."}
 	}
 
-	if err := common.ValidateRetryPolicy(attributes.RetryPolicy); err != nil {
+	if err := common.ValidateRetryPolicy(adapter.ToProtoRetryPolicy(attributes.RetryPolicy)); err != nil {
 		return err
 	}
 
@@ -480,7 +481,7 @@ func (v *decisionAttrValidator) validateUpsertWorkflowSearchAttributes(
 		return &workflow.BadRequestError{Message: "IndexedFields is empty on decision."}
 	}
 
-	return v.searchAttributesValidator.ValidateSearchAttributes(attributes.GetSearchAttributes(), domainName)
+	return v.searchAttributesValidator.ValidateSearchAttributes(adapter.ToProtoSearchAttributes(attributes.GetSearchAttributes()), domainName)
 }
 
 func (v *decisionAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
@@ -527,7 +528,7 @@ func (v *decisionAttrValidator) validateContinueAsNewWorkflowExecutionAttributes
 	if err != nil {
 		return err
 	}
-	return v.searchAttributesValidator.ValidateSearchAttributes(attributes.GetSearchAttributes(), domainEntry.GetInfo().Name)
+	return v.searchAttributesValidator.ValidateSearchAttributes(adapter.ToProtoSearchAttributes(attributes.GetSearchAttributes()), domainEntry.GetInfo().Name)
 }
 
 func (v *decisionAttrValidator) validateStartChildExecutionAttributes(
@@ -568,7 +569,7 @@ func (v *decisionAttrValidator) validateStartChildExecutionAttributes(
 		return &workflow.BadRequestError{Message: "WorkflowType exceeds length limit."}
 	}
 
-	if err := common.ValidateRetryPolicy(attributes.RetryPolicy); err != nil {
+	if err := common.ValidateRetryPolicy(adapter.ToProtoRetryPolicy(attributes.RetryPolicy)); err != nil {
 		return err
 	}
 

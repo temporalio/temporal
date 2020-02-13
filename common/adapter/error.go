@@ -74,6 +74,8 @@ func ToProtoError(in error) error {
 		st = errordetails.NewClientVersionNotSupportedStatus("Client version is not supported.", thriftError.FeatureVersion, thriftError.ClientImpl, thriftError.SupportedVersions)
 	case *history.ShardOwnershipLostError:
 		st = errordetails.NewShardOwnershipLostStatus(*thriftError.Message, *thriftError.Owner)
+	case *history.EventAlreadyStartedError:
+		st = status.New(codes.AlreadyExists, thriftError.Message)
 	case *shared.RetryTaskError:
 		st = errordetails.NewRetryTaskStatus(thriftError.Message, *thriftError.DomainId, *thriftError.WorkflowId, *thriftError.RunId, *thriftError.NextEventId)
 	case *shared.RetryTaskV2Error:
@@ -124,6 +126,7 @@ func ToThriftError(st *status.Status) error {
 			return &shared.DomainAlreadyExistsError{Message: st.Message()}
 		}
 
+		// TODO: history.EventAlreadyStartedError
 		return &shared.CancellationAlreadyRequestedError{Message: st.Message()}
 	case codes.FailedPrecondition:
 		if f, ok := errordetails.GetClientVersionNotSupportedFailure(st); ok {

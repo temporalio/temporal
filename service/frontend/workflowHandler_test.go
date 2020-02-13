@@ -26,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/status"
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
@@ -34,9 +35,10 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/workflowservice"
+	"google.golang.org/grpc/codes"
 
-	"github.com/temporalio/temporal/.gen/go/history/historyservicetest"
 	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/archiver"
@@ -69,7 +71,7 @@ type (
 		controller          *gomock.Controller
 		mockResource        *resource.Test
 		mockDomainCache     *cache.MockDomainCache
-		mockHistoryClient   *historyservicetest.MockClient
+		mockHistoryClient   *historyservicemock.MockHistoryServiceClient
 		mockClusterMetadata *cluster.MockMetadata
 
 		mockProducer           *mocks.KafkaProducer
@@ -107,7 +109,7 @@ func (s *workflowHandlerSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockResource = resource.NewTest(s.controller, metrics.Frontend)
 	s.mockDomainCache = s.mockResource.DomainCache
-	s.mockHistoryClient = s.mockResource.HistoryClient
+	s.mockHistoryClient = s.mockResource.HistoryClientGRPC
 	s.mockClusterMetadata = s.mockResource.ClusterMetadata
 	s.mockMetadataMgr = s.mockResource.MetadataMgr
 	s.mockHistoryV2Mgr = s.mockResource.HistoryMgr
@@ -129,8 +131,8 @@ func (s *workflowHandlerSuite) TearDownTest() {
 	s.mockVisibilityArchiver.AssertExpectations(s.T())
 }
 
-func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandlerGRPC {
-	return NewWorkflowHandlerGRPC(s.mockResource, NewWorkflowHandler(s.mockResource, config, s.mockProducer), config, s.mockProducer)
+func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandler {
+	return NewWorkflowHandler(s.mockResource, config, s.mockProducer)
 }
 
 func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
@@ -156,7 +158,7 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	}
 	_, err := wh.ListOpenWorkflowExecutions(context.Background(), listRequest)
 	s.Error(err)
-	s.Equal(stNoPermission.Err(), err)
+	s.Equal(adapter.ToProtoError(errNoPermission), err)
 
 	// test list open by workflow type
 	listRequest.Filters = &workflowservice.ListOpenWorkflowExecutionsRequest_TypeFilter{TypeFilter: &commonproto.WorkflowTypeFilter{
@@ -164,7 +166,7 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	}}
 	_, err = wh.ListOpenWorkflowExecutions(context.Background(), listRequest)
 	s.Error(err)
-	s.Equal(stNoPermission.Err(), err)
+	s.Equal(adapter.ToProtoError(errNoPermission), err)
 
 	// test list close by wid
 	listRequest2 := &workflowservice.ListClosedWorkflowExecutionsRequest{
@@ -179,7 +181,7 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	}
 	_, err = wh.ListClosedWorkflowExecutions(context.Background(), listRequest2)
 	s.Error(err)
-	s.Equal(stNoPermission.Err(), err)
+	s.Equal(adapter.ToProtoError(errNoPermission), err)
 
 	// test list close by workflow type
 	listRequest2.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_TypeFilter{TypeFilter: &commonproto.WorkflowTypeFilter{
@@ -187,14 +189,14 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	}}
 	_, err = wh.ListClosedWorkflowExecutions(context.Background(), listRequest2)
 	s.Error(err)
-	s.Equal(stNoPermission.Err(), err)
+	s.Equal(adapter.ToProtoError(errNoPermission), err)
 
 	// test list close by workflow status
 	failedStatus := enums.WorkflowExecutionCloseStatusFailed
 	listRequest2.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_StatusFilter{StatusFilter: &commonproto.StatusFilter{CloseStatus: failedStatus}}
 	_, err = wh.ListClosedWorkflowExecutions(context.Background(), listRequest2)
 	s.Error(err)
-	s.Equal(stNoPermission.Err(), err)
+	s.Equal(adapter.ToProtoError(errNoPermission), err)
 }
 
 func (s *workflowHandlerSuite) TestPollForTask_Failed_ContextTimeoutTooShort() {
@@ -204,22 +206,22 @@ func (s *workflowHandlerSuite) TestPollForTask_Failed_ContextTimeoutTooShort() {
 	bgCtx := context.Background()
 	_, err := wh.PollForDecisionTask(bgCtx, &workflowservice.PollForDecisionTaskRequest{})
 	s.Error(err)
-	s.Equal(common.StContextTimeoutNotSet.Err(), err)
+	s.Equal(adapter.ToProtoError(common.ErrContextTimeoutNotSet), err)
 
 	_, err = wh.PollForActivityTask(bgCtx, &workflowservice.PollForActivityTaskRequest{})
 	s.Error(err)
-	s.Equal(common.StContextTimeoutNotSet.Err(), err)
+	s.Equal(adapter.ToProtoError(common.ErrContextTimeoutNotSet), err)
 
 	shortCtx, cancel := context.WithTimeout(bgCtx, common.MinLongPollTimeout-time.Millisecond)
 	defer cancel()
 
 	_, err = wh.PollForDecisionTask(shortCtx, &workflowservice.PollForDecisionTaskRequest{})
 	s.Error(err)
-	s.Equal(common.StContextTimeoutTooShort.Err(), err)
+	s.Equal(adapter.ToProtoError(common.ErrContextTimeoutTooShort), err)
 
 	_, err = wh.PollForActivityTask(shortCtx, &workflowservice.PollForActivityTaskRequest{})
 	s.Error(err)
-	s.Equal(common.StContextTimeoutTooShort.Err(), err)
+	s.Equal(adapter.ToProtoError(common.ErrContextTimeoutTooShort), err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_RequestIdNotSet() {
@@ -248,7 +250,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_RequestIdNotSet
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(stRequestIDNotSet.Err(), err)
+	s.Equal(adapter.ToProtoError(errRequestIDNotSet), err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_StartRequestNotSet() {
@@ -258,7 +260,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_StartRequestNot
 
 	_, err := wh.StartWorkflowExecution(context.Background(), nil)
 	s.Error(err)
-	s.Equal(stRequestNotSet.Err(), err)
+	s.Equal(adapter.ToProtoError(errRequestNotSet), err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_DomainNotSet() {
@@ -287,7 +289,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_DomainNotSet() 
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(stDomainNotSet.Err(), err)
+	s.Equal(adapter.ToProtoError(errDomainNotSet), err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowIdNotSet() {
@@ -316,7 +318,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowIdNotSe
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(stWorkflowIDNotSet.Err(), err)
+	s.Equal(adapter.ToProtoError(errWorkflowIDNotSet), err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowTypeNotSet() {
@@ -346,7 +348,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowTypeNot
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(stWorkflowTypeNotSet.Err(), err)
+	s.Equal(adapter.ToProtoError(errWorkflowTypeNotSet), err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_TaskListNotSet() {
@@ -376,7 +378,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_TaskListNotSet(
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(stTaskListNotSet.Err(), err)
+	s.Equal(adapter.ToProtoError(errTaskListNotSet), err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidExecutionStartToCloseTimeout() {
@@ -406,7 +408,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidExecutio
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(stInvalidExecutionStartToCloseTimeoutSeconds.Err(), err)
+	s.Equal(adapter.ToProtoError(errInvalidExecutionStartToCloseTimeoutSeconds), err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidTaskStartToCloseTimeout() {
@@ -436,7 +438,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidTaskStar
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(stInvalidTaskStartToCloseTimeoutSeconds.Err(), err)
+	s.Equal(adapter.ToProtoError(errInvalidTaskStartToCloseTimeoutSeconds), err)
 }
 
 func (s *workflowHandlerSuite) TestRegisterDomain_Failure_InvalidArchivalURI() {
@@ -833,8 +835,7 @@ func (s *workflowHandlerSuite) TestHistoryArchived() {
 	}
 	s.False(wh.historyArchived(context.Background(), getHistoryRequest, "test-domain"))
 
-	// TODO: remove last 3 `gomock.Any()` after YARPC migration
-	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
+	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
 	getHistoryRequest = &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: testWorkflowID,
@@ -843,7 +844,7 @@ func (s *workflowHandlerSuite) TestHistoryArchived() {
 	}
 	s.False(wh.historyArchived(context.Background(), getHistoryRequest, "test-domain"))
 
-	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, &shared.EntityNotExistsError{Message: "got archival indication error"}).Times(1)
+	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(nil, status.Error(codes.NotFound, "got archival indication error")).Times(1)
 	getHistoryRequest = &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: testWorkflowID,
@@ -852,7 +853,7 @@ func (s *workflowHandlerSuite) TestHistoryArchived() {
 	}
 	s.True(wh.historyArchived(context.Background(), getHistoryRequest, "test-domain"))
 
-	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, errors.New("got non-archival indication error")).Times(1)
+	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(nil, errors.New("got non-archival indication error")).Times(1)
 	getHistoryRequest = &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: testWorkflowID,

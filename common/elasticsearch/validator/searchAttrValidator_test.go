@@ -24,8 +24,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
+	commonproto "go.temporal.io/temporal-proto/common"
 
-	gen "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
@@ -52,7 +52,7 @@ func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
 		dynamicconfig.GetIntPropertyFilteredByDomain(sizeOfTotalLimit))
 
 	domain := "domain"
-	var attr *gen.SearchAttributes
+	var attr *commonproto.SearchAttributes
 
 	err := validator.ValidateSearchAttributes(attr, domain)
 	s.Nil(err)
@@ -60,7 +60,7 @@ func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
 	fields := map[string][]byte{
 		"CustomIntField": []byte(`1`),
 	}
-	attr = &gen.SearchAttributes{
+	attr = &commonproto.SearchAttributes{
 		IndexedFields: fields,
 	}
 	err = validator.ValidateSearchAttributes(attr, domain)
