@@ -28,8 +28,8 @@ import (
 	"sync"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
-  persistenceClient "github.com/temporalio/temporal/common/persistence/client"
 	adminClient "github.com/temporalio/temporal/client/admin"
+	persistenceClient "github.com/temporalio/temporal/common/persistence/client"
 
 	"github.com/pborman/uuid"
 	"github.com/uber-go/tally"
@@ -707,7 +707,11 @@ func (c *cadenceImpl) startWorker(hosts map[string][]string, startWG *sync.WaitG
 	}
 	params.PublicClient = workflowservice.NewWorkflowServiceClient(connection)
 
-	service := service.NewOneboxService(params)
+	service, err := worker.NewService(params)
+	if err != nil {
+		params.Logger.Fatal("unable to create worker service", tag.Error(err))
+	}
+
 	service.Start()
 
 	var replicatorDomainCache cache.DomainCache
