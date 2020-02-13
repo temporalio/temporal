@@ -823,7 +823,7 @@ func (adh *AdminHandler) ReadDLQMessages(
 	var op func() error
 	switch request.GetType() {
 	case replicator.DLQTypeReplication:
-		return nil, &gen.BadRequestError{Message: "Not implement."}
+		return adh.GetHistoryClient().ReadDLQMessages(ctx, request)
 	case replicator.DLQTypeDomain:
 		op = func() error {
 			select {
@@ -877,7 +877,7 @@ func (adh *AdminHandler) PurgeDLQMessages(
 	var op func() error
 	switch request.GetType() {
 	case replicator.DLQTypeReplication:
-		return &gen.BadRequestError{Message: "Not implement."}
+		return adh.GetHistoryClient().PurgeDLQMessages(ctx, request)
 	case replicator.DLQTypeDomain:
 		op = func() error {
 			select {
@@ -926,7 +926,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 	var op func() error
 	switch request.GetType() {
 	case replicator.DLQTypeReplication:
-		return nil, &gen.BadRequestError{Message: "Not implement."}
+		return adh.GetHistoryClient().MergeDLQMessages(ctx, request)
 	case replicator.DLQTypeDomain:
 
 		op = func() error {

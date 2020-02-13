@@ -238,6 +238,7 @@ type (
 		StolenSinceRenew          int
 		UpdatedAt                 time.Time
 		ReplicationAckLevel       int64
+		ReplicationDLQAckLevel    map[string]int64
 		TransferAckLevel          int64
 		TimerAckLevel             time.Time
 		ClusterTransferAckLevel   map[string]int64
@@ -991,6 +992,19 @@ type (
 		GetReplicationTasksRequest
 	}
 
+	// DeleteReplicationTaskFromDLQRequest is used to delete replication task from DLQ
+	DeleteReplicationTaskFromDLQRequest struct {
+		SourceClusterName string
+		TaskID            int64
+	}
+
+	//RangeDeleteReplicationTaskFromDLQRequest is used to delete replication tasks from DLQ
+	RangeDeleteReplicationTaskFromDLQRequest struct {
+		SourceClusterName    string
+		ExclusiveBeginTaskID int64
+		InclusiveEndTaskID   int64
+	}
+
 	// GetReplicationTasksFromDLQResponse is the response for GetReplicationTasksFromDLQ
 	GetReplicationTasksFromDLQResponse = GetReplicationTasksResponse
 
@@ -1469,6 +1483,8 @@ type (
 		RangeCompleteReplicationTask(request *RangeCompleteReplicationTaskRequest) error
 		PutReplicationTaskToDLQ(request *PutReplicationTaskToDLQRequest) error
 		GetReplicationTasksFromDLQ(request *GetReplicationTasksFromDLQRequest) (*GetReplicationTasksFromDLQResponse, error)
+		DeleteReplicationTaskFromDLQ(request *DeleteReplicationTaskFromDLQRequest) error
+		RangeDeleteReplicationTaskFromDLQ(request *RangeDeleteReplicationTaskFromDLQRequest) error
 
 		// Timer related methods.
 		GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error)

@@ -21,7 +21,6 @@
 package history
 
 import (
-	"fmt"
 	"testing"
 	"time"
 
@@ -53,18 +52,19 @@ type (
 		*require.Assertions
 		controller *gomock.Controller
 
-		mockResource           *resource.Test
-		mockShard              ShardContext
-		mockEngine             *MockEngine
-		config                 *Config
-		historyClient          *historyservicetest.MockClient
-		replicationTaskFetcher *MockReplicationTaskFetcher
-		mockDomainCache        *cache.MockDomainCache
-		mockClientBean         *client.MockBean
-		adminClient            *adminservicetest.MockClient
-		clusterMetadata        *cluster.MockMetadata
-		executionManager       *mocks.ExecutionManager
-		requestChan            chan *request
+		mockResource            *resource.Test
+		mockShard               ShardContext
+		mockEngine              *MockEngine
+		config                  *Config
+		historyClient           *historyservicetest.MockClient
+		replicationTaskFetcher  *MockReplicationTaskFetcher
+		mockDomainCache         *cache.MockDomainCache
+		mockClientBean          *client.MockBean
+		adminClient             *adminservicetest.MockClient
+		clusterMetadata         *cluster.MockMetadata
+		executionManager        *mocks.ExecutionManager
+		requestChan             chan *request
+		replicationTaskExecutor *MockreplicationTaskExecutor
 
 		replicationTaskProcessor *ReplicationTaskProcessorImpl
 	}
@@ -93,6 +93,7 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 	s.adminClient = s.mockResource.RemoteAdminClient
 	s.clusterMetadata = s.mockResource.ClusterMetadata
 	s.executionManager = s.mockResource.ExecutionMgr
+	s.replicationTaskExecutor = NewMockreplicationTaskExecutor(s.controller)
 	logger := log.NewNoop()
 	s.mockShard = &shardContextImpl{
 		shardID:                   0,
@@ -122,9 +123,9 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 		s.mockShard,
 		s.mockEngine,
 		s.config,
-		s.historyClient,
 		metricsClient,
 		s.replicationTaskFetcher,
+		s.replicationTaskExecutor,
 	)
 }
 
@@ -142,61 +143,6 @@ func (s *replicationTaskProcessorSuite) TestSendFetchMessageRequest() {
 	s.Equal(int64(-1), requestMessage.token.GetLastRetrievedMessageId())
 }
 
-func (s *replicationTaskProcessorSuite) TestConvertRetryTaskError_OK() {
-	err := &shared.RetryTaskError{}
-	_, ok := s.replicationTaskProcessor.convertRetryTaskError(err)
-	s.True(ok)
-}
-
-func (s *replicationTaskProcessorSuite) TestConvertRetryTaskError_NotOK() {
-	err := &shared.RetryTaskV2Error{}
-	_, ok := s.replicationTaskProcessor.convertRetryTaskError(err)
-	s.False(ok)
-}
-
-func (s *replicationTaskProcessorSuite) TestConvertRetryTaskV2Error_OK() {
-	err := &shared.RetryTaskV2Error{}
-	_, ok := s.replicationTaskProcessor.convertRetryTaskV2Error(err)
-	s.True(ok)
-}
-
-func (s *replicationTaskProcessorSuite) TestConvertRetryTaskV2Error_NotOK() {
-	err := &shared.RetryTaskError{}
-	_, ok := s.replicationTaskProcessor.convertRetryTaskV2Error(err)
-	s.False(ok)
-}
-
-func (s *replicationTaskProcessorSuite) TestFilterTask() {
-	domainID := uuid.New()
-	s.mockDomainCache.EXPECT().
-		GetDomainByID(domainID).
-		Return(cache.NewGlobalDomainCacheEntryForTest(
-			nil,
-			nil,
-			&persistence.DomainReplicationConfig{
-				Clusters: []*persistence.ClusterReplicationConfig{
-					{
-						ClusterName: "active",
-					},
-				}},
-			0,
-			s.clusterMetadata,
-		), nil)
-	ok, err := s.replicationTaskProcessor.filterTask(domainID)
-	s.NoError(err)
-	s.True(ok)
-}
-
-func (s *replicationTaskProcessorSuite) TestFilterTask_Error() {
-	domainID := uuid.New()
-	s.mockDomainCache.EXPECT().
-		GetDomainByID(domainID).
-		Return(nil, fmt.Errorf("test"))
-	ok, err := s.replicationTaskProcessor.filterTask(domainID)
-	s.Error(err)
-	s.False(ok)
-}
-
 func (s *replicationTaskProcessorSuite) TestHandleSyncShardStatus() {
 	now := time.Now()
 	s.mockEngine.EXPECT().SyncShardStatus(gomock.Any(), &history.SyncShardStatusRequest{
@@ -208,153 +154,6 @@ func (s *replicationTaskProcessorSuite) TestHandleSyncShardStatus() {
 	err := s.replicationTaskProcessor.handleSyncShardStatus(&replicator.SyncShardStatus{
 		Timestamp: common.Int64Ptr(now.UnixNano()),
 	})
-	s.NoError(err)
-}
-
-func (s *replicationTaskProcessorSuite) TestProcessTaskOnce_DomainReplicationTask() {
-	defer func() {
-		if r := recover(); r == nil {
-			s.Fail("The Domain replication task should panic")
-		}
-	}()
-
-	task := &replicator.ReplicationTask{
-		TaskType: replicator.ReplicationTaskTypeDomain.Ptr(),
-	}
-	err := s.replicationTaskProcessor.processTaskOnce(task)
-	s.NoError(err)
-}
-
-func (s *replicationTaskProcessorSuite) TestProcessTaskOnce_SyncShardReplicationTask() {
-	task := &replicator.ReplicationTask{
-		TaskType: replicator.ReplicationTaskTypeSyncShardStatus.Ptr(),
-	}
-	err := s.replicationTaskProcessor.processTaskOnce(task)
-	s.NoError(err)
-}
-
-func (s *replicationTaskProcessorSuite) TestProcessTaskOnce_HistoryMetadataReplicationTask() {
-	task := &replicator.ReplicationTask{
-		TaskType: replicator.ReplicationTaskTypeHistoryMetadata.Ptr(),
-	}
-	err := s.replicationTaskProcessor.processTaskOnce(task)
-	s.NoError(err)
-}
-
-func (s *replicationTaskProcessorSuite) TestProcessTaskOnce_SyncActivityReplicationTask() {
-	domainID := uuid.New()
-	workflowID := uuid.New()
-	runID := uuid.New()
-	task := &replicator.ReplicationTask{
-		TaskType: replicator.ReplicationTaskTypeSyncActivity.Ptr(),
-		SyncActivityTaskAttributes: &replicator.SyncActivityTaskAttributes{
-			DomainId:   common.StringPtr(domainID),
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
-		},
-	}
-	request := &history.SyncActivityRequest{
-		DomainId:   common.StringPtr(domainID),
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(runID),
-	}
-
-	s.mockDomainCache.EXPECT().
-		GetDomainByID(domainID).
-		Return(cache.NewGlobalDomainCacheEntryForTest(
-			nil,
-			nil,
-			&persistence.DomainReplicationConfig{
-				Clusters: []*persistence.ClusterReplicationConfig{
-					{
-						ClusterName: "active",
-					},
-				}},
-			0,
-			s.clusterMetadata,
-		), nil).Times(1)
-	s.mockEngine.EXPECT().SyncActivity(gomock.Any(), request).Return(nil).Times(1)
-	err := s.replicationTaskProcessor.processTaskOnce(task)
-	s.NoError(err)
-}
-
-func (s *replicationTaskProcessorSuite) TestProcessTaskOnce_HistoryReplicationTask() {
-	domainID := uuid.New()
-	workflowID := uuid.New()
-	runID := uuid.New()
-	task := &replicator.ReplicationTask{
-		TaskType: replicator.ReplicationTaskTypeHistory.Ptr(),
-		HistoryTaskAttributes: &replicator.HistoryTaskAttributes{
-			DomainId:   common.StringPtr(domainID),
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
-		},
-	}
-	request := &history.ReplicateEventsRequest{
-		DomainUUID: common.StringPtr(domainID),
-		WorkflowExecution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
-		},
-		SourceCluster:     common.StringPtr("standby"),
-		ForceBufferEvents: common.BoolPtr(false),
-	}
-
-	s.mockDomainCache.EXPECT().
-		GetDomainByID(domainID).
-		Return(cache.NewGlobalDomainCacheEntryForTest(
-			nil,
-			nil,
-			&persistence.DomainReplicationConfig{
-				Clusters: []*persistence.ClusterReplicationConfig{
-					{
-						ClusterName: "active",
-					},
-				}},
-			0,
-			s.clusterMetadata,
-		), nil).Times(1)
-	s.mockEngine.EXPECT().ReplicateEvents(gomock.Any(), request).Return(nil).Times(1)
-	err := s.replicationTaskProcessor.processTaskOnce(task)
-	s.NoError(err)
-}
-
-func (s *replicationTaskProcessorSuite) TestProcessTaskOnce_HistoryV2ReplicationTask() {
-	domainID := uuid.New()
-	workflowID := uuid.New()
-	runID := uuid.New()
-	task := &replicator.ReplicationTask{
-		TaskType: replicator.ReplicationTaskTypeHistoryV2.Ptr(),
-		HistoryTaskV2Attributes: &replicator.HistoryTaskV2Attributes{
-			DomainId:   common.StringPtr(domainID),
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
-		},
-	}
-	request := &history.ReplicateEventsV2Request{
-		DomainUUID: common.StringPtr(domainID),
-		WorkflowExecution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
-		},
-	}
-
-	s.mockDomainCache.EXPECT().
-		GetDomainByID(domainID).
-		Return(cache.NewGlobalDomainCacheEntryForTest(
-			nil,
-			nil,
-			&persistence.DomainReplicationConfig{
-				Clusters: []*persistence.ClusterReplicationConfig{
-					{
-						ClusterName: "active",
-					},
-				}},
-			0,
-			s.clusterMetadata,
-		), nil).Times(1)
-	s.mockEngine.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(nil).Times(1)
-	err := s.replicationTaskProcessor.processTaskOnce(task)
 	s.NoError(err)
 }
 

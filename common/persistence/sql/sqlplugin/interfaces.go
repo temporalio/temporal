@@ -607,6 +607,12 @@ type (
 		// SelectFromReplicationTasksDLQ returns one or more rows from replication_tasks_dlq table
 		// Required filter params - {sourceClusterName, shardID, minTaskID, pageSize}
 		SelectFromReplicationTasksDLQ(filter *ReplicationTasksDLQFilter) ([]ReplicationTasksRow, error)
+		// DeleteMessageFromReplicationTasksDLQ deletes one row from replication_tasks_dlq table
+		// Required filter params - {sourceClusterName, shardID, taskID}
+		DeleteMessageFromReplicationTasksDLQ(filter *ReplicationTasksDLQFilter) (sql.Result, error)
+		// RangeDeleteMessageFromReplicationTasksDLQ deletes one or more rows from replication_tasks_dlq table
+		// Required filter params - {sourceClusterName, shardID, taskID, inclusiveTaskID}
+		RangeDeleteMessageFromReplicationTasksDLQ(filter *ReplicationTasksDLQFilter) (sql.Result, error)
 
 		ReplaceIntoActivityInfoMaps(rows []ActivityInfoMapsRow) (sql.Result, error)
 		// SelectFromActivityInfoMaps returns one or more rows from activity_info_maps

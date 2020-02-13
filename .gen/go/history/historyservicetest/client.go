@@ -295,6 +295,39 @@ func (mr *_MockClientRecorder) GetReplicationMessages(
 	return mr.mock.ctrl.RecordCall(mr.mock, "GetReplicationMessages", args...)
 }
 
+// MergeDLQMessages responds to a MergeDLQMessages call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().MergeDLQMessages(gomock.Any(), ...).Return(...)
+// 	... := client.MergeDLQMessages(...)
+func (m *MockClient) MergeDLQMessages(
+	ctx context.Context,
+	_Request *replicator.MergeDLQMessagesRequest,
+	opts ...yarpc.CallOption,
+) (success *replicator.MergeDLQMessagesResponse, err error) {
+
+	args := []interface{}{ctx, _Request}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "MergeDLQMessages", args...)
+	success, _ = ret[i].(*replicator.MergeDLQMessagesResponse)
+	i++
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) MergeDLQMessages(
+	ctx interface{},
+	_Request interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _Request}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "MergeDLQMessages", args...)
+}
+
 // PollMutableState responds to a PollMutableState call based on the mock expectations. This
 // call will fail if the mock does not expect this call. Use EXPECT to expect
 // a call to this function.
@@ -328,6 +361,37 @@ func (mr *_MockClientRecorder) PollMutableState(
 	return mr.mock.ctrl.RecordCall(mr.mock, "PollMutableState", args...)
 }
 
+// PurgeDLQMessages responds to a PurgeDLQMessages call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().PurgeDLQMessages(gomock.Any(), ...).Return(...)
+// 	... := client.PurgeDLQMessages(...)
+func (m *MockClient) PurgeDLQMessages(
+	ctx context.Context,
+	_Request *replicator.PurgeDLQMessagesRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := []interface{}{ctx, _Request}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "PurgeDLQMessages", args...)
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) PurgeDLQMessages(
+	ctx interface{},
+	_Request interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _Request}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "PurgeDLQMessages", args...)
+}
+
 // QueryWorkflow responds to a QueryWorkflow call based on the mock expectations. This
 // call will fail if the mock does not expect this call. Use EXPECT to expect
 // a call to this function.
@@ -359,6 +423,39 @@ func (mr *_MockClientRecorder) QueryWorkflow(
 ) *gomock.Call {
 	args := append([]interface{}{ctx, _QueryRequest}, opts...)
 	return mr.mock.ctrl.RecordCall(mr.mock, "QueryWorkflow", args...)
+}
+
+// ReadDLQMessages responds to a ReadDLQMessages call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().ReadDLQMessages(gomock.Any(), ...).Return(...)
+// 	... := client.ReadDLQMessages(...)
+func (m *MockClient) ReadDLQMessages(
+	ctx context.Context,
+	_Request *replicator.ReadDLQMessagesRequest,
+	opts ...yarpc.CallOption,
+) (success *replicator.ReadDLQMessagesResponse, err error) {
+
+	args := []interface{}{ctx, _Request}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "ReadDLQMessages", args...)
+	success, _ = ret[i].(*replicator.ReadDLQMessagesResponse)
+	i++
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) ReadDLQMessages(
+	ctx interface{},
+	_Request interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _Request}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "ReadDLQMessages", args...)
 }
 
 // ReapplyEvents responds to a ReapplyEvents call based on the mock expectations. This

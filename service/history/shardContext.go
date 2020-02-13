@@ -77,6 +77,8 @@ type (
 
 		GetReplicatorAckLevel() int64
 		UpdateReplicatorAckLevel(ackLevel int64) error
+		GetReplicatorDLQAckLevel(sourceCluster string) int64
+		UpdateReplicatorDLQAckLevel(sourCluster string, ackLevel int64) error
 
 		GetClusterReplicationLevel(cluster string) int64
 		UpdateClusterReplicationLevel(cluster string, lastTaskID int64) error
@@ -240,6 +242,28 @@ func (s *shardContextImpl) UpdateReplicatorAckLevel(ackLevel int64) error {
 	s.Lock()
 	defer s.Unlock()
 	s.shardInfo.ReplicationAckLevel = ackLevel
+	s.shardInfo.StolenSinceRenew = 0
+	return s.updateShardInfoLocked()
+}
+
+func (s *shardContextImpl) GetReplicatorDLQAckLevel(sourceCluster string) int64 {
+	s.RLock()
+	defer s.RUnlock()
+
+	if ackLevel, ok := s.shardInfo.ReplicationDLQAckLevel[sourceCluster]; ok {
+		return ackLevel
+	}
+	return -1
+}
+
+func (s *shardContextImpl) UpdateReplicatorDLQAckLevel(
+	sourceCluster string,
+	ackLevel int64,
+) error {
+
+	s.Lock()
+	defer s.Unlock()
+	s.shardInfo.ReplicationDLQAckLevel[sourceCluster] = ackLevel
 	s.shardInfo.StolenSinceRenew = 0
 	return s.updateShardInfoLocked()
 }

@@ -857,16 +857,54 @@ func (c *clientImpl) ReapplyEvents(
 	return err
 }
 
+func (c *clientImpl) ReadDLQMessages(
+	ctx context.Context,
+	request *replicator.ReadDLQMessagesRequest,
+	opts ...yarpc.CallOption,
+) (*replicator.ReadDLQMessagesResponse, error) {
+
+	client, err := c.getClientForShardID(int(request.GetShardID()))
+	if err != nil {
+		return nil, err
+	}
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	return client.ReadDLQMessages(ctx, request, opts...)
+}
+
+func (c *clientImpl) PurgeDLQMessages(
+	ctx context.Context,
+	request *replicator.PurgeDLQMessagesRequest,
+	opts ...yarpc.CallOption,
+) error {
+
+	client, err := c.getClientForShardID(int(request.GetShardID()))
+	if err != nil {
+		return err
+	}
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	return client.PurgeDLQMessages(ctx, request, opts...)
+}
+
+func (c *clientImpl) MergeDLQMessages(
+	ctx context.Context,
+	request *replicator.MergeDLQMessagesRequest,
+	opts ...yarpc.CallOption,
+) (*replicator.MergeDLQMessagesResponse, error) {
+
+	client, err := c.getClientForShardID(int(request.GetShardID()))
+	if err != nil {
+		return nil, err
+	}
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	return client.MergeDLQMessages(ctx, request, opts...)
+}
+
 func (c *clientImpl) RefreshWorkflowTasks(
 	ctx context.Context,
 	request *h.RefreshWorkflowTasksRequest,
 	opts ...yarpc.CallOption,
 ) error {
 	client, err := c.getClientForWorkflowID(request.GetRequest().GetExecution().GetWorkflowId())
-	if err != nil {
-		return err
-	}
-	opts = common.AggregateYarpcOptions(ctx, opts...)
 	op := func(ctx context.Context, client historyserviceclient.Interface) error {
 		ctx, cancel := c.createContext(ctx)
 		defer cancel()

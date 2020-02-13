@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "0.25",
+  "MinCompatibleVersion": "0.25",
+  "Description": "Added replication dlq ack level mapping to shard type",
+  "SchemaUpdateCqlFiles": [
+    "replication_dlq.cql"
+  ]
+}

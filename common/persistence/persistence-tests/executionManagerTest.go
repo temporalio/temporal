@@ -5231,6 +5231,55 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 	s.Equal(shardInfo, resp.ShardInfo)
 }
 
+// TestReplicationDLQ test
+func (s *ExecutionManagerSuite) TestReplicationDLQ() {
+	sourceCluster := "test"
+	taskInfo := &p.ReplicationTaskInfo{
+		DomainID:   uuid.New(),
+		WorkflowID: uuid.New(),
+		RunID:      uuid.New(),
+		TaskID:     0,
+		TaskType:   0,
+	}
+	err := s.PutReplicationTaskToDLQ(sourceCluster, taskInfo)
+	s.NoError(err)
+	resp, err := s.GetReplicationTasksFromDLQ(sourceCluster, -1, 0, 1, nil)
+	s.NoError(err)
+	s.Len(resp.Tasks, 1)
+	err = s.DeleteReplicationTaskFromDLQ(sourceCluster, 0)
+	s.NoError(err)
+	resp, err = s.GetReplicationTasksFromDLQ(sourceCluster, -1, 0, 1, nil)
+	s.NoError(err)
+	s.Len(resp.Tasks, 0)
+
+	taskInfo1 := &p.ReplicationTaskInfo{
+		DomainID:   uuid.New(),
+		WorkflowID: uuid.New(),
+		RunID:      uuid.New(),
+		TaskID:     1,
+		TaskType:   0,
+	}
+	taskInfo2 := &p.ReplicationTaskInfo{
+		DomainID:   uuid.New(),
+		WorkflowID: uuid.New(),
+		RunID:      uuid.New(),
+		TaskID:     2,
+		TaskType:   0,
+	}
+	err = s.PutReplicationTaskToDLQ(sourceCluster, taskInfo1)
+	s.NoError(err)
+	err = s.PutReplicationTaskToDLQ(sourceCluster, taskInfo2)
+	s.NoError(err)
+	resp, err = s.GetReplicationTasksFromDLQ(sourceCluster, 0, 2, 2, nil)
+	s.NoError(err)
+	s.Len(resp.Tasks, 2)
+	err = s.RangeDeleteReplicationTaskFromDLQ(sourceCluster, 0, 2)
+	s.NoError(err)
+	resp, err = s.GetReplicationTasksFromDLQ(sourceCluster, 0, 2, 2, nil)
+	s.NoError(err)
+	s.Len(resp.Tasks, 0)
+}
+
 func copyWorkflowExecutionInfo(sourceInfo *p.WorkflowExecutionInfo) *p.WorkflowExecutionInfo {
 	return &p.WorkflowExecutionInfo{
 		DomainID:                    sourceInfo.DomainID,

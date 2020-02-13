@@ -1608,6 +1608,72 @@ func (h *Handler) ReapplyEvents(
 	return nil
 }
 
+// ReadDLQMessages reads replication DLQ messages
+func (h *Handler) ReadDLQMessages(
+	ctx context.Context,
+	request *r.ReadDLQMessagesRequest,
+) (resp *r.ReadDLQMessagesResponse, retError error) {
+
+	defer log.CapturePanic(h.GetLogger(), &retError)
+	h.startWG.Wait()
+
+	scope := metrics.HistoryReadDLQMessagesScope
+	h.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
+	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	engine, err := h.controller.getEngineForShard(int(request.GetShardID()))
+	if err != nil {
+		return nil, h.error(err, scope, "", "")
+	}
+
+	return engine.ReadDLQMessages(ctx, request)
+}
+
+// PurgeDLQMessages deletes replication DLQ messages
+func (h *Handler) PurgeDLQMessages(
+	ctx context.Context,
+	request *r.PurgeDLQMessagesRequest,
+) (retError error) {
+
+	defer log.CapturePanic(h.GetLogger(), &retError)
+	h.startWG.Wait()
+
+	scope := metrics.HistoryPurgeDLQMessagesScope
+	h.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
+	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	engine, err := h.controller.getEngineForShard(int(request.GetShardID()))
+	if err != nil {
+		return h.error(err, scope, "", "")
+	}
+
+	return engine.PurgeDLQMessages(ctx, request)
+}
+
+// MergeDLQMessages reads and applies replication DLQ messages
+func (h *Handler) MergeDLQMessages(
+	ctx context.Context,
+	request *r.MergeDLQMessagesRequest,
+) (resp *r.MergeDLQMessagesResponse, retError error) {
+
+	defer log.CapturePanic(h.GetLogger(), &retError)
+	h.startWG.Wait()
+
+	scope := metrics.HistoryMergeDLQMessagesScope
+	h.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
+	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	engine, err := h.controller.getEngineForShard(int(request.GetShardID()))
+	if err != nil {
+		return nil, h.error(err, scope, "", "")
+	}
+
+	return engine.MergeDLQMessages(ctx, request)
+}
+
 // RefreshWorkflowTasks refreshes all the tasks of a workflow
 func (h *Handler) RefreshWorkflowTasks(
 	ctx context.Context,
@@ -1617,7 +1683,6 @@ func (h *Handler) RefreshWorkflowTasks(
 	h.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
-
 	domainID := request.GetDomainUIID()
 	execution := request.GetRequest().GetExecution()
 	workflowID := execution.GetWorkflowId()

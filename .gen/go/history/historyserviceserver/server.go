@@ -72,15 +72,30 @@ type Interface interface {
 		Request *replicator.GetReplicationMessagesRequest,
 	) (*replicator.GetReplicationMessagesResponse, error)
 
+	MergeDLQMessages(
+		ctx context.Context,
+		Request *replicator.MergeDLQMessagesRequest,
+	) (*replicator.MergeDLQMessagesResponse, error)
+
 	PollMutableState(
 		ctx context.Context,
 		PollRequest *history.PollMutableStateRequest,
 	) (*history.PollMutableStateResponse, error)
 
+	PurgeDLQMessages(
+		ctx context.Context,
+		Request *replicator.PurgeDLQMessagesRequest,
+	) error
+
 	QueryWorkflow(
 		ctx context.Context,
 		QueryRequest *history.QueryWorkflowRequest,
 	) (*history.QueryWorkflowResponse, error)
+
+	ReadDLQMessages(
+		ctx context.Context,
+		Request *replicator.ReadDLQMessagesRequest,
+	) (*replicator.ReadDLQMessagesResponse, error)
 
 	ReapplyEvents(
 		ctx context.Context,
@@ -302,6 +317,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 			},
 
 			thrift.Method{
+				Name: "MergeDLQMessages",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.MergeDLQMessages),
+				},
+				Signature:    "MergeDLQMessages(Request *replicator.MergeDLQMessagesRequest) (*replicator.MergeDLQMessagesResponse)",
+				ThriftModule: history.ThriftModule,
+			},
+
+			thrift.Method{
 				Name: "PollMutableState",
 				HandlerSpec: thrift.HandlerSpec{
 
@@ -313,6 +339,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 			},
 
 			thrift.Method{
+				Name: "PurgeDLQMessages",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.PurgeDLQMessages),
+				},
+				Signature:    "PurgeDLQMessages(Request *replicator.PurgeDLQMessagesRequest)",
+				ThriftModule: history.ThriftModule,
+			},
+
+			thrift.Method{
 				Name: "QueryWorkflow",
 				HandlerSpec: thrift.HandlerSpec{
 
@@ -320,6 +357,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 					Unary: thrift.UnaryHandler(h.QueryWorkflow),
 				},
 				Signature:    "QueryWorkflow(QueryRequest *history.QueryWorkflowRequest) (*history.QueryWorkflowResponse)",
+				ThriftModule: history.ThriftModule,
+			},
+
+			thrift.Method{
+				Name: "ReadDLQMessages",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.ReadDLQMessages),
+				},
+				Signature:    "ReadDLQMessages(Request *replicator.ReadDLQMessagesRequest) (*replicator.ReadDLQMessagesResponse)",
 				ThriftModule: history.ThriftModule,
 			},
 
@@ -611,7 +659,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 35)
+	procedures := make([]transport.Procedure, 0, 38)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -751,6 +799,25 @@ func (h handler) GetReplicationMessages(ctx context.Context, body wire.Value) (t
 	return response, err
 }
 
+func (h handler) MergeDLQMessages(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args history.HistoryService_MergeDLQMessages_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	success, err := h.impl.MergeDLQMessages(ctx, args.Request)
+
+	hadError := err != nil
+	result, err := history.HistoryService_MergeDLQMessages_Helper.WrapResponse(success, err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
 func (h handler) PollMutableState(ctx context.Context, body wire.Value) (thrift.Response, error) {
 	var args history.HistoryService_PollMutableState_Args
 	if err := args.FromWire(body); err != nil {
@@ -770,6 +837,25 @@ func (h handler) PollMutableState(ctx context.Context, body wire.Value) (thrift.
 	return response, err
 }
 
+func (h handler) PurgeDLQMessages(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args history.HistoryService_PurgeDLQMessages_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	err := h.impl.PurgeDLQMessages(ctx, args.Request)
+
+	hadError := err != nil
+	result, err := history.HistoryService_PurgeDLQMessages_Helper.WrapResponse(err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
 func (h handler) QueryWorkflow(ctx context.Context, body wire.Value) (thrift.Response, error) {
 	var args history.HistoryService_QueryWorkflow_Args
 	if err := args.FromWire(body); err != nil {
@@ -780,6 +866,25 @@ func (h handler) QueryWorkflow(ctx context.Context, body wire.Value) (thrift.Res
 
 	hadError := err != nil
 	result, err := history.HistoryService_QueryWorkflow_Helper.WrapResponse(success, err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) ReadDLQMessages(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args history.HistoryService_ReadDLQMessages_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	success, err := h.impl.ReadDLQMessages(ctx, args.Request)
+
+	hadError := err != nil
+	result, err := history.HistoryService_ReadDLQMessages_Helper.WrapResponse(success, err)
 
 	var response thrift.Response
 	if err == nil {

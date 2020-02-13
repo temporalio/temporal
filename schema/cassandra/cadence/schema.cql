@@ -17,6 +17,8 @@ CREATE TYPE shard (
   domain_notification_version bigint, -- the global domain change version this shard is aware of
   -- Mapping of (remote) cluster to corresponding replication level (last replicated task_id)
   cluster_replication_level   map<text, bigint>,
+  -- Mapping of (remote) cluster to corresponding replication DLQ ack level (last replicated task_id)
+  replication_dlq_ack_level   map<text, bigint>,
 );
 
 --- Workflow execution and mutable state ---

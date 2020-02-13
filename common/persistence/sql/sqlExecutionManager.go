@@ -1058,6 +1058,43 @@ func (m *sqlExecutionManager) GetReplicationTasksFromDLQ(
 	}
 }
 
+func (m *sqlExecutionManager) DeleteReplicationTaskFromDLQ(
+	request *p.DeleteReplicationTaskFromDLQRequest,
+) error {
+
+	filter := sqlplugin.ReplicationTasksFilter{
+		ShardID: m.shardID,
+		TaskID:  request.TaskID,
+	}
+
+	if _, err := m.db.DeleteMessageFromReplicationTasksDLQ(&sqlplugin.ReplicationTasksDLQFilter{
+		ReplicationTasksFilter: filter,
+		SourceClusterName:      request.SourceClusterName,
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *sqlExecutionManager) RangeDeleteReplicationTaskFromDLQ(
+	request *p.RangeDeleteReplicationTaskFromDLQRequest,
+) error {
+
+	filter := sqlplugin.ReplicationTasksFilter{
+		ShardID:            m.shardID,
+		TaskID:             request.ExclusiveBeginTaskID,
+		InclusiveEndTaskID: request.InclusiveEndTaskID,
+	}
+
+	if _, err := m.db.RangeDeleteMessageFromReplicationTasksDLQ(&sqlplugin.ReplicationTasksDLQFilter{
+		ReplicationTasksFilter: filter,
+		SourceClusterName:      request.SourceClusterName,
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
 type timerTaskPageToken struct {
 	TaskID    int64
 	Timestamp time.Time
