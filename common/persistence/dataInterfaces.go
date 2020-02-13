@@ -2291,8 +2291,8 @@ func (t *TransferTaskInfo) GetVersion() int64 {
 }
 
 // GetTaskType returns the task type for transfer task
-func (t *TransferTaskInfo) GetTaskType() int {
-	return t.TaskType
+func (t *TransferTaskInfo) GetTaskType() int32 {
+	return int32(t.TaskType)
 }
 
 // GetVisibilityTimestamp returns the task type for transfer task
@@ -2306,13 +2306,13 @@ func (t *TransferTaskInfo) GetWorkflowID() string {
 }
 
 // GetRunID returns the run ID for transfer task
-func (t *TransferTaskInfo) GetRunID() string {
-	return t.RunID
+func (t *TransferTaskInfo) GetRunID() []byte {
+	return primitives.MustParseUUID(t.RunID)
 }
 
 // GetDomainID returns the domain ID for transfer task
-func (t *TransferTaskInfo) GetDomainID() string {
-	return t.DomainID
+func (t *TransferTaskInfo) GetDomainID() []byte {
+	return primitives.MustParseUUID(t.DomainID)
 }
 
 // String returns string
@@ -2334,8 +2334,8 @@ func (t *TimerTaskInfo) GetVersion() int64 {
 }
 
 // GetTaskType returns the task type for timer task
-func (t *TimerTaskInfo) GetTaskType() int {
-	return t.TaskType
+func (t *TimerTaskInfo) GetTaskType() int32 {
+	return int32(t.TaskType)
 }
 
 // GetVisibilityTimestamp returns the task type for timer task
@@ -2349,13 +2349,13 @@ func (t *TimerTaskInfo) GetWorkflowID() string {
 }
 
 // GetRunID returns the run ID for timer task
-func (t *TimerTaskInfo) GetRunID() string {
-	return t.RunID
+func (t *TimerTaskInfo) GetRunID() []byte {
+	return primitives.MustParseUUID(t.RunID)
 }
 
 // GetDomainID returns the domain ID for timer task
-func (t *TimerTaskInfo) GetDomainID() string {
-	return t.DomainID
+func (t *TimerTaskInfo) GetDomainID() []byte {
+	return primitives.MustParseUUID(t.DomainID)
 }
 
 // GetTaskType returns the task type for timer task
