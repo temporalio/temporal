@@ -883,7 +883,7 @@ func (s *shardContextImpl) renewRangeLocked(isStealing bool) error {
 	}
 
 	err := s.GetShardManager().UpdateShard(&persistence.UpdateShardRequest{
-		ShardInfo:       &updatedShardInfo.ShardInfo,
+		ShardInfo:       updatedShardInfo.ShardInfo,
 		PreviousRangeID: s.shardInfo.RangeID})
 	if err != nil {
 		// Shard is stolen, trigger history engine shutdown
@@ -932,7 +932,7 @@ func (s *shardContextImpl) updateShardInfoLocked() error {
 	s.emitShardInfoMetricsLogsLocked()
 
 	err = s.GetShardManager().UpdateShard(&persistence.UpdateShardRequest{
-		ShardInfo:       &updatedShardInfo.ShardInfo,
+		ShardInfo:       updatedShardInfo.ShardInfo,
 		PreviousRangeID: s.shardInfo.RangeID,
 	})
 
@@ -1147,7 +1147,7 @@ func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContex
 			ShardID: int32(shardItem.shardID),
 		})
 		if err == nil {
-			shardInfo = &persistence.ShardInfoWithFailover{ShardInfo: *resp.ShardInfo}
+			shardInfo = &persistence.ShardInfoWithFailover{ShardInfo: resp.ShardInfo}
 			return nil
 		}
 		if _, ok := err.(*shared.EntityNotExistsError); !ok {
@@ -1156,13 +1156,13 @@ func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContex
 
 		// EntityNotExistsError error
 		shardInfo = &persistence.ShardInfoWithFailover{
-			ShardInfo: persistenceblobs.ShardInfo{
+			ShardInfo: &persistenceblobs.ShardInfo{
 				ShardID:          int32(shardItem.shardID),
 				RangeID:          0,
 				TransferAckLevel: 0,
 			},
 		}
-		return shardItem.GetShardManager().CreateShard(&persistence.CreateShardRequest{ShardInfo: &shardInfo.ShardInfo})
+		return shardItem.GetShardManager().CreateShard(&persistence.CreateShardRequest{ShardInfo: shardInfo.ShardInfo})
 	}
 
 	err := backoff.Retry(getShard, retryPolicy, retryPredicate)
@@ -1247,7 +1247,7 @@ func copyShardInfo(shardInfo *persistence.ShardInfoWithFailover) *persistence.Sh
 		clusterReplicationLevel[k] = v
 	}
 	shardInfoCopy := &persistence.ShardInfoWithFailover{
-		ShardInfo: persistenceblobs.ShardInfo{
+		ShardInfo: &persistenceblobs.ShardInfo{
 			ShardID:                   shardInfo.ShardID,
 			Owner:                     shardInfo.Owner,
 			RangeID:                   shardInfo.RangeID,

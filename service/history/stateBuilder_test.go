@@ -86,7 +86,7 @@ func (s *stateBuilderSuite) SetupTest() {
 	s.mockShard = newTestShardContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
-			ShardInfo: persistenceblobs.ShardInfo{
+			ShardInfo: &persistenceblobs.ShardInfo{
 				ShardID:          0,
 				RangeID:          1,
 				TransferAckLevel: 0,

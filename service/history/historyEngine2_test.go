@@ -100,7 +100,7 @@ func (s *engine2Suite) SetupTest() {
 	s.mockShard = newTestShardContext(
 		s.controller,
 		&p.ShardInfoWithFailover{
-			ShardInfo: persistenceblobs.ShardInfo{
+			ShardInfo: &persistenceblobs.ShardInfo{
 				ShardID:          0,
 				RangeID:          1,
 				TransferAckLevel: 0,

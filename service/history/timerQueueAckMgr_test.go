@@ -105,7 +105,7 @@ func (s *timerQueueAckMgrSuite) SetupTest() {
 	s.mockShard = newTestShardContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
-			ShardInfo: persistenceblobs.ShardInfo{
+			ShardInfo: &persistenceblobs.ShardInfo{
 				ShardID: 0,
 				RangeID: 1,
 				ClusterTimerAckLevel: map[string]*types.Timestamp{
@@ -545,7 +545,7 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 	s.mockShard = newTestShardContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
-			ShardInfo: persistenceblobs.ShardInfo{
+			ShardInfo: &persistenceblobs.ShardInfo{
 				ShardID: 0,
 				RangeID: 1,
 				ClusterTimerAckLevel: map[string]*types.Timestamp{

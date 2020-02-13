@@ -237,7 +237,7 @@ type (
 
 	// ShardInfoWithFailover describes a shard
 	ShardInfoWithFailover struct {
-		pblobs.ShardInfo
+		*pblobs.ShardInfo
 		TransferFailoverLevels map[string]TransferFailoverLevel // uuid -> TransferFailoverLevel
 		TimerFailoverLevels    map[string]TimerFailoverLevel    // uuid -> TimerFailoverLevel
 	}
