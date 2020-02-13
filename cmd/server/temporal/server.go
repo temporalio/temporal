@@ -24,26 +24,16 @@ import (
 	"log"
 	"time"
 
-	"github.com/temporalio/temporal/common/primitives"
-
-	"github.com/temporalio/temporal/common/service/config/ringpop"
-
+	"go.temporal.io/temporal-proto/workflowservice"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
 	persist "github.com/temporalio/temporal/.gen/go/persistenceblobs"
-	"github.com/temporalio/temporal/common/persistence"
-	persistenceClient "github.com/temporalio/temporal/common/persistence/client"
-
-	"github.com/temporalio/temporal/common/authorization"
-
-	"go.uber.org/zap"
-
-	"go.temporal.io/temporal-proto/workflowservice"
-
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
+	"github.com/temporalio/temporal/common/authorization"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/elasticsearch"
 	l "github.com/temporalio/temporal/common/log"
@@ -51,8 +41,12 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/messaging"
 	"github.com/temporalio/temporal/common/metrics"
-	"github.com/temporalio/temporal/common/service"
+	"github.com/temporalio/temporal/common/persistence"
+	persistenceClient "github.com/temporalio/temporal/common/persistence/client"
+	"github.com/temporalio/temporal/common/primitives"
+	"github.com/temporalio/temporal/common/resource"
 	"github.com/temporalio/temporal/common/service/config"
+	"github.com/temporalio/temporal/common/service/config/ringpop"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 	"github.com/temporalio/temporal/service/frontend"
 	"github.com/temporalio/temporal/service/history"
@@ -111,7 +105,7 @@ func (s *server) startService() common.Daemon {
 
 	var err error
 
-	params := service.BootstrapParams{}
+	params := resource.BootstrapParams{}
 	params.Name = primitives.GetServiceNameFromRole(s.name)
 	params.Logger = loggerimpl.NewLogger(s.cfg.Log.NewZapLogger())
 	params.PersistenceConfig = s.cfg.Persistence
@@ -140,7 +134,7 @@ func (s *server) startService() common.Daemon {
 	}
 
 	params.MembershipFactoryInitializer =
-		func(persistenceBean persistenceClient.Bean, logger l.Logger) (service.MembershipMonitorFactory, error) {
+		func(persistenceBean persistenceClient.Bean, logger l.Logger) (resource.MembershipMonitorFactory, error) {
 			return ringpop.NewRingpopFactory(
 				&s.cfg.Ringpop,
 				params.RPCFactory.GetRingpopDispatcher(),
@@ -155,7 +149,7 @@ func (s *server) startService() common.Daemon {
 
 	params.DCRedirectionPolicy = s.cfg.DCRedirectionPolicy
 
-	params.MetricsClient = metrics.NewClient(params.MetricScope, service.GetMetricsServiceIdx(params.Name, params.Logger))
+	params.MetricsClient = metrics.NewClient(params.MetricScope, metrics.GetMetricsServiceIdx(params.Name, params.Logger))
 
 	clusterMetadata := s.cfg.ClusterMetadata
 
