@@ -132,11 +132,7 @@ func (s *server) startService() common.Daemon {
 	servicePortMap := make(map[string]int)
 	for roleName, svcCfg := range s.cfg.Services {
 		serviceName := primitives.GetServiceNameFromRole(roleName)
-		if serviceName == common.FrontendServiceName || serviceName == common.MatchingServiceName {
-			servicePortMap[serviceName] = svcCfg.RPC.GRPCPort
-		} else {
-			servicePortMap[serviceName] = svcCfg.RPC.Port
-		}
+		servicePortMap[serviceName] = svcCfg.RPC.GRPCPort
 	}
 
 	params.MembershipFactoryInitializer =

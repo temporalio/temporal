@@ -360,9 +360,6 @@ func (h *Impl) Start() {
 	if err := h.pprofInitializer.Start(); err != nil {
 		h.logger.WithTags(tag.Error(err)).Fatal("fail to start PProf")
 	}
-	if err := h.dispatcher.Start(); err != nil {
-		h.logger.WithTags(tag.Error(err)).Fatal("fail to start dispatcher")
-	}
 	if err := h.ringpopDispatcher.Start(); err != nil {
 		h.logger.WithTags(tag.Error(err)).Fatal("fail to start dispatcher")
 	}
@@ -396,9 +393,6 @@ func (h *Impl) Stop() {
 	h.membershipMonitor.Stop()
 	if err := h.ringpopDispatcher.Stop(); err != nil {
 		h.logger.WithTags(tag.Error(err)).Error("failed to stop ringpop dispatcher")
-	}
-	if err := h.dispatcher.Stop(); err != nil {
-		h.logger.WithTags(tag.Error(err)).Error("failed to stop dispatcher")
 	}
 	h.runtimeMetricsReporter.Stop()
 	h.persistenceBean.Close()
