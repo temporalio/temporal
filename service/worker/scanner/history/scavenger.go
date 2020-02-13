@@ -24,11 +24,12 @@ import (
 	"context"
 	"time"
 
+	"github.com/gogo/status"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal/activity"
 	"golang.org/x/time/rate"
+	"google.golang.org/grpc/codes"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
@@ -240,7 +241,8 @@ func (s *Scavenger) startTaskProcessor(
 			})
 
 			if err != nil {
-				if _, ok := err.(*shared.EntityNotExistsError); ok {
+				//if _, ok := err.(*shared.EntityNotExistsError); ok {
+				if status.Code(err) == codes.NotFound {
 					//deleting history branch
 					var branchToken []byte
 					branchToken, err = persistence.NewHistoryBranchTokenByBranchID(task.treeID, task.branchID)
