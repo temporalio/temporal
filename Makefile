@@ -105,8 +105,8 @@ INTEG_NDC_SQL_COVER_FILE   := $(COVER_ROOT)/integ_ndc_sql_cover.out
 #   Packages are specified as import paths.
 GOCOVERPKG_ARG := -coverpkg="$(PROJECT_ROOT)/common/...,$(PROJECT_ROOT)/service/...,$(PROJECT_ROOT)/client/...,$(PROJECT_ROOT)/tools/..."
 
-sync-submodules:
-	git submodule update --init --recursive --remote
+git-submodules:
+	git submodule update --init --recursive
 
 yarpc-install:
 	GO111MODULE=off go get -u github.com/myitcv/gobin
@@ -116,7 +116,7 @@ yarpc-install:
 clean_thrift:
 	rm -rf .gen
 
-thriftc: yarpc-install $(THRIFTRW_GEN_SRC) copyright
+thriftc: yarpc-install git-submodules $(THRIFTRW_GEN_SRC) copyright
 
 copyright: cmd/tools/copyright/licensegen.go
 	GOOS= GOARCH= go run ./cmd/tools/copyright/licensegen.go --verifyOnly

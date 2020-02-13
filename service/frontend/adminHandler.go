@@ -956,6 +956,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 	}, nil
 }
 
+// RefreshWorkflowTasks re-generates the workflow tasks
 func (adh *AdminHandler) RefreshWorkflowTasks(
 	ctx context.Context,
 	request *gen.RefreshWorkflowTasksRequest,
