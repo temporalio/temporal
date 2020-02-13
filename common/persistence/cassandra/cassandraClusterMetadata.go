@@ -250,6 +250,10 @@ func (m *cassandraClusterMetadata) GetClusterMembers(request *p.GetClusterMember
 		return nil, convertCommonErrors("GetClusterMembers", err)
 	}
 
+	if len(clusterMembers) == 0 {
+		pagingToken = nil
+	}
+
 	return &p.GetClusterMembersResponse{ActiveMembers: clusterMembers, NextPageToken: pagingToken}, nil
 }
 
