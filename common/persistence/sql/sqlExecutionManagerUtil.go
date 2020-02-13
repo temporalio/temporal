@@ -26,6 +26,8 @@ import (
 	"fmt"
 	"time"
 
+	commonproto "go.temporal.io/temporal-proto/common"
+
 	"github.com/temporalio/temporal/common/primitives"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -855,7 +857,7 @@ func createReplicationTasks(
 		nextEventID := common.EmptyEventID
 		version := common.EmptyVersion
 		activityScheduleID := common.EmptyEventID
-		var lastReplicationInfo map[string]*persistenceblobs.ReplicationInfo
+		var lastReplicationInfo map[string]*commonproto.ReplicationInfo
 
 		var branchToken, newRunBranchToken []byte
 		var resetWorkflow bool
@@ -874,15 +876,15 @@ func createReplicationTasks(
 			branchToken = historyReplicationTask.BranchToken
 			newRunBranchToken = historyReplicationTask.NewRunBranchToken
 			resetWorkflow = historyReplicationTask.ResetWorkflow
-			lastReplicationInfo = make(map[string]*persistenceblobs.ReplicationInfo, len(historyReplicationTask.LastReplicationInfo))
+			lastReplicationInfo = make(map[string]*commonproto.ReplicationInfo, len(historyReplicationTask.LastReplicationInfo))
 			for k, v := range historyReplicationTask.LastReplicationInfo {
-				lastReplicationInfo[k] = &persistenceblobs.ReplicationInfo{Version: v.Version, LastEventID: v.LastEventID}
+				lastReplicationInfo[k] = &commonproto.ReplicationInfo{Version: v.Version, LastEventId: v.LastEventID}
 			}
 
 		case p.ReplicationTaskTypeSyncActivity:
 			version = task.GetVersion()
 			activityScheduleID = task.(*p.SyncActivityTask).ScheduledID
-			lastReplicationInfo = map[string]*persistenceblobs.ReplicationInfo{}
+			lastReplicationInfo = map[string]*commonproto.ReplicationInfo{}
 
 		default:
 			return &workflow.InternalServiceError{
@@ -891,6 +893,7 @@ func createReplicationTasks(
 		}
 
 		blob, err := ReplicationTaskInfoToBlob(&persistenceblobs.ReplicationTaskInfo{
+			TaskID:                  task.GetTaskID(),
 			DomainID:                domainID,
 			WorkflowID:              workflowID,
 			RunID:                   runID,

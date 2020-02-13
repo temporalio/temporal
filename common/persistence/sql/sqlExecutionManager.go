@@ -28,9 +28,9 @@ import (
 	"math"
 	"time"
 
-	"github.com/temporalio/temporal/common/primitives"
-
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+
+	"github.com/temporalio/temporal/common/primitives"
 
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
@@ -957,7 +957,7 @@ func (m *sqlExecutionManager) populateGetReplicationTasksResponse(
 		return &p.GetReplicationTasksResponse{}, nil
 	}
 
-	var tasks = make([]*p.ReplicationTaskInfo, len(rows))
+	var tasks = make([]*persistenceblobs.ReplicationTaskInfo, len(rows))
 	for i, row := range rows {
 		info, err := ReplicationTaskInfoFromBlob(row.Data, row.DataEncoding)
 		if err != nil {
@@ -968,25 +968,11 @@ func (m *sqlExecutionManager) populateGetReplicationTasksResponse(
 		if info.GetTaskType() == p.ReplicationTaskTypeHistory {
 			lastReplicationInfo = make(map[string]*p.ReplicationInfo, len(info.LastReplicationInfo))
 			for k, v := range info.LastReplicationInfo {
-				lastReplicationInfo[k] = &p.ReplicationInfo{Version: v.GetVersion(), LastEventID: v.GetLastEventID()}
+				lastReplicationInfo[k] = &p.ReplicationInfo{Version: v.GetVersion(), LastEventID: v.GetLastEventId()}
 			}
 		}
 
-		tasks[i] = &p.ReplicationTaskInfo{
-			TaskID:              row.TaskID,
-			DomainID:            primitives.UUID(info.DomainID).String(),
-			WorkflowID:          info.GetWorkflowID(),
-			RunID:               primitives.UUID(info.RunID).String(),
-			TaskType:            int(info.GetTaskType()),
-			FirstEventID:        info.GetFirstEventID(),
-			NextEventID:         info.GetNextEventID(),
-			Version:             info.GetVersion(),
-			LastReplicationInfo: lastReplicationInfo,
-			ScheduledID:         info.GetScheduledID(),
-			BranchToken:         info.GetBranchToken(),
-			NewRunBranchToken:   info.GetNewRunBranchToken(),
-			ResetWorkflow:       info.GetResetWorkflow(),
-		}
+		tasks[i] = info
 	}
 	var nextPageToken []byte
 	lastTaskID := rows[len(rows)-1].TaskID
@@ -1175,20 +1161,8 @@ func (m *sqlExecutionManager) RangeCompleteTimerTask(
 
 func (m *sqlExecutionManager) PutReplicationTaskToDLQ(request *p.PutReplicationTaskToDLQRequest) error {
 	replicationTask := request.TaskInfo
-	blob, err := ReplicationTaskInfoToBlob(&persistenceblobs.ReplicationTaskInfo{
-		DomainID:            primitives.MustParseUUID(replicationTask.DomainID),
-		WorkflowID:          replicationTask.WorkflowID,
-		RunID:               primitives.MustParseUUID(replicationTask.RunID),
-		TaskType:            int32(replicationTask.TaskType),
-		FirstEventID:        replicationTask.FirstEventID,
-		NextEventID:         replicationTask.NextEventID,
-		Version:             replicationTask.Version,
-		LastReplicationInfo: toSqldbReplicationInfo(replicationTask.LastReplicationInfo),
-		ScheduledID:         replicationTask.ScheduledID,
-		BranchToken:         replicationTask.BranchToken,
-		NewRunBranchToken:   replicationTask.NewRunBranchToken,
-		ResetWorkflow:       replicationTask.ResetWorkflow,
-	})
+	blob, err := ReplicationTaskInfoToBlob(replicationTask)
+
 	if err != nil {
 		return err
 	}
@@ -1212,16 +1186,4 @@ func (m *sqlExecutionManager) PutReplicationTaskToDLQ(request *p.PutReplicationT
 	}
 
 	return nil
-}
-
-func toSqldbReplicationInfo(info map[string]*p.ReplicationInfo) map[string]*persistenceblobs.ReplicationInfo {
-	replicationInfoMap := make(map[string]*persistenceblobs.ReplicationInfo)
-	for k, v := range info {
-		replicationInfoMap[k] = &persistenceblobs.ReplicationInfo{
-			Version:     v.Version,
-			LastEventID: v.LastEventID,
-		}
-	}
-
-	return replicationInfoMap
 }
