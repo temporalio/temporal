@@ -100,11 +100,6 @@ var (
 	ErrContextTimeoutTooShort = &workflow.BadRequestError{Message: "Context timeout is too short."}
 	// ErrContextTimeoutNotSet is error for not setting a context timeout when calling a long poll API
 	ErrContextTimeoutNotSet = &workflow.BadRequestError{Message: "Context timeout is not set."}
-
-	// StContextTimeoutTooShort is error for setting a very short context timeout when calling a long poll API
-	StContextTimeoutTooShort = status.New(codes.InvalidArgument, "Context timeout is too short.")
-	// StContextTimeoutNotSet is error for not setting a context timeout when calling a long poll API
-	StContextTimeoutNotSet = status.New(codes.InvalidArgument, "Context timeout is not set.")
 )
 
 // AwaitWaitGroup calls Wait on the given wait
@@ -359,23 +354,23 @@ func GenerateRandomString(n int) string {
 // CreateMatchingPollForDecisionTaskResponse create response for matching's PollForDecisionTask
 func CreateMatchingPollForDecisionTaskResponse(historyResponse *historyservice.RecordDecisionTaskStartedResponse, workflowExecution *commonproto.WorkflowExecution, token []byte) *matchingservice.PollForDecisionTaskResponse {
 	matchingResp := &matchingservice.PollForDecisionTaskResponse{
-		WorkflowExecution:         workflowExecution,
 		TaskToken:                 token,
-		Attempt:                   historyResponse.GetAttempt(),
+		WorkflowExecution:         workflowExecution,
 		WorkflowType:              historyResponse.WorkflowType,
+		PreviousStartedEventId:    historyResponse.PreviousStartedEventId,
 		StartedEventId:            historyResponse.StartedEventId,
-		StickyExecutionEnabled:    historyResponse.StickyExecutionEnabled,
+		Attempt:                   historyResponse.GetAttempt(),
 		NextEventId:               historyResponse.NextEventId,
+		StickyExecutionEnabled:    historyResponse.StickyExecutionEnabled,
 		DecisionInfo:              historyResponse.DecisionInfo,
 		WorkflowExecutionTaskList: historyResponse.WorkflowExecutionTaskList,
+		EventStoreVersion:         historyResponse.EventStoreVersion,
 		BranchToken:               historyResponse.BranchToken,
 		ScheduledTimestamp:        historyResponse.ScheduledTimestamp,
 		StartedTimestamp:          historyResponse.StartedTimestamp,
 		Queries:                   historyResponse.Queries,
 	}
-	if historyResponse.GetPreviousStartedEventId() != EmptyEventID {
-		matchingResp.PreviousStartedEventId = historyResponse.PreviousStartedEventId
-	}
+
 	return matchingResp
 }
 
@@ -583,8 +578,8 @@ func ConvertIndexedValueTypeToProtoType(fieldType interface{}, logger log.Logger
 		return enums.IndexedValueType(fieldType.(float64))
 	case int:
 		return enums.IndexedValueType(fieldType.(int))
-	case enums.IndexedValueType:
-		return fieldType.(enums.IndexedValueType)
+	case workflow.IndexedValueType:
+		return enums.IndexedValueType(fieldType.(workflow.IndexedValueType))
 	default:
 		// Unknown fieldType, please make sure dynamic config return correct value type
 		logger.Error("unknown index value type", tag.Value(fieldType), tag.ValueType(t))

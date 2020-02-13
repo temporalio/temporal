@@ -40,7 +40,6 @@ import (
 
 	"github.com/pborman/uuid"
 
-	h "github.com/temporalio/temporal/.gen/go/history"
 	m "github.com/temporalio/temporal/.gen/go/matching"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/client/history"
@@ -359,18 +358,27 @@ pollLoop:
 				StickyExecutionEnabled:    isStickyEnabled,
 				WorkflowExecutionTaskList: mutableStateResp.TaskList,
 				BranchToken:               mutableStateResp.CurrentBranchToken,
+				StartedEventId:            common.EmptyEventID,
 			}
 			return e.createPollForDecisionTaskResponse(task, resp), nil
 		}
 
 		resp, err := e.recordDecisionTaskStarted(ctx, adapter.ToProtoPollForDecisionTaskRequest(request), task)
 		if err != nil {
-			switch err.(type) {
-			case *workflow.EntityNotExistsError, *h.EventAlreadyStartedError:
-				e.logger.Debug("Duplicated decision task",
-					tag.Name(taskListName), tag.TaskID(task.event.TaskID))
+			//switch err.(type) {
+			//case *workflow.EntityNotExistsError, *h.EventAlreadyStartedError:
+			//	e.logger.Debug("Duplicated decision task",
+			//		tag.Name(taskListName), tag.TaskID(task.event.TaskID))
+			//	task.finish(nil)
+			//default:
+			//	task.finish(err)
+			//}
+
+			code := status.Code(err)
+			if code == codes.NotFound || code == codes.AlreadyExists {
+				e.logger.Debug("Duplicated decision task", tag.Name(taskListName), tag.TaskID(task.event.TaskID))
 				task.finish(nil)
-			default:
+			} else {
 				task.finish(err)
 			}
 
@@ -430,11 +438,19 @@ pollLoop:
 
 		resp, err := e.recordActivityTaskStarted(ctx, adapter.ToProtoPollForActivityTaskRequest(request), task)
 		if err != nil {
-			switch err.(type) {
-			case *workflow.EntityNotExistsError, *h.EventAlreadyStartedError:
+			//switch err.(type) {
+			//case *workflow.EntityNotExistsError, *h.EventAlreadyStartedError:
+			//	e.logger.Debug("Duplicated activity task", tag.Name(taskListName), tag.TaskID(task.event.TaskID))
+			//	task.finish(nil)
+			//default:
+			//	task.finish(err)
+			//}
+
+			code := status.Code(err)
+			if code == codes.NotFound || code == codes.AlreadyExists {
 				e.logger.Debug("Duplicated activity task", tag.Name(taskListName), tag.TaskID(task.event.TaskID))
 				task.finish(nil)
-			default:
+			} else {
 				task.finish(err)
 			}
 
