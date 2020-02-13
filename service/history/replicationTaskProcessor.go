@@ -105,7 +105,7 @@ func NewReplicationTaskProcessor(
 	shard ShardContext,
 	historyEngine Engine,
 	config *Config,
-	historyClient hc.ClientGRPC,
+	historyClient hc.Client,
 	metricsClient metrics.Client,
 	replicationTaskFetcher ReplicationTaskFetcher,
 ) *ReplicationTaskProcessorImpl {

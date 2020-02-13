@@ -50,7 +50,7 @@ type (
 		clusterMetadata        cluster.Metadata
 		domainReplicator       DomainReplicator
 		clientBean             client.Bean
-		historyClient          history.ClientGRPC
+		historyClient          history.Client
 		config                 *Config
 		client                 messaging.Client
 		processors             []*replicationTaskProcessor
@@ -100,7 +100,7 @@ func NewReplicator(
 		clusterMetadata:        clusterMetadata,
 		domainReplicator:       NewDomainReplicator(metadataManagerV2, logger),
 		clientBean:             clientBean,
-		historyClient:          clientBean.GetHistoryClientGRPC(),
+		historyClient:          clientBean.GetHistoryClient(),
 		config:                 config,
 		client:                 client,
 		logger:                 logger,
@@ -158,7 +158,7 @@ func (r *Replicator) createKafkaProcessors(currentClusterName string, clusterNam
 		common.CreateAdminServiceRetryPolicy(),
 		common.IsWhitelistServiceTransientErrorGRPC,
 	)
-	historyClient := history.NewRetryableClientGRPC(
+	historyClient := history.NewRetryableClient(
 		r.historyClient,
 		common.CreateHistoryServiceRetryPolicy(),
 		common.IsWhitelistServiceTransientErrorGRPC,

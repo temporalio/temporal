@@ -39,8 +39,8 @@ import (
 	"go.uber.org/yarpc/api/transport"
 
 	"github.com/temporalio/temporal/.gen/go/history"
-	"github.com/temporalio/temporal/.gen/go/history/historyservicetest"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservicemock"
 	"github.com/temporalio/temporal/common"
@@ -70,7 +70,7 @@ type (
 		mockTimerProcessor       *MocktimerQueueProcessor
 		mockDomainCache          *cache.MockDomainCache
 		mockMatchingClient       *matchingservicemock.MockMatchingServiceClient
-		mockHistoryClient        *historyservicetest.MockClient
+		mockHistoryClient        *historyservicemock.MockHistoryServiceClient
 		mockClusterMetadata      *cluster.MockMetadata
 
 		mockHistoryEngine *historyEngineImpl

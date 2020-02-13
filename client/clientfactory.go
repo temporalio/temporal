@@ -25,7 +25,6 @@ import (
 
 	"go.temporal.io/temporal-proto/workflowservice"
 
-	"github.com/temporalio/temporal/.gen/go/history/historyserviceclient"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
@@ -55,12 +54,10 @@ type (
 	// Factory can be used to create RPC clients for cadence services
 	Factory interface {
 		NewHistoryClient() (history.Client, error)
-		NewHistoryClientGRPC() (history.ClientGRPC, error)
 		NewMatchingClient(domainIDToName DomainIDToNameFunc) (matching.Client, error)
 		NewFrontendClient(rpcAddress string) (frontend.Client, error)
 
 		NewHistoryClientWithTimeout(timeout time.Duration) (history.Client, error)
-		NewHistoryClientWithTimeoutGRPC(timeout time.Duration) (history.ClientGRPC, error)
 		NewMatchingClientWithTimeout(domainIDToName DomainIDToNameFunc, timeout time.Duration, longPollTimeout time.Duration) (matching.Client, error)
 		NewFrontendClientWithTimeout(rpcAddress string, timeout time.Duration, longPollTimeout time.Duration) (frontend.Client, error)
 		NewAdminClientWithTimeout(rpcAddress string, timeout time.Duration) (admin.Client, error)
@@ -102,10 +99,6 @@ func (cf *rpcClientFactory) NewHistoryClient() (history.Client, error) {
 	return cf.NewHistoryClientWithTimeout(history.DefaultTimeout)
 }
 
-func (cf *rpcClientFactory) NewHistoryClientGRPC() (history.ClientGRPC, error) {
-	return cf.NewHistoryClientWithTimeoutGRPC(history.DefaultTimeout)
-}
-
 func (cf *rpcClientFactory) NewMatchingClient(domainIDToName DomainIDToNameFunc) (matching.Client, error) {
 	return cf.NewMatchingClientWithTimeout(domainIDToName, matching.DefaultTimeout, matching.DefaultLongPollTimeout)
 }
@@ -129,40 +122,13 @@ func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (
 	}
 
 	clientProvider := func(clientKey string) (interface{}, error) {
-		dispatcher := cf.rpcFactory.CreateTChannelDispatcherForOutbound(historyCaller, common.HistoryServiceName, clientKey)
-		return historyserviceclient.New(dispatcher.ClientConfig(common.HistoryServiceName)), nil
+		connection := cf.rpcFactory.CreateGRPCConnection(clientKey)
+		return historyservice.NewHistoryServiceClient(connection), nil
 	}
 
 	client := history.NewClient(cf.numberOfHistoryShards, timeout, common.NewClientCache(keyResolver, clientProvider), cf.logger)
 	if cf.metricsClient != nil {
 		client = history.NewMetricClient(client, cf.metricsClient)
-	}
-	return client, nil
-}
-
-func (cf *rpcClientFactory) NewHistoryClientWithTimeoutGRPC(timeout time.Duration) (history.ClientGRPC, error) {
-	// TODO: temporary hack for integration tests
-	resolver, err := cf.monitor.GetResolver(common.HistoryServiceName + "GRPC")
-	if err != nil {
-		return nil, err
-	}
-
-	keyResolver := func(key string) (string, error) {
-		host, err := resolver.Lookup(key)
-		if err != nil {
-			return "", err
-		}
-		return host.GetAddress(), nil
-	}
-
-	clientProvider := func(clientKey string) (interface{}, error) {
-		connection := cf.rpcFactory.CreateGRPCConnection(clientKey)
-		return historyservice.NewHistoryServiceClient(connection), nil
-	}
-
-	client := history.NewClientGRPC(cf.numberOfHistoryShards, timeout, common.NewClientCache(keyResolver, clientProvider), cf.logger)
-	if cf.metricsClient != nil {
-		client = history.NewMetricClientGRPC(client, cf.metricsClient)
 	}
 	return client, nil
 }

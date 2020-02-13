@@ -76,20 +76,6 @@ func (mr *MockBeanMockRecorder) GetHistoryClient() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryClient", reflect.TypeOf((*MockBean)(nil).GetHistoryClient))
 }
 
-// GetHistoryClientGRPC mocks base method
-func (m *MockBean) GetHistoryClientGRPC() history.ClientGRPC {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetHistoryClientGRPC")
-	ret0, _ := ret[0].(history.ClientGRPC)
-	return ret0
-}
-
-// GetHistoryClientGRPC indicates an expected call of GetHistoryClientGRPC
-func (mr *MockBeanMockRecorder) GetHistoryClientGRPC() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryClientGRPC", reflect.TypeOf((*MockBean)(nil).GetHistoryClientGRPC))
-}
-
 // SetHistoryClient mocks base method
 func (m *MockBean) SetHistoryClient(client history.Client) {
 	m.ctrl.T.Helper()

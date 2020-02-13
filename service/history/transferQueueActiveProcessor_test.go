@@ -156,7 +156,7 @@ func (s *transferQueueActiveProcessorSuite) SetupTest() {
 
 	s.mockArchivalClient = &warchiver.ClientMock{}
 	s.mockMatchingClient = s.mockShard.resource.MatchingClient
-	s.mockHistoryClient = s.mockShard.resource.HistoryClientGRPC
+	s.mockHistoryClient = s.mockShard.resource.HistoryClient
 	s.mockExecutionMgr = s.mockShard.resource.ExecutionMgr
 	s.mockHistoryV2Mgr = s.mockShard.resource.HistoryMgr
 	s.mockVisibilityMgr = s.mockShard.resource.VisibilityMgr

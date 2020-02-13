@@ -103,7 +103,6 @@ type (
 		matchingClient    matching.Client
 		historyRawClient  history.Client
 		historyClient     history.Client
-		historyClientGRPC history.ClientGRPC
 		clientBean        client.Bean
 
 		// persistence clients
@@ -248,13 +247,6 @@ func New(
 	historyClient := history.NewRetryableClient(
 		historyRawClient,
 		common.CreateHistoryServiceRetryPolicy(),
-		common.IsWhitelistServiceTransientError,
-	)
-
-	historyRawClientGRPC := clientBean.GetHistoryClientGRPC()
-	historyClientGRPC := history.NewRetryableClientGRPC(
-		historyRawClientGRPC,
-		common.CreateHistoryServiceRetryPolicy(),
 		common.IsWhitelistServiceTransientErrorGRPC,
 	)
 
@@ -317,7 +309,6 @@ func New(
 		matchingClient:    matchingClient,
 		historyRawClient:  historyRawClient,
 		historyClient:     historyClient,
-		historyClientGRPC: historyClientGRPC,
 		clientBean:        clientBean,
 
 		// persistence clients
@@ -369,9 +360,6 @@ func (h *Impl) Start() {
 	if err := h.pprofInitializer.Start(); err != nil {
 		h.logger.WithTags(tag.Error(err)).Fatal("fail to start PProf")
 	}
-	if err := h.dispatcher.Start(); err != nil {
-		h.logger.WithTags(tag.Error(err)).Fatal("fail to start dispatcher")
-	}
 	if err := h.ringpopDispatcher.Start(); err != nil {
 		h.logger.WithTags(tag.Error(err)).Fatal("fail to start dispatcher")
 	}
@@ -405,9 +393,6 @@ func (h *Impl) Stop() {
 	h.membershipMonitor.Stop()
 	if err := h.ringpopDispatcher.Stop(); err != nil {
 		h.logger.WithTags(tag.Error(err)).Error("failed to stop ringpop dispatcher")
-	}
-	if err := h.dispatcher.Stop(); err != nil {
-		h.logger.WithTags(tag.Error(err)).Error("failed to stop dispatcher")
 	}
 	h.runtimeMetricsReporter.Stop()
 	h.persistenceBean.Close()
@@ -533,11 +518,6 @@ func (h *Impl) GetHistoryRawClient() history.Client {
 // GetHistoryClient return history client with retry policy
 func (h *Impl) GetHistoryClient() history.Client {
 	return h.historyClient
-}
-
-// GetHistoryClientGRPC return history client with retry policy
-func (h *Impl) GetHistoryClientGRPC() history.ClientGRPC {
-	return h.historyClientGRPC
 }
 
 // GetRemoteAdminClient return remote admin client for given cluster name

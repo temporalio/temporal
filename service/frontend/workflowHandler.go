@@ -429,7 +429,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 	}
 
 	wh.GetLogger().Debug("Start workflow execution request domainID", tag.WorkflowDomainID(domainID))
-	resp, err := wh.GetHistoryClientGRPC().StartWorkflowExecution(ctx, common.CreateHistoryStartWorkflowRequest(domainID, request))
+	resp, err := wh.GetHistoryClient().StartWorkflowExecution(ctx, common.CreateHistoryStartWorkflowRequest(domainID, request))
 
 	if err != nil {
 		return nil, wh.error(err, scope)
@@ -501,7 +501,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		expectedNextEventID int64,
 		currentBranchToken []byte,
 	) ([]byte, string, int64, int64, bool, error) {
-		response, err := wh.GetHistoryClientGRPC().PollMutableState(ctx, &historyservice.PollMutableStateRequest{
+		response, err := wh.GetHistoryClient().PollMutableState(ctx, &historyservice.PollMutableStateRequest{
 			DomainUUID:          domainUUID,
 			Execution:           execution,
 			ExpectedNextEventId: expectedNextEventID,
@@ -791,7 +791,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(ctx context.Context, req
 	)
 	defer sw.Stop()
 
-	histResp, err := wh.GetHistoryClientGRPC().RespondDecisionTaskCompleted(ctx, &historyservice.RespondDecisionTaskCompletedRequest{
+	histResp, err := wh.GetHistoryClient().RespondDecisionTaskCompleted(ctx, &historyservice.RespondDecisionTaskCompletedRequest{
 		DomainUUID:      taskToken.DomainID,
 		CompleteRequest: request},
 	)
@@ -890,7 +890,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskFailed(ctx context.Context, reques
 		request.Details = request.Details[0:sizeLimitError]
 	}
 
-	_, err = wh.GetHistoryClientGRPC().RespondDecisionTaskFailed(ctx, &historyservice.RespondDecisionTaskFailedRequest{
+	_, err = wh.GetHistoryClient().RespondDecisionTaskFailed(ctx, &historyservice.RespondDecisionTaskFailedRequest{
 		DomainUUID:    taskToken.DomainID,
 		FailedRequest: request,
 	})
@@ -1070,7 +1070,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 			Details:   request.Details[0:sizeLimitError],
 			Identity:  request.Identity,
 		}
-		_, err = wh.GetHistoryClientGRPC().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
+		_, err = wh.GetHistoryClient().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
 			DomainUUID:    taskToken.DomainID,
 			FailedRequest: failRequest,
 		})
@@ -1079,7 +1079,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 		}
 		return &workflowservice.RecordActivityTaskHeartbeatResponse{CancelRequested: true}, nil
 	} else {
-		resp, err := wh.GetHistoryClientGRPC().RecordActivityTaskHeartbeat(ctx, &historyservice.RecordActivityTaskHeartbeatRequest{
+		resp, err := wh.GetHistoryClient().RecordActivityTaskHeartbeat(ctx, &historyservice.RecordActivityTaskHeartbeatRequest{
 			DomainUUID:       taskToken.DomainID,
 			HeartbeatRequest: request,
 		})
@@ -1172,7 +1172,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatByID(ctx context.Context, 
 			Details:   request.Details[0:sizeLimitError],
 			Identity:  request.Identity,
 		}
-		_, err = wh.GetHistoryClientGRPC().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
+		_, err = wh.GetHistoryClient().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
 			DomainUUID:    taskToken.DomainID,
 			FailedRequest: failRequest,
 		})
@@ -1187,7 +1187,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatByID(ctx context.Context, 
 			Identity:  request.Identity,
 		}
 
-		resp, err := wh.GetHistoryClientGRPC().RecordActivityTaskHeartbeat(ctx, &historyservice.RecordActivityTaskHeartbeatRequest{
+		resp, err := wh.GetHistoryClient().RecordActivityTaskHeartbeat(ctx, &historyservice.RecordActivityTaskHeartbeatRequest{
 			DomainUUID:       taskToken.DomainID,
 			HeartbeatRequest: req,
 		})
@@ -1263,7 +1263,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(ctx context.Context, req
 			Details:   request.Result[0:sizeLimitError],
 			Identity:  request.Identity,
 		}
-		_, err = wh.GetHistoryClientGRPC().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
+		_, err = wh.GetHistoryClient().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
 			DomainUUID:    taskToken.DomainID,
 			FailedRequest: failRequest,
 		})
@@ -1271,7 +1271,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(ctx context.Context, req
 			return nil, wh.error(err, scope)
 		}
 	} else {
-		_, err = wh.GetHistoryClientGRPC().RespondActivityTaskCompleted(ctx, &historyservice.RespondActivityTaskCompletedRequest{
+		_, err = wh.GetHistoryClient().RespondActivityTaskCompleted(ctx, &historyservice.RespondActivityTaskCompletedRequest{
 			DomainUUID:      taskToken.DomainID,
 			CompleteRequest: request,
 		})
@@ -1367,7 +1367,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedByID(ctx context.Context,
 			Details:   request.Result[0:sizeLimitError],
 			Identity:  request.Identity,
 		}
-		_, err = wh.GetHistoryClientGRPC().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
+		_, err = wh.GetHistoryClient().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
 			DomainUUID:    taskToken.DomainID,
 			FailedRequest: failRequest,
 		})
@@ -1381,7 +1381,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedByID(ctx context.Context,
 			Identity:  request.Identity,
 		}
 
-		_, err = wh.GetHistoryClientGRPC().RespondActivityTaskCompleted(ctx, &historyservice.RespondActivityTaskCompletedRequest{
+		_, err = wh.GetHistoryClient().RespondActivityTaskCompleted(ctx, &historyservice.RespondActivityTaskCompletedRequest{
 			DomainUUID:      taskToken.DomainID,
 			CompleteRequest: req,
 		})
@@ -1457,7 +1457,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(ctx context.Context, reques
 		request.Details = request.Details[0:sizeLimitError]
 	}
 
-	_, err = wh.GetHistoryClientGRPC().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
+	_, err = wh.GetHistoryClient().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
 		DomainUUID:    taskToken.DomainID,
 		FailedRequest: request,
 	})
@@ -1555,7 +1555,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedByID(ctx context.Context, re
 		Identity:  request.Identity,
 	}
 
-	_, err = wh.GetHistoryClientGRPC().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
+	_, err = wh.GetHistoryClient().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
 		DomainUUID:    taskToken.DomainID,
 		FailedRequest: req,
 	})
@@ -1631,7 +1631,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 			Details:   request.Details[0:sizeLimitError],
 			Identity:  request.Identity,
 		}
-		_, err = wh.GetHistoryClientGRPC().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
+		_, err = wh.GetHistoryClient().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
 			DomainUUID:    taskToken.DomainID,
 			FailedRequest: failRequest,
 		})
@@ -1639,7 +1639,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 			return nil, wh.error(err, scope)
 		}
 	} else {
-		_, err = wh.GetHistoryClientGRPC().RespondActivityTaskCanceled(ctx, &historyservice.RespondActivityTaskCanceledRequest{
+		_, err = wh.GetHistoryClient().RespondActivityTaskCanceled(ctx, &historyservice.RespondActivityTaskCanceledRequest{
 			DomainUUID:    taskToken.DomainID,
 			CancelRequest: request,
 		})
@@ -1734,7 +1734,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledByID(ctx context.Context, 
 			Details:   request.Details[0:sizeLimitError],
 			Identity:  request.Identity,
 		}
-		_, err = wh.GetHistoryClientGRPC().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
+		_, err = wh.GetHistoryClient().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
 			DomainUUID:    taskToken.DomainID,
 			FailedRequest: failRequest,
 		})
@@ -1748,7 +1748,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledByID(ctx context.Context, 
 			Identity:  request.Identity,
 		}
 
-		_, err = wh.GetHistoryClientGRPC().RespondActivityTaskCanceled(ctx, &historyservice.RespondActivityTaskCanceledRequest{
+		_, err = wh.GetHistoryClient().RespondActivityTaskCanceled(ctx, &historyservice.RespondActivityTaskCanceledRequest{
 			DomainUUID:    taskToken.DomainID,
 			CancelRequest: req,
 		})
@@ -1795,7 +1795,7 @@ func (wh *WorkflowHandler) RequestCancelWorkflowExecution(ctx context.Context, r
 		return nil, wh.error(err, scope)
 	}
 
-	_, err = wh.GetHistoryClientGRPC().RequestCancelWorkflowExecution(ctx, &historyservice.RequestCancelWorkflowExecutionRequest{
+	_, err = wh.GetHistoryClient().RequestCancelWorkflowExecution(ctx, &historyservice.RequestCancelWorkflowExecutionRequest{
 		DomainUUID:    domainID,
 		CancelRequest: request,
 	})
@@ -1870,7 +1870,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 		return nil, wh.error(err, scope)
 	}
 
-	_, err = wh.GetHistoryClientGRPC().SignalWorkflowExecution(ctx, &historyservice.SignalWorkflowExecutionRequest{
+	_, err = wh.GetHistoryClient().SignalWorkflowExecution(ctx, &historyservice.SignalWorkflowExecutionRequest{
 		DomainUUID:    domainID,
 		SignalRequest: request,
 	})
@@ -2003,7 +2003,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	var runId string
 	op := func() error {
 		var err error
-		resp, err := wh.GetHistoryClientGRPC().SignalWithStartWorkflowExecution(ctx, &historyservice.SignalWithStartWorkflowExecutionRequest{
+		resp, err := wh.GetHistoryClient().SignalWithStartWorkflowExecution(ctx, &historyservice.SignalWithStartWorkflowExecutionRequest{
 			DomainUUID:             domainID,
 			SignalWithStartRequest: request,
 		})
@@ -2052,7 +2052,7 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 		return nil, wh.error(err, scope)
 	}
 
-	resp, err := wh.GetHistoryClientGRPC().ResetWorkflowExecution(ctx, &historyservice.ResetWorkflowExecutionRequest{
+	resp, err := wh.GetHistoryClient().ResetWorkflowExecution(ctx, &historyservice.ResetWorkflowExecutionRequest{
 		DomainUUID:   domainID,
 		ResetRequest: request,
 	})
@@ -2096,7 +2096,7 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx context.Context, reque
 		return nil, wh.error(err, scope)
 	}
 
-	_, err = wh.GetHistoryClientGRPC().TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
+	_, err = wh.GetHistoryClient().TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
 		DomainUUID:       domainID,
 		TerminateRequest: request,
 	})
@@ -2691,7 +2691,7 @@ func (wh *WorkflowHandler) ResetStickyTaskList(ctx context.Context, request *wor
 		return nil, wh.error(err, scope)
 	}
 
-	_, err = wh.GetHistoryClientGRPC().ResetStickyTaskList(ctx, &historyservice.ResetStickyTaskListRequest{
+	_, err = wh.GetHistoryClient().ResetStickyTaskList(ctx, &historyservice.ResetStickyTaskListRequest{
 		DomainUUID: domainID,
 		Execution:  request.Execution,
 	})
@@ -2759,7 +2759,7 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflows
 		DomainUUID: domainID,
 		Request:    request,
 	}
-	hResponse, err := wh.GetHistoryClientGRPC().QueryWorkflow(ctx, req)
+	hResponse, err := wh.GetHistoryClient().QueryWorkflow(ctx, req)
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -2797,7 +2797,7 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 		return nil, err
 	}
 
-	response, err := wh.GetHistoryClientGRPC().DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
+	response, err := wh.GetHistoryClient().DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
 		DomainUUID: domainID,
 		Request:    request,
 	})
@@ -2922,7 +2922,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionRawHistory(ctx context.Context, r
 		execution *commonproto.WorkflowExecution,
 		currentBranchToken []byte,
 	) ([]byte, string, int64, error) {
-		response, err := wh.GetHistoryClientGRPC().GetMutableState(ctx, &historyservice.GetMutableStateRequest{
+		response, err := wh.GetHistoryClient().GetMutableState(ctx, &historyservice.GetMutableStateRequest{
 			DomainUUID:          domainUUID,
 			Execution:           execution,
 			ExpectedNextEventId: common.EmptyEventID,
@@ -3528,7 +3528,7 @@ func (wh *WorkflowHandler) historyArchived(ctx context.Context, request *workflo
 		DomainUUID: domainID,
 		Execution:  request.Execution,
 	}
-	_, err := wh.GetHistoryClientGRPC().GetMutableState(ctx, getMutableStateRequest)
+	_, err := wh.GetHistoryClient().GetMutableState(ctx, getMutableStateRequest)
 	if err == nil {
 		return false
 	}

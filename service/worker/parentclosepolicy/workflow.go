@@ -24,13 +24,16 @@ import (
 	"context"
 	"time"
 
+	"github.com/gogo/status"
 	"go.temporal.io/temporal"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/activity"
 	"go.temporal.io/temporal/workflow"
+	"google.golang.org/grpc/codes"
 
-	h "github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
@@ -110,34 +113,37 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 			//no-op
 			continue
 		case shared.ParentClosePolicyTerminate:
-			err = client.TerminateWorkflowExecution(nil, &h.TerminateWorkflowExecutionRequest{
-				DomainUUID: common.StringPtr(request.DomainUUID),
-				TerminateRequest: &shared.TerminateWorkflowExecutionRequest{
-					Domain: common.StringPtr(request.DomainName),
-					WorkflowExecution: &shared.WorkflowExecution{
-						WorkflowId: common.StringPtr(execution.WorkflowID),
-						RunId:      common.StringPtr(execution.RunID),
+			_, err = client.TerminateWorkflowExecution(nil, &historyservice.TerminateWorkflowExecutionRequest{
+				DomainUUID: request.DomainUUID,
+				TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
+					Domain: request.DomainName,
+					WorkflowExecution: &commonproto.WorkflowExecution{
+						WorkflowId: execution.WorkflowID,
+						RunId:      execution.RunID,
 					},
-					Reason:   common.StringPtr("by parent close policy"),
-					Identity: common.StringPtr(processorWFTypeName),
+					Reason:   "by parent close policy",
+					Identity: processorWFTypeName,
 				},
 			})
 		case shared.ParentClosePolicyRequestCancel:
-			err = client.RequestCancelWorkflowExecution(nil, &h.RequestCancelWorkflowExecutionRequest{
-				DomainUUID: common.StringPtr(request.DomainUUID),
-				CancelRequest: &shared.RequestCancelWorkflowExecutionRequest{
-					Domain: common.StringPtr(request.DomainName),
-					WorkflowExecution: &shared.WorkflowExecution{
-						WorkflowId: common.StringPtr(execution.WorkflowID),
-						RunId:      common.StringPtr(execution.RunID),
+			_, err = client.RequestCancelWorkflowExecution(nil, &historyservice.RequestCancelWorkflowExecutionRequest{
+				DomainUUID: request.DomainUUID,
+				CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
+					Domain: request.DomainName,
+					WorkflowExecution: &commonproto.WorkflowExecution{
+						WorkflowId: execution.WorkflowID,
+						RunId:      execution.RunID,
 					},
-					Identity: common.StringPtr(processorWFTypeName),
+					Identity: processorWFTypeName,
 				},
 			})
 		}
 
 		if err != nil {
-			if _, ok := err.(*shared.EntityNotExistsError); ok {
+			//if _, ok := err.(*shared.EntityNotExistsError); ok {
+			//	err = nil
+			//}
+			if status.Code(err) == codes.NotFound {
 				err = nil
 			}
 		}
