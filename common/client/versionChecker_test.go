@@ -26,14 +26,12 @@ import (
 	"strings"
 	"testing"
 
-	"go.uber.org/yarpc/api/encoding"
-	"go.uber.org/yarpc/api/transport"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
-
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 )
 
 type (
@@ -108,14 +106,14 @@ func (s *VersionCheckerSuite) TestClientSupported() {
 		},
 	}
 
-	for _, tc := range testCases {
+	for caseIndex, tc := range testCases {
 		versionChecker := NewVersionChecker()
 		err := versionChecker.ClientSupported(tc.callContext, tc.enableClientVersionCheck)
 		if tc.expectErr {
-			s.Error(err)
+			s.Errorf(err, "Case #%d", caseIndex)
 			s.IsType(&shared.ClientVersionNotSupportedError{}, err)
 		} else {
-			s.NoError(err)
+			s.NoErrorf(err, "Case #%d", caseIndex)
 		}
 	}
 }
@@ -268,11 +266,10 @@ func (s *VersionCheckerSuite) getHigherVersion(version string) string {
 }
 
 func (s *VersionCheckerSuite) constructCallContext(clientImpl string, featureVersion string) context.Context {
-	ctx := context.Background()
-	ctx, call := encoding.NewInboundCall(ctx)
-	err := call.ReadFromRequest(&transport.Request{
-		Headers: transport.NewHeaders().With(common.ClientImplHeaderName, clientImpl).With(common.FeatureVersionHeaderName, featureVersion),
-	})
-	s.NoError(err)
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
+		common.FeatureVersionHeaderName: featureVersion,
+		common.ClientImplHeaderName:     clientImpl,
+	}))
+
 	return ctx
 }

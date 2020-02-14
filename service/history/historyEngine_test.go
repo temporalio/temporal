@@ -28,21 +28,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.uber.org/yarpc/api/encoding"
-	"go.uber.org/yarpc/api/transport"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/temporalio/temporal/.gen/go/history"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservicemock"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	cc "github.com/temporalio/temporal/common/client"
@@ -4401,12 +4399,11 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_SuccessWith
 }
 
 func (s *engineSuite) constructCallContext(featureVersion string) context.Context {
-	ctx := context.Background()
-	ctx, call := encoding.NewInboundCall(ctx)
-	err := call.ReadFromRequest(&transport.Request{
-		Headers: transport.NewHeaders().With(common.ClientImplHeaderName, cc.GoSDK).With(common.FeatureVersionHeaderName, featureVersion),
-	})
-	s.NoError(err)
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
+		common.FeatureVersionHeaderName: featureVersion,
+		common.ClientImplHeaderName:     cc.GoSDK,
+	}))
+
 	return ctx
 }
 

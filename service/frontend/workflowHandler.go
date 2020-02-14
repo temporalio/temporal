@@ -31,7 +31,6 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/workflowservice"
-	"go.uber.org/yarpc/yarpcerrors"
 	"google.golang.org/grpc/codes"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
@@ -3304,11 +3303,6 @@ func (wh *WorkflowHandler) errorThrift(err error, scope metrics.Scope, tagsForEr
 	case *shared.ClientVersionNotSupportedError:
 		scope.IncCounter(metrics.CadenceErrClientVersionNotSupportedCounter)
 		return err
-	case *yarpcerrors.Status:
-		if err.Code() == yarpcerrors.CodeDeadlineExceeded {
-			scope.IncCounter(metrics.CadenceErrContextTimeoutCounter)
-			return err
-		}
 	}
 
 	wh.GetLogger().WithTags(tagsForErrorLog...).Error("Uncategorized error",
