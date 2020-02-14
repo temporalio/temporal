@@ -1,3 +1,23 @@
+// Copyright (c) 2020 Temporal Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
 package headers
 
 import (
@@ -44,18 +64,28 @@ func GetValues(ctx context.Context, headerNames ...string) []string {
 	return headerValues
 }
 
-// PropagateVersions propagates headers from incoming context to outgoing context.
+// PropagateVersions propagates version headers from incoming context to outgoing context.
+// It copies all version headers to outgoing context only if they are exist in incoming context
+// and doesn't exist in outgoing context already.
 func PropagateVersions(ctx context.Context) context.Context {
-	if md, ok := metadata.FromIncomingContext(ctx); ok {
-		outgoingMetadata := copyIncomingHeadersToOutgoing(md,
-			LibraryVersionHeaderName,
-			FeatureVersionHeaderName,
-			ClientImplHeaderName)
-		if outgoingMetadata.Len() > 0 {
-			ctx = metadata.NewOutgoingContext(ctx, outgoingMetadata)
+	if mdIncoming, ok := metadata.FromIncomingContext(ctx); ok {
+		var headersToAppend []string
+		mdOutgoing, mdOutgoingExist := metadata.FromOutgoingContext(ctx)
+		for _, headerName := range []string{LibraryVersionHeaderName, FeatureVersionHeaderName, ClientImplHeaderName} {
+			if incomingValue := mdIncoming.Get(headerName); len(incomingValue) > 0 {
+				if mdOutgoingExist {
+					if outgoingValue := mdOutgoing.Get(headerName); len(outgoingValue) > 0 {
+						continue
+					}
+				}
+
+				headersToAppend = append(headersToAppend, headerName, incomingValue[0])
+			}
+		}
+		if headersToAppend != nil {
+			metadata.AppendToOutgoingContext(ctx, headersToAppend...)
 		}
 	}
-
 	return ctx
 }
 
@@ -79,22 +109,11 @@ func SetVersionsForTests(ctx context.Context, libraryVersion, clientImpl, featur
 	}))
 }
 
-func copyIncomingHeadersToOutgoing(source metadata.MD, headerNames ...string) metadata.MD {
-	outgoingMetadata := metadata.New(map[string]string{})
-	for _, headerName := range headerNames {
-		if values := source.Get(headerName); len(values) > 0 {
-			outgoingMetadata.Append(headerName, values...)
-		}
-	}
-
-	return outgoingMetadata
-}
-
 func getSingleHeaderValue(md metadata.MD, headerName string) string {
 	values := md.Get(headerName)
-	if len(values) > 0 {
-		return values[0]
-	} else {
+	if len(values) == 0 {
 		return ""
 	}
+
+	return values[0]
 }

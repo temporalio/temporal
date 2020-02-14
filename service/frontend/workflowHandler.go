@@ -1077,17 +1077,17 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 			return nil, wh.error(err, scope)
 		}
 		return &workflowservice.RecordActivityTaskHeartbeatResponse{CancelRequested: true}, nil
-	} else {
-		resp, err := wh.GetHistoryClient().RecordActivityTaskHeartbeat(ctx, &historyservice.RecordActivityTaskHeartbeatRequest{
-			DomainUUID:       taskToken.DomainID,
-			HeartbeatRequest: request,
-		})
-		if err != nil {
-			return nil, wh.error(err, scope)
-		}
-
-		return &workflowservice.RecordActivityTaskHeartbeatResponse{CancelRequested: resp.GetCancelRequested()}, nil
 	}
+
+	resp, err := wh.GetHistoryClient().RecordActivityTaskHeartbeat(ctx, &historyservice.RecordActivityTaskHeartbeatRequest{
+		DomainUUID:       taskToken.DomainID,
+		HeartbeatRequest: request,
+	})
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	return &workflowservice.RecordActivityTaskHeartbeatResponse{CancelRequested: resp.GetCancelRequested()}, nil
 }
 
 // RecordActivityTaskHeartbeatByID is called by application worker while it is processing an ActivityTask.  If worker fails
@@ -1179,22 +1179,22 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatByID(ctx context.Context, 
 			return nil, wh.error(err, scope)
 		}
 		return &workflowservice.RecordActivityTaskHeartbeatByIDResponse{CancelRequested: true}, nil
-	} else {
-		req := &workflowservice.RecordActivityTaskHeartbeatRequest{
-			TaskToken: token,
-			Details:   request.Details,
-			Identity:  request.Identity,
-		}
-
-		resp, err := wh.GetHistoryClient().RecordActivityTaskHeartbeat(ctx, &historyservice.RecordActivityTaskHeartbeatRequest{
-			DomainUUID:       taskToken.DomainID,
-			HeartbeatRequest: req,
-		})
-		if err != nil {
-			return nil, wh.error(err, scope)
-		}
-		return &workflowservice.RecordActivityTaskHeartbeatByIDResponse{CancelRequested: resp.GetCancelRequested()}, nil
 	}
+
+	req := &workflowservice.RecordActivityTaskHeartbeatRequest{
+		TaskToken: token,
+		Details:   request.Details,
+		Identity:  request.Identity,
+	}
+
+	resp, err := wh.GetHistoryClient().RecordActivityTaskHeartbeat(ctx, &historyservice.RecordActivityTaskHeartbeatRequest{
+		DomainUUID:       taskToken.DomainID,
+		HeartbeatRequest: req,
+	})
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+	return &workflowservice.RecordActivityTaskHeartbeatByIDResponse{CancelRequested: resp.GetCancelRequested()}, nil
 }
 
 // RespondActivityTaskCompleted is called by application worker when it is done processing an ActivityTask.  It will

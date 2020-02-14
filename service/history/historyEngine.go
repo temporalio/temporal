@@ -24,6 +24,7 @@ package history
 
 import (
 	"bytes"
+	"context"
 	ctx "context"
 	"encoding/json"
 	"errors"
@@ -34,7 +35,6 @@ import (
 	"github.com/pborman/uuid"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/workflowservice"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc/codes"
 
 	h "github.com/temporalio/temporal/.gen/go/history"
