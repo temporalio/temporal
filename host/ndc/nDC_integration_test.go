@@ -37,8 +37,8 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/workflowservice"
-	"go.uber.org/yarpc"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
 	"gopkg.in/yaml.v2"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
@@ -145,7 +145,7 @@ func (s *nDCIntegrationTestSuite) SetupSuite() {
 func (s *nDCIntegrationTestSuite) GetReplicationMessagesMock(
 	ctx context.Context,
 	request *adminservice.GetReplicationMessagesRequest,
-	opts ...yarpc.CallOption,
+	opts ...grpc.CallOption,
 ) (*adminservice.GetReplicationMessagesResponse, error) {
 	select {
 	case task := <-s.standByReplicationTasksChan:

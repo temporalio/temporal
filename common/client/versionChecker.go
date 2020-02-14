@@ -25,7 +25,6 @@ import (
 	"fmt"
 
 	"github.com/hashicorp/go-version"
-	"go.uber.org/yarpc"
 	"google.golang.org/grpc/metadata"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
@@ -63,6 +62,18 @@ const (
 var (
 	// ErrUnknownFeature indicates that requested feature is not known by version checker
 	ErrUnknownFeature = &shared.BadRequestError{Message: "Unknown feature"}
+
+	internalHeaders = metadata.New(map[string]string{
+		common.LibraryVersionHeaderName: SupportedGoSDKVersion,
+		common.FeatureVersionHeaderName: GoWorkerConsistentQueryVersion,
+		common.ClientImplHeaderName:     GoSDK,
+	})
+
+	cliHeaders = metadata.New(map[string]string{
+		common.LibraryVersionHeaderName: SupportedCLIVersion,
+		common.FeatureVersionHeaderName: GoWorkerConsistentQueryVersion,
+		common.ClientImplHeaderName:     CLI,
+	})
 )
 
 type (
@@ -134,35 +145,15 @@ func (vc *versionChecker) ClientSupported(ctx context.Context, enableClientVersi
 
 // GetHeadersValue returns header values for passed header names.
 func GetHeadersValue(ctx context.Context, headerNames ...string) []string {
-	md, grpcHeader := metadata.FromIncomingContext(ctx)
-	var call *yarpc.Call
-	if !grpcHeader {
-		// backward compatibility with YARPC
-		call = yarpc.CallFromContext(ctx)
-		if call == nil {
-			return make([]string, len(headerNames))
-		}
-	}
+	headerValues := make([]string, len(headerNames))
 
-	var headerValues []string
-	for _, headerName := range headerNames {
-		if call != nil {
-			headerValues = append(headerValues, call.Header(headerName))
-		} else {
-			headerValues = append(headerValues, getSingleHeaderValue(md, headerName))
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		for i, headerName := range headerNames {
+			headerValues[i] = getSingleHeaderValue(md, headerName)
 		}
 	}
 
 	return headerValues
-}
-
-func getSingleHeaderValue(md metadata.MD, headerName string) string {
-	values := md.Get(headerName)
-	if len(values) > 0 {
-		return values[0]
-	} else {
-		return ""
-	}
 }
 
 func PropagateHeaders(ctx context.Context) context.Context {
@@ -177,6 +168,16 @@ func PropagateHeaders(ctx context.Context) context.Context {
 	}
 
 	return ctx
+}
+
+// SetHeaders sets headers for internal communications.
+func SetHeaders(ctx context.Context) context.Context {
+	return metadata.NewOutgoingContext(ctx, internalHeaders)
+}
+
+// SetCLIHeaders sets headers for CLI requests.
+func SetCLIHeaders(ctx context.Context) context.Context {
+	return metadata.NewOutgoingContext(ctx, cliHeaders)
 }
 
 func copyIncomingHeadersToOutgoing(source metadata.MD, headerNames ...string) metadata.MD {
@@ -200,6 +201,15 @@ func (vc *versionChecker) SupportsStickyQuery(clientImpl string, clientFeatureVe
 // In case client version lookup fails assume the client does not support feature.
 func (vc *versionChecker) SupportsConsistentQuery(clientImpl string, clientFeatureVersion string) error {
 	return vc.featureSupported(clientImpl, clientFeatureVersion, consistentQuery)
+}
+
+func getSingleHeaderValue(md metadata.MD, headerName string) string {
+	values := md.Get(headerName)
+	if len(values) > 0 {
+		return values[0]
+	} else {
+		return ""
+	}
 }
 
 func (vc *versionChecker) featureSupported(clientImpl string, clientFeatureVersion string, feature string) error {

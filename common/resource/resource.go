@@ -24,7 +24,6 @@ import (
 	"net"
 
 	"go.temporal.io/temporal-proto/workflowservice"
-	"go.uber.org/yarpc"
 
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/client/admin"
@@ -105,7 +104,6 @@ type (
 		GetThrottledLogger() log.Logger
 
 		// for registering handlers
-		GetDispatcher() *yarpc.Dispatcher
 		GetGRPCListener() net.Listener
 	}
 )

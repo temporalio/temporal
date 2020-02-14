@@ -23,7 +23,6 @@ package cli
 import (
 	"github.com/urfave/cli"
 	"go.temporal.io/temporal-proto/workflowservice"
-	"go.uber.org/yarpc"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
@@ -37,8 +36,7 @@ type ClientFactory interface {
 }
 
 type clientFactory struct {
-	dispatcher *yarpc.Dispatcher
-	logger     *zap.Logger
+	logger *zap.Logger
 }
 
 // NewClientFactory creates a new ClientFactory

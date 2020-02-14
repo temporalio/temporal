@@ -28,7 +28,6 @@ import (
 	"github.com/uber-go/tally"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal-proto/workflowservicemock"
-	"go.uber.org/yarpc"
 	"go.uber.org/zap"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
@@ -425,11 +424,6 @@ func (s *Test) GetLogger() log.Logger {
 // GetThrottledLogger for testing
 func (s *Test) GetThrottledLogger() log.Logger {
 	return s.Logger
-}
-
-// GetDispatcher for testing
-func (s *Test) GetDispatcher() *yarpc.Dispatcher {
-	panic("user should implement this method for test")
 }
 
 // GetGRPCListener for testing
