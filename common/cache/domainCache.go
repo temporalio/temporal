@@ -354,7 +354,7 @@ func (c *domainCache) GetDomainByID(
 	if id == "" {
 		return nil, &workflow.BadRequestError{Message: "DomainID is empty."}
 	}
-	return c.getDomainByID(id)
+	return c.getDomainByID(id, true)
 }
 
 // GetDomainID retrieves domainID by using GetDomain
@@ -374,7 +374,7 @@ func (c *domainCache) GetDomainName(
 	id string,
 ) (string, error) {
 
-	entry, err := c.getDomainByID(id)
+	entry, err := c.getDomainByID(id, false)
 	if err != nil {
 		return "", err
 	}
@@ -552,7 +552,7 @@ func (c *domainCache) getDomain(
 
 	id, cacheHit := c.cacheNameToID.Load().(Cache).Get(name).(string)
 	if cacheHit {
-		return c.getDomainByID(id)
+		return c.getDomainByID(id, true)
 	}
 
 	if err := c.checkDomainExists(name, ""); err != nil {
@@ -563,14 +563,14 @@ func (c *domainCache) getDomain(
 	defer c.refreshLock.Unlock()
 	id, cacheHit = c.cacheNameToID.Load().(Cache).Get(name).(string)
 	if cacheHit {
-		return c.getDomainByID(id)
+		return c.getDomainByID(id, true)
 	}
 	if err := c.refreshDomainsLocked(); err != nil {
 		return nil, err
 	}
 	id, cacheHit = c.cacheNameToID.Load().(Cache).Get(name).(string)
 	if cacheHit {
-		return c.getDomainByID(id)
+		return c.getDomainByID(id, true)
 	}
 	// impossible case
 	return nil, &workflow.InternalServiceError{Message: "domainCache encounter case where domain exists but cannot be loaded"}
@@ -580,13 +580,17 @@ func (c *domainCache) getDomain(
 // store and writes it to the cache with an expiry before returning back
 func (c *domainCache) getDomainByID(
 	id string,
+	deepCopy bool,
 ) (*DomainCacheEntry, error) {
 
 	var result *DomainCacheEntry
 	entry, cacheHit := c.cacheByID.Load().(Cache).Get(id).(*DomainCacheEntry)
 	if cacheHit {
 		entry.RLock()
-		result = entry.duplicate()
+		result = entry
+		if deepCopy {
+			result = entry.duplicate()
+		}
 		entry.RUnlock()
 		return result, nil
 	}
@@ -600,7 +604,10 @@ func (c *domainCache) getDomainByID(
 	entry, cacheHit = c.cacheByID.Load().(Cache).Get(id).(*DomainCacheEntry)
 	if cacheHit {
 		entry.RLock()
-		result = entry.duplicate()
+		result = entry
+		if deepCopy {
+			result = entry.duplicate()
+		}
 		entry.RUnlock()
 		return result, nil
 	}
@@ -610,7 +617,10 @@ func (c *domainCache) getDomainByID(
 	entry, cacheHit = c.cacheByID.Load().(Cache).Get(id).(*DomainCacheEntry)
 	if cacheHit {
 		entry.RLock()
-		result = entry.duplicate()
+		result = entry
+		if deepCopy {
+			result = entry.duplicate()
+		}
 		entry.RUnlock()
 		return result, nil
 	}
