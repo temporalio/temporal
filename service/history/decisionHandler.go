@@ -25,13 +25,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/temporalio/temporal/common/client"
-
 	h "github.com/temporalio/temporal/.gen/go/history"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
+	"github.com/temporalio/temporal/common/headers"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
@@ -66,7 +65,7 @@ type (
 		logger                log.Logger
 		throttledLogger       log.Logger
 		decisionAttrValidator *decisionAttrValidator
-		versionChecker        client.VersionChecker
+		versionChecker        headers.VersionChecker
 	}
 )
 
@@ -90,7 +89,7 @@ func newDecisionHandler(historyEngine *historyEngineImpl) *decisionHandlerImpl {
 			historyEngine.config,
 			historyEngine.logger,
 		),
-		versionChecker: client.NewVersionChecker(),
+		versionChecker: headers.NewVersionChecker(),
 	}
 }
 
@@ -280,7 +279,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskCompleted(
 		RunId:      common.StringPtr(token.RunID),
 	}
 
-	headers := client.GetHeadersValue(ctx, client.LibraryVersionHeaderName, client.FeatureVersionHeaderName, client.ClientImplHeaderName)
+	headers := headers.GetValues(ctx, headers.LibraryVersionHeaderName, headers.FeatureVersionHeaderName, headers.ClientImplHeaderName)
 	clientLibVersion := headers[0]
 	clientFeatureVersion := headers[1]
 	clientImpl := headers[2]

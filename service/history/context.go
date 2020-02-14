@@ -24,9 +24,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/temporalio/temporal/common/client"
+	"github.com/temporalio/temporal/common/headers"
 )
 
 func newContextWithTimeout(timeout time.Duration) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(client.SetHeaders(context.Background()), timeout)
+	return context.WithTimeout(headers.SetVersions(context.Background()), timeout)
 }

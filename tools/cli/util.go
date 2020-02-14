@@ -43,7 +43,7 @@ import (
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal/client"
 
-	versionChecker "github.com/temporalio/temporal/common/client"
+	"github.com/temporalio/temporal/common/headers"
 )
 
 // JSONHistorySerializer is used to encode history event in JSON
@@ -723,7 +723,7 @@ func newContextWithTimeout(c *cli.Context, defaultTimeout time.Duration) (contex
 		contextTimeout = time.Duration(c.GlobalInt(FlagContextTimeout)) * time.Second
 	}
 
-	return context.WithTimeout(versionChecker.SetCLIHeaders(context.Background()), contextTimeout)
+	return context.WithTimeout(headers.SetCLIVersions(context.Background()), contextTimeout)
 }
 
 // process and validate input provided through cmd or file

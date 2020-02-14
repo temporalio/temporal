@@ -32,7 +32,7 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/client"
+	"github.com/temporalio/temporal/common/headers"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 )
@@ -974,7 +974,7 @@ func (c *clientImpl) createContext(parent context.Context) (context.Context, con
 		return context.WithTimeout(context.Background(), c.timeout)
 	}
 
-	return context.WithTimeout(client.PropagateHeaders(parent), c.timeout)
+	return context.WithTimeout(headers.PropagateVersions(parent), c.timeout)
 }
 
 func (c *clientImpl) getClientForWorkflowID(workflowID string) (historyservice.HistoryServiceClient, error) {

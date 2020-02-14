@@ -38,7 +38,7 @@ import (
 
 	"github.com/temporalio/temporal/client/frontend"
 	"github.com/temporalio/temporal/common"
-	client2 "github.com/temporalio/temporal/common/client"
+	"github.com/temporalio/temporal/common/headers"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
@@ -348,7 +348,7 @@ func startTaskProcessor(
 			}
 			var err error
 			requestID := uuid.New().String()
-			ctx = metadata.AppendToOutgoingContext(ctx, client2.EnforceDCRedirection, "true")
+			ctx = metadata.AppendToOutgoingContext(ctx, headers.EnforceDCRedirection, "true")
 
 			switch batchParams.BatchType {
 			case BatchTypeTerminate:

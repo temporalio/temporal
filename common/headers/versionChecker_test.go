@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package client
+package headers
 
 import (
 	"context"
@@ -264,5 +264,5 @@ func (s *VersionCheckerSuite) getHigherVersion(version string) string {
 }
 
 func (s *VersionCheckerSuite) constructCallContext(clientImpl, featureVersion string) context.Context {
-	return SetHeadersForTests(context.Background(), SupportedGoSDKVersion, clientImpl, featureVersion)
+	return SetVersionsForTests(context.Background(), SupportedGoSDKVersion, clientImpl, featureVersion)
 }

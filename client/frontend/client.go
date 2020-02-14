@@ -29,7 +29,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/client"
+	"github.com/temporalio/temporal/common/headers"
 )
 
 const (
@@ -591,7 +591,7 @@ func (c *clientImpl) createContextWithTimeout(parent context.Context, timeout ti
 	if parent == nil {
 		return context.WithTimeout(context.Background(), timeout)
 	}
-	return context.WithTimeout(client.PropagateHeaders(parent), timeout)
+	return context.WithTimeout(headers.PropagateVersions(parent), timeout)
 }
 
 func (c *clientImpl) getRandomClient() (workflowservice.WorkflowServiceClient, error) {

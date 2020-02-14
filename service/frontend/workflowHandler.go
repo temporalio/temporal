@@ -41,9 +41,9 @@ import (
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/client"
 	"github.com/temporalio/temporal/common/domain"
 	"github.com/temporalio/temporal/common/elasticsearch/validator"
+	"github.com/temporalio/temporal/common/headers"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/messaging"
@@ -63,7 +63,7 @@ type (
 		tokenSerializer           common.TaskTokenSerializer
 		rateLimiter               quotas.Policy
 		config                    *Config
-		versionChecker            client.VersionChecker
+		versionChecker            headers.VersionChecker
 		domainHandler             domain.Handler
 		visibilityQueryValidator  *validator.VisibilityQueryValidator
 		searchAttributesValidator *validator.SearchAttributesValidator
@@ -141,7 +141,7 @@ func NewWorkflowHandler(
 				return float64(config.DomainRPS(domain))
 			},
 		),
-		versionChecker: client.NewVersionChecker(),
+		versionChecker: headers.NewVersionChecker(),
 		domainHandler: domain.NewHandler(
 			config.MinRetentionDays(),
 			config.MaxBadBinaries,
@@ -2637,7 +2637,7 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(ctx context.Context, reques
 		}
 	}
 
-	headers := client.GetHeadersValue(ctx, client.ClientImplHeaderName, client.FeatureVersionHeaderName)
+	headers := headers.GetValues(ctx, headers.ClientImplHeaderName, headers.FeatureVersionHeaderName)
 	request.WorkerVersionInfo = &commonproto.WorkerVersionInfo{
 		Impl:           headers[0],
 		FeatureVersion: headers[1],
@@ -3022,8 +3022,8 @@ func (wh *WorkflowHandler) GetClusterInfo(ctx context.Context, _ *workflowservic
 
 	return &workflowservice.GetClusterInfoResponse{
 		SupportedClientVersions: &commonproto.SupportedClientVersions{
-			GoSdk:   client.SupportedGoSDKVersion,
-			JavaSdk: client.SupportedJavaSDKVersion,
+			GoSdk:   headers.SupportedGoSDKVersion,
+			JavaSdk: headers.SupportedJavaSDKVersion,
 		},
 	}, nil
 }
