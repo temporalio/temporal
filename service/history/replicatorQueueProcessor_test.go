@@ -24,6 +24,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/temporalio/temporal/common/primitives"
+
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
 	"github.com/golang/mock/gomock"
@@ -122,12 +124,12 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 	runID := uuid.New()
 	scheduleID := int64(144)
 	taskID := int64(1444)
-	task := &persistence.ReplicationTaskInfo{
+	task := &persistenceblobs.ReplicationTaskInfo{
 		TaskType:    persistence.ReplicationTaskTypeSyncActivity,
 		TaskID:      taskID,
-		DomainID:    domainID,
+		DomainID:    primitives.MustParseUUID(domainID),
 		WorkflowID:  workflowID,
-		RunID:       runID,
+		RunID:       primitives.MustParseUUID(runID),
 		ScheduledID: scheduleID,
 	}
 	s.mockExecutionMgr.On("CompleteReplicationTask", &persistence.CompleteReplicationTaskRequest{TaskID: taskID}).Return(nil).Once()
@@ -152,7 +154,8 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 		nil,
 	), nil).AnyTimes()
 
-	_, err := s.replicatorQueueProcessor.process(newTaskInfo(nil, task, s.logger))
+	wrapper := &persistence.ReplicationTaskInfoWrapper{ReplicationTaskInfo: task}
+	_, err := s.replicatorQueueProcessor.process(newTaskInfo(nil, wrapper, s.logger))
 	s.Nil(err)
 }
 
@@ -164,12 +167,12 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 	scheduleID := int64(144)
 	taskID := int64(1444)
 	version := int64(2333)
-	task := &persistence.ReplicationTaskInfo{
+	task := &persistenceblobs.ReplicationTaskInfo{
 		TaskType:    persistence.ReplicationTaskTypeSyncActivity,
 		TaskID:      taskID,
-		DomainID:    domainID,
+		DomainID:    primitives.MustParseUUID(domainID),
 		WorkflowID:  workflowID,
-		RunID:       runID,
+		RunID:       primitives.MustParseUUID(runID),
 		ScheduledID: scheduleID,
 	}
 	s.mockExecutionMgr.On("CompleteReplicationTask", &persistence.CompleteReplicationTaskRequest{TaskID: taskID}).Return(nil).Once()
@@ -199,7 +202,8 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 		nil,
 	), nil).AnyTimes()
 
-	_, err := s.replicatorQueueProcessor.process(newTaskInfo(nil, task, s.logger))
+	wrapper := &persistence.ReplicationTaskInfoWrapper{ReplicationTaskInfo: task}
+	_, err := s.replicatorQueueProcessor.process(newTaskInfo(nil, wrapper, s.logger))
 	s.Nil(err)
 }
 
@@ -211,12 +215,12 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 	scheduleID := int64(144)
 	taskID := int64(1444)
 	version := int64(2333)
-	task := &persistence.ReplicationTaskInfo{
+	task := &persistenceblobs.ReplicationTaskInfo{
 		TaskType:    persistence.ReplicationTaskTypeSyncActivity,
 		TaskID:      taskID,
-		DomainID:    domainID,
+		DomainID:    primitives.MustParseUUID(domainID),
 		WorkflowID:  workflowID,
-		RunID:       runID,
+		RunID:       primitives.MustParseUUID(runID),
 		ScheduledID: scheduleID,
 	}
 	s.mockExecutionMgr.On("CompleteReplicationTask", &persistence.CompleteReplicationTaskRequest{TaskID: taskID}).Return(nil).Once()
@@ -248,7 +252,8 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 		nil,
 	), nil).AnyTimes()
 
-	_, err := s.replicatorQueueProcessor.process(newTaskInfo(nil, task, s.logger))
+	wrapper := &persistence.ReplicationTaskInfoWrapper{ReplicationTaskInfo: task}
+	_, err := s.replicatorQueueProcessor.process(newTaskInfo(nil, wrapper, s.logger))
 	s.Nil(err)
 }
 
@@ -260,12 +265,12 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	scheduleID := int64(144)
 	taskID := int64(1444)
 	version := int64(2333)
-	task := &persistence.ReplicationTaskInfo{
+	task := &persistenceblobs.ReplicationTaskInfo{
 		TaskType:    persistence.ReplicationTaskTypeSyncActivity,
 		TaskID:      taskID,
-		DomainID:    domainID,
+		DomainID:    primitives.MustParseUUID(domainID),
 		WorkflowID:  workflowID,
-		RunID:       runID,
+		RunID:       primitives.MustParseUUID(runID),
 		ScheduledID: scheduleID,
 	}
 	s.mockExecutionMgr.On("CompleteReplicationTask", &persistence.CompleteReplicationTaskRequest{TaskID: taskID}).Return(nil).Once()
@@ -358,7 +363,8 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 		},
 	}).Return(nil).Once()
 
-	_, err := s.replicatorQueueProcessor.process(newTaskInfo(nil, task, s.logger))
+	wrapper := &persistence.ReplicationTaskInfoWrapper{ReplicationTaskInfo: task}
+	_, err := s.replicatorQueueProcessor.process(newTaskInfo(nil, wrapper, s.logger))
 	s.Nil(err)
 }
 
@@ -370,12 +376,12 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	scheduleID := int64(144)
 	taskID := int64(1444)
 	version := int64(2333)
-	task := &persistence.ReplicationTaskInfo{
+	task := &persistenceblobs.ReplicationTaskInfo{
 		TaskType:    persistence.ReplicationTaskTypeSyncActivity,
 		TaskID:      taskID,
-		DomainID:    domainID,
+		DomainID:    primitives.MustParseUUID(domainID),
 		WorkflowID:  workflowID,
-		RunID:       runID,
+		RunID:       primitives.MustParseUUID(runID),
 		ScheduledID: scheduleID,
 	}
 	s.mockExecutionMgr.On("CompleteReplicationTask", &persistence.CompleteReplicationTaskRequest{TaskID: taskID}).Return(nil).Once()
@@ -467,7 +473,8 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 		},
 	}).Return(nil).Once()
 
-	_, err := s.replicatorQueueProcessor.process(newTaskInfo(nil, task, s.logger))
+	wrapper := &persistence.ReplicationTaskInfoWrapper{ReplicationTaskInfo: task}
+	_, err := s.replicatorQueueProcessor.process(newTaskInfo(nil, wrapper, s.logger))
 	s.Nil(err)
 }
 

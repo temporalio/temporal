@@ -93,24 +93,6 @@ CREATE TYPE transfer_task (
   record_visibility          boolean, -- indicates whether or not to create a visibility record
 );
 
-CREATE TYPE replication_task (
-  domain_id                  uuid,   -- The domain ID that this replication task belongs to
-  workflow_id                text,   -- The workflow ID that this replication task belongs to
-  run_id                     uuid,   -- The run ID that this replication task belongs to
-  task_id                    bigint,
-  type                       int,    -- enum TaskType {History, Heartbeat}
-  first_event_id             bigint,  -- Used by ReplicationTask to set the first event ID of the applied transaction
-  next_event_id              bigint,  -- Used by ReplicationTask to set the next event ID of the applied transaction
-  version                    bigint,  -- Used by ReplicationTask to set the failover version of the applied transaction
-  last_replication_info      map<text, frozen<replication_info>>, -- Used by replication task to snapshot replication information when the transaction was applied
-  scheduled_id               bigint, -- Used by ReplicationTask to sync activity info
-  event_store_version        int, -- indicates which version of event store to query
-  branch_token               blob, -- if eventV2, then query with this token
-  new_run_event_store_version        int, -- indicates which version of event store to query for new run(continueAsNew)
-  new_run_branch_token               blob, -- if eventV2, then query with this token for new run(continueAsNew)
-  reset_workflow             boolean, -- whether the task is for resetWorkflowExecution
-);
-
 CREATE TYPE timer_task (
   domain_id        uuid,
   workflow_id      text,
@@ -300,7 +282,8 @@ CREATE TABLE executions (
   shard_encoding                 text,
   execution                      frozen<workflow_execution>,
   transfer                       frozen<transfer_task>,
-  replication                    frozen<replication_task>,
+  replication                    blob,
+  replication_encoding           text,
   timer                          frozen<timer_task>,
   next_event_id                  bigint,  -- This is needed to make conditional updates on session history
   range_id                       bigint, -- Increasing sequence identifier for transfer queue, checkpointed into shard info

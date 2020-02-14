@@ -32,7 +32,6 @@ import (
 	"github.com/temporalio/temporal/common/persistence"
 	persistenceClient "github.com/temporalio/temporal/common/persistence/client"
 	"github.com/temporalio/temporal/common/resource"
-	"github.com/temporalio/temporal/common/service"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 	"github.com/temporalio/temporal/service/worker/archiver"
 	"github.com/temporalio/temporal/service/worker/batcher"
@@ -52,7 +51,7 @@ type (
 
 		status int32
 		stopC  chan struct{}
-		params *service.BootstrapParams
+		params *resource.BootstrapParams
 		config *Config
 	}
 
@@ -71,7 +70,7 @@ type (
 
 // NewService builds a new cadence-worker service
 func NewService(
-	params *service.BootstrapParams,
+	params *resource.BootstrapParams,
 ) (resource.Resource, error) {
 
 	serviceConfig := NewConfig(params)
@@ -106,7 +105,7 @@ func NewService(
 }
 
 // NewConfig builds the new Config for cadence-worker service
-func NewConfig(params *service.BootstrapParams) *Config {
+func NewConfig(params *resource.BootstrapParams) *Config {
 	dc := dynamicconfig.NewCollection(params.DynamicConfig, params.Logger)
 	config := &Config{
 		ReplicationCfg: &replicator.Config{

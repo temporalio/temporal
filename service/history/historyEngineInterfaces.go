@@ -67,11 +67,11 @@ type (
 	queueTaskInfo interface {
 		GetVersion() int64
 		GetTaskID() int64
-		GetTaskType() int
+		GetTaskType() int32
 		GetVisibilityTimestamp() time.Time
 		GetWorkflowID() string
-		GetRunID() string
-		GetDomainID() string
+		GetRunID() []byte
+		GetDomainID() []byte
 	}
 
 	taskExecutor interface {

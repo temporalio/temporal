@@ -24,6 +24,8 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/temporalio/temporal/common/primitives"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/go/sqlblobs"
 	"github.com/temporalio/temporal/common"
@@ -130,7 +132,7 @@ func (m *sqlMetadataManagerV2) CreateDomain(request *persistence.InternalCreateD
 	err = m.txExecute("CreateDomain", func(tx sqlplugin.Tx) error {
 		if _, err1 := tx.InsertIntoDomain(&sqlplugin.DomainRow{
 			Name:         request.Info.Name,
-			ID:           sqlplugin.MustParseUUID(request.Info.ID),
+			ID:           primitives.MustParseUUID(request.Info.ID),
 			Data:         blob.Data,
 			DataEncoding: string(blob.Encoding),
 			IsGlobal:     request.IsGlobalDomain,
@@ -164,7 +166,7 @@ func (m *sqlMetadataManagerV2) GetDomain(request *persistence.GetDomainRequest) 
 	case request.Name != "":
 		filter.Name = &request.Name
 	case request.ID != "":
-		filter.ID = sqlplugin.UUIDPtr(sqlplugin.MustParseUUID(request.ID))
+		filter.ID = primitives.UUIDPtr(primitives.MustParseUUID(request.ID))
 	default:
 		return nil, &workflow.BadRequestError{
 			Message: "GetDomain operation failed.  Both ID and Name are empty.",
@@ -290,7 +292,7 @@ func (m *sqlMetadataManagerV2) UpdateDomain(request *persistence.InternalUpdateD
 	return m.txExecute("UpdateDomain", func(tx sqlplugin.Tx) error {
 		result, err := tx.UpdateDomain(&sqlplugin.DomainRow{
 			Name:         request.Info.Name,
-			ID:           sqlplugin.MustParseUUID(request.Info.ID),
+			ID:           primitives.MustParseUUID(request.Info.ID),
 			Data:         blob.Data,
 			DataEncoding: string(blob.Encoding),
 		})
@@ -313,7 +315,7 @@ func (m *sqlMetadataManagerV2) UpdateDomain(request *persistence.InternalUpdateD
 
 func (m *sqlMetadataManagerV2) DeleteDomain(request *persistence.DeleteDomainRequest) error {
 	return m.txExecute("DeleteDomain", func(tx sqlplugin.Tx) error {
-		_, err := tx.DeleteFromDomain(&sqlplugin.DomainFilter{ID: sqlplugin.UUIDPtr(sqlplugin.MustParseUUID(request.ID))})
+		_, err := tx.DeleteFromDomain(&sqlplugin.DomainFilter{ID: primitives.UUIDPtr(primitives.MustParseUUID(request.ID))})
 		return err
 	})
 }
@@ -336,9 +338,9 @@ func (m *sqlMetadataManagerV2) GetMetadata() (*persistence.GetMetadataResponse, 
 }
 
 func (m *sqlMetadataManagerV2) ListDomains(request *persistence.ListDomainsRequest) (*persistence.InternalListDomainsResponse, error) {
-	var pageToken *sqlplugin.UUID
+	var pageToken *primitives.UUID
 	if request.NextPageToken != nil {
-		token := sqlplugin.UUID(request.NextPageToken)
+		token := primitives.UUID(request.NextPageToken)
 		pageToken = &token
 	}
 	rows, err := m.db.SelectFromDomain(&sqlplugin.DomainFilter{

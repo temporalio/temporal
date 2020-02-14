@@ -46,7 +46,6 @@ import (
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/resource"
-	"github.com/temporalio/temporal/common/service"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 	"github.com/temporalio/temporal/service/history"
 )
@@ -64,7 +63,7 @@ type (
 		resource.Resource
 
 		numberOfHistoryShards int
-		params                *service.BootstrapParams
+		params                *resource.BootstrapParams
 		config                *Config
 	}
 
@@ -84,7 +83,7 @@ type (
 // NewAdminHandler creates a gRPC handler for the workflowservice
 func NewAdminHandler(
 	resource resource.Resource,
-	params *service.BootstrapParams,
+	params *resource.BootstrapParams,
 	config *Config,
 ) *AdminHandler {
 	return &AdminHandler{
