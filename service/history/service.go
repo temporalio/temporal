@@ -36,7 +36,6 @@ import (
 	persistenceClient "github.com/temporalio/temporal/common/persistence/client"
 	espersistence "github.com/temporalio/temporal/common/persistence/elasticsearch"
 	"github.com/temporalio/temporal/common/resource"
-	"github.com/temporalio/temporal/common/service"
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
@@ -339,7 +338,7 @@ type Service struct {
 
 	status  int32
 	handler *Handler
-	params  *service.BootstrapParams
+	params  *resource.BootstrapParams
 	config  *Config
 
 	server *grpc.Server
@@ -347,7 +346,7 @@ type Service struct {
 
 // NewService builds a new cadence-history service
 func NewService(
-	params *service.BootstrapParams,
+	params *resource.BootstrapParams,
 ) (resource.Resource, error) {
 	serviceConfig := NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger),
 		params.PersistenceConfig.NumHistoryShards,

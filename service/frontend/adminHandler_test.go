@@ -48,7 +48,6 @@ import (
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/resource"
-	"github.com/temporalio/temporal/common/service"
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
@@ -89,7 +88,7 @@ func (s *adminHandlerSuite) SetupTest() {
 	s.mockHistoryClient = s.mockResource.HistoryClient
 	s.mockHistoryV2Mgr = s.mockResource.HistoryMgr
 
-	params := &service.BootstrapParams{
+	params := &resource.BootstrapParams{
 		PersistenceConfig: config.Persistence{
 			NumHistoryShards: 1,
 		},
@@ -438,7 +437,7 @@ func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistor
 
 func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 	handler := s.handler
-	handler.params = &service.BootstrapParams{}
+	handler.params = &resource.BootstrapParams{}
 	ctx := context.Background()
 
 	type test struct {

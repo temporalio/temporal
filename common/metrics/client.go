@@ -24,6 +24,10 @@ import (
 	"time"
 
 	"github.com/uber-go/tally"
+
+	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 // ClientImpl is used for reporting metrics by various Cadence services
@@ -124,4 +128,23 @@ func mergeMapToRight(src map[string]string, dest map[string]string) {
 	for k, v := range src {
 		dest[k] = v
 	}
+}
+
+// GetMetricsServiceIdx returns the metrics name
+func GetMetricsServiceIdx(serviceName string, logger log.Logger) ServiceIdx {
+	switch serviceName {
+	case primitives.GetServiceNameFromRole(primitives.FrontendService):
+		return Frontend
+	case primitives.GetServiceNameFromRole(primitives.HistoryService):
+		return History
+	case primitives.GetServiceNameFromRole(primitives.MatchingService):
+		return Matching
+	case primitives.GetServiceNameFromRole(primitives.WorkerService):
+		return Worker
+	default:
+		logger.Fatal("Unknown service name '%v' for metrics!", tag.Service(serviceName))
+	}
+
+	// this should never happen!
+	return NumServices
 }

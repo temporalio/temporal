@@ -27,10 +27,6 @@ import (
 	"net"
 	"sync"
 
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	adminClient "github.com/temporalio/temporal/client/admin"
-	persistenceClient "github.com/temporalio/temporal/common/persistence/client"
-
 	"github.com/pborman/uuid"
 	"github.com/uber-go/tally"
 	"go.temporal.io/temporal-proto/workflowservice"
@@ -41,7 +37,9 @@ import (
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/client"
+	adminClient "github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
 	carchiver "github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
@@ -56,7 +54,8 @@ import (
 	"github.com/temporalio/temporal/common/messaging"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/service"
+	persistenceClient "github.com/temporalio/temporal/common/persistence/client"
+	"github.com/temporalio/temporal/common/resource"
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 	"github.com/temporalio/temporal/service/frontend"
@@ -484,7 +483,7 @@ func (c *cadenceImpl) GetHistoryClient() historyservice.HistoryServiceClient {
 }
 
 func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.WaitGroup) {
-	params := new(service.BootstrapParams)
+	params := new(resource.BootstrapParams)
 	params.DCRedirectionPolicy = config.DCRedirectionPolicy{}
 	params.Name = common.FrontendServiceName
 	params.Logger = c.logger
@@ -493,13 +492,13 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 	params.RPCFactory = newRPCFactoryImpl(common.FrontendServiceName, c.FrontendAddress(), c.FrontendGRPCAddress(), c.FrontendRingpopAddress(),
 		c.logger)
 	params.MetricScope = tally.NewTestScope(common.FrontendServiceName, make(map[string]string))
-	params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (service.MembershipMonitorFactory, error) {
+	params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {
 		return newMembershipFactory(params.Name, hosts), nil
 	}
 	params.ClusterMetadata = c.clusterMetadata
 	params.DispatcherProvider = c.dispatcherProvider
 	params.MessagingClient = c.messagingClient
-	params.MetricsClient = metrics.NewClient(params.MetricScope, service.GetMetricsServiceIdx(params.Name, c.logger))
+	params.MetricsClient = metrics.NewClient(params.MetricScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
 	params.DynamicConfig = newIntegrationConfigClient(dynamicconfig.NewNopClient())
 	params.ArchivalMetadata = c.archiverMetadata
 	params.ArchiverProvider = c.archiverProvider
@@ -554,20 +553,20 @@ func (c *cadenceImpl) startHistory(
 	ringpopPorts := c.HistoryServiceAddress(2)
 	grpcPorts := c.HistoryServiceAddress(3)
 	for i, hostport := range c.HistoryServiceAddress(3) {
-		params := new(service.BootstrapParams)
+		params := new(resource.BootstrapParams)
 		params.Name = common.HistoryServiceName
 		params.Logger = c.logger
 		params.ThrottledLogger = c.logger
 		params.PProfInitializer = newPProfInitializerImpl(c.logger, pprofPorts[i])
 		params.RPCFactory = newRPCFactoryImpl(common.HistoryServiceName, hostport, grpcPorts[i], ringpopPorts[i], c.logger)
 		params.MetricScope = tally.NewTestScope(common.HistoryServiceName, make(map[string]string))
-		params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (service.MembershipMonitorFactory, error) {
+		params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {
 			return newMembershipFactory(params.Name, hosts), nil
 		}
 		params.ClusterMetadata = c.clusterMetadata
 		params.DispatcherProvider = c.dispatcherProvider
 		params.MessagingClient = c.messagingClient
-		params.MetricsClient = metrics.NewClient(params.MetricScope, service.GetMetricsServiceIdx(params.Name, c.logger))
+		params.MetricsClient = metrics.NewClient(params.MetricScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
 		integrationClient := newIntegrationConfigClient(dynamicconfig.NewNopClient())
 		c.overrideHistoryDynamicConfig(integrationClient)
 		params.DynamicConfig = integrationClient
@@ -632,7 +631,7 @@ func (c *cadenceImpl) startHistory(
 
 func (c *cadenceImpl) startMatching(hosts map[string][]string, startWG *sync.WaitGroup) {
 
-	params := new(service.BootstrapParams)
+	params := new(resource.BootstrapParams)
 	params.Name = common.MatchingServiceName
 	params.Logger = c.logger
 	params.ThrottledLogger = c.logger
@@ -640,12 +639,12 @@ func (c *cadenceImpl) startMatching(hosts map[string][]string, startWG *sync.Wai
 	params.RPCFactory = newRPCFactoryImpl(common.MatchingServiceName, c.MatchingServiceAddress(), c.MatchingGRPCServiceAddress(),
 		c.MatchingServiceRingpopAddress(), c.logger)
 	params.MetricScope = tally.NewTestScope(common.MatchingServiceName, make(map[string]string))
-	params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (service.MembershipMonitorFactory, error) {
+	params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {
 		return newMembershipFactory(params.Name, hosts), nil
 	}
 	params.ClusterMetadata = c.clusterMetadata
 	params.DispatcherProvider = c.dispatcherProvider
-	params.MetricsClient = metrics.NewClient(params.MetricScope, service.GetMetricsServiceIdx(params.Name, c.logger))
+	params.MetricsClient = metrics.NewClient(params.MetricScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
 	params.DynamicConfig = newIntegrationConfigClient(dynamicconfig.NewNopClient())
 	params.ArchivalMetadata = c.archiverMetadata
 	params.ArchiverProvider = c.archiverProvider
@@ -677,7 +676,7 @@ func (c *cadenceImpl) startMatching(hosts map[string][]string, startWG *sync.Wai
 }
 
 func (c *cadenceImpl) startWorker(hosts map[string][]string, startWG *sync.WaitGroup) {
-	params := new(service.BootstrapParams)
+	params := new(resource.BootstrapParams)
 	params.Name = common.WorkerServiceName
 	params.Logger = c.logger
 	params.ThrottledLogger = c.logger
@@ -685,12 +684,12 @@ func (c *cadenceImpl) startWorker(hosts map[string][]string, startWG *sync.WaitG
 	params.RPCFactory = newRPCFactoryImpl(common.WorkerServiceName, c.WorkerServiceAddress(), c.WorkerGRPCServiceAddress(),
 		c.WorkerServiceRingpopAddress(), c.logger)
 	params.MetricScope = tally.NewTestScope(common.WorkerServiceName, make(map[string]string))
-	params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (service.MembershipMonitorFactory, error) {
+	params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {
 		return newMembershipFactory(params.Name, hosts), nil
 	}
 	params.ClusterMetadata = c.clusterMetadata
 	params.DispatcherProvider = c.dispatcherProvider
-	params.MetricsClient = metrics.NewClient(params.MetricScope, service.GetMetricsServiceIdx(params.Name, c.logger))
+	params.MetricsClient = metrics.NewClient(params.MetricScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
 	params.DynamicConfig = newIntegrationConfigClient(dynamicconfig.NewNopClient())
 	params.ArchivalMetadata = c.archiverMetadata
 	params.ArchiverProvider = c.archiverProvider
@@ -707,7 +706,21 @@ func (c *cadenceImpl) startWorker(hosts map[string][]string, startWG *sync.WaitG
 	}
 	params.PublicClient = workflowservice.NewWorkflowServiceClient(connection)
 
-	service := service.NewOneboxService(params)
+	service, err := resource.New(
+		params,
+		common.WorkerServiceName,
+		dynamicconfig.GetIntPropertyFn(10000),
+		func(
+			persistenceBean persistenceClient.Bean,
+			logger log.Logger,
+		) (persistence.VisibilityManager, error) {
+			return persistenceBean.GetVisibilityManager(), nil
+		},
+	)
+	if err != nil {
+		params.Logger.Fatal("unable to create worker service", tag.Error(err))
+	}
+
 	service.Start()
 
 	var replicatorDomainCache cache.DomainCache
@@ -741,7 +754,7 @@ func (c *cadenceImpl) startWorker(hosts map[string][]string, startWG *sync.WaitG
 	c.shutdownWG.Done()
 }
 
-func (c *cadenceImpl) startWorkerReplicator(params *service.BootstrapParams, service service.OneboxService, domainCache cache.DomainCache) {
+func (c *cadenceImpl) startWorkerReplicator(params *resource.BootstrapParams, service resource.Resource, domainCache cache.DomainCache) {
 	metadataManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgr, service.GetMetricsClient(), c.logger)
 	workerConfig := worker.NewConfig(params)
 	workerConfig.ReplicationCfg.ReplicatorMessageConcurrency = dynamicconfig.GetIntPropertyFn(10)
@@ -768,20 +781,9 @@ func (c *cadenceImpl) startWorkerReplicator(params *service.BootstrapParams, ser
 	}
 }
 
-func (c *cadenceImpl) startWorkerClientWorker(params *service.BootstrapParams, service service.OneboxService, domainCache cache.DomainCache) {
+func (c *cadenceImpl) startWorkerClientWorker(params *resource.BootstrapParams, service resource.Resource, domainCache cache.DomainCache) {
 	workerConfig := worker.NewConfig(params)
 	workerConfig.ArchiverConfig.ArchiverConcurrency = dynamicconfig.GetIntPropertyFn(10)
-	historyArchiverBootstrapContainer := &carchiver.HistoryBootstrapContainer{
-		HistoryV2Manager: c.historyV2Mgr,
-		Logger:           c.logger,
-		MetricsClient:    service.GetMetricsClient(),
-		ClusterMetadata:  c.clusterMetadata,
-		DomainCache:      domainCache,
-	}
-	err := c.archiverProvider.RegisterBootstrapContainer(common.WorkerServiceName, historyArchiverBootstrapContainer, &carchiver.VisibilityBootstrapContainer{})
-	if err != nil {
-		c.logger.Fatal("Failed to register archiver bootstrap container for worker service", tag.Error(err))
-	}
 
 	bc := &archiver.BootstrapContainer{
 		PublicClient:     params.PublicClient,
@@ -799,7 +801,7 @@ func (c *cadenceImpl) startWorkerClientWorker(params *service.BootstrapParams, s
 	}
 }
 
-func (c *cadenceImpl) startWorkerIndexer(params *service.BootstrapParams, service service.OneboxService) {
+func (c *cadenceImpl) startWorkerIndexer(params *resource.BootstrapParams, service resource.Resource) {
 	params.DynamicConfig.UpdateValue(dynamicconfig.AdvancedVisibilityWritingMode, common.AdvancedVisibilityWritingModeDual)
 	workerConfig := worker.NewConfig(params)
 	c.indexer = indexer.NewIndexer(
@@ -883,7 +885,7 @@ func copyPersistenceConfig(pConfig config.Persistence) (config.Persistence, erro
 	return pConfig, nil
 }
 
-func newMembershipFactory(serviceName string, hosts map[string][]string) service.MembershipMonitorFactory {
+func newMembershipFactory(serviceName string, hosts map[string][]string) resource.MembershipMonitorFactory {
 	return &membershipFactoryImpl{
 		serviceName: serviceName,
 		hosts:       hosts,

@@ -50,7 +50,6 @@ import (
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
 	persistenceClient "github.com/temporalio/temporal/common/persistence/client"
-	"github.com/temporalio/temporal/common/service"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
@@ -134,7 +133,7 @@ var _ Resource = (*Impl)(nil)
 
 // New create a new resource containing common dependencies
 func New(
-	params *service.BootstrapParams,
+	params *BootstrapParams,
 	serviceName string,
 	throttledLoggerMaxRPS dynamicconfig.IntPropertyFn,
 	visibilityManagerInitializer VisibilityManagerInitializer,
