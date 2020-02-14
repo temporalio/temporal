@@ -24,23 +24,9 @@ import (
 	"context"
 	"time"
 
-	"google.golang.org/grpc/metadata"
-
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/client"
+	"github.com/temporalio/temporal/common/headers"
 )
 
-var (
-	headers = metadata.New(map[string]string{
-		common.LibraryVersionHeaderName: "1.0.0",
-		common.FeatureVersionHeaderName: client.GoWorkerConsistentQueryVersion,
-		common.ClientImplHeaderName:     client.GoSDK,
-	})
-)
-
-func newContextWithCancel(timeout time.Duration) (context.Context, context.CancelFunc) {
-	ctx := metadata.NewOutgoingContext(context.Background(), headers)
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-
-	return ctx, cancel
+func newContextWithTimeout(timeout time.Duration) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(headers.SetVersions(context.Background()), timeout)
 }

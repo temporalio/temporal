@@ -30,26 +30,24 @@ import (
 	"time"
 
 	"github.com/gogo/status"
+	"github.com/pborman/uuid"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"google.golang.org/grpc/codes"
 
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/.gen/proto/matchingservice"
-	"github.com/temporalio/temporal/common/adapter"
-	"github.com/temporalio/temporal/common/membership"
-
-	"github.com/pborman/uuid"
-
 	m "github.com/temporalio/temporal/.gen/go/matching"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
+	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/client/history"
 	"github.com/temporalio/temporal/client/matching"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/client"
+	"github.com/temporalio/temporal/common/headers"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/membership"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
 )
@@ -82,7 +80,7 @@ type (
 		config               *Config
 		lockableQueryTaskMap lockableQueryTaskMap
 		domainCache          cache.DomainCache
-		versionChecker       client.VersionChecker
+		versionChecker       headers.VersionChecker
 		keyResolver          membership.ServiceResolver
 	}
 )
@@ -127,7 +125,7 @@ func NewEngine(taskManager persistence.TaskManager,
 		config:               config,
 		lockableQueryTaskMap: lockableQueryTaskMap{queryTaskMap: make(map[string]chan *queryResult)},
 		domainCache:          domainCache,
-		versionChecker:       client.NewVersionChecker(),
+		versionChecker:       headers.NewVersionChecker(),
 		keyResolver:          resolver,
 	}
 }
@@ -347,7 +345,7 @@ pollLoop:
 			}
 
 			isStickyEnabled := false
-			supportsSticky := client.NewVersionChecker().SupportsStickyQuery(mutableStateResp.GetClientImpl(), mutableStateResp.GetClientFeatureVersion()) == nil
+			supportsSticky := e.versionChecker.SupportsStickyQuery(mutableStateResp.GetClientImpl(), mutableStateResp.GetClientFeatureVersion()) == nil
 			if len(mutableStateResp.StickyTaskList.GetName()) != 0 && supportsSticky {
 				isStickyEnabled = true
 			}

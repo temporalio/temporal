@@ -411,7 +411,7 @@ func (c *historyRereplicationContext) getHistory(
 	}
 	domainName := domainEntry.GetInfo().Name
 
-	ctx, cancel := newContextWithCancel(c.rereplicator.replicationTimeout)
+	ctx, cancel := newContextWithTimeout(c.rereplicator.replicationTimeout)
 	defer cancel()
 	response, err := c.rereplicator.adminClient.GetWorkflowExecutionRawHistory(ctx, &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Domain: domainName,

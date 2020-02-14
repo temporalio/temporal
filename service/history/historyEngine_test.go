@@ -33,7 +33,6 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"google.golang.org/grpc/metadata"
 
 	"github.com/temporalio/temporal/.gen/go/history"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
@@ -43,9 +42,9 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
-	cc "github.com/temporalio/temporal/common/client"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
+	"github.com/temporalio/temporal/common/headers"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -242,7 +241,7 @@ func (s *engineSuite) SetupTest() {
 		txProcessor:          s.mockTxProcessor,
 		replicatorProcessor:  s.mockReplicationProcessor,
 		timerProcessor:       s.mockTimerProcessor,
-		clientChecker:        cc.NewVersionChecker(),
+		versionChecker:       headers.NewVersionChecker(),
 	}
 	s.mockShard.SetEngine(h)
 	h.decisionHandler = newDecisionHandler(h)
@@ -4245,7 +4244,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_SuccessWith
 		id1: result1,
 		id2: result2,
 	}
-	_, err = s.mockHistoryEngine.RespondDecisionTaskCompleted(s.constructCallContext(cc.GoWorkerConsistentQueryVersion), &history.RespondDecisionTaskCompletedRequest{
+	_, err = s.mockHistoryEngine.RespondDecisionTaskCompleted(s.constructCallContext(headers.GoWorkerConsistentQueryVersion), &history.RespondDecisionTaskCompletedRequest{
 		DomainUUID: common.StringPtr(testDomainID),
 		CompleteRequest: &workflow.RespondDecisionTaskCompletedRequest{
 			TaskToken:        taskToken,
@@ -4399,12 +4398,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_SuccessWith
 }
 
 func (s *engineSuite) constructCallContext(featureVersion string) context.Context {
-	ctx := metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
-		common.FeatureVersionHeaderName: featureVersion,
-		common.ClientImplHeaderName:     cc.GoSDK,
-	}))
-
-	return ctx
+	return headers.SetVersionsForTests(context.Background(), headers.SupportedGoSDKVersion, headers.GoSDK, featureVersion)
 }
 
 func (s *engineSuite) TestStarTimer_DuplicateTimerID() {

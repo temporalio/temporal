@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package client
+package headers
 
 import (
 	"context"
@@ -28,7 +28,6 @@ import (
 	"google.golang.org/grpc/metadata"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/common"
 )
 
 const (
@@ -59,41 +58,38 @@ const (
 	consistentQuery = "consistent-query"
 )
 
-var (
-	// ErrUnknownFeature indicates that requested feature is not known by version checker
-	ErrUnknownFeature = &shared.BadRequestError{Message: "Unknown feature"}
-
-	internalHeaders = metadata.New(map[string]string{
-		common.LibraryVersionHeaderName: SupportedGoSDKVersion,
-		common.FeatureVersionHeaderName: GoWorkerConsistentQueryVersion,
-		common.ClientImplHeaderName:     GoSDK,
-	})
-
-	cliHeaders = metadata.New(map[string]string{
-		common.LibraryVersionHeaderName: SupportedCLIVersion,
-		common.FeatureVersionHeaderName: GoWorkerConsistentQueryVersion,
-		common.ClientImplHeaderName:     CLI,
-	})
-)
-
 type (
 	// VersionChecker is used to check client/server compatibility and client's capabilities
 	VersionChecker interface {
 		ClientSupported(ctx context.Context, enableClientVersionCheck bool) error
-
 		SupportsStickyQuery(clientImpl string, clientFeatureVersion string) error
 		SupportsConsistentQuery(clientImpl string, clientFeatureVersion string) error
 	}
 
 	versionChecker struct {
-		supportedFeatures                 map[string]map[string]version.Constraints
-		supportedClients                  map[string]version.Constraints
-		stickyQueryUnknownImplConstraints version.Constraints
+		supportedFeatures map[string]map[string]version.Constraints
+		supportedClients  map[string]version.Constraints
 	}
 )
 
+var (
+	_ VersionChecker = (*versionChecker)(nil)
+
+	versionHeaders = metadata.New(map[string]string{
+		LibraryVersionHeaderName: SupportedGoSDKVersion,
+		FeatureVersionHeaderName: GoWorkerConsistentQueryVersion,
+		ClientImplHeaderName:     GoSDK,
+	})
+
+	cliVersionHeaders = metadata.New(map[string]string{
+		LibraryVersionHeaderName: SupportedCLIVersion,
+		FeatureVersionHeaderName: GoWorkerConsistentQueryVersion,
+		ClientImplHeaderName:     CLI,
+	})
+)
+
 // NewVersionChecker constructs a new VersionChecker
-func NewVersionChecker() VersionChecker {
+func NewVersionChecker() *versionChecker {
 	supportedFeatures := map[string]map[string]version.Constraints{
 		GoSDK: {
 			stickyQuery:     mustNewConstraint(fmt.Sprintf(">=%v", GoWorkerStickyQueryVersion)),
@@ -109,9 +105,8 @@ func NewVersionChecker() VersionChecker {
 		CLI:     mustNewConstraint(fmt.Sprintf("<=%v", SupportedCLIVersion)),
 	}
 	return &versionChecker{
-		supportedFeatures:                 supportedFeatures,
-		supportedClients:                  supportedClients,
-		stickyQueryUnknownImplConstraints: mustNewConstraint(fmt.Sprintf(">=%v", StickyQueryUnknownImplConstraints)),
+		supportedFeatures: supportedFeatures,
+		supportedClients:  supportedClients,
 	}
 }
 
@@ -122,114 +117,57 @@ func (vc *versionChecker) ClientSupported(ctx context.Context, enableClientVersi
 		return nil
 	}
 
-	headers := GetHeadersValue(ctx, common.FeatureVersionHeaderName, common.ClientImplHeaderName)
-	clientFeatureVersion := headers[0]
+	headers := GetValues(ctx, FeatureVersionHeaderName, ClientImplHeaderName)
+	featureVersion := headers[0]
 	clientImpl := headers[1]
 
-	if clientFeatureVersion == "" {
+	if featureVersion == "" {
 		return nil
 	}
 	supportedVersions, ok := vc.supportedClients[clientImpl]
 	if !ok {
 		return nil
 	}
-	cfVersion, err := version.NewVersion(clientFeatureVersion)
+	cfVersion, err := version.NewVersion(featureVersion)
 	if err != nil {
-		return &shared.ClientVersionNotSupportedError{FeatureVersion: clientFeatureVersion, ClientImpl: clientImpl, SupportedVersions: supportedVersions.String()}
+		return &shared.ClientVersionNotSupportedError{FeatureVersion: featureVersion, ClientImpl: clientImpl, SupportedVersions: supportedVersions.String()}
 	}
 	if !supportedVersions.Check(cfVersion) {
-		return &shared.ClientVersionNotSupportedError{FeatureVersion: clientFeatureVersion, ClientImpl: clientImpl, SupportedVersions: supportedVersions.String()}
+		return &shared.ClientVersionNotSupportedError{FeatureVersion: featureVersion, ClientImpl: clientImpl, SupportedVersions: supportedVersions.String()}
 	}
 	return nil
 }
 
-// GetHeadersValue returns header values for passed header names.
-func GetHeadersValue(ctx context.Context, headerNames ...string) []string {
-	headerValues := make([]string, len(headerNames))
-
-	if md, ok := metadata.FromIncomingContext(ctx); ok {
-		for i, headerName := range headerNames {
-			headerValues[i] = getSingleHeaderValue(md, headerName)
-		}
-	}
-
-	return headerValues
-}
-
-func PropagateHeaders(ctx context.Context) context.Context {
-	if md, ok := metadata.FromIncomingContext(ctx); ok {
-		outgoingMetadata := copyIncomingHeadersToOutgoing(md,
-			common.LibraryVersionHeaderName,
-			common.FeatureVersionHeaderName,
-			common.ClientImplHeaderName)
-		if outgoingMetadata.Len() > 0 {
-			ctx = metadata.NewOutgoingContext(ctx, outgoingMetadata)
-		}
-	}
-
-	return ctx
-}
-
-// SetHeaders sets headers for internal communications.
-func SetHeaders(ctx context.Context) context.Context {
-	return metadata.NewOutgoingContext(ctx, internalHeaders)
-}
-
-// SetCLIHeaders sets headers for CLI requests.
-func SetCLIHeaders(ctx context.Context) context.Context {
-	return metadata.NewOutgoingContext(ctx, cliHeaders)
-}
-
-func copyIncomingHeadersToOutgoing(source metadata.MD, headerNames ...string) metadata.MD {
-	outgoingMetadata := metadata.New(map[string]string{})
-	for _, headerName := range headerNames {
-		if values := source.Get(headerName); len(values) > 0 {
-			outgoingMetadata.Append(headerName, values...)
-		}
-	}
-
-	return outgoingMetadata
-}
-
 // SupportsStickyQuery returns error if sticky query is not supported otherwise nil.
 // In case client version lookup fails assume the client does not support feature.
-func (vc *versionChecker) SupportsStickyQuery(clientImpl string, clientFeatureVersion string) error {
-	return vc.featureSupported(clientImpl, clientFeatureVersion, stickyQuery)
+func (vc *versionChecker) SupportsStickyQuery(clientImpl string, featureVersion string) error {
+	return vc.featureSupported(clientImpl, featureVersion, stickyQuery)
 }
 
 // SupportsConsistentQuery returns error if consistent query is not supported otherwise nil.
 // In case client version lookup fails assume the client does not support feature.
-func (vc *versionChecker) SupportsConsistentQuery(clientImpl string, clientFeatureVersion string) error {
-	return vc.featureSupported(clientImpl, clientFeatureVersion, consistentQuery)
+func (vc *versionChecker) SupportsConsistentQuery(clientImpl string, featureVersion string) error {
+	return vc.featureSupported(clientImpl, featureVersion, consistentQuery)
 }
 
-func getSingleHeaderValue(md metadata.MD, headerName string) string {
-	values := md.Get(headerName)
-	if len(values) > 0 {
-		return values[0]
-	} else {
-		return ""
-	}
-}
-
-func (vc *versionChecker) featureSupported(clientImpl string, clientFeatureVersion string, feature string) error {
-	if clientFeatureVersion == "" {
-		return &shared.ClientVersionNotSupportedError{ClientImpl: clientImpl, FeatureVersion: clientFeatureVersion}
+func (vc *versionChecker) featureSupported(clientImpl string, featureVersion string, feature string) error {
+	if featureVersion == "" {
+		return &shared.ClientVersionNotSupportedError{ClientImpl: clientImpl, FeatureVersion: featureVersion}
 	}
 	implMap, ok := vc.supportedFeatures[clientImpl]
 	if !ok {
-		return &shared.ClientVersionNotSupportedError{ClientImpl: clientImpl, FeatureVersion: clientFeatureVersion}
+		return &shared.ClientVersionNotSupportedError{ClientImpl: clientImpl, FeatureVersion: featureVersion}
 	}
 	supportedVersions, ok := implMap[feature]
 	if !ok {
-		return &shared.ClientVersionNotSupportedError{ClientImpl: clientImpl, FeatureVersion: clientFeatureVersion}
+		return &shared.ClientVersionNotSupportedError{ClientImpl: clientImpl, FeatureVersion: featureVersion}
 	}
-	cfVersion, err := version.NewVersion(clientFeatureVersion)
+	cfVersion, err := version.NewVersion(featureVersion)
 	if err != nil {
-		return &shared.ClientVersionNotSupportedError{FeatureVersion: clientFeatureVersion, ClientImpl: clientImpl, SupportedVersions: supportedVersions.String()}
+		return &shared.ClientVersionNotSupportedError{FeatureVersion: featureVersion, ClientImpl: clientImpl, SupportedVersions: supportedVersions.String()}
 	}
 	if !supportedVersions.Check(cfVersion) {
-		return &shared.ClientVersionNotSupportedError{ClientImpl: clientImpl, FeatureVersion: clientFeatureVersion, SupportedVersions: supportedVersions.String()}
+		return &shared.ClientVersionNotSupportedError{ClientImpl: clientImpl, FeatureVersion: featureVersion, SupportedVersions: supportedVersions.String()}
 	}
 	return nil
 }

@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package client
+package headers
 
 import (
 	"context"
@@ -28,10 +28,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"google.golang.org/grpc/metadata"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/common"
 )
 
 type (
@@ -265,11 +263,6 @@ func (s *VersionCheckerSuite) getHigherVersion(version string) string {
 	return fmt.Sprintf("%v.%v.%v", split[0], split[1], split[2][0]-'0'+1)
 }
 
-func (s *VersionCheckerSuite) constructCallContext(clientImpl string, featureVersion string) context.Context {
-	ctx := metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
-		common.FeatureVersionHeaderName: featureVersion,
-		common.ClientImplHeaderName:     clientImpl,
-	}))
-
-	return ctx
+func (s *VersionCheckerSuite) constructCallContext(clientImpl, featureVersion string) context.Context {
+	return SetVersionsForTests(context.Background(), SupportedGoSDKVersion, clientImpl, featureVersion)
 }

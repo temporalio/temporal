@@ -29,7 +29,7 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/client"
+	"github.com/temporalio/temporal/common/headers"
 )
 
 var _ Client = (*clientImpl)(nil)
@@ -227,7 +227,7 @@ func (c *clientImpl) createContext(parent context.Context) (context.Context, con
 	if parent == nil {
 		return context.WithTimeout(context.Background(), c.timeout)
 	}
-	return context.WithTimeout(client.PropagateHeaders(parent), c.timeout)
+	return context.WithTimeout(headers.PropagateVersions(parent), c.timeout)
 }
 
 func (c *clientImpl) getRandomClient() (adminservice.AdminServiceClient, error) {

@@ -39,8 +39,8 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
-	"github.com/temporalio/temporal/common/client"
 	"github.com/temporalio/temporal/common/definition"
+	"github.com/temporalio/temporal/common/headers"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
@@ -617,8 +617,8 @@ func (adh *AdminHandler) DescribeCluster(ctx context.Context, _ *adminservice.De
 
 	return &adminservice.DescribeClusterResponse{
 		SupportedClientVersions: &commonproto.SupportedClientVersions{
-			GoSdk:   client.SupportedGoSDKVersion,
-			JavaSdk: client.SupportedJavaSDKVersion,
+			GoSdk:   headers.SupportedGoSDKVersion,
+			JavaSdk: headers.SupportedJavaSDKVersion,
 		},
 		MembershipInfo: membershipInfo,
 	}, nil
