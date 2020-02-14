@@ -348,7 +348,7 @@ func startTaskProcessor(
 			}
 			var err error
 			requestID := uuid.New().String()
-			ctx = metadata.AppendToOutgoingContext(ctx, headers.EnforceDCRedirection, "true")
+			ctx = metadata.AppendToOutgoingContext(ctx, headers.EnforceDCRedirectionHeaderName, "true")
 
 			switch batchParams.BatchType {
 			case BatchTypeTerminate:

@@ -167,9 +167,9 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsDoma
 		return policy.currentClusterName, false
 	}
 
-	enforceDCRedirection := headers.GetValues(ctx, headers.EnforceDCRedirection)[0]
+	enforceDCRedirection := headers.GetValues(ctx, headers.EnforceDCRedirectionHeaderName)[0]
 	if !policy.config.EnableDomainNotActiveAutoForwarding(domainEntry.GetInfo().Name) && enforceDCRedirection != "true" {
-		// do not do dc redirection if auto-forwarding dynamic config and EnforceDCRedirection context flag is not enabled
+		// do not do dc redirection if auto-forwarding dynamic config and EnforceDCRedirectionHeaderName context flag is not enabled
 		return policy.currentClusterName, false
 	}
 
