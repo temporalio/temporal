@@ -31,6 +31,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/temporalio/temporal/common/primitives"
+
 	"github.com/gogo/protobuf/types"
 
 	pblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -2243,7 +2245,7 @@ func (s *ExecutionManagerSuite) TestReplicationTasks() {
 
 	for index := range replicationTasks {
 		s.Equal(replicationTasks[index].GetTaskID(), respTasks[index].GetTaskID())
-		s.Equal(replicationTasks[index].GetType(), respTasks[index].GetTaskType())
+		s.Equal(int32(replicationTasks[index].GetType()), respTasks[index].GetTaskType())
 		s.Equal(replicationTasks[index].GetVersion(), respTasks[index].GetVersion())
 		switch replicationTasks[index].GetType() {
 		case p.ReplicationTaskTypeHistory:
@@ -2258,7 +2260,7 @@ func (s *ExecutionManagerSuite) TestReplicationTasks() {
 				got, ok := respTasks[index].LastReplicationInfo[k]
 				s.True(ok, "replication info missing key")
 				s.Equal(v.Version, got.Version)
-				s.Equal(v.LastEventID, got.LastEventID)
+				s.Equal(v.LastEventID, got.LastEventId)
 			}
 		case p.ReplicationTaskTypeSyncActivity:
 			expected := replicationTasks[index].(*p.SyncActivityTask)
@@ -3104,23 +3106,23 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskTasks() {
 	s.NotNil(tasks1, "expected valid list of tasks.")
 	s.Equal(1, len(tasks1), "Expected 1 replication task.")
 	task1 := tasks1[0]
-	s.Equal(p.ReplicationTaskTypeHistory, task1.TaskType)
-	s.Equal(domainID, task1.DomainID)
+	s.Equal(p.ReplicationTaskTypeHistory, int(task1.TaskType))
+	s.Equal(domainID, primitives.UUID(task1.DomainID).String())
 	s.Equal(workflowExecution.GetWorkflowId(), task1.WorkflowID)
-	s.Equal(workflowExecution.GetRunId(), task1.RunID)
+	s.Equal(workflowExecution.GetRunId(), primitives.UUID(task1.RunID).String())
 	s.Equal(int64(1), task1.FirstEventID)
 	s.Equal(int64(3), task1.NextEventID)
 	s.Equal(int64(9), task1.Version)
 	s.Equal(2, len(task1.LastReplicationInfo))
 	for k, v := range task1.LastReplicationInfo {
-		log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventID)
+		log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(3), v.Version)
-			s.Equal(int64(1), v.LastEventID)
+			s.Equal(int64(1), v.LastEventId)
 		case "dc2":
 			s.Equal(int64(5), v.Version)
-			s.Equal(int64(2), v.LastEventID)
+			s.Equal(int64(2), v.LastEventId)
 		default:
 			s.Fail("Unexpected key")
 		}
@@ -3207,10 +3209,10 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskRangeComplete() {
 	s.NotNil(tasks1, "expected valid list of tasks.")
 	s.Equal(1, len(tasks1), "Expected 1 replication task.")
 	task1 := tasks1[0]
-	s.Equal(p.ReplicationTaskTypeHistory, task1.TaskType)
-	s.Equal(domainID, task1.DomainID)
+	s.Equal(p.ReplicationTaskTypeHistory, int(task1.TaskType))
+	s.Equal(domainID, primitives.UUID(task1.DomainID).String())
 	s.Equal(workflowExecution.GetWorkflowId(), task1.WorkflowID)
-	s.Equal(workflowExecution.GetRunId(), task1.RunID)
+	s.Equal(workflowExecution.GetRunId(), primitives.UUID(task1.RunID).String())
 	s.Equal(int64(1), task1.FirstEventID)
 	s.Equal(int64(3), task1.NextEventID)
 	s.Equal(int64(9), task1.Version)
@@ -3222,10 +3224,10 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskRangeComplete() {
 	s.NoError(err)
 	s.NotNil(tasks2, "expected valid list of tasks.")
 	task2 := tasks2[0]
-	s.Equal(p.ReplicationTaskTypeHistory, task2.TaskType)
-	s.Equal(domainID, task2.DomainID)
+	s.Equal(p.ReplicationTaskTypeHistory, int(task2.TaskType))
+	s.Equal(domainID, primitives.UUID(task2.DomainID).String())
 	s.Equal(workflowExecution.GetWorkflowId(), task2.WorkflowID)
-	s.Equal(workflowExecution.GetRunId(), task2.RunID)
+	s.Equal(workflowExecution.GetRunId(), primitives.UUID(task2.RunID).String())
 	s.Equal(int64(4), task2.FirstEventID)
 	s.Equal(int64(5), task2.NextEventID)
 	s.Equal(int64(9), task2.Version)
@@ -3292,23 +3294,23 @@ func (s *ExecutionManagerSuite) TestWorkflowReplicationState() {
 	taskR, err := s.GetReplicationTasks(1, false)
 	s.Equal(1, len(taskR), "Expected 1 replication task.")
 	tsk := taskR[0]
-	s.Equal(p.ReplicationTaskTypeHistory, tsk.TaskType)
-	s.Equal(domainID, tsk.DomainID)
+	s.Equal(p.ReplicationTaskTypeHistory, int(tsk.TaskType))
+	s.Equal(domainID, primitives.UUID(tsk.DomainID).String())
 	s.Equal(workflowExecution.GetWorkflowId(), tsk.WorkflowID)
-	s.Equal(workflowExecution.GetRunId(), tsk.RunID)
+	s.Equal(workflowExecution.GetRunId(), primitives.UUID(tsk.RunID).String())
 	s.Equal(int64(1), tsk.FirstEventID)
 	s.Equal(int64(3), tsk.NextEventID)
 	s.Equal(int64(9), tsk.Version)
 	s.Equal(2, len(tsk.LastReplicationInfo))
 	for k, v := range tsk.LastReplicationInfo {
-		log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventID)
+		log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(3), v.Version)
-			s.Equal(int64(1), v.LastEventID)
+			s.Equal(int64(1), v.LastEventId)
 		case "dc2":
 			s.Equal(int64(5), v.Version)
-			s.Equal(int64(2), v.LastEventID)
+			s.Equal(int64(2), v.LastEventId)
 		default:
 			s.Fail("Unexpected key")
 		}
@@ -3383,23 +3385,23 @@ func (s *ExecutionManagerSuite) TestWorkflowReplicationState() {
 	taskR1, err := s.GetReplicationTasks(1, false)
 	s.Equal(1, len(taskR1), "Expected 1 replication task.")
 	tsk1 := taskR1[0]
-	s.Equal(p.ReplicationTaskTypeHistory, tsk1.TaskType)
-	s.Equal(domainID, tsk1.DomainID)
+	s.Equal(p.ReplicationTaskTypeHistory, int(tsk1.TaskType))
+	s.Equal(domainID, primitives.UUID(tsk1.DomainID).String())
 	s.Equal(workflowExecution.GetWorkflowId(), tsk1.WorkflowID)
-	s.Equal(workflowExecution.GetRunId(), tsk1.RunID)
+	s.Equal(workflowExecution.GetRunId(), primitives.UUID(tsk1.RunID).String())
 	s.Equal(int64(3), tsk1.FirstEventID)
 	s.Equal(int64(5), tsk1.NextEventID)
 	s.Equal(int64(10), tsk1.Version)
 	s.Equal(2, len(tsk1.LastReplicationInfo))
 	for k, v := range tsk1.LastReplicationInfo {
-		log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventID)
+		log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(4), v.Version)
-			s.Equal(int64(2), v.LastEventID)
+			s.Equal(int64(2), v.LastEventId)
 		case "dc2":
 			s.Equal(int64(5), v.Version)
-			s.Equal(int64(2), v.LastEventID)
+			s.Equal(int64(2), v.LastEventId)
 		default:
 			s.Fail("Unexpected key")
 		}

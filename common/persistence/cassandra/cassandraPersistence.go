@@ -189,24 +189,6 @@ const (
 		`version: ?` +
 		`}`
 
-	templateReplicationTaskType = `{` +
-		`domain_id: ?, ` +
-		`workflow_id: ?, ` +
-		`run_id: ?, ` +
-		`task_id: ?, ` +
-		`type: ?, ` +
-		`first_event_id: ?,` +
-		`next_event_id: ?,` +
-		`version: ?,` +
-		`last_replication_info: ?, ` +
-		`scheduled_id: ?, ` +
-		`event_store_version: ?, ` +
-		`branch_token: ?, ` +
-		`reset_workflow: ?, ` +
-		`new_run_event_store_version: ?, ` +
-		`new_run_branch_token: ? ` +
-		`}`
-
 	templateTimerTaskType = `{` +
 		`domain_id: ?, ` +
 		`workflow_id: ?, ` +
@@ -386,8 +368,8 @@ workflow_state = ? ` +
 		`VALUES(?, ?, ?, ?, ?, ` + templateTransferTaskType + `, ?, ?)`
 
 	templateCreateReplicationTaskQuery = `INSERT INTO executions (` +
-		`shard_id, type, domain_id, workflow_id, run_id, replication, visibility_ts, task_id) ` +
-		`VALUES(?, ?, ?, ?, ?, ` + templateReplicationTaskType + `, ?, ?)`
+		`shard_id, type, domain_id, workflow_id, run_id, replication, replication_encoding, visibility_ts, task_id) ` +
+		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	templateCreateTimerTaskQuery = `INSERT INTO executions (` +
 		`shard_id, type, domain_id, workflow_id, run_id, timer, visibility_ts, task_id) ` +
@@ -701,7 +683,7 @@ workflow_state = ? ` +
 		`and task_id > ? ` +
 		`and task_id <= ?`
 
-	templateGetReplicationTasksQuery = `SELECT replication ` +
+	templateGetReplicationTasksQuery = `SELECT replication, replication_encoding ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
@@ -2098,11 +2080,11 @@ func (d *cassandraPersistence) GetReplicationTasks(
 		request.MaxReadLevel,
 	).PageSize(request.BatchSize).PageState(request.NextPageToken)
 
-	return d.populateGetReplicationTasksResponse(query)
+	return d.populateGetReplicationTasksResponse(query, "GetReplicationTasks")
 }
 
 func (d *cassandraPersistence) populateGetReplicationTasksResponse(
-	query *gocql.Query,
+	query *gocql.Query, operation string,
 ) (*p.GetReplicationTasksResponse, error) {
 	iter := query.Iter()
 	if iter == nil {
@@ -2112,11 +2094,15 @@ func (d *cassandraPersistence) populateGetReplicationTasksResponse(
 	}
 
 	response := &p.GetReplicationTasksResponse{}
-	task := make(map[string]interface{})
-	for iter.MapScan(task) {
-		t := createReplicationTaskInfo(task["replication"].(map[string]interface{}))
-		// Reset task map to get it ready for next scan
-		task = make(map[string]interface{})
+	var data []byte
+	var encoding string
+
+	for iter.Scan(&data, &encoding) {
+		t, err := sql.ReplicationTaskInfoFromBlob(data, encoding)
+
+		if err != nil {
+			return nil, convertCommonErrors(operation, err)
+		}
 
 		response.Tasks = append(response.Tasks, t)
 	}
@@ -2125,9 +2111,7 @@ func (d *cassandraPersistence) populateGetReplicationTasksResponse(
 	copy(response.NextPageToken, nextPageToken)
 
 	if err := iter.Close(); err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("GetReplicationTasks operation failed. Error: %v", err),
-		}
+		return nil, convertCommonErrors(operation, err)
 	}
 
 	return response, nil
@@ -2738,40 +2722,25 @@ func (d *cassandraPersistence) GetTimerIndexTasks(request *p.GetTimerIndexTasksR
 
 func (d *cassandraPersistence) PutReplicationTaskToDLQ(request *p.PutReplicationTaskToDLQRequest) error {
 	task := request.TaskInfo
+	datablob, err := sql.ReplicationTaskInfoToBlob(task)
+	if err != nil {
+		return convertCommonErrors("PutReplicationTaskToDLQ", err)
+	}
+
 	query := d.session.Query(templateCreateReplicationTaskQuery,
 		d.shardID,
 		rowTypeDLQ,
 		rowTypeDLQDomainID,
 		request.SourceClusterName,
 		rowTypeDLQRunID,
-		task.DomainID,
-		task.WorkflowID,
-		task.RunID,
-		task.TaskID,
-		task.TaskType,
-		task.FirstEventID,
-		task.NextEventID,
-		task.Version,
-		task.LastReplicationInfo,
-		task.ScheduledID,
-		p.EventStoreVersion,
-		task.BranchToken,
-		task.ResetWorkflow,
-		p.EventStoreVersion,
-		task.NewRunBranchToken,
+		datablob.Data,
+		datablob.Encoding,
 		defaultVisibilityTimestamp,
 		task.GetTaskID())
 
-	err := query.Exec()
+	err = query.Exec()
 	if err != nil {
-		if isThrottlingError(err) {
-			return &workflow.ServiceBusyError{
-				Message: fmt.Sprintf("PutReplicationTaskToDLQ operation failed. Error: %v", err),
-			}
-		}
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("PutReplicationTaskToDLQ operation failed. Error: %v", err),
-		}
+		return convertCommonErrors("PutReplicationTaskToDLQ", err)
 	}
 
 	return nil
@@ -2792,5 +2761,5 @@ func (d *cassandraPersistence) GetReplicationTasksFromDLQ(
 		request.ReadLevel+int64(request.BatchSize),
 	).PageSize(request.BatchSize).PageState(request.NextPageToken)
 
-	return d.populateGetReplicationTasksResponse(query)
+	return d.populateGetReplicationTasksResponse(query, "GetReplicationTasksFromDLQ")
 }

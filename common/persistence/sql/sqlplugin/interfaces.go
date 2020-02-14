@@ -24,6 +24,8 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/temporalio/temporal/common/primitives"
+
 	"github.com/temporalio/temporal/common/persistence"
 
 	"github.com/temporalio/temporal/common"
@@ -75,7 +77,7 @@ type (
 
 	// DomainRow represents a row in domain table
 	DomainRow struct {
-		ID           UUID
+		ID           primitives.UUID
 		Name         string
 		Data         []byte
 		DataEncoding string
@@ -88,9 +90,9 @@ type (
 	// Name will be used for WHERE condition. When both ID and Name are nil,
 	// no WHERE clause will be used
 	DomainFilter struct {
-		ID            *UUID
+		ID            *primitives.UUID
 		Name          *string
-		GreaterThanID *UUID
+		GreaterThanID *primitives.UUID
 		PageSize      *int
 	}
 
@@ -133,9 +135,9 @@ type (
 	// ExecutionsRow represents a row in executions table
 	ExecutionsRow struct {
 		ShardID                  int
-		DomainID                 UUID
+		DomainID                 primitives.UUID
 		WorkflowID               string
-		RunID                    UUID
+		RunID                    primitives.UUID
 		NextEventID              int64
 		LastWriteVersion         int64
 		Data                     []byte
@@ -148,17 +150,17 @@ type (
 	// can be used to filter results through a WHERE clause
 	ExecutionsFilter struct {
 		ShardID    int
-		DomainID   UUID
+		DomainID   primitives.UUID
 		WorkflowID string
-		RunID      UUID
+		RunID      primitives.UUID
 	}
 
 	// CurrentExecutionsRow represents a row in current_executions table
 	CurrentExecutionsRow struct {
 		ShardID          int64
-		DomainID         UUID
+		DomainID         primitives.UUID
 		WorkflowID       string
-		RunID            UUID
+		RunID            primitives.UUID
 		CreateRequestID  string
 		State            int
 		CloseStatus      int
@@ -170,17 +172,17 @@ type (
 	// can be used to filter results through a WHERE clause
 	CurrentExecutionsFilter struct {
 		ShardID    int64
-		DomainID   UUID
+		DomainID   primitives.UUID
 		WorkflowID string
-		RunID      UUID
+		RunID      primitives.UUID
 	}
 
 	// BufferedEventsRow represents a row in buffered_events table
 	BufferedEventsRow struct {
 		ShardID      int
-		DomainID     UUID
+		DomainID     primitives.UUID
 		WorkflowID   string
-		RunID        UUID
+		RunID        primitives.UUID
 		Data         []byte
 		DataEncoding string
 	}
@@ -189,14 +191,14 @@ type (
 	// can be used to filter results through a WHERE clause
 	BufferedEventsFilter struct {
 		ShardID    int
-		DomainID   UUID
+		DomainID   primitives.UUID
 		WorkflowID string
-		RunID      UUID
+		RunID      primitives.UUID
 	}
 
 	// TasksRow represents a row in tasks table
 	TasksRow struct {
-		DomainID     UUID
+		DomainID     primitives.UUID
 		TaskType     int64
 		TaskID       int64
 		TaskListName string
@@ -207,7 +209,7 @@ type (
 	// TasksFilter contains the column names within tasks table that
 	// can be used to filter results through a WHERE clause
 	TasksFilter struct {
-		DomainID             UUID
+		DomainID             primitives.UUID
 		TaskListName         string
 		TaskType             int64
 		TaskID               *int64
@@ -221,7 +223,7 @@ type (
 	// TaskListsRow represents a row in task_lists table
 	TaskListsRow struct {
 		ShardID      int
-		DomainID     UUID
+		DomainID     primitives.UUID
 		Name         string
 		TaskType     int64
 		RangeID      int64
@@ -233,10 +235,10 @@ type (
 	// can be used to filter results through a WHERE clause
 	TaskListsFilter struct {
 		ShardID             int
-		DomainID            *UUID
+		DomainID            *primitives.UUID
 		Name                *string
 		TaskType            *int64
-		DomainIDGreaterThan *UUID
+		DomainIDGreaterThan *primitives.UUID
 		NameGreaterThan     *string
 		TaskTypeGreaterThan *int64
 		RangeID             *int64
@@ -300,9 +302,9 @@ type (
 
 	// EventsRow represents a row in events table
 	EventsRow struct {
-		DomainID     UUID
+		DomainID     primitives.UUID
 		WorkflowID   string
-		RunID        UUID
+		RunID        primitives.UUID
 		FirstEventID int64
 		BatchVersion int64
 		RangeID      int64
@@ -314,9 +316,9 @@ type (
 	// EventsFilter contains the column names within events table that
 	// can be used to filter results through a WHERE clause
 	EventsFilter struct {
-		DomainID     UUID
+		DomainID     primitives.UUID
 		WorkflowID   string
-		RunID        UUID
+		RunID        primitives.UUID
 		FirstEventID *int64
 		NextEventID  *int64
 		PageSize     *int
@@ -325,8 +327,8 @@ type (
 	// HistoryNodeRow represents a row in history_node table
 	HistoryNodeRow struct {
 		ShardID  int
-		TreeID   UUID
-		BranchID UUID
+		TreeID   primitives.UUID
+		BranchID primitives.UUID
 		NodeID   int64
 		// use pointer so that it's easier to multiple by -1
 		TxnID        *int64
@@ -338,8 +340,8 @@ type (
 	// can be used to filter results through a WHERE clause
 	HistoryNodeFilter struct {
 		ShardID  int
-		TreeID   UUID
-		BranchID UUID
+		TreeID   primitives.UUID
+		BranchID primitives.UUID
 		// Inclusive
 		MinNodeID *int64
 		// Exclusive
@@ -350,8 +352,8 @@ type (
 	// HistoryTreeRow represents a row in history_tree table
 	HistoryTreeRow struct {
 		ShardID      int
-		TreeID       UUID
-		BranchID     UUID
+		TreeID       primitives.UUID
+		BranchID     primitives.UUID
 		Data         []byte
 		DataEncoding string
 	}
@@ -360,16 +362,16 @@ type (
 	// can be used to filter results through a WHERE clause
 	HistoryTreeFilter struct {
 		ShardID  int
-		TreeID   UUID
-		BranchID *UUID
+		TreeID   primitives.UUID
+		BranchID *primitives.UUID
 	}
 
 	// ActivityInfoMapsRow represents a row in activity_info_maps table
 	ActivityInfoMapsRow struct {
 		ShardID                  int64
-		DomainID                 UUID
+		DomainID                 primitives.UUID
 		WorkflowID               string
-		RunID                    UUID
+		RunID                    primitives.UUID
 		ScheduleID               int64
 		Data                     []byte
 		DataEncoding             string
@@ -381,18 +383,18 @@ type (
 	// can be used to filter results through a WHERE clause
 	ActivityInfoMapsFilter struct {
 		ShardID    int64
-		DomainID   UUID
+		DomainID   primitives.UUID
 		WorkflowID string
-		RunID      UUID
+		RunID      primitives.UUID
 		ScheduleID *int64
 	}
 
 	// TimerInfoMapsRow represents a row in timer_info_maps table
 	TimerInfoMapsRow struct {
 		ShardID      int64
-		DomainID     UUID
+		DomainID     primitives.UUID
 		WorkflowID   string
-		RunID        UUID
+		RunID        primitives.UUID
 		TimerID      string
 		Data         []byte
 		DataEncoding string
@@ -402,18 +404,18 @@ type (
 	// can be used to filter results through a WHERE clause
 	TimerInfoMapsFilter struct {
 		ShardID    int64
-		DomainID   UUID
+		DomainID   primitives.UUID
 		WorkflowID string
-		RunID      UUID
+		RunID      primitives.UUID
 		TimerID    *string
 	}
 
 	// ChildExecutionInfoMapsRow represents a row in child_execution_info_maps table
 	ChildExecutionInfoMapsRow struct {
 		ShardID      int64
-		DomainID     UUID
+		DomainID     primitives.UUID
 		WorkflowID   string
-		RunID        UUID
+		RunID        primitives.UUID
 		InitiatedID  int64
 		Data         []byte
 		DataEncoding string
@@ -423,18 +425,18 @@ type (
 	// can be used to filter results through a WHERE clause
 	ChildExecutionInfoMapsFilter struct {
 		ShardID     int64
-		DomainID    UUID
+		DomainID    primitives.UUID
 		WorkflowID  string
-		RunID       UUID
+		RunID       primitives.UUID
 		InitiatedID *int64
 	}
 
 	// RequestCancelInfoMapsRow represents a row in request_cancel_info_maps table
 	RequestCancelInfoMapsRow struct {
 		ShardID      int64
-		DomainID     UUID
+		DomainID     primitives.UUID
 		WorkflowID   string
-		RunID        UUID
+		RunID        primitives.UUID
 		InitiatedID  int64
 		Data         []byte
 		DataEncoding string
@@ -444,18 +446,18 @@ type (
 	// can be used to filter results through a WHERE clause
 	RequestCancelInfoMapsFilter struct {
 		ShardID     int64
-		DomainID    UUID
+		DomainID    primitives.UUID
 		WorkflowID  string
-		RunID       UUID
+		RunID       primitives.UUID
 		InitiatedID *int64
 	}
 
 	// SignalInfoMapsRow represents a row in signal_info_maps table
 	SignalInfoMapsRow struct {
 		ShardID      int64
-		DomainID     UUID
+		DomainID     primitives.UUID
 		WorkflowID   string
-		RunID        UUID
+		RunID        primitives.UUID
 		InitiatedID  int64
 		Data         []byte
 		DataEncoding string
@@ -465,18 +467,18 @@ type (
 	// can be used to filter results through a WHERE clause
 	SignalInfoMapsFilter struct {
 		ShardID     int64
-		DomainID    UUID
+		DomainID    primitives.UUID
 		WorkflowID  string
-		RunID       UUID
+		RunID       primitives.UUID
 		InitiatedID *int64
 	}
 
 	// SignalsRequestedSetsRow represents a row in signals_requested_sets table
 	SignalsRequestedSetsRow struct {
 		ShardID    int64
-		DomainID   UUID
+		DomainID   primitives.UUID
 		WorkflowID string
-		RunID      UUID
+		RunID      primitives.UUID
 		SignalID   string
 	}
 
@@ -484,9 +486,9 @@ type (
 	// can be used to filter results through a WHERE clause
 	SignalsRequestedSetsFilter struct {
 		ShardID    int64
-		DomainID   UUID
+		DomainID   primitives.UUID
 		WorkflowID string
-		RunID      UUID
+		RunID      primitives.UUID
 		SignalID   *string
 	}
 

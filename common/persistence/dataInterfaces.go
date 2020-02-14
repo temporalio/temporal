@@ -26,6 +26,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/temporalio/temporal/common/primitives"
+
+	commonproto "go.temporal.io/temporal-proto/common"
+
 	pblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
 	"github.com/temporalio/temporal/.gen/go/persistenceblobs"
@@ -353,23 +357,9 @@ type (
 		RecordVisibility        bool
 	}
 
-	// ReplicationTaskInfo describes the replication task created for replication of history events
-	ReplicationTaskInfo struct {
-		DomainID          string
-		WorkflowID        string
-		RunID             string
-		TaskID            int64
-		TaskType          int
-		FirstEventID      int64
-		NextEventID       int64
-		Version           int64
-		ScheduledID       int64
-		BranchToken       []byte
-		NewRunBranchToken []byte
-		ResetWorkflow     bool
-
-		// TODO deprecate when NDC is fully released && migrated
-		LastReplicationInfo map[string]*ReplicationInfo
+	// ReplicationTaskInfoWrapper describes a replication task.
+	ReplicationTaskInfoWrapper struct {
+		*pblobs.ReplicationTaskInfo
 	}
 
 	// TimerTaskInfo describes a timer task.
@@ -948,7 +938,7 @@ type (
 
 	// GetReplicationTasksResponse is the response to GetReplicationTask
 	GetReplicationTasksResponse struct {
-		Tasks         []*ReplicationTaskInfo
+		Tasks         []*pblobs.ReplicationTaskInfo
 		NextPageToken []byte
 	}
 
@@ -976,7 +966,7 @@ type (
 	// PutReplicationTaskToDLQRequest is used to put a replication task to dlq
 	PutReplicationTaskToDLQRequest struct {
 		SourceClusterName string
-		TaskInfo          *ReplicationTaskInfo
+		TaskInfo          *pblobs.ReplicationTaskInfo
 	}
 
 	// GetReplicationTasksFromDLQRequest is used to get replication tasks from dlq
@@ -1716,6 +1706,11 @@ func (d *DecisionTask) SetTaskID(id int64) {
 }
 
 // GetVisibilityTimestamp get the visibility timestamp
+func (d ReplicationTaskInfoWrapper) GetVisibilityTimestamp() time.Time {
+	return time.Time{}
+}
+
+// GetVisibilityTimestamp get the visibility timestamp
 func (d *DecisionTask) GetVisibilityTimestamp() time.Time {
 	return d.VisibilityTimestamp
 }
@@ -2296,8 +2291,8 @@ func (t *TransferTaskInfo) GetVersion() int64 {
 }
 
 // GetTaskType returns the task type for transfer task
-func (t *TransferTaskInfo) GetTaskType() int {
-	return t.TaskType
+func (t *TransferTaskInfo) GetTaskType() int32 {
+	return int32(t.TaskType)
 }
 
 // GetVisibilityTimestamp returns the task type for transfer task
@@ -2311,13 +2306,13 @@ func (t *TransferTaskInfo) GetWorkflowID() string {
 }
 
 // GetRunID returns the run ID for transfer task
-func (t *TransferTaskInfo) GetRunID() string {
-	return t.RunID
+func (t *TransferTaskInfo) GetRunID() []byte {
+	return primitives.MustParseUUID(t.RunID)
 }
 
 // GetDomainID returns the domain ID for transfer task
-func (t *TransferTaskInfo) GetDomainID() string {
-	return t.DomainID
+func (t *TransferTaskInfo) GetDomainID() []byte {
+	return primitives.MustParseUUID(t.DomainID)
 }
 
 // String returns string
@@ -2326,41 +2321,6 @@ func (t *TransferTaskInfo) String() string {
 		"{DomainID: %v, WorkflowID: %v, RunID: %v, TaskID: %v, TargetDomainID: %v, TargetWorkflowID %v, TargetRunID: %v, TargetChildWorkflowOnly: %v, TaskList: %v, TaskType: %v, ScheduleID: %v, Version: %v.}",
 		t.DomainID, t.WorkflowID, t.RunID, t.TaskID, t.TargetDomainID, t.TargetWorkflowID, t.TargetRunID, t.TargetChildWorkflowOnly, t.TaskList, t.TaskType, t.ScheduleID, t.Version,
 	)
-}
-
-// GetTaskID returns the task ID for replication task
-func (t *ReplicationTaskInfo) GetTaskID() int64 {
-	return t.TaskID
-}
-
-// GetVersion returns the task version for replication task
-func (t *ReplicationTaskInfo) GetVersion() int64 {
-	return t.Version
-}
-
-// GetTaskType returns the task type for replication task
-func (t *ReplicationTaskInfo) GetTaskType() int {
-	return t.TaskType
-}
-
-// GetVisibilityTimestamp returns the task type for replication task
-func (t *ReplicationTaskInfo) GetVisibilityTimestamp() time.Time {
-	return time.Time{}
-}
-
-// GetWorkflowID returns the workflow ID for replication task
-func (t *ReplicationTaskInfo) GetWorkflowID() string {
-	return t.WorkflowID
-}
-
-// GetRunID returns the run ID for replication task
-func (t *ReplicationTaskInfo) GetRunID() string {
-	return t.RunID
-}
-
-// GetDomainID returns the domain ID for replication task
-func (t *ReplicationTaskInfo) GetDomainID() string {
-	return t.DomainID
 }
 
 // GetTaskID returns the task ID for timer task
@@ -2374,8 +2334,8 @@ func (t *TimerTaskInfo) GetVersion() int64 {
 }
 
 // GetTaskType returns the task type for timer task
-func (t *TimerTaskInfo) GetTaskType() int {
-	return t.TaskType
+func (t *TimerTaskInfo) GetTaskType() int32 {
+	return int32(t.TaskType)
 }
 
 // GetVisibilityTimestamp returns the task type for timer task
@@ -2389,13 +2349,13 @@ func (t *TimerTaskInfo) GetWorkflowID() string {
 }
 
 // GetRunID returns the run ID for timer task
-func (t *TimerTaskInfo) GetRunID() string {
-	return t.RunID
+func (t *TimerTaskInfo) GetRunID() []byte {
+	return primitives.MustParseUUID(t.RunID)
 }
 
 // GetDomainID returns the domain ID for timer task
-func (t *TimerTaskInfo) GetDomainID() string {
-	return t.DomainID
+func (t *TimerTaskInfo) GetDomainID() []byte {
+	return primitives.MustParseUUID(t.DomainID)
 }
 
 // GetTaskType returns the task type for timer task
@@ -2442,6 +2402,10 @@ func (config *ClusterReplicationConfig) deserialize(input map[string]interface{}
 func (config *ClusterReplicationConfig) GetCopy() *ClusterReplicationConfig {
 	res := *config
 	return &res
+}
+
+func (r *ReplicationInfo) ToProto() *commonproto.ReplicationInfo {
+	return &commonproto.ReplicationInfo{Version: r.Version, LastEventId: r.LastEventID}
 }
 
 // DBTimestampToUnixNano converts CQL timestamp to UnixNano

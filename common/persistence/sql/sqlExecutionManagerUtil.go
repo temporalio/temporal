@@ -26,6 +26,12 @@ import (
 	"fmt"
 	"time"
 
+	commonproto "go.temporal.io/temporal-proto/common"
+
+	"github.com/temporalio/temporal/common/primitives"
+
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/go/sqlblobs"
 	"github.com/temporalio/temporal/common"
@@ -44,9 +50,9 @@ func applyWorkflowMutationTx(
 	versionHistories := workflowMutation.VersionHistories
 	startVersion := workflowMutation.StartVersion
 	lastWriteVersion := workflowMutation.LastWriteVersion
-	domainID := sqlplugin.MustParseUUID(executionInfo.DomainID)
+	domainID := primitives.MustParseUUID(executionInfo.DomainID)
 	workflowID := executionInfo.WorkflowID
-	runID := sqlplugin.MustParseUUID(executionInfo.RunID)
+	runID := primitives.MustParseUUID(executionInfo.RunID)
 
 	// TODO remove once 2DC is deprecated
 	//  since current version is only used by 2DC
@@ -204,9 +210,9 @@ func applyWorkflowSnapshotTxAsReset(
 	versionHistories := workflowSnapshot.VersionHistories
 	startVersion := workflowSnapshot.StartVersion
 	lastWriteVersion := workflowSnapshot.LastWriteVersion
-	domainID := sqlplugin.MustParseUUID(executionInfo.DomainID)
+	domainID := primitives.MustParseUUID(executionInfo.DomainID)
 	workflowID := executionInfo.WorkflowID
-	runID := sqlplugin.MustParseUUID(executionInfo.RunID)
+	runID := primitives.MustParseUUID(executionInfo.RunID)
 
 	// TODO remove once 2DC is deprecated
 	//  since current version is only used by 2DC
@@ -411,9 +417,9 @@ func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 	versionHistories := workflowSnapshot.VersionHistories
 	startVersion := workflowSnapshot.StartVersion
 	lastWriteVersion := workflowSnapshot.LastWriteVersion
-	domainID := sqlplugin.MustParseUUID(executionInfo.DomainID)
+	domainID := primitives.MustParseUUID(executionInfo.DomainID)
 	workflowID := executionInfo.WorkflowID
-	runID := sqlplugin.MustParseUUID(executionInfo.RunID)
+	runID := primitives.MustParseUUID(executionInfo.RunID)
 
 	// TODO remove once 2DC is deprecated
 	//  since current version is only used by 2DC
@@ -522,9 +528,9 @@ func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 func applyTasks(
 	tx sqlplugin.Tx,
 	shardID int,
-	domainID sqlplugin.UUID,
+	domainID primitives.UUID,
 	workflowID string,
-	runID sqlplugin.UUID,
+	runID primitives.UUID,
 	transferTasks []p.Task,
 	replicationTasks []p.Task,
 	timerTasks []p.Task,
@@ -571,7 +577,7 @@ func applyTasks(
 func lockCurrentExecutionIfExists(
 	tx sqlplugin.Tx,
 	shardID int,
-	domainID sqlplugin.UUID,
+	domainID primitives.UUID,
 	workflowID string,
 ) (*sqlplugin.CurrentExecutionsRow, error) {
 
@@ -600,9 +606,9 @@ func createOrUpdateCurrentExecution(
 	tx sqlplugin.Tx,
 	createMode p.CreateWorkflowMode,
 	shardID int,
-	domainID sqlplugin.UUID,
+	domainID primitives.UUID,
 	workflowID string,
-	runID sqlplugin.UUID,
+	runID primitives.UUID,
 	state int,
 	closeStatus int,
 	createRequestID string,
@@ -671,9 +677,9 @@ func createOrUpdateCurrentExecution(
 func lockAndCheckNextEventID(
 	tx sqlplugin.Tx,
 	shardID int,
-	domainID sqlplugin.UUID,
+	domainID primitives.UUID,
 	workflowID string,
-	runID sqlplugin.UUID,
+	runID primitives.UUID,
 	condition int64,
 ) error {
 
@@ -692,9 +698,9 @@ func lockAndCheckNextEventID(
 func lockNextEventID(
 	tx sqlplugin.Tx,
 	shardID int,
-	domainID sqlplugin.UUID,
+	domainID primitives.UUID,
 	workflowID string,
-	runID sqlplugin.UUID,
+	runID primitives.UUID,
 ) (*int64, error) {
 
 	nextEventID, err := tx.WriteLockExecutions(&sqlplugin.ExecutionsFilter{
@@ -727,9 +733,9 @@ func createTransferTasks(
 	tx sqlplugin.Tx,
 	transferTasks []p.Task,
 	shardID int,
-	domainID sqlplugin.UUID,
+	domainID primitives.UUID,
 	workflowID string,
-	runID sqlplugin.UUID,
+	runID primitives.UUID,
 ) error {
 
 	if len(transferTasks) == 0 {
@@ -752,35 +758,35 @@ func createTransferTasks(
 
 		switch task.GetType() {
 		case p.TransferTaskTypeActivityTask:
-			info.TargetDomainID = sqlplugin.MustParseUUID(task.(*p.ActivityTask).DomainID)
+			info.TargetDomainID = primitives.MustParseUUID(task.(*p.ActivityTask).DomainID)
 			info.TaskList = &task.(*p.ActivityTask).TaskList
 			info.ScheduleID = &task.(*p.ActivityTask).ScheduleID
 
 		case p.TransferTaskTypeDecisionTask:
-			info.TargetDomainID = sqlplugin.MustParseUUID(task.(*p.DecisionTask).DomainID)
+			info.TargetDomainID = primitives.MustParseUUID(task.(*p.DecisionTask).DomainID)
 			info.TaskList = &task.(*p.DecisionTask).TaskList
 			info.ScheduleID = &task.(*p.DecisionTask).ScheduleID
 
 		case p.TransferTaskTypeCancelExecution:
-			info.TargetDomainID = sqlplugin.MustParseUUID(task.(*p.CancelExecutionTask).TargetDomainID)
+			info.TargetDomainID = primitives.MustParseUUID(task.(*p.CancelExecutionTask).TargetDomainID)
 			info.TargetWorkflowID = &task.(*p.CancelExecutionTask).TargetWorkflowID
 			if task.(*p.CancelExecutionTask).TargetRunID != "" {
-				info.TargetRunID = sqlplugin.MustParseUUID(task.(*p.CancelExecutionTask).TargetRunID)
+				info.TargetRunID = primitives.MustParseUUID(task.(*p.CancelExecutionTask).TargetRunID)
 			}
 			info.TargetChildWorkflowOnly = &task.(*p.CancelExecutionTask).TargetChildWorkflowOnly
 			info.ScheduleID = &task.(*p.CancelExecutionTask).InitiatedID
 
 		case p.TransferTaskTypeSignalExecution:
-			info.TargetDomainID = sqlplugin.MustParseUUID(task.(*p.SignalExecutionTask).TargetDomainID)
+			info.TargetDomainID = primitives.MustParseUUID(task.(*p.SignalExecutionTask).TargetDomainID)
 			info.TargetWorkflowID = &task.(*p.SignalExecutionTask).TargetWorkflowID
 			if task.(*p.SignalExecutionTask).TargetRunID != "" {
-				info.TargetRunID = sqlplugin.MustParseUUID(task.(*p.SignalExecutionTask).TargetRunID)
+				info.TargetRunID = primitives.MustParseUUID(task.(*p.SignalExecutionTask).TargetRunID)
 			}
 			info.TargetChildWorkflowOnly = &task.(*p.SignalExecutionTask).TargetChildWorkflowOnly
 			info.ScheduleID = &task.(*p.SignalExecutionTask).InitiatedID
 
 		case p.TransferTaskTypeStartChildExecution:
-			info.TargetDomainID = sqlplugin.MustParseUUID(task.(*p.StartChildExecutionTask).TargetDomainID)
+			info.TargetDomainID = primitives.MustParseUUID(task.(*p.StartChildExecutionTask).TargetDomainID)
 			info.TargetWorkflowID = &task.(*p.StartChildExecutionTask).TargetWorkflowID
 			info.ScheduleID = &task.(*p.StartChildExecutionTask).InitiatedID
 
@@ -835,9 +841,9 @@ func createReplicationTasks(
 	tx sqlplugin.Tx,
 	replicationTasks []p.Task,
 	shardID int,
-	domainID sqlplugin.UUID,
+	domainID primitives.UUID,
 	workflowID string,
-	runID sqlplugin.UUID,
+	runID primitives.UUID,
 ) error {
 
 	if len(replicationTasks) == 0 {
@@ -851,7 +857,7 @@ func createReplicationTasks(
 		nextEventID := common.EmptyEventID
 		version := common.EmptyVersion
 		activityScheduleID := common.EmptyEventID
-		var lastReplicationInfo map[string]*sqlblobs.ReplicationInfo
+		var lastReplicationInfo map[string]*commonproto.ReplicationInfo
 
 		var branchToken, newRunBranchToken []byte
 		var resetWorkflow bool
@@ -870,15 +876,15 @@ func createReplicationTasks(
 			branchToken = historyReplicationTask.BranchToken
 			newRunBranchToken = historyReplicationTask.NewRunBranchToken
 			resetWorkflow = historyReplicationTask.ResetWorkflow
-			lastReplicationInfo = make(map[string]*sqlblobs.ReplicationInfo, len(historyReplicationTask.LastReplicationInfo))
+			lastReplicationInfo = make(map[string]*commonproto.ReplicationInfo, len(historyReplicationTask.LastReplicationInfo))
 			for k, v := range historyReplicationTask.LastReplicationInfo {
-				lastReplicationInfo[k] = &sqlblobs.ReplicationInfo{Version: &v.Version, LastEventID: &v.LastEventID}
+				lastReplicationInfo[k] = &commonproto.ReplicationInfo{Version: v.Version, LastEventId: v.LastEventID}
 			}
 
 		case p.ReplicationTaskTypeSyncActivity:
 			version = task.GetVersion()
 			activityScheduleID = task.(*p.SyncActivityTask).ScheduledID
-			lastReplicationInfo = map[string]*sqlblobs.ReplicationInfo{}
+			lastReplicationInfo = map[string]*commonproto.ReplicationInfo{}
 
 		default:
 			return &workflow.InternalServiceError{
@@ -886,21 +892,22 @@ func createReplicationTasks(
 			}
 		}
 
-		blob, err := replicationTaskInfoToBlob(&sqlblobs.ReplicationTaskInfo{
+		blob, err := ReplicationTaskInfoToBlob(&persistenceblobs.ReplicationTaskInfo{
+			TaskID:                  task.GetTaskID(),
 			DomainID:                domainID,
-			WorkflowID:              &workflowID,
+			WorkflowID:              workflowID,
 			RunID:                   runID,
-			TaskType:                common.Int16Ptr(int16(task.GetType())),
-			FirstEventID:            &firstEventID,
-			NextEventID:             &nextEventID,
-			Version:                 &version,
+			TaskType:                int32(task.GetType()),
+			FirstEventID:            firstEventID,
+			NextEventID:             nextEventID,
+			Version:                 version,
 			LastReplicationInfo:     lastReplicationInfo,
-			ScheduledID:             &activityScheduleID,
-			EventStoreVersion:       common.Int32Ptr(p.EventStoreVersion),
-			NewRunEventStoreVersion: common.Int32Ptr(p.EventStoreVersion),
+			ScheduledID:             activityScheduleID,
+			EventStoreVersion:       p.EventStoreVersion,
+			NewRunEventStoreVersion: p.EventStoreVersion,
 			BranchToken:             branchToken,
 			NewRunBranchToken:       newRunBranchToken,
-			ResetWorkflow:           &resetWorkflow,
+			ResetWorkflow:           resetWorkflow,
 		})
 		if err != nil {
 			return err
@@ -938,9 +945,9 @@ func createTimerTasks(
 	tx sqlplugin.Tx,
 	timerTasks []p.Task,
 	shardID int,
-	domainID sqlplugin.UUID,
+	domainID primitives.UUID,
 	workflowID string,
-	runID sqlplugin.UUID,
+	runID primitives.UUID,
 ) error {
 
 	if len(timerTasks) > 0 {
@@ -1026,9 +1033,9 @@ func createTimerTasks(
 func assertNotCurrentExecution(
 	tx sqlplugin.Tx,
 	shardID int,
-	domainID sqlplugin.UUID,
+	domainID primitives.UUID,
 	workflowID string,
-	runID sqlplugin.UUID,
+	runID primitives.UUID,
 ) error {
 	currentRow, err := tx.LockCurrentExecutions(&sqlplugin.CurrentExecutionsFilter{
 		ShardID:    int64(shardID),
@@ -1050,10 +1057,10 @@ func assertNotCurrentExecution(
 func assertRunIDAndUpdateCurrentExecution(
 	tx sqlplugin.Tx,
 	shardID int,
-	domainID sqlplugin.UUID,
+	domainID primitives.UUID,
 	workflowID string,
-	newRunID sqlplugin.UUID,
-	previousRunID sqlplugin.UUID,
+	newRunID primitives.UUID,
+	previousRunID primitives.UUID,
 	createRequestID string,
 	state int,
 	closeStatus int,
@@ -1081,10 +1088,10 @@ func assertRunIDAndUpdateCurrentExecution(
 func assertAndUpdateCurrentExecution(
 	tx sqlplugin.Tx,
 	shardID int,
-	domainID sqlplugin.UUID,
+	domainID primitives.UUID,
 	workflowID string,
-	newRunID sqlplugin.UUID,
-	previousRunID sqlplugin.UUID,
+	newRunID primitives.UUID,
+	previousRunID primitives.UUID,
 	previousLastWriteVersion int64,
 	previousState int,
 	createRequestID string,
@@ -1128,7 +1135,7 @@ func assertAndUpdateCurrentExecution(
 func assertCurrentExecution(
 	tx sqlplugin.Tx,
 	shardID int,
-	domainID sqlplugin.UUID,
+	domainID primitives.UUID,
 	workflowID string,
 	assertFn func(currentRow *sqlplugin.CurrentExecutionsRow) error,
 ) error {
@@ -1146,7 +1153,7 @@ func assertCurrentExecution(
 	return assertFn(currentRow)
 }
 
-func assertRunIDMismatch(runID sqlplugin.UUID, currentRunID sqlplugin.UUID) error {
+func assertRunIDMismatch(runID primitives.UUID, currentRunID primitives.UUID) error {
 	// zombie workflow creation with existence of current record, this is a noop
 	if bytes.Equal(currentRunID, runID) {
 		return &p.ConditionFailedError{Msg: fmt.Sprintf(
@@ -1161,9 +1168,9 @@ func assertRunIDMismatch(runID sqlplugin.UUID, currentRunID sqlplugin.UUID) erro
 func updateCurrentExecution(
 	tx sqlplugin.Tx,
 	shardID int,
-	domainID sqlplugin.UUID,
+	domainID primitives.UUID,
 	workflowID string,
-	runID sqlplugin.UUID,
+	runID primitives.UUID,
 	createRequestID string,
 	state int,
 	closeStatus int,
@@ -1286,9 +1293,9 @@ func buildExecutionRow(
 	}
 
 	if executionInfo.ParentDomainID != "" {
-		info.ParentDomainID = sqlplugin.MustParseUUID(executionInfo.ParentDomainID)
+		info.ParentDomainID = primitives.MustParseUUID(executionInfo.ParentDomainID)
 		info.ParentWorkflowID = &executionInfo.ParentWorkflowID
-		info.ParentRunID = sqlplugin.MustParseUUID(executionInfo.ParentRunID)
+		info.ParentRunID = primitives.MustParseUUID(executionInfo.ParentRunID)
 		info.InitiatedID = &executionInfo.InitiatedID
 		info.CompletionEvent = nil
 	}
@@ -1305,9 +1312,9 @@ func buildExecutionRow(
 
 	return &sqlplugin.ExecutionsRow{
 		ShardID:          shardID,
-		DomainID:         sqlplugin.MustParseUUID(executionInfo.DomainID),
+		DomainID:         primitives.MustParseUUID(executionInfo.DomainID),
 		WorkflowID:       executionInfo.WorkflowID,
-		RunID:            sqlplugin.MustParseUUID(executionInfo.RunID),
+		RunID:            primitives.MustParseUUID(executionInfo.RunID),
 		NextEventID:      int64(executionInfo.NextEventID),
 		LastWriteVersion: lastWriteVersion,
 		Data:             blob.Data,

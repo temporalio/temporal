@@ -23,6 +23,8 @@ package history
 import (
 	"fmt"
 
+	"github.com/temporalio/temporal/common/primitives"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -161,10 +163,10 @@ func initializeLoggerForTask(
 		tag.ShardID(shardID),
 		tag.TaskID(task.GetTaskID()),
 		tag.FailoverVersion(task.GetVersion()),
-		tag.TaskType(task.GetTaskType()),
-		tag.WorkflowDomainID(task.GetDomainID()),
+		tag.TaskType(int(task.GetTaskType())),
+		tag.WorkflowDomainID(primitives.UUID(task.GetDomainID()).String()),
 		tag.WorkflowID(task.GetWorkflowID()),
-		tag.WorkflowRunID(task.GetRunID()),
+		tag.WorkflowRunID(primitives.UUID(task.GetRunID()).String()),
 	)
 
 	switch task := task.(type) {
@@ -174,7 +176,7 @@ func initializeLoggerForTask(
 		)
 	case *persistence.TransferTaskInfo:
 		// noop
-	case *persistence.ReplicationTaskInfo:
+	case *persistence.ReplicationTaskInfoWrapper:
 		// noop
 	default:
 		taskLogger.Error(fmt.Sprintf("Unknown queue task type: %v", task))

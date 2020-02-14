@@ -144,7 +144,7 @@ func (t *transferQueueProcessorBase) pushActivity(
 	defer cancel()
 
 	if task.TaskType != persistence.TransferTaskTypeActivityTask {
-		t.logger.Fatal("Cannot process non activity task", tag.TaskType(task.GetTaskType()))
+		t.logger.Fatal("Cannot process non activity task", tag.TaskType(int(task.GetTaskType())))
 	}
 
 	_, err := t.matchingClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
@@ -172,7 +172,7 @@ func (t *transferQueueProcessorBase) pushDecision(
 	defer cancel()
 
 	if task.TaskType != persistence.TransferTaskTypeDecisionTask {
-		t.logger.Fatal("Cannot process non decision task", tag.TaskType(task.GetTaskType()))
+		t.logger.Fatal("Cannot process non decision task", tag.TaskType(int(task.GetTaskType())))
 	}
 
 	_, err := t.matchingClient.AddDecisionTask(ctx, &matchingservice.AddDecisionTaskRequest{

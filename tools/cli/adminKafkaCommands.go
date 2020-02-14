@@ -28,6 +28,11 @@ import (
 	"errors"
 	"fmt"
 
+	commonproto "go.temporal.io/temporal-proto/common"
+
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/common/primitives"
+
 	"github.com/temporalio/temporal/common/auth"
 
 	"io"
@@ -501,18 +506,18 @@ func doRereplicate(shardID int, domainID, wid, rid string, minID, maxID int64, t
 		}
 
 		currVersion := resp.State.ReplicationState.CurrentVersion
-		repInfo := map[string]*persistence.ReplicationInfo{
+		repInfo := map[string]*commonproto.ReplicationInfo{
 			"": {
 				Version:     currVersion,
-				LastEventID: 0,
+				LastEventId: 0,
 			},
 		}
 
 		exeInfo := resp.State.ExecutionInfo
-		taskTemplate := &persistence.ReplicationTaskInfo{
-			DomainID:            domainID,
+		taskTemplate := &persistenceblobs.ReplicationTaskInfo{
+			DomainID:            primitives.MustParseUUID(domainID),
 			WorkflowID:          wid,
-			RunID:               rid,
+			RunID:               primitives.MustParseUUID(rid),
 			Version:             currVersion,
 			LastReplicationInfo: repInfo,
 			BranchToken:         exeInfo.BranchToken,

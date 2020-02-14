@@ -25,6 +25,12 @@ import (
 	"errors"
 	"time"
 
+	commonproto "go.temporal.io/temporal-proto/common"
+
+	"github.com/temporalio/temporal/common/primitives"
+
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+
 	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
@@ -136,7 +142,7 @@ func (p *replicatorQueueProcessorImpl) process(
 	taskInfo *taskInfo,
 ) (int, error) {
 
-	task, ok := taskInfo.task.(*persistence.ReplicationTaskInfo)
+	task, ok := taskInfo.task.(*persistence.ReplicationTaskInfoWrapper)
 	if !ok {
 		return metrics.ReplicatorQueueProcessorScope, errUnexpectedQueueTask
 	}
@@ -145,13 +151,13 @@ func (p *replicatorQueueProcessorImpl) process(
 
 	switch task.TaskType {
 	case persistence.ReplicationTaskTypeSyncActivity:
-		err := p.processSyncActivityTask(task)
+		err := p.processSyncActivityTask(task.ReplicationTaskInfo)
 		if err == nil {
 			err = p.executionMgr.CompleteReplicationTask(&persistence.CompleteReplicationTaskRequest{TaskID: task.GetTaskID()})
 		}
 		return metrics.ReplicatorTaskSyncActivityScope, err
 	case persistence.ReplicationTaskTypeHistory:
-		err := p.processHistoryReplicationTask(task)
+		err := p.processHistoryReplicationTask(task.ReplicationTaskInfo)
 		if _, ok := err.(*shared.EntityNotExistsError); ok {
 			err = errHistoryNotFoundTask
 		}
@@ -170,7 +176,7 @@ func (p *replicatorQueueProcessorImpl) queueShutdown() error {
 }
 
 func (p *replicatorQueueProcessorImpl) processSyncActivityTask(
-	task *persistence.ReplicationTaskInfo,
+	task *persistenceblobs.ReplicationTaskInfo,
 ) error {
 
 	replicationTask, err := p.generateSyncActivityTask(ctx.Background(), task)
@@ -182,10 +188,9 @@ func (p *replicatorQueueProcessorImpl) processSyncActivityTask(
 }
 
 func (p *replicatorQueueProcessorImpl) processHistoryReplicationTask(
-	task *persistence.ReplicationTaskInfo,
+	task *persistenceblobs.ReplicationTaskInfo,
 ) error {
-
-	replicationTask, err := p.toReplicationTask(ctx.Background(), task)
+	replicationTask, err := p.toReplicationTask(ctx.Background(), persistence.ReplicationTaskInfoWrapper{task})
 	if err != nil || replicationTask == nil {
 		return err
 	}
@@ -200,14 +205,14 @@ func (p *replicatorQueueProcessorImpl) processHistoryReplicationTask(
 	return err
 }
 
-func (p *replicatorQueueProcessorImpl) generateHistoryMetadataTask(targetClusters []string, task *persistence.ReplicationTaskInfo) *replicator.ReplicationTask {
+func (p *replicatorQueueProcessorImpl) generateHistoryMetadataTask(targetClusters []string, task *persistenceblobs.ReplicationTaskInfo) *replicator.ReplicationTask {
 	return &replicator.ReplicationTask{
 		TaskType: replicator.ReplicationTaskTypeHistoryMetadata.Ptr(),
 		HistoryMetadataTaskAttributes: &replicator.HistoryMetadataTaskAttributes{
 			TargetClusters: targetClusters,
-			DomainId:       common.StringPtr(task.DomainID),
+			DomainId:       common.StringPtr(primitives.UUID(task.DomainID).String()),
 			WorkflowId:     common.StringPtr(task.WorkflowID),
-			RunId:          common.StringPtr(task.RunID),
+			RunId:          common.StringPtr(primitives.UUID(task.RunID).String()),
 			FirstEventId:   common.Int64Ptr(task.FirstEventID),
 			NextEventId:    common.Int64Ptr(task.NextEventID),
 		},
@@ -217,7 +222,7 @@ func (p *replicatorQueueProcessorImpl) generateHistoryMetadataTask(targetCluster
 // GenerateReplicationTask generate replication task
 func GenerateReplicationTask(
 	targetClusters []string,
-	task *persistence.ReplicationTaskInfo,
+	task *persistenceblobs.ReplicationTaskInfo,
 	historyV2Mgr persistence.HistoryManager,
 	metricsClient metrics.Client,
 	history *shared.History,
@@ -263,9 +268,9 @@ func GenerateReplicationTask(
 		TaskType: replicator.ReplicationTaskType.Ptr(replicator.ReplicationTaskTypeHistory),
 		HistoryTaskAttributes: &replicator.HistoryTaskAttributes{
 			TargetClusters:  targetClusters,
-			DomainId:        common.StringPtr(task.DomainID),
+			DomainId:        common.StringPtr(primitives.UUID(task.DomainID).String()),
 			WorkflowId:      common.StringPtr(task.WorkflowID),
-			RunId:           common.StringPtr(task.RunID),
+			RunId:           common.StringPtr(primitives.UUID(task.RunID).String()),
 			FirstEventId:    common.Int64Ptr(task.FirstEventID),
 			NextEventId:     common.Int64Ptr(task.NextEventID),
 			Version:         common.Int64Ptr(task.Version),
@@ -406,12 +411,12 @@ func PaginateHistory(
 }
 
 // TODO deprecate when 3+DC is released
-func convertLastReplicationInfo(info map[string]*persistence.ReplicationInfo) map[string]*shared.ReplicationInfo {
+func convertLastReplicationInfo(info map[string]*commonproto.ReplicationInfo) map[string]*shared.ReplicationInfo {
 	replicationInfoMap := make(map[string]*shared.ReplicationInfo)
 	for k, v := range info {
 		replicationInfoMap[k] = &shared.ReplicationInfo{
 			Version:     common.Int64Ptr(v.Version),
-			LastEventId: common.Int64Ptr(v.LastEventID),
+			LastEventId: common.Int64Ptr(v.LastEventId),
 		}
 	}
 
@@ -496,18 +501,18 @@ func (p *replicatorQueueProcessorImpl) getTask(
 	taskInfo *replicator.ReplicationTaskInfo,
 ) (*replicator.ReplicationTask, error) {
 
-	task := &persistence.ReplicationTaskInfo{
-		DomainID:     taskInfo.GetDomainID(),
+	task := &persistenceblobs.ReplicationTaskInfo{
+		DomainID:     primitives.MustParseUUID(taskInfo.GetDomainID()),
 		WorkflowID:   taskInfo.GetWorkflowID(),
-		RunID:        taskInfo.GetRunID(),
+		RunID:        primitives.MustParseUUID(taskInfo.GetRunID()),
 		TaskID:       taskInfo.GetTaskID(),
-		TaskType:     int(taskInfo.GetTaskType()),
+		TaskType:     int32(taskInfo.GetTaskType()),
 		FirstEventID: taskInfo.GetFirstEventID(),
 		NextEventID:  taskInfo.GetNextEventID(),
 		Version:      taskInfo.GetVersion(),
 		ScheduledID:  taskInfo.GetScheduledID(),
 	}
-	return p.toReplicationTask(ctx, task)
+	return p.toReplicationTask(ctx, &persistence.ReplicationTaskInfoWrapper{ReplicationTaskInfo: task})
 }
 
 func (p *replicatorQueueProcessorImpl) readTasksWithBatchSize(readLevel int64, batchSize int) ([]queueTaskInfo, bool, error) {
@@ -523,7 +528,7 @@ func (p *replicatorQueueProcessorImpl) readTasksWithBatchSize(readLevel int64, b
 
 	tasks := make([]queueTaskInfo, len(response.Tasks))
 	for i := range response.Tasks {
-		tasks[i] = response.Tasks[i]
+		tasks[i] = &persistence.ReplicationTaskInfoWrapper{ReplicationTaskInfo: response.Tasks[i]}
 	}
 
 	return tasks, len(response.NextPageToken) != 0, nil
@@ -534,11 +539,12 @@ func (p *replicatorQueueProcessorImpl) toReplicationTask(
 	qTask queueTaskInfo,
 ) (*replicator.ReplicationTask, error) {
 
-	task, ok := qTask.(*persistence.ReplicationTaskInfo)
+	t, ok := qTask.(*persistence.ReplicationTaskInfoWrapper)
 	if !ok {
 		return nil, errUnexpectedQueueTask
 	}
 
+	task := t.ReplicationTaskInfo
 	switch task.TaskType {
 	case persistence.ReplicationTaskTypeSyncActivity:
 		task, err := p.generateSyncActivityTask(ctx, task)
@@ -559,15 +565,16 @@ func (p *replicatorQueueProcessorImpl) toReplicationTask(
 
 func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 	ctx ctx.Context,
-	taskInfo *persistence.ReplicationTaskInfo,
+	taskInfo *persistenceblobs.ReplicationTaskInfo,
 ) (*replicator.ReplicationTask, error) {
-
+	domainID := primitives.UUID(taskInfo.GetDomainID()).String()
+	runID := primitives.UUID(taskInfo.GetRunID()).String()
 	return p.processReplication(
 		ctx,
 		false, // not necessary to send out sync activity task if workflow closed
-		taskInfo.GetDomainID(),
+		domainID,
 		taskInfo.GetWorkflowID(),
-		taskInfo.GetRunID(),
+		runID,
 		func(mutableState mutableState) (*replicator.ReplicationTask, error) {
 			activityInfo, ok := mutableState.GetActivityInfo(taskInfo.ScheduledID)
 			if !ok {
@@ -597,9 +604,9 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 			return &replicator.ReplicationTask{
 				TaskType: replicator.ReplicationTaskType.Ptr(replicator.ReplicationTaskTypeSyncActivity),
 				SyncActivityTaskAttributes: &replicator.SyncActivityTaskAttributes{
-					DomainId:           common.StringPtr(taskInfo.GetDomainID()),
+					DomainId:           common.StringPtr(domainID),
 					WorkflowId:         common.StringPtr(taskInfo.GetWorkflowID()),
-					RunId:              common.StringPtr(taskInfo.GetRunID()),
+					RunId:              common.StringPtr(runID),
 					Version:            common.Int64Ptr(activityInfo.Version),
 					ScheduledId:        common.Int64Ptr(activityInfo.ScheduleID),
 					ScheduledTime:      scheduledTime,
@@ -620,22 +627,23 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 
 func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 	ctx ctx.Context,
-	task *persistence.ReplicationTaskInfo,
+	task *persistenceblobs.ReplicationTaskInfo,
 ) (*replicator.ReplicationTask, error) {
-
+	domainID := primitives.UUID(task.GetDomainID()).String()
+	runID := primitives.UUID(task.GetRunID()).String()
 	return p.processReplication(
 		ctx,
 		true, // still necessary to send out history replication message if workflow closed
-		task.GetDomainID(),
+		domainID,
 		task.GetWorkflowID(),
-		task.GetRunID(),
+		runID,
 		func(mutableState mutableState) (*replicator.ReplicationTask, error) {
 
 			versionHistories := mutableState.GetVersionHistories()
 
 			// TODO when 3+DC migration is done, remove this block of code
 			if versionHistories == nil {
-				domainEntry, err := p.shard.GetDomainCache().GetDomainByID(task.DomainID)
+				domainEntry, err := p.shard.GetDomainCache().GetDomainByID(domainID)
 				if err != nil {
 					return nil, err
 				}
@@ -657,7 +665,7 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 					return nil, err
 				}
 				if newRunID != "" {
-					isNDCWorkflow, err := p.isNewRunNDCEnabled(ctx, task.DomainID, task.WorkflowID, newRunID)
+					isNDCWorkflow, err := p.isNewRunNDCEnabled(ctx, domainID, task.WorkflowID, newRunID)
 					if err != nil {
 						return nil, err
 					}
@@ -708,9 +716,9 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 				TaskType: replicator.ReplicationTaskType.Ptr(replicator.ReplicationTaskTypeHistoryV2),
 				HistoryTaskV2Attributes: &replicator.HistoryTaskV2Attributes{
 					TaskId:              common.Int64Ptr(task.FirstEventID),
-					DomainId:            common.StringPtr(task.DomainID),
+					DomainId:            common.StringPtr(domainID),
 					WorkflowId:          common.StringPtr(task.WorkflowID),
-					RunId:               common.StringPtr(task.RunID),
+					RunId:               common.StringPtr(runID),
 					VersionHistoryItems: versionHistoryItems,
 					Events:              eventsBlob,
 					NewRunEvents:        newRunEventsBlob,
