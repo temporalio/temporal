@@ -62,10 +62,6 @@ var (
 			Usage: "Workflow execution retention in days",
 		},
 		cli.StringFlag{
-			Name:  FlagEmitMetricWithAlias,
-			Usage: "Flag to emit metric",
-		},
-		cli.StringFlag{
 			Name:  FlagActiveClusterNameWithAlias,
 			Usage: "Active cluster name",
 		},
@@ -118,10 +114,6 @@ var (
 		cli.StringFlag{
 			Name:  FlagRetentionDaysWithAlias,
 			Usage: "Workflow execution retention in days",
-		},
-		cli.StringFlag{
-			Name:  FlagEmitMetricWithAlias,
-			Usage: "Flag to emit metric",
 		},
 		cli.StringFlag{
 			Name:  FlagActiveClusterNameWithAlias,

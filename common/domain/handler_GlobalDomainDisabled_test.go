@@ -205,7 +205,7 @@ func (s *domainHandlerGlobalDomainDisabledSuite) TestRegisterGetDomain_AllDefaul
 	}, resp.DomainInfo)
 	s.Equal(&shared.DomainConfiguration{
 		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
-		EmitMetric:                             common.BoolPtr(false),
+		EmitMetric:                             common.BoolPtr(true),
 		HistoryArchivalStatus:                  shared.ArchivalStatusDisabled.Ptr(),
 		HistoryArchivalURI:                     common.StringPtr(""),
 		VisibilityArchivalStatus:               shared.ArchivalStatusDisabled.Ptr(),

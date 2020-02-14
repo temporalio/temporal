@@ -178,7 +178,7 @@ func (s *cliAppSuite) TestDomainUpdate() {
 	s.serverFrontendClient.EXPECT().UpdateDomain(gomock.Any(), gomock.Any()).Return(nil, nil).Times(2)
 	err := s.app.Run([]string{"", "--do", domainName, "domain", "update"})
 	s.Nil(err)
-	err = s.app.Run([]string{"", "--do", domainName, "domain", "update", "--desc", "another desc", "--oe", "another@uber.com", "--rd", "1", "--em", "f"})
+	err = s.app.Run([]string{"", "--do", domainName, "domain", "update", "--desc", "another desc", "--oe", "another@uber.com", "--rd", "1"})
 	s.Nil(err)
 }
 

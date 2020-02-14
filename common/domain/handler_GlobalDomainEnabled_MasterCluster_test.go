@@ -178,7 +178,7 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestRegisterGetDoma
 	}, resp.DomainInfo)
 	s.Equal(&shared.DomainConfiguration{
 		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
-		EmitMetric:                             common.BoolPtr(false),
+		EmitMetric:                             common.BoolPtr(true),
 		HistoryArchivalStatus:                  shared.ArchivalStatusDisabled.Ptr(),
 		HistoryArchivalURI:                     common.StringPtr(""),
 		VisibilityArchivalStatus:               shared.ArchivalStatusDisabled.Ptr(),
@@ -473,7 +473,7 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestRegisterGetDoma
 	}, resp.DomainInfo)
 	s.Equal(&shared.DomainConfiguration{
 		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
-		EmitMetric:                             common.BoolPtr(false),
+		EmitMetric:                             common.BoolPtr(true),
 		HistoryArchivalStatus:                  shared.ArchivalStatusDisabled.Ptr(),
 		HistoryArchivalURI:                     common.StringPtr(""),
 		VisibilityArchivalStatus:               shared.ArchivalStatusDisabled.Ptr(),

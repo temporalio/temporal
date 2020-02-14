@@ -123,8 +123,6 @@ const (
 	FlagOwnerEmailWithAlias               = FlagOwnerEmail + ", oe"
 	FlagRetentionDays                     = "retention"
 	FlagRetentionDaysWithAlias            = FlagRetentionDays + ", rd"
-	FlagEmitMetric                        = "emit_metric"
-	FlagEmitMetricWithAlias               = FlagEmitMetric + ", em"
 	FlagHistoryArchivalStatus             = "history_archival_status"
 	FlagHistoryArchivalStatusWithAlias    = FlagHistoryArchivalStatus + ", has"
 	FlagHistoryArchivalURI                = "history_uri"
