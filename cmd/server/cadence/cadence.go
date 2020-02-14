@@ -60,11 +60,11 @@ func startHandler(c *cli.Context) {
 	}
 	// cassandra schema version validation
 	if err := cassandra.VerifyCompatibleVersion(cfg.Persistence); err != nil {
-		log.Fatal("Incompatible cassandra versions: ", err)
+		log.Fatal("cassandra schema version compatibility check failed: ", err)
 	}
 	// sql schema version validation
 	if err := sql.VerifyCompatibleVersion(cfg.Persistence); err != nil {
-		log.Fatal("Incompatible sql versions: ", err)
+		log.Fatal("sql schema version compatibility check failed: ", err)
 	}
 
 	var daemons []common.Daemon
