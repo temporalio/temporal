@@ -294,7 +294,8 @@ CREATE TABLE executions (
   shard_encoding                 text,
   execution                      frozen<workflow_execution>,
   transfer                       frozen<transfer_task>,
-  replication                    frozen<replication_task>,
+  replication                    blob,
+  replication_encoding           text,
   timer                          frozen<timer_task>,
   next_event_id                  bigint,  -- This is needed to make conditional updates on session history
   range_id                       bigint, -- Increasing sequence identifier for transfer queue, checkpointed into shard info

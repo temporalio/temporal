@@ -24,6 +24,7 @@ package persistenceblobs;
 option go_package = "github.com/temporalio/temporal/.gen/proto/persistenceblobs";
 
 import "google/protobuf/timestamp.proto";
+import "temporal-proto/common/replication.proto";
 
 // ImmutableClusterMetadata contains initialization configuration and metadata for the cluster
 message ImmutableClusterMetadata {
@@ -44,4 +45,22 @@ message ShardInfo {
     map<string, int64> clusterTransferAckLevel = 10;
     map<string, google.protobuf.Timestamp> clusterTimerAckLevel = 11;
     map<string, int64> clusterReplicationLevel = 12;
+}
+
+message ReplicationTaskInfo {
+    bytes domainID = 1;
+    string workflowID = 2;
+    bytes runID = 3;
+    int32 taskType = 4;
+    int64 version = 5;
+    int64 firstEventID = 6;
+    int64 nextEventID = 7;
+    int64 scheduledID = 8;
+    int32 eventStoreVersion = 9;
+    int32 newRunEventStoreVersion = 10;
+    bytes branch_token = 11;
+    map<string, common.ReplicationInfo> lastReplicationInfo = 12;
+    bytes newRunBranchToken = 13;
+    bool resetWorkflow = 14;
+    int64 taskID = 15;
 }

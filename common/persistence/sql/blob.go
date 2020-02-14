@@ -249,11 +249,11 @@ func timerTaskInfoFromBlob(b []byte, proto string) (*sqlblobs.TimerTaskInfo, err
 	return result, thriftRWDecode(b, proto, result)
 }
 
-func replicationTaskInfoToBlob(info *sqlblobs.ReplicationTaskInfo) (p.DataBlob, error) {
-	return thriftRWEncode(info)
+func ReplicationTaskInfoToBlob(info *persistenceblobs.ReplicationTaskInfo) (p.DataBlob, error) {
+	return protoRWEncode(info)
 }
 
-func replicationTaskInfoFromBlob(b []byte, proto string) (*sqlblobs.ReplicationTaskInfo, error) {
-	result := &sqlblobs.ReplicationTaskInfo{}
-	return result, thriftRWDecode(b, proto, result)
+func ReplicationTaskInfoFromBlob(b []byte, proto string) (*persistenceblobs.ReplicationTaskInfo, error) {
+	result := &persistenceblobs.ReplicationTaskInfo{}
+	return result, protoRWDecode(b, proto, result)
 }

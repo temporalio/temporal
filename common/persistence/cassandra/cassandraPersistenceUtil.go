@@ -24,6 +24,12 @@ import (
 	"fmt"
 	"time"
 
+	commonproto "go.temporal.io/temporal-proto/common"
+
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/common/persistence/sql"
+	"github.com/temporalio/temporal/common/primitives"
+
 	"github.com/gocql/gocql"
 
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
@@ -1061,7 +1067,7 @@ func createReplicationTasks(
 		firstEventID := common.EmptyEventID
 		nextEventID := common.EmptyEventID
 		version := common.EmptyVersion //nolint:ineffassign
-		var lastReplicationInfo map[string]map[string]interface{}
+		var lastReplicationInfo map[string]*commonproto.ReplicationInfo
 		activityScheduleID := common.EmptyEventID
 		var branchToken, newRunBranchToken []byte
 		resetWorkflow := false
@@ -1074,9 +1080,9 @@ func createReplicationTasks(
 			firstEventID = histTask.FirstEventID
 			nextEventID = histTask.NextEventID
 			version = task.GetVersion()
-			lastReplicationInfo = make(map[string]map[string]interface{})
+			lastReplicationInfo = make(map[string]*commonproto.ReplicationInfo)
 			for k, v := range histTask.LastReplicationInfo {
-				lastReplicationInfo[k] = createReplicationInfoMap(v)
+				lastReplicationInfo[k] = v.ToProto()
 			}
 			resetWorkflow = histTask.ResetWorkflow
 
@@ -1084,12 +1090,34 @@ func createReplicationTasks(
 			version = task.GetVersion()
 			activityScheduleID = task.(*p.SyncActivityTask).ScheduledID
 			// cassandra does not like null
-			lastReplicationInfo = make(map[string]map[string]interface{})
+			lastReplicationInfo = make(map[string]*commonproto.ReplicationInfo)
 
 		default:
 			return &workflow.InternalServiceError{
 				Message: fmt.Sprintf("Unknow replication type: %v", task.GetType()),
 			}
+		}
+
+		datablob, err := sql.ReplicationTaskInfoToBlob(&persistenceblobs.ReplicationTaskInfo{
+			DomainID:                primitives.MustParseUUID(domainID),
+			WorkflowID:              workflowID,
+			RunID:                   primitives.MustParseUUID(runID),
+			TaskID:                  task.GetTaskID(),
+			TaskType:                int32(task.GetType()),
+			Version:                 version,
+			FirstEventID:            firstEventID,
+			NextEventID:             nextEventID,
+			ScheduledID:             activityScheduleID,
+			EventStoreVersion:       p.EventStoreVersion,
+			NewRunBranchToken:       newRunBranchToken,
+			NewRunEventStoreVersion: p.EventStoreVersion,
+			BranchToken:             branchToken,
+			LastReplicationInfo:     lastReplicationInfo,
+			ResetWorkflow:           resetWorkflow,
+		})
+
+		if err != nil {
+			return err
 		}
 
 		batch.Query(templateCreateReplicationTaskQuery,
@@ -1098,21 +1126,8 @@ func createReplicationTasks(
 			rowTypeReplicationDomainID,
 			rowTypeReplicationWorkflowID,
 			rowTypeReplicationRunID,
-			domainID,
-			workflowID,
-			runID,
-			task.GetTaskID(),
-			task.GetType(),
-			firstEventID,
-			nextEventID,
-			version,
-			lastReplicationInfo,
-			activityScheduleID,
-			p.EventStoreVersion,
-			branchToken,
-			resetWorkflow,
-			p.EventStoreVersion,
-			newRunBranchToken,
+			datablob.Data,
+			datablob.Encoding,
 			defaultVisibilityTimestamp,
 			task.GetTaskID())
 	}
@@ -1972,49 +1987,6 @@ func createTransferTaskInfo(
 			info.RecordVisibility = v.(bool)
 		case "version":
 			info.Version = v.(int64)
-		}
-	}
-
-	return info
-}
-
-func createReplicationTaskInfo(
-	result map[string]interface{},
-) *p.ReplicationTaskInfo {
-
-	info := &p.ReplicationTaskInfo{}
-	for k, v := range result {
-		switch k {
-		case "domain_id":
-			info.DomainID = v.(gocql.UUID).String()
-		case "workflow_id":
-			info.WorkflowID = v.(string)
-		case "run_id":
-			info.RunID = v.(gocql.UUID).String()
-		case "task_id":
-			info.TaskID = v.(int64)
-		case "type":
-			info.TaskType = v.(int)
-		case "first_event_id":
-			info.FirstEventID = v.(int64)
-		case "next_event_id":
-			info.NextEventID = v.(int64)
-		case "version":
-			info.Version = v.(int64)
-		case "last_replication_info":
-			info.LastReplicationInfo = make(map[string]*p.ReplicationInfo)
-			replicationInfoMap := v.(map[string]map[string]interface{})
-			for key, value := range replicationInfoMap {
-				info.LastReplicationInfo[key] = createReplicationInfo(value)
-			}
-		case "scheduled_id":
-			info.ScheduledID = v.(int64)
-		case "branch_token":
-			info.BranchToken = v.([]byte)
-		case "reset_workflow":
-			info.ResetWorkflow = v.(bool)
-		case "new_run_branch_token":
-			info.NewRunBranchToken = v.([]byte)
 		}
 	}
 
