@@ -24,21 +24,10 @@ import (
 	"context"
 	"time"
 
-	"google.golang.org/grpc/metadata"
-
-	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/client"
 )
 
-var (
-	headers = metadata.New(map[string]string{
-		common.LibraryVersionHeaderName: "1.0.0",
-		common.FeatureVersionHeaderName: client.GoWorkerConsistentQueryVersion,
-		common.ClientImplHeaderName:     client.GoSDK,
-	})
-)
-
-// NewContext create new context with default timeout.
+// NewContext create new context with default timeout 90 seconds.
 func NewContext() context.Context {
 	ctx, _ := NewContextWithCancel(90 * time.Second)
 	return ctx
@@ -46,8 +35,5 @@ func NewContext() context.Context {
 
 // NewContextWithCancel create new context with timeout.
 func NewContextWithCancel(timeout time.Duration) (context.Context, context.CancelFunc) {
-	ctx := metadata.NewOutgoingContext(context.Background(), headers)
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-
-	return ctx, cancel
+	return context.WithTimeout(client.SetHeaders(context.Background()), timeout)
 }

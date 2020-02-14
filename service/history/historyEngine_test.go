@@ -33,7 +33,6 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"google.golang.org/grpc/metadata"
 
 	"github.com/temporalio/temporal/.gen/go/history"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
@@ -4399,12 +4398,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_SuccessWith
 }
 
 func (s *engineSuite) constructCallContext(featureVersion string) context.Context {
-	ctx := metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
-		common.FeatureVersionHeaderName: featureVersion,
-		common.ClientImplHeaderName:     cc.GoSDK,
-	}))
-
-	return ctx
+	return cc.SetHeadersForTests(context.Background(), cc.SupportedGoSDKVersion, cc.GoSDK, featureVersion)
 }
 
 func (s *engineSuite) TestStarTimer_DuplicateTimerID() {

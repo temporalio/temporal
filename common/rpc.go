@@ -27,32 +27,8 @@ import (
 	"google.golang.org/grpc"
 )
 
-const (
-	// LibraryVersionHeaderName refers to the name of the
-	// tchannel / http header that contains the client
-	// library version
-	LibraryVersionHeaderName = "cadence-client-library-version"
-
-	// FeatureVersionHeaderName refers to the name of the
-	// tchannel / http header that contains the client
-	// feature version
-	// the feature version sent from client represents the
-	// feature set of the cadence client library support.
-	// This can be used for client capibility check, on
-	// Cadence server, for backward compatibility
-	FeatureVersionHeaderName = "cadence-client-feature-version"
-
-	// ClientImplHeaderName refers to the name of the
-	// header that contains the client implementation
-	ClientImplHeaderName = "cadence-client-name"
-	// EnforceDCRedirection refers to a boolean string of whether
-	// to enforce DCRedirection(auto-forwarding)
-	// Will be removed in the future: https://github.com/uber/cadence/issues/2304
-	EnforceDCRedirection = "cadence-enforce-dc-redirection"
-)
-
 type (
-	// RPCFactory Creates a dispatcher that knows how to transport requests.
+	// RPCFactory creates gRPC listener and connection.
 	RPCFactory interface {
 		GetGRPCListener() net.Listener
 		GetRingpopDispatcher() *yarpc.Dispatcher

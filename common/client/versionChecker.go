@@ -28,7 +28,6 @@ import (
 	"google.golang.org/grpc/metadata"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/common"
 )
 
 const (
@@ -64,15 +63,15 @@ var (
 	ErrUnknownFeature = &shared.BadRequestError{Message: "Unknown feature"}
 
 	internalHeaders = metadata.New(map[string]string{
-		common.LibraryVersionHeaderName: SupportedGoSDKVersion,
-		common.FeatureVersionHeaderName: GoWorkerConsistentQueryVersion,
-		common.ClientImplHeaderName:     GoSDK,
+		LibraryVersionHeaderName: SupportedGoSDKVersion,
+		FeatureVersionHeaderName: GoWorkerConsistentQueryVersion,
+		ClientImplHeaderName:     GoSDK,
 	})
 
 	cliHeaders = metadata.New(map[string]string{
-		common.LibraryVersionHeaderName: SupportedCLIVersion,
-		common.FeatureVersionHeaderName: GoWorkerConsistentQueryVersion,
-		common.ClientImplHeaderName:     CLI,
+		LibraryVersionHeaderName: SupportedCLIVersion,
+		FeatureVersionHeaderName: GoWorkerConsistentQueryVersion,
+		ClientImplHeaderName:     CLI,
 	})
 )
 
@@ -122,7 +121,7 @@ func (vc *versionChecker) ClientSupported(ctx context.Context, enableClientVersi
 		return nil
 	}
 
-	headers := GetHeadersValue(ctx, common.FeatureVersionHeaderName, common.ClientImplHeaderName)
+	headers := GetHeadersValue(ctx, FeatureVersionHeaderName, ClientImplHeaderName)
 	clientFeatureVersion := headers[0]
 	clientImpl := headers[1]
 
@@ -144,6 +143,7 @@ func (vc *versionChecker) ClientSupported(ctx context.Context, enableClientVersi
 }
 
 // GetHeadersValue returns header values for passed header names.
+// It always returns slice of the same size as number of passed header names.
 func GetHeadersValue(ctx context.Context, headerNames ...string) []string {
 	headerValues := make([]string, len(headerNames))
 
@@ -156,12 +156,13 @@ func GetHeadersValue(ctx context.Context, headerNames ...string) []string {
 	return headerValues
 }
 
+// PropagateHeaders propagates headers from incoming context to outgoing context.
 func PropagateHeaders(ctx context.Context) context.Context {
 	if md, ok := metadata.FromIncomingContext(ctx); ok {
 		outgoingMetadata := copyIncomingHeadersToOutgoing(md,
-			common.LibraryVersionHeaderName,
-			common.FeatureVersionHeaderName,
-			common.ClientImplHeaderName)
+			LibraryVersionHeaderName,
+			FeatureVersionHeaderName,
+			ClientImplHeaderName)
 		if outgoingMetadata.Len() > 0 {
 			ctx = metadata.NewOutgoingContext(ctx, outgoingMetadata)
 		}
@@ -189,6 +190,16 @@ func copyIncomingHeadersToOutgoing(source metadata.MD, headerNames ...string) me
 	}
 
 	return outgoingMetadata
+}
+
+// SetHeaders sets headers as they are received from the client.
+// Must be used in tests only.
+func SetHeadersForTests(ctx context.Context, libraryVersion, clientImpl, featureVersion string) context.Context {
+	return metadata.NewIncomingContext(ctx, metadata.New(map[string]string{
+		LibraryVersionHeaderName: libraryVersion,
+		FeatureVersionHeaderName: featureVersion,
+		ClientImplHeaderName:     clientImpl,
+	}))
 }
 
 // SupportsStickyQuery returns error if sticky query is not supported otherwise nil.
@@ -241,3 +252,27 @@ func mustNewConstraint(v string) version.Constraints {
 	}
 	return constraint
 }
+
+const (
+	// LibraryVersionHeaderName refers to the name of the
+	// tchannel / http header that contains the client
+	// library version
+	LibraryVersionHeaderName = "cadence-client-library-version"
+
+	// FeatureVersionHeaderName refers to the name of the
+	// tchannel / http header that contains the client
+	// feature version
+	// the feature version sent from client represents the
+	// feature set of the cadence client library support.
+	// This can be used for client capibility check, on
+	// Cadence server, for backward compatibility
+	FeatureVersionHeaderName = "cadence-client-feature-version"
+
+	// ClientImplHeaderName refers to the name of the
+	// header that contains the client implementation
+	ClientImplHeaderName = "cadence-client-name"
+	// EnforceDCRedirection refers to a boolean string of whether
+	// to enforce DCRedirection(auto-forwarding)
+	// Will be removed in the future: https://github.com/uber/cadence/issues/2304
+	EnforceDCRedirection = "cadence-enforce-dc-redirection"
+)

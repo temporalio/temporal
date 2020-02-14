@@ -42,22 +42,12 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal/client"
-	"google.golang.org/grpc/metadata"
 
-	"github.com/temporalio/temporal/common"
+	versionChecker "github.com/temporalio/temporal/common/client"
 )
 
 // JSONHistorySerializer is used to encode history event in JSON
 type JSONHistorySerializer struct{}
-
-var (
-	// call header to cadence server
-	headers = metadata.New(map[string]string{
-		common.LibraryVersionHeaderName: "1.0.0",
-		common.FeatureVersionHeaderName: "1.0.0",
-		common.ClientImplHeaderName:     "cli",
-	})
-)
 
 // Serialize serializes history.
 func (j *JSONHistorySerializer) Serialize(h *commonproto.History) ([]byte, error) {
@@ -732,9 +722,8 @@ func newContextWithTimeout(c *cli.Context, defaultTimeout time.Duration) (contex
 	if c.GlobalIsSet(FlagContextTimeout) {
 		contextTimeout = time.Duration(c.GlobalInt(FlagContextTimeout)) * time.Second
 	}
-	ctx := metadata.NewOutgoingContext(context.Background(), headers)
 
-	return context.WithTimeout(ctx, contextTimeout)
+	return context.WithTimeout(versionChecker.SetCLIHeaders(context.Background()), contextTimeout)
 }
 
 // process and validate input provided through cmd or file

@@ -1253,7 +1253,7 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 			Message: fmt.Sprintf("cannot find cluster config %v to do reapply", activeCluster),
 		}
 	}
-	ctx2, cancel2 := newContextWithCancel(defaultRemoteCallTimeout)
+	ctx2, cancel2 := newContextWithTimeout(defaultRemoteCallTimeout)
 	defer cancel2()
 	_, err = sourceCluster.ReapplyEvents(
 		ctx2,

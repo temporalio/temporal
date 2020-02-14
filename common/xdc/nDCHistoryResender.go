@@ -236,7 +236,7 @@ func (n *NDCHistoryResenderImpl) getHistory(
 	}
 	domainName := domainEntry.GetInfo().Name
 
-	ctx, cancel := newContextWithCancel(resendContextTimeout)
+	ctx, cancel := newContextWithTimeout(resendContextTimeout)
 	defer cancel()
 	response, err := n.adminClient.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 		Domain: domainName,

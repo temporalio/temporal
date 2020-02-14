@@ -280,7 +280,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskCompleted(
 		RunId:      common.StringPtr(token.RunID),
 	}
 
-	headers := client.GetHeadersValue(ctx, common.LibraryVersionHeaderName, common.FeatureVersionHeaderName, common.ClientImplHeaderName)
+	headers := client.GetHeadersValue(ctx, client.LibraryVersionHeaderName, client.FeatureVersionHeaderName, client.ClientImplHeaderName)
 	clientLibVersion := headers[0]
 	clientFeatureVersion := headers[1]
 	clientImpl := headers[2]

@@ -2637,7 +2637,7 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(ctx context.Context, reques
 		}
 	}
 
-	headers := client.GetHeadersValue(ctx, common.ClientImplHeaderName, common.FeatureVersionHeaderName)
+	headers := client.GetHeadersValue(ctx, client.ClientImplHeaderName, client.FeatureVersionHeaderName)
 	request.WorkerVersionInfo = &commonproto.WorkerVersionInfo{
 		Impl:           headers[0],
 		FeatureVersion: headers[1],
