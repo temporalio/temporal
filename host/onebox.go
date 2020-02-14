@@ -21,7 +21,6 @@
 package host
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -35,7 +34,6 @@ import (
 	"github.com/uber-go/tally"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/yarpc"
-	"go.uber.org/yarpc/api/transport"
 	"go.uber.org/yarpc/transport/tchannel"
 	"google.golang.org/grpc"
 
@@ -47,7 +45,6 @@ import (
 	"github.com/temporalio/temporal/common/archiver/provider"
 	"github.com/temporalio/temporal/common/authorization"
 	"github.com/temporalio/temporal/common/cache"
-	cc "github.com/temporalio/temporal/common/client"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/elasticsearch"
 	"github.com/temporalio/temporal/common/log"
@@ -913,7 +910,6 @@ type rpcFactoryImpl struct {
 	logger             log.Logger
 
 	sync.Mutex
-	dispatcher        *yarpc.Dispatcher
 	listener          net.Listener
 	ringpopDispatcher *yarpc.Dispatcher
 }
@@ -949,18 +945,6 @@ func (c *rpcFactoryImpl) GetGRPCListener() net.Listener {
 	return c.listener
 }
 
-func (c *rpcFactoryImpl) GetTChannelDispatcher() *yarpc.Dispatcher {
-	c.Lock()
-	defer c.Unlock()
-
-	if c.dispatcher != nil {
-		return c.dispatcher
-	}
-
-	c.dispatcher = c.createTChannelDispatcher(c.serviceName, c.hostPort, true)
-	return c.dispatcher
-}
-
 func (c *rpcFactoryImpl) GetRingpopDispatcher() *yarpc.Dispatcher {
 	c.Lock()
 	defer c.Unlock()
@@ -994,23 +978,7 @@ func (c *rpcFactoryImpl) createTChannelDispatcher(serviceName string, hostPort s
 		Inbounds: yarpc.Inbounds{c.ch.NewInbound()},
 		// For integration tests to generate client out of the same outbound.
 		Outbounds: outbounds,
-		InboundMiddleware: yarpc.InboundMiddleware{
-			Unary: &versionMiddleware{},
-		},
 	})
-}
-
-type versionMiddleware struct {
-}
-
-func (vm *versionMiddleware) Handle(ctx context.Context, req *transport.Request, resw transport.ResponseWriter, h transport.UnaryHandler) error {
-	req.Headers = req.Headers.With(common.LibraryVersionHeaderName, "1.0.0").With(common.FeatureVersionHeaderName, cc.GoWorkerConsistentQueryVersion).With(common.ClientImplHeaderName, cc.GoSDK)
-	return h.Handle(ctx, req, resw)
-}
-
-func (c *rpcFactoryImpl) CreateTChannelDispatcherForOutbound(callerName, serviceName, hostName string) *yarpc.Dispatcher {
-	// Setup dispatcher(outbound) for onebox
-	return c.createDispatcherForOutbound(c.ch.NewSingleOutbound(hostName), callerName, serviceName, "TChannel")
 }
 
 // CreateGRPCConnection creates connection for gRPC calls
@@ -1021,18 +989,4 @@ func (c *rpcFactoryImpl) CreateGRPCConnection(hostName string) *grpc.ClientConn 
 	}
 
 	return connection
-}
-
-func (c *rpcFactoryImpl) createDispatcherForOutbound(unaryOutbound transport.UnaryOutbound, callerName, serviceName, transportType string) *yarpc.Dispatcher {
-	d := yarpc.NewDispatcher(yarpc.Config{
-		Name: callerName,
-		Outbounds: yarpc.Outbounds{
-			serviceName: {Unary: unaryOutbound},
-		},
-	})
-
-	if err := d.Start(); err != nil {
-		c.logger.Fatal("Failed to start outbound dispatcher", tag.Error(err), tag.TransportType(transportType))
-	}
-	return d
 }

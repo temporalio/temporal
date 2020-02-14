@@ -24,7 +24,6 @@ import (
 	"net"
 
 	"go.uber.org/yarpc"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
 
@@ -55,24 +54,8 @@ const (
 type (
 	// RPCFactory Creates a dispatcher that knows how to transport requests.
 	RPCFactory interface {
-		GetTChannelDispatcher() *yarpc.Dispatcher
 		GetGRPCListener() net.Listener
 		GetRingpopDispatcher() *yarpc.Dispatcher
-		CreateTChannelDispatcherForOutbound(callerName, serviceName, hostName string) *yarpc.Dispatcher
 		CreateGRPCConnection(hostName string) *grpc.ClientConn
 	}
 )
-
-// AggregateYarpcOptions aggregate the header information from context to existing yarpc call options
-func AggregateYarpcOptions(ctx context.Context, opts ...yarpc.CallOption) []yarpc.CallOption {
-	var result []yarpc.CallOption
-	if ctx != nil {
-		call := yarpc.CallFromContext(ctx)
-		for _, key := range call.HeaderNames() {
-			value := call.Header(key)
-			result = append(result, yarpc.WithHeader(key, value))
-		}
-	}
-	result = append(result, opts...)
-	return result
-}

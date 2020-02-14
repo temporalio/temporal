@@ -116,7 +116,6 @@ type (
 		throttledLogger log.Logger
 
 		// for registering handlers
-		dispatcher   *yarpc.Dispatcher
 		grpcListener net.Listener
 
 		// for ringpop listener
@@ -149,7 +148,6 @@ func New(
 		return nil, err
 	}
 
-	dispatcher := params.RPCFactory.GetTChannelDispatcher()
 	grpcListener := params.RPCFactory.GetGRPCListener()
 
 	ringpopDispatcher := params.RPCFactory.GetRingpopDispatcher()
@@ -320,9 +318,6 @@ func New(
 
 		logger:          logger,
 		throttledLogger: throttledLogger,
-
-		// for registering handlers
-		dispatcher: dispatcher,
 
 		// for registering grpc handlers
 		grpcListener: grpcListener,
@@ -601,11 +596,6 @@ func (h *Impl) GetLogger() log.Logger {
 // GetThrottledLogger return throttled logger
 func (h *Impl) GetThrottledLogger() log.Logger {
 	return h.throttledLogger
-}
-
-// GetDispatcher return YARPC dispatcher, used for registering handlers
-func (h *Impl) GetDispatcher() *yarpc.Dispatcher {
-	return h.dispatcher
 }
 
 // GetGRPCListener return GRPC listener, used for registering handlers
