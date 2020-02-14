@@ -21,40 +21,54 @@
 package dynamicconfig
 
 import (
-	"fmt"
-	"sort"
+	"reflect"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 )
 
+const (
+	errCountLogThreshold = 1000
+)
+
 // NewCollection creates a new collection
 func NewCollection(client Client, logger log.Logger) *Collection {
-	return &Collection{client, logger, &sync.Map{}}
+	return &Collection{
+		client:   client,
+		logger:   logger,
+		keys:     &sync.Map{},
+		errCount: -1,
+	}
 }
 
 // Collection wraps dynamic config client with a closure so that across the code, the config values
 // can be directly accessed by calling the function without propagating the client everywhere in
 // code
 type Collection struct {
-	client Client
-	logger log.Logger
-	keys   *sync.Map
+	client   Client
+	logger   log.Logger
+	keys     *sync.Map // map of config Key to strongly typed value
+	errCount int64
 }
 
-func (c *Collection) logNoValue(key Key, err error) {
-	_, loaded := c.keys.LoadOrStore(key, struct{}{})
-	if !loaded {
-		c.logger.Debug("Failed to fetch key from dynamic config", tag.Key(key.String()), tag.Error(err))
+func (c *Collection) logError(key Key, err error) {
+	errCount := atomic.AddInt64(&c.errCount, 1)
+	if errCount%errCountLogThreshold == 0 {
+		// log only every 'x' errors to reduce mem allocs and to avoid log noise
+		c.logger.Warn("Failed to fetch key from dynamic config", tag.Key(key.String()), tag.Error(err))
 	}
 }
 
-func (c *Collection) logValue(key Key, value, defaultValue interface{}) {
-	k := fmt.Sprintf("%s-%s", key.String(), value)
-	_, loaded := c.keys.LoadOrStore(k, struct{}{})
-	if !loaded {
+func (c *Collection) logValue(
+	key Key,
+	value, defaultValue interface{},
+	cmpValueEquals func(interface{}, interface{}) bool,
+) {
+	loadedValue, loaded := c.keys.LoadOrStore(key, value)
+	if !loaded || !cmpValueEquals(loadedValue, value) {
 		c.logger.Info("Get dynamic config",
 			tag.Name(key.String()), tag.Value(value), tag.DefaultValue(defaultValue))
 	}
@@ -107,9 +121,9 @@ func (c *Collection) GetProperty(key Key, defaultValue interface{}) PropertyFn {
 	return func() interface{} {
 		val, err := c.client.GetValue(key, defaultValue)
 		if err != nil {
-			c.logNoValue(key, err)
+			c.logError(key, err)
 		}
-		c.logValue(key, val, defaultValue)
+		c.logValue(key, val, defaultValue, reflect.DeepEqual)
 		return val
 	}
 }
@@ -128,9 +142,9 @@ func (c *Collection) GetIntProperty(key Key, defaultValue int) IntPropertyFn {
 	return func(opts ...FilterOption) int {
 		val, err := c.client.GetIntValue(key, getFilterMap(opts...), defaultValue)
 		if err != nil {
-			c.logNoValue(key, err)
+			c.logError(key, err)
 		}
-		c.logValue(key, val, defaultValue)
+		c.logValue(key, val, defaultValue, intCompareEquals)
 		return val
 	}
 }
@@ -140,9 +154,9 @@ func (c *Collection) GetIntPropertyFilteredByDomain(key Key, defaultValue int) I
 	return func(domain string) int {
 		val, err := c.client.GetIntValue(key, getFilterMap(DomainFilter(domain)), defaultValue)
 		if err != nil {
-			c.logNoValue(key, err)
+			c.logError(key, err)
 		}
-		c.logValue(key, val, defaultValue)
+		c.logValue(key, val, defaultValue, intCompareEquals)
 		return val
 	}
 }
@@ -156,9 +170,9 @@ func (c *Collection) GetIntPropertyFilteredByTaskListInfo(key Key, defaultValue 
 			defaultValue,
 		)
 		if err != nil {
-			c.logNoValue(key, err)
+			c.logError(key, err)
 		}
-		c.logValue(key, val, defaultValue)
+		c.logValue(key, val, defaultValue, intCompareEquals)
 		return val
 	}
 }
@@ -168,9 +182,9 @@ func (c *Collection) GetFloat64Property(key Key, defaultValue float64) FloatProp
 	return func(opts ...FilterOption) float64 {
 		val, err := c.client.GetFloatValue(key, getFilterMap(opts...), defaultValue)
 		if err != nil {
-			c.logNoValue(key, err)
+			c.logError(key, err)
 		}
-		c.logValue(key, val, defaultValue)
+		c.logValue(key, val, defaultValue, float64CompareEquals)
 		return val
 	}
 }
@@ -180,9 +194,9 @@ func (c *Collection) GetDurationProperty(key Key, defaultValue time.Duration) Du
 	return func(opts ...FilterOption) time.Duration {
 		val, err := c.client.GetDurationValue(key, getFilterMap(opts...), defaultValue)
 		if err != nil {
-			c.logNoValue(key, err)
+			c.logError(key, err)
 		}
-		c.logValue(key, val, defaultValue)
+		c.logValue(key, val, defaultValue, durationCompareEquals)
 		return val
 	}
 }
@@ -192,9 +206,9 @@ func (c *Collection) GetDurationPropertyFilteredByDomain(key Key, defaultValue t
 	return func(domain string) time.Duration {
 		val, err := c.client.GetDurationValue(key, getFilterMap(DomainFilter(domain)), defaultValue)
 		if err != nil {
-			c.logNoValue(key, err)
+			c.logError(key, err)
 		}
-		c.logValue(key, val, defaultValue)
+		c.logValue(key, val, defaultValue, durationCompareEquals)
 		return val
 	}
 }
@@ -208,9 +222,9 @@ func (c *Collection) GetDurationPropertyFilteredByTaskListInfo(key Key, defaultV
 			defaultValue,
 		)
 		if err != nil {
-			c.logNoValue(key, err)
+			c.logError(key, err)
 		}
-		c.logValue(key, val, defaultValue)
+		c.logValue(key, val, defaultValue, durationCompareEquals)
 		return val
 	}
 }
@@ -220,9 +234,9 @@ func (c *Collection) GetBoolProperty(key Key, defaultValue bool) BoolPropertyFn 
 	return func(opts ...FilterOption) bool {
 		val, err := c.client.GetBoolValue(key, getFilterMap(opts...), defaultValue)
 		if err != nil {
-			c.logNoValue(key, err)
+			c.logError(key, err)
 		}
-		c.logValue(key, val, defaultValue)
+		c.logValue(key, val, defaultValue, boolCompareEquals)
 		return val
 	}
 }
@@ -232,9 +246,9 @@ func (c *Collection) GetStringProperty(key Key, defaultValue string) StringPrope
 	return func(opts ...FilterOption) string {
 		val, err := c.client.GetStringValue(key, getFilterMap(opts...), defaultValue)
 		if err != nil {
-			c.logNoValue(key, err)
+			c.logError(key, err)
 		}
-		c.logValue(key, val, defaultValue)
+		c.logValue(key, val, defaultValue, stringCompareEquals)
 		return val
 	}
 }
@@ -244,33 +258,11 @@ func (c *Collection) GetMapProperty(key Key, defaultValue map[string]interface{}
 	return func(opts ...FilterOption) map[string]interface{} {
 		val, err := c.client.GetMapValue(key, getFilterMap(opts...), defaultValue)
 		if err != nil {
-			c.logNoValue(key, err)
+			c.logError(key, err)
 		}
-		c.logValue(key, mapToString(val), defaultValue)
+		c.logValue(key, val, defaultValue, reflect.DeepEqual)
 		return val
 	}
-}
-
-// mapToString ensure fmt.Print(map) will always be same instead of random order of keys.
-// Go 1.12+ will fix this then we don't mapToString anymore
-func mapToString(inputMap map[string]interface{}) string {
-	if len(inputMap) == 0 {
-		return ""
-	}
-
-	keys := make([]string, len(inputMap))
-	i := 0
-	for key := range inputMap {
-		keys[i] = key
-		i++
-	}
-	sort.Strings(keys)
-	res := "map["
-	for _, key := range keys {
-		res += fmt.Sprintf("%v:%v ", key, inputMap[key])
-	}
-	res = res[:len(res)-1] + "]"
-	return res
 }
 
 // GetStringPropertyFnWithDomainFilter gets property with domain filter and asserts that its domain
@@ -278,9 +270,9 @@ func (c *Collection) GetStringPropertyFnWithDomainFilter(key Key, defaultValue s
 	return func(domain string) string {
 		val, err := c.client.GetStringValue(key, getFilterMap(DomainFilter(domain)), defaultValue)
 		if err != nil {
-			c.logNoValue(key, err)
+			c.logError(key, err)
 		}
-		c.logValue(key, val, defaultValue)
+		c.logValue(key, val, defaultValue, stringCompareEquals)
 		return val
 	}
 }
@@ -290,9 +282,9 @@ func (c *Collection) GetBoolPropertyFnWithDomainFilter(key Key, defaultValue boo
 	return func(domain string) bool {
 		val, err := c.client.GetBoolValue(key, getFilterMap(DomainFilter(domain)), defaultValue)
 		if err != nil {
-			c.logNoValue(key, err)
+			c.logError(key, err)
 		}
-		c.logValue(key, val, defaultValue)
+		c.logValue(key, val, defaultValue, boolCompareEquals)
 		return val
 	}
 }
@@ -306,9 +298,9 @@ func (c *Collection) GetBoolPropertyFilteredByTaskListInfo(key Key, defaultValue
 			defaultValue,
 		)
 		if err != nil {
-			c.logNoValue(key, err)
+			c.logError(key, err)
 		}
-		c.logValue(key, val, defaultValue)
+		c.logValue(key, val, defaultValue, boolCompareEquals)
 		return val
 	}
 }
