@@ -709,9 +709,7 @@ func (c *cadenceImpl) startWorker(hosts map[string][]string, startWG *sync.WaitG
 	service, err := resource.New(
 		params,
 		common.WorkerServiceName,
-		func(opts ...dynamicconfig.FilterOption) int {
-			return 200
-		},
+		dynamicconfig.GetIntPropertyFn(10000),
 		func(
 			persistenceBean persistenceClient.Bean,
 			logger log.Logger,
@@ -786,17 +784,6 @@ func (c *cadenceImpl) startWorkerReplicator(params *resource.BootstrapParams, se
 func (c *cadenceImpl) startWorkerClientWorker(params *resource.BootstrapParams, service resource.Resource, domainCache cache.DomainCache) {
 	workerConfig := worker.NewConfig(params)
 	workerConfig.ArchiverConfig.ArchiverConcurrency = dynamicconfig.GetIntPropertyFn(10)
-	historyArchiverBootstrapContainer := &carchiver.HistoryBootstrapContainer{
-		HistoryV2Manager: c.historyV2Mgr,
-		Logger:           c.logger,
-		MetricsClient:    service.GetMetricsClient(),
-		ClusterMetadata:  c.clusterMetadata,
-		DomainCache:      domainCache,
-	}
-	err := c.archiverProvider.RegisterBootstrapContainer(common.WorkerServiceName, historyArchiverBootstrapContainer, &carchiver.VisibilityBootstrapContainer{})
-	if err != nil {
-		c.logger.Fatal("Failed to register archiver bootstrap container for worker service", tag.Error(err))
-	}
 
 	bc := &archiver.BootstrapContainer{
 		PublicClient:     params.PublicClient,
