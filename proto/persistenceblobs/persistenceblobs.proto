@@ -75,4 +75,5 @@ message TimerTaskInfo {
     int64 scheduleAttempt = 7;
     int64 eventID = 8;
     int64 taskID = 9;
+    google.protobuf.Timestamp VisibilityTimestamp = 10;
 }

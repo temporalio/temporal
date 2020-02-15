@@ -1091,7 +1091,7 @@ type (
 
 	// GetTimerIndexTasksResponse is the response for GetTimerIndexTasks
 	GetTimerIndexTasksResponse struct {
-		Timers        []*TimerTaskInfo
+		Timers        []*pblobs.TimerTaskInfo
 		NextPageToken []byte
 	}
 
