@@ -24,6 +24,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gogo/protobuf/types"
+
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/common/primitives"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
@@ -75,11 +80,11 @@ func newTimerQueueStandbyProcessor(
 	}
 	logger = logger.WithTags(tag.ClusterName(clusterName))
 	timerTaskFilter := func(taskInfo *taskInfo) (bool, error) {
-		timer, ok := taskInfo.task.(*persistence.TimerTaskInfo)
+		timer, ok := taskInfo.task.(*persistenceblobs.TimerTaskInfo)
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
-		return taskAllocator.verifyStandbyTask(clusterName, timer.DomainID, timer)
+		return taskAllocator.verifyStandbyTask(clusterName, primitives.UUIDString(timer.DomainID), timer)
 	}
 
 	timerGate := NewRemoteTimerGate()
@@ -170,7 +175,7 @@ func (t *timerQueueStandbyProcessorImpl) notifyNewTimers(
 func (t *timerQueueStandbyProcessorImpl) complete(
 	taskInfo *taskInfo,
 ) {
-	timerTask, ok := taskInfo.task.(*persistence.TimerTaskInfo)
+	timerTask, ok := taskInfo.task.(*persistenceblobs.TimerTaskInfo)
 	if !ok {
 		return
 	}
@@ -181,7 +186,7 @@ func (t *timerQueueStandbyProcessorImpl) process(
 	taskInfo *taskInfo,
 ) (int, error) {
 
-	timerTask, ok := taskInfo.task.(*persistence.TimerTaskInfo)
+	timerTask, ok := taskInfo.task.(*persistenceblobs.TimerTaskInfo)
 	if !ok {
 		return metrics.TimerStandbyQueueProcessorScope, errUnexpectedQueueTask
 	}
@@ -236,7 +241,7 @@ func (t *timerQueueStandbyProcessorImpl) processUserTimerTimeout(
 
 	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
-		timerTask := taskInfo.task.(*persistence.TimerTaskInfo)
+		timerTask := taskInfo.task.(*persistenceblobs.TimerTaskInfo)
 		timerSequence := t.getTimerSequence(mutableState)
 
 	Loop:
@@ -248,10 +253,8 @@ func (t *timerQueueStandbyProcessorImpl) processUserTimerTimeout(
 				return nil, &workflow.InternalServiceError{Message: errString}
 			}
 
-			if isExpired := timerSequence.isExpired(
-				timerTask.VisibilityTimestamp,
-				timerSequenceID,
-			); isExpired {
+			goVisibilityTime, _ := types.TimestampFromProto(timerTask.GetVisibilityTimestamp())
+			if isExpired := timerSequence.isExpired(goVisibilityTime, timerSequenceID); isExpired {
 				return getHistoryResendInfo(mutableState)
 			}
 			// since the user timer are already sorted, so if there is one timer which will not expired
@@ -294,7 +297,7 @@ func (t *timerQueueStandbyProcessorImpl) processActivityTimeout(
 
 	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
-		timerTask := taskInfo.task.(*persistence.TimerTaskInfo)
+		timerTask := taskInfo.task.(*persistenceblobs.TimerTaskInfo)
 		timerSequence := t.getTimerSequence(mutableState)
 		updateMutableState := false
 
@@ -307,8 +310,9 @@ func (t *timerQueueStandbyProcessorImpl) processActivityTimeout(
 				return nil, &workflow.InternalServiceError{Message: errString}
 			}
 
+			goVisibilityTime, _ := types.TimestampFromProto(timerTask.GetVisibilityTimestamp())
 			if isExpired := timerSequence.isExpired(
-				timerTask.VisibilityTimestamp,
+				goVisibilityTime,
 				timerSequenceID,
 			); isExpired {
 				return getHistoryResendInfo(mutableState)
@@ -327,7 +331,7 @@ func (t *timerQueueStandbyProcessorImpl) processActivityTimeout(
 		if err != nil {
 			return nil, err
 		}
-		isHeartBeatTask := timerTask.TimeoutType == int(workflow.TimeoutTypeHeartbeat)
+		isHeartBeatTask := timerTask.TimeoutType == int32(workflow.TimeoutTypeHeartbeat)
 		if activityInfo, ok := mutableState.GetActivityInfo(timerTask.EventID); isHeartBeatTask && ok {
 			activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ timerTaskStatusCreatedHeartbeat
 			if err := mutableState.UpdateActivity(activityInfo); err != nil {
@@ -380,20 +384,20 @@ func (t *timerQueueStandbyProcessorImpl) processDecisionTimeout(
 	// decision schedule to start timer task is a special snowflake.
 	// the schedule to start timer is for sticky decision, which is
 	// not applicable on the passive cluster
-	if taskInfo.task.(*persistence.TimerTaskInfo).TimeoutType == int(workflow.TimeoutTypeScheduleToStart) {
+	if taskInfo.task.(*persistenceblobs.TimerTaskInfo).TimeoutType == int32(workflow.TimeoutTypeScheduleToStart) {
 		return nil
 	}
 
 	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
-		timerTask := taskInfo.task.(*persistence.TimerTaskInfo)
+		timerTask := taskInfo.task.(*persistenceblobs.TimerTaskInfo)
 
 		decision, isPending := mutableState.GetDecisionInfo(timerTask.EventID)
 		if !isPending {
 			return nil, nil
 		}
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, timerTask.DomainID, decision.Version, timerTask.Version, timerTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, primitives.UUIDString(timerTask.DomainID), decision.Version, timerTask.Version, timerTask)
 		if err != nil || !ok {
 			return nil, err
 		}
@@ -460,7 +464,7 @@ func (t *timerQueueStandbyProcessorImpl) processWorkflowTimeout(
 
 	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
-		timerTask := taskInfo.task.(*persistence.TimerTaskInfo)
+		timerTask := taskInfo.task.(*persistenceblobs.TimerTaskInfo)
 
 		// we do not need to notify new timer to base, since if there is no new event being replicated
 		// checking again if the timer can be completed is meaningless
@@ -469,7 +473,7 @@ func (t *timerQueueStandbyProcessorImpl) processWorkflowTimeout(
 		if err != nil {
 			return nil, err
 		}
-		ok, err := verifyTaskVersion(t.shard, t.logger, timerTask.DomainID, startVersion, timerTask.Version, timerTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, primitives.UUIDString(timerTask.DomainID), startVersion, timerTask.Version, timerTask)
 		if err != nil || !ok {
 			return nil, err
 		}
@@ -513,7 +517,7 @@ func (t *timerQueueStandbyProcessorImpl) processTimer(
 	postActionFn standbyPostActionFn,
 ) (retError error) {
 
-	timerTask := taskInfo.task.(*persistence.TimerTaskInfo)
+	timerTask := taskInfo.task.(*persistenceblobs.TimerTaskInfo)
 	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
 		t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(timerTask),
 	)
@@ -560,7 +564,7 @@ func (t *timerQueueStandbyProcessorImpl) fetchHistoryFromRemote(
 		return nil
 	}
 
-	timerTask := taskInfo.task.(*persistence.TimerTaskInfo)
+	timerTask := taskInfo.task.(*persistenceblobs.TimerTaskInfo)
 	resendInfo := postActionInfo.(*historyResendInfo)
 
 	t.metricsClient.IncCounter(metrics.HistoryRereplicationByTimerTaskScope, metrics.CadenceClientRequests)
@@ -570,9 +574,9 @@ func (t *timerQueueStandbyProcessorImpl) fetchHistoryFromRemote(
 	var err error
 	if resendInfo.lastEventID != common.EmptyEventID && resendInfo.lastEventVersion != common.EmptyVersion {
 		err = t.nDCHistoryResender.SendSingleWorkflowHistory(
-			timerTask.DomainID,
+			primitives.UUIDString(timerTask.DomainID),
 			timerTask.WorkflowID,
-			timerTask.RunID,
+			primitives.UUIDString(timerTask.RunID),
 			resendInfo.lastEventID,
 			resendInfo.lastEventVersion,
 			common.EmptyEventID,
@@ -580,11 +584,11 @@ func (t *timerQueueStandbyProcessorImpl) fetchHistoryFromRemote(
 		)
 	} else if resendInfo.nextEventID != nil {
 		err = t.historyRereplicator.SendMultiWorkflowHistory(
-			timerTask.DomainID,
+			primitives.UUIDString(timerTask.DomainID),
 			timerTask.WorkflowID,
-			timerTask.RunID,
+			primitives.UUIDString(timerTask.RunID),
 			*resendInfo.nextEventID,
-			timerTask.RunID,
+			primitives.UUIDString(timerTask.RunID),
 			common.EndEventID, // use common.EndEventID since we do not know where is the end
 		)
 	} else {
@@ -596,9 +600,9 @@ func (t *timerQueueStandbyProcessorImpl) fetchHistoryFromRemote(
 	if err != nil {
 		t.logger.Error("Error re-replicating history from remote.",
 			tag.ShardID(t.shard.GetShardID()),
-			tag.WorkflowDomainID(timerTask.DomainID),
+			tag.WorkflowDomainIDBytes(timerTask.DomainID),
 			tag.WorkflowID(timerTask.WorkflowID),
-			tag.WorkflowRunID(timerTask.RunID),
+			tag.WorkflowRunIDBytes(timerTask.RunID),
 			tag.ClusterName(t.clusterName))
 	}
 

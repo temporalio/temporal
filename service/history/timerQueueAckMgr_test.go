@@ -24,11 +24,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/temporalio/temporal/common/primitives"
+
 	"github.com/gogo/protobuf/types"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
-	gomock "github.com/golang/mock/gomock"
+	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -75,6 +77,10 @@ type (
 		minLevel                 time.Time
 		maxLevel                 time.Time
 	}
+)
+
+var (
+	TestDomainId = primitives.MustParseUUID("deadbeef-c001-face-0000-000000000000")
 )
 
 func TestTimerQueueAckMgrSuite(t *testing.T) {
@@ -174,12 +180,12 @@ func (s *timerQueueAckMgrSuite) TestGetTimerTasks_More() {
 	}
 
 	response := &persistence.GetTimerIndexTasksResponse{
-		Timers: []*persistence.TimerTaskInfo{
-			&persistence.TimerTaskInfo{
-				DomainID:            "some random domain ID",
+		Timers: []*persistenceblobs.TimerTaskInfo{
+			{
+				DomainID:            TestDomainId,
 				WorkflowID:          "some random workflow ID",
-				RunID:               uuid.New(),
-				VisibilityTimestamp: time.Now().Add(-5 * time.Second),
+				RunID:               uuid.NewRandom(),
+				VisibilityTimestamp: gogoProtoTimestampNowAddDuration(-5),
 				TaskID:              int64(59),
 				TaskType:            1,
 				TimeoutType:         2,
@@ -211,12 +217,12 @@ func (s *timerQueueAckMgrSuite) TestGetTimerTasks_NoMore() {
 	}
 
 	response := &persistence.GetTimerIndexTasksResponse{
-		Timers: []*persistence.TimerTaskInfo{
-			&persistence.TimerTaskInfo{
-				DomainID:            "some random domain ID",
+		Timers: []*persistenceblobs.TimerTaskInfo{
+			{
+				DomainID:            TestDomainId,
 				WorkflowID:          "some random workflow ID",
-				RunID:               uuid.New(),
-				VisibilityTimestamp: time.Now().Add(-5 * time.Second),
+				RunID:               uuid.NewRandom(),
+				VisibilityTimestamp: gogoProtoTimestampNowAddDuration(-5),
 				TaskID:              int64(59),
 				TaskType:            1,
 				TimeoutType:         2,
@@ -236,7 +242,6 @@ func (s *timerQueueAckMgrSuite) TestGetTimerTasks_NoMore() {
 }
 
 func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_NoNextPage() {
-	domainID := "some random domain ID"
 	ackLevel := s.timerQueueAckMgr.ackLevel
 	minQueryLevel := s.timerQueueAckMgr.minQueryLevel
 	token := s.timerQueueAckMgr.pageToken
@@ -248,11 +253,11 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_NoNextPage() {
 	s.Empty(token)
 	s.Equal(minQueryLevel, maxQueryLevel)
 
-	timer := &persistence.TimerTaskInfo{
-		DomainID:            domainID,
+	timer := &persistenceblobs.TimerTaskInfo{
+		DomainID:            TestDomainId,
 		WorkflowID:          "some random workflow ID",
-		RunID:               uuid.New(),
-		VisibilityTimestamp: time.Now().Add(-5 * time.Second),
+		RunID:               uuid.NewRandom(),
+		VisibilityTimestamp: gogoProtoTimestampNowAddDuration(-5),
 		TaskID:              int64(59),
 		TaskType:            1,
 		TimeoutType:         2,
@@ -260,7 +265,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_NoNextPage() {
 		ScheduleAttempt:     0,
 	}
 	response := &persistence.GetTimerIndexTasksResponse{
-		Timers:        []*persistence.TimerTaskInfo{timer},
+		Timers:        []*persistenceblobs.TimerTaskInfo{timer},
 		NextPageToken: nil,
 	}
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -268,19 +273,18 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_NoNextPage() {
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(&persistence.GetTimerIndexTasksResponse{}, nil).Once()
 	filteredTasks, lookAheadTask, moreTasks, err := s.timerQueueAckMgr.readTimerTasks()
 	s.Nil(err)
-	s.Equal([]*persistence.TimerTaskInfo{timer}, filteredTasks)
+	s.Equal([]*persistenceblobs.TimerTaskInfo{timer}, filteredTasks)
 	s.Nil(lookAheadTask)
 	s.False(moreTasks)
 
-	timerSequenceID := timerKey{VisibilityTimestamp: timer.VisibilityTimestamp, TaskID: timer.TaskID}
-	s.Equal(map[timerKey]bool{timerSequenceID: false}, s.timerQueueAckMgr.outstandingTasks)
+	timerSequenceID := timerKeyFromGogoTime(timer.VisibilityTimestamp, timer.TaskID)
+	s.Equal(map[timerKey]bool{*timerSequenceID: false}, s.timerQueueAckMgr.outstandingTasks)
 	s.Equal(ackLevel, s.timerQueueAckMgr.ackLevel)
 	s.Empty(s.timerQueueAckMgr.pageToken)
 	s.Equal(s.timerQueueAckMgr.minQueryLevel, s.timerQueueAckMgr.maxQueryLevel)
 }
 
 func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_HasNextPage() {
-	domainID := "some random domain ID"
 	ackLevel := s.timerQueueAckMgr.ackLevel
 	minQueryLevel := s.timerQueueAckMgr.minQueryLevel
 	token := s.timerQueueAckMgr.pageToken
@@ -292,11 +296,11 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_HasNextPage() {
 	s.Empty(token)
 	s.Equal(minQueryLevel, maxQueryLevel)
 
-	timer := &persistence.TimerTaskInfo{
-		DomainID:            domainID,
+	timer := &persistenceblobs.TimerTaskInfo{
+		DomainID:            TestDomainId,
 		WorkflowID:          "some random workflow ID",
-		RunID:               uuid.New(),
-		VisibilityTimestamp: time.Now().Add(-5 * time.Second),
+		RunID:               uuid.NewRandom(),
+		VisibilityTimestamp: gogoProtoTimestampNowAddDuration(-5),
 		TaskID:              int64(59),
 		TaskType:            1,
 		TimeoutType:         2,
@@ -306,7 +310,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_HasNextPage() {
 	}
 
 	response := &persistence.GetTimerIndexTasksResponse{
-		Timers:        []*persistence.TimerTaskInfo{timer},
+		Timers:        []*persistenceblobs.TimerTaskInfo{timer},
 		NextPageToken: []byte("some random next page token"),
 	}
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -314,11 +318,11 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_HasNextPage() {
 	readTimestamp := time.Now() // the approximate time of calling readTimerTasks
 	filteredTasks, lookAheadTask, moreTasks, err := s.timerQueueAckMgr.readTimerTasks()
 	s.Nil(err)
-	s.Equal([]*persistence.TimerTaskInfo{timer}, filteredTasks)
+	s.Equal([]*persistenceblobs.TimerTaskInfo{timer}, filteredTasks)
 	s.Nil(lookAheadTask)
 	s.True(moreTasks)
-	timerSequenceID := timerKey{VisibilityTimestamp: timer.VisibilityTimestamp, TaskID: timer.TaskID}
-	s.Equal(map[timerKey]bool{timerSequenceID: false}, s.timerQueueAckMgr.outstandingTasks)
+	timerSequenceID := timerKeyFromGogoTime(timer.VisibilityTimestamp, timer.TaskID)
+	s.Equal(map[timerKey]bool{*timerSequenceID: false}, s.timerQueueAckMgr.outstandingTasks)
 	s.Equal(ackLevel, s.timerQueueAckMgr.ackLevel)
 	s.Equal(minQueryLevel, s.timerQueueAckMgr.minQueryLevel)
 	s.Equal(response.NextPageToken, s.timerQueueAckMgr.pageToken)
@@ -327,7 +331,6 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_HasNextPage() {
 }
 
 func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_NoNextPage() {
-	domainID := "some random domain ID"
 	ackLevel := s.timerQueueAckMgr.ackLevel
 	minQueryLevel := s.timerQueueAckMgr.minQueryLevel
 	token := s.timerQueueAckMgr.pageToken
@@ -339,11 +342,11 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_NoNextPage() {
 	s.Empty(token)
 	s.Equal(minQueryLevel, maxQueryLevel)
 
-	timer := &persistence.TimerTaskInfo{
-		DomainID:            domainID,
+	timer := &persistenceblobs.TimerTaskInfo{
+		DomainID:            TestDomainId,
 		WorkflowID:          "some random workflow ID",
-		RunID:               uuid.New(),
-		VisibilityTimestamp: time.Now().Add(s.mockShard.GetConfig().TimerProcessorMaxTimeShift()),
+		RunID:               uuid.NewRandom(),
+		VisibilityTimestamp: gogoProtoTimestampNowAddDuration(int(s.mockShard.GetConfig().TimerProcessorMaxTimeShift().Seconds())),
 		TaskID:              int64(59),
 		TaskType:            1,
 		TimeoutType:         2,
@@ -352,14 +355,14 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_NoNextPage() {
 	}
 
 	response := &persistence.GetTimerIndexTasksResponse{
-		Timers:        []*persistence.TimerTaskInfo{timer},
+		Timers:        []*persistenceblobs.TimerTaskInfo{timer},
 		NextPageToken: nil,
 	}
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(response, nil).Once()
 	filteredTasks, lookAheadTask, moreTasks, err := s.timerQueueAckMgr.readTimerTasks()
 	s.Nil(err)
-	s.Equal([]*persistence.TimerTaskInfo{}, filteredTasks)
+	s.Equal([]*persistenceblobs.TimerTaskInfo{}, filteredTasks)
 	s.Equal(timer, lookAheadTask)
 	s.False(moreTasks)
 
@@ -367,11 +370,14 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_NoNextPage() {
 	s.Equal(ackLevel, s.timerQueueAckMgr.ackLevel)
 	s.Equal(s.timerQueueAckMgr.maxQueryLevel, s.timerQueueAckMgr.minQueryLevel)
 	s.Empty(s.timerQueueAckMgr.pageToken)
-	s.Equal(timer.VisibilityTimestamp, s.timerQueueAckMgr.maxQueryLevel)
+	s.Equal(protoToNanos(timer.VisibilityTimestamp), s.timerQueueAckMgr.maxQueryLevel.UnixNano())
+}
+
+func protoToNanos(timestamp *types.Timestamp) int64 {
+	return (timestamp.Seconds * 1e9) + int64(timestamp.Nanos)
 }
 
 func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_HasNextPage() {
-	domainID := "some random domain ID"
 	ackLevel := s.timerQueueAckMgr.ackLevel
 	minQueryLevel := s.timerQueueAckMgr.minQueryLevel
 	token := s.timerQueueAckMgr.pageToken
@@ -383,11 +389,11 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_HasNextPage() {
 	s.Empty(token)
 	s.Equal(minQueryLevel, maxQueryLevel)
 
-	timer := &persistence.TimerTaskInfo{
-		DomainID:            domainID,
+	timer := &persistenceblobs.TimerTaskInfo{
+		DomainID:            TestDomainId,
 		WorkflowID:          "some random workflow ID",
-		RunID:               uuid.New(),
-		VisibilityTimestamp: time.Now().Add(s.mockShard.GetConfig().TimerProcessorMaxTimeShift()),
+		RunID:               uuid.NewRandom(),
+		VisibilityTimestamp: gogoProtoTimestampNowAddDuration(int(s.mockShard.GetConfig().TimerProcessorMaxTimeShift().Seconds())),
 		TaskID:              int64(59),
 		TaskType:            1,
 		TimeoutType:         2,
@@ -397,14 +403,14 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_HasNextPage() {
 	}
 
 	response := &persistence.GetTimerIndexTasksResponse{
-		Timers:        []*persistence.TimerTaskInfo{timer},
+		Timers:        []*persistenceblobs.TimerTaskInfo{timer},
 		NextPageToken: []byte("some random next page token"),
 	}
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(response, nil).Once()
 	filteredTasks, lookAheadTask, moreTasks, err := s.timerQueueAckMgr.readTimerTasks()
 	s.Nil(err)
-	s.Equal([]*persistence.TimerTaskInfo{}, filteredTasks)
+	s.Equal([]*persistenceblobs.TimerTaskInfo{}, filteredTasks)
 	s.Equal(timer, lookAheadTask)
 	s.False(moreTasks)
 
@@ -412,28 +418,26 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_HasNextPage() {
 	s.Equal(ackLevel, s.timerQueueAckMgr.ackLevel)
 	s.Equal(s.timerQueueAckMgr.maxQueryLevel, s.timerQueueAckMgr.minQueryLevel)
 	s.Empty(s.timerQueueAckMgr.pageToken)
-	s.Equal(timer.VisibilityTimestamp, s.timerQueueAckMgr.maxQueryLevel)
+	s.Equal(protoToNanos(timer.VisibilityTimestamp), s.timerQueueAckMgr.maxQueryLevel.UnixNano())
 }
 
 func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
-	domainID := "some random domain ID"
-
 	// create 3 timers, timer1 < timer2 < timer3 < now
-	timer1 := &persistence.TimerTaskInfo{
-		DomainID:            domainID,
+	timer1 := &persistenceblobs.TimerTaskInfo{
+		DomainID:            TestDomainId,
 		WorkflowID:          "some random workflow ID",
-		RunID:               uuid.New(),
-		VisibilityTimestamp: time.Now().UTC().Add(-5 * time.Second),
+		RunID:               uuid.NewRandom(),
+		VisibilityTimestamp: gogoProtoTimestampNowAddDuration(-5),
 		TaskID:              int64(59),
 		TaskType:            1,
 		TimeoutType:         2,
 		EventID:             int64(28),
 		ScheduleAttempt:     0,
 	}
-	timer2 := &persistence.TimerTaskInfo{
-		DomainID:            domainID,
+	timer2 := &persistenceblobs.TimerTaskInfo{
+		DomainID:            TestDomainId,
 		WorkflowID:          "some random workflow ID",
-		RunID:               uuid.New(),
+		RunID:               uuid.NewRandom(),
 		VisibilityTimestamp: timer1.VisibilityTimestamp,
 		TaskID:              timer1.TaskID + 1,
 		TaskType:            1,
@@ -441,11 +445,11 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		EventID:             int64(29),
 		ScheduleAttempt:     0,
 	}
-	timer3 := &persistence.TimerTaskInfo{
-		DomainID:            domainID,
+	timer3 := &persistenceblobs.TimerTaskInfo{
+		DomainID:            TestDomainId,
 		WorkflowID:          "some random workflow ID",
-		RunID:               uuid.New(),
-		VisibilityTimestamp: timer1.VisibilityTimestamp.Add(1 * time.Second),
+		RunID:               uuid.NewRandom(),
+		VisibilityTimestamp: &types.Timestamp{Seconds: timer1.VisibilityTimestamp.Seconds + 1, Nanos: timer1.VisibilityTimestamp.Nanos},
 		TaskID:              timer2.TaskID + 1,
 		TaskType:            1,
 		TimeoutType:         2,
@@ -453,7 +457,7 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		ScheduleAttempt:     0,
 	}
 	response := &persistence.GetTimerIndexTasksResponse{
-		Timers:        []*persistence.TimerTaskInfo{timer1, timer2, timer3},
+		Timers:        []*persistenceblobs.TimerTaskInfo{timer1, timer2, timer3},
 		NextPageToken: nil,
 	}
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -461,47 +465,48 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(&persistence.GetTimerIndexTasksResponse{}, nil).Once()
 	filteredTasks, lookAheadTask, moreTasks, err := s.timerQueueAckMgr.readTimerTasks()
 	s.Nil(err)
-	s.Equal([]*persistence.TimerTaskInfo{timer1, timer2, timer3}, filteredTasks)
+	s.Equal([]*persistenceblobs.TimerTaskInfo{timer1, timer2, timer3}, filteredTasks)
 	s.Nil(lookAheadTask)
 	s.False(moreTasks)
 
 	// we are not testing shard context
 	s.mockShardMgr.On("UpdateShard", mock.Anything).Return(nil).Once()
-	timerSequenceID1 := timerKey{VisibilityTimestamp: timer1.VisibilityTimestamp, TaskID: timer1.TaskID}
+	timerSequenceID1 := timerKeyFromGogoTime(timer1.VisibilityTimestamp, timer1.TaskID)
 	s.timerQueueAckMgr.completeTimerTask(timer1)
-	s.True(s.timerQueueAckMgr.outstandingTasks[timerSequenceID1])
+	s.True(s.timerQueueAckMgr.outstandingTasks[*timerSequenceID1])
 	s.timerQueueAckMgr.updateAckLevel()
-	s.Equal(timer1.VisibilityTimestamp, s.mockShard.GetTimerClusterAckLevel(s.clusterName))
+	s.Equal(protoToNanos(timer1.VisibilityTimestamp), s.mockShard.GetTimerClusterAckLevel(s.clusterName).UnixNano())
 
 	s.mockShardMgr.On("UpdateShard", mock.Anything).Return(nil).Once()
-	timerSequenceID3 := timerKey{VisibilityTimestamp: timer3.VisibilityTimestamp, TaskID: timer3.TaskID}
+	timerSequenceID3 := timerKeyFromGogoTime(timer3.VisibilityTimestamp, timer3.TaskID)
 	s.timerQueueAckMgr.completeTimerTask(timer3)
-	s.True(s.timerQueueAckMgr.outstandingTasks[timerSequenceID3])
+	s.True(s.timerQueueAckMgr.outstandingTasks[*timerSequenceID3])
 	s.timerQueueAckMgr.updateAckLevel()
 	// ack level remains unchanged
-	s.Equal(timer1.VisibilityTimestamp, s.mockShard.GetTimerClusterAckLevel(s.clusterName))
+	s.Equal(protoToNanos(timer1.VisibilityTimestamp), s.mockShard.GetTimerClusterAckLevel(s.clusterName).UnixNano())
 
 	// we are not testing shard context
 	s.mockShardMgr.On("UpdateShard", mock.Anything).Return(nil).Once()
-	timerSequenceID2 := timerKey{VisibilityTimestamp: timer2.VisibilityTimestamp, TaskID: timer2.TaskID}
+	timerSequenceID2 := timerKeyFromGogoTime(timer2.VisibilityTimestamp, timer2.TaskID)
 	s.timerQueueAckMgr.completeTimerTask(timer2)
-	s.True(s.timerQueueAckMgr.outstandingTasks[timerSequenceID2])
+	s.True(s.timerQueueAckMgr.outstandingTasks[*timerSequenceID2])
 	s.timerQueueAckMgr.updateAckLevel()
-	s.Equal(timer3.VisibilityTimestamp, s.mockShard.GetTimerClusterAckLevel(s.clusterName))
+	s.Equal(protoToNanos(timer3.VisibilityTimestamp), s.mockShard.GetTimerClusterAckLevel(s.clusterName).UnixNano())
 }
 
 func (s *timerQueueAckMgrSuite) TestReadLookAheadTask() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(s.clusterName).AnyTimes()
 	level := s.mockShard.UpdateTimerMaxReadLevel(s.clusterName)
+	protoLevel, err := types.TimestampProto(level)
+	s.NoError(err)
 	s.timerQueueAckMgr.minQueryLevel = level
 	s.timerQueueAckMgr.maxQueryLevel = s.timerQueueAckMgr.minQueryLevel
 
-	domainID := "some random domain ID"
-	timer := &persistence.TimerTaskInfo{
-		DomainID:            domainID,
+	timer := &persistenceblobs.TimerTaskInfo{
+		DomainID:            TestDomainId,
 		WorkflowID:          "some random workflow ID",
-		RunID:               uuid.New(),
-		VisibilityTimestamp: level,
+		RunID:               uuid.NewRandom(),
+		VisibilityTimestamp: protoLevel,
 		TaskID:              int64(59),
 		TaskType:            1,
 		TimeoutType:         2,
@@ -511,7 +516,7 @@ func (s *timerQueueAckMgrSuite) TestReadLookAheadTask() {
 	}
 
 	response := &persistence.GetTimerIndexTasksResponse{
-		Timers:        []*persistence.TimerTaskInfo{timer},
+		Timers:        []*persistenceblobs.TimerTaskInfo{timer},
 		NextPageToken: []byte("some random next page token"),
 	}
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(response, nil).Once()
@@ -581,7 +586,7 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 				persistence.TimerFailoverLevel{
 					MinLevel:  ackLevel.VisibilityTimestamp,
 					MaxLevel:  ackLevel.VisibilityTimestamp,
-					DomainIDs: map[string]struct{}{s.domainID: struct{}{}},
+					DomainIDs: map[string]struct{}{s.domainID: {}},
 				},
 			)
 		},
@@ -622,11 +627,11 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_HasNextPage() {
 	s.Empty(token)
 	s.Equal(s.maxLevel, maxQueryLevel)
 
-	timer1 := &persistence.TimerTaskInfo{
-		DomainID:            "some random domain ID",
+	timer1 := &persistenceblobs.TimerTaskInfo{
+		DomainID:            TestDomainId,
 		WorkflowID:          "some random workflow ID",
-		RunID:               uuid.New(),
-		VisibilityTimestamp: time.Now().Add(-5 * time.Second),
+		RunID:               uuid.NewRandom(),
+		VisibilityTimestamp: gogoProtoTimestampNowAddDuration(-5),
 		TaskID:              int64(59),
 		TaskType:            1,
 		TimeoutType:         2,
@@ -634,11 +639,11 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_HasNextPage() {
 		ScheduleAttempt:     0,
 	}
 
-	timer2 := &persistence.TimerTaskInfo{
-		DomainID:            "some other random domain ID",
+	timer2 := &persistenceblobs.TimerTaskInfo{
+		DomainID:            TestDomainId,
 		WorkflowID:          "some random workflow ID",
-		RunID:               uuid.New(),
-		VisibilityTimestamp: time.Now().Add(-5 * time.Second),
+		RunID:               uuid.NewRandom(),
+		VisibilityTimestamp: gogoProtoTimestampNowAddDuration(-5),
 		TaskID:              int64(60),
 		TaskType:            1,
 		TimeoutType:         2,
@@ -647,7 +652,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_HasNextPage() {
 	}
 
 	response := &persistence.GetTimerIndexTasksResponse{
-		Timers:        []*persistence.TimerTaskInfo{timer1, timer2},
+		Timers:        []*persistenceblobs.TimerTaskInfo{timer1, timer2},
 		NextPageToken: []byte("some random next page token"),
 	}
 
@@ -655,7 +660,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_HasNextPage() {
 	readTimestamp := time.Now() // the approximate time of calling readTimerTasks
 	timers, lookAheadTimer, more, err := s.timerQueueFailoverAckMgr.readTimerTasks()
 	s.Nil(err)
-	s.Equal([]*persistence.TimerTaskInfo{timer1, timer2}, timers)
+	s.Equal([]*persistenceblobs.TimerTaskInfo{timer1, timer2}, timers)
 	s.Nil(lookAheadTimer)
 	s.True(more)
 	s.Equal(ackLevel, s.timerQueueFailoverAckMgr.ackLevel)
@@ -678,7 +683,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_NoNextPage() {
 	s.Equal(s.maxLevel, maxQueryLevel)
 
 	response := &persistence.GetTimerIndexTasksResponse{
-		Timers:        []*persistence.TimerTaskInfo{},
+		Timers:        []*persistenceblobs.TimerTaskInfo{},
 		NextPageToken: nil,
 	}
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -687,7 +692,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_NoNextPage() {
 	readTimestamp := time.Now() // the approximate time of calling readTimerTasks
 	timers, lookAheadTimer, more, err := s.timerQueueFailoverAckMgr.readTimerTasks()
 	s.Nil(err)
-	s.Equal([]*persistence.TimerTaskInfo{}, timers)
+	s.Equal([]*persistenceblobs.TimerTaskInfo{}, timers)
 	s.Nil(lookAheadTimer)
 	s.False(more)
 
@@ -726,21 +731,21 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	s.timerQueueFailoverAckMgr.ackLevel = timerKey{VisibilityTimestamp: from}
 
 	// create 3 timers, timer1 < timer2 < timer3 < now
-	timer1 := &persistence.TimerTaskInfo{
-		DomainID:            "some random domain ID",
+	timer1 := &persistenceblobs.TimerTaskInfo{
+		DomainID:            TestDomainId,
 		WorkflowID:          "some random workflow ID",
-		RunID:               uuid.New(),
-		VisibilityTimestamp: time.Now().Add(-5 * time.Second),
+		RunID:               uuid.NewRandom(),
+		VisibilityTimestamp: gogoProtoTimestampNowAddDuration(-5),
 		TaskID:              int64(59),
 		TaskType:            1,
 		TimeoutType:         2,
 		EventID:             int64(28),
 		ScheduleAttempt:     0,
 	}
-	timer2 := &persistence.TimerTaskInfo{
-		DomainID:            "some other random domain ID",
+	timer2 := &persistenceblobs.TimerTaskInfo{
+		DomainID:            TestDomainId,
 		WorkflowID:          "some random workflow ID",
-		RunID:               uuid.New(),
+		RunID:               uuid.NewRandom(),
 		VisibilityTimestamp: timer1.VisibilityTimestamp,
 		TaskID:              timer1.TaskID + 1,
 		TaskType:            1,
@@ -748,11 +753,11 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		EventID:             int64(29),
 		ScheduleAttempt:     0,
 	}
-	timer3 := &persistence.TimerTaskInfo{
-		DomainID:            "some random domain ID",
+	timer3 := &persistenceblobs.TimerTaskInfo{
+		DomainID:            TestDomainId,
 		WorkflowID:          "some random workflow ID",
-		RunID:               uuid.New(),
-		VisibilityTimestamp: timer1.VisibilityTimestamp.Add(1 * time.Second),
+		RunID:               uuid.NewRandom(),
+		VisibilityTimestamp: &types.Timestamp{Seconds: timer1.VisibilityTimestamp.Seconds + 1, Nanos: timer1.VisibilityTimestamp.Nanos},
 		TaskID:              timer2.TaskID + 1,
 		TaskType:            1,
 		TimeoutType:         2,
@@ -760,20 +765,20 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		ScheduleAttempt:     0,
 	}
 	response := &persistence.GetTimerIndexTasksResponse{
-		Timers:        []*persistence.TimerTaskInfo{timer1, timer2, timer3},
+		Timers:        []*persistenceblobs.TimerTaskInfo{timer1, timer2, timer3},
 		NextPageToken: nil,
 	}
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(response, nil).Once()
 	filteredTasks, lookAheadTask, moreTasks, err := s.timerQueueFailoverAckMgr.readTimerTasks()
 	s.Nil(err)
-	s.Equal([]*persistence.TimerTaskInfo{timer1, timer2, timer3}, filteredTasks)
+	s.Equal([]*persistenceblobs.TimerTaskInfo{timer1, timer2, timer3}, filteredTasks)
 	s.Nil(lookAheadTask)
 	s.False(moreTasks)
 
-	timerSequenceID2 := timerKey{VisibilityTimestamp: timer2.VisibilityTimestamp, TaskID: timer2.TaskID}
+	timerSequenceID2 := timerKeyFromGogoTime(timer2.VisibilityTimestamp, timer2.TaskID)
 	s.timerQueueFailoverAckMgr.completeTimerTask(timer2)
-	s.True(s.timerQueueFailoverAckMgr.outstandingTasks[timerSequenceID2])
+	s.True(s.timerQueueFailoverAckMgr.outstandingTasks[*timerSequenceID2])
 	s.mockShardMgr.On("UpdateShard", mock.Anything).Return(nil).Once()
 	s.timerQueueFailoverAckMgr.updateAckLevel()
 	select {
@@ -782,9 +787,9 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	default:
 	}
 
-	timerSequenceID3 := timerKey{VisibilityTimestamp: timer3.VisibilityTimestamp, TaskID: timer3.TaskID}
+	timerSequenceID3 := timerKeyFromGogoTime(timer3.VisibilityTimestamp, timer3.TaskID)
 	s.timerQueueFailoverAckMgr.completeTimerTask(timer3)
-	s.True(s.timerQueueFailoverAckMgr.outstandingTasks[timerSequenceID3])
+	s.True(s.timerQueueFailoverAckMgr.outstandingTasks[*timerSequenceID3])
 	s.mockShardMgr.On("UpdateShard", mock.Anything).Return(nil).Once()
 	s.timerQueueFailoverAckMgr.updateAckLevel()
 	select {
@@ -793,9 +798,9 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	default:
 	}
 
-	timerSequenceID1 := timerKey{VisibilityTimestamp: timer1.VisibilityTimestamp, TaskID: timer1.TaskID}
+	timerSequenceID1 := timerKeyFromGogoTime(timer1.VisibilityTimestamp, timer1.TaskID)
 	s.timerQueueFailoverAckMgr.completeTimerTask(timer1)
-	s.True(s.timerQueueFailoverAckMgr.outstandingTasks[timerSequenceID1])
+	s.True(s.timerQueueFailoverAckMgr.outstandingTasks[*timerSequenceID1])
 	s.mockShardMgr.On("UpdateShard", mock.Anything).Return(nil).Once()
 	s.timerQueueFailoverAckMgr.updateAckLevel()
 	select {

@@ -26,6 +26,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gogo/protobuf/types"
+
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
@@ -102,6 +106,15 @@ func (t timerKeys) Swap(i, j int) {
 // Less implements sort.Interface
 func (t timerKeys) Less(i, j int) bool {
 	return compareTimerIDLess(&t[i], &t[j])
+}
+
+func timerKeyFromGogoTime(protoTime *types.Timestamp, taskID int64) *timerKey {
+	// Its okay to ignore this since we do validation coming into a gogo/protoTime
+	t, _ := types.TimestampFromProto(protoTime)
+	return &timerKey{
+		VisibilityTimestamp: t,
+		TaskID:              taskID,
+	}
 }
 
 func compareTimerIDLess(first *timerKey, second *timerKey) bool {
@@ -192,7 +205,7 @@ func (t *timerQueueAckMgrImpl) getFinishedChan() <-chan struct{} {
 	return t.finishedChan
 }
 
-func (t *timerQueueAckMgrImpl) readTimerTasks() ([]*persistence.TimerTaskInfo, *persistence.TimerTaskInfo, bool, error) {
+func (t *timerQueueAckMgrImpl) readTimerTasks() ([]*persistenceblobs.TimerTaskInfo, *persistenceblobs.TimerTaskInfo, bool, error) {
 	if t.maxQueryLevel == t.minQueryLevel {
 		t.maxQueryLevel = t.shard.UpdateTimerMaxReadLevel(t.clusterName)
 	}
@@ -200,7 +213,7 @@ func (t *timerQueueAckMgrImpl) readTimerTasks() ([]*persistence.TimerTaskInfo, *
 	maxQueryLevel := t.maxQueryLevel
 	pageToken := t.pageToken
 
-	var tasks []*persistence.TimerTaskInfo
+	var tasks []*persistenceblobs.TimerTaskInfo
 	morePage := false
 	var err error
 	if minQueryLevel.Before(maxQueryLevel) {
@@ -223,23 +236,24 @@ func (t *timerQueueAckMgrImpl) readTimerTasks() ([]*persistence.TimerTaskInfo, *
 	// We also get a look ahead task but it doesn't move the read level, this is for timer
 	// to wait on it instead of doing queries.
 
-	var lookAheadTask *persistence.TimerTaskInfo
-	filteredTasks := []*persistence.TimerTaskInfo{}
+	var lookAheadTask *persistenceblobs.TimerTaskInfo
+	filteredTasks := []*persistenceblobs.TimerTaskInfo{}
 
 TaskFilterLoop:
 	for _, task := range tasks {
-		timerKey := timerKey{VisibilityTimestamp: task.VisibilityTimestamp, TaskID: task.TaskID}
+		goVisibilityTime, _ := types.TimestampFromProto(task.GetVisibilityTimestamp())
+		timerKey := timerKey{VisibilityTimestamp: goVisibilityTime, TaskID: task.TaskID}
 		_, isLoaded := t.outstandingTasks[timerKey]
 		if isLoaded {
 			// timer already loaded
 			t.logger.Debug("Skipping timer task",
-				tag.Task(timerKey), tag.WorkflowID(task.WorkflowID), tag.WorkflowRunID(task.RunID), tag.TaskType(task.TaskType))
+				tag.Task(timerKey), tag.WorkflowID(task.WorkflowID), tag.WorkflowRunIDBytes(task.RunID), tag.TaskType32(task.TaskType))
 			continue TaskFilterLoop
 		}
 
-		if !t.isProcessNow(task.VisibilityTimestamp) {
-			lookAheadTask = task                       // this means there is task in the time range (now, now + offset)
-			t.maxQueryLevel = task.VisibilityTimestamp // adjust maxQueryLevel so that this task will be read next time
+		if !t.isProcessNow(goVisibilityTime) {
+			lookAheadTask = task               // this means there is task in the time range (now, now + offset)
+			t.maxQueryLevel = goVisibilityTime // adjust maxQueryLevel so that this task will be read next time
 			break TaskFilterLoop
 		}
 
@@ -280,11 +294,11 @@ TaskFilterLoop:
 }
 
 // read lookAheadTask from s.GetTimerMaxReadLevel to poll interval from there.
-func (t *timerQueueAckMgrImpl) readLookAheadTask() (*persistence.TimerTaskInfo, error) {
+func (t *timerQueueAckMgrImpl) readLookAheadTask() (*persistenceblobs.TimerTaskInfo, error) {
 	minQueryLevel := t.maxQueryLevel
 	maxQueryLevel := maximumTime
 
-	var tasks []*persistence.TimerTaskInfo
+	var tasks []*persistenceblobs.TimerTaskInfo
 	var err error
 	tasks, _, err = t.getTimerTasks(minQueryLevel, maxQueryLevel, 1, nil)
 	if err != nil {
@@ -296,8 +310,9 @@ func (t *timerQueueAckMgrImpl) readLookAheadTask() (*persistence.TimerTaskInfo, 
 	return nil, nil
 }
 
-func (t *timerQueueAckMgrImpl) completeTimerTask(timerTask *persistence.TimerTaskInfo) {
-	timerKey := timerKey{VisibilityTimestamp: timerTask.VisibilityTimestamp, TaskID: timerTask.TaskID}
+func (t *timerQueueAckMgrImpl) completeTimerTask(timerTask *persistenceblobs.TimerTaskInfo) {
+	goVisibilityTime, _ := types.TimestampFromProto(timerTask.GetVisibilityTimestamp())
+	timerKey := timerKey{VisibilityTimestamp: goVisibilityTime, TaskID: timerTask.TaskID}
 	t.Lock()
 	defer t.Unlock()
 
@@ -379,7 +394,7 @@ MoveAckLevelLoop:
 
 // this function does not take cluster name as parameter, due to we only have one timer queue on Cassandra
 // all timer tasks are in this queue and filter will be applied.
-func (t *timerQueueAckMgrImpl) getTimerTasks(minTimestamp time.Time, maxTimestamp time.Time, batchSize int, pageToken []byte) ([]*persistence.TimerTaskInfo, []byte, error) {
+func (t *timerQueueAckMgrImpl) getTimerTasks(minTimestamp time.Time, maxTimestamp time.Time, batchSize int, pageToken []byte) ([]*persistenceblobs.TimerTaskInfo, []byte, error) {
 	request := &persistence.GetTimerIndexTasksRequest{
 		MinTimestamp:  minTimestamp,
 		MaxTimestamp:  maxTimestamp,

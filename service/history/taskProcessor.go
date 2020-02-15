@@ -24,6 +24,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gogo/protobuf/types"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
@@ -311,12 +313,13 @@ func (t *taskProcessor) ackTaskOnce(
 
 	task.processor.complete(task)
 	if task.shouldProcessTask {
+		goVisibilityTime, _ := types.TimestampFromProto(task.task.GetVisibilityTimestamp())
 		t.metricsClient.RecordTimer(scope, metrics.TaskAttemptTimer, time.Duration(task.attempt))
 		t.metricsClient.RecordTimer(scope, metrics.TaskLatency, time.Since(task.startTime))
 		t.metricsClient.RecordTimer(
 			scope,
 			metrics.TaskQueueLatency,
-			time.Since(task.task.GetVisibilityTimestamp()),
+			time.Since(goVisibilityTime),
 		)
 	}
 }
