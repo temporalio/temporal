@@ -23,7 +23,7 @@ package history
 import (
 	"github.com/stretchr/testify/mock"
 
-	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 )
 
 // MockTimerQueueAckMgr is used as mock implementation for TimerQueueAckMgr
@@ -49,24 +49,24 @@ func (_m *MockTimerQueueAckMgr) getFinishedChan() <-chan struct{} {
 }
 
 // readTimerTasks is mock implementation for readTimerTasks of TimerQueueAckMgr
-func (_m *MockTimerQueueAckMgr) readTimerTasks() ([]*persistence.TimerTaskInfo, *persistence.TimerTaskInfo, bool, error) {
+func (_m *MockTimerQueueAckMgr) readTimerTasks() ([]*persistenceblobs.TimerTaskInfo, *persistenceblobs.TimerTaskInfo, bool, error) {
 	ret := _m.Called()
 
-	var r0 []*persistence.TimerTaskInfo
-	if rf, ok := ret.Get(0).(func() []*persistence.TimerTaskInfo); ok {
+	var r0 []*persistenceblobs.TimerTaskInfo
+	if rf, ok := ret.Get(0).(func() []*persistenceblobs.TimerTaskInfo); ok {
 		r0 = rf()
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]*persistence.TimerTaskInfo)
+			r0 = ret.Get(0).([]*persistenceblobs.TimerTaskInfo)
 		}
 	}
 
-	var r1 *persistence.TimerTaskInfo
-	if rf, ok := ret.Get(1).(func() *persistence.TimerTaskInfo); ok {
+	var r1 *persistenceblobs.TimerTaskInfo
+	if rf, ok := ret.Get(1).(func() *persistenceblobs.TimerTaskInfo); ok {
 		r1 = rf()
 	} else {
 		if ret.Get(1) != nil {
-			r1 = ret.Get(1).(*persistence.TimerTaskInfo)
+			r1 = ret.Get(1).(*persistenceblobs.TimerTaskInfo)
 		}
 	}
 
@@ -87,7 +87,7 @@ func (_m *MockTimerQueueAckMgr) readTimerTasks() ([]*persistence.TimerTaskInfo, 
 	return r0, r1, r2, r3
 }
 
-func (_m *MockTimerQueueAckMgr) completeTimerTask(timerTask *persistence.TimerTaskInfo) {
+func (_m *MockTimerQueueAckMgr) completeTimerTask(timerTask *persistenceblobs.TimerTaskInfo) {
 	_m.Called(timerTask)
 }
 
