@@ -25,8 +25,6 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
-	"github.com/temporalio/temporal/common/primitives"
-
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -166,9 +164,9 @@ func initializeLoggerForTask(
 		tag.TaskID(task.GetTaskID()),
 		tag.FailoverVersion(task.GetVersion()),
 		tag.TaskType(int(task.GetTaskType())),
-		tag.WorkflowDomainID(primitives.UUID(task.GetDomainID()).String()),
+		tag.WorkflowDomainIDBytes(task.GetDomainID()),
 		tag.WorkflowID(task.GetWorkflowID()),
-		tag.WorkflowRunID(primitives.UUID(task.GetRunID()).String()),
+		tag.WorkflowRunIDBytes(task.GetRunID()),
 	)
 
 	switch task := task.(type) {
