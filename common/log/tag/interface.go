@@ -38,6 +38,12 @@ func (t *Tag) Field() zap.Field {
 	return t.field
 }
 
+func newBinaryTag(key string, value []byte) Tag {
+	return Tag{
+		field: zap.Binary(key, value),
+	}
+}
+
 func newStringTag(key string, value string) Tag {
 	return Tag{
 		field: zap.String(key, value),
