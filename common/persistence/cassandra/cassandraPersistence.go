@@ -189,19 +189,6 @@ const (
 		`version: ?` +
 		`}`
 
-	templateTimerTaskType = `{` +
-		`domain_id: ?, ` +
-		`workflow_id: ?, ` +
-		`run_id: ?, ` +
-		`visibility_ts: ?, ` +
-		`task_id: ?, ` +
-		`type: ?, ` +
-		`timeout_type: ?, ` +
-		`event_id: ?, ` +
-		`schedule_attempt: ?, ` +
-		`version: ?` +
-		`}`
-
 	templateActivityInfoType = `{` +
 		`version: ?,` +
 		`schedule_id: ?, ` +
@@ -372,8 +359,8 @@ workflow_state = ? ` +
 		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	templateCreateTimerTaskQuery = `INSERT INTO executions (` +
-		`shard_id, type, domain_id, workflow_id, run_id, timer, visibility_ts, task_id) ` +
-		`VALUES(?, ?, ?, ?, ?, ` + templateTimerTaskType + `, ?, ?)`
+		`shard_id, type, domain_id, workflow_id, run_id, timer, timer_encoding, visibility_ts, task_id) ` +
+		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	templateUpdateLeaseQuery = `UPDATE executions ` +
 		`SET range_id = ? ` +
@@ -722,7 +709,7 @@ workflow_state = ? ` +
 		`and visibility_ts = ? ` +
 		`and task_id <= ?`
 
-	templateGetTimerTasksQuery = `SELECT timer ` +
+	templateGetTimerTasksQuery = `SELECT timer, timer_encoding ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ?` +
@@ -2694,11 +2681,15 @@ func (d *cassandraPersistence) GetTimerIndexTasks(request *p.GetTimerIndexTasksR
 	}
 
 	response := &p.GetTimerIndexTasksResponse{}
-	task := make(map[string]interface{})
-	for iter.MapScan(task) {
-		t := createTimerTaskInfo(task["timer"].(map[string]interface{}))
-		// Reset task map to get it ready for next scan
-		task = make(map[string]interface{})
+	var data []byte
+	var encoding string
+
+	for iter.Scan(&data, &encoding) {
+		t, err := sql.TimerTaskInfoFromBlob(data, encoding)
+
+		if err != nil {
+			return nil, convertCommonErrors("GetTimerIndexTask", err)
+		}
 
 		response.Timers = append(response.Timers, t)
 	}
@@ -2707,14 +2698,7 @@ func (d *cassandraPersistence) GetTimerIndexTasks(request *p.GetTimerIndexTasksR
 	copy(response.NextPageToken, nextPageToken)
 
 	if err := iter.Close(); err != nil {
-		if isThrottlingError(err) {
-			return nil, &workflow.ServiceBusyError{
-				Message: fmt.Sprintf("GetTimerTasks operation failed. Error: %v", err),
-			}
-		}
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("GetTimerTasks operation failed. Error: %v", err),
-		}
+		return nil, convertCommonErrors("GetTimerIndexTask", err)
 	}
 
 	return response, nil
