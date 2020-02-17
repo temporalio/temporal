@@ -1594,10 +1594,6 @@ func (h *Handler) ReapplyEvents(
 // HistoryEngine API calls to ShardOwnershipLost error return by HistoryService for client to be redirected to the
 // correct shard.
 func (h *Handler) convertError(err error) error {
-	//if st, ok := status.FromError(err); ok {
-	//	return adapter.ToThriftError(st)
-	//}
-
 	switch err.(type) {
 	case *persistence.ShardOwnershipLostError:
 		shardID := err.(*persistence.ShardOwnershipLostError).ShardID
