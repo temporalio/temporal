@@ -1,6 +1,6 @@
 module github.com/temporalio/temporal
 
-go 1.12
+go 1.13
 
 require (
 	github.com/DataDog/zstd v1.4.0 // indirect
