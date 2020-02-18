@@ -60,6 +60,10 @@ func (u UUID) String() string {
 	return string(buf[:])
 }
 
+func UUIDString(b []byte) string {
+	return UUID(b).String()
+}
+
 // Scan implements sql.Scanner interface to allow this type to be
 // parsed transparently by database drivers
 func (u *UUID) Scan(src interface{}) error {

@@ -25,6 +25,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/types"
+
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
 	gomock "github.com/golang/mock/gomock"
@@ -119,13 +121,13 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_ShutDown() {
 		s.notificationChan,
 		&taskInfo{
 			processor: s.mockProcessor,
-			task:      &persistence.TimerTaskInfo{},
+			task:      &persistenceblobs.TimerTaskInfo{},
 		},
 	)
 }
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainErrRetry_ProcessNoErr() {
-	task := newTaskInfo(s.mockProcessor, &persistence.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: time.Now()}, s.logger)
+	task := newTaskInfo(s.mockProcessor, &persistenceblobs.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: types.TimestampNow()}, s.logger)
 	var taskFilterErr taskFilter = func(task *taskInfo) (bool, error) {
 		return false, errors.New("some random error")
 	}
@@ -143,7 +145,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainErrRetry_ProcessNoErr()
 }
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainFalse_ProcessNoErr() {
-	task := newTaskInfo(s.mockProcessor, &persistence.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: time.Now()}, s.logger)
+	task := newTaskInfo(s.mockProcessor, &persistenceblobs.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: types.TimestampNow()}, s.logger)
 	task.shouldProcessTask = false
 	var taskFilter taskFilter = func(task *taskInfo) (bool, error) {
 		return false, nil
@@ -158,7 +160,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainFalse_ProcessNoErr() {
 }
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainTrue_ProcessNoErr() {
-	task := newTaskInfo(s.mockProcessor, &persistence.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: time.Now()}, s.logger)
+	task := newTaskInfo(s.mockProcessor, &persistenceblobs.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: types.TimestampNow()}, s.logger)
 	var taskFilter taskFilter = func(task *taskInfo) (bool, error) {
 		return true, nil
 	}
@@ -173,7 +175,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainTrue_ProcessNoErr() {
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainTrue_ProcessErrNoErr() {
 	err := errors.New("some random err")
-	task := newTaskInfo(s.mockProcessor, &persistence.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: time.Now()}, s.logger)
+	task := newTaskInfo(s.mockProcessor, &persistenceblobs.TimerTaskInfo{TaskID: 12345, VisibilityTimestamp: types.TimestampNow()}, s.logger)
 	var taskFilter taskFilter = func(task *taskInfo) (bool, error) {
 		return true, nil
 	}

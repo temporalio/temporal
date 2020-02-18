@@ -26,6 +26,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gogo/protobuf/types"
+
 	commonproto "go.temporal.io/temporal-proto/common"
 
 	"github.com/temporalio/temporal/common/primitives"
@@ -954,28 +956,28 @@ func createTimerTasks(
 		timerTasksRows := make([]sqlplugin.TimerTasksRow, len(timerTasks))
 
 		for i, task := range timerTasks {
-			info := &sqlblobs.TimerTaskInfo{}
+			info := &persistenceblobs.TimerTaskInfo{}
 			switch t := task.(type) {
 			case *p.DecisionTimeoutTask:
-				info.EventID = &t.EventID
-				info.TimeoutType = common.Int16Ptr(int16(t.TimeoutType))
-				info.ScheduleAttempt = &t.ScheduleAttempt
+				info.EventID = t.EventID
+				info.TimeoutType = int32(t.TimeoutType)
+				info.ScheduleAttempt = t.ScheduleAttempt
 
 			case *p.ActivityTimeoutTask:
-				info.EventID = &t.EventID
-				info.TimeoutType = common.Int16Ptr(int16(t.TimeoutType))
-				info.ScheduleAttempt = &t.Attempt
+				info.EventID = t.EventID
+				info.TimeoutType = int32(t.TimeoutType)
+				info.ScheduleAttempt = t.Attempt
 
 			case *p.UserTimerTask:
-				info.EventID = &t.EventID
+				info.EventID = t.EventID
 
 			case *p.ActivityRetryTimerTask:
-				info.EventID = &t.EventID
-				info.ScheduleAttempt = common.Int64Ptr(int64(t.Attempt))
+				info.EventID = t.EventID
+				info.ScheduleAttempt = int64(t.Attempt)
 
 			case *p.WorkflowBackoffTimerTask:
-				info.EventID = &t.EventID
-				info.TimeoutType = common.Int16Ptr(int16(t.TimeoutType))
+				info.EventID = t.EventID
+				info.TimeoutType = int32(t.TimeoutType)
 
 			case *p.WorkflowTimeoutTask:
 				// noop
@@ -990,18 +992,26 @@ func createTimerTasks(
 			}
 
 			info.DomainID = domainID
-			info.WorkflowID = &workflowID
+			info.WorkflowID = workflowID
 			info.RunID = runID
-			info.Version = common.Int64Ptr(task.GetVersion())
-			info.TaskType = common.Int16Ptr(int16(task.GetType()))
+			info.Version = task.GetVersion()
+			info.TaskType = int32(task.GetType())
+			info.TaskID = task.GetTaskID()
 
-			blob, err := timerTaskInfoToBlob(info)
+			goVisTs := task.GetVisibilityTimestamp()
+			protoVisTs, err := types.TimestampProto(goVisTs)
+			if err != nil {
+				return err
+			}
+
+			info.VisibilityTimestamp = protoVisTs
+			blob, err := TimerTaskInfoToBlob(info)
 			if err != nil {
 				return err
 			}
 
 			timerTasksRows[i].ShardID = shardID
-			timerTasksRows[i].VisibilityTimestamp = task.GetVisibilityTimestamp()
+			timerTasksRows[i].VisibilityTimestamp = goVisTs
 			timerTasksRows[i].TaskID = task.GetTaskID()
 			timerTasksRows[i].Data = blob.Data
 			timerTasksRows[i].DataEncoding = string(blob.Encoding)

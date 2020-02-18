@@ -23,9 +23,11 @@ package history
 import (
 	"errors"
 	"testing"
-	"time"
+
+	"github.com/gogo/protobuf/types"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/common/primitives"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
@@ -142,15 +144,15 @@ func (s *timerQueueProcessorBaseSuite) TearDownTest() {
 }
 
 func (s *timerQueueProcessorBaseSuite) TestDeleteWorkflow_NoErr() {
-	task := &persistence.TimerTaskInfo{
+	task := &persistenceblobs.TimerTaskInfo{
 		TaskID:              12345,
-		VisibilityTimestamp: time.Now(),
+		VisibilityTimestamp: types.TimestampNow(),
 	}
 	executionInfo := workflow.WorkflowExecution{
 		WorkflowId: &task.WorkflowID,
-		RunId:      &task.RunID,
+		RunId:      common.StringPtr(primitives.UUIDString(task.RunID)),
 	}
-	ctx := newWorkflowExecutionContext(task.DomainID, executionInfo, s.mockShard, s.mockExecutionManager, log.NewNoop())
+	ctx := newWorkflowExecutionContext(primitives.UUIDString(task.DomainID), executionInfo, s.mockShard, s.mockExecutionManager, log.NewNoop())
 
 	s.mockExecutionManager.On("DeleteCurrentWorkflowExecution", mock.Anything).Return(nil).Once()
 	s.mockExecutionManager.On("DeleteWorkflowExecution", mock.Anything).Return(nil).Once()
@@ -184,7 +186,7 @@ func (s *timerQueueProcessorBaseSuite) TestArchiveHistory_NoErr_InlineArchivalFa
 	}, nil)
 
 	domainCacheEntry := cache.NewDomainCacheEntryForTest(&persistence.DomainInfo{}, &persistence.DomainConfig{}, false, nil, 0, nil)
-	err := s.timerQueueProcessor.archiveWorkflow(&persistence.TimerTaskInfo{}, s.mockWorkflowExecutionContext, s.mockMutableState, domainCacheEntry)
+	err := s.timerQueueProcessor.archiveWorkflow(&persistenceblobs.TimerTaskInfo{}, s.mockWorkflowExecutionContext, s.mockMutableState, domainCacheEntry)
 	s.NoError(err)
 }
 
@@ -202,6 +204,6 @@ func (s *timerQueueProcessorBaseSuite) TestArchiveHistory_SendSignalErr() {
 	})).Return(nil, errors.New("failed to send signal"))
 
 	domainCacheEntry := cache.NewDomainCacheEntryForTest(&persistence.DomainInfo{}, &persistence.DomainConfig{}, false, nil, 0, nil)
-	err := s.timerQueueProcessor.archiveWorkflow(&persistence.TimerTaskInfo{}, s.mockWorkflowExecutionContext, s.mockMutableState, domainCacheEntry)
+	err := s.timerQueueProcessor.archiveWorkflow(&persistenceblobs.TimerTaskInfo{}, s.mockWorkflowExecutionContext, s.mockMutableState, domainCacheEntry)
 	s.Error(err)
 }
