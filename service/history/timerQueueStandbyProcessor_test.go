@@ -513,8 +513,8 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessActivityTimeout_Success() {
 		WorkflowID:          execution.GetWorkflowId(),
 		RunID:               primitives.MustParseUUID(execution.GetRunId()),
 		TaskID:              int64(100),
-		TaskType:            persistence.TaskTypeUserTimer,
-		TimeoutType:         int32(workflow.TimeoutTypeStartToClose),
+		TaskType:            persistence.TaskTypeActivityTimeout,
+		TimeoutType:         int32(workflow.TimeoutTypeScheduleToClose),
 		VisibilityTimestamp: protoTaskTime,
 		EventID:             di.ScheduleID,
 	}
