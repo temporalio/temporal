@@ -2688,7 +2688,7 @@ func (d *cassandraPersistence) GetTimerIndexTasks(request *p.GetTimerIndexTasksR
 		t, err := sql.TimerTaskInfoFromBlob(data, encoding)
 
 		if err != nil {
-			return nil, convertCommonErrors("GetTimerIndexTask", err)
+			return nil, convertCommonErrors("GetTimerIndexTasks", err)
 		}
 
 		response.Timers = append(response.Timers, t)
@@ -2698,7 +2698,7 @@ func (d *cassandraPersistence) GetTimerIndexTasks(request *p.GetTimerIndexTasksR
 	copy(response.NextPageToken, nextPageToken)
 
 	if err := iter.Close(); err != nil {
-		return nil, convertCommonErrors("GetTimerIndexTask", err)
+		return nil, convertCommonErrors("GetTimerIndexTasks", err)
 	}
 
 	return response, nil

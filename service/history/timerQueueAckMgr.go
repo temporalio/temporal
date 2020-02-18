@@ -241,9 +241,8 @@ func (t *timerQueueAckMgrImpl) readTimerTasks() ([]*persistenceblobs.TimerTaskIn
 
 TaskFilterLoop:
 	for _, task := range tasks {
-		goVisibilityTime, _ := types.TimestampFromProto(task.GetVisibilityTimestamp())
-		timerKey := timerKey{VisibilityTimestamp: goVisibilityTime, TaskID: task.TaskID}
-		_, isLoaded := t.outstandingTasks[timerKey]
+		timerKey := timerKeyFromGogoTime(task.GetVisibilityTimestamp(), task.TaskID)
+		_, isLoaded := t.outstandingTasks[*timerKey]
 		if isLoaded {
 			// timer already loaded
 			t.logger.Debug("Skipping timer task",
@@ -251,16 +250,16 @@ TaskFilterLoop:
 			continue TaskFilterLoop
 		}
 
-		if !t.isProcessNow(goVisibilityTime) {
+		if !t.isProcessNow(timerKey.VisibilityTimestamp) {
 			lookAheadTask = task               // this means there is task in the time range (now, now + offset)
-			t.maxQueryLevel = goVisibilityTime // adjust maxQueryLevel so that this task will be read next time
+			t.maxQueryLevel = timerKey.VisibilityTimestamp // adjust maxQueryLevel so that this task will be read next time
 			break TaskFilterLoop
 		}
 
 		t.logger.Debug("Moving timer read level", tag.Task(timerKey))
-		t.readLevel = timerKey
+		t.readLevel = *timerKey
 
-		t.outstandingTasks[timerKey] = false
+		t.outstandingTasks[*timerKey] = false
 		filteredTasks = append(filteredTasks, task)
 	}
 
@@ -311,12 +310,11 @@ func (t *timerQueueAckMgrImpl) readLookAheadTask() (*persistenceblobs.TimerTaskI
 }
 
 func (t *timerQueueAckMgrImpl) completeTimerTask(timerTask *persistenceblobs.TimerTaskInfo) {
-	goVisibilityTime, _ := types.TimestampFromProto(timerTask.GetVisibilityTimestamp())
-	timerKey := timerKey{VisibilityTimestamp: goVisibilityTime, TaskID: timerTask.TaskID}
+	timerKey := timerKeyFromGogoTime(timerTask.GetVisibilityTimestamp(), timerTask.TaskID)
 	t.Lock()
 	defer t.Unlock()
 
-	t.outstandingTasks[timerKey] = true
+	t.outstandingTasks[*timerKey] = true
 }
 
 func (t *timerQueueAckMgrImpl) getReadLevel() timerKey {
