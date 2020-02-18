@@ -1913,13 +1913,10 @@ func (s *ExecutionManagerSuite) TestTransferTasksThroughUpdate() {
 	s.NotNil(tasks1, "expected valid list of tasks.")
 	s.Equal(1, len(tasks1), "Expected 1 decision task.")
 	task1 := tasks1[0]
-	s.Equal(domainID, task1.DomainID)
-	s.Equal(workflowExecution.GetWorkflowId(), task1.WorkflowID)
-	s.Equal(workflowExecution.GetRunId(), task1.RunID)
+	s.validateTransferTaskHighLevel(task1, p.TransferTaskTypeDecisionTask, domainID, workflowExecution)
 	s.Equal("queue1", task1.TaskList)
-	s.Equal(p.TransferTaskTypeDecisionTask, task1.TaskType)
 	s.Equal(int64(2), task1.ScheduleID)
-	s.Equal("", task1.TargetRunID)
+	s.EqualValues(primitives.MustParseUUID(""), task1.TargetRunID)
 
 	err3 := s.CompleteTransferTask(task1.TaskID)
 	s.NoError(err3)
@@ -1939,13 +1936,10 @@ func (s *ExecutionManagerSuite) TestTransferTasksThroughUpdate() {
 	s.NotNil(tasks2, "expected valid list of tasks.")
 	s.Equal(1, len(tasks2), "Expected 1 decision task.")
 	task2 := tasks2[0]
-	s.Equal(domainID, task2.DomainID)
-	s.Equal(workflowExecution.GetWorkflowId(), task2.WorkflowID)
-	s.Equal(workflowExecution.GetRunId(), task2.RunID)
+	s.validateTransferTaskHighLevel(task2, p.TransferTaskTypeActivityTask, domainID, workflowExecution)
 	s.Equal("queue1", task2.TaskList)
-	s.Equal(p.TransferTaskTypeActivityTask, task2.TaskType)
 	s.Equal(int64(4), task2.ScheduleID)
-	s.Equal("", task2.TargetRunID)
+	s.EqualValues(primitives.MustParseUUID(""), task2.TargetRunID)
 
 	err4 := s.CompleteTransferTask(task2.TaskID)
 	s.NoError(err4)
@@ -1972,11 +1966,8 @@ func (s *ExecutionManagerSuite) TestTransferTasksThroughUpdate() {
 	s.NotNil(tasks3, "expected valid list of tasks.")
 	s.Equal(1, len(tasks3), "Expected 1 decision task.")
 	task3 := tasks3[0]
-	s.Equal(domainID, task3.DomainID)
-	s.Equal(workflowExecution.GetWorkflowId(), task3.WorkflowID)
-	s.Equal(workflowExecution.GetRunId(), task3.RunID)
-	s.Equal(p.TransferTaskTypeCloseExecution, task3.TaskType)
-	s.Equal("", task3.TargetRunID)
+	s.validateTransferTaskHighLevel(task3, p.TransferTaskTypeCloseExecution, domainID, workflowExecution)
+	s.EqualValues(primitives.MustParseUUID(""), task3.TargetRunID)
 
 	err8 := s.CompleteTransferTask(task3.TaskID)
 	s.NoError(err8)
@@ -2005,6 +1996,9 @@ func (s *ExecutionManagerSuite) TestCancelTransferTaskTasks() {
 	err = s.CompleteTransferTask(taskD[0].TaskID)
 	s.NoError(err)
 
+	deleteCheck, err := s.GetTransferTasks(1, false)
+	s.Equal(0, len(deleteCheck), "Expected no decision task.")
+
 	state1, err := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	s.NoError(err)
 	info1 := state1.ExecutionInfo
@@ -2032,13 +2026,8 @@ func (s *ExecutionManagerSuite) TestCancelTransferTaskTasks() {
 	s.NotNil(tasks1, "expected valid list of tasks.")
 	s.Equal(1, len(tasks1), "Expected 1 cancel task.")
 	task1 := tasks1[0]
-	s.Equal(p.TransferTaskTypeCancelExecution, task1.TaskType)
-	s.Equal(domainID, task1.DomainID)
-	s.Equal(workflowExecution.GetWorkflowId(), task1.WorkflowID)
-	s.Equal(workflowExecution.GetRunId(), task1.RunID)
-	s.Equal(targetDomainID, task1.TargetDomainID)
-	s.Equal(targetWorkflowID, task1.TargetWorkflowID)
-	s.Equal(targetRunID, task1.TargetRunID)
+	s.validateTransferTaskHighLevel(task1, p.TransferTaskTypeCancelExecution, domainID, workflowExecution)
+	s.validateTransferTaskTargetInfo(task1, targetDomainID, targetWorkflowID, targetRunID)
 	s.Equal(targetChildWorkflowOnly, task1.TargetChildWorkflowOnly)
 
 	err = s.CompleteTransferTask(task1.TaskID)
@@ -2072,17 +2061,25 @@ func (s *ExecutionManagerSuite) TestCancelTransferTaskTasks() {
 	s.NotNil(tasks2, "expected valid list of tasks.")
 	s.Equal(1, len(tasks2), "Expected 1 cancel task.")
 	task2 := tasks2[0]
-	s.Equal(p.TransferTaskTypeCancelExecution, task2.TaskType)
-	s.Equal(domainID, task2.DomainID)
-	s.Equal(workflowExecution.GetWorkflowId(), task2.WorkflowID)
-	s.Equal(workflowExecution.GetRunId(), task2.RunID)
-	s.Equal(targetDomainID, task2.TargetDomainID)
-	s.Equal(targetWorkflowID, task2.TargetWorkflowID)
-	s.Equal(targetRunID, task2.TargetRunID)
+	s.validateTransferTaskHighLevel(task2, p.TransferTaskTypeCancelExecution, domainID, workflowExecution)
+	s.validateTransferTaskTargetInfo(task2, targetDomainID, targetWorkflowID, targetRunID)
 	s.Equal(targetChildWorkflowOnly, task2.TargetChildWorkflowOnly)
 
 	err = s.CompleteTransferTask(task2.TaskID)
 	s.NoError(err)
+}
+
+func (s *ExecutionManagerSuite) validateTransferTaskHighLevel(task1 *pblobs.TransferTaskInfo, taskType int32, domainID string, workflowExecution gen.WorkflowExecution) {
+	s.EqualValues(taskType, task1.TaskType)
+	s.Equal(domainID, primitives.UUID(task1.DomainID).String())
+	s.Equal(workflowExecution.GetWorkflowId(), task1.WorkflowID)
+	s.Equal(workflowExecution.GetRunId(), primitives.UUID(task1.RunID).String())
+}
+
+func (s *ExecutionManagerSuite) validateTransferTaskTargetInfo(task2 *pblobs.TransferTaskInfo, targetDomainID string, targetWorkflowID string, targetRunID string) {
+	s.Equal(targetDomainID, primitives.UUID(task2.TargetDomainID).String())
+	s.Equal(targetWorkflowID, task2.TargetWorkflowID)
+	s.Equal(targetRunID, primitives.UUID(task2.TargetRunID).String())
 }
 
 // TestSignalTransferTaskTasks test
@@ -2129,13 +2126,8 @@ func (s *ExecutionManagerSuite) TestSignalTransferTaskTasks() {
 	s.NotNil(tasks1, "expected valid list of tasks.")
 	s.Equal(1, len(tasks1), "Expected 1 cancel task.")
 	task1 := tasks1[0]
-	s.Equal(p.TransferTaskTypeSignalExecution, task1.TaskType)
-	s.Equal(domainID, task1.DomainID)
-	s.Equal(workflowExecution.GetWorkflowId(), task1.WorkflowID)
-	s.Equal(workflowExecution.GetRunId(), task1.RunID)
-	s.Equal(targetDomainID, task1.TargetDomainID)
-	s.Equal(targetWorkflowID, task1.TargetWorkflowID)
-	s.Equal(targetRunID, task1.TargetRunID)
+	s.validateTransferTaskHighLevel(task1, p.TransferTaskTypeCancelExecution, domainID, workflowExecution)
+	s.validateTransferTaskTargetInfo(task1, targetDomainID, targetWorkflowID, targetRunID)
 	s.Equal(targetChildWorkflowOnly, task1.TargetChildWorkflowOnly)
 
 	err = s.CompleteTransferTask(task1.TaskID)
@@ -2169,13 +2161,8 @@ func (s *ExecutionManagerSuite) TestSignalTransferTaskTasks() {
 	s.NotNil(tasks2, "expected valid list of tasks.")
 	s.Equal(1, len(tasks2), "Expected 1 cancel task.")
 	task2 := tasks2[0]
-	s.Equal(p.TransferTaskTypeSignalExecution, task2.TaskType)
-	s.Equal(domainID, task2.DomainID)
-	s.Equal(workflowExecution.GetWorkflowId(), task2.WorkflowID)
-	s.Equal(workflowExecution.GetRunId(), task2.RunID)
-	s.Equal(targetDomainID, task2.TargetDomainID)
-	s.Equal(targetWorkflowID, task2.TargetWorkflowID)
-	s.Equal(targetRunID, task2.TargetRunID)
+	s.validateTransferTaskHighLevel(task2, p.TransferTaskTypeCancelExecution, domainID, workflowExecution)
+	s.validateTransferTaskTargetInfo(task2, targetDomainID, targetWorkflowID, targetRunID)
 	s.Equal(targetChildWorkflowOnly, task2.TargetChildWorkflowOnly)
 
 	err = s.CompleteTransferTask(task2.TaskID)
@@ -2289,14 +2276,14 @@ func (s *ExecutionManagerSuite) TestTransferTasksComplete() {
 	s.NotNil(tasks1, "expected valid list of tasks.")
 	s.Equal(1, len(tasks1), "Expected 1 decision task.")
 	task1 := tasks1[0]
-	s.Equal(domainID, task1.DomainID)
-	s.Equal(workflowExecution.GetWorkflowId(), task1.WorkflowID)
-	s.Equal(workflowExecution.GetRunId(), task1.RunID)
+	taskType := p.TransferTaskTypeDecisionTask
+	scheduleId := int64(2)
+	targetWorkflowId := p.TransferTaskTransferTargetWorkflowID
+	targetRunId := ""
+	s.validateTransferTaskHighLevel(task1, int32(taskType), domainID, workflowExecution)
+	s.validateTransferTaskTargetInfo(task1, primitives.UUID(task1.TargetDomainID).String(), targetWorkflowId, targetRunId)
 	s.Equal(tasklist, task1.TaskList)
-	s.Equal(p.TransferTaskTypeDecisionTask, task1.TaskType)
-	s.Equal(int64(2), task1.ScheduleID)
-	s.Equal(p.TransferTaskTransferTargetWorkflowID, task1.TargetWorkflowID)
-	s.Equal("", task1.TargetRunID)
+	s.Equal(scheduleId, task1.ScheduleID)
 	err3 := s.CompleteTransferTask(task1.TaskID)
 	s.NoError(err3)
 
@@ -2331,14 +2318,16 @@ func (s *ExecutionManagerSuite) TestTransferTasksComplete() {
 	s.NotNil(txTasks, "expected valid list of tasks.")
 	s.Equal(len(tasks), len(txTasks))
 	for index := range tasks {
-		s.True(timeComparatorGo(tasks[index].GetVisibilityTimestamp(), txTasks[index].VisibilityTimestamp, TimePrecision))
+		t, err := types.TimestampFromProto(txTasks[index].VisibilityTimestamp)
+		s.NoError(err)
+		s.True(timeComparatorGo(tasks[index].GetVisibilityTimestamp(), t, TimePrecision))
 	}
-	s.Equal(p.TransferTaskTypeActivityTask, txTasks[0].TaskType)
-	s.Equal(p.TransferTaskTypeDecisionTask, txTasks[1].TaskType)
-	s.Equal(p.TransferTaskTypeCloseExecution, txTasks[2].TaskType)
-	s.Equal(p.TransferTaskTypeCancelExecution, txTasks[3].TaskType)
-	s.Equal(p.TransferTaskTypeSignalExecution, txTasks[4].TaskType)
-	s.Equal(p.TransferTaskTypeStartChildExecution, txTasks[5].TaskType)
+	s.EqualValues(p.TransferTaskTypeActivityTask, txTasks[0].TaskType)
+	s.EqualValues(p.TransferTaskTypeDecisionTask, txTasks[1].TaskType)
+	s.EqualValues(p.TransferTaskTypeCloseExecution, txTasks[2].TaskType)
+	s.EqualValues(p.TransferTaskTypeCancelExecution, txTasks[3].TaskType)
+	s.EqualValues(p.TransferTaskTypeSignalExecution, txTasks[4].TaskType)
+	s.EqualValues(p.TransferTaskTypeStartChildExecution, txTasks[5].TaskType)
 	s.Equal(int64(111), txTasks[0].Version)
 	s.Equal(int64(222), txTasks[1].Version)
 	s.Equal(int64(333), txTasks[2].Version)
@@ -2371,7 +2360,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksComplete() {
 
 // TestTransferTasksRangeComplete test
 func (s *ExecutionManagerSuite) TestTransferTasksRangeComplete() {
-	domainID := "8bfb47be-5b57-4d55-9109-5fb35e20b1d7"
+	domainID := "8bfb47be-5b57-4d55-9109-5fb35e20b1d8"
 	workflowExecution := gen.WorkflowExecution{
 		WorkflowId: common.StringPtr("get-transfer-tasks-test-range-complete"),
 		RunId:      common.StringPtr("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
@@ -2387,14 +2376,11 @@ func (s *ExecutionManagerSuite) TestTransferTasksRangeComplete() {
 	s.NotNil(tasks1, "expected valid list of tasks.")
 	s.Equal(1, len(tasks1), "Expected 1 decision task.")
 	task1 := tasks1[0]
-	s.Equal(domainID, task1.DomainID)
-	s.Equal(workflowExecution.GetWorkflowId(), task1.WorkflowID)
-	s.Equal(workflowExecution.GetRunId(), task1.RunID)
+	s.validateTransferTaskHighLevel(task1, p.TransferTaskTypeDecisionTask, domainID, workflowExecution)
+	s.validateTransferTaskTargetInfo(task1, primitives.UUID(task1.DomainID).String(), p.TransferTaskTransferTargetWorkflowID, "")
 	s.Equal(tasklist, task1.TaskList)
-	s.Equal(p.TransferTaskTypeDecisionTask, task1.TaskType)
 	s.Equal(int64(2), task1.ScheduleID)
-	s.Equal(p.TransferTaskTransferTargetWorkflowID, task1.TargetWorkflowID)
-	s.Equal("", task1.TargetRunID)
+
 	err3 := s.CompleteTransferTask(task1.TaskID)
 	s.NoError(err3)
 
@@ -2429,14 +2415,16 @@ func (s *ExecutionManagerSuite) TestTransferTasksRangeComplete() {
 	s.NotNil(txTasks, "expected valid list of tasks.")
 	s.Equal(len(tasks), len(txTasks))
 	for index := range tasks {
-		s.True(timeComparatorGo(tasks[index].GetVisibilityTimestamp(), txTasks[index].VisibilityTimestamp, TimePrecision))
+		t, err := types.TimestampFromProto(txTasks[index].VisibilityTimestamp)
+		s.NoError(err)
+		s.True(timeComparatorGo(tasks[index].GetVisibilityTimestamp(), t, TimePrecision))
 	}
-	s.Equal(p.TransferTaskTypeActivityTask, txTasks[0].TaskType)
-	s.Equal(p.TransferTaskTypeDecisionTask, txTasks[1].TaskType)
-	s.Equal(p.TransferTaskTypeCloseExecution, txTasks[2].TaskType)
-	s.Equal(p.TransferTaskTypeCancelExecution, txTasks[3].TaskType)
-	s.Equal(p.TransferTaskTypeSignalExecution, txTasks[4].TaskType)
-	s.Equal(p.TransferTaskTypeStartChildExecution, txTasks[5].TaskType)
+	s.EqualValues(p.TransferTaskTypeActivityTask, txTasks[0].TaskType)
+	s.EqualValues(p.TransferTaskTypeDecisionTask, txTasks[1].TaskType)
+	s.EqualValues(p.TransferTaskTypeCloseExecution, txTasks[2].TaskType)
+	s.EqualValues(p.TransferTaskTypeCancelExecution, txTasks[3].TaskType)
+	s.EqualValues(p.TransferTaskTypeSignalExecution, txTasks[4].TaskType)
+	s.EqualValues(p.TransferTaskTypeStartChildExecution, txTasks[5].TaskType)
 	s.Equal(int64(111), txTasks[0].Version)
 	s.Equal(int64(222), txTasks[1].Version)
 	s.Equal(int64(333), txTasks[2].Version)
@@ -3292,7 +3280,7 @@ func (s *ExecutionManagerSuite) TestWorkflowReplicationState() {
 
 	taskD, err := s.GetTransferTasks(2, false)
 	s.Equal(1, len(taskD), "Expected 1 decision task.")
-	s.Equal(p.TransferTaskTypeDecisionTask, taskD[0].TaskType)
+	s.EqualValues(p.TransferTaskTypeDecisionTask, taskD[0].TaskType)
 	err = s.CompleteTransferTask(taskD[0].TaskID)
 	s.NoError(err)
 
