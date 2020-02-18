@@ -1031,8 +1031,8 @@ func (s *TestBase) DeleteCurrentWorkflowExecution(info *p.WorkflowExecutionInfo)
 }
 
 // GetTransferTasks is a utility method to get tasks from transfer task queue
-func (s *TestBase) GetTransferTasks(batchSize int, getAll bool) ([]*p.TransferTaskInfo, error) {
-	result := []*p.TransferTaskInfo{}
+func (s *TestBase) GetTransferTasks(batchSize int, getAll bool) ([]*pblobs.TransferTaskInfo, error) {
+	result := []*pblobs.TransferTaskInfo{}
 	var token []byte
 
 Loop:
