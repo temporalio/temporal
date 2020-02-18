@@ -172,23 +172,6 @@ const (
 		`last_replication_info: ?` +
 		`}`
 
-	templateTransferTaskType = `{` +
-		`domain_id: ?, ` +
-		`workflow_id: ?, ` +
-		`run_id: ?, ` +
-		`visibility_ts: ?, ` +
-		`task_id: ?, ` +
-		`target_domain_id: ?, ` +
-		`target_workflow_id: ?, ` +
-		`target_run_id: ?, ` +
-		`target_child_workflow_only: ?, ` +
-		`task_list: ?, ` +
-		`type: ?, ` +
-		`schedule_id: ?, ` +
-		`record_visibility: ?, ` +
-		`version: ?` +
-		`}`
-
 	templateActivityInfoType = `{` +
 		`version: ?,` +
 		`schedule_id: ?, ` +
@@ -351,8 +334,8 @@ workflow_state = ? ` +
 		`VALUES(?, ?, ?, ?, ?, ` + templateWorkflowExecutionType + `, ?, ?, ?, ?, ?, ` + templateChecksumType + `) IF NOT EXISTS `
 
 	templateCreateTransferTaskQuery = `INSERT INTO executions (` +
-		`shard_id, type, domain_id, workflow_id, run_id, transfer, visibility_ts, task_id) ` +
-		`VALUES(?, ?, ?, ?, ?, ` + templateTransferTaskType + `, ?, ?)`
+		`shard_id, type, domain_id, workflow_id, run_id, transfer, transfer_encoding, visibility_ts, task_id) ` +
+		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	templateCreateReplicationTaskQuery = `INSERT INTO executions (` +
 		`shard_id, type, domain_id, workflow_id, run_id, replication, replication_encoding, visibility_ts, task_id) ` +
@@ -659,7 +642,7 @@ workflow_state = ? ` +
 		`and visibility_ts = ? ` +
 		`and task_id = ? `
 
-	templateGetTransferTasksQuery = `SELECT transfer ` +
+	templateGetTransferTasksQuery = `SELECT transfer, transfer_encoding ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
@@ -2030,11 +2013,14 @@ func (d *cassandraPersistence) GetTransferTasks(request *p.GetTransferTasksReque
 	}
 
 	response := &p.GetTransferTasksResponse{}
-	task := make(map[string]interface{})
-	for iter.MapScan(task) {
-		t := createTransferTaskInfo(task["transfer"].(map[string]interface{}))
-		// Reset task map to get it ready for next scan
-		task = make(map[string]interface{})
+	var data []byte
+	var encoding string
+
+	for iter.Scan(&data, &encoding) {
+		t, err := sql.TransferTaskInfoFromBlob(data, encoding)
+		if err != nil {
+			return nil, convertCommonErrors("GetTransferTasks", err)
+		}
 
 		response.Tasks = append(response.Tasks, t)
 	}
@@ -2043,9 +2029,7 @@ func (d *cassandraPersistence) GetTransferTasks(request *p.GetTransferTasksReque
 	copy(response.NextPageToken, nextPageToken)
 
 	if err := iter.Close(); err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("GetTransferTasks operation failed. Error: %v", err),
-		}
+		return nil, convertCommonErrors("GetTransferTasks", err)
 	}
 
 	return response, nil

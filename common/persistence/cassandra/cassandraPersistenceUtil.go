@@ -1028,26 +1028,42 @@ func createTransferTasks(
 			}
 		}
 
+		taskVisTs, err := types.TimestampProto(task.GetVisibilityTimestamp())
+
+		if err != nil {
+			return err
+		}
+
+		// todo ~~~ come back for record visibility
+		p := &persistenceblobs.TransferTaskInfo{
+			DomainID:                primitives.MustParseUUID(domainID),
+			WorkflowID:              workflowID,
+			RunID:                   primitives.MustParseUUID(runID),
+			TaskType:                int32(task.GetType()),
+			TargetDomainID:          primitives.MustParseUUID(targetDomainID),
+			TargetWorkflowID:        targetWorkflowID,
+			TargetRunID:             primitives.MustParseUUID(targetRunID),
+			TaskList:                taskList,
+			TargetChildWorkflowOnly: targetChildWorkflowOnly,
+			ScheduleID:              scheduleID,
+			Version:                 task.GetVersion(),
+			TaskID:                  task.GetTaskID(),
+			VisibilityTimestamp:     taskVisTs,
+			RecordVisibility:        recordVisibility,
+		}
+
+		datablob, err := sql.TransferTaskInfoToBlob(p)
+		if err != nil {
+			return err
+		}
 		batch.Query(templateCreateTransferTaskQuery,
 			shardID,
 			rowTypeTransferTask,
 			rowTypeTransferDomainID,
 			rowTypeTransferWorkflowID,
 			rowTypeTransferRunID,
-			domainID,
-			workflowID,
-			runID,
-			task.GetVisibilityTimestamp(),
-			task.GetTaskID(),
-			targetDomainID,
-			targetWorkflowID,
-			targetRunID,
-			targetChildWorkflowOnly,
-			taskList,
-			task.GetType(),
-			scheduleID,
-			recordVisibility,
-			task.GetVersion(),
+			datablob.Data,
+			datablob.Encoding,
 			defaultVisibilityTimestamp,
 			task.GetTaskID())
 	}
@@ -1960,50 +1976,6 @@ func createReplicationState(
 			for key, value := range replicationInfoMap {
 				info.LastReplicationInfo[key] = createReplicationInfo(value)
 			}
-		}
-	}
-
-	return info
-}
-
-func createTransferTaskInfo(
-	result map[string]interface{},
-) *p.TransferTaskInfo {
-
-	info := &p.TransferTaskInfo{}
-	for k, v := range result {
-		switch k {
-		case "domain_id":
-			info.DomainID = v.(gocql.UUID).String()
-		case "workflow_id":
-			info.WorkflowID = v.(string)
-		case "run_id":
-			info.RunID = v.(gocql.UUID).String()
-		case "visibility_ts":
-			info.VisibilityTimestamp = v.(time.Time)
-		case "task_id":
-			info.TaskID = v.(int64)
-		case "target_domain_id":
-			info.TargetDomainID = v.(gocql.UUID).String()
-		case "target_workflow_id":
-			info.TargetWorkflowID = v.(string)
-		case "target_run_id":
-			info.TargetRunID = v.(gocql.UUID).String()
-			if info.TargetRunID == p.TransferTaskTransferTargetRunID {
-				info.TargetRunID = ""
-			}
-		case "target_child_workflow_only":
-			info.TargetChildWorkflowOnly = v.(bool)
-		case "task_list":
-			info.TaskList = v.(string)
-		case "type":
-			info.TaskType = v.(int)
-		case "schedule_id":
-			info.ScheduleID = v.(int64)
-		case "record_visibility":
-			info.RecordVisibility = v.(bool)
-		case "version":
-			info.Version = v.(int64)
 		}
 	}
 
