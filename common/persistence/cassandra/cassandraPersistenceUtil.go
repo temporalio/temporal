@@ -975,7 +975,7 @@ func createTransferTasks(
 		var taskList string
 		var scheduleID int64
 		targetWorkflowID := p.TransferTaskTransferTargetWorkflowID
-		targetRunID := p.TransferTaskTransferTargetRunID
+		targetRunID := ""
 		targetChildWorkflowOnly := false
 		recordVisibility := false
 
@@ -995,9 +995,7 @@ func createTransferTasks(
 			targetDomainID = task.(*p.CancelExecutionTask).TargetDomainID
 			targetWorkflowID = task.(*p.CancelExecutionTask).TargetWorkflowID
 			targetRunID = task.(*p.CancelExecutionTask).TargetRunID
-			if targetRunID == "" {
-				targetRunID = p.TransferTaskTransferTargetRunID
-			}
+
 			targetChildWorkflowOnly = task.(*p.CancelExecutionTask).TargetChildWorkflowOnly
 			scheduleID = task.(*p.CancelExecutionTask).InitiatedID
 
@@ -1005,9 +1003,7 @@ func createTransferTasks(
 			targetDomainID = task.(*p.SignalExecutionTask).TargetDomainID
 			targetWorkflowID = task.(*p.SignalExecutionTask).TargetWorkflowID
 			targetRunID = task.(*p.SignalExecutionTask).TargetRunID
-			if targetRunID == "" {
-				targetRunID = p.TransferTaskTransferTargetRunID
-			}
+
 			targetChildWorkflowOnly = task.(*p.SignalExecutionTask).TargetChildWorkflowOnly
 			scheduleID = task.(*p.SignalExecutionTask).InitiatedID
 

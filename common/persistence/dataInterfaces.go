@@ -184,9 +184,6 @@ const (
 	// TransferTaskTransferTargetWorkflowID is the the dummy workflow ID for transfer tasks of types
 	// that do not have a target workflow
 	TransferTaskTransferTargetWorkflowID = "20000000-0000-f000-f000-000000000001"
-	// TransferTaskTransferTargetRunID is the the dummy run ID for transfer tasks of types
-	// that do not have a target workflow
-	TransferTaskTransferTargetRunID = "30000000-0000-f000-f000-000000000002"
 
 	// indicate invalid workflow state transition
 	invalidStateTransitionMsg = "unable to change workflow state from %v to %v, close status %v"
