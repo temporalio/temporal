@@ -23,6 +23,10 @@ package history
 import (
 	"time"
 
+	"github.com/gogo/protobuf/types"
+
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
@@ -84,16 +88,16 @@ func standbyTimerTaskPostActionTaskDiscarded(
 		return nil
 	}
 
-	timerTask := task.task.(*persistence.TimerTaskInfo)
+	timerTask := task.task.(*persistenceblobs.TimerTaskInfo)
 	logger.Error("Discarding standby timer task due to task being pending for too long.",
 		tag.WorkflowID(timerTask.WorkflowID),
-		tag.WorkflowRunID(timerTask.RunID),
-		tag.WorkflowDomainID(timerTask.DomainID),
+		tag.WorkflowRunIDBytes(timerTask.RunID),
+		tag.WorkflowDomainIDBytes(timerTask.DomainID),
 		tag.TaskID(timerTask.TaskID),
-		tag.TaskType(timerTask.TaskType),
+		tag.TaskType32(timerTask.TaskType),
 		tag.WorkflowTimeoutType(int64(timerTask.TimeoutType)),
 		tag.FailoverVersion(timerTask.GetVersion()),
-		tag.Timestamp(timerTask.VisibilityTimestamp),
+		tag.TimestampProto(timerTask.VisibilityTimestamp),
 		tag.WorkflowEventID(timerTask.EventID))
 	return ErrTaskDiscarded
 }
@@ -191,7 +195,7 @@ func getStandbyPostActionFn(
 
 	// this is for task retry, use machine time
 	now := standbyNow()
-	taskTime := taskInfo.task.GetVisibilityTimestamp()
+	taskTime, _ := types.TimestampFromProto(taskInfo.task.GetVisibilityTimestamp())
 	resendTime := taskTime.Add(standbyTaskMissingEventsResendDelay)
 	discardTime := taskTime.Add(standbyTaskMissingEventsDiscardDelay)
 

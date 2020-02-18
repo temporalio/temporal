@@ -31,6 +31,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/common/primitives"
+
 	"github.com/gogo/status"
 	"github.com/pborman/uuid"
 	"go.temporal.io/temporal-proto/enums"
@@ -2325,13 +2328,13 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 }
 
 func (e *historyEngineImpl) DeleteExecutionFromVisibility(
-	task *persistence.TimerTaskInfo,
+	task *persistenceblobs.TimerTaskInfo,
 ) error {
 
 	request := &persistence.VisibilityDeleteWorkflowExecutionRequest{
-		DomainID:   task.DomainID,
+		DomainID:   primitives.UUIDString(task.DomainID),
 		WorkflowID: task.WorkflowID,
-		RunID:      task.RunID,
+		RunID:      primitives.UUIDString(task.RunID),
 		TaskID:     task.TaskID,
 	}
 	return e.visibilityMgr.DeleteWorkflowExecution(request) // delete from db

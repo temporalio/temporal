@@ -23,7 +23,7 @@ package history
 import (
 	"fmt"
 
-	"github.com/temporalio/temporal/common/primitives"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/log"
@@ -112,7 +112,7 @@ func loadMutableStateForTransferTask(
 // if still mutable state's next event ID <= task ID, will return nil, nil
 func loadMutableStateForTimerTask(
 	context workflowExecutionContext,
-	timerTask *persistence.TimerTaskInfo,
+	timerTask *persistenceblobs.TimerTaskInfo,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) (mutableState, error) {
@@ -164,13 +164,13 @@ func initializeLoggerForTask(
 		tag.TaskID(task.GetTaskID()),
 		tag.FailoverVersion(task.GetVersion()),
 		tag.TaskType(int(task.GetTaskType())),
-		tag.WorkflowDomainID(primitives.UUID(task.GetDomainID()).String()),
+		tag.WorkflowDomainIDBytes(task.GetDomainID()),
 		tag.WorkflowID(task.GetWorkflowID()),
-		tag.WorkflowRunID(primitives.UUID(task.GetRunID()).String()),
+		tag.WorkflowRunIDBytes(task.GetRunID()),
 	)
 
 	switch task := task.(type) {
-	case *persistence.TimerTaskInfo:
+	case *persistenceblobs.TimerTaskInfo:
 		taskLogger = taskLogger.WithTags(
 			tag.WorkflowTimeoutType(int64(task.TimeoutType)),
 		)

@@ -23,6 +23,8 @@ package tag
 import (
 	"fmt"
 	"time"
+
+	"github.com/gogo/protobuf/types"
 )
 
 // All logging tags are defined in this file.
@@ -47,6 +49,12 @@ func ClusterName(clusterName string) Tag {
 // Timestamp returns tag for Timestamp
 func Timestamp(timestamp time.Time) Tag {
 	return newTimeTag("timestamp", timestamp)
+}
+
+// Timestamp returns tag for Timestamp
+func TimestampProto(timestamp *types.Timestamp) Tag {
+	t, _ := types.TimestampFromProto(timestamp)
+	return newTimeTag("timestamp", t)
 }
 
 // TimestampInt returns tag for Timestamp
@@ -106,6 +114,12 @@ func WorkflowRunID(runID string) Tag {
 	return newStringTag("wf-run-id", runID)
 }
 
+// WorkflowRunID returns tag for WorkflowRunID
+func WorkflowRunIDBytes(runID []byte) Tag {
+	// Todo, we want these to print as hex-encoded (uuid format), binary tag gives us b64
+	return newBinaryTag("wf-run-id", runID)
+}
+
 // WorkflowResetBaseRunID returns tag for WorkflowResetBaseRunID
 func WorkflowResetBaseRunID(runID string) Tag {
 	return newStringTag("wf-reset-base-run-id", runID)
@@ -156,6 +170,12 @@ func QueryID(queryID string) Tag {
 // WorkflowDomainID returns tag for WorkflowDomainID
 func WorkflowDomainID(domainID string) Tag {
 	return newStringTag("wf-domain-id", domainID)
+}
+
+// WorkflowRunID returns tag for WorkflowRunID
+func WorkflowDomainIDBytes(domainID []byte) Tag {
+	// Todo, we want these to print as hex-encoded (uuid format), binary tag gives us b64
+	return newBinaryTag("wf-domain-id", domainID)
 }
 
 // WorkflowDomainName returns tag for WorkflowDomainName
@@ -488,6 +508,11 @@ func TaskID(taskID int64) Tag {
 // TaskType returns tag for TaskType for queue processor
 func TaskType(taskType int) Tag {
 	return newInt("queue-task-type", taskType)
+}
+
+// TaskType returns tag for TaskType for queue processor
+func TaskType32(taskType int32) Tag {
+	return newInt32("queue-task-type", taskType)
 }
 
 // TaskVersion returns tag for TaskVersion

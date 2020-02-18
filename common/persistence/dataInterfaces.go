@@ -26,6 +26,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gogo/protobuf/types"
+
 	"github.com/temporalio/temporal/common/primitives"
 
 	commonproto "go.temporal.io/temporal-proto/common"
@@ -1091,7 +1093,7 @@ type (
 
 	// GetTimerIndexTasksResponse is the response for GetTimerIndexTasks
 	GetTimerIndexTasksResponse struct {
-		Timers        []*TimerTaskInfo
+		Timers        []*pblobs.TimerTaskInfo
 		NextPageToken []byte
 	}
 
@@ -1706,8 +1708,8 @@ func (d *DecisionTask) SetTaskID(id int64) {
 }
 
 // GetVisibilityTimestamp get the visibility timestamp
-func (d ReplicationTaskInfoWrapper) GetVisibilityTimestamp() time.Time {
-	return time.Time{}
+func (d ReplicationTaskInfoWrapper) GetVisibilityTimestamp() *types.Timestamp {
+	return &types.Timestamp{}
 }
 
 // GetVisibilityTimestamp get the visibility timestamp
@@ -2296,8 +2298,10 @@ func (t *TransferTaskInfo) GetTaskType() int32 {
 }
 
 // GetVisibilityTimestamp returns the task type for transfer task
-func (t *TransferTaskInfo) GetVisibilityTimestamp() time.Time {
-	return t.VisibilityTimestamp
+func (t *TransferTaskInfo) GetVisibilityTimestamp() *types.Timestamp {
+	// Todo: This is temp unsafe time->type.timestamp validation until TransferTaskInfo is converted to proto
+	ret, _ := types.TimestampProto(t.VisibilityTimestamp)
+	return ret
 }
 
 // GetWorkflowID returns the workflow ID for transfer task
