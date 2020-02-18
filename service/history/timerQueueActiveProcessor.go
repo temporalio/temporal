@@ -25,6 +25,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/common/primitives"
+
 	"github.com/pborman/uuid"
 	commonproto "go.temporal.io/temporal-proto/common"
 
@@ -72,11 +75,11 @@ func newTimerQueueActiveProcessor(
 	}
 	logger = logger.WithTags(tag.ClusterName(currentClusterName))
 	timerTaskFilter := func(taskInfo *taskInfo) (bool, error) {
-		timer, ok := taskInfo.task.(*persistence.TimerTaskInfo)
+		timer, ok := taskInfo.task.(*persistenceblobs.TimerTaskInfo)
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
-		return taskAllocator.verifyActiveTask(timer.DomainID, timer)
+		return taskAllocator.verifyActiveTask(primitives.UUID(timer.DomainID).String(), timer)
 	}
 
 	timerQueueAckMgr := newTimerQueueAckMgr(
@@ -158,11 +161,11 @@ func newTimerQueueFailoverProcessor(
 		tag.FailoverMsg("from: "+standbyClusterName),
 	)
 	timerTaskFilter := func(taskInfo *taskInfo) (bool, error) {
-		timer, ok := taskInfo.task.(*persistence.TimerTaskInfo)
+		timer, ok := taskInfo.task.(*persistenceblobs.TimerTaskInfo)
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
-		return taskAllocator.verifyFailoverActiveTask(domainIDs, timer.DomainID, timer)
+		return taskAllocator.verifyFailoverActiveTask(domainIDs, primitives.UUID(timer.DomainID).String(), timer)
 	}
 
 	timerQueueAckMgr := newTimerQueueFailoverAckMgr(
@@ -233,7 +236,7 @@ func (t *timerQueueActiveProcessorImpl) notifyNewTimers(
 func (t *timerQueueActiveProcessorImpl) complete(
 	taskInfo *taskInfo,
 ) {
-	timerTask, ok := taskInfo.task.(*persistence.TimerTaskInfo)
+	timerTask, ok := taskInfo.task.(*persistenceblobs.TimerTaskInfo)
 	if !ok {
 		return
 	}
@@ -244,7 +247,7 @@ func (t *timerQueueActiveProcessorImpl) process(
 	taskInfo *taskInfo,
 ) (int, error) {
 
-	timerTask, ok := taskInfo.task.(*persistence.TimerTaskInfo)
+	timerTask, ok := taskInfo.task.(*persistenceblobs.TimerTaskInfo)
 	if !ok {
 		return metrics.TimerActiveQueueProcessorScope, errUnexpectedQueueTask
 	}
@@ -299,7 +302,7 @@ func (t *timerQueueActiveProcessorImpl) process(
 }
 
 func (t *timerQueueActiveProcessorImpl) processUserTimerTimeout(
-	task *persistence.TimerTaskInfo,
+	task *persistenceblobs.TimerTaskInfo,
 ) (retError error) {
 
 	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
@@ -351,7 +354,7 @@ Loop:
 }
 
 func (t *timerQueueActiveProcessorImpl) processActivityTimeout(
-	task *persistence.TimerTaskInfo,
+	task *persistenceblobs.TimerTaskInfo,
 ) (retError error) {
 
 	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
@@ -376,7 +379,7 @@ func (t *timerQueueActiveProcessorImpl) processActivityTimeout(
 	scheduleDecision := false
 
 	// need to clear activity heartbeat timer task mask for new activity timer task creation
-	isHeartBeatTask := task.TimeoutType == int(workflow.TimeoutTypeHeartbeat)
+	isHeartBeatTask := task.TimeoutType == int32(workflow.TimeoutTypeHeartbeat)
 	if activityInfo, ok := mutableState.GetActivityInfo(task.EventID); isHeartBeatTask && ok {
 		activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ timerTaskStatusCreatedHeartbeat
 		if err := mutableState.UpdateActivity(activityInfo); err != nil {
@@ -443,7 +446,7 @@ Loop:
 }
 
 func (t *timerQueueActiveProcessorImpl) processDecisionTimeout(
-	task *persistence.TimerTaskInfo,
+	task *persistenceblobs.TimerTaskInfo,
 ) (retError error) {
 
 	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
@@ -468,7 +471,7 @@ func (t *timerQueueActiveProcessorImpl) processDecisionTimeout(
 		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.TaskID), tag.WorkflowScheduleID(scheduleID), tag.TaskType(persistence.TaskTypeDecisionTimeout))
 		return nil
 	}
-	ok, err = verifyTaskVersion(t.shard, t.logger, task.DomainID, decision.Version, task.Version, task)
+	ok, err = verifyTaskVersion(t.shard, t.logger, primitives.UUID(task.DomainID).String(), decision.Version, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
@@ -515,7 +518,7 @@ func (t *timerQueueActiveProcessorImpl) processDecisionTimeout(
 }
 
 func (t *timerQueueActiveProcessorImpl) processWorkflowBackoffTimer(
-	task *persistence.TimerTaskInfo,
+	task *persistenceblobs.TimerTaskInfo,
 ) (retError error) {
 
 	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
@@ -550,7 +553,7 @@ func (t *timerQueueActiveProcessorImpl) processWorkflowBackoffTimer(
 }
 
 func (t *timerQueueActiveProcessorImpl) processActivityRetryTimer(
-	task *persistence.TimerTaskInfo,
+	task *persistenceblobs.TimerTaskInfo,
 ) (retError error) {
 
 	weCtx, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
@@ -586,7 +589,7 @@ func (t *timerQueueActiveProcessorImpl) processActivityRetryTimer(
 		}
 		return nil
 	}
-	ok, err = verifyTaskVersion(t.shard, t.logger, task.DomainID, activityInfo.Version, task.Version, task)
+	ok, err = verifyTaskVersion(t.shard, t.logger, primitives.UUID(task.DomainID).String(), activityInfo.Version, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
@@ -594,7 +597,7 @@ func (t *timerQueueActiveProcessorImpl) processActivityRetryTimer(
 	domainID := task.DomainID
 	targetDomainID := domainID
 	if activityInfo.DomainID != "" {
-		targetDomainID = activityInfo.DomainID
+		targetDomainID = primitives.MustParseUUID(activityInfo.DomainID)
 	} else {
 		// TODO remove this block after Mar, 1th, 2020
 		//  previously, DomainID in activity info is not used, so need to get
@@ -609,13 +612,13 @@ func (t *timerQueueActiveProcessorImpl) processActivityRetryTimer(
 			if err != nil {
 				return &workflow.InternalServiceError{Message: "unable to re-schedule activity across domain."}
 			}
-			targetDomainID = domainEntry.GetInfo().ID
+			targetDomainID = primitives.MustParseUUID(domainEntry.GetInfo().ID)
 		}
 	}
 
 	execution := &commonproto.WorkflowExecution{
 		WorkflowId: task.WorkflowID,
-		RunId:      task.RunID}
+		RunId:      primitives.UUID(task.RunID).String()}
 	taskList := &commonproto.TaskList{
 		Name: activityInfo.TaskList,
 	}
@@ -624,8 +627,8 @@ func (t *timerQueueActiveProcessorImpl) processActivityRetryTimer(
 	release(nil) // release earlier as we don't need the lock anymore
 
 	_, retError = t.matchingClient.AddActivityTask(context.Background(), &matchingservice.AddActivityTaskRequest{
-		DomainUUID:                    targetDomainID,
-		SourceDomainUUID:              domainID,
+		DomainUUID:                    primitives.UUID(targetDomainID).String(),
+		SourceDomainUUID:              primitives.UUID(domainID).String(),
 		Execution:                     execution,
 		TaskList:                      taskList,
 		ScheduleId:                    scheduledID,
@@ -636,7 +639,7 @@ func (t *timerQueueActiveProcessorImpl) processActivityRetryTimer(
 }
 
 func (t *timerQueueActiveProcessorImpl) processWorkflowTimeout(
-	task *persistence.TimerTaskInfo,
+	task *persistenceblobs.TimerTaskInfo,
 ) (retError error) {
 
 	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
@@ -659,7 +662,7 @@ func (t *timerQueueActiveProcessorImpl) processWorkflowTimeout(
 	if err != nil {
 		return err
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, startVersion, task.Version, task)
+	ok, err := verifyTaskVersion(t.shard, t.logger, primitives.UUID(task.DomainID).String(), startVersion, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}

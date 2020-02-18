@@ -24,6 +24,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gogo/protobuf/types"
+
 	commonproto "go.temporal.io/temporal-proto/common"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -1185,7 +1187,30 @@ func createTimerTasks(
 		}
 
 		// Ignoring possible type cast errors.
-		ts := p.UnixNanoToDBTimestamp(task.GetVisibilityTimestamp().UnixNano())
+		goTs := task.GetVisibilityTimestamp()
+		dbTs := p.UnixNanoToDBTimestamp(goTs.UnixNano())
+		protoTs, err := types.TimestampProto(goTs)
+
+		if err != nil {
+			return err
+		}
+
+		datablob, err := sql.TimerTaskInfoToBlob(&persistenceblobs.TimerTaskInfo{
+			DomainID:            primitives.MustParseUUID(domainID),
+			WorkflowID:          workflowID,
+			RunID:               primitives.MustParseUUID(runID),
+			TaskType:            int32(task.GetType()),
+			TimeoutType:         int32(timeoutType),
+			Version:             task.GetVersion(),
+			ScheduleAttempt:     attempt,
+			EventID:             eventID,
+			TaskID:              task.GetTaskID(),
+			VisibilityTimestamp: protoTs,
+		})
+
+		if err != nil {
+			return err
+		}
 
 		batch.Query(templateCreateTimerTaskQuery,
 			shardID,
@@ -1193,17 +1218,9 @@ func createTimerTasks(
 			rowTypeTimerDomainID,
 			rowTypeTimerWorkflowID,
 			rowTypeTimerRunID,
-			domainID,
-			workflowID,
-			runID,
-			ts,
-			task.GetTaskID(),
-			task.GetType(),
-			timeoutType,
-			eventID,
-			attempt,
-			task.GetVersion(),
-			ts,
+			datablob.Data,
+			datablob.Encoding,
+			dbTs,
 			task.GetTaskID())
 	}
 

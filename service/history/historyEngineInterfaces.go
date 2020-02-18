@@ -22,9 +22,11 @@ package history
 
 import (
 	"context"
-	"time"
+
+	"github.com/gogo/protobuf/types"
 
 	"github.com/temporalio/temporal/.gen/go/replicator"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/persistence"
@@ -68,7 +70,7 @@ type (
 		GetVersion() int64
 		GetTaskID() int64
 		GetTaskType() int32
-		GetVisibilityTimestamp() time.Time
+		GetVisibilityTimestamp() *types.Timestamp
 		GetWorkflowID() string
 		GetRunID() []byte
 		GetDomainID() []byte
@@ -94,8 +96,8 @@ type (
 
 	timerQueueAckMgr interface {
 		getFinishedChan() <-chan struct{}
-		readTimerTasks() ([]*persistence.TimerTaskInfo, *persistence.TimerTaskInfo, bool, error)
-		completeTimerTask(timerTask *persistence.TimerTaskInfo)
+		readTimerTasks() ([]*persistenceblobs.TimerTaskInfo, *persistenceblobs.TimerTaskInfo, bool, error)
+		completeTimerTask(timerTask *persistenceblobs.TimerTaskInfo)
 		getAckLevel() timerKey
 		getReadLevel() timerKey
 		updateAckLevel()

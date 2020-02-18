@@ -64,3 +64,16 @@ message ReplicationTaskInfo {
     bool resetWorkflow = 14;
     int64 taskID = 15;
 }
+
+message TimerTaskInfo {
+    bytes domainID = 1;
+    string workflowID = 2;
+    bytes runID = 3;
+    int32 taskType = 4;
+    int32 timeoutType = 5;
+    int64 version = 6;
+    int64 scheduleAttempt = 7;
+    int64 eventID = 8;
+    int64 taskID = 9;
+    google.protobuf.Timestamp VisibilityTimestamp = 10;
+}

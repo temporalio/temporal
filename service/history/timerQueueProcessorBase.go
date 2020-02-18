@@ -26,6 +26,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/gogo/protobuf/types"
+
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/common/primitives"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
@@ -294,7 +299,11 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 				return err
 			}
 			if lookAheadTimer != nil {
-				t.timerGate.Update(lookAheadTimer.VisibilityTimestamp)
+				visTs, err := types.TimestampFromProto(lookAheadTimer.VisibilityTimestamp)
+				if err != nil {
+					return err
+				}
+				t.timerGate.Update(visTs)
 			}
 		case <-pollTimer.C:
 			pollTimer.Reset(backoff.JitDuration(
@@ -307,7 +316,11 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 					return err
 				}
 				if lookAheadTimer != nil {
-					t.timerGate.Update(lookAheadTimer.VisibilityTimestamp)
+					visTs, err := types.TimestampFromProto(lookAheadTimer.VisibilityTimestamp)
+					if err != nil {
+						return err
+					}
+					t.timerGate.Update(visTs)
 				}
 			}
 		case <-updateAckTimer.C:
@@ -328,7 +341,7 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 	}
 }
 
-func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*persistence.TimerTaskInfo, error) {
+func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*persistenceblobs.TimerTaskInfo, error) {
 	ctx, cancel := ctx.WithTimeout(ctx.Background(), loadTimerTaskThrottleRetryDelay)
 	if err := t.rateLimiter.Wait(ctx); err != nil {
 		cancel()
@@ -374,7 +387,7 @@ func (t *timerQueueProcessorBase) retryTasks() {
 }
 
 func (t *timerQueueProcessorBase) complete(
-	timerTask *persistence.TimerTaskInfo,
+	timerTask *persistenceblobs.TimerTaskInfo,
 ) {
 
 	t.timerQueueAckMgr.completeTimerTask(timerTask)
@@ -386,17 +399,17 @@ func (t *timerQueueProcessorBase) getTimerFiredCount() uint64 {
 }
 
 func (t *timerQueueProcessorBase) getDomainIDAndWorkflowExecution(
-	task *persistence.TimerTaskInfo,
+	task *persistenceblobs.TimerTaskInfo,
 ) (string, workflow.WorkflowExecution) {
 
-	return task.DomainID, workflow.WorkflowExecution{
+	return primitives.UUIDString(task.DomainID), workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(task.WorkflowID),
-		RunId:      common.StringPtr(task.RunID),
+		RunId:      common.StringPtr(primitives.UUIDString(task.RunID)),
 	}
 }
 
 func (t *timerQueueProcessorBase) processDeleteHistoryEvent(
-	task *persistence.TimerTaskInfo,
+	task *persistenceblobs.TimerTaskInfo,
 ) (retError error) {
 
 	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(t.getDomainIDAndWorkflowExecution(task))
@@ -417,12 +430,12 @@ func (t *timerQueueProcessorBase) processDeleteHistoryEvent(
 	if err != nil {
 		return err
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, lastWriteVersion, task.Version, task)
+	ok, err := verifyTaskVersion(t.shard, t.logger, primitives.UUIDString(task.DomainID), lastWriteVersion, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
 
-	domainCacheEntry, err := t.historyService.shard.GetDomainCache().GetDomainByID(task.DomainID)
+	domainCacheEntry, err := t.historyService.shard.GetDomainCache().GetDomainByID(primitives.UUIDString(task.DomainID))
 	if err != nil {
 		return err
 	}
@@ -441,7 +454,7 @@ func (t *timerQueueProcessorBase) processDeleteHistoryEvent(
 }
 
 func (t *timerQueueProcessorBase) deleteWorkflow(
-	task *persistence.TimerTaskInfo,
+	task *persistenceblobs.TimerTaskInfo,
 	context workflowExecutionContext,
 	msBuilder mutableState,
 ) error {
@@ -468,7 +481,7 @@ func (t *timerQueueProcessorBase) deleteWorkflow(
 }
 
 func (t *timerQueueProcessorBase) archiveWorkflow(
-	task *persistence.TimerTaskInfo,
+	task *persistenceblobs.TimerTaskInfo,
 	workflowContext workflowExecutionContext,
 	msBuilder mutableState,
 	domainCacheEntry *cache.DomainCacheEntry,
@@ -484,9 +497,9 @@ func (t *timerQueueProcessorBase) archiveWorkflow(
 
 	req := &archiver.ClientRequest{
 		ArchiveRequest: &archiver.ArchiveRequest{
-			DomainID:             task.DomainID,
+			DomainID:             primitives.UUIDString(task.DomainID),
 			WorkflowID:           task.WorkflowID,
-			RunID:                task.RunID,
+			RunID:                primitives.UUIDString(task.RunID),
 			DomainName:           domainCacheEntry.GetInfo().Name,
 			ShardID:              t.shard.GetShardID(),
 			Targets:              []archiver.ArchivalTarget{archiver.ArchiveTargetHistory},
@@ -535,35 +548,35 @@ func (t *timerQueueProcessorBase) archiveWorkflow(
 }
 
 func (t *timerQueueProcessorBase) deleteWorkflowExecution(
-	task *persistence.TimerTaskInfo,
+	task *persistenceblobs.TimerTaskInfo,
 ) error {
 
 	op := func() error {
 		return t.executionManager.DeleteWorkflowExecution(&persistence.DeleteWorkflowExecutionRequest{
-			DomainID:   task.DomainID,
+			DomainID:   primitives.UUIDString(task.DomainID),
 			WorkflowID: task.WorkflowID,
-			RunID:      task.RunID,
+			RunID:      primitives.UUIDString(task.RunID),
 		})
 	}
 	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 }
 
 func (t *timerQueueProcessorBase) deleteCurrentWorkflowExecution(
-	task *persistence.TimerTaskInfo,
+	task *persistenceblobs.TimerTaskInfo,
 ) error {
 
 	op := func() error {
 		return t.executionManager.DeleteCurrentWorkflowExecution(&persistence.DeleteCurrentWorkflowExecutionRequest{
-			DomainID:   task.DomainID,
+			DomainID:   primitives.UUIDString(task.DomainID),
 			WorkflowID: task.WorkflowID,
-			RunID:      task.RunID,
+			RunID:      primitives.UUIDString(task.RunID),
 		})
 	}
 	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 }
 
 func (t *timerQueueProcessorBase) deleteWorkflowHistory(
-	task *persistence.TimerTaskInfo,
+	task *persistenceblobs.TimerTaskInfo,
 	msBuilder mutableState,
 ) error {
 
@@ -582,7 +595,7 @@ func (t *timerQueueProcessorBase) deleteWorkflowHistory(
 }
 
 func (t *timerQueueProcessorBase) deleteWorkflowVisibility(
-	task *persistence.TimerTaskInfo,
+	task *persistenceblobs.TimerTaskInfo,
 ) error {
 
 	op := func() error {

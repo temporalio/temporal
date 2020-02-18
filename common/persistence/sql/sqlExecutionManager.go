@@ -28,6 +28,8 @@ import (
 	"math"
 	"time"
 
+	"github.com/gogo/protobuf/types"
+
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
 	"github.com/temporalio/temporal/common/primitives"
@@ -1087,30 +1089,26 @@ func (m *sqlExecutionManager) GetTimerIndexTasks(
 		}
 	}
 
-	resp := &p.GetTimerIndexTasksResponse{Timers: make([]*p.TimerTaskInfo, len(rows))}
+	resp := &p.GetTimerIndexTasksResponse{Timers: make([]*persistenceblobs.TimerTaskInfo, len(rows))}
 	for i, row := range rows {
-		info, err := timerTaskInfoFromBlob(row.Data, row.DataEncoding)
+		info, err := TimerTaskInfoFromBlob(row.Data, row.DataEncoding)
 		if err != nil {
 			return nil, err
 		}
-		resp.Timers[i] = &p.TimerTaskInfo{
-			VisibilityTimestamp: row.VisibilityTimestamp,
-			TaskID:              row.TaskID,
-			DomainID:            primitives.UUID(info.DomainID).String(),
-			WorkflowID:          info.GetWorkflowID(),
-			RunID:               primitives.UUID(info.RunID).String(),
-			TaskType:            int(info.GetTaskType()),
-			TimeoutType:         int(info.GetTimeoutType()),
-			EventID:             info.GetEventID(),
-			ScheduleAttempt:     info.GetScheduleAttempt(),
-			Version:             info.GetVersion(),
-		}
+		resp.Timers[i] = info
 	}
 
 	if len(resp.Timers) > request.BatchSize {
+		goVisibilityTimestamp, err := types.TimestampFromProto(resp.Timers[request.BatchSize].VisibilityTimestamp)
+		if err != nil {
+			return nil, &workflow.InternalServiceError{
+				Message: fmt.Sprintf("GetTimerTasks: error converting time for page token: %v", err),
+			}
+		}
+
 		pageToken = &timerTaskPageToken{
 			TaskID:    resp.Timers[request.BatchSize].TaskID,
-			Timestamp: resp.Timers[request.BatchSize].VisibilityTimestamp,
+			Timestamp: goVisibilityTimestamp,
 		}
 		resp.Timers = resp.Timers[:request.BatchSize]
 		nextToken, err := pageToken.serialize()

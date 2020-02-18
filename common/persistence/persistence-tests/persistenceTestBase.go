@@ -1124,8 +1124,8 @@ func (s *TestBase) CompleteReplicationTask(taskID int64) error {
 }
 
 // GetTimerIndexTasks is a utility method to get tasks from transfer task queue
-func (s *TestBase) GetTimerIndexTasks(batchSize int, getAll bool) ([]*p.TimerTaskInfo, error) {
-	result := []*p.TimerTaskInfo{}
+func (s *TestBase) GetTimerIndexTasks(batchSize int, getAll bool) ([]*pblobs.TimerTaskInfo, error) {
+	result := []*pblobs.TimerTaskInfo{}
 	var token []byte
 
 Loop:
@@ -1156,6 +1156,14 @@ func (s *TestBase) CompleteTimerTask(ts time.Time, taskID int64) error {
 		VisibilityTimestamp: ts,
 		TaskID:              taskID,
 	})
+}
+
+func (s *TestBase) CompleteTimerTaskProto(ts *types.Timestamp, taskID int64) error {
+	t, err := types.TimestampFromProto(ts)
+	if err != nil {
+		return err
+	}
+	return s.CompleteTimerTask(t, taskID)
 }
 
 // RangeCompleteTimerTask is a utility method to complete a range of timer tasks
