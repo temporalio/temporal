@@ -231,13 +231,13 @@ func taskListInfoFromBlob(b []byte, proto string) (*sqlblobs.TaskListInfo, error
 	return result, thriftRWDecode(b, proto, result)
 }
 
-func transferTaskInfoToBlob(info *sqlblobs.TransferTaskInfo) (p.DataBlob, error) {
-	return thriftRWEncode(info)
+func TransferTaskInfoToBlob(info *persistenceblobs.TransferTaskInfo) (p.DataBlob, error) {
+	return protoRWEncode(info)
 }
 
-func transferTaskInfoFromBlob(b []byte, proto string) (*sqlblobs.TransferTaskInfo, error) {
-	result := &sqlblobs.TransferTaskInfo{}
-	return result, thriftRWDecode(b, proto, result)
+func TransferTaskInfoFromBlob(b []byte, proto string) (*persistenceblobs.TransferTaskInfo, error) {
+	result := &persistenceblobs.TransferTaskInfo{}
+	return result, protoRWDecode(b, proto, result)
 }
 
 func TimerTaskInfoToBlob(info *persistenceblobs.TimerTaskInfo) (p.DataBlob, error) {
