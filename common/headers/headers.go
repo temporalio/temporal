@@ -68,28 +68,28 @@ func GetValues(ctx context.Context, headerNames ...string) []string {
 // It copies all version headers to outgoing context only if they are exist in incoming context
 // and doesn't exist in outgoing context already.
 func PropagateVersions(ctx context.Context) context.Context {
-	if md, ok := metadata.FromIncomingContext(ctx); ok {
-		outgoingMetadata := copyIncomingHeadersToOutgoing(md,
-			LibraryVersionHeaderName,
-			FeatureVersionHeaderName,
-			ClientImplHeaderName)
-		if outgoingMetadata.Len() > 0 {
-			ctx = metadata.NewOutgoingContext(ctx, outgoingMetadata)
+	if mdIncoming, ok := metadata.FromIncomingContext(ctx); ok {
+		var headersToAppend []string
+		mdOutgoing, mdOutgoingExist := metadata.FromOutgoingContext(ctx)
+		for _, headerName := range []string{LibraryVersionHeaderName, FeatureVersionHeaderName, ClientImplHeaderName} {
+			if incomingValue := mdIncoming.Get(headerName); len(incomingValue) > 0 {
+				if mdOutgoingExist {
+					if outgoingValue := mdOutgoing.Get(headerName); len(outgoingValue) > 0 {
+						continue
+					}
+				}
+				headersToAppend = append(headersToAppend, headerName, incomingValue[0])
+			}
+		}
+		if headersToAppend != nil {
+			if mdOutgoingExist {
+				ctx = metadata.AppendToOutgoingContext(ctx, headersToAppend...)
+			} else {
+				ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(headersToAppend...))
+			}
 		}
 	}
-
 	return ctx
-}
-
-func copyIncomingHeadersToOutgoing(source metadata.MD, headerNames ...string) metadata.MD {
-	outgoingMetadata := metadata.New(map[string]string{})
-	for _, headerName := range headerNames {
-		if values := source.Get(headerName); len(values) > 0 {
-			outgoingMetadata.Append(headerName, values...)
-		}
-	}
-
-	return outgoingMetadata
 }
 
 // SetVersions sets headers for internal communications.
