@@ -801,7 +801,7 @@ func NewDataBlobFromProto(blob *commonproto.DataBlob) *DataBlob {
 			Encoding: common.EncodingTypeThriftRW,
 			Data:     blob.Data,
 		}
-	case enums.EncodingTypeProto:
+	case enums.EncodingTypeProto3:
 		panic("EncodingTypeProto is not supported")
 	default:
 		panic(fmt.Sprintf("NewDataBlobFromThrift seeing unsupported enconding type: %v", blob.GetEncodingType()))

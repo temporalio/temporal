@@ -144,7 +144,7 @@ func ToThriftEncodingType(in enums.EncodingType) *shared.EncodingType {
 	case enums.EncodingTypeJSON:
 		ret := shared.EncodingTypeJSON
 		return &ret
-	case enums.EncodingTypeProto:
+	case enums.EncodingTypeProto3:
 		panic("EncodingTypeProto is not supported")
 	}
 

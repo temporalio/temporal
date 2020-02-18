@@ -23,21 +23,24 @@ package persistence
 import (
 	"fmt"
 
+	commonproto "go.temporal.io/temporal-proto/common"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common/adapter"
 )
 
 // ReadFullPageV2Events reads a full page of history events from HistoryManager. Due to storage format of V2 History
 // it is not guaranteed that pageSize amount of data is returned. Function returns the list of history events, the size
 // of data read, the next page token, and an error if present.
-func ReadFullPageV2Events(historyV2Mgr HistoryManager, req *ReadHistoryBranchRequest) ([]*shared.HistoryEvent, int, []byte, error) {
-	historyEvents := []*shared.HistoryEvent{}
+func ReadFullPageV2Events(historyV2Mgr HistoryManager, req *ReadHistoryBranchRequest) ([]*commonproto.HistoryEvent, int, []byte, error) {
+	var historyEvents []*commonproto.HistoryEvent
 	size := int(0)
 	for {
 		response, err := historyV2Mgr.ReadHistoryBranch(req)
 		if err != nil {
 			return nil, 0, nil, err
 		}
-		historyEvents = append(historyEvents, response.HistoryEvents...)
+		historyEvents = append(historyEvents, adapter.ToProtoHistoryEvents(response.HistoryEvents)...)
 		size += response.Size
 		if len(historyEvents) >= req.PageSize || len(response.NextPageToken) == 0 {
 			return historyEvents, size, response.NextPageToken, nil
