@@ -21,6 +21,8 @@
 package history
 
 import (
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/common/primitives"
 	"time"
 
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
@@ -81,11 +83,11 @@ func newTransferQueueStandbyProcessor(
 	logger = logger.WithTags(tag.ClusterName(clusterName))
 
 	transferTaskFilter := func(taskInfo *taskInfo) (bool, error) {
-		task, ok := taskInfo.task.(*persistence.TransferTaskInfo)
+		task, ok := taskInfo.task.(*persistenceblobs.TransferTaskInfo)
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
-		return taskAllocator.verifyStandbyTask(clusterName, task.DomainID, task)
+		return taskAllocator.verifyStandbyTask(clusterName, primitives.UUID(task.DomainID).String(), task)
 	}
 	maxReadAckLevel := func() int64 {
 		return shard.GetTransferMaxReadLevel()
@@ -151,7 +153,7 @@ func (t *transferQueueStandbyProcessorImpl) process(
 	taskInfo *taskInfo,
 ) (int, error) {
 
-	task, ok := taskInfo.task.(*persistence.TransferTaskInfo)
+	task, ok := taskInfo.task.(*persistenceblobs.TransferTaskInfo)
 	if !ok {
 		return metrics.TransferStandbyQueueProcessorScope, errUnexpectedQueueTask
 	}
@@ -221,14 +223,14 @@ func (t *transferQueueStandbyProcessorImpl) processActivityTask(
 	processTaskIfClosed := false
 	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
-		transferTask := taskInfo.task.(*persistence.TransferTaskInfo)
+		transferTask := taskInfo.task.(*persistenceblobs.TransferTaskInfo)
 
 		activityInfo, ok := mutableState.GetActivityInfo(transferTask.ScheduleID)
 		if !ok {
 			return nil, nil
 		}
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, activityInfo.Version, transferTask.Version, transferTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, primitives.UUID(transferTask.DomainID).String(), activityInfo.Version, transferTask.Version, transferTask)
 		if err != nil || !ok {
 			return nil, err
 		}
@@ -264,7 +266,7 @@ func (t *transferQueueStandbyProcessorImpl) processDecisionTask(
 	processTaskIfClosed := false
 	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
-		transferTask := taskInfo.task.(*persistence.TransferTaskInfo)
+		transferTask := taskInfo.task.(*persistenceblobs.TransferTaskInfo)
 
 		decisionInfo, ok := mutableState.GetDecisionInfo(transferTask.ScheduleID)
 		if !ok {
@@ -275,7 +277,7 @@ func (t *transferQueueStandbyProcessorImpl) processDecisionTask(
 		workflowTimeout := executionInfo.WorkflowTimeout
 		decisionTimeout := common.MinInt32(workflowTimeout, common.MaxTaskTimeout)
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, decisionInfo.Version, transferTask.Version, transferTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, primitives.UUID(transferTask.DomainID).String(), decisionInfo.Version, transferTask.Version, transferTask)
 		if err != nil || !ok {
 			return nil, err
 		}
@@ -312,7 +314,7 @@ func (t *transferQueueStandbyProcessorImpl) processCloseExecution(
 	processTaskIfClosed := true
 	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
-		transferTask := taskInfo.task.(*persistence.TransferTaskInfo)
+		transferTask := taskInfo.task.(*persistenceblobs.TransferTaskInfo)
 
 		if mutableState.IsWorkflowExecutionRunning() {
 			// this can happen if workflow is reset.
@@ -343,7 +345,7 @@ func (t *transferQueueStandbyProcessorImpl) processCloseExecution(
 		if err != nil {
 			return nil, err
 		}
-		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, lastWriteVersion, transferTask.Version, transferTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, primitives.UUID(transferTask.DomainID).String(), lastWriteVersion, transferTask.Version, transferTask)
 		if err != nil || !ok {
 			return nil, err
 		}
@@ -351,9 +353,9 @@ func (t *transferQueueStandbyProcessorImpl) processCloseExecution(
 		// DO NOT REPLY TO PARENT
 		// since event replication should be done by active cluster
 		return nil, t.recordWorkflowClosed(
-			transferTask.DomainID,
+			primitives.UUID(transferTask.DomainID).String(),
 			transferTask.WorkflowID,
-			transferTask.RunID,
+			primitives.UUID(transferTask.RunID).String(),
 			workflowTypeName,
 			workflowStartTimestamp,
 			workflowExecutionTimestamp.UnixNano(),
@@ -381,14 +383,14 @@ func (t *transferQueueStandbyProcessorImpl) processCancelExecution(
 	processTaskIfClosed := false
 	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
-		transferTask := taskInfo.task.(*persistence.TransferTaskInfo)
+		transferTask := taskInfo.task.(*persistenceblobs.TransferTaskInfo)
 
 		requestCancelInfo, ok := mutableState.GetRequestCancelInfo(transferTask.ScheduleID)
 		if !ok {
 			return nil, nil
 		}
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, requestCancelInfo.Version, transferTask.Version, transferTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, primitives.UUID(transferTask.DomainID).String(), requestCancelInfo.Version, transferTask.Version, transferTask)
 		if err != nil || !ok {
 			return nil, err
 		}
@@ -418,14 +420,14 @@ func (t *transferQueueStandbyProcessorImpl) processSignalExecution(
 	processTaskIfClosed := false
 	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
-		transferTask := taskInfo.task.(*persistence.TransferTaskInfo)
+		transferTask := taskInfo.task.(*persistenceblobs.TransferTaskInfo)
 
 		signalInfo, ok := mutableState.GetSignalInfo(transferTask.ScheduleID)
 		if !ok {
 			return nil, nil
 		}
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, signalInfo.Version, transferTask.Version, transferTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, primitives.UUID(transferTask.DomainID).String(), signalInfo.Version, transferTask.Version, transferTask)
 		if err != nil || !ok {
 			return nil, err
 		}
@@ -455,14 +457,14 @@ func (t *transferQueueStandbyProcessorImpl) processStartChildExecution(
 	processTaskIfClosed := false
 	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
-		transferTask := taskInfo.task.(*persistence.TransferTaskInfo)
+		transferTask := taskInfo.task.(*persistenceblobs.TransferTaskInfo)
 
 		childWorkflowInfo, ok := mutableState.GetChildExecutionInfo(transferTask.ScheduleID)
 		if !ok {
 			return nil, nil
 		}
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, childWorkflowInfo.Version, transferTask.Version, transferTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, primitives.UUID(transferTask.DomainID).String(), childWorkflowInfo.Version, transferTask.Version, transferTask)
 		if err != nil || !ok {
 			return nil, err
 		}
@@ -499,7 +501,7 @@ func (t *transferQueueStandbyProcessorImpl) processRecordWorkflowStarted(
 		taskInfo,
 		func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
-			transferTask := taskInfo.task.(*persistence.TransferTaskInfo)
+			transferTask := taskInfo.task.(*persistenceblobs.TransferTaskInfo)
 
 			return nil, t.processRecordWorkflowStartedOrUpsertHelper(transferTask, mutableState, true)
 		},
@@ -517,7 +519,7 @@ func (t *transferQueueStandbyProcessorImpl) processUpsertWorkflowSearchAttribute
 		taskInfo,
 		func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
-			transferTask := taskInfo.task.(*persistence.TransferTaskInfo)
+			transferTask := taskInfo.task.(*persistenceblobs.TransferTaskInfo)
 			return nil, t.processRecordWorkflowStartedOrUpsertHelper(transferTask, mutableState, false)
 		},
 		standbyTaskPostActionNoOp,
@@ -525,7 +527,7 @@ func (t *transferQueueStandbyProcessorImpl) processUpsertWorkflowSearchAttribute
 }
 
 func (t *transferQueueStandbyProcessorImpl) processRecordWorkflowStartedOrUpsertHelper(
-	transferTask *persistence.TransferTaskInfo,
+	transferTask *persistenceblobs.TransferTaskInfo,
 	mutableState mutableState,
 	isRecordStart bool,
 ) error {
@@ -537,7 +539,7 @@ func (t *transferQueueStandbyProcessorImpl) processRecordWorkflowStartedOrUpsert
 		if err != nil {
 			return err
 		}
-		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, startVersion, transferTask.Version, transferTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, primitives.UUID(transferTask.DomainID).String(), startVersion, transferTask.Version, transferTask)
 		if err != nil || !ok {
 			return err
 		}
@@ -557,9 +559,9 @@ func (t *transferQueueStandbyProcessorImpl) processRecordWorkflowStartedOrUpsert
 
 	if isRecordStart {
 		return t.recordWorkflowStarted(
-			transferTask.DomainID,
+			primitives.UUID(transferTask.DomainID).String(),
 			transferTask.WorkflowID,
-			transferTask.RunID,
+			primitives.UUID(transferTask.RunID).String(),
 			wfTypeName,
 			startTimestamp,
 			executionTimestamp.UnixNano(),
@@ -570,9 +572,9 @@ func (t *transferQueueStandbyProcessorImpl) processRecordWorkflowStartedOrUpsert
 		)
 	}
 	return t.upsertWorkflowExecution(
-		transferTask.DomainID,
+		primitives.UUID(transferTask.DomainID).String(),
 		transferTask.WorkflowID,
-		transferTask.RunID,
+		primitives.UUID(transferTask.RunID).String(),
 		wfTypeName,
 		startTimestamp,
 		executionTimestamp.UnixNano(),
@@ -591,7 +593,7 @@ func (t *transferQueueStandbyProcessorImpl) processTransfer(
 	postActionFn standbyPostActionFn,
 ) (retError error) {
 
-	transferTask := taskInfo.task.(*persistence.TransferTaskInfo)
+	transferTask := taskInfo.task.(*persistenceblobs.TransferTaskInfo)
 	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
 		t.getDomainIDAndWorkflowExecution(transferTask),
 	)
@@ -638,7 +640,7 @@ func (t *transferQueueStandbyProcessorImpl) pushActivity(
 	pushActivityInfo := postActionInfo.(*pushActivityToMatchingInfo)
 	timeout := common.MinInt32(pushActivityInfo.activityScheduleToStartTimeout, common.MaxTaskTimeout)
 	return t.transferQueueProcessorBase.pushActivity(
-		task.task.(*persistence.TransferTaskInfo),
+		task.task.(*persistenceblobs.TransferTaskInfo),
 		timeout,
 	)
 }
@@ -656,7 +658,7 @@ func (t *transferQueueStandbyProcessorImpl) pushDecision(
 	pushDecisionInfo := postActionInfo.(*pushDecisionToMatchingInfo)
 	timeout := common.MinInt32(pushDecisionInfo.decisionScheduleToStartTimeout, common.MaxTaskTimeout)
 	return t.transferQueueProcessorBase.pushDecision(
-		task.task.(*persistence.TransferTaskInfo),
+		task.task.(*persistenceblobs.TransferTaskInfo),
 		&pushDecisionInfo.tasklist,
 		timeout,
 	)
@@ -672,7 +674,7 @@ func (t *transferQueueStandbyProcessorImpl) fetchHistoryFromRemote(
 		return nil
 	}
 
-	transferTask := taskInfo.task.(*persistence.TransferTaskInfo)
+	transferTask := taskInfo.task.(*persistenceblobs.TransferTaskInfo)
 	resendInfo := postActionInfo.(*historyResendInfo)
 
 	t.metricsClient.IncCounter(metrics.HistoryRereplicationByTransferTaskScope, metrics.CadenceClientRequests)
@@ -682,9 +684,9 @@ func (t *transferQueueStandbyProcessorImpl) fetchHistoryFromRemote(
 	var err error
 	if resendInfo.lastEventID != common.EmptyEventID && resendInfo.lastEventVersion != common.EmptyVersion {
 		err = t.nDCHistoryResender.SendSingleWorkflowHistory(
-			transferTask.DomainID,
+			primitives.UUID(transferTask.DomainID).String(),
 			transferTask.WorkflowID,
-			transferTask.RunID,
+			primitives.UUID(transferTask.RunID).String(),
 			resendInfo.lastEventID,
 			resendInfo.lastEventVersion,
 			common.EmptyEventID,
@@ -692,12 +694,11 @@ func (t *transferQueueStandbyProcessorImpl) fetchHistoryFromRemote(
 		)
 	} else if resendInfo.nextEventID != nil {
 		err = t.historyRereplicator.SendMultiWorkflowHistory(
-			transferTask.DomainID,
-
+			primitives.UUID(transferTask.DomainID).String(),
 			transferTask.WorkflowID,
-			transferTask.RunID,
+			primitives.UUID(transferTask.RunID).String(),
 			*resendInfo.nextEventID,
-			transferTask.RunID,
+			primitives.UUID(transferTask.RunID).String(),
 			common.EndEventID, // use common.EndEventID since we do not know where is the end
 		)
 	} else {
@@ -709,9 +710,9 @@ func (t *transferQueueStandbyProcessorImpl) fetchHistoryFromRemote(
 	if err != nil {
 		t.logger.Error("Error re-replicating history from remote.",
 			tag.ShardID(t.shard.GetShardID()),
-			tag.WorkflowDomainID(transferTask.DomainID),
+			tag.WorkflowDomainIDBytes(transferTask.DomainID),
 			tag.WorkflowID(transferTask.WorkflowID),
-			tag.WorkflowRunID(transferTask.RunID),
+			tag.WorkflowRunIDBytes(transferTask.RunID),
 			tag.SourceCluster(t.clusterName))
 	}
 

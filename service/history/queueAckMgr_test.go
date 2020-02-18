@@ -130,10 +130,10 @@ func (s *queueAckMgrSuite) TestReadTimerTasks() {
 	moreInput := false
 	taskID1 := int64(59)
 	tasksInput := []queueTaskInfo{
-		&p.TransferTaskInfo{
-			DomainID:   "some random domain ID",
+		&persistenceblobs.TransferTaskInfo{
+			DomainID:   TestDomainId,
 			WorkflowID: "some random workflow ID",
-			RunID:      uuid.New(),
+			RunID:      uuid.NewRandom(),
 			TaskID:     taskID1,
 			TaskList:   "some random tasklist",
 			TaskType:   1,
@@ -152,10 +152,10 @@ func (s *queueAckMgrSuite) TestReadTimerTasks() {
 	moreInput = true
 	taskID2 := int64(60)
 	tasksInput = []queueTaskInfo{
-		&p.TransferTaskInfo{
-			DomainID:   "some random domain ID",
+		&persistenceblobs.TransferTaskInfo{
+			DomainID:   TestDomainId,
 			WorkflowID: "some random workflow ID",
-			RunID:      uuid.New(),
+			RunID:      uuid.NewRandom(),
 			TaskID:     taskID2,
 			TaskList:   "some random tasklist",
 			TaskType:   1,
@@ -180,10 +180,10 @@ func (s *queueAckMgrSuite) TestReadCompleteTimerTasks() {
 	moreInput := false
 	taskID := int64(59)
 	tasksInput := []queueTaskInfo{
-		&p.TransferTaskInfo{
-			DomainID:   "some random domain ID",
+		&persistenceblobs.TransferTaskInfo{
+			DomainID:   TestDomainId,
 			WorkflowID: "some random workflow ID",
-			RunID:      uuid.New(),
+			RunID:      uuid.NewRandom(),
 			TaskID:     taskID,
 			TaskList:   "some random tasklist",
 			TaskType:   1,
@@ -213,28 +213,28 @@ func (s *queueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	taskID2 := int64(60)
 	taskID3 := int64(61)
 	tasksInput := []queueTaskInfo{
-		&p.TransferTaskInfo{
-			DomainID:   "some random domain ID",
+		&persistenceblobs.TransferTaskInfo{
+			DomainID:   TestDomainId,
 			WorkflowID: "some random workflow ID",
-			RunID:      uuid.New(),
+			RunID:      uuid.NewRandom(),
 			TaskID:     taskID1,
 			TaskList:   "some random tasklist",
 			TaskType:   1,
 			ScheduleID: 28,
 		},
-		&p.TransferTaskInfo{
-			DomainID:   "some random domain ID",
+		&persistenceblobs.TransferTaskInfo{
+			DomainID:   TestDomainId,
 			WorkflowID: "some random workflow ID",
-			RunID:      uuid.New(),
+			RunID:      uuid.NewRandom(),
 			TaskID:     taskID2,
 			TaskList:   "some random tasklist",
 			TaskType:   1,
 			ScheduleID: 28,
 		},
-		&p.TransferTaskInfo{
-			DomainID:   "some random domain ID",
+		&persistenceblobs.TransferTaskInfo{
+			DomainID:   TestDomainId,
 			WorkflowID: "some random workflow ID",
-			RunID:      uuid.New(),
+			RunID:      uuid.NewRandom(),
 			TaskID:     taskID3,
 			TaskList:   "some random tasklist",
 			TaskType:   1,
@@ -319,10 +319,10 @@ func (s *queueFailoverAckMgrSuite) TestReadQueueTasks() {
 	moreInput := true
 	taskID1 := int64(59)
 	tasksInput := []queueTaskInfo{
-		&p.TransferTaskInfo{
-			DomainID:   "some random domain ID",
+		&persistenceblobs.TransferTaskInfo{
+			DomainID:   TestDomainId,
 			WorkflowID: "some random workflow ID",
-			RunID:      uuid.New(),
+			RunID:      uuid.NewRandom(),
 			TaskID:     taskID1,
 			TaskList:   "some random tasklist",
 			TaskType:   1,
@@ -342,10 +342,10 @@ func (s *queueFailoverAckMgrSuite) TestReadQueueTasks() {
 	moreInput = false
 	taskID2 := int64(60)
 	tasksInput = []queueTaskInfo{
-		&p.TransferTaskInfo{
-			DomainID:   "some random domain ID",
+		&persistenceblobs.TransferTaskInfo{
+			DomainID:   TestDomainId,
 			WorkflowID: "some random workflow ID",
-			RunID:      uuid.New(),
+			RunID:      uuid.NewRandom(),
 			TaskID:     taskID2,
 			TaskList:   "some random tasklist",
 			TaskType:   1,
@@ -372,19 +372,19 @@ func (s *queueFailoverAckMgrSuite) TestReadCompleteQueueTasks() {
 	taskID1 := int64(59)
 	taskID2 := int64(60)
 	tasksInput := []queueTaskInfo{
-		&p.TransferTaskInfo{
-			DomainID:   "some random domain ID",
+		&persistenceblobs.TransferTaskInfo{
+			DomainID:   TestDomainId,
 			WorkflowID: "some random workflow ID",
-			RunID:      uuid.New(),
+			RunID:      uuid.NewRandom(),
 			TaskID:     taskID1,
 			TaskList:   "some random tasklist",
 			TaskType:   1,
 			ScheduleID: 28,
 		},
-		&p.TransferTaskInfo{
-			DomainID:   "some random domain ID",
+		&persistenceblobs.TransferTaskInfo{
+			DomainID:   TestDomainId,
 			WorkflowID: "some random workflow ID",
-			RunID:      uuid.New(),
+			RunID:      uuid.NewRandom(),
 			TaskID:     taskID2,
 			TaskList:   "some random tasklist",
 			TaskType:   2,
