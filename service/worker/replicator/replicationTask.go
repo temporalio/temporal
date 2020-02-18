@@ -26,11 +26,11 @@ import (
 
 	"github.com/gogo/status"
 	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/errordetails"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/client/history"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
@@ -522,7 +522,15 @@ func (t *workflowReplicationTask) convertRetryTaskError(
 ) (*shared.RetryTaskError, bool) {
 
 	if st, ok := status.FromError(err); ok {
-		err = adapter.ToThriftError(st)
+		if f, ok := errordetails.GetRetryTaskFailure(st); ok {
+			return &shared.RetryTaskError{
+				Message:     st.Message(),
+				DomainId:    &f.DomainId,
+				WorkflowId:  &f.WorkflowId,
+				RunId:       &f.RunId,
+				NextEventId: &f.NextEventId,
+			}, true
+		}
 	}
 
 	retError, ok := err.(*shared.RetryTaskError)
@@ -534,7 +542,18 @@ func (t *workflowReplicationTask) convertRetryTaskV2Error(
 ) (*shared.RetryTaskV2Error, bool) {
 
 	if st, ok := status.FromError(err); ok {
-		err = adapter.ToThriftError(st)
+		if f, ok := errordetails.GetRetryTaskV2Failure(st); ok {
+			return &shared.RetryTaskV2Error{
+				Message:           st.Message(),
+				DomainId:          &f.DomainId,
+				WorkflowId:        &f.WorkflowId,
+				RunId:             &f.RunId,
+				StartEventId:      &f.StartEventId,
+				StartEventVersion: &f.StartEventVersion,
+				EndEventId:        &f.EndEventId,
+				EndEventVersion:   &f.EndEventVersion,
+			}, true
+		}
 	}
 
 	retError, ok := err.(*shared.RetryTaskV2Error)
