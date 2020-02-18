@@ -926,7 +926,7 @@ type (
 
 	// GetTransferTasksResponse is the response to GetTransferTasksRequest
 	GetTransferTasksResponse struct {
-		Tasks         []*TransferTaskInfo
+		Tasks         []*pblobs.TransferTaskInfo
 		NextPageToken []byte
 	}
 
