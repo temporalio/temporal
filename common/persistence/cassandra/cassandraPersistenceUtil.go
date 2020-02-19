@@ -22,6 +22,7 @@ package cassandra
 
 import (
 	"fmt"
+	"github.com/temporalio/temporal/common/persistence/serialization"
 	"time"
 
 	"github.com/gogo/protobuf/types"
@@ -29,7 +30,6 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common/persistence/sql"
 	"github.com/temporalio/temporal/common/primitives"
 
 	"github.com/gocql/gocql"
@@ -1048,7 +1048,7 @@ func createTransferTasks(
 			RecordVisibility:        recordVisibility,
 		}
 
-		datablob, err := sql.TransferTaskInfoToBlob(p)
+		datablob, err := serialization.TransferTaskInfoToBlob(p)
 		if err != nil {
 			return err
 		}
@@ -1112,7 +1112,7 @@ func createReplicationTasks(
 			}
 		}
 
-		datablob, err := sql.ReplicationTaskInfoToBlob(&persistenceblobs.ReplicationTaskInfo{
+		datablob, err := serialization.ReplicationTaskInfoToBlob(&persistenceblobs.ReplicationTaskInfo{
 			DomainID:                primitives.MustParseUUID(domainID),
 			WorkflowID:              workflowID,
 			RunID:                   primitives.MustParseUUID(runID),
@@ -1207,7 +1207,7 @@ func createTimerTasks(
 			return err
 		}
 
-		datablob, err := sql.TimerTaskInfoToBlob(&persistenceblobs.TimerTaskInfo{
+		datablob, err := serialization.TimerTaskInfoToBlob(&persistenceblobs.TimerTaskInfo{
 			DomainID:            primitives.MustParseUUID(domainID),
 			WorkflowID:          workflowID,
 			RunID:               primitives.MustParseUUID(runID),

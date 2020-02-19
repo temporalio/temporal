@@ -23,6 +23,7 @@ package sql
 import (
 	"database/sql"
 	"fmt"
+	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
@@ -86,7 +87,7 @@ func (m *sqlShardManager) GetShard(request *persistence.GetShardRequest) (*persi
 		}
 	}
 
-	shardInfo, err := ShardInfoFromBlob(row.Data, row.DataEncoding, m.currentClusterName)
+	shardInfo, err := serialization.ShardInfoFromBlob(row.Data, row.DataEncoding, m.currentClusterName)
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +171,7 @@ func readLockShard(tx sqlplugin.Tx, shardID int, oldRangeID int64) error {
 }
 
 func shardInfoToShardsRow(s persistenceblobs.ShardInfo) (*sqlplugin.ShardsRow, error) {
-	blob, err := ShardInfoToBlob(&s)
+	blob, err := serialization.ShardInfoToBlob(&s)
 	if err != nil {
 		return nil, err
 	}

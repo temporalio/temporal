@@ -23,6 +23,7 @@ package sql
 import (
 	"database/sql"
 	"fmt"
+	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/temporalio/temporal/common/primitives"
 
@@ -123,7 +124,7 @@ func (m *sqlMetadataManagerV2) CreateDomain(request *persistence.InternalCreateD
 		BadBinariesEncoding:         badBinariesEncoding,
 	}
 
-	blob, err := domainInfoToBlob(domainInfo)
+	blob, err := serialization.domainInfoToBlob(domainInfo)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +203,7 @@ func (m *sqlMetadataManagerV2) GetDomain(request *persistence.GetDomainRequest) 
 }
 
 func (m *sqlMetadataManagerV2) domainRowToGetDomainResponse(row *sqlplugin.DomainRow) (*persistence.InternalGetDomainResponse, error) {
-	domainInfo, err := domainInfoFromBlob(row.Data, row.DataEncoding)
+	domainInfo, err := serialization.domainInfoFromBlob(row.Data, row.DataEncoding)
 	if err != nil {
 		return nil, err
 	}
@@ -284,7 +285,7 @@ func (m *sqlMetadataManagerV2) UpdateDomain(request *persistence.InternalUpdateD
 		BadBinariesEncoding:         badBinariesEncoding,
 	}
 
-	blob, err := domainInfoToBlob(domainInfo)
+	blob, err := serialization.domainInfoToBlob(domainInfo)
 	if err != nil {
 		return err
 	}

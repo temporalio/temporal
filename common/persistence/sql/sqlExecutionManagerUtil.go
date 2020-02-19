@@ -24,6 +24,7 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
+	"github.com/temporalio/temporal/common/persistence/serialization"
 	"time"
 
 	"github.com/gogo/protobuf/types"
@@ -815,7 +816,7 @@ func createTransferTasks(
 
 		info.VisibilityTimestamp = t
 
-		blob, err := TransferTaskInfoToBlob(info)
+		blob, err := serialization.TransferTaskInfoToBlob(info)
 		if err != nil {
 			return err
 		}
@@ -901,7 +902,7 @@ func createReplicationTasks(
 			}
 		}
 
-		blob, err := ReplicationTaskInfoToBlob(&persistenceblobs.ReplicationTaskInfo{
+		blob, err := serialization.ReplicationTaskInfoToBlob(&persistenceblobs.ReplicationTaskInfo{
 			TaskID:                  task.GetTaskID(),
 			DomainID:                domainID,
 			WorkflowID:              workflowID,
@@ -1012,7 +1013,7 @@ func createTimerTasks(
 			}
 
 			info.VisibilityTimestamp = protoVisTs
-			blob, err := TimerTaskInfoToBlob(info)
+			blob, err := serialization.TimerTaskInfoToBlob(info)
 			if err != nil {
 				return err
 			}
@@ -1322,7 +1323,7 @@ func buildExecutionRow(
 		info.CancelRequestID = &executionInfo.CancelRequestID
 	}
 
-	blob, err := workflowExecutionInfoToBlob(info)
+	blob, err := serialization.workflowExecutionInfoToBlob(info)
 	if err != nil {
 		return nil, err
 	}

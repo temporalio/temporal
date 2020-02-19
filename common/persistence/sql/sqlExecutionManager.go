@@ -25,6 +25,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/temporalio/temporal/common/persistence/serialization"
 	"math"
 	"time"
 
@@ -234,7 +235,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 		}
 	}
 
-	info, err := workflowExecutionInfoFromBlob(execution.Data, execution.DataEncoding)
+	info, err := serialization.workflowExecutionInfoFromBlob(execution.Data, execution.DataEncoding)
 	if err != nil {
 		return nil, err
 	}
@@ -856,7 +857,7 @@ func (m *sqlExecutionManager) GetTransferTasks(
 	}
 	resp := &p.GetTransferTasksResponse{Tasks: make([]*persistenceblobs.TransferTaskInfo, len(rows))}
 	for i, row := range rows {
-		info, err := TransferTaskInfoFromBlob(row.Data, row.DataEncoding)
+		info, err := serialization.TransferTaskInfoFromBlob(row.Data, row.DataEncoding)
 		if err != nil {
 			return nil, err
 		}
@@ -948,7 +949,7 @@ func (m *sqlExecutionManager) populateGetReplicationTasksResponse(
 
 	var tasks = make([]*persistenceblobs.ReplicationTaskInfo, len(rows))
 	for i, row := range rows {
-		info, err := ReplicationTaskInfoFromBlob(row.Data, row.DataEncoding)
+		info, err := serialization.ReplicationTaskInfoFromBlob(row.Data, row.DataEncoding)
 		if err != nil {
 			return nil, err
 		}
@@ -1115,7 +1116,7 @@ func (m *sqlExecutionManager) GetTimerIndexTasks(
 
 	resp := &p.GetTimerIndexTasksResponse{Timers: make([]*persistenceblobs.TimerTaskInfo, len(rows))}
 	for i, row := range rows {
-		info, err := TimerTaskInfoFromBlob(row.Data, row.DataEncoding)
+		info, err := serialization.TimerTaskInfoFromBlob(row.Data, row.DataEncoding)
 		if err != nil {
 			return nil, err
 		}
@@ -1183,7 +1184,7 @@ func (m *sqlExecutionManager) RangeCompleteTimerTask(
 
 func (m *sqlExecutionManager) PutReplicationTaskToDLQ(request *p.PutReplicationTaskToDLQRequest) error {
 	replicationTask := request.TaskInfo
-	blob, err := ReplicationTaskInfoToBlob(replicationTask)
+	blob, err := serialization.ReplicationTaskInfoToBlob(replicationTask)
 
 	if err != nil {
 		return err
