@@ -33,13 +33,13 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/elasticsearch"
@@ -450,12 +450,12 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 		{
 			Name:     "nil request",
 			Request:  nil,
-			Expected: &shared.BadRequestError{Message: "Request is nil."},
+			Expected: &serviceerror.InvalidArgument{Message: "Request is nil."},
 		},
 		{
 			Name:     "empty request",
 			Request:  &adminservice.AddSearchAttributeRequest{},
-			Expected: &shared.BadRequestError{Message: "SearchAttributes are not provided"},
+			Expected: &serviceerror.InvalidArgument{Message: "SearchAttributes are not set on request."},
 		},
 		{
 			Name: "no advanced config",
@@ -464,12 +464,12 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 					"CustomKeywordField": 1,
 				},
 			},
-			Expected: &shared.BadRequestError{Message: "AdvancedVisibilityStore is not configured for this Cadence Cluster"},
+			Expected: &serviceerror.InvalidArgument{Message: "AdvancedVisibilityStore is not configured for this cluster."},
 		},
 	}
 	for _, testCase := range testCases1 {
 		resp, err := handler.AddSearchAttribute(ctx, testCase.Request)
-		s.Equal(adapter.ToProtoError(testCase.Expected), err)
+		s.Equal(testCase.Expected, err)
 		s.Nil(resp)
 	}
 
@@ -495,7 +495,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 					"WorkflowID": 1,
 				},
 			},
-			Expected: &shared.BadRequestError{Message: "Key [WorkflowID] is reserved by system"},
+			Expected: &serviceerror.InvalidArgument{Message: "Key [WorkflowID] is reserved by system."},
 		},
 		{
 			Name: "key already whitelisted",
@@ -504,12 +504,12 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 					"testkey": 1,
 				},
 			},
-			Expected: &shared.BadRequestError{Message: "Key [testkey] is already whitelist"},
+			Expected: &serviceerror.InvalidArgument{Message: "Key [testkey] is already whitelist."},
 		},
 	}
 	for _, testCase := range testCases2 {
 		resp, err := handler.AddSearchAttribute(ctx, testCase.Request)
-		s.Equal(adapter.ToProtoError(testCase.Expected), err)
+		s.Equal(testCase.Expected, err)
 		s.Nil(resp)
 	}
 
@@ -520,7 +520,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 				"testkey2": 1,
 			},
 		},
-		Expected: &shared.InternalServiceError{Message: "Failed to update dynamic config, err: error"},
+		Expected: &serviceerror.Internal{Message: "Failed to update dynamic config, err: error."},
 	}
 	dynamicConfig.EXPECT().UpdateValue(dynamicconfig.ValidSearchAttributes, map[string]interface{}{
 		"testkey":  shared.IndexedValueTypeKeyword,
@@ -528,7 +528,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 	}).Return(errors.New("error"))
 
 	resp, err := handler.AddSearchAttribute(ctx, dcUpdateTest.Request)
-	s.Equal(adapter.ToProtoError(dcUpdateTest.Expected), err)
+	s.Equal(dcUpdateTest.Expected, err)
 	s.Nil(resp)
 
 	// ES operations tests
@@ -541,10 +541,10 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 				"testkey3": -1,
 			},
 		},
-		Expected: &shared.BadRequestError{Message: "Unknown value type, -1"},
+		Expected: &serviceerror.InvalidArgument{Message: "Unknown value type, -1."},
 	}
 	resp, err = handler.AddSearchAttribute(ctx, convertFailedTest.Request)
-	s.Equal(adapter.ToProtoError(convertFailedTest.Expected), err)
+	s.Equal(convertFailedTest.Expected, err)
 	s.Nil(resp)
 
 	esClient.On("PutMapping", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -556,10 +556,10 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 				"testkey4": 1,
 			},
 		},
-		Expected: &shared.InternalServiceError{Message: "Failed to update ES mapping, err: error"},
+		Expected: &serviceerror.Internal{Message: "Failed to update ES mapping, err: error."},
 	}
 	resp, err = handler.AddSearchAttribute(ctx, esErrorTest.Request)
-	s.Equal(adapter.ToProtoError(esErrorTest.Expected), err)
+	s.Equal(esErrorTest.Expected, err)
 	s.Nil(resp)
 }
 
@@ -589,12 +589,12 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Permission() {
 			Request: &adminservice.AddSearchAttributeRequest{
 				SecurityToken: common.DefaultAdminOperationToken,
 			},
-			Expected: &shared.BadRequestError{Message: "SearchAttributes are not provided"},
+			Expected: &serviceerror.InvalidArgument{Message: "SearchAttributes are not set on request."},
 		},
 	}
 	for _, testCase := range testCases {
 		resp, err := handler.AddSearchAttribute(ctx, testCase.Request)
-		s.Equal(adapter.ToProtoError(testCase.Expected), err)
+		s.Equal(testCase.Expected, err)
 		s.Nil(resp)
 	}
 }

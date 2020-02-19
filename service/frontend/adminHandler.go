@@ -24,7 +24,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strconv"
 	"time"
 
@@ -33,6 +32,7 @@ import (
 	"github.com/pborman/uuid"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
@@ -120,10 +120,10 @@ func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *admins
 		return nil, adh.error(errNoPermission, scope)
 	}
 	if len(request.GetSearchAttribute()) == 0 {
-		return nil, adh.error(&shared.BadRequestError{Message: "SearchAttributes are not provided"}, scope)
+		return nil, adh.error(errSearchAttributesNotSet, scope)
 	}
 	if err := adh.validateConfigForAdvanceVisibility(); err != nil {
-		return nil, adh.error(&shared.BadRequestError{Message: fmt.Sprintf("AdvancedVisibilityStore is not configured for this Cadence Cluster")}, scope)
+		return nil, adh.error(errAdvancedVisibilityStoreIsNotConfigured, scope)
 	}
 
 	searchAttr := request.GetSearchAttribute()
@@ -131,10 +131,10 @@ func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *admins
 		dynamicconfig.ValidSearchAttributes, nil, definition.GetDefaultIndexedKeys())
 	for k, v := range searchAttr {
 		if definition.IsSystemIndexedKey(k) {
-			return nil, adh.error(&shared.BadRequestError{Message: fmt.Sprintf("Key [%s] is reserved by system", k)}, scope)
+			return nil, adh.error(errKeyIsReservedBySystem.MessageArgs(k), scope)
 		}
 		if _, exist := currentValidAttr[k]; exist {
-			return nil, adh.error(&shared.BadRequestError{Message: fmt.Sprintf("Key [%s] is already whitelist", k)}, scope)
+			return nil, adh.error(errKeyIsAlreadyWhitelisted.MessageArgs(k), scope)
 		}
 
 		currentValidAttr[k] = int(v)
@@ -143,7 +143,7 @@ func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *admins
 	// update dynamic config
 	err := adh.params.DynamicConfig.UpdateValue(dynamicconfig.ValidSearchAttributes, currentValidAttr)
 	if err != nil {
-		return nil, adh.error(&shared.InternalServiceError{Message: fmt.Sprintf("Failed to update dynamic config, err: %v", err)}, scope)
+		return nil, adh.error(errFailedUpdateDynamicConfig.MessageArgs(err), scope)
 	}
 
 	// update elasticsearch mapping, new added field will not be able to remove or update
@@ -151,18 +151,18 @@ func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *admins
 	for k, v := range searchAttr {
 		valueType := adh.convertIndexedValueTypeToESDataType(v)
 		if len(valueType) == 0 {
-			return nil, adh.error(&shared.BadRequestError{Message: fmt.Sprintf("Unknown value type, %v", v)}, scope)
+			return nil, adh.error(errUnknownValueType.MessageArgs(v), scope)
 		}
 		err := adh.params.ESClient.PutMapping(ctx, index, definition.Attr, k, valueType)
 		if elastic.IsNotFound(err) {
 			err = adh.params.ESClient.CreateIndex(ctx, index)
 			if err != nil {
-				return nil, adh.error(&shared.InternalServiceError{Message: fmt.Sprintf("Failed to create ES index, err: %v", err)}, scope)
+				return nil, adh.error(errFailedToCreateESIndex.MessageArgs(err), scope)
 			}
 			err = adh.params.ESClient.PutMapping(ctx, index, definition.Attr, k, valueType)
 		}
 		if err != nil {
-			return nil, adh.error(&shared.InternalServiceError{Message: fmt.Sprintf("Failed to update ES mapping, err: %v", err)}, scope)
+			return nil, adh.error(errFailedToUpdateESMapping.MessageArgs(err), scope)
 		}
 	}
 
@@ -297,19 +297,19 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 	scope = scope.Tagged(metrics.DomainTag(request.GetDomain()))
 
 	execution := request.Execution
-	if len(execution.GetWorkflowId()) == 0 {
-		return nil, &shared.BadRequestError{Message: "Invalid WorkflowID."}
+	if execution.GetWorkflowId() == "" {
+		return nil, errWorkflowIDNotSet
 	}
 	// TODO currently, this API is only going to be used by re-send history events
 	// to remote cluster if kafka is lossy again, in the future, this API can be used
 	// by CLI and client, then empty runID (meaning the current workflow) should be allowed
-	if len(execution.GetRunId()) == 0 || uuid.Parse(execution.GetRunId()) == nil {
-		return nil, &shared.BadRequestError{Message: "Invalid RunID."}
+	if execution.GetRunId() == "" || uuid.Parse(execution.GetRunId()) == nil {
+		return nil, errInvalidRunID
 	}
 
 	pageSize := int(request.GetMaximumPageSize())
 	if pageSize <= 0 {
-		return nil, &shared.BadRequestError{Message: "Invalid PageSize."}
+		return nil, errInvalidPageSize
 	}
 
 	var token *getHistoryContinuationToken
@@ -328,7 +328,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 			// so as long as customer do not change next event ID during pagination,
 			// next event ID in the token <= next event ID in the request.
 			request.GetNextEventId() < token.NextEventID {
-			return nil, &shared.BadRequestError{Message: "Invalid pagination token."}
+			return nil, errInvalidPaginationToken
 		}
 
 		// for the rest variables in the token, since we do not do hmac,
@@ -342,7 +342,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 		firstEventID := request.GetFirstEventId()
 		nextEventID := request.GetNextEventId()
 		if firstEventID < 0 || firstEventID > nextEventID {
-			return nil, &shared.BadRequestError{Message: "Invalid FirstEventID && NextEventID combination."}
+			return nil, errInvalidFirstNextEventCombination
 		}
 
 		response, err := adh.GetHistoryClient().GetMutableState(ctx, &historyservice.GetMutableStateRequest{
@@ -484,7 +484,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 		}
 		versionHistories := pageToken.VersionHistories
 		if versionHistories == nil {
-			return nil, adh.error(&shared.BadRequestError{Message: "Invalid version histories."}, scope)
+			return nil, adh.error(errInvalidVersionHistories, scope)
 		}
 		targetVersionHistory, err = adh.setRequestDefaultValueAndGetTargetVersionHistory(
 			request,
@@ -759,36 +759,36 @@ func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(
 ) error {
 
 	execution := request.Execution
-	if len(execution.GetWorkflowId()) == 0 {
-		return &shared.BadRequestError{Message: "Invalid WorkflowID."}
+	if execution.GetWorkflowId() == "" {
+		return errWorkflowIDNotSet
 	}
 	// TODO currently, this API is only going to be used by re-send history events
 	// to remote cluster if kafka is lossy again, in the future, this API can be used
 	// by CLI and client, then empty runID (meaning the current workflow) should be allowed
-	if len(execution.GetRunId()) == 0 || uuid.Parse(execution.GetRunId()) == nil {
-		return &shared.BadRequestError{Message: "Invalid RunID."}
+	if execution.GetRunId() == "" || uuid.Parse(execution.GetRunId()) == nil {
+		return errInvalidRunID
 	}
 
 	pageSize := int(request.GetMaximumPageSize())
 	if pageSize <= 0 {
-		return &shared.BadRequestError{Message: "Invalid PageSize."}
+		return errInvalidPageSize
 	}
 
 	if request.GetStartEventId() == common.EmptyEventID &&
 		request.GetStartEventVersion() == common.EmptyVersion &&
 		request.GetEndEventId() == common.EmptyEventID &&
 		request.GetEndEventVersion() == common.EmptyVersion {
-		return &shared.BadRequestError{Message: "Invalid event query range."}
+		return errInvalidEventQueryRange
 	}
 
 	if (request.GetStartEventId() != common.EmptyEventID && request.GetStartEventVersion() == common.EmptyVersion) ||
 		(request.GetStartEventId() == common.EmptyEventID && request.GetStartEventVersion() != common.EmptyVersion) {
-		return &shared.BadRequestError{Message: "Invalid start event id and start event version combination."}
+		return errInvalidStartEventCombination
 	}
 
 	if (request.GetEndEventId() != common.EmptyEventID && request.GetEndEventVersion() == common.EmptyVersion) ||
 		(request.GetEndEventId() == common.EmptyEventID && request.GetEndEventVersion() != common.EmptyVersion) {
-		return &shared.BadRequestError{Message: "Invalid end event id and end event version combination."}
+		return errInvalidEndEventCombination
 	}
 	return nil
 }
@@ -832,7 +832,7 @@ func (adh *AdminHandler) setRequestDefaultValueAndGetTargetVersionHistory(
 	}
 
 	if request.GetStartEventId() < 0 {
-		return nil, &shared.BadRequestError{Message: "Invalid FirstEventID && NextEventID combination."}
+		return nil, errInvalidFirstNextEventCombination
 	}
 
 	// get branch based on the end event if end event is defined in the request
@@ -912,7 +912,7 @@ func (adh *AdminHandler) validatePaginationToken(
 		request.GetStartEventVersion() != token.StartEventVersion ||
 		request.GetEndEventId() != token.EndEventID ||
 		request.GetEndEventVersion() != token.EndEventVersion {
-		return &shared.BadRequestError{Message: "Invalid pagination token."}
+		return errInvalidPaginationToken
 	}
 	return nil
 }
@@ -926,33 +926,37 @@ func (adh *AdminHandler) startRequestProfile(scope int) (metrics.Scope, metrics.
 }
 
 func (adh *AdminHandler) error(err error, scope metrics.Scope) error {
-	if _, ok := status.FromError(err); ok {
-		scope.IncCounter(metrics.CadenceFailures)
-		return err
+	// TODO: remove after error migration is done
+	if _, ok := err.(interface{ GRPCStatus() *status.Status }); !ok {
+		// This means the err is an old Thrift error.
+		err = adapter.ToServiceError(err)
+	} else {
+		if _, ok := err.(interface{ Details() []interface{} }); ok {
+			// This means the err is an actual status.Status that came from another RPC call (history, matching, etc).
+			return err
+		}
 	}
 
-	return adapter.ToProtoError(adh.errorThrift(err, scope))
-}
-
-func (adh *AdminHandler) errorThrift(err error, scope metrics.Scope) error {
 	switch err.(type) {
-	case *shared.InternalServiceError:
+	case *serviceerror.Internal:
 		adh.GetLogger().Error("Internal service error", tag.Error(err))
 		scope.IncCounter(metrics.CadenceFailures)
 		return err
-	case *shared.BadRequestError:
+	case *serviceerror.InvalidArgument:
 		scope.IncCounter(metrics.CadenceErrBadRequestCounter)
 		return err
-	case *shared.ServiceBusyError:
+	case *serviceerror.ResourceExhausted:
 		scope.IncCounter(metrics.CadenceErrServiceBusyCounter)
 		return err
-	case *shared.EntityNotExistsError:
+	case *serviceerror.NotFound:
 		return err
-	default:
-		adh.GetLogger().Error("Uncategorized error", tag.Error(err))
-		scope.IncCounter(metrics.CadenceFailures)
-		return &shared.InternalServiceError{Message: err.Error()}
 	}
+
+	adh.GetLogger().Error("Unknown error", tag.Error(err))
+	scope.IncCounter(metrics.CadenceFailures)
+
+	// err will be converted to *status.Status with codes.Unknown by gRPC.
+	return err
 }
 
 func (adh *AdminHandler) convertIndexedValueTypeToESDataType(valueType enums.IndexedValueType) string {
