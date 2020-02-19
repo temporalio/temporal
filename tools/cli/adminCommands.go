@@ -23,6 +23,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/temporalio/temporal/common/persistence/serialization"
 	"io/ioutil"
 	"strconv"
 	"time"
@@ -54,7 +55,7 @@ func AdminShowWorkflow(c *cli.Context) {
 
 	session := connectToCassandra(c)
 	serializer := persistence.NewPayloadSerializer()
-	var history []*persistence.DataBlob
+	var history []*serialization.DataBlob
 	if len(tid) != 0 {
 		histV2 := cassp.NewHistoryV2PersistenceFromSession(session, loggerimpl.NewNopLogger())
 		resp, err := histV2.ReadHistoryBranch(&persistence.InternalReadHistoryBranchRequest{

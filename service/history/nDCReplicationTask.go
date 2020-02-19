@@ -21,6 +21,7 @@
 package history
 
 import (
+	"github.com/temporalio/temporal/common/persistence/serialization"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -370,7 +371,7 @@ func deserializeBlob(
 		return nil, nil
 	}
 
-	return historySerializer.DeserializeBatchEvents(&persistence.DataBlob{
+	return historySerializer.DeserializeBatchEvents(&serialization.DataBlob{
 		Encoding: common.EncodingTypeThriftRW,
 		Data:     blob.Data,
 	})

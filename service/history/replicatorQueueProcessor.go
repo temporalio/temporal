@@ -23,6 +23,7 @@ package history
 import (
 	ctx "context"
 	"errors"
+	"github.com/temporalio/temporal/common/persistence/serialization"
 	"time"
 
 	commonproto "go.temporal.io/temporal-proto/common"
@@ -746,7 +747,7 @@ func (p *replicatorQueueProcessorImpl) getEventsBlob(
 	nextEventID int64,
 ) (*shared.DataBlob, error) {
 
-	var eventBatchBlobs []*persistence.DataBlob
+	var eventBatchBlobs []*serialization.DataBlob
 	var pageToken []byte
 	req := &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,

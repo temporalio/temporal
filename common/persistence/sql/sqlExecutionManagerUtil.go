@@ -1229,7 +1229,7 @@ func updateCurrentExecution(
 func buildExecutionRow(
 	executionInfo *p.InternalWorkflowExecutionInfo,
 	replicationState *p.ReplicationState,
-	versionHistories *p.DataBlob,
+	versionHistories *serialization.DataBlob,
 	startVersion int64,
 	lastWriteVersion int64,
 	currentVersion int64,
@@ -1323,7 +1323,7 @@ func buildExecutionRow(
 		info.CancelRequestID = &executionInfo.CancelRequestID
 	}
 
-	blob, err := serialization.workflowExecutionInfoToBlob(info)
+	blob, err := serialization.WorkflowExecutionInfoToBlob(info)
 	if err != nil {
 		return nil, err
 	}
@@ -1344,7 +1344,7 @@ func (m *sqlExecutionManager) createExecution(
 	tx sqlplugin.Tx,
 	executionInfo *p.InternalWorkflowExecutionInfo,
 	replicationState *p.ReplicationState,
-	versionHistories *p.DataBlob,
+	versionHistories *serialization.DataBlob,
 	startVersion int64,
 	lastWriteVersion int64,
 	currentVersion int64,
@@ -1409,7 +1409,7 @@ func updateExecution(
 	tx sqlplugin.Tx,
 	executionInfo *p.InternalWorkflowExecutionInfo,
 	replicationState *p.ReplicationState,
-	versionHistories *p.DataBlob,
+	versionHistories *serialization.DataBlob,
 	startVersion int64,
 	lastWriteVersion int64,
 	currentVersion int64,

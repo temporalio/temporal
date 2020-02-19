@@ -373,7 +373,7 @@ func createExecution(
 	shardID int,
 	executionInfo *p.InternalWorkflowExecutionInfo,
 	replicationState *p.ReplicationState,
-	versionHistories *p.DataBlob,
+	versionHistories *serialization.DataBlob,
 	checksum checksum.Checksum,
 	cqlNowTimestampMillis int64,
 ) error {
@@ -646,7 +646,7 @@ func updateExecution(
 	shardID int,
 	executionInfo *p.InternalWorkflowExecutionInfo,
 	replicationState *p.ReplicationState,
-	versionHistories *p.DataBlob,
+	versionHistories *serialization.DataBlob,
 	cqlNowTimestampMillis int64,
 	condition int64,
 	checksum checksum.Checksum,
@@ -1773,7 +1773,7 @@ func resetSignalRequested(
 
 func updateBufferedEvents(
 	batch *gocql.Batch,
-	newBufferedEvents *p.DataBlob,
+	newBufferedEvents *serialization.DataBlob,
 	clearBufferedEvents bool,
 	shardID int,
 	domainID string,
@@ -2330,9 +2330,9 @@ func resetSignalInfoMap(
 
 func createHistoryEventBatchBlob(
 	result map[string]interface{},
-) *p.DataBlob {
+) *serialization.DataBlob {
 
-	eventBatch := &p.DataBlob{Encoding: common.EncodingTypeJSON}
+	eventBatch := &serialization.DataBlob{Encoding: common.EncodingTypeJSON}
 	for k, v := range result {
 		switch k {
 		case "encoding_type":

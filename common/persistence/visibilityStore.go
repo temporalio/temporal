@@ -22,6 +22,7 @@ package persistence
 
 import (
 	"encoding/json"
+	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
@@ -287,7 +288,7 @@ func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution
 	return convertedExecution
 }
 
-func (v *visibilityManagerImpl) serializeMemo(visibilityMemo *shared.Memo, domainID, wID, rID string) *DataBlob {
+func (v *visibilityManagerImpl) serializeMemo(visibilityMemo *shared.Memo, domainID, wID, rID string) *serialization.DataBlob {
 	memo, err := v.serializer.SerializeVisibilityMemo(visibilityMemo, VisibilityEncoding)
 	if err != nil {
 		v.logger.WithTags(
@@ -298,7 +299,7 @@ func (v *visibilityManagerImpl) serializeMemo(visibilityMemo *shared.Memo, domai
 			Error("Unable to encode visibility memo")
 	}
 	if memo == nil {
-		return &DataBlob{}
+		return &serialization.DataBlob{}
 	}
 	return memo
 }

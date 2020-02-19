@@ -23,6 +23,7 @@ package sql
 import (
 	"database/sql"
 	"fmt"
+	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/temporalio/temporal/common/primitives"
 
@@ -175,8 +176,8 @@ func (m *sqlHistoryV2Manager) ReadHistoryBranch(
 		return &p.InternalReadHistoryBranchResponse{}, nil
 	}
 
-	history := make([]*p.DataBlob, 0, int(request.PageSize))
-	eventBlob := &p.DataBlob{}
+	history := make([]*serialization.DataBlob, 0, int(request.PageSize))
+	eventBlob := &serialization.DataBlob{}
 
 	for _, row := range rows {
 		eventBlob.Data = row.Data
@@ -220,7 +221,7 @@ func (m *sqlHistoryV2Manager) ReadHistoryBranch(
 			lastTxnID = *row.TxnID
 			lastNodeID = row.NodeID
 			history = append(history, eventBlob)
-			eventBlob = &p.DataBlob{}
+			eventBlob = &serialization.DataBlob{}
 		}
 	}
 

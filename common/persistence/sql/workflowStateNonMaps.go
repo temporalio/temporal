@@ -23,6 +23,7 @@ package sql
 import (
 	"database/sql"
 	"fmt"
+	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/temporalio/temporal/common/primitives"
 
@@ -127,7 +128,7 @@ func deleteSignalsRequestedSet(
 
 func updateBufferedEvents(
 	tx sqlplugin.Tx,
-	batch *p.DataBlob,
+	batch *serialization.DataBlob,
 	shardID int,
 	domainID primitives.UUID,
 	workflowID string,
@@ -160,7 +161,7 @@ func getBufferedEvents(
 	domainID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
-) ([]*p.DataBlob, error) {
+) ([]*serialization.DataBlob, error) {
 
 	rows, err := db.SelectFromBufferedEvents(&sqlplugin.BufferedEventsFilter{
 		ShardID:    shardID,
@@ -173,7 +174,7 @@ func getBufferedEvents(
 			Message: fmt.Sprintf("getBufferedEvents operation failed. Select failed: %v", err),
 		}
 	}
-	var result []*p.DataBlob
+	var result []*serialization.DataBlob
 	for _, row := range rows {
 		result = append(result, p.NewDataBlob(row.Data, common.EncodingType(row.DataEncoding)))
 	}

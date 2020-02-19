@@ -23,19 +23,16 @@ package serialization
 import (
 	"bytes"
 	"fmt"
-	
-	"github.com/temporalio/temporal/.gen/go/shared"
-
 	"github.com/gogo/protobuf/types"
 
 	"go.uber.org/thriftrw/protocol"
 	"go.uber.org/thriftrw/wire"
 
+	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/go/sqlblobs"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
-	p "github.com/temporalio/temporal/common/persistence"
-
+	
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 )
@@ -72,8 +69,8 @@ func decodeErr(encoding common.EncodingType, err error) error {
 	return fmt.Errorf("error deserializing blob to blob using encoding - %v - : %v", encoding, err)
 }
 
-func protoRWEncode(m protoMarshal) (p.DataBlob, error) {
-	blob := p.DataBlob{Encoding: common.EncodingTypeProto3}
+func protoRWEncode(m protoMarshal) (DataBlob, error) {
+	blob := DataBlob{Encoding: common.EncodingTypeProto3}
 	data, err := m.Marshal()
 	if err != nil {
 		return blob, encodeErr(common.EncodingTypeProto3, err)
@@ -89,8 +86,8 @@ func protoRWDecode(b []byte, proto string, result protoMarshal) error {
 	return decodeErr(common.EncodingTypeProto3, result.Unmarshal(b))
 }
 
-func thriftRWEncode(t thriftRWType) (p.DataBlob, error) {
-	blob := p.DataBlob{Encoding: common.EncodingTypeThriftRW}
+func thriftRWEncode(t thriftRWType) (DataBlob, error) {
+	blob := DataBlob{Encoding: common.EncodingTypeThriftRW}
 	value, err := t.ToWire()
 	if err != nil {
 		return blob, encodeErr(common.EncodingTypeThriftRW, err)
@@ -114,7 +111,7 @@ func thriftRWDecode(b []byte, proto string, result thriftRWType) error {
 	return decodeErr(common.EncodingTypeThriftRW, result.FromWire(value))
 }
 
-func ShardInfoToBlob(info *persistenceblobs.ShardInfo) (p.DataBlob, error) {
+func ShardInfoToBlob(info *persistenceblobs.ShardInfo) (DataBlob, error) {
 	return protoRWEncode(info)
 }
 
@@ -149,16 +146,16 @@ func ShardInfoFromBlob(b []byte, proto string, clusterName string) (*persistence
 	return shardInfo, nil
 }
 
-func domainInfoToBlob(info *sqlblobs.DomainInfo) (p.DataBlob, error) {
+func DomainInfoToBlob(info *sqlblobs.DomainInfo) (DataBlob, error) {
 	return thriftRWEncode(info)
 }
 
-func domainInfoFromBlob(b []byte, proto string) (*sqlblobs.DomainInfo, error) {
+func DomainInfoFromBlob(b []byte, proto string) (*sqlblobs.DomainInfo, error) {
 	result := &sqlblobs.DomainInfo{}
 	return result, thriftRWDecode(b, proto, result)
 }
 
-func HistoryTreeInfoToBlob(info *persistenceblobs.HistoryTreeInfo) (p.DataBlob, error) {
+func HistoryTreeInfoToBlob(info *persistenceblobs.HistoryTreeInfo) (DataBlob, error) {
 	return protoRWEncode(info)
 }
 
@@ -167,7 +164,7 @@ func HistoryTreeInfoFromBlob(b []byte, proto string) (*persistenceblobs.HistoryT
 	return result, protoRWDecode(b, proto, result)
 }
 
-func HistoryBranchToBlob(info *persistenceblobs.HistoryBranch) (p.DataBlob, error) {
+func HistoryBranchToBlob(info *persistenceblobs.HistoryBranch) (DataBlob, error) {
 	return protoRWEncode(info)
 }
 
@@ -176,79 +173,79 @@ func HistoryBranchFromBlob(b []byte, proto string) (*persistenceblobs.HistoryBra
 	return result, protoRWDecode(b, proto, result)
 }
 
-func workflowExecutionInfoToBlob(info *sqlblobs.WorkflowExecutionInfo) (p.DataBlob, error) {
+func WorkflowExecutionInfoToBlob(info *sqlblobs.WorkflowExecutionInfo) (DataBlob, error) {
 	return thriftRWEncode(info)
 }
 
-func workflowExecutionInfoFromBlob(b []byte, proto string) (*sqlblobs.WorkflowExecutionInfo, error) {
+func WorkflowExecutionInfoFromBlob(b []byte, proto string) (*sqlblobs.WorkflowExecutionInfo, error) {
 	result := &sqlblobs.WorkflowExecutionInfo{}
 	return result, thriftRWDecode(b, proto, result)
 }
 
-func activityInfoToBlob(info *sqlblobs.ActivityInfo) (p.DataBlob, error) {
+func ActivityInfoToBlob(info *sqlblobs.ActivityInfo) (DataBlob, error) {
 	return thriftRWEncode(info)
 }
 
-func activityInfoFromBlob(b []byte, proto string) (*sqlblobs.ActivityInfo, error) {
+func ActivityInfoFromBlob(b []byte, proto string) (*sqlblobs.ActivityInfo, error) {
 	result := &sqlblobs.ActivityInfo{}
 	return result, thriftRWDecode(b, proto, result)
 }
 
-func childExecutionInfoToBlob(info *sqlblobs.ChildExecutionInfo) (p.DataBlob, error) {
+func ChildExecutionInfoToBlob(info *sqlblobs.ChildExecutionInfo) (DataBlob, error) {
 	return thriftRWEncode(info)
 }
 
-func childExecutionInfoFromBlob(b []byte, proto string) (*sqlblobs.ChildExecutionInfo, error) {
+func ChildExecutionInfoFromBlob(b []byte, proto string) (*sqlblobs.ChildExecutionInfo, error) {
 	result := &sqlblobs.ChildExecutionInfo{}
 	return result, thriftRWDecode(b, proto, result)
 }
 
-func signalInfoToBlob(info *sqlblobs.SignalInfo) (p.DataBlob, error) {
+func SignalInfoToBlob(info *sqlblobs.SignalInfo) (DataBlob, error) {
 	return thriftRWEncode(info)
 }
 
-func signalInfoFromBlob(b []byte, proto string) (*sqlblobs.SignalInfo, error) {
+func SignalInfoFromBlob(b []byte, proto string) (*sqlblobs.SignalInfo, error) {
 	result := &sqlblobs.SignalInfo{}
 	return result, thriftRWDecode(b, proto, result)
 }
 
-func requestCancelInfoToBlob(info *sqlblobs.RequestCancelInfo) (p.DataBlob, error) {
+func RequestCancelInfoToBlob(info *sqlblobs.RequestCancelInfo) (DataBlob, error) {
 	return thriftRWEncode(info)
 }
 
-func requestCancelInfoFromBlob(b []byte, proto string) (*sqlblobs.RequestCancelInfo, error) {
+func RequestCancelInfoFromBlob(b []byte, proto string) (*sqlblobs.RequestCancelInfo, error) {
 	result := &sqlblobs.RequestCancelInfo{}
 	return result, thriftRWDecode(b, proto, result)
 }
 
-func timerInfoToBlob(info *sqlblobs.TimerInfo) (p.DataBlob, error) {
+func TimerInfoToBlob(info *sqlblobs.TimerInfo) (DataBlob, error) {
 	return thriftRWEncode(info)
 }
 
-func timerInfoFromBlob(b []byte, proto string) (*sqlblobs.TimerInfo, error) {
+func TimerInfoFromBlob(b []byte, proto string) (*sqlblobs.TimerInfo, error) {
 	result := &sqlblobs.TimerInfo{}
 	return result, thriftRWDecode(b, proto, result)
 }
 
-func taskInfoToBlob(info *sqlblobs.TaskInfo) (p.DataBlob, error) {
+func TaskInfoToBlob(info *sqlblobs.TaskInfo) (DataBlob, error) {
 	return thriftRWEncode(info)
 }
 
-func taskInfoFromBlob(b []byte, proto string) (*sqlblobs.TaskInfo, error) {
+func TaskInfoFromBlob(b []byte, proto string) (*sqlblobs.TaskInfo, error) {
 	result := &sqlblobs.TaskInfo{}
 	return result, thriftRWDecode(b, proto, result)
 }
 
-func taskListInfoToBlob(info *sqlblobs.TaskListInfo) (p.DataBlob, error) {
+func TaskListInfoToBlob(info *sqlblobs.TaskListInfo) (DataBlob, error) {
 	return thriftRWEncode(info)
 }
 
-func taskListInfoFromBlob(b []byte, proto string) (*sqlblobs.TaskListInfo, error) {
+func TaskListInfoFromBlob(b []byte, proto string) (*sqlblobs.TaskListInfo, error) {
 	result := &sqlblobs.TaskListInfo{}
 	return result, thriftRWDecode(b, proto, result)
 }
 
-func TransferTaskInfoToBlob(info *persistenceblobs.TransferTaskInfo) (p.DataBlob, error) {
+func TransferTaskInfoToBlob(info *persistenceblobs.TransferTaskInfo) (DataBlob, error) {
 	return protoRWEncode(info)
 }
 
@@ -257,7 +254,7 @@ func TransferTaskInfoFromBlob(b []byte, proto string) (*persistenceblobs.Transfe
 	return result, protoRWDecode(b, proto, result)
 }
 
-func TimerTaskInfoToBlob(info *persistenceblobs.TimerTaskInfo) (p.DataBlob, error) {
+func TimerTaskInfoToBlob(info *persistenceblobs.TimerTaskInfo) (DataBlob, error) {
 	return protoRWEncode(info)
 }
 
@@ -266,7 +263,7 @@ func TimerTaskInfoFromBlob(b []byte, proto string) (*persistenceblobs.TimerTaskI
 	return result, protoRWDecode(b, proto, result)
 }
 
-func ReplicationTaskInfoToBlob(info *persistenceblobs.ReplicationTaskInfo) (p.DataBlob, error) {
+func ReplicationTaskInfoToBlob(info *persistenceblobs.ReplicationTaskInfo) (DataBlob, error) {
 	return protoRWEncode(info)
 }
 

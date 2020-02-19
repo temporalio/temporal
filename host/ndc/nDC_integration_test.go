@@ -24,6 +24,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/temporalio/temporal/common/persistence/serialization"
 	"io/ioutil"
 	"os"
 	"sync/atomic"
@@ -1608,7 +1609,7 @@ func (s *nDCIntegrationTestSuite) generateNewRunHistory(
 	version int64,
 	workflowType string,
 	taskList string,
-) *persistence.DataBlob {
+) *serialization.DataBlob {
 
 	// TODO temporary code to generate first event & version history
 	//  we should generate these as part of modeled based testing
@@ -1656,7 +1657,7 @@ func (s *nDCIntegrationTestSuite) generateNewRunHistory(
 }
 
 func (s *nDCIntegrationTestSuite) toProtoDataBlob(
-	blob *persistence.DataBlob,
+	blob *serialization.DataBlob,
 ) *commonproto.DataBlob {
 
 	if blob == nil {
@@ -1688,7 +1689,7 @@ func (s *nDCIntegrationTestSuite) generateEventBlobs(
 	workflowType string,
 	tasklist string,
 	batch *commonproto.History,
-) (*persistence.DataBlob, *persistence.DataBlob) {
+) (*serialization.DataBlob, *serialization.DataBlob) {
 	// TODO temporary code to generate next run first event
 	//  we should generate these as part of modeled based testing
 	lastEvent := batch.Events[len(batch.Events)-1]

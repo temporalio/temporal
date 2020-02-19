@@ -235,7 +235,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 		}
 	}
 
-	info, err := serialization.workflowExecutionInfoFromBlob(execution.Data, execution.DataEncoding)
+	info, err := serialization.WorkflowExecutionInfoFromBlob(execution.Data, execution.DataEncoding)
 	if err != nil {
 		return nil, err
 	}

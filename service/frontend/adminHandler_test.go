@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/temporalio/temporal/common/persistence/serialization"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -242,7 +243,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2() {
 	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(mState, nil).AnyTimes()
 
 	s.mockHistoryV2Mgr.On("ReadRawHistoryBranch", mock.Anything).Return(&persistence.ReadRawHistoryBranchResponse{
-		HistoryEventBlobs: []*persistence.DataBlob{},
+		HistoryEventBlobs: []*serialization.DataBlob{},
 		NextPageToken:     []byte{},
 		Size:              0,
 	}, nil)

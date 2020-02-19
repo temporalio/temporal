@@ -22,6 +22,7 @@ package cassandra
 
 import (
 	"fmt"
+	"github.com/temporalio/temporal/common/persistence/serialization"
 	"sort"
 	"time"
 
@@ -159,9 +160,9 @@ func (h *cassandraHistoryV2Persistence) ReadHistoryBranch(
 	}
 	pagingToken := iter.PageState()
 
-	history := make([]*p.DataBlob, 0, int(request.PageSize))
+	history := make([]*serialization.DataBlob, 0, int(request.PageSize))
 
-	eventBlob := &p.DataBlob{}
+	eventBlob := &serialization.DataBlob{}
 	nodeID := int64(0)
 	txnID := int64(0)
 
@@ -194,7 +195,7 @@ func (h *cassandraHistoryV2Persistence) ReadHistoryBranch(
 			lastTxnID = txnID
 			lastNodeID = nodeID
 			history = append(history, eventBlob)
-			eventBlob = &p.DataBlob{}
+			eventBlob = &serialization.DataBlob{}
 		}
 	}
 

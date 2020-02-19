@@ -22,6 +22,7 @@ package persistence
 
 import (
 	"fmt"
+	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/pborman/uuid"
 
@@ -297,7 +298,7 @@ func (m *historyV2ManagerImpl) GetAllHistoryTreeBranches(
 
 func (m *historyV2ManagerImpl) readRawHistoryBranch(
 	request *ReadHistoryBranchRequest,
-) ([]*DataBlob, *historyV2PagingToken, int, log.Logger, error) {
+) ([]*serialization.DataBlob, *historyV2PagingToken, int, log.Logger, error) {
 
 	var branch workflow.HistoryBranch
 	err := m.thriftEncoder.Decode(request.BranchToken, &branch)
