@@ -75,24 +75,6 @@ CREATE TYPE replication_state (
   last_replication_info            map<text, frozen<replication_info>>, -- information about replication events from other clusters
 );
 
--- TODO: Remove fields that are left over from activity and workflow tasks.
-CREATE TYPE transfer_task (
-  domain_id                  uuid,   -- The domain ID that this transfer task belongs to
-  workflow_id                text,   -- The workflow ID that this transfer task belongs to
-  run_id                     uuid,   -- The run ID that this transfer task belongs to
-  task_id                    bigint,
-  visibility_ts              timestamp, -- The timestamp when the transfer task is generated
-  target_domain_id           uuid,   -- The external domain ID that this transfer task is doing work for.
-  target_workflow_id         text,   -- The external workflow ID that this transfer task is doing work for.
-  target_run_id              uuid,   -- The external run ID that this transfer task is doing work for.
-  target_child_workflow_only boolean, -- The whether target child workflow only.
-  task_list                  text,
-  type                       int,    -- enum TaskType {ActivityTask, DecisionTask, DeleteExecution, CancelExecution, StartChildExecution, ReplicationTask}
-  schedule_id                bigint,
-  version                    bigint, -- the failover version when this task is created, used to compare against the mutable state, in case the events got overwritten
-  record_visibility          boolean, -- indicates whether or not to create a visibility record
-);
-
 -- Workflow activity in progress mutable state
 CREATE TYPE activity_info (
   version                   bigint,
@@ -268,7 +250,8 @@ CREATE TABLE executions (
   shard                          blob,
   shard_encoding                 text,
   execution                      frozen<workflow_execution>,
-  transfer                       frozen<transfer_task>,
+  transfer                       blob,
+  transfer_encoding              text,
   replication                    blob,
   replication_encoding           text,
   timer                          blob,

@@ -31,7 +31,6 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
-	"github.com/temporalio/temporal/common/persistence"
 )
 
 type (
@@ -65,15 +64,15 @@ func standbyTransferTaskPostActionTaskDiscarded(
 		return nil
 	}
 
-	transferTask := task.task.(*persistence.TransferTaskInfo)
+	transferTask := task.task.(*persistenceblobs.TransferTaskInfo)
 	logger.Error("Discarding standby transfer task due to task being pending for too long.",
 		tag.WorkflowID(transferTask.WorkflowID),
-		tag.WorkflowRunID(transferTask.RunID),
-		tag.WorkflowDomainID(transferTask.DomainID),
+		tag.WorkflowRunIDBytes(transferTask.RunID),
+		tag.WorkflowDomainIDBytes(transferTask.DomainID),
 		tag.TaskID(transferTask.TaskID),
-		tag.TaskType(transferTask.TaskType),
+		tag.TaskType32(transferTask.TaskType),
 		tag.FailoverVersion(transferTask.GetVersion()),
-		tag.Timestamp(transferTask.VisibilityTimestamp),
+		tag.TimestampProto(transferTask.VisibilityTimestamp),
 		tag.WorkflowEventID(transferTask.ScheduleID))
 	return ErrTaskDiscarded
 }

@@ -77,3 +77,21 @@ message TimerTaskInfo {
     int64 taskID = 9;
     google.protobuf.Timestamp VisibilityTimestamp = 10;
 }
+
+
+message TransferTaskInfo {
+    bytes domainID = 1;
+    string workflowID = 2;
+    bytes runID = 3;
+    int32 taskType = 4;
+    bytes targetDomainID = 5;
+    string targetWorkflowID = 6;
+    bytes targetRunID = 7;
+    string taskList = 8;
+    bool targetChildWorkflowOnly = 9;
+    int64 scheduleID = 10;
+    int64 version = 11;
+    int64 taskID = 12;
+    google.protobuf.Timestamp visibilityTimestamp = 13;
+    bool recordVisibility = 14;
+}
