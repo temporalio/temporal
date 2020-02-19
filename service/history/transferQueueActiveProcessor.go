@@ -21,8 +21,11 @@
 package history
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/common/primitives"
 	"time"
 
 	"github.com/gogo/status"
@@ -95,11 +98,11 @@ func newTransferQueueActiveProcessor(
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	logger = logger.WithTags(tag.ClusterName(currentClusterName))
 	transferTaskFilter := func(taskInfo *taskInfo) (bool, error) {
-		task, ok := taskInfo.task.(*persistence.TransferTaskInfo)
+		task, ok := taskInfo.task.(*persistenceblobs.TransferTaskInfo)
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
-		return taskAllocator.verifyActiveTask(task.DomainID, task)
+		return taskAllocator.verifyActiveTask(primitives.UUID(task.DomainID).String(), task)
 	}
 	maxReadAckLevel := func() int64 {
 		return shard.GetTransferMaxReadLevel()
@@ -188,11 +191,11 @@ func newTransferQueueFailoverProcessor(
 	)
 
 	transferTaskFilter := func(taskInfo *taskInfo) (bool, error) {
-		task, ok := taskInfo.task.(*persistence.TransferTaskInfo)
+		task, ok := taskInfo.task.(*persistenceblobs.TransferTaskInfo)
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
-		return taskAllocator.verifyFailoverActiveTask(domainIDs, task.DomainID, task)
+		return taskAllocator.verifyFailoverActiveTask(domainIDs, primitives.UUID(task.DomainID).String(), task)
 	}
 	maxReadAckLevel := func() int64 {
 		return maxLevel // this is a const
@@ -265,7 +268,7 @@ func (t *transferQueueActiveProcessorImpl) process(
 	taskInfo *taskInfo,
 ) (int, error) {
 
-	task, ok := taskInfo.task.(*persistence.TransferTaskInfo)
+	task, ok := taskInfo.task.(*persistenceblobs.TransferTaskInfo)
 	if !ok {
 		return metrics.TransferActiveQueueProcessorScope, errUnexpectedQueueTask
 	}
@@ -332,7 +335,7 @@ func (t *transferQueueActiveProcessorImpl) process(
 }
 
 func (t *transferQueueActiveProcessorImpl) processActivityTask(
-	task *persistence.TransferTaskInfo,
+	task *persistenceblobs.TransferTaskInfo,
 ) (retError error) {
 
 	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
@@ -356,7 +359,7 @@ func (t *transferQueueActiveProcessorImpl) processActivityTask(
 		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.TaskID), tag.WorkflowScheduleID(task.ScheduleID), tag.TaskType(persistence.TransferTaskTypeActivityTask))
 		return nil
 	}
-	ok, err = verifyTaskVersion(t.shard, t.logger, task.DomainID, ai.Version, task.Version, task)
+	ok, err = verifyTaskVersion(t.shard, t.logger, primitives.UUID(task.DomainID).String(), ai.Version, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
@@ -369,7 +372,7 @@ func (t *transferQueueActiveProcessorImpl) processActivityTask(
 }
 
 func (t *transferQueueActiveProcessorImpl) processDecisionTask(
-	task *persistence.TransferTaskInfo,
+	task *persistenceblobs.TransferTaskInfo,
 ) (retError error) {
 
 	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
@@ -393,7 +396,7 @@ func (t *transferQueueActiveProcessorImpl) processDecisionTask(
 		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.TaskID), tag.WorkflowScheduleID(task.ScheduleID), tag.TaskType(persistence.TransferTaskTypeDecisionTask))
 		return nil
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, decision.Version, task.Version, task)
+	ok, err := verifyTaskVersion(t.shard, t.logger, primitives.UUID(task.DomainID).String(), decision.Version, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
@@ -424,7 +427,7 @@ func (t *transferQueueActiveProcessorImpl) processDecisionTask(
 }
 
 func (t *transferQueueActiveProcessorImpl) processCloseExecution(
-	task *persistence.TransferTaskInfo,
+	task *persistenceblobs.TransferTaskInfo,
 ) (retError error) {
 
 	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
@@ -447,7 +450,7 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(
 	if err != nil {
 		return err
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, lastWriteVersion, task.Version, task)
+	ok, err := verifyTaskVersion(t.shard, t.logger, primitives.UUID(task.DomainID).String(), lastWriteVersion, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
@@ -485,9 +488,9 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 	err = t.recordWorkflowClosed(
-		task.DomainID,
+		primitives.UUID(task.DomainID).String(),
 		task.WorkflowID,
-		task.RunID,
+		primitives.UUID(task.RunID).String(),
 		workflowTypeName,
 		workflowStartTimestamp,
 		workflowExecutionTimestamp.UnixNano(),
@@ -515,7 +518,7 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(
 			InitiatedId: initiatedID,
 			CompletedExecution: &commonproto.WorkflowExecution{
 				WorkflowId: task.WorkflowID,
-				RunId:      task.RunID,
+				RunId:      primitives.UUID(task.RunID).String(),
 			},
 			CompletionEvent: adapter.ToProtoHistoryEvent(completionEvent),
 		})
@@ -530,11 +533,11 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(
 		return err
 	}
 
-	return t.processParentClosePolicy(task.DomainID, domainName, children)
+	return t.processParentClosePolicy(primitives.UUID(task.DomainID).String(), domainName, children)
 }
 
 func (t *transferQueueActiveProcessorImpl) processCancelExecution(
-	task *persistence.TransferTaskInfo,
+	task *persistenceblobs.TransferTaskInfo,
 ) (retError error) {
 
 	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
@@ -558,21 +561,21 @@ func (t *transferQueueActiveProcessorImpl) processCancelExecution(
 	if !ok {
 		return nil
 	}
-	ok, err = verifyTaskVersion(t.shard, t.logger, task.DomainID, requestCancelInfo.Version, task.Version, task)
+	ok, err = verifyTaskVersion(t.shard, t.logger, primitives.UUID(task.DomainID).String(), requestCancelInfo.Version, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
 
-	targetDomainEntry, err := t.domainCache.GetDomainByID(task.TargetDomainID)
+	targetDomainEntry, err := t.domainCache.GetDomainByID(primitives.UUID(task.TargetDomainID).String())
 	if err != nil {
 		return err
 	}
 	targetDomain := targetDomainEntry.GetInfo().Name
 
 	// handle workflow cancel itself
-	if task.DomainID == task.TargetDomainID && task.WorkflowID == task.TargetWorkflowID {
+	if bytes.Compare(task.DomainID, task.TargetDomainID) == 0 && task.WorkflowID == task.TargetWorkflowID {
 		// it does not matter if the run ID is a mismatch
-		err = t.requestCancelExternalExecutionFailed(task, context, targetDomain, task.TargetWorkflowID, task.TargetRunID)
+		err = t.requestCancelExternalExecutionFailed(task, context, targetDomain, task.TargetWorkflowID, primitives.UUID(task.TargetRunID).String())
 		if status.Code(err) == codes.NotFound {
 			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
 			return nil
@@ -598,13 +601,13 @@ func (t *transferQueueActiveProcessorImpl) processCancelExecution(
 			context,
 			targetDomain,
 			task.TargetWorkflowID,
-			task.TargetRunID,
+			primitives.UUID(task.TargetRunID).String(),
 		)
 	}
 
 	t.logger.Debug("RequestCancel successfully recorded to external workflow execution",
 		tag.WorkflowID(task.TargetWorkflowID),
-		tag.WorkflowRunID(task.TargetRunID),
+		tag.WorkflowRunIDBytes(task.TargetRunID),
 	)
 
 	// Record ExternalWorkflowExecutionCancelRequested in source execution
@@ -613,12 +616,12 @@ func (t *transferQueueActiveProcessorImpl) processCancelExecution(
 		context,
 		targetDomain,
 		task.TargetWorkflowID,
-		task.TargetRunID,
+		primitives.UUID(task.TargetRunID).String(),
 	)
 }
 
 func (t *transferQueueActiveProcessorImpl) processSignalExecution(
-	task *persistence.TransferTaskInfo,
+	task *persistenceblobs.TransferTaskInfo,
 ) (retError error) {
 
 	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
@@ -645,26 +648,26 @@ func (t *transferQueueActiveProcessorImpl) processSignalExecution(
 		// To do that, probably need to add the SignalRequestID in transfer task.
 		return nil
 	}
-	ok, err = verifyTaskVersion(t.shard, t.logger, task.DomainID, signalInfo.Version, task.Version, task)
+	ok, err = verifyTaskVersion(t.shard, t.logger, primitives.UUID(task.DomainID).String(), signalInfo.Version, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
 
-	targetDomainEntry, err := t.domainCache.GetDomainByID(task.TargetDomainID)
+	targetDomainEntry, err := t.domainCache.GetDomainByID(primitives.UUID(task.TargetDomainID).String())
 	if err != nil {
 		return err
 	}
 	targetDomain := targetDomainEntry.GetInfo().Name
 
 	// handle workflow signal itself
-	if task.DomainID == task.TargetDomainID && task.WorkflowID == task.TargetWorkflowID {
+	if bytes.Compare(task.DomainID, task.TargetDomainID) == 0 && task.WorkflowID == task.TargetWorkflowID {
 		// it does not matter if the run ID is a mismatch
 		return t.signalExternalExecutionFailed(
 			task,
 			weContext,
 			targetDomain,
 			task.TargetWorkflowID,
-			task.TargetRunID,
+			primitives.UUID(task.TargetRunID).String(),
 			signalInfo.Control,
 		)
 	}
@@ -687,14 +690,14 @@ func (t *transferQueueActiveProcessorImpl) processSignalExecution(
 			weContext,
 			targetDomain,
 			task.TargetWorkflowID,
-			task.TargetRunID,
+			primitives.UUID(task.TargetRunID).String(),
 			signalInfo.Control,
 		)
 	}
 
 	t.logger.Debug("Signal successfully recorded to external workflow execution",
 		tag.WorkflowID(task.TargetWorkflowID),
-		tag.WorkflowRunID(task.TargetRunID),
+		tag.WorkflowRunIDBytes(task.TargetRunID),
 	)
 
 	err = t.signalExternalExecutionCompleted(
@@ -702,7 +705,7 @@ func (t *transferQueueActiveProcessorImpl) processSignalExecution(
 		weContext,
 		targetDomain,
 		task.TargetWorkflowID,
-		task.TargetRunID,
+		primitives.UUID(task.TargetRunID).String(),
 		signalInfo.Control,
 	)
 	if err != nil {
@@ -716,10 +719,10 @@ func (t *transferQueueActiveProcessorImpl) processSignalExecution(
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
 	_, err = t.historyClient.RemoveSignalMutableState(ctx, &historyservice.RemoveSignalMutableStateRequest{
-		DomainUUID: task.TargetDomainID,
+		DomainUUID: primitives.UUID(task.TargetDomainID).String(),
 		WorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: task.TargetWorkflowID,
-			RunId:      task.TargetRunID,
+			RunId:      primitives.UUID(task.TargetRunID).String(),
 		},
 		RequestId: signalInfo.SignalRequestID,
 	})
@@ -727,7 +730,7 @@ func (t *transferQueueActiveProcessorImpl) processSignalExecution(
 }
 
 func (t *transferQueueActiveProcessorImpl) processStartChildExecution(
-	task *persistence.TransferTaskInfo,
+	task *persistenceblobs.TransferTaskInfo,
 ) (retError error) {
 
 	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
@@ -748,24 +751,24 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(
 
 	// Get parent domain name
 	var domain string
-	if domainEntry, err := t.shard.GetDomainCache().GetDomainByID(task.DomainID); err != nil {
+	if domainEntry, err := t.shard.GetDomainCache().GetDomainByID(primitives.UUID(task.DomainID).String()); err != nil {
 		if status.Code(err) != codes.NotFound {
 			return err
 		}
 		// it is possible that the domain got deleted. Use domainID instead as this is only needed for the history event
-		domain = task.DomainID
+		domain = primitives.UUID(task.DomainID).String()
 	} else {
 		domain = domainEntry.GetInfo().Name
 	}
 
 	// Get target domain name
 	var targetDomain string
-	if domainEntry, err := t.shard.GetDomainCache().GetDomainByID(task.TargetDomainID); err != nil {
+	if domainEntry, err := t.shard.GetDomainCache().GetDomainByID(primitives.UUID(task.TargetDomainID).String()); err != nil {
 		if status.Code(err) != codes.NotFound {
 			return err
 		}
 		// it is possible that the domain got deleted. Use domainID instead as this is only needed for the history event
-		targetDomain = task.TargetDomainID
+		targetDomain = primitives.UUID(task.DomainID).String()
 	} else {
 		targetDomain = domainEntry.GetInfo().Name
 	}
@@ -775,7 +778,7 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(
 	if !ok {
 		return nil
 	}
-	ok, err = verifyTaskVersion(t.shard, t.logger, task.DomainID, childInfo.Version, task.Version, task)
+	ok, err = verifyTaskVersion(t.shard, t.logger, primitives.UUID(task.DomainID).String(), childInfo.Version, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
@@ -791,7 +794,7 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(
 			WorkflowId: childInfo.StartedWorkflowID,
 			RunId:      childInfo.StartedRunID,
 		}
-		return t.createFirstDecisionTask(task.TargetDomainID, childExecution)
+		return t.createFirstDecisionTask(primitives.UUID(task.TargetDomainID).String(), childExecution)
 	}
 
 	attributes := initiatedEvent.StartChildWorkflowExecutionInitiatedEventAttributes
@@ -824,28 +827,28 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(
 		return err
 	}
 	// Finally create first decision task for Child execution so it is really started
-	return t.createFirstDecisionTask(task.TargetDomainID, &commonproto.WorkflowExecution{
+	return t.createFirstDecisionTask(primitives.UUID(task.TargetDomainID).String(), &commonproto.WorkflowExecution{
 		WorkflowId: task.TargetWorkflowID,
 		RunId:      childRunID,
 	})
 }
 
 func (t *transferQueueActiveProcessorImpl) processRecordWorkflowStarted(
-	task *persistence.TransferTaskInfo,
+	task *persistenceblobs.TransferTaskInfo,
 ) (retError error) {
 
 	return t.processRecordWorkflowStartedOrUpsertHelper(task, true)
 }
 
 func (t *transferQueueActiveProcessorImpl) processUpsertWorkflowSearchAttributes(
-	task *persistence.TransferTaskInfo,
+	task *persistenceblobs.TransferTaskInfo,
 ) (retError error) {
 
 	return t.processRecordWorkflowStartedOrUpsertHelper(task, false)
 }
 
 func (t *transferQueueActiveProcessorImpl) processRecordWorkflowStartedOrUpsertHelper(
-	task *persistence.TransferTaskInfo,
+	task *persistenceblobs.TransferTaskInfo,
 	recordStart bool,
 ) (retError error) {
 
@@ -872,7 +875,7 @@ func (t *transferQueueActiveProcessorImpl) processRecordWorkflowStartedOrUpsertH
 		if err != nil {
 			return err
 		}
-		ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, startVersion, task.Version, task)
+		ok, err := verifyTaskVersion(t.shard, t.logger, primitives.UUID(task.DomainID).String(), startVersion, task.Version, task)
 		if err != nil || !ok {
 			return err
 		}
@@ -896,9 +899,9 @@ func (t *transferQueueActiveProcessorImpl) processRecordWorkflowStartedOrUpsertH
 
 	if recordStart {
 		return t.recordWorkflowStarted(
-			task.DomainID,
+			primitives.UUID(task.DomainID).String(),
 			task.WorkflowID,
-			task.RunID,
+			primitives.UUID(task.RunID).String(),
 			wfTypeName,
 			startTimestamp,
 			executionTimestamp.UnixNano(),
@@ -909,9 +912,9 @@ func (t *transferQueueActiveProcessorImpl) processRecordWorkflowStartedOrUpsertH
 		)
 	}
 	return t.upsertWorkflowExecution(
-		task.DomainID,
+		primitives.UUID(task.DomainID).String(),
 		task.WorkflowID,
-		task.RunID,
+		primitives.UUID(task.RunID).String(),
 		wfTypeName,
 		startTimestamp,
 		executionTimestamp.UnixNano(),
@@ -923,7 +926,7 @@ func (t *transferQueueActiveProcessorImpl) processRecordWorkflowStartedOrUpsertH
 }
 
 func (t *transferQueueActiveProcessorImpl) processResetWorkflow(
-	task *persistence.TransferTaskInfo,
+	task *persistenceblobs.TransferTaskInfo,
 ) (retError error) {
 
 	currentContext, currentRelease, err := t.cache.getOrCreateWorkflowExecutionForBackground(
@@ -943,22 +946,22 @@ func (t *transferQueueActiveProcessorImpl) processResetWorkflow(
 	}
 
 	logger := t.logger.WithTags(
-		tag.WorkflowDomainID(task.DomainID),
+		tag.WorkflowDomainIDBytes(task.DomainID),
 		tag.WorkflowID(task.WorkflowID),
-		tag.WorkflowRunID(task.RunID),
+		tag.WorkflowRunIDBytes(task.RunID),
 	)
 
 	if !currentMutableState.IsWorkflowExecutionRunning() {
 		// it means this this might not be current anymore, we need to check
 		var resp *persistence.GetCurrentExecutionResponse
 		resp, err = t.executionManager.GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
-			DomainID:   task.DomainID,
+			DomainID:   primitives.UUID(task.DomainID).String(),
 			WorkflowID: task.WorkflowID,
 		})
 		if err != nil {
 			return err
 		}
-		if resp.RunID != task.RunID {
+		if resp.RunID != primitives.UUID(task.RunID).String() {
 			logger.Warn("Auto-Reset is skipped, because current run is stale.")
 			return nil
 		}
@@ -973,7 +976,7 @@ func (t *transferQueueActiveProcessorImpl) processResetWorkflow(
 	if err != nil {
 		return err
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, currentStartVersion, task.Version, task)
+	ok, err := verifyTaskVersion(t.shard, t.logger, primitives.UUID(task.DomainID).String(), currentStartVersion, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
@@ -1008,7 +1011,7 @@ func (t *transferQueueActiveProcessorImpl) processResetWorkflow(
 			WorkflowId: task.WorkflowID,
 			RunId:      resetPoint.GetRunId(),
 		}
-		baseContext, baseRelease, err = t.cache.getOrCreateWorkflowExecutionForBackground(task.DomainID, *adapter.ToThriftWorkflowExecution(baseExecution))
+		baseContext, baseRelease, err = t.cache.getOrCreateWorkflowExecutionForBackground(primitives.UUID(task.DomainID).String(), *adapter.ToThriftWorkflowExecution(baseExecution))
 		if err != nil {
 			return err
 		}
@@ -1039,7 +1042,7 @@ func (t *transferQueueActiveProcessorImpl) processResetWorkflow(
 }
 
 func (t *transferQueueActiveProcessorImpl) recordChildExecutionStarted(
-	task *persistence.TransferTaskInfo,
+	task *persistenceblobs.TransferTaskInfo,
 	context workflowExecutionContext,
 	initiatedAttributes *shared.StartChildWorkflowExecutionInitiatedEventAttributes,
 	runID string,
@@ -1074,7 +1077,7 @@ func (t *transferQueueActiveProcessorImpl) recordChildExecutionStarted(
 }
 
 func (t *transferQueueActiveProcessorImpl) recordStartChildExecutionFailed(
-	task *persistence.TransferTaskInfo,
+	task *persistenceblobs.TransferTaskInfo,
 	context workflowExecutionContext,
 	initiatedAttributes *shared.StartChildWorkflowExecutionInitiatedEventAttributes,
 ) error {
@@ -1125,7 +1128,7 @@ func (t *transferQueueActiveProcessorImpl) createFirstDecisionTask(
 }
 
 func (t *transferQueueActiveProcessorImpl) requestCancelExternalExecutionCompleted(
-	task *persistence.TransferTaskInfo,
+	task *persistenceblobs.TransferTaskInfo,
 	context workflowExecutionContext,
 	targetDomain string,
 	targetWorkflowID string,
@@ -1162,7 +1165,7 @@ func (t *transferQueueActiveProcessorImpl) requestCancelExternalExecutionComplet
 }
 
 func (t *transferQueueActiveProcessorImpl) signalExternalExecutionCompleted(
-	task *persistence.TransferTaskInfo,
+	task *persistenceblobs.TransferTaskInfo,
 	context workflowExecutionContext,
 	targetDomain string,
 	targetWorkflowID string,
@@ -1201,7 +1204,7 @@ func (t *transferQueueActiveProcessorImpl) signalExternalExecutionCompleted(
 }
 
 func (t *transferQueueActiveProcessorImpl) requestCancelExternalExecutionFailed(
-	task *persistence.TransferTaskInfo,
+	task *persistenceblobs.TransferTaskInfo,
 	context workflowExecutionContext,
 	targetDomain string,
 	targetWorkflowID string,
@@ -1240,7 +1243,7 @@ func (t *transferQueueActiveProcessorImpl) requestCancelExternalExecutionFailed(
 }
 
 func (t *transferQueueActiveProcessorImpl) signalExternalExecutionFailed(
-	task *persistence.TransferTaskInfo,
+	task *persistenceblobs.TransferTaskInfo,
 	context workflowExecutionContext,
 	targetDomain string,
 	targetWorkflowID string,
@@ -1307,18 +1310,18 @@ func (t *transferQueueActiveProcessorImpl) updateWorkflowExecution(
 }
 
 func (t *transferQueueActiveProcessorImpl) requestCancelExternalExecutionWithRetry(
-	task *persistence.TransferTaskInfo,
+	task *persistenceblobs.TransferTaskInfo,
 	targetDomain string,
 	requestCancelInfo *persistence.RequestCancelInfo,
 ) error {
 
 	request := &historyservice.RequestCancelWorkflowExecutionRequest{
-		DomainUUID: task.TargetDomainID,
+		DomainUUID: primitives.UUID(task.TargetDomainID).String(),
 		CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
 			Domain: targetDomain,
 			WorkflowExecution: &commonproto.WorkflowExecution{
 				WorkflowId: task.TargetWorkflowID,
-				RunId:      task.TargetRunID,
+				RunId:      primitives.UUID(task.TargetRunID).String(),
 			},
 			Identity: identityHistoryService,
 			// Use the same request ID to dedupe RequestCancelWorkflowExecution calls
@@ -1327,7 +1330,7 @@ func (t *transferQueueActiveProcessorImpl) requestCancelExternalExecutionWithRet
 		ExternalInitiatedEventId: task.ScheduleID,
 		ExternalWorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: task.WorkflowID,
-			RunId:      task.RunID,
+			RunId:      primitives.UUID(task.RunID).String(),
 		},
 		ChildWorkflowOnly: task.TargetChildWorkflowOnly,
 	}
@@ -1351,18 +1354,18 @@ func (t *transferQueueActiveProcessorImpl) requestCancelExternalExecutionWithRet
 }
 
 func (t *transferQueueActiveProcessorImpl) signalExternalExecutionWithRetry(
-	task *persistence.TransferTaskInfo,
+	task *persistenceblobs.TransferTaskInfo,
 	targetDomain string,
 	signalInfo *persistence.SignalInfo,
 ) error {
 
 	request := &historyservice.SignalWorkflowExecutionRequest{
-		DomainUUID: task.TargetDomainID,
+		DomainUUID: primitives.UUID(task.TargetDomainID).String(),
 		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
 			Domain: targetDomain,
 			WorkflowExecution: &commonproto.WorkflowExecution{
 				WorkflowId: task.TargetWorkflowID,
-				RunId:      task.TargetRunID,
+				RunId:      primitives.UUID(task.TargetRunID).String(),
 			},
 			Identity:   identityHistoryService,
 			SignalName: signalInfo.SignalName,
@@ -1373,7 +1376,7 @@ func (t *transferQueueActiveProcessorImpl) signalExternalExecutionWithRetry(
 		},
 		ExternalWorkflowExecution: &commonproto.WorkflowExecution{
 			WorkflowId: task.WorkflowID,
-			RunId:      task.RunID,
+			RunId:      primitives.UUID(task.RunID).String(),
 		},
 		ChildWorkflowOnly: task.TargetChildWorkflowOnly,
 	}
@@ -1389,7 +1392,7 @@ func (t *transferQueueActiveProcessorImpl) signalExternalExecutionWithRetry(
 }
 
 func (t *transferQueueActiveProcessorImpl) startWorkflowWithRetry(
-	task *persistence.TransferTaskInfo,
+	task *persistenceblobs.TransferTaskInfo,
 	domain string,
 	targetDomain string,
 	childInfo *persistence.ChildExecutionInfo,
@@ -1398,7 +1401,7 @@ func (t *transferQueueActiveProcessorImpl) startWorkflowWithRetry(
 
 	now := t.timeSource.Now()
 	request := &historyservice.StartWorkflowExecutionRequest{
-		DomainUUID: task.TargetDomainID,
+		DomainUUID: primitives.UUID(task.TargetDomainID).String(),
 		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 			Domain:                              targetDomain,
 			WorkflowId:                          attributes.WorkflowId,
@@ -1417,11 +1420,11 @@ func (t *transferQueueActiveProcessorImpl) startWorkflowWithRetry(
 			SearchAttributes:      attributes.SearchAttributes,
 		},
 		ParentExecutionInfo: &commonproto.ParentExecutionInfo{
-			DomainUUID: task.DomainID,
+			DomainUUID: primitives.UUID(task.DomainID).String(),
 			Domain:     domain,
 			Execution: &commonproto.WorkflowExecution{
 				WorkflowId: task.WorkflowID,
-				RunId:      task.RunID,
+				RunId:      primitives.UUID(task.RunID).String(),
 			},
 			InitiatedId: task.ScheduleID,
 		},
@@ -1449,7 +1452,7 @@ func (t *transferQueueActiveProcessorImpl) startWorkflowWithRetry(
 }
 
 func (t *transferQueueActiveProcessorImpl) resetWorkflow(
-	task *persistence.TransferTaskInfo,
+	task *persistenceblobs.TransferTaskInfo,
 	domain string,
 	reason string,
 	resetPoint *shared.ResetPointInfo,
@@ -1464,7 +1467,7 @@ func (t *transferQueueActiveProcessorImpl) resetWorkflow(
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
 
-	domainID := task.DomainID
+	domainID := primitives.UUID(task.DomainID).String()
 	workflowID := task.WorkflowID
 	baseRunID := baseMutableState.GetExecutionInfo().RunID
 

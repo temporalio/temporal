@@ -437,7 +437,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 
 	taskD, err := s.GetTransferTasks(2, false)
 	s.Equal(1, len(taskD), "Expected 1 decision task.")
-	s.Equal(p.TransferTaskTypeDecisionTask, taskD[0].TaskType)
+	s.EqualValues(p.TransferTaskTypeDecisionTask, taskD[0].TaskType)
 	err = s.CompleteTransferTask(taskD[0].TaskID)
 	s.NoError(err)
 
@@ -717,7 +717,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 
 	taskD, err := s.GetTransferTasks(2, false)
 	s.Equal(1, len(taskD), "Expected 1 decision task.")
-	s.Equal(p.TransferTaskTypeDecisionTask, taskD[0].TaskType)
+	s.EqualValues(p.TransferTaskTypeDecisionTask, taskD[0].TaskType)
 	err = s.CompleteTransferTask(taskD[0].TaskID)
 	s.NoError(err)
 	taskD, err = s.GetTransferTasks(2, false)
@@ -1149,7 +1149,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 
 	taskD, err := s.GetTransferTasks(2, false)
 	s.Equal(1, len(taskD), "Expected 1 decision task.")
-	s.Equal(p.TransferTaskTypeDecisionTask, taskD[0].TaskType)
+	s.EqualValues(p.TransferTaskTypeDecisionTask, taskD[0].TaskType)
 	err = s.CompleteTransferTask(taskD[0].TaskID)
 	s.NoError(err)
 	taskD, err = s.GetTransferTasks(2, false)
@@ -1524,7 +1524,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 
 	taskD, err := s.GetTransferTasks(2, false)
 	s.Equal(1, len(taskD), "Expected 1 decision task.")
-	s.Equal(p.TransferTaskTypeDecisionTask, taskD[0].TaskType)
+	s.EqualValues(p.TransferTaskTypeDecisionTask, taskD[0].TaskType)
 	err = s.CompleteTransferTask(taskD[0].TaskID)
 	s.NoError(err)
 	taskD, err = s.GetTransferTasks(2, false)
@@ -1619,7 +1619,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 	taskD, err = s.GetTransferTasks(3, false)
 	s.Equal(1, len(taskD), "Expected 1 decision task.")
 
-	s.Equal(p.TransferTaskTypeDecisionTask, taskD[0].TaskType)
+	s.EqualValues(p.TransferTaskTypeDecisionTask, taskD[0].TaskType)
 	s.Equal(int64(200), taskD[0].Version)
 	err = s.CompleteTransferTask(taskD[0].TaskID)
 	s.NoError(err)

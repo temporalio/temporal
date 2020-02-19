@@ -746,13 +746,14 @@ func createTransferTasks(
 
 	transferTasksRows := make([]sqlplugin.TransferTasksRow, len(transferTasks))
 	for i, task := range transferTasks {
-		info := &sqlblobs.TransferTaskInfo{
+		info := &persistenceblobs.TransferTaskInfo{
 			DomainID:         domainID,
-			WorkflowID:       &workflowID,
+			WorkflowID:       workflowID,
 			RunID:            runID,
 			TargetDomainID:   domainID,
-			TargetWorkflowID: common.StringPtr(p.TransferTaskTransferTargetWorkflowID),
-			ScheduleID:       common.Int64Ptr(0),
+			TargetWorkflowID: p.TransferTaskTransferTargetWorkflowID,
+			ScheduleID:       0,
+			TaskID:           task.GetTaskID(),
 		}
 
 		transferTasksRows[i].ShardID = shardID
@@ -761,36 +762,36 @@ func createTransferTasks(
 		switch task.GetType() {
 		case p.TransferTaskTypeActivityTask:
 			info.TargetDomainID = primitives.MustParseUUID(task.(*p.ActivityTask).DomainID)
-			info.TaskList = &task.(*p.ActivityTask).TaskList
-			info.ScheduleID = &task.(*p.ActivityTask).ScheduleID
+			info.TaskList = task.(*p.ActivityTask).TaskList
+			info.ScheduleID = task.(*p.ActivityTask).ScheduleID
 
 		case p.TransferTaskTypeDecisionTask:
 			info.TargetDomainID = primitives.MustParseUUID(task.(*p.DecisionTask).DomainID)
-			info.TaskList = &task.(*p.DecisionTask).TaskList
-			info.ScheduleID = &task.(*p.DecisionTask).ScheduleID
+			info.TaskList = task.(*p.DecisionTask).TaskList
+			info.ScheduleID = task.(*p.DecisionTask).ScheduleID
 
 		case p.TransferTaskTypeCancelExecution:
 			info.TargetDomainID = primitives.MustParseUUID(task.(*p.CancelExecutionTask).TargetDomainID)
-			info.TargetWorkflowID = &task.(*p.CancelExecutionTask).TargetWorkflowID
+			info.TargetWorkflowID = task.(*p.CancelExecutionTask).TargetWorkflowID
 			if task.(*p.CancelExecutionTask).TargetRunID != "" {
 				info.TargetRunID = primitives.MustParseUUID(task.(*p.CancelExecutionTask).TargetRunID)
 			}
-			info.TargetChildWorkflowOnly = &task.(*p.CancelExecutionTask).TargetChildWorkflowOnly
-			info.ScheduleID = &task.(*p.CancelExecutionTask).InitiatedID
+			info.TargetChildWorkflowOnly = task.(*p.CancelExecutionTask).TargetChildWorkflowOnly
+			info.ScheduleID = task.(*p.CancelExecutionTask).InitiatedID
 
 		case p.TransferTaskTypeSignalExecution:
 			info.TargetDomainID = primitives.MustParseUUID(task.(*p.SignalExecutionTask).TargetDomainID)
-			info.TargetWorkflowID = &task.(*p.SignalExecutionTask).TargetWorkflowID
+			info.TargetWorkflowID = task.(*p.SignalExecutionTask).TargetWorkflowID
 			if task.(*p.SignalExecutionTask).TargetRunID != "" {
 				info.TargetRunID = primitives.MustParseUUID(task.(*p.SignalExecutionTask).TargetRunID)
 			}
-			info.TargetChildWorkflowOnly = &task.(*p.SignalExecutionTask).TargetChildWorkflowOnly
-			info.ScheduleID = &task.(*p.SignalExecutionTask).InitiatedID
+			info.TargetChildWorkflowOnly = task.(*p.SignalExecutionTask).TargetChildWorkflowOnly
+			info.ScheduleID = task.(*p.SignalExecutionTask).InitiatedID
 
 		case p.TransferTaskTypeStartChildExecution:
 			info.TargetDomainID = primitives.MustParseUUID(task.(*p.StartChildExecutionTask).TargetDomainID)
-			info.TargetWorkflowID = &task.(*p.StartChildExecutionTask).TargetWorkflowID
-			info.ScheduleID = &task.(*p.StartChildExecutionTask).InitiatedID
+			info.TargetWorkflowID = task.(*p.StartChildExecutionTask).TargetWorkflowID
+			info.ScheduleID = task.(*p.StartChildExecutionTask).InitiatedID
 
 		case p.TransferTaskTypeCloseExecution,
 			p.TransferTaskTypeRecordWorkflowStarted,
@@ -804,11 +805,17 @@ func createTransferTasks(
 			}
 		}
 
-		info.TaskType = common.Int16Ptr(int16(task.GetType()))
-		info.Version = common.Int64Ptr(task.GetVersion())
-		info.VisibilityTimestampNanos = common.Int64Ptr(task.GetVisibilityTimestamp().UnixNano())
+		info.TaskType = int32(task.GetType())
+		info.Version = task.GetVersion()
 
-		blob, err := transferTaskInfoToBlob(info)
+		t, err := types.TimestampProto(task.GetVisibilityTimestamp().UTC())
+		if err != nil {
+			return err
+		}
+
+		info.VisibilityTimestamp = t
+
+		blob, err := TransferTaskInfoToBlob(info)
 		if err != nil {
 			return err
 		}
