@@ -22,19 +22,6 @@ namespace java com.temporalio.temporal.sqlblobs
 
 include "shared.thrift"
 
-struct ShardInfo {
-  10: optional i32 stolenSinceRenew
-  12: optional i64 (js.type = "Long") updatedAtNanos
-  14: optional i64 (js.type = "Long") replicationAckLevel
-  16: optional i64 (js.type = "Long") transferAckLevel
-  18: optional i64 (js.type = "Long") timerAckLevelNanos
-  24: optional i64 (js.type = "Long") domainNotificationVersion
-  34: optional map<string, i64> clusterTransferAckLevel
-  36: optional map<string, i64> clusterTimerAckLevel
-  38: optional string owner
-  40: optional map<string, i64> clusterReplicationLevel
-}
-
 struct DomainInfo {
   10: optional string name
   12: optional string description
@@ -221,47 +208,4 @@ struct TaskListInfo {
   12: optional i64 (js.type = "Long") ackLevel
   14: optional i64 (js.type = "Long") expiryTimeNanos
   16: optional i64 (js.type = "Long") lastUpdatedNanos
-}
-
-struct TransferTaskInfo {
-  10: optional binary domainID
-  12: optional string workflowID
-  14: optional binary runID
-  16: optional i16 taskType
-  18: optional binary targetDomainID
-  20: optional string targetWorkflowID
-  22: optional binary targetRunID
-  24: optional string taskList
-  26: optional bool targetChildWorkflowOnly
-  28: optional i64 (js.type = "Long") scheduleID
-  30: optional i64 (js.type = "Long") version
-  32: optional i64 (js.type = "Long") visibilityTimestampNanos
-}
-
-struct TimerTaskInfo {
-  10: optional binary domainID
-  12: optional string workflowID
-  14: optional binary runID
-  16: optional i16 taskType
-  18: optional i16 timeoutType
-  20: optional i64 (js.type = "Long") version
-  22: optional i64 (js.type = "Long") scheduleAttempt
-  24: optional i64 (js.type = "Long") eventID
-}
-
-struct ReplicationTaskInfo {
-  10: optional binary domainID
-  12: optional string workflowID
-  14: optional binary runID
-  16: optional i16 taskType
-  18: optional i64 (js.type = "Long") version
-  20: optional i64 (js.type = "Long") firstEventID
-  22: optional i64 (js.type = "Long") nextEventID
-  24: optional i64 (js.type = "Long") scheduledID
-  26: optional i32 eventStoreVersion
-  28: optional i32 newRunEventStoreVersion
-  30: optional binary branch_token
-  32: optional map<string, ReplicationInfo> lastReplicationInfo
-  34: optional binary newRunBranchToken
-  36: optional bool resetWorkflow
 }
