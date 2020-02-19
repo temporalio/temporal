@@ -30,10 +30,10 @@ import (
 	"github.com/pborman/uuid"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"google.golang.org/grpc/codes"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/common"
@@ -82,44 +82,6 @@ type (
 )
 
 var (
-	errDomainNotSet                               = &shared.BadRequestError{Message: "Domain not set on request."}
-	errTaskTokenNotSet                            = &shared.BadRequestError{Message: "Task token not set on request."}
-	errInvalidTaskToken                           = &shared.BadRequestError{Message: "Invalid TaskToken."}
-	errTaskListNotSet                             = &shared.BadRequestError{Message: "TaskList is not set on request."}
-	errTaskListTypeNotSet                         = &shared.BadRequestError{Message: "TaskListType is not set on request."}
-	errExecutionNotSet                            = &shared.BadRequestError{Message: "Execution is not set on request."}
-	errWorkflowIDNotSet                           = &shared.BadRequestError{Message: "WorkflowId is not set on request."}
-	errActivityIDNotSet                           = &shared.BadRequestError{Message: "ActivityID is not set on request."}
-	errInvalidRunID                               = &shared.BadRequestError{Message: "Invalid RunId."}
-	errInvalidNextPageToken                       = &shared.BadRequestError{Message: "Invalid NextPageToken."}
-	errNextPageTokenRunIDMismatch                 = &shared.BadRequestError{Message: "RunID in the request does not match the NextPageToken."}
-	errQueryNotSet                                = &shared.BadRequestError{Message: "WorkflowQuery is not set on request."}
-	errQueryTypeNotSet                            = &shared.BadRequestError{Message: "QueryType is not set on request."}
-	errRequestNotSet                              = &shared.BadRequestError{Message: "Request is nil."}
-	errNoPermission                               = &shared.BadRequestError{Message: "No permission to do this operation."}
-	errRequestIDNotSet                            = &shared.BadRequestError{Message: "RequestId is not set on request."}
-	errWorkflowTypeNotSet                         = &shared.BadRequestError{Message: "WorkflowType is not set on request."}
-	errInvalidRetention                           = &shared.BadRequestError{Message: "RetentionDays is invalid."}
-	errInvalidExecutionStartToCloseTimeoutSeconds = &shared.BadRequestError{Message: "A valid ExecutionStartToCloseTimeoutSeconds is not set on request."}
-	errInvalidTaskStartToCloseTimeoutSeconds      = &shared.BadRequestError{Message: "A valid TaskStartToCloseTimeoutSeconds is not set on request."}
-	errQueryDisallowedForDomain                   = &shared.BadRequestError{Message: "Domain is not allowed to query, please contact cadence team to re-enable queries."}
-	errClusterNameNotSet                          = &shared.BadRequestError{Message: "Cluster name is not set."}
-	errEmptyReplicationInfo                       = &shared.BadRequestError{Message: "Replication task info is not set."}
-
-	// err for archival
-	errHistoryNotFound = &shared.BadRequestError{Message: "Requested workflow history not found, may have passed retention period."}
-
-	// err for string too long
-	errDomainTooLong       = &shared.BadRequestError{Message: "Domain length exceeds limit."}
-	errWorkflowTypeTooLong = &shared.BadRequestError{Message: "WorkflowType length exceeds limit."}
-	errWorkflowIDTooLong   = &shared.BadRequestError{Message: "WorkflowID length exceeds limit."}
-	errSignalNameTooLong   = &shared.BadRequestError{Message: "SignalName length exceeds limit."}
-	errTaskListTooLong     = &shared.BadRequestError{Message: "TaskList length exceeds limit."}
-	errRequestIDTooLong    = &shared.BadRequestError{Message: "RequestID length exceeds limit."}
-	errIdentityTooLong     = &shared.BadRequestError{Message: "Identity length exceeds limit."}
-
-	errServiceBusy = &shared.ServiceBusyError{Message: "Too many outstanding requests to the service."}
-
 	frontendServiceRetryPolicy = common.CreateFrontendServiceRetryPolicy()
 )
 
@@ -1838,7 +1800,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 	}
 
 	if request.GetSignalName() == "" {
-		return nil, wh.error(&shared.BadRequestError{Message: "SignalName is not set on request."}, scope)
+		return nil, wh.error(errSignalNameTooLong, scope)
 	}
 
 	if len(request.GetSignalName()) > wh.config.MaxIDLengthLimit() {
@@ -1913,7 +1875,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	}
 
 	if request.GetWorkflowId() == "" {
-		return nil, wh.error(&shared.BadRequestError{Message: "WorkflowId is not set on request."}, scope)
+		return nil, wh.error(errWorkflowIDNotSet, scope)
 	}
 
 	if len(request.GetWorkflowId()) > wh.config.MaxIDLengthLimit() {
@@ -1921,7 +1883,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	}
 
 	if request.GetSignalName() == "" {
-		return nil, wh.error(&shared.BadRequestError{Message: "SignalName is not set on request."}, scope)
+		return nil, wh.error(errSignalNameNotSet, scope)
 	}
 
 	if len(request.GetSignalName()) > wh.config.MaxIDLengthLimit() {
@@ -1929,7 +1891,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	}
 
 	if request.WorkflowType == nil || request.WorkflowType.GetName() == "" {
-		return nil, wh.error(&shared.BadRequestError{Message: "WorkflowType is not set on request."}, scope)
+		return nil, wh.error(errWorkflowTypeNotSet, scope)
 	}
 
 	if len(request.WorkflowType.GetName()) > wh.config.MaxIDLengthLimit() {
@@ -1945,13 +1907,11 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	}
 
 	if request.GetExecutionStartToCloseTimeoutSeconds() <= 0 {
-		return nil, wh.error(&shared.BadRequestError{
-			Message: "A valid ExecutionStartToCloseTimeoutSeconds is not set on request."}, scope)
+		return nil, wh.error(errInvalidExecutionStartToCloseTimeoutSeconds, scope)
 	}
 
 	if request.GetTaskStartToCloseTimeoutSeconds() <= 0 {
-		return nil, wh.error(&shared.BadRequestError{
-			Message: "A valid TaskStartToCloseTimeoutSeconds is not set on request."}, scope)
+		return nil, wh.error(errInvalidTaskStartToCloseTimeoutSeconds, scope)
 	}
 
 	if err := common.ValidateRetryPolicy(request.RetryPolicy); err != nil {
@@ -2130,11 +2090,11 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 	}
 
 	if request.StartTimeFilter == nil {
-		return nil, wh.error(&shared.BadRequestError{Message: "StartTimeFilter is required"}, scope)
+		return nil, wh.error(errStartTimeFilterNotSet, scope)
 	}
 
 	if request.StartTimeFilter.GetEarliestTime() > request.StartTimeFilter.GetLatestTime() {
-		return nil, wh.error(&shared.BadRequestError{Message: "EarliestTime in StartTimeFilter should not be larger than LatestTime"}, scope)
+		return nil, wh.error(errEarliestTimeIsGreaterThanLatestTime, scope)
 	}
 
 	if request.GetMaximumPageSize() <= 0 {
@@ -2142,8 +2102,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 	}
 
 	if wh.isListRequestPageSizeTooLarge(request.GetMaximumPageSize(), request.GetDomain()) {
-		return nil, wh.error(&shared.BadRequestError{
-			Message: fmt.Sprintf("Pagesize is larger than allow %d", wh.config.ESIndexMaxResultWindow())}, scope)
+		return nil, wh.error(errPageSizeTooBig.MessageArgs(wh.config.ESIndexMaxResultWindow()), scope)
 	}
 
 	domain := request.GetDomain()
@@ -2223,11 +2182,11 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 	}
 
 	if request.StartTimeFilter == nil {
-		return nil, wh.error(&shared.BadRequestError{Message: "StartTimeFilter is required"}, scope)
+		return nil, wh.error(errStartTimeFilterNotSet, scope)
 	}
 
 	if request.StartTimeFilter.GetEarliestTime() > request.StartTimeFilter.GetLatestTime() {
-		return nil, wh.error(&shared.BadRequestError{Message: "EarliestTime in StartTimeFilter should not be larger than LatestTime"}, scope)
+		return nil, wh.error(errEarliestTimeIsGreaterThanLatestTime, scope)
 	}
 
 	if request.GetMaximumPageSize() <= 0 {
@@ -2235,8 +2194,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 	}
 
 	if wh.isListRequestPageSizeTooLarge(request.GetMaximumPageSize(), request.GetDomain()) {
-		return nil, wh.error(&shared.BadRequestError{
-			Message: fmt.Sprintf("Pagesize is larger than allow %d", wh.config.ESIndexMaxResultWindow())}, scope)
+		return nil, wh.error(errPageSizeTooBig.MessageArgs(wh.config.ESIndexMaxResultWindow()), scope)
 	}
 
 	domain := request.GetDomain()
@@ -2331,8 +2289,7 @@ func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, request *
 	}
 
 	if wh.isListRequestPageSizeTooLarge(request.GetPageSize(), request.GetDomain()) {
-		return nil, wh.error(&shared.BadRequestError{
-			Message: fmt.Sprintf("Pagesize is larger than allow %d", wh.config.ESIndexMaxResultWindow())}, scope)
+		return nil, wh.error(errPageSizeTooBig.MessageArgs(wh.config.ESIndexMaxResultWindow()), scope)
 	}
 
 	if err := wh.visibilityQueryValidator.ValidateListRequestForQuery(request); err != nil {
@@ -2392,16 +2349,15 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 
 	maxPageSize := wh.config.VisibilityArchivalQueryMaxPageSize()
 	if int(request.GetPageSize()) > maxPageSize {
-		return nil, wh.error(&shared.BadRequestError{
-			Message: fmt.Sprintf("Pagesize is larger than allowed %d", maxPageSize)}, scope)
+		return nil, wh.error(errPageSizeTooBig.MessageArgs(maxPageSize), scope)
 	}
 
 	if !wh.GetArchivalMetadata().GetVisibilityConfig().ClusterConfiguredForArchival() {
-		return nil, wh.error(&shared.BadRequestError{Message: "Cluster is not configured for visibility archival"}, scope)
+		return nil, wh.error(errClusterIsNotConfiguredForVisibilityArchival, scope)
 	}
 
 	if !wh.GetArchivalMetadata().GetVisibilityConfig().ReadEnabled() {
-		return nil, wh.error(&shared.BadRequestError{Message: "Cluster is not configured for reading archived visibility records"}, scope)
+		return nil, wh.error(errClusterIsNotConfiguredForReadingArchivalVisibility, scope)
 	}
 
 	entry, err := wh.GetDomainCache().GetDomain(request.GetDomain())
@@ -2410,7 +2366,7 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 	}
 
 	if adapter.ToProtoArchivalStatus(&entry.GetConfig().VisibilityArchivalStatus) != enums.ArchivalStatusEnabled {
-		return nil, wh.error(&shared.BadRequestError{Message: "Domain is not configured for visibility archival"}, scope)
+		return nil, wh.error(errDomainIsNotConfiguredForVisibilityArchival, scope)
 	}
 
 	URI, err := archiver.NewURI(entry.GetConfig().VisibilityArchivalURI)
@@ -2476,8 +2432,7 @@ func (wh *WorkflowHandler) ScanWorkflowExecutions(ctx context.Context, request *
 	}
 
 	if wh.isListRequestPageSizeTooLarge(request.GetPageSize(), request.GetDomain()) {
-		return nil, wh.error(&shared.BadRequestError{
-			Message: fmt.Sprintf("Pagesize is larger than allow %d", wh.config.ESIndexMaxResultWindow())}, scope)
+		return nil, wh.error(errPageSizeTooBig.MessageArgs(wh.config.ESIndexMaxResultWindow()), scope)
 	}
 
 	if err := wh.visibilityQueryValidator.ValidateScanRequestForQuery(request); err != nil {
@@ -3157,8 +3112,8 @@ func (wh *WorkflowHandler) getHistory(
 	isFirstPage := len(nextPageToken) == 0
 	shardID := common.WorkflowIDToHistoryShard(execution.GetWorkflowId(), wh.config.NumHistoryShards)
 	var err error
-	var persistenceHistoryEvents []*shared.HistoryEvent
-	persistenceHistoryEvents, size, nextPageToken, err = persistence.ReadFullPageV2Events(wh.GetHistoryManager(), &persistence.ReadHistoryBranchRequest{
+	var historyEvents []*commonproto.HistoryEvent
+	historyEvents, size, nextPageToken, err = persistence.ReadFullPageV2Events(wh.GetHistoryManager(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
@@ -3171,8 +3126,6 @@ func (wh *WorkflowHandler) getHistory(
 	}
 
 	scope.RecordTimer(metrics.HistorySize, time.Duration(size))
-
-	historyEvents := adapter.ToProtoHistoryEvents(persistenceHistoryEvents)
 
 	isLastPage := len(nextPageToken) == 0
 	if err := wh.verifyHistoryIsComplete(
@@ -3219,9 +3172,7 @@ func (wh *WorkflowHandler) validateTransientDecisionEvents(
 		return nil
 	}
 
-	return fmt.Errorf(
-		"invalid transient decision: "+
-			"expectedScheduledEventID=%v expectedStartedEventID=%v but have scheduledEventID=%v startedEventID=%v",
+	return fmt.Errorf("invalid transient decision: expectedScheduledEventID=%v expectedStartedEventID=%v but have scheduledEventID=%v startedEventID=%v",
 		expectedNextEventID,
 		expectedNextEventID+1,
 		decision.ScheduledEvent.GetEventId(),
@@ -3256,59 +3207,60 @@ func (wh *WorkflowHandler) getDefaultScope(scope int) metrics.Scope {
 }
 
 func (wh *WorkflowHandler) error(err error, scope metrics.Scope, tagsForErrorLog ...tag.Tag) error {
-	if st, ok := status.FromError(err); ok {
-		if st.Code() == codes.DeadlineExceeded {
-			scope.IncCounter(metrics.CadenceErrContextTimeoutCounter)
+	// TODO: remove after error migration is done
+	if _, ok := err.(interface{ GRPCStatus() *status.Status }); !ok {
+		// This means the err is an old Thrift error.
+		err = adapter.ToServiceError(err)
+	} else {
+		if _, ok := err.(interface{ Details() []interface{} }); ok {
+			// This means the err is an actual status.Status that came from another RPC call (history, matching, etc).
+			return err
 		}
-		scope.IncCounter(metrics.CadenceFailures)
-		return err
 	}
 
-	return adapter.ToProtoError(wh.errorThrift(err, scope, tagsForErrorLog...))
-}
-
-func (wh *WorkflowHandler) errorThrift(err error, scope metrics.Scope, tagsForErrorLog ...tag.Tag) error {
 	switch err := err.(type) {
-	case *shared.InternalServiceError:
+	case *serviceerror.Internal:
+	case *serviceerror.DataLoss:
 		wh.GetLogger().WithTags(tagsForErrorLog...).Error("Internal service error", tag.Error(err))
 		scope.IncCounter(metrics.CadenceFailures)
 		return err
-	case *shared.BadRequestError:
+	case *serviceerror.InvalidArgument:
 		scope.IncCounter(metrics.CadenceErrBadRequestCounter)
 		return err
-	case *shared.DomainNotActiveError:
+	case *serviceerror.DomainNotActive:
 		scope.IncCounter(metrics.CadenceErrBadRequestCounter)
 		return err
-	case *shared.ServiceBusyError:
+	case *serviceerror.ResourceExhausted:
 		scope.IncCounter(metrics.CadenceErrServiceBusyCounter)
 		return err
-	case *shared.EntityNotExistsError:
+	case *serviceerror.NotFound:
 		scope.IncCounter(metrics.CadenceErrEntityNotExistsCounter)
 		return err
-	case *shared.WorkflowExecutionAlreadyStartedError:
+	case *serviceerror.WorkflowExecutionAlreadyStarted:
 		scope.IncCounter(metrics.CadenceErrExecutionAlreadyStartedCounter)
 		return err
-	case *shared.DomainAlreadyExistsError:
+	case *serviceerror.DomainAlreadyExists:
 		scope.IncCounter(metrics.CadenceErrDomainAlreadyExistsCounter)
 		return err
-	case *shared.CancellationAlreadyRequestedError:
+	case *serviceerror.CancellationAlreadyRequested:
 		scope.IncCounter(metrics.CadenceErrCancellationAlreadyRequestedCounter)
 		return err
-	case *shared.QueryFailedError:
+	case *serviceerror.QueryFailed:
 		scope.IncCounter(metrics.CadenceErrQueryFailedCounter)
 		return err
-	case *shared.LimitExceededError:
-		scope.IncCounter(metrics.CadenceErrLimitExceededCounter)
-		return err
-	case *shared.ClientVersionNotSupportedError:
+	case *serviceerror.ClientVersionNotSupported:
 		scope.IncCounter(metrics.CadenceErrClientVersionNotSupportedCounter)
+		return err
+	case *serviceerror.DeadlineExceeded:
+		scope.IncCounter(metrics.CadenceErrContextTimeoutCounter)
 		return err
 	}
 
-	wh.GetLogger().WithTags(tagsForErrorLog...).Error("Uncategorized error",
-		tag.Error(err))
+	wh.GetLogger().WithTags(tagsForErrorLog...).Error("Unknown error", tag.Error(err))
 	scope.IncCounter(metrics.CadenceFailures)
-	return &shared.InternalServiceError{Message: fmt.Sprintf("Internal uncategorized error: %v", err)}
+
+	// err will be converted to *status.Status with codes.Unknown by gRPC.
+	return err
 }
 
 func (wh *WorkflowHandler) validateTaskList(t *commonproto.TaskList, scope metrics.Scope) error {
@@ -3452,17 +3404,16 @@ func (wh *WorkflowHandler) verifyHistoryIsComplete(
 			// there are no more events to consume - bail out if this is the case here
 			return nil
 		}
-		return fmt.Errorf("invalid history: contains zero events")
+		return serviceerror.NewDataLoss("History contains zero events.")
 	}
 
 	firstEventID := events[0].GetEventId()
 	lastEventID := events[nEvents-1].GetEventId()
 
-	if !isFirstPage { // atleast one page of history has been read previously
+	if !isFirstPage { // at least one page of history has been read previously
 		if firstEventID <= expectedFirstEventID {
 			// not first page and no events have been read in the previous pages - not possible
-			return &shared.InternalServiceError{Message: fmt.Sprintf(
-				"invalid hierrory: expected first eventID to be > %v but got %v", expectedFirstEventID, firstEventID)}
+			return serviceerror.NewDataLoss(fmt.Sprintf("Invalid history: expected first eventID to be > %v but got %v", expectedFirstEventID, firstEventID))
 		}
 		expectedFirstEventID = firstEventID
 	}
@@ -3481,10 +3432,7 @@ func (wh *WorkflowHandler) verifyHistoryIsComplete(
 		return nil
 	}
 
-	return &shared.InternalServiceError{Message: fmt.Sprintf(
-		"incomplete history: "+
-			"expected events [%v-%v] but got events [%v-%v] of length %v:"+
-			"isFirstPage=%v,isLastPage=%v,pageSize=%v",
+	return serviceerror.NewDataLoss(fmt.Sprintf("Incomplete history: expected events [%v-%v] but got events [%v-%v] of length %v: isFirstPage=%v,isLastPage=%v,pageSize=%v",
 		expectedFirstEventID,
 		expectedLastEventID,
 		firstEventID,
@@ -3492,7 +3440,7 @@ func (wh *WorkflowHandler) verifyHistoryIsComplete(
 		nEvents,
 		isFirstPage,
 		isLastPage,
-		pageSize)}
+		pageSize))
 }
 
 func (wh *WorkflowHandler) deserializeHistoryToken(bytes []byte) (*getHistoryContinuationToken, error) {
@@ -3648,7 +3596,7 @@ func (wh *WorkflowHandler) checkBadBinary(domainEntry *cache.DomainCacheEntry, b
 		_, ok := badBinaries[binaryChecksum]
 		if ok {
 			wh.GetMetricsClient().IncCounter(metrics.FrontendPollForDecisionTaskScope, metrics.CadenceErrBadBinaryCounter)
-			return &shared.BadRequestError{Message: fmt.Sprintf("binary %v already marked as bad deployment", binaryChecksum)}
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("Binary %v already marked as bad deployment.", binaryChecksum))
 		}
 	}
 	return nil

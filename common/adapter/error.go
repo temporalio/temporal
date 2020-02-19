@@ -25,6 +25,7 @@ import (
 
 	"github.com/gogo/status"
 	"go.temporal.io/temporal-proto/errordetails"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.uber.org/yarpc/encoding/protobuf"
 	"go.uber.org/yarpc/yarpcerrors"
 	"google.golang.org/grpc/codes"
@@ -172,4 +173,56 @@ func ToThriftError(st *status.Status) error {
 	}
 
 	return &shared.InternalServiceError{Message: fmt.Sprintf("temporal internal uncategorized error, msg: %s", st.Message())}
+}
+
+// ToProtoError converts Thrift error to gRPC error.
+func ToServiceError(in error) error {
+	if in == nil {
+		return nil
+	}
+
+	switch thriftError := in.(type) {
+	case *shared.InternalServiceError:
+		return serviceerror.NewInternal(thriftError.Message)
+	case *shared.BadRequestError:
+		switch thriftError.Message {
+		case "No permission to do this operation.":
+			return serviceerror.NewPermissionDenied(thriftError.Message)
+		default:
+			return serviceerror.NewInvalidArgument(thriftError.Message)
+		}
+	case *shared.DomainNotActiveError:
+		return serviceerror.NewDomainNotActive(thriftError.Message, thriftError.DomainName, thriftError.CurrentCluster, thriftError.ActiveCluster)
+	case *shared.ServiceBusyError:
+		return serviceerror.NewResourceExhausted(thriftError.Message)
+	case *shared.WorkflowExecutionAlreadyStartedError:
+		return serviceerror.NewWorkflowExecutionAlreadyStarted(*thriftError.Message, *thriftError.StartRequestId, *thriftError.RunId)
+	case *shared.DomainAlreadyExistsError:
+		return serviceerror.NewDomainAlreadyExists(thriftError.Message)
+	case *shared.CancellationAlreadyRequestedError:
+		return serviceerror.NewCancellationAlreadyRequested(thriftError.Message)
+	case *shared.QueryFailedError:
+		return serviceerror.NewQueryFailed(thriftError.Message)
+	case *shared.EntityNotExistsError:
+	case *shared.LimitExceededError:
+		return serviceerror.NewResourceExhausted(thriftError.Message)
+	case *shared.ClientVersionNotSupportedError:
+		return serviceerror.NewClientVersionNotSupported("Client version is not supported.", thriftError.FeatureVersion, thriftError.ClientImpl, thriftError.SupportedVersions)
+	case *history.ShardOwnershipLostError:
+		return serviceerror.NewShardOwnershipLost(*thriftError.Message, *thriftError.Owner)
+	case *history.EventAlreadyStartedError:
+		return serviceerror.NewEventAlreadyStarted(thriftError.Message)
+	case *shared.RetryTaskError:
+		return serviceerror.NewRetryTask(thriftError.Message, *thriftError.DomainId, *thriftError.WorkflowId, *thriftError.RunId, *thriftError.NextEventId)
+	case *shared.RetryTaskV2Error:
+		return serviceerror.NewRetryTaskV2(thriftError.Message, *thriftError.DomainId, *thriftError.WorkflowId, *thriftError.RunId, *thriftError.StartEventId, *thriftError.StartEventVersion, *thriftError.EndEventId, *thriftError.EndEventVersion)
+	case *shared.InternalDataInconsistencyError:
+		return serviceerror.NewDataLoss(thriftError.Message)
+	case *shared.AccessDeniedError:
+		return serviceerror.NewPermissionDenied(thriftError.Message)
+	case *shared.CurrentBranchChangedError:
+		return serviceerror.NewCurrentBranchChanged(thriftError.Message, thriftError.CurrentBranchToken)
+	}
+
+	return in
 }

@@ -158,7 +158,7 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	}
 	_, err := wh.ListOpenWorkflowExecutions(context.Background(), listRequest)
 	s.Error(err)
-	s.Equal(adapter.ToProtoError(errNoPermission), err)
+	s.Equal(errNoPermission, err)
 
 	// test list open by workflow type
 	listRequest.Filters = &workflowservice.ListOpenWorkflowExecutionsRequest_TypeFilter{TypeFilter: &commonproto.WorkflowTypeFilter{
@@ -166,7 +166,7 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	}}
 	_, err = wh.ListOpenWorkflowExecutions(context.Background(), listRequest)
 	s.Error(err)
-	s.Equal(adapter.ToProtoError(errNoPermission), err)
+	s.Equal(errNoPermission, err)
 
 	// test list close by wid
 	listRequest2 := &workflowservice.ListClosedWorkflowExecutionsRequest{
@@ -181,7 +181,7 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	}
 	_, err = wh.ListClosedWorkflowExecutions(context.Background(), listRequest2)
 	s.Error(err)
-	s.Equal(adapter.ToProtoError(errNoPermission), err)
+	s.Equal(errNoPermission, err)
 
 	// test list close by workflow type
 	listRequest2.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_TypeFilter{TypeFilter: &commonproto.WorkflowTypeFilter{
@@ -189,14 +189,14 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	}}
 	_, err = wh.ListClosedWorkflowExecutions(context.Background(), listRequest2)
 	s.Error(err)
-	s.Equal(adapter.ToProtoError(errNoPermission), err)
+	s.Equal(errNoPermission, err)
 
 	// test list close by workflow status
 	failedStatus := enums.WorkflowExecutionCloseStatusFailed
 	listRequest2.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_StatusFilter{StatusFilter: &commonproto.StatusFilter{CloseStatus: failedStatus}}
 	_, err = wh.ListClosedWorkflowExecutions(context.Background(), listRequest2)
 	s.Error(err)
-	s.Equal(adapter.ToProtoError(errNoPermission), err)
+	s.Equal(errNoPermission, err)
 }
 
 func (s *workflowHandlerSuite) TestPollForTask_Failed_ContextTimeoutTooShort() {
@@ -206,22 +206,22 @@ func (s *workflowHandlerSuite) TestPollForTask_Failed_ContextTimeoutTooShort() {
 	bgCtx := context.Background()
 	_, err := wh.PollForDecisionTask(bgCtx, &workflowservice.PollForDecisionTaskRequest{})
 	s.Error(err)
-	s.Equal(adapter.ToProtoError(common.ErrContextTimeoutNotSet), err)
+	s.Equal(common.ErrContextTimeoutNotSet2, err)
 
 	_, err = wh.PollForActivityTask(bgCtx, &workflowservice.PollForActivityTaskRequest{})
 	s.Error(err)
-	s.Equal(adapter.ToProtoError(common.ErrContextTimeoutNotSet), err)
+	s.Equal(common.ErrContextTimeoutNotSet2, err)
 
 	shortCtx, cancel := context.WithTimeout(bgCtx, common.MinLongPollTimeout-time.Millisecond)
 	defer cancel()
 
 	_, err = wh.PollForDecisionTask(shortCtx, &workflowservice.PollForDecisionTaskRequest{})
 	s.Error(err)
-	s.Equal(adapter.ToProtoError(common.ErrContextTimeoutTooShort), err)
+	s.Equal(common.ErrContextTimeoutTooShort2, err)
 
 	_, err = wh.PollForActivityTask(shortCtx, &workflowservice.PollForActivityTaskRequest{})
 	s.Error(err)
-	s.Equal(adapter.ToProtoError(common.ErrContextTimeoutTooShort), err)
+	s.Equal(common.ErrContextTimeoutTooShort2, err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_RequestIdNotSet() {
@@ -250,7 +250,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_RequestIdNotSet
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(adapter.ToProtoError(errRequestIDNotSet), err)
+	s.Equal(errRequestIDNotSet, err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_StartRequestNotSet() {
@@ -260,7 +260,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_StartRequestNot
 
 	_, err := wh.StartWorkflowExecution(context.Background(), nil)
 	s.Error(err)
-	s.Equal(adapter.ToProtoError(errRequestNotSet), err)
+	s.Equal(errRequestNotSet, err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_DomainNotSet() {
@@ -289,7 +289,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_DomainNotSet() 
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(adapter.ToProtoError(errDomainNotSet), err)
+	s.Equal(errDomainNotSet, err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowIdNotSet() {
@@ -318,7 +318,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowIdNotSe
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(adapter.ToProtoError(errWorkflowIDNotSet), err)
+	s.Equal(errWorkflowIDNotSet, err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowTypeNotSet() {
@@ -348,7 +348,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowTypeNot
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(adapter.ToProtoError(errWorkflowTypeNotSet), err)
+	s.Equal(errWorkflowTypeNotSet, err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_TaskListNotSet() {
@@ -378,7 +378,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_TaskListNotSet(
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(adapter.ToProtoError(errTaskListNotSet), err)
+	s.Equal(errTaskListNotSet, err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidExecutionStartToCloseTimeout() {
@@ -408,7 +408,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidExecutio
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(adapter.ToProtoError(errInvalidExecutionStartToCloseTimeoutSeconds), err)
+	s.Equal(errInvalidExecutionStartToCloseTimeoutSeconds, err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidTaskStartToCloseTimeout() {
@@ -438,7 +438,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidTaskStar
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(adapter.ToProtoError(errInvalidTaskStartToCloseTimeoutSeconds), err)
+	s.Equal(errInvalidTaskStartToCloseTimeoutSeconds, err)
 }
 
 func (s *workflowHandlerSuite) TestRegisterDomain_Failure_InvalidArchivalURI() {

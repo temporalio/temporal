@@ -33,6 +33,7 @@ import (
 	"github.com/gogo/status"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/yarpc/yarpcerrors"
 	"golang.org/x/net/context"
@@ -100,6 +101,13 @@ var (
 	ErrContextTimeoutTooShort = &workflow.BadRequestError{Message: "Context timeout is too short."}
 	// ErrContextTimeoutNotSet is error for not setting a context timeout when calling a long poll API
 	ErrContextTimeoutNotSet = &workflow.BadRequestError{Message: "Context timeout is not set."}
+
+	// ErrBlobSizeExceedsLimit2 is error for event blob size exceeds limit
+	ErrBlobSizeExceedsLimit2 = serviceerror.NewInvalidArgument("Blob data size exceeds limit.")
+	// ErrContextTimeoutTooShort2 is error for setting a very short context timeout when calling a long poll API
+	ErrContextTimeoutTooShort2 = serviceerror.NewInvalidArgument("Context timeout is too short.")
+	// ErrContextTimeoutNotSet2 is error for not setting a context timeout when calling a long poll API
+	ErrContextTimeoutNotSet2 = serviceerror.NewInvalidArgument("Context timeout is not set.")
 )
 
 // AwaitWaitGroup calls Wait on the given wait
