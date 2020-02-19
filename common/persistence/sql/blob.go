@@ -23,19 +23,21 @@ package sql
 import (
 	"bytes"
 	"fmt"
+	
+	"github.com/temporalio/temporal/.gen/go/shared"
 
 	"github.com/gogo/protobuf/types"
-
-	commonproto "go.temporal.io/temporal-proto/common"
-
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
 	"go.uber.org/thriftrw/protocol"
 	"go.uber.org/thriftrw/wire"
 
 	"github.com/temporalio/temporal/.gen/go/sqlblobs"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	p "github.com/temporalio/temporal/common/persistence"
+
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 )
 
 // thriftRWType represents an thrift auto generated type
@@ -156,13 +158,22 @@ func domainInfoFromBlob(b []byte, proto string) (*sqlblobs.DomainInfo, error) {
 	return result, thriftRWDecode(b, proto, result)
 }
 
-func historyTreeInfoToBlob(info *sqlblobs.HistoryTreeInfo) (p.DataBlob, error) {
-	return thriftRWEncode(info)
+func HistoryTreeInfoToBlob(info *persistenceblobs.HistoryTreeInfo) (p.DataBlob, error) {
+	return protoRWEncode(info)
 }
 
-func historyTreeInfoFromBlob(b []byte, proto string) (*sqlblobs.HistoryTreeInfo, error) {
-	result := &sqlblobs.HistoryTreeInfo{}
-	return result, thriftRWDecode(b, proto, result)
+func HistoryTreeInfoFromBlob(b []byte, proto string) (*persistenceblobs.HistoryTreeInfo, error) {
+	result := &persistenceblobs.HistoryTreeInfo{}
+	return result, protoRWDecode(b, proto, result)
+}
+
+func HistoryBranchToBlob(info *persistenceblobs.HistoryBranch) (p.DataBlob, error) {
+	return protoRWEncode(info)
+}
+
+func HistoryBranchFromBlob(b []byte, proto string) (*persistenceblobs.HistoryBranch, error) {
+	result := &persistenceblobs.HistoryBranch{}
+	return result, protoRWDecode(b, proto, result)
 }
 
 func workflowExecutionInfoToBlob(info *sqlblobs.WorkflowExecutionInfo) (p.DataBlob, error) {
@@ -264,11 +275,61 @@ func ReplicationTaskInfoFromBlob(b []byte, proto string) (*persistenceblobs.Repl
 	return result, protoRWDecode(b, proto, result)
 }
 
-func ReplicationTaskToBlob(info *commonproto.ReplicationTask) (p.DataBlob, error) {
-	return protoRWEncode(info)
+type DataBlob struct {
+	Encoding common.EncodingType
+	Data     []byte
 }
 
-func ReplicationTaskFromBlob(b []byte, proto string) (*commonproto.ReplicationTask, error) {
-	result := &commonproto.ReplicationTask{}
-	return result, protoRWDecode(b, proto, result)
+// ToThrift convert data blob to thrift representation
+func (d *DataBlob) ToThrift() *shared.DataBlob {
+	switch d.Encoding {
+	case common.EncodingTypeJSON:
+		return &shared.DataBlob{
+			EncodingType: shared.EncodingTypeJSON.Ptr(),
+			Data:         d.Data,
+		}
+	case common.EncodingTypeThriftRW:
+		return &shared.DataBlob{
+			EncodingType: shared.EncodingTypeThriftRW.Ptr(),
+			Data:         d.Data,
+		}
+	default:
+		panic(fmt.Sprintf("DataBlob seeing unsupported enconding type: %v", d.Encoding))
+	}
+}
+
+// ToProto convert data blob to thrift representation
+func (d *DataBlob) ToProto() *commonproto.DataBlob {
+	switch d.Encoding {
+	case common.EncodingTypeJSON:
+		return &commonproto.DataBlob{
+			EncodingType: enums.EncodingTypeJSON,
+			Data:         d.Data,
+		}
+	case common.EncodingTypeThriftRW:
+		return &commonproto.DataBlob{
+			EncodingType: enums.EncodingTypeThriftRW,
+			Data:         d.Data,
+		}
+	default:
+		panic(fmt.Sprintf("DataBlob seeing unsupported enconding type: %v", d.Encoding))
+	}
+}
+
+// GetEncoding returns encoding type
+func (d *DataBlob) GetEncoding() common.EncodingType {
+	encodingStr := string(d.Encoding)
+
+	switch common.EncodingType(encodingStr) {
+	case common.EncodingTypeGob:
+		return common.EncodingTypeGob
+	case common.EncodingTypeJSON:
+		return common.EncodingTypeJSON
+	case common.EncodingTypeThriftRW:
+		return common.EncodingTypeThriftRW
+	case common.EncodingTypeEmpty:
+		return common.EncodingTypeEmpty
+	default:
+		return common.EncodingTypeUnknown
+	}
 }
