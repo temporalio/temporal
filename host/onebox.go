@@ -21,6 +21,7 @@
 package host
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -45,6 +46,7 @@ import (
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/elasticsearch"
+	"github.com/temporalio/temporal/common/headers"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/membership"
@@ -985,10 +987,21 @@ func (c *rpcFactoryImpl) createTChannelDispatcher(serviceName string, hostPort s
 
 // CreateGRPCConnection creates connection for gRPC calls
 func (c *rpcFactoryImpl) CreateGRPCConnection(hostName string) *grpc.ClientConn {
-	connection, err := grpc.Dial(hostName, grpc.WithInsecure())
+	connection, err := grpc.Dial(hostName, grpc.WithInsecure(), grpc.WithChainUnaryInterceptor(clientVersionInterceptor, errorInterceptor))
 	if err != nil {
 		c.logger.Fatal("Failed to create gRPC connection", tag.Error(err))
 	}
 
 	return connection
+}
+
+func errorInterceptor(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+	err := invoker(ctx, method, req, reply, cc, opts...)
+	//err = serviceerror.FromStatus(status.Convert(err))
+	return err
+}
+
+func clientVersionInterceptor(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+	ctx = headers.PropagateVersions(ctx)
+	return invoker(ctx, method, req, reply, cc, opts...)
 }

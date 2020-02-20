@@ -21,6 +21,7 @@
 package config
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"sync"
@@ -29,6 +30,7 @@ import (
 	"go.uber.org/yarpc/transport/tchannel"
 	"google.golang.org/grpc"
 
+	"github.com/temporalio/temporal/common/headers"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 )
@@ -134,10 +136,21 @@ func (d *RPCFactory) getListenIP() net.IP {
 
 // CreateGRPCConnection creates connection for gRPC calls
 func (d *RPCFactory) CreateGRPCConnection(hostName string) *grpc.ClientConn {
-	connection, err := grpc.Dial(hostName, grpc.WithInsecure())
+	connection, err := grpc.Dial(hostName, grpc.WithInsecure(), grpc.WithChainUnaryInterceptor(clientVersionInterceptor, errorInterceptor))
 	if err != nil {
 		d.logger.Fatal("Failed to create gRPC connection", tag.Error(err))
 	}
 
 	return connection
+}
+
+func errorInterceptor(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+	err := invoker(ctx, method, req, reply, cc, opts...)
+	//err = serviceerror.FromStatus(status.Convert(err))
+	return err
+}
+
+func clientVersionInterceptor(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+	ctx = headers.PropagateVersions(ctx)
+	return invoker(ctx, method, req, reply, cc, opts...)
 }
