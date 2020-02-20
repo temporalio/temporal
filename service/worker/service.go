@@ -51,10 +51,11 @@ type (
 	Service struct {
 		resource.Resource
 
-		status int32
-		stopC  chan struct{}
-		params *service.BootstrapParams
-		config *Config
+		scannerResource resource.Resource // separate out scanner resource because it requires a different persistence QPS
+		status          int32
+		stopC           chan struct{}
+		params          *service.BootstrapParams
+		config          *Config
 	}
 
 	// Config contains all the service config for worker
@@ -76,33 +77,23 @@ func NewService(
 ) (resource.Resource, error) {
 
 	serviceConfig := NewConfig(params)
-
-	params.PersistenceConfig.SetMaxQPS(
-		params.PersistenceConfig.DefaultStore,
-		serviceConfig.ReplicationCfg.PersistenceMaxQPS(),
-	)
-
-	serviceResource, err := resource.New(
-		params,
-		common.WorkerServiceName,
-		serviceConfig.ThrottledLogRPS,
-		func(
-			persistenceBean persistenceClient.Bean,
-			logger log.Logger,
-		) (persistence.VisibilityManager, error) {
-			return persistenceBean.GetVisibilityManager(), nil
-		},
-	)
+	serviceResource, err := getResource(params, serviceConfig.ThrottledLogRPS, serviceConfig.ReplicationCfg.PersistenceMaxQPS)
+	if err != nil {
+		return nil, err
+	}
+	scannerResource, err := getResource(params, serviceConfig.ThrottledLogRPS, serviceConfig.ScannerCfg.PersistenceMaxQPS)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Service{
 		Resource: serviceResource,
-		status:   common.DaemonStatusInitialized,
-		config:   serviceConfig,
-		params:   params,
-		stopC:    make(chan struct{}),
+
+		scannerResource: scannerResource,
+		status:          common.DaemonStatusInitialized,
+		config:          serviceConfig,
+		params:          params,
+		stopC:           make(chan struct{}),
 	}, nil
 }
 
@@ -169,6 +160,7 @@ func (s *Service) Start() {
 	logger.Info("worker starting", tag.ComponentWorker)
 
 	s.Resource.Start()
+	s.scannerResource.Start()
 
 	s.ensureSystemDomainExists()
 	s.startScanner()
@@ -202,6 +194,7 @@ func (s *Service) Stop() {
 	close(s.stopC)
 
 	s.Resource.Stop()
+	s.scannerResource.Stop()
 
 	s.params.Logger.Info("worker stopped", tag.ComponentWorker)
 }
@@ -239,7 +232,7 @@ func (s *Service) startScanner() {
 		Config:     *s.config.ScannerCfg,
 		TallyScope: s.params.MetricScope,
 	}
-	if err := scanner.New(s.Resource, params).Start(); err != nil {
+	if err := scanner.New(s.scannerResource, params).Start(); err != nil {
 		s.GetLogger().Fatal("error starting scanner", tag.Error(err))
 	}
 }
@@ -340,4 +333,24 @@ func (s *Service) registerSystemDomain() {
 		}
 		s.GetLogger().Fatal("failed to register system domain", tag.Error(err))
 	}
+}
+
+func getResource(
+	params *service.BootstrapParams,
+	throttledLogRPS dynamicconfig.IntPropertyFn,
+	persistenceMaxQPS dynamicconfig.IntPropertyFn,
+) (resource.Resource, error) {
+
+	params.PersistenceConfig.SetMaxQPS(params.PersistenceConfig.DefaultStore, persistenceMaxQPS)
+	return resource.New(
+		params,
+		common.WorkerServiceName,
+		throttledLogRPS,
+		func(
+			persistenceBean persistenceClient.Bean,
+			logger log.Logger,
+		) (persistence.VisibilityManager, error) {
+			return persistenceBean.GetVisibilityManager(), nil
+		},
+	)
 }
