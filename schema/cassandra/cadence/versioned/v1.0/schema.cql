@@ -75,24 +75,6 @@ CREATE TYPE replication_state (
   last_replication_info            map<text, frozen<replication_info>>, -- information about replication events from other clusters
 );
 
-CREATE TYPE replication_task (
-  domain_id                  uuid,   -- The domain ID that this replication task belongs to
-  workflow_id                text,   -- The workflow ID that this replication task belongs to
-  run_id                     uuid,   -- The run ID that this replication task belongs to
-  task_id                    bigint,
-  type                       int,    -- enum TaskType {History, Heartbeat}
-  first_event_id             bigint,  -- Used by ReplicationTask to set the first event ID of the applied transaction
-  next_event_id              bigint,  -- Used by ReplicationTask to set the next event ID of the applied transaction
-  version                    bigint,  -- Used by ReplicationTask to set the failover version of the applied transaction
-  last_replication_info      map<text, frozen<replication_info>>, -- Used by replication task to snapshot replication information when the transaction was applied
-  scheduled_id               bigint, -- Used by ReplicationTask to sync activity info
-  event_store_version        int, -- indicates which version of event store to query
-  branch_token               blob, -- if eventV2, then query with this token
-  new_run_event_store_version        int, -- indicates which version of event store to query for new run(continueAsNew)
-  new_run_branch_token               blob, -- if eventV2, then query with this token for new run(continueAsNew)
-  reset_workflow             boolean, -- whether the task is for resetWorkflowExecution
-);
-
 -- Workflow activity in progress mutable state
 CREATE TYPE activity_info (
   version                   bigint,
@@ -244,12 +226,6 @@ CREATE TYPE buffered_replication_task_info (
   new_run_event_store_version        int, -- indicates which version of event store to query for new run(continueAsNew)
 );
 
--- for history v2 events
-CREATE TYPE branch_range (
-  branch_id   uuid,
-  end_node_id bigint, -- exclusive node_id to represent the stopping point for this range
-);
-
 CREATE TABLE executions (
   shard_id                       int,
   type                           int, -- enum RowType { Shard, Execution, TransferTask, TimerTask, ReplicationTask}
@@ -296,21 +272,20 @@ CREATE TABLE history_node (
   data                blob, -- Batch of workflow execution history events as a blob
   data_encoding       text, -- Protocol used for history serialization
   PRIMARY KEY ((tree_id), branch_id, node_id, txn_id )
-  ) WITH CLUSTERING ORDER BY (branch_id ASC, node_id ASC, txn_id DESC)
-    AND COMPACTION = {
+) WITH CLUSTERING ORDER BY (branch_id ASC, node_id ASC, txn_id DESC)
+  AND COMPACTION = {
      'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
-    };
+};
 
 CREATE TABLE history_tree (
-  tree_id           uuid,
-  branch_id         uuid,
-  ancestors         list<frozen<branch_range>>,
-  fork_time         timestamp, -- For fork operation to prevent race condition to leak event data when forking branches
-  info              text, -- For background cleanup when fork operation cannot finish self cleanup due to crash
+  tree_id               uuid,
+  branch_id             uuid,
+  branch                blob,
+  branch_encoding       text,
   PRIMARY KEY ((tree_id), branch_id )
 ) WITH COMPACTION = {
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
-  };
+};
 
 -- Stores activity or workflow tasks
 CREATE TABLE tasks (

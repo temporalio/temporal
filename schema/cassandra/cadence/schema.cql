@@ -226,12 +226,6 @@ CREATE TYPE buffered_replication_task_info (
   new_run_event_store_version        int, -- indicates which version of event store to query for new run(continueAsNew)
 );
 
--- for history v2 events
-CREATE TYPE branch_range (
-  branch_id   uuid,
-  end_node_id bigint, -- exclusive node_id to represent the stopping point for this range
-);
-
 CREATE TYPE checksum (
   version int,  -- version of the payload used to generate checksum
   flavor  int,  -- type of checksum e.g crc32OverThrift
@@ -285,21 +279,20 @@ CREATE TABLE history_node (
   data                blob, -- Batch of workflow execution history events as a blob
   data_encoding       text, -- Protocol used for history serialization
   PRIMARY KEY ((tree_id), branch_id, node_id, txn_id )
-  ) WITH CLUSTERING ORDER BY (branch_id ASC, node_id ASC, txn_id DESC)
-    AND COMPACTION = {
+) WITH CLUSTERING ORDER BY (branch_id ASC, node_id ASC, txn_id DESC)
+  AND COMPACTION = {
      'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
-    };
+};
 
 CREATE TABLE history_tree (
-  tree_id           uuid,
-  branch_id         uuid,
-  ancestors         list<frozen<branch_range>>,
-  fork_time         timestamp, -- For fork operation to prevent race condition to leak event data when forking branches
-  info              text, -- For background cleanup when fork operation cannot finish self cleanup due to crash
+  tree_id               uuid,
+  branch_id             uuid,
+  branch                blob,
+  branch_encoding       text,
   PRIMARY KEY ((tree_id), branch_id )
 ) WITH COMPACTION = {
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
-  };
+};
 
 -- Stores activity or workflow tasks
 CREATE TABLE tasks (
@@ -395,6 +388,7 @@ INSERT INTO domains (
    id,
    domain
 ) VALUES (
+   32049b68-7872-4094-8e63-d0dd59896a83,
    32049b68-7872-4094-8e63-d0dd59896a83,
    {
        name: 'cadence-system'
