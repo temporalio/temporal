@@ -54,7 +54,7 @@ func NewAdminNilCheckHandler(
 func (adh *AdminNilCheckHandler) DescribeWorkflowExecution(ctx context.Context, request *adminservice.DescribeWorkflowExecutionRequest) (_ *adminservice.DescribeWorkflowExecutionResponse, retError error) {
 	resp, err := adh.parentHandler.DescribeWorkflowExecution(ctx, request)
 	if resp == nil && err == nil {
-		return &adminservice.DescribeWorkflowExecutionResponse{}, err
+		resp = &adminservice.DescribeWorkflowExecutionResponse{}
 	}
 	return resp, err
 }
@@ -63,7 +63,7 @@ func (adh *AdminNilCheckHandler) DescribeWorkflowExecution(ctx context.Context, 
 func (adh *AdminNilCheckHandler) DescribeHistoryHost(ctx context.Context, request *adminservice.DescribeHistoryHostRequest) (_ *adminservice.DescribeHistoryHostResponse, retError error) {
 	resp, err := adh.parentHandler.DescribeHistoryHost(ctx, request)
 	if resp == nil && err == nil {
-		return &adminservice.DescribeHistoryHostResponse{}, err
+		resp = &adminservice.DescribeHistoryHostResponse{}
 	}
 	return resp, err
 }
@@ -72,7 +72,7 @@ func (adh *AdminNilCheckHandler) DescribeHistoryHost(ctx context.Context, reques
 func (adh *AdminNilCheckHandler) CloseShard(ctx context.Context, request *adminservice.CloseShardRequest) (_ *adminservice.CloseShardResponse, retError error) {
 	resp, err := adh.parentHandler.CloseShard(ctx, request)
 	if resp == nil && err == nil {
-		return &adminservice.CloseShardResponse{}, err
+		resp = &adminservice.CloseShardResponse{}
 	}
 	return resp, err
 }
@@ -81,7 +81,7 @@ func (adh *AdminNilCheckHandler) CloseShard(ctx context.Context, request *admins
 func (adh *AdminNilCheckHandler) RemoveTask(ctx context.Context, request *adminservice.RemoveTaskRequest) (_ *adminservice.RemoveTaskResponse, retError error) {
 	resp, err := adh.parentHandler.RemoveTask(ctx, request)
 	if resp == nil && err == nil {
-		return &adminservice.RemoveTaskResponse{}, err
+		resp = &adminservice.RemoveTaskResponse{}
 	}
 	return resp, err
 }
@@ -90,7 +90,7 @@ func (adh *AdminNilCheckHandler) RemoveTask(ctx context.Context, request *admins
 func (adh *AdminNilCheckHandler) GetWorkflowExecutionRawHistory(ctx context.Context, request *adminservice.GetWorkflowExecutionRawHistoryRequest) (_ *adminservice.GetWorkflowExecutionRawHistoryResponse, retError error) {
 	resp, err := adh.parentHandler.GetWorkflowExecutionRawHistory(ctx, request)
 	if resp == nil && err == nil {
-		return &adminservice.GetWorkflowExecutionRawHistoryResponse{}, err
+		resp = &adminservice.GetWorkflowExecutionRawHistoryResponse{}
 	}
 	return resp, err
 }
@@ -99,7 +99,7 @@ func (adh *AdminNilCheckHandler) GetWorkflowExecutionRawHistory(ctx context.Cont
 func (adh *AdminNilCheckHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, request *adminservice.GetWorkflowExecutionRawHistoryV2Request) (_ *adminservice.GetWorkflowExecutionRawHistoryV2Response, retError error) {
 	resp, err := adh.parentHandler.GetWorkflowExecutionRawHistoryV2(ctx, request)
 	if resp == nil && err == nil {
-		return &adminservice.GetWorkflowExecutionRawHistoryV2Response{}, err
+		resp = &adminservice.GetWorkflowExecutionRawHistoryV2Response{}
 	}
 	return resp, err
 }
@@ -108,7 +108,7 @@ func (adh *AdminNilCheckHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Co
 func (adh *AdminNilCheckHandler) AddSearchAttribute(ctx context.Context, request *adminservice.AddSearchAttributeRequest) (_ *adminservice.AddSearchAttributeResponse, retError error) {
 	resp, err := adh.parentHandler.AddSearchAttribute(ctx, request)
 	if resp == nil && err == nil {
-		return &adminservice.AddSearchAttributeResponse{}, err
+		resp = &adminservice.AddSearchAttributeResponse{}
 	}
 	return resp, err
 }
@@ -117,7 +117,7 @@ func (adh *AdminNilCheckHandler) AddSearchAttribute(ctx context.Context, request
 func (adh *AdminNilCheckHandler) DescribeCluster(ctx context.Context, request *adminservice.DescribeClusterRequest) (_ *adminservice.DescribeClusterResponse, retError error) {
 	resp, err := adh.parentHandler.DescribeCluster(ctx, request)
 	if resp == nil && err == nil {
-		return &adminservice.DescribeClusterResponse{}, err
+		resp = &adminservice.DescribeClusterResponse{}
 	}
 	return resp, err
 }
@@ -126,7 +126,7 @@ func (adh *AdminNilCheckHandler) DescribeCluster(ctx context.Context, request *a
 func (adh *AdminNilCheckHandler) GetReplicationMessages(ctx context.Context, request *adminservice.GetReplicationMessagesRequest) (_ *adminservice.GetReplicationMessagesResponse, retError error) {
 	resp, err := adh.parentHandler.GetReplicationMessages(ctx, request)
 	if resp == nil && err == nil {
-		return &adminservice.GetReplicationMessagesResponse{}, err
+		resp = &adminservice.GetReplicationMessagesResponse{}
 	}
 	return resp, err
 }
@@ -135,7 +135,7 @@ func (adh *AdminNilCheckHandler) GetReplicationMessages(ctx context.Context, req
 func (adh *AdminNilCheckHandler) GetDomainReplicationMessages(ctx context.Context, request *adminservice.GetDomainReplicationMessagesRequest) (_ *adminservice.GetDomainReplicationMessagesResponse, retError error) {
 	resp, err := adh.parentHandler.GetDomainReplicationMessages(ctx, request)
 	if resp == nil && err == nil {
-		return &adminservice.GetDomainReplicationMessagesResponse{}, err
+		resp = &adminservice.GetDomainReplicationMessagesResponse{}
 	}
 	return resp, err
 }
@@ -144,7 +144,7 @@ func (adh *AdminNilCheckHandler) GetDomainReplicationMessages(ctx context.Contex
 func (adh *AdminNilCheckHandler) GetDLQReplicationMessages(ctx context.Context, request *adminservice.GetDLQReplicationMessagesRequest) (_ *adminservice.GetDLQReplicationMessagesResponse, retError error) {
 	resp, err := adh.parentHandler.GetDLQReplicationMessages(ctx, request)
 	if resp == nil && err == nil {
-		return &adminservice.GetDLQReplicationMessagesResponse{}, err
+		resp = &adminservice.GetDLQReplicationMessagesResponse{}
 	}
 	return resp, err
 }
@@ -153,7 +153,7 @@ func (adh *AdminNilCheckHandler) GetDLQReplicationMessages(ctx context.Context, 
 func (adh *AdminNilCheckHandler) ReapplyEvents(ctx context.Context, request *adminservice.ReapplyEventsRequest) (_ *adminservice.ReapplyEventsResponse, retError error) {
 	resp, err := adh.parentHandler.ReapplyEvents(ctx, request)
 	if resp == nil && err == nil {
-		return &adminservice.ReapplyEventsResponse{}, err
+		resp = &adminservice.ReapplyEventsResponse{}
 	}
 	return resp, err
 }

@@ -22,9 +22,10 @@ package history
 
 import (
 	ctx "context"
+	"time"
+
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/primitives"
-	"time"
 
 	commonproto "go.temporal.io/temporal-proto/common"
 

@@ -23,9 +23,7 @@ package frontend
 import (
 	"context"
 
-	"github.com/gogo/status"
 	"go.temporal.io/temporal-proto/workflowservice"
-	"google.golang.org/grpc/codes"
 
 	"github.com/temporalio/temporal/.gen/proto/healthservice"
 	"github.com/temporalio/temporal/common/authorization"
@@ -33,8 +31,6 @@ import (
 )
 
 // TODO(vancexu): add metrics
-
-var errUnauthorized = status.New(codes.PermissionDenied, "Request unauthorized.").Err()
 
 // AccessControlledWorkflowHandler frontend handler wrapper for authentication and authorization
 type AccessControlledWorkflowHandler struct {

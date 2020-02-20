@@ -3208,19 +3208,10 @@ func (wh *WorkflowHandler) getDefaultScope(scope int) metrics.Scope {
 
 func (wh *WorkflowHandler) error(err error, scope metrics.Scope, tagsForErrorLog ...tag.Tag) error {
 	// TODO: remove after error migration is done
-	if _, ok := err.(interface{ GRPCStatus() *status.Status }); !ok {
-		// This means the err is an old Thrift error.
-		err = adapter.ToServiceError(err)
-	} else {
-		if _, ok := err.(interface{ Details() []interface{} }); ok {
-			// This means the err is an actual status.Status that came from another RPC call (history, matching, etc).
-			return err
-		}
-	}
+	err = adapter.ToServiceError(err)
 
 	switch err := err.(type) {
-	case *serviceerror.Internal:
-	case *serviceerror.DataLoss:
+	case *serviceerror.Internal, *serviceerror.DataLoss:
 		wh.GetLogger().WithTags(tagsForErrorLog...).Error("Internal service error", tag.Error(err))
 		scope.IncCounter(metrics.CadenceFailures)
 		return err
@@ -3259,7 +3250,6 @@ func (wh *WorkflowHandler) error(err error, scope metrics.Scope, tagsForErrorLog
 	wh.GetLogger().WithTags(tagsForErrorLog...).Error("Unknown error", tag.Error(err))
 	scope.IncCounter(metrics.CadenceFailures)
 
-	// err will be converted to *status.Status with codes.Unknown by gRPC.
 	return err
 }
 

@@ -27,7 +27,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/gogo/status"
 	"github.com/olivere/elastic"
 	"github.com/pborman/uuid"
 	commonproto "go.temporal.io/temporal-proto/common"
@@ -927,15 +926,7 @@ func (adh *AdminHandler) startRequestProfile(scope int) (metrics.Scope, metrics.
 
 func (adh *AdminHandler) error(err error, scope metrics.Scope) error {
 	// TODO: remove after error migration is done
-	if _, ok := err.(interface{ GRPCStatus() *status.Status }); !ok {
-		// This means the err is an old Thrift error.
-		err = adapter.ToServiceError(err)
-	} else {
-		if _, ok := err.(interface{ Details() []interface{} }); ok {
-			// This means the err is an actual status.Status that came from another RPC call (history, matching, etc).
-			return err
-		}
-	}
+	err = adapter.ToServiceError(err)
 
 	switch err.(type) {
 	case *serviceerror.Internal:
@@ -955,7 +946,6 @@ func (adh *AdminHandler) error(err error, scope metrics.Scope) error {
 	adh.GetLogger().Error("Unknown error", tag.Error(err))
 	scope.IncCounter(metrics.CadenceFailures)
 
-	// err will be converted to *status.Status with codes.Unknown by gRPC.
 	return err
 }
 

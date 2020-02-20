@@ -77,6 +77,7 @@ var (
 	errFailedToUpdateESMapping   = serviceerror.NewInternal("Failed to update ES mapping, err: %v.")
 
 	errNoPermission = serviceerror.NewPermissionDenied("No permission to do this operation.")
+	errUnauthorized = serviceerror.NewPermissionDenied("Request unauthorized.")
 
 	errServiceBusy = serviceerror.NewResourceExhausted("Too many outstanding requests to the service.")
 )

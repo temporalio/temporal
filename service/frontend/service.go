@@ -21,9 +21,11 @@
 package frontend
 
 import (
+	"context"
 	"sync/atomic"
 
 	"github.com/stretchr/testify/mock"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"google.golang.org/grpc"
 
@@ -228,7 +230,7 @@ func (s *Service) Start() {
 		replicationMessageSink.(*mocks.KafkaProducer).On("Publish", mock.Anything).Return(nil)
 	}
 
-	s.server = grpc.NewServer()
+	s.server = grpc.NewServer(grpc.UnaryInterceptor(interceptor))
 
 	wfHandler := NewWorkflowHandler(s, s.config, replicationMessageSink)
 	dcRedirectionHandler := NewDCRedirectionHandler(wfHandler, s.params.DCRedirectionPolicy)
@@ -268,4 +270,9 @@ func (s *Service) Stop() {
 	s.Resource.Stop()
 
 	s.params.Logger.Info("frontend stopped")
+}
+
+func interceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	resp, err := handler(ctx, req)
+	return resp, serviceerror.ToStatus(err).Err()
 }
