@@ -25,8 +25,7 @@ import (
 	"net"
 	"sync"
 
-	"go.uber.org/yarpc"
-	"go.uber.org/yarpc/transport/tchannel"
+	"github.com/uber/tchannel-go"
 	"google.golang.org/grpc"
 
 	"github.com/temporalio/temporal/common/log"
@@ -37,12 +36,11 @@ import (
 type RPCFactory struct {
 	config      *RPC
 	serviceName string
-	ch          *tchannel.ChannelTransport
 	logger      log.Logger
 
 	sync.Mutex
-	grpcListiner      net.Listener
-	ringpopDispatcher *yarpc.Dispatcher
+	grpcListener   net.Listener
+	ringpopChannel *tchannel.Channel
 }
 
 // NewFactory builds a new RPCFactory
@@ -58,55 +56,63 @@ func newRPCFactory(cfg *RPC, sName string, logger log.Logger) *RPCFactory {
 
 // GetGRPCListener returns cached dispatcher for gRPC inbound or creates one
 func (d *RPCFactory) GetGRPCListener() net.Listener {
-	if d.grpcListiner != nil {
-		return d.grpcListiner
+	if d.grpcListener != nil {
+		return d.grpcListener
 	}
 
 	d.Lock()
 	defer d.Unlock()
 
-	if d.grpcListiner == nil {
+	if d.grpcListener == nil {
 		hostAddress := fmt.Sprintf("%v:%v", d.getListenIP(), d.config.GRPCPort)
 		var err error
-		d.grpcListiner, err = net.Listen("tcp", hostAddress)
+		d.grpcListener, err = net.Listen("tcp", hostAddress)
 		if err != nil {
-			d.logger.Fatal("Failed create gRPC listener", tag.Error(err), tag.Service(d.serviceName), tag.Address(hostAddress))
+			d.logger.Fatal("Failed to start gRPC listener", tag.Error(err), tag.Service(d.serviceName), tag.Address(hostAddress))
 		}
 
 		d.logger.Info("Created gRPC listener", tag.Service(d.serviceName), tag.Address(hostAddress))
 	}
 
-	return d.grpcListiner
+	return d.grpcListener
 }
 
-// GetRingpopDispatcher return a cached ringpop dispatcher
-func (d *RPCFactory) GetRingpopDispatcher() *yarpc.Dispatcher {
+// CreateGRPCConnection creates connection for gRPC calls
+func (d *RPCFactory) CreateGRPCConnection(hostName string) *grpc.ClientConn {
+	connection, err := grpc.Dial(hostName, grpc.WithInsecure())
+	if err != nil {
+		d.logger.Fatal("Failed to dial gRPC connection", tag.Error(err))
+	}
+
+	return connection
+}
+
+// GetRingpopChannel return a cached ringpop dispatcher
+func (d *RPCFactory) GetRingpopChannel() *tchannel.Channel {
+	if d.ringpopChannel != nil {
+		return d.ringpopChannel
+	}
+
 	d.Lock()
 	defer d.Unlock()
 
-	if d.ringpopDispatcher != nil {
-		return d.ringpopDispatcher
+	if d.ringpopChannel == nil {
+		ringpopServiceName := fmt.Sprintf("%v-ringpop", d.serviceName)
+		ringpopHostAddress := fmt.Sprintf("%v:%v", d.getListenIP(), d.config.RingpopPort)
+
+		var err error
+		d.ringpopChannel, err = tchannel.NewChannel(ringpopServiceName, nil)
+		if err != nil {
+			d.logger.Fatal("Failed to create ringpop TChannel", tag.Error(err))
+		}
+
+		err = d.ringpopChannel.ListenAndServe(ringpopHostAddress)
+		if err != nil {
+			d.logger.Fatal("Failed to start ringpop listener", tag.Error(err), tag.Address(ringpopHostAddress))
+		}
 	}
 
-	ringpopServiceName := fmt.Sprintf("%v-ringpop", d.serviceName)
-	d.ringpopDispatcher = d.createInboundTChannelDispatcher(ringpopServiceName, d.config.RingpopPort)
-	return d.ringpopDispatcher
-}
-
-func (d *RPCFactory) createInboundTChannelDispatcher(serviceName string, port int) *yarpc.Dispatcher {
-	var err error
-	hostAddress := fmt.Sprintf("%v:%v", d.getListenIP(), port)
-	d.ch, err = tchannel.NewChannelTransport(
-		tchannel.ServiceName(serviceName),
-		tchannel.ListenAddr(hostAddress))
-	if err != nil {
-		d.logger.Fatal("Failed to create transport channel", tag.Error(err), tag.Address(hostAddress))
-	}
-	d.logger.Info("Created RPC dispatcher and listening", tag.Service(serviceName), tag.Address(hostAddress))
-	return yarpc.NewDispatcher(yarpc.Config{
-		Name:     serviceName,
-		Inbounds: yarpc.Inbounds{d.ch.NewInbound()},
-	})
+	return d.ringpopChannel
 }
 
 func (d *RPCFactory) getListenIP() net.IP {
@@ -130,14 +136,4 @@ func (d *RPCFactory) getListenIP() net.IP {
 		d.logger.Fatal("ListenIP failed, err=%v", tag.Error(err))
 	}
 	return ip
-}
-
-// CreateGRPCConnection creates connection for gRPC calls
-func (d *RPCFactory) CreateGRPCConnection(hostName string) *grpc.ClientConn {
-	connection, err := grpc.Dial(hostName, grpc.WithInsecure())
-	if err != nil {
-		d.logger.Fatal("Failed to create gRPC connection", tag.Error(err))
-	}
-
-	return connection
 }

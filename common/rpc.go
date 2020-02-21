@@ -23,7 +23,7 @@ package common
 import (
 	"net"
 
-	"go.uber.org/yarpc"
+	"github.com/uber/tchannel-go"
 	"google.golang.org/grpc"
 )
 
@@ -31,7 +31,7 @@ type (
 	// RPCFactory creates gRPC listener and connection.
 	RPCFactory interface {
 		GetGRPCListener() net.Listener
-		GetRingpopDispatcher() *yarpc.Dispatcher
+		GetRingpopChannel() *tchannel.Channel
 		CreateGRPCConnection(hostName string) *grpc.ClientConn
 	}
 )
