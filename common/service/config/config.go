@@ -187,7 +187,7 @@ type (
 		// Datacenter is the data center filter arg for cassandra
 		Datacenter string `yaml:"datacenter"`
 		// MaxQPS is the max request rate to this datastore
-		MaxQPS dynamicconfig.IntPropertyFn `yaml:"-" json:"-"`
+		MaxQPS int `yaml:"maxQPS"`
 		// MaxConns is the max number of connections to this datastore for a single keyspace
 		MaxConns int `yaml:"maxConns"`
 		// TLS configuration
@@ -211,7 +211,7 @@ type (
 		// ConnectAttributes is a set of key-value attributes to be sent as part of connect data_source_name url
 		ConnectAttributes map[string]string `yaml:"connectAttributes"`
 		// MaxQPS the max request rate on this datastore
-		MaxQPS dynamicconfig.IntPropertyFn `yaml:"-" json:"-"`
+		MaxQPS int `yaml:"maxQPS"`
 		// MaxConns the max number of connections to this datastore
 		MaxConns int `yaml:"maxConns"`
 		// MaxIdleConns is the max number of idle connections to this datastore

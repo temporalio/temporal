@@ -48,7 +48,10 @@ func NewService(
 ) (resource.Resource, error) {
 
 	serviceConfig := NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger))
-	params.PersistenceConfig.SetMaxQPS(params.PersistenceConfig.DefaultStore, serviceConfig.PersistenceMaxQPS)
+	params.PersistenceConfig.SetMaxQPS(
+		params.PersistenceConfig.DefaultStore,
+		serviceConfig.PersistenceMaxQPS(),
+	)
 	serviceResource, err := resource.New(
 		params,
 		common.MatchingServiceName,

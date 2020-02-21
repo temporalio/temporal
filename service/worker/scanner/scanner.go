@@ -107,6 +107,7 @@ func New(
 ) *Scanner {
 
 	cfg := params.Config
+	cfg.Persistence.SetMaxQPS(cfg.Persistence.DefaultStore, cfg.PersistenceMaxQPS())
 	zapLogger, err := zap.NewProduction()
 	if err != nil {
 		resource.GetLogger().Fatal("failed to initialize zap logger", tag.Error(err))

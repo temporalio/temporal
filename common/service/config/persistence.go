@@ -20,11 +20,7 @@
 
 package config
 
-import (
-	"fmt"
-
-	"github.com/uber/cadence/common/service/dynamicconfig"
-)
+import "fmt"
 
 const (
 	// StoreTypeSQL refers to sql based storage as persistence store
@@ -34,7 +30,7 @@ const (
 )
 
 // SetMaxQPS sets the MaxQPS value for the given datastore
-func (c *Persistence) SetMaxQPS(key string, qps dynamicconfig.IntPropertyFn) {
+func (c *Persistence) SetMaxQPS(key string, qps int) {
 	ds, ok := c.DataStores[key]
 	if !ok {
 		return
