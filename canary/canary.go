@@ -23,12 +23,11 @@ package canary
 import (
 	"context"
 
-	"github.com/gogo/status"
 	"github.com/opentracing/opentracing-go"
 	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal/worker"
 	"go.uber.org/zap"
-	"google.golang.org/grpc/codes"
 )
 
 type (
@@ -127,7 +126,7 @@ func (c *canaryImpl) startCronWorkflow() {
 	ctx = opentracing.ContextWithSpan(ctx, span)
 	_, err := c.canaryClient.StartWorkflow(ctx, opts, cronWorkflow, c.canaryDomain, wfTypeSanity)
 	if err != nil {
-		if status.Code(err) == codes.AlreadyExists {
+		if _, ok := err.(*serviceerror.WorkflowExecutionAlreadyStarted); !ok {
 			c.runtime.logger.Error("error starting cron workflow", zap.Error(err))
 		}
 	}

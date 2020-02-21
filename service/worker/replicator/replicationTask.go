@@ -24,9 +24,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/gogo/status"
 	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/errordetails"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
@@ -521,16 +520,14 @@ func (t *workflowReplicationTask) convertRetryTaskError(
 	err error,
 ) (*shared.RetryTaskError, bool) {
 
-	if st, ok := status.FromError(err); ok {
-		if f, ok := errordetails.GetRetryTaskFailure(st); ok {
-			return &shared.RetryTaskError{
-				Message:     st.Message(),
-				DomainId:    &f.DomainId,
-				WorkflowId:  &f.WorkflowId,
-				RunId:       &f.RunId,
-				NextEventId: &f.NextEventId,
-			}, true
-		}
+	if rtErr, ok := err.(*serviceerror.RetryTask); ok {
+		return &shared.RetryTaskError{
+			Message:     rtErr.Message,
+			DomainId:    &rtErr.DomainId,
+			WorkflowId:  &rtErr.WorkflowId,
+			RunId:       &rtErr.RunId,
+			NextEventId: &rtErr.NextEventId,
+		}, true
 	}
 
 	retError, ok := err.(*shared.RetryTaskError)
@@ -541,19 +538,17 @@ func (t *workflowReplicationTask) convertRetryTaskV2Error(
 	err error,
 ) (*shared.RetryTaskV2Error, bool) {
 
-	if st, ok := status.FromError(err); ok {
-		if f, ok := errordetails.GetRetryTaskV2Failure(st); ok {
-			return &shared.RetryTaskV2Error{
-				Message:           st.Message(),
-				DomainId:          &f.DomainId,
-				WorkflowId:        &f.WorkflowId,
-				RunId:             &f.RunId,
-				StartEventId:      &f.StartEventId,
-				StartEventVersion: &f.StartEventVersion,
-				EndEventId:        &f.EndEventId,
-				EndEventVersion:   &f.EndEventVersion,
-			}, true
-		}
+	if rtErr, ok := err.(*serviceerror.RetryTaskV2); ok {
+		return &shared.RetryTaskV2Error{
+			Message:           rtErr.Message,
+			DomainId:          &rtErr.DomainId,
+			WorkflowId:        &rtErr.WorkflowId,
+			RunId:             &rtErr.RunId,
+			StartEventId:      &rtErr.StartEventId,
+			StartEventVersion: &rtErr.StartEventVersion,
+			EndEventId:        &rtErr.EndEventId,
+			EndEventVersion:   &rtErr.EndEventVersion,
+		}, true
 	}
 
 	retError, ok := err.(*shared.RetryTaskV2Error)

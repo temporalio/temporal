@@ -25,9 +25,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gogo/status"
 	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/errordetails"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"google.golang.org/grpc"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
@@ -1003,9 +1002,9 @@ redirectLoop:
 		}
 		err = op(ctx, client)
 		if err != nil {
-			if failure, ok := errordetails.GetShardOwnershipLostFailure(status.Convert(err)); ok {
+			if s, ok := err.(*serviceerror.ShardOwnershipLost); ok {
 				// TODO: consider emitting a metric for number of redirects
-				ret, err := c.clients.GetClientForClientKey(failure.GetOwner())
+				ret, err := c.clients.GetClientForClientKey(s.Owner)
 				if err != nil {
 					return err
 				}

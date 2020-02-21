@@ -34,16 +34,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/status"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
-	"go.temporal.io/temporal-proto/errordetails"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/zap"
-	"google.golang.org/grpc/codes"
 	"gopkg.in/yaml.v2"
 
 	"github.com/temporalio/temporal/common"
@@ -799,16 +797,14 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	startReq.RequestId = uuid.New()
 	startReq.WorkflowIdReusePolicy = enums.WorkflowIdReusePolicyAllowDuplicateFailedOnly
 	we, err = client2.StartWorkflowExecution(host.NewContext(), startReq)
-	st := status.Convert(err)
-	s.True(errordetails.IsWorkflowExecutionAlreadyStartedStatus(st))
+	s.IsType(&serviceerror.WorkflowExecutionAlreadyStarted{}, err)
 	s.Nil(we)
 
 	// start the same workflow in cluster 2 is not allowed if policy is RejectDuplicate
 	startReq.RequestId = uuid.New()
 	startReq.WorkflowIdReusePolicy = enums.WorkflowIdReusePolicyRejectDuplicate
 	we, err = client2.StartWorkflowExecution(host.NewContext(), startReq)
-	st = status.Convert(err)
-	s.True(errordetails.IsWorkflowExecutionAlreadyStartedStatus(st))
+	s.IsType(&serviceerror.WorkflowExecutionAlreadyStarted{}, err)
 	s.Nil(we)
 
 	// start the workflow in cluster 2
@@ -1649,7 +1645,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	_, err = poller1.PollAndProcessDecisionTask(false, false)
 	s.NoError(err)
 	err = poller1.PollAndProcessActivityTask(false)
-	s.Equal(codes.NotFound, status.Code(err))
+	s.IsType(&serviceerror.NotFound{}, err)
 
 	// Update domain to fail over
 	updateReq := &workflowservice.UpdateDomainRequest{

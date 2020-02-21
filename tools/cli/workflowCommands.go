@@ -36,16 +36,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gogo/status"
 	"github.com/olekukonko/tablewriter"
 	"github.com/pborman/uuid"
 	"github.com/urfave/cli"
 	"github.com/valyala/fastjson"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/client"
-	"google.golang.org/grpc/codes"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/adapter"
@@ -1451,7 +1450,7 @@ func processResets(c *cli.Context, domain string, wes chan commonproto.WorkflowE
 				if err == nil {
 					break
 				}
-				if status.Code(err) == codes.InvalidArgument {
+				if _, ok := err.(*serviceerror.InvalidArgument); ok {
 					break
 				}
 				fmt.Println("failed and retry...: ", wid, rid, err)
@@ -1840,7 +1839,7 @@ func getBadDecisionCompletedID(ctx context.Context, domain, wid, rid, binChecksu
 	}
 
 	if decisionFinishID == 0 {
-		return "", 0, printErrorAndReturn("Get DecisionFinishID failed", status.New(codes.InvalidArgument, "no DecisionFinishID").Err())
+		return "", 0, printErrorAndReturn("Get DecisionFinishID failed", serviceerror.NewInvalidArgument("no DecisionFinishID"))
 	}
 	return
 }

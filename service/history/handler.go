@@ -26,10 +26,9 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/gogo/status"
 	"github.com/pborman/uuid"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.uber.org/yarpc/yarpcerrors"
-	"google.golang.org/grpc/codes"
 
 	"github.com/temporalio/temporal/.gen/go/health"
 	hist "github.com/temporalio/temporal/.gen/go/history"
@@ -1628,35 +1627,26 @@ func (h *Handler) updateErrorMetric(
 		return
 	}
 
-	if st, ok := status.FromError(err); ok {
-		if st.Code() == codes.DeadlineExceeded {
-			h.GetMetricsClient().IncCounter(scope, metrics.CadenceErrContextTimeoutCounter)
-		}
-		h.GetMetricsClient().IncCounter(scope, metrics.CadenceFailures)
-
-		return
-	}
-
 	switch err := err.(type) {
-	case *hist.ShardOwnershipLostError:
+	case *hist.ShardOwnershipLostError, *serviceerror.ShardOwnershipLost:
 		h.GetMetricsClient().IncCounter(scope, metrics.CadenceErrShardOwnershipLostCounter)
-	case *hist.EventAlreadyStartedError:
+	case *hist.EventAlreadyStartedError, *serviceerror.EventAlreadyStarted:
 		h.GetMetricsClient().IncCounter(scope, metrics.CadenceErrEventAlreadyStartedCounter)
-	case *gen.BadRequestError:
+	case *gen.BadRequestError, *serviceerror.InvalidArgument:
 		h.GetMetricsClient().IncCounter(scope, metrics.CadenceErrBadRequestCounter)
-	case *gen.DomainNotActiveError:
+	case *gen.DomainNotActiveError, *serviceerror.DomainNotActive:
 		h.GetMetricsClient().IncCounter(scope, metrics.CadenceErrBadRequestCounter)
-	case *gen.WorkflowExecutionAlreadyStartedError:
+	case *gen.WorkflowExecutionAlreadyStartedError, *serviceerror.WorkflowExecutionAlreadyStarted:
 		h.GetMetricsClient().IncCounter(scope, metrics.CadenceErrExecutionAlreadyStartedCounter)
-	case *gen.EntityNotExistsError:
+	case *gen.EntityNotExistsError, *serviceerror.NotFound:
 		h.GetMetricsClient().IncCounter(scope, metrics.CadenceErrEntityNotExistsCounter)
-	case *gen.CancellationAlreadyRequestedError:
+	case *gen.CancellationAlreadyRequestedError, *serviceerror.CancellationAlreadyRequested:
 		h.GetMetricsClient().IncCounter(scope, metrics.CadenceErrCancellationAlreadyRequestedCounter)
-	case *gen.LimitExceededError:
+	case *gen.LimitExceededError, *serviceerror.ResourceExhausted:
 		h.GetMetricsClient().IncCounter(scope, metrics.CadenceErrLimitExceededCounter)
-	case *gen.RetryTaskError:
+	case *gen.RetryTaskError, *serviceerror.RetryTask:
 		h.GetMetricsClient().IncCounter(scope, metrics.CadenceErrRetryTaskCounter)
-	case *gen.RetryTaskV2Error:
+	case *gen.RetryTaskV2Error, *serviceerror.RetryTaskV2:
 		h.GetMetricsClient().IncCounter(scope, metrics.CadenceErrRetryTaskCounter)
 	case *gen.ServiceBusyError:
 		h.GetMetricsClient().IncCounter(scope, metrics.CadenceErrServiceBusyCounter)
@@ -1665,7 +1655,9 @@ func (h *Handler) updateErrorMetric(
 			h.GetMetricsClient().IncCounter(scope, metrics.CadenceErrContextTimeoutCounter)
 		}
 		h.GetMetricsClient().IncCounter(scope, metrics.CadenceFailures)
-	case *gen.InternalServiceError:
+	case *serviceerror.DeadlineExceeded:
+		h.GetMetricsClient().IncCounter(scope, metrics.CadenceErrContextTimeoutCounter)
+	case *gen.InternalServiceError, *serviceerror.Internal:
 		h.GetMetricsClient().IncCounter(scope, metrics.CadenceFailures)
 		h.GetLogger().Error("Internal service error",
 			tag.Error(err),

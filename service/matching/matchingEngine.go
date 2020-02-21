@@ -29,10 +29,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gogo/status"
 	"github.com/pborman/uuid"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
-	"google.golang.org/grpc/codes"
 
 	m "github.com/temporalio/temporal/.gen/go/matching"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
@@ -363,20 +362,12 @@ pollLoop:
 
 		resp, err := e.recordDecisionTaskStarted(ctx, adapter.ToProtoPollForDecisionTaskRequest(request), task)
 		if err != nil {
-			//switch err.(type) {
-			//case *workflow.EntityNotExistsError, *h.EventAlreadyStartedError:
-			//	e.logger.Debug("Duplicated decision task",
-			//		tag.Name(taskListName), tag.TaskID(task.event.TaskID))
-			//	task.finish(nil)
-			//default:
-			//	task.finish(err)
-			//}
-
-			code := status.Code(err)
-			if code == codes.NotFound || code == codes.AlreadyExists {
-				e.logger.Debug("Duplicated decision task", tag.Name(taskListName), tag.TaskID(task.event.TaskID))
+			switch err.(type) {
+			case *serviceerror.NotFound, *serviceerror.EventAlreadyStarted:
+				e.logger.Debug(fmt.Sprintf("Duplicated decision task taskList=%v, taskID=%v",
+					taskListName, task.event.TaskID))
 				task.finish(nil)
-			} else {
+			default:
 				task.finish(err)
 			}
 
@@ -436,19 +427,11 @@ pollLoop:
 
 		resp, err := e.recordActivityTaskStarted(ctx, adapter.ToProtoPollForActivityTaskRequest(request), task)
 		if err != nil {
-			//switch err.(type) {
-			//case *workflow.EntityNotExistsError, *h.EventAlreadyStartedError:
-			//	e.logger.Debug("Duplicated activity task", tag.Name(taskListName), tag.TaskID(task.event.TaskID))
-			//	task.finish(nil)
-			//default:
-			//	task.finish(err)
-			//}
-
-			code := status.Code(err)
-			if code == codes.NotFound || code == codes.AlreadyExists {
+			switch err.(type) {
+			case *serviceerror.NotFound, *serviceerror.EventAlreadyStarted:
 				e.logger.Debug("Duplicated activity task", tag.Name(taskListName), tag.TaskID(task.event.TaskID))
 				task.finish(nil)
-			} else {
+			default:
 				task.finish(err)
 			}
 
@@ -794,16 +777,10 @@ func (e *matchingEngineImpl) recordDecisionTaskStarted(
 		return err
 	}
 	err := backoff.Retry(op, historyServiceOperationRetryPolicy, func(err error) bool {
-		//switch err.(type) {
-		//case *workflow.EntityNotExistsError, *h.EventAlreadyStartedError:
-		//	return false
-		//}
-		//return true
-		code := status.Code(err)
-		if code == codes.NotFound || code == codes.AlreadyExists {
+		switch err.(type) {
+		case *serviceerror.NotFound, *serviceerror.NotFound:
 			return false
 		}
-
 		return true
 	})
 	return resp, err
@@ -829,18 +806,11 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		return err
 	}
 	err := backoff.Retry(op, historyServiceOperationRetryPolicy, func(err error) bool {
-		//switch err.(type) {
-		//case *workflow.EntityNotExistsError, *h.EventAlreadyStartedError:
-		//	return false
-		//}
-		//return true
-		code := status.Code(err)
-		if code == codes.NotFound || code == codes.AlreadyExists {
+		switch err.(type) {
+		case *serviceerror.NotFound, *serviceerror.EventAlreadyStarted:
 			return false
 		}
-
 		return true
-
 	})
 	return resp, err
 }

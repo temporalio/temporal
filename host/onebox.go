@@ -27,8 +27,10 @@ import (
 	"net"
 	"sync"
 
+	"github.com/gogo/status"
 	"github.com/pborman/uuid"
 	"github.com/uber-go/tally"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/transport/tchannel"
@@ -997,7 +999,7 @@ func (c *rpcFactoryImpl) CreateGRPCConnection(hostName string) *grpc.ClientConn 
 
 func errorInterceptor(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 	err := invoker(ctx, method, req, reply, cc, opts...)
-	//err = serviceerror.FromStatus(status.Convert(err))
+	err = serviceerror.FromStatus(status.Convert(err))
 	return err
 }
 

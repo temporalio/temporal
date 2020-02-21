@@ -24,19 +24,16 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common/primitives"
 	"time"
 
-	"github.com/gogo/status"
 	"github.com/pborman/uuid"
 	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/errordetails"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
-	"google.golang.org/grpc/codes"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/client/history"
 	"github.com/temporalio/temporal/client/matching"
 	"github.com/temporalio/temporal/common"
@@ -47,6 +44,7 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/service/worker/parentclosepolicy"
 )
 
@@ -524,7 +522,7 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(
 		})
 
 		// Check to see if the error is non-transient, in which case reset the error and continue with processing
-		if status.Code(err) == codes.NotFound {
+		if _, ok := err.(*serviceerror.NotFound); ok {
 			err = nil
 		}
 	}
@@ -576,7 +574,7 @@ func (t *transferQueueActiveProcessorImpl) processCancelExecution(
 	if bytes.Compare(task.DomainID, task.TargetDomainID) == 0 && task.WorkflowID == task.TargetWorkflowID {
 		// it does not matter if the run ID is a mismatch
 		err = t.requestCancelExternalExecutionFailed(task, context, targetDomain, task.TargetWorkflowID, primitives.UUID(task.TargetRunID).String())
-		if status.Code(err) == codes.NotFound {
+		if _, ok := err.(*serviceerror.NotFound); ok {
 			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
 			return nil
 		}
@@ -752,7 +750,7 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(
 	// Get parent domain name
 	var domain string
 	if domainEntry, err := t.shard.GetDomainCache().GetDomainByID(primitives.UUID(task.DomainID).String()); err != nil {
-		if status.Code(err) != codes.NotFound {
+		if _, ok := err.(*serviceerror.NotFound); !ok {
 			return err
 		}
 		// it is possible that the domain got deleted. Use domainID instead as this is only needed for the history event
@@ -764,7 +762,7 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(
 	// Get target domain name
 	var targetDomain string
 	if domainEntry, err := t.shard.GetDomainCache().GetDomainByID(primitives.UUID(task.TargetDomainID).String()); err != nil {
-		if status.Code(err) != codes.NotFound {
+		if _, ok := err.(*serviceerror.NotFound); !ok {
 			return err
 		}
 		// it is possible that the domain got deleted. Use domainID instead as this is only needed for the history event
@@ -810,7 +808,7 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(
 
 		// Check to see if the error is non-transient, in which case add StartChildWorkflowExecutionFailed
 		// event and complete transfer task by setting the err = nil
-		if errordetails.IsWorkflowExecutionAlreadyStartedStatus(status.Convert(err)) {
+		if _, ok := err.(*serviceerror.WorkflowExecutionAlreadyStarted); ok {
 			err = t.recordStartChildExecutionFailed(task, context, attributes)
 		}
 
@@ -1117,7 +1115,7 @@ func (t *transferQueueActiveProcessorImpl) createFirstDecisionTask(
 	})
 
 	if err != nil {
-		if status.Code(err) == codes.NotFound {
+		if _, ok := err.(*serviceerror.NotFound); ok {
 			// Maybe child workflow execution already timedout or terminated
 			// Safe to discard the error and complete this transfer task
 			return nil
@@ -1344,8 +1342,8 @@ func (t *transferQueueActiveProcessorImpl) requestCancelExternalExecutionWithRet
 
 	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientErrorGRPC)
 
-	if status.Code(err) == codes.AlreadyExists {
-		// err is CancellationAlreadyRequestedError
+	if _, ok := err.(*serviceerror.CancellationAlreadyRequested); ok {
+		// err is CancellationAlreadyRequested
 		// this could happen if target workflow cancellation is already requested
 		// mark as success
 		return nil
@@ -1596,7 +1594,7 @@ func (t *transferQueueActiveProcessorImpl) processParentClosePolicy(
 			domainName,
 			childInfo,
 		); err != nil {
-			if status.Code(err) != codes.NotFound {
+			if _, ok := err.(*serviceerror.NotFound); !ok {
 				scope.IncCounter(metrics.ParentClosePolicyProcessorFailures)
 				return err
 			}
