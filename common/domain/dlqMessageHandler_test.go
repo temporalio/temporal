@@ -28,10 +28,10 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 	"go.uber.org/zap"
 
-	"github.com/temporalio/temporal/.gen/go/replicator"
-	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/persistence"
 )
@@ -87,10 +87,10 @@ func (s *dlqMessageHandlerSuite) TestReadMessages() {
 	pageSize := 100
 	pageToken := []byte{}
 
-	tasks := []*replicator.ReplicationTask{
+	tasks := []*commonproto.ReplicationTask{
 		{
-			TaskType:     replicator.ReplicationTaskTypeDomain.Ptr(),
-			SourceTaskId: common.Int64Ptr(1),
+			TaskType:     enums.ReplicationTaskTypeDomain,
+			SourceTaskId: 1,
 		},
 	}
 	s.mockReplicationQueue.EXPECT().GetDLQAckLevel().Return(ackLevel, nil).Times(1)
@@ -109,10 +109,10 @@ func (s *dlqMessageHandlerSuite) TestReadMessages_ThrowErrorOnGetDLQAckLevel() {
 	pageSize := 100
 	pageToken := []byte{}
 
-	tasks := []*replicator.ReplicationTask{
+	tasks := []*commonproto.ReplicationTask{
 		{
-			TaskType:     replicator.ReplicationTaskTypeDomain.Ptr(),
-			SourceTaskId: common.Int64Ptr(1),
+			TaskType:     enums.ReplicationTaskTypeDomain,
+			SourceTaskId: 1,
 		},
 	}
 	testError := fmt.Errorf("test")
@@ -185,15 +185,17 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages() {
 	pageToken := []byte{}
 	messageID := 11
 
-	domainAttribute := &replicator.DomainTaskAttributes{
-		ID: common.StringPtr(uuid.New()),
+	domainAttribute := &commonproto.DomainTaskAttributes{
+		Id: uuid.New(),
 	}
 
-	tasks := []*replicator.ReplicationTask{
+	tasks := []*commonproto.ReplicationTask{
 		{
-			TaskType:             replicator.ReplicationTaskTypeDomain.Ptr(),
-			SourceTaskId:         common.Int64Ptr(int64(messageID)),
-			DomainTaskAttributes: domainAttribute,
+			TaskType:     enums.ReplicationTaskTypeDomain,
+			SourceTaskId: int64(messageID),
+			Attributes: &commonproto.ReplicationTask_DomainTaskAttributes{
+				DomainTaskAttributes: domainAttribute,
+			},
 		},
 	}
 	s.mockReplicationQueue.EXPECT().GetDLQAckLevel().Return(ackLevel, nil).Times(1)
@@ -214,15 +216,17 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages_ThrowErrorOnGetDLQAckLevel() 
 	pageToken := []byte{}
 	messageID := 11
 	testError := fmt.Errorf("test")
-	domainAttribute := &replicator.DomainTaskAttributes{
-		ID: common.StringPtr(uuid.New()),
+	domainAttribute := &commonproto.DomainTaskAttributes{
+		Id: uuid.New(),
 	}
 
-	tasks := []*replicator.ReplicationTask{
+	tasks := []*commonproto.ReplicationTask{
 		{
-			TaskType:             replicator.ReplicationTaskTypeDomain.Ptr(),
-			SourceTaskId:         common.Int64Ptr(int64(messageID)),
-			DomainTaskAttributes: domainAttribute,
+			TaskType:     enums.ReplicationTaskTypeDomain,
+			SourceTaskId: int64(messageID),
+			Attributes: &commonproto.ReplicationTask_DomainTaskAttributes{
+				DomainTaskAttributes: domainAttribute,
+			},
 		},
 	}
 	s.mockReplicationQueue.EXPECT().GetDLQAckLevel().Return(-1, testError).Times(1)
@@ -264,22 +268,26 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages_ThrowErrorOnHandleReceivingTa
 	messageID1 := 11
 	messageID2 := 12
 	testError := fmt.Errorf("test")
-	domainAttribute1 := &replicator.DomainTaskAttributes{
-		ID: common.StringPtr(uuid.New()),
+	domainAttribute1 := &commonproto.DomainTaskAttributes{
+		Id: uuid.New(),
 	}
-	domainAttribute2 := &replicator.DomainTaskAttributes{
-		ID: common.StringPtr(uuid.New()),
+	domainAttribute2 := &commonproto.DomainTaskAttributes{
+		Id: uuid.New(),
 	}
-	tasks := []*replicator.ReplicationTask{
+	tasks := []*commonproto.ReplicationTask{
 		{
-			TaskType:             replicator.ReplicationTaskTypeDomain.Ptr(),
-			SourceTaskId:         common.Int64Ptr(int64(messageID1)),
-			DomainTaskAttributes: domainAttribute1,
+			TaskType:     enums.ReplicationTaskTypeDomain,
+			SourceTaskId: int64(messageID1),
+			Attributes: &commonproto.ReplicationTask_DomainTaskAttributes{
+				DomainTaskAttributes: domainAttribute1,
+			},
 		},
 		{
-			TaskType:             replicator.ReplicationTaskTypeDomain.Ptr(),
-			SourceTaskId:         common.Int64Ptr(int64(messageID2)),
-			DomainTaskAttributes: domainAttribute2,
+			TaskType:     enums.ReplicationTaskTypeDomain,
+			SourceTaskId: int64(messageID2),
+			Attributes: &commonproto.ReplicationTask_DomainTaskAttributes{
+				DomainTaskAttributes: domainAttribute2,
+			},
 		},
 	}
 	s.mockReplicationQueue.EXPECT().GetDLQAckLevel().Return(ackLevel, nil).Times(1)
@@ -304,22 +312,26 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages_ThrowErrorOnDeleteMessages() 
 	messageID1 := 11
 	messageID2 := 12
 	testError := fmt.Errorf("test")
-	domainAttribute1 := &replicator.DomainTaskAttributes{
-		ID: common.StringPtr(uuid.New()),
+	domainAttribute1 := &commonproto.DomainTaskAttributes{
+		Id: uuid.New(),
 	}
-	domainAttribute2 := &replicator.DomainTaskAttributes{
-		ID: common.StringPtr(uuid.New()),
+	domainAttribute2 := &commonproto.DomainTaskAttributes{
+		Id: uuid.New(),
 	}
-	tasks := []*replicator.ReplicationTask{
+	tasks := []*commonproto.ReplicationTask{
 		{
-			TaskType:             replicator.ReplicationTaskTypeDomain.Ptr(),
-			SourceTaskId:         common.Int64Ptr(int64(messageID1)),
-			DomainTaskAttributes: domainAttribute1,
+			TaskType:     enums.ReplicationTaskTypeDomain,
+			SourceTaskId: int64(messageID1),
+			Attributes: &commonproto.ReplicationTask_DomainTaskAttributes{
+				DomainTaskAttributes: domainAttribute1,
+			},
 		},
 		{
-			TaskType:             replicator.ReplicationTaskTypeDomain.Ptr(),
-			SourceTaskId:         common.Int64Ptr(int64(messageID2)),
-			DomainTaskAttributes: domainAttribute2,
+			TaskType:     enums.ReplicationTaskTypeDomain,
+			SourceTaskId: int64(messageID2),
+			Attributes: &commonproto.ReplicationTask_DomainTaskAttributes{
+				DomainTaskAttributes: domainAttribute2,
+			},
 		},
 	}
 	s.mockReplicationQueue.EXPECT().GetDLQAckLevel().Return(ackLevel, nil).Times(1)
@@ -342,15 +354,17 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages_IgnoreErrorOnUpdateDLQAckLeve
 	pageToken := []byte{}
 	messageID := 11
 	testError := fmt.Errorf("test")
-	domainAttribute := &replicator.DomainTaskAttributes{
-		ID: common.StringPtr(uuid.New()),
+	domainAttribute := &commonproto.DomainTaskAttributes{
+		Id: uuid.New(),
 	}
 
-	tasks := []*replicator.ReplicationTask{
+	tasks := []*commonproto.ReplicationTask{
 		{
-			TaskType:             replicator.ReplicationTaskTypeDomain.Ptr(),
-			SourceTaskId:         common.Int64Ptr(int64(messageID)),
-			DomainTaskAttributes: domainAttribute,
+			TaskType:     enums.ReplicationTaskTypeDomain,
+			SourceTaskId: int64(messageID),
+			Attributes: &commonproto.ReplicationTask_DomainTaskAttributes{
+				DomainTaskAttributes: domainAttribute,
+			},
 		},
 	}
 	s.mockReplicationQueue.EXPECT().GetDLQAckLevel().Return(ackLevel, nil).Times(1)
