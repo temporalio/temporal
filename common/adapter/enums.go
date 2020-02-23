@@ -144,7 +144,7 @@ func ToThriftEncodingType(in enums.EncodingType) *shared.EncodingType {
 	case enums.EncodingTypeJSON:
 		ret := shared.EncodingTypeJSON
 		return &ret
-	case enums.EncodingTypeProto:
+	case enums.EncodingTypeProto3:
 		panic("EncodingTypeProto is not supported")
 	}
 
@@ -197,4 +197,14 @@ func ToThriftDomainStatus(in enums.DomainStatus) *shared.DomainStatus {
 func ToThriftReplicationTaskType(in enums.ReplicationTaskType) *replicator.ReplicationTaskType {
 	ret := replicator.ReplicationTaskType(in)
 	return &ret
+}
+func ToThriftDLQType(in enums.DLQType) *replicator.DLQType {
+	ret := replicator.DLQType(in)
+	return &ret
+}
+func ToProtoDLQType(in *replicator.DLQType) enums.DLQType {
+	if in == nil {
+		return enums.DLQTypeReplication
+	}
+	return enums.DLQType(*in)
 }

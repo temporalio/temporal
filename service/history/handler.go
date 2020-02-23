@@ -546,6 +546,19 @@ func (h *Handler) RespondDecisionTaskFailed(
 		tag.WorkflowRunID(token.RunID),
 		tag.WorkflowScheduleID(token.ScheduleID))
 
+	if failedRequest != nil && failedRequest.GetCause() == gen.DecisionTaskFailedCauseUnhandledDecision {
+		h.GetLogger().Info("Non-Deterministic Error", tag.WorkflowDomainID(token.DomainID), tag.WorkflowID(token.WorkflowID), tag.WorkflowRunID(token.RunID))
+		domainName, err := h.GetDomainCache().GetDomainName(token.DomainID)
+		var domainTag metrics.Tag
+
+		if err == nil {
+			domainTag = metrics.DomainTag(domainName)
+		} else {
+			domainTag = metrics.DomainUnknownTag()
+		}
+
+		h.GetMetricsClient().Scope(scope, domainTag).IncCounter(metrics.CadenceErrNonDeterministicCounter)
+	}
 	err0 = validateTaskToken(token)
 	if err0 != nil {
 		return h.error(err0, scope, domainID, "")
@@ -1589,6 +1602,37 @@ func (h *Handler) ReapplyEvents(
 		return h.error(err, scope, domainID, workflowID)
 	}
 	return nil
+}
+
+// ReadDLQMessages reads replication DLQ messages
+func (h *Handler) ReadDLQMessages(
+	ctx context.Context,
+	request *r.ReadDLQMessagesRequest,
+) (resp *r.ReadDLQMessagesResponse, retError error) {
+	panic("ReadDLQMessages should not be called for thrift handler")
+}
+
+// PurgeDLQMessages deletes replication DLQ messages
+func (h *Handler) PurgeDLQMessages(
+	ctx context.Context,
+	request *r.PurgeDLQMessagesRequest,
+) (retError error) {
+	panic("PurgeDLQMessages should not be called for thrift handler")
+}
+
+// MergeDLQMessages reads and applies replication DLQ messages
+func (h *Handler) MergeDLQMessages(
+	ctx context.Context,
+	request *r.MergeDLQMessagesRequest,
+) (resp *r.MergeDLQMessagesResponse, retError error) {
+	panic("MergeDLQMessages should not be called for thrift handler")
+}
+
+// RefreshWorkflowTasks refreshes all the tasks of a workflow
+func (h *Handler) RefreshWorkflowTasks(
+	ctx context.Context,
+	request *hist.RefreshWorkflowTasksRequest) (retError error) {
+	panic("RefreshWorkflowTasks should not be called for thrift handler")
 }
 
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various

@@ -167,3 +167,49 @@ message DescribeClusterResponse {
     common.SupportedClientVersions supportedClientVersions = 1;
     common.MembershipInfo membershipInfo = 2;
 }
+
+message ReadDLQMessagesRequest {
+    enums.DLQType type = 1;
+    int32 shardID = 2;
+    string sourceCluster = 3;
+    int64 inclusiveEndMessageID = 4;
+    int32 maximumPageSize = 5;
+    bytes nextPageToken = 6;
+}
+
+message ReadDLQMessagesResponse {
+    enums.DLQType type = 1;
+    repeated common.ReplicationTask replicationTasks = 2;
+    bytes nextPageToken = 3;
+}
+
+message PurgeDLQMessagesRequest {
+    enums.DLQType type = 1;
+    int32 shardID = 2;
+    string sourceCluster = 3;
+    int64 inclusiveEndMessageID = 4;
+}
+
+message PurgeDLQMessagesResponse {
+}
+
+message MergeDLQMessagesRequest {
+    enums.DLQType type = 1;
+    int32 shardID = 2;
+    string sourceCluster = 3;
+    int64 inclusiveEndMessageID = 4;
+    int32 maximumPageSize = 5;
+    bytes nextPageToken = 6;
+}
+
+message MergeDLQMessagesResponse {
+    bytes nextPageToken = 1;
+}
+
+message RefreshWorkflowTasksRequest {
+    string domain = 1;
+    common.WorkflowExecution execution = 2;
+}
+
+message RefreshWorkflowTasksResponse {
+}

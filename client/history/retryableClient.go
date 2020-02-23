@@ -586,3 +586,71 @@ func (c *retryableClient) ReapplyEvents(
 	err := backoff.Retry(op, c.policy, c.isRetryable)
 	return resp, err
 }
+
+func (c *retryableClient) ReadDLQMessages(
+	ctx context.Context,
+	request *historyservice.ReadDLQMessagesRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.ReadDLQMessagesResponse, error) {
+
+	var resp *historyservice.ReadDLQMessagesResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.ReadDLQMessages(ctx, request, opts...)
+		return err
+	}
+
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) PurgeDLQMessages(
+	ctx context.Context,
+	request *historyservice.PurgeDLQMessagesRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.PurgeDLQMessagesResponse, error) {
+
+	var resp *historyservice.PurgeDLQMessagesResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.PurgeDLQMessages(ctx, request, opts...)
+		return err
+	}
+
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) MergeDLQMessages(
+	ctx context.Context,
+	request *historyservice.MergeDLQMessagesRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.MergeDLQMessagesResponse, error) {
+
+	var resp *historyservice.MergeDLQMessagesResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.MergeDLQMessages(ctx, request, opts...)
+		return err
+	}
+
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) RefreshWorkflowTasks(
+	ctx context.Context,
+	request *historyservice.RefreshWorkflowTasksRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.RefreshWorkflowTasksResponse, error) {
+
+	var resp *historyservice.RefreshWorkflowTasksResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.RefreshWorkflowTasks(ctx, request, opts...)
+		return err
+	}
+
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}

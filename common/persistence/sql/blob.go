@@ -26,6 +26,8 @@ import (
 
 	"github.com/gogo/protobuf/types"
 
+	commonproto "go.temporal.io/temporal-proto/common"
+
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
 	"go.uber.org/thriftrw/protocol"
@@ -82,7 +84,7 @@ func protoRWDecode(b []byte, proto string, result protoMarshal) error {
 	if err := validateProto(proto, common.EncodingTypeProto3); err != nil {
 		return err
 	}
-	return decodeErr(common.EncodingTypeThriftRW, result.Unmarshal(b))
+	return decodeErr(common.EncodingTypeProto3, result.Unmarshal(b))
 }
 
 func thriftRWEncode(t thriftRWType) (p.DataBlob, error) {
@@ -136,6 +138,10 @@ func ShardInfoFromBlob(b []byte, proto string, clusterName string) (*persistence
 
 	if shardInfo.GetClusterReplicationLevel() == nil {
 		shardInfo.ClusterReplicationLevel = make(map[string]int64)
+	}
+
+	if shardInfo.GetReplicationDLQAckLevel() == nil {
+		shardInfo.ReplicationDLQAckLevel = make(map[string]int64)
 	}
 
 	return shardInfo, nil
@@ -255,5 +261,14 @@ func ReplicationTaskInfoToBlob(info *persistenceblobs.ReplicationTaskInfo) (p.Da
 
 func ReplicationTaskInfoFromBlob(b []byte, proto string) (*persistenceblobs.ReplicationTaskInfo, error) {
 	result := &persistenceblobs.ReplicationTaskInfo{}
+	return result, protoRWDecode(b, proto, result)
+}
+
+func ReplicationTaskToBlob(info *commonproto.ReplicationTask) (p.DataBlob, error) {
+	return protoRWEncode(info)
+}
+
+func ReplicationTaskFromBlob(b []byte, proto string) (*commonproto.ReplicationTask, error) {
+	result := &commonproto.ReplicationTask{}
 	return result, protoRWDecode(b, proto, result)
 }

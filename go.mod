@@ -3,13 +3,15 @@ module github.com/temporalio/temporal
 go 1.12
 
 require (
+	cloud.google.com/go v0.38.0
 	github.com/DataDog/zstd v1.4.0 // indirect
 	github.com/Shopify/sarama v1.23.0
 	github.com/anmitsu/go-shlex v0.0.0-20161002113705-648efa622239 // indirect
 	github.com/apache/thrift v0.0.0-20161221203622-b2a4d4ae21c7
+	github.com/aws/aws-sdk-go v1.29.4
 	github.com/benbjohnson/clock v1.0.0 // indirect
 	github.com/bitly/go-hostpool v0.1.0 // indirect
-	github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869 // indirect
+	github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869
 	github.com/bmizerany/perks v0.0.0-20141205001514-d9a9656a3a4b // indirect
 	github.com/bsm/sarama-cluster v2.1.13+incompatible
 	github.com/cactus/go-statsd-client v3.1.1+incompatible
@@ -23,7 +25,7 @@ require (
 	github.com/fatih/structtag v1.2.0 // indirect
 	github.com/flynn/go-shlex v0.0.0-20150515145356-3f9db97f8568 // indirect
 	github.com/fortytw2/leaktest v1.3.0 // indirect
-	github.com/go-sql-driver/mysql v1.4.1
+	github.com/go-sql-driver/mysql v1.5.0
 	github.com/gocql/gocql v0.0.0-20171220143535-56a164ee9f31
 	github.com/gogo/protobuf v1.3.1
 	github.com/gogo/status v1.1.0
@@ -64,14 +66,14 @@ require (
 	github.com/uber-common/bark v1.2.1 // indirect
 	github.com/uber-go/kafka-client v0.2.3-0.20191018205945-8b3555b395f9
 	github.com/uber-go/mapdecode v1.0.0 // indirect
-	github.com/uber-go/tally v3.3.13+incompatible
+	github.com/uber-go/tally v3.3.15+incompatible
 	github.com/uber/ringpop-go v0.8.5
 	github.com/uber/tchannel-go v1.16.0
 	github.com/urfave/cli v1.20.0
 	github.com/valyala/fastjson v1.4.1
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
 	go.temporal.io/temporal v0.10.5
-	go.temporal.io/temporal-proto v0.0.0-20200211220322-aef097c349a6
+	go.temporal.io/temporal-proto v0.0.0-20200220011422-f48cb2702adc
 	go.uber.org/atomic v1.5.1
 	go.uber.org/fx v1.10.0 // indirect
 	go.uber.org/multierr v1.4.0
@@ -81,8 +83,10 @@ require (
 	go.uber.org/zap v1.13.0
 	golang.org/x/crypto v0.0.0-20190701094942-4def268fd1a4 // indirect
 	golang.org/x/net v0.0.0-20200202094626-16171245cfb2
+	golang.org/x/oauth2 v0.0.0-20190226205417-e64efc72b421
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4
 	golang.org/x/tools v0.0.0-20191114200427-caa0b0f7d508
+	google.golang.org/api v0.4.0
 	google.golang.org/appengine v1.6.1 // indirect
 	google.golang.org/grpc v1.27.1
 	gopkg.in/inf.v0 v0.9.1 // indirect

@@ -157,3 +157,39 @@ func (adh *AdminNilCheckHandler) ReapplyEvents(ctx context.Context, request *adm
 	}
 	return resp, err
 }
+
+// ReadDLQMessages returns messages from DLQ
+func (adh *AdminNilCheckHandler) ReadDLQMessages(ctx context.Context, request *adminservice.ReadDLQMessagesRequest) (*adminservice.ReadDLQMessagesResponse, error) {
+	resp, err := adh.parentHandler.ReadDLQMessages(ctx, request)
+	if resp == nil && err == nil {
+		return &adminservice.ReadDLQMessagesResponse{}, err
+	}
+	return resp, err
+}
+
+// PurgeDLQMessages purges messages from DLQ
+func (adh *AdminNilCheckHandler) PurgeDLQMessages(ctx context.Context, request *adminservice.PurgeDLQMessagesRequest) (*adminservice.PurgeDLQMessagesResponse, error) {
+	resp, err := adh.parentHandler.PurgeDLQMessages(ctx, request)
+	if resp == nil && err == nil {
+		return &adminservice.PurgeDLQMessagesResponse{}, err
+	}
+	return resp, err
+}
+
+// MergeDLQMessages merges messages from DLQ
+func (adh *AdminNilCheckHandler) MergeDLQMessages(ctx context.Context, request *adminservice.MergeDLQMessagesRequest) (*adminservice.MergeDLQMessagesResponse, error) {
+	resp, err := adh.parentHandler.MergeDLQMessages(ctx, request)
+	if resp == nil && err == nil {
+		return &adminservice.MergeDLQMessagesResponse{}, err
+	}
+	return resp, err
+}
+
+// RefreshWorkflowTasks refreshes all tasks of a workflow
+func (adh *AdminNilCheckHandler) RefreshWorkflowTasks(ctx context.Context, request *adminservice.RefreshWorkflowTasksRequest) (*adminservice.RefreshWorkflowTasksResponse, error) {
+	resp, err := adh.parentHandler.RefreshWorkflowTasks(ctx, request)
+	if resp == nil && err == nil {
+		return &adminservice.RefreshWorkflowTasksResponse{}, err
+	}
+	return resp, err
+}

@@ -39,7 +39,9 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
+	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/definition"
+	"github.com/temporalio/temporal/common/domain"
 	"github.com/temporalio/temporal/common/headers"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -65,6 +67,7 @@ type (
 		numberOfHistoryShards int
 		params                *resource.BootstrapParams
 		config                *Config
+		domainDLQHandler      domain.DLQMessageHandler
 	}
 
 	getWorkflowRawHistoryV2Token struct {
@@ -80,17 +83,31 @@ type (
 	}
 )
 
+var (
+	adminServiceRetryPolicy = common.CreateAdminServiceRetryPolicy()
+)
+
 // NewAdminHandler creates a gRPC handler for the workflowservice
 func NewAdminHandler(
 	resource resource.Resource,
 	params *resource.BootstrapParams,
 	config *Config,
 ) *AdminHandler {
+
+	domainReplicationTaskExecutor := domain.NewReplicationTaskExecutor(
+		resource.GetMetadataManager(),
+		resource.GetLogger(),
+	)
 	return &AdminHandler{
 		Resource:              resource,
 		numberOfHistoryShards: params.PersistenceConfig.NumHistoryShards,
 		params:                params,
 		config:                config,
+		domainDLQHandler: domain.NewDLQMessageHandler(
+			domainReplicationTaskExecutor,
+			resource.GetDomainReplicationQueue(),
+			resource.GetLogger(),
+		),
 	}
 }
 
@@ -690,7 +707,7 @@ func (adh *AdminHandler) GetDomainReplicationMessages(ctx context.Context, reque
 
 	return &adminservice.GetDomainReplicationMessagesResponse{
 		Messages: &commonproto.ReplicationMessages{
-			ReplicationTasks:       adapter.ToProtoReplicationTasks(replicationTasks),
+			ReplicationTasks:       replicationTasks,
 			LastRetrievedMessageId: int64(lastMessageID),
 		},
 	}, nil
@@ -751,6 +768,228 @@ func (adh *AdminHandler) ReapplyEvents(ctx context.Context, request *adminservic
 		return nil, adh.error(err, scope)
 	}
 	return nil, nil
+}
+
+// ReadDLQMessages reads messages from DLQ
+func (adh *AdminHandler) ReadDLQMessages(
+	ctx context.Context,
+	request *adminservice.ReadDLQMessagesRequest,
+) (resp *adminservice.ReadDLQMessagesResponse, retErr error) {
+
+	defer log.CapturePanicGRPC(adh.GetLogger(), &retErr)
+	scope, sw := adh.startRequestProfile(metrics.AdminReadDLQMessagesScope)
+	defer sw.Stop()
+
+	if request == nil {
+		return nil, adh.error(errRequestNotSet, scope)
+	}
+
+	if request.GetMaximumPageSize() <= 0 {
+		request.MaximumPageSize = common.ReadDLQMessagesPageSize
+	}
+
+	if request.InclusiveEndMessageID <= 0 {
+		request.InclusiveEndMessageID = common.EndMessageID
+	}
+
+	var tasks []*commonproto.ReplicationTask
+	var token []byte
+	var op func() error
+	switch request.GetType() {
+	case enums.DLQTypeReplication:
+		resp, err := adh.GetHistoryClient().ReadDLQMessages(ctx, &historyservice.ReadDLQMessagesRequest{
+			Type:                  request.GetType(),
+			ShardID:               request.GetShardID(),
+			SourceCluster:         request.GetSourceCluster(),
+			InclusiveEndMessageID: request.GetInclusiveEndMessageID(),
+			MaximumPageSize:       request.GetMaximumPageSize(),
+			NextPageToken:         request.GetNextPageToken(),
+		})
+
+		if resp == nil {
+			return nil, err
+		}
+
+		return &adminservice.ReadDLQMessagesResponse{
+			Type:             resp.GetType(),
+			ReplicationTasks: resp.GetReplicationTasks(),
+			NextPageToken:    resp.GetNextPageToken(),
+		}, err
+	case enums.DLQTypeDomain:
+		op = func() error {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+				var err error
+				tasks, token, err = adh.domainDLQHandler.Read(
+					int(request.GetInclusiveEndMessageID()),
+					int(request.GetMaximumPageSize()),
+					request.GetNextPageToken())
+				return err
+			}
+		}
+	default:
+		return nil, adh.error(&shared.BadRequestError{Message: "The DLQ type is not supported."}, scope)
+	}
+	retErr = backoff.Retry(op, adminServiceRetryPolicy, common.IsServiceTransientError)
+	if retErr != nil {
+		return nil, adh.error(retErr, scope)
+	}
+
+	return &adminservice.ReadDLQMessagesResponse{
+		ReplicationTasks: tasks,
+		NextPageToken:    token,
+	}, nil
+}
+
+// PurgeDLQMessages purge messages from DLQ
+func (adh *AdminHandler) PurgeDLQMessages(
+	ctx context.Context,
+	request *adminservice.PurgeDLQMessagesRequest,
+) (_ *adminservice.PurgeDLQMessagesResponse, err error) {
+
+	defer log.CapturePanicGRPC(adh.GetLogger(), &err)
+	scope, sw := adh.startRequestProfile(metrics.AdminPurgeDLQMessagesScope)
+	defer sw.Stop()
+
+	if request == nil {
+		return nil, adh.error(errRequestNotSet, scope)
+	}
+
+	if request.InclusiveEndMessageID <= 0 {
+		request.InclusiveEndMessageID = common.EndMessageID
+	}
+
+	var op func() error
+	switch request.GetType() {
+	case enums.DLQTypeReplication:
+		resp, err := adh.GetHistoryClient().PurgeDLQMessages(ctx, &historyservice.PurgeDLQMessagesRequest{
+			Type:                  request.GetType(),
+			ShardID:               request.GetShardID(),
+			SourceCluster:         request.GetSourceCluster(),
+			InclusiveEndMessageID: request.GetInclusiveEndMessageID(),
+		})
+
+		if resp == nil {
+			return nil, adh.error(err, scope)
+		}
+
+		return &adminservice.PurgeDLQMessagesResponse{}, err
+	case enums.DLQTypeDomain:
+		op = func() error {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+				return adh.domainDLQHandler.Purge(int(request.GetInclusiveEndMessageID()))
+			}
+		}
+	default:
+		return nil, adh.error(&shared.BadRequestError{Message: "The DLQ type is not supported."}, scope)
+	}
+	err = backoff.Retry(op, adminServiceRetryPolicy, common.IsServiceTransientError)
+	if err != nil {
+		return nil, adh.error(err, scope)
+	}
+
+	return &adminservice.PurgeDLQMessagesResponse{}, err
+}
+
+// MergeDLQMessages merges DLQ messages
+func (adh *AdminHandler) MergeDLQMessages(
+	ctx context.Context,
+	request *adminservice.MergeDLQMessagesRequest,
+) (resp *adminservice.MergeDLQMessagesResponse, err error) {
+
+	defer log.CapturePanicGRPC(adh.GetLogger(), &err)
+	scope, sw := adh.startRequestProfile(metrics.AdminMergeDLQMessagesScope)
+	defer sw.Stop()
+
+	if request == nil {
+		return nil, adh.error(errRequestNotSet, scope)
+	}
+
+	if request.InclusiveEndMessageID <= 0 {
+		request.InclusiveEndMessageID = common.EndMessageID
+	}
+
+	var token []byte
+	var op func() error
+	switch request.GetType() {
+	case enums.DLQTypeReplication:
+		resp, err := adh.GetHistoryClient().MergeDLQMessages(ctx, &historyservice.MergeDLQMessagesRequest{
+			Type:                  request.GetType(),
+			ShardID:               request.GetShardID(),
+			SourceCluster:         request.GetSourceCluster(),
+			InclusiveEndMessageID: request.GetInclusiveEndMessageID(),
+			MaximumPageSize:       request.GetMaximumPageSize(),
+			NextPageToken:         request.GetNextPageToken(),
+		})
+		if resp == nil {
+			return nil, adh.error(err, scope)
+		}
+
+		return &adminservice.MergeDLQMessagesResponse{
+			NextPageToken: request.GetNextPageToken(),
+		}, nil
+	case enums.DLQTypeDomain:
+
+		op = func() error {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+				var err error
+				token, err = adh.domainDLQHandler.Merge(
+					int(request.GetInclusiveEndMessageID()),
+					int(request.GetMaximumPageSize()),
+					request.GetNextPageToken(),
+				)
+				return err
+			}
+		}
+	default:
+		return nil, adh.error(&shared.BadRequestError{Message: "The DLQ type is not supported."}, scope)
+	}
+	err = backoff.Retry(op, adminServiceRetryPolicy, common.IsServiceTransientError)
+	if err != nil {
+		return nil, adh.error(err, scope)
+	}
+
+	return &adminservice.MergeDLQMessagesResponse{
+		NextPageToken: token,
+	}, nil
+}
+
+// RefreshWorkflowTasks re-generates the workflow tasks
+func (adh *AdminHandler) RefreshWorkflowTasks(
+	ctx context.Context,
+	request *adminservice.RefreshWorkflowTasksRequest,
+) (_ *adminservice.RefreshWorkflowTasksResponse, err error) {
+	defer log.CapturePanicGRPC(adh.GetLogger(), &err)
+	scope, sw := adh.startRequestProfile(metrics.AdminRefreshWorkflowTasksScope)
+	defer sw.Stop()
+
+	if request == nil {
+		return nil, adh.error(errRequestNotSet, scope)
+	}
+	if err := adh.validateExecution(request.Execution); err != nil {
+		return nil, adh.error(err, scope)
+	}
+	domainEntry, err := adh.GetDomainCache().GetDomain(request.GetDomain())
+	if err != nil {
+		return nil, adh.error(err, scope)
+	}
+
+	_, err = adh.GetHistoryClient().RefreshWorkflowTasks(ctx, &historyservice.RefreshWorkflowTasksRequest{
+		DomainUUID: domainEntry.GetInfo().ID,
+		Request:    request,
+	})
+	if err != nil {
+		return nil, adh.error(err, scope)
+	}
+	return &adminservice.RefreshWorkflowTasksResponse{}, nil
 }
 
 //===================================================================

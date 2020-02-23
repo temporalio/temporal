@@ -35,7 +35,7 @@ type (
 	}
 )
 
-func newReplicationSequentialTaskQueue(task task.SequentialTask) task.SequentialTaskQueue {
+func newReplicationSequentialTaskQueue(task task.Task) task.SequentialTaskQueue {
 	var id definition.WorkflowIdentifier
 	switch t := task.(type) {
 	case *historyMetadataReplicationTask:
@@ -62,12 +62,12 @@ func (q *replicationSequentialTaskQueue) QueueID() interface{} {
 	return q.id
 }
 
-func (q *replicationSequentialTaskQueue) Add(task task.SequentialTask) {
+func (q *replicationSequentialTaskQueue) Add(task task.Task) {
 	q.taskQueue.Add(task)
 }
 
-func (q *replicationSequentialTaskQueue) Remove() task.SequentialTask {
-	return q.taskQueue.Remove().(task.SequentialTask)
+func (q *replicationSequentialTaskQueue) Remove() task.Task {
+	return q.taskQueue.Remove().(task.Task)
 }
 
 func (q *replicationSequentialTaskQueue) IsEmpty() bool {

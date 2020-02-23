@@ -35,26 +35,26 @@ import (
 )
 
 type (
-	domainReplicatorSuite struct {
+	transmissionTaskSuite struct {
 		suite.Suite
 		domainReplicator *domainReplicatorImpl
 		kafkaProducer    *mocks.KafkaProducer
 	}
 )
 
-func TestDomainReplicatorSuite(t *testing.T) {
-	s := new(domainReplicatorSuite)
+func TestTransmissionTaskSuite(t *testing.T) {
+	s := new(transmissionTaskSuite)
 	suite.Run(t, s)
 }
 
-func (s *domainReplicatorSuite) SetupSuite() {
+func (s *transmissionTaskSuite) SetupSuite() {
 }
 
-func (s *domainReplicatorSuite) TearDownSuite() {
+func (s *transmissionTaskSuite) TearDownSuite() {
 
 }
 
-func (s *domainReplicatorSuite) SetupTest() {
+func (s *transmissionTaskSuite) SetupTest() {
 	s.kafkaProducer = &mocks.KafkaProducer{}
 	s.domainReplicator = NewDomainReplicator(
 		s.kafkaProducer,
@@ -62,11 +62,11 @@ func (s *domainReplicatorSuite) SetupTest() {
 	).(*domainReplicatorImpl)
 }
 
-func (s *domainReplicatorSuite) TearDownTest() {
+func (s *transmissionTaskSuite) TearDownTest() {
 	s.kafkaProducer.AssertExpectations(s.T())
 }
 
-func (s *domainReplicatorSuite) TestHandleTransmissionTask_RegisterDomainTask_IsGlobalDomain() {
+func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterDomainTask_IsGlobalDomain() {
 	taskType := replicator.ReplicationTaskTypeDomain
 	id := uuid.New()
 	name := "some random domain test name"
@@ -151,7 +151,7 @@ func (s *domainReplicatorSuite) TestHandleTransmissionTask_RegisterDomainTask_Is
 	s.Nil(err)
 }
 
-func (s *domainReplicatorSuite) TestHandleTransmissionTask_RegisterDomainTask_NotGlobalDomain() {
+func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterDomainTask_NotGlobalDomain() {
 	id := uuid.New()
 	name := "some random domain test name"
 	description := "some random test description"
@@ -204,7 +204,7 @@ func (s *domainReplicatorSuite) TestHandleTransmissionTask_RegisterDomainTask_No
 	s.Nil(err)
 }
 
-func (s *domainReplicatorSuite) TestHandleTransmissionTask_UpdateDomainTask_IsGlobalDomain() {
+func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateDomainTask_IsGlobalDomain() {
 	taskType := replicator.ReplicationTaskTypeDomain
 	id := uuid.New()
 	name := "some random domain test name"
@@ -289,7 +289,7 @@ func (s *domainReplicatorSuite) TestHandleTransmissionTask_UpdateDomainTask_IsGl
 	s.Nil(err)
 }
 
-func (s *domainReplicatorSuite) TestHandleTransmissionTask_UpdateDomainTask_NotGlobalDomain() {
+func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateDomainTask_NotGlobalDomain() {
 	id := uuid.New()
 	name := "some random domain test name"
 	description := "some random test description"

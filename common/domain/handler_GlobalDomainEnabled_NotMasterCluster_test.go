@@ -153,7 +153,7 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestRegisterGetD
 	}, resp.DomainInfo)
 	s.Equal(&commonproto.DomainConfiguration{
 		WorkflowExecutionRetentionPeriodInDays: retention,
-		EmitMetric:                             &commonproto.BoolValue{Value: false},
+		EmitMetric:                             &commonproto.BoolValue{Value: true},
 		HistoryArchivalStatus:                  enums.ArchivalStatusDisabled,
 		HistoryArchivalURI:                     "",
 		VisibilityArchivalStatus:               enums.ArchivalStatusDisabled,

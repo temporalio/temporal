@@ -275,11 +275,32 @@ func TestDynamicConfigFilterTypeIsMapped(t *testing.T) {
 	}
 }
 
-func TestMapToString(t *testing.T) {
-	require.Equal(t, "", mapToString(nil))
-	m := map[string]interface{}{
-		"k1": 1,
-		"k2": 2,
+func BenchmarkLogValue(b *testing.B) {
+	keys := []Key{
+		HistorySizeLimitError,
+		MatchingThrottledLogRPS,
+		MatchingIdleTasklistCheckInterval,
 	}
-	require.Equal(t, "map[k1:1 k2:2]", mapToString(m))
+	values := []interface{}{
+		1024 * 1024,
+		0.1,
+		30 * time.Second,
+	}
+	cmpFuncs := []func(interface{}, interface{}) bool{
+		intCompareEquals,
+		float64CompareEquals,
+		durationCompareEquals,
+	}
+
+	collection := NewCollection(newInMemoryClient(), log.NewNoop())
+	// pre-warm the collection logValue map
+	for i := range keys {
+		collection.logValue(keys[i], values[i], values[i], cmpFuncs[i])
+	}
+
+	for i := 0; i < b.N; i++ {
+		for i := range keys {
+			collection.logValue(keys[i], values[i], values[i], cmpFuncs[i])
+		}
+	}
 }

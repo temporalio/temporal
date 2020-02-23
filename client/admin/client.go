@@ -223,6 +223,63 @@ func (c *clientImpl) ReapplyEvents(
 	return client.ReapplyEvents(ctx, request, opts...)
 }
 
+func (c *clientImpl) ReadDLQMessages(
+	ctx context.Context,
+	request *adminservice.ReadDLQMessagesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ReadDLQMessagesResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.ReadDLQMessages(ctx, request, opts...)
+}
+
+func (c *clientImpl) PurgeDLQMessages(
+	ctx context.Context,
+	request *adminservice.PurgeDLQMessagesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.PurgeDLQMessagesResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.PurgeDLQMessages(ctx, request, opts...)
+}
+
+func (c *clientImpl) MergeDLQMessages(
+	ctx context.Context,
+	request *adminservice.MergeDLQMessagesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.MergeDLQMessagesResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.MergeDLQMessages(ctx, request, opts...)
+
+}
+
+func (c *clientImpl) RefreshWorkflowTasks(
+	ctx context.Context,
+	request *adminservice.RefreshWorkflowTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.RefreshWorkflowTasksResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.RefreshWorkflowTasks(ctx, request, opts...)
+}
+
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
 	if parent == nil {
 		return context.WithTimeout(context.Background(), c.timeout)

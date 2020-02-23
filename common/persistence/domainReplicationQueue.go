@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -29,7 +29,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/temporalio/temporal/.gen/go/replicator"
+	commonproto "go.temporal.io/temporal-proto/common"
+
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log"
@@ -38,7 +39,9 @@ import (
 )
 
 const (
-	purgeInterval = 5 * time.Minute
+	purgeInterval                 = 5 * time.Minute
+	emptyMessageID                = -1
+	localDomainReplicationCluster = "domainReplication"
 )
 
 var _ DomainReplicationQueue = (*domainReplicationQueueImpl)(nil)
@@ -80,9 +83,14 @@ type (
 		common.Daemon
 		Publish(message interface{}) error
 		PublishToDLQ(message interface{}) error
-		GetReplicationMessages(lastMessageID int, maxCount int) ([]*replicator.ReplicationTask, int, error)
+		GetReplicationMessages(lastMessageID int, maxCount int) ([]*commonproto.ReplicationTask, int, error)
 		UpdateAckLevel(lastProcessedMessageID int, clusterName string) error
 		GetAckLevels() (map[string]int, error)
+		GetMessagesFromDLQ(firstMessageID int, lastMessageID int, pageSize int, pageToken []byte) ([]*commonproto.ReplicationTask, []byte, error)
+		UpdateDLQAckLevel(lastProcessedMessageID int) error
+		GetDLQAckLevel() (int, error)
+		RangeDeleteMessagesFromDLQ(firstMessageID int, lastMessageID int) error
+		DeleteMessageFromDLQ(messageID int) error
 	}
 )
 
@@ -101,12 +109,12 @@ func (q *domainReplicationQueueImpl) Stop() {
 }
 
 func (q *domainReplicationQueueImpl) Publish(message interface{}) error {
-	task, ok := message.(*replicator.ReplicationTask)
+	task, ok := message.(*commonproto.ReplicationTask)
 	if !ok {
 		return errors.New("wrong message type")
 	}
 
-	bytes, err := q.encoder.Encode(task)
+	bytes, err := task.Marshal()
 	if err != nil {
 		return fmt.Errorf("failed to encode message: %v", err)
 	}
@@ -114,12 +122,12 @@ func (q *domainReplicationQueueImpl) Publish(message interface{}) error {
 }
 
 func (q *domainReplicationQueueImpl) PublishToDLQ(message interface{}) error {
-	task, ok := message.(*replicator.ReplicationTask)
+	task, ok := message.(*commonproto.ReplicationTask)
 	if !ok {
 		return errors.New("wrong message type")
 	}
 
-	bytes, err := q.encoder.Encode(task)
+	bytes, err := task.Marshal()
 	if err != nil {
 		return fmt.Errorf("failed to encode message: %v", err)
 	}
@@ -129,29 +137,33 @@ func (q *domainReplicationQueueImpl) PublishToDLQ(message interface{}) error {
 func (q *domainReplicationQueueImpl) GetReplicationMessages(
 	lastMessageID int,
 	maxCount int,
-) ([]*replicator.ReplicationTask, int, error) {
+) ([]*commonproto.ReplicationTask, int, error) {
 
 	messages, err := q.queue.ReadMessages(lastMessageID, maxCount)
 	if err != nil {
 		return nil, lastMessageID, err
 	}
 
-	var replicationTasks []*replicator.ReplicationTask
+	var replicationTasks []*commonproto.ReplicationTask
 	for _, message := range messages {
-		var replicationTask replicator.ReplicationTask
-		err := q.encoder.Decode(message.Payload, &replicationTask)
+		replicationTask := &commonproto.ReplicationTask{}
+		err := replicationTask.Unmarshal(message.Payload)
 		if err != nil {
 			return nil, lastMessageID, fmt.Errorf("failed to decode task: %v", err)
 		}
 
 		lastMessageID = message.ID
-		replicationTasks = append(replicationTasks, &replicationTask)
+		replicationTasks = append(replicationTasks, replicationTask)
 	}
 
 	return replicationTasks, lastMessageID, nil
 }
 
-func (q *domainReplicationQueueImpl) UpdateAckLevel(lastProcessedMessageID int, clusterName string) error {
+func (q *domainReplicationQueueImpl) UpdateAckLevel(
+	lastProcessedMessageID int,
+	clusterName string,
+) error {
+
 	err := q.queue.UpdateAckLevel(lastProcessedMessageID, clusterName)
 	if err != nil {
 		return fmt.Errorf("failed to update ack level: %v", err)
@@ -167,6 +179,76 @@ func (q *domainReplicationQueueImpl) UpdateAckLevel(lastProcessedMessageID int, 
 
 func (q *domainReplicationQueueImpl) GetAckLevels() (map[string]int, error) {
 	return q.queue.GetAckLevels()
+}
+
+func (q *domainReplicationQueueImpl) GetMessagesFromDLQ(
+	firstMessageID int,
+	lastMessageID int,
+	pageSize int,
+	pageToken []byte,
+) ([]*commonproto.ReplicationTask, []byte, error) {
+
+	messages, token, err := q.queue.ReadMessagesFromDLQ(firstMessageID, lastMessageID, pageSize, pageToken)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var replicationTasks []*commonproto.ReplicationTask
+	for _, message := range messages {
+		replicationTask := &commonproto.ReplicationTask{}
+		err := replicationTask.Unmarshal(message.Payload)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to decode dlq task: %v", err)
+		}
+
+		//Overwrite to local cluster message id
+		replicationTask.SourceTaskId = int64(message.ID)
+		replicationTasks = append(replicationTasks, replicationTask)
+	}
+
+	return replicationTasks, token, nil
+}
+
+func (q *domainReplicationQueueImpl) UpdateDLQAckLevel(
+	lastProcessedMessageID int,
+) error {
+
+	return q.queue.UpdateDLQAckLevel(lastProcessedMessageID, localDomainReplicationCluster)
+}
+
+func (q *domainReplicationQueueImpl) GetDLQAckLevel() (int, error) {
+	dlqMetadata, err := q.queue.GetDLQAckLevels()
+	if err != nil {
+		return emptyMessageID, err
+	}
+
+	ackLevel, ok := dlqMetadata[localDomainReplicationCluster]
+	if !ok {
+		return emptyMessageID, nil
+	}
+	return ackLevel, nil
+}
+
+func (q *domainReplicationQueueImpl) RangeDeleteMessagesFromDLQ(
+	firstMessageID int,
+	lastMessageID int,
+) error {
+
+	if err := q.queue.RangeDeleteMessagesFromDLQ(
+		firstMessageID,
+		lastMessageID,
+	); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (q *domainReplicationQueueImpl) DeleteMessageFromDLQ(
+	messageID int,
+) error {
+
+	return q.queue.DeleteMessageFromDLQ(messageID)
 }
 
 func (q *domainReplicationQueueImpl) purgeAckedMessages() error {
