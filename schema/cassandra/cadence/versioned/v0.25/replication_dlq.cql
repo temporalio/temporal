@@ -1,1 +1,0 @@
-ALTER TYPE shard ADD replication_dlq_ack_level map<text, bigint>;
