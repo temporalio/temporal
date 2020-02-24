@@ -22,9 +22,10 @@ package cassandra
 
 import (
 	"fmt"
-	"github.com/temporalio/temporal/common/persistence/serialization"
 	"strings"
 	"time"
+
+	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/gogo/protobuf/types"
 
