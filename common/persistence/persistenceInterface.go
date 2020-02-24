@@ -22,7 +22,12 @@ package persistence
 
 import (
 	"fmt"
+
+	"github.com/temporalio/temporal/common/primitives"
+
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/persistence/serialization"
+
 	"time"
 
 	commonproto "go.temporal.io/temporal-proto/common"
@@ -453,7 +458,7 @@ type (
 		// The info for clean up data in background
 		Info string
 		// The branch to be appended
-		BranchInfo workflow.HistoryBranch
+		BranchInfo *persistenceblobs.HistoryBranch
 		// The first eventID becomes the nodeID to be appended
 		NodeID int64
 		// The events to be appended
@@ -472,11 +477,11 @@ type (
 	// InternalForkHistoryBranchRequest is used to fork a history branch
 	InternalForkHistoryBranchRequest struct {
 		// The base branch to fork from
-		ForkBranchInfo workflow.HistoryBranch
+		ForkBranchInfo *persistenceblobs.HistoryBranch
 		// The nodeID to fork from, the new branch will start from ( inclusive ), the base branch will stop at(exclusive)
 		ForkNodeID int64
 		// branchID of the new branch
-		NewBranchID string
+		NewBranchID primitives.UUID
 		// the info for clean up data in background
 		Info string
 		// Used in sharded data stores to identify which shard to use
@@ -486,13 +491,13 @@ type (
 	// InternalForkHistoryBranchResponse is the response to ForkHistoryBranchRequest
 	InternalForkHistoryBranchResponse struct {
 		// branchInfo to represent the new branch
-		NewBranchInfo workflow.HistoryBranch
+		NewBranchInfo *persistenceblobs.HistoryBranch
 	}
 
 	// InternalDeleteHistoryBranchRequest is used to remove a history branch
 	InternalDeleteHistoryBranchRequest struct {
 		// branch to be deleted
-		BranchInfo workflow.HistoryBranch
+		BranchInfo *persistenceblobs.HistoryBranch
 		// Used in sharded data stores to identify which shard to use
 		ShardID int
 	}
@@ -500,9 +505,9 @@ type (
 	// InternalReadHistoryBranchRequest is used to read a history branch
 	InternalReadHistoryBranchRequest struct {
 		// The tree of branch range to be read
-		TreeID string
+		TreeID primitives.UUID
 		// The branch range to be read
-		BranchID string
+		BranchID primitives.UUID
 		// Get the history nodes from MinNodeID. Inclusive.
 		MinNodeID int64
 		// Get the history nodes upto MaxNodeID.  Exclusive.
@@ -522,7 +527,7 @@ type (
 	// InternalCompleteForkBranchRequest is used to update some tree/branch meta data for forking
 	InternalCompleteForkBranchRequest struct {
 		// branch to be updated
-		BranchInfo workflow.HistoryBranch
+		BranchInfo persistenceblobs.HistoryBranch
 		// whether fork is successful
 		Success bool
 		// Used in sharded data stores to identify which shard to use
@@ -714,24 +719,6 @@ func FromDataBlob(blob *serialization.DataBlob) ([]byte, string) {
 		return nil, ""
 	}
 	return blob.Data, string(blob.Encoding)
-}
-
-// NewDataBlobFromThrift convert data blob from thrift representation
-func NewDataBlobFromThrift(blob *workflow.DataBlob) *serialization.DataBlob {
-	switch blob.GetEncodingType() {
-	case workflow.EncodingTypeJSON:
-		return &serialization.DataBlob{
-			Encoding: common.EncodingTypeJSON,
-			Data:     blob.Data,
-		}
-	case workflow.EncodingTypeThriftRW:
-		return &serialization.DataBlob{
-			Encoding: common.EncodingTypeThriftRW,
-			Data:     blob.Data,
-		}
-	default:
-		panic(fmt.Sprintf("NewDataBlobFromThrift seeing unsupported enconding type: %v", blob.GetEncodingType()))
-	}
 }
 
 // NewDataBlobFromProto convert data blob from Proto representation
