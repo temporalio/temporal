@@ -32,7 +32,7 @@ services:
     depends_on:
       - postgres
   cadence-web:
-    image: ubercadence/web:3.4.1
+    image: ubercadence/web:latest
     environment:
       - "CADENCE_TCHANNEL_PEERS=cadence:7933"
     ports:
