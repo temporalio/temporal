@@ -23,6 +23,7 @@ package persistence
 import (
 	"encoding/json"
 	"fmt"
+
 	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	persist "github.com/temporalio/temporal/.gen/go/persistenceblobs"

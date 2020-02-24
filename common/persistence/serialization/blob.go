@@ -23,6 +23,7 @@ package serialization
 import (
 	"bytes"
 	"fmt"
+
 	"github.com/gogo/protobuf/types"
 
 	"go.uber.org/thriftrw/protocol"
@@ -32,7 +33,7 @@ import (
 	"github.com/temporalio/temporal/.gen/go/sqlblobs"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
-	
+
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 )

@@ -22,6 +22,7 @@ package persistence
 
 import (
 	"encoding/json"
+
 	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/temporalio/temporal/.gen/go/shared"

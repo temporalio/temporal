@@ -24,12 +24,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/temporalio/temporal/common/persistence/serialization"
 	"io"
 	"math"
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/olivere/elastic"
 	"github.com/stretchr/testify/mock"

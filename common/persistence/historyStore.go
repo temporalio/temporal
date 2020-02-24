@@ -22,7 +22,10 @@ package persistence
 
 import (
 	"fmt"
+
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/persistence/serialization"
+	"github.com/temporalio/temporal/common/primitives"
 
 	"github.com/pborman/uuid"
 
@@ -85,8 +88,7 @@ func (m *historyV2ManagerImpl) ForkHistoryBranch(
 		}
 	}
 
-	var forkBranch workflow.HistoryBranch
-	err := m.thriftEncoder.Decode(request.ForkBranchToken, &forkBranch)
+	forkBranch, err := serialization.HistoryBranchFromBlob(request.ForkBranchToken, common.EncodingTypeProto3.String())
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +101,7 @@ func (m *historyV2ManagerImpl) ForkHistoryBranch(
 	req := &InternalForkHistoryBranchRequest{
 		ForkBranchInfo: forkBranch,
 		ForkNodeID:     request.ForkNodeID,
-		NewBranchID:    uuid.New(),
+		NewBranchID:    primitives.UUID(uuid.NewRandom()),
 		Info:           request.Info,
 		ShardID:        shardID,
 	}
@@ -109,10 +111,11 @@ func (m *historyV2ManagerImpl) ForkHistoryBranch(
 		return nil, err
 	}
 
-	token, err := m.thriftEncoder.Encode(&resp.NewBranchInfo)
+	datablob, err := serialization.HistoryBranchToBlob(resp.NewBranchInfo)
 	if err != nil {
 		return nil, err
 	}
+	token := datablob.Data
 
 	return &ForkHistoryBranchResponse{
 		NewBranchToken: token,
@@ -124,8 +127,7 @@ func (m *historyV2ManagerImpl) DeleteHistoryBranch(
 	request *DeleteHistoryBranchRequest,
 ) error {
 
-	var branch workflow.HistoryBranch
-	err := m.thriftEncoder.Decode(request.BranchToken, &branch)
+	branch, err := serialization.HistoryBranchFromBlob(request.BranchToken, common.EncodingTypeProto3.String())
 	if err != nil {
 		return err
 	}
@@ -151,8 +153,7 @@ func (m *historyV2ManagerImpl) GetHistoryTree(
 ) (*GetHistoryTreeResponse, error) {
 
 	if len(request.TreeID) == 0 {
-		var branch workflow.HistoryBranch
-		err := m.thriftEncoder.Decode(request.BranchToken, &branch)
+		branch, err := serialization.HistoryBranchFromBlob(request.BranchToken, common.EncodingTypeProto3.String())
 		if err != nil {
 			return nil, err
 		}
@@ -166,8 +167,7 @@ func (m *historyV2ManagerImpl) AppendHistoryNodes(
 	request *AppendHistoryNodesRequest,
 ) (*AppendHistoryNodesResponse, error) {
 
-	var branch workflow.HistoryBranch
-	err := m.thriftEncoder.Decode(request.BranchToken, &branch)
+	branch, err := serialization.HistoryBranchFromBlob(request.BranchToken, common.EncodingTypeProto3.String())
 	if err != nil {
 		return nil, err
 	}
@@ -300,13 +300,12 @@ func (m *historyV2ManagerImpl) readRawHistoryBranch(
 	request *ReadHistoryBranchRequest,
 ) ([]*serialization.DataBlob, *historyV2PagingToken, int, log.Logger, error) {
 
-	var branch workflow.HistoryBranch
-	err := m.thriftEncoder.Decode(request.BranchToken, &branch)
+	branch, err := serialization.HistoryBranchFromBlob(request.BranchToken, common.EncodingTypeProto3.String())
 	if err != nil {
 		return nil, nil, 0, nil, err
 	}
-	treeID := *branch.TreeID
-	branchID := *branch.BranchID
+	treeID := branch.TreeID
+	branchID := branch.BranchID
 
 	if request.PageSize <= 0 || request.MinEventID >= request.MaxEventID {
 		return nil, nil, 0, nil, &InvalidPersistenceRequestError{
@@ -332,22 +331,22 @@ func (m *historyV2ManagerImpl) readRawHistoryBranch(
 	// We may also query the current branch from beginNodeID
 	beginNodeID := common.FirstEventID
 	if len(branch.Ancestors) > 0 {
-		beginNodeID = *branch.Ancestors[len(branch.Ancestors)-1].EndNodeID
+		beginNodeID = branch.Ancestors[len(branch.Ancestors)-1].EndNodeID
 	}
-	allBRs = append(allBRs, &workflow.HistoryBranchRange{
-		BranchID:    &branchID,
-		BeginNodeID: common.Int64Ptr(beginNodeID),
-		EndNodeID:   common.Int64Ptr(request.MaxEventID),
+	allBRs = append(allBRs, &persistenceblobs.HistoryBranchRange{
+		BranchID:    branchID,
+		BeginNodeID: beginNodeID,
+		EndNodeID:   request.MaxEventID,
 	})
 
 	if token.CurrentRangeIndex == notStartedIndex {
 		for idx, br := range allBRs {
 			// this range won't contain any nodes needed
-			if request.MinEventID >= *br.EndNodeID {
+			if request.MinEventID >= br.EndNodeID {
 				continue
 			}
 			// similarly, the ranges and the rest won't contain any nodes needed,
-			if request.MaxEventID <= *br.BeginNodeID {
+			if request.MaxEventID <= br.BeginNodeID {
 				break
 			}
 
@@ -365,7 +364,7 @@ func (m *historyV2ManagerImpl) readRawHistoryBranch(
 	}
 
 	minNodeID := request.MinEventID
-	maxNodeID := *allBRs[token.CurrentRangeIndex].EndNodeID
+	maxNodeID := allBRs[token.CurrentRangeIndex].EndNodeID
 	if request.MaxEventID < maxNodeID {
 		maxNodeID = request.MaxEventID
 	}
@@ -378,7 +377,7 @@ func (m *historyV2ManagerImpl) readRawHistoryBranch(
 	}
 	req := &InternalReadHistoryBranchRequest{
 		TreeID:            treeID,
-		BranchID:          *allBRs[token.CurrentRangeIndex].BranchID,
+		BranchID:          allBRs[token.CurrentRangeIndex].BranchID,
 		MinNodeID:         minNodeID,
 		MaxNodeID:         maxNodeID,
 		NextPageToken:     token.StoreToken,
@@ -408,7 +407,7 @@ func (m *historyV2ManagerImpl) readRawHistoryBranch(
 
 	// NOTE: in this method, we need to make sure eventVersion is NOT
 	// decreasing(otherwise we skip the events), eventID should be continuous(otherwise return error)
-	logger := m.logger.WithTags(tag.WorkflowBranchID(*branch.BranchID), tag.WorkflowTreeID(*branch.TreeID))
+	logger := m.logger.WithTags(tag.WorkflowBranchIDBytes(branch.BranchID), tag.WorkflowTreeIDBytes(branch.TreeID))
 
 	return dataBlobs, token, dataSize, logger, nil
 }
