@@ -324,7 +324,7 @@ func (h *NilCheckHandler) ReapplyEvents(ctx context.Context, request *historyser
 func (h *NilCheckHandler) ReadDLQMessages(ctx context.Context, request *historyservice.ReadDLQMessagesRequest) (*historyservice.ReadDLQMessagesResponse, error) {
 	resp, err := h.parentHandler.ReadDLQMessages(ctx, request)
 	if resp == nil && err == nil {
-		return &historyservice.ReadDLQMessagesResponse{}, err
+		resp = &historyservice.ReadDLQMessagesResponse{}
 	}
 	return resp, err
 }
@@ -332,7 +332,7 @@ func (h *NilCheckHandler) ReadDLQMessages(ctx context.Context, request *historys
 func (h *NilCheckHandler) PurgeDLQMessages(ctx context.Context, request *historyservice.PurgeDLQMessagesRequest) (*historyservice.PurgeDLQMessagesResponse, error) {
 	resp, err := h.parentHandler.PurgeDLQMessages(ctx, request)
 	if resp == nil && err == nil {
-		return &historyservice.PurgeDLQMessagesResponse{}, err
+		resp = &historyservice.PurgeDLQMessagesResponse{}
 	}
 	return resp, err
 }
@@ -340,7 +340,7 @@ func (h *NilCheckHandler) PurgeDLQMessages(ctx context.Context, request *history
 func (h *NilCheckHandler) MergeDLQMessages(ctx context.Context, request *historyservice.MergeDLQMessagesRequest) (*historyservice.MergeDLQMessagesResponse, error) {
 	resp, err := h.parentHandler.MergeDLQMessages(ctx, request)
 	if resp == nil && err == nil {
-		return &historyservice.MergeDLQMessagesResponse{}, err
+		resp = &historyservice.MergeDLQMessagesResponse{}
 	}
 	return resp, err
 }
@@ -348,7 +348,7 @@ func (h *NilCheckHandler) MergeDLQMessages(ctx context.Context, request *history
 func (h *NilCheckHandler) RefreshWorkflowTasks(ctx context.Context, request *historyservice.RefreshWorkflowTasksRequest) (*historyservice.RefreshWorkflowTasksResponse, error) {
 	resp, err := h.parentHandler.RefreshWorkflowTasks(ctx, request)
 	if resp == nil && err == nil {
-		return &historyservice.RefreshWorkflowTasksResponse{}, err
+		resp = &historyservice.RefreshWorkflowTasksResponse{}
 	}
 	return resp, err
 }
