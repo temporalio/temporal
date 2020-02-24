@@ -36,7 +36,6 @@ import (
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/client"
 	adminClient "github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
 	carchiver "github.com/temporalio/temporal/common/archiver"
@@ -87,7 +86,6 @@ type (
 		logger                 log.Logger
 		clusterMetadata        cluster.Metadata
 		persistenceConfig      config.Persistence
-		dispatcherProvider     client.DispatcherProvider
 		messagingClient        messaging.Client
 		metadataMgr            persistence.MetadataManager
 		shardMgr               persistence.ShardManager
@@ -124,7 +122,6 @@ type (
 	CadenceParams struct {
 		ClusterMetadata               cluster.Metadata
 		PersistenceConfig             config.Persistence
-		DispatcherProvider            client.DispatcherProvider
 		MessagingClient               messaging.Client
 		MetadataMgr                   persistence.MetadataManager
 		ShardMgr                      persistence.ShardManager
@@ -158,7 +155,6 @@ func NewCadence(params *CadenceParams) Cadence {
 		logger:                 params.Logger,
 		clusterMetadata:        params.ClusterMetadata,
 		persistenceConfig:      params.PersistenceConfig,
-		dispatcherProvider:     params.DispatcherProvider,
 		messagingClient:        params.MessagingClient,
 		metadataMgr:            params.MetadataMgr,
 		visibilityMgr:          params.VisibilityMgr,
@@ -493,7 +489,6 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 		return newMembershipFactory(params.Name, hosts), nil
 	}
 	params.ClusterMetadata = c.clusterMetadata
-	params.DispatcherProvider = c.dispatcherProvider
 	params.MessagingClient = c.messagingClient
 	params.MetricsClient = metrics.NewClient(params.MetricScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
 	params.DynamicConfig = newIntegrationConfigClient(dynamicconfig.NewNopClient())
@@ -561,7 +556,6 @@ func (c *cadenceImpl) startHistory(
 			return newMembershipFactory(params.Name, hosts), nil
 		}
 		params.ClusterMetadata = c.clusterMetadata
-		params.DispatcherProvider = c.dispatcherProvider
 		params.MessagingClient = c.messagingClient
 		params.MetricsClient = metrics.NewClient(params.MetricScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
 		integrationClient := newIntegrationConfigClient(dynamicconfig.NewNopClient())
@@ -640,7 +634,6 @@ func (c *cadenceImpl) startMatching(hosts map[string][]string, startWG *sync.Wai
 		return newMembershipFactory(params.Name, hosts), nil
 	}
 	params.ClusterMetadata = c.clusterMetadata
-	params.DispatcherProvider = c.dispatcherProvider
 	params.MetricsClient = metrics.NewClient(params.MetricScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
 	params.DynamicConfig = newIntegrationConfigClient(dynamicconfig.NewNopClient())
 	params.ArchivalMetadata = c.archiverMetadata
@@ -685,7 +678,6 @@ func (c *cadenceImpl) startWorker(hosts map[string][]string, startWG *sync.WaitG
 		return newMembershipFactory(params.Name, hosts), nil
 	}
 	params.ClusterMetadata = c.clusterMetadata
-	params.DispatcherProvider = c.dispatcherProvider
 	params.MetricsClient = metrics.NewClient(params.MetricScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
 	params.DynamicConfig = newIntegrationConfigClient(dynamicconfig.NewNopClient())
 	params.ArchivalMetadata = c.archiverMetadata

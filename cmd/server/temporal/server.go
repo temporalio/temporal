@@ -29,7 +29,6 @@ import (
 	"google.golang.org/grpc"
 
 	persist "github.com/temporalio/temporal/.gen/go/persistenceblobs"
-	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
@@ -164,12 +163,6 @@ func (s *server) startService() common.Daemon {
 		clusterMetadata.ReplicationConsumer,
 	)
 
-	if s.cfg.PublicClient.HostPort != "" {
-		params.DispatcherProvider = client.NewDNSYarpcDispatcherProvider(params.Logger, s.cfg.PublicClient.RefreshInterval)
-	} else {
-		log.Fatalf("need to provide an endpoint config for PublicClient")
-	}
-
 	advancedVisMode := dc.GetStringProperty(
 		dynamicconfig.AdvancedVisibilityWritingMode,
 		common.GetDefaultAdvancedVisibilityWritingMode(params.PersistenceConfig.IsAdvancedVisibilityConfigExist()),
@@ -205,9 +198,12 @@ func (s *server) startService() common.Daemon {
 		}
 	}
 
+	if s.cfg.PublicClient.HostPort == "" {
+		log.Fatalf("need to provide an endpoint config for PublicClient")
+	}
 	connection, err := grpc.Dial(s.cfg.PublicClient.HostPort, grpc.WithInsecure())
 	if err != nil {
-		log.Fatalf("failed to construct connection: %v", err)
+		log.Fatalf("failed to dial gRPC connection: %v", err)
 	}
 	params.PublicClient = workflowservice.NewWorkflowServiceClient(connection)
 
