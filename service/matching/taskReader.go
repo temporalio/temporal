@@ -239,6 +239,9 @@ func (tr *taskReader) addTasksToBuffer(
 	for _, t := range tasks {
 		if tr.isTaskExpired(t, now) {
 			tr.scope().IncCounter(metrics.ExpiredTasksCounter)
+			// Also increment readLevel for expired tasks otherwise it could result in
+			// looping over the same tasks if all tasks read in the batch are expired
+			tr.tlMgr.taskAckManager.setReadLevel(t.TaskID)
 			continue
 		}
 		if !tr.addSingleTaskToBuffer(t, lastWriteTime, idleTimer) {

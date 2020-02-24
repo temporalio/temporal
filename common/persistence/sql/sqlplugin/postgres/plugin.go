@@ -55,7 +55,7 @@ func (d *plugin) CreateDB(cfg *config.SQL) (sqlplugin.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	db := NewDB(conn, nil)
+	db := newDB(conn, nil)
 	return db, nil
 }
 
@@ -65,7 +65,7 @@ func (d *plugin) CreateAdminDB(cfg *config.SQL) (sqlplugin.AdminDB, error) {
 	if err != nil {
 		return nil, err
 	}
-	db := NewDB(conn, nil)
+	db := newDB(conn, nil)
 	return db, nil
 }
 

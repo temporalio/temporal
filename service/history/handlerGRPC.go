@@ -23,10 +23,12 @@ package history
 import (
 	"context"
 
+	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/healthservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/metrics"
 )
 
 // Disable lint due to missing comments.
@@ -398,4 +400,113 @@ func (h *HandlerGRPC) ReapplyEvents(ctx context.Context, request *historyservice
 		return nil, adapter.ToProtoError(err)
 	}
 	return &historyservice.ReapplyEventsResponse{}, nil
+}
+
+func (h *HandlerGRPC) ReadDLQMessages(ctx context.Context, request *historyservice.ReadDLQMessagesRequest) (_ *historyservice.ReadDLQMessagesResponse, retError error) {
+	defer log.CapturePanicGRPC(h.handlerThrift.GetLogger(), &retError)
+
+	h.handlerThrift.startWG.Wait()
+
+	scope := metrics.HistoryReadDLQMessagesScope
+	h.handlerThrift.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
+	sw := h.handlerThrift.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	engine, err := h.handlerThrift.controller.getEngineForShard(int(request.GetShardID()))
+	if err != nil {
+		err = h.handlerThrift.error(err, scope, "", "")
+		return nil, adapter.ToProtoError(err)
+	}
+
+	resp, err := engine.ReadDLQMessages(ctx, request)
+	if err != nil {
+		err = h.handlerThrift.error(err, scope, "", "")
+		return nil, adapter.ToProtoError(err)
+	}
+
+	return resp, nil
+}
+
+func (h *HandlerGRPC) PurgeDLQMessages(ctx context.Context, request *historyservice.PurgeDLQMessagesRequest) (_ *historyservice.PurgeDLQMessagesResponse, retError error) {
+	defer log.CapturePanicGRPC(h.handlerThrift.GetLogger(), &retError)
+
+	h.handlerThrift.startWG.Wait()
+
+	scope := metrics.HistoryPurgeDLQMessagesScope
+	h.handlerThrift.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
+	sw := h.handlerThrift.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	engine, err := h.handlerThrift.controller.getEngineForShard(int(request.GetShardID()))
+	if err != nil {
+		err = h.handlerThrift.error(err, scope, "", "")
+		return nil, adapter.ToProtoError(err)
+	}
+
+	err = engine.PurgeDLQMessages(ctx, request)
+	if err != nil {
+		err = h.handlerThrift.error(err, scope, "", "")
+		return nil, adapter.ToProtoError(err)
+	}
+	return &historyservice.PurgeDLQMessagesResponse{}, nil
+}
+
+func (h *HandlerGRPC) MergeDLQMessages(ctx context.Context, request *historyservice.MergeDLQMessagesRequest) (_ *historyservice.MergeDLQMessagesResponse, retError error) {
+	defer log.CapturePanicGRPC(h.handlerThrift.GetLogger(), &retError)
+
+	h.handlerThrift.startWG.Wait()
+
+	scope := metrics.HistoryMergeDLQMessagesScope
+	h.handlerThrift.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
+	sw := h.handlerThrift.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	engine, err := h.handlerThrift.controller.getEngineForShard(int(request.GetShardID()))
+	if err != nil {
+		err = h.handlerThrift.error(err, scope, "", "")
+		return nil, adapter.ToProtoError(err)
+	}
+
+	resp, err := engine.MergeDLQMessages(ctx, request)
+	if err != nil {
+		err = h.handlerThrift.error(err, scope, "", "")
+		return nil, adapter.ToProtoError(err)
+	}
+
+	return resp, nil
+}
+
+func (h *HandlerGRPC) RefreshWorkflowTasks(ctx context.Context, request *historyservice.RefreshWorkflowTasksRequest) (_ *historyservice.RefreshWorkflowTasksResponse, retError error) {
+	defer log.CapturePanicGRPC(h.handlerThrift.GetLogger(), &retError)
+
+	h.handlerThrift.startWG.Wait()
+
+	scope := metrics.HistoryRefreshWorkflowTasksScope
+	h.handlerThrift.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
+	sw := h.handlerThrift.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
+	defer sw.Stop()
+	domainID := request.GetDomainUUID()
+	execution := request.GetRequest().GetExecution()
+	workflowID := execution.GetWorkflowId()
+	engine, err := h.handlerThrift.controller.GetEngine(workflowID)
+	if err != nil {
+		err = h.handlerThrift.error(err, scope, domainID, workflowID)
+		return nil, adapter.ToProtoError(err)
+	}
+
+	err = engine.RefreshWorkflowTasks(
+		ctx,
+		domainID,
+		shared.WorkflowExecution{
+			WorkflowId: &execution.WorkflowId,
+			RunId:      &execution.RunId,
+		},
+	)
+
+	if err != nil {
+		err = h.handlerThrift.error(err, scope, domainID, workflowID)
+		return nil, adapter.ToProtoError(err)
+	}
+
+	return &historyservice.RefreshWorkflowTasksResponse{}, nil
 }

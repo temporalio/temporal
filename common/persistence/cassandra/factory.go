@@ -25,7 +25,6 @@ import (
 
 	"github.com/gocql/gocql"
 
-	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cassandra"
 	"github.com/temporalio/temporal/common/log"
 	p "github.com/temporalio/temporal/common/persistence"
@@ -97,7 +96,7 @@ func (f *Factory) NewVisibilityStore() (p.VisibilityStore, error) {
 }
 
 // NewQueue returns a new queue backed by cassandra
-func (f *Factory) NewQueue(queueType common.QueueType) (p.Queue, error) {
+func (f *Factory) NewQueue(queueType p.QueueType) (p.Queue, error) {
 	return newQueue(f.cfg, f.logger, queueType)
 }
 

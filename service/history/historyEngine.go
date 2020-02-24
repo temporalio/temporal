@@ -31,18 +31,18 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common/primitives"
-
 	"github.com/gogo/status"
 	"github.com/pborman/uuid"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"google.golang.org/grpc/codes"
 
+	commonproto "go.temporal.io/temporal-proto/common"
+
 	h "github.com/temporalio/temporal/.gen/go/history"
 	r "github.com/temporalio/temporal/.gen/go/replicator"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	hc "github.com/temporalio/temporal/client/history"
 	"github.com/temporalio/temporal/client/matching"
@@ -60,6 +60,7 @@ import (
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/service/config"
+	"github.com/temporalio/temporal/common/xdc"
 	warchiver "github.com/temporalio/temporal/service/worker/archiver"
 )
 
@@ -108,6 +109,10 @@ type (
 		GetDLQReplicationMessages(ctx ctx.Context, taskInfos []*r.ReplicationTaskInfo) ([]*r.ReplicationTask, error)
 		QueryWorkflow(ctx ctx.Context, request *h.QueryWorkflowRequest) (*h.QueryWorkflowResponse, error)
 		ReapplyEvents(ctx ctx.Context, domainUUID string, workflowID string, runID string, events []*workflow.HistoryEvent) error
+		ReadDLQMessages(ctx ctx.Context, messagesRequest *historyservice.ReadDLQMessagesRequest) (*historyservice.ReadDLQMessagesResponse, error)
+		PurgeDLQMessages(ctx ctx.Context, messagesRequest *historyservice.PurgeDLQMessagesRequest) error
+		MergeDLQMessages(ctx ctx.Context, messagesRequest *historyservice.MergeDLQMessagesRequest) (*historyservice.MergeDLQMessagesResponse, error)
+		RefreshWorkflowTasks(ctx ctx.Context, domainUUID string, execution workflow.WorkflowExecution) error
 
 		NotifyNewHistoryEvent(event *historyEventNotification)
 		NotifyNewTransferTasks(tasks []persistence.Task)
@@ -146,6 +151,7 @@ type (
 		matchingClient            matching.Client
 		rawMatchingClient         matching.Client
 		versionChecker            headers.VersionChecker
+		replicationDLQHandler     replicationDLQHandler
 	}
 )
 
@@ -290,19 +296,50 @@ func NewEngineWithShardContext(
 	)
 	historyEngImpl.decisionHandler = newDecisionHandler(historyEngImpl)
 
+	nDCHistoryResender := xdc.NewNDCHistoryResender(
+		shard.GetDomainCache(),
+		shard.GetService().GetClientBean().GetRemoteAdminClient(currentClusterName),
+		func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
+			return historyEngImpl.ReplicateEventsV2(ctx, adapter.ToThriftReplicateEventsV2Request(request))
+		},
+		shard.GetService().GetPayloadSerializer(),
+		shard.GetLogger(),
+	)
+	historyRereplicator := xdc.NewHistoryRereplicator(
+		currentClusterName,
+		shard.GetDomainCache(),
+		shard.GetService().GetClientBean().GetRemoteAdminClient(currentClusterName),
+		func(ctx context.Context, request *historyservice.ReplicateRawEventsRequest) error {
+			return historyEngImpl.ReplicateRawEvents(ctx, adapter.ToThriftReplicateRawEventsRequest(request))
+		},
+		shard.GetService().GetPayloadSerializer(),
+		replicationTimeout,
+		shard.GetLogger(),
+	)
+	replicationTaskExecutor := newReplicationTaskExecutor(
+		currentClusterName,
+		shard.GetDomainCache(),
+		nDCHistoryResender,
+		historyRereplicator,
+		historyEngImpl,
+		shard.GetMetricsClient(),
+		shard.GetLogger(),
+	)
 	var replicationTaskProcessors []ReplicationTaskProcessor
 	for _, replicationTaskFetcher := range replicationTaskFetchers.GetFetchers() {
 		replicationTaskProcessor := NewReplicationTaskProcessor(
 			shard,
 			historyEngImpl,
 			config,
-			historyClient,
 			shard.GetMetricsClient(),
 			replicationTaskFetcher,
+			replicationTaskExecutor,
 		)
 		replicationTaskProcessors = append(replicationTaskProcessors, replicationTaskProcessor)
 	}
 	historyEngImpl.replicationTaskProcessors = replicationTaskProcessors
+	replicationMessageHandler := newReplicationDLQHandler(shard, replicationTaskExecutor)
+	historyEngImpl.replicationDLQHandler = replicationMessageHandler
 
 	shard.SetEngine(historyEngImpl)
 	return historyEngImpl
@@ -2327,19 +2364,6 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 	}, nil
 }
 
-func (e *historyEngineImpl) DeleteExecutionFromVisibility(
-	task *persistenceblobs.TimerTaskInfo,
-) error {
-
-	request := &persistence.VisibilityDeleteWorkflowExecutionRequest{
-		DomainID:   primitives.UUIDString(task.DomainID),
-		WorkflowID: task.WorkflowID,
-		RunID:      primitives.UUIDString(task.RunID),
-		TaskID:     task.TaskID,
-	}
-	return e.visibilityMgr.DeleteWorkflowExecution(request) // delete from db
-}
-
 func (e *historyEngineImpl) updateWorkflow(
 	ctx ctx.Context,
 	domainID string,
@@ -2781,11 +2805,11 @@ func (e *historyEngineImpl) GetReplicationMessages(
 	}
 
 	//Set cluster status for sync shard info
-	replicationMessages.SyncShardStatus = &r.SyncShardStatus{
-		Timestamp: common.Int64Ptr(e.timeSource.Now().UnixNano()),
+	replicationMessages.SyncShardStatus = &commonproto.SyncShardStatus{
+		Timestamp: e.timeSource.Now().UnixNano(),
 	}
 	e.logger.Debug("Successfully fetched replication messages.", tag.Counter(len(replicationMessages.ReplicationTasks)))
-	return replicationMessages, nil
+	return adapter.ToThriftReplicationMessages(replicationMessages), nil
 }
 
 func (e *historyEngineImpl) GetDLQReplicationMessages(
@@ -2799,12 +2823,12 @@ func (e *historyEngineImpl) GetDLQReplicationMessages(
 
 	tasks := make([]*r.ReplicationTask, len(taskInfos))
 	for _, taskInfo := range taskInfos {
-		task, err := e.replicatorProcessor.getTask(ctx, taskInfo)
+		task, err := e.replicatorProcessor.getTask(ctx, adapter.ToProtoReplicationTaskInfo(taskInfo))
 		if err != nil {
 			e.logger.Error("Failed to fetch DLQ replication messages.", tag.Error(err))
 			return nil, err
 		}
-		tasks = append(tasks, task)
+		tasks = append(tasks, adapter.ToThriftReplicationTask(task))
 	}
 
 	return tasks, nil
@@ -2917,6 +2941,107 @@ func (e *historyEngineImpl) ReapplyEvents(
 			}
 			return postActions, nil
 		})
+}
+
+func (e *historyEngineImpl) ReadDLQMessages(
+	ctx context.Context,
+	request *historyservice.ReadDLQMessagesRequest,
+) (*historyservice.ReadDLQMessagesResponse, error) {
+
+	tasks, token, err := e.replicationDLQHandler.readMessages(
+		ctx,
+		request.GetSourceCluster(),
+		request.GetInclusiveEndMessageID(),
+		int(request.GetMaximumPageSize()),
+		request.GetNextPageToken(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &historyservice.ReadDLQMessagesResponse{
+		Type:             request.GetType(),
+		ReplicationTasks: tasks,
+		NextPageToken:    token,
+	}, nil
+}
+
+func (e *historyEngineImpl) PurgeDLQMessages(
+	ctx context.Context,
+	request *historyservice.PurgeDLQMessagesRequest,
+) error {
+
+	return e.replicationDLQHandler.purgeMessages(
+		request.GetSourceCluster(),
+		request.GetInclusiveEndMessageID(),
+	)
+}
+
+func (e *historyEngineImpl) MergeDLQMessages(
+	ctx context.Context,
+	request *historyservice.MergeDLQMessagesRequest,
+) (*historyservice.MergeDLQMessagesResponse, error) {
+
+	token, err := e.replicationDLQHandler.mergeMessages(
+		ctx,
+		request.GetSourceCluster(),
+		request.GetInclusiveEndMessageID(),
+		int(request.GetMaximumPageSize()),
+		request.GetNextPageToken(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &historyservice.MergeDLQMessagesResponse{
+		NextPageToken: token,
+	}, nil
+}
+
+func (e *historyEngineImpl) RefreshWorkflowTasks(
+	ctx ctx.Context,
+	domainUUID string,
+	execution workflow.WorkflowExecution,
+) (retError error) {
+
+	domainEntry, err := e.getActiveDomainEntry(common.StringPtr(domainUUID))
+	if err != nil {
+		return err
+	}
+	domainID := domainEntry.GetInfo().ID
+
+	context, release, err := e.historyCache.getOrCreateWorkflowExecution(ctx, domainID, execution)
+	if err != nil {
+		return err
+	}
+	defer func() { release(retError) }()
+
+	mutableState, err := context.loadWorkflowExecution()
+	if err != nil {
+		return err
+	}
+
+	if !mutableState.IsWorkflowExecutionRunning() {
+		return nil
+	}
+
+	mutableStateTaskRefresher := newMutableStateTaskRefresher(
+		e.shard.GetConfig(),
+		e.shard.GetDomainCache(),
+		e.shard.GetEventsCache(),
+		e.shard.GetLogger(),
+	)
+
+	now := e.shard.GetTimeSource().Now()
+
+	err = mutableStateTaskRefresher.refreshTasks(now, mutableState)
+	if err != nil {
+		return err
+	}
+
+	err = context.updateWorkflowExecutionAsActive(now)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (e *historyEngineImpl) loadWorkflowOnce(

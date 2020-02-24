@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package replicator
+package domain
 
 import (
 	"testing"
@@ -37,42 +37,42 @@ import (
 )
 
 type (
-	domainReplicatorSuite struct {
+	domainReplicationTaskExecutorSuite struct {
 		suite.Suite
 		persistencetests.TestBase
-		domainReplicator *domainReplicatorImpl
+		domainReplicator *domainReplicationTaskExecutorImpl
 	}
 )
 
-func TestDomainReplicatorSuite(t *testing.T) {
-	s := new(domainReplicatorSuite)
+func TestDomainReplicationTaskExecutorSuite(t *testing.T) {
+	s := new(domainReplicationTaskExecutorSuite)
 	suite.Run(t, s)
 }
 
-func (s *domainReplicatorSuite) SetupSuite() {
+func (s *domainReplicationTaskExecutorSuite) SetupSuite() {
 }
 
-func (s *domainReplicatorSuite) TearDownSuite() {
+func (s *domainReplicationTaskExecutorSuite) TearDownSuite() {
 
 }
 
-func (s *domainReplicatorSuite) SetupTest() {
+func (s *domainReplicationTaskExecutorSuite) SetupTest() {
 	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{})
 	s.TestBase.Setup()
 	zapLogger, err := zap.NewDevelopment()
 	s.Require().NoError(err)
 	logger := loggerimpl.NewLogger(zapLogger)
-	s.domainReplicator = NewDomainReplicator(
+	s.domainReplicator = NewReplicationTaskExecutor(
 		s.MetadataManager,
 		logger,
-	).(*domainReplicatorImpl)
+	).(*domainReplicationTaskExecutorImpl)
 }
 
-func (s *domainReplicatorSuite) TearDownTest() {
+func (s *domainReplicationTaskExecutorSuite) TearDownTest() {
 	s.TearDownWorkflowStore()
 }
 
-func (s *domainReplicatorSuite) TestHandleReceivingTask_RegisterDomainTask_NameUUIdCollision() {
+func (s *domainReplicationTaskExecutorSuite) TestExecute_RegisterDomainTask_NameUUIDCollision() {
 	operation := enums.DomainOperationCreate
 	id := uuid.New()
 	name := "some random domain test name"
@@ -125,23 +125,23 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_RegisterDomainTask_NameU
 		FailoverVersion: failoverVersion,
 	}
 
-	err := s.domainReplicator.HandleReceivingTask(task)
+	err := s.domainReplicator.Execute(task)
 	s.Nil(err)
 
 	task.Id = uuid.New()
 	task.Info.Name = name
-	err = s.domainReplicator.HandleReceivingTask(task)
+	err = s.domainReplicator.Execute(task)
 	s.NotNil(err)
 	s.IsType(&shared.BadRequestError{}, err)
 
 	task.Id = id
 	task.Info.Name = "other random domain test name"
-	err = s.domainReplicator.HandleReceivingTask(task)
+	err = s.domainReplicator.Execute(task)
 	s.NotNil(err)
 	s.IsType(&shared.BadRequestError{}, err)
 }
 
-func (s *domainReplicatorSuite) TestHandleReceivingTask_RegisterDomainTask() {
+func (s *domainReplicationTaskExecutorSuite) TestExecute_RegisterDomainTask() {
 	operation := enums.DomainOperationCreate
 	id := uuid.New()
 	name := "some random domain test name"
@@ -197,7 +197,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_RegisterDomainTask() {
 	metadata, err := s.MetadataManager.GetMetadata()
 	s.Nil(err)
 	notificationVersion := metadata.NotificationVersion
-	err = s.domainReplicator.HandleReceivingTask(task)
+	err = s.domainReplicator.Execute(task)
 	s.Nil(err)
 
 	resp, err := s.MetadataManager.GetDomain(&persistence.GetDomainRequest{ID: id})
@@ -223,11 +223,11 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_RegisterDomainTask() {
 	s.Equal(notificationVersion, resp.NotificationVersion)
 
 	// handle duplicated task
-	err = s.domainReplicator.HandleReceivingTask(task)
+	err = s.domainReplicator.Execute(task)
 	s.Nil(err)
 }
 
-func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_DomainNotExist() {
+func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_DomainNotExist() {
 	operation := enums.DomainOperationUpdate
 	id := uuid.New()
 	name := "some random domain test name"
@@ -283,7 +283,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_DomainN
 	metadata, err := s.MetadataManager.GetMetadata()
 	s.Nil(err)
 	notificationVersion := metadata.NotificationVersion
-	err = s.domainReplicator.HandleReceivingTask(updateTask)
+	err = s.domainReplicator.Execute(updateTask)
 	s.Nil(err)
 
 	resp, err := s.MetadataManager.GetDomain(&persistence.GetDomainRequest{Name: name})
@@ -309,7 +309,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_DomainN
 	s.Equal(notificationVersion, resp.NotificationVersion)
 }
 
-func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_UpdateConfig_UpdateActiveCluster() {
+func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_UpdateConfig_UpdateActiveCluster() {
 	operation := enums.DomainOperationCreate
 	id := uuid.New()
 	name := "some random domain test name"
@@ -362,7 +362,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_UpdateC
 		FailoverVersion: failoverVersion,
 	}
 
-	err := s.domainReplicator.HandleReceivingTask(createTask)
+	err := s.domainReplicator.Execute(createTask)
 	s.Nil(err)
 
 	// success update case
@@ -417,7 +417,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_UpdateC
 	metadata, err := s.MetadataManager.GetMetadata()
 	s.Nil(err)
 	notificationVersion := metadata.NotificationVersion
-	err = s.domainReplicator.HandleReceivingTask(updateTask)
+	err = s.domainReplicator.Execute(updateTask)
 	s.Nil(err)
 	resp, err := s.MetadataManager.GetDomain(&persistence.GetDomainRequest{Name: name})
 	s.Nil(err)
@@ -442,7 +442,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_UpdateC
 	s.Equal(notificationVersion, resp.NotificationVersion)
 }
 
-func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_UpdateConfig_NoUpdateActiveCluster() {
+func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_UpdateConfig_NoUpdateActiveCluster() {
 	operation := enums.DomainOperationCreate
 	id := uuid.New()
 	name := "some random domain test name"
@@ -495,7 +495,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_UpdateC
 		FailoverVersion: failoverVersion,
 	}
 
-	err := s.domainReplicator.HandleReceivingTask(createTask)
+	err := s.domainReplicator.Execute(createTask)
 	s.Nil(err)
 
 	// success update case
@@ -550,7 +550,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_UpdateC
 	metadata, err := s.MetadataManager.GetMetadata()
 	s.Nil(err)
 	notificationVersion := metadata.NotificationVersion
-	err = s.domainReplicator.HandleReceivingTask(updateTask)
+	err = s.domainReplicator.Execute(updateTask)
 	s.Nil(err)
 	resp, err := s.MetadataManager.GetDomain(&persistence.GetDomainRequest{Name: name})
 	s.Nil(err)
@@ -575,7 +575,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_UpdateC
 	s.Equal(notificationVersion, resp.NotificationVersion)
 }
 
-func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_NoUpdateConfig_UpdateActiveCluster() {
+func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_NoUpdateConfig_UpdateActiveCluster() {
 	operation := enums.DomainOperationCreate
 	id := uuid.New()
 	name := "some random domain test name"
@@ -628,7 +628,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_NoUpdat
 		FailoverVersion: failoverVersion,
 	}
 
-	err := s.domainReplicator.HandleReceivingTask(createTask)
+	err := s.domainReplicator.Execute(createTask)
 	s.Nil(err)
 
 	// success update case
@@ -679,7 +679,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_NoUpdat
 	metadata, err := s.MetadataManager.GetMetadata()
 	s.Nil(err)
 	notificationVersion := metadata.NotificationVersion
-	err = s.domainReplicator.HandleReceivingTask(updateTask)
+	err = s.domainReplicator.Execute(updateTask)
 	s.Nil(err)
 	resp, err := s.MetadataManager.GetDomain(&persistence.GetDomainRequest{Name: name})
 	s.Nil(err)
@@ -704,7 +704,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_NoUpdat
 	s.Equal(notificationVersion, resp.NotificationVersion)
 }
 
-func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_NoUpdateConfig_NoUpdateActiveCluster() {
+func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_NoUpdateConfig_NoUpdateActiveCluster() {
 	operation := enums.DomainOperationCreate
 	id := uuid.New()
 	name := "some random domain test name"
@@ -759,7 +759,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_NoUpdat
 	metadata, err := s.MetadataManager.GetMetadata()
 	s.Nil(err)
 	notificationVersion := metadata.NotificationVersion
-	err = s.domainReplicator.HandleReceivingTask(createTask)
+	err = s.domainReplicator.Execute(createTask)
 	s.Nil(err)
 
 	// success update case
@@ -807,7 +807,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_NoUpdat
 		ConfigVersion:   updateConfigVersion,
 		FailoverVersion: updateFailoverVersion,
 	}
-	err = s.domainReplicator.HandleReceivingTask(updateTask)
+	err = s.domainReplicator.Execute(updateTask)
 	s.Nil(err)
 	resp, err := s.MetadataManager.GetDomain(&persistence.GetDomainRequest{Name: name})
 	s.Nil(err)

@@ -21,9 +21,10 @@
 package history
 
 import (
-	"github.com/temporalio/temporal/common/primitives"
 	"testing"
 	"time"
+
+	"github.com/temporalio/temporal/common/primitives"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 

@@ -27,6 +27,7 @@ import (
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
+	"github.com/temporalio/temporal/common/domain"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
@@ -240,6 +241,10 @@ func (s *Service) startScanner() {
 }
 
 func (s *Service) startReplicator() {
+	domainReplicationTaskExecutor := domain.NewReplicationTaskExecutor(
+		s.GetMetadataManager(),
+		s.GetLogger(),
+	)
 	msgReplicator := replicator.NewReplicator(
 		s.GetClusterMetadata(),
 		s.GetMetadataManager(),
@@ -252,6 +257,7 @@ func (s *Service) startReplicator() {
 		s.GetHostInfo(),
 		s.GetWorkerServiceResolver(),
 		s.GetDomainReplicationQueue(),
+		domainReplicationTaskExecutor,
 	)
 	if err := msgReplicator.Start(); err != nil {
 		msgReplicator.Stop()

@@ -217,4 +217,20 @@ service HistoryService {
     // ReapplyEvents applies stale events to the current workflow and current run.
     rpc ReapplyEvents (ReapplyEventsRequest) returns (ReapplyEventsResponse) {
     }
+
+    // ReadDLQMessages returns messages from DLQ
+    rpc ReadDLQMessages(ReadDLQMessagesRequest) returns (ReadDLQMessagesResponse) {
+    }
+
+    // PurgeDLQMessages purges messages from DLQ
+    rpc PurgeDLQMessages(PurgeDLQMessagesRequest) returns (PurgeDLQMessagesResponse) {
+    }
+
+    // MergeDLQMessages merges messages from DLQ
+    rpc MergeDLQMessages(MergeDLQMessagesRequest) returns (MergeDLQMessagesResponse) {
+    }
+
+    // RefreshWorkflowTasks refreshes all tasks of a workflow
+    rpc RefreshWorkflowTasks(RefreshWorkflowTasksRequest) returns (RefreshWorkflowTasksResponse) {
+    }
 }

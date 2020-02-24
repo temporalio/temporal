@@ -5114,6 +5114,7 @@ func (s *ExecutionManagerSuite) TestCreateGetShardBackfill() {
 		TransferAckLevel:        currentClusterTransferAck,
 		TimerAckLevel:           currentClusterTimerAck,
 		ClusterReplicationLevel: map[string]int64{},
+		ReplicationDLQAckLevel:  map[string]int64{},
 	}
 	createRequest := &p.CreateShardRequest{
 		ShardInfo: shardInfo,
@@ -5170,6 +5171,7 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 		},
 		DomainNotificationVersion: domainNotificationVersion,
 		ClusterReplicationLevel:   map[string]int64{},
+		ReplicationDLQAckLevel:    map[string]int64{},
 	}
 	createRequest := &p.CreateShardRequest{
 		ShardInfo: shardInfo,
@@ -5213,6 +5215,7 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 		},
 		DomainNotificationVersion: domainNotificationVersion,
 		ClusterReplicationLevel:   map[string]int64{cluster.TestAlternativeClusterName: 12345},
+		ReplicationDLQAckLevel:    map[string]int64{},
 	}
 	updateRequest := &p.UpdateShardRequest{
 		ShardInfo:       shardInfo,
@@ -5231,6 +5234,55 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 	resp.ShardInfo.TimerAckLevel = shardInfo.TimerAckLevel
 	resp.ShardInfo.ClusterTimerAckLevel = shardInfo.ClusterTimerAckLevel
 	s.Equal(shardInfo, resp.ShardInfo)
+}
+
+// TestReplicationDLQ test
+func (s *ExecutionManagerSuite) TestReplicationDLQ() {
+	sourceCluster := "test"
+	taskInfo := &pblobs.ReplicationTaskInfo{
+		DomainID:   primitives.MustParseUUID(uuid.New()),
+		WorkflowID: uuid.New(),
+		RunID:      primitives.MustParseUUID(uuid.New()),
+		TaskID:     0,
+		TaskType:   0,
+	}
+	err := s.PutReplicationTaskToDLQ(sourceCluster, taskInfo)
+	s.NoError(err)
+	resp, err := s.GetReplicationTasksFromDLQ(sourceCluster, -1, 0, 1, nil)
+	s.NoError(err)
+	s.Len(resp.Tasks, 1)
+	err = s.DeleteReplicationTaskFromDLQ(sourceCluster, 0)
+	s.NoError(err)
+	resp, err = s.GetReplicationTasksFromDLQ(sourceCluster, -1, 0, 1, nil)
+	s.NoError(err)
+	s.Len(resp.Tasks, 0)
+
+	taskInfo1 := &pblobs.ReplicationTaskInfo{
+		DomainID:   primitives.MustParseUUID(uuid.New()),
+		WorkflowID: uuid.New(),
+		RunID:      primitives.MustParseUUID(uuid.New()),
+		TaskID:     1,
+		TaskType:   0,
+	}
+	taskInfo2 := &pblobs.ReplicationTaskInfo{
+		DomainID:   primitives.MustParseUUID(uuid.New()),
+		WorkflowID: uuid.New(),
+		RunID:      primitives.MustParseUUID(uuid.New()),
+		TaskID:     2,
+		TaskType:   0,
+	}
+	err = s.PutReplicationTaskToDLQ(sourceCluster, taskInfo1)
+	s.NoError(err)
+	err = s.PutReplicationTaskToDLQ(sourceCluster, taskInfo2)
+	s.NoError(err)
+	resp, err = s.GetReplicationTasksFromDLQ(sourceCluster, 0, 2, 2, nil)
+	s.NoError(err)
+	s.Len(resp.Tasks, 2)
+	err = s.RangeDeleteReplicationTaskFromDLQ(sourceCluster, 0, 2)
+	s.NoError(err)
+	resp, err = s.GetReplicationTasksFromDLQ(sourceCluster, 0, 2, 2, nil)
+	s.NoError(err)
+	s.Len(resp.Tasks, 0)
 }
 
 func copyWorkflowExecutionInfo(sourceInfo *p.WorkflowExecutionInfo) *p.WorkflowExecutionInfo {
