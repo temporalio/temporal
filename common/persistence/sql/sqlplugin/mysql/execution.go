@@ -140,6 +140,18 @@ VALUES     (:source_cluster_name,
             :data, 
             :data_encoding)
 `
+	deleteReplicationTaskFromDLQQuery = `
+	DELETE FROM replication_tasks_dlq 
+		WHERE source_cluster_name = ? 
+		AND shard_id = ? 
+		AND task_id = ?`
+
+	rangeDeleteReplicationTaskFromDLQQuery = `
+	DELETE FROM replication_tasks_dlq 
+		WHERE source_cluster_name = ? 
+		AND shard_id = ? 
+		AND task_id > ?
+		AND task_id <= ?`
 )
 
 // InsertIntoExecutions inserts a row into executions table
@@ -337,4 +349,31 @@ func (mdb *db) SelectFromReplicationTasksDLQ(filter *sqlplugin.ReplicationTasksD
 		filter.MaxTaskID,
 		filter.PageSize)
 	return rows, err
+}
+
+// DeleteMessageFromReplicationTasksDLQ deletes one row from replication_tasks_dlq table
+func (mdb *db) DeleteMessageFromReplicationTasksDLQ(
+	filter *sqlplugin.ReplicationTasksDLQFilter,
+) (sql.Result, error) {
+
+	return mdb.conn.Exec(
+		deleteReplicationTaskFromDLQQuery,
+		filter.SourceClusterName,
+		filter.ShardID,
+		filter.TaskID,
+	)
+}
+
+// DeleteMessageFromReplicationTasksDLQ deletes one or more rows from replication_tasks_dlq table
+func (mdb *db) RangeDeleteMessageFromReplicationTasksDLQ(
+	filter *sqlplugin.ReplicationTasksDLQFilter,
+) (sql.Result, error) {
+
+	return mdb.conn.Exec(
+		rangeDeleteReplicationTaskFromDLQQuery,
+		filter.SourceClusterName,
+		filter.ShardID,
+		filter.TaskID,
+		filter.InclusiveEndTaskID,
+	)
 }

@@ -86,9 +86,29 @@ type Interface interface {
 		GetRequest *admin.GetWorkflowExecutionRawHistoryV2Request,
 	) (*admin.GetWorkflowExecutionRawHistoryV2Response, error)
 
+	MergeDLQMessages(
+		ctx context.Context,
+		Request *replicator.MergeDLQMessagesRequest,
+	) (*replicator.MergeDLQMessagesResponse, error)
+
+	PurgeDLQMessages(
+		ctx context.Context,
+		Request *replicator.PurgeDLQMessagesRequest,
+	) error
+
+	ReadDLQMessages(
+		ctx context.Context,
+		Request *replicator.ReadDLQMessagesRequest,
+	) (*replicator.ReadDLQMessagesResponse, error)
+
 	ReapplyEvents(
 		ctx context.Context,
 		ReapplyEventsRequest *shared.ReapplyEventsRequest,
+	) error
+
+	RefreshWorkflowTasks(
+		ctx context.Context,
+		Request *shared.RefreshWorkflowTasksRequest,
 	) error
 
 	RemoveTask(
@@ -219,6 +239,39 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 			},
 
 			thrift.Method{
+				Name: "MergeDLQMessages",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.MergeDLQMessages),
+				},
+				Signature:    "MergeDLQMessages(Request *replicator.MergeDLQMessagesRequest) (*replicator.MergeDLQMessagesResponse)",
+				ThriftModule: admin.ThriftModule,
+			},
+
+			thrift.Method{
+				Name: "PurgeDLQMessages",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.PurgeDLQMessages),
+				},
+				Signature:    "PurgeDLQMessages(Request *replicator.PurgeDLQMessagesRequest)",
+				ThriftModule: admin.ThriftModule,
+			},
+
+			thrift.Method{
+				Name: "ReadDLQMessages",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.ReadDLQMessages),
+				},
+				Signature:    "ReadDLQMessages(Request *replicator.ReadDLQMessagesRequest) (*replicator.ReadDLQMessagesResponse)",
+				ThriftModule: admin.ThriftModule,
+			},
+
+			thrift.Method{
 				Name: "ReapplyEvents",
 				HandlerSpec: thrift.HandlerSpec{
 
@@ -226,6 +279,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 					Unary: thrift.UnaryHandler(h.ReapplyEvents),
 				},
 				Signature:    "ReapplyEvents(ReapplyEventsRequest *shared.ReapplyEventsRequest)",
+				ThriftModule: admin.ThriftModule,
+			},
+
+			thrift.Method{
+				Name: "RefreshWorkflowTasks",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.RefreshWorkflowTasks),
+				},
+				Signature:    "RefreshWorkflowTasks(Request *shared.RefreshWorkflowTasksRequest)",
 				ThriftModule: admin.ThriftModule,
 			},
 
@@ -242,7 +306,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 12)
+	procedures := make([]transport.Procedure, 0, 16)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -439,6 +503,63 @@ func (h handler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, body wire
 	return response, err
 }
 
+func (h handler) MergeDLQMessages(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args admin.AdminService_MergeDLQMessages_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	success, err := h.impl.MergeDLQMessages(ctx, args.Request)
+
+	hadError := err != nil
+	result, err := admin.AdminService_MergeDLQMessages_Helper.WrapResponse(success, err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) PurgeDLQMessages(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args admin.AdminService_PurgeDLQMessages_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	err := h.impl.PurgeDLQMessages(ctx, args.Request)
+
+	hadError := err != nil
+	result, err := admin.AdminService_PurgeDLQMessages_Helper.WrapResponse(err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) ReadDLQMessages(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args admin.AdminService_ReadDLQMessages_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	success, err := h.impl.ReadDLQMessages(ctx, args.Request)
+
+	hadError := err != nil
+	result, err := admin.AdminService_ReadDLQMessages_Helper.WrapResponse(success, err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
 func (h handler) ReapplyEvents(ctx context.Context, body wire.Value) (thrift.Response, error) {
 	var args admin.AdminService_ReapplyEvents_Args
 	if err := args.FromWire(body); err != nil {
@@ -449,6 +570,25 @@ func (h handler) ReapplyEvents(ctx context.Context, body wire.Value) (thrift.Res
 
 	hadError := err != nil
 	result, err := admin.AdminService_ReapplyEvents_Helper.WrapResponse(err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) RefreshWorkflowTasks(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args admin.AdminService_RefreshWorkflowTasks_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	err := h.impl.RefreshWorkflowTasks(ctx, args.Request)
+
+	hadError := err != nil
+	result, err := admin.AdminService_RefreshWorkflowTasks_Helper.WrapResponse(err)
 
 	var response thrift.Response
 	if err == nil {

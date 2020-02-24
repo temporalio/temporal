@@ -63,6 +63,16 @@ const (
 // CreateWorkflowMode workflow creation mode
 type CreateWorkflowMode int
 
+// QueueType is an enum that represents various queue types in persistence
+type QueueType int
+
+// Queue types used in queue table
+// Use positive numbers for queue type
+// Negative numbers are reserved for DLQ
+const (
+	DomainReplicationQueueType QueueType = iota + 1
+)
+
 // Create Workflow Execution Mode
 const (
 	// Fail if current record exists
@@ -956,6 +966,19 @@ type (
 		GetReplicationTasksRequest
 	}
 
+	// DeleteReplicationTaskFromDLQRequest is used to delete replication task from DLQ
+	DeleteReplicationTaskFromDLQRequest struct {
+		SourceClusterName string
+		TaskID            int64
+	}
+
+	//RangeDeleteReplicationTaskFromDLQRequest is used to delete replication tasks from DLQ
+	RangeDeleteReplicationTaskFromDLQRequest struct {
+		SourceClusterName    string
+		ExclusiveBeginTaskID int64
+		InclusiveEndTaskID   int64
+	}
+
 	// GetReplicationTasksFromDLQResponse is the response for GetReplicationTasksFromDLQ
 	GetReplicationTasksFromDLQResponse = GetReplicationTasksResponse
 
@@ -1495,6 +1518,8 @@ type (
 		RangeCompleteReplicationTask(request *RangeCompleteReplicationTaskRequest) error
 		PutReplicationTaskToDLQ(request *PutReplicationTaskToDLQRequest) error
 		GetReplicationTasksFromDLQ(request *GetReplicationTasksFromDLQRequest) (*GetReplicationTasksFromDLQResponse, error)
+		DeleteReplicationTaskFromDLQ(request *DeleteReplicationTaskFromDLQRequest) error
+		RangeDeleteReplicationTaskFromDLQ(request *RangeDeleteReplicationTaskFromDLQRequest) error
 
 		// Timer related methods.
 		GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error)

@@ -28,13 +28,13 @@ import (
 
 	"github.com/gogo/protobuf/types"
 
-	pblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/temporalio/temporal/.gen/go/replicator"
+	commonproto "go.temporal.io/temporal-proto/common"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	pblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cluster"
@@ -1099,6 +1099,64 @@ func (s *TestBase) RangeCompleteReplicationTask(inclusiveEndTaskID int64) error 
 	})
 }
 
+// PutReplicationTaskToDLQ is a utility method to insert a replication task info
+func (s *TestBase) PutReplicationTaskToDLQ(
+	sourceCluster string,
+	taskInfo *pblobs.ReplicationTaskInfo,
+) error {
+
+	return s.ExecutionManager.PutReplicationTaskToDLQ(&p.PutReplicationTaskToDLQRequest{
+		SourceClusterName: sourceCluster,
+		TaskInfo:          taskInfo,
+	})
+}
+
+// GetReplicationTasksFromDLQ is a utility method to read replication task info
+func (s *TestBase) GetReplicationTasksFromDLQ(
+	sourceCluster string,
+	readLevel int64,
+	maxReadLevel int64,
+	pageSize int,
+	pageToken []byte,
+) (*p.GetReplicationTasksFromDLQResponse, error) {
+
+	return s.ExecutionManager.GetReplicationTasksFromDLQ(&p.GetReplicationTasksFromDLQRequest{
+		SourceClusterName: sourceCluster,
+		GetReplicationTasksRequest: p.GetReplicationTasksRequest{
+			ReadLevel:     readLevel,
+			MaxReadLevel:  maxReadLevel,
+			BatchSize:     pageSize,
+			NextPageToken: pageToken,
+		},
+	})
+}
+
+// DeleteReplicationTaskFromDLQ is a utility method to delete a replication task info
+func (s *TestBase) DeleteReplicationTaskFromDLQ(
+	sourceCluster string,
+	taskID int64,
+) error {
+
+	return s.ExecutionManager.DeleteReplicationTaskFromDLQ(&p.DeleteReplicationTaskFromDLQRequest{
+		SourceClusterName: sourceCluster,
+		TaskID:            taskID,
+	})
+}
+
+// RangeDeleteReplicationTaskFromDLQ is a utility method to delete  replication task info
+func (s *TestBase) RangeDeleteReplicationTaskFromDLQ(
+	sourceCluster string,
+	beginTaskID int64,
+	endTaskID int64,
+) error {
+
+	return s.ExecutionManager.RangeDeleteReplicationTaskFromDLQ(&p.RangeDeleteReplicationTaskFromDLQRequest{
+		SourceClusterName:    sourceCluster,
+		ExclusiveBeginTaskID: beginTaskID,
+		InclusiveEndTaskID:   endTaskID,
+	})
+}
+
 // CompleteTransferTask is a utility method to complete a transfer task
 func (s *TestBase) CompleteTransferTask(taskID int64) error {
 
@@ -1392,7 +1450,10 @@ func (g *TestTransferTaskIDGenerator) GenerateTransferTaskID() (int64, error) {
 }
 
 // Publish is a utility method to add messages to the queue
-func (s *TestBase) Publish(message interface{}) error {
+func (s *TestBase) Publish(
+	message interface{},
+) error {
+
 	retryPolicy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
 	retryPolicy.SetBackoffCoefficient(1.5)
 	retryPolicy.SetMaximumAttempts(5)
@@ -1413,18 +1474,91 @@ func isMessageIDConflictError(err error) bool {
 }
 
 // GetReplicationMessages is a utility method to get messages from the queue
-func (s *TestBase) GetReplicationMessages(lastMessageID int, maxCount int) ([]*replicator.ReplicationTask, int, error) {
+func (s *TestBase) GetReplicationMessages(
+	lastMessageID int,
+	maxCount int,
+) ([]*commonproto.ReplicationTask, int, error) {
+
 	return s.DomainReplicationQueue.GetReplicationMessages(lastMessageID, maxCount)
 }
 
 // UpdateAckLevel updates replication queue ack level
-func (s *TestBase) UpdateAckLevel(lastProcessedMessageID int, clusterName string) error {
+func (s *TestBase) UpdateAckLevel(
+	lastProcessedMessageID int,
+	clusterName string,
+) error {
+
 	return s.DomainReplicationQueue.UpdateAckLevel(lastProcessedMessageID, clusterName)
 }
 
 // GetAckLevels returns replication queue ack levels
 func (s *TestBase) GetAckLevels() (map[string]int, error) {
 	return s.DomainReplicationQueue.GetAckLevels()
+}
+
+// PublishToDomainDLQ is a utility method to add messages to the domain DLQ
+func (s *TestBase) PublishToDomainDLQ(
+	message interface{},
+) error {
+
+	retryPolicy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
+	retryPolicy.SetBackoffCoefficient(1.5)
+	retryPolicy.SetMaximumAttempts(5)
+
+	return backoff.Retry(
+		func() error {
+			return s.DomainReplicationQueue.PublishToDLQ(message)
+		},
+		retryPolicy,
+		func(e error) bool {
+			return common.IsPersistenceTransientError(e) || isMessageIDConflictError(e)
+		})
+}
+
+// GetMessagesFromDomainDLQ is a utility method to get messages from the domain DLQ
+func (s *TestBase) GetMessagesFromDomainDLQ(
+	firstMessageID int,
+	lastMessageID int,
+	pageSize int,
+	pageToken []byte,
+) ([]*commonproto.ReplicationTask, []byte, error) {
+
+	return s.DomainReplicationQueue.GetMessagesFromDLQ(
+		firstMessageID,
+		lastMessageID,
+		pageSize,
+		pageToken,
+	)
+}
+
+// UpdateDomainDLQAckLevel updates domain dlq ack level
+func (s *TestBase) UpdateDomainDLQAckLevel(
+	lastProcessedMessageID int,
+) error {
+
+	return s.DomainReplicationQueue.UpdateDLQAckLevel(lastProcessedMessageID)
+}
+
+// GetDomainDLQAckLevel returns domain dlq ack level
+func (s *TestBase) GetDomainDLQAckLevel() (int, error) {
+	return s.DomainReplicationQueue.GetDLQAckLevel()
+}
+
+// DeleteMessageFromDomainDLQ deletes one message from domain DLQ
+func (s *TestBase) DeleteMessageFromDomainDLQ(
+	messageID int,
+) error {
+
+	return s.DomainReplicationQueue.DeleteMessageFromDLQ(messageID)
+}
+
+// RangeDeleteMessagesFromDomainDLQ deletes messages from domain DLQ
+func (s *TestBase) RangeDeleteMessagesFromDomainDLQ(
+	firstMessageID int,
+	lastMessageID int,
+) error {
+
+	return s.DomainReplicationQueue.RangeDeleteMessagesFromDLQ(firstMessageID, lastMessageID)
 }
 
 // GenerateTransferTaskIDs helper

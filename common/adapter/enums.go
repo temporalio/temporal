@@ -198,3 +198,13 @@ func ToThriftReplicationTaskType(in enums.ReplicationTaskType) *replicator.Repli
 	ret := replicator.ReplicationTaskType(in)
 	return &ret
 }
+func ToThriftDLQType(in enums.DLQType) *replicator.DLQType {
+	ret := replicator.DLQType(in)
+	return &ret
+}
+func ToProtoDLQType(in *replicator.DLQType) enums.DLQType {
+	if in == nil {
+		return enums.DLQTypeReplication
+	}
+	return enums.DLQType(*in)
+}

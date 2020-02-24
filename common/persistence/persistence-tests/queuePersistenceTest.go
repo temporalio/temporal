@@ -28,9 +28,8 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
-
-	"github.com/temporalio/temporal/.gen/go/replicator"
-	"github.com/temporalio/temporal/common"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 )
 
 type (
@@ -68,13 +67,15 @@ func (s *QueuePersistenceSuite) TestDomainReplicationQueue() {
 
 	messageChan := make(chan interface{})
 
-	taskType := replicator.ReplicationTaskTypeDomain
+	taskType := enums.ReplicationTaskTypeDomain
 	go func() {
 		for i := 0; i < numMessages; i++ {
-			messageChan <- &replicator.ReplicationTask{
-				TaskType: &taskType,
-				DomainTaskAttributes: &replicator.DomainTaskAttributes{
-					ID: common.StringPtr(fmt.Sprintf("message-%v", i)),
+			messageChan <- &commonproto.ReplicationTask{
+				TaskType: taskType,
+				Attributes: &commonproto.ReplicationTask_DomainTaskAttributes{
+					DomainTaskAttributes: &commonproto.DomainTaskAttributes{
+						Id: fmt.Sprintf("message-%v", i),
+					},
 				},
 			}
 		}
@@ -132,4 +133,86 @@ func (s *QueuePersistenceSuite) TestQueueMetadataOperations() {
 	s.Assert().Len(clusterAckLevels, 2)
 	s.Assert().Equal(20, clusterAckLevels["test1"])
 	s.Assert().Equal(25, clusterAckLevels["test2"])
+}
+
+// TestDomainReplicationDLQ tests domain DLQ operations
+func (s *QueuePersistenceSuite) TestDomainReplicationDLQ() {
+	numMessages := 100
+	concurrentSenders := 10
+
+	messageChan := make(chan interface{})
+
+	taskType := enums.ReplicationTaskTypeDomain
+	go func() {
+		for i := 0; i < numMessages; i++ {
+			messageChan <- &commonproto.ReplicationTask{
+				TaskType: taskType,
+				Attributes: &commonproto.ReplicationTask_DomainTaskAttributes{
+					DomainTaskAttributes: &commonproto.DomainTaskAttributes{
+						Id: fmt.Sprintf("message-%v", i),
+					},
+				},
+			}
+		}
+		close(messageChan)
+	}()
+
+	wg := sync.WaitGroup{}
+	wg.Add(concurrentSenders)
+
+	for i := 0; i < concurrentSenders; i++ {
+		go func() {
+			defer wg.Done()
+			for message := range messageChan {
+				err := s.PublishToDomainDLQ(message)
+				s.Nil(err, "Enqueue message failed.")
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	result1, token, err := s.GetMessagesFromDomainDLQ(-1, numMessages, numMessages/2, nil)
+	s.Nil(err, "GetReplicationMessages failed.")
+	s.NotNil(token)
+	result2, token, err := s.GetMessagesFromDomainDLQ(-1, numMessages, numMessages, token)
+	s.Nil(err, "GetReplicationMessages failed.")
+	s.Equal(len(token), 0)
+	s.Equal(len(result1)+len(result2), numMessages)
+
+	lastMessageID := result2[len(result2)-1].SourceTaskId
+	err = s.DeleteMessageFromDomainDLQ(int(lastMessageID))
+	s.NoError(err)
+	result3, token, err := s.GetMessagesFromDomainDLQ(-1, numMessages, numMessages, token)
+	s.Nil(err, "GetReplicationMessages failed.")
+	s.Equal(len(token), 0)
+	s.Equal(len(result3), numMessages-1)
+
+	err = s.RangeDeleteMessagesFromDomainDLQ(-1, int(lastMessageID))
+	s.NoError(err)
+	result4, token, err := s.GetMessagesFromDomainDLQ(-1, numMessages, numMessages, token)
+	s.Nil(err, "GetReplicationMessages failed.")
+	s.Equal(len(token), 0)
+	s.Equal(len(result4), 0)
+}
+
+// TestDomainDLQMetadataOperations tests queue metadata operations
+func (s *QueuePersistenceSuite) TestDomainDLQMetadataOperations() {
+	ackLevel, err := s.GetDomainDLQAckLevel()
+	s.Require().NoError(err)
+	s.Equal(-1, ackLevel)
+
+	err = s.UpdateDomainDLQAckLevel(10)
+	s.NoError(err)
+
+	ackLevel, err = s.GetDomainDLQAckLevel()
+	s.Require().NoError(err)
+	s.Equal(10, ackLevel)
+
+	err = s.UpdateDomainDLQAckLevel(1)
+	s.NoError(err)
+
+	ackLevel, err = s.GetDomainDLQAckLevel()
+	s.Require().NoError(err)
+	s.Equal(10, ackLevel)
 }
