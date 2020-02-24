@@ -415,13 +415,13 @@ func (h *HandlerGRPC) ReadDLQMessages(ctx context.Context, request *historyservi
 	engine, err := h.handlerThrift.controller.getEngineForShard(int(request.GetShardID()))
 	if err != nil {
 		err = h.handlerThrift.error(err, scope, "", "")
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 
 	resp, err := engine.ReadDLQMessages(ctx, request)
 	if err != nil {
 		err = h.handlerThrift.error(err, scope, "", "")
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 
 	return resp, nil
@@ -440,13 +440,13 @@ func (h *HandlerGRPC) PurgeDLQMessages(ctx context.Context, request *historyserv
 	engine, err := h.handlerThrift.controller.getEngineForShard(int(request.GetShardID()))
 	if err != nil {
 		err = h.handlerThrift.error(err, scope, "", "")
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 
 	err = engine.PurgeDLQMessages(ctx, request)
 	if err != nil {
 		err = h.handlerThrift.error(err, scope, "", "")
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return &historyservice.PurgeDLQMessagesResponse{}, nil
 }
@@ -464,13 +464,13 @@ func (h *HandlerGRPC) MergeDLQMessages(ctx context.Context, request *historyserv
 	engine, err := h.handlerThrift.controller.getEngineForShard(int(request.GetShardID()))
 	if err != nil {
 		err = h.handlerThrift.error(err, scope, "", "")
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 
 	resp, err := engine.MergeDLQMessages(ctx, request)
 	if err != nil {
 		err = h.handlerThrift.error(err, scope, "", "")
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 
 	return resp, nil
@@ -491,7 +491,7 @@ func (h *HandlerGRPC) RefreshWorkflowTasks(ctx context.Context, request *history
 	engine, err := h.handlerThrift.controller.GetEngine(workflowID)
 	if err != nil {
 		err = h.handlerThrift.error(err, scope, domainID, workflowID)
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 
 	err = engine.RefreshWorkflowTasks(
@@ -505,7 +505,7 @@ func (h *HandlerGRPC) RefreshWorkflowTasks(ctx context.Context, request *history
 
 	if err != nil {
 		err = h.handlerThrift.error(err, scope, domainID, workflowID)
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 
 	return &historyservice.RefreshWorkflowTasksResponse{}, nil
