@@ -67,7 +67,7 @@ func verifyTaskVersion(
 // if still mutable state's next event ID <= task ID, will return nil, nil
 func loadMutableStateForTransferTask(
 	context workflowExecutionContext,
-	transferTask *persistence.TransferTaskInfo,
+	transferTask *persistenceblobs.TransferTaskInfo,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) (mutableState, error) {
@@ -174,7 +174,7 @@ func initializeLoggerForTask(
 		taskLogger = taskLogger.WithTags(
 			tag.WorkflowTimeoutType(int64(task.TimeoutType)),
 		)
-	case *persistence.TransferTaskInfo:
+	case *persistenceblobs.TransferTaskInfo:
 		// noop
 	case *persistence.ReplicationTaskInfoWrapper:
 		// noop

@@ -194,9 +194,6 @@ const (
 	// TransferTaskTransferTargetWorkflowID is the the dummy workflow ID for transfer tasks of types
 	// that do not have a target workflow
 	TransferTaskTransferTargetWorkflowID = "20000000-0000-f000-f000-000000000001"
-	// TransferTaskTransferTargetRunID is the the dummy run ID for transfer tasks of types
-	// that do not have a target workflow
-	TransferTaskTransferTargetRunID = "30000000-0000-f000-f000-000000000002"
 
 	// indicate invalid workflow state transition
 	invalidStateTransitionMsg = "unable to change workflow state from %v to %v, close status %v"
@@ -349,24 +346,6 @@ type (
 		LastWriteVersion    int64
 		LastWriteEventID    int64
 		LastReplicationInfo map[string]*ReplicationInfo
-	}
-
-	// TransferTaskInfo describes a transfer task
-	TransferTaskInfo struct {
-		DomainID                string
-		WorkflowID              string
-		RunID                   string
-		VisibilityTimestamp     time.Time
-		TaskID                  int64
-		TargetDomainID          string
-		TargetWorkflowID        string
-		TargetRunID             string
-		TargetChildWorkflowOnly bool
-		TaskList                string
-		TaskType                int
-		ScheduleID              int64
-		Version                 int64
-		RecordVisibility        bool
 	}
 
 	// ReplicationTaskInfoWrapper describes a replication task.
@@ -936,7 +915,7 @@ type (
 
 	// GetTransferTasksResponse is the response to GetTransferTasksRequest
 	GetTransferTasksResponse struct {
-		Tasks         []*TransferTaskInfo
+		Tasks         []*pblobs.TransferTaskInfo
 		NextPageToken []byte
 	}
 
@@ -2305,51 +2284,6 @@ func (a *SyncActivityTask) GetVisibilityTimestamp() time.Time {
 // SetVisibilityTimestamp set the visibility timestamp
 func (a *SyncActivityTask) SetVisibilityTimestamp(timestamp time.Time) {
 	a.VisibilityTimestamp = timestamp
-}
-
-// GetTaskID returns the task ID for transfer task
-func (t *TransferTaskInfo) GetTaskID() int64 {
-	return t.TaskID
-}
-
-// GetVersion returns the task version for transfer task
-func (t *TransferTaskInfo) GetVersion() int64 {
-	return t.Version
-}
-
-// GetTaskType returns the task type for transfer task
-func (t *TransferTaskInfo) GetTaskType() int32 {
-	return int32(t.TaskType)
-}
-
-// GetVisibilityTimestamp returns the task type for transfer task
-func (t *TransferTaskInfo) GetVisibilityTimestamp() *types.Timestamp {
-	// Todo: This is temp unsafe time->type.timestamp validation until TransferTaskInfo is converted to proto
-	ret, _ := types.TimestampProto(t.VisibilityTimestamp)
-	return ret
-}
-
-// GetWorkflowID returns the workflow ID for transfer task
-func (t *TransferTaskInfo) GetWorkflowID() string {
-	return t.WorkflowID
-}
-
-// GetRunID returns the run ID for transfer task
-func (t *TransferTaskInfo) GetRunID() []byte {
-	return primitives.MustParseUUID(t.RunID)
-}
-
-// GetDomainID returns the domain ID for transfer task
-func (t *TransferTaskInfo) GetDomainID() []byte {
-	return primitives.MustParseUUID(t.DomainID)
-}
-
-// String returns string
-func (t *TransferTaskInfo) String() string {
-	return fmt.Sprintf(
-		"{DomainID: %v, WorkflowID: %v, RunID: %v, TaskID: %v, TargetDomainID: %v, TargetWorkflowID %v, TargetRunID: %v, TargetChildWorkflowOnly: %v, TaskList: %v, TaskType: %v, ScheduleID: %v, Version: %v.}",
-		t.DomainID, t.WorkflowID, t.RunID, t.TaskID, t.TargetDomainID, t.TargetWorkflowID, t.TargetRunID, t.TargetChildWorkflowOnly, t.TaskList, t.TaskType, t.ScheduleID, t.Version,
-	)
 }
 
 // GetTaskID returns the task ID for timer task

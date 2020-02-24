@@ -854,28 +854,15 @@ func (m *sqlExecutionManager) GetTransferTasks(
 			}
 		}
 	}
-	resp := &p.GetTransferTasksResponse{Tasks: make([]*p.TransferTaskInfo, len(rows))}
+	resp := &p.GetTransferTasksResponse{Tasks: make([]*persistenceblobs.TransferTaskInfo, len(rows))}
 	for i, row := range rows {
-		info, err := transferTaskInfoFromBlob(row.Data, row.DataEncoding)
+		info, err := TransferTaskInfoFromBlob(row.Data, row.DataEncoding)
 		if err != nil {
 			return nil, err
 		}
-		resp.Tasks[i] = &p.TransferTaskInfo{
-			TaskID:                  row.TaskID,
-			DomainID:                primitives.UUID(info.DomainID).String(),
-			WorkflowID:              info.GetWorkflowID(),
-			RunID:                   primitives.UUID(info.RunID).String(),
-			VisibilityTimestamp:     time.Unix(0, info.GetVisibilityTimestampNanos()),
-			TargetDomainID:          primitives.UUID(info.TargetDomainID).String(),
-			TargetWorkflowID:        info.GetTargetWorkflowID(),
-			TargetRunID:             primitives.UUID(info.TargetRunID).String(),
-			TargetChildWorkflowOnly: info.GetTargetChildWorkflowOnly(),
-			TaskList:                info.GetTaskList(),
-			TaskType:                int(info.GetTaskType()),
-			ScheduleID:              info.GetScheduleID(),
-			Version:                 info.GetVersion(),
-		}
+		resp.Tasks[i] = info
 	}
+
 	return resp, nil
 }
 

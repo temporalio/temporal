@@ -24,6 +24,9 @@ import (
 	ctx "context"
 	"time"
 
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/common/primitives"
+
 	commonproto "go.temporal.io/temporal-proto/common"
 
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
@@ -126,17 +129,17 @@ func (t *transferQueueProcessorBase) queueShutdown() error {
 }
 
 func (t *transferQueueProcessorBase) getDomainIDAndWorkflowExecution(
-	task *persistence.TransferTaskInfo,
+	task *persistenceblobs.TransferTaskInfo,
 ) (string, workflow.WorkflowExecution) {
 
-	return task.DomainID, workflow.WorkflowExecution{
+	return primitives.UUID(task.DomainID).String(), workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(task.WorkflowID),
-		RunId:      common.StringPtr(task.RunID),
+		RunId:      common.StringPtr(primitives.UUID(task.RunID).String()),
 	}
 }
 
 func (t *transferQueueProcessorBase) pushActivity(
-	task *persistence.TransferTaskInfo,
+	task *persistenceblobs.TransferTaskInfo,
 	activityScheduleToStartTimeout int32,
 ) error {
 
@@ -148,11 +151,11 @@ func (t *transferQueueProcessorBase) pushActivity(
 	}
 
 	_, err := t.matchingClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
-		DomainUUID:       task.TargetDomainID,
-		SourceDomainUUID: task.DomainID,
+		DomainUUID:       primitives.UUID(task.TargetDomainID).String(),
+		SourceDomainUUID: primitives.UUID(task.DomainID).String(),
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: task.WorkflowID,
-			RunId:      task.RunID,
+			RunId:      primitives.UUID(task.RunID).String(),
 		},
 		TaskList:                      &commonproto.TaskList{Name: task.TaskList},
 		ScheduleId:                    task.ScheduleID,
@@ -163,7 +166,7 @@ func (t *transferQueueProcessorBase) pushActivity(
 }
 
 func (t *transferQueueProcessorBase) pushDecision(
-	task *persistence.TransferTaskInfo,
+	task *persistenceblobs.TransferTaskInfo,
 	tasklist *workflow.TaskList,
 	decisionScheduleToStartTimeout int32,
 ) error {
@@ -176,10 +179,10 @@ func (t *transferQueueProcessorBase) pushDecision(
 	}
 
 	_, err := t.matchingClient.AddDecisionTask(ctx, &matchingservice.AddDecisionTaskRequest{
-		DomainUUID: task.DomainID,
+		DomainUUID: primitives.UUID(task.DomainID).String(),
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: task.WorkflowID,
-			RunId:      task.RunID,
+			RunId:      primitives.UUID(task.RunID).String(),
 		},
 		TaskList:                      adapter.ToProtoTaskList(tasklist),
 		ScheduleId:                    task.ScheduleID,
