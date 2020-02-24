@@ -24,10 +24,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/temporalio/temporal/common/primitives"
-
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-
 	"github.com/gogo/status"
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -47,6 +43,7 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservicemock"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/archiver"
@@ -60,6 +57,7 @@ import (
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/persistence"
 	p "github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 	dc "github.com/temporalio/temporal/common/service/dynamicconfig"
 	warchiver "github.com/temporalio/temporal/service/worker/archiver"
 	"github.com/temporalio/temporal/service/worker/parentclosepolicy"
