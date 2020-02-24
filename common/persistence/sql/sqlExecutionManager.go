@@ -25,9 +25,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"github.com/temporalio/temporal/common/persistence/serialization"
 	"math"
 	"time"
+
+	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/gogo/protobuf/types"
 

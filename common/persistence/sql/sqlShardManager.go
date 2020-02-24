@@ -23,6 +23,7 @@ package sql
 import (
 	"database/sql"
 	"fmt"
+
 	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"

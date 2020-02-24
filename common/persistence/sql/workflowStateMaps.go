@@ -23,8 +23,9 @@ package sql
 import (
 	"database/sql"
 	"fmt"
-	"github.com/temporalio/temporal/common/persistence/serialization"
 	"time"
+
+	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/temporalio/temporal/common/primitives"
 
