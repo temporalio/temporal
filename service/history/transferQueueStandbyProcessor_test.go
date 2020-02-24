@@ -25,6 +25,10 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
+
+	"github.com/temporalio/temporal/common/primitives"
+
+	"github.com/gogo/protobuf/types"
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"

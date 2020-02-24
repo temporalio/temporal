@@ -31,6 +31,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
+	"github.com/temporalio/temporal/common/domain"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/membership"
@@ -46,21 +47,21 @@ import (
 type (
 	// Replicator is the processor for replication tasks
 	Replicator struct {
-		domainCache            cache.DomainCache
-		clusterMetadata        cluster.Metadata
-		domainReplicator       DomainReplicator
-		clientBean             client.Bean
-		historyClient          history.Client
-		config                 *Config
-		client                 messaging.Client
-		processors             []*replicationTaskProcessor
-		domainProcessors       []*domainReplicationMessageProcessor
-		logger                 log.Logger
-		metricsClient          metrics.Client
-		historySerializer      persistence.PayloadSerializer
-		hostInfo               *membership.HostInfo
-		serviceResolver        membership.ServiceResolver
-		domainReplicationQueue persistence.DomainReplicationQueue
+		domainCache                   cache.DomainCache
+		clusterMetadata               cluster.Metadata
+		domainReplicationTaskExecutor domain.ReplicationTaskExecutor
+		clientBean                    client.Bean
+		historyClient                 history.Client
+		config                        *Config
+		client                        messaging.Client
+		processors                    []*replicationTaskProcessor
+		domainProcessors              []*domainReplicationMessageProcessor
+		logger                        log.Logger
+		metricsClient                 metrics.Client
+		historySerializer             persistence.PayloadSerializer
+		hostInfo                      *membership.HostInfo
+		serviceResolver               membership.ServiceResolver
+		domainReplicationQueue        persistence.DomainReplicationQueue
 	}
 
 	// Config contains all the replication config for worker
@@ -90,23 +91,24 @@ func NewReplicator(
 	hostInfo *membership.HostInfo,
 	serviceResolver membership.ServiceResolver,
 	domainReplicationQueue persistence.DomainReplicationQueue,
+	domainReplicationTaskExecutor domain.ReplicationTaskExecutor,
 ) *Replicator {
 
 	logger = logger.WithTags(tag.ComponentReplicator)
 	return &Replicator{
-		hostInfo:               hostInfo,
-		serviceResolver:        serviceResolver,
-		domainCache:            domainCache,
-		clusterMetadata:        clusterMetadata,
-		domainReplicator:       NewDomainReplicator(metadataManagerV2, logger),
-		clientBean:             clientBean,
-		historyClient:          clientBean.GetHistoryClient(),
-		config:                 config,
-		client:                 client,
-		logger:                 logger,
-		metricsClient:          metricsClient,
-		historySerializer:      persistence.NewPayloadSerializer(),
-		domainReplicationQueue: domainReplicationQueue,
+		hostInfo:                      hostInfo,
+		serviceResolver:               serviceResolver,
+		domainCache:                   domainCache,
+		clusterMetadata:               clusterMetadata,
+		domainReplicationTaskExecutor: domainReplicationTaskExecutor,
+		clientBean:                    clientBean,
+		historyClient:                 clientBean.GetHistoryClient(),
+		config:                        config,
+		client:                        client,
+		logger:                        logger,
+		metricsClient:                 metricsClient,
+		historySerializer:             persistence.NewPayloadSerializer(),
+		domainReplicationQueue:        domainReplicationQueue,
 	}
 }
 
@@ -126,7 +128,7 @@ func (r *Replicator) Start() error {
 					r.logger.WithTags(tag.ComponentReplicationTaskProcessor, tag.SourceCluster(clusterName)),
 					r.clientBean.GetRemoteAdminClient(clusterName),
 					r.metricsClient,
-					r.domainReplicator,
+					r.domainReplicationTaskExecutor,
 					r.hostInfo,
 					r.serviceResolver,
 					r.domainReplicationQueue,
@@ -194,7 +196,7 @@ func (r *Replicator) createKafkaProcessors(currentClusterName string, clusterNam
 		r.config,
 		logger,
 		r.metricsClient,
-		r.domainReplicator,
+		r.domainReplicationTaskExecutor,
 		historyRereplicator,
 		nDCHistoryReplicator,
 		r.historyClient,

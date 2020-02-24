@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
@@ -122,7 +121,7 @@ func (f *Factory) NewVisibilityStore() (p.VisibilityStore, error) {
 }
 
 // NewQueue returns a new queue backed by sql
-func (f *Factory) NewQueue(queueType common.QueueType) (p.Queue, error) {
+func (f *Factory) NewQueue(queueType p.QueueType) (p.Queue, error) {
 	conn, err := f.dbConn.get()
 	if err != nil {
 		return nil, err

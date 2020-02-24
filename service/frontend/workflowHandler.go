@@ -53,8 +53,6 @@ import (
 	"github.com/temporalio/temporal/common/resource"
 )
 
-var _ workflowservice.WorkflowServiceServer = (*WorkflowHandler)(nil)
-
 type (
 	// WorkflowHandler - gRPC handler interface for workflowservice
 	WorkflowHandler struct {
@@ -82,7 +80,8 @@ type (
 )
 
 var (
-	frontendServiceRetryPolicy = common.CreateFrontendServiceRetryPolicy()
+	_                          workflowservice.WorkflowServiceServer = (*WorkflowHandler)(nil)
+	frontendServiceRetryPolicy                                       = common.CreateFrontendServiceRetryPolicy()
 )
 
 // NewWorkflowHandler creates a gRPC handler for workflowservice
@@ -3021,7 +3020,6 @@ func (wh *WorkflowHandler) ListTaskListPartitions(ctx context.Context, request *
 	}, err
 }
 
-//===============================================================================
 func (wh *WorkflowHandler) getRawHistory(
 	scope metrics.Scope,
 	domainID string,
