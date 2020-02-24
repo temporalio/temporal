@@ -193,8 +193,8 @@ func ToServiceError(in error) error {
 		}
 	case *shared.DomainNotActiveError:
 		return serviceerror.NewDomainNotActive(thriftError.Message, thriftError.DomainName, thriftError.CurrentCluster, thriftError.ActiveCluster)
-	case *shared.ServiceBusyError:
-		return serviceerror.NewResourceExhausted(thriftError.Message)
+	case *shared.EntityNotExistsError:
+		return serviceerror.NewNotFound(thriftError.Message)
 	case *shared.WorkflowExecutionAlreadyStartedError:
 		return serviceerror.NewWorkflowExecutionAlreadyStarted(*thriftError.Message, *thriftError.StartRequestId, *thriftError.RunId)
 	case *shared.DomainAlreadyExistsError:
@@ -203,8 +203,9 @@ func ToServiceError(in error) error {
 		return serviceerror.NewCancellationAlreadyRequested(thriftError.Message)
 	case *shared.QueryFailedError:
 		return serviceerror.NewQueryFailed(thriftError.Message)
-	case *shared.EntityNotExistsError:
 	case *shared.LimitExceededError:
+		return serviceerror.NewResourceExhausted(thriftError.Message)
+	case *shared.ServiceBusyError:
 		return serviceerror.NewResourceExhausted(thriftError.Message)
 	case *shared.ClientVersionNotSupportedError:
 		return serviceerror.NewClientVersionNotSupported("Client version is not supported.", thriftError.FeatureVersion, thriftError.ClientImpl, thriftError.SupportedVersions)
