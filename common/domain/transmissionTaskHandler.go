@@ -21,9 +21,10 @@
 package domain
 
 import (
-	"github.com/temporalio/temporal/.gen/go/replicator"
-	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/common"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
+
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/messaging"
@@ -35,7 +36,7 @@ import (
 type (
 	// Replicator is the interface which can replicate the domain
 	Replicator interface {
-		HandleTransmissionTask(domainOperation replicator.DomainOperation, info *persistence.DomainInfo,
+		HandleTransmissionTask(domainOperation enums.DomainOperation, info *persistence.DomainInfo,
 			config *persistence.DomainConfig, replicationConfig *persistence.DomainReplicationConfig,
 			configVersion int64, failoverVersion int64, isGlobalDomainEnabled bool) error
 	}
@@ -55,7 +56,7 @@ func NewDomainReplicator(replicationMessageSink messaging.Producer, logger log.L
 }
 
 // HandleTransmissionTask handle transmission of the domain replication task
-func (domainReplicator *domainReplicatorImpl) HandleTransmissionTask(domainOperation replicator.DomainOperation,
+func (domainReplicator *domainReplicatorImpl) HandleTransmissionTask(domainOperation enums.DomainOperation,
 	info *persistence.DomainInfo, config *persistence.DomainConfig, replicationConfig *persistence.DomainReplicationConfig,
 	configVersion int64, failoverVersion int64, isGlobalDomainEnabled bool) error {
 
@@ -64,66 +65,68 @@ func (domainReplicator *domainReplicatorImpl) HandleTransmissionTask(domainOpera
 		return nil
 	}
 
-	status, err := domainReplicator.convertDomainStatusToThrift(info.Status)
+	status, err := domainReplicator.convertDomainStatusToProto(info.Status)
 	if err != nil {
 		return err
 	}
 
-	taskType := replicator.ReplicationTaskTypeDomain
-	task := &replicator.DomainTaskAttributes{
-		DomainOperation: &domainOperation,
-		ID:              common.StringPtr(info.ID),
-		Info: &shared.DomainInfo{
-			Name:        common.StringPtr(info.Name),
+	taskType := enums.ReplicationTaskTypeDomain
+	task := &commonproto.DomainTaskAttributes{
+		DomainOperation: domainOperation,
+		Id:              info.ID,
+		Info: &commonproto.DomainInfo{
+			Name:        info.Name,
 			Status:      status,
-			Description: common.StringPtr(info.Description),
-			OwnerEmail:  common.StringPtr(info.OwnerEmail),
+			Description: info.Description,
+			OwnerEmail:  info.OwnerEmail,
 			Data:        info.Data,
 		},
-		Config: &shared.DomainConfiguration{
-			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(config.Retention),
-			EmitMetric:                             common.BoolPtr(config.EmitMetric),
-			HistoryArchivalStatus:                  common.ArchivalStatusPtr(config.HistoryArchivalStatus),
-			HistoryArchivalURI:                     common.StringPtr(config.HistoryArchivalURI),
-			VisibilityArchivalStatus:               common.ArchivalStatusPtr(config.VisibilityArchivalStatus),
-			VisibilityArchivalURI:                  common.StringPtr(config.VisibilityArchivalURI),
-			BadBinaries:                            &config.BadBinaries,
+		Config: &commonproto.DomainConfiguration{
+			WorkflowExecutionRetentionPeriodInDays: config.Retention,
+			EmitMetric:                             adapter.ToProtoBool(&config.EmitMetric),
+			HistoryArchivalStatus:                  adapter.ToProtoArchivalStatus(&config.HistoryArchivalStatus),
+			HistoryArchivalURI:                     config.HistoryArchivalURI,
+			VisibilityArchivalStatus:               adapter.ToProtoArchivalStatus(&config.VisibilityArchivalStatus),
+			VisibilityArchivalURI:                  config.VisibilityArchivalURI,
+			BadBinaries:                            adapter.ToProtoBadBinaries(&config.BadBinaries),
 		},
-		ReplicationConfig: &shared.DomainReplicationConfiguration{
-			ActiveClusterName: common.StringPtr(replicationConfig.ActiveClusterName),
-			Clusters:          domainReplicator.convertClusterReplicationConfigToThrift(replicationConfig.Clusters),
+		ReplicationConfig: &commonproto.DomainReplicationConfiguration{
+			ActiveClusterName: replicationConfig.ActiveClusterName,
+			Clusters:          domainReplicator.convertClusterReplicationConfigToProto(replicationConfig.Clusters),
 		},
-		ConfigVersion:   common.Int64Ptr(configVersion),
-		FailoverVersion: common.Int64Ptr(failoverVersion),
+		ConfigVersion:   configVersion,
+		FailoverVersion: failoverVersion,
 	}
 
 	return domainReplicator.replicationMessageSink.Publish(
-		&replicator.ReplicationTask{
-			TaskType:             &taskType,
-			DomainTaskAttributes: task,
+		&commonproto.ReplicationTask{
+			TaskType: taskType,
+			Attributes: &commonproto.ReplicationTask_DomainTaskAttributes{
+				DomainTaskAttributes: task,
+			},
 		})
 }
 
-func (domainReplicator *domainReplicatorImpl) convertClusterReplicationConfigToThrift(
+func (domainReplicator *domainReplicatorImpl) convertClusterReplicationConfigToProto(
 	input []*persistence.ClusterReplicationConfig,
-) []*shared.ClusterReplicationConfiguration {
-	output := []*shared.ClusterReplicationConfiguration{}
+) []*commonproto.ClusterReplicationConfiguration {
+	output := []*commonproto.ClusterReplicationConfiguration{}
 	for _, cluster := range input {
-		clusterName := common.StringPtr(cluster.ClusterName)
-		output = append(output, &shared.ClusterReplicationConfiguration{ClusterName: clusterName})
+		clusterName := cluster.ClusterName
+		output = append(output, &commonproto.ClusterReplicationConfiguration{ClusterName: clusterName})
 	}
 	return output
 }
 
-func (domainReplicator *domainReplicatorImpl) convertDomainStatusToThrift(input int) (*shared.DomainStatus, error) {
+func (domainReplicator *domainReplicatorImpl) convertDomainStatusToProto(input int) (enums.DomainStatus, error) {
 	switch input {
 	case persistence.DomainStatusRegistered:
-		output := shared.DomainStatusRegistered
-		return &output, nil
+		output := enums.DomainStatusRegistered
+		return output, nil
 	case persistence.DomainStatusDeprecated:
-		output := shared.DomainStatusDeprecated
-		return &output, nil
+		output := enums.DomainStatusDeprecated
+		return output, nil
 	default:
-		return nil, ErrInvalidDomainStatus
+		return enums.DomainStatusRegistered, ErrInvalidDomainStatus
 	}
 }

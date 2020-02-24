@@ -26,9 +26,11 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/temporalio/temporal/.gen/go/replicator"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/mocks"
 	p "github.com/temporalio/temporal/common/persistence"
@@ -67,10 +69,10 @@ func (s *transmissionTaskSuite) TearDownTest() {
 }
 
 func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterDomainTask_IsGlobalDomain() {
-	taskType := replicator.ReplicationTaskTypeDomain
+	taskType := enums.ReplicationTaskTypeDomain
 	id := uuid.New()
 	name := "some random domain test name"
-	status := shared.DomainStatusRegistered
+	status := enums.DomainStatusRegistered
 	description := "some random test description"
 	ownerEmail := "some random test owner"
 	data := map[string]string{"k": "v"}
@@ -93,7 +95,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterDomainTask_Is
 		},
 	}
 
-	domainOperation := replicator.DomainOperationCreate
+	domainOperation := enums.DomainOperationCreate
 	info := &p.DomainInfo{
 		ID:          id,
 		Name:        name,
@@ -117,33 +119,35 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterDomainTask_Is
 	}
 	isGlobalDomain := true
 
-	s.kafkaProducer.On("Publish", &replicator.ReplicationTask{
-		TaskType: &taskType,
-		DomainTaskAttributes: &replicator.DomainTaskAttributes{
-			DomainOperation: &domainOperation,
-			ID:              common.StringPtr(id),
-			Info: &shared.DomainInfo{
-				Name:        common.StringPtr(name),
-				Status:      &status,
-				Description: common.StringPtr(description),
-				OwnerEmail:  common.StringPtr(ownerEmail),
-				Data:        data,
+	s.kafkaProducer.On("Publish", &commonproto.ReplicationTask{
+		TaskType: taskType,
+		Attributes: &commonproto.ReplicationTask_DomainTaskAttributes{
+			DomainTaskAttributes: &commonproto.DomainTaskAttributes{
+				DomainOperation: domainOperation,
+				Id:              id,
+				Info: &commonproto.DomainInfo{
+					Name:        name,
+					Status:      status,
+					Description: description,
+					OwnerEmail:  ownerEmail,
+					Data:        data,
+				},
+				Config: &commonproto.DomainConfiguration{
+					WorkflowExecutionRetentionPeriodInDays: retention,
+					EmitMetric:                             adapter.ToProtoBool(&emitMetric),
+					HistoryArchivalStatus:                  adapter.ToProtoArchivalStatus(&historyArchivalStatus),
+					HistoryArchivalURI:                     historyArchivalURI,
+					VisibilityArchivalStatus:               adapter.ToProtoArchivalStatus(&visibilityArchivalStatus),
+					VisibilityArchivalURI:                  visibilityArchivalURI,
+					BadBinaries:                            adapter.ToProtoBadBinaries(&shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}}),
+				},
+				ReplicationConfig: &commonproto.DomainReplicationConfiguration{
+					ActiveClusterName: clusterActive,
+					Clusters:          s.domainReplicator.convertClusterReplicationConfigToProto(clusters),
+				},
+				ConfigVersion:   configVersion,
+				FailoverVersion: failoverVersion,
 			},
-			Config: &shared.DomainConfiguration{
-				WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
-				EmitMetric:                             common.BoolPtr(emitMetric),
-				HistoryArchivalStatus:                  common.ArchivalStatusPtr(historyArchivalStatus),
-				HistoryArchivalURI:                     common.StringPtr(historyArchivalURI),
-				VisibilityArchivalStatus:               common.ArchivalStatusPtr(visibilityArchivalStatus),
-				VisibilityArchivalURI:                  common.StringPtr(visibilityArchivalURI),
-				BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
-			},
-			ReplicationConfig: &shared.DomainReplicationConfiguration{
-				ActiveClusterName: common.StringPtr(clusterActive),
-				Clusters:          s.domainReplicator.convertClusterReplicationConfigToThrift(clusters),
-			},
-			ConfigVersion:   common.Int64Ptr(configVersion),
-			FailoverVersion: common.Int64Ptr(failoverVersion),
 		},
 	}).Return(nil).Once()
 
@@ -176,7 +180,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterDomainTask_No
 		},
 	}
 
-	domainOperation := replicator.DomainOperationCreate
+	domainOperation := enums.DomainOperationCreate
 	info := &p.DomainInfo{
 		ID:          id,
 		Name:        name,
@@ -205,10 +209,10 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterDomainTask_No
 }
 
 func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateDomainTask_IsGlobalDomain() {
-	taskType := replicator.ReplicationTaskTypeDomain
+	taskType := enums.ReplicationTaskTypeDomain
 	id := uuid.New()
 	name := "some random domain test name"
-	status := shared.DomainStatusDeprecated
+	status, _ := s.domainReplicator.convertDomainStatusToProto(int(shared.DomainStatusDeprecated))
 	description := "some random test description"
 	ownerEmail := "some random test owner"
 	data := map[string]string{"k": "v"}
@@ -231,7 +235,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateDomainTask_IsGl
 		},
 	}
 
-	domainOperation := replicator.DomainOperationUpdate
+	domainOperation := enums.DomainOperationUpdate
 	info := &p.DomainInfo{
 		ID:          id,
 		Name:        name,
@@ -255,33 +259,34 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateDomainTask_IsGl
 	}
 	isGlobalDomain := true
 
-	s.kafkaProducer.On("Publish", &replicator.ReplicationTask{
-		TaskType: &taskType,
-		DomainTaskAttributes: &replicator.DomainTaskAttributes{
-			DomainOperation: &domainOperation,
-			ID:              common.StringPtr(id),
-			Info: &shared.DomainInfo{
-				Name:        common.StringPtr(name),
-				Status:      &status,
-				Description: common.StringPtr(description),
-				OwnerEmail:  common.StringPtr(ownerEmail),
-				Data:        data,
-			},
-			Config: &shared.DomainConfiguration{
-				WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
-				EmitMetric:                             common.BoolPtr(emitMetric),
-				HistoryArchivalStatus:                  common.ArchivalStatusPtr(historyArchivalStatus),
-				HistoryArchivalURI:                     common.StringPtr(historyArchivalURI),
-				VisibilityArchivalStatus:               common.ArchivalStatusPtr(visibilityArchivalStatus),
-				VisibilityArchivalURI:                  common.StringPtr(visibilityArchivalURI),
-				BadBinaries:                            &shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
-			},
-			ReplicationConfig: &shared.DomainReplicationConfiguration{
-				ActiveClusterName: common.StringPtr(clusterActive),
-				Clusters:          s.domainReplicator.convertClusterReplicationConfigToThrift(clusters),
-			},
-			ConfigVersion:   common.Int64Ptr(configVersion),
-			FailoverVersion: common.Int64Ptr(failoverVersion),
+	s.kafkaProducer.On("Publish", &commonproto.ReplicationTask{
+		TaskType: taskType,
+		Attributes: &commonproto.ReplicationTask_DomainTaskAttributes{
+			DomainTaskAttributes: &commonproto.DomainTaskAttributes{
+				DomainOperation: domainOperation,
+				Id:              id,
+				Info: &commonproto.DomainInfo{
+					Name:        name,
+					Status:      status,
+					Description: description,
+					OwnerEmail:  ownerEmail,
+					Data:        data,
+				},
+				Config: &commonproto.DomainConfiguration{
+					WorkflowExecutionRetentionPeriodInDays: retention,
+					EmitMetric:                             adapter.ToProtoBool(&emitMetric),
+					HistoryArchivalStatus:                  adapter.ToProtoArchivalStatus(&historyArchivalStatus),
+					HistoryArchivalURI:                     historyArchivalURI,
+					VisibilityArchivalStatus:               adapter.ToProtoArchivalStatus(&visibilityArchivalStatus),
+					VisibilityArchivalURI:                  visibilityArchivalURI,
+					BadBinaries:                            adapter.ToProtoBadBinaries(&shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}}),
+				},
+				ReplicationConfig: &commonproto.DomainReplicationConfiguration{
+					ActiveClusterName: clusterActive,
+					Clusters:          s.domainReplicator.convertClusterReplicationConfigToProto(clusters),
+				},
+				ConfigVersion:   configVersion,
+				FailoverVersion: failoverVersion},
 		},
 	}).Return(nil).Once()
 
@@ -314,7 +319,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateDomainTask_NotG
 		},
 	}
 
-	domainOperation := replicator.DomainOperationUpdate
+	domainOperation := enums.DomainOperationUpdate
 	info := &p.DomainInfo{
 		ID:          id,
 		Name:        name,
