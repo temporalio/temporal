@@ -24,8 +24,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/temporalio/temporal/common/persistence/serialization"
 	"testing"
+
+	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"

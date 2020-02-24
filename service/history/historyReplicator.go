@@ -23,8 +23,9 @@ package history
 import (
 	ctx "context"
 	"fmt"
-	"github.com/temporalio/temporal/common/persistence/serialization"
 	"time"
+
+	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/pborman/uuid"
 

@@ -22,8 +22,9 @@ package xdc
 
 import (
 	"context"
-	"github.com/temporalio/temporal/common/persistence/serialization"
 	"time"
+
+	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/gogo/status"
 	commonproto "go.temporal.io/temporal-proto/common"

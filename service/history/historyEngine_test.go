@@ -28,6 +28,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/temporalio/temporal/common/primitives"
+
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"

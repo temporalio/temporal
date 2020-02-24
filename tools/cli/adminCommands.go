@@ -23,10 +23,12 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/temporalio/temporal/common/persistence/serialization"
 	"io/ioutil"
 	"strconv"
 	"time"
+
+	"github.com/temporalio/temporal/common/persistence/serialization"
+	"github.com/temporalio/temporal/common/primitives"
 
 	"github.com/gocql/gocql"
 	"github.com/urfave/cli"

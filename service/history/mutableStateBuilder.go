@@ -26,6 +26,8 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/temporalio/temporal/common/primitives"
+
 	"github.com/pborman/uuid"
 
 	h "github.com/temporalio/temporal/.gen/go/history"

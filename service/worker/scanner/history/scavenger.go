@@ -24,6 +24,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/temporalio/temporal/common/primitives"
+
 	"github.com/gogo/status"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal/activity"

@@ -24,6 +24,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/temporalio/temporal/common/primitives"
+
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
 	"github.com/golang/mock/gomock"

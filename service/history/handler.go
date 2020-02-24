@@ -23,9 +23,10 @@ package history
 import (
 	"context"
 	"fmt"
-	"github.com/temporalio/temporal/common/persistence/serialization"
 	"sync"
 	"sync/atomic"
+
+	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/gogo/status"
 	"github.com/pborman/uuid"

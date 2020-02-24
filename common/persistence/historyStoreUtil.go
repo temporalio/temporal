@@ -23,8 +23,9 @@ package persistence
 import (
 	"fmt"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	commonproto "go.temporal.io/temporal-proto/common"
+
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/adapter"

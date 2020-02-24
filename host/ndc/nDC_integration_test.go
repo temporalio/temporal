@@ -24,12 +24,13 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/temporalio/temporal/common/persistence/serialization"
 	"io/ioutil"
 	"os"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"

@@ -23,9 +23,10 @@ package host
 import (
 	"bytes"
 	"encoding/binary"
-	"github.com/temporalio/temporal/common/persistence/serialization"
 	"strconv"
 	"time"
+
+	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/pborman/uuid"
 	commonproto "go.temporal.io/temporal-proto/common"
