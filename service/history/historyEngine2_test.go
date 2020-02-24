@@ -823,7 +823,7 @@ func (s *engine2Suite) createExecutionStartedState(we workflow.WorkflowExecution
 	if startDecision {
 		addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	}
-	_ = msBuilder.SetHistoryTree(we.GetRunId())
+	_ = msBuilder.SetHistoryTree(primitives.MustParseUUID(we.GetRunId()))
 
 	return msBuilder
 }

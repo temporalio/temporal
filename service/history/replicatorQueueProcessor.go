@@ -23,8 +23,9 @@ package history
 import (
 	ctx "context"
 	"errors"
-	"github.com/temporalio/temporal/common/persistence/serialization"
 	"time"
+
+	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"

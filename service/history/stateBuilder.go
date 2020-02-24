@@ -180,7 +180,7 @@ func (b *stateBuilderImpl) applyEvents(
 			}
 
 			if err := b.mutableState.SetHistoryTree(
-				execution.GetRunId(),
+				primitives.MustParseUUID(execution.GetRunId()),
 			); err != nil {
 				return nil, err
 			}

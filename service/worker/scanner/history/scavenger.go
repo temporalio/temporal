@@ -247,7 +247,9 @@ func (s *Scavenger) startTaskProcessor(
 				if status.Code(err) == codes.NotFound {
 					//deleting history branch
 					var branchToken []byte
-					branchToken, err = persistence.NewHistoryBranchTokenByBranchID(task.treeID, task.branchID)
+					branchToken, err = persistence.NewHistoryBranchTokenByBranchID(
+						primitives.MustParseUUID(task.treeID),
+						primitives.MustParseUUID(task.branchID))
 					if err != nil {
 						respCh <- err
 						s.logger.Error("encounter error when creating branch token",

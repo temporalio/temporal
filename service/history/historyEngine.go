@@ -504,7 +504,7 @@ func (e *historyEngineImpl) createMutableState(
 		)
 	}
 
-	if err := newMutableState.SetHistoryTree(runID); err != nil {
+	if err := newMutableState.SetHistoryTree(primitives.MustParseUUID(runID)); err != nil {
 		return nil, err
 	}
 

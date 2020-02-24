@@ -61,8 +61,8 @@ func AdminShowWorkflow(c *cli.Context) {
 	if len(tid) != 0 {
 		histV2 := cassp.NewHistoryV2PersistenceFromSession(session, loggerimpl.NewNopLogger())
 		resp, err := histV2.ReadHistoryBranch(&persistence.InternalReadHistoryBranchRequest{
-			TreeID:    tid,
-			BranchID:  bid,
+			TreeID:    primitives.MustParseUUID(tid),
+			BranchID:  primitives.MustParseUUID(bid),
 			MinNodeID: 1,
 			MaxNodeID: maxEventID,
 			PageSize:  maxEventID,
@@ -196,8 +196,6 @@ func AdminDeleteWorkflow(c *cli.Context) {
 		ErrorAndExit("strconv.Atoi(shardID) err", err)
 	}
 
-	branchInfo := shared.HistoryBranch{}
-	thriftrwEncoder := codec.NewThriftRWEncoder()
 	branchTokens := [][]byte{ms.ExecutionInfo.BranchToken}
 	if ms.VersionHistories != nil {
 		// if VersionHistories is set, then all branch infos are stored in VersionHistories
@@ -208,7 +206,7 @@ func AdminDeleteWorkflow(c *cli.Context) {
 	}
 
 	for _, branchToken := range branchTokens {
-		err = thriftrwEncoder.Decode(branchToken, &branchInfo)
+		branchInfo, err := serialization.HistoryBranchFromBlob(branchToken, common.EncodingTypeProto3.String())
 		if err != nil {
 			ErrorAndExit("thriftrwEncoder.Decode err", err)
 		}

@@ -2177,7 +2177,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowFail
 	executionContext := []byte("context")
 
 	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
-		loggerimpl.NewDevelopmentForTest(s.Suite), we.GetRunId())
+		loggerimpl.NewDevelopmentForTest(s.Suite), testRunID)
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
@@ -5113,7 +5113,7 @@ func newMutableStateBuilderWithEventV2(shard ShardContext, eventsCache eventsCac
 	logger log.Logger, runID string) *mutableStateBuilder {
 
 	msBuilder := newMutableStateBuilder(shard, eventsCache, logger, testLocalDomainEntry)
-	_ = msBuilder.SetHistoryTree(runID)
+	_ = msBuilder.SetHistoryTree(primitives.MustParseUUID(runID))
 
 	return msBuilder
 }
@@ -5127,7 +5127,7 @@ func newMutableStateBuilderWithReplicationStateWithEventV2(shard ShardContext, e
 	if err != nil {
 		logger.Error("update current version error", tag.Error(err))
 	}
-	_ = msBuilder.SetHistoryTree(runID)
+	_ = msBuilder.SetHistoryTree(primitives.MustParseUUID(runID))
 
 	return msBuilder
 }

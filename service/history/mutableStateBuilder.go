@@ -338,7 +338,7 @@ func (e *mutableStateBuilder) GetVersionHistories() *persistence.VersionHistorie
 
 // set treeID/historyBranches
 func (e *mutableStateBuilder) SetHistoryTree(
-	treeID string,
+	treeID []byte,
 ) error {
 
 	initialBranchToken, err := persistence.NewHistoryBranchToken(treeID)
@@ -1691,7 +1691,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 		return nil, err
 	}
 
-	if err := e.SetHistoryTree(e.GetExecutionInfo().RunID); err != nil {
+	if err := e.SetHistoryTree(primitives.MustParseUUID(e.GetExecutionInfo().RunID)); err != nil {
 		return nil, err
 	}
 
