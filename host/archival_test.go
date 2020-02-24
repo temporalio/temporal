@@ -27,6 +27,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/temporalio/temporal/common/primitives"
+
 	"github.com/pborman/uuid"
 
 	commonproto "go.temporal.io/temporal-proto/common"
@@ -60,7 +62,7 @@ func (s *integrationSuite) TestArchival_TimerQueueProcessor() {
 		RunId:      runID,
 	}
 	s.True(s.isHistoryArchived(s.archivalDomainName, execution))
-	s.True(s.isHistoryDeleted(domainID, execution))
+	s.True(s.isHistoryDeleted(execution))
 	s.True(s.isMutableStateDeleted(domainID, execution))
 }
 
@@ -81,7 +83,7 @@ func (s *integrationSuite) TestArchival_ContinueAsNew() {
 			RunId:      runID,
 		}
 		s.True(s.isHistoryArchived(s.archivalDomainName, execution))
-		s.True(s.isHistoryDeleted(domainID, execution))
+		s.True(s.isHistoryDeleted(execution))
 		s.True(s.isMutableStateDeleted(domainID, execution))
 	}
 }
@@ -101,7 +103,7 @@ func (s *integrationSuite) TestArchival_ArchiverWorker() {
 		RunId:      runID,
 	}
 	s.True(s.isHistoryArchived(s.archivalDomainName, execution))
-	s.True(s.isHistoryDeleted(domainID, execution))
+	s.True(s.isHistoryDeleted(execution))
 	s.True(s.isMutableStateDeleted(domainID, execution))
 }
 
@@ -174,10 +176,10 @@ func (s *integrationSuite) isHistoryArchived(domain string, execution *commonpro
 	return false
 }
 
-func (s *integrationSuite) isHistoryDeleted(domainID string, execution *commonproto.WorkflowExecution) bool {
+func (s *integrationSuite) isHistoryDeleted(execution *commonproto.WorkflowExecution) bool {
 	shardID := common.WorkflowIDToHistoryShard(execution.GetWorkflowId(), s.testClusterConfig.HistoryConfig.NumHistoryShards)
 	request := &persistence.GetHistoryTreeRequest{
-		TreeID:  execution.GetRunId(),
+		TreeID:  primitives.MustParseUUID(execution.GetRunId()),
 		ShardID: common.IntPtr(shardID),
 	}
 	for i := 0; i < retryLimit; i++ {
