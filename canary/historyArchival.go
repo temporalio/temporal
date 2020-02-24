@@ -27,7 +27,7 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/pborman/uuid"
 	"go.uber.org/cadence/.gen/go/shared"
 	"go.uber.org/cadence/activity"
 	"go.uber.org/cadence/workflow"
@@ -35,27 +35,27 @@ import (
 )
 
 const (
-	numArchivals = 5
-	resultSize   = 1024 // 1KB
+	numHistoryArchivals = 5
+	resultSize          = 1024 // 1KB
 )
 
 func init() {
-	registerWorkflow(archivalWorkflow, wfTypeArchival)
-	registerActivity(archivalActivity, activityTypeArchival)
+	registerWorkflow(historyArchivalWorkflow, wfTypeHistoryArchival)
+	registerActivity(historyArchivalActivity, activityTypeHistoryArchival)
 	registerWorkflow(archivalExternalWorkflow, wfTypeArchivalExternal)
-	registerActivity(archivalLargeResultActivity, activityTypeLargeResult)
+	registerActivity(largeResultActivity, activityTypeLargeResult)
 }
 
-func archivalWorkflow(ctx workflow.Context, scheduledTimeNanos int64, _ string) error {
-	profile, err := beginWorkflow(ctx, wfTypeArchival, scheduledTimeNanos)
+func historyArchivalWorkflow(ctx workflow.Context, scheduledTimeNanos int64, _ string) error {
+	profile, err := beginWorkflow(ctx, wfTypeHistoryArchival, scheduledTimeNanos)
 	if err != nil {
 		return err
 	}
-	ch := workflow.NewBufferedChannel(ctx, numArchivals)
-	for i := 0; i < numArchivals; i++ {
+	ch := workflow.NewBufferedChannel(ctx, numHistoryArchivals)
+	for i := 0; i < numHistoryArchivals; i++ {
 		workflow.Go(ctx, func(ctx2 workflow.Context) {
 			aCtx := workflow.WithActivityOptions(ctx2, newActivityOptions())
-			err := workflow.ExecuteActivity(aCtx, activityTypeArchival, workflow.Now(ctx2).UnixNano()).Get(aCtx, nil)
+			err := workflow.ExecuteActivity(aCtx, activityTypeHistoryArchival, workflow.Now(ctx2).UnixNano()).Get(aCtx, nil)
 			errStr := ""
 			if err != nil {
 				errStr = err.Error()
@@ -64,7 +64,7 @@ func archivalWorkflow(ctx workflow.Context, scheduledTimeNanos int64, _ string) 
 		})
 	}
 	successfulArchivalsCount := 0
-	for i := 0; i < numArchivals; i++ {
+	for i := 0; i < numHistoryArchivals; i++ {
 		var errStr string
 		ch.Receive(ctx, &errStr)
 		if errStr != "" {
@@ -73,35 +73,24 @@ func archivalWorkflow(ctx workflow.Context, scheduledTimeNanos int64, _ string) 
 		}
 		successfulArchivalsCount++
 	}
+
 	return profile.end(nil)
 }
 
-func archivalActivity(ctx context.Context, scheduledTimeNanos int64) error {
+func historyArchivalActivity(ctx context.Context, scheduledTimeNanos int64) error {
 	scope := activity.GetMetricsScope(ctx)
 	var err error
-	scope, sw := recordActivityStart(scope, activityTypeArchival, scheduledTimeNanos)
+	scope, sw := recordActivityStart(scope, activityTypeHistoryArchival, scheduledTimeNanos)
 	defer recordActivityEnd(scope, sw, err)
 
 	client := getActivityArchivalContext(ctx).cadence
-	workflowID := fmt.Sprintf("%v.%v", wfTypeArchivalExternal, uuid.New().String())
-	ops := newWorkflowOptions(workflowID, childWorkflowTimeout)
-	ops.TaskList = archivalTaskListName
-	workflowRun, err := client.ExecuteWorkflow(context.Background(), ops, wfTypeArchivalExternal, scheduledTimeNanos)
+	execution, err := executeArchivalExeternalWorkflow(ctx, client, scheduledTimeNanos)
 	if err != nil {
 		return err
 	}
-	err = workflowRun.Get(ctx, nil)
-	if err != nil {
-		return err
-	}
-	domain := archivalDomain
-	runID := workflowRun.GetRunID()
 	getHistoryReq := &shared.GetWorkflowExecutionHistoryRequest{
-		Domain: &domain,
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: &workflowID,
-			RunId:      &runID,
-		},
+		Domain:    stringPtr(archivalDomain),
+		Execution: execution,
 	}
 
 	failureReason := ""
@@ -129,10 +118,32 @@ func archivalActivity(ctx context.Context, scheduledTimeNanos int64) error {
 	activity.GetLogger(ctx).Error("failed to get archived history within time limit",
 		zap.String("failure_reason", failureReason),
 		zap.String("domain", archivalDomain),
-		zap.String("workflow_id", workflowID),
-		zap.String("run_id", runID),
+		zap.String("workflow_id", execution.GetWorkflowId()),
+		zap.String("run_id", execution.GetRunId()),
 		zap.Int("attempts", attempts))
 	return fmt.Errorf("failed to get archived history within time limit, %v", failureReason)
+}
+
+func executeArchivalExeternalWorkflow(
+	ctx context.Context,
+	client cadenceClient,
+	scheduledTimeNanos int64,
+) (*shared.WorkflowExecution, error) {
+	workflowID := fmt.Sprintf("%v.%v", wfTypeArchivalExternal, uuid.New())
+	ops := newWorkflowOptions(workflowID, childWorkflowTimeout)
+	ops.TaskList = archivalTaskListName
+	workflowRun, err := client.ExecuteWorkflow(ctx, ops, wfTypeArchivalExternal, scheduledTimeNanos)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := workflowRun.Get(ctx, nil); err != nil {
+		return nil, err
+	}
+	return &shared.WorkflowExecution{
+		WorkflowId: stringPtr(workflowID),
+		RunId:      stringPtr(workflowRun.GetRunID()),
+	}, nil
 }
 
 func archivalExternalWorkflow(ctx workflow.Context, scheduledTimeNanos int64) error {
@@ -158,6 +169,6 @@ func archivalExternalWorkflow(ctx workflow.Context, scheduledTimeNanos int64) er
 	return profile.end(nil)
 }
 
-func archivalLargeResultActivity() ([]byte, error) {
+func largeResultActivity() ([]byte, error) {
 	return make([]byte, resultSize, resultSize), nil
 }
