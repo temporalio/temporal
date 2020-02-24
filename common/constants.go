@@ -68,6 +68,10 @@ const (
 	EncodingTypeProto3   EncodingType = "proto3"
 )
 
+func (e EncodingType) String() string {
+	return string(e)
+}
+
 type (
 	// EncodingType is an enum that represents various data encoding types
 	EncodingType string
