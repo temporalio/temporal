@@ -24,9 +24,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/gogo/status"
 	"github.com/uber-go/tally"
-	"go.temporal.io/temporal-proto/errordetails"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.uber.org/zap"
 
 	cclient "go.temporal.io/temporal/client"
@@ -163,8 +162,7 @@ func (s *Scanner) startWorkflow(
 	_, err := client.StartWorkflow(ctx, options, workflowType)
 	cancel()
 	if err != nil {
-		st := status.Convert(err)
-		if errordetails.IsWorkflowExecutionAlreadyStartedStatus(st) {
+		if _, ok := err.(*serviceerror.WorkflowExecutionAlreadyStarted); ok {
 			return nil
 		}
 		s.context.GetLogger().Error("error starting "+workflowType+" workflow", tag.Error(err))

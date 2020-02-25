@@ -21,6 +21,7 @@
 package common
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"sort"
@@ -30,14 +31,11 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/status"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/yarpc/yarpcerrors"
-	"golang.org/x/net/context"
-	"google.golang.org/grpc/codes"
 
 	h "github.com/temporalio/temporal/.gen/go/history"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
@@ -202,8 +200,9 @@ func IsPersistenceTransientError(err error) bool {
 
 // IsPersistenceTransientError checks if the error is a transient persistence error
 func IsPersistenceTransientErrorGRPC(err error) bool {
-	code := status.Code(err)
-	if code == codes.Internal || code == codes.ResourceExhausted {
+	switch err.(type) {
+	case *serviceerror.Internal,
+		*serviceerror.ResourceExhausted:
 		return true
 	}
 
@@ -250,16 +249,13 @@ func IsServiceNonRetryableError(err error) bool {
 
 // IsServiceNonRetryableErrorGRPC checks if the error is a non retryable error.
 func IsServiceNonRetryableErrorGRPC(err error) bool {
-	if err == context.DeadlineExceeded {
-		return false
-	}
-
-	if st, ok := status.FromError(err); ok {
-		if st.Code() == codes.NotFound ||
-			st.Code() == codes.InvalidArgument ||
-			st.Code() == codes.AlreadyExists {
-			return true
-		}
+	switch err.(type) {
+	case *serviceerror.NotFound,
+		*serviceerror.InvalidArgument,
+		*serviceerror.DomainNotActive,
+		*serviceerror.WorkflowExecutionAlreadyStarted,
+		*serviceerror.CancellationAlreadyRequested:
+		return true
 	}
 
 	return false
@@ -296,20 +292,17 @@ func IsWhitelistServiceTransientError(err error) bool {
 
 // IsWhitelistServiceTransientErrorGRPC checks if the error is a transient error.
 func IsWhitelistServiceTransientErrorGRPC(err error) bool {
-	// TODO: wrong context package
 	if err == context.DeadlineExceeded {
 		return true
 	}
 
-	if st, ok := status.FromError(err); ok {
-		if st.Code() == codes.Internal ||
-			st.Code() == codes.ResourceExhausted ||
-			st.Code() == codes.Unavailable ||
-			st.Code() == codes.Unknown ||
-			st.Code() == codes.DeadlineExceeded {
-			// TODO: add *h.ShardOwnershipLostError handle here
-			return true
-		}
+	switch err.(type) {
+	case *serviceerror.Internal,
+		*serviceerror.ResourceExhausted,
+		*serviceerror.ShardOwnershipLost,
+		*serviceerror.DeadlineExceeded,
+		*serviceerror.Unavailable:
+		return true
 	}
 
 	return false

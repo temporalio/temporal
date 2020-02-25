@@ -26,12 +26,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/gogo/status"
 	"github.com/pborman/uuid"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
-	"google.golang.org/grpc/codes"
 
 	"github.com/temporalio/temporal/common/log/tag"
 )
@@ -137,7 +136,7 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 		},
 	})
 	s.NotNil(err)
-	s.Equal(codes.AlreadyExists, status.Code(err))
+	s.IsType(&serviceerror.CancellationAlreadyRequested{}, err)
 
 	_, err = poller.PollAndProcessDecisionTask(true, false)
 	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))

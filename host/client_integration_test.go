@@ -43,9 +43,9 @@ import (
 	"go.temporal.io/temporal/worker"
 	"go.temporal.io/temporal/workflow"
 	"go.uber.org/zap"
-	"google.golang.org/grpc"
 
 	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/rpc"
 )
 
 func init() {
@@ -102,7 +102,7 @@ func (s *clientIntegrationSuite) buildServiceClient() (workflowservice.WorkflowS
 		hostPort = TestFlags.FrontendAddr
 	}
 
-	connection, err := grpc.Dial(hostPort, grpc.WithInsecure())
+	connection, err := rpc.Dial(hostPort)
 	if err != nil {
 		return nil, err
 	}

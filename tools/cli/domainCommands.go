@@ -28,13 +28,12 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/gogo/status"
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
-	"google.golang.org/grpc/codes"
 
 	"github.com/temporalio/temporal/common/domain"
 )
@@ -143,13 +142,10 @@ func (d *domainCLIImpl) RegisterDomain(c *cli.Context) {
 	defer cancel()
 	err = d.registerDomain(ctx, request)
 	if err != nil {
-		st := status.Convert(err)
-		if st.Code() == codes.AlreadyExists {
-			ErrorAndExit(fmt.Sprintf("Domain %s already registered.", domainName), err)
-		} else if st.Code() != codes.Unknown {
-			ErrorAndExit(st.Message(), err)
+		if _, ok := err.(*serviceerror.DomainAlreadyExists); !ok {
+			ErrorAndExit("Register Domain operation failed.", err)
 		} else {
-			ErrorAndExit("Operation RegisterDomain failed.", err)
+			ErrorAndExit(fmt.Sprintf("Domain %s already registered.", domainName), err)
 		}
 	} else {
 		fmt.Printf("Domain %s successfully registered.\n", domainName)
@@ -179,13 +175,10 @@ func (d *domainCLIImpl) UpdateDomain(c *cli.Context) {
 			Name: domainName,
 		})
 		if err != nil {
-			st := status.Convert(err)
-			if st.Code() == codes.NotFound {
-				ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domainName), err)
-			} else if st.Code() != codes.Unknown {
-				ErrorAndExit(st.Message(), err)
-			} else {
+			if _, ok := err.(*serviceerror.NotFound); !ok {
 				ErrorAndExit("Operation UpdateDomain failed.", err)
+			} else {
+				ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domainName), err)
 			}
 			return
 		}
@@ -278,18 +271,14 @@ func (d *domainCLIImpl) UpdateDomain(c *cli.Context) {
 	updateRequest.SecurityToken = securityToken
 	err := d.updateDomain(ctx, updateRequest)
 	if err != nil {
-		st := status.Convert(err)
-		if st.Code() == codes.NotFound {
-			ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domainName), err)
-		} else if st.Code() != codes.Unknown {
-			ErrorAndExit(st.Message(), err)
-		} else {
+		if _, ok := err.(*serviceerror.NotFound); !ok {
 			ErrorAndExit("Operation UpdateDomain failed.", err)
+		} else {
+			ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domainName), err)
 		}
-		return
+	} else {
+		fmt.Printf("Domain %s successfully updated.\n", domainName)
 	}
-
-	fmt.Printf("Domain %s successfully updated.\n", domainName)
 }
 
 // DescribeDomain updates a domain
@@ -307,15 +296,10 @@ func (d *domainCLIImpl) DescribeDomain(c *cli.Context) {
 		Uuid: domainID,
 	})
 	if err != nil {
-		st := status.Convert(err)
-		if st.Code() == codes.NotFound {
-			ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domainName), err)
-		} else if st.Code() != codes.Unknown {
-			ErrorAndExit(st.Message(), err)
-		} else {
+		if _, ok := err.(*serviceerror.NotFound); !ok {
 			ErrorAndExit("Operation DescribeDomain failed.", err)
 		}
-		return
+		ErrorAndExit(fmt.Sprintf("Domain %s does not exist.", domainName), err)
 	}
 
 	var formatStr = "Name: %v\nUUID: %v\nDescription: %v\nOwnerEmail: %v\nDomainData: %#v\nStatus: %v\nRetentionInDays: %v\n" +

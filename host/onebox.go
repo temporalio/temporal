@@ -53,6 +53,7 @@ import (
 	"github.com/temporalio/temporal/common/persistence"
 	persistenceClient "github.com/temporalio/temporal/common/persistence/client"
 	"github.com/temporalio/temporal/common/resource"
+	"github.com/temporalio/temporal/common/rpc"
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 	"github.com/temporalio/temporal/service/frontend"
@@ -525,7 +526,7 @@ func (c *cadenceImpl) startHistory(
 		c.overrideHistoryDynamicConfig(integrationClient)
 		params.DynamicConfig = integrationClient
 
-		connection, err := grpc.Dial(c.FrontendGRPCAddress(), grpc.WithInsecure())
+		connection, err := rpc.Dial(c.FrontendGRPCAddress())
 		if err != nil {
 			c.logger.Fatal("Failed to create connection for history", tag.Error(err))
 		}
@@ -567,7 +568,7 @@ func (c *cadenceImpl) startHistory(
 		// However current interface for getting history client doesn't specify which client it needs and the tests that use this API
 		// depends on the fact that there's only one history host.
 		// Need to change those tests and modify the interface for getting history client.
-		historyConnection, err := grpc.Dial(c.HistoryServiceAddress(3)[0], grpc.WithInsecure())
+		historyConnection, err := rpc.Dial(c.HistoryServiceAddress(3)[0])
 		if err != nil {
 			c.logger.Fatal("Failed to create connection for history", tag.Error(err))
 		}
@@ -652,7 +653,7 @@ func (c *cadenceImpl) startWorker(hosts map[string][]string, startWG *sync.WaitG
 		c.logger.Fatal("Failed to copy persistence config for worker", tag.Error(err))
 	}
 
-	connection, err := grpc.Dial(c.FrontendGRPCAddress(), grpc.WithInsecure())
+	connection, err := rpc.Dial(c.FrontendGRPCAddress())
 	if err != nil {
 		c.logger.Fatal("Failed to create connection for worker", tag.Error(err))
 	}
@@ -928,7 +929,7 @@ func (c *rpcFactoryImpl) GetRingpopChannel() *tchannel.Channel {
 
 // CreateGRPCConnection creates connection for gRPC calls
 func (c *rpcFactoryImpl) CreateGRPCConnection(hostName string) *grpc.ClientConn {
-	connection, err := grpc.Dial(hostName, grpc.WithInsecure())
+	connection, err := rpc.Dial(hostName)
 	if err != nil {
 		c.logger.Fatal("Failed to create gRPC connection", tag.Error(err))
 	}

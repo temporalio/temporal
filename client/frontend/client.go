@@ -29,7 +29,6 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/headers"
 )
 
 const (
@@ -579,32 +578,6 @@ func (c *clientImpl) UpdateDomain(
 	return client.UpdateDomain(ctx, request, opts...)
 }
 
-func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
-	return c.createContextWithTimeout(parent, c.timeout)
-}
-
-func (c *clientImpl) createLongPollContext(parent context.Context) (context.Context, context.CancelFunc) {
-	return c.createContextWithTimeout(parent, c.longPollTimeout)
-}
-
-func (c *clientImpl) createContextWithTimeout(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
-	if parent == nil {
-		return context.WithTimeout(context.Background(), timeout)
-	}
-	return context.WithTimeout(headers.PropagateVersions(parent), timeout)
-}
-
-func (c *clientImpl) getRandomClient() (workflowservice.WorkflowServiceClient, error) {
-	// generate a random shard key to do load balancing
-	key := uuid.New()
-	client, err := c.clients.GetClientForKey(key)
-	if err != nil {
-		return nil, err
-	}
-
-	return client.(workflowservice.WorkflowServiceClient), nil
-}
-
 func (c *clientImpl) GetClusterInfo(
 	ctx context.Context,
 	request *workflowservice.GetClusterInfoRequest,
@@ -632,4 +605,30 @@ func (c *clientImpl) ListTaskListPartitions(
 	defer cancel()
 
 	return client.ListTaskListPartitions(ctx, request, opts...)
+}
+
+func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
+	return c.createContextWithTimeout(parent, c.timeout)
+}
+
+func (c *clientImpl) createLongPollContext(parent context.Context) (context.Context, context.CancelFunc) {
+	return c.createContextWithTimeout(parent, c.longPollTimeout)
+}
+
+func (c *clientImpl) createContextWithTimeout(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	if parent == nil {
+		return context.WithTimeout(context.Background(), timeout)
+	}
+	return context.WithTimeout(parent, timeout)
+}
+
+func (c *clientImpl) getRandomClient() (workflowservice.WorkflowServiceClient, error) {
+	// generate a random shard key to do load balancing
+	key := uuid.New()
+	client, err := c.clients.GetClientForKey(key)
+	if err != nil {
+		return nil, err
+	}
+
+	return client.(workflowservice.WorkflowServiceClient), nil
 }

@@ -25,9 +25,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/gogo/status"
 	"github.com/pborman/uuid"
-	"google.golang.org/grpc/codes"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
@@ -97,7 +96,7 @@ func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
 			ReturnNewDecisionTask:      true,
 			ForceCreateNewDecisionTask: true,
 		})
-		if status.Code(err2) == codes.NotFound {
+		if _, ok := err2.(*serviceerror.NotFound); ok {
 			hbTimeout++
 			s.IsType(&workflowservice.RespondDecisionTaskCompletedResponse{}, resp2)
 
