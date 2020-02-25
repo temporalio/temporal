@@ -65,7 +65,7 @@ func (h *HandlerGRPC) PollForDecisionTask(ctx context.Context, request *matching
 
 	resp, err := h.handlerThrift.PollForDecisionTask(ctx, adapter.ToThriftMatchingPollForDecisionTaskRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return adapter.ToProtoMatchingPollForDecisionTaskResponse(resp), nil
 }
@@ -75,7 +75,7 @@ func (h *HandlerGRPC) PollForActivityTask(ctx context.Context, request *matching
 
 	resp, err := h.handlerThrift.PollForActivityTask(ctx, adapter.ToThriftMatchingPollForActivityTaskRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return adapter.ToProtoMatchingPollForActivityTaskResponse(resp), nil
 }
@@ -85,7 +85,7 @@ func (h *HandlerGRPC) AddDecisionTask(ctx context.Context, request *matchingserv
 
 	err := h.handlerThrift.AddDecisionTask(ctx, adapter.ToThriftAddDecisionTaskRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return &matchingservice.AddDecisionTaskResponse{}, nil
 }
@@ -95,7 +95,7 @@ func (h *HandlerGRPC) AddActivityTask(ctx context.Context, request *matchingserv
 
 	err := h.handlerThrift.AddActivityTask(ctx, adapter.ToThriftAddActivityTaskRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return &matchingservice.AddActivityTaskResponse{}, nil
 }
@@ -105,7 +105,7 @@ func (h *HandlerGRPC) QueryWorkflow(ctx context.Context, request *matchingservic
 
 	resp, err := h.handlerThrift.QueryWorkflow(ctx, adapter.ToThriftMatchingQueryWorkflowRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return adapter.ToProtoMatchingQueryWorkflowResponse(resp), nil
 }
@@ -115,7 +115,7 @@ func (h *HandlerGRPC) RespondQueryTaskCompleted(ctx context.Context, request *ma
 
 	err := h.handlerThrift.RespondQueryTaskCompleted(ctx, adapter.ToThriftMatchingRespondQueryTaskCompletedRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return &matchingservice.RespondQueryTaskCompletedResponse{}, nil
 }
@@ -125,7 +125,7 @@ func (h *HandlerGRPC) CancelOutstandingPoll(ctx context.Context, request *matchi
 
 	err := h.handlerThrift.CancelOutstandingPoll(ctx, adapter.ToThriftCancelOutstandingPollRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return &matchingservice.CancelOutstandingPollResponse{}, nil
 }
@@ -135,7 +135,7 @@ func (h *HandlerGRPC) DescribeTaskList(ctx context.Context, request *matchingser
 
 	resp, err := h.handlerThrift.DescribeTaskList(ctx, adapter.ToThriftMatchingDescribeTaskListRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return adapter.ToProtoMatchingDescribeTaskListResponse(resp), nil
 }
@@ -145,7 +145,7 @@ func (h *HandlerGRPC) ListTaskListPartitions(ctx context.Context, request *match
 
 	resp, err := h.handlerThrift.ListTaskListPartitions(ctx, adapter.ToThriftMatchingListTaskListPartitionsRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return adapter.ToProtoMatchingListTaskListPartitionsResponse(resp), nil
 }

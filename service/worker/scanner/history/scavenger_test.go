@@ -26,6 +26,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/temporalio/temporal/common/primitives"
+
 	"github.com/gogo/status"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
@@ -50,6 +52,20 @@ type (
 		logger log.Logger
 		metric metrics.Client
 	}
+)
+
+var (
+	treeID1 = primitives.MustParseUUID("deadbeef-17ee-0000-0000-000000000001")
+	treeID2 = primitives.MustParseUUID("deadbeef-17ee-0000-0000-000000000002")
+	treeID3 = primitives.MustParseUUID("deadbeef-17ee-0000-0000-000000000003")
+	treeID4 = primitives.MustParseUUID("deadbeef-17ee-0000-0000-000000000004")
+	treeID5 = primitives.MustParseUUID("deadbeef-17ee-0000-0000-000000000005")
+
+	branchID1 = primitives.MustParseUUID("deadbeef-face-0000-0000-000000000001")
+	branchID2 = primitives.MustParseUUID("deadbeef-face-0000-0000-000000000002")
+	branchID3 = primitives.MustParseUUID("deadbeef-face-0000-0000-000000000003")
+	branchID4 = primitives.MustParseUUID("deadbeef-face-0000-0000-000000000004")
+	branchID5 = primitives.MustParseUUID("deadbeef-face-0000-0000-000000000005")
 )
 
 func TestScavengerTestSuite(t *testing.T) {
@@ -268,14 +284,14 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 		NextPageToken: []byte("page1"),
 		Branches: []p.HistoryBranchDetail{
 			{
-				TreeID:   "treeID1",
-				BranchID: "branchID1",
+				TreeID:   treeID1.String(),
+				BranchID: branchID1.String(),
 				ForkTime: time.Now().Add(-cleanUpThreshold * 2),
 				Info:     p.BuildHistoryGarbageCleanupInfo("domainID1", "workflowID1", "runID1"),
 			},
 			{
-				TreeID:   "treeID2",
-				BranchID: "branchID2",
+				TreeID:   treeID2.String(),
+				BranchID: branchID2.String(),
 				ForkTime: time.Now().Add(-cleanUpThreshold * 2),
 				Info:     p.BuildHistoryGarbageCleanupInfo("domainID2", "workflowID2", "runID2"),
 			},
@@ -287,14 +303,14 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 	}).Return(&p.GetAllHistoryTreeBranchesResponse{
 		Branches: []p.HistoryBranchDetail{
 			{
-				TreeID:   "treeID3",
-				BranchID: "branchID3",
+				TreeID:   treeID3.String(),
+				BranchID: branchID3.String(),
 				ForkTime: time.Now().Add(-cleanUpThreshold * 2),
 				Info:     p.BuildHistoryGarbageCleanupInfo("domainID3", "workflowID3", "runID3"),
 			},
 			{
-				TreeID:   "treeID4",
-				BranchID: "branchID4",
+				TreeID:   treeID4.String(),
+				BranchID: branchID4.String(),
 				ForkTime: time.Now().Add(-cleanUpThreshold * 2),
 				Info:     p.BuildHistoryGarbageCleanupInfo("domainID4", "workflowID4", "runID4"),
 			},
@@ -330,25 +346,25 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 		},
 	}).Return(nil, status.Error(codes.NotFound, ""))
 
-	branchToken1, err := p.NewHistoryBranchTokenByBranchID("treeID1", "branchID1")
+	branchToken1, err := p.NewHistoryBranchTokenByBranchID(treeID1, branchID1)
 	s.Nil(err)
 	db.On("DeleteHistoryBranch", &p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken1,
 		ShardID:     common.IntPtr(1),
 	}).Return(nil).Once()
-	branchToken2, err := p.NewHistoryBranchTokenByBranchID("treeID2", "branchID2")
+	branchToken2, err := p.NewHistoryBranchTokenByBranchID(treeID2, branchID2)
 	s.Nil(err)
 	db.On("DeleteHistoryBranch", &p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken2,
 		ShardID:     common.IntPtr(1),
 	}).Return(nil).Once()
-	branchToken3, err := p.NewHistoryBranchTokenByBranchID("treeID3", "branchID3")
+	branchToken3, err := p.NewHistoryBranchTokenByBranchID(treeID3, branchID3)
 	s.Nil(err)
 	db.On("DeleteHistoryBranch", &p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken3,
 		ShardID:     common.IntPtr(1),
 	}).Return(nil).Once()
-	branchToken4, err := p.NewHistoryBranchTokenByBranchID("treeID4", "branchID4")
+	branchToken4, err := p.NewHistoryBranchTokenByBranchID(treeID4, branchID4)
 	s.Nil(err)
 	db.On("DeleteHistoryBranch", &p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken4,
@@ -374,15 +390,15 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 		Branches: []p.HistoryBranchDetail{
 			{
 				// skip
-				TreeID:   "treeID1",
-				BranchID: "branchID1",
+				TreeID:   treeID1.String(),
+				BranchID: branchID1.String(),
 				ForkTime: time.Now(),
 				Info:     p.BuildHistoryGarbageCleanupInfo("domainID1", "workflowID1", "runID1"),
 			},
 			{
 				// split error
-				TreeID:   "treeID2",
-				BranchID: "branchID2",
+				TreeID:   treeID2.String(),
+				BranchID: branchID2.String(),
 				ForkTime: time.Now().Add(-cleanUpThreshold * 2),
 				Info:     "error-info",
 			},
@@ -395,22 +411,22 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 		Branches: []p.HistoryBranchDetail{
 			{
 				// delete succ
-				TreeID:   "treeID3",
-				BranchID: "branchID3",
+				TreeID:   treeID3.String(),
+				BranchID: branchID3.String(),
 				ForkTime: time.Now().Add(-cleanUpThreshold * 2),
 				Info:     p.BuildHistoryGarbageCleanupInfo("domainID3", "workflowID3", "runID3"),
 			},
 			{
 				// delete fail
-				TreeID:   "treeID4",
-				BranchID: "branchID4",
+				TreeID:   treeID4.String(),
+				BranchID: branchID4.String(),
 				ForkTime: time.Now().Add(-cleanUpThreshold * 2),
 				Info:     p.BuildHistoryGarbageCleanupInfo("domainID4", "workflowID4", "runID4"),
 			},
 			{
 				// not delete
-				TreeID:   "treeID5",
-				BranchID: "branchID5",
+				TreeID:   treeID5.String(),
+				BranchID: branchID5.String(),
 				ForkTime: time.Now().Add(-cleanUpThreshold * 2),
 				Info:     p.BuildHistoryGarbageCleanupInfo("domainID5", "workflowID5", "runID5"),
 			},
@@ -440,14 +456,14 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 		},
 	}).Return(nil, nil)
 
-	branchToken3, err := p.NewHistoryBranchTokenByBranchID("treeID3", "branchID3")
+	branchToken3, err := p.NewHistoryBranchTokenByBranchID(treeID3, branchID3)
 	s.Nil(err)
 	db.On("DeleteHistoryBranch", &p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken3,
 		ShardID:     common.IntPtr(1),
 	}).Return(nil).Once()
 
-	branchToken4, err := p.NewHistoryBranchTokenByBranchID("treeID4", "branchID4")
+	branchToken4, err := p.NewHistoryBranchTokenByBranchID(treeID4, branchID4)
 	s.Nil(err)
 	db.On("DeleteHistoryBranch", &p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken4,

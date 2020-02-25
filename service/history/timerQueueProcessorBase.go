@@ -29,12 +29,9 @@ import (
 	"github.com/gogo/protobuf/types"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common/primitives"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
-	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -42,7 +39,6 @@ import (
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/quotas"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
-	"github.com/temporalio/temporal/service/worker/archiver"
 )
 
 var (
@@ -97,7 +93,7 @@ func newTimerQueueProcessorBase(
 		workerCount: shard.GetConfig().TimerTaskWorkerCount(),
 		queueSize:   shard.GetConfig().TimerTaskWorkerCount() * shard.GetConfig().TimerTaskBatchSize(),
 	}
-	taskProcessor := newTaskProcessor(options, shard, historyService.historyCache, logger)
+	taskProcessor := newTaskProcessor(options, shard, historyService.historyCache, log)
 	base := &timerQueueProcessorBase{
 		scope:            scope,
 		shard:            shard,
@@ -196,51 +192,8 @@ func (t *timerQueueProcessorBase) notifyNewTimers(
 			newTime = ts
 		}
 
-		switch task.GetType() {
-		case persistence.TaskTypeDecisionTimeout:
-			if isActive {
-				t.metricsClient.IncCounter(metrics.TimerActiveTaskDecisionTimeoutScope, metrics.NewTimerCounter)
-			} else {
-				t.metricsClient.IncCounter(metrics.TimerStandbyTaskDecisionTimeoutScope, metrics.NewTimerCounter)
-			}
-		case persistence.TaskTypeActivityTimeout:
-			if isActive {
-				t.metricsClient.IncCounter(metrics.TimerActiveTaskActivityTimeoutScope, metrics.NewTimerCounter)
-			} else {
-				t.metricsClient.IncCounter(metrics.TimerStandbyTaskActivityTimeoutScope, metrics.NewTimerCounter)
-			}
-		case persistence.TaskTypeUserTimer:
-			if isActive {
-				t.metricsClient.IncCounter(metrics.TimerActiveTaskUserTimerScope, metrics.NewTimerCounter)
-			} else {
-				t.metricsClient.IncCounter(metrics.TimerStandbyTaskUserTimerScope, metrics.NewTimerCounter)
-			}
-		case persistence.TaskTypeWorkflowTimeout:
-			if isActive {
-				t.metricsClient.IncCounter(metrics.TimerActiveTaskWorkflowTimeoutScope, metrics.NewTimerCounter)
-			} else {
-				t.metricsClient.IncCounter(metrics.TimerStandbyTaskWorkflowTimeoutScope, metrics.NewTimerCounter)
-			}
-		case persistence.TaskTypeDeleteHistoryEvent:
-			if isActive {
-				t.metricsClient.IncCounter(metrics.TimerActiveTaskDeleteHistoryEventScope, metrics.NewTimerCounter)
-			} else {
-				t.metricsClient.IncCounter(metrics.TimerStandbyTaskDeleteHistoryEventScope, metrics.NewTimerCounter)
-			}
-		case persistence.TaskTypeActivityRetryTimer:
-			if isActive {
-				t.metricsClient.IncCounter(metrics.TimerActiveTaskActivityRetryTimerScope, metrics.NewTimerCounter)
-			} else {
-				t.metricsClient.IncCounter(metrics.TimerStandbyTaskActivityRetryTimerScope, metrics.NewTimerCounter)
-			}
-		case persistence.TaskTypeWorkflowBackoffTimer:
-			if isActive {
-				t.metricsClient.IncCounter(metrics.TimerActiveTaskWorkflowBackoffTimerScope, metrics.NewTimerCounter)
-			} else {
-				t.metricsClient.IncCounter(metrics.TimerStandbyTaskWorkflowBackoffTimerScope, metrics.NewTimerCounter)
-			}
-			// TODO add default
-		}
+		scopeIdx := t.getTimerTaskMetricScope(task.GetType(), isActive)
+		t.metricsClient.IncCounter(scopeIdx, metrics.NewTimerCounter)
 	}
 
 	t.notifyNewTimer(newTime)
@@ -398,212 +351,6 @@ func (t *timerQueueProcessorBase) getTimerFiredCount() uint64 {
 	return atomic.LoadUint64(&t.timerFiredCount)
 }
 
-func (t *timerQueueProcessorBase) getDomainIDAndWorkflowExecution(
-	task *persistenceblobs.TimerTaskInfo,
-) (string, workflow.WorkflowExecution) {
-
-	return primitives.UUIDString(task.DomainID), workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(task.WorkflowID),
-		RunId:      common.StringPtr(primitives.UUIDString(task.RunID)),
-	}
-}
-
-func (t *timerQueueProcessorBase) processDeleteHistoryEvent(
-	task *persistenceblobs.TimerTaskInfo,
-) (retError error) {
-
-	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(t.getDomainIDAndWorkflowExecution(task))
-	if err != nil {
-		return err
-	}
-	defer func() { release(retError) }()
-
-	mutableState, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
-	if err != nil {
-		return err
-	}
-	if mutableState == nil || mutableState.IsWorkflowExecutionRunning() {
-		return nil
-	}
-
-	lastWriteVersion, err := mutableState.GetLastWriteVersion()
-	if err != nil {
-		return err
-	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, primitives.UUIDString(task.DomainID), lastWriteVersion, task.Version, task)
-	if err != nil || !ok {
-		return err
-	}
-
-	domainCacheEntry, err := t.historyService.shard.GetDomainCache().GetDomainByID(primitives.UUIDString(task.DomainID))
-	if err != nil {
-		return err
-	}
-	clusterConfiguredForHistoryArchival := t.shard.GetService().GetArchivalMetadata().GetHistoryConfig().ClusterConfiguredForArchival()
-	domainConfiguredForHistoryArchival := domainCacheEntry.GetConfig().HistoryArchivalStatus == workflow.ArchivalStatusEnabled
-	archiveHistory := clusterConfiguredForHistoryArchival && domainConfiguredForHistoryArchival
-
-	// TODO: @ycyang once archival backfill is in place cluster:paused && domain:enabled should be a nop rather than a delete
-	if archiveHistory {
-		t.metricsClient.IncCounter(metrics.HistoryProcessDeleteHistoryEventScope, metrics.WorkflowCleanupArchiveCount)
-		return t.archiveWorkflow(task, context, mutableState, domainCacheEntry)
-	}
-
-	t.metricsClient.IncCounter(metrics.HistoryProcessDeleteHistoryEventScope, metrics.WorkflowCleanupDeleteCount)
-	return t.deleteWorkflow(task, context, mutableState)
-}
-
-func (t *timerQueueProcessorBase) deleteWorkflow(
-	task *persistenceblobs.TimerTaskInfo,
-	context workflowExecutionContext,
-	msBuilder mutableState,
-) error {
-
-	if err := t.deleteCurrentWorkflowExecution(task); err != nil {
-		return err
-	}
-
-	if err := t.deleteWorkflowExecution(task); err != nil {
-		return err
-	}
-
-	if err := t.deleteWorkflowHistory(task, msBuilder); err != nil {
-		return err
-	}
-
-	if err := t.deleteWorkflowVisibility(task); err != nil {
-		return err
-	}
-	// calling clear here to force accesses of mutable state to read database
-	// if this is not called then callers will get mutable state even though its been removed from database
-	context.clear()
-	return nil
-}
-
-func (t *timerQueueProcessorBase) archiveWorkflow(
-	task *persistenceblobs.TimerTaskInfo,
-	workflowContext workflowExecutionContext,
-	msBuilder mutableState,
-	domainCacheEntry *cache.DomainCacheEntry,
-) error {
-	branchToken, err := msBuilder.GetCurrentBranchToken()
-	if err != nil {
-		return err
-	}
-	closeFailoverVersion, err := msBuilder.GetLastWriteVersion()
-	if err != nil {
-		return err
-	}
-
-	req := &archiver.ClientRequest{
-		ArchiveRequest: &archiver.ArchiveRequest{
-			DomainID:             primitives.UUIDString(task.DomainID),
-			WorkflowID:           task.WorkflowID,
-			RunID:                primitives.UUIDString(task.RunID),
-			DomainName:           domainCacheEntry.GetInfo().Name,
-			ShardID:              t.shard.GetShardID(),
-			Targets:              []archiver.ArchivalTarget{archiver.ArchiveTargetHistory},
-			URI:                  domainCacheEntry.GetConfig().HistoryArchivalURI,
-			NextEventID:          msBuilder.GetNextEventID(),
-			BranchToken:          branchToken,
-			CloseFailoverVersion: closeFailoverVersion,
-		},
-		CallerService:        common.HistoryServiceName,
-		AttemptArchiveInline: false, // archive in workflow by default
-	}
-	executionStats, err := workflowContext.loadExecutionStats()
-	if err == nil && executionStats.HistorySize < int64(t.config.TimerProcessorHistoryArchivalSizeLimit()) {
-		req.AttemptArchiveInline = true
-	}
-
-	ctx, cancel := ctx.WithTimeout(ctx.Background(), t.config.TimerProcessorArchivalTimeLimit())
-	defer cancel()
-	resp, err := t.historyService.archivalClient.Archive(ctx, req)
-	if err != nil {
-		return err
-	}
-
-	if err := t.deleteCurrentWorkflowExecution(task); err != nil {
-		return err
-	}
-	if err := t.deleteWorkflowExecution(task); err != nil {
-		return err
-	}
-	// delete workflow history if history archival is not needed or history as been archived inline
-	if resp.HistoryArchivedInline {
-		t.metricsClient.IncCounter(metrics.HistoryProcessDeleteHistoryEventScope, metrics.WorkflowCleanupDeleteHistoryInlineCount)
-		if err := t.deleteWorkflowHistory(task, msBuilder); err != nil {
-			return err
-		}
-	}
-	// delete visibility record here regardless if it's been archived inline or not
-	// since the entire record is included as part of the archive request.
-	if err := t.deleteWorkflowVisibility(task); err != nil {
-		return err
-	}
-	// calling clear here to force accesses of mutable state to read database
-	// if this is not called then callers will get mutable state even though its been removed from database
-	workflowContext.clear()
-	return nil
-}
-
-func (t *timerQueueProcessorBase) deleteWorkflowExecution(
-	task *persistenceblobs.TimerTaskInfo,
-) error {
-
-	op := func() error {
-		return t.executionManager.DeleteWorkflowExecution(&persistence.DeleteWorkflowExecutionRequest{
-			DomainID:   primitives.UUIDString(task.DomainID),
-			WorkflowID: task.WorkflowID,
-			RunID:      primitives.UUIDString(task.RunID),
-		})
-	}
-	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
-}
-
-func (t *timerQueueProcessorBase) deleteCurrentWorkflowExecution(
-	task *persistenceblobs.TimerTaskInfo,
-) error {
-
-	op := func() error {
-		return t.executionManager.DeleteCurrentWorkflowExecution(&persistence.DeleteCurrentWorkflowExecutionRequest{
-			DomainID:   primitives.UUIDString(task.DomainID),
-			WorkflowID: task.WorkflowID,
-			RunID:      primitives.UUIDString(task.RunID),
-		})
-	}
-	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
-}
-
-func (t *timerQueueProcessorBase) deleteWorkflowHistory(
-	task *persistenceblobs.TimerTaskInfo,
-	msBuilder mutableState,
-) error {
-
-	op := func() error {
-		branchToken, err := msBuilder.GetCurrentBranchToken()
-		if err != nil {
-			return err
-		}
-		return t.historyService.historyV2Mgr.DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
-			BranchToken: branchToken,
-			ShardID:     common.IntPtr(t.shard.GetShardID()),
-		})
-
-	}
-	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
-}
-
-func (t *timerQueueProcessorBase) deleteWorkflowVisibility(
-	task *persistenceblobs.TimerTaskInfo,
-) error {
-
-	op := func() error {
-		return t.historyService.DeleteExecutionFromVisibility(task)
-	}
-	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
-}
-
 //nolint:unused
 func (t *timerQueueProcessorBase) getTimerTaskType(
 	taskType int,
@@ -626,4 +373,52 @@ func (t *timerQueueProcessorBase) getTimerTaskType(
 		return "WorkflowBackoffTimerTask"
 	}
 	return "UnKnown"
+}
+
+func (t *timerQueueProcessorBase) getTimerTaskMetricScope(
+	taskType int,
+	isActive bool,
+) int {
+	switch taskType {
+	case persistence.TaskTypeDecisionTimeout:
+		if isActive {
+			return metrics.TimerActiveTaskDecisionTimeoutScope
+		}
+		return metrics.TimerStandbyTaskDecisionTimeoutScope
+	case persistence.TaskTypeActivityTimeout:
+		if isActive {
+			return metrics.TimerActiveTaskActivityTimeoutScope
+		}
+		return metrics.TimerStandbyTaskActivityTimeoutScope
+	case persistence.TaskTypeUserTimer:
+		if isActive {
+			return metrics.TimerActiveTaskUserTimerScope
+		}
+		return metrics.TimerStandbyTaskUserTimerScope
+	case persistence.TaskTypeWorkflowTimeout:
+		if isActive {
+			return metrics.TimerActiveTaskWorkflowTimeoutScope
+		}
+		return metrics.TimerStandbyTaskWorkflowTimeoutScope
+	case persistence.TaskTypeDeleteHistoryEvent:
+		if isActive {
+			return metrics.TimerActiveTaskDeleteHistoryEventScope
+		}
+		return metrics.TimerStandbyTaskDeleteHistoryEventScope
+	case persistence.TaskTypeActivityRetryTimer:
+		if isActive {
+			return metrics.TimerActiveTaskActivityRetryTimerScope
+		}
+		return metrics.TimerStandbyTaskActivityRetryTimerScope
+	case persistence.TaskTypeWorkflowBackoffTimer:
+		if isActive {
+			return metrics.TimerActiveTaskWorkflowBackoffTimerScope
+		}
+		return metrics.TimerStandbyTaskWorkflowBackoffTimerScope
+	default:
+		if isActive {
+			return metrics.TimerActiveQueueProcessorScope
+		}
+		return metrics.TimerStandbyQueueProcessorScope
+	}
 }

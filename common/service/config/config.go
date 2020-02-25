@@ -86,8 +86,6 @@ type (
 
 	// RPC contains the rpc config items
 	RPC struct {
-		// Port is the port  on which the channel will bind to
-		Port int `yaml:"port"`
 		// GRPCPort is the port  on which gRPC will listen
 		GRPCPort int `yaml:"grpcPort"`
 		// Port used for ringpop listener
@@ -290,6 +288,8 @@ type (
 		// Tags is the set of key-value pairs to be reported
 		// as part of every metric
 		Tags map[string]string `yaml:"tags"`
+		// Prefix sets the prefix to all outgoing metrics
+		Prefix string `yaml:"prefix"`
 	}
 
 	// Statsd contains the config items for statsd metrics reporter
@@ -328,6 +328,8 @@ type (
 	// HistoryArchiverProvider contains the config for all history archivers
 	HistoryArchiverProvider struct {
 		Filestore *FilestoreArchiver `yaml:"filestore"`
+		Gstorage  *GstorageArchiver  `yaml:"gstorage"`
+		S3store   *S3Archiver        `yaml:"s3store"`
 	}
 
 	// VisibilityArchival contains the config for visibility archival
@@ -343,12 +345,24 @@ type (
 	// VisibilityArchiverProvider contains the config for all visibility archivers
 	VisibilityArchiverProvider struct {
 		Filestore *FilestoreArchiver `yaml:"filestore"`
+		S3store   *S3Archiver        `yaml:"s3store"`
 	}
 
 	// FilestoreArchiver contain the config for filestore archiver
 	FilestoreArchiver struct {
 		FileMode string `yaml:"fileMode"`
 		DirMode  string `yaml:"dirMode"`
+	}
+
+	// GstorageArchiver contain the config for google storage archiver
+	GstorageArchiver struct {
+		CredentialsPath string `yaml:"credentialsPath"`
+	}
+	// S3Archiver contains the config for S3 archiver
+	S3Archiver struct {
+		Region           string  `yaml:"region"`
+		Endpoint         *string `yaml:"endpoint"`
+		S3ForcePathStyle bool    `yaml:"s3ForcePathStyle"`
 	}
 
 	// PublicClient is config for connecting to cadence frontend

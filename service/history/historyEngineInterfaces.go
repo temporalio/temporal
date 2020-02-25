@@ -24,12 +24,13 @@ import (
 	"context"
 
 	"github.com/gogo/protobuf/types"
+	commonproto "go.temporal.io/temporal-proto/common"
 
-	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/task"
 )
 
 type (
@@ -50,11 +51,11 @@ type (
 			ctx context.Context,
 			pollingCluster string,
 			lastReadTaskID int64,
-		) (*replicator.ReplicationMessages, error)
+		) (*commonproto.ReplicationMessages, error)
 		getTask(
 			ctx context.Context,
-			taskInfo *replicator.ReplicationTaskInfo,
-		) (*replicator.ReplicationTask, error)
+			taskInfo *commonproto.ReplicationTaskInfo,
+		) (*commonproto.ReplicationTask, error)
 	}
 
 	queueAckMgr interface {
@@ -76,6 +77,19 @@ type (
 		GetDomainID() []byte
 	}
 
+	queueTask interface {
+		task.PriorityTask
+		queueTaskInfo
+		GetQueueType() queueType
+		// TODO: add a method for getting task shardID
+	}
+
+	queueTaskExecutor interface {
+		execute(taskInfo *taskInfo) error
+	}
+
+	// TODO: deprecate this interface in favor of the task interface
+	// defined in common/task package
 	taskExecutor interface {
 		process(taskInfo *taskInfo) (int, error)
 		complete(taskInfo *taskInfo)
@@ -109,4 +123,12 @@ type (
 		WatchHistoryEvent(identifier definition.WorkflowIdentifier) (string, chan *historyEventNotification, error)
 		UnwatchHistoryEvent(identifier definition.WorkflowIdentifier, subscriberID string) error
 	}
+
+	queueType int
+)
+
+const (
+	transferQueueType queueType = iota + 1
+	timerQueueType
+	replicationQueueType
 )

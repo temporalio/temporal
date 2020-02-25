@@ -317,3 +317,14 @@ func ToProtoGetDLQReplicationMessagesResponse(in *replicator.GetDLQReplicationMe
 		ReplicationTasks: ToProtoReplicationTasks(in.GetReplicationTasks()),
 	}
 }
+
+// ToThriftRefreshWorkflowTasksRequest ...
+func ToThriftRefreshWorkflowTasksRequest(in *adminservice.RefreshWorkflowTasksRequest) *shared.RefreshWorkflowTasksRequest {
+	if in == nil {
+		return nil
+	}
+	return &shared.RefreshWorkflowTasksRequest{
+		Domain:    &in.Domain,
+		Execution: ToThriftWorkflowExecution(in.Execution),
+	}
+}

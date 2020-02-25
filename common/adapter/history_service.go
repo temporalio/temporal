@@ -247,6 +247,30 @@ func ToProtoHistoryQueryWorkflowResponse(in *history.QueryWorkflowResponse) *his
 	}
 }
 
+// ToProtoHistoryReadDLQMessagesResponse ...
+func ToProtoHistoryReadDLQMessagesResponse(in *replicator.ReadDLQMessagesResponse) *historyservice.ReadDLQMessagesResponse {
+	if in == nil {
+		return nil
+	}
+
+	return &historyservice.ReadDLQMessagesResponse{
+		Type:             ToProtoDLQType(in.Type),
+		ReplicationTasks: ToProtoReplicationTasks(in.GetReplicationTasks()),
+		NextPageToken:    in.NextPageToken,
+	}
+}
+
+// ToProtoHistoryMergeDLQMessagesResponse ...
+func ToProtoHistoryMergeDLQMessagesResponse(in *replicator.MergeDLQMessagesResponse) *historyservice.MergeDLQMessagesResponse {
+	if in == nil {
+		return nil
+	}
+
+	return &historyservice.MergeDLQMessagesResponse{
+		NextPageToken: in.NextPageToken,
+	}
+}
+
 // ToThriftStartWorkflowExecutionRequest ...
 func ToThriftHistoryStartWorkflowExecutionRequest(in *historyservice.StartWorkflowExecutionRequest) *history.StartWorkflowExecutionRequest {
 	if in == nil {
@@ -682,5 +706,63 @@ func ToThriftHistoryReapplyEventsRequest(in *historyservice.ReapplyEventsRequest
 	return &history.ReapplyEventsRequest{
 		DomainUUID: &in.DomainUUID,
 		Request:    ToThriftReapplyEventsRequest(in.Request),
+	}
+}
+
+// ToThriftHistoryReadDLQMessagesRequest ...
+func ToThriftHistoryReadDLQMessagesRequest(in *historyservice.ReadDLQMessagesRequest) *replicator.ReadDLQMessagesRequest {
+	if in == nil {
+		return nil
+	}
+
+	return &replicator.ReadDLQMessagesRequest{
+		Type:                  ToThriftDLQType(in.Type),
+		ShardID:               &in.ShardID,
+		SourceCluster:         &in.SourceCluster,
+		InclusiveEndMessageID: &in.InclusiveEndMessageID,
+		MaximumPageSize:       &in.MaximumPageSize,
+		NextPageToken:         in.NextPageToken,
+	}
+}
+
+// ToThriftHistoryPurgeDLQMessagesRequest ...
+func ToThriftHistoryPurgeDLQMessagesRequest(in *historyservice.PurgeDLQMessagesRequest) *replicator.PurgeDLQMessagesRequest {
+	if in == nil {
+		return nil
+	}
+
+	return &replicator.PurgeDLQMessagesRequest{
+		Type:                  ToThriftDLQType(in.Type),
+		ShardID:               &in.ShardID,
+		SourceCluster:         &in.SourceCluster,
+		InclusiveEndMessageID: &in.InclusiveEndMessageID,
+	}
+}
+
+// ToThriftHistoryMergeDLQMessagesRequest ...
+func ToThriftHistoryMergeDLQMessagesRequest(in *historyservice.MergeDLQMessagesRequest) *replicator.MergeDLQMessagesRequest {
+	if in == nil {
+		return nil
+	}
+
+	return &replicator.MergeDLQMessagesRequest{
+		Type:                  ToThriftDLQType(in.Type),
+		ShardID:               &in.ShardID,
+		SourceCluster:         &in.SourceCluster,
+		InclusiveEndMessageID: &in.InclusiveEndMessageID,
+		MaximumPageSize:       &in.MaximumPageSize,
+		NextPageToken:         in.NextPageToken,
+	}
+}
+
+// ToThriftHistoryRefreshWorkflowTasksRequest ...
+func ToThriftHistoryRefreshWorkflowTasksRequest(in *historyservice.RefreshWorkflowTasksRequest) *history.RefreshWorkflowTasksRequest {
+	if in == nil {
+		return nil
+	}
+
+	return &history.RefreshWorkflowTasksRequest{
+		DomainUIID: &in.DomainUUID,
+		Request:    ToThriftRefreshWorkflowTasksRequest(in.Request),
 	}
 }

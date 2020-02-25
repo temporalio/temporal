@@ -20,7 +20,6 @@ ringpop:
 services:
   frontend:
     rpc:
-      port: 7933
       grpcPort: 7233
       ringpopPort: 6933
       bindOnLocalHost: true
@@ -33,7 +32,6 @@ services:
 
   matching:
     rpc:
-      port: 7935
       grpcPort: 7235
       ringpopPort: 6935
       bindOnLocalHost: true
@@ -46,7 +44,6 @@ services:
 
   history:
     rpc:
-      port: 7934
       grpcPort: 7234
       ringpopPort: 6934
       bindOnLocalHost: true
@@ -59,7 +56,6 @@ services:
 
   worker:
     rpc:
-      port: 7939
       grpcPort: 7239
       ringpopPort: 6939
       bindOnLocalHost: true
@@ -94,6 +90,8 @@ archival:
       filestore:
         fileMode: "0666"
         dirMode: "0766"
+      gstorage:
+        credentialsPath: "/tmp/gcloud/keyfile.json"
   visibility:
     status: "disabled"
     enableRead: false

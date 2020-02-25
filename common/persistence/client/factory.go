@@ -23,7 +23,6 @@ package client
 import (
 	"sync"
 
-	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/metrics"
 	p "github.com/temporalio/temporal/common/persistence"
@@ -74,7 +73,7 @@ type (
 		NewExecutionStore(shardID int) (p.ExecutionStore, error)
 		// NewVisibilityStore returns a new visibility store
 		NewVisibilityStore() (p.VisibilityStore, error)
-		NewQueue(queueType common.QueueType) (p.Queue, error)
+		NewQueue(queueType p.QueueType) (p.Queue, error)
 		// NewClusterMetadataStore returns a new metadata store
 		NewClusterMetadataStore() (p.ClusterMetadataStore, error)
 	}
@@ -275,7 +274,7 @@ func (f *factoryImpl) NewVisibilityManager() (p.VisibilityManager, error) {
 
 func (f *factoryImpl) NewDomainReplicationQueue() (p.DomainReplicationQueue, error) {
 	ds := f.datastores[storeTypeQueue]
-	result, err := ds.factory.NewQueue(common.DomainReplicationQueueType)
+	result, err := ds.factory.NewQueue(p.DomainReplicationQueueType)
 	if err != nil {
 		return nil, err
 	}

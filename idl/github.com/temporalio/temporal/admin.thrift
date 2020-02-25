@@ -24,7 +24,7 @@ include "shared.thrift"
 include "replicator.thrift"
 
 /**
-* AdminService provides advanced APIs for debugging and analysis with admin privillege
+* AdminService provides advanced APIs for debugging and analysis with admin privilege
 **/
 service AdminService {
   /**
@@ -141,6 +141,50 @@ service AdminService {
       1: shared.InternalServiceError internalServiceError,
       2: shared.ServiceBusyError serviceBusyError,
     )
+
+  /**
+  * ReadDLQMessages returns messages from DLQ
+  **/
+  replicator.ReadDLQMessagesResponse ReadDLQMessages(1: replicator.ReadDLQMessagesRequest request)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.ServiceBusyError serviceBusyError,
+      4: shared.EntityNotExistsError entityNotExistError,
+    )
+
+  /**
+  * PurgeDLQMessages purges messages from DLQ
+  **/
+  void PurgeDLQMessages(1: replicator.PurgeDLQMessagesRequest request)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.ServiceBusyError serviceBusyError,
+      4: shared.EntityNotExistsError entityNotExistError,
+    )
+
+  /**
+  * MergeDLQMessages merges messages from DLQ
+  **/
+  replicator.MergeDLQMessagesResponse MergeDLQMessages(1: replicator.MergeDLQMessagesRequest request)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.ServiceBusyError serviceBusyError,
+      4: shared.EntityNotExistsError entityNotExistError,
+    )
+
+  /**
+  * RefreshWorkflowTasks refreshes all tasks of a workflow
+  **/
+  void RefreshWorkflowTasks(1: shared.RefreshWorkflowTasksRequest request)
+   throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.DomainNotActiveError domainNotActiveError,
+      3: shared.ServiceBusyError serviceBusyError,
+      4: shared.EntityNotExistsError entityNotExistError,
+   )
 }
 
 struct DescribeWorkflowExecutionRequest {
