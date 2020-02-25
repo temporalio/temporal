@@ -119,6 +119,11 @@ type Interface interface {
 		PollRequest *shared.PollForDecisionTaskRequest,
 	) (*shared.PollForDecisionTaskResponse, error)
 
+	PollForWorkflowExecutionRawHistory(
+		ctx context.Context,
+		GetRequest *shared.PollForWorkflowExecutionRawHistoryRequest,
+	) (*shared.PollForWorkflowExecutionRawHistoryResponse, error)
+
 	QueryWorkflow(
 		ctx context.Context,
 		QueryRequest *shared.QueryWorkflowRequest,
@@ -429,6 +434,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 			},
 
 			thrift.Method{
+				Name: "PollForWorkflowExecutionRawHistory",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.PollForWorkflowExecutionRawHistory),
+				},
+				Signature:    "PollForWorkflowExecutionRawHistory(GetRequest *shared.PollForWorkflowExecutionRawHistoryRequest) (*shared.PollForWorkflowExecutionRawHistoryResponse)",
+				ThriftModule: cadence.ThriftModule,
+			},
+
+			thrift.Method{
 				Name: "QueryWorkflow",
 				HandlerSpec: thrift.HandlerSpec{
 
@@ -672,7 +688,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 39)
+	procedures := make([]transport.Procedure, 0, 40)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -993,6 +1009,25 @@ func (h handler) PollForDecisionTask(ctx context.Context, body wire.Value) (thri
 
 	hadError := err != nil
 	result, err := cadence.WorkflowService_PollForDecisionTask_Helper.WrapResponse(success, err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) PollForWorkflowExecutionRawHistory(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args cadence.WorkflowService_PollForWorkflowExecutionRawHistory_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	success, err := h.impl.PollForWorkflowExecutionRawHistory(ctx, args.GetRequest)
+
+	hadError := err != nil
+	result, err := cadence.WorkflowService_PollForWorkflowExecutionRawHistory_Helper.WrapResponse(success, err)
 
 	var response thrift.Response
 	if err == nil {

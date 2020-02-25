@@ -313,6 +313,21 @@ func (mr *MockWorkflowHandlerMockRecorder) PollForDecisionTask(ctx, PollRequest 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollForDecisionTask", reflect.TypeOf((*MockWorkflowHandler)(nil).PollForDecisionTask), ctx, PollRequest)
 }
 
+// PollForWorkflowExecutionRawHistory mocks base method
+func (m *MockWorkflowHandler) PollForWorkflowExecutionRawHistory(ctx context.Context, GetRequest *shared.PollForWorkflowExecutionRawHistoryRequest) (*shared.PollForWorkflowExecutionRawHistoryResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PollForWorkflowExecutionRawHistory", ctx, GetRequest)
+	ret0, _ := ret[0].(*shared.PollForWorkflowExecutionRawHistoryResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PollForWorkflowExecutionRawHistory indicates an expected call of PollForWorkflowExecutionRawHistory
+func (mr *MockWorkflowHandlerMockRecorder) PollForWorkflowExecutionRawHistory(ctx, GetRequest interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollForWorkflowExecutionRawHistory", reflect.TypeOf((*MockWorkflowHandler)(nil).PollForWorkflowExecutionRawHistory), ctx, GetRequest)
+}
+
 // QueryWorkflow mocks base method
 func (m *MockWorkflowHandler) QueryWorkflow(ctx context.Context, QueryRequest *shared.QueryWorkflowRequest) (*shared.QueryWorkflowResponse, error) {
 	m.ctrl.T.Helper()

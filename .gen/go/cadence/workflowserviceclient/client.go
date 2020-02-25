@@ -138,6 +138,12 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) (*shared.PollForDecisionTaskResponse, error)
 
+	PollForWorkflowExecutionRawHistory(
+		ctx context.Context,
+		GetRequest *shared.PollForWorkflowExecutionRawHistoryRequest,
+		opts ...yarpc.CallOption,
+	) (*shared.PollForWorkflowExecutionRawHistoryResponse, error)
+
 	QueryWorkflow(
 		ctx context.Context,
 		QueryRequest *shared.QueryWorkflowRequest,
@@ -681,6 +687,29 @@ func (c client) PollForDecisionTask(
 	}
 
 	success, err = cadence.WorkflowService_PollForDecisionTask_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) PollForWorkflowExecutionRawHistory(
+	ctx context.Context,
+	_GetRequest *shared.PollForWorkflowExecutionRawHistoryRequest,
+	opts ...yarpc.CallOption,
+) (success *shared.PollForWorkflowExecutionRawHistoryResponse, err error) {
+
+	args := cadence.WorkflowService_PollForWorkflowExecutionRawHistory_Helper.Args(_GetRequest)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result cadence.WorkflowService_PollForWorkflowExecutionRawHistory_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	success, err = cadence.WorkflowService_PollForWorkflowExecutionRawHistory_Helper.UnwrapResponse(&result)
 	return
 }
 
