@@ -25,6 +25,8 @@ package history
 import (
 	"time"
 
+	"github.com/temporalio/temporal/common/primitives"
+
 	"github.com/pborman/uuid"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
@@ -178,7 +180,7 @@ func (b *stateBuilderImpl) applyEvents(
 			}
 
 			if err := b.mutableState.SetHistoryTree(
-				execution.GetRunId(),
+				primitives.MustParseUUID(execution.GetRunId()),
 			); err != nil {
 				return nil, err
 			}

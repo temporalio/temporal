@@ -204,7 +204,7 @@ type (
 		ReplicateWorkflowExecutionTimedoutEvent(int64, *workflow.HistoryEvent) error
 		SetCurrentBranchToken(branchToken []byte) error
 		SetHistoryBuilder(hBuilder *historyBuilder)
-		SetHistoryTree(treeID string) error
+		SetHistoryTree(treeID []byte) error
 		SetVersionHistories(*persistence.VersionHistories) error
 		UpdateActivity(*persistence.ActivityInfo) error
 		UpdateActivityProgress(ai *persistence.ActivityInfo, request *workflow.RecordActivityTaskHeartbeatRequest)

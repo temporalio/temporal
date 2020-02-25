@@ -30,6 +30,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/temporalio/temporal/common/persistence/serialization"
+
 	"github.com/olivere/elastic"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -147,7 +149,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted_EmptyRequest() {
 	// test empty request
 	request := &p.InternalRecordWorkflowExecutionStartedRequest{
-		Memo: &p.DataBlob{},
+		Memo: &serialization.DataBlob{},
 	}
 	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexer.Message) bool {
 		s.Equal(indexer.MessageTypeIndex, input.GetMessageType())
@@ -199,7 +201,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed_EmptyRequest() {
 	// test empty request
 	request := &p.InternalRecordWorkflowExecutionClosedRequest{
-		Memo: &p.DataBlob{},
+		Memo: &serialization.DataBlob{},
 	}
 	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexer.Message) bool {
 		s.Equal(indexer.MessageTypeIndex, input.GetMessageType())

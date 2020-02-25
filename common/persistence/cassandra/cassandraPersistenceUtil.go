@@ -24,12 +24,13 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/temporalio/temporal/common/persistence/serialization"
+
 	"github.com/gogo/protobuf/types"
 
 	commonproto "go.temporal.io/temporal-proto/common"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common/persistence/sql"
 	"github.com/temporalio/temporal/common/primitives"
 
 	"github.com/gocql/gocql"
@@ -373,7 +374,7 @@ func createExecution(
 	shardID int,
 	executionInfo *p.InternalWorkflowExecutionInfo,
 	replicationState *p.ReplicationState,
-	versionHistories *p.DataBlob,
+	versionHistories *serialization.DataBlob,
 	checksum checksum.Checksum,
 	cqlNowTimestampMillis int64,
 ) error {
@@ -646,7 +647,7 @@ func updateExecution(
 	shardID int,
 	executionInfo *p.InternalWorkflowExecutionInfo,
 	replicationState *p.ReplicationState,
-	versionHistories *p.DataBlob,
+	versionHistories *serialization.DataBlob,
 	cqlNowTimestampMillis int64,
 	condition int64,
 	checksum checksum.Checksum,
@@ -1048,7 +1049,7 @@ func createTransferTasks(
 			RecordVisibility:        recordVisibility,
 		}
 
-		datablob, err := sql.TransferTaskInfoToBlob(p)
+		datablob, err := serialization.TransferTaskInfoToBlob(p)
 		if err != nil {
 			return err
 		}
@@ -1112,7 +1113,7 @@ func createReplicationTasks(
 			}
 		}
 
-		datablob, err := sql.ReplicationTaskInfoToBlob(&persistenceblobs.ReplicationTaskInfo{
+		datablob, err := serialization.ReplicationTaskInfoToBlob(&persistenceblobs.ReplicationTaskInfo{
 			DomainID:                primitives.MustParseUUID(domainID),
 			WorkflowID:              workflowID,
 			RunID:                   primitives.MustParseUUID(runID),
@@ -1207,7 +1208,7 @@ func createTimerTasks(
 			return err
 		}
 
-		datablob, err := sql.TimerTaskInfoToBlob(&persistenceblobs.TimerTaskInfo{
+		datablob, err := serialization.TimerTaskInfoToBlob(&persistenceblobs.TimerTaskInfo{
 			DomainID:            primitives.MustParseUUID(domainID),
 			WorkflowID:          workflowID,
 			RunID:               primitives.MustParseUUID(runID),
@@ -1773,7 +1774,7 @@ func resetSignalRequested(
 
 func updateBufferedEvents(
 	batch *gocql.Batch,
-	newBufferedEvents *p.DataBlob,
+	newBufferedEvents *serialization.DataBlob,
 	clearBufferedEvents bool,
 	shardID int,
 	domainID string,
@@ -2330,9 +2331,9 @@ func resetSignalInfoMap(
 
 func createHistoryEventBatchBlob(
 	result map[string]interface{},
-) *p.DataBlob {
+) *serialization.DataBlob {
 
-	eventBatch := &p.DataBlob{Encoding: common.EncodingTypeJSON}
+	eventBatch := &serialization.DataBlob{Encoding: common.EncodingTypeJSON}
 	for k, v := range result {
 		switch k {
 		case "encoding_type":

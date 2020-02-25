@@ -96,3 +96,28 @@ message TransferTaskInfo {
     google.protobuf.Timestamp visibilityTimestamp = 13;
     bool recordVisibility = 14;
 }
+
+// HistoryBranchRange represents a piece of range for a branch.
+message HistoryBranchRange {
+    // BranchID of original branch forked from.
+    bytes branchID = 1;
+    // Beginning node for the range, inclusive.
+    int64 beginNodeID = 2;
+    // Ending node for the range, exclusive.
+    int64 endNodeID = 3;
+}
+
+// For history persistence to serialize/deserialize branch details.
+message HistoryBranch {
+    bytes treeID = 1;
+    bytes branchID = 2;
+    repeated HistoryBranchRange ancestors = 3;
+}
+
+message HistoryTreeInfo {
+    HistoryBranch branchInfo = 1;
+    // For fork operation to prevent race condition of leaking event data when forking branches fail. Also can be used for clean up leaked data.
+    google.protobuf.Timestamp forkTime = 2;
+    // For lookup back to workflow during debugging, also background cleanup when fork operation cannot finish self cleanup due to crash.
+    string info = 3;
+}
