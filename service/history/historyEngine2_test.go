@@ -27,6 +27,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/temporalio/temporal/common/primitives"
+
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
 	"github.com/golang/mock/gomock"
@@ -821,7 +823,7 @@ func (s *engine2Suite) createExecutionStartedState(we workflow.WorkflowExecution
 	if startDecision {
 		addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	}
-	_ = msBuilder.SetHistoryTree(we.GetRunId())
+	_ = msBuilder.SetHistoryTree(primitives.MustParseUUID(we.GetRunId()))
 
 	return msBuilder
 }

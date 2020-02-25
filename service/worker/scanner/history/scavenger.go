@@ -35,6 +35,7 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -243,7 +244,9 @@ func (s *Scavenger) startTaskProcessor(
 				if _, ok := err.(*serviceerror.NotFound); ok {
 					//deleting history branch
 					var branchToken []byte
-					branchToken, err = persistence.NewHistoryBranchTokenByBranchID(task.treeID, task.branchID)
+					branchToken, err = persistence.NewHistoryBranchTokenByBranchID(
+						primitives.MustParseUUID(task.treeID),
+						primitives.MustParseUUID(task.branchID))
 					if err != nil {
 						respCh <- err
 						s.logger.Error("encounter error when creating branch token",

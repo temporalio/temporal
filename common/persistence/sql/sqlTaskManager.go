@@ -26,6 +26,8 @@ import (
 	"math"
 	"time"
 
+	"github.com/temporalio/temporal/common/persistence/serialization"
+
 	"github.com/temporalio/temporal/common/primitives"
 
 	"github.com/dgryski/go-farm"
@@ -76,7 +78,7 @@ func (m *sqlTaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest
 				ExpiryTimeNanos:  common.Int64Ptr(0),
 				LastUpdatedNanos: common.Int64Ptr(time.Now().UnixNano()),
 			}
-			blob, err := taskListInfoToBlob(tlInfo)
+			blob, err := serialization.TaskListInfoToBlob(tlInfo)
 			if err != nil {
 				return nil, err
 			}
@@ -109,7 +111,7 @@ func (m *sqlTaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest
 		}
 	}
 
-	tlInfo, err := taskListInfoFromBlob(row.Data, row.DataEncoding)
+	tlInfo, err := serialization.TaskListInfoFromBlob(row.Data, row.DataEncoding)
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +129,7 @@ func (m *sqlTaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest
 		}
 		now := time.Now()
 		tlInfo.LastUpdatedNanos = common.Int64Ptr(now.UnixNano())
-		blob, err1 := taskListInfoToBlob(tlInfo)
+		blob, err1 := serialization.TaskListInfoToBlob(tlInfo)
 		if err1 != nil {
 			return err1
 		}
@@ -175,7 +177,7 @@ func (m *sqlTaskManager) UpdateTaskList(request *persistence.UpdateTaskListReque
 	}
 	if request.TaskListInfo.Kind == persistence.TaskListKindSticky {
 		tlInfo.ExpiryTimeNanos = common.Int64Ptr(stickyTaskListTTL().UnixNano())
-		blob, err := taskListInfoToBlob(tlInfo)
+		blob, err := serialization.TaskListInfoToBlob(tlInfo)
 		if err != nil {
 			return nil, err
 		}
@@ -194,7 +196,7 @@ func (m *sqlTaskManager) UpdateTaskList(request *persistence.UpdateTaskListReque
 		}
 	}
 	var resp *persistence.UpdateTaskListResponse
-	blob, err := taskListInfoToBlob(tlInfo)
+	blob, err := serialization.TaskListInfoToBlob(tlInfo)
 	if err != nil {
 		return nil, err
 	}
@@ -287,7 +289,7 @@ func (m *sqlTaskManager) ListTaskList(request *persistence.ListTaskListRequest) 
 	}
 
 	for i := range rows {
-		info, err := taskListInfoFromBlob(rows[i].Data, rows[i].DataEncoding)
+		info, err := serialization.TaskListInfoFromBlob(rows[i].Data, rows[i].DataEncoding)
 		if err != nil {
 			return nil, err
 		}
@@ -333,7 +335,7 @@ func (m *sqlTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (*
 		if v.Data.ScheduleToStartTimeout > 0 {
 			expiryTime = time.Now().Add(time.Second * time.Duration(v.Data.ScheduleToStartTimeout))
 		}
-		blob, err := taskInfoToBlob(&sqlblobs.TaskInfo{
+		blob, err := serialization.TaskInfoToBlob(&sqlblobs.TaskInfo{
 			WorkflowID:       &v.Data.WorkflowID,
 			RunID:            primitives.MustParseUUID(v.Data.RunID),
 			ScheduleID:       &v.Data.ScheduleID,
@@ -389,7 +391,7 @@ func (m *sqlTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persis
 
 	var tasks = make([]*persistence.TaskInfo, len(rows))
 	for i, v := range rows {
-		info, err := taskInfoFromBlob(v.Data, v.DataEncoding)
+		info, err := serialization.TaskInfoFromBlob(v.Data, v.DataEncoding)
 		if err != nil {
 			return nil, err
 		}

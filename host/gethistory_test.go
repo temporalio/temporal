@@ -26,6 +26,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/temporalio/temporal/common/persistence/serialization"
+
 	"github.com/pborman/uuid"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
@@ -468,7 +470,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 		var events []*shared.HistoryEvent
 		for _, blob := range blobs {
 			s.True(blob.GetEncodingType() == enums.EncodingTypeThriftRW)
-			blobEvents, err := serializer.DeserializeBatchEvents(&persistence.DataBlob{
+			blobEvents, err := serializer.DeserializeBatchEvents(&serialization.DataBlob{
 				Encoding: common.EncodingTypeThriftRW,
 				Data:     blob.Data,
 			})
@@ -831,7 +833,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 		var events []*shared.HistoryEvent
 		for _, blob := range blobs {
 			s.True(blob.GetEncodingType() == enums.EncodingTypeThriftRW)
-			blobEvents, err := serializer.DeserializeBatchEvents(&persistence.DataBlob{
+			blobEvents, err := serializer.DeserializeBatchEvents(&serialization.DataBlob{
 				Encoding: common.EncodingTypeThriftRW,
 				Data:     blob.Data,
 			})

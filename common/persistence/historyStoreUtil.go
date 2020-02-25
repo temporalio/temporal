@@ -25,6 +25,8 @@ import (
 
 	commonproto "go.temporal.io/temporal-proto/common"
 
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/adapter"
 )
@@ -74,13 +76,13 @@ func ReadFullPageV2EventsByBatch(historyV2Mgr HistoryManager, req *ReadHistoryBr
 }
 
 // GetBeginNodeID gets node id from last ancestor
-func GetBeginNodeID(bi shared.HistoryBranch) int64 {
+func GetBeginNodeID(bi *persistenceblobs.HistoryBranch) int64 {
 	if len(bi.Ancestors) == 0 {
 		// root branch
 		return 1
 	}
 	idx := len(bi.Ancestors) - 1
-	return *bi.Ancestors[idx].EndNodeID
+	return bi.Ancestors[idx].EndNodeID
 }
 
 func getShardID(shardID *int) (int, error) {

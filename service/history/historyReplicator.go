@@ -25,6 +25,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/temporalio/temporal/common/persistence/serialization"
+
 	"github.com/pborman/uuid"
 
 	h "github.com/temporalio/temporal/.gen/go/history"
@@ -1065,7 +1067,7 @@ func (r *historyReplicator) deserializeBlob(
 	if blob.GetEncodingType() != workflow.EncodingTypeThriftRW {
 		return nil, ErrUnknownEncodingType
 	}
-	historyEvents, err := r.historySerializer.DeserializeBatchEvents(&persistence.DataBlob{
+	historyEvents, err := r.historySerializer.DeserializeBatchEvents(&serialization.DataBlob{
 		Encoding: common.EncodingTypeThriftRW,
 		Data:     blob.Data,
 	})

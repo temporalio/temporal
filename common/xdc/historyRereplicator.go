@@ -38,6 +38,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/persistence/serialization"
 )
 
 var (
@@ -484,7 +485,7 @@ func (c *historyRereplicationContext) deserializeBlob(blob *commonproto.DataBlob
 
 	switch blob.GetEncodingType() {
 	case enums.EncodingTypeThriftRW:
-		historyEvents, err = c.rereplicator.serializer.DeserializeBatchEvents(&persistence.DataBlob{
+		historyEvents, err = c.rereplicator.serializer.DeserializeBatchEvents(&serialization.DataBlob{
 			Encoding: common.EncodingTypeThriftRW,
 			Data:     blob.Data,
 		})

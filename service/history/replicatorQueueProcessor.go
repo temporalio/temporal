@@ -25,6 +25,8 @@ import (
 	"errors"
 	"time"
 
+	"github.com/temporalio/temporal/common/persistence/serialization"
+
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 
@@ -746,7 +748,7 @@ func (p *replicatorQueueProcessorImpl) getEventsBlob(
 	nextEventID int64,
 ) (*shared.DataBlob, error) {
 
-	var eventBatchBlobs []*persistence.DataBlob
+	var eventBatchBlobs []*serialization.DataBlob
 	var pageToken []byte
 	req := &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,

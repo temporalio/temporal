@@ -247,6 +247,16 @@ func WorkflowBranchID(branchID string) Tag {
 	return newStringTag("wf-branch-id", branchID)
 }
 
+// WorkflowTreeIDBytes returns tag for WorkflowTreeIDBytes
+func WorkflowTreeIDBytes(treeIDBytes []byte) Tag {
+	return newBinaryTag("wf-tree-id", treeIDBytes)
+}
+
+// WorkflowBranchIDBytes returns tag for WorkflowBranchIDBytes
+func WorkflowBranchIDBytes(branchIDBytes []byte) Tag {
+	return newBinaryTag("wf-branch-id", branchIDBytes)
+}
+
 // workflow task
 
 // WorkflowDecisionType returns tag for WorkflowDecisionType

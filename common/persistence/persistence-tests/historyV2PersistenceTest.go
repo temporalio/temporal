@@ -28,6 +28,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/temporalio/temporal/common/primitives"
+
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
@@ -130,14 +134,14 @@ func (s *HistoryV2PersistenceSuite) TestScanAllTrees() {
 	pgSize := 100
 
 	for i := 0; i < totalTrees; i++ {
-		treeID := uuid.New()
+		treeID := uuid.NewRandom()
 		bi, err := s.newHistoryBranch(treeID)
 		s.Nil(err)
 
 		events := s.genRandomEvents([]int64{1, 2, 3}, 1)
 		err = s.appendNewBranchAndFirstNode(bi, events, 1, "branchInfo")
 		s.Nil(err)
-		trees[treeID] = true
+		trees[string(treeID)] = true
 	}
 
 	var pgToken []byte
@@ -148,8 +152,9 @@ func (s *HistoryV2PersistenceSuite) TestScanAllTrees() {
 		})
 		s.Nil(err)
 		for _, br := range resp.Branches {
-			if trees[br.TreeID] == true {
-				delete(trees, br.TreeID)
+			uuidTreeId := primitives.MustParseUUID(br.TreeID)
+			if trees[string(uuidTreeId)] == true {
+				delete(trees, string(uuidTreeId))
 
 				s.True(br.ForkTime.UnixNano() > 0)
 				s.True(len(br.BranchID) > 0)
@@ -170,7 +175,7 @@ func (s *HistoryV2PersistenceSuite) TestScanAllTrees() {
 
 // TestReadBranchByPagination test
 func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
-	treeID := uuid.New()
+	treeID := uuid.NewRandom()
 	bi, err := s.newHistoryBranch(treeID)
 	s.Nil(err)
 
@@ -359,7 +364,7 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 
 // TestConcurrentlyCreateAndAppendBranches test
 func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
-	treeID := uuid.New()
+	treeID := uuid.NewRandom()
 	wg := sync.WaitGroup{}
 	concurrency := 20
 	m := sync.Map{}
@@ -478,7 +483,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 
 // TestConcurrentlyForkAndAppendBranches test
 func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
-	treeID := uuid.New()
+	treeID := uuid.NewRandom()
 	wg := sync.WaitGroup{}
 	concurrency := 10
 	masterBr, err := s.newHistoryBranch(treeID)
@@ -501,7 +506,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 
 	branches = s.descTree(treeID)
 	s.Equal(1, len(branches))
-	mbrID := *branches[0].BranchID
+	mbrID := branches[0].BranchID
 
 	txn := int64(1)
 	getTxnLock := sync.Mutex{}
@@ -638,7 +643,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 			masterCnt++
 		} else {
 			s.Equal(1, len(b.Ancestors))
-			s.Equal(mbrID, *b.Ancestors[0].BranchID)
+			s.Equal(mbrID, b.Ancestors[0].BranchID)
 		}
 	}
 	s.Equal(forkOnLevel1, actualForkOnLevel1)
@@ -696,7 +701,7 @@ func (s *HistoryV2PersistenceSuite) genRandomEvents(eventIDs []int64, version in
 }
 
 // persistence helper
-func (s *HistoryV2PersistenceSuite) newHistoryBranch(treeID string) ([]byte, error) {
+func (s *HistoryV2PersistenceSuite) newHistoryBranch(treeID []byte) ([]byte, error) {
 	return p.NewHistoryBranchToken(treeID)
 }
 
@@ -716,7 +721,7 @@ func (s *HistoryV2PersistenceSuite) deleteHistoryBranch(branch []byte) error {
 }
 
 // persistence helper
-func (s *HistoryV2PersistenceSuite) descTreeByToken(br []byte) []*workflow.HistoryBranch {
+func (s *HistoryV2PersistenceSuite) descTreeByToken(br []byte) []*persistenceblobs.HistoryBranch {
 	resp, err := s.HistoryV2Mgr.GetHistoryTree(&p.GetHistoryTreeRequest{
 		BranchToken: br,
 		ShardID:     common.IntPtr(int(s.ShardInfo.ShardID)),
@@ -725,7 +730,7 @@ func (s *HistoryV2PersistenceSuite) descTreeByToken(br []byte) []*workflow.Histo
 	return resp.Branches
 }
 
-func (s *HistoryV2PersistenceSuite) descTree(treeID string) []*workflow.HistoryBranch {
+func (s *HistoryV2PersistenceSuite) descTree(treeID []byte) []*persistenceblobs.HistoryBranch {
 	resp, err := s.HistoryV2Mgr.GetHistoryTree(&p.GetHistoryTreeRequest{
 		TreeID:  treeID,
 		ShardID: common.IntPtr(int(s.ShardInfo.ShardID)),
