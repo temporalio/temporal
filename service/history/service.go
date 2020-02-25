@@ -21,9 +21,11 @@
 package history
 
 import (
+	"context"
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/temporal-proto/serviceerror"
 	"google.golang.org/grpc"
 
 	"github.com/temporalio/temporal/.gen/proto/healthservice"
@@ -423,7 +425,7 @@ func (s *Service) Start() {
 	s.Resource.Start()
 	s.handler.Start()
 
-	s.server = grpc.NewServer()
+	s.server = grpc.NewServer(grpc.UnaryInterceptor(interceptor))
 	handlerGRPC := NewHandlerGRPC(s.handler)
 	nilCheckHandler := NewNilCheckHandler(handlerGRPC)
 	historyservice.RegisterHistoryServiceServer(s.server, nilCheckHandler)
@@ -448,4 +450,9 @@ func (s *Service) Stop() {
 	s.Resource.Stop()
 
 	s.GetLogger().Info("history stopped")
+}
+
+func interceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	resp, err := handler(ctx, req)
+	return resp, serviceerror.ToStatus(err).Err()
 }
