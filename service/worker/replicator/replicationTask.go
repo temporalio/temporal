@@ -49,6 +49,7 @@ type (
 		attempt      int
 		kafkaMsg     messaging.Message
 		logger       log.Logger
+		state        task.State
 
 		config        *Config
 		timeSource    clock.TimeSource
@@ -84,17 +85,17 @@ type (
 	}
 )
 
-var _ task.SequentialTask = (*activityReplicationTask)(nil)
-var _ task.SequentialTask = (*historyReplicationTask)(nil)
-var _ task.SequentialTask = (*historyMetadataReplicationTask)(nil)
-var _ task.SequentialTask = (*historyReplicationV2Task)(nil)
+var _ task.Task = (*activityReplicationTask)(nil)
+var _ task.Task = (*historyReplicationTask)(nil)
+var _ task.Task = (*historyMetadataReplicationTask)(nil)
+var _ task.Task = (*historyReplicationV2Task)(nil)
 
 const (
 	replicationTaskRetryDelay = 500 * time.Microsecond
 )
 
 func newActivityReplicationTask(
-	task *commonproto.ReplicationTask,
+	replicationTask *commonproto.ReplicationTask,
 	msg messaging.Message,
 	logger log.Logger,
 	config *Config,
@@ -105,7 +106,7 @@ func newActivityReplicationTask(
 	nDCHistoryResender xdc.NDCHistoryResender,
 ) *activityReplicationTask {
 
-	attr := task.GetSyncActivityTaskAttributes()
+	attr := replicationTask.GetSyncActivityTaskAttributes()
 
 	logger = logger.WithTags(tag.WorkflowDomainID(attr.GetDomainId()),
 		tag.WorkflowID(attr.GetWorkflowId()),
@@ -123,6 +124,7 @@ func newActivityReplicationTask(
 			attempt:       0,
 			kafkaMsg:      msg,
 			logger:        logger,
+			state:         task.TaskStatePending,
 			config:        config,
 			timeSource:    timeSource,
 			historyClient: historyClient,
@@ -151,7 +153,7 @@ func newActivityReplicationTask(
 }
 
 func newHistoryReplicationTask(
-	task *commonproto.ReplicationTask,
+	replicationTask *commonproto.ReplicationTask,
 	msg messaging.Message,
 	sourceCluster string,
 	logger log.Logger,
@@ -162,7 +164,7 @@ func newHistoryReplicationTask(
 	historyRereplicator xdc.HistoryRereplicator,
 ) *historyReplicationTask {
 
-	attr := task.GetHistoryTaskAttributes()
+	attr := replicationTask.GetHistoryTaskAttributes()
 	logger = logger.WithTags(tag.WorkflowDomainID(attr.GetDomainId()),
 		tag.WorkflowID(attr.GetWorkflowId()),
 		tag.WorkflowRunID(attr.GetRunId()),
@@ -180,6 +182,7 @@ func newHistoryReplicationTask(
 			attempt:       0,
 			kafkaMsg:      msg,
 			logger:        logger,
+			state:         task.TaskStatePending,
 			config:        config,
 			timeSource:    timeSource,
 			historyClient: historyClient,
@@ -207,7 +210,7 @@ func newHistoryReplicationTask(
 }
 
 func newHistoryMetadataReplicationTask(
-	task *commonproto.ReplicationTask,
+	replicationTask *commonproto.ReplicationTask,
 	msg messaging.Message,
 	sourceCluster string,
 	logger log.Logger,
@@ -218,7 +221,7 @@ func newHistoryMetadataReplicationTask(
 	historyRereplicator xdc.HistoryRereplicator,
 ) *historyMetadataReplicationTask {
 
-	attr := task.GetHistoryMetadataTaskAttributes()
+	attr := replicationTask.GetHistoryMetadataTaskAttributes()
 	logger = logger.WithTags(tag.WorkflowDomainID(attr.GetDomainId()),
 		tag.WorkflowID(attr.GetWorkflowId()),
 		tag.WorkflowRunID(attr.GetRunId()),
@@ -235,6 +238,7 @@ func newHistoryMetadataReplicationTask(
 			attempt:       0,
 			kafkaMsg:      msg,
 			logger:        logger,
+			state:         task.TaskStatePending,
 			config:        config,
 			timeSource:    timeSource,
 			historyClient: historyClient,
@@ -248,7 +252,7 @@ func newHistoryMetadataReplicationTask(
 }
 
 func newHistoryReplicationV2Task(
-	task *commonproto.ReplicationTask,
+	replicationTask *commonproto.ReplicationTask,
 	msg messaging.Message,
 	logger log.Logger,
 	config *Config,
@@ -258,7 +262,7 @@ func newHistoryReplicationV2Task(
 	nDCHistoryResender xdc.NDCHistoryResender,
 ) *historyReplicationV2Task {
 
-	attr := task.GetHistoryTaskV2Attributes()
+	attr := replicationTask.GetHistoryTaskV2Attributes()
 	logger = logger.WithTags(tag.WorkflowDomainID(attr.GetDomainId()),
 		tag.WorkflowID(attr.GetWorkflowId()),
 		tag.WorkflowRunID(attr.GetRunId()),
@@ -274,6 +278,7 @@ func newHistoryReplicationV2Task(
 			attempt:       0,
 			kafkaMsg:      msg,
 			logger:        logger,
+			state:         task.TaskStatePending,
 			config:        config,
 			timeSource:    timeSource,
 			historyClient: historyClient,
@@ -492,10 +497,15 @@ func (t *workflowReplicationTask) RetryErr(err error) bool {
 	return false
 }
 
+func (t *workflowReplicationTask) State() task.State {
+	return t.state
+}
+
 func (t *workflowReplicationTask) Ack() {
 	t.metricsClient.IncCounter(t.metricsScope, metrics.ReplicatorMessages)
 	t.metricsClient.RecordTimer(t.metricsScope, metrics.ReplicatorLatency, t.timeSource.Now().Sub(t.startTime))
 
+	t.state = task.TaskStateAcked
 	// the underlying implementation will not return anything other than nil
 	// do logging just in case
 	err := t.kafkaMsg.Ack()
@@ -508,6 +518,14 @@ func (t *workflowReplicationTask) Nack() {
 	t.metricsClient.IncCounter(t.metricsScope, metrics.ReplicatorMessages)
 	t.metricsClient.RecordTimer(t.metricsScope, metrics.ReplicatorLatency, t.timeSource.Now().Sub(t.startTime))
 
+	t.logger.Info("Replication task moved to DLQ",
+		tag.WorkflowDomainID(t.queueID.DomainID),
+		tag.WorkflowID(t.queueID.WorkflowID),
+		tag.WorkflowRunID(t.queueID.RunID),
+		tag.TaskID(t.taskID),
+	)
+
+	t.state = task.TaskStateNacked
 	// the underlying implementation will not return anything other than nil
 	// do logging just in case
 	err := t.kafkaMsg.Nack()

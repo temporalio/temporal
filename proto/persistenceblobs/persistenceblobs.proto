@@ -45,6 +45,7 @@ message ShardInfo {
     map<string, int64> clusterTransferAckLevel = 10;
     map<string, google.protobuf.Timestamp> clusterTimerAckLevel = 11;
     map<string, int64> clusterReplicationLevel = 12;
+    map<string, int64> replicationDLQAckLevel = 13;
 }
 
 message ReplicationTaskInfo {

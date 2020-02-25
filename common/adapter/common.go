@@ -1373,6 +1373,25 @@ func ToThriftReplicationTaskInfo(in *common.ReplicationTaskInfo) *replicator.Rep
 	}
 }
 
+// ToProtoReplicationTaskInfo ...
+func ToProtoReplicationTaskInfo(in *replicator.ReplicationTaskInfo) *common.ReplicationTaskInfo {
+	if in == nil {
+		return nil
+	}
+
+	return &common.ReplicationTaskInfo{
+		DomainId:     in.GetDomainID(),
+		WorkflowId:   in.GetWorkflowID(),
+		RunId:        in.GetRunID(),
+		TaskType:     int32(in.GetTaskType()),
+		TaskId:       in.GetTaskID(),
+		Version:      in.GetVersion(),
+		FirstEventId: in.GetFirstEventID(),
+		NextEventId:  in.GetNextEventID(),
+		ScheduledId:  in.GetScheduledID(),
+	}
+}
+
 // ToThriftReplicationTaskInfos ...
 func ToThriftReplicationTaskInfos(in []*common.ReplicationTaskInfo) []*replicator.ReplicationTaskInfo {
 	if in == nil {

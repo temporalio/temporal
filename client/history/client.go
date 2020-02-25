@@ -967,6 +967,66 @@ func (c *clientImpl) ReapplyEvents(
 
 }
 
+func (c *clientImpl) ReadDLQMessages(
+	ctx context.Context,
+	request *historyservice.ReadDLQMessagesRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.ReadDLQMessagesResponse, error) {
+
+	client, err := c.getClientForShardID(int(request.GetShardID()))
+	if err != nil {
+		return nil, err
+	}
+	return client.ReadDLQMessages(ctx, request, opts...)
+}
+
+func (c *clientImpl) PurgeDLQMessages(
+	ctx context.Context,
+	request *historyservice.PurgeDLQMessagesRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.PurgeDLQMessagesResponse, error) {
+
+	client, err := c.getClientForShardID(int(request.GetShardID()))
+	if err != nil {
+		return nil, err
+	}
+	return client.PurgeDLQMessages(ctx, request, opts...)
+}
+
+func (c *clientImpl) MergeDLQMessages(
+	ctx context.Context,
+	request *historyservice.MergeDLQMessagesRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.MergeDLQMessagesResponse, error) {
+
+	client, err := c.getClientForShardID(int(request.GetShardID()))
+	if err != nil {
+		return nil, err
+	}
+	return client.MergeDLQMessages(ctx, request, opts...)
+}
+
+func (c *clientImpl) RefreshWorkflowTasks(
+	ctx context.Context,
+	request *historyservice.RefreshWorkflowTasksRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.RefreshWorkflowTasksResponse, error) {
+	client, err := c.getClientForWorkflowID(request.GetRequest().GetExecution().GetWorkflowId())
+	var response *historyservice.RefreshWorkflowTasksResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.RefreshWorkflowTasks(ctx, request, opts...)
+		return err
+	}
+	err = c.executeWithRedirect(ctx, client, op)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
 	if parent == nil {
 		return context.WithTimeout(context.Background(), c.timeout)

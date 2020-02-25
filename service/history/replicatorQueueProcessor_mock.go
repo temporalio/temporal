@@ -30,7 +30,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 
-	replicator "github.com/temporalio/temporal/.gen/go/replicator"
+	commonproto "go.temporal.io/temporal-proto/common"
 )
 
 // MockReplicatorQueueProcessor is a mock of ReplicatorQueueProcessor interface
@@ -81,19 +81,19 @@ func (mr *MockReplicatorQueueProcessorMockRecorder) Stop() *gomock.Call {
 }
 
 // getTasks mocks base method
-func (m *MockReplicatorQueueProcessor) getTasks(arg0 context.Context, arg1 string, arg2 int64) (*replicator.ReplicationMessages, error) {
+func (m *MockReplicatorQueueProcessor) getTasks(arg0 context.Context, arg1 string, arg2 int64) (*commonproto.ReplicationMessages, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "getTasks", arg0, arg1, arg2)
-	ret0, _ := ret[0].(*replicator.ReplicationMessages)
+	ret0, _ := ret[0].(*commonproto.ReplicationMessages)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // getTasks mocks base method
-func (m *MockReplicatorQueueProcessor) getTask(arg0 context.Context, arg1 *replicator.ReplicationTaskInfo) (*replicator.ReplicationTask, error) {
+func (m *MockReplicatorQueueProcessor) getTask(arg0 context.Context, arg1 *commonproto.ReplicationTaskInfo) (*commonproto.ReplicationTask, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "getTask", arg0, arg1)
-	ret0, _ := ret[0].(*replicator.ReplicationTask)
+	ret0, _ := ret[0].(*commonproto.ReplicationTask)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

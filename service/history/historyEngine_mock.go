@@ -36,6 +36,7 @@ import (
 	history "github.com/temporalio/temporal/.gen/go/history"
 	replicator "github.com/temporalio/temporal/.gen/go/replicator"
 	shared "github.com/temporalio/temporal/.gen/go/shared"
+	historyservice "github.com/temporalio/temporal/.gen/proto/historyservice"
 	persistence "github.com/temporalio/temporal/common/persistence"
 )
 
@@ -533,6 +534,64 @@ func (m *MockEngine) ReapplyEvents(ctx context.Context, domainUUID, workflowID, 
 func (mr *MockEngineMockRecorder) ReapplyEvents(ctx, domainUUID, workflowID, runID, events interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReapplyEvents", reflect.TypeOf((*MockEngine)(nil).ReapplyEvents), ctx, domainUUID, workflowID, runID, events)
+}
+
+// ReadDLQMessages mocks base method
+func (m *MockEngine) ReadDLQMessages(ctx context.Context, messagesRequest *historyservice.ReadDLQMessagesRequest) (*historyservice.ReadDLQMessagesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReadDLQMessages", ctx, messagesRequest)
+	ret0, _ := ret[0].(*historyservice.ReadDLQMessagesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReadDLQMessages indicates an expected call of ReadDLQMessages
+func (mr *MockEngineMockRecorder) ReadDLQMessages(ctx, messagesRequest interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadDLQMessages", reflect.TypeOf((*MockEngine)(nil).ReadDLQMessages), ctx, messagesRequest)
+}
+
+// PurgeDLQMessages mocks base method
+func (m *MockEngine) PurgeDLQMessages(ctx context.Context, messagesRequest *historyservice.PurgeDLQMessagesRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PurgeDLQMessages", ctx, messagesRequest)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// PurgeDLQMessages indicates an expected call of PurgeDLQMessages
+func (mr *MockEngineMockRecorder) PurgeDLQMessages(ctx, messagesRequest interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PurgeDLQMessages", reflect.TypeOf((*MockEngine)(nil).PurgeDLQMessages), ctx, messagesRequest)
+}
+
+// MergeDLQMessages mocks base method
+func (m *MockEngine) MergeDLQMessages(ctx context.Context, messagesRequest *historyservice.MergeDLQMessagesRequest) (*historyservice.MergeDLQMessagesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MergeDLQMessages", ctx, messagesRequest)
+	ret0, _ := ret[0].(*historyservice.MergeDLQMessagesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MergeDLQMessages indicates an expected call of MergeDLQMessages
+func (mr *MockEngineMockRecorder) MergeDLQMessages(ctx, messagesRequest interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergeDLQMessages", reflect.TypeOf((*MockEngine)(nil).MergeDLQMessages), ctx, messagesRequest)
+}
+
+// RefreshWorkflowTasks mocks base method
+func (m *MockEngine) RefreshWorkflowTasks(ctx context.Context, domainUUID string, execution shared.WorkflowExecution) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RefreshWorkflowTasks", ctx, domainUUID, execution)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RefreshWorkflowTasks indicates an expected call of RefreshWorkflowTasks
+func (mr *MockEngineMockRecorder) RefreshWorkflowTasks(ctx, domainUUID, execution interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshWorkflowTasks", reflect.TypeOf((*MockEngine)(nil).RefreshWorkflowTasks), ctx, domainUUID, execution)
 }
 
 // NotifyNewHistoryEvent mocks base method

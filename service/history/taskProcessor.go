@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -35,6 +35,7 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -44,6 +45,7 @@ type (
 	}
 
 	taskInfo struct {
+		// TODO: change to queueTaskExecutor
 		processor taskExecutor
 		task      queueTaskInfo
 
@@ -97,8 +99,6 @@ func newTaskProcessor(
 	logger log.Logger,
 ) *taskProcessor {
 
-	log := logger.WithTags(tag.ComponentTimerQueue)
-
 	workerNotificationChans := []chan struct{}{}
 	for index := 0; index < options.workerCount; index++ {
 		workerNotificationChans = append(workerNotificationChans, make(chan struct{}, 1))
@@ -110,7 +110,7 @@ func newTaskProcessor(
 		shutdownCh:              make(chan struct{}),
 		tasksCh:                 make(chan *taskInfo, options.queueSize),
 		config:                  shard.GetConfig(),
-		logger:                  log,
+		logger:                  logger,
 		metricsClient:           shard.GetMetricsClient(),
 		timeSource:              shard.GetTimeSource(),
 		workerNotificationChans: workerNotificationChans,
@@ -127,15 +127,15 @@ func (t *taskProcessor) start() {
 		notificationChan := t.workerNotificationChans[i]
 		go t.taskWorker(notificationChan)
 	}
-	t.logger.Info("Timer queue task processor started.")
+	t.logger.Info("Task processor started.")
 }
 
 func (t *taskProcessor) stop() {
 	close(t.shutdownCh)
 	if success := common.AwaitWaitGroup(&t.workerWG, time.Minute); !success {
-		t.logger.Warn("Timer queue task processor timedout on shutdown.")
+		t.logger.Warn("Task processor timed out on shutdown.")
 	}
-	t.logger.Info("Timer queue task processor shutdown.")
+	t.logger.Info("Task processor shutdown.")
 }
 
 func (t *taskProcessor) taskWorker(
@@ -182,7 +182,7 @@ func (t *taskProcessor) processTaskAndAck(
 	task *taskInfo,
 ) {
 
-	var scope int
+	var scope metrics.Scope
 	var err error
 
 FilterLoop:
@@ -206,8 +206,9 @@ FilterLoop:
 		if err != nil {
 			task.attempt++
 			if task.attempt >= t.config.TimerTaskMaxRetryCount() {
-				t.metricsClient.RecordTimer(scope, metrics.TaskAttemptTimer, time.Duration(task.attempt))
-				task.logger.Error("Critical error processing timer task, retrying.", tag.Error(err), tag.OperationCritical)
+				scope.RecordTimer(metrics.TaskAttemptTimer, time.Duration(task.attempt))
+				task.logger.Error("Critical error processing task, retrying.",
+					tag.Error(err), tag.OperationCritical, tag.TaskType(int(task.task.GetTaskType())))
 			}
 		}
 		return err
@@ -239,7 +240,7 @@ FilterLoop:
 func (t *taskProcessor) processTaskOnce(
 	notificationChan <-chan struct{},
 	task *taskInfo,
-) (int, error) {
+) (metrics.Scope, error) {
 
 	select {
 	case <-notificationChan:
@@ -247,17 +248,18 @@ func (t *taskProcessor) processTaskOnce(
 	}
 
 	startTime := t.timeSource.Now()
-	scope, err := task.processor.process(task)
+	scopeIdx, err := task.processor.process(task)
+	scope := t.metricsClient.Scope(scopeIdx).Tagged(t.getDomainTagByID(primitives.UUIDString(task.task.GetDomainID())))
 	if task.shouldProcessTask {
-		t.metricsClient.IncCounter(scope, metrics.TaskRequests)
-		t.metricsClient.RecordTimer(scope, metrics.TaskProcessingLatency, time.Since(startTime))
+		scope.IncCounter(metrics.TaskRequests)
+		scope.RecordTimer(metrics.TaskProcessingLatency, time.Since(startTime))
 	}
 
 	return scope, err
 }
 
 func (t *taskProcessor) handleTaskError(
-	scope int,
+	scope metrics.Scope,
 	task *taskInfo,
 	notificationChan <-chan struct{},
 	err error,
@@ -273,13 +275,13 @@ func (t *taskProcessor) handleTaskError(
 
 	// this is a transient error
 	if err == ErrTaskRetry {
-		t.metricsClient.IncCounter(scope, metrics.TaskStandbyRetryCounter)
+		scope.IncCounter(metrics.TaskStandbyRetryCounter)
 		<-notificationChan
 		return err
 	}
 
 	if err == ErrTaskDiscarded {
-		t.metricsClient.IncCounter(scope, metrics.TaskDiscarded)
+		scope.IncCounter(metrics.TaskDiscarded)
 		err = nil
 	}
 
@@ -288,14 +290,14 @@ func (t *taskProcessor) handleTaskError(
 	//  since the new task life cycle will not give up until task processed / verified
 	if _, ok := err.(*workflow.DomainNotActiveError); ok {
 		if t.timeSource.Now().Sub(task.startTime) > 2*cache.DomainCacheRefreshInterval {
-			t.metricsClient.IncCounter(scope, metrics.TaskNotActiveCounter)
+			scope.IncCounter(metrics.TaskNotActiveCounter)
 			return nil
 		}
 
 		return err
 	}
 
-	t.metricsClient.IncCounter(scope, metrics.TaskFailures)
+	scope.IncCounter(metrics.TaskFailures)
 
 	if _, ok := err.(*persistence.CurrentWorkflowConditionFailedError); ok {
 		task.logger.Error("More than 2 workflow are running.", tag.Error(err), tag.LifeCycleProcessingFailed)
@@ -307,19 +309,24 @@ func (t *taskProcessor) handleTaskError(
 }
 
 func (t *taskProcessor) ackTaskOnce(
-	scope int,
+	scope metrics.Scope,
 	task *taskInfo,
 ) {
 
 	task.processor.complete(task)
 	if task.shouldProcessTask {
 		goVisibilityTime, _ := types.TimestampFromProto(task.task.GetVisibilityTimestamp())
-		t.metricsClient.RecordTimer(scope, metrics.TaskAttemptTimer, time.Duration(task.attempt))
-		t.metricsClient.RecordTimer(scope, metrics.TaskLatency, time.Since(task.startTime))
-		t.metricsClient.RecordTimer(
-			scope,
-			metrics.TaskQueueLatency,
-			time.Since(goVisibilityTime),
-		)
+		scope.RecordTimer(metrics.TaskAttemptTimer, time.Duration(task.attempt))
+		scope.RecordTimer(metrics.TaskLatency, time.Since(task.startTime))
+		scope.RecordTimer(metrics.TaskQueueLatency, time.Since(goVisibilityTime))
 	}
+}
+
+func (t *taskProcessor) getDomainTagByID(domainID string) metrics.Tag {
+	domainName, err := t.shard.GetDomainCache().GetDomainName(domainID)
+	if err != nil {
+		t.logger.Error("Unable to get domainName", tag.Error(err))
+		return metrics.DomainUnknownTag()
+	}
+	return metrics.DomainTag(domainName)
 }

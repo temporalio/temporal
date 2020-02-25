@@ -79,14 +79,8 @@ func (d *domainCLIImpl) RegisterDomain(c *cli.Context) {
 		retentionDays = c.Int(FlagRetentionDays)
 	}
 	securityToken := c.String(FlagSecurityToken)
-	emitMetric := false
 	var err error
-	if c.IsSet(FlagEmitMetric) {
-		emitMetric, err = strconv.ParseBool(c.String(FlagEmitMetric))
-		if err != nil {
-			ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", FlagEmitMetric), err)
-		}
-	}
+
 	var isGlobalDomain bool
 	if c.IsSet(FlagIsGlobalDomain) {
 		isGlobalDomain, err = strconv.ParseBool(c.String(FlagIsGlobalDomain))
@@ -134,7 +128,6 @@ func (d *domainCLIImpl) RegisterDomain(c *cli.Context) {
 		OwnerEmail:                             ownerEmail,
 		Data:                                   domainData,
 		WorkflowExecutionRetentionPeriodInDays: int32(retentionDays),
-		EmitMetric:                             emitMetric,
 		Clusters:                               clusters,
 		ActiveClusterName:                      activeClusterName,
 		SecurityToken:                          securityToken,
@@ -212,12 +205,6 @@ func (d *domainCLIImpl) UpdateDomain(c *cli.Context) {
 		}
 		if c.IsSet(FlagRetentionDays) {
 			retentionDays = int32(c.Int(FlagRetentionDays))
-		}
-		if c.IsSet(FlagEmitMetric) {
-			emitMetric, err = strconv.ParseBool(c.String(FlagEmitMetric))
-			if err != nil {
-				ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", FlagEmitMetric), err)
-			}
 		}
 		if c.IsSet(FlagClusters) {
 			clusterStr := c.String(FlagClusters)

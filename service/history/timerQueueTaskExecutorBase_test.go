@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -37,113 +37,95 @@ import (
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/clock"
-	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/service/dynamicconfig"
 	"github.com/temporalio/temporal/service/worker/archiver"
 )
 
 type (
-	timerQueueProcessorBaseSuite struct {
+	timerQueueTaskExecutorBaseSuite struct {
 		suite.Suite
 		*require.Assertions
-
-		clusterName string
-		logger      log.Logger
 
 		controller                   *gomock.Controller
 		mockShard                    *shardContextTest
 		mockWorkflowExecutionContext *MockworkflowExecutionContext
 		mockMutableState             *MockmutableState
 
-		mockQueueAckMgr       *MockTimerQueueAckMgr
 		mockExecutionManager  *mocks.ExecutionManager
 		mockVisibilityManager *mocks.VisibilityManager
 		mockHistoryV2Manager  *mocks.HistoryV2Manager
 		mockArchivalClient    *archiver.ClientMock
 
-		scope            int
-		notificationChan chan struct{}
-
-		timerQueueProcessor *timerQueueProcessorBase
+		timerQueueTaskExecutorBase *timerQueueTaskExecutorBase
 	}
 )
 
-func TestTimerQueueProcessorBaseSuite(t *testing.T) {
-	s := new(timerQueueProcessorBaseSuite)
+func TestTimerQueueTaskExecutorBaseSuite(t *testing.T) {
+	s := new(timerQueueTaskExecutorBaseSuite)
 	suite.Run(t, s)
 }
 
-func (s *timerQueueProcessorBaseSuite) SetupSuite() {
+func (s *timerQueueTaskExecutorBaseSuite) SetupSuite() {
 
 }
 
-func (s *timerQueueProcessorBaseSuite) TearDownSuite() {
+func (s *timerQueueTaskExecutorBaseSuite) TearDownSuite() {
 
 }
 
-func (s *timerQueueProcessorBaseSuite) SetupTest() {
+func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
-
-	shardID := 0
-	s.clusterName = cluster.TestAlternativeClusterName
-	s.scope = 0
 
 	s.controller = gomock.NewController(s.T())
 	s.mockWorkflowExecutionContext = NewMockworkflowExecutionContext(s.controller)
 	s.mockMutableState = NewMockmutableState(s.controller)
 
+	config := NewDynamicConfigForTest()
 	s.mockShard = newTestShardContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
-				ShardID:          int32(shardID),
+				ShardID:          0,
 				RangeID:          1,
 				TransferAckLevel: 0,
 			}},
-		NewDynamicConfigForTest(),
+		config,
 	)
 
 	s.mockExecutionManager = s.mockShard.resource.ExecutionMgr
 	s.mockVisibilityManager = s.mockShard.resource.VisibilityMgr
 	s.mockHistoryV2Manager = s.mockShard.resource.HistoryMgr
 	s.mockArchivalClient = &archiver.ClientMock{}
-	s.mockQueueAckMgr = &MockTimerQueueAckMgr{}
 
-	s.logger = s.mockShard.GetLogger()
+	logger := s.mockShard.GetLogger()
 
-	s.notificationChan = make(chan struct{})
 	h := &historyEngineImpl{
 		shard:          s.mockShard,
-		logger:         s.logger,
+		logger:         logger,
 		metricsClient:  s.mockShard.GetMetricsClient(),
 		visibilityMgr:  s.mockVisibilityManager,
 		historyV2Mgr:   s.mockHistoryV2Manager,
 		archivalClient: s.mockArchivalClient,
 	}
 
-	s.timerQueueProcessor = newTimerQueueProcessorBase(
-		s.scope,
+	s.timerQueueTaskExecutorBase = newTimerQueueTaskExecutorBase(
 		s.mockShard,
 		h,
-		s.mockQueueAckMgr,
-		NewLocalTimerGate(clock.NewRealTimeSource()),
-		dynamicconfig.GetIntPropertyFn(10),
-		s.logger,
+		logger,
+		s.mockShard.GetMetricsClient(),
+		config,
 	)
 }
 
-func (s *timerQueueProcessorBaseSuite) TearDownTest() {
+func (s *timerQueueTaskExecutorBaseSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockShard.Finish(s.T())
-	s.mockQueueAckMgr.AssertExpectations(s.T())
 	s.mockArchivalClient.AssertExpectations(s.T())
 }
 
-func (s *timerQueueProcessorBaseSuite) TestDeleteWorkflow_NoErr() {
+func (s *timerQueueTaskExecutorBaseSuite) TestDeleteWorkflow_NoErr() {
 	task := &persistenceblobs.TimerTaskInfo{
 		TaskID:              12345,
 		VisibilityTimestamp: types.TimestampNow(),
@@ -161,11 +143,11 @@ func (s *timerQueueProcessorBaseSuite) TestDeleteWorkflow_NoErr() {
 	s.mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{1, 2, 3}, nil).Times(1)
 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1234), nil).AnyTimes()
 
-	err := s.timerQueueProcessor.deleteWorkflow(task, ctx, s.mockMutableState)
+	err := s.timerQueueTaskExecutorBase.deleteWorkflow(task, ctx, s.mockMutableState)
 	s.NoError(err)
 }
 
-func (s *timerQueueProcessorBaseSuite) TestArchiveHistory_NoErr_InlineArchivalFailed() {
+func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_NoErr_InlineArchivalFailed() {
 	s.mockWorkflowExecutionContext.EXPECT().loadExecutionStats().Return(&persistence.ExecutionStats{
 		HistorySize: 1024,
 	}, nil).Times(1)
@@ -186,11 +168,11 @@ func (s *timerQueueProcessorBaseSuite) TestArchiveHistory_NoErr_InlineArchivalFa
 	}, nil)
 
 	domainCacheEntry := cache.NewDomainCacheEntryForTest(&persistence.DomainInfo{}, &persistence.DomainConfig{}, false, nil, 0, nil)
-	err := s.timerQueueProcessor.archiveWorkflow(&persistenceblobs.TimerTaskInfo{}, s.mockWorkflowExecutionContext, s.mockMutableState, domainCacheEntry)
+	err := s.timerQueueTaskExecutorBase.archiveWorkflow(&persistenceblobs.TimerTaskInfo{}, s.mockWorkflowExecutionContext, s.mockMutableState, domainCacheEntry)
 	s.NoError(err)
 }
 
-func (s *timerQueueProcessorBaseSuite) TestArchiveHistory_SendSignalErr() {
+func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_SendSignalErr() {
 	s.mockWorkflowExecutionContext.EXPECT().loadExecutionStats().Return(&persistence.ExecutionStats{
 		HistorySize: 1024 * 1024 * 1024,
 	}, nil).Times(1)
@@ -204,6 +186,6 @@ func (s *timerQueueProcessorBaseSuite) TestArchiveHistory_SendSignalErr() {
 	})).Return(nil, errors.New("failed to send signal"))
 
 	domainCacheEntry := cache.NewDomainCacheEntryForTest(&persistence.DomainInfo{}, &persistence.DomainConfig{}, false, nil, 0, nil)
-	err := s.timerQueueProcessor.archiveWorkflow(&persistenceblobs.TimerTaskInfo{}, s.mockWorkflowExecutionContext, s.mockMutableState, domainCacheEntry)
+	err := s.timerQueueTaskExecutorBase.archiveWorkflow(&persistenceblobs.TimerTaskInfo{}, s.mockWorkflowExecutionContext, s.mockMutableState, domainCacheEntry)
 	s.Error(err)
 }

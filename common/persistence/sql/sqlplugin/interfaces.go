@@ -24,11 +24,8 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/temporalio/temporal/common/primitives"
-
 	"github.com/temporalio/temporal/common/persistence"
-
-	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/service/config"
 )
 
@@ -523,14 +520,14 @@ type (
 
 	// QueueRow represents a row in queue table
 	QueueRow struct {
-		QueueType      common.QueueType
+		QueueType      persistence.QueueType
 		MessageID      int
 		MessagePayload []byte
 	}
 
 	// QueueMetadataRow represents a row in queue_metadata table
 	QueueMetadataRow struct {
-		QueueType common.QueueType
+		QueueType persistence.QueueType
 		Data      []byte
 	}
 
@@ -653,6 +650,12 @@ type (
 		// SelectFromReplicationTasksDLQ returns one or more rows from replication_tasks_dlq table
 		// Required filter params - {sourceClusterName, shardID, minTaskID, pageSize}
 		SelectFromReplicationTasksDLQ(filter *ReplicationTasksDLQFilter) ([]ReplicationTasksRow, error)
+		// DeleteMessageFromReplicationTasksDLQ deletes one row from replication_tasks_dlq table
+		// Required filter params - {sourceClusterName, shardID, taskID}
+		DeleteMessageFromReplicationTasksDLQ(filter *ReplicationTasksDLQFilter) (sql.Result, error)
+		// RangeDeleteMessageFromReplicationTasksDLQ deletes one or more rows from replication_tasks_dlq table
+		// Required filter params - {sourceClusterName, shardID, taskID, inclusiveTaskID}
+		RangeDeleteMessageFromReplicationTasksDLQ(filter *ReplicationTasksDLQFilter) (sql.Result, error)
 
 		ReplaceIntoActivityInfoMaps(rows []ActivityInfoMapsRow) (sql.Result, error)
 		// SelectFromActivityInfoMaps returns one or more rows from activity_info_maps
@@ -731,14 +734,15 @@ type (
 		DeleteFromVisibility(filter *VisibilityFilter) (sql.Result, error)
 
 		InsertIntoQueue(row *QueueRow) (sql.Result, error)
-		GetLastEnqueuedMessageIDForUpdate(queueType common.QueueType) (int, error)
-		GetMessagesFromQueue(queueType common.QueueType, lastMessageID, maxRows int) ([]QueueRow, error)
-		GetMessagesBetween(queueType common.QueueType, firstMessageID int, lastMessageID int, maxRows int) ([]QueueRow, error)
-		DeleteMessagesBefore(queueType common.QueueType, messageID int) (sql.Result, error)
-		DeleteMessage(queueType common.QueueType, messageID int) (sql.Result, error)
-		InsertAckLevel(queueType common.QueueType, messageID int, clusterName string) error
-		UpdateAckLevels(queueType common.QueueType, clusterAckLevels map[string]int) error
-		GetAckLevels(queueType common.QueueType, forUpdate bool) (map[string]int, error)
+		GetLastEnqueuedMessageIDForUpdate(queueType persistence.QueueType) (int, error)
+		GetMessagesFromQueue(queueType persistence.QueueType, lastMessageID, maxRows int) ([]QueueRow, error)
+		GetMessagesBetween(queueType persistence.QueueType, firstMessageID int, lastMessageID int, maxRows int) ([]QueueRow, error)
+		DeleteMessagesBefore(queueType persistence.QueueType, messageID int) (sql.Result, error)
+		RangeDeleteMessages(queueType persistence.QueueType, exclusiveBeginMessageID int, inclusiveEndMessageID int) (sql.Result, error)
+		DeleteMessage(queueType persistence.QueueType, messageID int) (sql.Result, error)
+		InsertAckLevel(queueType persistence.QueueType, messageID int, clusterName string) error
+		UpdateAckLevels(queueType persistence.QueueType, clusterAckLevels map[string]int) error
+		GetAckLevels(queueType persistence.QueueType, forUpdate bool) (map[string]int, error)
 	}
 
 	// adminCRUD defines admin operations for CLI and test suites
