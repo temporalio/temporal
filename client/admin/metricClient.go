@@ -255,3 +255,71 @@ func (c *metricClient) ReapplyEvents(
 	}
 	return resp, err
 }
+
+func (c *metricClient) ReadDLQMessages(
+	ctx context.Context,
+	request *adminservice.ReadDLQMessagesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ReadDLQMessagesResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientReadDLQMessagesScope, metrics.CadenceClientRequests)
+	sw := c.metricsClient.StartTimer(metrics.AdminClientReadDLQMessagesScope, metrics.CadenceClientLatency)
+	resp, err := c.client.ReadDLQMessages(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientReadDLQMessagesScope, metrics.CadenceClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) PurgeDLQMessages(
+	ctx context.Context,
+	request *adminservice.PurgeDLQMessagesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.PurgeDLQMessagesResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientPurgeDLQMessagesScope, metrics.CadenceClientRequests)
+	sw := c.metricsClient.StartTimer(metrics.AdminClientPurgeDLQMessagesScope, metrics.CadenceClientLatency)
+	resp, err := c.client.PurgeDLQMessages(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientPurgeDLQMessagesScope, metrics.CadenceClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) MergeDLQMessages(
+	ctx context.Context,
+	request *adminservice.MergeDLQMessagesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.MergeDLQMessagesResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientMergeDLQMessagesScope, metrics.CadenceClientRequests)
+	sw := c.metricsClient.StartTimer(metrics.AdminClientMergeDLQMessagesScope, metrics.CadenceClientLatency)
+	resp, err := c.client.MergeDLQMessages(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientMergeDLQMessagesScope, metrics.CadenceClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) RefreshWorkflowTasks(
+	ctx context.Context,
+	request *adminservice.RefreshWorkflowTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.RefreshWorkflowTasksResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientRefreshWorkflowTasksScope, metrics.CadenceClientRequests)
+	sw := c.metricsClient.StartTimer(metrics.AdminClientRefreshWorkflowTasksScope, metrics.CadenceClientLatency)
+	resp, err := c.client.RefreshWorkflowTasks(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientRefreshWorkflowTasksScope, metrics.CadenceClientFailures)
+	}
+	return resp, err
+}

@@ -32,15 +32,16 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common/adapter"
-	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/clock"
 
 	h "github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/client/history"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/cache"
+	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/codec"
+	"github.com/temporalio/temporal/common/domain"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/messaging"
@@ -51,26 +52,26 @@ import (
 
 type (
 	replicationTaskProcessor struct {
-		currentCluster          string
-		sourceCluster           string
-		consumerName            string
-		client                  messaging.Client
-		consumer                messaging.Consumer
-		isStarted               int32
-		isStopped               int32
-		shutdownWG              sync.WaitGroup
-		shutdownCh              chan struct{}
-		config                  *Config
-		logger                  log.Logger
-		metricsClient           metrics.Client
-		domainReplicator        DomainReplicator
-		historyRereplicator     xdc.HistoryRereplicator
-		nDCHistoryResender      xdc.NDCHistoryResender
-		historyClient           history.Client
-		domainCache             cache.DomainCache
-		msgEncoder              codec.BinaryEncoder
-		timeSource              clock.TimeSource
-		sequentialTaskProcessor task.SequentialTaskProcessor
+		currentCluster                string
+		sourceCluster                 string
+		consumerName                  string
+		client                        messaging.Client
+		consumer                      messaging.Consumer
+		isStarted                     int32
+		isStopped                     int32
+		shutdownWG                    sync.WaitGroup
+		shutdownCh                    chan struct{}
+		config                        *Config
+		logger                        log.Logger
+		metricsClient                 metrics.Client
+		domainreplicationTaskExecutor domain.ReplicationTaskExecutor
+		historyRereplicator           xdc.HistoryRereplicator
+		nDCHistoryResender            xdc.NDCHistoryResender
+		historyClient                 history.Client
+		domainCache                   cache.DomainCache
+		msgEncoder                    codec.BinaryEncoder
+		timeSource                    clock.TimeSource
+		sequentialTaskProcessor       task.Processor
 	}
 )
 
@@ -95,34 +96,34 @@ func newReplicationTaskProcessor(
 	config *Config,
 	logger log.Logger,
 	metricsClient metrics.Client,
-	domainReplicator DomainReplicator,
+	domainreplicationTaskExecutor domain.ReplicationTaskExecutor,
 	historyRereplicator xdc.HistoryRereplicator,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	historyClient history.Client,
 	domainCache cache.DomainCache,
-	sequentialTaskProcessor task.SequentialTaskProcessor,
+	sequentialTaskProcessor task.Processor,
 ) *replicationTaskProcessor {
 
 	retryableHistoryClient := history.NewRetryableClient(historyClient, common.CreateHistoryServiceRetryPolicy(),
 		common.IsWhitelistServiceTransientErrorGRPC)
 
 	return &replicationTaskProcessor{
-		currentCluster:          currentCluster,
-		sourceCluster:           sourceCluster,
-		consumerName:            consumer,
-		client:                  client,
-		shutdownCh:              make(chan struct{}),
-		config:                  config,
-		logger:                  logger,
-		metricsClient:           metricsClient,
-		domainReplicator:        domainReplicator,
-		historyRereplicator:     historyRereplicator,
-		nDCHistoryResender:      nDCHistoryResender,
-		historyClient:           retryableHistoryClient,
-		msgEncoder:              codec.NewThriftRWEncoder(),
-		timeSource:              clock.NewRealTimeSource(),
-		domainCache:             domainCache,
-		sequentialTaskProcessor: sequentialTaskProcessor,
+		currentCluster:                currentCluster,
+		sourceCluster:                 sourceCluster,
+		consumerName:                  consumer,
+		client:                        client,
+		shutdownCh:                    make(chan struct{}),
+		config:                        config,
+		logger:                        logger,
+		metricsClient:                 metricsClient,
+		domainreplicationTaskExecutor: domainreplicationTaskExecutor,
+		historyRereplicator:           historyRereplicator,
+		nDCHistoryResender:            nDCHistoryResender,
+		historyClient:                 retryableHistoryClient,
+		msgEncoder:                    codec.NewThriftRWEncoder(),
+		timeSource:                    clock.NewRealTimeSource(),
+		domainCache:                   domainCache,
+		sequentialTaskProcessor:       sequentialTaskProcessor,
 	}
 }
 
@@ -309,7 +310,7 @@ func (p *replicationTaskProcessor) handleDomainReplicationTask(task *commonproto
 		}
 	}()
 
-	err := p.domainReplicator.HandleReceivingTask(task.GetDomainTaskAttributes())
+	err := p.domainreplicationTaskExecutor.Execute(task.GetDomainTaskAttributes())
 	if err != nil {
 		return err
 	}

@@ -21,9 +21,10 @@
 package history
 
 import (
+	"time"
+
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/primitives"
-	"time"
 
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/client/matching"

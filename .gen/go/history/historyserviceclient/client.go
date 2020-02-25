@@ -81,17 +81,35 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) (*replicator.GetReplicationMessagesResponse, error)
 
+	MergeDLQMessages(
+		ctx context.Context,
+		Request *replicator.MergeDLQMessagesRequest,
+		opts ...yarpc.CallOption,
+	) (*replicator.MergeDLQMessagesResponse, error)
+
 	PollMutableState(
 		ctx context.Context,
 		PollRequest *history.PollMutableStateRequest,
 		opts ...yarpc.CallOption,
 	) (*history.PollMutableStateResponse, error)
 
+	PurgeDLQMessages(
+		ctx context.Context,
+		Request *replicator.PurgeDLQMessagesRequest,
+		opts ...yarpc.CallOption,
+	) error
+
 	QueryWorkflow(
 		ctx context.Context,
 		QueryRequest *history.QueryWorkflowRequest,
 		opts ...yarpc.CallOption,
 	) (*history.QueryWorkflowResponse, error)
+
+	ReadDLQMessages(
+		ctx context.Context,
+		Request *replicator.ReadDLQMessagesRequest,
+		opts ...yarpc.CallOption,
+	) (*replicator.ReadDLQMessagesResponse, error)
 
 	ReapplyEvents(
 		ctx context.Context,
@@ -122,6 +140,12 @@ type Interface interface {
 		AddRequest *history.RecordDecisionTaskStartedRequest,
 		opts ...yarpc.CallOption,
 	) (*history.RecordDecisionTaskStartedResponse, error)
+
+	RefreshWorkflowTasks(
+		ctx context.Context,
+		Request *history.RefreshWorkflowTasksRequest,
+		opts ...yarpc.CallOption,
+	) error
 
 	RemoveSignalMutableState(
 		ctx context.Context,
@@ -429,6 +453,29 @@ func (c client) GetReplicationMessages(
 	return
 }
 
+func (c client) MergeDLQMessages(
+	ctx context.Context,
+	_Request *replicator.MergeDLQMessagesRequest,
+	opts ...yarpc.CallOption,
+) (success *replicator.MergeDLQMessagesResponse, err error) {
+
+	args := history.HistoryService_MergeDLQMessages_Helper.Args(_Request)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result history.HistoryService_MergeDLQMessages_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	success, err = history.HistoryService_MergeDLQMessages_Helper.UnwrapResponse(&result)
+	return
+}
+
 func (c client) PollMutableState(
 	ctx context.Context,
 	_PollRequest *history.PollMutableStateRequest,
@@ -452,6 +499,29 @@ func (c client) PollMutableState(
 	return
 }
 
+func (c client) PurgeDLQMessages(
+	ctx context.Context,
+	_Request *replicator.PurgeDLQMessagesRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := history.HistoryService_PurgeDLQMessages_Helper.Args(_Request)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result history.HistoryService_PurgeDLQMessages_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	err = history.HistoryService_PurgeDLQMessages_Helper.UnwrapResponse(&result)
+	return
+}
+
 func (c client) QueryWorkflow(
 	ctx context.Context,
 	_QueryRequest *history.QueryWorkflowRequest,
@@ -472,6 +542,29 @@ func (c client) QueryWorkflow(
 	}
 
 	success, err = history.HistoryService_QueryWorkflow_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) ReadDLQMessages(
+	ctx context.Context,
+	_Request *replicator.ReadDLQMessagesRequest,
+	opts ...yarpc.CallOption,
+) (success *replicator.ReadDLQMessagesResponse, err error) {
+
+	args := history.HistoryService_ReadDLQMessages_Helper.Args(_Request)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result history.HistoryService_ReadDLQMessages_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	success, err = history.HistoryService_ReadDLQMessages_Helper.UnwrapResponse(&result)
 	return
 }
 
@@ -587,6 +680,29 @@ func (c client) RecordDecisionTaskStarted(
 	}
 
 	success, err = history.HistoryService_RecordDecisionTaskStarted_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) RefreshWorkflowTasks(
+	ctx context.Context,
+	_Request *history.RefreshWorkflowTasksRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := history.HistoryService_RefreshWorkflowTasks_Helper.Args(_Request)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result history.HistoryService_RefreshWorkflowTasks_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	err = history.HistoryService_RefreshWorkflowTasks_Helper.UnwrapResponse(&result)
 	return
 }
 

@@ -5,5 +5,5 @@ system.minRetentionDays:
 - value: 0
   constraints: {}
 history.EnableConsistentQueryByDomain:
-  - value: true
-    constrains: {}
+- value: true
+  constraints: {}

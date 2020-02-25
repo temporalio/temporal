@@ -251,7 +251,7 @@ TaskFilterLoop:
 		}
 
 		if !t.isProcessNow(timerKey.VisibilityTimestamp) {
-			lookAheadTask = task               // this means there is task in the time range (now, now + offset)
+			lookAheadTask = task                           // this means there is task in the time range (now, now + offset)
 			t.maxQueryLevel = timerKey.VisibilityTimestamp // adjust maxQueryLevel so that this task will be read next time
 			break TaskFilterLoop
 		}
