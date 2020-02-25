@@ -26,13 +26,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gogo/status"
 	"github.com/pborman/uuid"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
-	"google.golang.org/grpc/codes"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
@@ -3462,7 +3460,8 @@ func (wh *WorkflowHandler) historyArchived(ctx context.Context, request *workflo
 	if err == nil {
 		return false
 	}
-	if status.Code(err) == codes.NotFound {
+	switch err.(type) {
+	case *serviceerror.NotFound:
 		// the only case in which history is assumed to be archived is if getting mutable state returns entity not found error
 		return true
 	}
