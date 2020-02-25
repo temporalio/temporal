@@ -778,7 +778,7 @@ func (e *matchingEngineImpl) recordDecisionTaskStarted(
 	}
 	err := backoff.Retry(op, historyServiceOperationRetryPolicy, func(err error) bool {
 		switch err.(type) {
-		case *serviceerror.NotFound, *serviceerror.NotFound:
+		case *serviceerror.NotFound, *serviceerror.EventAlreadyStarted:
 			return false
 		}
 		return true

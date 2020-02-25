@@ -191,7 +191,7 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 	}
 	queryResult = <-queryResultCh
 	s.NotNil(queryResult.Err)
-	s.IsType(&serviceerror.InvalidArgument{}, queryResult.Err)
+	s.IsType(&serviceerror.QueryFailed{}, queryResult.Err)
 	s.Equal("unknown-query-type", queryResult.Err.Error())
 }
 
@@ -489,7 +489,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	}
 	queryResult = <-queryResultCh
 	s.NotNil(queryResult.Err)
-	s.IsType(&serviceerror.InvalidArgument{}, queryResult.Err)
+	s.IsType(&serviceerror.QueryFailed{}, queryResult.Err)
 	s.Equal("unknown-query-type", queryResult.Err.Error())
 
 	// advance the state of the decider
