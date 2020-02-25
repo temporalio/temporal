@@ -26,7 +26,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -55,14 +54,6 @@ const (
 	headerDestination = "rpc-service"
 )
 
-// muttleyTransport wraps around default http.Transport to add muttley specific headers to all requests
-type muttleyTransport struct {
-	http.Transport
-
-	source      string
-	destination string
-}
-
 var timeKeys = map[string]bool{
 	"StartTime":     true,
 	"CloseTime":     true,
@@ -86,38 +77,18 @@ func timeValProcess(timeStr string) (string, error) {
 	return fmt.Sprintf("%v", parsedTime.UnixNano()), nil
 }
 
-func (t *muttleyTransport) RoundTrip(r *http.Request) (*http.Response, error) {
-	r.Header.Set(headerSource, t.source)
-	r.Header.Set(headerDestination, t.destination)
-	return t.Transport.RoundTrip(r)
-}
-
 func getESClient(c *cli.Context) *elastic.Client {
 	url := getRequiredOption(c, FlagURL)
+	retrier := elastic.NewBackoffRetrier(elastic.NewExponentialBackoff(128*time.Millisecond, 513*time.Millisecond))
 	var client *elastic.Client
 	var err error
-	retrier := elastic.NewBackoffRetrier(elastic.NewExponentialBackoff(128*time.Millisecond, 513*time.Millisecond))
-	if c.IsSet(FlagMuttleyDestination) {
-		httpClient := &http.Client{
-			Transport: &muttleyTransport{
-				source:      "cadence-cli",
-				destination: c.String(FlagMuttleyDestination),
-			},
-		}
-		client, err = elastic.NewClient(
-			elastic.SetHttpClient(httpClient),
-			elastic.SetURL(url),
-			elastic.SetRetrier(retrier),
-		)
-	} else {
-		client, err = elastic.NewClient(
-			elastic.SetURL(url),
-			elastic.SetRetrier(retrier),
-		)
-	}
-	if err != nil {
+	if client, err = elastic.NewClient(
+		elastic.SetURL(url),
+		elastic.SetRetrier(retrier),
+	); err != nil {
 		ErrorAndExit("Unable to create ElasticSearch client", err)
 	}
+
 	return client
 }
 
