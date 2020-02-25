@@ -78,16 +78,6 @@ func (d *RPCFactory) GetGRPCListener() net.Listener {
 	return d.grpcListener
 }
 
-// CreateGRPCConnection creates connection for gRPC calls
-func (d *RPCFactory) CreateGRPCConnection(hostName string) *grpc.ClientConn {
-	connection, err := grpc.Dial(hostName, grpc.WithInsecure())
-	if err != nil {
-		d.logger.Fatal("Failed to dial gRPC connection", tag.Error(err))
-	}
-
-	return connection
-}
-
 // GetRingpopChannel return a cached ringpop dispatcher
 func (d *RPCFactory) GetRingpopChannel() *tchannel.Channel {
 	if d.ringpopChannel != nil {
