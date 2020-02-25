@@ -22,7 +22,6 @@ package cassandra
 
 import (
 	"fmt"
-	persistencetests "github.com/temporalio/temporal/common/persistence/persistence-tests"
 	"io/ioutil"
 	"math/rand"
 	"os"
@@ -57,8 +56,8 @@ func (s *VersionTestSuite) SetupTest() {
 }
 
 func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
-	keyspace := "temporal_ver_test_" + persistencetests.GenerateRandomDBName(3)
-	visKeyspace := "temporal_vis_ver_test_" + persistencetests.GenerateRandomDBName(3)
+	keyspace := "temporal_ver_test_"
+	visKeyspace := "temporal_vis_ver_test_"
 	_, filename, _, ok := runtime.Caller(0)
 	s.True(ok)
 	root := path.Dir(path.Dir(path.Dir(filename)))
