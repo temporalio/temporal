@@ -40,13 +40,6 @@ import (
 )
 
 const (
-	historyCaller  = "history-service-client"
-	matchingCaller = "matching-service-client"
-	crossDCCaller  = "cadence-xdc-client"
-)
-
-const (
-	clientKeyDispatcher = "client-key-dispatcher"
 	clientKeyConnection = "client-key-connection"
 )
 
