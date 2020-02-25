@@ -644,10 +644,6 @@ func newAdminElasticSearchCommands() []cli.Command {
 					Name:  FlagURL,
 					Usage: "URL of ElasticSearch cluster",
 				},
-				cli.StringFlag{
-					Name:  FlagMuttleyDestinationWithAlias,
-					Usage: "Optional muttely destination to ElasticSearch cluster",
-				},
 			},
 			Action: func(c *cli.Context) {
 				AdminCatIndices(c)
@@ -661,10 +657,6 @@ func newAdminElasticSearchCommands() []cli.Command {
 				cli.StringFlag{
 					Name:  FlagURL,
 					Usage: "URL of ElasticSearch cluster",
-				},
-				cli.StringFlag{
-					Name:  FlagMuttleyDestinationWithAlias,
-					Usage: "Optional muttely destination to ElasticSearch cluster",
 				},
 				cli.StringFlag{
 					Name:  FlagIndex,
@@ -692,10 +684,6 @@ func newAdminElasticSearchCommands() []cli.Command {
 				cli.StringFlag{
 					Name:  FlagURL,
 					Usage: "URL of ElasticSearch cluster",
-				},
-				cli.StringFlag{
-					Name:  FlagMuttleyDestinationWithAlias,
-					Usage: "Optional muttely destination to ElasticSearch cluster",
 				},
 				cli.StringFlag{
 					Name:  FlagIndex,
