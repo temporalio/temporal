@@ -25,15 +25,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gogo/status"
 	"github.com/google/uuid"
 	"go.temporal.io/temporal"
 	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/activity"
 	"go.temporal.io/temporal/workflow"
 	"golang.org/x/time/rate"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 
 	"github.com/temporalio/temporal/client/frontend"
@@ -440,7 +439,7 @@ func processTask(
 		err = procFn(wf.GetWorkflowId(), wf.GetRunId())
 		if err != nil {
 			// NotFound means wf is not running or deleted
-			if status.Code(err) != codes.NotFound {
+			if _, ok := err.(*serviceerror.NotFound); !ok {
 				return err
 			}
 		}
@@ -454,7 +453,7 @@ func processTask(
 		})
 		if err != nil {
 			// NotFound means wf is deleted
-			if status.Code(err) != codes.NotFound {
+			if _, ok := err.(*serviceerror.NotFound); !ok {
 				return err
 			}
 			continue

@@ -25,8 +25,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gogo/status"
 	"github.com/uber-go/tally"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/go/health"
 	m "github.com/temporalio/temporal/.gen/go/matching"
@@ -302,38 +302,32 @@ func (h *Handler) handleErr(err error, scope int) error {
 		return nil
 	}
 
-	if _, ok := status.FromError(err); ok {
-		h.metricsClient.IncCounter(scope, metrics.CadenceFailures)
-
-		return err
-	}
-
 	switch err.(type) {
-	case *gen.InternalServiceError:
+	case *gen.InternalServiceError, *serviceerror.Internal:
 		h.metricsClient.IncCounter(scope, metrics.CadenceFailures)
 		return err
-	case *gen.BadRequestError:
+	case *gen.BadRequestError, *serviceerror.InvalidArgument:
 		h.metricsClient.IncCounter(scope, metrics.CadenceErrBadRequestCounter)
 		return err
-	case *gen.EntityNotExistsError:
+	case *gen.EntityNotExistsError, *serviceerror.NotFound:
 		h.metricsClient.IncCounter(scope, metrics.CadenceErrEntityNotExistsCounter)
 		return err
-	case *gen.WorkflowExecutionAlreadyStartedError:
+	case *gen.WorkflowExecutionAlreadyStartedError, *serviceerror.WorkflowExecutionAlreadyStarted:
 		h.metricsClient.IncCounter(scope, metrics.CadenceErrExecutionAlreadyStartedCounter)
 		return err
-	case *gen.DomainAlreadyExistsError:
+	case *gen.DomainAlreadyExistsError, *serviceerror.DomainAlreadyExists:
 		h.metricsClient.IncCounter(scope, metrics.CadenceErrDomainAlreadyExistsCounter)
 		return err
-	case *gen.QueryFailedError:
+	case *gen.QueryFailedError, *serviceerror.QueryFailed:
 		h.metricsClient.IncCounter(scope, metrics.CadenceErrQueryFailedCounter)
 		return err
-	case *gen.LimitExceededError:
+	case *gen.LimitExceededError, *serviceerror.ResourceExhausted:
 		h.metricsClient.IncCounter(scope, metrics.CadenceErrLimitExceededCounter)
 		return err
 	case *gen.ServiceBusyError:
 		h.metricsClient.IncCounter(scope, metrics.CadenceErrServiceBusyCounter)
 		return err
-	case *gen.DomainNotActiveError:
+	case *gen.DomainNotActiveError, *serviceerror.DomainNotActive:
 		h.metricsClient.IncCounter(scope, metrics.CadenceErrDomainNotActiveCounter)
 		return err
 	default:

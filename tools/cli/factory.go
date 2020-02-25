@@ -27,6 +27,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
+	"github.com/temporalio/temporal/common/rpc"
 )
 
 // ClientFactory is used to construct rpc clients
@@ -70,7 +71,7 @@ func (b *clientFactory) createGRPCConnection(hostPort string) *grpc.ClientConn {
 		hostPort = localHostPortGRPC
 	}
 
-	connection, err := grpc.Dial(hostPort, grpc.WithInsecure())
+	connection, err := rpc.Dial(hostPort)
 	if err != nil {
 		b.logger.Fatal("Failed to create connection", zap.Error(err))
 		return nil

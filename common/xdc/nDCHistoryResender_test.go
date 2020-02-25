@@ -31,7 +31,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
-	"go.temporal.io/temporal-proto/errordetails"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
@@ -300,7 +300,7 @@ func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest_Err() {
 		},
 		VersionHistoryItems: []*commonproto.VersionHistoryItem{item},
 	}
-	retryErr := errordetails.NewRetryTaskV2Status(
+	retryErr := serviceerror.NewRetryTaskV2(
 		"",
 		s.domainID,
 		workflowID,
@@ -309,7 +309,7 @@ func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest_Err() {
 		common.EmptyVersion,
 		common.EmptyEventID,
 		common.EmptyVersion,
-	).Err()
+	)
 
 	s.mockHistoryClient.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(nil, retryErr).Times(1)
 	err := s.rereplicator.sendReplicationRawRequest(request)

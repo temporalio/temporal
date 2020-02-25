@@ -30,6 +30,7 @@ import (
 
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/rpc"
 )
 
 // RPCFactory is an implementation of service.RPCFactory interface
@@ -75,16 +76,6 @@ func (d *RPCFactory) GetGRPCListener() net.Listener {
 	}
 
 	return d.grpcListener
-}
-
-// CreateGRPCConnection creates connection for gRPC calls
-func (d *RPCFactory) CreateGRPCConnection(hostName string) *grpc.ClientConn {
-	connection, err := grpc.Dial(hostName, grpc.WithInsecure())
-	if err != nil {
-		d.logger.Fatal("Failed to dial gRPC connection", tag.Error(err))
-	}
-
-	return connection
 }
 
 // GetRingpopChannel return a cached ringpop dispatcher
@@ -136,4 +127,14 @@ func (d *RPCFactory) getListenIP() net.IP {
 		d.logger.Fatal("ListenIP failed, err=%v", tag.Error(err))
 	}
 	return ip
+}
+
+// CreateGRPCConnection creates connection for gRPC calls
+func (d *RPCFactory) CreateGRPCConnection(hostName string) *grpc.ClientConn {
+	connection, err := rpc.Dial(hostName)
+	if err != nil {
+		d.logger.Fatal("Failed to create gRPC connection", tag.Error(err))
+	}
+
+	return connection
 }

@@ -26,9 +26,9 @@ import (
 
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/zap"
-	"google.golang.org/grpc"
 
 	"github.com/temporalio/temporal/common/log/loggerimpl"
+	"github.com/temporalio/temporal/common/rpc"
 )
 
 type canaryRunner struct {
@@ -47,7 +47,7 @@ func NewCanaryRunner(cfg *Config) (Runnable, error) {
 		cfg.Cadence.HostNameAndPort = CadenceLocalHostPort
 	}
 
-	connection, err := grpc.Dial(cfg.Cadence.HostNameAndPort, grpc.WithInsecure())
+	connection, err := rpc.Dial(cfg.Cadence.HostNameAndPort)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create connection: %v", err)
 	}

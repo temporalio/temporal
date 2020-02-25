@@ -27,13 +27,12 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/gogo/status"
 	"github.com/pborman/uuid"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/atomic"
-	"google.golang.org/grpc/codes"
 
 	"github.com/temporalio/temporal/common/log/tag"
 )
@@ -192,9 +191,8 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 	}
 	queryResult = <-queryResultCh
 	s.NotNil(queryResult.Err)
-	st := status.Convert(queryResult.Err)
-	s.Equal(codes.InvalidArgument, st.Code())
-	s.Equal("unknown-query-type", st.Message())
+	s.IsType(&serviceerror.QueryFailed{}, queryResult.Err)
+	s.Equal("unknown-query-type", queryResult.Err.Error())
 }
 
 func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
@@ -491,9 +489,8 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	}
 	queryResult = <-queryResultCh
 	s.NotNil(queryResult.Err)
-	st := status.Convert(queryResult.Err)
-	s.Equal(codes.InvalidArgument, st.Code())
-	s.Equal("unknown-query-type", st.Message())
+	s.IsType(&serviceerror.QueryFailed{}, queryResult.Err)
+	s.Equal("unknown-query-type", queryResult.Err.Error())
 
 	// advance the state of the decider
 	_, err = poller.PollAndProcessDecisionTask(false, false)
@@ -1329,7 +1326,6 @@ func (s *integrationSuite) TestQueryWorkflow_BeforeFirstDecision() {
 		},
 	})
 	s.IsType(&workflowservice.QueryWorkflowResponse{}, queryResp)
-	st := status.Convert(err)
-	s.Equal(codes.InvalidArgument, st.Code())
-	s.Equal("workflow must handle at least one decision task before it can be queried", st.Message())
+	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.Equal("workflow must handle at least one decision task before it can be queried", err.Error())
 }

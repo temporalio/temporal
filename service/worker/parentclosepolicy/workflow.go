@@ -24,13 +24,12 @@ import (
 	"context"
 	"time"
 
-	"github.com/gogo/status"
 	"go.temporal.io/temporal"
 	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/activity"
 	"go.temporal.io/temporal/workflow"
-	"google.golang.org/grpc/codes"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
@@ -140,10 +139,7 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 		}
 
 		if err != nil {
-			//if _, ok := err.(*shared.EntityNotExistsError); ok {
-			//	err = nil
-			//}
-			if status.Code(err) == codes.NotFound {
+			if _, ok := err.(*serviceerror.NotFound); ok {
 				err = nil
 			}
 		}

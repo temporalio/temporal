@@ -26,15 +26,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/temporalio/temporal/common/primitives"
-
-	"github.com/gogo/status"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.uber.org/zap"
-	"google.golang.org/grpc/codes"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
@@ -44,6 +41,7 @@ import (
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/mocks"
 	p "github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -323,28 +321,28 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 			WorkflowId: "workflowID1",
 			RunId:      "runID1",
 		},
-	}).Return(nil, status.Error(codes.NotFound, ""))
+	}).Return(nil, serviceerror.NewNotFound(""))
 	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
 		DomainUUID: "domainID2",
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: "workflowID2",
 			RunId:      "runID2",
 		},
-	}).Return(nil, status.Error(codes.NotFound, ""))
+	}).Return(nil, serviceerror.NewNotFound(""))
 	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
 		DomainUUID: "domainID3",
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: "workflowID3",
 			RunId:      "runID3",
 		},
-	}).Return(nil, status.Error(codes.NotFound, ""))
+	}).Return(nil, serviceerror.NewNotFound(""))
 	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
 		DomainUUID: "domainID4",
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: "workflowID4",
 			RunId:      "runID4",
 		},
-	}).Return(nil, status.Error(codes.NotFound, ""))
+	}).Return(nil, serviceerror.NewNotFound(""))
 
 	branchToken1, err := p.NewHistoryBranchTokenByBranchID(treeID1, branchID1)
 	s.Nil(err)
@@ -439,7 +437,7 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 			WorkflowId: "workflowID3",
 			RunId:      "runID3",
 		},
-	}).Return(nil, status.Error(codes.NotFound, ""))
+	}).Return(nil, serviceerror.NewNotFound(""))
 
 	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
 		DomainUUID: "domainID4",
@@ -447,7 +445,7 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 			WorkflowId: "workflowID4",
 			RunId:      "runID4",
 		},
-	}).Return(nil, status.Error(codes.NotFound, ""))
+	}).Return(nil, serviceerror.NewNotFound(""))
 	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
 		DomainUUID: "domainID5",
 		Execution: &commonproto.WorkflowExecution{

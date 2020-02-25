@@ -24,12 +24,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/temporalio/temporal/common/persistence/serialization"
-
-	"github.com/gogo/status"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
-	"go.temporal.io/temporal-proto/errordetails"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
@@ -41,6 +38,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/persistence/serialization"
 )
 
 var (
@@ -321,19 +319,19 @@ func (c *historyRereplicationContext) sendReplicationRawRequest(request *history
 	// sometimes there can be case when the first re-replication call
 	// trigger an history reset and this reset can leave a hole in target
 	// workflow, we should amend that hole and continue
-	var retryFailure *errordetails.RetryTaskFailure
-	if retryErr, ok := err.(*shared.RetryTaskError); ok {
-		retryFailure = &errordetails.RetryTaskFailure{
-			DomainId:    retryErr.GetDomainId(),
-			WorkflowId:  retryErr.GetWorkflowId(),
-			RunId:       retryErr.GetRunId(),
-			NextEventId: retryErr.GetNextEventId(),
+	var retryServiceError *serviceerror.RetryTask
+	if retrySharedError, ok := err.(*shared.RetryTaskError); ok {
+		retryServiceError = &serviceerror.RetryTask{
+			DomainId:    retrySharedError.GetDomainId(),
+			WorkflowId:  retrySharedError.GetWorkflowId(),
+			RunId:       retrySharedError.GetRunId(),
+			NextEventId: retrySharedError.GetNextEventId(),
 		}
 	} else {
-		retryFailure, _ = errordetails.GetRetryTaskFailure(status.Convert(err))
+		retryServiceError = err.(*serviceerror.RetryTask)
 	}
 
-	if retryFailure == nil {
+	if retryServiceError == nil {
 		logger.Error("error sending history", tag.Error(err))
 		return err
 	}
@@ -341,17 +339,17 @@ func (c *historyRereplicationContext) sendReplicationRawRequest(request *history
 		logger.Error("encounter RetryTaskError not in first call")
 		return err
 	}
-	if retryFailure.GetRunId() != c.beginningRunID {
+	if retryServiceError.RunId != c.beginningRunID {
 		logger.Error("encounter RetryTaskError with non expected run ID")
 		return err
 	}
-	if retryFailure.GetNextEventId() >= c.beginningFirstEventID {
+	if retryServiceError.NextEventId >= c.beginningFirstEventID {
 		logger.Error("encounter RetryTaskError with larger event ID")
 		return err
 	}
 
-	_, err = c.sendSingleWorkflowHistory(c.domainID, c.workflowID, retryFailure.GetRunId(),
-		retryFailure.GetNextEventId(), c.beginningFirstEventID)
+	_, err = c.sendSingleWorkflowHistory(c.domainID, c.workflowID, retryServiceError.RunId,
+		retryServiceError.NextEventId, c.beginningFirstEventID)
 	if err != nil {
 		logger.Error("error sending history", tag.Error(err))
 		return err

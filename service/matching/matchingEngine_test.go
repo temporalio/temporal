@@ -32,14 +32,13 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/emirpasic/gods/maps/treemap"
-	"github.com/gogo/status"
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
-	"google.golang.org/grpc/codes"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/go/matching"
 	"github.com/temporalio/temporal/.gen/go/shared"
@@ -1148,8 +1147,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 		func(ctx context.Context, taskRequest *historyservice.RecordActivityTaskStartedRequest) (*historyservice.RecordActivityTaskStartedResponse, error) {
 			if _, ok := startedTasks[taskRequest.TaskId]; ok {
 				s.logger.Debug("From error function Mock Received DUPLICATED RecordActivityTaskStartedRequest", tag.TaskID(taskRequest.TaskId))
-				//return nil, &shared.EntityNotExistsError{Message: "already started"}
-				return nil, status.Error(codes.NotFound, "already started")
+				return nil, serviceerror.NewNotFound("already started")
 			}
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest", tag.TaskID(taskRequest.TaskId))
 
@@ -1292,8 +1290,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 		func(ctx context.Context, taskRequest *historyservice.RecordDecisionTaskStartedRequest) (*historyservice.RecordDecisionTaskStartedResponse, error) {
 			if _, ok := startedTasks[taskRequest.TaskId]; ok {
 				s.logger.Debug("From error function Mock Received DUPLICATED RecordDecisionTaskStartedRequest", tag.TaskID(taskRequest.TaskId))
-				return nil, status.Error(codes.AlreadyExists, "already started")
-				//return nil, &hg.EventAlreadyStartedError{Message: "already started"}
+				return nil, serviceerror.NewEventAlreadyStarted("already started")
 			}
 			s.logger.Debug("Mock Received RecordDecisionTaskStartedRequest", tag.TaskID(taskRequest.TaskId))
 			s.logger.Debug("Mock Received RecordDecisionTaskStartedRequest")
