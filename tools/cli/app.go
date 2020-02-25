@@ -132,6 +132,12 @@ func NewCliApp() *cli.App {
 					Usage:       "Run admin operation on cluster",
 					Subcommands: newAdminClusterCommands(),
 				},
+				{
+					Name:        "dlq",
+					Aliases:     []string{"dlq"},
+					Usage:       "Run admin operation on DLQ",
+					Subcommands: newAdminDLQCommands(),
+				},
 			},
 		},
 		{

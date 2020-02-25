@@ -21,9 +21,11 @@
 package history
 
 import (
+	"context"
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/temporal-proto/serviceerror"
 	"google.golang.org/grpc"
 
 	"github.com/temporalio/temporal/.gen/proto/healthservice"
@@ -79,6 +81,9 @@ type Config struct {
 	StandbyClusterDelay                  dynamicconfig.DurationPropertyFn
 	StandbyTaskMissingEventsResendDelay  dynamicconfig.DurationPropertyFn
 	StandbyTaskMissingEventsDiscardDelay dynamicconfig.DurationPropertyFn
+
+	// Task process settings
+	TaskProcessRPS dynamicconfig.IntPropertyFnWithDomainFilter
 
 	// TimerQueueProcessor settings
 	TimerTaskBatchSize                               dynamicconfig.IntPropertyFn
@@ -234,6 +239,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int, storeType strin
 		StandbyClusterDelay:                                   dc.GetDurationProperty(dynamicconfig.StandbyClusterDelay, 5*time.Minute),
 		StandbyTaskMissingEventsResendDelay:                   dc.GetDurationProperty(dynamicconfig.StandbyTaskMissingEventsResendDelay, 15*time.Minute),
 		StandbyTaskMissingEventsDiscardDelay:                  dc.GetDurationProperty(dynamicconfig.StandbyTaskMissingEventsDiscardDelay, 25*time.Minute),
+		TaskProcessRPS:                                        dc.GetIntPropertyFilteredByDomain(dynamicconfig.TaskProcessRPS, 1000),
 		TimerTaskBatchSize:                                    dc.GetIntProperty(dynamicconfig.TimerTaskBatchSize, 100),
 		TimerTaskWorkerCount:                                  dc.GetIntProperty(dynamicconfig.TimerTaskWorkerCount, 10),
 		TimerTaskMaxRetryCount:                                dc.GetIntProperty(dynamicconfig.TimerTaskMaxRetryCount, 100),
@@ -419,7 +425,7 @@ func (s *Service) Start() {
 	s.Resource.Start()
 	s.handler.Start()
 
-	s.server = grpc.NewServer()
+	s.server = grpc.NewServer(grpc.UnaryInterceptor(interceptor))
 	handlerGRPC := NewHandlerGRPC(s.handler)
 	nilCheckHandler := NewNilCheckHandler(handlerGRPC)
 	historyservice.RegisterHistoryServiceServer(s.server, nilCheckHandler)
@@ -444,4 +450,9 @@ func (s *Service) Stop() {
 	s.Resource.Stop()
 
 	s.GetLogger().Info("history stopped")
+}
+
+func interceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	resp, err := handler(ctx, req)
+	return resp, serviceerror.ToStatus(err).Err()
 }

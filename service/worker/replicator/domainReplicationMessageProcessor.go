@@ -31,6 +31,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/backoff"
+	"github.com/temporalio/temporal/common/domain"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/membership"
@@ -52,7 +53,7 @@ func newDomainReplicationMessageProcessor(
 	logger log.Logger,
 	remotePeer admin.Client,
 	metricsClient metrics.Client,
-	domainReplicator DomainReplicator,
+	taskExecutor domain.ReplicationTaskExecutor,
 	hostInfo *membership.HostInfo,
 	serviceResolver membership.ServiceResolver,
 	domainReplicationQueue persistence.DomainReplicationQueue,
@@ -68,7 +69,7 @@ func newDomainReplicationMessageProcessor(
 		sourceCluster:          sourceCluster,
 		logger:                 logger,
 		remotePeer:             remotePeer,
-		domainReplicator:       domainReplicator,
+		taskExecutor:           taskExecutor,
 		metricsClient:          metricsClient,
 		retryPolicy:            retryPolicy,
 		lastProcessedMessageID: -1,
@@ -86,7 +87,7 @@ type (
 		sourceCluster          string
 		logger                 log.Logger
 		remotePeer             admin.Client
-		domainReplicator       DomainReplicator
+		taskExecutor           domain.ReplicationTaskExecutor
 		metricsClient          metrics.Client
 		retryPolicy            backoff.RetryPolicy
 		lastProcessedMessageID int64
@@ -190,7 +191,7 @@ func (p *domainReplicationMessageProcessor) handleDomainReplicationTask(
 	sw := p.metricsClient.StartTimer(metrics.DomainReplicationTaskScope, metrics.ReplicatorLatency)
 	defer sw.Stop()
 
-	return p.domainReplicator.HandleReceivingTask(task.GetDomainTaskAttributes())
+	return p.taskExecutor.Execute(task.GetDomainTaskAttributes())
 }
 
 func (p *domainReplicationMessageProcessor) Stop() {

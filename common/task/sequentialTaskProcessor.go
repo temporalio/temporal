@@ -52,7 +52,7 @@ type (
 
 // NewSequentialTaskProcessor create a new sequential tasks processor
 func NewSequentialTaskProcessor(coroutineSize int, taskQueueHashFn collection.HashFunc, taskQueueFactory SequentialTaskQueueFactory,
-	metricsClient metrics.Client, logger log.Logger) SequentialTaskProcessor {
+	metricsClient metrics.Client, logger log.Logger) Processor {
 
 	return &sequentialTaskProcessorImpl{
 		status:           common.DaemonStatusInitialized,
@@ -92,7 +92,7 @@ func (t *sequentialTaskProcessorImpl) Stop() {
 	t.logger.Info("Task processor stopped.")
 }
 
-func (t *sequentialTaskProcessorImpl) Submit(task SequentialTask) error {
+func (t *sequentialTaskProcessorImpl) Submit(task Task) error {
 
 	t.metricsClient.IncCounter(t.metricsScope, metrics.SequentialTaskSubmitRequest)
 	metricsTimer := t.metricsClient.StartTimer(t.metricsScope, metrics.SequentialTaskSubmitLatency)

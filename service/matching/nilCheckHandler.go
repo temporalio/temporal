@@ -52,7 +52,7 @@ func NewNilCheckHandler(
 func (h *NilCheckHandler) PollForDecisionTask(ctx context.Context, request *matchingservice.PollForDecisionTaskRequest) (*matchingservice.PollForDecisionTaskResponse, error) {
 	resp, err := h.parentHandler.PollForDecisionTask(ctx, request)
 	if resp == nil && err == nil {
-		return &matchingservice.PollForDecisionTaskResponse{}, err
+		resp = &matchingservice.PollForDecisionTaskResponse{}
 	}
 	return resp, err
 }
@@ -60,7 +60,7 @@ func (h *NilCheckHandler) PollForDecisionTask(ctx context.Context, request *matc
 func (h *NilCheckHandler) PollForActivityTask(ctx context.Context, request *matchingservice.PollForActivityTaskRequest) (*matchingservice.PollForActivityTaskResponse, error) {
 	resp, err := h.parentHandler.PollForActivityTask(ctx, request)
 	if resp == nil && err == nil {
-		return &matchingservice.PollForActivityTaskResponse{}, err
+		resp = &matchingservice.PollForActivityTaskResponse{}
 	}
 	return resp, err
 }
@@ -68,7 +68,7 @@ func (h *NilCheckHandler) PollForActivityTask(ctx context.Context, request *matc
 func (h *NilCheckHandler) AddDecisionTask(ctx context.Context, request *matchingservice.AddDecisionTaskRequest) (*matchingservice.AddDecisionTaskResponse, error) {
 	resp, err := h.parentHandler.AddDecisionTask(ctx, request)
 	if resp == nil && err == nil {
-		return &matchingservice.AddDecisionTaskResponse{}, err
+		resp = &matchingservice.AddDecisionTaskResponse{}
 	}
 	return resp, err
 }
@@ -76,7 +76,7 @@ func (h *NilCheckHandler) AddDecisionTask(ctx context.Context, request *matching
 func (h *NilCheckHandler) AddActivityTask(ctx context.Context, request *matchingservice.AddActivityTaskRequest) (*matchingservice.AddActivityTaskResponse, error) {
 	resp, err := h.parentHandler.AddActivityTask(ctx, request)
 	if resp == nil && err == nil {
-		return &matchingservice.AddActivityTaskResponse{}, err
+		resp = &matchingservice.AddActivityTaskResponse{}
 	}
 	return resp, err
 }
@@ -84,7 +84,7 @@ func (h *NilCheckHandler) AddActivityTask(ctx context.Context, request *matching
 func (h *NilCheckHandler) QueryWorkflow(ctx context.Context, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error) {
 	resp, err := h.parentHandler.QueryWorkflow(ctx, request)
 	if resp == nil && err == nil {
-		return &matchingservice.QueryWorkflowResponse{}, err
+		resp = &matchingservice.QueryWorkflowResponse{}
 	}
 	return resp, err
 }
@@ -92,7 +92,7 @@ func (h *NilCheckHandler) QueryWorkflow(ctx context.Context, request *matchingse
 func (h *NilCheckHandler) RespondQueryTaskCompleted(ctx context.Context, request *matchingservice.RespondQueryTaskCompletedRequest) (*matchingservice.RespondQueryTaskCompletedResponse, error) {
 	resp, err := h.parentHandler.RespondQueryTaskCompleted(ctx, request)
 	if resp == nil && err == nil {
-		return &matchingservice.RespondQueryTaskCompletedResponse{}, err
+		resp = &matchingservice.RespondQueryTaskCompletedResponse{}
 	}
 	return resp, err
 }
@@ -100,7 +100,7 @@ func (h *NilCheckHandler) RespondQueryTaskCompleted(ctx context.Context, request
 func (h *NilCheckHandler) CancelOutstandingPoll(ctx context.Context, request *matchingservice.CancelOutstandingPollRequest) (*matchingservice.CancelOutstandingPollResponse, error) {
 	resp, err := h.parentHandler.CancelOutstandingPoll(ctx, request)
 	if resp == nil && err == nil {
-		return &matchingservice.CancelOutstandingPollResponse{}, err
+		resp = &matchingservice.CancelOutstandingPollResponse{}
 	}
 	return resp, err
 }
@@ -108,7 +108,7 @@ func (h *NilCheckHandler) CancelOutstandingPoll(ctx context.Context, request *ma
 func (h *NilCheckHandler) DescribeTaskList(ctx context.Context, request *matchingservice.DescribeTaskListRequest) (*matchingservice.DescribeTaskListResponse, error) {
 	resp, err := h.parentHandler.DescribeTaskList(ctx, request)
 	if resp == nil && err == nil {
-		return &matchingservice.DescribeTaskListResponse{}, err
+		resp = &matchingservice.DescribeTaskListResponse{}
 	}
 	return resp, err
 }
@@ -116,7 +116,7 @@ func (h *NilCheckHandler) DescribeTaskList(ctx context.Context, request *matchin
 func (h *NilCheckHandler) ListTaskListPartitions(ctx context.Context, request *matchingservice.ListTaskListPartitionsRequest) (*matchingservice.ListTaskListPartitionsResponse, error) {
 	resp, err := h.parentHandler.ListTaskListPartitions(ctx, request)
 	if resp == nil && err == nil {
-		return &matchingservice.ListTaskListPartitionsResponse{}, err
+		resp = &matchingservice.ListTaskListPartitionsResponse{}
 	}
 	return resp, err
 }

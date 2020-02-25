@@ -140,6 +140,7 @@ var keys = map[Key]string{
 	StandbyClusterDelay:                                   "history.standbyClusterDelay",
 	StandbyTaskMissingEventsResendDelay:                   "history.standbyTaskMissingEventsResendDelay",
 	StandbyTaskMissingEventsDiscardDelay:                  "history.standbyTaskMissingEventsDiscardDelay",
+	TaskProcessRPS:                                        "history.taskProcessRPS",
 	TimerTaskBatchSize:                                    "history.timerTaskBatchSize",
 	TimerTaskWorkerCount:                                  "history.timerTaskWorkerCount",
 	TimerTaskMaxRetryCount:                                "history.timerTaskMaxRetryCount",
@@ -429,6 +430,8 @@ const (
 	// StandbyTaskMissingEventsDiscardDelay is the amount of time standby cluster's will wait (if events are missing)
 	// before discarding the task
 	StandbyTaskMissingEventsDiscardDelay
+	// TaskProcessRPS is the task processing rate per second for each domain
+	TaskProcessRPS
 	// TimerTaskBatchSize is batch size for timer processor to process tasks
 	TimerTaskBatchSize
 	// TimerTaskWorkerCount is number of task workers for timer processor

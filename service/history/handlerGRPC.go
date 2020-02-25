@@ -23,10 +23,12 @@ package history
 import (
 	"context"
 
+	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/healthservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/metrics"
 )
 
 // Disable lint due to missing comments.
@@ -65,7 +67,7 @@ func (h *HandlerGRPC) StartWorkflowExecution(ctx context.Context, request *histo
 
 	resp, err := h.handlerThrift.StartWorkflowExecution(ctx, adapter.ToThriftHistoryStartWorkflowExecutionRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return adapter.ToProtoHistoryStartWorkflowExecutionResponse(resp), nil
 }
@@ -75,7 +77,7 @@ func (h *HandlerGRPC) GetMutableState(ctx context.Context, request *historyservi
 
 	resp, err := h.handlerThrift.GetMutableState(ctx, adapter.ToThriftGetMutableStateRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return adapter.ToProtoGetMutableStateResponse(resp), nil
 }
@@ -85,7 +87,7 @@ func (h *HandlerGRPC) PollMutableState(ctx context.Context, request *historyserv
 
 	resp, err := h.handlerThrift.PollMutableState(ctx, adapter.ToThriftPollMutableStateRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return adapter.ToProtoPollMutableStateResponse(resp), nil
 }
@@ -95,7 +97,7 @@ func (h *HandlerGRPC) ResetStickyTaskList(ctx context.Context, request *historys
 
 	resp, err := h.handlerThrift.ResetStickyTaskList(ctx, adapter.ToThriftHistoryResetStickyTaskListRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return adapter.ToProtoResetStickyTaskListResponse(resp), nil
 }
@@ -105,7 +107,7 @@ func (h *HandlerGRPC) RecordDecisionTaskStarted(ctx context.Context, request *hi
 
 	resp, err := h.handlerThrift.RecordDecisionTaskStarted(ctx, adapter.ToThriftRecordDecisionTaskStartedRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return adapter.ToProtoRecordDecisionTaskStartedResponse(resp), nil
 }
@@ -115,7 +117,7 @@ func (h *HandlerGRPC) RecordActivityTaskStarted(ctx context.Context, request *hi
 
 	resp, err := h.handlerThrift.RecordActivityTaskStarted(ctx, adapter.ToThriftRecordActivityTaskStartedRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return adapter.ToProtoRecordActivityTaskStartedResponse(resp), nil
 }
@@ -125,7 +127,7 @@ func (h *HandlerGRPC) RespondDecisionTaskCompleted(ctx context.Context, request 
 
 	resp, err := h.handlerThrift.RespondDecisionTaskCompleted(ctx, adapter.ToThriftHistoryRespondDecisionTaskCompletedRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return adapter.ToProtoHistoryRespondDecisionTaskCompletedResponse(resp), nil
 }
@@ -135,7 +137,7 @@ func (h *HandlerGRPC) RespondDecisionTaskFailed(ctx context.Context, request *hi
 
 	err := h.handlerThrift.RespondDecisionTaskFailed(ctx, adapter.ToThriftHistoryRespondDecisionTaskFailedRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return &historyservice.RespondDecisionTaskFailedResponse{}, nil
 }
@@ -145,7 +147,7 @@ func (h *HandlerGRPC) RecordActivityTaskHeartbeat(ctx context.Context, request *
 
 	resp, err := h.handlerThrift.RecordActivityTaskHeartbeat(ctx, adapter.ToThriftHistoryRecordActivityTaskHeartbeatRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return adapter.ToProtoHistoryRecordActivityTaskHeartbeatResponse(resp), nil
 }
@@ -155,7 +157,7 @@ func (h *HandlerGRPC) RespondActivityTaskCompleted(ctx context.Context, request 
 
 	err := h.handlerThrift.RespondActivityTaskCompleted(ctx, adapter.ToThriftHistoryRespondActivityTaskCompletedRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return &historyservice.RespondActivityTaskCompletedResponse{}, nil
 }
@@ -165,7 +167,7 @@ func (h *HandlerGRPC) RespondActivityTaskFailed(ctx context.Context, request *hi
 
 	err := h.handlerThrift.RespondActivityTaskFailed(ctx, adapter.ToThriftHistoryRespondActivityTaskFailedRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return &historyservice.RespondActivityTaskFailedResponse{}, nil
 }
@@ -175,7 +177,7 @@ func (h *HandlerGRPC) RespondActivityTaskCanceled(ctx context.Context, request *
 
 	err := h.handlerThrift.RespondActivityTaskCanceled(ctx, adapter.ToThriftHistoryRespondActivityTaskCanceledRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return &historyservice.RespondActivityTaskCanceledResponse{}, nil
 }
@@ -185,7 +187,7 @@ func (h *HandlerGRPC) SignalWorkflowExecution(ctx context.Context, request *hist
 
 	err := h.handlerThrift.SignalWorkflowExecution(ctx, adapter.ToThriftHistorySignalWorkflowExecutionRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return &historyservice.SignalWorkflowExecutionResponse{}, nil
 }
@@ -195,7 +197,7 @@ func (h *HandlerGRPC) SignalWithStartWorkflowExecution(ctx context.Context, requ
 
 	resp, err := h.handlerThrift.SignalWithStartWorkflowExecution(ctx, adapter.ToThriftHistorySignalWithStartWorkflowExecutionRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return adapter.ToProtoHistorySignalWithStartWorkflowExecutionResponse(resp), nil
 }
@@ -205,7 +207,7 @@ func (h *HandlerGRPC) RemoveSignalMutableState(ctx context.Context, request *his
 
 	err := h.handlerThrift.RemoveSignalMutableState(ctx, adapter.ToThriftRemoveSignalMutableStateRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return &historyservice.RemoveSignalMutableStateResponse{}, nil
 }
@@ -215,7 +217,7 @@ func (h *HandlerGRPC) TerminateWorkflowExecution(ctx context.Context, request *h
 
 	err := h.handlerThrift.TerminateWorkflowExecution(ctx, adapter.ToThriftHistoryTerminateWorkflowExecutionRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return &historyservice.TerminateWorkflowExecutionResponse{}, nil
 }
@@ -225,7 +227,7 @@ func (h *HandlerGRPC) ResetWorkflowExecution(ctx context.Context, request *histo
 
 	resp, err := h.handlerThrift.ResetWorkflowExecution(ctx, adapter.ToThriftHistoryResetWorkflowExecutionRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return adapter.ToProtoHistoryResetWorkflowExecutionResponse(resp), nil
 }
@@ -235,7 +237,7 @@ func (h *HandlerGRPC) RequestCancelWorkflowExecution(ctx context.Context, reques
 
 	err := h.handlerThrift.RequestCancelWorkflowExecution(ctx, adapter.ToThriftHistoryRequestCancelWorkflowExecutionRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return &historyservice.RequestCancelWorkflowExecutionResponse{}, nil
 }
@@ -245,7 +247,7 @@ func (h *HandlerGRPC) ScheduleDecisionTask(ctx context.Context, request *history
 
 	err := h.handlerThrift.ScheduleDecisionTask(ctx, adapter.ToThriftScheduleDecisionTaskRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return &historyservice.ScheduleDecisionTaskResponse{}, nil
 }
@@ -255,7 +257,7 @@ func (h *HandlerGRPC) RecordChildExecutionCompleted(ctx context.Context, request
 
 	err := h.handlerThrift.RecordChildExecutionCompleted(ctx, adapter.ToThriftRecordChildExecutionCompletedRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return &historyservice.RecordChildExecutionCompletedResponse{}, nil
 }
@@ -265,7 +267,7 @@ func (h *HandlerGRPC) DescribeWorkflowExecution(ctx context.Context, request *hi
 
 	resp, err := h.handlerThrift.DescribeWorkflowExecution(ctx, adapter.ToThriftHistoryDescribeWorkflowExecutionRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return adapter.ToProtoHistoryDescribeWorkflowExecutionResponse(resp), nil
 }
@@ -275,7 +277,7 @@ func (h *HandlerGRPC) ReplicateEvents(ctx context.Context, request *historyservi
 
 	err := h.handlerThrift.ReplicateEvents(ctx, adapter.ToThriftReplicateEventsRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return &historyservice.ReplicateEventsResponse{}, nil
 }
@@ -285,7 +287,7 @@ func (h *HandlerGRPC) ReplicateRawEvents(ctx context.Context, request *historyse
 
 	err := h.handlerThrift.ReplicateRawEvents(ctx, adapter.ToThriftReplicateRawEventsRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return &historyservice.ReplicateRawEventsResponse{}, nil
 }
@@ -295,7 +297,7 @@ func (h *HandlerGRPC) ReplicateEventsV2(ctx context.Context, request *historyser
 
 	err := h.handlerThrift.ReplicateEventsV2(ctx, adapter.ToThriftReplicateEventsV2Request(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return &historyservice.ReplicateEventsV2Response{}, nil
 }
@@ -305,7 +307,7 @@ func (h *HandlerGRPC) SyncShardStatus(ctx context.Context, request *historyservi
 
 	err := h.handlerThrift.SyncShardStatus(ctx, adapter.ToThriftSyncShardStatusRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return &historyservice.SyncShardStatusResponse{}, nil
 }
@@ -315,7 +317,7 @@ func (h *HandlerGRPC) SyncActivity(ctx context.Context, request *historyservice.
 
 	err := h.handlerThrift.SyncActivity(ctx, adapter.ToThriftSyncActivityRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return &historyservice.SyncActivityResponse{}, nil
 }
@@ -325,7 +327,7 @@ func (h *HandlerGRPC) DescribeMutableState(ctx context.Context, request *history
 
 	resp, err := h.handlerThrift.DescribeMutableState(ctx, adapter.ToThriftDescribeMutableStateRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return adapter.ToProtoDescribeMutableStateResponse(resp), nil
 }
@@ -335,7 +337,7 @@ func (h *HandlerGRPC) DescribeHistoryHost(ctx context.Context, request *historys
 
 	resp, err := h.handlerThrift.DescribeHistoryHost(ctx, adapter.ToThriftHistoryDescribeHistoryHostRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return adapter.ToProtoHistoryDescribeHistoryHostResponse(resp), nil
 }
@@ -345,7 +347,7 @@ func (h *HandlerGRPC) CloseShard(ctx context.Context, request *historyservice.Cl
 
 	err := h.handlerThrift.CloseShard(ctx, adapter.ToThriftHistoryCloseShardRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return &historyservice.CloseShardResponse{}, nil
 }
@@ -355,7 +357,7 @@ func (h *HandlerGRPC) RemoveTask(ctx context.Context, request *historyservice.Re
 
 	err := h.handlerThrift.RemoveTask(ctx, adapter.ToThriftHistoryRemoveTaskRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return &historyservice.RemoveTaskResponse{}, nil
 }
@@ -365,7 +367,7 @@ func (h *HandlerGRPC) GetReplicationMessages(ctx context.Context, request *histo
 
 	resp, err := h.handlerThrift.GetReplicationMessages(ctx, adapter.ToThriftHistoryGetReplicationMessagesRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return adapter.ToProtoHistoryGetReplicationMessagesResponse(resp), nil
 }
@@ -375,7 +377,7 @@ func (h *HandlerGRPC) GetDLQReplicationMessages(ctx context.Context, request *hi
 
 	resp, err := h.handlerThrift.GetDLQReplicationMessages(ctx, adapter.ToThriftHistoryGetDLQReplicationMessagesRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return adapter.ToProtoHistoryGetDLQReplicationMessagesResponse(resp), nil
 }
@@ -385,7 +387,7 @@ func (h *HandlerGRPC) QueryWorkflow(ctx context.Context, request *historyservice
 
 	resp, err := h.handlerThrift.QueryWorkflow(ctx, adapter.ToThriftHistoryQueryWorkflowRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return adapter.ToProtoHistoryQueryWorkflowResponse(resp), nil
 }
@@ -395,7 +397,116 @@ func (h *HandlerGRPC) ReapplyEvents(ctx context.Context, request *historyservice
 
 	err := h.handlerThrift.ReapplyEvents(ctx, adapter.ToThriftHistoryReapplyEventsRequest(request))
 	if err != nil {
-		return nil, adapter.ToProtoError(err)
+		return nil, adapter.ToServiceError(err)
 	}
 	return &historyservice.ReapplyEventsResponse{}, nil
+}
+
+func (h *HandlerGRPC) ReadDLQMessages(ctx context.Context, request *historyservice.ReadDLQMessagesRequest) (_ *historyservice.ReadDLQMessagesResponse, retError error) {
+	defer log.CapturePanicGRPC(h.handlerThrift.GetLogger(), &retError)
+
+	h.handlerThrift.startWG.Wait()
+
+	scope := metrics.HistoryReadDLQMessagesScope
+	h.handlerThrift.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
+	sw := h.handlerThrift.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	engine, err := h.handlerThrift.controller.getEngineForShard(int(request.GetShardID()))
+	if err != nil {
+		err = h.handlerThrift.error(err, scope, "", "")
+		return nil, adapter.ToServiceError(err)
+	}
+
+	resp, err := engine.ReadDLQMessages(ctx, request)
+	if err != nil {
+		err = h.handlerThrift.error(err, scope, "", "")
+		return nil, adapter.ToServiceError(err)
+	}
+
+	return resp, nil
+}
+
+func (h *HandlerGRPC) PurgeDLQMessages(ctx context.Context, request *historyservice.PurgeDLQMessagesRequest) (_ *historyservice.PurgeDLQMessagesResponse, retError error) {
+	defer log.CapturePanicGRPC(h.handlerThrift.GetLogger(), &retError)
+
+	h.handlerThrift.startWG.Wait()
+
+	scope := metrics.HistoryPurgeDLQMessagesScope
+	h.handlerThrift.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
+	sw := h.handlerThrift.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	engine, err := h.handlerThrift.controller.getEngineForShard(int(request.GetShardID()))
+	if err != nil {
+		err = h.handlerThrift.error(err, scope, "", "")
+		return nil, adapter.ToServiceError(err)
+	}
+
+	err = engine.PurgeDLQMessages(ctx, request)
+	if err != nil {
+		err = h.handlerThrift.error(err, scope, "", "")
+		return nil, adapter.ToServiceError(err)
+	}
+	return &historyservice.PurgeDLQMessagesResponse{}, nil
+}
+
+func (h *HandlerGRPC) MergeDLQMessages(ctx context.Context, request *historyservice.MergeDLQMessagesRequest) (_ *historyservice.MergeDLQMessagesResponse, retError error) {
+	defer log.CapturePanicGRPC(h.handlerThrift.GetLogger(), &retError)
+
+	h.handlerThrift.startWG.Wait()
+
+	scope := metrics.HistoryMergeDLQMessagesScope
+	h.handlerThrift.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
+	sw := h.handlerThrift.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	engine, err := h.handlerThrift.controller.getEngineForShard(int(request.GetShardID()))
+	if err != nil {
+		err = h.handlerThrift.error(err, scope, "", "")
+		return nil, adapter.ToServiceError(err)
+	}
+
+	resp, err := engine.MergeDLQMessages(ctx, request)
+	if err != nil {
+		err = h.handlerThrift.error(err, scope, "", "")
+		return nil, adapter.ToServiceError(err)
+	}
+
+	return resp, nil
+}
+
+func (h *HandlerGRPC) RefreshWorkflowTasks(ctx context.Context, request *historyservice.RefreshWorkflowTasksRequest) (_ *historyservice.RefreshWorkflowTasksResponse, retError error) {
+	defer log.CapturePanicGRPC(h.handlerThrift.GetLogger(), &retError)
+
+	h.handlerThrift.startWG.Wait()
+
+	scope := metrics.HistoryRefreshWorkflowTasksScope
+	h.handlerThrift.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
+	sw := h.handlerThrift.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
+	defer sw.Stop()
+	domainID := request.GetDomainUUID()
+	execution := request.GetRequest().GetExecution()
+	workflowID := execution.GetWorkflowId()
+	engine, err := h.handlerThrift.controller.GetEngine(workflowID)
+	if err != nil {
+		err = h.handlerThrift.error(err, scope, domainID, workflowID)
+		return nil, adapter.ToServiceError(err)
+	}
+
+	err = engine.RefreshWorkflowTasks(
+		ctx,
+		domainID,
+		shared.WorkflowExecution{
+			WorkflowId: &execution.WorkflowId,
+			RunId:      &execution.RunId,
+		},
+	)
+
+	if err != nil {
+		err = h.handlerThrift.error(err, scope, domainID, workflowID)
+		return nil, adapter.ToServiceError(err)
+	}
+
+	return &historyservice.RefreshWorkflowTasksResponse{}, nil
 }

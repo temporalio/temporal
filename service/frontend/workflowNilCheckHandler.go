@@ -57,7 +57,7 @@ func NewWorkflowNilCheckHandler(
 func (wh *WorkflowNilCheckHandler) RegisterDomain(ctx context.Context, request *workflowservice.RegisterDomainRequest) (_ *workflowservice.RegisterDomainResponse, retError error) {
 	resp, err := wh.parentHandler.RegisterDomain(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.RegisterDomainResponse{}, err
+		resp = &workflowservice.RegisterDomainResponse{}
 	}
 	return resp, err
 }
@@ -66,7 +66,7 @@ func (wh *WorkflowNilCheckHandler) RegisterDomain(ctx context.Context, request *
 func (wh *WorkflowNilCheckHandler) DescribeDomain(ctx context.Context, request *workflowservice.DescribeDomainRequest) (_ *workflowservice.DescribeDomainResponse, retError error) {
 	resp, err := wh.parentHandler.DescribeDomain(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.DescribeDomainResponse{}, err
+		resp = &workflowservice.DescribeDomainResponse{}
 	}
 	return resp, err
 }
@@ -75,7 +75,7 @@ func (wh *WorkflowNilCheckHandler) DescribeDomain(ctx context.Context, request *
 func (wh *WorkflowNilCheckHandler) ListDomains(ctx context.Context, request *workflowservice.ListDomainsRequest) (_ *workflowservice.ListDomainsResponse, retError error) {
 	resp, err := wh.parentHandler.ListDomains(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.ListDomainsResponse{}, err
+		resp = &workflowservice.ListDomainsResponse{}
 	}
 	return resp, err
 }
@@ -84,7 +84,7 @@ func (wh *WorkflowNilCheckHandler) ListDomains(ctx context.Context, request *wor
 func (wh *WorkflowNilCheckHandler) UpdateDomain(ctx context.Context, request *workflowservice.UpdateDomainRequest) (_ *workflowservice.UpdateDomainResponse, retError error) {
 	resp, err := wh.parentHandler.UpdateDomain(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.UpdateDomainResponse{}, err
+		resp = &workflowservice.UpdateDomainResponse{}
 	}
 	return resp, err
 }
@@ -95,7 +95,7 @@ func (wh *WorkflowNilCheckHandler) UpdateDomain(ctx context.Context, request *wo
 func (wh *WorkflowNilCheckHandler) DeprecateDomain(ctx context.Context, request *workflowservice.DeprecateDomainRequest) (_ *workflowservice.DeprecateDomainResponse, retError error) {
 	resp, err := wh.parentHandler.DeprecateDomain(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.DeprecateDomainResponse{}, err
+		resp = &workflowservice.DeprecateDomainResponse{}
 	}
 	return resp, err
 }
@@ -107,7 +107,7 @@ func (wh *WorkflowNilCheckHandler) DeprecateDomain(ctx context.Context, request 
 func (wh *WorkflowNilCheckHandler) StartWorkflowExecution(ctx context.Context, request *workflowservice.StartWorkflowExecutionRequest) (_ *workflowservice.StartWorkflowExecutionResponse, retError error) {
 	resp, err := wh.parentHandler.StartWorkflowExecution(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.StartWorkflowExecutionResponse{}, err
+		resp = &workflowservice.StartWorkflowExecutionResponse{}
 	}
 	return resp, err
 }
@@ -117,7 +117,7 @@ func (wh *WorkflowNilCheckHandler) StartWorkflowExecution(ctx context.Context, r
 func (wh *WorkflowNilCheckHandler) GetWorkflowExecutionHistory(ctx context.Context, request *workflowservice.GetWorkflowExecutionHistoryRequest) (_ *workflowservice.GetWorkflowExecutionHistoryResponse, retError error) {
 	resp, err := wh.parentHandler.GetWorkflowExecutionHistory(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.GetWorkflowExecutionHistoryResponse{}, err
+		resp = &workflowservice.GetWorkflowExecutionHistoryResponse{}
 	}
 	return resp, err
 }
@@ -130,7 +130,7 @@ func (wh *WorkflowNilCheckHandler) GetWorkflowExecutionHistory(ctx context.Conte
 func (wh *WorkflowNilCheckHandler) PollForDecisionTask(ctx context.Context, request *workflowservice.PollForDecisionTaskRequest) (_ *workflowservice.PollForDecisionTaskResponse, retError error) {
 	resp, err := wh.parentHandler.PollForDecisionTask(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.PollForDecisionTaskResponse{}, err
+		resp = &workflowservice.PollForDecisionTaskResponse{}
 	}
 	return resp, err
 }
@@ -144,7 +144,7 @@ func (wh *WorkflowNilCheckHandler) PollForDecisionTask(ctx context.Context, requ
 func (wh *WorkflowNilCheckHandler) RespondDecisionTaskCompleted(ctx context.Context, request *workflowservice.RespondDecisionTaskCompletedRequest) (_ *workflowservice.RespondDecisionTaskCompletedResponse, retError error) {
 	resp, err := wh.parentHandler.RespondDecisionTaskCompleted(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.RespondDecisionTaskCompletedResponse{}, err
+		resp = &workflowservice.RespondDecisionTaskCompletedResponse{}
 	}
 	return resp, err
 }
@@ -156,7 +156,7 @@ func (wh *WorkflowNilCheckHandler) RespondDecisionTaskCompleted(ctx context.Cont
 func (wh *WorkflowNilCheckHandler) RespondDecisionTaskFailed(ctx context.Context, request *workflowservice.RespondDecisionTaskFailedRequest) (_ *workflowservice.RespondDecisionTaskFailedResponse, retError error) {
 	resp, err := wh.parentHandler.RespondDecisionTaskFailed(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.RespondDecisionTaskFailedResponse{}, err
+		resp = &workflowservice.RespondDecisionTaskFailedResponse{}
 	}
 	return resp, err
 }
@@ -171,7 +171,7 @@ func (wh *WorkflowNilCheckHandler) RespondDecisionTaskFailed(ctx context.Context
 func (wh *WorkflowNilCheckHandler) PollForActivityTask(ctx context.Context, request *workflowservice.PollForActivityTaskRequest) (_ *workflowservice.PollForActivityTaskResponse, retError error) {
 	resp, err := wh.parentHandler.PollForActivityTask(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.PollForActivityTaskResponse{}, err
+		resp = &workflowservice.PollForActivityTaskResponse{}
 	}
 	return resp, err
 }
@@ -184,7 +184,7 @@ func (wh *WorkflowNilCheckHandler) PollForActivityTask(ctx context.Context, requ
 func (wh *WorkflowNilCheckHandler) RecordActivityTaskHeartbeat(ctx context.Context, request *workflowservice.RecordActivityTaskHeartbeatRequest) (_ *workflowservice.RecordActivityTaskHeartbeatResponse, retError error) {
 	resp, err := wh.parentHandler.RecordActivityTaskHeartbeat(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.RecordActivityTaskHeartbeatResponse{}, err
+		resp = &workflowservice.RecordActivityTaskHeartbeatResponse{}
 	}
 	return resp, err
 }
@@ -197,7 +197,7 @@ func (wh *WorkflowNilCheckHandler) RecordActivityTaskHeartbeat(ctx context.Conte
 func (wh *WorkflowNilCheckHandler) RecordActivityTaskHeartbeatByID(ctx context.Context, request *workflowservice.RecordActivityTaskHeartbeatByIDRequest) (_ *workflowservice.RecordActivityTaskHeartbeatByIDResponse, retError error) {
 	resp, err := wh.parentHandler.RecordActivityTaskHeartbeatByID(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.RecordActivityTaskHeartbeatByIDResponse{}, err
+		resp = &workflowservice.RecordActivityTaskHeartbeatByIDResponse{}
 	}
 	return resp, err
 }
@@ -210,7 +210,7 @@ func (wh *WorkflowNilCheckHandler) RecordActivityTaskHeartbeatByID(ctx context.C
 func (wh *WorkflowNilCheckHandler) RespondActivityTaskCompleted(ctx context.Context, request *workflowservice.RespondActivityTaskCompletedRequest) (_ *workflowservice.RespondActivityTaskCompletedResponse, retError error) {
 	resp, err := wh.parentHandler.RespondActivityTaskCompleted(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.RespondActivityTaskCompletedResponse{}, err
+		resp = &workflowservice.RespondActivityTaskCompletedResponse{}
 	}
 	return resp, err
 }
@@ -223,7 +223,7 @@ func (wh *WorkflowNilCheckHandler) RespondActivityTaskCompleted(ctx context.Cont
 func (wh *WorkflowNilCheckHandler) RespondActivityTaskCompletedByID(ctx context.Context, request *workflowservice.RespondActivityTaskCompletedByIDRequest) (_ *workflowservice.RespondActivityTaskCompletedByIDResponse, retError error) {
 	resp, err := wh.parentHandler.RespondActivityTaskCompletedByID(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.RespondActivityTaskCompletedByIDResponse{}, err
+		resp = &workflowservice.RespondActivityTaskCompletedByIDResponse{}
 	}
 	return resp, err
 }
@@ -236,7 +236,7 @@ func (wh *WorkflowNilCheckHandler) RespondActivityTaskCompletedByID(ctx context.
 func (wh *WorkflowNilCheckHandler) RespondActivityTaskFailed(ctx context.Context, request *workflowservice.RespondActivityTaskFailedRequest) (_ *workflowservice.RespondActivityTaskFailedResponse, retError error) {
 	resp, err := wh.parentHandler.RespondActivityTaskFailed(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.RespondActivityTaskFailedResponse{}, err
+		resp = &workflowservice.RespondActivityTaskFailedResponse{}
 	}
 	return resp, err
 }
@@ -249,7 +249,7 @@ func (wh *WorkflowNilCheckHandler) RespondActivityTaskFailed(ctx context.Context
 func (wh *WorkflowNilCheckHandler) RespondActivityTaskFailedByID(ctx context.Context, request *workflowservice.RespondActivityTaskFailedByIDRequest) (_ *workflowservice.RespondActivityTaskFailedByIDResponse, retError error) {
 	resp, err := wh.parentHandler.RespondActivityTaskFailedByID(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.RespondActivityTaskFailedByIDResponse{}, err
+		resp = &workflowservice.RespondActivityTaskFailedByIDResponse{}
 	}
 	return resp, err
 }
@@ -262,7 +262,7 @@ func (wh *WorkflowNilCheckHandler) RespondActivityTaskFailedByID(ctx context.Con
 func (wh *WorkflowNilCheckHandler) RespondActivityTaskCanceled(ctx context.Context, request *workflowservice.RespondActivityTaskCanceledRequest) (_ *workflowservice.RespondActivityTaskCanceledResponse, retError error) {
 	resp, err := wh.parentHandler.RespondActivityTaskCanceled(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.RespondActivityTaskCanceledResponse{}, err
+		resp = &workflowservice.RespondActivityTaskCanceledResponse{}
 	}
 	return resp, err
 }
@@ -275,7 +275,7 @@ func (wh *WorkflowNilCheckHandler) RespondActivityTaskCanceled(ctx context.Conte
 func (wh *WorkflowNilCheckHandler) RespondActivityTaskCanceledByID(ctx context.Context, request *workflowservice.RespondActivityTaskCanceledByIDRequest) (_ *workflowservice.RespondActivityTaskCanceledByIDResponse, retError error) {
 	resp, err := wh.parentHandler.RespondActivityTaskCanceledByID(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.RespondActivityTaskCanceledByIDResponse{}, err
+		resp = &workflowservice.RespondActivityTaskCanceledByIDResponse{}
 	}
 	return resp, err
 }
@@ -287,7 +287,7 @@ func (wh *WorkflowNilCheckHandler) RespondActivityTaskCanceledByID(ctx context.C
 func (wh *WorkflowNilCheckHandler) RequestCancelWorkflowExecution(ctx context.Context, request *workflowservice.RequestCancelWorkflowExecutionRequest) (_ *workflowservice.RequestCancelWorkflowExecutionResponse, retError error) {
 	resp, err := wh.parentHandler.RequestCancelWorkflowExecution(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.RequestCancelWorkflowExecutionResponse{}, err
+		resp = &workflowservice.RequestCancelWorkflowExecutionResponse{}
 	}
 	return resp, err
 }
@@ -297,7 +297,7 @@ func (wh *WorkflowNilCheckHandler) RequestCancelWorkflowExecution(ctx context.Co
 func (wh *WorkflowNilCheckHandler) SignalWorkflowExecution(ctx context.Context, request *workflowservice.SignalWorkflowExecutionRequest) (_ *workflowservice.SignalWorkflowExecutionResponse, retError error) {
 	resp, err := wh.parentHandler.SignalWorkflowExecution(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.SignalWorkflowExecutionResponse{}, err
+		resp = &workflowservice.SignalWorkflowExecutionResponse{}
 	}
 	return resp, err
 }
@@ -310,7 +310,7 @@ func (wh *WorkflowNilCheckHandler) SignalWorkflowExecution(ctx context.Context, 
 func (wh *WorkflowNilCheckHandler) SignalWithStartWorkflowExecution(ctx context.Context, request *workflowservice.SignalWithStartWorkflowExecutionRequest) (_ *workflowservice.SignalWithStartWorkflowExecutionResponse, retError error) {
 	resp, err := wh.parentHandler.SignalWithStartWorkflowExecution(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.SignalWithStartWorkflowExecutionResponse{}, err
+		resp = &workflowservice.SignalWithStartWorkflowExecutionResponse{}
 	}
 	return resp, err
 }
@@ -320,7 +320,7 @@ func (wh *WorkflowNilCheckHandler) SignalWithStartWorkflowExecution(ctx context.
 func (wh *WorkflowNilCheckHandler) ResetWorkflowExecution(ctx context.Context, request *workflowservice.ResetWorkflowExecutionRequest) (_ *workflowservice.ResetWorkflowExecutionResponse, retError error) {
 	resp, err := wh.parentHandler.ResetWorkflowExecution(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.ResetWorkflowExecutionResponse{}, err
+		resp = &workflowservice.ResetWorkflowExecutionResponse{}
 	}
 	return resp, err
 }
@@ -330,7 +330,7 @@ func (wh *WorkflowNilCheckHandler) ResetWorkflowExecution(ctx context.Context, r
 func (wh *WorkflowNilCheckHandler) TerminateWorkflowExecution(ctx context.Context, request *workflowservice.TerminateWorkflowExecutionRequest) (_ *workflowservice.TerminateWorkflowExecutionResponse, retError error) {
 	resp, err := wh.parentHandler.TerminateWorkflowExecution(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.TerminateWorkflowExecutionResponse{}, err
+		resp = &workflowservice.TerminateWorkflowExecutionResponse{}
 	}
 	return resp, err
 }
@@ -339,7 +339,7 @@ func (wh *WorkflowNilCheckHandler) TerminateWorkflowExecution(ctx context.Contex
 func (wh *WorkflowNilCheckHandler) ListOpenWorkflowExecutions(ctx context.Context, request *workflowservice.ListOpenWorkflowExecutionsRequest) (_ *workflowservice.ListOpenWorkflowExecutionsResponse, retError error) {
 	resp, err := wh.parentHandler.ListOpenWorkflowExecutions(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.ListOpenWorkflowExecutionsResponse{}, err
+		resp = &workflowservice.ListOpenWorkflowExecutionsResponse{}
 	}
 	return resp, err
 }
@@ -348,7 +348,7 @@ func (wh *WorkflowNilCheckHandler) ListOpenWorkflowExecutions(ctx context.Contex
 func (wh *WorkflowNilCheckHandler) ListClosedWorkflowExecutions(ctx context.Context, request *workflowservice.ListClosedWorkflowExecutionsRequest) (_ *workflowservice.ListClosedWorkflowExecutionsResponse, retError error) {
 	resp, err := wh.parentHandler.ListClosedWorkflowExecutions(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.ListClosedWorkflowExecutionsResponse{}, err
+		resp = &workflowservice.ListClosedWorkflowExecutionsResponse{}
 	}
 	return resp, err
 }
@@ -357,7 +357,7 @@ func (wh *WorkflowNilCheckHandler) ListClosedWorkflowExecutions(ctx context.Cont
 func (wh *WorkflowNilCheckHandler) ListWorkflowExecutions(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (_ *workflowservice.ListWorkflowExecutionsResponse, retError error) {
 	resp, err := wh.parentHandler.ListWorkflowExecutions(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.ListWorkflowExecutionsResponse{}, err
+		resp = &workflowservice.ListWorkflowExecutionsResponse{}
 	}
 	return resp, err
 }
@@ -366,7 +366,7 @@ func (wh *WorkflowNilCheckHandler) ListWorkflowExecutions(ctx context.Context, r
 func (wh *WorkflowNilCheckHandler) ListArchivedWorkflowExecutions(ctx context.Context, request *workflowservice.ListArchivedWorkflowExecutionsRequest) (_ *workflowservice.ListArchivedWorkflowExecutionsResponse, retError error) {
 	resp, err := wh.parentHandler.ListArchivedWorkflowExecutions(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.ListArchivedWorkflowExecutionsResponse{}, err
+		resp = &workflowservice.ListArchivedWorkflowExecutionsResponse{}
 	}
 	return resp, err
 }
@@ -375,7 +375,7 @@ func (wh *WorkflowNilCheckHandler) ListArchivedWorkflowExecutions(ctx context.Co
 func (wh *WorkflowNilCheckHandler) ScanWorkflowExecutions(ctx context.Context, request *workflowservice.ScanWorkflowExecutionsRequest) (_ *workflowservice.ScanWorkflowExecutionsResponse, retError error) {
 	resp, err := wh.parentHandler.ScanWorkflowExecutions(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.ScanWorkflowExecutionsResponse{}, err
+		resp = &workflowservice.ScanWorkflowExecutionsResponse{}
 	}
 	return resp, err
 }
@@ -384,7 +384,7 @@ func (wh *WorkflowNilCheckHandler) ScanWorkflowExecutions(ctx context.Context, r
 func (wh *WorkflowNilCheckHandler) CountWorkflowExecutions(ctx context.Context, request *workflowservice.CountWorkflowExecutionsRequest) (_ *workflowservice.CountWorkflowExecutionsResponse, retError error) {
 	resp, err := wh.parentHandler.CountWorkflowExecutions(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.CountWorkflowExecutionsResponse{}, err
+		resp = &workflowservice.CountWorkflowExecutionsResponse{}
 	}
 	return resp, err
 }
@@ -393,7 +393,7 @@ func (wh *WorkflowNilCheckHandler) CountWorkflowExecutions(ctx context.Context, 
 func (wh *WorkflowNilCheckHandler) GetSearchAttributes(ctx context.Context, request *workflowservice.GetSearchAttributesRequest) (_ *workflowservice.GetSearchAttributesResponse, retError error) {
 	resp, err := wh.parentHandler.GetSearchAttributes(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.GetSearchAttributesResponse{}, err
+		resp = &workflowservice.GetSearchAttributesResponse{}
 	}
 	return resp, err
 }
@@ -404,7 +404,7 @@ func (wh *WorkflowNilCheckHandler) GetSearchAttributes(ctx context.Context, requ
 func (wh *WorkflowNilCheckHandler) RespondQueryTaskCompleted(ctx context.Context, request *workflowservice.RespondQueryTaskCompletedRequest) (_ *workflowservice.RespondQueryTaskCompletedResponse, retError error) {
 	resp, err := wh.parentHandler.RespondQueryTaskCompleted(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.RespondQueryTaskCompletedResponse{}, err
+		resp = &workflowservice.RespondQueryTaskCompletedResponse{}
 	}
 	return resp, err
 }
@@ -419,7 +419,7 @@ func (wh *WorkflowNilCheckHandler) RespondQueryTaskCompleted(ctx context.Context
 func (wh *WorkflowNilCheckHandler) ResetStickyTaskList(ctx context.Context, request *workflowservice.ResetStickyTaskListRequest) (_ *workflowservice.ResetStickyTaskListResponse, retError error) {
 	resp, err := wh.parentHandler.ResetStickyTaskList(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.ResetStickyTaskListResponse{}, err
+		resp = &workflowservice.ResetStickyTaskListResponse{}
 	}
 	return resp, err
 }
@@ -428,7 +428,7 @@ func (wh *WorkflowNilCheckHandler) ResetStickyTaskList(ctx context.Context, requ
 func (wh *WorkflowNilCheckHandler) QueryWorkflow(ctx context.Context, request *workflowservice.QueryWorkflowRequest) (_ *workflowservice.QueryWorkflowResponse, retError error) {
 	resp, err := wh.parentHandler.QueryWorkflow(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.QueryWorkflowResponse{}, err
+		resp = &workflowservice.QueryWorkflowResponse{}
 	}
 	return resp, err
 }
@@ -437,7 +437,7 @@ func (wh *WorkflowNilCheckHandler) QueryWorkflow(ctx context.Context, request *w
 func (wh *WorkflowNilCheckHandler) DescribeWorkflowExecution(ctx context.Context, request *workflowservice.DescribeWorkflowExecutionRequest) (_ *workflowservice.DescribeWorkflowExecutionResponse, retError error) {
 	resp, err := wh.parentHandler.DescribeWorkflowExecution(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.DescribeWorkflowExecutionResponse{}, err
+		resp = &workflowservice.DescribeWorkflowExecutionResponse{}
 	}
 	return resp, err
 }
@@ -447,7 +447,7 @@ func (wh *WorkflowNilCheckHandler) DescribeWorkflowExecution(ctx context.Context
 func (wh *WorkflowNilCheckHandler) DescribeTaskList(ctx context.Context, request *workflowservice.DescribeTaskListRequest) (_ *workflowservice.DescribeTaskListResponse, retError error) {
 	resp, err := wh.parentHandler.DescribeTaskList(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.DescribeTaskListResponse{}, err
+		resp = &workflowservice.DescribeTaskListResponse{}
 	}
 	return resp, err
 }
@@ -456,7 +456,7 @@ func (wh *WorkflowNilCheckHandler) DescribeTaskList(ctx context.Context, request
 func (wh *WorkflowNilCheckHandler) GetWorkflowExecutionRawHistory(ctx context.Context, request *workflowservice.GetWorkflowExecutionRawHistoryRequest) (_ *workflowservice.GetWorkflowExecutionRawHistoryResponse, retError error) {
 	resp, err := wh.parentHandler.GetWorkflowExecutionRawHistory(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.GetWorkflowExecutionRawHistoryResponse{}, err
+		resp = &workflowservice.GetWorkflowExecutionRawHistoryResponse{}
 	}
 	return resp, err
 }
@@ -465,7 +465,7 @@ func (wh *WorkflowNilCheckHandler) GetWorkflowExecutionRawHistory(ctx context.Co
 func (wh *WorkflowNilCheckHandler) GetClusterInfo(ctx context.Context, request *workflowservice.GetClusterInfoRequest) (_ *workflowservice.GetClusterInfoResponse, retError error) {
 	resp, err := wh.parentHandler.GetClusterInfo(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.GetClusterInfoResponse{}, err
+		resp = &workflowservice.GetClusterInfoResponse{}
 	}
 	return resp, err
 }
@@ -474,7 +474,7 @@ func (wh *WorkflowNilCheckHandler) GetClusterInfo(ctx context.Context, request *
 func (wh *WorkflowNilCheckHandler) ListTaskListPartitions(ctx context.Context, request *workflowservice.ListTaskListPartitionsRequest) (_ *workflowservice.ListTaskListPartitionsResponse, retError error) {
 	resp, err := wh.parentHandler.ListTaskListPartitions(ctx, request)
 	if resp == nil && err == nil {
-		return &workflowservice.ListTaskListPartitionsResponse{}, err
+		resp = &workflowservice.ListTaskListPartitionsResponse{}
 	}
 	return resp, err
 }

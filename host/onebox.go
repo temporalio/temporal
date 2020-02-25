@@ -43,6 +43,7 @@ import (
 	"github.com/temporalio/temporal/common/authorization"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
+	"github.com/temporalio/temporal/common/domain"
 	"github.com/temporalio/temporal/common/elasticsearch"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -69,7 +70,6 @@ type Cadence interface {
 	Stop()
 	GetAdminClient() adminservice.AdminServiceClient
 	GetFrontendClient() workflowservice.WorkflowServiceClient
-	FrontendAddress() string
 	GetHistoryClient() historyservice.HistoryServiceClient
 	GetExecutionManagerFactory() persistence.ExecutionManagerFactory
 }
@@ -80,35 +80,36 @@ type (
 		matchingService common.Daemon
 		historyServices []common.Daemon
 
-		adminClient            adminservice.AdminServiceClient
-		frontendClient         workflowservice.WorkflowServiceClient
-		historyClient          historyservice.HistoryServiceClient
-		logger                 log.Logger
-		clusterMetadata        cluster.Metadata
-		persistenceConfig      config.Persistence
-		dispatcherProvider     client.DispatcherProvider
-		messagingClient        messaging.Client
-		metadataMgr            persistence.MetadataManager
-		shardMgr               persistence.ShardManager
-		historyV2Mgr           persistence.HistoryManager
-		taskMgr                persistence.TaskManager
-		visibilityMgr          persistence.VisibilityManager
-		executionMgrFactory    persistence.ExecutionManagerFactory
-		domainReplicationQueue persistence.DomainReplicationQueue
-		shutdownCh             chan struct{}
-		shutdownWG             sync.WaitGroup
-		clusterNo              int // cluster number
-		replicator             *replicator.Replicator
-		clientWorker           archiver.ClientWorker
-		indexer                *indexer.Indexer
-		enableNDC              bool
-		archiverMetadata       carchiver.ArchivalMetadata
-		archiverProvider       provider.ArchiverProvider
-		historyConfig          *HistoryConfig
-		esConfig               *elasticsearch.Config
-		esClient               elasticsearch.Client
-		workerConfig           *WorkerConfig
-		mockAdminClient        map[string]adminClient.Client
+		adminClient                   adminservice.AdminServiceClient
+		frontendClient                workflowservice.WorkflowServiceClient
+		historyClient                 historyservice.HistoryServiceClient
+		logger                        log.Logger
+		clusterMetadata               cluster.Metadata
+		persistenceConfig             config.Persistence
+		dispatcherProvider            client.DispatcherProvider
+		messagingClient               messaging.Client
+		metadataMgr                   persistence.MetadataManager
+		shardMgr                      persistence.ShardManager
+		historyV2Mgr                  persistence.HistoryManager
+		taskMgr                       persistence.TaskManager
+		visibilityMgr                 persistence.VisibilityManager
+		executionMgrFactory           persistence.ExecutionManagerFactory
+		domainReplicationQueue        persistence.DomainReplicationQueue
+		shutdownCh                    chan struct{}
+		shutdownWG                    sync.WaitGroup
+		clusterNo                     int // cluster number
+		replicator                    *replicator.Replicator
+		clientWorker                  archiver.ClientWorker
+		indexer                       *indexer.Indexer
+		enableNDC                     bool
+		archiverMetadata              carchiver.ArchivalMetadata
+		archiverProvider              provider.ArchiverProvider
+		historyConfig                 *HistoryConfig
+		esConfig                      *elasticsearch.Config
+		esClient                      elasticsearch.Client
+		workerConfig                  *WorkerConfig
+		mockAdminClient               map[string]adminClient.Client
+		domainReplicationTaskExecutor domain.ReplicationTaskExecutor
 	}
 
 	// HistoryConfig contains configs for history service
@@ -131,7 +132,7 @@ type (
 		ExecutionMgrFactory           persistence.ExecutionManagerFactory
 		TaskMgr                       persistence.TaskManager
 		VisibilityMgr                 persistence.VisibilityManager
-		domainReplicationQueue        persistence.DomainReplicationQueue
+		DomainReplicationQueue        persistence.DomainReplicationQueue
 		Logger                        log.Logger
 		ClusterNo                     int
 		EnableNDC                     bool
@@ -143,6 +144,7 @@ type (
 		ESClient                      elasticsearch.Client
 		WorkerConfig                  *WorkerConfig
 		MockAdminClient               map[string]adminClient.Client
+		DomainReplicationTaskExecutor domain.ReplicationTaskExecutor
 	}
 
 	membershipFactoryImpl struct {
@@ -154,28 +156,29 @@ type (
 // NewCadence returns an instance that hosts full cadence in one process
 func NewCadence(params *CadenceParams) Cadence {
 	return &cadenceImpl{
-		logger:                 params.Logger,
-		clusterMetadata:        params.ClusterMetadata,
-		persistenceConfig:      params.PersistenceConfig,
-		dispatcherProvider:     params.DispatcherProvider,
-		messagingClient:        params.MessagingClient,
-		metadataMgr:            params.MetadataMgr,
-		visibilityMgr:          params.VisibilityMgr,
-		shardMgr:               params.ShardMgr,
-		historyV2Mgr:           params.HistoryV2Mgr,
-		taskMgr:                params.TaskMgr,
-		executionMgrFactory:    params.ExecutionMgrFactory,
-		domainReplicationQueue: params.domainReplicationQueue,
-		shutdownCh:             make(chan struct{}),
-		clusterNo:              params.ClusterNo,
-		enableNDC:              params.EnableNDC,
-		esConfig:               params.ESConfig,
-		esClient:               params.ESClient,
-		archiverMetadata:       params.ArchiverMetadata,
-		archiverProvider:       params.ArchiverProvider,
-		historyConfig:          params.HistoryConfig,
-		workerConfig:           params.WorkerConfig,
-		mockAdminClient:        params.MockAdminClient,
+		logger:                        params.Logger,
+		clusterMetadata:               params.ClusterMetadata,
+		persistenceConfig:             params.PersistenceConfig,
+		dispatcherProvider:            params.DispatcherProvider,
+		messagingClient:               params.MessagingClient,
+		metadataMgr:                   params.MetadataMgr,
+		visibilityMgr:                 params.VisibilityMgr,
+		shardMgr:                      params.ShardMgr,
+		historyV2Mgr:                  params.HistoryV2Mgr,
+		taskMgr:                       params.TaskMgr,
+		executionMgrFactory:           params.ExecutionMgrFactory,
+		domainReplicationQueue:        params.DomainReplicationQueue,
+		shutdownCh:                    make(chan struct{}),
+		clusterNo:                     params.ClusterNo,
+		enableNDC:                     params.EnableNDC,
+		esConfig:                      params.ESConfig,
+		esClient:                      params.ESClient,
+		archiverMetadata:              params.ArchiverMetadata,
+		archiverProvider:              params.ArchiverProvider,
+		historyConfig:                 params.HistoryConfig,
+		workerConfig:                  params.WorkerConfig,
+		mockAdminClient:               params.MockAdminClient,
+		domainReplicationTaskExecutor: params.DomainReplicationTaskExecutor,
 	}
 }
 
@@ -189,7 +192,7 @@ func (c *cadenceImpl) Start() error {
 	hosts[common.MatchingServiceName] = []string{c.MatchingGRPCServiceAddress()}
 	hosts[common.HistoryServiceName] = c.HistoryServiceAddress(3)
 	if c.enableWorker() {
-		hosts[common.WorkerServiceName] = []string{c.WorkerServiceAddress()}
+		hosts[common.WorkerServiceName] = []string{c.WorkerGRPCServiceAddress()}
 	}
 
 	// create cadence-system domain, this must be created before starting
@@ -238,21 +241,6 @@ func (c *cadenceImpl) Stop() {
 	c.shutdownWG.Wait()
 }
 
-func (c *cadenceImpl) FrontendAddress() string {
-	switch c.clusterNo {
-	case 0:
-		return "127.0.0.1:7104"
-	case 1:
-		return "127.0.0.1:8104"
-	case 2:
-		return "127.0.0.1:9104"
-	case 3:
-		return "127.0.0.1:10104"
-	default:
-		return "127.0.0.1:7104"
-	}
-}
-
 func (c *cadenceImpl) FrontendGRPCAddress() string {
 	switch c.clusterNo {
 	case 0:
@@ -298,6 +286,7 @@ func (c *cadenceImpl) FrontendPProfPort() int {
 	}
 }
 
+// penultimatePortDigit: 2 - ringpop, 3 - gRPC
 func (c *cadenceImpl) HistoryServiceAddress(penultimatePortDigit int) []string {
 	var hosts []string
 	startPort := penultimatePortDigit * 10
@@ -346,21 +335,6 @@ func (c *cadenceImpl) HistoryPProfPort() []int {
 	return ports
 }
 
-func (c *cadenceImpl) MatchingServiceAddress() string {
-	switch c.clusterNo {
-	case 0:
-		return "127.0.0.1:7106"
-	case 1:
-		return "127.0.0.1:8106"
-	case 2:
-		return "127.0.0.1:9106"
-	case 3:
-		return "127.0.0.1:10106"
-	default:
-		return "127.0.0.1:7106"
-	}
-}
-
 func (c *cadenceImpl) MatchingGRPCServiceAddress() string {
 	switch c.clusterNo {
 	case 0:
@@ -403,21 +377,6 @@ func (c *cadenceImpl) MatchingPProfPort() int {
 		return 10107
 	default:
 		return 7107
-	}
-}
-
-func (c *cadenceImpl) WorkerServiceAddress() string {
-	switch c.clusterNo {
-	case 0:
-		return "127.0.0.1:7108"
-	case 1:
-		return "127.0.0.1:8108"
-	case 2:
-		return "127.0.0.1:9108"
-	case 3:
-		return "127.0.0.1:10108"
-	default:
-		return "127.0.0.1:7108"
 	}
 }
 
@@ -485,7 +444,7 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 	params.Logger = c.logger
 	params.ThrottledLogger = c.logger
 	params.PProfInitializer = newPProfInitializerImpl(c.logger, c.FrontendPProfPort())
-	params.RPCFactory = newRPCFactoryImpl(common.FrontendServiceName, c.FrontendAddress(), c.FrontendGRPCAddress(), c.FrontendRingpopAddress(),
+	params.RPCFactory = newRPCFactoryImpl(common.FrontendServiceName, c.FrontendGRPCAddress(), c.FrontendRingpopAddress(),
 		c.logger)
 	params.MetricScope = tally.NewTestScope(common.FrontendServiceName, make(map[string]string))
 	params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {
@@ -547,14 +506,13 @@ func (c *cadenceImpl) startHistory(
 ) {
 	pprofPorts := c.HistoryPProfPort()
 	ringpopPorts := c.HistoryServiceAddress(2)
-	grpcPorts := c.HistoryServiceAddress(3)
-	for i, hostport := range c.HistoryServiceAddress(3) {
+	for i, grpcPort := range c.HistoryServiceAddress(3) {
 		params := new(resource.BootstrapParams)
 		params.Name = common.HistoryServiceName
 		params.Logger = c.logger
 		params.ThrottledLogger = c.logger
 		params.PProfInitializer = newPProfInitializerImpl(c.logger, pprofPorts[i])
-		params.RPCFactory = newRPCFactoryImpl(common.HistoryServiceName, hostport, grpcPorts[i], ringpopPorts[i], c.logger)
+		params.RPCFactory = newRPCFactoryImpl(common.HistoryServiceName, grpcPort, ringpopPorts[i], c.logger)
 		params.MetricScope = tally.NewTestScope(common.HistoryServiceName, make(map[string]string))
 		params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {
 			return newMembershipFactory(params.Name, hosts), nil
@@ -632,8 +590,7 @@ func (c *cadenceImpl) startMatching(hosts map[string][]string, startWG *sync.Wai
 	params.Logger = c.logger
 	params.ThrottledLogger = c.logger
 	params.PProfInitializer = newPProfInitializerImpl(c.logger, c.MatchingPProfPort())
-	params.RPCFactory = newRPCFactoryImpl(common.MatchingServiceName, c.MatchingServiceAddress(), c.MatchingGRPCServiceAddress(),
-		c.MatchingServiceRingpopAddress(), c.logger)
+	params.RPCFactory = newRPCFactoryImpl(common.MatchingServiceName, c.MatchingGRPCServiceAddress(), c.MatchingServiceRingpopAddress(), c.logger)
 	params.MetricScope = tally.NewTestScope(common.MatchingServiceName, make(map[string]string))
 	params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {
 		return newMembershipFactory(params.Name, hosts), nil
@@ -677,8 +634,7 @@ func (c *cadenceImpl) startWorker(hosts map[string][]string, startWG *sync.WaitG
 	params.Logger = c.logger
 	params.ThrottledLogger = c.logger
 	params.PProfInitializer = newPProfInitializerImpl(c.logger, c.WorkerPProfPort())
-	params.RPCFactory = newRPCFactoryImpl(common.WorkerServiceName, c.WorkerServiceAddress(), c.WorkerGRPCServiceAddress(),
-		c.WorkerServiceRingpopAddress(), c.logger)
+	params.RPCFactory = newRPCFactoryImpl(common.WorkerServiceName, c.WorkerGRPCServiceAddress(), c.WorkerServiceRingpopAddress(), c.logger)
 	params.MetricScope = tally.NewTestScope(common.WorkerServiceName, make(map[string]string))
 	params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {
 		return newMembershipFactory(params.Name, hosts), nil
@@ -770,6 +726,7 @@ func (c *cadenceImpl) startWorkerReplicator(params *resource.BootstrapParams, se
 		service.GetHostInfo(),
 		serviceResolver,
 		c.domainReplicationQueue,
+		c.domainReplicationTaskExecutor,
 	)
 	if err := c.replicator.Start(); err != nil {
 		c.replicator.Stop()
@@ -904,7 +861,6 @@ func newPProfInitializerImpl(logger log.Logger, port int) common.PProfInitialize
 type rpcFactoryImpl struct {
 	serviceName        string
 	ringpopServiceName string
-	hostPort           string
 	grpcHostPort       string
 	ringpopHostPort    string
 	logger             log.Logger
@@ -914,10 +870,9 @@ type rpcFactoryImpl struct {
 	ringpopChannel *tchannel.Channel
 }
 
-func newRPCFactoryImpl(sName, hostPort, grpcHostPort, ringpopHostPort string, logger log.Logger) common.RPCFactory {
+func newRPCFactoryImpl(sName, grpcHostPort, ringpopHostPort string, logger log.Logger) common.RPCFactory {
 	return &rpcFactoryImpl{
 		serviceName:     sName,
-		hostPort:        hostPort,
 		grpcHostPort:    grpcHostPort,
 		ringpopHostPort: ringpopHostPort,
 		logger:          logger,

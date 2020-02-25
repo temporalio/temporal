@@ -1012,7 +1012,7 @@ struct RegisterDomainRequest {
   20: optional string description
   30: optional string ownerEmail
   40: optional i32 workflowExecutionRetentionPeriodInDays
-  50: optional bool emitMetric
+  50: optional bool emitMetric = true
   60: optional list<ClusterReplicationConfiguration> clusters
   70: optional string activeClusterName
   // A key-value map for any customized purpose
@@ -1636,4 +1636,10 @@ struct GetWorkflowExecutionRawHistoryResponse {
   10: optional list<DataBlob> rawHistory
   20: optional binary nextPageToken
 }
+
+struct RefreshWorkflowTasksRequest {
+  10: optional string domain
+  20: optional WorkflowExecution execution
+}
+
 

@@ -27,6 +27,9 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/temporalio/temporal/common/persistence/serialization"
+	"github.com/temporalio/temporal/common/primitives"
+
 	"github.com/gocql/gocql"
 	"github.com/urfave/cli"
 	commonproto "go.temporal.io/temporal-proto/common"
@@ -54,12 +57,12 @@ func AdminShowWorkflow(c *cli.Context) {
 
 	session := connectToCassandra(c)
 	serializer := persistence.NewPayloadSerializer()
-	var history []*persistence.DataBlob
+	var history []*serialization.DataBlob
 	if len(tid) != 0 {
 		histV2 := cassp.NewHistoryV2PersistenceFromSession(session, loggerimpl.NewNopLogger())
 		resp, err := histV2.ReadHistoryBranch(&persistence.InternalReadHistoryBranchRequest{
-			TreeID:    tid,
-			BranchID:  bid,
+			TreeID:    primitives.MustParseUUID(tid),
+			BranchID:  primitives.MustParseUUID(bid),
 			MinNodeID: 1,
 			MaxNodeID: maxEventID,
 			PageSize:  maxEventID,
@@ -193,8 +196,6 @@ func AdminDeleteWorkflow(c *cli.Context) {
 		ErrorAndExit("strconv.Atoi(shardID) err", err)
 	}
 
-	branchInfo := shared.HistoryBranch{}
-	thriftrwEncoder := codec.NewThriftRWEncoder()
 	branchTokens := [][]byte{ms.ExecutionInfo.BranchToken}
 	if ms.VersionHistories != nil {
 		// if VersionHistories is set, then all branch infos are stored in VersionHistories
@@ -205,7 +206,7 @@ func AdminDeleteWorkflow(c *cli.Context) {
 	}
 
 	for _, branchToken := range branchTokens {
-		err = thriftrwEncoder.Decode(branchToken, &branchInfo)
+		branchInfo, err := serialization.HistoryBranchFromBlob(branchToken, common.EncodingTypeProto3.String())
 		if err != nil {
 			ErrorAndExit("thriftrwEncoder.Decode err", err)
 		}
@@ -436,4 +437,29 @@ func AdminDescribeHistoryHost(c *cli.Context) {
 		resp.ShardIDs = nil
 	}
 	prettyPrintJSONObject(resp)
+}
+
+// AdminRefreshWorkflowTasks refreshes all the tasks of a workflow
+func AdminRefreshWorkflowTasks(c *cli.Context) {
+	adminClient := cFactory.AdminClient(c)
+
+	domain := getRequiredGlobalOption(c, FlagDomain)
+	wid := getRequiredOption(c, FlagWorkflowID)
+	rid := c.String(FlagRunID)
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	_, err := adminClient.RefreshWorkflowTasks(ctx, &adminservice.RefreshWorkflowTasksRequest{
+		Domain: domain,
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      rid,
+		},
+	})
+	if err != nil {
+		ErrorAndExit("Refresh workflow task failed", err)
+	} else {
+		fmt.Println("Refresh workflow task succeeded.")
+	}
 }

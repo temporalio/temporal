@@ -1,5 +1,7 @@
 #!/bin/bash
 
-set -x
+set -ex
 
-dockerize -template /etc/cadence/config/config_template.yaml:/etc/cadence/config/docker.yaml cadence-server --root $CADENCE_HOME --env docker start --services=$SERVICES
+dockerize -template /etc/cadence/config/config_template.yaml:/etc/cadence/config/docker.yaml
+
+exec cadence-server --root $CADENCE_HOME --env docker start --services=$SERVICES

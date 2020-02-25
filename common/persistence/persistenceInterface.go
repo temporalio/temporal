@@ -22,6 +22,12 @@ package persistence
 
 import (
 	"fmt"
+
+	"github.com/temporalio/temporal/common/primitives"
+
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/common/persistence/serialization"
+
 	"time"
 
 	commonproto "go.temporal.io/temporal-proto/common"
@@ -99,6 +105,8 @@ type (
 		RangeCompleteReplicationTask(request *RangeCompleteReplicationTaskRequest) error
 		PutReplicationTaskToDLQ(request *PutReplicationTaskToDLQRequest) error
 		GetReplicationTasksFromDLQ(request *GetReplicationTasksFromDLQRequest) (*GetReplicationTasksFromDLQResponse, error)
+		DeleteReplicationTaskFromDLQ(request *DeleteReplicationTaskFromDLQRequest) error
+		RangeDeleteReplicationTaskFromDLQ(request *RangeDeleteReplicationTaskFromDLQRequest) error
 
 		// Timer related methods.
 		GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error)
@@ -161,10 +169,11 @@ type (
 		UpdateAckLevel(messageID int, clusterName string) error
 		GetAckLevels() (map[string]int, error)
 		EnqueueMessageToDLQ(messagePayload []byte) error
-		ReadMessagesFromDLQ(firstMessageID int, lastMessageID int, maxCount int) ([]*QueueMessage, error)
+		ReadMessagesFromDLQ(firstMessageID int, lastMessageID int, pageSize int, pageToken []byte) ([]*QueueMessage, []byte, error)
 		DeleteMessageFromDLQ(messageID int) error
-		DeleteDLQMessagesBefore(messageID int) error
-		GetLastMessageIDFromDLQ() (int, error)
+		RangeDeleteMessagesFromDLQ(firstMessageID int, lastMessageID int) error
+		UpdateDLQAckLevel(messageID int, clusterName string) error
+		GetDLQAckLevels() (map[string]int, error)
 	}
 
 	// QueueMessage is the message that stores in the queue
@@ -176,10 +185,6 @@ type (
 	// DataBlob represents a blob for any binary data.
 	// It contains raw data, and metadata(right now only encoding) in other field
 	// Note that it should be only used for Persistence layer, below dataInterface and application(historyEngine/etc)
-	DataBlob struct {
-		Encoding common.EncodingType
-		Data     []byte
-	}
 
 	// InternalCreateWorkflowExecutionRequest is used to write a new workflow execution
 	InternalCreateWorkflowExecutionRequest struct {
@@ -203,7 +208,7 @@ type (
 		ParentRunID                        string
 		InitiatedID                        int64
 		CompletionEventBatchID             int64
-		CompletionEvent                    *DataBlob
+		CompletionEvent                    *serialization.DataBlob
 		TaskList                           string
 		WorkflowTypeName                   string
 		WorkflowTimeout                    int32
@@ -235,7 +240,7 @@ type (
 		ClientLibraryVersion               string
 		ClientFeatureVersion               string
 		ClientImpl                         string
-		AutoResetPoints                    *DataBlob
+		AutoResetPoints                    *serialization.DataBlob
 		// for retry
 		Attempt            int32
 		HasRetryPolicy     bool
@@ -259,7 +264,7 @@ type (
 	InternalWorkflowMutableState struct {
 		ExecutionInfo    *InternalWorkflowExecutionInfo
 		ReplicationState *ReplicationState
-		VersionHistories *DataBlob
+		VersionHistories *serialization.DataBlob
 		ActivityInfos    map[int64]*InternalActivityInfo
 
 		TimerInfos          map[string]*TimerInfo
@@ -267,7 +272,7 @@ type (
 		RequestCancelInfos  map[int64]*RequestCancelInfo
 		SignalInfos         map[int64]*SignalInfo
 		SignalRequestedIDs  map[string]struct{}
-		BufferedEvents      []*DataBlob
+		BufferedEvents      []*serialization.DataBlob
 
 		Checksum checksum.Checksum
 	}
@@ -277,10 +282,10 @@ type (
 		Version                  int64
 		ScheduleID               int64
 		ScheduledEventBatchID    int64
-		ScheduledEvent           *DataBlob
+		ScheduledEvent           *serialization.DataBlob
 		ScheduledTime            time.Time
 		StartedID                int64
-		StartedEvent             *DataBlob
+		StartedEvent             *serialization.DataBlob
 		StartedTime              time.Time
 		ActivityID               string
 		RequestID                string
@@ -317,11 +322,11 @@ type (
 		Version               int64
 		InitiatedID           int64
 		InitiatedEventBatchID int64
-		InitiatedEvent        *DataBlob
+		InitiatedEvent        *serialization.DataBlob
 		StartedID             int64
 		StartedWorkflowID     string
 		StartedRunID          string
-		StartedEvent          *DataBlob
+		StartedEvent          *serialization.DataBlob
 		CreateRequestID       string
 		DomainName            string
 		WorkflowTypeName      string
@@ -382,7 +387,7 @@ type (
 	InternalWorkflowMutation struct {
 		ExecutionInfo    *InternalWorkflowExecutionInfo
 		ReplicationState *ReplicationState
-		VersionHistories *DataBlob
+		VersionHistories *serialization.DataBlob
 		StartVersion     int64
 		LastWriteVersion int64
 
@@ -398,7 +403,7 @@ type (
 		DeleteSignalInfo          *int64
 		UpsertSignalRequestedIDs  []string
 		DeleteSignalRequestedID   string
-		NewBufferedEvents         *DataBlob
+		NewBufferedEvents         *serialization.DataBlob
 		ClearBufferedEvents       bool
 
 		TransferTasks    []Task
@@ -414,7 +419,7 @@ type (
 	InternalWorkflowSnapshot struct {
 		ExecutionInfo    *InternalWorkflowExecutionInfo
 		ReplicationState *ReplicationState
-		VersionHistories *DataBlob
+		VersionHistories *serialization.DataBlob
 		StartVersion     int64
 		LastWriteVersion int64
 
@@ -442,7 +447,7 @@ type (
 		EventBatchVersion int64
 		RangeID           int64
 		TransactionID     int64
-		Events            *DataBlob
+		Events            *serialization.DataBlob
 		Overwrite         bool
 	}
 
@@ -453,11 +458,11 @@ type (
 		// The info for clean up data in background
 		Info string
 		// The branch to be appended
-		BranchInfo workflow.HistoryBranch
+		BranchInfo *persistenceblobs.HistoryBranch
 		// The first eventID becomes the nodeID to be appended
 		NodeID int64
 		// The events to be appended
-		Events *DataBlob
+		Events *serialization.DataBlob
 		// Requested TransactionID for conditional update
 		TransactionID int64
 		// Used in sharded data stores to identify which shard to use
@@ -472,11 +477,11 @@ type (
 	// InternalForkHistoryBranchRequest is used to fork a history branch
 	InternalForkHistoryBranchRequest struct {
 		// The base branch to fork from
-		ForkBranchInfo workflow.HistoryBranch
+		ForkBranchInfo *persistenceblobs.HistoryBranch
 		// The nodeID to fork from, the new branch will start from ( inclusive ), the base branch will stop at(exclusive)
 		ForkNodeID int64
 		// branchID of the new branch
-		NewBranchID string
+		NewBranchID primitives.UUID
 		// the info for clean up data in background
 		Info string
 		// Used in sharded data stores to identify which shard to use
@@ -486,13 +491,13 @@ type (
 	// InternalForkHistoryBranchResponse is the response to ForkHistoryBranchRequest
 	InternalForkHistoryBranchResponse struct {
 		// branchInfo to represent the new branch
-		NewBranchInfo workflow.HistoryBranch
+		NewBranchInfo *persistenceblobs.HistoryBranch
 	}
 
 	// InternalDeleteHistoryBranchRequest is used to remove a history branch
 	InternalDeleteHistoryBranchRequest struct {
 		// branch to be deleted
-		BranchInfo workflow.HistoryBranch
+		BranchInfo *persistenceblobs.HistoryBranch
 		// Used in sharded data stores to identify which shard to use
 		ShardID int
 	}
@@ -500,9 +505,9 @@ type (
 	// InternalReadHistoryBranchRequest is used to read a history branch
 	InternalReadHistoryBranchRequest struct {
 		// The tree of branch range to be read
-		TreeID string
+		TreeID primitives.UUID
 		// The branch range to be read
-		BranchID string
+		BranchID primitives.UUID
 		// Get the history nodes from MinNodeID. Inclusive.
 		MinNodeID int64
 		// Get the history nodes upto MaxNodeID.  Exclusive.
@@ -522,7 +527,7 @@ type (
 	// InternalCompleteForkBranchRequest is used to update some tree/branch meta data for forking
 	InternalCompleteForkBranchRequest struct {
 		// branch to be updated
-		BranchInfo workflow.HistoryBranch
+		BranchInfo persistenceblobs.HistoryBranch
 		// whether fork is successful
 		Success bool
 		// Used in sharded data stores to identify which shard to use
@@ -532,7 +537,7 @@ type (
 	// InternalReadHistoryBranchResponse is the response to ReadHistoryBranchRequest
 	InternalReadHistoryBranchResponse struct {
 		// History events
-		History []*DataBlob
+		History []*serialization.DataBlob
 		// Pagination token
 		NextPageToken []byte
 		// LastNodeID is the last known node ID attached to a history node
@@ -551,7 +556,7 @@ type (
 		CloseTime        time.Time
 		Status           *workflow.WorkflowExecutionCloseStatus
 		HistoryLength    int64
-		Memo             *DataBlob
+		Memo             *serialization.DataBlob
 		SearchAttributes map[string]interface{}
 	}
 
@@ -578,7 +583,7 @@ type (
 		ExecutionTimestamp int64
 		WorkflowTimeout    int64
 		TaskID             int64
-		Memo               *DataBlob
+		Memo               *serialization.DataBlob
 		SearchAttributes   map[string][]byte
 	}
 
@@ -591,7 +596,7 @@ type (
 		StartTimestamp     int64
 		ExecutionTimestamp int64
 		TaskID             int64
-		Memo               *DataBlob
+		Memo               *serialization.DataBlob
 		SearchAttributes   map[string][]byte
 		CloseTimestamp     int64
 		Status             workflow.WorkflowExecutionCloseStatus
@@ -609,7 +614,7 @@ type (
 		ExecutionTimestamp int64
 		WorkflowTimeout    int64
 		TaskID             int64
-		Memo               *DataBlob
+		Memo               *serialization.DataBlob
 		SearchAttributes   map[string][]byte
 	}
 
@@ -617,14 +622,14 @@ type (
 	InternalDomainConfig struct {
 		// NOTE: this retention is in days, not in seconds
 		Retention                int32
-		EmitMetric               bool
+		EmitMetric               bool                    // deprecated
 		ArchivalBucket           string                  // deprecated
 		ArchivalStatus           workflow.ArchivalStatus // deprecated
 		HistoryArchivalStatus    workflow.ArchivalStatus
 		HistoryArchivalURI       string
 		VisibilityArchivalStatus workflow.ArchivalStatus
 		VisibilityArchivalURI    string
-		BadBinaries              *DataBlob
+		BadBinaries              *serialization.DataBlob
 	}
 
 	// InternalCreateDomainRequest is used to create the domain
@@ -670,13 +675,13 @@ type (
 	// These values can only be set a single time upon cluster initialization.
 	InternalInitializeImmutableClusterMetadataRequest struct {
 		// Serialized ImmutableCusterMetadata to persist.
-		ImmutableClusterMetadata *DataBlob
+		ImmutableClusterMetadata *serialization.DataBlob
 	}
 
 	// InternalInitializeImmutableClusterMetadataResponse is a request of InitializeImmutableClusterMetadata
 	InternalInitializeImmutableClusterMetadataResponse struct {
 		// Serialized ImmutableCusterMetadata that is currently persisted.
-		PersistedImmutableMetadata *DataBlob
+		PersistedImmutableMetadata *serialization.DataBlob
 		RequestApplied             bool
 	}
 
@@ -684,7 +689,7 @@ type (
 	// These values are set a single time upon cluster initialization.
 	InternalGetImmutableClusterMetadataResponse struct {
 		// Serialized ImmutableCusterMetadata.
-		ImmutableClusterMetadata *DataBlob
+		ImmutableClusterMetadata *serialization.DataBlob
 	}
 
 	// InternalUpsertClusterMembershipRequest is the request to UpsertClusterMembership
@@ -695,109 +700,37 @@ type (
 )
 
 // NewDataBlob returns a new DataBlob
-func NewDataBlob(data []byte, encodingType common.EncodingType) *DataBlob {
+func NewDataBlob(data []byte, encodingType common.EncodingType) *serialization.DataBlob {
 	if data == nil || len(data) == 0 {
 		return nil
 	}
 	if encodingType != "thriftrw" && data[0] == 'Y' {
 		panic(fmt.Sprintf("Invalid incoding: \"%v\"", encodingType))
 	}
-	return &DataBlob{
+	return &serialization.DataBlob{
 		Data:     data,
 		Encoding: encodingType,
 	}
 }
 
 // FromDataBlob decodes a datablob into a (payload, encodingType) tuple
-func FromDataBlob(blob *DataBlob) ([]byte, string) {
+func FromDataBlob(blob *serialization.DataBlob) ([]byte, string) {
 	if blob == nil || len(blob.Data) == 0 {
 		return nil, ""
 	}
 	return blob.Data, string(blob.Encoding)
 }
 
-// GetEncoding returns encoding type
-func (d *DataBlob) GetEncoding() common.EncodingType {
-	encodingStr := string(d.Encoding)
-
-	switch common.EncodingType(encodingStr) {
-	case common.EncodingTypeGob:
-		return common.EncodingTypeGob
-	case common.EncodingTypeJSON:
-		return common.EncodingTypeJSON
-	case common.EncodingTypeThriftRW:
-		return common.EncodingTypeThriftRW
-	case common.EncodingTypeEmpty:
-		return common.EncodingTypeEmpty
-	default:
-		return common.EncodingTypeUnknown
-	}
-}
-
-// ToThrift convert data blob to thrift representation
-func (d *DataBlob) ToThrift() *workflow.DataBlob {
-	switch d.Encoding {
-	case common.EncodingTypeJSON:
-		return &workflow.DataBlob{
-			EncodingType: workflow.EncodingTypeJSON.Ptr(),
-			Data:         d.Data,
-		}
-	case common.EncodingTypeThriftRW:
-		return &workflow.DataBlob{
-			EncodingType: workflow.EncodingTypeThriftRW.Ptr(),
-			Data:         d.Data,
-		}
-	default:
-		panic(fmt.Sprintf("DataBlob seeing unsupported enconding type: %v", d.Encoding))
-	}
-}
-
-// ToProto convert data blob to thrift representation
-func (d *DataBlob) ToProto() *commonproto.DataBlob {
-	switch d.Encoding {
-	case common.EncodingTypeJSON:
-		return &commonproto.DataBlob{
-			EncodingType: enums.EncodingTypeJSON,
-			Data:         d.Data,
-		}
-	case common.EncodingTypeThriftRW:
-		return &commonproto.DataBlob{
-			EncodingType: enums.EncodingTypeThriftRW,
-			Data:         d.Data,
-		}
-	default:
-		panic(fmt.Sprintf("DataBlob seeing unsupported enconding type: %v", d.Encoding))
-	}
-}
-
-// NewDataBlobFromThrift convert data blob from thrift representation
-func NewDataBlobFromThrift(blob *workflow.DataBlob) *DataBlob {
-	switch blob.GetEncodingType() {
-	case workflow.EncodingTypeJSON:
-		return &DataBlob{
-			Encoding: common.EncodingTypeJSON,
-			Data:     blob.Data,
-		}
-	case workflow.EncodingTypeThriftRW:
-		return &DataBlob{
-			Encoding: common.EncodingTypeThriftRW,
-			Data:     blob.Data,
-		}
-	default:
-		panic(fmt.Sprintf("NewDataBlobFromThrift seeing unsupported enconding type: %v", blob.GetEncodingType()))
-	}
-}
-
 // NewDataBlobFromProto convert data blob from Proto representation
-func NewDataBlobFromProto(blob *commonproto.DataBlob) *DataBlob {
+func NewDataBlobFromProto(blob *commonproto.DataBlob) *serialization.DataBlob {
 	switch blob.GetEncodingType() {
 	case enums.EncodingTypeJSON:
-		return &DataBlob{
+		return &serialization.DataBlob{
 			Encoding: common.EncodingTypeJSON,
 			Data:     blob.Data,
 		}
 	case enums.EncodingTypeThriftRW:
-		return &DataBlob{
+		return &serialization.DataBlob{
 			Encoding: common.EncodingTypeThriftRW,
 			Data:     blob.Data,
 		}

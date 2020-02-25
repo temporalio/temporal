@@ -23,23 +23,6 @@ syntax = "proto3";
 package sqlblobs;
 option go_package = "github.com/temporalio/temporal/.gen/proto/sqlblobs";
 
-// HistoryBranchRange represents a piece of range for a branch.
-message HistoryBranchRange {
-    // BranchID of original branch forked from.
-    string branchID = 1;
-    // Beginning node for the range, inclusive.
-    int64 beginNodeID = 2;
-    // Ending node for the range, exclusive.
-    int64 endNodeID = 3;
-}
-
-// For history persistence to serialize/deserialize branch details.
-message HistoryBranch {
-    string treeID = 1;
-    string branchID = 2;
-    repeated HistoryBranchRange ancestors = 3;
-}
-
 message DomainInfo {
     string name = 1;
     string description = 2;
@@ -62,14 +45,6 @@ message DomainInfo {
     string historyArchivalURI = 19;
     int32 visibilityArchivalStatus = 20;
     string visibilityArchivalURI = 21;
-}
-
-message HistoryTreeInfo {
-    // For fork operation to prevent race condition of leaking event data when forking branches fail. Also can be used for clean up leaked data. 
-    int64 createdTimeNanos = 1;
-    repeated HistoryBranchRange ancestors = 2;
-    // For lookup back to workflow during debugging, also background cleanup when fork operation cannot finish self cleanup due to crash.
-    string info = 3;
 }
 
 message ReplicationInfo {
