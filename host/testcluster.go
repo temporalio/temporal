@@ -27,7 +27,6 @@ import (
 	"github.com/uber-go/tally"
 	"go.uber.org/zap"
 
-	"github.com/temporalio/temporal/client"
 	adminClient "github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
@@ -171,7 +170,6 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	cadenceParams := &CadenceParams{
 		ClusterMetadata:               clusterMetadata,
 		PersistenceConfig:             pConfig,
-		DispatcherProvider:            client.NewDNSYarpcDispatcherProvider(logger, 0),
 		MessagingClient:               messagingClient,
 		MetadataMgr:                   testBase.MetadataManager,
 		ShardMgr:                      testBase.ShardMgr,

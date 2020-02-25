@@ -181,7 +181,6 @@ func New(
 			numShards,
 			logger,
 		),
-		params.DispatcherProvider,
 		params.ClusterMetadata,
 	)
 	if err != nil {

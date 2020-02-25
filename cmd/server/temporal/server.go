@@ -22,13 +22,13 @@ package temporal
 
 import (
 	"log"
+	"net"
 	"time"
 
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/zap"
 
 	persist "github.com/temporalio/temporal/.gen/go/persistenceblobs"
-	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
@@ -164,10 +164,16 @@ func (s *server) startService() common.Daemon {
 		clusterMetadata.ReplicationConsumer,
 	)
 
-	if s.cfg.PublicClient.HostPort != "" {
-		params.DispatcherProvider = client.NewDNSYarpcDispatcherProvider(params.Logger, s.cfg.PublicClient.RefreshInterval)
-	} else {
+	if s.cfg.PublicClient.HostPort == "" {
 		log.Fatalf("need to provide an endpoint config for PublicClient")
+	} else if h, _, err := net.SplitHostPort(s.cfg.PublicClient.HostPort); err != nil  || len(h) == 0 {
+		log.Fatalf("Malformed PublicClient HostPort, must be host:port - '%v' - Error - %v", s.cfg.PublicClient.HostPort, err)
+	} else {
+		connection, err := rpc.Dial(s.cfg.PublicClient.HostPort)
+		if err != nil {
+			log.Fatalf("failed to dial gRPC connection: %v", err)
+		}
+		params.PublicClient = workflowservice.NewWorkflowServiceClient(connection)
 	}
 
 	advancedVisMode := dc.GetStringProperty(
@@ -204,12 +210,6 @@ func (s *server) startService() common.Daemon {
 			log.Fatalf("elastic search config missing visibility index")
 		}
 	}
-
-	connection, err := rpc.Dial(s.cfg.PublicClient.HostPort)
-	if err != nil {
-		log.Fatalf("failed to construct connection: %v", err)
-	}
-	params.PublicClient = workflowservice.NewWorkflowServiceClient(connection)
 
 	params.ArchivalMetadata = archiver.NewArchivalMetadata(
 		dc,
