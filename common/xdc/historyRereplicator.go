@@ -330,8 +330,6 @@ func (c *historyRereplicationContext) sendReplicationRawRequest(request *history
 		retryServiceError = err.(*serviceerror.RetryTask)
 	}
 
-	//retryServiceError, ok := err.(*serviceerror.RetryTask)
-	//if !ok {
 	if retryServiceError == nil {
 		logger.Error("error sending history", tag.Error(err))
 		return err
