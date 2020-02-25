@@ -59,6 +59,7 @@ import (
 	"github.com/temporalio/temporal/common/messaging"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/common/xdc"
 	warchiver "github.com/temporalio/temporal/service/worker/archiver"
@@ -503,7 +504,7 @@ func (e *historyEngineImpl) createMutableState(
 		)
 	}
 
-	if err := newMutableState.SetHistoryTree(runID); err != nil {
+	if err := newMutableState.SetHistoryTree(primitives.MustParseUUID(runID)); err != nil {
 		return nil, err
 	}
 

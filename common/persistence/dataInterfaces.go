@@ -26,6 +26,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/temporalio/temporal/common/persistence/serialization"
+
 	"github.com/gogo/protobuf/types"
 
 	"github.com/temporalio/temporal/common/primitives"
@@ -42,7 +44,6 @@ import (
 
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/codec"
 )
 
 // Domain status
@@ -1330,7 +1331,7 @@ type (
 	// ReadRawHistoryBranchResponse is the response to ReadHistoryBranchRequest
 	ReadRawHistoryBranchResponse struct {
 		// HistoryEventBlobs history event blobs
-		HistoryEventBlobs []*DataBlob
+		HistoryEventBlobs []*serialization.DataBlob
 		// Token to read next page if there are more events beyond page size.
 		// Use this to set NextPageToken on ReadHistoryBranchRequest to read the next page.
 		// Empty means we have reached the last page, not need to continue
@@ -1380,7 +1381,7 @@ type (
 	// GetHistoryTreeRequest is used to retrieve branch info of a history tree
 	GetHistoryTreeRequest struct {
 		// A UUID of a tree
-		TreeID string
+		TreeID primitives.UUID
 		// Get data from this shard
 		ShardID *int
 		// optional: can provide treeID via branchToken if treeID is empty
@@ -1398,7 +1399,7 @@ type (
 	// GetHistoryTreeResponse is a response to GetHistoryTreeRequest
 	GetHistoryTreeResponse struct {
 		// all branches of a tree
-		Branches []*workflow.HistoryBranch
+		Branches []*pblobs.HistoryBranch
 	}
 
 	// GetAllHistoryTreeBranchesRequest is a request of GetAllHistoryTreeBranches
@@ -2381,54 +2382,34 @@ func UnixNanoToDBTimestamp(timestamp int64) int64 {
 	return timestamp / (1000 * 1000) // Milliseconds are 10⁻³, nanoseconds are 10⁻⁹, (-9) - (-3) = -6, so divide by 10⁶
 }
 
-var internalThriftEncoder = codec.NewThriftRWEncoder()
-
 // NewHistoryBranchToken return a new branch token
-func NewHistoryBranchToken(treeID string) ([]byte, error) {
-	branchID := uuid.New()
-	bi := &workflow.HistoryBranch{
-		TreeID:    &treeID,
-		BranchID:  &branchID,
-		Ancestors: []*workflow.HistoryBranchRange{},
+func NewHistoryBranchToken(treeID []byte) ([]byte, error) {
+	branchID := uuid.NewRandom()
+	bi := &pblobs.HistoryBranch{
+		TreeID:    treeID,
+		BranchID:  branchID,
+		Ancestors: []*pblobs.HistoryBranchRange{},
 	}
-	token, err := internalThriftEncoder.Encode(bi)
+	datablob, err := serialization.HistoryBranchToBlob(bi)
 	if err != nil {
 		return nil, err
 	}
+	token := datablob.Data
 	return token, nil
 }
 
 // NewHistoryBranchTokenByBranchID return a new branch token with treeID/branchID
-func NewHistoryBranchTokenByBranchID(treeID, branchID string) ([]byte, error) {
-	bi := &workflow.HistoryBranch{
-		TreeID:    &treeID,
-		BranchID:  &branchID,
-		Ancestors: []*workflow.HistoryBranchRange{},
+func NewHistoryBranchTokenByBranchID(treeID, branchID []byte) ([]byte, error) {
+	bi := &pblobs.HistoryBranch{
+		TreeID:    treeID,
+		BranchID:  branchID,
+		Ancestors: []*pblobs.HistoryBranchRange{},
 	}
-	token, err := internalThriftEncoder.Encode(bi)
+	datablob, err := serialization.HistoryBranchToBlob(bi)
 	if err != nil {
 		return nil, err
 	}
-	return token, nil
-}
-
-// NewHistoryBranchTokenFromAnother make up a branchToken
-func NewHistoryBranchTokenFromAnother(branchID string, anotherToken []byte) ([]byte, error) {
-	var branch workflow.HistoryBranch
-	err := internalThriftEncoder.Decode(anotherToken, &branch)
-	if err != nil {
-		return nil, err
-	}
-
-	bi := &workflow.HistoryBranch{
-		TreeID:    branch.TreeID,
-		BranchID:  &branchID,
-		Ancestors: []*workflow.HistoryBranchRange{},
-	}
-	token, err := internalThriftEncoder.Encode(bi)
-	if err != nil {
-		return nil, err
-	}
+	token := datablob.Data
 	return token, nil
 }
 

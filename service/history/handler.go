@@ -26,6 +26,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/temporalio/temporal/common/persistence/serialization"
+
 	"github.com/gogo/status"
 	"github.com/pborman/uuid"
 	"go.uber.org/yarpc/yarpcerrors"
@@ -1582,7 +1584,7 @@ func (h *Handler) ReapplyEvents(
 		return h.error(err, scope, domainID, workflowID)
 	}
 	// deserialize history event object
-	historyEvents, err := h.GetPayloadSerializer().DeserializeBatchEvents(&persistence.DataBlob{
+	historyEvents, err := h.GetPayloadSerializer().DeserializeBatchEvents(&serialization.DataBlob{
 		Encoding: common.EncodingTypeThriftRW,
 		Data:     request.GetRequest().GetEvents().GetData(),
 	})

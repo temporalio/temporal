@@ -24,6 +24,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/temporalio/temporal/common/persistence/serialization"
+
 	"github.com/gogo/status"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
@@ -485,7 +487,7 @@ func (c *historyRereplicationContext) deserializeBlob(blob *commonproto.DataBlob
 
 	switch blob.GetEncodingType() {
 	case enums.EncodingTypeThriftRW:
-		historyEvents, err = c.rereplicator.serializer.DeserializeBatchEvents(&persistence.DataBlob{
+		historyEvents, err = c.rereplicator.serializer.DeserializeBatchEvents(&serialization.DataBlob{
 			Encoding: common.EncodingTypeThriftRW,
 			Data:     blob.Data,
 		})
