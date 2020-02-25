@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/temporalio/temporal/common/primitives"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -890,7 +891,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedInvalidToken() {
 	})
 
 	s.NotNil(err)
-	s.IsType(&workflow.BadRequestError{}, err)
+	s.IsType(serviceerror.NewInvalidArgument(""), err)
 }
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedIfNoExecution() {
@@ -2279,7 +2280,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedInvalidToken() {
 	})
 
 	s.NotNil(err)
-	s.IsType(&workflow.BadRequestError{}, err)
+	s.IsType(serviceerror.NewInvalidArgument(""), err)
 }
 
 func (s *engineSuite) TestRespondActivityTaskCompletedIfNoExecution() {
@@ -2810,7 +2811,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedInvalidToken() {
 	})
 
 	s.NotNil(err)
-	s.IsType(&workflow.BadRequestError{}, err)
+	s.IsType(serviceerror.NewInvalidArgument(""), err)
 }
 
 func (s *engineSuite) TestRespondActivityTaskFailedIfNoExecution() {

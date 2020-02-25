@@ -25,13 +25,12 @@ import (
 	"fmt"
 
 	"github.com/gogo/protobuf/types"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/temporalio/temporal/common/primitives"
-
-	"github.com/temporalio/temporal/.gen/go/shared"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
@@ -133,7 +132,7 @@ func (m *sqlHistoryV2Manager) AppendHistoryNodes(
 		if m.db.IsDupEntryError(err) {
 			return &p.ConditionFailedError{Msg: fmt.Sprintf("AppendHistoryNodes: row already exist: %v", err)}
 		}
-		return &shared.InternalServiceError{Message: fmt.Sprintf("AppendHistoryEvents: %v", err)}
+		return serviceerror.NewInternal(fmt.Sprintf("AppendHistoryEvents: %v", err))
 	}
 	return nil
 }
@@ -155,8 +154,7 @@ func (m *sqlHistoryV2Manager) ReadHistoryBranch(
 		// TODO the inner pagination token can be replaced by a dummy token
 		//  since lastNodeID & lastTxnID are both provided
 		if lastNodeID, err = deserializePageToken(request.NextPageToken); err != nil {
-			return nil, &shared.InternalServiceError{
-				Message: fmt.Sprintf("invalid next page token %v", request.NextPageToken)}
+			return nil, serviceerror.NewInternal(fmt.Sprintf("invalid next page token %v", request.NextPageToken))
 		}
 		minNodeID = lastNodeID + 1
 	}
@@ -194,9 +192,7 @@ func (m *sqlHistoryV2Manager) ReadHistoryBranch(
 			//  -> batch with lower transaction ID is invalid (happens before)
 			//  -> batch with higher transaction ID is valid
 			if row.NodeID < lastNodeID {
-				return nil, &shared.InternalServiceError{
-					Message: fmt.Sprintf("corrupted data, nodeID cannot decrease"),
-				}
+				return nil, serviceerror.NewInternal(fmt.Sprintf("corrupted data, nodeID cannot decrease"))
 			} else if row.NodeID > lastNodeID {
 				// update lastNodeID so that our pagination can make progress in the corner case that
 				// the page are all rows with smaller txnID
@@ -208,13 +204,9 @@ func (m *sqlHistoryV2Manager) ReadHistoryBranch(
 
 		switch {
 		case row.NodeID < lastNodeID:
-			return nil, &shared.InternalServiceError{
-				Message: fmt.Sprintf("corrupted data, nodeID cannot decrease"),
-			}
+			return nil, serviceerror.NewInternal(fmt.Sprintf("corrupted data, nodeID cannot decrease"))
 		case row.NodeID == lastNodeID:
-			return nil, &shared.InternalServiceError{
-				Message: fmt.Sprintf("corrupted data, same nodeID must have smaller txnID"),
-			}
+			return nil, serviceerror.NewInternal(fmt.Sprintf("corrupted data, same nodeID must have smaller txnID"))
 		default: // row.NodeID > lastNodeID:
 			// NOTE: when row.nodeID > lastNodeID, we expect the one with largest txnID comes first
 			lastTxnID = *row.TxnID

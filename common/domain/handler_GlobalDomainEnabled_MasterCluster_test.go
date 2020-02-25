@@ -31,9 +31,9 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
@@ -144,7 +144,7 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestRegisterGetDoma
 		IsGlobalDomain:                         isGlobalDomain,
 	})
 	s.Error(err)
-	s.IsType(&shared.BadRequestError{}, err)
+	s.IsType(serviceerror.NewInvalidArgument(""), err)
 	s.Nil(registerResp)
 }
 

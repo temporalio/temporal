@@ -23,9 +23,8 @@ package domain
 import (
 	"testing"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
-
 	"github.com/temporalio/temporal/common/cluster"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common/persistence"
 
@@ -96,7 +95,7 @@ func (s *attrValidatorSuite) TestClusterName() {
 	)
 
 	err := s.validator.validateClusterName("some random foo bar")
-	s.IsType(&shared.BadRequestError{}, err)
+	s.IsType(serviceerror.NewInvalidArgument(""), err)
 
 	err = s.validator.validateClusterName(cluster.TestCurrentClusterName)
 	s.NoError(err)
@@ -121,7 +120,7 @@ func (s *attrValidatorSuite) TestValidateDomainReplicationConfigForLocalDomain()
 			},
 		},
 	)
-	s.IsType(&shared.BadRequestError{}, err)
+	s.IsType(serviceerror.NewInvalidArgument(""), err)
 
 	err = s.validator.validateDomainReplicationConfigForLocalDomain(
 		&persistence.DomainReplicationConfig{
@@ -132,7 +131,7 @@ func (s *attrValidatorSuite) TestValidateDomainReplicationConfigForLocalDomain()
 			},
 		},
 	)
-	s.IsType(&shared.BadRequestError{}, err)
+	s.IsType(serviceerror.NewInvalidArgument(""), err)
 
 	err = s.validator.validateDomainReplicationConfigForLocalDomain(
 		&persistence.DomainReplicationConfig{
@@ -143,7 +142,7 @@ func (s *attrValidatorSuite) TestValidateDomainReplicationConfigForLocalDomain()
 			},
 		},
 	)
-	s.IsType(&shared.BadRequestError{}, err)
+	s.IsType(serviceerror.NewInvalidArgument(""), err)
 
 	err = s.validator.validateDomainReplicationConfigForLocalDomain(
 		&persistence.DomainReplicationConfig{
@@ -240,7 +239,7 @@ func (s *attrValidatorSuite) TestValidateDomainReplicationConfigClustersDoesNotR
 			{ClusterName: cluster.TestAlternativeClusterName},
 		},
 	)
-	s.IsType(&shared.BadRequestError{}, err)
+	s.IsType(serviceerror.NewInvalidArgument(""), err)
 
 	err = s.validator.validateDomainReplicationConfigClustersDoesNotRemove(
 		[]*persistence.ClusterReplicationConfig{
@@ -250,5 +249,5 @@ func (s *attrValidatorSuite) TestValidateDomainReplicationConfigClustersDoesNotR
 			{ClusterName: cluster.TestAlternativeClusterName},
 		},
 	)
-	s.IsType(&shared.BadRequestError{}, err)
+	s.IsType(serviceerror.NewInvalidArgument(""), err)
 }

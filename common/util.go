@@ -94,11 +94,11 @@ const (
 
 var (
 	// ErrBlobSizeExceedsLimit is error for event blob size exceeds limit
-	ErrBlobSizeExceedsLimit = &workflow.BadRequestError{Message: "Blob data size exceeds limit."}
+	ErrBlobSizeExceedsLimit = serviceerror.NewInvalidArgument("Blob data size exceeds limit.")
 	// ErrContextTimeoutTooShort is error for setting a very short context timeout when calling a long poll API
-	ErrContextTimeoutTooShort = &workflow.BadRequestError{Message: "Context timeout is too short."}
+	ErrContextTimeoutTooShort = serviceerror.NewInvalidArgument("Context timeout is too short.")
 	// ErrContextTimeoutNotSet is error for not setting a context timeout when calling a long poll API
-	ErrContextTimeoutNotSet = &workflow.BadRequestError{Message: "Context timeout is not set."}
+	ErrContextTimeoutNotSet = serviceerror.NewInvalidArgument("Context timeout is not set.")
 
 	// ErrBlobSizeExceedsLimit2 is error for event blob size exceeds limit
 	ErrBlobSizeExceedsLimit2 = serviceerror.NewInvalidArgument("Blob data size exceeds limit.")
@@ -430,25 +430,25 @@ func ValidateRetryPolicy(policy *commonproto.RetryPolicy) error {
 		return nil
 	}
 	if policy.GetInitialIntervalInSeconds() <= 0 {
-		return &workflow.BadRequestError{Message: "InitialIntervalInSeconds must be greater than 0 on retry policy."}
+		return serviceerror.NewInvalidArgument("InitialIntervalInSeconds must be greater than 0 on retry policy.")
 	}
 	if policy.GetBackoffCoefficient() < 1 {
-		return &workflow.BadRequestError{Message: "BackoffCoefficient cannot be less than 1 on retry policy."}
+		return serviceerror.NewInvalidArgument("BackoffCoefficient cannot be less than 1 on retry policy.")
 	}
 	if policy.GetMaximumIntervalInSeconds() < 0 {
-		return &workflow.BadRequestError{Message: "MaximumIntervalInSeconds cannot be less than 0 on retry policy."}
+		return serviceerror.NewInvalidArgument("MaximumIntervalInSeconds cannot be less than 0 on retry policy.")
 	}
 	if policy.GetMaximumIntervalInSeconds() > 0 && policy.GetMaximumIntervalInSeconds() < policy.GetInitialIntervalInSeconds() {
-		return &workflow.BadRequestError{Message: "MaximumIntervalInSeconds cannot be less than InitialIntervalInSeconds on retry policy."}
+		return serviceerror.NewInvalidArgument("MaximumIntervalInSeconds cannot be less than InitialIntervalInSeconds on retry policy.")
 	}
 	if policy.GetMaximumAttempts() < 0 {
-		return &workflow.BadRequestError{Message: "MaximumAttempts cannot be less than 0 on retry policy."}
+		return serviceerror.NewInvalidArgument("MaximumAttempts cannot be less than 0 on retry policy.")
 	}
 	if policy.GetExpirationIntervalInSeconds() < 0 {
-		return &workflow.BadRequestError{Message: "ExpirationIntervalInSeconds cannot be less than 0 on retry policy."}
+		return serviceerror.NewInvalidArgument("ExpirationIntervalInSeconds cannot be less than 0 on retry policy.")
 	}
 	if policy.GetMaximumAttempts() == 0 && policy.GetExpirationIntervalInSeconds() == 0 {
-		return &workflow.BadRequestError{Message: "MaximumAttempts and ExpirationIntervalInSeconds are both 0. At least one of them must be specified."}
+		return serviceerror.NewInvalidArgument("MaximumAttempts and ExpirationIntervalInSeconds are both 0. At least one of them must be specified.")
 	}
 	return nil
 }

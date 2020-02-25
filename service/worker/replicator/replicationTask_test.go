@@ -30,6 +30,7 @@ import (
 	"github.com/uber-go/tally"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.uber.org/zap"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
@@ -362,7 +363,7 @@ func (s *activityReplicationTaskSuite) TestHandleErr_EnoughAttempt_RetryErr() {
 }
 
 func (s *activityReplicationTaskSuite) TestRetryErr_NonRetryable() {
-	err := &shared.BadRequestError{}
+	err := serviceerror.NewInvalidArgument("")
 	task := newActivityReplicationTask(
 		s.getActivityReplicationTask(),
 		s.mockMsg,
@@ -377,7 +378,7 @@ func (s *activityReplicationTaskSuite) TestRetryErr_NonRetryable() {
 }
 
 func (s *activityReplicationTaskSuite) TestRetryErr_Retryable() {
-	err := &shared.InternalServiceError{}
+	err := serviceerror.NewInternal("")
 	task := newActivityReplicationTask(
 		s.getActivityReplicationTask(),
 		s.mockMsg,
@@ -393,7 +394,7 @@ func (s *activityReplicationTaskSuite) TestRetryErr_Retryable() {
 }
 
 func (s *activityReplicationTaskSuite) TestRetryErr_Retryable_ExceedAttempt() {
-	err := &shared.InternalServiceError{}
+	err := serviceerror.NewInternal("")
 	task := newActivityReplicationTask(
 		s.getActivityReplicationTask(),
 		s.mockMsg,
@@ -409,7 +410,7 @@ func (s *activityReplicationTaskSuite) TestRetryErr_Retryable_ExceedAttempt() {
 }
 
 func (s *activityReplicationTaskSuite) TestRetryErr_Retryable_ExceedDuration() {
-	err := &shared.InternalServiceError{}
+	err := serviceerror.NewInternal("")
 	task := newActivityReplicationTask(
 		s.getActivityReplicationTask(),
 		s.mockMsg,
@@ -576,14 +577,14 @@ func (s *historyReplicationTaskSuite) TestHandleErr_EnoughAttempt_RetryErr() {
 }
 
 func (s *historyReplicationTaskSuite) TestRetryErr_NonRetryable() {
-	err := &shared.BadRequestError{}
+	err := serviceerror.NewInvalidArgument("")
 	task := newHistoryReplicationTask(s.getHistoryReplicationTask(), s.mockMsg, s.sourceCluster, s.logger,
 		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator)
 	s.False(task.RetryErr(err))
 }
 
 func (s *historyReplicationTaskSuite) TestRetryErr_Retryable() {
-	err := &shared.InternalServiceError{}
+	err := serviceerror.NewInternal("")
 	task := newHistoryReplicationTask(s.getHistoryReplicationTask(), s.mockMsg, s.sourceCluster, s.logger,
 		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator)
 	task.attempt = 0
@@ -592,7 +593,7 @@ func (s *historyReplicationTaskSuite) TestRetryErr_Retryable() {
 }
 
 func (s *historyReplicationTaskSuite) TestRetryErr_Retryable_ExceedAttempt() {
-	err := &shared.InternalServiceError{}
+	err := serviceerror.NewInternal("")
 	task := newHistoryReplicationTask(s.getHistoryReplicationTask(), s.mockMsg, s.sourceCluster, s.logger,
 		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator)
 	task.attempt = s.config.ReplicationTaskMaxRetryCount() + 100
@@ -600,7 +601,7 @@ func (s *historyReplicationTaskSuite) TestRetryErr_Retryable_ExceedAttempt() {
 }
 
 func (s *historyReplicationTaskSuite) TestRetryErr_Retryable_ExceedDuration() {
-	err := &shared.InternalServiceError{}
+	err := serviceerror.NewInternal("")
 	task := newHistoryReplicationTask(s.getHistoryReplicationTask(), s.mockMsg, s.sourceCluster, s.logger,
 		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator)
 	task.startTime = s.mockTimeSource.Now().Add(-2 * s.config.ReplicationTaskMaxRetryDuration())
@@ -727,14 +728,14 @@ func (s *historyMetadataReplicationTaskSuite) TestHandleErr_RetryErr() {
 }
 
 func (s *historyMetadataReplicationTaskSuite) TestRetryErr_NonRetryable() {
-	err := &shared.BadRequestError{}
+	err := serviceerror.NewInvalidArgument("")
 	task := newHistoryMetadataReplicationTask(s.getHistoryMetadataReplicationTask(), s.mockMsg, s.sourceCluster, s.logger,
 		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator)
 	s.False(task.RetryErr(err))
 }
 
 func (s *historyMetadataReplicationTaskSuite) TestRetryErr_Retryable() {
-	err := &shared.InternalServiceError{}
+	err := serviceerror.NewInternal("")
 	task := newHistoryMetadataReplicationTask(s.getHistoryMetadataReplicationTask(), s.mockMsg, s.sourceCluster, s.logger,
 		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator)
 	task.attempt = 0
@@ -742,7 +743,7 @@ func (s *historyMetadataReplicationTaskSuite) TestRetryErr_Retryable() {
 }
 
 func (s *historyMetadataReplicationTaskSuite) TestRetryErr_Retryable_ExceedAttempt() {
-	err := &shared.InternalServiceError{}
+	err := serviceerror.NewInternal("")
 	task := newHistoryMetadataReplicationTask(s.getHistoryMetadataReplicationTask(), s.mockMsg, s.sourceCluster, s.logger,
 		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator)
 	task.attempt = s.config.ReplicationTaskMaxRetryCount() + 100
@@ -750,7 +751,7 @@ func (s *historyMetadataReplicationTaskSuite) TestRetryErr_Retryable_ExceedAttem
 }
 
 func (s *historyMetadataReplicationTaskSuite) TestRetryErr_Retryable_ExceedDuration() {
-	err := &shared.InternalServiceError{}
+	err := serviceerror.NewInternal("")
 	task := newHistoryMetadataReplicationTask(s.getHistoryMetadataReplicationTask(), s.mockMsg, s.sourceCluster, s.logger,
 		s.config, s.mockTimeSource, s.mockHistoryClient, s.metricsClient, s.mockRereplicator)
 	task.startTime = s.mockTimeSource.Now().Add(-2 * s.config.ReplicationTaskMaxRetryDuration())

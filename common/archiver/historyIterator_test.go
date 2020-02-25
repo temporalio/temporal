@@ -27,6 +27,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
@@ -642,7 +643,7 @@ func (s *HistoryIteratorSuite) constructMockHistoryV2Manager(batchInfo []int, re
 			PageSize:    testDefaultPersistencePageSize,
 			ShardID:     common.IntPtr(testShardID),
 		}
-		mockHistoryV2Manager.On("ReadHistoryBranchByBatch", req).Return(nil, &shared.EntityNotExistsError{Message: "Reach the end"})
+		mockHistoryV2Manager.On("ReadHistoryBranchByBatch", req).Return(nil, serviceerror.NewNotFound("Reach the end"))
 	}
 
 	return mockHistoryV2Manager

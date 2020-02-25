@@ -25,8 +25,8 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
+	"go.temporal.io/temporal-proto/serviceerror"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cassandra"
 	"github.com/temporalio/temporal/common/log"
@@ -158,13 +158,9 @@ func (q *cassandraQueue) tryEnqueue(
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
 		if isThrottlingError(err) {
-			return &workflow.ServiceBusyError{
-				Message: fmt.Sprintf("Failed to enqueue message. Error: %v, Type: %v.", err, queueType),
-			}
+			return serviceerror.NewResourceExhausted(fmt.Sprintf("Failed to enqueue message. Error: %v, Type: %v.", err, queueType))
 		}
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to enqueue message. Error: %v, Type: %v.", err, queueType),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("Failed to enqueue message. Error: %v, Type: %v.", err, queueType))
 	}
 
 	if !applied {
@@ -185,14 +181,10 @@ func (q *cassandraQueue) getLastMessageID(
 		if err == gocql.ErrNotFound {
 			return emptyMessageID, nil
 		} else if isThrottlingError(err) {
-			return emptyMessageID, &workflow.ServiceBusyError{
-				Message: fmt.Sprintf("Failed to get last message ID for queue %v. Error: %v", queueType, err),
-			}
+			return emptyMessageID, serviceerror.NewResourceExhausted(fmt.Sprintf("Failed to get last message ID for queue %v. Error: %v", queueType, err))
 		}
 
-		return emptyMessageID, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to get last message ID for queue %v. Error: %v", queueType, err),
-		}
+		return emptyMessageID, serviceerror.NewInternal(fmt.Sprintf("Failed to get last message ID for queue %v. Error: %v", queueType, err))
 	}
 
 	return result["message_id"].(int), nil
@@ -211,9 +203,7 @@ func (q *cassandraQueue) ReadMessages(
 
 	iter := query.Iter()
 	if iter == nil {
-		return nil, &workflow.InternalServiceError{
-			Message: "ReadMessages operation failed. Not able to create query iterator.",
-		}
+		return nil, serviceerror.NewInternal("ReadMessages operation failed. Not able to create query iterator.")
 	}
 
 	var result []*persistence.QueueMessage
@@ -226,9 +216,7 @@ func (q *cassandraQueue) ReadMessages(
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ReadMessages operation failed. Error: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("ReadMessages operation failed. Error: %v", err))
 	}
 
 	return result, nil
@@ -250,9 +238,7 @@ func (q *cassandraQueue) ReadMessagesFromDLQ(
 
 	iter := query.Iter()
 	if iter == nil {
-		return nil, nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ReadMessagesFromDLQ operation failed. Not able to create query iterator."),
-		}
+		return nil, nil, serviceerror.NewInternal(fmt.Sprintf("ReadMessagesFromDLQ operation failed. Not able to create query iterator."))
 	}
 
 	var result []*persistence.QueueMessage
@@ -268,9 +254,7 @@ func (q *cassandraQueue) ReadMessagesFromDLQ(
 	newPageToken := make([]byte, len(nextPageToken))
 	copy(newPageToken, nextPageToken)
 	if err := iter.Close(); err != nil {
-		return nil, nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ReadMessagesFromDLQ operation failed. Error: %v", err),
-		}
+		return nil, nil, serviceerror.NewInternal(fmt.Sprintf("ReadMessagesFromDLQ operation failed. Error: %v", err))
 	}
 
 	return result, newPageToken, nil
@@ -296,9 +280,7 @@ func (q *cassandraQueue) DeleteMessagesBefore(
 
 	query := q.session.Query(templateDeleteMessagesQuery, q.queueType, messageID)
 	if err := query.Exec(); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("DeleteMessagesBefore operation failed. Error %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("DeleteMessagesBefore operation failed. Error %v", err))
 	}
 
 	return nil
@@ -311,9 +293,7 @@ func (q *cassandraQueue) DeleteMessageFromDLQ(
 	// Use negative queue type as the dlq type
 	query := q.session.Query(templateDeleteMessageQuery, q.getDLQTypeFromQueueType(), messageID)
 	if err := query.Exec(); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("DeleteMessageFromDLQ operation failed. Error %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("DeleteMessageFromDLQ operation failed. Error %v", err))
 	}
 
 	return nil
@@ -327,9 +307,7 @@ func (q *cassandraQueue) RangeDeleteMessagesFromDLQ(
 	// Use negative queue type as the dlq type
 	query := q.session.Query(templateDeleteMessagesQuery, q.getDLQTypeFromQueueType(), firstMessageID, lastMessageID)
 	if err := query.Exec(); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("RangeDeleteMessagesFromDLQ operation failed. Error %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("RangeDeleteMessagesFromDLQ operation failed. Error %v", err))
 	}
 
 	return nil
@@ -423,14 +401,10 @@ func (q *cassandraQueue) updateQueueMetadata(
 	)
 	applied, err := query.ScanCAS()
 	if err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("UpdateAckLevel operation failed. Error %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("UpdateAckLevel operation failed. Error %v", err))
 	}
 	if !applied {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("UpdateAckLevel operation encounter concurrent write."),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("UpdateAckLevel operation encounter concurrent write."))
 	}
 
 	return nil
@@ -448,9 +422,7 @@ func (q *cassandraQueue) updateAckLevel(
 
 	queueMetadata, err := q.getQueueMetadata(queueType)
 	if err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("UpdateDLQAckLevel operation failed. Error %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("UpdateDLQAckLevel operation failed. Error %v", err))
 	}
 
 	// Ignore possibly delayed message
@@ -464,9 +436,7 @@ func (q *cassandraQueue) updateAckLevel(
 	// Use negative queue type as the dlq type
 	err = q.updateQueueMetadata(queueMetadata, queueType)
 	if err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("UpdateDLQAckLevel operation failed. Error %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("UpdateDLQAckLevel operation failed. Error %v", err))
 	}
 	return nil
 }

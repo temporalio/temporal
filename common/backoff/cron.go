@@ -25,8 +25,7 @@ import (
 	"time"
 
 	"github.com/robfig/cron"
-
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 // NoBackoff is used to represent backoff when no cron backoff is needed
@@ -38,7 +37,7 @@ func ValidateSchedule(cronSchedule string) error {
 		return nil
 	}
 	if _, err := cron.ParseStandard(cronSchedule); err != nil {
-		return &workflow.BadRequestError{Message: "Invalid CronSchedule."}
+		return serviceerror.NewInvalidArgument("Invalid CronSchedule.")
 	}
 	return nil
 }

@@ -24,21 +24,18 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/temporalio/temporal/common/persistence/serialization"
-
-	"github.com/gogo/protobuf/types"
-
-	commonproto "go.temporal.io/temporal-proto/common"
-
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common/primitives"
-
 	"github.com/gocql/gocql"
+	"github.com/gogo/protobuf/types"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/checksum"
 	p "github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/persistence/serialization"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 func applyWorkflowMutationBatch(
@@ -635,9 +632,7 @@ func createExecution(
 			checksum.Flavor,
 			checksum.Value)
 	} else {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Create workflow execution with both version histories and replication state."),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("Create workflow execution with both version histories and replication state."))
 	}
 	return nil
 }
@@ -911,9 +906,7 @@ func updateExecution(
 			rowTypeExecutionTaskID,
 			condition)
 	} else {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Update workflow execution with both version histories and replication state."),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("Update workflow execution with both version histories and replication state."))
 	}
 
 	return nil
@@ -1020,9 +1013,7 @@ func createTransferTasks(
 			// No explicit property needs to be set
 
 		default:
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("Unknow transfer type: %v", task.GetType()),
-			}
+			return serviceerror.NewInternal(fmt.Sprintf("Unknow transfer type: %v", task.GetType()))
 		}
 
 		taskVisTs, err := types.TimestampProto(task.GetVisibilityTimestamp())
@@ -1108,9 +1099,7 @@ func createReplicationTasks(
 			lastReplicationInfo = make(map[string]*commonproto.ReplicationInfo)
 
 		default:
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("Unknow replication type: %v", task.GetType()),
-			}
+			return serviceerror.NewInternal(fmt.Sprintf("Unknow replication type: %v", task.GetType()))
 		}
 
 		datablob, err := serialization.ReplicationTaskInfoToBlob(&persistenceblobs.ReplicationTaskInfo{
@@ -1194,9 +1183,7 @@ func createTimerTasks(
 			// noop
 
 		default:
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("Unknow timer type: %v", task.GetType()),
-			}
+			return serviceerror.NewInternal(fmt.Sprintf("Unknow timer type: %v", task.GetType()))
 		}
 
 		// Ignoring possible type cast errors.
@@ -1319,9 +1306,7 @@ func createOrUpdateCurrentExecution(
 			state,
 		)
 	default:
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("unknown mode: %v", createMode),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("unknown mode: %v", createMode))
 	}
 
 	return nil

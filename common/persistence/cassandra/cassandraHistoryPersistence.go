@@ -24,6 +24,7 @@ import (
 	"fmt"
 
 	"github.com/gogo/protobuf/types"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/persistence/serialization"
@@ -34,7 +35,6 @@ import (
 
 	"github.com/gocql/gocql"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/log"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/service/config"
@@ -151,16 +151,12 @@ func (h *cassandraHistoryV2Persistence) ReadHistoryBranch(
 
 	treeID, err := gocql.UUIDFromBytes(request.TreeID)
 	if err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ReadHistoryBranch - Gocql TreeId UUID cast failed. Error: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("ReadHistoryBranch - Gocql TreeId UUID cast failed. Error: %v", err))
 	}
 
 	branchID, err := gocql.UUIDFromBytes(request.BranchID)
 	if err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ReadHistoryBranch - Gocql BranchId UUID cast failed. Error: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("ReadHistoryBranch - Gocql BranchId UUID cast failed. Error: %v", err))
 	}
 
 	lastNodeID := request.LastNodeID
@@ -170,9 +166,7 @@ func (h *cassandraHistoryV2Persistence) ReadHistoryBranch(
 
 	iter := query.PageSize(int(request.PageSize)).PageState(request.NextPageToken).Iter()
 	if iter == nil {
-		return nil, &workflow.InternalServiceError{
-			Message: "ReadHistoryBranch operation failed.  Not able to create query iterator.",
-		}
+		return nil, serviceerror.NewInternal("ReadHistoryBranch operation failed.  Not able to create query iterator.")
 	}
 	pagingToken := iter.PageState()
 
@@ -199,13 +193,9 @@ func (h *cassandraHistoryV2Persistence) ReadHistoryBranch(
 
 		switch {
 		case nodeID < lastNodeID:
-			return nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("corrupted data, nodeID cannot decrease"),
-			}
+			return nil, serviceerror.NewInternal(fmt.Sprintf("corrupted data, nodeID cannot decrease"))
 		case nodeID == lastNodeID:
-			return nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("corrupted data, same nodeID must have smaller txnID"),
-			}
+			return nil, serviceerror.NewInternal(fmt.Sprintf("corrupted data, same nodeID must have smaller txnID"))
 		default: // row.NodeID > lastNodeID:
 			// NOTE: when row.nodeID > lastNodeID, we expect the one with largest txnID comes first
 			lastTxnID = txnID
@@ -216,9 +206,7 @@ func (h *cassandraHistoryV2Persistence) ReadHistoryBranch(
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ReadHistoryBranch. Close operation failed. Error: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("ReadHistoryBranch. Close operation failed. Error: %v", err))
 	}
 
 	return &p.InternalReadHistoryBranchResponse{
@@ -322,16 +310,12 @@ func (h *cassandraHistoryV2Persistence) ForkHistoryBranch(
 
 	cqlTreeID, err := gocql.UUIDFromBytes(forkB.TreeID)
 	if err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ForkHistoryBranch - Gocql TreeId UUID cast failed. Error: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("ForkHistoryBranch - Gocql TreeId UUID cast failed. Error: %v", err))
 	}
 
 	cqlNewBranchID, err := gocql.UUIDFromBytes(request.NewBranchID)
 	if err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ForkHistoryBranch - Gocql NewBranchID UUID cast failed. Error: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("ForkHistoryBranch - Gocql NewBranchID UUID cast failed. Error: %v", err))
 	}
 	query := h.session.Query(v2templateInsertTree, cqlTreeID, cqlNewBranchID, datablob.Data, datablob.Encoding)
 	err = query.Exec()
@@ -352,9 +336,7 @@ func (h *cassandraHistoryV2Persistence) DeleteHistoryBranch(
 	branch := request.BranchInfo
 	treeID, err := gocql.UUIDFromBytes(branch.TreeID)
 	if err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("DeleteHistoryBranch - Gocql TreeId UUID cast failed. Error: %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("DeleteHistoryBranch - Gocql TreeId UUID cast failed. Error: %v", err))
 	}
 	brsToDelete := branch.Ancestors
 	beginNodeID := p.GetBeginNodeID(branch)
@@ -427,9 +409,7 @@ func (h *cassandraHistoryV2Persistence) GetAllHistoryTreeBranches(
 
 	iter := query.PageSize(int(request.PageSize)).PageState(request.NextPageToken).Iter()
 	if iter == nil {
-		return nil, &workflow.InternalServiceError{
-			Message: "GetAllHistoryTreeBranches operation failed.  Not able to create query iterator.",
-		}
+		return nil, serviceerror.NewInternal("GetAllHistoryTreeBranches operation failed.  Not able to create query iterator.")
 	}
 	pagingToken := iter.PageState()
 
@@ -460,9 +440,7 @@ func (h *cassandraHistoryV2Persistence) GetAllHistoryTreeBranches(
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("GetAllHistoryTreeBranches. Close operation failed. Error: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetAllHistoryTreeBranches. Close operation failed. Error: %v", err))
 	}
 
 	response := &p.GetAllHistoryTreeBranchesResponse{
@@ -480,9 +458,7 @@ func (h *cassandraHistoryV2Persistence) GetHistoryTree(
 
 	treeID, err := gocql.UUIDFromBytes(request.TreeID)
 	if err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ReadHistoryBranch. Gocql TreeId UUID cast failed. Error: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("ReadHistoryBranch. Gocql TreeId UUID cast failed. Error: %v", err))
 	}
 	query := h.session.Query(v2templateReadAllBranches, treeID)
 
@@ -493,9 +469,7 @@ func (h *cassandraHistoryV2Persistence) GetHistoryTree(
 	for {
 		iter = query.PageSize(100).PageState(pagingToken).Iter()
 		if iter == nil {
-			return nil, &workflow.InternalServiceError{
-				Message: "GetHistoryTree operation failed.  Not able to create query iterator.",
-			}
+			return nil, serviceerror.NewInternal("GetHistoryTree operation failed.  Not able to create query iterator.")
 		}
 		pagingToken = iter.PageState()
 

@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/temporalio/temporal/common/persistence/serialization"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/gogo/protobuf/types"
 
@@ -125,9 +126,7 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 	switch request.Mode {
 	case p.CreateWorkflowModeContinueAsNew:
 		// cannot create workflow with continue as new mode
-		return nil, &workflow.InternalServiceError{
-			Message: "CreateWorkflowExecution: operation failed, encounter invalid CreateWorkflowModeContinueAsNew",
-		}
+		return nil, serviceerror.NewInternal("CreateWorkflowExecution: operation failed, encounter invalid CreateWorkflowModeContinueAsNew")
 	}
 
 	var err error
@@ -181,12 +180,7 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 			}
 
 		default:
-			return nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf(
-					"CreteWorkflowExecution: unknown mode: %v",
-					request.Mode,
-				),
-			}
+			return nil, serviceerror.NewInternal(fmt.Sprintf("CreteWorkflowExecution: unknown mode: %v", request.Mode))
 		}
 	}
 
@@ -231,9 +225,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 				),
 			}
 		}
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("GetWorkflowExecution: failed. Error: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed. Error: %v", err))
 	}
 
 	info, err := serialization.WorkflowExecutionInfoFromBlob(execution.Data, execution.DataEncoding)
@@ -347,9 +339,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 			wfID,
 			runID)
 		if err != nil {
-			return nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("GetWorkflowExecution: failed to get activity info. Error: %v", err),
-			}
+			return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed to get activity info. Error: %v", err))
 		}
 	}
 
@@ -361,9 +351,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 			wfID,
 			runID)
 		if err != nil {
-			return nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("GetWorkflowExecution: failed to get timer info. Error: %v", err),
-			}
+			return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed to get timer info. Error: %v", err))
 		}
 	}
 
@@ -375,9 +363,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 			wfID,
 			runID)
 		if err != nil {
-			return nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("GetWorkflowExecution: failed to get child execution info. Error: %v", err),
-			}
+			return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed to get child execution info. Error: %v", err))
 		}
 	}
 
@@ -389,9 +375,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 			wfID,
 			runID)
 		if err != nil {
-			return nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("GetWorkflowExecution: failed to get request cancel info. Error: %v", err),
-			}
+			return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed to get request cancel info. Error: %v", err))
 		}
 	}
 
@@ -403,9 +387,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 			wfID,
 			runID)
 		if err != nil {
-			return nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("GetWorkflowExecution: failed to get signal info. Error: %v", err),
-			}
+			return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed to get signal info. Error: %v", err))
 		}
 	}
 
@@ -417,9 +399,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 			wfID,
 			runID)
 		if err != nil {
-			return nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("GetWorkflowExecution: failed to get buffered events. Error: %v", err),
-			}
+			return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed to get buffered events. Error: %v", err))
 		}
 	}
 
@@ -431,9 +411,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 			wfID,
 			runID)
 		if err != nil {
-			return nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("GetWorkflowExecution: failed to get signals requested. Error: %v", err),
-			}
+			return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed to get signals requested. Error: %v", err))
 		}
 	}
 
@@ -490,9 +468,7 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(
 			newRunID := primitives.MustParseUUID(newExecutionInfo.RunID)
 
 			if !bytes.Equal(domainID, newDomainID) {
-				return &workflow.InternalServiceError{
-					Message: fmt.Sprintf("UpdateWorkflowExecution: cannot continue as new to another domain"),
-				}
+				return serviceerror.NewInternal(fmt.Sprintf("UpdateWorkflowExecution: cannot continue as new to another domain"))
 			}
 
 			if err := assertRunIDAndUpdateCurrentExecution(tx,
@@ -506,9 +482,7 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(
 				newWorkflow.ExecutionInfo.CloseStatus,
 				startVersion,
 				lastWriteVersion); err != nil {
-				return &workflow.InternalServiceError{
-					Message: fmt.Sprintf("UpdateWorkflowExecution: failed to continue as new current execution. Error: %v", err),
-				}
+				return serviceerror.NewInternal(fmt.Sprintf("UpdateWorkflowExecution: failed to continue as new current execution. Error: %v", err))
 			}
 		} else {
 			startVersion := updateWorkflow.StartVersion
@@ -525,16 +499,12 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(
 				executionInfo.CloseStatus,
 				startVersion,
 				lastWriteVersion); err != nil {
-				return &workflow.InternalServiceError{
-					Message: fmt.Sprintf("UpdateWorkflowExecution: failed to update current execution. Error: %v", err),
-				}
+				return serviceerror.NewInternal(fmt.Sprintf("UpdateWorkflowExecution: failed to update current execution. Error: %v", err))
 			}
 		}
 
 	default:
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("UpdateWorkflowExecution: unknown mode: %v", request.Mode),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("UpdateWorkflowExecution: unknown mode: %v", request.Mode))
 	}
 
 	if err := applyWorkflowMutationTx(tx, shardID, &updateWorkflow); err != nil {
@@ -590,9 +560,7 @@ func (m *sqlExecutionManager) resetWorkflowExecutionTx(
 		startVersion,
 		lastWriteVersion,
 	); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ResetWorkflowExecution operation failed. Failed at updateCurrentExecution. Error: %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("ResetWorkflowExecution operation failed. Failed at updateCurrentExecution. Error: %v", err))
 	}
 
 	// 2. lock base run: we want to grab a read-lock for base run to prevent race condition
@@ -603,9 +571,7 @@ func (m *sqlExecutionManager) resetWorkflowExecutionTx(
 			case *p.ConditionFailedError:
 				return err
 			default:
-				return &workflow.InternalServiceError{
-					Message: fmt.Sprintf("ResetWorkflowExecution operation failed. Failed to lock executions row. Error: %v", err),
-				}
+				return serviceerror.NewInternal(fmt.Sprintf("ResetWorkflowExecution operation failed. Failed to lock executions row. Error: %v", err))
 			}
 		}
 	}
@@ -624,9 +590,7 @@ func (m *sqlExecutionManager) resetWorkflowExecutionTx(
 			case *p.ConditionFailedError:
 				return err
 			default:
-				return &workflow.InternalServiceError{
-					Message: fmt.Sprintf("ResetWorkflowExecution operation failed. Failed to lock executions row. Error: %v", err),
-				}
+				return serviceerror.NewInternal(fmt.Sprintf("ResetWorkflowExecution operation failed. Failed to lock executions row. Error: %v", err))
 			}
 		}
 	}
@@ -709,10 +673,7 @@ func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 				closeStatus,
 				startVersion,
 				lastWriteVersion); err != nil {
-				return &workflow.InternalServiceError{Message: fmt.Sprintf(
-					"ConflictResolveWorkflowExecution. Failed to comare and swap the current record. Error: %v",
-					err,
-				)}
+				return serviceerror.NewInternal(fmt.Sprintf("ConflictResolveWorkflowExecution. Failed to comare and swap the current record. Error: %v", err))
 			}
 		} else if currentWorkflow != nil {
 			prevRunID := primitives.MustParseUUID(currentWorkflow.ExecutionInfo.RunID)
@@ -728,10 +689,7 @@ func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 				closeStatus,
 				startVersion,
 				lastWriteVersion); err != nil {
-				return &workflow.InternalServiceError{Message: fmt.Sprintf(
-					"ConflictResolveWorkflowExecution. Failed to comare and swap the current record. Error: %v",
-					err,
-				)}
+				return serviceerror.NewInternal(fmt.Sprintf("ConflictResolveWorkflowExecution. Failed to comare and swap the current record. Error: %v", err))
 			}
 		} else {
 			// reset workflow is current
@@ -748,17 +706,12 @@ func (m *sqlExecutionManager) conflictResolveWorkflowExecutionTx(
 				closeStatus,
 				startVersion,
 				lastWriteVersion); err != nil {
-				return &workflow.InternalServiceError{Message: fmt.Sprintf(
-					"ConflictResolveWorkflowExecution. Failed to comare and swap the current record. Error: %v",
-					err,
-				)}
+				return serviceerror.NewInternal(fmt.Sprintf("ConflictResolveWorkflowExecution. Failed to comare and swap the current record. Error: %v", err))
 			}
 		}
 
 	default:
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ConflictResolveWorkflowExecution: unknown mode: %v", request.Mode),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("ConflictResolveWorkflowExecution: unknown mode: %v", request.Mode))
 	}
 
 	if err := applyWorkflowSnapshotTxAsReset(tx, shardID, &resetWorkflow); err != nil {
@@ -828,11 +781,9 @@ func (m *sqlExecutionManager) GetCurrentExecution(
 	})
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, &workflow.EntityNotExistsError{Message: err.Error()}
+			return nil, serviceerror.NewNotFound(err.Error())
 		}
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("GetCurrentExecution operation failed. Error: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetCurrentExecution operation failed. Error: %v", err))
 	}
 	return &p.GetCurrentExecutionResponse{
 		StartRequestID:   row.CreateRequestID,
@@ -851,9 +802,7 @@ func (m *sqlExecutionManager) GetTransferTasks(
 		ShardID: m.shardID, MinTaskID: &request.ReadLevel, MaxTaskID: &request.MaxReadLevel})
 	if err != nil {
 		if err != sql.ErrNoRows {
-			return nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("GetTransferTasks operation failed. Select failed. Error: %v", err),
-			}
+			return nil, serviceerror.NewInternal(fmt.Sprintf("GetTransferTasks operation failed. Select failed. Error: %v", err))
 		}
 	}
 	resp := &p.GetTransferTasksResponse{Tasks: make([]*persistenceblobs.TransferTaskInfo, len(rows))}
@@ -876,9 +825,7 @@ func (m *sqlExecutionManager) CompleteTransferTask(
 		ShardID: m.shardID,
 		TaskID:  &request.TaskID,
 	}); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("CompleteTransferTask operation failed. Error: %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("CompleteTransferTask operation failed. Error: %v", err))
 	}
 	return nil
 }
@@ -891,9 +838,7 @@ func (m *sqlExecutionManager) RangeCompleteTransferTask(
 		ShardID:   m.shardID,
 		MinTaskID: &request.ExclusiveBeginTaskID,
 		MaxTaskID: &request.InclusiveEndTaskID}); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("RangeCompleteTransferTask operation failed. Error: %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("RangeCompleteTransferTask operation failed. Error: %v", err))
 	}
 	return nil
 }
@@ -921,9 +866,7 @@ func (m *sqlExecutionManager) GetReplicationTasks(
 	case sql.ErrNoRows:
 		return &p.GetReplicationTasksResponse{}, nil
 	default:
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("GetReplicationTasks operation failed. Select failed: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetReplicationTasks operation failed. Select failed: %v", err))
 	}
 }
 
@@ -984,9 +927,7 @@ func (m *sqlExecutionManager) CompleteReplicationTask(
 		ShardID: m.shardID,
 		TaskID:  request.TaskID,
 	}); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("CompleteReplicationTask operation failed. Error: %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("CompleteReplicationTask operation failed. Error: %v", err))
 	}
 	return nil
 }
@@ -999,9 +940,7 @@ func (m *sqlExecutionManager) RangeCompleteReplicationTask(
 		ShardID: m.shardID,
 		TaskID:  request.InclusiveEndTaskID,
 	}); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("RangeCompleteReplicationTask operation failed. Error: %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("RangeCompleteReplicationTask operation failed. Error: %v", err))
 	}
 	return nil
 }
@@ -1032,9 +971,7 @@ func (m *sqlExecutionManager) GetReplicationTasksFromDLQ(
 	case sql.ErrNoRows:
 		return &p.GetReplicationTasksResponse{}, nil
 	default:
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("GetReplicationTasks operation failed. Select failed: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetReplicationTasks operation failed. Select failed: %v", err))
 	}
 }
 
@@ -1095,9 +1032,7 @@ func (m *sqlExecutionManager) GetTimerIndexTasks(
 	pageToken := &timerTaskPageToken{TaskID: math.MinInt64, Timestamp: request.MinTimestamp}
 	if len(request.NextPageToken) > 0 {
 		if err := pageToken.deserialize(request.NextPageToken); err != nil {
-			return nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("error deserializing timerTaskPageToken: %v", err),
-			}
+			return nil, serviceerror.NewInternal(fmt.Sprintf("error deserializing timerTaskPageToken: %v", err))
 		}
 	}
 
@@ -1110,9 +1045,7 @@ func (m *sqlExecutionManager) GetTimerIndexTasks(
 	})
 
 	if err != nil && err != sql.ErrNoRows {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("GetTimerTasks operation failed. Select failed. Error: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetTimerTasks operation failed. Select failed. Error: %v", err))
 	}
 
 	resp := &p.GetTimerIndexTasksResponse{Timers: make([]*persistenceblobs.TimerTaskInfo, len(rows))}
@@ -1127,9 +1060,7 @@ func (m *sqlExecutionManager) GetTimerIndexTasks(
 	if len(resp.Timers) > request.BatchSize {
 		goVisibilityTimestamp, err := types.TimestampFromProto(resp.Timers[request.BatchSize].VisibilityTimestamp)
 		if err != nil {
-			return nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("GetTimerTasks: error converting time for page token: %v", err),
-			}
+			return nil, serviceerror.NewInternal(fmt.Sprintf("GetTimerTasks: error converting time for page token: %v", err))
 		}
 
 		pageToken = &timerTaskPageToken{
@@ -1139,9 +1070,7 @@ func (m *sqlExecutionManager) GetTimerIndexTasks(
 		resp.Timers = resp.Timers[:request.BatchSize]
 		nextToken, err := pageToken.serialize()
 		if err != nil {
-			return nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("GetTimerTasks: error serializing page token: %v", err),
-			}
+			return nil, serviceerror.NewInternal(fmt.Sprintf("GetTimerTasks: error serializing page token: %v", err))
 		}
 		resp.NextPageToken = nextToken
 	}
@@ -1158,9 +1087,7 @@ func (m *sqlExecutionManager) CompleteTimerTask(
 		VisibilityTimestamp: &request.VisibilityTimestamp,
 		TaskID:              request.TaskID,
 	}); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("CompleteTimerTask operation failed. Error: %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("CompleteTimerTask operation failed. Error: %v", err))
 	}
 	return nil
 }
@@ -1176,9 +1103,7 @@ func (m *sqlExecutionManager) RangeCompleteTimerTask(
 		MinVisibilityTimestamp: &start,
 		MaxVisibilityTimestamp: &end,
 	}); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("CompleteTimerTask operation failed. Error: %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("CompleteTimerTask operation failed. Error: %v", err))
 	}
 	return nil
 }
@@ -1204,9 +1129,7 @@ func (m *sqlExecutionManager) PutReplicationTaskToDLQ(request *p.PutReplicationT
 	// Tasks are immutable. So it's fine if we already persisted it before.
 	// This can happen when tasks are retried (ack and cleanup can have lag on source side).
 	if err != nil && !m.db.IsDupEntryError(err) {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to create replication tasks. Error: %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("Failed to create replication tasks. Error: %v", err))
 	}
 
 	return nil

@@ -26,8 +26,8 @@ import (
 	ctx "context"
 
 	"github.com/pborman/uuid"
+	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
 )
@@ -99,9 +99,7 @@ func (r *nDCConflictResolverImpl) prepareMutableState(
 	}
 
 	if incomingVersion == currentLastItem.GetVersion() {
-		return nil, false, &shared.BadRequestError{
-			Message: "nDCConflictResolver encounter replication task version == current branch last write version",
-		}
+		return nil, false, serviceerror.NewInvalidArgument("nDCConflictResolver encounter replication task version == current branch last write version")
 	}
 
 	// task.getVersion() > currentLastItem
@@ -160,9 +158,7 @@ func (r *nDCConflictResolverImpl) rebuild(
 	}
 
 	if !rebuildVersionHistory.Equals(replayVersionHistory) {
-		return nil, &shared.InternalServiceError{
-			Message: "nDCConflictResolver encounter mismatch version history after rebuild",
-		}
+		return nil, serviceerror.NewInternal("nDCConflictResolver encounter mismatch version history after rebuild")
 	}
 
 	// set the current branch index to target branch index

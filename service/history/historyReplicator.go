@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/temporalio/temporal/common/persistence/serialization"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/pborman/uuid"
 
@@ -67,10 +68,10 @@ type (
 var (
 	// ErrRetryEntityNotExists is returned to indicate workflow execution is not created yet and replicator should
 	// try this task again after a small delay.
-	ErrRetryEntityNotExists = &shared.RetryTaskError{Message: "entity not exists"}
+	ErrRetryEntityNotExists = serviceerror.NewRetryTask("entity not exists", "", "", "", common.EmptyEventID)
 	// ErrRetryRaceCondition is returned to indicate logic race condition encountered and replicator should
 	// try this task again after a small delay.
-	ErrRetryRaceCondition = &shared.RetryTaskError{Message: "encounter race condition, retry"}
+	ErrRetryRaceCondition = serviceerror.NewRetryTask("encounter race condition, retry", "", "", "", common.EmptyEventID)
 	// ErrRetrySyncActivityMsg is returned when sync activity replication tasks are arriving out of order, should retry
 	ErrRetrySyncActivityMsg = "retry on applying sync activity"
 	// ErrRetryBufferEventsMsg is returned when events are arriving out of order, should retry, or specify force apply
@@ -83,29 +84,29 @@ var (
 	// this error can be return if we encounter race condition, i.e. terminating the target workflow while
 	// the target workflow has done continue as new.
 	// try this task again after a small delay.
-	ErrRetryExecutionAlreadyStarted = &shared.RetryTaskError{Message: "another workflow execution is running"}
+	ErrRetryExecutionAlreadyStarted = serviceerror.NewRetryTask("another workflow execution is running", "", "", "", common.EmptyEventID)
 	// ErrCorruptedReplicationInfo is returned when replication task has corrupted replication information from source cluster
-	ErrCorruptedReplicationInfo = &shared.BadRequestError{Message: "replication task is has corrupted cluster replication info"}
+	ErrCorruptedReplicationInfo = serviceerror.NewInvalidArgument("replication task is has corrupted cluster replication info")
 	// ErrCorruptedMutableStateDecision is returned when mutable state decision is corrupted
-	ErrCorruptedMutableStateDecision = &shared.BadRequestError{Message: "mutable state decision is corrupted"}
+	ErrCorruptedMutableStateDecision = serviceerror.NewInvalidArgument("mutable state decision is corrupted")
 	// ErrMoreThan2DC is returned when there are more than 2 data center
-	ErrMoreThan2DC = &shared.BadRequestError{Message: "more than 2 data center"}
+	ErrMoreThan2DC = serviceerror.NewInvalidArgument("more than 2 data center")
 	// ErrImpossibleLocalRemoteMissingReplicationInfo is returned when replication task is missing replication info, as well as local replication info being empty
-	ErrImpossibleLocalRemoteMissingReplicationInfo = &shared.BadRequestError{Message: "local and remote both are missing replication info"}
+	ErrImpossibleLocalRemoteMissingReplicationInfo = serviceerror.NewInvalidArgument("local and remote both are missing replication info")
 	// ErrImpossibleRemoteClaimSeenHigherVersion is returned when replication info contains higher version then this cluster ever emitted.
-	ErrImpossibleRemoteClaimSeenHigherVersion = &shared.BadRequestError{Message: "replication info contains higher version then this cluster ever emitted"}
+	ErrImpossibleRemoteClaimSeenHigherVersion = serviceerror.NewInvalidArgument("replication info contains higher version then this cluster ever emitted")
 	// ErrInternalFailure is returned when encounter code bug
-	ErrInternalFailure = &shared.BadRequestError{Message: "fail to apply history events due bug"}
+	ErrInternalFailure = serviceerror.NewInvalidArgument("fail to apply history events due bug")
 	// ErrEmptyHistoryRawEventBatch indicate that one single batch of history raw events is of size 0
-	ErrEmptyHistoryRawEventBatch = &shared.BadRequestError{Message: "encounter empty history batch"}
+	ErrEmptyHistoryRawEventBatch = serviceerror.NewInvalidArgument("encounter empty history batch")
 	// ErrUnknownEncodingType indicate that the encoding type is unknown
-	ErrUnknownEncodingType = &shared.BadRequestError{Message: "unknown encoding type"}
+	ErrUnknownEncodingType = serviceerror.NewInvalidArgument("unknown encoding type")
 	// ErrUnreappliableEvent indicate that the event is not reappliable
-	ErrUnreappliableEvent = &shared.BadRequestError{Message: "event is not reappliable"}
+	ErrUnreappliableEvent = serviceerror.NewInvalidArgument("event is not reappliable")
 	// ErrWorkflowMutationDecision indicate that something is wrong with mutating workflow, i.e. adding decision to workflow
-	ErrWorkflowMutationDecision = &shared.BadRequestError{Message: "error encountered when mutating workflow adding decision"}
+	ErrWorkflowMutationDecision = serviceerror.NewInvalidArgument("error encountered when mutating workflow adding decision")
 	// ErrWorkflowMutationSignal indicate that something is wrong with mutating workflow, i.e. adding signal to workflow
-	ErrWorkflowMutationSignal = &shared.BadRequestError{Message: "error encountered when mutating workflow adding signal"}
+	ErrWorkflowMutationSignal = serviceerror.NewInvalidArgument("error encountered when mutating workflow adding signal")
 )
 
 func newHistoryReplicator(
@@ -288,7 +289,7 @@ func (r *historyReplicator) ApplyEvents(
 
 		// Sanity check to make only 2DC mutable state here
 		if msBuilder.GetReplicationState() == nil {
-			return &workflow.InternalServiceError{Message: "The mutable state does not support 2DC."}
+			return serviceerror.NewInternal("The mutable state does not support 2DC.")
 		}
 
 		logger.WithTags(tag.CurrentVersion(msBuilder.GetReplicationState().LastWriteVersion))
@@ -969,7 +970,7 @@ func (r *historyReplicator) terminateWorkflow(
 				[]byte(fmt.Sprintf("terminated by version: %v", incomingVersion)),
 				workflowTerminationIdentity,
 			); err != nil {
-				return &workflow.InternalServiceError{Message: "Unable to terminate workflow execution."}
+				return serviceerror.NewInternal("Unable to terminate workflow execution.")
 			}
 
 			return nil
@@ -1201,7 +1202,7 @@ func (r *historyReplicator) reapplyEventsToCurrentClosedWorkflow(
 		//  reset to workflow finish event
 		errStr := "cannot reapply signal due to workflow missing decision"
 		logger.Error(errStr)
-		return &shared.BadRequestError{Message: errStr}
+		return serviceerror.NewInvalidArgument(errStr)
 
 	}
 

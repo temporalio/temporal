@@ -38,6 +38,7 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 const (
@@ -283,9 +284,7 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, er
 		return nil, err
 	}
 	if flushBeforeReady {
-		return nil, &workflow.InternalServiceError{
-			Message: "workflowExecutionContext counter flushBeforeReady status after loading mutable state from DB",
-		}
+		return nil, serviceerror.NewInternal("workflowExecutionContext counter flushBeforeReady status after loading mutable state from DB")
 	}
 
 	return c.mutableState, nil
@@ -745,9 +744,7 @@ func (c *workflowExecutionContextImpl) mergeContinueAsNewReplicationTasks(
 	}
 
 	if newWorkflowSnapshot == nil || len(newWorkflowSnapshot.ReplicationTasks) != 1 {
-		return &workflow.InternalServiceError{
-			Message: "unable to find replication task from new workflow for continue as new replication",
-		}
+		return serviceerror.NewInternal("unable to find replication task from new workflow for continue as new replication")
 	}
 
 	// merge the new run first event batch replication task
@@ -764,9 +761,7 @@ func (c *workflowExecutionContextImpl) mergeContinueAsNewReplicationTasks(
 		}
 	}
 	if !taskUpdated {
-		return &workflow.InternalServiceError{
-			Message: "unable to find replication task from current workflow for continue as new replication",
-		}
+		return serviceerror.NewInternal("unable to find replication task from current workflow for continue as new replication")
 	}
 	return nil
 }
@@ -776,9 +771,7 @@ func (c *workflowExecutionContextImpl) persistFirstWorkflowEvents(
 ) (int64, error) {
 
 	if len(workflowEvents.Events) == 0 {
-		return 0, &workflow.InternalServiceError{
-			Message: "cannot persist first workflow events with empty events",
-		}
+		return 0, serviceerror.NewInternal("cannot persist first workflow events with empty events")
 	}
 
 	domainID := workflowEvents.DomainID
@@ -997,9 +990,7 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 	// Since we always reset to decision task, there shouldn't be any buffered events.
 	// Therefore currently ResetWorkflowExecution persistence API doesn't implement setting buffered events.
 	if newMutableState.HasBufferedEvents() {
-		retError = &workflow.InternalServiceError{
-			Message: fmt.Sprintf("reset workflow execution shouldn't have buffered events"),
-		}
+		retError = serviceerror.NewInternal(fmt.Sprintf("reset workflow execution shouldn't have buffered events"))
 		return
 	}
 
@@ -1048,9 +1039,7 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 		return err
 	}
 	if len(workflowEventsSeq) != 1 {
-		return &workflow.InternalServiceError{
-			Message: "reset workflow execution should generate exactly 1 event batch",
-		}
+		return serviceerror.NewInternal("reset workflow execution should generate exactly 1 event batch")
 	}
 	for _, workflowEvents := range workflowEventsSeq {
 		eventsSize, err := c.persistNonFirstWorkflowEvents(workflowEvents)
@@ -1069,9 +1058,7 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 	if len(resetWorkflow.ChildExecutionInfos) > 0 ||
 		len(resetWorkflow.SignalInfos) > 0 ||
 		len(resetWorkflow.SignalRequestedIDs) > 0 {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("something went wrong, we shouldn't see any pending childWF, sending Signal or signal requested"),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("something went wrong, we shouldn't see any pending childWF, sending Signal or signal requested"))
 	}
 
 	resetWFReq := &persistence.ResetWorkflowExecutionRequest{
@@ -1191,9 +1178,7 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 	for _, events := range eventBatches {
 		if events.DomainID != domainID ||
 			events.WorkflowID != workflowID {
-			return &workflow.InternalServiceError{
-				Message: "workflowExecutionContext encounter mismatch domainID / workflowID in events reapplication.",
-			}
+			return serviceerror.NewInternal("workflowExecutionContext encounter mismatch domainID / workflowID in events reapplication.")
 		}
 
 		for _, event := range events.Events {
@@ -1249,9 +1234,7 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 	// Reapplication only happens in active cluster
 	sourceCluster := clientBean.GetRemoteAdminClient(activeCluster)
 	if sourceCluster == nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("cannot find cluster config %v to do reapply", activeCluster),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("cannot find cluster config %v to do reapply", activeCluster))
 	}
 	ctx2, cancel2 := newContextWithTimeout(defaultRemoteCallTimeout)
 	defer cancel2()

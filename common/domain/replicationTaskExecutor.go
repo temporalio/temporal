@@ -25,6 +25,7 @@ package domain
 import (
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/adapter"
@@ -34,25 +35,25 @@ import (
 
 var (
 	// ErrEmptyDomainReplicationTask is the error to indicate empty replication task
-	ErrEmptyDomainReplicationTask = &shared.BadRequestError{Message: "empty domain replication task"}
+	ErrEmptyDomainReplicationTask = serviceerror.NewInvalidArgument("empty domain replication task")
 	// ErrInvalidDomainOperation is the error to indicate empty domain operation attribute
-	ErrInvalidDomainOperation = &shared.BadRequestError{Message: "invalid domain operation attribute"}
+	ErrInvalidDomainOperation = serviceerror.NewInvalidArgument("invalid domain operation attribute")
 	// ErrInvalidDomainID is the error to indicate empty rID attribute
-	ErrInvalidDomainID = &shared.BadRequestError{Message: "invalid domain ID attribute"}
+	ErrInvalidDomainID = serviceerror.NewInvalidArgument("invalid domain ID attribute")
 	// ErrInvalidDomainInfo is the error to indicate empty info attribute
-	ErrInvalidDomainInfo = &shared.BadRequestError{Message: "invalid domain info attribute"}
+	ErrInvalidDomainInfo = serviceerror.NewInvalidArgument("invalid domain info attribute")
 	// ErrInvalidDomainConfig is the error to indicate empty config attribute
-	ErrInvalidDomainConfig = &shared.BadRequestError{Message: "invalid domain config attribute"}
+	ErrInvalidDomainConfig = serviceerror.NewInvalidArgument("invalid domain config attribute")
 	// ErrInvalidDomainReplicationConfig is the error to indicate empty replication config attribute
-	ErrInvalidDomainReplicationConfig = &shared.BadRequestError{Message: "invalid domain replication config attribute"}
+	ErrInvalidDomainReplicationConfig = serviceerror.NewInvalidArgument("invalid domain replication config attribute")
 	// ErrInvalidDomainConfigVersion is the error to indicate empty config version attribute
-	ErrInvalidDomainConfigVersion = &shared.BadRequestError{Message: "invalid domain config version attribute"}
+	ErrInvalidDomainConfigVersion = serviceerror.NewInvalidArgument("invalid domain config version attribute")
 	// ErrInvalidDomainFailoverVersion is the error to indicate empty failover version attribute
-	ErrInvalidDomainFailoverVersion = &shared.BadRequestError{Message: "invalid domain failover version attribute"}
+	ErrInvalidDomainFailoverVersion = serviceerror.NewInvalidArgument("invalid domain failover version attribute")
 	// ErrInvalidDomainStatus is the error to indicate invalid domain status
-	ErrInvalidDomainStatus = &shared.BadRequestError{Message: "invalid domain status attribute"}
+	ErrInvalidDomainStatus = serviceerror.NewInvalidArgument("invalid domain status attribute")
 	// ErrNameUUIDCollision is the error to indicate domain name / UUID collision
-	ErrNameUUIDCollision = &shared.BadRequestError{Message: "domain replication encounter name / UUID collision"}
+	ErrNameUUIDCollision = serviceerror.NewInvalidArgument("domain replication encounter name / UUID collision")
 )
 
 // NOTE: the counterpart of domain replication transmission logic is in service/fropntend package

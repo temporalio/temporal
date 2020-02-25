@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/temporalio/temporal/common/primitives"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/pborman/uuid"
 
@@ -657,7 +658,7 @@ func (b *stateBuilderImpl) applyEvents(
 			}
 
 		default:
-			return nil, &shared.BadRequestError{Message: "Unknown event type"}
+			return nil, serviceerror.NewInvalidArgument("Unknown event type")
 		}
 	}
 

@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -125,7 +126,7 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 			if !ok {
 				errString := fmt.Sprintf("failed to find in user timer event ID: %v", timerSequenceID.eventID)
 				t.logger.Error(errString)
-				return nil, &workflow.InternalServiceError{Message: errString}
+				return nil, serviceerror.NewInternal(errString)
 			}
 
 			t, _ := types.TimestampFromProto(timerTask.VisibilityTimestamp)
@@ -185,7 +186,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 			if !ok {
 				errString := fmt.Sprintf("failed to find in memory activity timer: %v", timerSequenceID.eventID)
 				t.logger.Error(errString)
-				return nil, &workflow.InternalServiceError{Message: errString}
+				return nil, serviceerror.NewInternal(errString)
 			}
 
 			t, _ := types.TimestampFromProto(timerTask.VisibilityTimestamp)
@@ -470,9 +471,7 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 			common.EndEventID, // use common.EndEventID since we do not know where is the end
 		)
 	} else {
-		err = &workflow.InternalServiceError{
-			Message: "timerQueueStandbyProcessor encounter empty historyResendInfo",
-		}
+		err = serviceerror.NewInternal("timerQueueStandbyProcessor encounter empty historyResendInfo")
 	}
 
 	if err != nil {

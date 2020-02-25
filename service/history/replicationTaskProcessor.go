@@ -34,6 +34,7 @@ import (
 
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.uber.org/yarpc/yarpcerrors"
 
 	h "github.com/temporalio/temporal/.gen/go/history"
@@ -56,7 +57,7 @@ const (
 
 var (
 	// ErrUnknownReplicationTask is the error to indicate unknown replication task type
-	ErrUnknownReplicationTask = &shared.BadRequestError{Message: "unknown replication task"}
+	ErrUnknownReplicationTask = serviceerror.NewInvalidArgument("unknown replication task")
 )
 
 type (

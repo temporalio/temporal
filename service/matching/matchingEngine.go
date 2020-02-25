@@ -500,7 +500,7 @@ func (e *matchingEngineImpl) QueryWorkflow(ctx context.Context, queryRequest *m.
 		case workflow.QueryTaskCompletedTypeFailed:
 			return nil, &workflow.QueryFailedError{Message: workerResponse.GetCompletedRequest().GetErrorMessage()}
 		default:
-			return nil, &workflow.InternalServiceError{Message: "unknown query completed type"}
+			return nil, serviceerror.NewInternal("unknown query completed type")
 		}
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -518,7 +518,7 @@ func (e *matchingEngineImpl) RespondQueryTaskCompleted(ctx context.Context, requ
 func (e *matchingEngineImpl) deliverQueryResult(taskID string, queryResult *queryResult) error {
 	queryResultCh, ok := e.lockableQueryTaskMap.get(taskID)
 	if !ok {
-		return &workflow.InternalServiceError{Message: "query task not found, or already expired"}
+		return serviceerror.NewInternal("query task not found, or already expired")
 	}
 	queryResultCh <- queryResult
 	return nil

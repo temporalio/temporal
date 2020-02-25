@@ -1049,14 +1049,14 @@ func (t *transferQueueActiveProcessorImpl) recordChildExecutionStarted(
 	return t.updateWorkflowExecution(context, true,
 		func(mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return &shared.EntityNotExistsError{Message: "Workflow execution already completed."}
+				return serviceerror.NewNotFound("Workflow execution already completed.")
 			}
 
 			domain := initiatedAttributes.Domain
 			initiatedEventID := task.ScheduleID
 			ci, ok := mutableState.GetChildExecutionInfo(initiatedEventID)
 			if !ok || ci.StartedID != common.EmptyEventID {
-				return &shared.EntityNotExistsError{Message: "Pending child execution not found."}
+				return serviceerror.NewNotFound("Pending child execution not found.")
 			}
 
 			_, err := mutableState.AddChildWorkflowExecutionStartedEvent(
@@ -1083,13 +1083,13 @@ func (t *transferQueueActiveProcessorImpl) recordStartChildExecutionFailed(
 	return t.updateWorkflowExecution(context, true,
 		func(mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return &shared.EntityNotExistsError{Message: "Workflow execution already completed."}
+				return serviceerror.NewNotFound("Workflow execution already completed.")
 			}
 
 			initiatedEventID := task.ScheduleID
 			ci, ok := mutableState.GetChildExecutionInfo(initiatedEventID)
 			if !ok || ci.StartedID != common.EmptyEventID {
-				return &shared.EntityNotExistsError{Message: "Pending child execution not found."}
+				return serviceerror.NewNotFound("Pending child execution not found.")
 			}
 
 			_, err := mutableState.AddStartChildWorkflowExecutionFailedEvent(initiatedEventID,
@@ -1136,7 +1136,7 @@ func (t *transferQueueActiveProcessorImpl) requestCancelExternalExecutionComplet
 	err := t.updateWorkflowExecution(context, true,
 		func(mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return &shared.EntityNotExistsError{Message: "Workflow execution already completed."}
+				return serviceerror.NewNotFound("Workflow execution already completed.")
 			}
 
 			initiatedEventID := task.ScheduleID
@@ -1174,7 +1174,7 @@ func (t *transferQueueActiveProcessorImpl) signalExternalExecutionCompleted(
 	err := t.updateWorkflowExecution(context, true,
 		func(mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return &shared.EntityNotExistsError{Message: "Workflow execution already completed."}
+				return serviceerror.NewNotFound("Workflow execution already completed.")
 			}
 
 			initiatedEventID := task.ScheduleID
@@ -1212,7 +1212,7 @@ func (t *transferQueueActiveProcessorImpl) requestCancelExternalExecutionFailed(
 	err := t.updateWorkflowExecution(context, true,
 		func(mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return &shared.EntityNotExistsError{Message: "Workflow execution already completed."}
+				return serviceerror.NewNotFound("Workflow execution already completed.")
 			}
 
 			initiatedEventID := task.ScheduleID
@@ -1252,7 +1252,7 @@ func (t *transferQueueActiveProcessorImpl) signalExternalExecutionFailed(
 	err := t.updateWorkflowExecution(context, true,
 		func(mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return &shared.EntityNotExistsError{Message: "Workflow is not running."}
+				return serviceerror.NewNotFound("Workflow is not running.")
 			}
 
 			initiatedEventID := task.ScheduleID
@@ -1647,8 +1647,6 @@ func (t *transferQueueActiveProcessorImpl) applyParentClosePolicy(
 		})
 		return err
 	default:
-		return &shared.InternalServiceError{
-			Message: fmt.Sprintf("unknown parent close policy: %v", childInfo.ParentClosePolicy),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("unknown parent close policy: %v", childInfo.ParentClosePolicy))
 	}
 }

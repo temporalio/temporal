@@ -29,6 +29,7 @@ import (
 	"github.com/temporalio/temporal/common/archiver/gcloud/connector"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/service/config"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
@@ -191,23 +192,23 @@ func (h *historyArchiver) Get(ctx context.Context, URI archiver.URI, request *ar
 
 	err := h.ValidateURI(URI)
 	if err != nil {
-		return nil, &shared.BadRequestError{Message: archiver.ErrInvalidURI.Error()}
+		return nil, serviceerror.NewInvalidArgument(archiver.ErrInvalidURI.Error())
 	}
 
 	if err := archiver.ValidateGetRequest(request); err != nil {
-		return nil, &shared.BadRequestError{Message: archiver.ErrInvalidGetHistoryRequest.Error()}
+		return nil, serviceerror.NewInvalidArgument(archiver.ErrInvalidGetHistoryRequest.Error())
 	}
 
 	var token *getHistoryToken
 	if request.NextPageToken != nil {
 		token, err = deserializeGetHistoryToken(request.NextPageToken)
 		if err != nil {
-			return nil, &shared.BadRequestError{Message: archiver.ErrNextPageTokenCorrupted.Error()}
+			return nil, serviceerror.NewInvalidArgument(archiver.ErrNextPageTokenCorrupted.Error())
 		}
 	} else {
 		highestVersion, historyhighestPart, historyCurrentPart, err := h.getHighestVersion(ctx, URI, request)
 		if err != nil {
-			return nil, &shared.InternalServiceError{Message: err.Error()}
+			return nil, serviceerror.NewInternal(err.Error())
 		}
 		token = &getHistoryToken{
 			CloseFailoverVersion: *highestVersion,
@@ -228,16 +229,16 @@ outer:
 		encodedHistoryBatches, err := h.gcloudStorage.Get(ctx, URI, filename)
 
 		if err != nil {
-			return nil, &shared.InternalServiceError{Message: err.Error()}
+			return nil, serviceerror.NewInternal(err.Error())
 		}
 
 		if encodedHistoryBatches == nil {
-			return nil, &shared.InternalServiceError{Message: "Fail retrieving history file: " + URI.String() + "/" + filename}
+			return nil, serviceerror.NewInternal("Fail retrieving history file: " + URI.String() + "/" + filename)
 		}
 
 		batches, err := decodeHistoryBatches(encodedHistoryBatches)
 		if err != nil {
-			return nil, &shared.InternalServiceError{Message: err.Error()}
+			return nil, serviceerror.NewInternal(err.Error())
 		}
 		// trim the batches in the beginning based on token.BatchIdxOffset
 		batches = batches[token.BatchIdxOffset:]
@@ -266,7 +267,7 @@ outer:
 	if token.CurrentPart <= token.HighestPart {
 		nextToken, err := serializeToken(token)
 		if err != nil {
-			return nil, &shared.InternalServiceError{Message: err.Error()}
+			return nil, serviceerror.NewInternal(err.Error())
 		}
 		response.NextPageToken = nextToken
 	}

@@ -26,6 +26,7 @@ import (
 	"time"
 
 	pblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -336,7 +337,7 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 		},
 	}
 
-	notExistErr := &workflow.EntityNotExistsError{Message: "Workflow not exist"}
+	notExistErr := serviceerror.NewNotFound("Workflow not exist")
 
 	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(nil, notExistErr).Once()
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()

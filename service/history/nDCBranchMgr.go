@@ -26,8 +26,8 @@ import (
 	ctx "context"
 
 	"github.com/pborman/uuid"
+	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
@@ -248,9 +248,7 @@ func (r *nDCBranchMgrImpl) createNewBranch(
 		return 0, err
 	}
 	if branchChanged {
-		return 0, &shared.BadRequestError{
-			Message: "nDCBranchMgr encounter branch change during conflict resolution",
-		}
+		return 0, serviceerror.NewInvalidArgument("nDCBranchMgr encounter branch change during conflict resolution")
 	}
 
 	return newIndex, nil

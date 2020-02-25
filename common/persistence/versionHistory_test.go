@@ -23,8 +23,8 @@ package persistence
 import (
 	"testing"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/stretchr/testify/suite"
 )
@@ -124,22 +124,22 @@ func (s *versionHistorySuite) TestDuplicateUntilLCAItem_Failure() {
 	history := NewVersionHistory(BranchToken, Items)
 
 	_, err := history.DuplicateUntilLCAItem(NewVersionHistoryItem(4, 0))
-	s.IsType(&shared.BadRequestError{}, err)
+	s.IsType(serviceerror.NewInvalidArgument(""), err)
 
 	_, err = history.DuplicateUntilLCAItem(NewVersionHistoryItem(2, 1))
-	s.IsType(&shared.BadRequestError{}, err)
+	s.IsType(serviceerror.NewInvalidArgument(""), err)
 
 	_, err = history.DuplicateUntilLCAItem(NewVersionHistoryItem(5, 3))
-	s.IsType(&shared.BadRequestError{}, err)
+	s.IsType(serviceerror.NewInvalidArgument(""), err)
 
 	_, err = history.DuplicateUntilLCAItem(NewVersionHistoryItem(7, 5))
-	s.IsType(&shared.BadRequestError{}, err)
+	s.IsType(serviceerror.NewInvalidArgument(""), err)
 
 	_, err = history.DuplicateUntilLCAItem(NewVersionHistoryItem(4, 0))
-	s.IsType(&shared.BadRequestError{}, err)
+	s.IsType(serviceerror.NewInvalidArgument(""), err)
 
 	_, err = history.DuplicateUntilLCAItem(NewVersionHistoryItem(7, 4))
-	s.IsType(&shared.BadRequestError{}, err)
+	s.IsType(serviceerror.NewInvalidArgument(""), err)
 }
 
 func (s *versionHistorySuite) TestSetBranchToken() {
@@ -413,7 +413,7 @@ func (s *versionHistorySuite) TestGetFirstItem_Failure() {
 	history := NewVersionHistory(BranchToken, []*VersionHistoryItem{})
 
 	_, err := history.GetFirstItem()
-	s.IsType(&shared.BadRequestError{}, err)
+	s.IsType(serviceerror.NewInvalidArgument(""), err)
 }
 
 func (s *versionHistorySuite) TestGetLastItem_Success() {
@@ -447,7 +447,7 @@ func (s *versionHistorySuite) TestGetLastItem_Failure() {
 	history := NewVersionHistory(BranchToken, []*VersionHistoryItem{})
 
 	_, err := history.GetLastItem()
-	s.IsType(&shared.BadRequestError{}, err)
+	s.IsType(serviceerror.NewInvalidArgument(""), err)
 }
 
 func (s *versionHistoriesSuite) TestGetVersion_Success() {

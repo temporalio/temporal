@@ -25,12 +25,12 @@ import (
 	"fmt"
 
 	"github.com/temporalio/temporal/common/persistence/serialization"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common/primitives"
 
 	"github.com/temporalio/temporal/common"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
 )
@@ -57,9 +57,7 @@ func updateSignalsRequested(
 			}
 		}
 		if _, err := tx.InsertIntoSignalsRequestedSets(rows); err != nil {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("Failed to update signals requested. Failed to execute update query. Error: %v", err),
-			}
+			return serviceerror.NewInternal(fmt.Sprintf("Failed to update signals requested. Failed to execute update query. Error: %v", err))
 		}
 	}
 
@@ -71,9 +69,7 @@ func updateSignalsRequested(
 			RunID:      runID,
 			SignalID:   &deleteSignalRequestID,
 		}); err != nil {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("Failed to update signals requested. Failed to execute delete query. Error: %v", err),
-			}
+			return serviceerror.NewInternal(fmt.Sprintf("Failed to update signals requested. Failed to execute delete query. Error: %v", err))
 		}
 	}
 
@@ -95,9 +91,7 @@ func getSignalsRequested(
 		RunID:      runID,
 	})
 	if err != nil && err != sql.ErrNoRows {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to get signals requested. Error: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to get signals requested. Error: %v", err))
 	}
 	var ret = make(map[string]struct{})
 	for _, s := range rows {
@@ -120,9 +114,7 @@ func deleteSignalsRequestedSet(
 		WorkflowID: workflowID,
 		RunID:      runID,
 	}); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to delete signals requested set. Error: %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("Failed to delete signals requested set. Error: %v", err))
 	}
 	return nil
 }
@@ -149,9 +141,7 @@ func updateBufferedEvents(
 	}
 
 	if _, err := tx.InsertIntoBufferedEvents([]sqlplugin.BufferedEventsRow{row}); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("updateBufferedEvents operation failed. Error: %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("updateBufferedEvents operation failed. Error: %v", err))
 	}
 	return nil
 }
@@ -171,9 +161,7 @@ func getBufferedEvents(
 		RunID:      runID,
 	})
 	if err != nil && err != sql.ErrNoRows {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("getBufferedEvents operation failed. Select failed: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("getBufferedEvents operation failed. Select failed: %v", err))
 	}
 	var result []*serialization.DataBlob
 	for _, row := range rows {
@@ -196,9 +184,7 @@ func deleteBufferedEvents(
 		WorkflowID: workflowID,
 		RunID:      runID,
 	}); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("updateBufferedEvents delete operation failed. Error: %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("updateBufferedEvents delete operation failed. Error: %v", err))
 	}
 	return nil
 }

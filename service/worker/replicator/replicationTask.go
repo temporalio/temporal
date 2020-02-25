@@ -356,7 +356,7 @@ func (t *activityReplicationTask) HandleErr(
 			return err
 		}
 	} else {
-		return &shared.InternalServiceError{Message: "activityReplicationTask encounter error which cannot be handled"}
+		return serviceerror.NewInternal("activityReplicationTask encounter error which cannot be handled")
 	}
 
 	// should try again

@@ -29,6 +29,7 @@ import (
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/metrics"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type (
@@ -84,9 +85,7 @@ func (r *nDCEventsReapplierImpl) reapplyEvents(
 
 	// sanity check workflow still running
 	if !msBuilder.IsWorkflowExecutionRunning() {
-		return nil, &workflow.InternalServiceError{
-			Message: "unable to reapply events to closed workflow.",
-		}
+		return nil, serviceerror.NewInternal("unable to reapply events to closed workflow.")
 	}
 
 	for _, event := range reappliedEvents {

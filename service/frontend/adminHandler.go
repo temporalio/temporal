@@ -829,7 +829,7 @@ func (adh *AdminHandler) ReadDLQMessages(
 			}
 		}
 	default:
-		return nil, adh.error(&shared.BadRequestError{Message: "The DLQ type is not supported."}, scope)
+		return nil, adh.error(serviceerror.NewInvalidArgument("The DLQ type is not supported."), scope)
 	}
 	retErr = backoff.Retry(op, adminServiceRetryPolicy, common.IsServiceTransientError)
 	if retErr != nil {
@@ -885,7 +885,7 @@ func (adh *AdminHandler) PurgeDLQMessages(
 			}
 		}
 	default:
-		return nil, adh.error(&shared.BadRequestError{Message: "The DLQ type is not supported."}, scope)
+		return nil, adh.error(serviceerror.NewInvalidArgument("The DLQ type is not supported."), scope)
 	}
 	err = backoff.Retry(op, adminServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
@@ -949,7 +949,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 			}
 		}
 	default:
-		return nil, adh.error(&shared.BadRequestError{Message: "The DLQ type is not supported."}, scope)
+		return nil, adh.error(serviceerror.NewInvalidArgument("The DLQ type is not supported."), scope)
 	}
 	err = backoff.Retry(op, adminServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {

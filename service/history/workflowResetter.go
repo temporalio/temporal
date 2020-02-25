@@ -34,6 +34,7 @@ import (
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type (
@@ -186,9 +187,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 
 	baseLastEventVersion := resetMutableState.GetCurrentVersion()
 	if baseLastEventVersion > resetWorkflowVersion {
-		return nil, &shared.InternalServiceError{
-			Message: "workflowResetter encounter version mismatch.",
-		}
+		return nil, serviceerror.NewInternal("workflowResetter encounter version mismatch.")
 	}
 	if err := resetMutableState.UpdateCurrentVersion(
 		resetWorkflowVersion,
@@ -200,14 +199,10 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 	// TODO add checking of reset until event ID == decision task started ID + 1
 	decision, ok := resetMutableState.GetInFlightDecision()
 	if !ok || decision.StartedID+1 != resetMutableState.GetNextEventID() {
-		return nil, &shared.BadRequestError{
-			Message: fmt.Sprintf("Can only reset workflow to DecisionTaskStarted + 1: %v", baseRebuildLastEventID+1),
-		}
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Can only reset workflow to DecisionTaskStarted + 1: %v", baseRebuildLastEventID+1))
 	}
 	if len(resetMutableState.GetPendingChildExecutionInfos()) > 0 {
-		return nil, &shared.BadRequestError{
-			Message: fmt.Sprintf("Can only reset workflow with pending child workflows"),
-		}
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Can only reset workflow with pending child workflows"))
 	}
 
 	_, err = resetMutableState.AddDecisionTaskFailedEvent(
@@ -376,9 +371,7 @@ func (r *workflowResetterImpl) failInflightActivity(
 		case common.TransientEventID:
 			// activity is started (with retry policy)
 			// should not encounter this case when rebuilding mutable state
-			return &shared.InternalServiceError{
-				Message: "workflowResetter encounter transient activity",
-			}
+			return serviceerror.NewInternal("workflowResetter encounter transient activity")
 		default:
 			if _, err := mutableState.AddActivityTaskFailedEvent(
 				ai.ScheduleID,

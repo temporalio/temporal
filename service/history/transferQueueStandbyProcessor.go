@@ -25,6 +25,7 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/primitives"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/client/matching"
@@ -703,9 +704,7 @@ func (t *transferQueueStandbyProcessorImpl) fetchHistoryFromRemote(
 			common.EndEventID, // use common.EndEventID since we do not know where is the end
 		)
 	} else {
-		err = &workflow.InternalServiceError{
-			Message: "transferQueueStandbyProcessor encounter empty historyResendInfo",
-		}
+		err = serviceerror.NewInternal("transferQueueStandbyProcessor encounter empty historyResendInfo")
 	}
 
 	if err != nil {

@@ -26,11 +26,11 @@ import (
 	ctx "context"
 	"fmt"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type (
@@ -166,9 +166,7 @@ func (r *nDCWorkflowImpl) suppressBy(
 		lastEventTaskID,
 		incomingLastWriteVersion,
 		incomingLastEventTaskID) {
-		return transactionPolicyActive, &shared.InternalServiceError{
-			Message: "nDCWorkflow cannot suppress workflow by older workflow",
-		}
+		return transactionPolicyActive, serviceerror.NewInternal("nDCWorkflow cannot suppress workflow by older workflow")
 	}
 
 	// if workflow is in zombie or finished state, keep as is
@@ -204,9 +202,7 @@ func (r *nDCWorkflowImpl) flushBufferedEvents() error {
 	currentCluster := r.clusterMetadata.GetCurrentClusterName()
 
 	if lastWriteCluster != currentCluster {
-		return &shared.InternalServiceError{
-			Message: "nDCWorkflow encounter workflow with buffered events but last write not from current cluster",
-		}
+		return serviceerror.NewInternal("nDCWorkflow encounter workflow with buffered events but last write not from current cluster")
 	}
 
 	return r.failDecision(lastWriteVersion)

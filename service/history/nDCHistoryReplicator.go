@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	h "github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/shared"
@@ -234,7 +235,7 @@ func (r *nDCHistoryReplicatorImpl) applyEvents(
 		case nil:
 			// Sanity check to make only 3DC mutable state here
 			if mutableState.GetVersionHistories() == nil {
-				return &shared.InternalServiceError{Message: "The mutable state does not support 3DC."}
+				return serviceerror.NewInternal("The mutable state does not support 3DC.")
 			}
 
 			doContinue, branchIndex, err := r.applyNonStartEventsPrepareBranch(ctx, context, mutableState, task)

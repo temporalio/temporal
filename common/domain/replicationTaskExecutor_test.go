@@ -27,9 +27,9 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.uber.org/zap"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/persistence"
@@ -132,13 +132,13 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_RegisterDomainTask_Name
 	task.Info.Name = name
 	err = s.domainReplicator.Execute(task)
 	s.NotNil(err)
-	s.IsType(&shared.BadRequestError{}, err)
+	s.IsType(serviceerror.NewInvalidArgument(""), err)
 
 	task.Id = id
 	task.Info.Name = "other random domain test name"
 	err = s.domainReplicator.Execute(task)
 	s.NotNil(err)
-	s.IsType(&shared.BadRequestError{}, err)
+	s.IsType(serviceerror.NewInvalidArgument(""), err)
 }
 
 func (s *domainReplicationTaskExecutorSuite) TestExecute_RegisterDomainTask() {

@@ -36,6 +36,7 @@ import (
 	"github.com/cch123/elasticsql"
 	"github.com/olivere/elastic"
 	"github.com/valyala/fastjson"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/go/indexer"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
@@ -174,9 +175,7 @@ func (v *esVisibilityStore) ListOpenWorkflowExecutions(
 	isOpen := true
 	searchResult, err := v.getSearchResult(request, token, nil, isOpen)
 	if err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ListOpenWorkflowExecutions failed. Error: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutions failed. Error: %v", err))
 	}
 
 	isRecordValid := func(rec *p.VisibilityWorkflowExecutionInfo) bool {
@@ -198,9 +197,7 @@ func (v *esVisibilityStore) ListClosedWorkflowExecutions(
 	isOpen := false
 	searchResult, err := v.getSearchResult(request, token, nil, isOpen)
 	if err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ListClosedWorkflowExecutions failed. Error: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutions failed. Error: %v", err))
 	}
 
 	isRecordValid := func(rec *p.VisibilityWorkflowExecutionInfo) bool {
@@ -223,9 +220,7 @@ func (v *esVisibilityStore) ListOpenWorkflowExecutionsByType(
 	matchQuery := elastic.NewMatchQuery(es.WorkflowType, request.WorkflowTypeName)
 	searchResult, err := v.getSearchResult(&request.ListWorkflowExecutionsRequest, token, matchQuery, isOpen)
 	if err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ListOpenWorkflowExecutionsByType failed. Error: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutionsByType failed. Error: %v", err))
 	}
 
 	isRecordValid := func(rec *p.VisibilityWorkflowExecutionInfo) bool {
@@ -248,9 +243,7 @@ func (v *esVisibilityStore) ListClosedWorkflowExecutionsByType(
 	matchQuery := elastic.NewMatchQuery(es.WorkflowType, request.WorkflowTypeName)
 	searchResult, err := v.getSearchResult(&request.ListWorkflowExecutionsRequest, token, matchQuery, isOpen)
 	if err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ListClosedWorkflowExecutionsByType failed. Error: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByType failed. Error: %v", err))
 	}
 
 	isRecordValid := func(rec *p.VisibilityWorkflowExecutionInfo) bool {
@@ -273,9 +266,7 @@ func (v *esVisibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
 	matchQuery := elastic.NewMatchQuery(es.WorkflowID, request.WorkflowID)
 	searchResult, err := v.getSearchResult(&request.ListWorkflowExecutionsRequest, token, matchQuery, isOpen)
 	if err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ListOpenWorkflowExecutionsByWorkflowID failed. Error: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutionsByWorkflowID failed. Error: %v", err))
 	}
 
 	isRecordValid := func(rec *p.VisibilityWorkflowExecutionInfo) bool {
@@ -298,9 +289,7 @@ func (v *esVisibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
 	matchQuery := elastic.NewMatchQuery(es.WorkflowID, request.WorkflowID)
 	searchResult, err := v.getSearchResult(&request.ListWorkflowExecutionsRequest, token, matchQuery, isOpen)
 	if err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ListClosedWorkflowExecutionsByWorkflowID failed. Error: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByWorkflowID failed. Error: %v", err))
 	}
 
 	isRecordValid := func(rec *p.VisibilityWorkflowExecutionInfo) bool {
@@ -323,9 +312,7 @@ func (v *esVisibilityStore) ListClosedWorkflowExecutionsByStatus(
 	matchQuery := elastic.NewMatchQuery(es.CloseStatus, int32(request.Status))
 	searchResult, err := v.getSearchResult(&request.ListWorkflowExecutionsRequest, token, matchQuery, isOpen)
 	if err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ListClosedWorkflowExecutionsByStatus failed. Error: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByStatus failed. Error: %v", err))
 	}
 
 	isRecordValid := func(rec *p.VisibilityWorkflowExecutionInfo) bool {
@@ -356,9 +343,7 @@ func (v *esVisibilityStore) GetClosedWorkflowExecution(
 	}
 	searchResult, err := v.esClient.Search(ctx, params)
 	if err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("GetClosedWorkflowExecution failed. Error: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetClosedWorkflowExecution failed. Error: %v", err))
 	}
 
 	response := &p.InternalGetClosedWorkflowExecutionResponse{}
@@ -394,15 +379,13 @@ func (v *esVisibilityStore) ListWorkflowExecutions(
 
 	queryDSL, err := v.getESQueryDSL(request, token)
 	if err != nil {
-		return nil, &workflow.BadRequestError{Message: fmt.Sprintf("Error when parse query: %v", err)}
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Error when parse query: %v", err))
 	}
 
 	ctx := context.Background()
 	searchResult, err := v.esClient.SearchWithDSL(ctx, v.index, queryDSL)
 	if err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ListWorkflowExecutions failed. Error: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("ListWorkflowExecutions failed. Error: %v", err))
 	}
 
 	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, nil)
@@ -425,7 +408,7 @@ func (v *esVisibilityStore) ScanWorkflowExecutions(
 		var queryDSL string
 		queryDSL, err = getESQueryDSLForScan(request)
 		if err != nil {
-			return nil, &workflow.BadRequestError{Message: fmt.Sprintf("Error when parse query: %v", err)}
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Error when parse query: %v", err))
 		}
 		searchResult, scrollService, err = v.esClient.ScrollFirstPage(ctx, v.index, queryDSL)
 	} else {
@@ -437,9 +420,7 @@ func (v *esVisibilityStore) ScanWorkflowExecutions(
 		isLastPage = true
 		scrollService.Clear(context.Background()) //nolint:errcheck
 	} else if err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ScanWorkflowExecutions failed. Error: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("ScanWorkflowExecutions failed. Error: %v", err))
 	}
 
 	return v.getScanWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, searchResult.ScrollId, isLastPage)
@@ -450,15 +431,13 @@ func (v *esVisibilityStore) CountWorkflowExecutions(request *p.CountWorkflowExec
 
 	queryDSL, err := getESQueryDSLForCount(request)
 	if err != nil {
-		return nil, &workflow.BadRequestError{Message: fmt.Sprintf("Error when parse query: %v", err)}
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Error when parse query: %v", err))
 	}
 
 	ctx := context.Background()
 	count, err := v.esClient.Count(ctx, v.index, queryDSL)
 	if err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("CountWorkflowExecutions failed. Error: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("CountWorkflowExecutions failed. Error: %v", err))
 	}
 
 	response := &p.CountWorkflowExecutionsResponse{Count: count}
@@ -864,9 +843,7 @@ func (v *esVisibilityStore) deserializePageToken(data []byte) (*esVisibilityPage
 	dec.UseNumber()
 	err := dec.Decode(&token)
 	if err != nil {
-		return nil, &workflow.BadRequestError{
-			Message: fmt.Sprintf("unable to deserialize page token. err: %v", err),
-		}
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to deserialize page token. err: %v", err))
 	}
 	return &token, nil
 }
@@ -874,9 +851,7 @@ func (v *esVisibilityStore) deserializePageToken(data []byte) (*esVisibilityPage
 func (v *esVisibilityStore) serializePageToken(token *esVisibilityPageToken) ([]byte, error) {
 	data, err := json.Marshal(token)
 	if err != nil {
-		return nil, &workflow.BadRequestError{
-			Message: fmt.Sprintf("unable to serialize page token. err: %v", err),
-		}
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to serialize page token. err: %v", err))
 	}
 	return data, nil
 }

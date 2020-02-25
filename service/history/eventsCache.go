@@ -32,6 +32,7 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type (
@@ -77,7 +78,7 @@ type (
 )
 
 var (
-	errEventNotFoundInBatch = &shared.InternalServiceError{Message: "History event not found within expected batch"}
+	errEventNotFoundInBatch = serviceerror.NewInternal("History event not found within expected batch")
 )
 
 var _ eventsCache = (*eventsCacheImpl)(nil)

@@ -29,6 +29,7 @@ import (
 
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/primitives"
@@ -774,9 +775,7 @@ func (p *replicatorQueueProcessorImpl) getEventsBlob(
 	}
 
 	if len(eventBatchBlobs) != 1 {
-		return nil, &shared.InternalServiceError{
-			Message: "replicatorQueueProcessor encounter more than 1 NDC raw event batch",
-		}
+		return nil, serviceerror.NewInternal("replicatorQueueProcessor encounter more than 1 NDC raw event batch")
 	}
 
 	return eventBatchBlobs[0].ToThrift(), nil
@@ -790,9 +789,7 @@ func (p *replicatorQueueProcessorImpl) getVersionHistoryItems(
 
 	versionHistories := mutableState.GetVersionHistories()
 	if versionHistories == nil {
-		return nil, nil, &shared.InternalServiceError{
-			Message: "replicatorQueueProcessor encounter workflow without version histories",
-		}
+		return nil, nil, serviceerror.NewInternal("replicatorQueueProcessor encounter workflow without version histories")
 	}
 
 	versionHistoryIndex, err := versionHistories.FindFirstVersionHistoryIndexByItem(

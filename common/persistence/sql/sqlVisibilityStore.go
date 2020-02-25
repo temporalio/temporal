@@ -32,6 +32,7 @@ import (
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
 	"github.com/temporalio/temporal/common/service/config"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type (
@@ -230,9 +231,7 @@ func (s *sqlVisibilityStore) GetClosedWorkflowExecution(request *p.GetClosedWork
 					execution.GetWorkflowId(), execution.GetRunId()),
 			}
 		}
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("GetClosedWorkflowExecution operation failed. Select failed: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetClosedWorkflowExecution operation failed. Select failed: %v", err))
 	}
 	rows[0].DomainID = request.DomainUUID
 	rows[0].RunID = execution.GetRunId()
@@ -246,7 +245,7 @@ func (s *sqlVisibilityStore) DeleteWorkflowExecution(request *p.VisibilityDelete
 		RunID:    &request.RunID,
 	})
 	if err != nil {
-		return &workflow.InternalServiceError{Message: err.Error()}
+		return serviceerror.NewInternal(err.Error())
 	}
 	return nil
 }
@@ -297,9 +296,7 @@ func (s *sqlVisibilityStore) listWorkflowExecutions(opName string, pageToken []b
 	}
 	rows, err := selectOp(readLevel)
 	if err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("%v operation failed. Select failed: %v", opName, err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("%v operation failed. Select failed: %v", opName, err))
 	}
 	if len(rows) == 0 {
 		return &p.InternalListWorkflowExecutionsResponse{}, nil

@@ -28,6 +28,7 @@ import (
 
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.uber.org/yarpc/yarpcerrors"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
@@ -81,11 +82,11 @@ const (
 
 var (
 	// ErrEmptyReplicationTask is the error to indicate empty replication task
-	ErrEmptyReplicationTask = &shared.BadRequestError{Message: "empty replication task"}
+	ErrEmptyReplicationTask = serviceerror.NewInvalidArgument("empty replication task")
 	// ErrUnknownReplicationTask is the error to indicate unknown replication task type
-	ErrUnknownReplicationTask = &shared.BadRequestError{Message: "unknown replication task"}
+	ErrUnknownReplicationTask = serviceerror.NewInvalidArgument("unknown replication task")
 	// ErrDeserializeReplicationTask is the error to indicate failure to deserialize replication task
-	ErrDeserializeReplicationTask = &shared.BadRequestError{Message: "Failed to deserialize replication task"}
+	ErrDeserializeReplicationTask = serviceerror.NewInvalidArgument("Failed to deserialize replication task")
 )
 
 func newReplicationTaskProcessor(

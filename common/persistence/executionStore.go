@@ -25,6 +25,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence/serialization"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type (
@@ -525,9 +526,7 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 	}
 
 	if request.CurrentWorkflowMutation != nil && request.CurrentWorkflowCAS != nil {
-		return &workflow.InternalServiceError{
-			Message: "ConflictResolveWorkflowExecution: current workflow & current workflow CAS both set",
-		}
+		return serviceerror.NewInternal("ConflictResolveWorkflowExecution: current workflow & current workflow CAS both set")
 	}
 
 	newRequest := &InternalConflictResolveWorkflowExecutionRequest{

@@ -170,29 +170,29 @@ var (
 	// ErrStaleState is the error returned during state update indicating that cached mutable state could be stale
 	ErrStaleState = errors.New("cache mutable state could potentially be stale")
 	// ErrActivityTaskNotFound is the error to indicate activity task could be duplicate and activity already completed
-	ErrActivityTaskNotFound = &workflow.EntityNotExistsError{Message: "invalid activityID or activity already timed out or invoking workflow is completed"}
+	ErrActivityTaskNotFound = serviceerror.NewNotFound("invalid activityID or activity already timed out or invoking workflow is completed")
 	// ErrWorkflowCompleted is the error to indicate workflow execution already completed
-	ErrWorkflowCompleted = &workflow.EntityNotExistsError{Message: "workflow execution already completed"}
+	ErrWorkflowCompleted = serviceerror.NewNotFound("workflow execution already completed")
 	// ErrWorkflowParent is the error to parent execution is given and mismatch
-	ErrWorkflowParent = &workflow.EntityNotExistsError{Message: "workflow parent does not match"}
+	ErrWorkflowParent = serviceerror.NewNotFound("workflow parent does not match")
 	// ErrDeserializingToken is the error to indicate task token is invalid
-	ErrDeserializingToken = &workflow.BadRequestError{Message: "error deserializing task token"}
+	ErrDeserializingToken = serviceerror.NewInvalidArgument("error deserializing task token")
 	// ErrSignalOverSize is the error to indicate signal input size is > 256K
-	ErrSignalOverSize = &workflow.BadRequestError{Message: "signal input size is over 256K"}
+	ErrSignalOverSize = serviceerror.NewInvalidArgument("signal input size is over 256K")
 	// ErrCancellationAlreadyRequested is the error indicating cancellation for target workflow is already requested
-	ErrCancellationAlreadyRequested = &workflow.CancellationAlreadyRequestedError{Message: "cancellation already requested for this workflow execution"}
+	ErrCancellationAlreadyRequested = serviceerror.NewCancellationAlreadyRequested("cancellation already requested for this workflow execution")
 	// ErrSignalsLimitExceeded is the error indicating limit reached for maximum number of signal events
-	ErrSignalsLimitExceeded = &workflow.LimitExceededError{Message: "exceeded workflow execution limit for signal events"}
+	ErrSignalsLimitExceeded = serviceerror.NewResourceExhausted("exceeded workflow execution limit for signal events")
 	// ErrEventsAterWorkflowFinish is the error indicating server error trying to write events after workflow finish event
-	ErrEventsAterWorkflowFinish = &workflow.InternalServiceError{Message: "error validating last event being workflow finish event"}
+	ErrEventsAterWorkflowFinish = serviceerror.NewInternal("error validating last event being workflow finish event")
 	// ErrQueryEnteredInvalidState is error indicating query entered invalid state
-	ErrQueryEnteredInvalidState = &workflow.BadRequestError{Message: "query entered invalid state, this should be impossible"}
+	ErrQueryEnteredInvalidState = serviceerror.NewInvalidArgument("query entered invalid state, this should be impossible")
 	// ErrQueryWorkflowBeforeFirstDecision is error indicating that query was attempted before first decision task completed
-	ErrQueryWorkflowBeforeFirstDecision = &workflow.BadRequestError{Message: "workflow must handle at least one decision task before it can be queried"}
+	ErrQueryWorkflowBeforeFirstDecision = serviceerror.NewInvalidArgument("workflow must handle at least one decision task before it can be queried")
 	// ErrConsistentQueryNotEnabled is error indicating that consistent query was requested but either cluster or domain does not enable consistent query
-	ErrConsistentQueryNotEnabled = &workflow.BadRequestError{Message: "cluster or domain does not enable strongly consistent query but strongly consistent query was requested"}
+	ErrConsistentQueryNotEnabled = serviceerror.NewInvalidArgument("cluster or domain does not enable strongly consistent query but strongly consistent query was requested")
 	// ErrConsistentQueryBufferExceeded is error indicating that too many consistent queries have been buffered and until buffered queries are finished new consistent queries cannot be buffered
-	ErrConsistentQueryBufferExceeded = &workflow.InternalServiceError{Message: "consistent query buffer is full, cannot accept new consistent queries"}
+	ErrConsistentQueryBufferExceeded = serviceerror.NewInternal("consistent query buffer is full, cannot accept new consistent queries")
 
 	// FailedWorkflowCloseState is a set of failed workflow close states, used for start workflow policy
 	// for start workflow execution API
@@ -572,9 +572,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		startRequest,
 	)
 	if err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: "Failed to add workflow execution started event.",
-		}
+		return nil, serviceerror.NewInternal("Failed to add workflow execution started event.")
 	}
 
 	// Generate first decision task event if not child WF and no first decision task backoff
@@ -1495,7 +1493,7 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 
 			if _, err := mutableState.AddActivityTaskCompletedEvent(scheduleID, ai.StartedID, request); err != nil {
 				// Unable to add ActivityTaskCompleted event to history
-				return &workflow.InternalServiceError{Message: "Unable to add ActivityTaskCompleted event to history."}
+				return serviceerror.NewInternal("Unable to add ActivityTaskCompleted event to history.")
 			}
 			return nil
 		})
@@ -1560,7 +1558,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 				// no more retry, and we want to record the failure event
 				if _, err := mutableState.AddActivityTaskFailedEvent(scheduleID, ai.StartedID, request); err != nil {
 					// Unable to add ActivityTaskFailed event to history
-					return nil, &workflow.InternalServiceError{Message: "Unable to add ActivityTaskFailed event to history."}
+					return nil, serviceerror.NewInternal("Unable to add ActivityTaskFailed event to history.")
 				}
 				postActions.createDecision = true
 			}
@@ -1626,7 +1624,7 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 				request.Details,
 				common.StringDefault(request.Identity)); err != nil {
 				// Unable to add ActivityTaskCanceled event to history
-				return &workflow.InternalServiceError{Message: "Unable to add ActivityTaskCanceled event to history."}
+				return serviceerror.NewInternal("Unable to add ActivityTaskCanceled event to history.")
 			}
 
 			return nil
@@ -1758,7 +1756,7 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 			}
 
 			if _, err := mutableState.AddWorkflowExecutionCancelRequestedEvent("", req); err != nil {
-				return nil, &workflow.InternalServiceError{Message: "Unable to cancel workflow execution."}
+				return nil, serviceerror.NewInternal("Unable to cancel workflow execution.")
 			}
 
 			return updateWorkflowWithNewDecision, nil
@@ -1833,7 +1831,7 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 				request.GetSignalName(),
 				request.GetInput(),
 				request.GetIdentity()); err != nil {
-				return nil, &workflow.InternalServiceError{Message: "Unable to signal workflow execution."}
+				return nil, serviceerror.NewInternal("Unable to signal workflow execution.")
 			}
 
 			return postActions, nil
@@ -1893,14 +1891,14 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 				sRequest.GetSignalName(),
 				sRequest.GetSignalInput(),
 				sRequest.GetIdentity()); err != nil {
-				return nil, &workflow.InternalServiceError{Message: "Unable to signal workflow execution."}
+				return nil, serviceerror.NewInternal("Unable to signal workflow execution.")
 			}
 
 			// Create a transfer task to schedule a decision task
 			if !mutableState.HasPendingDecision() {
 				_, err := mutableState.AddDecisionTaskScheduledEvent(false)
 				if err != nil {
-					return nil, &workflow.InternalServiceError{Message: "Failed to add decision scheduled event."}
+					return nil, serviceerror.NewInternal("Failed to add decision scheduled event.")
 				}
 			}
 
@@ -1986,9 +1984,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		startRequest,
 	)
 	if err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: "Failed to add workflow execution started event.",
-		}
+		return nil, serviceerror.NewInternal("Failed to add workflow execution started event.")
 	}
 
 	// Add signal event
@@ -1996,7 +1992,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		sRequest.GetSignalName(),
 		sRequest.GetSignalInput(),
 		sRequest.GetIdentity()); err != nil {
-		return nil, &workflow.InternalServiceError{Message: "Failed to add workflow execution signaled event."}
+		return nil, serviceerror.NewInternal("Failed to add workflow execution signaled event.")
 	}
 
 	if err = e.generateFirstDecisionTask(
@@ -2152,7 +2148,7 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 			// Check mutable state to make sure child execution is in pending child executions
 			ci, isRunning := mutableState.GetChildExecutionInfo(initiatedID)
 			if !isRunning || ci.StartedID == common.EmptyEventID {
-				return &workflow.EntityNotExistsError{Message: "Pending child execution not found."}
+				return serviceerror.NewNotFound("Pending child execution not found.")
 			}
 
 			switch *completionEvent.EventType {
@@ -2256,9 +2252,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 	}
 	if request.GetDecisionFinishEventId() <= common.FirstEventID ||
 		request.GetDecisionFinishEventId() >= baseMutableState.GetNextEventID() {
-		return nil, &workflow.BadRequestError{
-			Message: "Decision finish ID must be > 1 && <= workflow next event ID.",
-		}
+		return nil, serviceerror.NewInvalidArgument("Decision finish ID must be > 1 && <= workflow next event ID.")
 	}
 
 	// also load the current run of the workflow, it can be different from the base runID
@@ -2433,7 +2427,7 @@ UpdateHistoryLoop:
 			if !mutableState.HasPendingDecision() {
 				_, err := mutableState.AddDecisionTaskScheduledEvent(false)
 				if err != nil {
-					return &workflow.InternalServiceError{Message: "Failed to add decision scheduled event."}
+					return serviceerror.NewInternal("Failed to add decision scheduled event.")
 				}
 			}
 		}
@@ -2559,31 +2553,31 @@ func validateStartWorkflowExecutionRequest(
 ) error {
 
 	if len(request.GetRequestId()) == 0 {
-		return &workflow.BadRequestError{Message: "Missing request ID."}
+		return serviceerror.NewInvalidArgument("Missing request ID.")
 	}
 	if request.ExecutionStartToCloseTimeoutSeconds == nil || request.GetExecutionStartToCloseTimeoutSeconds() <= 0 {
-		return &workflow.BadRequestError{Message: "Missing or invalid ExecutionStartToCloseTimeoutSeconds."}
+		return serviceerror.NewInvalidArgument("Missing or invalid ExecutionStartToCloseTimeoutSeconds.")
 	}
 	if request.TaskStartToCloseTimeoutSeconds == nil || request.GetTaskStartToCloseTimeoutSeconds() <= 0 {
-		return &workflow.BadRequestError{Message: "Missing or invalid TaskStartToCloseTimeoutSeconds."}
+		return serviceerror.NewInvalidArgument("Missing or invalid TaskStartToCloseTimeoutSeconds.")
 	}
 	if request.TaskList == nil || request.TaskList.Name == nil || request.TaskList.GetName() == "" {
-		return &workflow.BadRequestError{Message: "Missing Tasklist."}
+		return serviceerror.NewInvalidArgument("Missing Tasklist.")
 	}
 	if request.WorkflowType == nil || request.WorkflowType.Name == nil || request.WorkflowType.GetName() == "" {
-		return &workflow.BadRequestError{Message: "Missing WorkflowType."}
+		return serviceerror.NewInvalidArgument("Missing WorkflowType.")
 	}
 	if len(request.GetDomain()) > maxIDLengthLimit {
-		return &workflow.BadRequestError{Message: "Domain exceeds length limit."}
+		return serviceerror.NewInvalidArgument("Domain exceeds length limit.")
 	}
 	if len(request.GetWorkflowId()) > maxIDLengthLimit {
-		return &workflow.BadRequestError{Message: "WorkflowId exceeds length limit."}
+		return serviceerror.NewInvalidArgument("WorkflowId exceeds length limit.")
 	}
 	if len(request.TaskList.GetName()) > maxIDLengthLimit {
-		return &workflow.BadRequestError{Message: "TaskList exceeds length limit."}
+		return serviceerror.NewInvalidArgument("TaskList exceeds length limit.")
 	}
 	if len(request.WorkflowType.GetName()) > maxIDLengthLimit {
-		return &workflow.BadRequestError{Message: "WorkflowType exceeds length limit."}
+		return serviceerror.NewInvalidArgument("WorkflowType exceeds length limit.")
 	}
 
 	return common.ValidateRetryPolicy(adapter.ToProtoRetryPolicy(request.RetryPolicy))
@@ -2616,9 +2610,9 @@ func validateDomainUUID(
 ) (string, error) {
 
 	if domainUUID == nil {
-		return "", &workflow.BadRequestError{Message: "Missing domain UUID."}
+		return "", serviceerror.NewInvalidArgument("Missing domain UUID.")
 	} else if uuid.Parse(*domainUUID) == nil {
-		return "", &workflow.BadRequestError{Message: "Invalid domain UUID."}
+		return "", serviceerror.NewInvalidArgument("Invalid domain UUID.")
 	}
 	return *domainUUID, nil
 }
@@ -2656,11 +2650,11 @@ func getScheduleID(
 ) (int64, error) {
 
 	if activityID == "" {
-		return 0, &workflow.BadRequestError{Message: "Neither ActivityID nor ScheduleID is provided"}
+		return 0, serviceerror.NewInvalidArgument("Neither ActivityID nor ScheduleID is provided")
 	}
 	activityInfo, ok := mutableState.GetActivityByActivityID(activityID)
 	if !ok {
-		return 0, &workflow.BadRequestError{Message: "Cannot locate Activity ScheduleID"}
+		return 0, serviceerror.NewInvalidArgument("Cannot locate Activity ScheduleID")
 	}
 	return activityInfo.ScheduleID, nil
 }
@@ -2754,7 +2748,7 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyHelper(
 		// previous workflow completed, proceed
 	default:
 		// persistence.WorkflowStateZombie or unknown type
-		return &workflow.InternalServiceError{Message: fmt.Sprintf("Failed to process workflow, workflow has invalid state: %v.", prevState)}
+		return serviceerror.NewInternal(fmt.Sprintf("Failed to process workflow, workflow has invalid state: %v.", prevState))
 	}
 
 	switch wfIDReusePolicy {
@@ -2769,7 +2763,7 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyHelper(
 		msg := "Workflow execution already finished. WorkflowId: %v, RunId: %v. Workflow ID reuse policy: reject duplicate workflow ID."
 		return getWorkflowAlreadyStartedError(msg, prevStartRequestID, execution.GetWorkflowId(), prevRunID)
 	default:
-		return &workflow.InternalServiceError{Message: "Failed to process start workflow reuse policy."}
+		return serviceerror.NewInternal("Failed to process start workflow reuse policy.")
 	}
 
 	return nil
@@ -2931,7 +2925,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 			)
 			if err != nil {
 				e.logger.Error("failed to re-apply stale events", tag.Error(err))
-				return nil, &workflow.InternalServiceError{Message: "unable to re-apply stale events"}
+				return nil, serviceerror.NewInternal("unable to re-apply stale events")
 			}
 			if len(reappliedEvents) == 0 {
 				return &updateWorkflowAction{
@@ -3111,5 +3105,5 @@ func (e *historyEngineImpl) loadWorkflow(
 		workflowContext.getReleaseFn()(nil)
 	}
 
-	return nil, &workflow.InternalServiceError{Message: "unable to locate current workflow execution"}
+	return nil, serviceerror.NewInternal("unable to locate current workflow execution")
 }

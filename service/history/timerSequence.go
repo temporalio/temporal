@@ -31,6 +31,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type timerType int32
@@ -122,9 +123,7 @@ func (t *timerSequenceImpl) createNextUserTimer() (bool, error) {
 
 	timerInfo, ok := t.mutableState.GetUserTimerInfoByEventID(firstTimerTask.eventID)
 	if !ok {
-		return false, &shared.InternalServiceError{
-			Message: fmt.Sprintf("unable to load activity info %v", firstTimerTask.eventID),
-		}
+		return false, serviceerror.NewInternal(fmt.Sprintf("unable to load activity info %v", firstTimerTask.eventID))
 	}
 	// mark timer task mask as indication that timer task is generated
 	// here TaskID is misleading attr, should be called timer created flag or something
@@ -157,9 +156,7 @@ func (t *timerSequenceImpl) createNextActivityTimer() (bool, error) {
 
 	activityInfo, ok := t.mutableState.GetActivityInfo(firstTimerTask.eventID)
 	if !ok {
-		return false, &shared.InternalServiceError{
-			Message: fmt.Sprintf("unable to load activity info %v", firstTimerTask.eventID),
-		}
+		return false, serviceerror.NewInternal(fmt.Sprintf("unable to load activity info %v", firstTimerTask.eventID))
 	}
 	// mark timer task mask as indication that timer task is generated
 	activityInfo.TimerTaskStatus |= timerTypeToTimerMask(firstTimerTask.timerType)

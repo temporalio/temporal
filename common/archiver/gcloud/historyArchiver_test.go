@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.uber.org/zap"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
@@ -219,7 +220,7 @@ func (h *historyArchiverSuite) TestArchive_Fail_TimeoutWhenReadingHistory() {
 	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
 	gomock.InOrder(
 		historyIterator.EXPECT().HasNext().Return(true),
-		historyIterator.EXPECT().Next().Return(nil, &shared.ServiceBusyError{}),
+		historyIterator.EXPECT().Next().Return(nil, serviceerror.NewResourceExhausted("")),
 	)
 
 	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
@@ -419,7 +420,7 @@ func (h *historyArchiverSuite) TestGet_Fail_InvalidToken() {
 	response, err := historyArchiver.Get(ctx, URI, request)
 	h.Nil(response)
 	h.Error(err)
-	h.IsType(&shared.BadRequestError{}, err)
+	h.IsType(serviceerror.NewInvalidArgument(""), err)
 }
 
 func (h *historyArchiverSuite) TestGet_Success_PickHighestVersion() {

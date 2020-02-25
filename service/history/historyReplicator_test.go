@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -2050,7 +2051,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 	}}
 	msBuilder.EXPECT().CloseTransactionAsSnapshot(now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
-	errRet := &shared.InternalServiceError{}
+	errRet := serviceerror.NewInternal("")
 	// the test above already assert the create workflow request, so here just use anyting
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, errRet)
 	s.mockShardManager.On("UpdateShard", mock.Anything).Return(nil) // this is called when err is returned, and shard will try to update

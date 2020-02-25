@@ -21,9 +21,8 @@
 package codec
 
 import (
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.uber.org/thriftrw/wire"
-
-	"github.com/temporalio/temporal/.gen/go/shared"
 )
 
 type (
@@ -47,9 +46,9 @@ const (
 
 var (
 	// MissingBinaryEncodingVersion indicate that the encoding version is missing
-	MissingBinaryEncodingVersion = &shared.BadRequestError{Message: "Missing binary encoding version."}
+	MissingBinaryEncodingVersion = serviceerror.NewInvalidArgument("Missing binary encoding version.")
 	// InvalidBinaryEncodingVersion indicate that the encoding version is incorrect
-	InvalidBinaryEncodingVersion = &shared.BadRequestError{Message: "Invalid binary encoding version."}
+	InvalidBinaryEncodingVersion = serviceerror.NewInvalidArgument("Invalid binary encoding version.")
 	// MsgPayloadNotThriftEncoded indicate message is not thrift encoded
-	MsgPayloadNotThriftEncoded = &shared.BadRequestError{Message: "Message payload is not thrift encoded."}
+	MsgPayloadNotThriftEncoded = serviceerror.NewInvalidArgument("Message payload is not thrift encoded.")
 )

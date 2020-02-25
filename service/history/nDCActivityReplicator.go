@@ -34,6 +34,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type (
@@ -298,7 +299,7 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 			)
 		}
 	} else {
-		return false, &workflow.InternalServiceError{Message: "The workflow is neither 2DC nor 3DC enabled."}
+		return false, serviceerror.NewInternal("The workflow is neither 2DC nor 3DC enabled.")
 	}
 
 	return true, nil

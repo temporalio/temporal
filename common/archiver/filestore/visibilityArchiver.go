@@ -34,6 +34,7 @@ import (
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/service/config"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 const (
@@ -138,16 +139,16 @@ func (v *visibilityArchiver) Query(
 	request *archiver.QueryVisibilityRequest,
 ) (*archiver.QueryVisibilityResponse, error) {
 	if err := v.ValidateURI(URI); err != nil {
-		return nil, &shared.BadRequestError{Message: archiver.ErrInvalidURI.Error()}
+		return nil, serviceerror.NewInvalidArgument(archiver.ErrInvalidURI.Error())
 	}
 
 	if err := archiver.ValidateQueryRequest(request); err != nil {
-		return nil, &shared.BadRequestError{Message: archiver.ErrInvalidQueryVisibilityRequest.Error()}
+		return nil, serviceerror.NewInvalidArgument(archiver.ErrInvalidQueryVisibilityRequest.Error())
 	}
 
 	parsedQuery, err := v.queryParser.Parse(request.Query)
 	if err != nil {
-		return nil, &shared.BadRequestError{Message: err.Error()}
+		return nil, serviceerror.NewInvalidArgument(err.Error())
 	}
 
 	if parsedQuery.emptyResult {
@@ -172,14 +173,14 @@ func (v *visibilityArchiver) query(
 		var err error
 		token, err = deserializeQueryVisibilityToken(request.nextPageToken)
 		if err != nil {
-			return nil, &shared.BadRequestError{Message: archiver.ErrNextPageTokenCorrupted.Error()}
+			return nil, serviceerror.NewInvalidArgument(archiver.ErrNextPageTokenCorrupted.Error())
 		}
 	}
 
 	dirPath := path.Join(URI.Path(), request.domainID)
 	exists, err := directoryExists(dirPath)
 	if err != nil {
-		return nil, &shared.InternalServiceError{Message: err.Error()}
+		return nil, serviceerror.NewInternal(err.Error())
 	}
 	if !exists {
 		return &archiver.QueryVisibilityResponse{}, nil
@@ -187,12 +188,12 @@ func (v *visibilityArchiver) query(
 
 	files, err := listFiles(dirPath)
 	if err != nil {
-		return nil, &shared.InternalServiceError{Message: err.Error()}
+		return nil, serviceerror.NewInternal(err.Error())
 	}
 
 	files, err = sortAndFilterFiles(files, token)
 	if err != nil {
-		return nil, &shared.InternalServiceError{Message: err.Error()}
+		return nil, serviceerror.NewInternal(err.Error())
 	}
 	if len(files) == 0 {
 		return &archiver.QueryVisibilityResponse{}, nil
@@ -202,12 +203,12 @@ func (v *visibilityArchiver) query(
 	for idx, file := range files {
 		encodedRecord, err := readFile(path.Join(dirPath, file))
 		if err != nil {
-			return nil, &shared.InternalServiceError{Message: err.Error()}
+			return nil, serviceerror.NewInternal(err.Error())
 		}
 
 		record, err := decodeVisibilityRecord(encodedRecord)
 		if err != nil {
-			return nil, &shared.InternalServiceError{Message: err.Error()}
+			return nil, serviceerror.NewInternal(err.Error())
 		}
 
 		if record.CloseTimestamp < request.parsedQuery.earliestCloseTime {
@@ -224,7 +225,7 @@ func (v *visibilityArchiver) query(
 					}
 					encodedToken, err := serializeToken(newToken)
 					if err != nil {
-						return nil, &shared.InternalServiceError{Message: err.Error()}
+						return nil, serviceerror.NewInternal(err.Error())
 					}
 					response.NextPageToken = encodedToken
 				}

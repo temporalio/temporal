@@ -35,6 +35,7 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type (
@@ -177,7 +178,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 			if !isRunning {
 				// Looks like DecisionTask already completed as a result of another call.
 				// It is OK to drop the task at this point.
-				return nil, &workflow.EntityNotExistsError{Message: "Decision task not found."}
+				return nil, serviceerror.NewNotFound("Decision task not found.")
 			}
 
 			updateAction := &updateWorkflowAction{}
@@ -201,7 +202,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 			_, decision, err = mutableState.AddDecisionTaskStartedEvent(scheduleID, requestID, req.PollRequest)
 			if err != nil {
 				// Unable to add DecisionTaskStarted event to history
-				return nil, &workflow.InternalServiceError{Message: "Unable to add DecisionTaskStarted event to history."}
+				return nil, serviceerror.NewInternal("Unable to add DecisionTaskStarted event to history.")
 			}
 
 			resp, err = handler.createRecordDecisionTaskStartedResponse(domainID, mutableState, decision, req.PollRequest.GetIdentity())
@@ -248,7 +249,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskFailed(
 			scheduleID := token.ScheduleID
 			decision, isRunning := mutableState.GetDecisionInfo(scheduleID)
 			if !isRunning || decision.Attempt != token.ScheduleAttempt || decision.StartedID == common.EmptyEventID {
-				return &workflow.EntityNotExistsError{Message: "Decision task not found."}
+				return serviceerror.NewNotFound("Decision task not found.")
 			}
 
 			_, err := mutableState.AddDecisionTaskFailedEvent(decision.ScheduleID, decision.StartedID, request.GetCause(), request.Details,
@@ -320,7 +321,7 @@ Update_History_Loop:
 
 		if !msBuilder.IsWorkflowExecutionRunning() || !isRunning || currentDecision.Attempt != token.ScheduleAttempt ||
 			currentDecision.StartedID == common.EmptyEventID {
-			return nil, &workflow.EntityNotExistsError{Message: "Decision task not found."}
+			return nil, serviceerror.NewNotFound("Decision task not found.")
 		}
 
 		startedID := currentDecision.StartedID
@@ -341,19 +342,19 @@ Update_History_Loop:
 				scope.IncCounter(metrics.DecisionHeartbeatTimeoutCounter)
 				completedEvent, err = msBuilder.AddDecisionTaskTimedOutEvent(currentDecision.ScheduleID, currentDecision.StartedID)
 				if err != nil {
-					return nil, &workflow.InternalServiceError{Message: "Failed to add decision timeout event."}
+					return nil, serviceerror.NewInternal("Failed to add decision timeout event.")
 				}
 				msBuilder.ClearStickyness()
 			} else {
 				completedEvent, err = msBuilder.AddDecisionTaskCompletedEvent(scheduleID, startedID, request, maxResetPoints)
 				if err != nil {
-					return nil, &workflow.InternalServiceError{Message: "Unable to add DecisionTaskCompleted event to history."}
+					return nil, serviceerror.NewInternal("Unable to add DecisionTaskCompleted event to history.")
 				}
 			}
 		} else {
 			completedEvent, err = msBuilder.AddDecisionTaskCompletedEvent(scheduleID, startedID, request, maxResetPoints)
 			if err != nil {
-				return nil, &workflow.InternalServiceError{Message: "Unable to add DecisionTaskCompleted event to history."}
+				return nil, serviceerror.NewInternal("Unable to add DecisionTaskCompleted event to history.")
 			}
 		}
 
@@ -470,7 +471,7 @@ Update_History_Loop:
 				)
 			}
 			if err != nil {
-				return nil, &workflow.InternalServiceError{Message: "Failed to add decision scheduled event."}
+				return nil, serviceerror.NewInternal("Failed to add decision scheduled event.")
 			}
 
 			newDecisionTaskScheduledID = newDecision.ScheduleID
@@ -558,9 +559,7 @@ Update_History_Loop:
 
 		if decisionHeartbeatTimeout {
 			// at this point, update is successful, but we still return an error to client so that the worker will give up this workflow
-			return nil, &workflow.EntityNotExistsError{
-				Message: fmt.Sprintf("decision heartbeat timeout"),
-			}
+			return nil, serviceerror.NewNotFound(fmt.Sprintf("decision heartbeat timeout"))
 		}
 
 		resp = &h.RespondDecisionTaskCompletedResponse{}
@@ -663,7 +662,7 @@ func (handler *decisionHandlerImpl) handleBufferedQueries(
 		scope.IncCounter(metrics.WorkerNotSupportsConsistentQueryCount)
 		failedTerminationState := &queryTerminationState{
 			queryTerminationType: queryTerminationTypeFailed,
-			failure:              &workflow.BadRequestError{Message: versionErr.Error()},
+			failure:              serviceerror.NewInvalidArgument(versionErr.Error()),
 		}
 		buffered := queryRegistry.getBufferedIDs()
 		handler.logger.Info(

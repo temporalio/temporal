@@ -28,9 +28,9 @@ import (
 	"time"
 
 	"github.com/olivere/elastic"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/go/indexer"
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/definition"
@@ -68,7 +68,7 @@ const (
 )
 
 var (
-	errUnknownMessageType = &shared.BadRequestError{Message: "unknown message type"}
+	errUnknownMessageType = serviceerror.NewInvalidArgument("unknown message type")
 )
 
 func newIndexProcessor(appName, consumerName string, kafkaClient messaging.Client, esClient es.Client,

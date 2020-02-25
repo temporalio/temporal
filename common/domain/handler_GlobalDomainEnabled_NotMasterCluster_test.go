@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
@@ -430,7 +431,7 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestRegisterGetD
 		IsGlobalDomain: isGlobalDomain,
 	})
 	s.Error(err)
-	s.IsType(&shared.BadRequestError{}, err)
+	s.IsType(serviceerror.NewInvalidArgument(""), err)
 	s.Nil(registerResp)
 
 	resp, err := s.handler.DescribeDomain(context.Background(), &workflowservice.DescribeDomainRequest{
@@ -474,7 +475,7 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestRegisterGetD
 		IsGlobalDomain:                         isGlobalDomain,
 	})
 	s.Error(err)
-	s.IsType(&shared.BadRequestError{}, err)
+	s.IsType(serviceerror.NewInvalidArgument(""), err)
 	s.Nil(registerResp)
 
 	resp, err := s.handler.DescribeDomain(context.Background(), &workflowservice.DescribeDomainRequest{
@@ -537,7 +538,7 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestUpdateGetDom
 		Name: domainName,
 	})
 	s.Error(err)
-	s.IsType(&shared.BadRequestError{}, err)
+	s.IsType(serviceerror.NewInvalidArgument(""), err)
 	s.Nil(resp)
 }
 
@@ -616,7 +617,7 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestUpdateGetDom
 		},
 	})
 	s.Error(err)
-	s.IsType(&shared.BadRequestError{}, err)
+	s.IsType(serviceerror.NewInvalidArgument(""), err)
 	s.Nil(updateResp)
 }
 
