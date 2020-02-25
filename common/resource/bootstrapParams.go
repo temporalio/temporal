@@ -24,7 +24,6 @@ import (
 	"github.com/uber-go/tally"
 	"go.temporal.io/temporal-proto/workflowservice"
 
-	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
@@ -61,7 +60,6 @@ type (
 		ESClient                     elasticsearch.Client
 		ESConfig                     *elasticsearch.Config
 		DynamicConfig                dynamicconfig.Client
-		DispatcherProvider           client.DispatcherProvider
 		DCRedirectionPolicy          config.DCRedirectionPolicy
 		PublicClient                 workflowservice.WorkflowServiceClient
 		ArchivalMetadata             archiver.ArchivalMetadata
