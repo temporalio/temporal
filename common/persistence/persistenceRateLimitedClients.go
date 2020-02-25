@@ -353,6 +353,26 @@ func (p *workflowExecutionRateLimitedPersistenceClient) GetReplicationTasksFromD
 	return p.persistence.GetReplicationTasksFromDLQ(request)
 }
 
+func (p *workflowExecutionRateLimitedPersistenceClient) DeleteReplicationTaskFromDLQ(
+	request *DeleteReplicationTaskFromDLQRequest,
+) error {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+
+	return p.persistence.DeleteReplicationTaskFromDLQ(request)
+}
+
+func (p *workflowExecutionRateLimitedPersistenceClient) RangeDeleteReplicationTaskFromDLQ(
+	request *RangeDeleteReplicationTaskFromDLQRequest,
+) error {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+
+	return p.persistence.RangeDeleteReplicationTaskFromDLQ(request)
+}
+
 func (p *workflowExecutionRateLimitedPersistenceClient) GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
@@ -799,12 +819,35 @@ func (p *queueRateLimitedPersistenceClient) EnqueueMessageToDLQ(message []byte) 
 	return p.persistence.EnqueueMessageToDLQ(message)
 }
 
-func (p *queueRateLimitedPersistenceClient) ReadMessagesFromDLQ(firstMessageID int, lastMessageID int, maxCount int) ([]*QueueMessage, error) {
+func (p *queueRateLimitedPersistenceClient) ReadMessagesFromDLQ(firstMessageID int, lastMessageID int, pageSize int, pageToken []byte) ([]*QueueMessage, []byte, error) {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return nil, nil, ErrPersistenceLimitExceeded
+	}
+
+	return p.persistence.ReadMessagesFromDLQ(firstMessageID, lastMessageID, pageSize, pageToken)
+}
+
+func (p *queueRateLimitedPersistenceClient) RangeDeleteMessagesFromDLQ(firstMessageID int, lastMessageID int) error {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+
+	return p.persistence.RangeDeleteMessagesFromDLQ(firstMessageID, lastMessageID)
+}
+func (p *queueRateLimitedPersistenceClient) UpdateDLQAckLevel(messageID int, clusterName string) error {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+
+	return p.persistence.UpdateDLQAckLevel(messageID, clusterName)
+}
+
+func (p *queueRateLimitedPersistenceClient) GetDLQAckLevels() (map[string]int, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
-	return p.persistence.ReadMessagesFromDLQ(firstMessageID, lastMessageID, maxCount)
+	return p.persistence.GetDLQAckLevels()
 }
 
 func (p *queueRateLimitedPersistenceClient) DeleteMessageFromDLQ(messageID int) error {
@@ -813,22 +856,6 @@ func (p *queueRateLimitedPersistenceClient) DeleteMessageFromDLQ(messageID int) 
 	}
 
 	return p.persistence.DeleteMessageFromDLQ(messageID)
-}
-
-func (p *queueRateLimitedPersistenceClient) DeleteDLQMessagesBefore(messageID int) error {
-	if ok := p.rateLimiter.Allow(); !ok {
-		return ErrPersistenceLimitExceeded
-	}
-
-	return p.persistence.DeleteDLQMessagesBefore(messageID)
-}
-
-func (p *queueRateLimitedPersistenceClient) GetLastMessageIDFromDLQ() (int, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
-		return 0, ErrPersistenceLimitExceeded
-	}
-
-	return p.persistence.GetLastMessageIDFromDLQ()
 }
 
 func (p *queueRateLimitedPersistenceClient) Close() {

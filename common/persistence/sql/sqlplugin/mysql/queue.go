@@ -24,7 +24,7 @@ import (
 	"database/sql"
 	"encoding/json"
 
-	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
 )
 
@@ -34,6 +34,7 @@ const (
 	templateGetMessagesQuery               = `SELECT message_id, message_payload FROM queue WHERE queue_type = ? and message_id > ? ORDER BY message_id ASC LIMIT ?`
 	templateGetMessagesBetweenQuery        = `SELECT message_id, message_payload FROM queue WHERE queue_type = ? and message_id > ? and message_id <= ? ORDER BY message_id ASC LIMIT ?`
 	templateDeleteMessagesBeforeQuery      = `DELETE FROM queue WHERE queue_type = ? and message_id < ?`
+	templateRangeDeleteMessagesQuery       = `DELETE FROM queue WHERE queue_type = ? and message_id > ? and message_id <= ?`
 	templateDeleteMessageQuery             = `DELETE FROM queue WHERE queue_type = ? and message_id = ?`
 	templateGetQueueMetadataQuery          = `SELECT data from queue_metadata WHERE queue_type = ?`
 	templateGetQueueMetadataForUpdateQuery = templateGetQueueMetadataQuery + ` FOR UPDATE`
@@ -47,38 +48,43 @@ func (mdb *db) InsertIntoQueue(row *sqlplugin.QueueRow) (sql.Result, error) {
 }
 
 // GetLastEnqueuedMessageIDForUpdate returns the last enqueued message ID
-func (mdb *db) GetLastEnqueuedMessageIDForUpdate(queueType common.QueueType) (int, error) {
+func (mdb *db) GetLastEnqueuedMessageIDForUpdate(queueType persistence.QueueType) (int, error) {
 	var lastMessageID int
 	err := mdb.conn.Get(&lastMessageID, templateGetLastMessageIDQuery, queueType)
 	return lastMessageID, err
 }
 
 // GetMessagesFromQueue retrieves messages from the queue
-func (mdb *db) GetMessagesFromQueue(queueType common.QueueType, lastMessageID, maxRows int) ([]sqlplugin.QueueRow, error) {
+func (mdb *db) GetMessagesFromQueue(queueType persistence.QueueType, lastMessageID, maxRows int) ([]sqlplugin.QueueRow, error) {
 	var rows []sqlplugin.QueueRow
 	err := mdb.conn.Select(&rows, templateGetMessagesQuery, queueType, lastMessageID, maxRows)
 	return rows, err
 }
 
 // GetMessagesBetween retrieves messages from the queue
-func (mdb *db) GetMessagesBetween(queueType common.QueueType, firstMessageID int, lastMessageID int, maxRows int) ([]sqlplugin.QueueRow, error) {
+func (mdb *db) GetMessagesBetween(queueType persistence.QueueType, firstMessageID int, lastMessageID int, maxRows int) ([]sqlplugin.QueueRow, error) {
 	var rows []sqlplugin.QueueRow
 	err := mdb.conn.Select(&rows, templateGetMessagesBetweenQuery, queueType, firstMessageID, lastMessageID, maxRows)
 	return rows, err
 }
 
 // DeleteMessagesBefore deletes messages before messageID from the queue
-func (mdb *db) DeleteMessagesBefore(queueType common.QueueType, messageID int) (sql.Result, error) {
+func (mdb *db) DeleteMessagesBefore(queueType persistence.QueueType, messageID int) (sql.Result, error) {
 	return mdb.conn.Exec(templateDeleteMessagesBeforeQuery, queueType, messageID)
 }
 
+// RangeDeleteMessages deletes messages before messageID from the queue
+func (mdb *db) RangeDeleteMessages(queueType persistence.QueueType, exclusiveBeginMessageID int, inclusiveEndMessageID int) (sql.Result, error) {
+	return mdb.conn.Exec(templateRangeDeleteMessagesQuery, queueType, exclusiveBeginMessageID, inclusiveEndMessageID)
+}
+
 // DeleteMessage deletes message with a messageID from the queue
-func (mdb *db) DeleteMessage(queueType common.QueueType, messageID int) (sql.Result, error) {
+func (mdb *db) DeleteMessage(queueType persistence.QueueType, messageID int) (sql.Result, error) {
 	return mdb.conn.Exec(templateDeleteMessageQuery, queueType, messageID)
 }
 
 // InsertAckLevel inserts ack level
-func (mdb *db) InsertAckLevel(queueType common.QueueType, messageID int, clusterName string) error {
+func (mdb *db) InsertAckLevel(queueType persistence.QueueType, messageID int, clusterName string) error {
 	clusterAckLevels := map[string]int{clusterName: messageID}
 	data, err := json.Marshal(clusterAckLevels)
 	if err != nil {
@@ -91,7 +97,7 @@ func (mdb *db) InsertAckLevel(queueType common.QueueType, messageID int, cluster
 }
 
 // UpdateAckLevels updates cluster ack levels
-func (mdb *db) UpdateAckLevels(queueType common.QueueType, clusterAckLevels map[string]int) error {
+func (mdb *db) UpdateAckLevels(queueType persistence.QueueType, clusterAckLevels map[string]int) error {
 	data, err := json.Marshal(clusterAckLevels)
 	if err != nil {
 		return err
@@ -102,7 +108,7 @@ func (mdb *db) UpdateAckLevels(queueType common.QueueType, clusterAckLevels map[
 }
 
 // GetAckLevels returns ack levels for pulling clusters
-func (mdb *db) GetAckLevels(queueType common.QueueType, forUpdate bool) (map[string]int, error) {
+func (mdb *db) GetAckLevels(queueType persistence.QueueType, forUpdate bool) (map[string]int, error) {
 	queryStr := templateGetQueueMetadataQuery
 	if forUpdate {
 		queryStr = templateGetQueueMetadataForUpdateQuery

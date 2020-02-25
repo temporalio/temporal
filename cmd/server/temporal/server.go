@@ -132,7 +132,7 @@ func (s *server) startService() common.Daemon {
 		func(persistenceBean persistenceClient.Bean, logger l.Logger) (resource.MembershipMonitorFactory, error) {
 			return ringpop.NewRingpopFactory(
 				&s.cfg.Ringpop,
-				params.RPCFactory.GetRingpopDispatcher(),
+				params.RPCFactory.GetRingpopChannel(),
 				params.Name,
 				servicePortMap,
 				logger,

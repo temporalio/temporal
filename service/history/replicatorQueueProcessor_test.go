@@ -24,24 +24,24 @@ import (
 	"testing"
 	"time"
 
-	"github.com/temporalio/temporal/common/primitives"
-
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/temporalio/temporal/.gen/go/replicator"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -342,24 +342,26 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 		nil,
 	), nil).AnyTimes()
 
-	s.mockProducer.On("Publish", &replicator.ReplicationTask{
-		TaskType: replicator.ReplicationTaskType.Ptr(replicator.ReplicationTaskTypeSyncActivity),
-		SyncActivityTaskAttributes: &replicator.SyncActivityTaskAttributes{
-			DomainId:           common.StringPtr(domainID),
-			WorkflowId:         common.StringPtr(workflowID),
-			RunId:              common.StringPtr(runID),
-			Version:            common.Int64Ptr(activityVersion),
-			ScheduledId:        common.Int64Ptr(activityScheduleID),
-			ScheduledTime:      common.Int64Ptr(activityScheduledTime.UnixNano()),
-			StartedId:          common.Int64Ptr(activityStartedID),
-			StartedTime:        nil,
-			LastHeartbeatTime:  common.Int64Ptr(activityHeartbeatTime.UnixNano()),
-			Details:            activityDetails,
-			Attempt:            common.Int32Ptr(activityAttempt),
-			LastFailureReason:  common.StringPtr(activityLastFailureReason),
-			LastWorkerIdentity: common.StringPtr(activityLastWorkerIdentity),
-			LastFailureDetails: activityLastFailureDetails,
-			VersionHistory:     versionHistory.ToThrift(),
+	s.mockProducer.On("Publish", &commonproto.ReplicationTask{
+		TaskType: enums.ReplicationTaskTypeSyncActivity,
+		Attributes: &commonproto.ReplicationTask_SyncActivityTaskAttributes{
+			SyncActivityTaskAttributes: &commonproto.SyncActivityTaskAttributes{
+				DomainId:           domainID,
+				WorkflowId:         workflowID,
+				RunId:              runID,
+				Version:            activityVersion,
+				ScheduledId:        activityScheduleID,
+				ScheduledTime:      activityScheduledTime.UnixNano(),
+				StartedId:          activityStartedID,
+				StartedTime:        0,
+				LastHeartbeatTime:  activityHeartbeatTime.UnixNano(),
+				Details:            activityDetails,
+				Attempt:            activityAttempt,
+				LastFailureReason:  activityLastFailureReason,
+				LastWorkerIdentity: activityLastWorkerIdentity,
+				LastFailureDetails: activityLastFailureDetails,
+				VersionHistory:     versionHistory.ToProto(),
+			},
 		},
 	}).Return(nil).Once()
 
@@ -452,24 +454,26 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 		version,
 		nil,
 	), nil).AnyTimes()
-	s.mockProducer.On("Publish", &replicator.ReplicationTask{
-		TaskType: replicator.ReplicationTaskType.Ptr(replicator.ReplicationTaskTypeSyncActivity),
-		SyncActivityTaskAttributes: &replicator.SyncActivityTaskAttributes{
-			DomainId:           common.StringPtr(domainID),
-			WorkflowId:         common.StringPtr(workflowID),
-			RunId:              common.StringPtr(runID),
-			Version:            common.Int64Ptr(activityVersion),
-			ScheduledId:        common.Int64Ptr(activityScheduleID),
-			ScheduledTime:      common.Int64Ptr(activityScheduledTime.UnixNano()),
-			StartedId:          common.Int64Ptr(activityStartedID),
-			StartedTime:        common.Int64Ptr(activityStartedTime.UnixNano()),
-			LastHeartbeatTime:  common.Int64Ptr(activityHeartbeatTime.UnixNano()),
-			Details:            activityDetails,
-			Attempt:            common.Int32Ptr(activityAttempt),
-			LastFailureReason:  common.StringPtr(activityLastFailureReason),
-			LastWorkerIdentity: common.StringPtr(activityLastWorkerIdentity),
-			LastFailureDetails: activityLastFailureDetails,
-			VersionHistory:     versionHistory.ToThrift(),
+	s.mockProducer.On("Publish", &commonproto.ReplicationTask{
+		TaskType: enums.ReplicationTaskTypeSyncActivity,
+		Attributes: &commonproto.ReplicationTask_SyncActivityTaskAttributes{
+			SyncActivityTaskAttributes: &commonproto.SyncActivityTaskAttributes{
+				DomainId:           domainID,
+				WorkflowId:         workflowID,
+				RunId:              runID,
+				Version:            activityVersion,
+				ScheduledId:        activityScheduleID,
+				ScheduledTime:      activityScheduledTime.UnixNano(),
+				StartedId:          activityStartedID,
+				StartedTime:        activityStartedTime.UnixNano(),
+				LastHeartbeatTime:  activityHeartbeatTime.UnixNano(),
+				Details:            activityDetails,
+				Attempt:            activityAttempt,
+				LastFailureReason:  activityLastFailureReason,
+				LastWorkerIdentity: activityLastWorkerIdentity,
+				LastFailureDetails: activityLastFailureDetails,
+				VersionHistory:     versionHistory.ToProto(),
+			},
 		},
 	}).Return(nil).Once()
 

@@ -123,8 +123,6 @@ const (
 	FlagOwnerEmailWithAlias               = FlagOwnerEmail + ", oe"
 	FlagRetentionDays                     = "retention"
 	FlagRetentionDaysWithAlias            = FlagRetentionDays + ", rd"
-	FlagEmitMetric                        = "emit_metric"
-	FlagEmitMetricWithAlias               = FlagEmitMetric + ", em"
 	FlagHistoryArchivalStatus             = "history_archival_status"
 	FlagHistoryArchivalStatusWithAlias    = FlagHistoryArchivalStatus + ", has"
 	FlagHistoryArchivalURI                = "history_uri"
@@ -169,8 +167,6 @@ const (
 	FlagMessageType                       = "message_type"
 	FlagMessageTypeWithAlias              = FlagMessageType + ", mt"
 	FlagURL                               = "url"
-	FlagMuttleyDestination                = "muttely_destination"
-	FlagMuttleyDestinationWithAlias       = FlagMuttleyDestination + ", muttley"
 	FlagIndex                             = "index"
 	FlagBatchSize                         = "batch_size"
 	FlagBatchSizeWithAlias                = FlagBatchSize + ", bs"
@@ -208,6 +204,12 @@ const (
 	FlagTLSKeyPath                        = "tls_key_path"
 	FlagTLSCaPath                         = "tls_ca_path"
 	FlagTLSEnableHostVerification         = "tls_enable_host_verification"
+	FlagDLQType                           = "dlq_type"
+	FlagDLQTypeWithAlias                  = FlagDLQType + ", dt"
+	FlagMaxMessageCount                   = "max_message_count"
+	FlagMaxMessageCountWithAlias          = FlagMaxMessageCount + ", mmc"
+	FlagLastMessageID                     = "last_message_id"
+	FlagLastMessageIDWithAlias            = FlagLastMessageID + ", lm"
 )
 
 var flagsForExecution = []cli.Flag{

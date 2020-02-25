@@ -48,10 +48,9 @@ func (mdb *db) IsDupEntryError(err error) bool {
 	return ok && sqlErr.Number == ErrDupEntry
 }
 
-// NewDB returns an instance of DB, which is a logical
+// newDB returns an instance of DB, which is a logical
 // connection to the underlying mysql database
-// Fixme we need to ignore this Lint warning
-func NewDB(xdb *sqlx.DB, tx *sqlx.Tx) *db {
+func newDB(xdb *sqlx.DB, tx *sqlx.Tx) *db {
 	mdb := &db{db: xdb, tx: tx}
 	mdb.conn = xdb
 	if tx != nil {
@@ -67,7 +66,7 @@ func (mdb *db) BeginTx() (sqlplugin.Tx, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewDB(mdb.db, xtx), nil
+	return newDB(mdb.db, xtx), nil
 }
 
 // Commit commits a previously started transaction

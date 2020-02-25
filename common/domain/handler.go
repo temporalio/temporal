@@ -32,7 +32,6 @@ import (
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/workflowservice"
 
-	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
@@ -255,7 +254,7 @@ func (d *HandlerImpl) RegisterDomain(
 
 	if domainRequest.IsGlobalDomain {
 		err = d.domainReplicator.HandleTransmissionTask(
-			replicator.DomainOperationCreate,
+			enums.DomainOperationCreate,
 			domainRequest.Info,
 			domainRequest.Config,
 			domainRequest.ReplicationConfig,
@@ -551,7 +550,7 @@ func (d *HandlerImpl) UpdateDomain(
 	}
 
 	if isGlobalDomain {
-		err = d.domainReplicator.HandleTransmissionTask(replicator.DomainOperationUpdate,
+		err = d.domainReplicator.HandleTransmissionTask(enums.DomainOperationUpdate,
 			info, config, replicationConfig, configVersion, failoverVersion, isGlobalDomain)
 		if err != nil {
 			return nil, err

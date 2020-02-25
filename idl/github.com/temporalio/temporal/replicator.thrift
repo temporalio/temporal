@@ -181,3 +181,43 @@ struct GetDLQReplicationMessagesRequest {
 struct GetDLQReplicationMessagesResponse {
   10: optional list<ReplicationTask> replicationTasks
 }
+
+enum DLQType {
+  Replication,
+  Domain,
+}
+
+struct ReadDLQMessagesRequest{
+  10: optional DLQType type
+  20: optional i32 shardID
+  30: optional string sourceCluster
+  40: optional i64 (js.type = "Long") inclusiveEndMessageID
+  50: optional i32 maximumPageSize
+  60: optional binary nextPageToken
+}
+
+struct ReadDLQMessagesResponse{
+  10: optional DLQType type
+  20: optional list<ReplicationTask> replicationTasks
+  30: optional binary nextPageToken
+}
+
+struct PurgeDLQMessagesRequest{
+  10: optional DLQType type
+  20: optional i32 shardID
+  30: optional string sourceCluster
+  40: optional i64 (js.type = "Long") inclusiveEndMessageID
+}
+
+struct MergeDLQMessagesRequest{
+  10: optional DLQType type
+  20: optional i32 shardID
+  30: optional string sourceCluster
+  40: optional i64 (js.type = "Long") inclusiveEndMessageID
+  50: optional i32 maximumPageSize
+  60: optional binary nextPageToken
+}
+
+struct MergeDLQMessagesResponse{
+  10: optional binary nextPageToken
+}

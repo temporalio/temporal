@@ -19,7 +19,8 @@ ringpop:
 services:
   frontend:
     rpc:
-      port: 9933
+      grpcPort: 9233
+      ringpopPort: 9933
       bindOnLocalHost: true
     metrics:
       statsd:
@@ -30,7 +31,8 @@ services:
 
   matching:
     rpc:
-      port: 9935
+      grpcPort: 9235
+      ringpopPort: 9935
       bindOnLocalHost: true
     metrics:
       statsd:
@@ -41,7 +43,8 @@ services:
 
   history:
     rpc:
-      port: 9934
+      grpcPort: 9234
+      ringpopPort: 9934
       bindOnLocalHost: true
     metrics:
       statsd:
@@ -52,7 +55,8 @@ services:
 
   worker:
     rpc:
-      port: 9940
+      grpcPort: 9240
+      ringpopPort: 9940
       bindOnLocalHost: true
     metrics:
       statsd:

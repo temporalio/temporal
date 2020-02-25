@@ -716,6 +716,7 @@ func ListArchivedWorkflow(c *cli.Context) {
 			cancel()
 			ErrorAndExit("Failed to list archived workflow.", err)
 		}
+		request.NextPageToken = result.NextPageToken
 		cancel()
 	}
 

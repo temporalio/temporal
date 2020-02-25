@@ -25,9 +25,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gogo/protobuf/types"
+	"github.com/temporalio/temporal/common/persistence/serialization"
 
-	"github.com/temporalio/temporal/common/persistence/sql"
+	"github.com/gogo/protobuf/types"
 
 	"github.com/temporalio/temporal/common/cassandra"
 
@@ -683,7 +683,7 @@ workflow_state = ? ` +
 		`and task_id > ? ` +
 		`and task_id <= ?`
 
-	templateRangeCompleteReplicationTaskQuery = `DELETE FROM executions ` +
+	templateCompleteReplicationTaskBeforeQuery = `DELETE FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and domain_id = ? ` +
@@ -691,6 +691,10 @@ workflow_state = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
 		`and task_id <= ?`
+
+	templateCompleteReplicationTaskQuery = templateCompleteTransferTaskQuery
+
+	templateRangeCompleteReplicationTaskQuery = templateRangeCompleteTransferTaskQuery
 
 	templateGetTimerTasksQuery = `SELECT timer, timer_encoding ` +
 		`FROM executions ` +
@@ -882,7 +886,7 @@ func (d *cassandraPersistence) GetShardID() int {
 func (d *cassandraPersistence) CreateShard(request *p.CreateShardRequest) error {
 	shardInfo := request.ShardInfo
 	shardInfo.UpdatedAt = types.TimestampNow()
-	data, err := sql.ShardInfoToBlob(shardInfo)
+	data, err := serialization.ShardInfoToBlob(shardInfo)
 
 	if err != nil {
 		return convertCommonErrors("CreateShard", err)
@@ -909,7 +913,7 @@ func (d *cassandraPersistence) CreateShard(request *p.CreateShardRequest) error 
 	if !applied {
 		data := previous["shard"].([]byte)
 		encoding := previous["shard_encoding"].(string)
-		shard, _ := sql.ShardInfoFromBlob(data, encoding, d.currentClusterName)
+		shard, _ := serialization.ShardInfoFromBlob(data, encoding, d.currentClusterName)
 
 		return &p.ShardAlreadyExistError{
 			Msg: fmt.Sprintf("Shard already exists in executions table.  ShardId: %v, RangeId: %v",
@@ -937,7 +941,7 @@ func (d *cassandraPersistence) GetShard(request *p.GetShardRequest) (*p.GetShard
 		return nil, convertCommonErrors("GetShard", err)
 	}
 
-	info, err := sql.ShardInfoFromBlob(data, encoding, d.currentClusterName)
+	info, err := serialization.ShardInfoFromBlob(data, encoding, d.currentClusterName)
 
 	if err != nil {
 		return nil, convertCommonErrors("GetShard", err)
@@ -949,7 +953,7 @@ func (d *cassandraPersistence) GetShard(request *p.GetShardRequest) (*p.GetShard
 func (d *cassandraPersistence) UpdateShard(request *p.UpdateShardRequest) error {
 	shardInfo := request.ShardInfo
 	shardInfo.UpdatedAt = types.TimestampNow()
-	data, err := sql.ShardInfoToBlob(shardInfo)
+	data, err := serialization.ShardInfoToBlob(shardInfo)
 
 	if err != nil {
 		return convertCommonErrors("UpdateShard", err)
@@ -1276,7 +1280,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 	state.SignalRequestedIDs = signalRequestedIDs
 
 	eList := result["buffered_events_list"].([]map[string]interface{})
-	bufferedEventsBlobs := make([]*p.DataBlob, 0, len(eList))
+	bufferedEventsBlobs := make([]*serialization.DataBlob, 0, len(eList))
 	for _, v := range eList {
 		blob := createHistoryEventBatchBlob(v)
 		bufferedEventsBlobs = append(bufferedEventsBlobs, blob)
@@ -2017,7 +2021,7 @@ func (d *cassandraPersistence) GetTransferTasks(request *p.GetTransferTasksReque
 	var encoding string
 
 	for iter.Scan(&data, &encoding) {
-		t, err := sql.TransferTaskInfoFromBlob(data, encoding)
+		t, err := serialization.TransferTaskInfoFromBlob(data, encoding)
 		if err != nil {
 			return nil, convertCommonErrors("GetTransferTasks", err)
 		}
@@ -2069,7 +2073,7 @@ func (d *cassandraPersistence) populateGetReplicationTasksResponse(
 	var encoding string
 
 	for iter.Scan(&data, &encoding) {
-		t, err := sql.ReplicationTaskInfoFromBlob(data, encoding)
+		t, err := serialization.ReplicationTaskInfoFromBlob(data, encoding)
 
 		if err != nil {
 			return nil, convertCommonErrors(operation, err)
@@ -2141,7 +2145,7 @@ func (d *cassandraPersistence) RangeCompleteTransferTask(request *p.RangeComplet
 }
 
 func (d *cassandraPersistence) CompleteReplicationTask(request *p.CompleteReplicationTaskRequest) error {
-	query := d.session.Query(templateCompleteTransferTaskQuery,
+	query := d.session.Query(templateCompleteReplicationTaskQuery,
 		d.shardID,
 		rowTypeReplicationTask,
 		rowTypeReplicationDomainID,
@@ -2169,7 +2173,7 @@ func (d *cassandraPersistence) RangeCompleteReplicationTask(
 	request *p.RangeCompleteReplicationTaskRequest,
 ) error {
 
-	query := d.session.Query(templateRangeCompleteReplicationTaskQuery,
+	query := d.session.Query(templateCompleteReplicationTaskBeforeQuery,
 		d.shardID,
 		rowTypeReplicationTask,
 		rowTypeReplicationDomainID,
@@ -2669,7 +2673,7 @@ func (d *cassandraPersistence) GetTimerIndexTasks(request *p.GetTimerIndexTasksR
 	var encoding string
 
 	for iter.Scan(&data, &encoding) {
-		t, err := sql.TimerTaskInfoFromBlob(data, encoding)
+		t, err := serialization.TimerTaskInfoFromBlob(data, encoding)
 
 		if err != nil {
 			return nil, convertCommonErrors("GetTimerIndexTasks", err)
@@ -2690,11 +2694,12 @@ func (d *cassandraPersistence) GetTimerIndexTasks(request *p.GetTimerIndexTasksR
 
 func (d *cassandraPersistence) PutReplicationTaskToDLQ(request *p.PutReplicationTaskToDLQRequest) error {
 	task := request.TaskInfo
-	datablob, err := sql.ReplicationTaskInfoToBlob(task)
+	datablob, err := serialization.ReplicationTaskInfoToBlob(task)
 	if err != nil {
 		return convertCommonErrors("PutReplicationTaskToDLQ", err)
 	}
 
+	// Use source cluster name as the workflow id for replication dlq
 	query := d.session.Query(templateCreateReplicationTaskQuery,
 		d.shardID,
 		rowTypeDLQ,
@@ -2730,4 +2735,61 @@ func (d *cassandraPersistence) GetReplicationTasksFromDLQ(
 	).PageSize(request.BatchSize).PageState(request.NextPageToken)
 
 	return d.populateGetReplicationTasksResponse(query, "GetReplicationTasksFromDLQ")
+}
+
+func (d *cassandraPersistence) DeleteReplicationTaskFromDLQ(
+	request *p.DeleteReplicationTaskFromDLQRequest,
+) error {
+
+	query := d.session.Query(templateCompleteReplicationTaskQuery,
+		d.shardID,
+		rowTypeDLQ,
+		rowTypeDLQDomainID,
+		request.SourceClusterName,
+		rowTypeDLQRunID,
+		defaultVisibilityTimestamp,
+		request.TaskID,
+	)
+
+	err := query.Exec()
+	if err != nil {
+		if isThrottlingError(err) {
+			return &workflow.ServiceBusyError{
+				Message: fmt.Sprintf("DeleteReplicationTaskFromDLQ operation failed. Error: %v", err),
+			}
+		}
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("DeleteReplicationTaskFromDLQ operation failed. Error: %v", err),
+		}
+	}
+	return nil
+}
+
+func (d *cassandraPersistence) RangeDeleteReplicationTaskFromDLQ(
+	request *p.RangeDeleteReplicationTaskFromDLQRequest,
+) error {
+
+	query := d.session.Query(templateRangeCompleteReplicationTaskQuery,
+		d.shardID,
+		rowTypeDLQ,
+		rowTypeDLQDomainID,
+		request.SourceClusterName,
+		rowTypeDLQRunID,
+		defaultVisibilityTimestamp,
+		request.ExclusiveBeginTaskID,
+		request.InclusiveEndTaskID,
+	)
+
+	err := query.Exec()
+	if err != nil {
+		if isThrottlingError(err) {
+			return &workflow.ServiceBusyError{
+				Message: fmt.Sprintf("RangeDeleteReplicationTaskFromDLQ operation failed. Error: %v", err),
+			}
+		}
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("RangeDeleteReplicationTaskFromDLQ operation failed. Error: %v", err),
+		}
+	}
+	return nil
 }

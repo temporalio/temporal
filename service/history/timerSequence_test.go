@@ -188,6 +188,51 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated() {
 	s.True(modified)
 }
 
+func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer() {
+	now := time.Now()
+	currentVersion := int64(999)
+	activityInfo := &persistence.ActivityInfo{
+		Version:                  123,
+		ScheduleID:               234,
+		ScheduledTime:            now,
+		StartedID:                345,
+		StartedTime:              now.Add(200 * time.Millisecond),
+		ActivityID:               "some random activity ID",
+		ScheduleToStartTimeout:   10,
+		ScheduleToCloseTimeout:   1000,
+		StartToCloseTimeout:      100,
+		HeartbeatTimeout:         1,
+		LastHeartBeatUpdatedTime: time.Time{},
+		TimerTaskStatus:          timerTaskStatusNone,
+		Attempt:                  12,
+	}
+	activityInfos := map[int64]*persistence.ActivityInfo{activityInfo.ScheduleID: activityInfo}
+	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos).Times(1)
+	s.mockMutableState.EXPECT().GetActivityInfo(activityInfo.ScheduleID).Return(activityInfo, true).Times(1)
+
+	taskVisibilityTimestamp := activityInfo.StartedTime.Add(
+		time.Duration(activityInfo.HeartbeatTimeout) * time.Second,
+	)
+
+	var activityInfoUpdated = *activityInfo // make a copy
+	activityInfoUpdated.TimerTaskStatus = timerTaskStatusCreatedHeartbeat
+	activityInfoUpdated.LastHeartbeatTimeoutVisibility = taskVisibilityTimestamp.Unix()
+	s.mockMutableState.EXPECT().UpdateActivity(&activityInfoUpdated).Return(nil).Times(1)
+	s.mockMutableState.EXPECT().GetCurrentVersion().Return(currentVersion).Times(1)
+	s.mockMutableState.EXPECT().AddTimerTasks(&persistence.ActivityTimeoutTask{
+		// TaskID is set by shard
+		VisibilityTimestamp: taskVisibilityTimestamp,
+		TimeoutType:         int(shared.TimeoutTypeHeartbeat),
+		EventID:             activityInfo.ScheduleID,
+		Attempt:             int64(activityInfo.Attempt),
+		Version:             currentVersion,
+	}).Times(1)
+
+	modified, err := s.timerSequence.createNextActivityTimer()
+	s.NoError(err)
+	s.True(modified)
+}
+
 func (s *timerSequenceSuite) TestLoadAndSortUserTimers_None() {
 	timerInfos := map[string]*persistence.TimerInfo{}
 	s.mockMutableState.EXPECT().GetPendingTimerInfos().Return(timerInfos).Times(1)

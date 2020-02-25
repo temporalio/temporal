@@ -24,6 +24,7 @@ import (
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/persistence/serialization"
 )
 
 type (
@@ -184,7 +185,7 @@ func (m *executionManagerImpl) DeserializeExecutionInfo(
 }
 
 func (m *executionManagerImpl) DeserializeBufferedEvents(
-	blobs []*DataBlob,
+	blobs []*serialization.DataBlob,
 ) ([]*workflow.HistoryEvent, error) {
 
 	events := make([]*workflow.HistoryEvent, 0)
@@ -629,7 +630,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 	if err != nil {
 		return nil, err
 	}
-	var serializedNewBufferedEvents *DataBlob
+	var serializedNewBufferedEvents *serialization.DataBlob
 	if input.NewBufferedEvents != nil {
 		serializedNewBufferedEvents, err = m.serializer.SerializeBatchEvents(input.NewBufferedEvents, encoding)
 		if err != nil {
@@ -738,7 +739,7 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 func (m *executionManagerImpl) SerializeVersionHistories(
 	versionHistories *VersionHistories,
 	encoding common.EncodingType,
-) (*DataBlob, error) {
+) (*serialization.DataBlob, error) {
 
 	if versionHistories == nil {
 		return nil, nil
@@ -747,7 +748,7 @@ func (m *executionManagerImpl) SerializeVersionHistories(
 }
 
 func (m *executionManagerImpl) DeserializeVersionHistories(
-	blob *DataBlob,
+	blob *serialization.DataBlob,
 ) (*VersionHistories, error) {
 
 	if blob == nil {
@@ -832,6 +833,18 @@ func (m *executionManagerImpl) GetReplicationTasksFromDLQ(
 	request *GetReplicationTasksFromDLQRequest,
 ) (*GetReplicationTasksFromDLQResponse, error) {
 	return m.persistence.GetReplicationTasksFromDLQ(request)
+}
+
+func (m *executionManagerImpl) DeleteReplicationTaskFromDLQ(
+	request *DeleteReplicationTaskFromDLQRequest,
+) error {
+	return m.persistence.DeleteReplicationTaskFromDLQ(request)
+}
+
+func (m *executionManagerImpl) RangeDeleteReplicationTaskFromDLQ(
+	request *RangeDeleteReplicationTaskFromDLQRequest,
+) error {
+	return m.persistence.RangeDeleteReplicationTaskFromDLQ(request)
 }
 
 // Timer related methods.
