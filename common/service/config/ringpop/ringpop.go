@@ -21,24 +21,18 @@
 package ringpop
 
 import (
-	"errors"
 	"fmt"
 	"net"
-	"reflect"
 	"sync"
 	"time"
 
-	"github.com/temporalio/temporal/common/service/config"
-
-	"github.com/temporalio/temporal/common/persistence"
-
 	"github.com/uber/ringpop-go"
-	tcg "github.com/uber/tchannel-go"
-	"go.uber.org/yarpc"
-	"go.uber.org/yarpc/transport/tchannel"
+	"github.com/uber/tchannel-go"
 
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/membership"
+	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/service/config"
 )
 
 const (
@@ -48,7 +42,7 @@ const (
 // RingpopFactory implements the RingpopFactory interface
 type RingpopFactory struct {
 	config         *config.Ringpop
-	dispatcher     *yarpc.Dispatcher
+	channel        *tchannel.Channel
 	serviceName    string
 	servicePortMap map[string]int
 	logger         log.Logger
@@ -63,13 +57,13 @@ type RingpopFactory struct {
 // to the underlying configuration
 func NewRingpopFactory(
 	rpConfig *config.Ringpop,
-	dispatcher *yarpc.Dispatcher,
+	channel *tchannel.Channel,
 	serviceName string,
 	servicePortMap map[string]int,
 	logger log.Logger,
 	metadataManager persistence.ClusterMetadataManager,
 ) (*RingpopFactory, error) {
-	return newRingpopFactory(rpConfig, dispatcher, serviceName, servicePortMap, logger, metadataManager)
+	return newRingpopFactory(rpConfig, channel, serviceName, servicePortMap, logger, metadataManager)
 }
 
 func validateRingpopConfig(rpConfig *config.Ringpop) error {
@@ -84,7 +78,7 @@ func validateRingpopConfig(rpConfig *config.Ringpop) error {
 
 func newRingpopFactory(
 	rpConfig *config.Ringpop,
-	dispatcher *yarpc.Dispatcher,
+	channel *tchannel.Channel,
 	serviceName string,
 	servicePortMap map[string]int,
 	logger log.Logger,
@@ -99,7 +93,7 @@ func newRingpopFactory(
 	}
 	return &RingpopFactory{
 		config:          rpConfig,
-		dispatcher:      dispatcher,
+		channel:         channel,
 		serviceName:     serviceName,
 		servicePortMap:  servicePortMap,
 		logger:          logger,
@@ -155,42 +149,14 @@ func (factory *RingpopFactory) getRingpop() (*membership.RingPop, error) {
 }
 
 func (factory *RingpopFactory) broadcastAddressResolver() (string, error) {
-	// This initial piece is copied from ringpop-go/ringpop.go/channelAddressResolver
-	var ch *tcg.Channel
-	var err error
-	if ch, err = factory.getChannel(factory.dispatcher); err != nil {
-		return "", err
-	}
-
-	return membership.BuildBroadcastHostPort(ch.PeerInfo(), factory.config.BroadcastAddress)
+	return membership.BuildBroadcastHostPort(factory.channel.PeerInfo(), factory.config.BroadcastAddress)
 }
 
 func (factory *RingpopFactory) createRingpop() (*membership.RingPop, error) {
-
-	var ch *tcg.Channel
-	var err error
-	if ch, err = factory.getChannel(factory.dispatcher); err != nil {
-		return nil, err
-	}
-
-	rp, err := ringpop.New(factory.config.Name, ringpop.Channel(ch), ringpop.AddressResolverFunc(factory.broadcastAddressResolver))
+	rp, err := ringpop.New(factory.config.Name, ringpop.Channel(factory.channel), ringpop.AddressResolverFunc(factory.broadcastAddressResolver))
 	if err != nil {
 		return nil, err
 	}
 
 	return membership.NewRingPop(rp, factory.config.MaxJoinDuration, factory.logger), nil
-}
-
-func (factory *RingpopFactory) getChannel(
-	dispatcher *yarpc.Dispatcher,
-) (*tcg.Channel, error) {
-
-	t := dispatcher.Inbounds()[0].Transports()[0].(*tchannel.ChannelTransport)
-	ty := reflect.ValueOf(t.Channel())
-	var ch *tcg.Channel
-	var ok bool
-	if ch, ok = ty.Interface().(*tcg.Channel); !ok {
-		return nil, errors.New("unable to get tchannel out of the dispatcher")
-	}
-	return ch, nil
 }

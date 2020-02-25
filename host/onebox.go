@@ -28,9 +28,8 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/uber-go/tally"
+	"github.com/uber/tchannel-go"
 	"go.temporal.io/temporal-proto/workflowservice"
-	"go.uber.org/yarpc"
-	"go.uber.org/yarpc/transport/tchannel"
 	"google.golang.org/grpc"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
@@ -861,7 +860,6 @@ func newPProfInitializerImpl(logger log.Logger, port int) common.PProfInitialize
 }
 
 type rpcFactoryImpl struct {
-	ch                 *tchannel.ChannelTransport
 	serviceName        string
 	ringpopServiceName string
 	grpcHostPort       string
@@ -869,15 +867,15 @@ type rpcFactoryImpl struct {
 	logger             log.Logger
 
 	sync.Mutex
-	listener          net.Listener
-	ringpopDispatcher *yarpc.Dispatcher
+	listener       net.Listener
+	ringpopChannel *tchannel.Channel
 }
 
-func newRPCFactoryImpl(sName, grpcHostPort, ringpopAddress string, logger log.Logger) common.RPCFactory {
+func newRPCFactoryImpl(sName, grpcHostPort, ringpopHostPort string, logger log.Logger) common.RPCFactory {
 	return &rpcFactoryImpl{
 		serviceName:     sName,
 		grpcHostPort:    grpcHostPort,
-		ringpopHostPort: ringpopAddress,
+		ringpopHostPort: ringpopHostPort,
 		logger:          logger,
 	}
 }
@@ -903,40 +901,30 @@ func (c *rpcFactoryImpl) GetGRPCListener() net.Listener {
 	return c.listener
 }
 
-func (c *rpcFactoryImpl) GetRingpopDispatcher() *yarpc.Dispatcher {
+func (c *rpcFactoryImpl) GetRingpopChannel() *tchannel.Channel {
+	if c.ringpopChannel != nil {
+		return c.ringpopChannel
+	}
+
 	c.Lock()
 	defer c.Unlock()
 
-	if c.ringpopDispatcher != nil {
-		return c.ringpopDispatcher
-	}
+	if c.ringpopChannel == nil {
+		ringpopServiceName := fmt.Sprintf("%v-ringpop", c.serviceName)
 
-	ringpopServiceName := fmt.Sprintf("%v-ringpop", c.serviceName)
-	c.ringpopDispatcher = c.createTChannelDispatcher(ringpopServiceName, c.ringpopHostPort, false)
-	return c.ringpopDispatcher
-}
+		var err error
+		c.ringpopChannel, err = tchannel.NewChannel(ringpopServiceName, nil)
+		if err != nil {
+			c.logger.Fatal("Failed to create ringpop TChannel", tag.Error(err))
+		}
 
-func (c *rpcFactoryImpl) createTChannelDispatcher(serviceName string, hostPort string, createOutbound bool) *yarpc.Dispatcher {
-	// Setup dispatcher for onebox
-	var err error
-	c.ch, err = tchannel.NewChannelTransport(
-		tchannel.ServiceName(serviceName), tchannel.ListenAddr(hostPort))
-	if err != nil {
-		c.logger.Fatal("Failed to create transport channel", tag.Error(err))
-	}
-
-	var outbounds yarpc.Outbounds
-	if createOutbound {
-		outbounds = yarpc.Outbounds{
-			c.serviceName: {Unary: c.ch.NewSingleOutbound(hostPort)},
+		err = c.ringpopChannel.ListenAndServe(c.ringpopHostPort)
+		if err != nil {
+			c.logger.Fatal("Failed to start ringpop listener", tag.Error(err), tag.Address(c.ringpopHostPort))
 		}
 	}
-	return yarpc.NewDispatcher(yarpc.Config{
-		Name:     serviceName,
-		Inbounds: yarpc.Inbounds{c.ch.NewInbound()},
-		// For integration tests to generate client out of the same outbound.
-		Outbounds: outbounds,
-	})
+
+	return c.ringpopChannel
 }
 
 // CreateGRPCConnection creates connection for gRPC calls

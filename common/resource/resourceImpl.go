@@ -28,8 +28,8 @@ import (
 	"time"
 
 	"github.com/uber-go/tally"
+	"github.com/uber/tchannel-go"
 	"go.temporal.io/temporal-proto/workflowservice"
-	"go.uber.org/yarpc"
 
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/client/admin"
@@ -118,7 +118,7 @@ type (
 		grpcListener net.Listener
 
 		// for ringpop listener
-		ringpopDispatcher *yarpc.Dispatcher
+		ringpopChannel *tchannel.Channel
 
 		// internal vars
 
@@ -149,7 +149,7 @@ func New(
 
 	grpcListener := params.RPCFactory.GetGRPCListener()
 
-	ringpopDispatcher := params.RPCFactory.GetRingpopDispatcher()
+	ringpopChannel := params.RPCFactory.GetRingpopChannel()
 
 	persistenceBean, err := persistenceClient.NewBeanFromFactory(persistenceClient.NewFactory(
 		&params.PersistenceConfig,
@@ -322,7 +322,7 @@ func New(
 		grpcListener: grpcListener,
 
 		// for ringpop listener
-		ringpopDispatcher: ringpopDispatcher,
+		ringpopChannel: ringpopChannel,
 
 		// internal vars
 		pprofInitializer: params.PProfInitializer,
@@ -354,9 +354,6 @@ func (h *Impl) Start() {
 	if err := h.pprofInitializer.Start(); err != nil {
 		h.logger.WithTags(tag.Error(err)).Fatal("fail to start PProf")
 	}
-	if err := h.ringpopDispatcher.Start(); err != nil {
-		h.logger.WithTags(tag.Error(err)).Fatal("fail to start dispatcher")
-	}
 	h.membershipMonitor.Start()
 	h.domainCache.Start()
 
@@ -385,8 +382,9 @@ func (h *Impl) Stop() {
 
 	h.domainCache.Stop()
 	h.membershipMonitor.Stop()
-	if err := h.ringpopDispatcher.Stop(); err != nil {
-		h.logger.WithTags(tag.Error(err)).Error("failed to stop ringpop dispatcher")
+	h.ringpopChannel.Close()
+	if err := h.grpcListener.Close(); err != nil {
+		h.logger.WithTags(tag.Error(err)).Error("failed to close gRPC listener")
 	}
 	h.runtimeMetricsReporter.Stop()
 	h.persistenceBean.Close()
