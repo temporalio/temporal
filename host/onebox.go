@@ -71,7 +71,6 @@ type Cadence interface {
 	Stop()
 	GetAdminClient() adminservice.AdminServiceClient
 	GetFrontendClient() workflowservice.WorkflowServiceClient
-	FrontendAddress() string
 	GetHistoryClient() historyservice.HistoryServiceClient
 	GetExecutionManagerFactory() persistence.ExecutionManagerFactory
 }
@@ -194,7 +193,7 @@ func (c *cadenceImpl) Start() error {
 	hosts[common.MatchingServiceName] = []string{c.MatchingGRPCServiceAddress()}
 	hosts[common.HistoryServiceName] = c.HistoryServiceAddress(3)
 	if c.enableWorker() {
-		hosts[common.WorkerServiceName] = []string{c.WorkerServiceAddress()}
+		hosts[common.WorkerServiceName] = []string{c.WorkerGRPCServiceAddress()}
 	}
 
 	// create cadence-system domain, this must be created before starting
@@ -243,21 +242,6 @@ func (c *cadenceImpl) Stop() {
 	c.shutdownWG.Wait()
 }
 
-func (c *cadenceImpl) FrontendAddress() string {
-	switch c.clusterNo {
-	case 0:
-		return "127.0.0.1:7104"
-	case 1:
-		return "127.0.0.1:8104"
-	case 2:
-		return "127.0.0.1:9104"
-	case 3:
-		return "127.0.0.1:10104"
-	default:
-		return "127.0.0.1:7104"
-	}
-}
-
 func (c *cadenceImpl) FrontendGRPCAddress() string {
 	switch c.clusterNo {
 	case 0:
@@ -303,6 +287,7 @@ func (c *cadenceImpl) FrontendPProfPort() int {
 	}
 }
 
+// penultimatePortDigit: 2 - ringpop, 3 - gRPC
 func (c *cadenceImpl) HistoryServiceAddress(penultimatePortDigit int) []string {
 	var hosts []string
 	startPort := penultimatePortDigit * 10
@@ -351,21 +336,6 @@ func (c *cadenceImpl) HistoryPProfPort() []int {
 	return ports
 }
 
-func (c *cadenceImpl) MatchingServiceAddress() string {
-	switch c.clusterNo {
-	case 0:
-		return "127.0.0.1:7106"
-	case 1:
-		return "127.0.0.1:8106"
-	case 2:
-		return "127.0.0.1:9106"
-	case 3:
-		return "127.0.0.1:10106"
-	default:
-		return "127.0.0.1:7106"
-	}
-}
-
 func (c *cadenceImpl) MatchingGRPCServiceAddress() string {
 	switch c.clusterNo {
 	case 0:
@@ -408,21 +378,6 @@ func (c *cadenceImpl) MatchingPProfPort() int {
 		return 10107
 	default:
 		return 7107
-	}
-}
-
-func (c *cadenceImpl) WorkerServiceAddress() string {
-	switch c.clusterNo {
-	case 0:
-		return "127.0.0.1:7108"
-	case 1:
-		return "127.0.0.1:8108"
-	case 2:
-		return "127.0.0.1:9108"
-	case 3:
-		return "127.0.0.1:10108"
-	default:
-		return "127.0.0.1:7108"
 	}
 }
 
@@ -490,7 +445,7 @@ func (c *cadenceImpl) startFrontend(hosts map[string][]string, startWG *sync.Wai
 	params.Logger = c.logger
 	params.ThrottledLogger = c.logger
 	params.PProfInitializer = newPProfInitializerImpl(c.logger, c.FrontendPProfPort())
-	params.RPCFactory = newRPCFactoryImpl(common.FrontendServiceName, c.FrontendAddress(), c.FrontendGRPCAddress(), c.FrontendRingpopAddress(),
+	params.RPCFactory = newRPCFactoryImpl(common.FrontendServiceName, c.FrontendGRPCAddress(), c.FrontendRingpopAddress(),
 		c.logger)
 	params.MetricScope = tally.NewTestScope(common.FrontendServiceName, make(map[string]string))
 	params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {
@@ -552,14 +507,13 @@ func (c *cadenceImpl) startHistory(
 ) {
 	pprofPorts := c.HistoryPProfPort()
 	ringpopPorts := c.HistoryServiceAddress(2)
-	grpcPorts := c.HistoryServiceAddress(3)
-	for i, hostport := range c.HistoryServiceAddress(3) {
+	for i, grpcPort := range c.HistoryServiceAddress(3) {
 		params := new(resource.BootstrapParams)
 		params.Name = common.HistoryServiceName
 		params.Logger = c.logger
 		params.ThrottledLogger = c.logger
 		params.PProfInitializer = newPProfInitializerImpl(c.logger, pprofPorts[i])
-		params.RPCFactory = newRPCFactoryImpl(common.HistoryServiceName, hostport, grpcPorts[i], ringpopPorts[i], c.logger)
+		params.RPCFactory = newRPCFactoryImpl(common.HistoryServiceName, grpcPort, ringpopPorts[i], c.logger)
 		params.MetricScope = tally.NewTestScope(common.HistoryServiceName, make(map[string]string))
 		params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {
 			return newMembershipFactory(params.Name, hosts), nil
@@ -637,8 +591,7 @@ func (c *cadenceImpl) startMatching(hosts map[string][]string, startWG *sync.Wai
 	params.Logger = c.logger
 	params.ThrottledLogger = c.logger
 	params.PProfInitializer = newPProfInitializerImpl(c.logger, c.MatchingPProfPort())
-	params.RPCFactory = newRPCFactoryImpl(common.MatchingServiceName, c.MatchingServiceAddress(), c.MatchingGRPCServiceAddress(),
-		c.MatchingServiceRingpopAddress(), c.logger)
+	params.RPCFactory = newRPCFactoryImpl(common.MatchingServiceName, c.MatchingGRPCServiceAddress(), c.MatchingServiceRingpopAddress(), c.logger)
 	params.MetricScope = tally.NewTestScope(common.MatchingServiceName, make(map[string]string))
 	params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {
 		return newMembershipFactory(params.Name, hosts), nil
@@ -682,8 +635,7 @@ func (c *cadenceImpl) startWorker(hosts map[string][]string, startWG *sync.WaitG
 	params.Logger = c.logger
 	params.ThrottledLogger = c.logger
 	params.PProfInitializer = newPProfInitializerImpl(c.logger, c.WorkerPProfPort())
-	params.RPCFactory = newRPCFactoryImpl(common.WorkerServiceName, c.WorkerServiceAddress(), c.WorkerGRPCServiceAddress(),
-		c.WorkerServiceRingpopAddress(), c.logger)
+	params.RPCFactory = newRPCFactoryImpl(common.WorkerServiceName, c.WorkerGRPCServiceAddress(), c.WorkerServiceRingpopAddress(), c.logger)
 	params.MetricScope = tally.NewTestScope(common.WorkerServiceName, make(map[string]string))
 	params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {
 		return newMembershipFactory(params.Name, hosts), nil
@@ -911,7 +863,6 @@ type rpcFactoryImpl struct {
 	ch                 *tchannel.ChannelTransport
 	serviceName        string
 	ringpopServiceName string
-	hostPort           string
 	grpcHostPort       string
 	ringpopHostPort    string
 	logger             log.Logger
@@ -921,10 +872,9 @@ type rpcFactoryImpl struct {
 	ringpopDispatcher *yarpc.Dispatcher
 }
 
-func newRPCFactoryImpl(sName, hostPort, grpcHostPort, ringpopAddress string, logger log.Logger) common.RPCFactory {
+func newRPCFactoryImpl(sName, grpcHostPort, ringpopAddress string, logger log.Logger) common.RPCFactory {
 	return &rpcFactoryImpl{
 		serviceName:     sName,
-		hostPort:        hostPort,
 		grpcHostPort:    grpcHostPort,
 		ringpopHostPort: ringpopAddress,
 		logger:          logger,
