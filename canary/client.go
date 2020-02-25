@@ -24,14 +24,13 @@ import (
 	"context"
 	"time"
 
-	"github.com/gogo/status"
 	"github.com/opentracing/opentracing-go"
 	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/activity"
 	"go.temporal.io/temporal/client"
 	"go.temporal.io/temporal/workflow"
-	"google.golang.org/grpc/codes"
 )
 
 // cadenceClient is an abstraction on top of
@@ -64,7 +63,7 @@ func (client *cadenceClient) createDomain(name string, desc string, owner string
 	}
 	err := client.Register(context.Background(), req)
 	if err != nil {
-		if status.Code(err) == codes.AlreadyExists {
+		if _, ok := err.(*serviceerror.DomainAlreadyExists); !ok {
 			return err
 		}
 	}

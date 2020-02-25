@@ -33,16 +33,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/status"
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
-	"go.temporal.io/temporal-proto/errordetails"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
-	"google.golang.org/grpc/codes"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -114,8 +112,7 @@ func (s *integrationSuite) TestStartWorkflowExecution() {
 	}
 	we2, err2 := s.engine.StartWorkflowExecution(NewContext(), newRequest)
 	s.NotNil(err2)
-	st2 := status.Convert(err2)
-	s.True(errordetails.IsWorkflowExecutionAlreadyStartedStatus(st2))
+	s.IsType(&serviceerror.WorkflowExecutionAlreadyStarted{}, err2)
 	log.Errorf("Unable to start workflow execution: %v", err2)
 	s.Nil(we2)
 }
@@ -1269,9 +1266,8 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 	_, err := poller.PollAndProcessDecisionTask(false, false)
 	s.Logger.Info("PollAndProcessDecisionTask", tag.Error(err))
 	s.NotNil(err)
-	st := status.Convert(err)
-	s.Equal(codes.NotFound, st.Code())
-	s.Equal("Decision task not found.", st.Message())
+	s.IsType(&serviceerror.NotFound{}, err)
+	s.Equal("Decision task not found.", err.Error())
 
 	// Process signal in decider
 	_, err = poller.PollAndProcessDecisionTask(true, false)

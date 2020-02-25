@@ -27,13 +27,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gogo/status"
 	"github.com/pborman/uuid"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
-	"go.temporal.io/temporal-proto/errordetails"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
-	"google.golang.org/grpc/codes"
 
 	"github.com/temporalio/temporal/common/log/tag"
 )
@@ -61,7 +59,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 		Identity:   identity,
 	})
 	s.NotNil(err0)
-	s.Equal(codes.NotFound, status.Code(err0))
+	s.IsType(&serviceerror.NotFound{}, err0)
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -223,7 +221,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 		Identity:   identity,
 	})
 	s.NotNil(err)
-	s.Equal(codes.NotFound, status.Code(err))
+	s.IsType(&serviceerror.NotFound{}, err)
 }
 
 func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
@@ -1501,9 +1499,8 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	resp, err := s.engine.SignalWithStartWorkflowExecution(ctx, sRequest)
 	s.Nil(resp)
 	s.Error(err)
-	st := status.Convert(err)
-	s.True(strings.Contains(st.Message(), "reject duplicate workflow ID"))
-	s.True(errordetails.IsWorkflowExecutionAlreadyStartedStatus(st))
+	s.True(strings.Contains(err.Error(), "reject duplicate workflow ID"))
+	s.IsType(&serviceerror.WorkflowExecutionAlreadyStarted{}, err)
 
 	// test policy WorkflowIdReusePolicyAllowDuplicateFailedOnly
 	sRequest.WorkflowIdReusePolicy = enums.WorkflowIdReusePolicyAllowDuplicateFailedOnly
@@ -1511,9 +1508,8 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	resp, err = s.engine.SignalWithStartWorkflowExecution(ctx, sRequest)
 	s.Nil(resp)
 	s.Error(err)
-	st = status.Convert(err)
-	s.True(strings.Contains(st.Message(), "allow duplicate workflow ID if last run failed"))
-	s.True(errordetails.IsWorkflowExecutionAlreadyStartedStatus(st))
+	s.True(strings.Contains(err.Error(), "allow duplicate workflow ID if last run failed"))
+	s.IsType(&serviceerror.WorkflowExecutionAlreadyStarted{}, err)
 
 	// test policy WorkflowIdReusePolicyAllowDuplicate
 	sRequest.WorkflowIdReusePolicy = enums.WorkflowIdReusePolicyAllowDuplicate

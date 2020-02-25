@@ -25,14 +25,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gogo/status"
 	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/errordetails"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"google.golang.org/grpc"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/headers"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 )
@@ -1034,7 +1032,7 @@ func (c *clientImpl) createContext(parent context.Context) (context.Context, con
 		return context.WithTimeout(context.Background(), c.timeout)
 	}
 
-	return context.WithTimeout(headers.PropagateVersions(parent), c.timeout)
+	return context.WithTimeout(parent, c.timeout)
 }
 
 func (c *clientImpl) getClientForWorkflowID(workflowID string) (historyservice.HistoryServiceClient, error) {
@@ -1064,9 +1062,9 @@ redirectLoop:
 		}
 		err = op(ctx, client)
 		if err != nil {
-			if failure, ok := errordetails.GetShardOwnershipLostFailure(status.Convert(err)); ok {
+			if s, ok := err.(*serviceerror.ShardOwnershipLost); ok {
 				// TODO: consider emitting a metric for number of redirects
-				ret, err := c.clients.GetClientForClientKey(failure.GetOwner())
+				ret, err := c.clients.GetClientForClientKey(s.Owner)
 				if err != nil {
 					return err
 				}

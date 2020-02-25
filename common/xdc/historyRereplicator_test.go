@@ -30,7 +30,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
-	"go.temporal.io/temporal-proto/errordetails"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.uber.org/zap"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
@@ -836,14 +836,14 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_HistoryReset_Mi
 	}
 
 	rereplicationContext := newHistoryRereplicationContext(s.domainID, workflowID, runID, int64(123), uuid.New(), int64(111), s.rereplicator)
-	retryErr := errordetails.NewRetryTaskStatus(
+	retryErr := serviceerror.NewRetryTask(
 		"retry task status",
 		s.domainID,
 		workflowID,
 		runID,
 		rereplicationContext.beginningFirstEventID-10)
 
-	s.mockHistoryClient.EXPECT().ReplicateRawEvents(gomock.Any(), request).Return(nil, retryErr.Err()).Times(1)
+	s.mockHistoryClient.EXPECT().ReplicateRawEvents(gomock.Any(), request).Return(nil, retryErr).Times(1)
 
 	missingEventBatch := []*commonproto.HistoryEvent{
 		{
@@ -854,14 +854,14 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_HistoryReset_Mi
 		},
 	}
 	missingBlob := s.serializeEvents(missingEventBatch)
-	failure, _ := errordetails.GetRetryTaskFailure(retryErr)
+
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Domain: s.domainName,
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
-		FirstEventId:    failure.GetNextEventId(),
+		FirstEventId:    retryErr.NextEventId,
 		NextEventId:     rereplicationContext.beginningFirstEventID,
 		MaximumPageSize: defaultPageSize,
 		NextPageToken:   nil,
@@ -915,12 +915,12 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_Err() {
 
 	rereplicationContext := newHistoryRereplicationContext(s.domainID, workflowID, runID, int64(123), uuid.New(), int64(111), s.rereplicator)
 	rereplicationContext.rpcCalls = 1 // so this will be the second API call for rereplication
-	retryErr := errordetails.NewRetryTaskStatus(
+	retryErr := serviceerror.NewRetryTask(
 		"",
 		s.domainID,
 		workflowID,
 		runID,
-		rereplicationContext.beginningFirstEventID-10).Err()
+		rereplicationContext.beginningFirstEventID-10)
 
 	s.mockHistoryClient.EXPECT().ReplicateRawEvents(gomock.Any(), request).Return(nil, retryErr).Times(1)
 

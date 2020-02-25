@@ -28,7 +28,6 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/headers"
 	"github.com/temporalio/temporal/common/persistence"
 )
 
@@ -212,7 +211,7 @@ func (c *clientImpl) createContextWithTimeout(parent context.Context, timeout ti
 	if parent == nil {
 		return context.WithTimeout(context.Background(), timeout)
 	}
-	return context.WithTimeout(headers.PropagateVersions(parent), timeout)
+	return context.WithTimeout(parent, timeout)
 }
 
 func (c *clientImpl) getClientForTasklist(key string) (matchingservice.MatchingServiceClient, error) {

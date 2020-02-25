@@ -24,8 +24,7 @@ import (
 	"fmt"
 	"runtime/debug"
 
-	"github.com/gogo/status"
-	"google.golang.org/grpc/codes"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common/log/tag"
 )
@@ -63,8 +62,6 @@ func CapturePanicGRPC(logger Logger, retError *error) {
 
 		logger.Error("Panic is captured", tag.SysStackTrace(st), tag.Error(err))
 
-		err = status.New(codes.Internal, err.Error()).Err()
-
-		*retError = err
+		*retError = serviceerror.NewInternal(err.Error())
 	}
 }

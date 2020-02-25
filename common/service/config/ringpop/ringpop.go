@@ -149,7 +149,6 @@ func (factory *RingpopFactory) getRingpop() (*membership.RingPop, error) {
 }
 
 func (factory *RingpopFactory) broadcastAddressResolver() (string, error) {
-	// This initial piece is copied from ringpop-go/ringpop.go/channelAddressResolver
 	return membership.BuildBroadcastHostPort(factory.channel.PeerInfo(), factory.config.BroadcastAddress)
 }
 

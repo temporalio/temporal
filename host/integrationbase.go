@@ -32,7 +32,6 @@ import (
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/zap"
-	"google.golang.org/grpc"
 	"gopkg.in/yaml.v2"
 
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
@@ -42,6 +41,7 @@ import (
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/rpc"
 	"github.com/temporalio/temporal/environment"
 )
 
@@ -71,7 +71,7 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 	if clusterConfig.FrontendAddress != "" {
 		s.Logger.Info("Running integration test against specified frontend", tag.Address(TestFlags.FrontendAddr))
 
-		connection, err := grpc.Dial(TestFlags.FrontendAddrGRPC, grpc.WithInsecure())
+		connection, err := rpc.Dial(TestFlags.FrontendAddrGRPC)
 		if err != nil {
 			s.Require().NoError(err)
 		}

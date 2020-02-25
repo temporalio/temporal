@@ -26,7 +26,6 @@ import (
 
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/zap"
-	"google.golang.org/grpc"
 
 	persist "github.com/temporalio/temporal/.gen/go/persistenceblobs"
 	"github.com/temporalio/temporal/common"
@@ -44,6 +43,7 @@ import (
 	persistenceClient "github.com/temporalio/temporal/common/persistence/client"
 	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/resource"
+	"github.com/temporalio/temporal/common/rpc"
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/common/service/config/ringpop"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
@@ -201,7 +201,7 @@ func (s *server) startService() common.Daemon {
 	if s.cfg.PublicClient.HostPort == "" {
 		log.Fatalf("need to provide an endpoint config for PublicClient")
 	}
-	connection, err := grpc.Dial(s.cfg.PublicClient.HostPort, grpc.WithInsecure())
+	connection, err := rpc.Dial(s.cfg.PublicClient.HostPort)
 	if err != nil {
 		log.Fatalf("failed to dial gRPC connection: %v", err)
 	}
