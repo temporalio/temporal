@@ -35,7 +35,6 @@ import (
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/errors"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
@@ -229,8 +228,8 @@ func (r *historyReplicator) ApplyEvents(
 			case *persistence.WorkflowExecutionAlreadyStartedError:
 				logger.Debug("Encounter WorkflowExecutionAlreadyStartedError", tag.Error(retError))
 				retError = ErrRetryExecutionAlreadyStarted
-			case *errors.InternalFailureError:
-				logError(logger, "Encounter InternalFailure.", retError)
+			case *serviceerror.Internal:
+				logError(logger, "Encounter Internal.", retError)
 				retError = ErrInternalFailure
 			}
 		}

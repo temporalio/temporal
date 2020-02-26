@@ -32,7 +32,6 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/errors"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
@@ -97,7 +96,7 @@ func (b *stateBuilderImpl) applyEvents(
 ) (mutableState, error) {
 
 	if len(history) == 0 {
-		return nil, errors.NewInternalFailureError(ErrMessageHistorySizeZero)
+		return nil, serviceerror.NewInternal(ErrMessageHistorySizeZero)
 	}
 	firstEvent := history[0]
 	lastEvent := history[len(history)-1]
