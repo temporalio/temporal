@@ -420,7 +420,7 @@ func (h *historyArchiverSuite) TestGet_Fail_InvalidToken() {
 	response, err := historyArchiver.Get(ctx, URI, request)
 	h.Nil(response)
 	h.Error(err)
-	h.IsType(serviceerror.NewInvalidArgument(""), err)
+	h.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
 func (h *historyArchiverSuite) TestGet_Success_PickHighestVersion() {

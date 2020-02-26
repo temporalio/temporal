@@ -216,7 +216,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateCloseStatus() {
 	for _, invalidCloseStatus := range invalidCloseStatuses {
 		req.NewWorkflowSnapshot.ExecutionInfo.CloseStatus = invalidCloseStatus
 		_, err := s.ExecutionManager.CreateWorkflowExecution(req)
-		s.IsType(serviceerror.NewInternal(""), err)
+		s.IsType(&serviceerror.Internal{}, err)
 	}
 	req.NewWorkflowSnapshot.ExecutionInfo.CloseStatus = p.WorkflowCloseStatusNone
 	_, err := s.ExecutionManager.CreateWorkflowExecution(req)
@@ -237,7 +237,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateCloseStatus() {
 	for _, invalidCloseStatus := range invalidCloseStatuses {
 		req.NewWorkflowSnapshot.ExecutionInfo.CloseStatus = invalidCloseStatus
 		_, err := s.ExecutionManager.CreateWorkflowExecution(req)
-		s.IsType(serviceerror.NewInternal(""), err)
+		s.IsType(&serviceerror.Internal{}, err)
 	}
 	req.NewWorkflowSnapshot.ExecutionInfo.CloseStatus = p.WorkflowCloseStatusNone
 	_, err = s.ExecutionManager.CreateWorkflowExecution(req)
@@ -258,11 +258,11 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateCloseStatus() {
 	for _, invalidCloseStatus := range invalidCloseStatuses {
 		req.NewWorkflowSnapshot.ExecutionInfo.CloseStatus = invalidCloseStatus
 		_, err := s.ExecutionManager.CreateWorkflowExecution(req)
-		s.IsType(serviceerror.NewInternal(""), err)
+		s.IsType(&serviceerror.Internal{}, err)
 	}
 	req.NewWorkflowSnapshot.ExecutionInfo.CloseStatus = p.WorkflowCloseStatusNone
 	_, err = s.ExecutionManager.CreateWorkflowExecution(req)
-	s.IsType(serviceerror.NewInternal(""), err)
+	s.IsType(&serviceerror.Internal{}, err)
 
 	// for zombie workflow creation, we must use existing workflow ID which got created
 	// since we do not allow creation of zombie workflow without current record
@@ -277,7 +277,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateCloseStatus() {
 	for _, invalidCloseStatus := range invalidCloseStatuses {
 		req.NewWorkflowSnapshot.ExecutionInfo.CloseStatus = invalidCloseStatus
 		_, err := s.ExecutionManager.CreateWorkflowExecution(req)
-		s.IsType(serviceerror.NewInternal(""), err)
+		s.IsType(&serviceerror.Internal{}, err)
 	}
 	req.NewWorkflowSnapshot.ExecutionInfo.CloseStatus = p.WorkflowCloseStatusNone
 	_, err = s.ExecutionManager.CreateWorkflowExecution(req)
@@ -458,7 +458,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateCloseStatus() {
 			RangeID: s.ShardInfo.RangeID,
 			Mode:    p.UpdateWorkflowModeUpdateCurrent,
 		})
-		s.IsType(serviceerror.NewInternal(""), err)
+		s.IsType(&serviceerror.Internal{}, err)
 	}
 
 	updatedInfo = copyWorkflowExecutionInfo(info.ExecutionInfo)
@@ -474,7 +474,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateCloseStatus() {
 		RangeID: s.ShardInfo.RangeID,
 		Mode:    p.UpdateWorkflowModeUpdateCurrent,
 	})
-	s.IsType(serviceerror.NewInternal(""), err)
+	s.IsType(&serviceerror.Internal{}, err)
 
 	for _, closeStatus := range closeStatuses {
 		updatedInfo.CloseStatus = closeStatus
@@ -543,7 +543,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateCloseStatus() {
 			RangeID: s.ShardInfo.RangeID,
 			Mode:    p.UpdateWorkflowModeBypassCurrent,
 		})
-		s.IsType(serviceerror.NewInternal(""), err)
+		s.IsType(&serviceerror.Internal{}, err)
 	}
 }
 

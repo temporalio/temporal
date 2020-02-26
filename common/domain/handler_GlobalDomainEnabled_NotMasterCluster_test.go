@@ -431,7 +431,7 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestRegisterGetD
 		IsGlobalDomain: isGlobalDomain,
 	})
 	s.Error(err)
-	s.IsType(serviceerror.NewInvalidArgument(""), err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Nil(registerResp)
 
 	resp, err := s.handler.DescribeDomain(context.Background(), &workflowservice.DescribeDomainRequest{
@@ -475,7 +475,7 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestRegisterGetD
 		IsGlobalDomain:                         isGlobalDomain,
 	})
 	s.Error(err)
-	s.IsType(serviceerror.NewInvalidArgument(""), err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Nil(registerResp)
 
 	resp, err := s.handler.DescribeDomain(context.Background(), &workflowservice.DescribeDomainRequest{
@@ -538,7 +538,7 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestUpdateGetDom
 		Name: domainName,
 	})
 	s.Error(err)
-	s.IsType(serviceerror.NewInvalidArgument(""), err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Nil(resp)
 }
 
@@ -617,7 +617,7 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestUpdateGetDom
 		},
 	})
 	s.Error(err)
-	s.IsType(serviceerror.NewInvalidArgument(""), err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Nil(updateResp)
 }
 

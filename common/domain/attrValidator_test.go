@@ -96,7 +96,7 @@ func (s *attrValidatorSuite) TestClusterName() {
 	)
 
 	err := s.validator.validateClusterName("some random foo bar")
-	s.IsType(serviceerror.NewInvalidArgument(""), err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 
 	err = s.validator.validateClusterName(cluster.TestCurrentClusterName)
 	s.NoError(err)
@@ -121,7 +121,7 @@ func (s *attrValidatorSuite) TestValidateDomainReplicationConfigForLocalDomain()
 			},
 		},
 	)
-	s.IsType(serviceerror.NewInvalidArgument(""), err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 
 	err = s.validator.validateDomainReplicationConfigForLocalDomain(
 		&persistence.DomainReplicationConfig{
@@ -132,7 +132,7 @@ func (s *attrValidatorSuite) TestValidateDomainReplicationConfigForLocalDomain()
 			},
 		},
 	)
-	s.IsType(serviceerror.NewInvalidArgument(""), err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 
 	err = s.validator.validateDomainReplicationConfigForLocalDomain(
 		&persistence.DomainReplicationConfig{
@@ -143,7 +143,7 @@ func (s *attrValidatorSuite) TestValidateDomainReplicationConfigForLocalDomain()
 			},
 		},
 	)
-	s.IsType(serviceerror.NewInvalidArgument(""), err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 
 	err = s.validator.validateDomainReplicationConfigForLocalDomain(
 		&persistence.DomainReplicationConfig{
@@ -240,7 +240,7 @@ func (s *attrValidatorSuite) TestValidateDomainReplicationConfigClustersDoesNotR
 			{ClusterName: cluster.TestAlternativeClusterName},
 		},
 	)
-	s.IsType(serviceerror.NewInvalidArgument(""), err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 
 	err = s.validator.validateDomainReplicationConfigClustersDoesNotRemove(
 		[]*persistence.ClusterReplicationConfig{
@@ -250,5 +250,5 @@ func (s *attrValidatorSuite) TestValidateDomainReplicationConfigClustersDoesNotR
 			{ClusterName: cluster.TestAlternativeClusterName},
 		},
 	)
-	s.IsType(serviceerror.NewInvalidArgument(""), err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 }

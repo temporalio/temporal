@@ -892,7 +892,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedInvalidToken() {
 	})
 
 	s.NotNil(err)
-	s.IsType(serviceerror.NewInvalidArgument(""), err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedIfNoExecution() {
@@ -2281,7 +2281,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedInvalidToken() {
 	})
 
 	s.NotNil(err)
-	s.IsType(serviceerror.NewInvalidArgument(""), err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
 func (s *engineSuite) TestRespondActivityTaskCompletedIfNoExecution() {
@@ -2812,7 +2812,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedInvalidToken() {
 	})
 
 	s.NotNil(err)
-	s.IsType(serviceerror.NewInvalidArgument(""), err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
 func (s *engineSuite) TestRespondActivityTaskFailedIfNoExecution() {

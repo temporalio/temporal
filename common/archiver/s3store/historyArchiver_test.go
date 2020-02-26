@@ -436,7 +436,7 @@ func (s *historyArchiverSuite) TestGet_Fail_InvalidRequest() {
 	response, err := historyArchiver.Get(context.Background(), s.testArchivalURI, request)
 	s.Nil(response)
 	s.Error(err)
-	s.IsType(serviceerror.NewInvalidArgument(""), err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
 func (s *historyArchiverSuite) TestGet_Fail_InvalidToken() {
@@ -453,7 +453,7 @@ func (s *historyArchiverSuite) TestGet_Fail_InvalidToken() {
 	response, err := historyArchiver.Get(context.Background(), URI, request)
 	s.Nil(response)
 	s.Error(err)
-	s.IsType(serviceerror.NewInvalidArgument(""), err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
 func (s *historyArchiverSuite) TestGet_Fail_KeyNotExist() {
@@ -470,7 +470,7 @@ func (s *historyArchiverSuite) TestGet_Fail_KeyNotExist() {
 	response, err := historyArchiver.Get(context.Background(), URI, request)
 	s.Nil(response)
 	s.Error(err)
-	s.IsType(serviceerror.NewInvalidArgument(""), err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
 func (s *historyArchiverSuite) TestGet_Success_PickHighestVersion() {

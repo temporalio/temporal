@@ -144,7 +144,7 @@ func (s *domainHandlerGlobalDomainEnabledMasterClusterSuite) TestRegisterGetDoma
 		IsGlobalDomain:                         isGlobalDomain,
 	})
 	s.Error(err)
-	s.IsType(serviceerror.NewInvalidArgument(""), err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Nil(registerResp)
 }
 

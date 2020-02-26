@@ -132,13 +132,13 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_RegisterDomainTask_Name
 	task.Info.Name = name
 	err = s.domainReplicator.Execute(task)
 	s.NotNil(err)
-	s.IsType(serviceerror.NewInvalidArgument(""), err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 
 	task.Id = id
 	task.Info.Name = "other random domain test name"
 	err = s.domainReplicator.Execute(task)
 	s.NotNil(err)
-	s.IsType(serviceerror.NewInvalidArgument(""), err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
 func (s *domainReplicationTaskExecutorSuite) TestExecute_RegisterDomainTask() {

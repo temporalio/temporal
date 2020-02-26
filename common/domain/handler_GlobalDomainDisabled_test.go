@@ -143,7 +143,7 @@ func (s *domainHandlerGlobalDomainDisabledSuite) TestRegisterGetDomain_InvalidGl
 		IsGlobalDomain:                         isGlobalDomain,
 	})
 	s.Error(err)
-	s.IsType(serviceerror.NewInvalidArgument(""), err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Nil(resp)
 }
 
@@ -174,7 +174,7 @@ func (s *domainHandlerGlobalDomainDisabledSuite) TestRegisterGetDomain_InvalidCl
 		IsGlobalDomain:                         isGlobalDomain,
 	})
 	s.Error(err)
-	s.IsType(serviceerror.NewInvalidArgument(""), err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Nil(resp)
 }
 
