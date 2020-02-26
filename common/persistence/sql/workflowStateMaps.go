@@ -25,6 +25,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+
 	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/temporalio/temporal/common/primitives"
@@ -232,7 +234,7 @@ func deleteActivityInfoMap(
 
 func updateTimerInfos(
 	tx sqlplugin.Tx,
-	timerInfos []*persistence.TimerInfo,
+	timerInfos []*persistenceblobs.TimerInfo,
 	deleteInfos []string,
 	shardID int,
 	domainID primitives.UUID,
@@ -243,15 +245,7 @@ func updateTimerInfos(
 	if len(timerInfos) > 0 {
 		rows := make([]sqlplugin.TimerInfoMapsRow, len(timerInfos))
 		for i, v := range timerInfos {
-			blob, err := serialization.TimerInfoToBlob(&sqlblobs.TimerInfo{
-				Version:         &v.Version,
-				StartedID:       &v.StartedID,
-				ExpiryTimeNanos: common.Int64Ptr(v.ExpiryTime.UnixNano()),
-				// TaskID is a misleading variable, it actually serves
-				// the purpose of indicating whether a timer task is
-				// generated for this timer info
-				TaskID: &v.TaskStatus,
-			})
+			blob, err := serialization.TimerInfoToBlob(v)
 			if err != nil {
 				return err
 			}
@@ -307,7 +301,7 @@ func getTimerInfoMap(
 	domainID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
-) (map[string]*persistence.TimerInfo, error) {
+) (map[string]*persistenceblobs.TimerInfo, error) {
 
 	rows, err := db.SelectFromTimerInfoMaps(&sqlplugin.TimerInfoMapsFilter{
 		ShardID:    int64(shardID),
@@ -320,22 +314,13 @@ func getTimerInfoMap(
 			Message: fmt.Sprintf("Failed to get timer info. Error: %v", err),
 		}
 	}
-	ret := make(map[string]*persistence.TimerInfo)
+	ret := make(map[string]*persistenceblobs.TimerInfo)
 	for _, v := range rows {
 		info, err := serialization.TimerInfoFromBlob(v.Data, v.DataEncoding)
 		if err != nil {
 			return nil, err
 		}
-		ret[v.TimerID] = &persistence.TimerInfo{
-			TimerID:    v.TimerID,
-			Version:    info.GetVersion(),
-			StartedID:  info.GetStartedID(),
-			ExpiryTime: time.Unix(0, info.GetExpiryTimeNanos()),
-			// TaskID is a misleading variable, it actually serves
-			// the purpose of indicating whether a timer task is
-			// generated for this timer info
-			TaskStatus: info.GetTaskID(),
-		}
+		ret[v.TimerID] = info
 	}
 
 	return ret, nil
