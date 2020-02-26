@@ -194,14 +194,16 @@ func applyWorkflowSnapshotBatchAsReset(
 		return err
 	}
 
-	resetTimerInfos(
+	if err := resetTimerInfos(
 		batch,
 		workflowSnapshot.TimerInfos,
 		shardID,
 		domainID,
 		workflowID,
 		runID,
-	)
+	); err != nil {
+		return err
+	}
 
 	if err := resetChildExecutionInfos(
 		batch,
@@ -1434,23 +1436,24 @@ func resetActivityInfos(
 
 func updateTimerInfos(
 	batch *gocql.Batch,
-	timerInfos []*p.TimerInfo,
+	timerInfos []*persistenceblobs.TimerInfo,
 	deleteInfos []string,
 	shardID int,
 	domainID string,
 	workflowID string,
 	runID string,
-) {
-
+) error {
 	for _, a := range timerInfos {
+		datablob, err := serialization.TimerInfoToBlob(a)
+		if err != nil {
+			return err
+		}
+
 		batch.Query(templateUpdateTimerInfoQuery,
-			a.TimerID,
-			a.Version,
-			a.TimerID,
-			a.StartedID,
-			a.ExpiryTime,
-			a.TaskStatus,
-			shardID,
+			a.TimerID,         // timermap key
+			datablob.Data,     // timermap data
+			datablob.Encoding, // timermap encoding
+			shardID,           // where ...
 			rowTypeExecution,
 			domainID,
 			workflowID,
@@ -1470,19 +1473,27 @@ func updateTimerInfos(
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID)
 	}
+
+	return nil
 }
 
 func resetTimerInfos(
 	batch *gocql.Batch,
-	timerInfos []*p.TimerInfo,
+	timerInfos []*persistenceblobs.TimerInfo,
 	shardID int,
 	domainID string,
 	workflowID string,
 	runID string,
-) {
+) error {
+	timerMap, timerMapEncoding, err := resetTimerInfoMap(timerInfos)
+
+	if err != nil {
+		return err
+	}
 
 	batch.Query(templateResetTimerInfoQuery,
-		resetTimerInfoMap(timerInfos),
+		timerMap,
+		timerMapEncoding,
 		shardID,
 		rowTypeExecution,
 		domainID,
@@ -1490,6 +1501,8 @@ func resetTimerInfos(
 		runID,
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID)
+
+	return nil
 }
 
 func updateChildExecutionInfos(
@@ -2049,31 +2062,6 @@ func createActivityInfo(
 	return info
 }
 
-func createTimerInfo(
-	result map[string]interface{},
-) *p.TimerInfo {
-
-	info := &p.TimerInfo{}
-	for k, v := range result {
-		switch k {
-		case "version":
-			info.Version = v.(int64)
-		case "timer_id":
-			info.TimerID = v.(string)
-		case "started_id":
-			info.StartedID = v.(int64)
-		case "expiry_time":
-			info.ExpiryTime = v.(time.Time)
-		case "task_id":
-			// task_id is a misleading variable, it actually serves
-			// the purpose of indicating whether a timer task is
-			// generated for this timer info
-			info.TaskStatus = v.(int64)
-		}
-	}
-	return info
-}
-
 func createChildExecutionInfo(
 	result map[string]interface{},
 ) *p.InternalChildExecutionInfo {
@@ -2218,25 +2206,24 @@ func resetActivityInfoMap(
 }
 
 func resetTimerInfoMap(
-	timerInfos []*p.TimerInfo,
-) map[string]map[string]interface{} {
+	timerInfos []*persistenceblobs.TimerInfo,
+) (map[string][]byte, common.EncodingType, error) {
 
-	tMap := make(map[string]map[string]interface{})
+	tMap := make(map[string][]byte)
+	var encoding common.EncodingType
 	for _, t := range timerInfos {
-		tInfo := make(map[string]interface{})
-		tInfo["version"] = t.Version
-		tInfo["timer_id"] = t.TimerID
-		tInfo["started_id"] = t.StartedID
-		tInfo["expiry_time"] = t.ExpiryTime
-		// task_id is a misleading variable, it actually serves
-		// the purpose of indicating whether a timer task is
-		// generated for this timer info
-		tInfo["task_id"] = t.TaskStatus
+		datablob, err := serialization.TimerInfoToBlob(t)
 
-		tMap[t.TimerID] = tInfo
+		if err != nil {
+			return nil, common.EncodingTypeUnknown, err
+		}
+
+		encoding = datablob.Encoding
+
+		tMap[t.TimerID] = datablob.Data
 	}
 
-	return tMap
+	return tMap, encoding, nil
 }
 
 func resetChildExecutionInfoMap(

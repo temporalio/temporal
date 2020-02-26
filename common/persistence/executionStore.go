@@ -327,6 +327,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		UpdateWorkflowMutation: *serializedWorkflowMutation,
 		NewWorkflowSnapshot:    serializedNewWorkflowSnapshot,
 	}
+
 	msuss := m.statsComputer.computeMutableStateUpdateStats(newRequest)
 	err1 := m.persistence.UpdateWorkflowExecution(newRequest)
 	return &UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: msuss}, err1

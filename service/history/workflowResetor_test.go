@@ -800,7 +800,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	s.Empty(resetReq.NewWorkflowSnapshot.SignalRequestedIDs)
 }
 
-func (s *resetorSuite) assertTimerIDs(ids []string, timers []*p.TimerInfo) {
+func (s *resetorSuite) assertTimerIDs(ids []string, timers []*persistenceblobs.TimerInfo) {
 	m := map[string]bool{}
 	for _, s := range ids {
 		m[s] = true

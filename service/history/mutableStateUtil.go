@@ -21,6 +21,7 @@
 package history
 
 import (
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/persistence"
 )
 
@@ -90,10 +91,10 @@ func convertSyncActivityInfos(
 }
 
 func convertPendingTimerInfos(
-	inputs map[string]*persistence.TimerInfo,
-) []*persistence.TimerInfo {
+	inputs map[string]*persistenceblobs.TimerInfo,
+) []*persistenceblobs.TimerInfo {
 
-	outputs := make([]*persistence.TimerInfo, 0, len(inputs))
+	outputs := make([]*persistenceblobs.TimerInfo, 0, len(inputs))
 	for _, item := range inputs {
 		outputs = append(outputs, item)
 	}
@@ -101,10 +102,10 @@ func convertPendingTimerInfos(
 }
 
 func convertUpdateTimerInfos(
-	inputs map[*persistence.TimerInfo]struct{},
-) []*persistence.TimerInfo {
+	inputs map[*persistenceblobs.TimerInfo]struct{},
+) []*persistenceblobs.TimerInfo {
 
-	outputs := make([]*persistence.TimerInfo, 0, len(inputs))
+	outputs := make([]*persistenceblobs.TimerInfo, 0, len(inputs))
 	for item := range inputs {
 		outputs = append(outputs, item)
 	}

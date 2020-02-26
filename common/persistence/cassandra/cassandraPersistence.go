@@ -29,6 +29,7 @@ import (
 	"github.com/gogo/protobuf/types"
 	"go.temporal.io/temporal-proto/serviceerror"
 
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cassandra"
 	"github.com/temporalio/temporal/common/log"
@@ -37,6 +38,7 @@ import (
 	"github.com/temporalio/temporal/common/service/config"
 )
 
+//	"go.temporal.io/temporal-proto/serviceerror"
 // Guidelines for creating new special UUID constants
 // Each UUID should be of the form: E0000000-R000-f000-f000-00000000000x
 // Where x is any hexadecimal value, E represents the entity type valid values are:
@@ -353,7 +355,7 @@ workflow_state = ? ` +
 		`and task_id = ? ` +
 		`IF range_id = ?`
 
-	templateGetWorkflowExecutionQuery = `SELECT execution, replication_state, activity_map, timer_map, ` +
+	templateGetWorkflowExecutionQuery = `SELECT execution, replication_state, activity_map, timer_map, timer_map_encoding, ` +
 		`child_executions_map, request_cancel_map, signal_map, signal_requested, buffered_events_list, ` +
 		`buffered_replication_tasks_map, version_histories, version_histories_encoding, checksum ` +
 		`FROM executions ` +
@@ -449,7 +451,7 @@ workflow_state = ? ` +
 		`and task_id = ? `
 
 	templateUpdateTimerInfoQuery = `UPDATE executions ` +
-		`SET timer_map[ ? ] =` + templateTimerInfoType + ` ` +
+		`SET timer_map[ ? ] = ?, timer_map_encoding = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and domain_id = ? ` +
@@ -459,7 +461,7 @@ workflow_state = ? ` +
 		`and task_id = ? `
 
 	templateResetTimerInfoQuery = `UPDATE executions ` +
-		`SET timer_map = ?` +
+		`SET timer_map = ?, timer_map_encoding = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and domain_id = ? ` +
@@ -1224,10 +1226,14 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 	}
 	state.ActivityInfos = activityInfos
 
-	timerInfos := make(map[string]*p.TimerInfo)
-	tMap := result["timer_map"].(map[string]map[string]interface{})
+	timerInfos := make(map[string]*persistenceblobs.TimerInfo)
+	tMapEncoding := result["timer_map_encoding"].(string)
+	tMap := result["timer_map"].(map[string][]byte)
 	for key, value := range tMap {
-		info := createTimerInfo(value)
+		info, err := serialization.TimerInfoFromBlob(value, tMapEncoding)
+		if err != nil {
+			return nil, err
+		}
 		timerInfos[key] = info
 	}
 	state.TimerInfos = timerInfos

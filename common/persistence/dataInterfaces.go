@@ -598,7 +598,7 @@ type (
 	// WorkflowMutableState indicates workflow related state
 	WorkflowMutableState struct {
 		ActivityInfos       map[int64]*ActivityInfo
-		TimerInfos          map[string]*TimerInfo
+		TimerInfos          map[string]*pblobs.TimerInfo
 		ChildExecutionInfos map[int64]*ChildExecutionInfo
 		RequestCancelInfos  map[int64]*RequestCancelInfo
 		SignalInfos         map[int64]*SignalInfo
@@ -649,15 +649,6 @@ type (
 		LastFailureDetails []byte
 		// Not written to database - This is used only for deduping heartbeat timer creation
 		LastHeartbeatTimeoutVisibility int64
-	}
-
-	// TimerInfo details - metadata about user timer info.
-	TimerInfo struct {
-		Version    int64
-		TimerID    string
-		StartedID  int64
-		ExpiryTime time.Time
-		TaskStatus int64
 	}
 
 	// ChildExecutionInfo has details for pending child executions.
@@ -841,7 +832,7 @@ type (
 
 		UpsertActivityInfos       []*ActivityInfo
 		DeleteActivityInfos       []int64
-		UpsertTimerInfos          []*TimerInfo
+		UpsertTimerInfos          []*pblobs.TimerInfo
 		DeleteTimerInfos          []string
 		UpsertChildExecutionInfos []*ChildExecutionInfo
 		DeleteChildExecutionInfo  *int64
@@ -870,7 +861,7 @@ type (
 		VersionHistories *VersionHistories
 
 		ActivityInfos       []*ActivityInfo
-		TimerInfos          []*TimerInfo
+		TimerInfos          []*pblobs.TimerInfo
 		ChildExecutionInfos []*ChildExecutionInfo
 		RequestCancelInfos  []*RequestCancelInfo
 		SignalInfos         []*SignalInfo

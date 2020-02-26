@@ -219,13 +219,13 @@ func RequestCancelInfoFromBlob(b []byte, proto string) (*sqlblobs.RequestCancelI
 	return result, thriftRWDecode(b, proto, result)
 }
 
-func TimerInfoToBlob(info *sqlblobs.TimerInfo) (DataBlob, error) {
-	return thriftRWEncode(info)
+func TimerInfoToBlob(info *persistenceblobs.TimerInfo) (DataBlob, error) {
+	return protoRWEncode(info)
 }
 
-func TimerInfoFromBlob(b []byte, proto string) (*sqlblobs.TimerInfo, error) {
-	result := &sqlblobs.TimerInfo{}
-	return result, thriftRWDecode(b, proto, result)
+func TimerInfoFromBlob(b []byte, proto string) (*persistenceblobs.TimerInfo, error) {
+	result := &persistenceblobs.TimerInfo{}
+	return result, protoRWDecode(b, proto, result)
 }
 
 func TaskInfoToBlob(info *sqlblobs.TaskInfo) (DataBlob, error) {
