@@ -356,7 +356,7 @@ workflow_state = ? ` +
 		`IF range_id = ?`
 
 	templateGetWorkflowExecutionQuery = `SELECT execution, replication_state, activity_map, timer_map, timer_map_encoding, ` +
-		`child_executions_map, request_cancel_map, signal_map, signal_map_encoding, signal_requested, buffered_events_list, ` +
+		`child_executions_map, request_cancel_map, request_cancel_map_encoding, signal_map, signal_map_encoding, signal_requested, buffered_events_list, ` +
 		`buffered_replication_tasks_map, version_histories, version_histories_encoding, checksum ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
@@ -491,7 +491,7 @@ workflow_state = ? ` +
 		`and task_id = ? `
 
 	templateUpdateRequestCancelInfoQuery = `UPDATE executions ` +
-		`SET request_cancel_map[ ? ] =` + templateRequestCancelInfoType + ` ` +
+		`SET request_cancel_map[ ? ] = ?, request_cancel_map_encoding = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and domain_id = ? ` +
@@ -501,7 +501,7 @@ workflow_state = ? ` +
 		`and task_id = ? `
 
 	templateResetRequestCancelInfoQuery = `UPDATE executions ` +
-		`SET request_cancel_map = ?` +
+		`SET request_cancel_map = ?, request_cancel_map_encoding = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and domain_id = ? ` +
@@ -1246,10 +1246,14 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 	}
 	state.ChildExecutionInfos = childExecutionInfos
 
-	requestCancelInfos := make(map[int64]*p.RequestCancelInfo)
-	rMap := result["request_cancel_map"].(map[int64]map[string]interface{})
+	requestCancelInfos := make(map[int64]*persistenceblobs.RequestCancelInfo)
+	rMapEncoding := result["request_cancel_map_encoding"].(string)
+	rMap := result["request_cancel_map"].(map[int64][]byte)
 	for key, value := range rMap {
-		info := createRequestCancelInfo(value)
+		info, err := serialization.RequestCancelInfoFromBlob(value, rMapEncoding)
+		if err != nil {
+			return nil, err
+		}
 		requestCancelInfos[key] = info
 	}
 	state.RequestCancelInfos = requestCancelInfos
