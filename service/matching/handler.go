@@ -49,7 +49,7 @@ type Handler struct {
 }
 
 var (
-	errMatchingHostThrottle = serviceerror.NewResourceExhausted("Matching host rps exceeded")
+	errMatchingHostThrottle = serviceerror.NewResourceExhausted("Matching host RPS exceeded.")
 )
 
 // NewHandler creates a thrift handler for the history service

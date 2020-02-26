@@ -65,13 +65,15 @@ var _ EngineFactory = (*Handler)(nil)
 var (
 	errDomainNotSet            = serviceerror.NewInvalidArgument("Domain not set on request.")
 	errWorkflowExecutionNotSet = serviceerror.NewInvalidArgument("WorkflowExecution not set on request.")
-	errTaskListNotSet          = serviceerror.NewInvalidArgument("Tasklist not set.")
+	errTaskListNotSet          = serviceerror.NewInvalidArgument("Task list not set.")
 	errWorkflowIDNotSet        = serviceerror.NewInvalidArgument("WorkflowId is not set on request.")
 	errRunIDNotValid           = serviceerror.NewInvalidArgument("RunID is not valid UUID.")
 	errSourceClusterNotSet     = serviceerror.NewInvalidArgument("Source Cluster not set on request.")
 	errShardIDNotSet           = serviceerror.NewInvalidArgument("Shard ID not set on request.")
 	errTimestampNotSet         = serviceerror.NewInvalidArgument("Timestamp not set on request.")
-	errHistoryHostThrottle     = serviceerror.NewResourceExhausted("History host rps exceeded.")
+	errDeserializeTaskToken    = serviceerror.NewInvalidArgument("Error to deserialize task token. Error: %v.")
+
+	errHistoryHostThrottle = serviceerror.NewResourceExhausted("History host RPS exceeded.")
 )
 
 // NewHandler creates a thrift handler for the history service
@@ -178,8 +180,7 @@ func (h *Handler) RecordActivityTaskHeartbeat(
 	heartbeatRequest := wrappedRequest.HeartbeatRequest
 	token, err0 := h.tokenSerializer.Deserialize(heartbeatRequest.TaskToken)
 	if err0 != nil {
-		err0 = serviceerror.NewInvalidArgument(fmt.Sprintf("Error deserializing task token. Error: %v", err0))
-		return nil, h.error(err0, scope, domainID, "")
+		return nil, h.error(errDeserializeTaskToken.MessageArgs(err0), scope, domainID, "")
 	}
 
 	err0 = validateTaskToken(token)
@@ -318,8 +319,7 @@ func (h *Handler) RespondActivityTaskCompleted(
 	completeRequest := wrappedRequest.CompleteRequest
 	token, err0 := h.tokenSerializer.Deserialize(completeRequest.TaskToken)
 	if err0 != nil {
-		err0 = serviceerror.NewInvalidArgument(fmt.Sprintf("Error deserializing task token. Error: %v", err0))
-		return h.error(err0, scope, domainID, "")
+		return h.error(errDeserializeTaskToken.MessageArgs(err0), scope, domainID, "")
 	}
 
 	err0 = validateTaskToken(token)
@@ -367,8 +367,7 @@ func (h *Handler) RespondActivityTaskFailed(
 	failRequest := wrappedRequest.FailedRequest
 	token, err0 := h.tokenSerializer.Deserialize(failRequest.TaskToken)
 	if err0 != nil {
-		err0 = serviceerror.NewInvalidArgument(fmt.Sprintf("Error deserializing task token. Error: %v", err0))
-		return h.error(err0, scope, domainID, "")
+		return h.error(errDeserializeTaskToken.MessageArgs(err0), scope, domainID, "")
 	}
 
 	err0 = validateTaskToken(token)
@@ -416,8 +415,7 @@ func (h *Handler) RespondActivityTaskCanceled(
 	cancelRequest := wrappedRequest.CancelRequest
 	token, err0 := h.tokenSerializer.Deserialize(cancelRequest.TaskToken)
 	if err0 != nil {
-		err0 = serviceerror.NewInvalidArgument(fmt.Sprintf("Error deserializing task token. Error: %v", err0))
-		return h.error(err0, scope, domainID, "")
+		return h.error(errDeserializeTaskToken.MessageArgs(err0), scope, domainID, "")
 	}
 
 	err0 = validateTaskToken(token)
@@ -468,8 +466,7 @@ func (h *Handler) RespondDecisionTaskCompleted(
 	}
 	token, err0 := h.tokenSerializer.Deserialize(completeRequest.TaskToken)
 	if err0 != nil {
-		err0 = serviceerror.NewInvalidArgument(fmt.Sprintf("Error deserializing task token. Error: %v", err0))
-		return nil, h.error(err0, scope, domainID, "")
+		return nil, h.error(errDeserializeTaskToken.MessageArgs(err0), scope, domainID, "")
 	}
 
 	h.GetLogger().Debug("RespondDecisionTaskCompleted",
@@ -523,8 +520,7 @@ func (h *Handler) RespondDecisionTaskFailed(
 	failedRequest := wrappedRequest.FailedRequest
 	token, err0 := h.tokenSerializer.Deserialize(failedRequest.TaskToken)
 	if err0 != nil {
-		err0 = serviceerror.NewInvalidArgument(fmt.Sprintf("Error deserializing task token. Error: %v", err0))
-		return h.error(err0, scope, domainID, "")
+		return h.error(errDeserializeTaskToken.MessageArgs(err0), scope, domainID, "")
 	}
 
 	h.GetLogger().Debug("RespondDecisionTaskFailed",
