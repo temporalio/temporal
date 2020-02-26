@@ -601,7 +601,7 @@ type (
 		TimerInfos          map[string]*pblobs.TimerInfo
 		ChildExecutionInfos map[int64]*ChildExecutionInfo
 		RequestCancelInfos  map[int64]*RequestCancelInfo
-		SignalInfos         map[int64]*SignalInfo
+		SignalInfos         map[int64]*pblobs.SignalInfo
 		SignalRequestedIDs  map[string]struct{}
 		ExecutionInfo       *WorkflowExecutionInfo
 		ExecutionStats      *ExecutionStats
@@ -673,17 +673,6 @@ type (
 		InitiatedEventBatchID int64
 		InitiatedID           int64
 		CancelRequestID       string
-	}
-
-	// SignalInfo has details for pending external workflow signal
-	SignalInfo struct {
-		Version               int64
-		InitiatedEventBatchID int64
-		InitiatedID           int64
-		SignalRequestID       string
-		SignalName            string
-		Input                 []byte
-		Control               []byte
 	}
 
 	// CreateShardRequest is used to create a shard in executions table
@@ -838,7 +827,7 @@ type (
 		DeleteChildExecutionInfo  *int64
 		UpsertRequestCancelInfos  []*RequestCancelInfo
 		DeleteRequestCancelInfo   *int64
-		UpsertSignalInfos         []*SignalInfo
+		UpsertSignalInfos         []*pblobs.SignalInfo
 		DeleteSignalInfo          *int64
 		UpsertSignalRequestedIDs  []string
 		DeleteSignalRequestedID   string
@@ -864,7 +853,7 @@ type (
 		TimerInfos          []*pblobs.TimerInfo
 		ChildExecutionInfos []*ChildExecutionInfo
 		RequestCancelInfos  []*RequestCancelInfo
-		SignalInfos         []*SignalInfo
+		SignalInfos         []*pblobs.SignalInfo
 		SignalRequestedIDs  []string
 
 		TransferTasks    []Task

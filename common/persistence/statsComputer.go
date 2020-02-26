@@ -216,8 +216,8 @@ func computeChildInfoSize(ci *InternalChildExecutionInfo) int {
 	return size
 }
 
-func computeSignalInfoSize(si *SignalInfo) int {
-	size := len(si.SignalName)
+func computeSignalInfoSize(si *persistenceblobs.SignalInfo) int {
+	size := len(si.Name)
 	size += len(si.Input)
 	size += len(si.Control)
 
