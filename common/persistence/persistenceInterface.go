@@ -267,7 +267,7 @@ type (
 		VersionHistories *serialization.DataBlob
 		ActivityInfos    map[int64]*InternalActivityInfo
 
-		TimerInfos          map[string]*TimerInfo
+		TimerInfos          map[string]*persistenceblobs.TimerInfo
 		ChildExecutionInfos map[int64]*InternalChildExecutionInfo
 		RequestCancelInfos  map[int64]*RequestCancelInfo
 		SignalInfos         map[int64]*SignalInfo
@@ -393,7 +393,7 @@ type (
 
 		UpsertActivityInfos       []*InternalActivityInfo
 		DeleteActivityInfos       []int64
-		UpsertTimerInfos          []*TimerInfo
+		UpsertTimerInfos          []*persistenceblobs.TimerInfo
 		DeleteTimerInfos          []string
 		UpsertChildExecutionInfos []*InternalChildExecutionInfo
 		DeleteChildExecutionInfo  *int64
@@ -424,7 +424,7 @@ type (
 		LastWriteVersion int64
 
 		ActivityInfos       []*InternalActivityInfo
-		TimerInfos          []*TimerInfo
+		TimerInfos          []*persistenceblobs.TimerInfo
 		ChildExecutionInfos []*InternalChildExecutionInfo
 		RequestCancelInfos  []*RequestCancelInfo
 		SignalInfos         []*SignalInfo
