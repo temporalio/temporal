@@ -42,20 +42,21 @@ type (
 	queryParser struct{}
 
 	parsedQuery struct {
-		workflowID      *string
-		startTime       *int64
-		closeTime       *int64
-		searchPrecision *string
-		emptyResult     bool
+		workflowTypeName *string
+		workflowID       *string
+		startTime        *int64
+		closeTime        *int64
+		searchPrecision  *string
 	}
 )
 
 // All allowed fields for filtering
 const (
-	WorkflowID      = "WorkflowID"
-	StartTime       = "StartTime"
-	CloseTime       = "CloseTime"
-	SearchPrecision = "SearchPrecision"
+	WorkflowTypeName = "WorkflowTypeName"
+	WorkflowID       = "WorkflowID"
+	StartTime        = "StartTime"
+	CloseTime        = "CloseTime"
+	SearchPrecision  = "SearchPrecision"
 )
 
 // Precision specific values
@@ -85,8 +86,11 @@ func (p *queryParser) Parse(query string) (*parsedQuery, error) {
 	if err := p.convertWhereExpr(whereExpr, parsedQuery); err != nil {
 		return nil, err
 	}
-	if parsedQuery.workflowID == nil {
-		return nil, errors.New("workflowID is required in query")
+	if parsedQuery.workflowID == nil && parsedQuery.workflowTypeName == nil {
+		return nil, errors.New("WorkflowID or WorkflowTypeName is required in query")
+	}
+	if parsedQuery.workflowID != nil && parsedQuery.workflowTypeName != nil {
+		return nil, errors.New("only one of WorkflowID or WorkflowTypeName can be specified in a query")
 	}
 	if parsedQuery.closeTime != nil && parsedQuery.startTime != nil {
 		return nil, errors.New("only one of StartTime or CloseTime can be specified in a query")
@@ -143,6 +147,18 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 	valStr := sqlparser.String(valExpr)
 
 	switch colNameStr {
+	case WorkflowTypeName:
+		val, err := extractStringValue(valStr)
+		if err != nil {
+			return err
+		}
+		if op != "=" {
+			return fmt.Errorf("only operation = is support for %s", WorkflowTypeName)
+		}
+		if parsedQuery.workflowTypeName != nil {
+			return fmt.Errorf("can not query %s multiple times", WorkflowTypeName)
+		}
+		parsedQuery.workflowTypeName = common.StringPtr(val)
 	case WorkflowID:
 		val, err := extractStringValue(valStr)
 		if err != nil {
@@ -151,9 +167,8 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		if op != "=" {
 			return fmt.Errorf("only operation = is support for %s", WorkflowID)
 		}
-		if parsedQuery.workflowID != nil && *parsedQuery.workflowID != val {
-			parsedQuery.emptyResult = true
-			return nil
+		if parsedQuery.workflowID != nil {
+			return fmt.Errorf("can not query %s multiple times", WorkflowID)
 		}
 		parsedQuery.workflowID = common.StringPtr(val)
 	case CloseTime:

@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -119,16 +120,36 @@ func constructHistoryKey(path, domainID, workflowID, runID string, version int64
 }
 
 func constructHistoryKeyPrefix(path, domainID, workflowID, runID string) string {
-	return fmt.Sprintf("%s/%s", constructCommonKeyPrefix(path, domainID, workflowID, "history"), runID)
+	return strings.TrimLeft(strings.Join([]string{path, domainID, "history", workflowID, runID}, "/"), "/")
 }
 
-func constructVisibilitySearchPrefix(path, domainID, workflowID, indexType string) string {
-	return constructCommonKeyPrefix(path, domainID, workflowID, fmt.Sprintf("visibility/%s", indexType))
+func constructTimeBasedSearchKey(path, domainID, primaryIndexKey, primaryIndexValue, secondaryIndexKey string, timestamp int64, precision string) string {
+	t := time.Unix(0, timestamp).In(time.UTC)
+	var timeFormat = ""
+	switch precision {
+	case PrecisionSecond:
+		timeFormat = ":05"
+		fallthrough
+	case PrecisionMinute:
+		timeFormat = ":04" + timeFormat
+		fallthrough
+	case PrecisionHour:
+		timeFormat = "15" + timeFormat
+		fallthrough
+	case PrecisionDay:
+		timeFormat = "2006-01-02T" + timeFormat
+	}
+
+	return fmt.Sprintf("%s/%s", constructVisibilitySearchPrefix(path, domainID, primaryIndexKey, primaryIndexValue, secondaryIndexKey), t.Format(timeFormat))
 }
 
-// Make sure there are no trailing slashes
-func constructCommonKeyPrefix(path, domainID, workflowID, entryType string) string {
-	return strings.TrimLeft(strings.Join([]string{path, domainID, workflowID, entryType}, "/"), "/")
+func constructTimestampIndex(path, domainID, primaryIndexKey, primaryIndexValue, secondaryIndexKey string, timestamp int64, runID string) string {
+	t := time.Unix(0, timestamp).In(time.UTC)
+	return fmt.Sprintf("%s/%s/%s", constructVisibilitySearchPrefix(path, domainID, primaryIndexKey, primaryIndexValue, secondaryIndexKey), t.Format(time.RFC3339), runID)
+}
+
+func constructVisibilitySearchPrefix(path, domainID, primaryIndexKey, primaryIndexValue, secondaryIndexType string) string {
+	return strings.TrimLeft(strings.Join([]string{path, domainID, "visibility", primaryIndexKey, primaryIndexValue, secondaryIndexType}, "/"), "/")
 }
 
 func ensureContextTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
