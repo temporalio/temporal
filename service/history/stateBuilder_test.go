@@ -24,6 +24,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/types"
+
 	"github.com/temporalio/temporal/common/primitives"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -920,10 +922,11 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeTimerStarted() {
 			StartToFireTimeoutSeconds: common.Int64Ptr(timeoutSecond),
 		},
 	}
-	ti := &persistence.TimerInfo{
+	expiryTime, _ := types.TimestampProto(time.Unix(0, event.GetTimestamp()).Add(time.Duration(timeoutSecond) * time.Second))
+	ti := &persistenceblobs.TimerInfo{
 		Version:    event.GetVersion(),
 		TimerID:    timerID,
-		ExpiryTime: time.Unix(0, event.GetTimestamp()).Add(time.Duration(timeoutSecond) * time.Second),
+		ExpiryTime: expiryTime,
 		StartedID:  event.GetEventId(),
 		TaskStatus: timerTaskStatusNone,
 	}

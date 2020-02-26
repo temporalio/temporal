@@ -31,6 +31,7 @@ import (
 
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/backoff"
@@ -1085,7 +1086,7 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 
 			UpsertActivityInfos:       []*persistence.ActivityInfo{},
 			DeleteActivityInfos:       []int64{},
-			UpsertTimerInfos:          []*persistence.TimerInfo{},
+			UpsertTimerInfos:          []*persistenceblobs.TimerInfo{},
 			DeleteTimerInfos:          []string{},
 			UpsertChildExecutionInfos: []*persistence.ChildExecutionInfo{},
 			DeleteChildExecutionInfo:  nil,

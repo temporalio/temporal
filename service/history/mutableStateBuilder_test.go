@@ -24,6 +24,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/types"
+
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
 	"github.com/golang/mock/gomock"
@@ -285,7 +287,7 @@ func (s *mutableStateSuite) TestReorderEvents() {
 	}
 
 	activityInfos := map[int64]*persistence.ActivityInfo{
-		5: &persistence.ActivityInfo{
+		5: {
 			Version:                int64(1),
 			ScheduleID:             int64(5),
 			ScheduledTime:          time.Now(),
@@ -300,7 +302,7 @@ func (s *mutableStateSuite) TestReorderEvents() {
 	}
 
 	bufferedEvents := []*workflow.HistoryEvent{
-		&workflow.HistoryEvent{
+		{
 			EventId:   common.Int64Ptr(common.BufferedEventID),
 			EventType: workflow.EventTypeActivityTaskCompleted.Ptr(),
 			Version:   common.Int64Ptr(1),
@@ -311,7 +313,7 @@ func (s *mutableStateSuite) TestReorderEvents() {
 			},
 		},
 
-		&workflow.HistoryEvent{
+		{
 			EventId:   common.Int64Ptr(common.BufferedEventID),
 			EventType: workflow.EventTypeActivityTaskStarted.Ptr(),
 			Version:   common.Int64Ptr(1),
@@ -481,10 +483,10 @@ func (s *mutableStateSuite) TestTrimEvents() {
 	s.Equal(input, output)
 
 	input = []*workflow.HistoryEvent{
-		&workflow.HistoryEvent{
+		{
 			EventType: workflow.EventTypeActivityTaskCanceled.Ptr(),
 		},
-		&workflow.HistoryEvent{
+		{
 			EventType: workflow.EventTypeWorkflowExecutionSignaled.Ptr(),
 		},
 	}
@@ -492,10 +494,10 @@ func (s *mutableStateSuite) TestTrimEvents() {
 	s.Equal(input, output)
 
 	input = []*workflow.HistoryEvent{
-		&workflow.HistoryEvent{
+		{
 			EventType: workflow.EventTypeActivityTaskCanceled.Ptr(),
 		},
-		&workflow.HistoryEvent{
+		{
 			EventType: workflow.EventTypeWorkflowExecutionCompleted.Ptr(),
 		},
 	}
@@ -503,16 +505,16 @@ func (s *mutableStateSuite) TestTrimEvents() {
 	s.Equal(input, output)
 
 	input = []*workflow.HistoryEvent{
-		&workflow.HistoryEvent{
+		{
 			EventType: workflow.EventTypeWorkflowExecutionCompleted.Ptr(),
 		},
-		&workflow.HistoryEvent{
+		{
 			EventType: workflow.EventTypeActivityTaskCanceled.Ptr(),
 		},
 	}
 	output = s.msBuilder.trimEventsAfterWorkflowClose(input)
 	s.Equal([]*workflow.HistoryEvent{
-		&workflow.HistoryEvent{
+		{
 			EventType: workflow.EventTypeWorkflowExecutionCompleted.Ptr(),
 		},
 	}, output)
@@ -741,7 +743,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 	}
 
 	activityInfos := map[int64]*persistence.ActivityInfo{
-		5: &persistence.ActivityInfo{
+		5: {
 			Version:                failoverVersion,
 			ScheduleID:             int64(90),
 			ScheduledTime:          time.Now(),
@@ -755,17 +757,19 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		},
 	}
 
-	timerInfos := map[string]*persistence.TimerInfo{
-		"25": &persistence.TimerInfo{
+	expiryTime := types.TimestampNow()
+	expiryTime.Seconds += int64(time.Hour.Seconds())
+	timerInfos := map[string]*persistenceblobs.TimerInfo{
+		"25": {
 			Version:    failoverVersion,
 			TimerID:    "25",
 			StartedID:  85,
-			ExpiryTime: time.Now().Add(time.Hour),
+			ExpiryTime: expiryTime,
 		},
 	}
 
 	childInfos := map[int64]*persistence.ChildExecutionInfo{
-		80: &persistence.ChildExecutionInfo{
+		80: {
 			Version:               failoverVersion,
 			InitiatedID:           80,
 			InitiatedEventBatchID: 20,
@@ -778,7 +782,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 	}
 
 	signalInfos := map[int64]*persistence.SignalInfo{
-		75: &persistence.SignalInfo{
+		75: {
 			Version:               failoverVersion,
 			InitiatedID:           75,
 			InitiatedEventBatchID: 17,
@@ -789,11 +793,11 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 	}
 
 	signalRequestIDs := map[string]struct{}{
-		uuid.New(): struct{}{},
+		uuid.New(): {},
 	}
 
 	bufferedEvents := []*workflow.HistoryEvent{
-		&workflow.HistoryEvent{
+		{
 			EventId:   common.Int64Ptr(common.BufferedEventID),
 			EventType: workflow.EventTypeWorkflowExecutionSignaled.Ptr(),
 			Version:   common.Int64Ptr(failoverVersion),

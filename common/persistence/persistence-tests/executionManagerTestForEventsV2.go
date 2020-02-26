@@ -26,6 +26,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/types"
+
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+
 	"github.com/temporalio/temporal/common/primitives"
 
 	"github.com/temporalio/temporal/common/checksum"
@@ -157,9 +161,9 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 	updatedStats := copyExecutionStats(state0.ExecutionStats)
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
-	currentTime := time.Now().UTC()
+	currentTime := types.TimestampNow()
 	timerID := "id_1"
-	timerInfos := []*p.TimerInfo{{
+	timerInfos := []*persistenceblobs.TimerInfo{{
 		Version:    3345,
 		TimerID:    timerID,
 		ExpiryTime: currentTime,
@@ -177,7 +181,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 	s.Equal(1, len(state.TimerInfos))
 	s.Equal(int64(3345), state.TimerInfos[timerID].Version)
 	s.Equal(timerID, state.TimerInfos[timerID].TimerID)
-	s.EqualTimesWithPrecision(currentTime, state.TimerInfos[timerID].ExpiryTime, time.Millisecond*500)
+	s.Equal(currentTime, state.TimerInfos[timerID].ExpiryTime)
 	s.Equal(int64(2), state.TimerInfos[timerID].TaskStatus)
 	s.Equal(int64(5), state.TimerInfos[timerID].StartedID)
 	s.assertChecksumsEqual(testWorkflowChecksum, state.Checksum)
@@ -260,9 +264,9 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedStats := copyExecutionStats(state0.ExecutionStats)
 	updatedInfo.LastProcessedEvent = int64(2)
-	currentTime := time.Now().UTC()
+	currentTime := types.TimestampNow()
 	timerID := "id_1"
-	timerInfos := []*p.TimerInfo{{
+	timerInfos := []*persistenceblobs.TimerInfo{{
 		Version:    3345,
 		TimerID:    timerID,
 		ExpiryTime: currentTime,
@@ -283,7 +287,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 	s.Equal(1, len(state.TimerInfos))
 	s.Equal(int64(3345), state.TimerInfos[timerID].Version)
 	s.Equal(timerID, state.TimerInfos[timerID].TimerID)
-	s.EqualTimesWithPrecision(currentTime, state.TimerInfos[timerID].ExpiryTime, time.Millisecond*500)
+	s.Equal(currentTime, state.TimerInfos[timerID].ExpiryTime)
 	s.Equal(int64(2), state.TimerInfos[timerID].TaskStatus)
 	s.Equal(int64(5), state.TimerInfos[timerID].StartedID)
 	s.Equal(state.VersionHistories, versionHistories)
@@ -671,7 +675,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 		RunId:      common.StringPtr(runID),
 	}
 
-	currentTime := time.Now()
+	currentTime := types.TimestampNow()
 	txTasks := []p.Task{&p.HistoryReplicationTask{
 		TaskID:       s.GetNextSequenceNumber(),
 		FirstEventID: int64(1),
@@ -692,7 +696,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 	},
 		&p.WorkflowTimeoutTask{
 			TaskID:              s.GetNextSequenceNumber(),
-			VisibilityTimestamp: currentTime,
+			VisibilityTimestamp: time.Unix(currentTime.Seconds, int64(currentTime.Nanos)).UTC(),
 		}}
 
 	task0, err0 := s.createWorkflowExecutionWithReplication(domainID, workflowExecution, "taskList", "wType", 20, 13, 3,
@@ -884,7 +888,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 		ResetWorkflow: true,
 	}}
 
-	insertTimerInfos := []*p.TimerInfo{{
+	insertTimerInfos := []*persistenceblobs.TimerInfo{{
 		Version:    100,
 		TimerID:    "id101",
 		ExpiryTime: currentTime,
@@ -1103,7 +1107,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 		RunId:      common.StringPtr(runID),
 	}
 
-	currentTime := time.Now()
+	currentTime := types.TimestampNow()
 	txTasks := []p.Task{&p.HistoryReplicationTask{
 		TaskID:       s.GetNextSequenceNumber(),
 		FirstEventID: int64(1),
@@ -1124,7 +1128,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	},
 		&p.WorkflowTimeoutTask{
 			TaskID:              s.GetNextSequenceNumber(),
-			VisibilityTimestamp: currentTime,
+			VisibilityTimestamp: time.Unix(currentTime.Seconds, int64(currentTime.Nanos)).UTC(),
 		}}
 
 	task0, err0 := s.createWorkflowExecutionWithReplication(domainID, workflowExecution, "taskList", "wType", 20, 13, 3,
@@ -1299,7 +1303,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 		BranchToken: []byte("branchToken5"),
 	}}
 
-	insertTimerInfos := []*p.TimerInfo{{
+	insertTimerInfos := []*persistenceblobs.TimerInfo{{
 		Version:    100,
 		TimerID:    "id101",
 		ExpiryTime: currentTime,
@@ -1510,11 +1514,11 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 		RunId:      common.StringPtr(runID),
 	}
 
-	currentTime := time.Now()
+	currentTime := types.TimestampNow()
 	txTasks := []p.Task{
 		&p.WorkflowTimeoutTask{
 			TaskID:              s.GetNextSequenceNumber(),
-			VisibilityTimestamp: currentTime,
+			VisibilityTimestamp: time.Unix(currentTime.Seconds, int64(currentTime.Nanos)).UTC(),
 		}}
 
 	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, "taskList", "wType",
@@ -1584,7 +1588,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 		},
 	}
 
-	insertTimerInfos := []*p.TimerInfo{{
+	insertTimerInfos := []*persistenceblobs.TimerInfo{{
 		Version:    100,
 		TimerID:    "id101",
 		ExpiryTime: currentTime,
