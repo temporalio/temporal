@@ -53,7 +53,7 @@ type (
 		UnlockTaskPrrocessing()
 	}
 
-	taskFilter func(task *taskInfo) (bool, error)
+	taskFilter func(task queueTaskInfo) (bool, error)
 
 	transferQueueProcessorImpl struct {
 		isGlobalDomainEnabled bool

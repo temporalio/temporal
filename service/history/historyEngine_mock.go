@@ -558,14 +558,6 @@ func (m *MockEngine) PurgeDLQMessages(ctx context.Context, messagesRequest *repl
 	return ret0
 }
 
-// RefreshWorkflowTasks mocks base method
-func (m *MockEngine) RefreshWorkflowTasks(ctx context.Context, domainUUID string, execution shared.WorkflowExecution) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RefreshWorkflowTasks", ctx, domainUUID, execution)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
 // PurgeDLQMessages indicates an expected call of PurgeDLQMessages
 func (mr *MockEngineMockRecorder) PurgeDLQMessages(ctx, messagesRequest interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
@@ -585,6 +577,14 @@ func (m *MockEngine) MergeDLQMessages(ctx context.Context, messagesRequest *repl
 func (mr *MockEngineMockRecorder) MergeDLQMessages(ctx, messagesRequest interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergeDLQMessages", reflect.TypeOf((*MockEngine)(nil).MergeDLQMessages), ctx, messagesRequest)
+}
+
+// RefreshWorkflowTasks mocks base method
+func (m *MockEngine) RefreshWorkflowTasks(ctx context.Context, domainUUID string, execution shared.WorkflowExecution) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RefreshWorkflowTasks", ctx, domainUUID, execution)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // RefreshWorkflowTasks indicates an expected call of RefreshWorkflowTasks

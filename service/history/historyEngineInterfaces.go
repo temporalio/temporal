@@ -83,7 +83,7 @@ type (
 	}
 
 	queueTaskExecutor interface {
-		execute(taskInfo *taskInfo) error
+		execute(taskInfo queueTaskInfo, shouldProcessTask bool) error
 	}
 
 	// TODO: deprecate this interface in favor of the task interface

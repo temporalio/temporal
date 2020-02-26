@@ -32,13 +32,13 @@ import (
 
 type (
 	standbyActionFn     func(workflowExecutionContext, mutableState) (interface{}, error)
-	standbyPostActionFn func(*taskInfo, interface{}, log.Logger) error
+	standbyPostActionFn func(queueTaskInfo, interface{}, log.Logger) error
 
 	standbyCurrentTimeFn func() time.Time
 )
 
 func standbyTaskPostActionNoOp(
-	task *taskInfo,
+	taskInfo queueTaskInfo,
 	postActionInfo interface{},
 	logger log.Logger,
 ) error {
@@ -52,7 +52,7 @@ func standbyTaskPostActionNoOp(
 }
 
 func standbyTransferTaskPostActionTaskDiscarded(
-	task *taskInfo,
+	taskInfo queueTaskInfo,
 	postActionInfo interface{},
 	logger log.Logger,
 ) error {
@@ -61,7 +61,7 @@ func standbyTransferTaskPostActionTaskDiscarded(
 		return nil
 	}
 
-	transferTask := task.task.(*persistence.TransferTaskInfo)
+	transferTask := taskInfo.(*persistence.TransferTaskInfo)
 	logger.Error("Discarding standby transfer task due to task being pending for too long.",
 		tag.WorkflowID(transferTask.WorkflowID),
 		tag.WorkflowRunID(transferTask.RunID),
@@ -75,7 +75,7 @@ func standbyTransferTaskPostActionTaskDiscarded(
 }
 
 func standbyTimerTaskPostActionTaskDiscarded(
-	task *taskInfo,
+	taskInfo queueTaskInfo,
 	postActionInfo interface{},
 	logger log.Logger,
 ) error {
@@ -84,7 +84,7 @@ func standbyTimerTaskPostActionTaskDiscarded(
 		return nil
 	}
 
-	timerTask := task.task.(*persistence.TimerTaskInfo)
+	timerTask := taskInfo.(*persistence.TimerTaskInfo)
 	logger.Error("Discarding standby timer task due to task being pending for too long.",
 		tag.WorkflowID(timerTask.WorkflowID),
 		tag.WorkflowRunID(timerTask.RunID),
@@ -179,7 +179,7 @@ func getHistoryResendInfo(
 }
 
 func getStandbyPostActionFn(
-	taskInfo *taskInfo,
+	taskInfo queueTaskInfo,
 	standbyNow standbyCurrentTimeFn,
 	standbyTaskMissingEventsResendDelay time.Duration,
 	standbyTaskMissingEventsDiscardDelay time.Duration,
@@ -189,7 +189,7 @@ func getStandbyPostActionFn(
 
 	// this is for task retry, use machine time
 	now := standbyNow()
-	taskTime := taskInfo.task.GetVisibilityTimestamp()
+	taskTime := taskInfo.GetVisibilityTimestamp()
 	resendTime := taskTime.Add(standbyTaskMissingEventsResendDelay)
 	discardTime := taskTime.Add(standbyTaskMissingEventsDiscardDelay)
 

@@ -62,14 +62,15 @@ func newTimerQueueActiveTaskExecutor(
 }
 
 func (t *timerQueueActiveTaskExecutor) execute(
-	taskInfo *taskInfo,
+	taskInfo queueTaskInfo,
+	shouldProcessTask bool,
 ) error {
-	timerTask, ok := taskInfo.task.(*persistence.TimerTaskInfo)
+	timerTask, ok := taskInfo.(*persistence.TimerTaskInfo)
 	if !ok {
 		return errUnexpectedQueueTask
 	}
 
-	if !taskInfo.shouldProcessTask {
+	if !shouldProcessTask {
 		return nil
 	}
 

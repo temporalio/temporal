@@ -257,7 +257,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), s.createAddActivityTaskRequest(transferTask, ai)).Return(nil).Times(1)
 
-	err = s.transferQueueActiveTaskExecutor.execute(newTaskInfo(nil, transferTask, s.logger))
+	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
 
@@ -314,7 +314,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Duplicati
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
-	err = s.transferQueueActiveTaskExecutor.execute(newTaskInfo(nil, transferTask, s.logger))
+	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
 
@@ -360,7 +360,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_FirstDeci
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockMatchingClient.EXPECT().AddDecisionTask(gomock.Any(), s.createAddDecisionTaskRequest(transferTask, mutableState)).Return(nil).Times(1)
 
-	err = s.transferQueueActiveTaskExecutor.execute(newTaskInfo(nil, transferTask, s.logger))
+	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
 
@@ -413,7 +413,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_NonFirstD
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockMatchingClient.EXPECT().AddDecisionTask(gomock.Any(), s.createAddDecisionTaskRequest(transferTask, mutableState)).Return(nil).Times(1)
 
-	err = s.transferQueueActiveTaskExecutor.execute(newTaskInfo(nil, transferTask, s.logger))
+	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
 
@@ -472,7 +472,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_Sticky_No
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockMatchingClient.EXPECT().AddDecisionTask(gomock.Any(), s.createAddDecisionTaskRequest(transferTask, mutableState)).Return(nil).Times(1)
 
-	err = s.transferQueueActiveTaskExecutor.execute(newTaskInfo(nil, transferTask, s.logger))
+	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
 
@@ -531,7 +531,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_DecisionN
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockMatchingClient.EXPECT().AddDecisionTask(gomock.Any(), s.createAddDecisionTaskRequest(transferTask, mutableState)).Return(nil).Times(1)
 
-	err = s.transferQueueActiveTaskExecutor.execute(newTaskInfo(nil, transferTask, s.logger))
+	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
 
@@ -579,7 +579,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_Duplicati
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
-	err = s.transferQueueActiveTaskExecutor.execute(newTaskInfo(nil, transferTask, s.logger))
+	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
 
@@ -652,7 +652,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 	s.mockVisibilityMgr.On("RecordWorkflowExecutionClosed", mock.Anything).Return(nil).Once()
 	s.mockArchivalMetadata.On("GetVisibilityConfig").Return(archiver.NewDisabledArchvialConfig())
 
-	err = s.transferQueueActiveTaskExecutor.execute(newTaskInfo(nil, transferTask, s.logger))
+	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
 
@@ -705,7 +705,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	s.mockArchivalMetadata.On("GetVisibilityConfig").Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI"))
 	s.mockArchivalClient.On("Archive", mock.Anything, mock.Anything).Return(nil, nil).Once()
 
-	err = s.transferQueueActiveTaskExecutor.execute(newTaskInfo(nil, transferTask, s.logger))
+	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
 
@@ -839,7 +839,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	s.mockHistoryClient.EXPECT().RequestCancelWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 	s.mockHistoryClient.EXPECT().TerminateWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 
-	err = s.transferQueueActiveTaskExecutor.execute(newTaskInfo(nil, transferTask, s.logger))
+	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
 
@@ -930,7 +930,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	s.mockArchivalMetadata.On("GetVisibilityConfig").Return(archiver.NewDisabledArchvialConfig())
 	s.mockParentClosePolicyClient.On("SendParentClosePolicyRequest", mock.Anything).Return(nil).Times(1)
 
-	err = s.transferQueueActiveTaskExecutor.execute(newTaskInfo(nil, transferTask, s.logger))
+	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
 
@@ -1020,7 +1020,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	s.mockVisibilityMgr.On("RecordWorkflowExecutionClosed", mock.Anything).Return(nil).Once()
 	s.mockArchivalMetadata.On("GetVisibilityConfig").Return(archiver.NewDisabledArchvialConfig())
 
-	err = s.transferQueueActiveTaskExecutor.execute(newTaskInfo(nil, transferTask, s.logger))
+	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
 
@@ -1082,7 +1082,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Succes
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
 
-	err = s.transferQueueActiveTaskExecutor.execute(newTaskInfo(nil, transferTask, s.logger))
+	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
 
@@ -1144,7 +1144,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Failur
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
 
-	err = s.transferQueueActiveTaskExecutor.execute(newTaskInfo(nil, transferTask, s.logger))
+	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
 
@@ -1204,7 +1204,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Duplic
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
-	err = s.transferQueueActiveTaskExecutor.execute(newTaskInfo(nil, transferTask, s.logger))
+	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
 
@@ -1279,7 +1279,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Succes
 		RequestId: common.StringPtr(si.SignalRequestID),
 	}).Return(nil).Times(1)
 
-	err = s.transferQueueActiveTaskExecutor.execute(newTaskInfo(nil, transferTask, s.logger))
+	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
 
@@ -1345,7 +1345,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Failur
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
 
-	err = s.transferQueueActiveTaskExecutor.execute(newTaskInfo(nil, transferTask, s.logger))
+	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
 
@@ -1409,7 +1409,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Duplic
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
-	err = s.transferQueueActiveTaskExecutor.execute(newTaskInfo(nil, transferTask, s.logger))
+	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
 
@@ -1487,7 +1487,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 		IsFirstDecision: common.BoolPtr(true),
 	}).Return(nil).Times(1)
 
-	err = s.transferQueueActiveTaskExecutor.execute(newTaskInfo(nil, transferTask, s.logger))
+	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
 
@@ -1566,7 +1566,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil).Once()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
 
-	err = s.transferQueueActiveTaskExecutor.execute(newTaskInfo(nil, transferTask, s.logger))
+	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
 
@@ -1647,7 +1647,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 		IsFirstDecision: common.BoolPtr(true),
 	}).Return(nil).Times(1)
 
-	err = s.transferQueueActiveTaskExecutor.execute(newTaskInfo(nil, transferTask, s.logger))
+	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
 
@@ -1726,7 +1726,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Du
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
-	err = s.transferQueueActiveTaskExecutor.execute(newTaskInfo(nil, transferTask, s.logger))
+	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
 
@@ -1777,7 +1777,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessRecordWorkflowStartedT
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", s.createRecordWorkflowExecutionStartedRequest(s.domainName, event, transferTask, mutableState, backoffSeconds)).Once().Return(nil)
 
-	err = s.transferQueueActiveTaskExecutor.execute(newTaskInfo(nil, transferTask, s.logger))
+	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
 
@@ -1824,7 +1824,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessUpsertWorkflowSearchAt
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockVisibilityMgr.On("UpsertWorkflowExecution", s.createUpsertWorkflowSearchAttributesRequest(s.domainName, event, transferTask, mutableState)).Once().Return(nil)
 
-	err = s.transferQueueActiveTaskExecutor.execute(newTaskInfo(nil, transferTask, s.logger))
+	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
 }
 

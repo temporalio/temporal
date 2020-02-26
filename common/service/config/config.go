@@ -225,7 +225,7 @@ type (
 		TLS *auth.TLS `yaml:"tls"`
 	}
 
-	// CustomDB is the configuration for connecting to a custom datastore that is not supported by cadence core
+	// CustomDatastoreConfig is the configuration for connecting to a custom datastore that is not supported by cadence core
 	CustomDatastoreConfig struct {
 		// Name of the custom datastore
 		Name string `yaml:"name"`

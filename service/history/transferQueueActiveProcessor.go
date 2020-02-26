@@ -74,8 +74,8 @@ func newTransferQueueActiveProcessor(
 	}
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	logger = logger.WithTags(tag.ClusterName(currentClusterName))
-	transferTaskFilter := func(taskInfo *taskInfo) (bool, error) {
-		task, ok := taskInfo.task.(*persistence.TransferTaskInfo)
+	transferTaskFilter := func(taskInfo queueTaskInfo) (bool, error) {
+		task, ok := taskInfo.(*persistence.TransferTaskInfo)
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
@@ -157,8 +157,8 @@ func newTransferQueueFailoverProcessor(
 		tag.FailoverMsg("from: "+standbyClusterName),
 	)
 
-	transferTaskFilter := func(taskInfo *taskInfo) (bool, error) {
-		task, ok := taskInfo.task.(*persistence.TransferTaskInfo)
+	transferTaskFilter := func(taskInfo queueTaskInfo) (bool, error) {
+		task, ok := taskInfo.(*persistence.TransferTaskInfo)
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
@@ -234,5 +234,5 @@ func (t *transferQueueActiveProcessorImpl) process(
 ) (int, error) {
 	// TODO: task metricScope should be determined when creating taskInfo
 	metricScope := t.getTransferTaskMetricsScope(taskInfo.task.GetTaskType(), true)
-	return metricScope, t.taskExecutor.execute(taskInfo)
+	return metricScope, t.taskExecutor.execute(taskInfo.task, taskInfo.shouldProcessTask)
 }
