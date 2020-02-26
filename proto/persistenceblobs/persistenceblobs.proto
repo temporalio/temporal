@@ -121,3 +121,31 @@ message HistoryTreeInfo {
     // For lookup back to workflow during debugging, also background cleanup when fork operation cannot finish self cleanup due to crash.
     string info = 3;
 }
+
+
+message TimerInfo {
+    int64 version = 1;
+    int64 startedID = 2;
+    google.protobuf.Timestamp expiryTime = 3;
+    // taskID is a misleading variable, it actually serves
+    // the purpose of indicating whether a timer task is
+    // generated for this timer info
+    int64 taskStatus = 4;
+    string timerID = 5;
+}
+
+message TaskInfo {
+    string workflowID = 1;
+    bytes runID = 2;
+    int64 scheduleID = 3;
+    google.protobuf.Timestamp expiryTime = 4;
+    google.protobuf.Timestamp createdTime = 5;
+}
+
+message TaskListInfo {
+    // {Normal, Sticky}
+    int32 kind = 1;
+    int64 ackLevel = 2;
+    google.protobuf.Timestamp expiryTime = 3;
+    google.protobuf.Timestamp lastUpdated = 4;
+}

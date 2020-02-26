@@ -179,29 +179,3 @@ message RequestCancelInfo {
     int64 initiatedEventBatchID = 2;
     string cancelRequestID = 3;
 }
-
-message TimerInfo {
-    int64 version = 1;
-    int64 startedID = 2;
-    int64 expiryTimeNanos = 3;
-    // taskID is a misleading variable, it actually serves
-    // the purpose of indicating whether a timer task is
-    // generated for this timer info
-    int64 taskID = 4;
-}
-
-message TaskInfo {
-    string workflowID = 1;
-    bytes runID = 2;
-    int64 scheduleID = 3;
-    int64 expiryTimeNanos = 4;
-    int64 createdTimeNanos = 5;
-}
-
-message TaskListInfo {
-    // {Normal, Sticky}
-    int32 kind = 1;
-    int64 ackLevel = 2;
-    int64 expiryTimeNanos = 3;
-    int64 lastUpdatedNanos = 4;
-}
