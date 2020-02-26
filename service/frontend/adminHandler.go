@@ -37,7 +37,6 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/domain"
@@ -1163,9 +1162,6 @@ func (adh *AdminHandler) startRequestProfile(scope int) (metrics.Scope, metrics.
 }
 
 func (adh *AdminHandler) error(err error, scope metrics.Scope) error {
-	// TODO: remove after error migration is done
-	err = adapter.ToServiceError(err)
-
 	switch err.(type) {
 	case *serviceerror.Internal:
 		adh.GetLogger().Error("Internal service error", tag.Error(err))

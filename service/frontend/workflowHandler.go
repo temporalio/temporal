@@ -3203,9 +3203,6 @@ func (wh *WorkflowHandler) getDefaultScope(scope int) metrics.Scope {
 }
 
 func (wh *WorkflowHandler) error(err error, scope metrics.Scope, tagsForErrorLog ...tag.Tag) error {
-	// TODO: remove after error migration is done
-	err = adapter.ToServiceError(err)
-
 	switch err := err.(type) {
 	case *serviceerror.Internal, *serviceerror.DataLoss:
 		wh.GetLogger().WithTags(tagsForErrorLog...).Error("Internal service error", tag.Error(err))

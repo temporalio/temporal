@@ -150,7 +150,7 @@ func (e *replicationTaskExecutorImpl) handleActivityTask(
 	if !okV1 && !okV2 {
 		return err
 	} else if okV1 {
-		if retryV1Err.GetRunId() == "" {
+		if retryV1Err.RunId == "" {
 			return err
 		}
 		e.metricsClient.IncCounter(metrics.HistoryRereplicationByActivityReplicationScope, metrics.CadenceClientRequests)
@@ -161,8 +161,8 @@ func (e *replicationTaskExecutorImpl) handleActivityTask(
 		if resendErr := e.historyRereplicator.SendMultiWorkflowHistory(
 			attr.GetDomainId(),
 			attr.GetWorkflowId(),
-			retryV1Err.GetRunId(),
-			retryV1Err.GetNextEventId(),
+			retryV1Err.RunId,
+			retryV1Err.NextEventId,
 			attr.GetRunId(),
 			attr.GetScheduledId()+1, // the next event ID should be at activity schedule ID + 1
 		); resendErr != nil {
@@ -176,13 +176,13 @@ func (e *replicationTaskExecutorImpl) handleActivityTask(
 		defer stopwatch.Stop()
 
 		if resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
-			retryV2Err.GetDomainId(),
-			retryV2Err.GetWorkflowId(),
-			retryV2Err.GetRunId(),
-			retryV2Err.GetStartEventId(),
-			retryV2Err.GetStartEventVersion(),
-			retryV2Err.GetEndEventId(),
-			retryV2Err.GetEndEventVersion(),
+			retryV2Err.DomainId,
+			retryV2Err.WorkflowId,
+			retryV2Err.RunId,
+			retryV2Err.StartEventId,
+			retryV2Err.StartEventVersion,
+			retryV2Err.EndEventId,
+			retryV2Err.EndEventVersion,
 		); resendErr != nil {
 			e.logger.Error("error resend history for sync activity", tag.Error(resendErr))
 			// should return the replication error, not the resending error
@@ -228,7 +228,7 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTask(
 
 	err = e.historyEngine.ReplicateEvents(ctx, request)
 	retryErr, ok := e.convertRetryTaskError(err)
-	if !ok || retryErr.GetRunId() == "" {
+	if !ok || retryErr.RunId == "" {
 		return err
 	}
 
@@ -239,8 +239,8 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTask(
 	resendErr := e.historyRereplicator.SendMultiWorkflowHistory(
 		attr.GetDomainId(),
 		attr.GetWorkflowId(),
-		retryErr.GetRunId(),
-		retryErr.GetNextEventId(),
+		retryErr.RunId,
+		retryErr.NextEventId,
 		attr.GetRunId(),
 		attr.GetFirstEventId(),
 	)
@@ -288,13 +288,13 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTaskV2(
 	defer stopwatch.Stop()
 
 	if resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
-		retryErr.GetDomainId(),
-		retryErr.GetWorkflowId(),
-		retryErr.GetRunId(),
-		retryErr.GetStartEventId(),
-		retryErr.GetStartEventVersion(),
-		retryErr.GetEndEventId(),
-		retryErr.GetEndEventVersion(),
+		retryErr.DomainId,
+		retryErr.WorkflowId,
+		retryErr.RunId,
+		retryErr.StartEventId,
+		retryErr.StartEventVersion,
+		retryErr.EndEventId,
+		retryErr.EndEventVersion,
 	); resendErr != nil {
 		e.logger.Error("error resend history for history event v2", tag.Error(resendErr))
 		// should return the replication error, not the resending error

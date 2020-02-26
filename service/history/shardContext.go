@@ -481,7 +481,6 @@ Create_Loop:
 			switch err.(type) {
 			case *serviceerror.WorkflowExecutionAlreadyStarted,
 				*persistence.WorkflowExecutionAlreadyStartedError,
-				*serviceerror.ResourceExhausted,
 				*persistence.TimeoutError,
 				*serviceerror.ResourceExhausted:
 				// No special handling required for these errors
@@ -573,7 +572,6 @@ Update_Loop:
 		if err != nil {
 			switch err.(type) {
 			case *persistence.ConditionFailedError,
-				*serviceerror.ResourceExhausted,
 				*serviceerror.ResourceExhausted:
 				// No special handling required for these errors
 			case *persistence.ShardOwnershipLostError:
@@ -658,7 +656,6 @@ Reset_Loop:
 		if err != nil {
 			switch err.(type) {
 			case *persistence.ConditionFailedError,
-				*serviceerror.ResourceExhausted,
 				*persistence.TimeoutError,
 				*serviceerror.ResourceExhausted:
 				// No special handling required for these errors
@@ -758,7 +755,6 @@ Reset_Loop:
 		if err != nil {
 			switch err.(type) {
 			case *persistence.ConditionFailedError,
-				*serviceerror.ResourceExhausted,
 				*serviceerror.ResourceExhausted:
 				// No special handling required for these errors
 			case *persistence.ShardOwnershipLostError:

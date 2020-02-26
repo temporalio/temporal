@@ -25,6 +25,8 @@ import (
 	"testing"
 	"time"
 
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/common/definition"
 
 	"github.com/pborman/uuid"
@@ -505,7 +507,7 @@ func (s *VisibilityPersistenceSuite) TestGetClosedExecution() {
 		Execution:  workflowExecution,
 	})
 	s.Error(err1)
-	_, ok := err1.(*gen.EntityNotExistsError)
+	_, ok := err1.(*serviceerror.NotFound)
 	s.True(ok, "EntityNotExistsError")
 	s.Nil(closedResp)
 
@@ -542,7 +544,7 @@ func (s *VisibilityPersistenceSuite) TestClosedWithoutStarted() {
 		Execution:  workflowExecution,
 	})
 	s.Error(err0)
-	_, ok := err0.(*gen.EntityNotExistsError)
+	_, ok := err0.(*serviceerror.NotFound)
 	s.True(ok, "EntityNotExistsError")
 	s.Nil(closedResp)
 
