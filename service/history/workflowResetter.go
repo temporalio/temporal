@@ -23,7 +23,7 @@
 package history
 
 import (
-	ctx "context"
+	"context"
 	"fmt"
 
 	"go.temporal.io/temporal-proto/serviceerror"
@@ -42,7 +42,7 @@ type (
 	workflowResetter interface {
 		// resetWorkflow is the new NDC compatible workflow reset logic
 		resetWorkflow(
-			ctx ctx.Context,
+			ctx context.Context,
 			domainID string,
 			workflowID string,
 			baseRunID string,
@@ -92,7 +92,7 @@ func newWorkflowResetter(
 }
 
 func (r *workflowResetterImpl) resetWorkflow(
-	ctx ctx.Context,
+	ctx context.Context,
 	domainID string,
 	workflowID string,
 	baseRunID string,
@@ -154,7 +154,7 @@ func (r *workflowResetterImpl) resetWorkflow(
 }
 
 func (r *workflowResetterImpl) prepareResetWorkflow(
-	ctx ctx.Context,
+	ctx context.Context,
 	domainID string,
 	workflowID string,
 	baseRunID string,
@@ -294,7 +294,7 @@ func (r *workflowResetterImpl) persistToDB(
 }
 
 func (r *workflowResetterImpl) replayResetWorkflow(
-	ctx ctx.Context,
+	ctx context.Context,
 	domainID string,
 	workflowID string,
 	baseRunID string,
@@ -428,7 +428,7 @@ func (r *workflowResetterImpl) terminateWorkflow(
 }
 
 func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
-	ctx ctx.Context,
+	ctx context.Context,
 	resetMutableState mutableState,
 	domainID string,
 	workflowID string,

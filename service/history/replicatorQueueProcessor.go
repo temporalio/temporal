@@ -21,7 +21,7 @@
 package history
 
 import (
-	ctx "context"
+	"context"
 	"errors"
 	"time"
 
@@ -180,7 +180,7 @@ func (p *replicatorQueueProcessorImpl) processSyncActivityTask(
 	task *persistenceblobs.ReplicationTaskInfo,
 ) error {
 
-	replicationTask, err := p.generateSyncActivityTask(ctx.Background(), task)
+	replicationTask, err := p.generateSyncActivityTask(context.Background(), task)
 	if err != nil || replicationTask == nil {
 		return err
 	}
@@ -191,7 +191,7 @@ func (p *replicatorQueueProcessorImpl) processSyncActivityTask(
 func (p *replicatorQueueProcessorImpl) processHistoryReplicationTask(
 	task *persistenceblobs.ReplicationTaskInfo,
 ) error {
-	replicationTask, err := p.toReplicationTask(ctx.Background(), persistence.ReplicationTaskInfoWrapper{task})
+	replicationTask, err := p.toReplicationTask(context.Background(), persistence.ReplicationTaskInfoWrapper{task})
 	if err != nil || replicationTask == nil {
 		return err
 	}
@@ -434,7 +434,7 @@ func convertLastReplicationInfo(info map[string]*commonproto.ReplicationInfo) ma
 //  and move logic below to dedicated replicationTaskAckMgr
 
 func (p *replicatorQueueProcessorImpl) getTasks(
-	ctx ctx.Context,
+	ctx context.Context,
 	pollingCluster string,
 	lastReadTaskID int64,
 ) (*commonproto.ReplicationMessages, error) {
@@ -504,7 +504,7 @@ func (p *replicatorQueueProcessorImpl) getTasks(
 }
 
 func (p *replicatorQueueProcessorImpl) getTask(
-	ctx ctx.Context,
+	ctx context.Context,
 	taskInfo *commonproto.ReplicationTaskInfo,
 ) (*commonproto.ReplicationTask, error) {
 
@@ -542,7 +542,7 @@ func (p *replicatorQueueProcessorImpl) readTasksWithBatchSize(readLevel int64, b
 }
 
 func (p *replicatorQueueProcessorImpl) toReplicationTask(
-	ctx ctx.Context,
+	ctx context.Context,
 	qTask queueTaskInfo,
 ) (*commonproto.ReplicationTask, error) {
 
@@ -571,7 +571,7 @@ func (p *replicatorQueueProcessorImpl) toReplicationTask(
 }
 
 func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
-	ctx ctx.Context,
+	ctx context.Context,
 	taskInfo *persistenceblobs.ReplicationTaskInfo,
 ) (*commonproto.ReplicationTask, error) {
 	domainID := primitives.UUID(taskInfo.GetDomainID()).String()
@@ -597,7 +597,7 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 			// LastHeartBeatUpdatedTime must be valid when getting the sync activity replication task
 			heartbeatTime = activityInfo.LastHeartBeatUpdatedTime.UnixNano()
 
-			//Version history uses when replicate the sync activity task
+			// Version history uses when replicate the sync activity task
 			versionHistories := mutableState.GetVersionHistories()
 			var versionHistory *shared.VersionHistory
 			if versionHistories != nil {
@@ -635,7 +635,7 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 }
 
 func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
-	ctx ctx.Context,
+	ctx context.Context,
 	task *persistenceblobs.ReplicationTaskInfo,
 ) (*commonproto.ReplicationTask, error) {
 	domainID := primitives.UUID(task.GetDomainID()).String()
@@ -807,7 +807,7 @@ func (p *replicatorQueueProcessorImpl) getVersionHistoryItems(
 }
 
 func (p *replicatorQueueProcessorImpl) processReplication(
-	ctx ctx.Context,
+	ctx context.Context,
 	processTaskIfClosed bool,
 	domainID string,
 	workflowID string,
@@ -842,7 +842,7 @@ func (p *replicatorQueueProcessorImpl) processReplication(
 }
 
 func (p *replicatorQueueProcessorImpl) isNewRunNDCEnabled(
-	ctx ctx.Context,
+	ctx context.Context,
 	domainID string,
 	workflowID string,
 	runID string,

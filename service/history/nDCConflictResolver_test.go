@@ -21,16 +21,15 @@
 package history
 
 import (
-	ctx "context"
+	"context"
 	"testing"
-
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
@@ -101,7 +100,7 @@ func (s *nDCConflictResolverSuite) TearDownTest() {
 }
 
 func (s *nDCConflictResolverSuite) TestRebuild() {
-	ctx := ctx.Background()
+	ctx := context.Background()
 	updateCondition := int64(59)
 	requestID := uuid.New()
 	version := int64(12)
@@ -180,14 +179,14 @@ func (s *nDCConflictResolverSuite) TestPrepareMutableState_NoRebuild() {
 	versionHistories := persistence.NewVersionHistories(versionHistory)
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(versionHistories).AnyTimes()
 
-	rebuiltMutableState, isRebuilt, err := s.nDCConflictResolver.prepareMutableState(ctx.Background(), 0, version)
+	rebuiltMutableState, isRebuilt, err := s.nDCConflictResolver.prepareMutableState(context.Background(), 0, version)
 	s.NoError(err)
 	s.False(isRebuilt)
 	s.Equal(s.mockMutableState, rebuiltMutableState)
 }
 
 func (s *nDCConflictResolverSuite) TestPrepareMutableState_Rebuild() {
-	ctx := ctx.Background()
+	ctx := context.Background()
 	updateCondition := int64(59)
 	version := int64(12)
 	incomingVersion := version + 1

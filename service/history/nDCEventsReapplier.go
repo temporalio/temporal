@@ -23,7 +23,7 @@
 package history
 
 import (
-	ctx "context"
+	"context"
 
 	"go.temporal.io/temporal-proto/serviceerror"
 
@@ -36,7 +36,7 @@ import (
 type (
 	nDCEventsReapplier interface {
 		reapplyEvents(
-			ctx ctx.Context,
+			ctx context.Context,
 			msBuilder mutableState,
 			historyEvents []*workflow.HistoryEvent,
 			runID string,
@@ -61,7 +61,7 @@ func newNDCEventsReapplier(
 }
 
 func (r *nDCEventsReapplierImpl) reapplyEvents(
-	ctx ctx.Context,
+	ctx context.Context,
 	msBuilder mutableState,
 	historyEvents []*workflow.HistoryEvent,
 	runID string,

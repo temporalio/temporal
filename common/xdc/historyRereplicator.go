@@ -38,6 +38,7 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/serialization"
+	"github.com/temporalio/temporal/common/rpc"
 )
 
 var (
@@ -399,7 +400,7 @@ func (c *historyRereplicationContext) getHistory(
 	}
 	domainName := domainEntry.GetInfo().Name
 
-	ctx, cancel := newContextWithTimeout(c.rereplicator.replicationTimeout)
+	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(c.rereplicator.replicationTimeout)
 	defer cancel()
 	response, err := c.rereplicator.adminClient.GetWorkflowExecutionRawHistory(ctx, &adminservice.GetWorkflowExecutionRawHistoryRequest{
 		Domain: domainName,

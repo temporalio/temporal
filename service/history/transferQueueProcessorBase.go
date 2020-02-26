@@ -21,7 +21,7 @@
 package history
 
 import (
-	ctx "context"
+	"context"
 	"time"
 
 	commonproto "go.temporal.io/temporal-proto/common"
@@ -37,6 +37,7 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
+	"github.com/temporalio/temporal/common/rpc"
 	"github.com/temporalio/temporal/service/worker/archiver"
 )
 
@@ -143,7 +144,7 @@ func (t *transferQueueProcessorBase) pushActivity(
 	activityScheduleToStartTimeout int32,
 ) error {
 
-	ctx, cancel := ctx.WithTimeout(ctx.Background(), transferActiveTaskDefaultTimeout)
+	ctx, cancel := rpc.NewContextWithTimeout(transferActiveTaskDefaultTimeout)
 	defer cancel()
 
 	if task.TaskType != persistence.TransferTaskTypeActivityTask {
@@ -171,7 +172,7 @@ func (t *transferQueueProcessorBase) pushDecision(
 	decisionScheduleToStartTimeout int32,
 ) error {
 
-	ctx, cancel := ctx.WithTimeout(ctx.Background(), transferActiveTaskDefaultTimeout)
+	ctx, cancel := rpc.NewContextWithTimeout(transferActiveTaskDefaultTimeout)
 	defer cancel()
 
 	if task.TaskType != persistence.TransferTaskTypeDecisionTask {
@@ -345,7 +346,7 @@ func (t *transferQueueProcessorBase) recordWorkflowClosed(
 	}
 
 	if archiveVisibility {
-		ctx, cancel := ctx.WithTimeout(ctx.Background(), t.config.TransferProcessorVisibilityArchivalTimeLimit())
+		ctx, cancel := context.WithTimeout(context.Background(), t.config.TransferProcessorVisibilityArchivalTimeLimit())
 		defer cancel()
 		_, err := t.historyService.archivalClient.Archive(ctx, &archiver.ClientRequest{
 			ArchiveRequest: &archiver.ArchiveRequest{

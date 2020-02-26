@@ -21,7 +21,7 @@
 package history
 
 import (
-	ctx "context"
+	"context"
 	"fmt"
 	"time"
 
@@ -156,7 +156,7 @@ func newHistoryReplicator(
 }
 
 func (r *historyReplicator) ApplyRawEvents(
-	ctx ctx.Context,
+	ctx context.Context,
 	requestIn *h.ReplicateRawEventsRequest,
 ) (retError error) {
 
@@ -198,7 +198,7 @@ func (r *historyReplicator) ApplyRawEvents(
 }
 
 func (r *historyReplicator) ApplyEvents(
-	ctx ctx.Context,
+	ctx context.Context,
 	request *h.ReplicateEventsRequest,
 ) (retError error) {
 
@@ -246,7 +246,7 @@ func (r *historyReplicator) ApplyEvents(
 	}
 
 	execution := *request.WorkflowExecution
-	context, release, err := r.historyCache.getOrCreateWorkflowExecution(ctx, domainID, execution)
+	weContext, release, err := r.historyCache.getOrCreateWorkflowExecution(ctx, domainID, execution)
 	if err != nil {
 		// for get workflow execution context, with valid run id
 		// err will not be of type EntityNotExistsError
@@ -257,7 +257,7 @@ func (r *historyReplicator) ApplyEvents(
 	firstEvent := request.History.Events[0]
 	switch firstEvent.GetEventType() {
 	case shared.EventTypeWorkflowExecutionStarted:
-		_, err := context.loadWorkflowExecution()
+		_, err := weContext.loadWorkflowExecution()
 		if err == nil {
 			// Workflow execution already exist, looks like a duplicate start event, it is safe to ignore it
 			logger.Debug("Dropping stale replication task for start event.")
@@ -268,12 +268,12 @@ func (r *historyReplicator) ApplyEvents(
 			// GetWorkflowExecution failed with some transient error. Return err so we can retry the task later
 			return err
 		}
-		return r.ApplyStartEvent(ctx, context, request, logger)
+		return r.ApplyStartEvent(ctx, weContext, request, logger)
 
 	default:
 		// apply events, other than simple start workflow execution
 		// the continue as new + start workflow execution combination will also be processed here
-		msBuilder, err := context.loadWorkflowExecution()
+		msBuilder, err := weContext.loadWorkflowExecution()
 		if err != nil {
 			if _, ok := err.(*serviceerror.NotFound); !ok {
 				return err
@@ -291,16 +291,16 @@ func (r *historyReplicator) ApplyEvents(
 		}
 
 		logger.WithTags(tag.CurrentVersion(msBuilder.GetReplicationState().LastWriteVersion))
-		msBuilder, err = r.ApplyOtherEventsVersionChecking(ctx, context, msBuilder, request, logger)
+		msBuilder, err = r.ApplyOtherEventsVersionChecking(ctx, weContext, msBuilder, request, logger)
 		if err != nil || msBuilder == nil {
 			return err
 		}
-		return r.ApplyOtherEvents(ctx, context, msBuilder, request, logger)
+		return r.ApplyOtherEvents(ctx, weContext, msBuilder, request, logger)
 	}
 }
 
 func (r *historyReplicator) ApplyStartEvent(
-	ctx ctx.Context,
+	ctx context.Context,
 	context workflowExecutionContext,
 	request *h.ReplicateEventsRequest,
 	logger log.Logger,
@@ -315,7 +315,7 @@ func (r *historyReplicator) ApplyStartEvent(
 }
 
 func (r *historyReplicator) ApplyOtherEventsMissingMutableState(
-	ctx ctx.Context,
+	ctx context.Context,
 	domainID string,
 	workflowID string,
 	runID string,
@@ -385,7 +385,7 @@ func (r *historyReplicator) ApplyOtherEventsMissingMutableState(
 }
 
 func (r *historyReplicator) ApplyOtherEventsVersionChecking(
-	ctx ctx.Context,
+	ctx context.Context,
 	context workflowExecutionContext,
 	msBuilder mutableState,
 	request *h.ReplicateEventsRequest,
@@ -519,7 +519,7 @@ func (r *historyReplicator) ApplyOtherEventsVersionChecking(
 }
 
 func (r *historyReplicator) ApplyOtherEvents(
-	ctx ctx.Context,
+	ctx context.Context,
 	context workflowExecutionContext,
 	msBuilder mutableState,
 	request *h.ReplicateEventsRequest,
@@ -559,7 +559,7 @@ func (r *historyReplicator) ApplyOtherEvents(
 }
 
 func (r *historyReplicator) ApplyReplicationTask(
-	ctx ctx.Context,
+	ctx context.Context,
 	context workflowExecutionContext,
 	msBuilder mutableState,
 	request *h.ReplicateEventsRequest,
@@ -629,7 +629,7 @@ func (r *historyReplicator) ApplyReplicationTask(
 }
 
 func (r *historyReplicator) replicateWorkflowStarted(
-	ctx ctx.Context,
+	ctx context.Context,
 	context workflowExecutionContext,
 	msBuilder mutableState,
 	history *shared.History,
@@ -791,7 +791,7 @@ func (r *historyReplicator) replicateWorkflowStarted(
 }
 
 func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(
-	ctx ctx.Context,
+	ctx context.Context,
 	msBuilder mutableState,
 	incomingVersion int64,
 	incomingTimestamp int64,
@@ -866,7 +866,7 @@ func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(
 
 // func (r *historyReplicator) getCurrentWorkflowInfo(domainID string, workflowID string) (runID string, lastWriteVersion int64, closeStatus int, retError error) {
 func (r *historyReplicator) getCurrentWorkflowMutableState(
-	ctx ctx.Context,
+	ctx context.Context,
 	domainID string,
 	workflowID string,
 ) (workflowExecutionContext, mutableState, releaseWorkflowExecutionFunc, error) {
@@ -901,7 +901,7 @@ func (r *historyReplicator) getCurrentWorkflowRunID(domainID string, workflowID 
 }
 
 func (r *historyReplicator) terminateWorkflow(
-	ctx ctx.Context,
+	ctx context.Context,
 	domainID string,
 	workflowID string,
 	runID string,
@@ -1011,7 +1011,7 @@ func (r *historyReplicator) getLatestCheckpoint(
 }
 
 func (r *historyReplicator) resetMutableState(
-	ctx ctx.Context,
+	ctx context.Context,
 	context workflowExecutionContext,
 	msBuilder mutableState,
 	lastEventID int64,
@@ -1114,7 +1114,7 @@ func (r *historyReplicator) flushEventsBuffer(
 }
 
 func (r *historyReplicator) reapplyEvents(
-	ctx ctx.Context,
+	ctx context.Context,
 	context workflowExecutionContext,
 	msBuilder mutableState,
 	events []*workflow.HistoryEvent,
@@ -1141,7 +1141,7 @@ func (r *historyReplicator) reapplyEvents(
 }
 
 func (r *historyReplicator) reapplyEventsToCurrentRunningWorkflow(
-	ctx ctx.Context,
+	ctx context.Context,
 	context workflowExecutionContext,
 	msBuilder mutableState,
 	events []*workflow.HistoryEvent,
@@ -1176,7 +1176,7 @@ func (r *historyReplicator) reapplyEventsToCurrentRunningWorkflow(
 }
 
 func (r *historyReplicator) reapplyEventsToCurrentClosedWorkflow(
-	ctx ctx.Context,
+	ctx context.Context,
 	context workflowExecutionContext,
 	msBuilder mutableState,
 	events []*workflow.HistoryEvent,

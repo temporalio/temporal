@@ -23,7 +23,7 @@
 package history
 
 import (
-	ctx "context"
+	"context"
 
 	"github.com/pborman/uuid"
 	"go.temporal.io/temporal-proto/serviceerror"
@@ -38,7 +38,7 @@ import (
 type (
 	nDCBranchMgr interface {
 		prepareVersionHistory(
-			ctx ctx.Context,
+			ctx context.Context,
 			incomingVersionHistory *persistence.VersionHistory,
 			incomingFirstEventID int64,
 			incomingFirstEventVersion int64,
@@ -79,7 +79,7 @@ func newNDCBranchMgr(
 }
 
 func (r *nDCBranchMgrImpl) prepareVersionHistory(
-	ctx ctx.Context,
+	ctx context.Context,
 	incomingVersionHistory *persistence.VersionHistory,
 	incomingFirstEventID int64,
 	incomingFirstEventVersion int64,
@@ -140,7 +140,7 @@ func (r *nDCBranchMgrImpl) prepareVersionHistory(
 }
 
 func (r *nDCBranchMgrImpl) flushBufferedEvents(
-	ctx ctx.Context,
+	ctx context.Context,
 	incomingVersionHistory *persistence.VersionHistory,
 ) (int, *persistence.VersionHistoryItem, error) {
 
@@ -185,7 +185,7 @@ func (r *nDCBranchMgrImpl) flushBufferedEvents(
 }
 
 func (r *nDCBranchMgrImpl) verifyEventsOrder(
-	ctx ctx.Context,
+	ctx context.Context,
 	localVersionHistory *persistence.VersionHistory,
 	incomingFirstEventID int64,
 	incomingFirstEventVersion int64,
@@ -217,7 +217,7 @@ func (r *nDCBranchMgrImpl) verifyEventsOrder(
 }
 
 func (r *nDCBranchMgrImpl) createNewBranch(
-	ctx ctx.Context,
+	ctx context.Context,
 	baseBranchToken []byte,
 	baseBranchLastEventID int64,
 	newVersionHistory *persistence.VersionHistory,

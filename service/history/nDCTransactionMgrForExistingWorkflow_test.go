@@ -21,7 +21,7 @@
 package history
 
 import (
-	ctx "context"
+	"context"
 	"testing"
 	"time"
 
@@ -63,7 +63,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TearDownTest() {
 }
 
 func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow_NoRebuild_CurrentWorkflowGuaranteed() {
-	ctx := ctx.Background()
+	ctx := context.Background()
 	now := time.Now()
 
 	isWorkflowRebuilt := false
@@ -102,7 +102,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 }
 
 func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow_NoRebuild_CurrentWorkflowNotGuaranteed_IsCurrent() {
-	ctx := ctx.Background()
+	ctx := context.Background()
 	now := time.Now()
 
 	domainID := "some random domain ID"
@@ -130,7 +130,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 }
 
 func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow_NoRebuild_CurrentWorkflowNotGuaranteed_NotCurrent_CurrentRunning_UpdateAsCurrent() {
-	ctx := ctx.Background()
+	ctx := context.Background()
 	now := time.Now()
 
 	domainID := "some random domain ID"
@@ -204,7 +204,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 }
 
 func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow_NoRebuild_CurrentWorkflowNotGuaranteed_NotCurrent_CurrentComplete_UpdateAsCurrent() {
-	ctx := ctx.Background()
+	ctx := context.Background()
 	now := time.Now()
 
 	domainID := "some random domain ID"
@@ -278,7 +278,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 }
 
 func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow_NoRebuild_CurrentWorkflowNotGuaranteed_NotCurrent_UpdateAsZombie_NewRunDoesNotExists() {
-	ctx := ctx.Background()
+	ctx := context.Background()
 	now := time.Now()
 
 	domainID := "some random domain ID"
@@ -349,7 +349,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 }
 
 func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow_NoRebuild_CurrentWorkflowNotGuaranteed_NotCurrent_UpdateAsZombie_NewRunDoesExists() {
-	ctx := ctx.Background()
+	ctx := context.Background()
 	now := time.Now()
 
 	domainID := "some random domain ID"
@@ -420,7 +420,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 }
 
 func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow_Rebuild_IsCurrent() {
-	ctx := ctx.Background()
+	ctx := context.Background()
 	now := time.Now()
 
 	domainID := "some random domain ID"
@@ -474,7 +474,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 }
 
 func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow_Rebuild_NotCurrent_UpdateAsCurrent() {
-	ctx := ctx.Background()
+	ctx := context.Background()
 	now := time.Now()
 
 	domainID := "some random domain ID"
@@ -547,7 +547,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 }
 
 func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow_Rebuild_NotCurrent_UpdateAsZombie_NewRunDoesNotExists() {
-	ctx := ctx.Background()
+	ctx := context.Background()
 	now := time.Now()
 
 	domainID := "some random domain ID"
@@ -620,7 +620,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 }
 
 func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow_Rebuild_NotCurrent_UpdateAsZombie_NewRunDoesExists() {
-	ctx := ctx.Background()
+	ctx := context.Background()
 	now := time.Now()
 
 	domainID := "some random domain ID"

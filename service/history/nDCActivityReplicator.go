@@ -23,7 +23,7 @@
 package history
 
 import (
-	ctx "context"
+	"context"
 	"time"
 
 	"go.temporal.io/temporal-proto/serviceerror"
@@ -41,7 +41,7 @@ import (
 type (
 	nDCActivityReplicator interface {
 		SyncActivity(
-			ctx ctx.Context,
+			ctx context.Context,
 			request *h.SyncActivityRequest,
 		) error
 	}
@@ -67,7 +67,7 @@ func newNDCActivityReplicator(
 }
 
 func (r *nDCActivityReplicatorImpl) SyncActivity(
-	ctx ctx.Context,
+	ctx context.Context,
 	request *h.SyncActivityRequest,
 ) (retError error) {
 

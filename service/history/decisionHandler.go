@@ -21,7 +21,7 @@
 package history
 
 import (
-	ctx "context"
+	"context"
 	"fmt"
 	"time"
 
@@ -42,12 +42,12 @@ import (
 type (
 	// decision business logic handler
 	decisionHandler interface {
-		handleDecisionTaskScheduled(ctx.Context, *h.ScheduleDecisionTaskRequest) error
-		handleDecisionTaskStarted(ctx.Context,
+		handleDecisionTaskScheduled(context.Context, *h.ScheduleDecisionTaskRequest) error
+		handleDecisionTaskStarted(context.Context,
 			*h.RecordDecisionTaskStartedRequest) (*h.RecordDecisionTaskStartedResponse, error)
-		handleDecisionTaskFailed(ctx.Context,
+		handleDecisionTaskFailed(context.Context,
 			*h.RespondDecisionTaskFailedRequest) error
-		handleDecisionTaskCompleted(ctx.Context,
+		handleDecisionTaskCompleted(context.Context,
 			*h.RespondDecisionTaskCompletedRequest) (*h.RespondDecisionTaskCompletedResponse, error)
 		// TODO also include the handle of decision timeout here
 	}
@@ -96,7 +96,7 @@ func newDecisionHandler(historyEngine *historyEngineImpl) *decisionHandlerImpl {
 }
 
 func (handler *decisionHandlerImpl) handleDecisionTaskScheduled(
-	ctx ctx.Context,
+	ctx context.Context,
 	req *h.ScheduleDecisionTaskRequest,
 ) error {
 
@@ -138,7 +138,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskScheduled(
 }
 
 func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
-	ctx ctx.Context,
+	ctx context.Context,
 	req *h.RecordDecisionTaskStartedRequest,
 ) (*h.RecordDecisionTaskStartedResponse, error) {
 
@@ -220,7 +220,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 }
 
 func (handler *decisionHandlerImpl) handleDecisionTaskFailed(
-	ctx ctx.Context,
+	ctx context.Context,
 	req *h.RespondDecisionTaskFailedRequest,
 ) (retError error) {
 
@@ -260,7 +260,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskFailed(
 }
 
 func (handler *decisionHandlerImpl) handleDecisionTaskCompleted(
-	ctx ctx.Context,
+	ctx context.Context,
 	req *h.RespondDecisionTaskCompletedRequest,
 ) (resp *h.RespondDecisionTaskCompletedResponse, retError error) {
 
@@ -281,12 +281,12 @@ func (handler *decisionHandlerImpl) handleDecisionTaskCompleted(
 		RunId:      common.StringPtr(token.RunID),
 	}
 
-	headers := headers.GetValues(ctx, headers.LibraryVersionHeaderName, headers.FeatureVersionHeaderName, headers.ClientImplHeaderName)
-	clientLibVersion := headers[0]
-	clientFeatureVersion := headers[1]
-	clientImpl := headers[2]
+	clientHeaders := headers.GetValues(ctx, headers.LibraryVersionHeaderName, headers.FeatureVersionHeaderName, headers.ClientImplHeaderName)
+	clientLibVersion := clientHeaders[0]
+	clientFeatureVersion := clientHeaders[1]
+	clientImpl := clientHeaders[2]
 
-	context, release, err := handler.historyCache.getOrCreateWorkflowExecution(ctx, domainID, workflowExecution)
+	weContext, release, err := handler.historyCache.getOrCreateWorkflowExecution(ctx, domainID, workflowExecution)
 	if err != nil {
 		return nil, err
 	}
@@ -294,14 +294,14 @@ func (handler *decisionHandlerImpl) handleDecisionTaskCompleted(
 
 Update_History_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
-		msBuilder, err := context.loadWorkflowExecution()
+		msBuilder, err := weContext.loadWorkflowExecution()
 		if err != nil {
 			return nil, err
 		}
 		if !msBuilder.IsWorkflowExecutionRunning() {
 			return nil, ErrWorkflowCompleted
 		}
-		executionStats, err := context.loadExecutionStats()
+		executionStats, err := weContext.loadExecutionStats()
 		if err != nil {
 			return nil, err
 		}
@@ -316,7 +316,7 @@ Update_History_Loop:
 		if !isRunning && scheduleID >= msBuilder.GetNextEventID() {
 			handler.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.StaleMutableStateCounter)
 			// Reload workflow execution history
-			context.clear()
+			weContext.clear()
 			continue Update_History_Loop
 		}
 
@@ -448,7 +448,7 @@ Update_History_Loop:
 				tag.WorkflowID(token.WorkflowID),
 				tag.WorkflowRunID(token.RunID),
 				tag.WorkflowDomainID(domainID))
-			msBuilder, err = handler.historyEngine.failDecision(context, scheduleID, startedID, failCause, []byte(failMessage), request)
+			msBuilder, err = handler.historyEngine.failDecision(weContext, scheduleID, startedID, failCause, []byte(failMessage), request)
 			if err != nil {
 				return nil, err
 			}
@@ -495,7 +495,7 @@ Update_History_Loop:
 		var updateErr error
 		if continueAsNewBuilder != nil {
 			continueAsNewExecutionInfo := continueAsNewBuilder.GetExecutionInfo()
-			updateErr = context.updateWorkflowExecutionWithNewAsActive(
+			updateErr = weContext.updateWorkflowExecutionWithNewAsActive(
 				handler.shard.GetTimeSource().Now(),
 				newWorkflowExecutionContext(
 					continueAsNewExecutionInfo.DomainID,
@@ -510,7 +510,7 @@ Update_History_Loop:
 				continueAsNewBuilder,
 			)
 		} else {
-			updateErr = context.updateWorkflowExecutionAsActive(handler.shard.GetTimeSource().Now())
+			updateErr = weContext.updateWorkflowExecutionAsActive(handler.shard.GetTimeSource().Now())
 		}
 
 		if updateErr != nil {
@@ -524,7 +524,7 @@ Update_History_Loop:
 			case *persistence.TransactionSizeLimitError:
 				// must reload mutable state because the first call to updateWorkflowExecutionWithContext or continueAsNewWorkflowExecution
 				// clears mutable state if error is returned
-				msBuilder, err = context.loadWorkflowExecution()
+				msBuilder, err = weContext.loadWorkflowExecution()
 				if err != nil {
 					return nil, err
 				}
@@ -539,7 +539,7 @@ Update_History_Loop:
 				); err != nil {
 					return nil, err
 				}
-				if err := context.updateWorkflowExecutionAsActive(
+				if err := weContext.updateWorkflowExecutionAsActive(
 					handler.shard.GetTimeSource().Now(),
 				); err != nil {
 					return nil, err

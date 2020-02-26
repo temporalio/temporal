@@ -25,7 +25,6 @@ package history
 import (
 	"bytes"
 	"context"
-	ctx "context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -76,41 +75,41 @@ type (
 	Engine interface {
 		common.Daemon
 
-		StartWorkflowExecution(ctx ctx.Context, request *h.StartWorkflowExecutionRequest) (*workflow.StartWorkflowExecutionResponse, error)
-		GetMutableState(ctx ctx.Context, request *h.GetMutableStateRequest) (*h.GetMutableStateResponse, error)
-		PollMutableState(ctx ctx.Context, request *h.PollMutableStateRequest) (*h.PollMutableStateResponse, error)
-		DescribeMutableState(ctx ctx.Context, request *h.DescribeMutableStateRequest) (*h.DescribeMutableStateResponse, error)
-		ResetStickyTaskList(ctx ctx.Context, resetRequest *h.ResetStickyTaskListRequest) (*h.ResetStickyTaskListResponse, error)
-		DescribeWorkflowExecution(ctx ctx.Context, request *h.DescribeWorkflowExecutionRequest) (*workflow.DescribeWorkflowExecutionResponse, error)
-		RecordDecisionTaskStarted(ctx ctx.Context, request *h.RecordDecisionTaskStartedRequest) (*h.RecordDecisionTaskStartedResponse, error)
-		RecordActivityTaskStarted(ctx ctx.Context, request *h.RecordActivityTaskStartedRequest) (*h.RecordActivityTaskStartedResponse, error)
-		RespondDecisionTaskCompleted(ctx ctx.Context, request *h.RespondDecisionTaskCompletedRequest) (*h.RespondDecisionTaskCompletedResponse, error)
-		RespondDecisionTaskFailed(ctx ctx.Context, request *h.RespondDecisionTaskFailedRequest) error
-		RespondActivityTaskCompleted(ctx ctx.Context, request *h.RespondActivityTaskCompletedRequest) error
-		RespondActivityTaskFailed(ctx ctx.Context, request *h.RespondActivityTaskFailedRequest) error
-		RespondActivityTaskCanceled(ctx ctx.Context, request *h.RespondActivityTaskCanceledRequest) error
-		RecordActivityTaskHeartbeat(ctx ctx.Context, request *h.RecordActivityTaskHeartbeatRequest) (*workflow.RecordActivityTaskHeartbeatResponse, error)
-		RequestCancelWorkflowExecution(ctx ctx.Context, request *h.RequestCancelWorkflowExecutionRequest) error
-		SignalWorkflowExecution(ctx ctx.Context, request *h.SignalWorkflowExecutionRequest) error
-		SignalWithStartWorkflowExecution(ctx ctx.Context, request *h.SignalWithStartWorkflowExecutionRequest) (*workflow.StartWorkflowExecutionResponse, error)
-		RemoveSignalMutableState(ctx ctx.Context, request *h.RemoveSignalMutableStateRequest) error
-		TerminateWorkflowExecution(ctx ctx.Context, request *h.TerminateWorkflowExecutionRequest) error
-		ResetWorkflowExecution(ctx ctx.Context, request *h.ResetWorkflowExecutionRequest) (*workflow.ResetWorkflowExecutionResponse, error)
-		ScheduleDecisionTask(ctx ctx.Context, request *h.ScheduleDecisionTaskRequest) error
-		RecordChildExecutionCompleted(ctx ctx.Context, request *h.RecordChildExecutionCompletedRequest) error
-		ReplicateEvents(ctx ctx.Context, request *h.ReplicateEventsRequest) error
-		ReplicateRawEvents(ctx ctx.Context, request *h.ReplicateRawEventsRequest) error
-		ReplicateEventsV2(ctx ctx.Context, request *h.ReplicateEventsV2Request) error
-		SyncShardStatus(ctx ctx.Context, request *h.SyncShardStatusRequest) error
-		SyncActivity(ctx ctx.Context, request *h.SyncActivityRequest) error
-		GetReplicationMessages(ctx ctx.Context, pollingCluster string, lastReadMessageID int64) (*r.ReplicationMessages, error)
-		GetDLQReplicationMessages(ctx ctx.Context, taskInfos []*r.ReplicationTaskInfo) ([]*r.ReplicationTask, error)
-		QueryWorkflow(ctx ctx.Context, request *h.QueryWorkflowRequest) (*h.QueryWorkflowResponse, error)
-		ReapplyEvents(ctx ctx.Context, domainUUID string, workflowID string, runID string, events []*workflow.HistoryEvent) error
-		ReadDLQMessages(ctx ctx.Context, messagesRequest *historyservice.ReadDLQMessagesRequest) (*historyservice.ReadDLQMessagesResponse, error)
-		PurgeDLQMessages(ctx ctx.Context, messagesRequest *historyservice.PurgeDLQMessagesRequest) error
-		MergeDLQMessages(ctx ctx.Context, messagesRequest *historyservice.MergeDLQMessagesRequest) (*historyservice.MergeDLQMessagesResponse, error)
-		RefreshWorkflowTasks(ctx ctx.Context, domainUUID string, execution workflow.WorkflowExecution) error
+		StartWorkflowExecution(ctx context.Context, request *h.StartWorkflowExecutionRequest) (*workflow.StartWorkflowExecutionResponse, error)
+		GetMutableState(ctx context.Context, request *h.GetMutableStateRequest) (*h.GetMutableStateResponse, error)
+		PollMutableState(ctx context.Context, request *h.PollMutableStateRequest) (*h.PollMutableStateResponse, error)
+		DescribeMutableState(ctx context.Context, request *h.DescribeMutableStateRequest) (*h.DescribeMutableStateResponse, error)
+		ResetStickyTaskList(ctx context.Context, resetRequest *h.ResetStickyTaskListRequest) (*h.ResetStickyTaskListResponse, error)
+		DescribeWorkflowExecution(ctx context.Context, request *h.DescribeWorkflowExecutionRequest) (*workflow.DescribeWorkflowExecutionResponse, error)
+		RecordDecisionTaskStarted(ctx context.Context, request *h.RecordDecisionTaskStartedRequest) (*h.RecordDecisionTaskStartedResponse, error)
+		RecordActivityTaskStarted(ctx context.Context, request *h.RecordActivityTaskStartedRequest) (*h.RecordActivityTaskStartedResponse, error)
+		RespondDecisionTaskCompleted(ctx context.Context, request *h.RespondDecisionTaskCompletedRequest) (*h.RespondDecisionTaskCompletedResponse, error)
+		RespondDecisionTaskFailed(ctx context.Context, request *h.RespondDecisionTaskFailedRequest) error
+		RespondActivityTaskCompleted(ctx context.Context, request *h.RespondActivityTaskCompletedRequest) error
+		RespondActivityTaskFailed(ctx context.Context, request *h.RespondActivityTaskFailedRequest) error
+		RespondActivityTaskCanceled(ctx context.Context, request *h.RespondActivityTaskCanceledRequest) error
+		RecordActivityTaskHeartbeat(ctx context.Context, request *h.RecordActivityTaskHeartbeatRequest) (*workflow.RecordActivityTaskHeartbeatResponse, error)
+		RequestCancelWorkflowExecution(ctx context.Context, request *h.RequestCancelWorkflowExecutionRequest) error
+		SignalWorkflowExecution(ctx context.Context, request *h.SignalWorkflowExecutionRequest) error
+		SignalWithStartWorkflowExecution(ctx context.Context, request *h.SignalWithStartWorkflowExecutionRequest) (*workflow.StartWorkflowExecutionResponse, error)
+		RemoveSignalMutableState(ctx context.Context, request *h.RemoveSignalMutableStateRequest) error
+		TerminateWorkflowExecution(ctx context.Context, request *h.TerminateWorkflowExecutionRequest) error
+		ResetWorkflowExecution(ctx context.Context, request *h.ResetWorkflowExecutionRequest) (*workflow.ResetWorkflowExecutionResponse, error)
+		ScheduleDecisionTask(ctx context.Context, request *h.ScheduleDecisionTaskRequest) error
+		RecordChildExecutionCompleted(ctx context.Context, request *h.RecordChildExecutionCompletedRequest) error
+		ReplicateEvents(ctx context.Context, request *h.ReplicateEventsRequest) error
+		ReplicateRawEvents(ctx context.Context, request *h.ReplicateRawEventsRequest) error
+		ReplicateEventsV2(ctx context.Context, request *h.ReplicateEventsV2Request) error
+		SyncShardStatus(ctx context.Context, request *h.SyncShardStatusRequest) error
+		SyncActivity(ctx context.Context, request *h.SyncActivityRequest) error
+		GetReplicationMessages(ctx context.Context, pollingCluster string, lastReadMessageID int64) (*r.ReplicationMessages, error)
+		GetDLQReplicationMessages(ctx context.Context, taskInfos []*r.ReplicationTaskInfo) ([]*r.ReplicationTask, error)
+		QueryWorkflow(ctx context.Context, request *h.QueryWorkflowRequest) (*h.QueryWorkflowResponse, error)
+		ReapplyEvents(ctx context.Context, domainUUID string, workflowID string, runID string, events []*workflow.HistoryEvent) error
+		ReadDLQMessages(ctx context.Context, messagesRequest *historyservice.ReadDLQMessagesRequest) (*historyservice.ReadDLQMessagesResponse, error)
+		PurgeDLQMessages(ctx context.Context, messagesRequest *historyservice.PurgeDLQMessagesRequest) error
+		MergeDLQMessages(ctx context.Context, messagesRequest *historyservice.MergeDLQMessagesRequest) (*historyservice.MergeDLQMessagesResponse, error)
+		RefreshWorkflowTasks(ctx context.Context, domainUUID string, execution workflow.WorkflowExecution) error
 
 		NotifyNewHistoryEvent(event *historyEventNotification)
 		NotifyNewTransferTasks(tasks []persistence.Task)
@@ -527,7 +526,7 @@ func (e *historyEngineImpl) generateFirstDecisionTask(
 
 // StartWorkflowExecution starts a workflow execution
 func (e *historyEngineImpl) StartWorkflowExecution(
-	ctx ctx.Context,
+	ctx context.Context,
 	startRequest *h.StartWorkflowExecutionRequest,
 ) (resp *workflow.StartWorkflowExecutionResponse, retError error) {
 
@@ -583,7 +582,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		return nil, err
 	}
 
-	context := newWorkflowExecutionContext(domainID, execution, e.shard, e.executionManager, e.logger)
+	weContext := newWorkflowExecutionContext(domainID, execution, e.shard, e.executionManager, e.logger)
 
 	now := e.timeSource.Now()
 	newWorkflow, newWorkflowEventsSeq, err := mutableState.CloseTransactionAsSnapshot(
@@ -593,7 +592,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	historySize, err := context.persistFirstWorkflowEvents(newWorkflowEventsSeq[0])
+	historySize, err := weContext.persistFirstWorkflowEvents(newWorkflowEventsSeq[0])
 	if err != nil {
 		return nil, err
 	}
@@ -602,7 +601,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	createMode := persistence.CreateWorkflowModeBrandNew
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
-	err = context.createWorkflowExecution(
+	err = weContext.createWorkflowExecution(
 		newWorkflow, historySize, now,
 		createMode, prevRunID, prevLastWriteVersion,
 	)
@@ -638,7 +637,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 			); err != nil {
 				return nil, err
 			}
-			err = context.createWorkflowExecution(
+			err = weContext.createWorkflowExecution(
 				newWorkflow, historySize, now,
 				createMode, prevRunID, prevLastWriteVersion,
 			)
@@ -655,7 +654,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 
 // GetMutableState retrieves the mutable state of the workflow execution
 func (e *historyEngineImpl) GetMutableState(
-	ctx ctx.Context,
+	ctx context.Context,
 	request *h.GetMutableStateRequest,
 ) (*h.GetMutableStateResponse, error) {
 
@@ -664,7 +663,7 @@ func (e *historyEngineImpl) GetMutableState(
 
 // PollMutableState retrieves the mutable state of the workflow execution with long polling
 func (e *historyEngineImpl) PollMutableState(
-	ctx ctx.Context,
+	ctx context.Context,
 	request *h.PollMutableStateRequest,
 ) (*h.PollMutableStateResponse, error) {
 
@@ -698,7 +697,7 @@ func (e *historyEngineImpl) PollMutableState(
 }
 
 func (e *historyEngineImpl) getMutableStateOrPolling(
-	ctx ctx.Context,
+	ctx context.Context,
 	request *h.GetMutableStateRequest,
 ) (*h.GetMutableStateResponse, error) {
 
@@ -783,7 +782,7 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 }
 
 func (e *historyEngineImpl) QueryWorkflow(
-	ctx ctx.Context,
+	ctx context.Context,
 	request *h.QueryWorkflowRequest,
 ) (retResp *h.QueryWorkflowResponse, retErr error) {
 
@@ -925,7 +924,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 }
 
 func (e *historyEngineImpl) queryDirectlyThroughMatching(
-	ctx ctx.Context,
+	ctx context.Context,
 	msResp *h.GetMutableStateResponse,
 	domainID string,
 	queryRequest *workflow.QueryWorkflowRequest,
@@ -1029,7 +1028,7 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 }
 
 func (e *historyEngineImpl) getMutableState(
-	ctx ctx.Context,
+	ctx context.Context,
 	domainID string,
 	execution workflow.WorkflowExecution,
 ) (retResp *h.GetMutableStateResponse, retError error) {
@@ -1089,7 +1088,7 @@ func (e *historyEngineImpl) getMutableState(
 }
 
 func (e *historyEngineImpl) DescribeMutableState(
-	ctx ctx.Context,
+	ctx context.Context,
 	request *h.DescribeMutableStateRequest,
 ) (response *h.DescribeMutableStateResponse, retError error) {
 
@@ -1151,7 +1150,7 @@ func (e *historyEngineImpl) toMutableStateJSON(msb mutableState) (*string, error
 // 4. ClientFeatureVersion
 // 5. ClientImpl
 func (e *historyEngineImpl) ResetStickyTaskList(
-	ctx ctx.Context,
+	ctx context.Context,
 	resetRequest *h.ResetStickyTaskListRequest,
 ) (*h.ResetStickyTaskListResponse, error) {
 
@@ -1178,7 +1177,7 @@ func (e *historyEngineImpl) ResetStickyTaskList(
 
 // DescribeWorkflowExecution returns information about the specified workflow execution.
 func (e *historyEngineImpl) DescribeWorkflowExecution(
-	ctx ctx.Context,
+	ctx context.Context,
 	request *h.DescribeWorkflowExecutionRequest,
 ) (retResp *workflow.DescribeWorkflowExecutionResponse, retError error) {
 
@@ -1312,7 +1311,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 }
 
 func (e *historyEngineImpl) RecordActivityTaskStarted(
-	ctx ctx.Context,
+	ctx context.Context,
 	request *h.RecordActivityTaskStartedRequest,
 ) (*h.RecordActivityTaskStartedResponse, error) {
 
@@ -1404,7 +1403,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 
 // ScheduleDecisionTask schedules a decision if no outstanding decision found
 func (e *historyEngineImpl) ScheduleDecisionTask(
-	ctx ctx.Context,
+	ctx context.Context,
 	req *h.ScheduleDecisionTaskRequest,
 ) error {
 	return e.decisionHandler.handleDecisionTaskScheduled(ctx, req)
@@ -1412,7 +1411,7 @@ func (e *historyEngineImpl) ScheduleDecisionTask(
 
 // RecordDecisionTaskStarted starts a decision
 func (e *historyEngineImpl) RecordDecisionTaskStarted(
-	ctx ctx.Context,
+	ctx context.Context,
 	request *h.RecordDecisionTaskStartedRequest,
 ) (*h.RecordDecisionTaskStartedResponse, error) {
 	return e.decisionHandler.handleDecisionTaskStarted(ctx, request)
@@ -1420,7 +1419,7 @@ func (e *historyEngineImpl) RecordDecisionTaskStarted(
 
 // RespondDecisionTaskCompleted completes a decision task
 func (e *historyEngineImpl) RespondDecisionTaskCompleted(
-	ctx ctx.Context,
+	ctx context.Context,
 	req *h.RespondDecisionTaskCompletedRequest,
 ) (*h.RespondDecisionTaskCompletedResponse, error) {
 	return e.decisionHandler.handleDecisionTaskCompleted(ctx, req)
@@ -1428,7 +1427,7 @@ func (e *historyEngineImpl) RespondDecisionTaskCompleted(
 
 // RespondDecisionTaskFailed fails a decision
 func (e *historyEngineImpl) RespondDecisionTaskFailed(
-	ctx ctx.Context,
+	ctx context.Context,
 	req *h.RespondDecisionTaskFailedRequest,
 ) error {
 	return e.decisionHandler.handleDecisionTaskFailed(ctx, req)
@@ -1436,7 +1435,7 @@ func (e *historyEngineImpl) RespondDecisionTaskFailed(
 
 // RespondActivityTaskCompleted completes an activity task.
 func (e *historyEngineImpl) RespondActivityTaskCompleted(
-	ctx ctx.Context,
+	ctx context.Context,
 	req *h.RespondActivityTaskCompletedRequest,
 ) error {
 
@@ -1494,7 +1493,7 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 
 // RespondActivityTaskFailed completes an activity task failure.
 func (e *historyEngineImpl) RespondActivityTaskFailed(
-	ctx ctx.Context,
+	ctx context.Context,
 	req *h.RespondActivityTaskFailedRequest,
 ) error {
 
@@ -1562,7 +1561,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 
 // RespondActivityTaskCanceled completes an activity task failure.
 func (e *historyEngineImpl) RespondActivityTaskCanceled(
-	ctx ctx.Context,
+	ctx context.Context,
 	req *h.RespondActivityTaskCanceledRequest,
 ) error {
 
@@ -1630,7 +1629,7 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 // - For reporting liveness of the activity.
 // - For reporting progress of the activity, this can be done even if the liveness is not configured.
 func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
-	ctx ctx.Context,
+	ctx context.Context,
 	req *h.RecordActivityTaskHeartbeatRequest,
 ) (*workflow.RecordActivityTaskHeartbeatResponse, error) {
 
@@ -1700,7 +1699,7 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 
 // RequestCancelWorkflowExecution records request cancellation event for workflow execution
 func (e *historyEngineImpl) RequestCancelWorkflowExecution(
-	ctx ctx.Context,
+	ctx context.Context,
 	req *h.RequestCancelWorkflowExecutionRequest,
 ) error {
 
@@ -1757,7 +1756,7 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 }
 
 func (e *historyEngineImpl) SignalWorkflowExecution(
-	ctx ctx.Context,
+	ctx context.Context,
 	signalRequest *h.SignalWorkflowExecutionRequest,
 ) error {
 
@@ -1832,7 +1831,7 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 }
 
 func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
-	ctx ctx.Context,
+	ctx context.Context,
 	signalWithStartRequest *h.SignalWithStartWorkflowExecutionRequest,
 ) (retResp *workflow.StartWorkflowExecutionResponse, retError error) {
 
@@ -2047,7 +2046,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 
 // RemoveSignalMutableState remove the signal request id in signal_requested for deduplicate
 func (e *historyEngineImpl) RemoveSignalMutableState(
-	ctx ctx.Context,
+	ctx context.Context,
 	request *h.RemoveSignalMutableStateRequest,
 ) error {
 
@@ -2075,7 +2074,7 @@ func (e *historyEngineImpl) RemoveSignalMutableState(
 }
 
 func (e *historyEngineImpl) TerminateWorkflowExecution(
-	ctx ctx.Context,
+	ctx context.Context,
 	terminateRequest *h.TerminateWorkflowExecutionRequest,
 ) error {
 
@@ -2113,7 +2112,7 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 
 // RecordChildExecutionCompleted records the completion of child execution into parent execution history
 func (e *historyEngineImpl) RecordChildExecutionCompleted(
-	ctx ctx.Context,
+	ctx context.Context,
 	completionRequest *h.RecordChildExecutionCompletedRequest,
 ) error {
 
@@ -2167,7 +2166,7 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 }
 
 func (e *historyEngineImpl) ReplicateEvents(
-	ctx ctx.Context,
+	ctx context.Context,
 	replicateRequest *h.ReplicateEventsRequest,
 ) error {
 
@@ -2175,7 +2174,7 @@ func (e *historyEngineImpl) ReplicateEvents(
 }
 
 func (e *historyEngineImpl) ReplicateRawEvents(
-	ctx ctx.Context,
+	ctx context.Context,
 	replicateRequest *h.ReplicateRawEventsRequest,
 ) error {
 
@@ -2183,7 +2182,7 @@ func (e *historyEngineImpl) ReplicateRawEvents(
 }
 
 func (e *historyEngineImpl) ReplicateEventsV2(
-	ctx ctx.Context,
+	ctx context.Context,
 	replicateRequest *h.ReplicateEventsV2Request,
 ) error {
 
@@ -2191,7 +2190,7 @@ func (e *historyEngineImpl) ReplicateEventsV2(
 }
 
 func (e *historyEngineImpl) SyncShardStatus(
-	ctx ctx.Context,
+	ctx context.Context,
 	request *h.SyncShardStatusRequest,
 ) error {
 
@@ -2209,7 +2208,7 @@ func (e *historyEngineImpl) SyncShardStatus(
 }
 
 func (e *historyEngineImpl) SyncActivity(
-	ctx ctx.Context,
+	ctx context.Context,
 	request *h.SyncActivityRequest,
 ) (retError error) {
 
@@ -2217,7 +2216,7 @@ func (e *historyEngineImpl) SyncActivity(
 }
 
 func (e *historyEngineImpl) ResetWorkflowExecution(
-	ctx ctx.Context,
+	ctx context.Context,
 	resetRequest *h.ResetWorkflowExecutionRequest,
 ) (response *workflow.ResetWorkflowExecutionResponse, retError error) {
 
@@ -2351,7 +2350,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 }
 
 func (e *historyEngineImpl) updateWorkflow(
-	ctx ctx.Context,
+	ctx context.Context,
 	domainID string,
 	execution workflow.WorkflowExecution,
 	action updateWorkflowActionFunc,
@@ -2367,7 +2366,7 @@ func (e *historyEngineImpl) updateWorkflow(
 }
 
 func (e *historyEngineImpl) updateWorkflowExecutionWithAction(
-	ctx ctx.Context,
+	ctx context.Context,
 	domainID string,
 	execution workflow.WorkflowExecution,
 	action updateWorkflowActionFunc,
@@ -2389,11 +2388,11 @@ func (e *historyEngineImpl) updateWorkflowHelper(
 
 UpdateHistoryLoop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
-		context := workflowContext.getContext()
+		weContext := workflowContext.getContext()
 		mutableState := workflowContext.getMutableState()
 
 		// conduct caller action
-		postActions, err := action(context, mutableState)
+		postActions, err := action(weContext, mutableState)
 		if err != nil {
 			if err == ErrStaleState {
 				// Handler detected that cached workflow mutable could potentially be stale
@@ -2442,7 +2441,7 @@ UpdateHistoryLoop:
 
 // TODO: remove and use updateWorkflowExecutionWithAction
 func (e *historyEngineImpl) updateWorkflowExecution(
-	ctx ctx.Context,
+	ctx context.Context,
 	domainID string,
 	execution workflow.WorkflowExecution,
 	createDecisionTask bool,
@@ -2771,7 +2770,7 @@ func getWorkflowAlreadyStartedError(errMsg string, createRequestID string, workf
 }
 
 func (e *historyEngineImpl) GetReplicationMessages(
-	ctx ctx.Context,
+	ctx context.Context,
 	pollingCluster string,
 	lastReadMessageID int64,
 ) (*r.ReplicationMessages, error) {
@@ -2799,7 +2798,7 @@ func (e *historyEngineImpl) GetReplicationMessages(
 }
 
 func (e *historyEngineImpl) GetDLQReplicationMessages(
-	ctx ctx.Context,
+	ctx context.Context,
 	taskInfos []*r.ReplicationTaskInfo,
 ) ([]*r.ReplicationTask, error) {
 
@@ -2821,7 +2820,7 @@ func (e *historyEngineImpl) GetDLQReplicationMessages(
 }
 
 func (e *historyEngineImpl) ReapplyEvents(
-	ctx ctx.Context,
+	ctx context.Context,
 	domainUUID string,
 	workflowID string,
 	runID string,
@@ -2983,7 +2982,7 @@ func (e *historyEngineImpl) MergeDLQMessages(
 }
 
 func (e *historyEngineImpl) RefreshWorkflowTasks(
-	ctx ctx.Context,
+	ctx context.Context,
 	domainUUID string,
 	execution workflow.WorkflowExecution,
 ) (retError error) {
@@ -3031,7 +3030,7 @@ func (e *historyEngineImpl) RefreshWorkflowTasks(
 }
 
 func (e *historyEngineImpl) loadWorkflowOnce(
-	ctx ctx.Context,
+	ctx context.Context,
 	domainID string,
 	workflowID string,
 	runID string,
@@ -3059,7 +3058,7 @@ func (e *historyEngineImpl) loadWorkflowOnce(
 }
 
 func (e *historyEngineImpl) loadWorkflow(
-	ctx ctx.Context,
+	ctx context.Context,
 	domainID string,
 	workflowID string,
 	runID string,

@@ -21,11 +21,9 @@
 package history
 
 import (
-	ctx "context"
+	"context"
 	"testing"
 	"time"
-
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -33,6 +31,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
@@ -306,7 +305,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	s.mockTaskRefresher.EXPECT().refreshTasks(now, gomock.Any()).Return(nil).Times(1)
 
 	rebuildMutableState, rebuiltHistorySize, err := s.nDCStateRebuilder.rebuild(
-		ctx.Background(),
+		context.Background(),
 		now,
 		definition.NewWorkflowIdentifier(s.domainID, s.workflowID, s.runID),
 		branchToken,

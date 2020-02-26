@@ -23,7 +23,7 @@
 package history
 
 import (
-	ctx "context"
+	"context"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -37,7 +37,7 @@ import (
 type (
 	nDCWorkflowResetter interface {
 		resetWorkflow(
-			ctx ctx.Context,
+			ctx context.Context,
 			now time.Time,
 			baseLastEventID int64,
 			baseLastEventVersion int64,
@@ -91,7 +91,7 @@ func newNDCWorkflowResetter(
 }
 
 func (r *nDCWorkflowResetterImpl) resetWorkflow(
-	ctx ctx.Context,
+	ctx context.Context,
 	now time.Time,
 	baseLastEventID int64,
 	baseLastEventVersion int64,
@@ -143,7 +143,7 @@ func (r *nDCWorkflowResetterImpl) resetWorkflow(
 }
 
 func (r *nDCWorkflowResetterImpl) getBaseBranchToken(
-	ctx ctx.Context,
+	ctx context.Context,
 	baseLastEventID int64,
 	baseLastEventVersion int64,
 	incomingFirstEventID int64,
@@ -190,7 +190,7 @@ func (r *nDCWorkflowResetterImpl) getBaseBranchToken(
 }
 
 func (r *nDCWorkflowResetterImpl) getResetBranchToken(
-	ctx ctx.Context,
+	ctx context.Context,
 	baseBranchToken []byte,
 	baseLastEventID int64,
 ) ([]byte, error) {
