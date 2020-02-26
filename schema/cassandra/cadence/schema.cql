@@ -112,18 +112,6 @@ CREATE TYPE activity_info (
   event_data_encoding       text, -- Protocol used for history serialization
 );
 
--- User timer details
-CREATE TYPE timer_info (
-  version       bigint,
-  timer_id      text,      -- User defined timer ID
-  started_id    bigint,    -- The event ID corresponding to timer started.
-  expiry_time   timestamp, -- Timestamp at which this timer expires or fires
-  -- task_id is a misleading variable, it actually serves
-  -- the purpose of indicating whether a timer task is
-  -- generated for this timer info
-  task_id       bigint,
-);
-
 -- Child execution in progress mutable state
 CREATE TYPE child_execution_info (
   version                   bigint,
@@ -253,7 +241,8 @@ CREATE TABLE executions (
   next_event_id                  bigint,  -- This is needed to make conditional updates on session history
   range_id                       bigint, -- Increasing sequence identifier for transfer queue, checkpointed into shard info
   activity_map                   map<bigint, frozen<activity_info>>,
-  timer_map                      map<text, frozen<timer_info>>,
+  timer_map                      map<text, blob>,
+  timer_map_encoding             text,
   child_executions_map           map<bigint, frozen<child_execution_info>>,
   request_cancel_map             map<bigint, frozen<request_cancel_info>>,
   signal_map                     map<bigint, frozen<signal_info>>,
