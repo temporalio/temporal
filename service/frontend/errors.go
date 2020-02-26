@@ -71,6 +71,7 @@ var (
 	errInvalidVersionHistories                            = serviceerror.NewInvalidArgument("Invalid version histories.")
 	errInvalidEventQueryRange                             = serviceerror.NewInvalidArgument("Invalid event query range.")
 	errUnknownValueType                                   = serviceerror.NewInvalidArgument("Unknown value type, %v.")
+	errDLQTypeIsNotSupported                              = serviceerror.NewInvalidArgument("The DLQ type is not supported.")
 
 	errFailedUpdateDynamicConfig = serviceerror.NewInternal("Failed to update dynamic config, err: %v.")
 	errFailedToCreateESIndex     = serviceerror.NewInternal("Failed to create ES index, err: %v.")

@@ -549,11 +549,11 @@ func (mr *MockmutableStateMockRecorder) AddSignalExternalWorkflowExecutionFailed
 }
 
 // AddSignalExternalWorkflowExecutionInitiatedEvent mocks base method
-func (m *MockmutableState) AddSignalExternalWorkflowExecutionInitiatedEvent(arg0 int64, arg1 string, arg2 *shared.SignalExternalWorkflowExecutionDecisionAttributes) (*shared.HistoryEvent, *persistence.SignalInfo, error) {
+func (m *MockmutableState) AddSignalExternalWorkflowExecutionInitiatedEvent(arg0 int64, arg1 string, arg2 *shared.SignalExternalWorkflowExecutionDecisionAttributes) (*shared.HistoryEvent, *persistenceblobs.SignalInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddSignalExternalWorkflowExecutionInitiatedEvent", arg0, arg1, arg2)
 	ret0, _ := ret[0].(*shared.HistoryEvent)
-	ret1, _ := ret[1].(*persistence.SignalInfo)
+	ret1, _ := ret[1].(*persistenceblobs.SignalInfo)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }
@@ -1255,10 +1255,10 @@ func (mr *MockmutableStateMockRecorder) GetPendingRequestCancelExternalInfos() *
 }
 
 // GetPendingSignalExternalInfos mocks base method
-func (m *MockmutableState) GetPendingSignalExternalInfos() map[int64]*persistence.SignalInfo {
+func (m *MockmutableState) GetPendingSignalExternalInfos() map[int64]*persistenceblobs.SignalInfo {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPendingSignalExternalInfos")
-	ret0, _ := ret[0].(map[int64]*persistence.SignalInfo)
+	ret0, _ := ret[0].(map[int64]*persistenceblobs.SignalInfo)
 	return ret0
 }
 
@@ -1327,10 +1327,10 @@ func (mr *MockmutableStateMockRecorder) GetCronBackoffDuration() *gomock.Call {
 }
 
 // GetSignalInfo mocks base method
-func (m *MockmutableState) GetSignalInfo(arg0 int64) (*persistence.SignalInfo, bool) {
+func (m *MockmutableState) GetSignalInfo(arg0 int64) (*persistenceblobs.SignalInfo, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetSignalInfo", arg0)
-	ret0, _ := ret[0].(*persistence.SignalInfo)
+	ret0, _ := ret[0].(*persistenceblobs.SignalInfo)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
@@ -1949,10 +1949,10 @@ func (mr *MockmutableStateMockRecorder) ReplicateSignalExternalWorkflowExecution
 }
 
 // ReplicateSignalExternalWorkflowExecutionInitiatedEvent mocks base method
-func (m *MockmutableState) ReplicateSignalExternalWorkflowExecutionInitiatedEvent(arg0 int64, arg1 *shared.HistoryEvent, arg2 string) (*persistence.SignalInfo, error) {
+func (m *MockmutableState) ReplicateSignalExternalWorkflowExecutionInitiatedEvent(arg0 int64, arg1 *shared.HistoryEvent, arg2 string) (*persistenceblobs.SignalInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReplicateSignalExternalWorkflowExecutionInitiatedEvent", arg0, arg1, arg2)
-	ret0, _ := ret[0].(*persistence.SignalInfo)
+	ret0, _ := ret[0].(*persistenceblobs.SignalInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

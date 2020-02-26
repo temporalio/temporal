@@ -1691,13 +1691,13 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeSignalExternalWorkflowExecu
 			ChildWorkflowOnly: common.BoolPtr(childWorkflowOnly),
 		},
 	}
-	si := &persistence.SignalInfo{
-		Version:         event.GetVersion(),
-		InitiatedID:     event.GetEventId(),
-		SignalRequestID: signalRequestID,
-		SignalName:      signalName,
-		Input:           signalInput,
-		Control:         control,
+	si := &persistenceblobs.SignalInfo{
+		Version:     event.GetVersion(),
+		InitiatedID: event.GetEventId(),
+		RequestID:   signalRequestID,
+		Name:        signalName,
+		Input:       signalInput,
+		Control:     control,
 	}
 
 	// the cancellation request ID is generated inside, cannot assert equal

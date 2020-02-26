@@ -568,7 +568,7 @@ func deleteRequestCancelInfoMap(
 
 func updateSignalInfos(
 	tx sqlplugin.Tx,
-	signalInfos []*persistence.SignalInfo,
+	signalInfos []*persistenceblobs.SignalInfo,
 	deleteInfo *int64,
 	shardID int,
 	domainID primitives.UUID,
@@ -579,14 +579,7 @@ func updateSignalInfos(
 	if len(signalInfos) > 0 {
 		rows := make([]sqlplugin.SignalInfoMapsRow, len(signalInfos))
 		for i, v := range signalInfos {
-			blob, err := serialization.SignalInfoToBlob(&sqlblobs.SignalInfo{
-				Version:               &v.Version,
-				InitiatedEventBatchID: &v.InitiatedEventBatchID,
-				RequestID:             &v.SignalRequestID,
-				Name:                  &v.SignalName,
-				Input:                 v.Input,
-				Control:               v.Control,
-			})
+			blob, err := serialization.SignalInfoToBlob(v)
 			if err != nil {
 				return err
 			}
@@ -634,7 +627,7 @@ func getSignalInfoMap(
 	domainID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
-) (map[int64]*persistence.SignalInfo, error) {
+) (map[int64]*persistenceblobs.SignalInfo, error) {
 
 	rows, err := db.SelectFromSignalInfoMaps(&sqlplugin.SignalInfoMapsFilter{
 		ShardID:    int64(shardID),
@@ -646,21 +639,13 @@ func getSignalInfoMap(
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to get signal info. Error: %v", err))
 	}
 
-	ret := make(map[int64]*persistence.SignalInfo)
+	ret := make(map[int64]*persistenceblobs.SignalInfo)
 	for _, v := range rows {
 		rowInfo, err := serialization.SignalInfoFromBlob(v.Data, v.DataEncoding)
 		if err != nil {
 			return nil, err
 		}
-		ret[v.InitiatedID] = &persistence.SignalInfo{
-			Version:               rowInfo.GetVersion(),
-			InitiatedID:           v.InitiatedID,
-			InitiatedEventBatchID: rowInfo.GetInitiatedEventBatchID(),
-			SignalRequestID:       rowInfo.GetRequestID(),
-			SignalName:            rowInfo.GetName(),
-			Input:                 rowInfo.GetInput(),
-			Control:               rowInfo.GetControl(),
-		}
+		ret[v.InitiatedID] = rowInfo
 	}
 
 	return ret, nil

@@ -168,10 +168,10 @@ func convertUpdateRequestCancelInfos(
 }
 
 func convertPendingSignalInfos(
-	inputs map[int64]*persistence.SignalInfo,
-) []*persistence.SignalInfo {
+	inputs map[int64]*persistenceblobs.SignalInfo,
+) []*persistenceblobs.SignalInfo {
 
-	outputs := make([]*persistence.SignalInfo, 0, len(inputs))
+	outputs := make([]*persistenceblobs.SignalInfo, 0, len(inputs))
 	for _, item := range inputs {
 		outputs = append(outputs, item)
 	}
@@ -179,10 +179,10 @@ func convertPendingSignalInfos(
 }
 
 func convertUpdateSignalInfos(
-	inputs map[*persistence.SignalInfo]struct{},
-) []*persistence.SignalInfo {
+	inputs map[*persistenceblobs.SignalInfo]struct{},
+) []*persistenceblobs.SignalInfo {
 
-	outputs := make([]*persistence.SignalInfo, 0, len(inputs))
+	outputs := make([]*persistenceblobs.SignalInfo, 0, len(inputs))
 	for item := range inputs {
 		outputs = append(outputs, item)
 	}

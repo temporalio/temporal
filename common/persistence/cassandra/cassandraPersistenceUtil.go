@@ -79,7 +79,7 @@ func applyWorkflowMutationBatch(
 		return err
 	}
 
-	updateTimerInfos(
+	if err := updateTimerInfos(
 		batch,
 		workflowMutation.UpsertTimerInfos,
 		workflowMutation.DeleteTimerInfos,
@@ -87,7 +87,9 @@ func applyWorkflowMutationBatch(
 		domainID,
 		workflowID,
 		runID,
-	)
+	); err != nil {
+		return err
+	}
 
 	if err := updateChildExecutionInfos(
 		batch,
@@ -225,14 +227,16 @@ func applyWorkflowSnapshotBatchAsReset(
 		runID,
 	)
 
-	resetSignalInfos(
+	if err := resetSignalInfos(
 		batch,
 		workflowSnapshot.SignalInfos,
 		shardID,
 		domainID,
 		workflowID,
 		runID,
-	)
+	); err != nil {
+		return err
+	}
 
 	resetSignalRequested(
 		batch,
@@ -1653,24 +1657,24 @@ func resetRequestCancelInfos(
 
 func updateSignalInfos(
 	batch *gocql.Batch,
-	signalInfos []*p.SignalInfo,
+	signalInfos []*persistenceblobs.SignalInfo,
 	deleteInfo *int64,
 	shardID int,
 	domainID string,
 	workflowID string,
 	runID string,
-) {
+) error {
 
 	for _, c := range signalInfos {
+		datablob, err := serialization.SignalInfoToBlob(c)
+		if err != nil {
+			return err
+		}
+
 		batch.Query(templateUpdateSignalInfoQuery,
 			c.InitiatedID,
-			c.Version,
-			c.InitiatedID,
-			c.InitiatedEventBatchID,
-			c.SignalRequestID,
-			c.SignalName,
-			c.Input,
-			c.Control,
+			datablob.Data,
+			datablob.Encoding,
 			shardID,
 			rowTypeExecution,
 			domainID,
@@ -1692,19 +1696,27 @@ func updateSignalInfos(
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID)
 	}
+
+	return nil
 }
 
 func resetSignalInfos(
 	batch *gocql.Batch,
-	signalInfos []*p.SignalInfo,
+	signalInfos []*persistenceblobs.SignalInfo,
 	shardID int,
 	domainID string,
 	workflowID string,
 	runID string,
-) {
+) error {
+	sMap, sMapEncoding, err := resetSignalInfoMap(signalInfos)
+
+	if err != nil {
+		return err
+	}
 
 	batch.Query(templateResetSignalInfoQuery,
-		resetSignalInfoMap(signalInfos),
+		sMap,
+		sMapEncoding,
 		shardID,
 		rowTypeExecution,
 		domainID,
@@ -1712,6 +1724,8 @@ func resetSignalInfos(
 		runID,
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID)
+
+	return nil
 }
 
 func updateSignalsRequested(
@@ -2126,33 +2140,6 @@ func createRequestCancelInfo(
 	return info
 }
 
-func createSignalInfo(
-	result map[string]interface{},
-) *p.SignalInfo {
-
-	info := &p.SignalInfo{}
-	for k, v := range result {
-		switch k {
-		case "version":
-			info.Version = v.(int64)
-		case "initiated_id":
-			info.InitiatedID = v.(int64)
-		case "initiated_event_batch_id":
-			info.InitiatedEventBatchID = v.(int64)
-		case "signal_request_id":
-			info.SignalRequestID = v.(gocql.UUID).String()
-		case "signal_name":
-			info.SignalName = v.(string)
-		case "input":
-			info.Input = v.([]byte)
-		case "control":
-			info.Control = v.([]byte)
-		}
-	}
-
-	return info
-}
-
 func resetActivityInfoMap(
 	activityInfos []*p.InternalActivityInfo,
 ) (map[int64]map[string]interface{}, error) {
@@ -2281,24 +2268,24 @@ func resetRequestCancelInfoMap(
 }
 
 func resetSignalInfoMap(
-	signalInfos []*p.SignalInfo,
-) map[int64]map[string]interface{} {
+	signalInfos []*persistenceblobs.SignalInfo,
+) (map[int64][]byte, common.EncodingType, error)  {
 
-	sMap := make(map[int64]map[string]interface{})
+	sMap := make(map[int64][]byte)
+	var encoding common.EncodingType
 	for _, s := range signalInfos {
-		sInfo := make(map[string]interface{})
-		sInfo["version"] = s.Version
-		sInfo["initiated_id"] = s.InitiatedID
-		sInfo["initiated_event_batch_id"] = s.InitiatedEventBatchID
-		sInfo["signal_request_id"] = s.SignalRequestID
-		sInfo["signal_name"] = s.SignalName
-		sInfo["input"] = s.Input
-		sInfo["control"] = s.Control
+		datablob, err := serialization.SignalInfoToBlob(s)
 
-		sMap[s.InitiatedID] = sInfo
+		if err != nil {
+			return nil, common.EncodingTypeUnknown, err
+		}
+
+		encoding = datablob.Encoding
+
+		sMap[s.InitiatedID] = datablob.Data
 	}
 
-	return sMap
+	return sMap, encoding, nil
 }
 
 func createHistoryEventBatchBlob(

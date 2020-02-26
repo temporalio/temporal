@@ -5027,7 +5027,7 @@ func addCancelRequestedEvent(builder mutableState, initiatedID int64, domain, wo
 }
 
 func addRequestSignalInitiatedEvent(builder mutableState, decisionCompletedEventID int64,
-	signalRequestID, domain, workflowID, runID, signalName string, input, control []byte) (*workflow.HistoryEvent, *persistence.SignalInfo) {
+	signalRequestID, domain, workflowID, runID, signalName string, input, control []byte) (*workflow.HistoryEvent, *persistenceblobs.SignalInfo) {
 	event, si, _ := builder.AddSignalExternalWorkflowExecutionInitiatedEvent(decisionCompletedEventID, signalRequestID,
 		&workflow.SignalExternalWorkflowExecutionDecisionAttributes{
 			Domain: common.StringPtr(domain),
@@ -5149,7 +5149,7 @@ func createMutableState(ms mutableState) *persistence.WorkflowMutableState {
 	for id, info := range builder.pendingRequestCancelInfoIDs {
 		cancellationInfos[id] = copyCancellationInfo(info)
 	}
-	signalInfos := make(map[int64]*persistence.SignalInfo)
+	signalInfos := make(map[int64]*persistenceblobs.SignalInfo)
 	for id, info := range builder.pendingSignalInfoIDs {
 		signalInfos[id] = copySignalInfo(info)
 	}
@@ -5328,12 +5328,12 @@ func copyCancellationInfo(sourceInfo *persistence.RequestCancelInfo) *persistenc
 	}
 }
 
-func copySignalInfo(sourceInfo *persistence.SignalInfo) *persistence.SignalInfo {
-	result := &persistence.SignalInfo{
-		Version:         sourceInfo.Version,
-		InitiatedID:     sourceInfo.InitiatedID,
-		SignalRequestID: sourceInfo.SignalRequestID,
-		SignalName:      sourceInfo.SignalName,
+func copySignalInfo(sourceInfo *persistenceblobs.SignalInfo) *persistenceblobs.SignalInfo {
+	result := &persistenceblobs.SignalInfo{
+		Version:     sourceInfo.Version,
+		InitiatedID: sourceInfo.InitiatedID,
+		RequestID:   sourceInfo.RequestID,
+		Name:        sourceInfo.Name,
 	}
 	result.Input = make([]byte, len(sourceInfo.Input))
 	copy(result.Input, sourceInfo.Input)

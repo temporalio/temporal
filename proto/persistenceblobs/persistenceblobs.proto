@@ -149,3 +149,13 @@ message TaskListInfo {
     google.protobuf.Timestamp expiryTime = 3;
     google.protobuf.Timestamp lastUpdated = 4;
 }
+
+message SignalInfo {
+    int64 version = 1;
+    int64 initiatedEventBatchID = 2;
+    string requestID = 3;
+    string name = 4;
+    bytes input = 5;
+    bytes control = 6;
+    int64 initiatedID = 7;
+}
