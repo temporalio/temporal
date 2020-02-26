@@ -356,7 +356,7 @@ workflow_state = ? ` +
 		`IF range_id = ?`
 
 	templateGetWorkflowExecutionQuery = `SELECT execution, replication_state, activity_map, timer_map, timer_map_encoding, ` +
-		`child_executions_map, request_cancel_map, signal_map, signal_requested, buffered_events_list, ` +
+		`child_executions_map, request_cancel_map, signal_map, signal_map_encoding, signal_requested, buffered_events_list, ` +
 		`buffered_replication_tasks_map, version_histories, version_histories_encoding, checksum ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
@@ -511,7 +511,7 @@ workflow_state = ? ` +
 		`and task_id = ? `
 
 	templateUpdateSignalInfoQuery = `UPDATE executions ` +
-		`SET signal_map[ ? ] =` + templateSignalInfoType + ` ` +
+		`SET signal_map[ ? ] = ?, signal_map_encoding = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and domain_id = ? ` +
@@ -521,7 +521,7 @@ workflow_state = ? ` +
 		`and task_id = ? `
 
 	templateResetSignalInfoQuery = `UPDATE executions ` +
-		`SET signal_map = ?` +
+		`SET signal_map = ?, signal_map_encoding = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and domain_id = ? ` +
@@ -1254,10 +1254,14 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 	}
 	state.RequestCancelInfos = requestCancelInfos
 
-	signalInfos := make(map[int64]*p.SignalInfo)
-	sMap := result["signal_map"].(map[int64]map[string]interface{})
+	signalInfos := make(map[int64]*persistenceblobs.SignalInfo)
+	sMapEncoding := result["signal_map_encoding"].(string)
+	sMap := result["signal_map"].(map[int64][]byte)
 	for key, value := range sMap {
-		info := createSignalInfo(value)
+		info, err := serialization.SignalInfoFromBlob(value, sMapEncoding)
+		if err != nil {
+			return nil, err
+		}
 		signalInfos[key] = info
 	}
 	state.SignalInfos = signalInfos

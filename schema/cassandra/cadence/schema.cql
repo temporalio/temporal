@@ -137,17 +137,6 @@ CREATE TYPE request_cancel_info (
   cancel_request_id         text,
 );
 
--- External workflow signal in progress mutable state
-CREATE TYPE signal_info (
-  version                   bigint,
-  initiated_event_batch_id  bigint,
-  initiated_id              bigint,
-  signal_request_id         uuid,
-  signal_name               text,
-  input                     blob,
-  control                   blob,
-);
-
 -- Activity or workflow task in a task list
 CREATE TYPE task (
   domain_id        uuid,
@@ -245,7 +234,8 @@ CREATE TABLE executions (
   timer_map_encoding             text,
   child_executions_map           map<bigint, frozen<child_execution_info>>,
   request_cancel_map             map<bigint, frozen<request_cancel_info>>,
-  signal_map                     map<bigint, frozen<signal_info>>,
+  signal_map                     map<bigint, blob>,
+  signal_map_encoding            text,
   signal_requested               set<uuid>,
   buffered_events_list           list<frozen<serialized_event_batch>>,
   replication_state              frozen<replication_state>, -- Replication information part of mutable state

@@ -781,13 +781,13 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		},
 	}
 
-	signalInfos := map[int64]*persistence.SignalInfo{
+	signalInfos := map[int64]*persistenceblobs.SignalInfo{
 		75: {
 			Version:               failoverVersion,
 			InitiatedID:           75,
 			InitiatedEventBatchID: 17,
-			SignalRequestID:       uuid.New(),
-			SignalName:            "test-signal-75",
+			RequestID:       uuid.New(),
+			Name:            "test-signal-75",
 			Input:                 []byte("signal-input-75"),
 		},
 	}

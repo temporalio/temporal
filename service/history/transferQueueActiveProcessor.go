@@ -722,7 +722,7 @@ func (t *transferQueueActiveProcessorImpl) processSignalExecution(
 			WorkflowId: task.TargetWorkflowID,
 			RunId:      primitives.UUID(task.TargetRunID).String(),
 		},
-		RequestId: signalInfo.SignalRequestID,
+		RequestId: signalInfo.RequestID,
 	})
 	return err
 }
@@ -1354,7 +1354,7 @@ func (t *transferQueueActiveProcessorImpl) requestCancelExternalExecutionWithRet
 func (t *transferQueueActiveProcessorImpl) signalExternalExecutionWithRetry(
 	task *persistenceblobs.TransferTaskInfo,
 	targetDomain string,
-	signalInfo *persistence.SignalInfo,
+	signalInfo *persistenceblobs.SignalInfo,
 ) error {
 
 	request := &historyservice.SignalWorkflowExecutionRequest{
@@ -1366,10 +1366,10 @@ func (t *transferQueueActiveProcessorImpl) signalExternalExecutionWithRetry(
 				RunId:      primitives.UUID(task.TargetRunID).String(),
 			},
 			Identity:   identityHistoryService,
-			SignalName: signalInfo.SignalName,
+			SignalName: signalInfo.Name,
 			Input:      signalInfo.Input,
 			// Use same request ID to deduplicate SignalWorkflowExecution calls
-			RequestId: signalInfo.SignalRequestID,
+			RequestId: signalInfo.RequestID,
 			Control:   signalInfo.Control,
 		},
 		ExternalWorkflowExecution: &commonproto.WorkflowExecution{

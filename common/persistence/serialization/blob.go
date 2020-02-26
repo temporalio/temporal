@@ -29,13 +29,13 @@ import (
 	"go.uber.org/thriftrw/protocol"
 	"go.uber.org/thriftrw/wire"
 
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/go/sqlblobs"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
-
-	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
 )
 
 // thriftRWType represents an thrift auto generated type
@@ -201,13 +201,13 @@ func ChildExecutionInfoFromBlob(b []byte, proto string) (*sqlblobs.ChildExecutio
 	return result, thriftRWDecode(b, proto, result)
 }
 
-func SignalInfoToBlob(info *sqlblobs.SignalInfo) (DataBlob, error) {
-	return thriftRWEncode(info)
+func SignalInfoToBlob(info *persistenceblobs.SignalInfo) (DataBlob, error) {
+	return protoRWEncode(info)
 }
 
-func SignalInfoFromBlob(b []byte, proto string) (*sqlblobs.SignalInfo, error) {
-	result := &sqlblobs.SignalInfo{}
-	return result, thriftRWDecode(b, proto, result)
+func SignalInfoFromBlob(b []byte, proto string) (*persistenceblobs.SignalInfo, error) {
+	result := &persistenceblobs.SignalInfo{}
+	return result, protoRWDecode(b, proto, result)
 }
 
 func RequestCancelInfoToBlob(info *sqlblobs.RequestCancelInfo) (DataBlob, error) {

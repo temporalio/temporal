@@ -918,11 +918,11 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 		InitiatedEvent:  &gen.HistoryEvent{EventId: int64Ptr(1)},
 	}}
 
-	insertSignalInfos := []*p.SignalInfo{{
-		Version:         140,
-		InitiatedID:     141,
-		SignalName:      "142",
-		SignalRequestID: uuid.New(),
+	insertSignalInfos := []*persistenceblobs.SignalInfo{{
+		Version:     140,
+		InitiatedID: 141,
+		Name:        "142",
+		RequestID:   uuid.New(),
 	}}
 
 	insertSignalRequests := []string{uuid.New()}
@@ -1333,11 +1333,11 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 		InitiatedEvent:  &gen.HistoryEvent{EventId: int64Ptr(1)},
 	}}
 
-	insertSignalInfos := []*p.SignalInfo{{
-		Version:         140,
-		InitiatedID:     141,
-		SignalName:      "142",
-		SignalRequestID: uuid.New(),
+	insertSignalInfos := []*persistenceblobs.SignalInfo{{
+		Version:     140,
+		InitiatedID: 141,
+		Name:        "142",
+		RequestID:   uuid.New(),
 	}}
 
 	insertSignalRequests := []string{uuid.New()}

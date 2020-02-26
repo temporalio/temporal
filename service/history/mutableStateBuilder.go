@@ -98,8 +98,8 @@ type (
 		updateRequestCancelInfos    map[*persistence.RequestCancelInfo]struct{} // Modified RequestCancel Infos since last update, for persistence update
 		deleteRequestCancelInfo     *int64                                      // Deleted RequestCancel Info since last update, for persistence update
 
-		pendingSignalInfoIDs map[int64]*persistence.SignalInfo    // Initiated Event ID -> SignalInfo
-		updateSignalInfos    map[*persistence.SignalInfo]struct{} // Modified SignalInfo since last update
+		pendingSignalInfoIDs map[int64]*persistenceblobs.SignalInfo    // Initiated Event ID -> SignalInfo
+		updateSignalInfos    map[*persistenceblobs.SignalInfo]struct{} // Modified SignalInfo since last update
 		deleteSignalInfo     *int64                               // Deleted SignalInfo since last update
 
 		pendingSignalRequestedIDs map[string]struct{} // Set of signaled requestIds
@@ -184,8 +184,8 @@ func newMutableStateBuilder(
 		pendingRequestCancelInfoIDs: make(map[int64]*persistence.RequestCancelInfo),
 		deleteRequestCancelInfo:     nil,
 
-		updateSignalInfos:    make(map[*persistence.SignalInfo]struct{}),
-		pendingSignalInfoIDs: make(map[int64]*persistence.SignalInfo),
+		updateSignalInfos:    make(map[*persistenceblobs.SignalInfo]struct{}),
+		pendingSignalInfoIDs: make(map[int64]*persistenceblobs.SignalInfo),
 		deleteSignalInfo:     nil,
 
 		updateSignalRequestedIDs:  make(map[string]struct{}),
@@ -1092,7 +1092,7 @@ func (e *mutableStateBuilder) GetCronBackoffDuration() (time.Duration, error) {
 // GetSignalInfo get details about a signal request that is currently in progress.
 func (e *mutableStateBuilder) GetSignalInfo(
 	initiatedEventID int64,
-) (*persistence.SignalInfo, bool) {
+) (*persistenceblobs.SignalInfo, bool) {
 
 	ri, ok := e.pendingSignalInfoIDs[initiatedEventID]
 	return ri, ok
@@ -1466,7 +1466,7 @@ func (e *mutableStateBuilder) GetPendingRequestCancelExternalInfos() map[int64]*
 	return e.pendingRequestCancelInfoIDs
 }
 
-func (e *mutableStateBuilder) GetPendingSignalExternalInfos() map[int64]*persistence.SignalInfo {
+func (e *mutableStateBuilder) GetPendingSignalExternalInfos() map[int64]*persistenceblobs.SignalInfo {
 	return e.pendingSignalInfoIDs
 }
 
@@ -2841,7 +2841,7 @@ func (e *mutableStateBuilder) AddSignalExternalWorkflowExecutionInitiatedEvent(
 	decisionCompletedEventID int64,
 	signalRequestID string,
 	request *workflow.SignalExternalWorkflowExecutionDecisionAttributes,
-) (*workflow.HistoryEvent, *persistence.SignalInfo, error) {
+) (*workflow.HistoryEvent, *persistenceblobs.SignalInfo, error) {
 
 	opTag := tag.WorkflowActionExternalWorkflowSignalInitiated
 	if err := e.checkMutability(opTag); err != nil {
@@ -2867,17 +2867,17 @@ func (e *mutableStateBuilder) ReplicateSignalExternalWorkflowExecutionInitiatedE
 	firstEventID int64,
 	event *workflow.HistoryEvent,
 	signalRequestID string,
-) (*persistence.SignalInfo, error) {
+) (*persistenceblobs.SignalInfo, error) {
 
 	// TODO: Consider also writing signalRequestID to history event
 	initiatedEventID := event.GetEventId()
 	attributes := event.SignalExternalWorkflowExecutionInitiatedEventAttributes
-	si := &persistence.SignalInfo{
+	si := &persistenceblobs.SignalInfo{
 		Version:               event.GetVersion(),
 		InitiatedEventBatchID: firstEventID,
 		InitiatedID:           initiatedEventID,
-		SignalRequestID:       signalRequestID,
-		SignalName:            attributes.GetSignalName(),
+		RequestID:             signalRequestID,
+		Name:                  attributes.GetSignalName(),
 		Input:                 attributes.Input,
 		Control:               attributes.Control,
 	}
@@ -4108,7 +4108,7 @@ func (e *mutableStateBuilder) cleanupTransaction(
 	e.updateRequestCancelInfos = make(map[*persistence.RequestCancelInfo]struct{})
 	e.deleteRequestCancelInfo = nil
 
-	e.updateSignalInfos = make(map[*persistence.SignalInfo]struct{})
+	e.updateSignalInfos = make(map[*persistenceblobs.SignalInfo]struct{})
 	e.deleteSignalInfo = nil
 
 	e.updateSignalRequestedIDs = make(map[string]struct{})

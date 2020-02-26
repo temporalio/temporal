@@ -1292,7 +1292,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessSignalExecution_Success()
 			WorkflowId: transferTask.TargetWorkflowID,
 			RunId:      primitives.UUID(transferTask.TargetRunID).String(),
 		},
-		RequestId: si.SignalRequestID,
+		RequestId: si.RequestID,
 	}).Return(nil, nil).Times(1)
 
 	_, err = s.transferQueueActiveProcessor.process(newTaskInfo(nil, transferTask, s.logger))
@@ -1961,7 +1961,7 @@ func (s *transferQueueActiveProcessorSuite) createRequestCancelWorkflowExecution
 func (s *transferQueueActiveProcessorSuite) createSignalWorkflowExecutionRequest(
 	targetDomainName string,
 	task *persistenceblobs.TransferTaskInfo,
-	si *persistence.SignalInfo,
+	si *persistenceblobs.SignalInfo,
 ) *historyservice.SignalWorkflowExecutionRequest {
 
 	sourceExecution := commonproto.WorkflowExecution{
@@ -1979,9 +1979,9 @@ func (s *transferQueueActiveProcessorSuite) createSignalWorkflowExecutionRequest
 			Domain:            targetDomainName,
 			WorkflowExecution: &targetExecution,
 			Identity:          identityHistoryService,
-			SignalName:        si.SignalName,
+			SignalName:        si.Name,
 			Input:             si.Input,
-			RequestId:         si.SignalRequestID,
+			RequestId:         si.RequestID,
 			Control:           si.Control,
 		},
 		ExternalWorkflowExecution: &sourceExecution,
