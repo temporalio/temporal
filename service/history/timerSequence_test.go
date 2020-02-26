@@ -101,12 +101,13 @@ func addDurationToGogoTime(timestamp *types.Timestamp, seconds int) *types.Times
 
 func (s *timerSequenceSuite) TestCreateNextUserTimer_NotCreated() {
 	now := types.TimestampNow()
+	now = addDurationToGogoTime(now, 100)
 	currentVersion := int64(999)
 	timerInfo := &persistenceblobs.TimerInfo{
 		Version:    123,
 		TimerID:    "some random timer ID",
 		StartedID:  456,
-		ExpiryTime: addDurationToGogoTime(now, 100),
+		ExpiryTime: now,
 		TaskStatus: timerTaskStatusNone,
 	}
 	timerInfos := map[string]*persistenceblobs.TimerInfo{timerInfo.TimerID: timerInfo}
