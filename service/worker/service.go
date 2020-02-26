@@ -24,6 +24,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/domain"
@@ -39,7 +41,6 @@ import (
 	"github.com/temporalio/temporal/service/worker/parentclosepolicy"
 	"github.com/temporalio/temporal/service/worker/replicator"
 	"github.com/temporalio/temporal/service/worker/scanner"
-	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type (

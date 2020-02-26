@@ -30,8 +30,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/temporalio/temporal/common/metrics"
 	"go.temporal.io/temporal-proto/serviceerror"
+
+	"github.com/temporalio/temporal/common/metrics"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"

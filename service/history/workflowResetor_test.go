@@ -27,6 +27,8 @@ import (
 	"testing"
 	"time"
 
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
 	"github.com/golang/mock/gomock"
@@ -37,7 +39,6 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	h "github.com/temporalio/temporal/.gen/go/history"
-	"github.com/temporalio/temporal/.gen/go/shared"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -1391,7 +1392,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 	s.mockHistoryV2Mgr.On("ReadHistoryBranchByBatch", readHistoryReq).Return(readHistoryResp, nil).Once()
 
 	_, err := s.historyEngine.ResetWorkflowExecution(context.Background(), request)
-	s.EqualError(err, "BadRequestError{Message: it is not allowed resetting to a point that workflow has pending request cancel.}")
+	s.EqualError(err, "InvalidArgument{Message: it is not allowed resetting to a point that workflow has pending request cancel.}")
 }
 
 func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCurrent() {
@@ -2695,7 +2696,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 	s.mockHistoryV2Mgr.On("ForkHistoryBranch", mock.Anything).Return(forkResp, nil).Once()
 
 	_, err := s.historyEngine.ResetWorkflowExecution(context.Background(), request)
-	s.IsType(&shared.DomainNotActiveError{}, err)
+	s.IsType(&serviceerror.DomainNotActive{}, err)
 }
 
 func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurrent() {

@@ -23,10 +23,11 @@ package persistence
 import (
 	"fmt"
 
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 	"github.com/temporalio/temporal/common/primitives"
-	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/pborman/uuid"
 

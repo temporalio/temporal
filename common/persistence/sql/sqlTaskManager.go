@@ -26,8 +26,9 @@ import (
 	"math"
 	"time"
 
-	"github.com/temporalio/temporal/common/persistence/serialization"
 	"go.temporal.io/temporal-proto/serviceerror"
+
+	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/temporalio/temporal/common/primitives"
 

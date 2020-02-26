@@ -24,6 +24,8 @@ import (
 	ctx "context"
 	"testing"
 
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
 	"github.com/golang/mock/gomock"
@@ -274,7 +276,7 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchAppendable_MissingEv
 		incomingVersionHistory,
 		150+2,
 		300)
-	s.IsType(&shared.RetryTaskV2Error{}, err)
+	s.IsType(&serviceerror.RetryTaskV2{}, err)
 }
 
 func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_NoMissingEventInBetween() {
@@ -368,5 +370,5 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_Missin
 		baseBranchLCAEventID+2,
 		baseBranchLCAEventVersion,
 	)
-	s.IsType(&shared.RetryTaskV2Error{}, err)
+	s.IsType(&serviceerror.RetryTaskV2{}, err)
 }

@@ -21,9 +21,10 @@
 package history
 
 import (
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
-	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type workflowContext interface {

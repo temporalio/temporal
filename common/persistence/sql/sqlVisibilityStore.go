@@ -26,13 +26,14 @@ import (
 	"fmt"
 	"time"
 
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
 	"github.com/temporalio/temporal/common/service/config"
-	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type (

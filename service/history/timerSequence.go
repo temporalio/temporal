@@ -27,11 +27,12 @@ import (
 	"sort"
 	"time"
 
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/persistence"
-	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type timerType int32

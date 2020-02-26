@@ -21,11 +21,12 @@
 package persistence
 
 import (
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence/serialization"
-	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type (

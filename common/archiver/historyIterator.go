@@ -24,10 +24,11 @@ import (
 	"encoding/json"
 	"errors"
 
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/persistence"
-	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 const (

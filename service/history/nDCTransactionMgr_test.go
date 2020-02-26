@@ -25,6 +25,8 @@ import (
 	"testing"
 	"time"
 
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
 	"github.com/golang/mock/gomock"
@@ -446,7 +448,7 @@ func (s *nDCTransactionMgrSuite) TestCheckWorkflowExists_DoesNotExists() {
 			WorkflowId: common.StringPtr(workflowID),
 			RunId:      common.StringPtr(runID),
 		},
-	}).Return(nil, &shared.EntityNotExistsError{}).Once()
+	}).Return(nil, serviceerror.NewNotFound("")).Once()
 
 	exists, err := s.transactionMgr.checkWorkflowExists(ctx, domainID, workflowID, runID)
 	s.NoError(err)
@@ -480,7 +482,7 @@ func (s *nDCTransactionMgrSuite) TestGetWorkflowCurrentRunID_Missing() {
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
 		DomainID:   domainID,
 		WorkflowID: workflowID,
-	}).Return(nil, &shared.EntityNotExistsError{}).Once()
+	}).Return(nil, serviceerror.NewNotFound("")).Once()
 
 	currentRunID, err := s.transactionMgr.getCurrentWorkflowRunID(ctx, domainID, workflowID)
 	s.NoError(err)

@@ -26,6 +26,8 @@ import (
 	"testing"
 	"time"
 
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
 	"github.com/golang/mock/gomock"
@@ -163,7 +165,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_WorkflowNotFound() {
 			WorkflowId: common.StringPtr(workflowID),
 			RunId:      common.StringPtr(runID),
 		},
-	}).Return(nil, &shared.EntityNotExistsError{})
+	}).Return(nil, serviceerror.NewNotFound(""))
 	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID, Name: domainName},

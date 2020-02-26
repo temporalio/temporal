@@ -402,7 +402,7 @@ func (s *historyArchiverSuite) TestGet_Fail_FileNotExist() {
 	response, err := historyArchiver.Get(context.Background(), URI, request)
 	s.Nil(response)
 	s.Error(err)
-	s.IsType(&shared.EntityNotExistsError{}, err)
+	s.IsType(&serviceerror.NotFound{}, err)
 }
 
 func (s *historyArchiverSuite) TestGet_Success_PickHighestVersion() {

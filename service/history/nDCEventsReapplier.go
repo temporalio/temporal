@@ -25,11 +25,12 @@ package history
 import (
 	ctx "context"
 
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/metrics"
-	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type (

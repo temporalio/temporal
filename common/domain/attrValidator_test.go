@@ -23,8 +23,9 @@ package domain
 import (
 	"testing"
 
-	"github.com/temporalio/temporal/common/cluster"
 	"go.temporal.io/temporal-proto/serviceerror"
+
+	"github.com/temporalio/temporal/common/cluster"
 
 	"github.com/temporalio/temporal/common/persistence"
 

@@ -23,9 +23,10 @@ package persistence
 import (
 	"fmt"
 
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
-	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type (

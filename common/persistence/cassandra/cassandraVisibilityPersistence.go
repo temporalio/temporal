@@ -24,8 +24,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/temporalio/temporal/common/cassandra"
 	"go.temporal.io/temporal-proto/serviceerror"
+
+	"github.com/temporalio/temporal/common/cassandra"
 
 	"github.com/gocql/gocql"
 

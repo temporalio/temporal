@@ -41,13 +41,14 @@ import (
 	"path"
 	"strconv"
 
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/service/config"
-	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 const (

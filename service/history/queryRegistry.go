@@ -25,8 +25,9 @@ package history
 import (
 	"sync"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"go.temporal.io/temporal-proto/serviceerror"
+
+	"github.com/temporalio/temporal/.gen/go/shared"
 )
 
 var (

@@ -286,7 +286,7 @@ func (p *replicationTaskProcessor) decodeAndValidateMsg(msg messaging.Message, l
 	var replicationTask replicator.ReplicationTask
 	err := p.msgEncoder.Decode(msg.Value(), &replicationTask)
 	if err != nil {
-		// return BadRequestError so processWithRetry can nack the message
+		// return InvalidArgument so processWithRetry can nack the message
 		return nil, ErrDeserializeReplicationTask
 	}
 

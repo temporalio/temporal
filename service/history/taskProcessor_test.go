@@ -26,15 +26,13 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-
-	gomock "github.com/golang/mock/gomock"
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+	"go.temporal.io/temporal-proto/serviceerror"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
@@ -198,7 +196,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_DomainTrue_ProcessErrNoErr() 
 }
 
 func (s *taskProcessorSuite) TestHandleTaskError_EntityNotExists() {
-	err := &workflow.EntityNotExistsError{}
+	err := serviceerror.NewNotFound("")
 
 	taskInfo := newTaskInfo(s.mockProcessor, nil, s.logger)
 	s.Nil(s.taskProcessor.handleTaskError(s.scope, taskInfo, s.notificationChan, err))
@@ -228,7 +226,7 @@ func (s *taskProcessorSuite) TestHandleTaskError_ErrTaskDiscarded() {
 }
 
 func (s *taskProcessorSuite) TestHandleTaskError_DomainNotActiveError() {
-	err := &workflow.DomainNotActiveError{}
+	err := serviceerror.NewDomainNotActive("", "", "")
 
 	taskInfo := newTaskInfo(s.mockProcessor, nil, s.logger)
 	taskInfo.startTime = time.Now().Add(-cache.DomainCacheRefreshInterval * time.Duration(2))

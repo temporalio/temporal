@@ -25,8 +25,9 @@ package membership
 import (
 	"errors"
 
-	"github.com/temporalio/temporal/common"
 	"go.temporal.io/temporal-proto/serviceerror"
+
+	"github.com/temporalio/temporal/common"
 )
 
 // ErrUnknownService is thrown for a service that is not tracked by this instance

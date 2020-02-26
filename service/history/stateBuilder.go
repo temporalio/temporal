@@ -25,8 +25,9 @@ package history
 import (
 	"time"
 
-	"github.com/temporalio/temporal/common/primitives"
 	"go.temporal.io/temporal-proto/serviceerror"
+
+	"github.com/temporalio/temporal/common/primitives"
 
 	"github.com/pborman/uuid"
 

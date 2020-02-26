@@ -25,6 +25,8 @@ import (
 	"fmt"
 	"time"
 
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	h "github.com/temporalio/temporal/.gen/go/history"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
@@ -35,7 +37,6 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
-	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type (

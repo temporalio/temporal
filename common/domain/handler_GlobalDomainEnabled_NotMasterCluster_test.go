@@ -438,7 +438,7 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestRegisterGetD
 		Name: domainName,
 	})
 	s.Error(err)
-	s.IsType(&shared.EntityNotExistsError{}, err)
+	s.IsType(&serviceerror.NotFound{}, err)
 	s.Nil(resp)
 }
 
@@ -482,7 +482,7 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestRegisterGetD
 		Name: domainName,
 	})
 	s.Error(err)
-	s.IsType(&shared.EntityNotExistsError{}, err)
+	s.IsType(&serviceerror.NotFound{}, err)
 	s.Nil(resp)
 }
 

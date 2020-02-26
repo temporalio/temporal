@@ -25,8 +25,9 @@ import (
 	"testing"
 	"time"
 
-	pblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"go.temporal.io/temporal-proto/serviceerror"
+
+	pblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -265,7 +266,7 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 
 	sRequest := &h.SignalWithStartWorkflowExecutionRequest{}
 	_, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
-	s.EqualError(err, "BadRequestError{Message: Missing domain UUID.}")
+	s.EqualError(err, "InvalidArgument{Message: Missing domain UUID.}")
 
 	domainID := testDomainID
 	workflowID := "wId"
@@ -311,7 +312,7 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 
 	sRequest := &h.SignalWithStartWorkflowExecutionRequest{}
 	_, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
-	s.EqualError(err, "BadRequestError{Message: Missing domain UUID.}")
+	s.EqualError(err, "InvalidArgument{Message: Missing domain UUID.}")
 
 	domainID := testDomainID
 	workflowID := "wId"

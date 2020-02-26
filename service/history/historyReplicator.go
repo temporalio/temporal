@@ -25,8 +25,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/temporalio/temporal/common/persistence/serialization"
 	"go.temporal.io/temporal-proto/serviceerror"
+
+	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/pborman/uuid"
 
@@ -496,7 +497,7 @@ func (r *historyReplicator) ApplyOtherEventsVersionChecking(
 	if ri.GetLastEventId() > rState.LastWriteEventID {
 		// if there is any bug in the replication protocol or implementation, this case can happen
 		logError(logger, "Conflict detected, but cannot resolve.", ErrCorruptedReplicationInfo)
-		// Returning BadRequestError to force the message to land into DLQ
+		// Returning InvalidArgument to force the message to land into DLQ
 		return nil, ErrCorruptedReplicationInfo
 	}
 

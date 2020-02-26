@@ -27,11 +27,12 @@ import (
 	"encoding/gob"
 	"fmt"
 
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
-	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 // TODO: Rename all SQL Managers to Stores

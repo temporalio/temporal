@@ -28,8 +28,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/temporalio/temporal/common/primitives"
 	"go.temporal.io/temporal-proto/serviceerror"
+
+	"github.com/temporalio/temporal/common/primitives"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -311,13 +312,13 @@ func (s *engineSuite) TestGetMutableState_EmptyRunID() {
 		WorkflowId: common.StringPtr("test-get-workflow-execution-event-id"),
 	}
 
-	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(nil, &workflow.EntityNotExistsError{}).Once()
+	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(nil, serviceerror.NewNotFound("")).Once()
 
 	_, err := s.mockHistoryEngine.GetMutableState(ctx, &history.GetMutableStateRequest{
 		DomainUUID: common.StringPtr(testDomainID),
 		Execution:  &execution,
 	})
-	s.Equal(&workflow.EntityNotExistsError{}, err)
+	s.Equal(&serviceerror.NotFound{}, err)
 }
 
 func (s *engineSuite) TestGetMutableStateLongPoll() {
@@ -903,7 +904,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfNoExecution() {
 	})
 	identity := "testIdentity"
 
-	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(nil, &workflow.EntityNotExistsError{}).Once()
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(nil, serviceerror.NewNotFound("")).Once()
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &history.RespondDecisionTaskCompletedRequest{
 		DomainUUID: common.StringPtr(testDomainID),
@@ -913,7 +914,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfNoExecution() {
 		},
 	})
 	s.NotNil(err)
-	s.IsType(&workflow.EntityNotExistsError{}, err)
+	s.IsType(&serviceerror.NotFound{}, err)
 }
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedIfGetExecutionFailed() {
@@ -1011,7 +1012,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskCompleted() {
 		},
 	})
 	s.NotNil(err)
-	s.IsType(&workflow.EntityNotExistsError{}, err)
+	s.IsType(&serviceerror.NotFound{}, err)
 }
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskNotStarted() {
@@ -1045,7 +1046,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskNotStarted() {
 		},
 	})
 	s.NotNil(err)
-	s.IsType(&workflow.EntityNotExistsError{}, err)
+	s.IsType(&serviceerror.NotFound{}, err)
 }
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedConflictOnUpdate() {
@@ -2206,7 +2207,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowFail
 		},
 	})
 
-	s.EqualError(err, "BadRequestError{Message: RunID is not valid UUID.}")
+	s.EqualError(err, "InvalidArgument{Message: RunID is not valid UUID.}")
 }
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowFailed_UnKnownDomain() {
@@ -2292,7 +2293,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoExecution() {
 	})
 	identity := "testIdentity"
 
-	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(nil, &workflow.EntityNotExistsError{}).Once()
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(nil, serviceerror.NewNotFound("")).Once()
 
 	err := s.mockHistoryEngine.RespondActivityTaskCompleted(context.Background(), &history.RespondActivityTaskCompletedRequest{
 		DomainUUID: common.StringPtr(testDomainID),
@@ -2302,7 +2303,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoExecution() {
 		},
 	})
 	s.NotNil(err)
-	s.IsType(&workflow.EntityNotExistsError{}, err)
+	s.IsType(&serviceerror.NotFound{}, err)
 }
 
 func (s *engineSuite) TestRespondActivityTaskCompletedIfNoRunID() {
@@ -2313,7 +2314,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoRunID() {
 	})
 	identity := "testIdentity"
 
-	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(nil, &workflow.EntityNotExistsError{}).Once()
+	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(nil, serviceerror.NewNotFound("")).Once()
 
 	err := s.mockHistoryEngine.RespondActivityTaskCompleted(context.Background(), &history.RespondActivityTaskCompletedRequest{
 		DomainUUID: common.StringPtr(testDomainID),
@@ -2323,7 +2324,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoRunID() {
 		},
 	})
 	s.NotNil(err)
-	s.IsType(&workflow.EntityNotExistsError{}, err)
+	s.IsType(&serviceerror.NotFound{}, err)
 }
 
 func (s *engineSuite) TestRespondActivityTaskCompletedIfGetExecutionFailed() {
@@ -2378,7 +2379,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoAIdProvided() {
 			Identity:  &identity,
 		},
 	})
-	s.EqualError(err, "BadRequestError{Message: Neither ActivityID nor ScheduleID is provided}")
+	s.EqualError(err, "InvalidArgument{Message: Neither ActivityID nor ScheduleID is provided}")
 }
 
 func (s *engineSuite) TestRespondActivityTaskCompletedIfNotFound() {
@@ -2510,7 +2511,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskCompleted() {
 		},
 	})
 	s.NotNil(err)
-	s.IsType(&workflow.EntityNotExistsError{}, err)
+	s.IsType(&serviceerror.NotFound{}, err)
 }
 
 func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskNotStarted() {
@@ -2555,7 +2556,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskNotStarted() {
 		},
 	})
 	s.NotNil(err)
-	s.IsType(&workflow.EntityNotExistsError{}, err)
+	s.IsType(&serviceerror.NotFound{}, err)
 }
 
 func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
@@ -2824,7 +2825,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfNoExecution() {
 	identity := "testIdentity"
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(nil,
-		&workflow.EntityNotExistsError{}).Once()
+		serviceerror.NewNotFound("")).Once()
 
 	err := s.mockHistoryEngine.RespondActivityTaskFailed(context.Background(), &history.RespondActivityTaskFailedRequest{
 		DomainUUID: common.StringPtr(testDomainID),
@@ -2834,7 +2835,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfNoExecution() {
 		},
 	})
 	s.NotNil(err)
-	s.IsType(&workflow.EntityNotExistsError{}, err)
+	s.IsType(&serviceerror.NotFound{}, err)
 }
 
 func (s *engineSuite) TestRespondActivityTaskFailedIfNoRunID() {
@@ -2846,7 +2847,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfNoRunID() {
 	identity := "testIdentity"
 
 	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(nil,
-		&workflow.EntityNotExistsError{}).Once()
+		serviceerror.NewNotFound("")).Once()
 
 	err := s.mockHistoryEngine.RespondActivityTaskFailed(context.Background(), &history.RespondActivityTaskFailedRequest{
 		DomainUUID: common.StringPtr(testDomainID),
@@ -2856,7 +2857,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfNoRunID() {
 		},
 	})
 	s.NotNil(err)
-	s.IsType(&workflow.EntityNotExistsError{}, err)
+	s.IsType(&serviceerror.NotFound{}, err)
 }
 
 func (s *engineSuite) TestRespondActivityTaskFailedIfGetExecutionFailed() {
@@ -2912,7 +2913,7 @@ func (s *engineSuite) TestRespondActivityTaskFailededIfNoAIdProvided() {
 			Identity:  &identity,
 		},
 	})
-	s.EqualError(err, "BadRequestError{Message: Neither ActivityID nor ScheduleID is provided}")
+	s.EqualError(err, "InvalidArgument{Message: Neither ActivityID nor ScheduleID is provided}")
 }
 
 func (s *engineSuite) TestRespondActivityTaskFailededIfNotFound() {
@@ -3044,7 +3045,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskCompleted() {
 		},
 	})
 	s.NotNil(err)
-	s.IsType(&workflow.EntityNotExistsError{}, err)
+	s.IsType(&serviceerror.NotFound{}, err)
 }
 
 func (s *engineSuite) TestRespondActivityTaskFailedIfTaskNotStarted() {
@@ -3087,7 +3088,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskNotStarted() {
 		},
 	})
 	s.NotNil(err)
-	s.IsType(&workflow.EntityNotExistsError{}, err)
+	s.IsType(&serviceerror.NotFound{}, err)
 }
 
 func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
@@ -3527,7 +3528,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Scheduled() {
 		},
 	})
 	s.NotNil(err)
-	s.IsType(&workflow.EntityNotExistsError{}, err)
+	s.IsType(&serviceerror.NotFound{}, err)
 }
 
 func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
@@ -3658,7 +3659,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoRunID() {
 	})
 	identity := "testIdentity"
 
-	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(nil, &workflow.EntityNotExistsError{}).Once()
+	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(nil, serviceerror.NewNotFound("")).Once()
 
 	err := s.mockHistoryEngine.RespondActivityTaskCanceled(context.Background(), &history.RespondActivityTaskCanceledRequest{
 		DomainUUID: common.StringPtr(testDomainID),
@@ -3668,7 +3669,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoRunID() {
 		},
 	})
 	s.NotNil(err)
-	s.IsType(&workflow.EntityNotExistsError{}, err)
+	s.IsType(&serviceerror.NotFound{}, err)
 }
 
 func (s *engineSuite) TestRespondActivityTaskCanceledIfNoAIdProvided() {
@@ -3695,7 +3696,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoAIdProvided() {
 			Identity:  &identity,
 		},
 	})
-	s.EqualError(err, "BadRequestError{Message: Neither ActivityID nor ScheduleID is provided}")
+	s.EqualError(err, "InvalidArgument{Message: Neither ActivityID nor ScheduleID is provided}")
 }
 
 func (s *engineSuite) TestRespondActivityTaskCanceledIfNotFound() {
@@ -4684,7 +4685,7 @@ func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_TimerFired() 
 func (s *engineSuite) TestSignalWorkflowExecution() {
 	signalRequest := &history.SignalWorkflowExecutionRequest{}
 	err := s.mockHistoryEngine.SignalWorkflowExecution(context.Background(), signalRequest)
-	s.EqualError(err, "BadRequestError{Message: Missing domain UUID.}")
+	s.EqualError(err, "InvalidArgument{Message: Missing domain UUID.}")
 
 	we := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("wId"),
@@ -4725,7 +4726,7 @@ func (s *engineSuite) TestSignalWorkflowExecution() {
 func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest() {
 	signalRequest := &history.SignalWorkflowExecutionRequest{}
 	err := s.mockHistoryEngine.SignalWorkflowExecution(context.Background(), signalRequest)
-	s.EqualError(err, "BadRequestError{Message: Missing domain UUID.}")
+	s.EqualError(err, "InvalidArgument{Message: Missing domain UUID.}")
 
 	we := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("wId2"),
@@ -4769,7 +4770,7 @@ func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest() {
 func (s *engineSuite) TestSignalWorkflowExecution_Failed() {
 	signalRequest := &history.SignalWorkflowExecutionRequest{}
 	err := s.mockHistoryEngine.SignalWorkflowExecution(context.Background(), signalRequest)
-	s.EqualError(err, "BadRequestError{Message: Missing domain UUID.}")
+	s.EqualError(err, "InvalidArgument{Message: Missing domain UUID.}")
 
 	we := &workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("wId"),
@@ -4807,7 +4808,7 @@ func (s *engineSuite) TestSignalWorkflowExecution_Failed() {
 func (s *engineSuite) TestRemoveSignalMutableState() {
 	removeRequest := &history.RemoveSignalMutableStateRequest{}
 	err := s.mockHistoryEngine.RemoveSignalMutableState(context.Background(), removeRequest)
-	s.EqualError(err, "BadRequestError{Message: Missing domain UUID.}")
+	s.EqualError(err, "InvalidArgument{Message: Missing domain UUID.}")
 
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("wId"),

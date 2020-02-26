@@ -23,8 +23,9 @@ package persistence
 import (
 	"testing"
 
-	"github.com/temporalio/temporal/common"
 	"go.temporal.io/temporal-proto/serviceerror"
+
+	"github.com/temporalio/temporal/common"
 
 	"github.com/stretchr/testify/suite"
 )

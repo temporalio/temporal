@@ -60,7 +60,7 @@ THRIFTRW_GEN_SRC += $(THRIFT_GENDIR)/go/$1/$1.go
 
 $(THRIFT_GENDIR)/go/$1/$1.go:: $2
 	@mkdir -p $(THRIFT_GENDIR)/go
-	thriftrw --plugin=yarpc --pkg-prefix=$(PROJECT_ROOT)/$(THRIFT_GENDIR)/go/ --out=$(THRIFT_GENDIR)/go $2
+	thriftrw --pkg-prefix=$(PROJECT_ROOT)/$(THRIFT_GENDIR)/go/ --out=$(THRIFT_GENDIR)/go $2
 endef
 
 $(foreach tsrc,$(THRIFTRW_SRCS),$(eval $(call \
@@ -154,7 +154,6 @@ grpc-install:
 yarpc-install:
 	GO111MODULE=off go get -u github.com/myitcv/gobin
 	GOOS= GOARCH= gobin -mod=readonly go.uber.org/thriftrw
-	GOOS= GOARCH= gobin -mod=readonly go.uber.org/yarpc/encoding/thrift/thriftrw-plugin-yarpc
 
 clean_thrift:
 	rm -rf .gen/go

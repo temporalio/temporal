@@ -23,9 +23,10 @@ package tasklist
 import (
 	"time"
 
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/common/backoff"
 	p "github.com/temporalio/temporal/common/persistence"
-	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 var retryForeverPolicy = newRetryForeverPolicy()
