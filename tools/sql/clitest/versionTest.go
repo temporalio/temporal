@@ -30,6 +30,8 @@ import (
 	"strconv"
 	"time"
 
+	persistencetests "github.com/temporalio/temporal/common/persistence/persistence-tests"
+
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
@@ -63,8 +65,8 @@ func (s *VersionTestSuite) SetupTest() {
 
 // TestVerifyCompatibleVersion test
 func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
-	database := "cadence_test"
-	visDatabase := "cadence_visibility_test"
+	database := "temporal_ver_test_" + persistencetests.GenerateRandomDBName(3)
+	visDatabase := "temporal_vis_ver_test_" + persistencetests.GenerateRandomDBName(3)
 	_, filename, _, ok := runtime.Caller(0)
 	s.True(ok)
 	root := path.Dir(path.Dir(path.Dir(path.Dir(filename))))

@@ -23,6 +23,7 @@ package persistencetests
 import (
 	"math"
 	"math/rand"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -113,7 +114,7 @@ const (
 // NewTestBaseWithCassandra returns a persistence test base backed by cassandra datastore
 func NewTestBaseWithCassandra(options *TestBaseOptions) TestBase {
 	if options.DBName == "" {
-		options.DBName = "test_" + GenerateRandomDBName(10)
+		options.DBName = "test_" + GenerateRandomDBName(3)
 	}
 	testCluster := cassandra.NewTestCluster(options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SchemaDir)
 	return newTestBase(options, testCluster)
@@ -122,7 +123,7 @@ func NewTestBaseWithCassandra(options *TestBaseOptions) TestBase {
 // NewTestBaseWithSQL returns a new persistence test base backed by SQL
 func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 	if options.DBName == "" {
-		options.DBName = "test_" + GenerateRandomDBName(10)
+		options.DBName = "test_" + GenerateRandomDBName(3)
 	}
 	testCluster := sql.NewTestCluster(options.SQLDBPluginName, options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SchemaDir)
 	return newTestBase(options, testCluster)
@@ -1574,15 +1575,25 @@ func (g *TestTransferTaskIDGenerator) GenerateTransferTaskIDs(number int) ([]int
 	return result, nil
 }
 
-// GenerateRandomDBName helper
-func GenerateRandomDBName(n int) string {
-	rand.Seed(time.Now().UnixNano())
-	letterRunes := []rune("workflow")
-	b := make([]rune, n)
+func randString(length int) string {
+	const lowercaseSet = "abcdefghijklmnopqrstuvwxyz"
+	b := make([]byte, length)
 	for i := range b {
-		b[i] = letterRunes[rand.Intn(len(letterRunes))]
+		b[i] = lowercaseSet[rand.Int63()%int64(len(lowercaseSet))]
 	}
 	return string(b)
+}
+
+// GenerateRandomDBName helper
+// Format: MMDDHHMMSS_abc
+func GenerateRandomDBName(n int) string {
+	now := time.Now()
+	rand.Seed(now.UnixNano())
+	var prefix strings.Builder
+	prefix.WriteString(now.Format("0102150405"))
+	prefix.WriteRune('_')
+	prefix.WriteString(randString(n))
+	return prefix.String()
 }
 
 func pickRandomEncoding() common.EncodingType {
