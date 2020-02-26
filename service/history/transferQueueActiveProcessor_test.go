@@ -1931,7 +1931,7 @@ func (s *transferQueueActiveProcessorSuite) createRecordWorkflowExecutionStarted
 func (s *transferQueueActiveProcessorSuite) createRequestCancelWorkflowExecutionRequest(
 	targetDomainName string,
 	task *persistenceblobs.TransferTaskInfo,
-	rci *persistence.RequestCancelInfo,
+	rci *persistenceblobs.RequestCancelInfo,
 ) *historyservice.RequestCancelWorkflowExecutionRequest {
 
 	sourceExecution := commonproto.WorkflowExecution{

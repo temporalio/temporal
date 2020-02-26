@@ -1310,7 +1310,7 @@ func (t *transferQueueActiveProcessorImpl) updateWorkflowExecution(
 func (t *transferQueueActiveProcessorImpl) requestCancelExternalExecutionWithRetry(
 	task *persistenceblobs.TransferTaskInfo,
 	targetDomain string,
-	requestCancelInfo *persistence.RequestCancelInfo,
+	requestCancelInfo *persistenceblobs.RequestCancelInfo,
 ) error {
 
 	request := &historyservice.RequestCancelWorkflowExecutionRequest{
