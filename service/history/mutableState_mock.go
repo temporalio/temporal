@@ -35,6 +35,7 @@ import (
 
 	history "github.com/temporalio/temporal/.gen/go/history"
 	shared "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	cache "github.com/temporalio/temporal/common/cache"
 	definition "github.com/temporalio/temporal/common/definition"
 	persistence "github.com/temporalio/temporal/common/persistence"
@@ -652,11 +653,11 @@ func (mr *MockmutableStateMockRecorder) AddTimerFiredEvent(arg0 interface{}) *go
 }
 
 // AddTimerStartedEvent mocks base method
-func (m *MockmutableState) AddTimerStartedEvent(arg0 int64, arg1 *shared.StartTimerDecisionAttributes) (*shared.HistoryEvent, *persistence.TimerInfo, error) {
+func (m *MockmutableState) AddTimerStartedEvent(arg0 int64, arg1 *shared.StartTimerDecisionAttributes) (*shared.HistoryEvent, *persistenceblobs.TimerInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddTimerStartedEvent", arg0, arg1)
 	ret0, _ := ret[0].(*shared.HistoryEvent)
-	ret1, _ := ret[1].(*persistence.TimerInfo)
+	ret1, _ := ret[1].(*persistenceblobs.TimerInfo)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }
@@ -1212,10 +1213,10 @@ func (mr *MockmutableStateMockRecorder) GetPendingActivityInfos() *gomock.Call {
 }
 
 // GetPendingTimerInfos mocks base method
-func (m *MockmutableState) GetPendingTimerInfos() map[string]*persistence.TimerInfo {
+func (m *MockmutableState) GetPendingTimerInfos() map[string]*persistenceblobs.TimerInfo {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPendingTimerInfos")
-	ret0, _ := ret[0].(map[string]*persistence.TimerInfo)
+	ret0, _ := ret[0].(map[string]*persistenceblobs.TimerInfo)
 	return ret0
 }
 
@@ -1356,10 +1357,10 @@ func (mr *MockmutableStateMockRecorder) GetStartVersion() *gomock.Call {
 }
 
 // GetUserTimerInfoByEventID mocks base method
-func (m *MockmutableState) GetUserTimerInfoByEventID(arg0 int64) (*persistence.TimerInfo, bool) {
+func (m *MockmutableState) GetUserTimerInfoByEventID(arg0 int64) (*persistenceblobs.TimerInfo, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetUserTimerInfoByEventID", arg0)
-	ret0, _ := ret[0].(*persistence.TimerInfo)
+	ret0, _ := ret[0].(*persistenceblobs.TimerInfo)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
@@ -1371,10 +1372,10 @@ func (mr *MockmutableStateMockRecorder) GetUserTimerInfoByEventID(arg0 interface
 }
 
 // GetUserTimerInfo mocks base method
-func (m *MockmutableState) GetUserTimerInfo(arg0 string) (*persistence.TimerInfo, bool) {
+func (m *MockmutableState) GetUserTimerInfo(arg0 string) (*persistenceblobs.TimerInfo, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetUserTimerInfo", arg0)
-	ret0, _ := ret[0].(*persistence.TimerInfo)
+	ret0, _ := ret[0].(*persistenceblobs.TimerInfo)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
@@ -2020,10 +2021,10 @@ func (mr *MockmutableStateMockRecorder) ReplicateTimerFiredEvent(arg0 interface{
 }
 
 // ReplicateTimerStartedEvent mocks base method
-func (m *MockmutableState) ReplicateTimerStartedEvent(arg0 *shared.HistoryEvent) (*persistence.TimerInfo, error) {
+func (m *MockmutableState) ReplicateTimerStartedEvent(arg0 *shared.HistoryEvent) (*persistenceblobs.TimerInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReplicateTimerStartedEvent", arg0)
-	ret0, _ := ret[0].(*persistence.TimerInfo)
+	ret0, _ := ret[0].(*persistenceblobs.TimerInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -2304,7 +2305,7 @@ func (mr *MockmutableStateMockRecorder) UpdateReplicationStateLastEventID(arg0, 
 }
 
 // UpdateUserTimer mocks base method
-func (m *MockmutableState) UpdateUserTimer(arg0 *persistence.TimerInfo) error {
+func (m *MockmutableState) UpdateUserTimer(arg0 *persistenceblobs.TimerInfo) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateUserTimer", arg0)
 	ret0, _ := ret[0].(error)

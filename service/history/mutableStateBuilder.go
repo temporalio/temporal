@@ -26,6 +26,10 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/gogo/protobuf/types"
+
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+
 	"github.com/temporalio/temporal/common/primitives"
 
 	"github.com/pborman/uuid"
@@ -84,10 +88,10 @@ type (
 		deleteActivityInfos        map[int64]struct{}                     // Deleted activities from last update.
 		syncActivityTasks          map[int64]struct{}                     // Activity to be sync to remote
 
-		pendingTimerInfoIDs     map[string]*persistence.TimerInfo   // User Timer ID -> Timer Info.
-		pendingTimerEventIDToID map[int64]string                    // User Timer Start Event ID -> User Timer ID.
-		updateTimerInfos        map[*persistence.TimerInfo]struct{} // Modified timers from last update.
-		deleteTimerInfos        map[string]struct{}                 // Deleted timers from last update.
+		pendingTimerInfoIDs     map[string]*persistenceblobs.TimerInfo   // User Timer ID -> Timer Info.
+		pendingTimerEventIDToID map[int64]string                         // User Timer Start Event ID -> User Timer ID.
+		updateTimerInfos        map[*persistenceblobs.TimerInfo]struct{} // Modified timers from last update.
+		deleteTimerInfos        map[string]struct{}                      // Deleted timers from last update.
 
 		pendingChildExecutionInfoIDs map[int64]*persistence.ChildExecutionInfo    // Initiated Event ID -> Child Execution Info
 		updateChildExecutionInfos    map[*persistence.ChildExecutionInfo]struct{} // Modified ChildExecution Infos since last update
@@ -170,9 +174,9 @@ func newMutableStateBuilder(
 		deleteActivityInfos:        make(map[int64]struct{}),
 		syncActivityTasks:          make(map[int64]struct{}),
 
-		pendingTimerInfoIDs:     make(map[string]*persistence.TimerInfo),
+		pendingTimerInfoIDs:     make(map[string]*persistenceblobs.TimerInfo),
 		pendingTimerEventIDToID: make(map[int64]string),
-		updateTimerInfos:        make(map[*persistence.TimerInfo]struct{}),
+		updateTimerInfos:        make(map[*persistenceblobs.TimerInfo]struct{}),
 		deleteTimerInfos:        make(map[string]struct{}),
 
 		updateChildExecutionInfos:    make(map[*persistence.ChildExecutionInfo]struct{}),
@@ -1347,7 +1351,7 @@ func (e *mutableStateBuilder) DeleteActivity(
 // GetUserTimerInfo gives details about a user timer.
 func (e *mutableStateBuilder) GetUserTimerInfo(
 	timerID string,
-) (*persistence.TimerInfo, bool) {
+) (*persistenceblobs.TimerInfo, bool) {
 
 	timerInfo, ok := e.pendingTimerInfoIDs[timerID]
 	return timerInfo, ok
@@ -1356,7 +1360,7 @@ func (e *mutableStateBuilder) GetUserTimerInfo(
 // GetUserTimerInfoByEventID gives details about a user timer.
 func (e *mutableStateBuilder) GetUserTimerInfoByEventID(
 	startEventID int64,
-) (*persistence.TimerInfo, bool) {
+) (*persistenceblobs.TimerInfo, bool) {
 
 	timerID, ok := e.pendingTimerEventIDToID[startEventID]
 	if !ok {
@@ -1367,7 +1371,7 @@ func (e *mutableStateBuilder) GetUserTimerInfoByEventID(
 
 // UpdateUserTimer updates the user timer in progress.
 func (e *mutableStateBuilder) UpdateUserTimer(
-	ti *persistence.TimerInfo,
+	ti *persistenceblobs.TimerInfo,
 ) error {
 
 	timerID, ok := e.pendingTimerEventIDToID[ti.StartedID]
@@ -1455,7 +1459,7 @@ func (e *mutableStateBuilder) GetPendingActivityInfos() map[int64]*persistence.A
 	return e.pendingActivityInfoIDs
 }
 
-func (e *mutableStateBuilder) GetPendingTimerInfos() map[string]*persistence.TimerInfo {
+func (e *mutableStateBuilder) GetPendingTimerInfos() map[string]*persistenceblobs.TimerInfo {
 	return e.pendingTimerInfoIDs
 }
 
@@ -3021,7 +3025,7 @@ func (e *mutableStateBuilder) ReplicateSignalExternalWorkflowExecutionFailedEven
 func (e *mutableStateBuilder) AddTimerStartedEvent(
 	decisionCompletedEventID int64,
 	request *workflow.StartTimerDecisionAttributes,
-) (*workflow.HistoryEvent, *persistence.TimerInfo, error) {
+) (*workflow.HistoryEvent, *persistenceblobs.TimerInfo, error) {
 
 	opTag := tag.WorkflowActionTimerStarted
 	if err := e.checkMutability(opTag); err != nil {
@@ -3048,7 +3052,7 @@ func (e *mutableStateBuilder) AddTimerStartedEvent(
 
 func (e *mutableStateBuilder) ReplicateTimerStartedEvent(
 	event *workflow.HistoryEvent,
-) (*persistence.TimerInfo, error) {
+) (*persistenceblobs.TimerInfo, error) {
 
 	attributes := event.TimerStartedEventAttributes
 	timerID := attributes.GetTimerId()
@@ -3056,8 +3060,13 @@ func (e *mutableStateBuilder) ReplicateTimerStartedEvent(
 	startToFireTimeout := attributes.GetStartToFireTimeoutSeconds()
 	fireTimeout := time.Duration(startToFireTimeout) * time.Second
 	// TODO: Time skew need to be taken in to account.
-	expiryTime := time.Unix(0, event.GetTimestamp()).Add(fireTimeout) // should use the event time, not now
-	ti := &persistence.TimerInfo{
+	expiryTime, err := types.TimestampProto(time.Unix(0, event.GetTimestamp()).Add(fireTimeout)) // should use the event time, not now
+
+	if err != nil {
+		return nil, err
+	}
+
+	ti := &persistenceblobs.TimerInfo{
 		Version:    event.GetVersion(),
 		TimerID:    timerID,
 		ExpiryTime: expiryTime,
@@ -4105,7 +4114,7 @@ func (e *mutableStateBuilder) cleanupTransaction(
 	e.deleteActivityInfos = make(map[int64]struct{})
 	e.syncActivityTasks = make(map[int64]struct{})
 
-	e.updateTimerInfos = make(map[*persistence.TimerInfo]struct{})
+	e.updateTimerInfos = make(map[*persistenceblobs.TimerInfo]struct{})
 	e.deleteTimerInfos = make(map[string]struct{})
 
 	e.updateChildExecutionInfos = make(map[*persistence.ChildExecutionInfo]struct{})

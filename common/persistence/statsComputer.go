@@ -20,6 +20,8 @@
 
 package persistence
 
+import "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+
 type (
 	// statsComputer is to computing struct sizes after serialization
 	statsComputer struct{}
@@ -197,7 +199,7 @@ func computeActivityInfoSize(ai *InternalActivityInfo) int {
 	return size
 }
 
-func computeTimerInfoSize(ti *TimerInfo) int {
+func computeTimerInfoSize(ti *persistenceblobs.TimerInfo) int {
 	size := len(ti.TimerID)
 
 	return size

@@ -4995,7 +4995,7 @@ func addActivityTaskFailedEvent(builder mutableState, scheduleID, startedID int6
 }
 
 func addTimerStartedEvent(builder mutableState, decisionCompletedEventID int64, timerID string,
-	timeOut int64) (*workflow.HistoryEvent, *persistence.TimerInfo) {
+	timeOut int64) (*workflow.HistoryEvent, *persistenceblobs.TimerInfo) {
 	event, ti, _ := builder.AddTimerStartedEvent(decisionCompletedEventID,
 		&workflow.StartTimerDecisionAttributes{
 			TimerId:                   common.StringPtr(timerID),
@@ -5141,7 +5141,7 @@ func createMutableState(ms mutableState) *persistence.WorkflowMutableState {
 	for id, info := range builder.pendingActivityInfoIDs {
 		activityInfos[id] = copyActivityInfo(info)
 	}
-	timerInfos := make(map[string]*persistence.TimerInfo)
+	timerInfos := make(map[string]*persistenceblobs.TimerInfo)
 	for id, info := range builder.pendingTimerInfoIDs {
 		timerInfos[id] = copyTimerInfo(info)
 	}
@@ -5310,8 +5310,8 @@ func copyActivityInfo(sourceInfo *persistence.ActivityInfo) *persistence.Activit
 	}
 }
 
-func copyTimerInfo(sourceInfo *persistence.TimerInfo) *persistence.TimerInfo {
-	return &persistence.TimerInfo{
+func copyTimerInfo(sourceInfo *persistenceblobs.TimerInfo) *persistenceblobs.TimerInfo {
+	return &persistenceblobs.TimerInfo{
 		Version:    sourceInfo.Version,
 		TimerID:    sourceInfo.TimerID,
 		StartedID:  sourceInfo.StartedID,

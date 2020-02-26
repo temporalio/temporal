@@ -622,7 +622,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 				Condition:                 mutableState.GetNextEventID(),
 				UpsertActivityInfos:       input.UpdateWorkflowMutation.UpsertActivityInfos,
 				DeleteActivityInfos:       []int64{},
-				UpsertTimerInfos:          []*persistence.TimerInfo{},
+				UpsertTimerInfos:          []*persistenceblobs.TimerInfo{},
 				DeleteTimerInfos:          []string{},
 				UpsertChildExecutionInfos: []*persistence.ChildExecutionInfo{},
 				DeleteChildExecutionInfo:  nil,

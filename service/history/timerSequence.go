@@ -27,7 +27,10 @@ import (
 	"sort"
 	"time"
 
+	"github.com/gogo/protobuf/types"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/persistence"
@@ -236,12 +239,14 @@ func (t *timerSequenceImpl) loadAndSortActivityTimers() []timerSequenceID {
 }
 
 func (t *timerSequenceImpl) getUserTimerTimeout(
-	timerInfo *persistence.TimerInfo,
+	timerInfo *persistenceblobs.TimerInfo,
 ) *timerSequenceID {
+
+	expiryTime, _ := types.TimestampFromProto(timerInfo.ExpiryTime)
 
 	return &timerSequenceID{
 		eventID:      timerInfo.StartedID,
-		timestamp:    timerInfo.ExpiryTime,
+		timestamp:    expiryTime,
 		timerType:    timerTypeStartToClose,
 		timerCreated: timerInfo.TaskStatus == timerTaskStatusCreated,
 		attempt:      0,

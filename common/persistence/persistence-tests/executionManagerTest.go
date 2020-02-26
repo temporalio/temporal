@@ -2708,9 +2708,9 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateTimers() {
 	updatedStats := copyExecutionStats(state0.ExecutionStats)
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
-	currentTime := time.Now().UTC()
+	currentTime := types.TimestampNow()
 	timerID := "id_1"
-	timerInfos := []*p.TimerInfo{{
+	timerInfos := []*pblobs.TimerInfo{{
 		Version:    3345,
 		TimerID:    timerID,
 		ExpiryTime: currentTime,
@@ -2726,7 +2726,8 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateTimers() {
 	s.Equal(1, len(state.TimerInfos))
 	s.Equal(int64(3345), state.TimerInfos[timerID].Version)
 	s.Equal(timerID, state.TimerInfos[timerID].TimerID)
-	s.EqualTimesWithPrecision(currentTime, state.TimerInfos[timerID].ExpiryTime, time.Millisecond*500)
+	s.Equal(currentTime.Nanos, state.TimerInfos[timerID].ExpiryTime.Nanos)
+	s.Equal(currentTime.Seconds, state.TimerInfos[timerID].ExpiryTime.Seconds)
 	s.Equal(int64(2), state.TimerInfos[timerID].TaskStatus)
 	s.Equal(int64(5), state.TimerInfos[timerID].StartedID)
 
@@ -3579,9 +3580,10 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
 	currentTime := time.Now().UTC()
-	expiryTime := currentTime.Add(10 * time.Second)
+	expiryTime, _ := types.TimestampProto(currentTime)
+	expiryTime.Seconds += 10
 	eventsBatch1 := []*gen.HistoryEvent{
-		&gen.HistoryEvent{
+		{
 			EventId:   common.Int64Ptr(5),
 			EventType: gen.EventTypeDecisionTaskCompleted.Ptr(),
 			Version:   common.Int64Ptr(11),
@@ -3591,7 +3593,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 				Identity:         common.StringPtr("test_worker"),
 			},
 		},
-		&gen.HistoryEvent{
+		{
 			EventId:   common.Int64Ptr(6),
 			EventType: gen.EventTypeTimerStarted.Ptr(),
 			Version:   common.Int64Ptr(11),
@@ -3604,7 +3606,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 	}
 
 	eventsBatch2 := []*gen.HistoryEvent{
-		&gen.HistoryEvent{
+		{
 			EventId:   common.Int64Ptr(21),
 			EventType: gen.EventTypeTimerFired.Ptr(),
 			Version:   common.Int64Ptr(12),
@@ -3654,7 +3656,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 				TimerTaskStatus:          1,
 			}},
 
-		TimerInfos: map[string]*p.TimerInfo{
+		TimerInfos: map[string]*pblobs.TimerInfo{
 			"t1": {
 				Version:    2333,
 				TimerID:    "t1",
@@ -3805,7 +3807,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 	s.Equal(int64(2333), ti.Version)
 	s.Equal("t1", ti.TimerID)
 	s.Equal(int64(1), ti.StartedID)
-	s.EqualTimes(expiryTime, ti.ExpiryTime)
+	s.Equal(expiryTime, ti.ExpiryTime)
 	s.Equal(int64(500), ti.TaskStatus)
 
 	ti, ok = state1.TimerInfos["t2"]
@@ -3814,7 +3816,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 	s.Equal(int64(2333), ti.Version)
 	s.Equal("t2", ti.TimerID)
 	s.Equal(int64(2), ti.StartedID)
-	s.EqualTimes(expiryTime, ti.ExpiryTime)
+	s.Equal(expiryTime, ti.ExpiryTime)
 	s.Equal(int64(501), ti.TaskStatus)
 
 	ti, ok = state1.TimerInfos["t3"]
@@ -3823,7 +3825,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 	s.Equal(int64(2333), ti.Version)
 	s.Equal("t3", ti.TimerID)
 	s.Equal(int64(3), ti.StartedID)
-	s.EqualTimes(expiryTime, ti.ExpiryTime)
+	s.Equal(expiryTime, ti.ExpiryTime)
 	s.Equal(int64(502), ti.TaskStatus)
 
 	s.Equal(1, len(state1.ChildExecutionInfos))
@@ -3875,7 +3877,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 			TimerTaskStatus:          1,
 		}}
 
-	resetTimerInfos := []*p.TimerInfo{
+	resetTimerInfos := []*pblobs.TimerInfo{
 		{
 			Version:    3333,
 			TimerID:    "t1_new",
@@ -3974,7 +3976,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 	s.Equal(int64(3333), ti.Version)
 	s.Equal("t1_new", ti.TimerID)
 	s.Equal(int64(1), ti.StartedID)
-	s.EqualTimes(expiryTime, ti.ExpiryTime)
+	s.Equal(expiryTime, ti.ExpiryTime)
 	s.Equal(int64(600), ti.TaskStatus)
 
 	ti, ok = state4.TimerInfos["t2_new"]
@@ -3983,7 +3985,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionCurrentIsSel
 	s.Equal(int64(3333), ti.Version)
 	s.Equal("t2_new", ti.TimerID)
 	s.Equal(int64(2), ti.StartedID)
-	s.EqualTimes(expiryTime, ti.ExpiryTime)
+	s.Equal(expiryTime, ti.ExpiryTime)
 	s.Equal(int64(601), ti.TaskStatus)
 
 	s.Equal(1, len(state4.ChildExecutionInfos))
@@ -4098,7 +4100,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithCASCurre
 	}
 	resetStats := &p.ExecutionStats{}
 	resetActivityInfos := []*p.ActivityInfo{}
-	resetTimerInfos := []*p.TimerInfo{}
+	resetTimerInfos := []*pblobs.TimerInfo{}
 	resetChildExecutionInfos := []*p.ChildExecutionInfo{}
 	resetRequestCancelInfos := []*p.RequestCancelInfo{}
 	resetSignalInfos := []*p.SignalInfo{}
@@ -4230,7 +4232,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithCASMisma
 	}
 	resetStats := &p.ExecutionStats{}
 	resetActivityInfos := []*p.ActivityInfo{}
-	resetTimerInfos := []*p.TimerInfo{}
+	resetTimerInfos := []*pblobs.TimerInfo{}
 	resetChildExecutionInfos := []*p.ChildExecutionInfo{}
 	resetRequestCancelInfos := []*p.RequestCancelInfo{}
 	resetSignalInfos := []*p.SignalInfo{}
@@ -4354,7 +4356,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 			Condition:        int64(5),
 
 			ActivityInfos:       []*p.ActivityInfo{},
-			TimerInfos:          []*p.TimerInfo{},
+			TimerInfos:          []*pblobs.TimerInfo{},
 			ChildExecutionInfos: []*p.ChildExecutionInfo{},
 			RequestCancelInfos:  []*p.RequestCancelInfo{},
 			SignalInfos:         []*p.SignalInfo{},
@@ -4368,7 +4370,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 			Condition:        int64(3),
 
 			UpsertActivityInfos:       []*p.ActivityInfo{},
-			UpsertTimerInfos:          []*p.TimerInfo{},
+			UpsertTimerInfos:          []*pblobs.TimerInfo{},
 			UpsertChildExecutionInfos: []*p.ChildExecutionInfo{},
 			UpsertRequestCancelInfos:  []*p.RequestCancelInfo{},
 			UpsertSignalInfos:         []*p.SignalInfo{},
@@ -4511,7 +4513,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 			Condition: int64(5),
 
 			ActivityInfos:       []*p.ActivityInfo{},
-			TimerInfos:          []*p.TimerInfo{},
+			TimerInfos:          []*pblobs.TimerInfo{},
 			ChildExecutionInfos: []*p.ChildExecutionInfo{},
 			RequestCancelInfos:  []*p.RequestCancelInfo{},
 			SignalInfos:         []*p.SignalInfo{},
@@ -4524,7 +4526,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 			Condition:        0,
 
 			ActivityInfos:       []*p.ActivityInfo{},
-			TimerInfos:          []*p.TimerInfo{},
+			TimerInfos:          []*pblobs.TimerInfo{},
 			ChildExecutionInfos: []*p.ChildExecutionInfo{},
 			RequestCancelInfos:  []*p.RequestCancelInfo{},
 			SignalInfos:         []*p.SignalInfo{},
@@ -4537,7 +4539,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 			Condition:        int64(3),
 
 			UpsertActivityInfos:       []*p.ActivityInfo{},
-			UpsertTimerInfos:          []*p.TimerInfo{},
+			UpsertTimerInfos:          []*pblobs.TimerInfo{},
 			UpsertChildExecutionInfos: []*p.ChildExecutionInfo{},
 			UpsertRequestCancelInfos:  []*p.RequestCancelInfo{},
 			UpsertSignalInfos:         []*p.SignalInfo{},
@@ -4657,7 +4659,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 			Condition:        nextEventID,
 
 			ActivityInfos:       []*p.ActivityInfo{},
-			TimerInfos:          []*p.TimerInfo{},
+			TimerInfos:          []*pblobs.TimerInfo{},
 			ChildExecutionInfos: []*p.ChildExecutionInfo{},
 			RequestCancelInfos:  []*p.RequestCancelInfo{},
 			SignalInfos:         []*p.SignalInfo{},
@@ -4770,7 +4772,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 			Condition: nextEventID,
 
 			ActivityInfos:       []*p.ActivityInfo{},
-			TimerInfos:          []*p.TimerInfo{},
+			TimerInfos:          []*pblobs.TimerInfo{},
 			ChildExecutionInfos: []*p.ChildExecutionInfo{},
 			RequestCancelInfos:  []*p.RequestCancelInfo{},
 			SignalInfos:         []*p.SignalInfo{},
@@ -4783,7 +4785,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 			Condition:        0,
 
 			ActivityInfos:       []*p.ActivityInfo{},
-			TimerInfos:          []*p.TimerInfo{},
+			TimerInfos:          []*pblobs.TimerInfo{},
 			ChildExecutionInfos: []*p.ChildExecutionInfo{},
 			RequestCancelInfos:  []*p.RequestCancelInfo{},
 			SignalInfos:         []*p.SignalInfo{},
@@ -4913,7 +4915,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 			Condition:        int64(5),
 
 			ActivityInfos:       []*p.ActivityInfo{},
-			TimerInfos:          []*p.TimerInfo{},
+			TimerInfos:          []*pblobs.TimerInfo{},
 			ChildExecutionInfos: []*p.ChildExecutionInfo{},
 			RequestCancelInfos:  []*p.RequestCancelInfo{},
 			SignalInfos:         []*p.SignalInfo{},
@@ -5039,7 +5041,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 			Condition: int64(5),
 
 			ActivityInfos:       []*p.ActivityInfo{},
-			TimerInfos:          []*p.TimerInfo{},
+			TimerInfos:          []*pblobs.TimerInfo{},
 			ChildExecutionInfos: []*p.ChildExecutionInfo{},
 			RequestCancelInfos:  []*p.RequestCancelInfo{},
 			SignalInfos:         []*p.SignalInfo{},
@@ -5052,7 +5054,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 			Condition:        0,
 
 			ActivityInfos:       []*p.ActivityInfo{},
-			TimerInfos:          []*p.TimerInfo{},
+			TimerInfos:          []*pblobs.TimerInfo{},
 			ChildExecutionInfos: []*p.ChildExecutionInfo{},
 			RequestCancelInfos:  []*p.RequestCancelInfo{},
 			SignalInfos:         []*p.SignalInfo{},

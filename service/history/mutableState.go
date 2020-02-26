@@ -25,6 +25,8 @@ package history
 import (
 	"time"
 
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+
 	h "github.com/temporalio/temporal/.gen/go/history"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/cache"
@@ -94,7 +96,7 @@ type (
 		AddTimeoutWorkflowEvent(int64) (*workflow.HistoryEvent, error)
 		AddTimerCanceledEvent(int64, *workflow.CancelTimerDecisionAttributes, string) (*workflow.HistoryEvent, error)
 		AddTimerFiredEvent(string) (*workflow.HistoryEvent, error)
-		AddTimerStartedEvent(int64, *workflow.StartTimerDecisionAttributes) (*workflow.HistoryEvent, *persistence.TimerInfo, error)
+		AddTimerStartedEvent(int64, *workflow.StartTimerDecisionAttributes) (*workflow.HistoryEvent, *persistenceblobs.TimerInfo, error)
 		AddUpsertWorkflowSearchAttributesEvent(int64, *workflow.UpsertWorkflowSearchAttributesDecisionAttributes) (*workflow.HistoryEvent, error)
 		AddWorkflowExecutionCancelRequestedEvent(string, *h.RequestCancelWorkflowExecutionRequest) (*workflow.HistoryEvent, error)
 		AddWorkflowExecutionCanceledEvent(int64, *workflow.CancelWorkflowExecutionDecisionAttributes) (*workflow.HistoryEvent, error)
@@ -133,7 +135,7 @@ type (
 		GetNextEventID() int64
 		GetPreviousStartedEventID() int64
 		GetPendingActivityInfos() map[int64]*persistence.ActivityInfo
-		GetPendingTimerInfos() map[string]*persistence.TimerInfo
+		GetPendingTimerInfos() map[string]*persistenceblobs.TimerInfo
 		GetPendingChildExecutionInfos() map[int64]*persistence.ChildExecutionInfo
 		GetPendingRequestCancelExternalInfos() map[int64]*persistence.RequestCancelInfo
 		GetPendingSignalExternalInfos() map[int64]*persistence.SignalInfo
@@ -143,8 +145,8 @@ type (
 		GetCronBackoffDuration() (time.Duration, error)
 		GetSignalInfo(int64) (*persistence.SignalInfo, bool)
 		GetStartVersion() (int64, error)
-		GetUserTimerInfoByEventID(int64) (*persistence.TimerInfo, bool)
-		GetUserTimerInfo(string) (*persistence.TimerInfo, bool)
+		GetUserTimerInfoByEventID(int64) (*persistenceblobs.TimerInfo, bool)
+		GetUserTimerInfo(string) (*persistenceblobs.TimerInfo, bool)
 		GetWorkflowType() *workflow.WorkflowType
 		GetWorkflowStateCloseStatus() (int, int)
 		GetQueryRegistry() queryRegistry
@@ -190,7 +192,7 @@ type (
 		ReplicateStartChildWorkflowExecutionInitiatedEvent(int64, *workflow.HistoryEvent, string) (*persistence.ChildExecutionInfo, error)
 		ReplicateTimerCanceledEvent(*workflow.HistoryEvent) error
 		ReplicateTimerFiredEvent(*workflow.HistoryEvent) error
-		ReplicateTimerStartedEvent(*workflow.HistoryEvent) (*persistence.TimerInfo, error)
+		ReplicateTimerStartedEvent(*workflow.HistoryEvent) (*persistenceblobs.TimerInfo, error)
 		ReplicateTransientDecisionTaskScheduled() (*decisionInfo, error)
 		ReplicateUpsertWorkflowSearchAttributesEvent(*workflow.HistoryEvent)
 		ReplicateWorkflowExecutionCancelRequestedEvent(*workflow.HistoryEvent) error
@@ -211,7 +213,7 @@ type (
 		UpdateDecision(*decisionInfo)
 		UpdateReplicationStateVersion(int64, bool)
 		UpdateReplicationStateLastEventID(int64, int64)
-		UpdateUserTimer(*persistence.TimerInfo) error
+		UpdateUserTimer(*persistenceblobs.TimerInfo) error
 		UpdateCurrentVersion(version int64, forceUpdate bool) error
 		UpdateWorkflowStateCloseStatus(state int, closeStatus int) error
 

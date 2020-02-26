@@ -166,7 +166,7 @@ func (s *server) startService() common.Daemon {
 
 	if s.cfg.PublicClient.HostPort == "" {
 		log.Fatalf("need to provide an endpoint config for PublicClient")
-	} else if h, _, err := net.SplitHostPort(s.cfg.PublicClient.HostPort); err != nil  || len(h) == 0 {
+	} else if h, _, err := net.SplitHostPort(s.cfg.PublicClient.HostPort); err != nil || len(h) == 0 {
 		log.Fatalf("Malformed PublicClient HostPort, must be host:port - '%v' - Error - %v", s.cfg.PublicClient.HostPort, err)
 	} else {
 		connection, err := rpc.Dial(s.cfg.PublicClient.HostPort)

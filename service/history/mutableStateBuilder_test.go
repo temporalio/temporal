@@ -755,8 +755,8 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		},
 	}
 
-	timerInfos := map[string]*persistence.TimerInfo{
-		"25": &persistence.TimerInfo{
+	timerInfos := map[string]*persistenceblobs.TimerInfo{
+		"25": &persistenceblobs.TimerInfo{
 			Version:    failoverVersion,
 			TimerID:    "25",
 			StartedID:  85,
