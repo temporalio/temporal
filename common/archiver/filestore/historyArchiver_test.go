@@ -32,6 +32,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.uber.org/zap"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
@@ -182,7 +183,7 @@ func (s *historyArchiverSuite) TestArchive_Fail_TimeoutWhenReadingHistory() {
 	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
 	gomock.InOrder(
 		historyIterator.EXPECT().HasNext().Return(true),
-		historyIterator.EXPECT().Next().Return(nil, &shared.ServiceBusyError{}),
+		historyIterator.EXPECT().Next().Return(nil, serviceerror.NewResourceExhausted("")),
 	)
 
 	historyArchiver := s.newTestHistoryArchiver(historyIterator)
@@ -353,7 +354,7 @@ func (s *historyArchiverSuite) TestGet_Fail_InvalidRequest() {
 	response, err := historyArchiver.Get(context.Background(), s.testArchivalURI, request)
 	s.Nil(response)
 	s.Error(err)
-	s.IsType(&shared.BadRequestError{}, err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
 func (s *historyArchiverSuite) TestGet_Fail_DirectoryNotExist() {
@@ -367,7 +368,7 @@ func (s *historyArchiverSuite) TestGet_Fail_DirectoryNotExist() {
 	response, err := historyArchiver.Get(context.Background(), s.testArchivalURI, request)
 	s.Nil(response)
 	s.Error(err)
-	s.IsType(&shared.BadRequestError{}, err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
 func (s *historyArchiverSuite) TestGet_Fail_InvalidToken() {
@@ -384,7 +385,7 @@ func (s *historyArchiverSuite) TestGet_Fail_InvalidToken() {
 	response, err := historyArchiver.Get(context.Background(), URI, request)
 	s.Nil(response)
 	s.Error(err)
-	s.IsType(&shared.BadRequestError{}, err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
 func (s *historyArchiverSuite) TestGet_Fail_FileNotExist() {
@@ -401,7 +402,7 @@ func (s *historyArchiverSuite) TestGet_Fail_FileNotExist() {
 	response, err := historyArchiver.Get(context.Background(), URI, request)
 	s.Nil(response)
 	s.Error(err)
-	s.IsType(&shared.EntityNotExistsError{}, err)
+	s.IsType(&serviceerror.NotFound{}, err)
 }
 
 func (s *historyArchiverSuite) TestGet_Success_PickHighestVersion() {

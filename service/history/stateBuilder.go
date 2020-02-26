@@ -25,9 +25,8 @@ package history
 import (
 	"time"
 
-	"github.com/temporalio/temporal/common/primitives"
-
 	"github.com/pborman/uuid"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
@@ -36,6 +35,7 @@ import (
 	"github.com/temporalio/temporal/common/errors"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -657,7 +657,7 @@ func (b *stateBuilderImpl) applyEvents(
 			}
 
 		default:
-			return nil, &shared.BadRequestError{Message: "Unknown event type"}
+			return nil, serviceerror.NewInvalidArgument("Unknown event type")
 		}
 	}
 

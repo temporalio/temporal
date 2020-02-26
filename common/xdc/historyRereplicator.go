@@ -167,7 +167,7 @@ func (h *HistoryRereplicatorImpl) SendMultiWorkflowHistory(domainID string, work
 	for len(runID) != 0 {
 		runID, err = rereplicationContext.getPrevRunID(domainID, workflowID, runID)
 		if err != nil {
-			if _, ok := err.(*shared.EntityNotExistsError); ok {
+			if _, ok := err.(*serviceerror.NotFound); ok {
 				// it is possible that this run ID (input)'s corresponding history does not exists
 				break
 			}
@@ -319,19 +319,8 @@ func (c *historyRereplicationContext) sendReplicationRawRequest(request *history
 	// sometimes there can be case when the first re-replication call
 	// trigger an history reset and this reset can leave a hole in target
 	// workflow, we should amend that hole and continue
-	var retryServiceError *serviceerror.RetryTask
-	if retrySharedError, ok := err.(*shared.RetryTaskError); ok {
-		retryServiceError = &serviceerror.RetryTask{
-			DomainId:    retrySharedError.GetDomainId(),
-			WorkflowId:  retrySharedError.GetWorkflowId(),
-			RunId:       retrySharedError.GetRunId(),
-			NextEventId: retrySharedError.GetNextEventId(),
-		}
-	} else {
-		retryServiceError = err.(*serviceerror.RetryTask)
-	}
-
-	if retryServiceError == nil {
+	retryErr, ok := err.(*serviceerror.RetryTask)
+	if !ok {
 		logger.Error("error sending history", tag.Error(err))
 		return err
 	}
@@ -339,17 +328,17 @@ func (c *historyRereplicationContext) sendReplicationRawRequest(request *history
 		logger.Error("encounter RetryTaskError not in first call")
 		return err
 	}
-	if retryServiceError.RunId != c.beginningRunID {
+	if retryErr.RunId != c.beginningRunID {
 		logger.Error("encounter RetryTaskError with non expected run ID")
 		return err
 	}
-	if retryServiceError.NextEventId >= c.beginningFirstEventID {
+	if retryErr.NextEventId >= c.beginningFirstEventID {
 		logger.Error("encounter RetryTaskError with larger event ID")
 		return err
 	}
 
-	_, err = c.sendSingleWorkflowHistory(c.domainID, c.workflowID, retryServiceError.RunId,
-		retryServiceError.NextEventId, c.beginningFirstEventID)
+	_, err = c.sendSingleWorkflowHistory(c.domainID, c.workflowID, retryErr.RunId,
+		retryErr.NextEventId, c.beginningFirstEventID)
 	if err != nil {
 		logger.Error("error sending history", tag.Error(err))
 		return err
@@ -444,7 +433,7 @@ func (c *historyRereplicationContext) getPrevRunID(domainID string, workflowID s
 	if len(response.HistoryBatches) == 0 {
 		// is it possible that remote mutable state / history are deleted, while mutable state still accessible from cache
 		// treat this case entity not exists
-		return "", &shared.EntityNotExistsError{}
+		return "", serviceerror.NewNotFound("")
 	}
 
 	blob := response.HistoryBatches[0]

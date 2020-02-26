@@ -32,7 +32,6 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-
 	history "github.com/temporalio/temporal/.gen/go/history"
 	shared "github.com/temporalio/temporal/.gen/go/shared"
 )

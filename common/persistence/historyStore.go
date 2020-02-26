@@ -23,17 +23,17 @@ package persistence
 import (
 	"fmt"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common/persistence/serialization"
-	"github.com/temporalio/temporal/common/primitives"
-
 	"github.com/pborman/uuid"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/persistence/serialization"
+	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
@@ -94,9 +94,7 @@ func (m *historyV2ManagerImpl) ForkHistoryBranch(
 	}
 	shardID, err := getShardID(request.ShardID)
 	if err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: err.Error(),
-		}
+		return nil, serviceerror.NewInternal(err.Error())
 	}
 	req := &InternalForkHistoryBranchRequest{
 		ForkBranchInfo: forkBranch,
@@ -135,9 +133,7 @@ func (m *historyV2ManagerImpl) DeleteHistoryBranch(
 	shardID, err := getShardID(request.ShardID)
 	if err != nil {
 		m.logger.Error("shardID is not set in delete history operation", tag.Error(err))
-		return &workflow.InternalServiceError{
-			Message: err.Error(),
-		}
+		return serviceerror.NewInternal(err.Error())
 	}
 	req := &InternalDeleteHistoryBranchRequest{
 		BranchInfo: branch,
@@ -214,9 +210,7 @@ func (m *historyV2ManagerImpl) AppendHistoryNodes(
 	shardID, err := getShardID(request.ShardID)
 	if err != nil {
 		m.logger.Error("shardID is not set in append history nodes operation", tag.Error(err))
-		return nil, &workflow.InternalServiceError{
-			Message: err.Error(),
-		}
+		return nil, serviceerror.NewInternal(err.Error())
 	}
 	req := &InternalAppendHistoryNodesRequest{
 		IsNewBranch:   request.IsNewBranch,
@@ -357,9 +351,7 @@ func (m *historyV2ManagerImpl) readRawHistoryBranch(
 		}
 
 		if token.CurrentRangeIndex == notStartedIndex {
-			return nil, nil, 0, nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("branchRange is corrupted"),
-			}
+			return nil, nil, 0, nil, serviceerror.NewInternal(fmt.Sprintf("branchRange is corrupted"))
 		}
 	}
 
@@ -373,7 +365,7 @@ func (m *historyV2ManagerImpl) readRawHistoryBranch(
 	shardID, err := getShardID(request.ShardID)
 	if err != nil {
 		m.logger.Error("shardID is not set in read history branch operation", tag.Error(err))
-		return nil, nil, 0, nil, &workflow.InternalServiceError{Message: err.Error()}
+		return nil, nil, 0, nil, serviceerror.NewInternal(err.Error())
 	}
 	req := &InternalReadHistoryBranchRequest{
 		TreeID:            treeID,
@@ -392,7 +384,7 @@ func (m *historyV2ManagerImpl) readRawHistoryBranch(
 		return nil, nil, 0, nil, err
 	}
 	if len(resp.History) == 0 && len(request.NextPageToken) == 0 {
-		return nil, nil, 0, nil, &workflow.EntityNotExistsError{Message: "Workflow execution history not found."}
+		return nil, nil, 0, nil, serviceerror.NewNotFound("Workflow execution history not found.")
 	}
 
 	dataBlobs := resp.History
@@ -435,9 +427,7 @@ func (m *historyV2ManagerImpl) readHistoryBranch(
 		}
 		if len(events) == 0 {
 			logger.Error("Empty events in a batch")
-			return nil, nil, nil, 0, 0, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("corrupted history event batch, empty events"),
-			}
+			return nil, nil, nil, 0, 0, serviceerror.NewInternal(fmt.Sprintf("corrupted history event batch, empty events"))
 		}
 
 		firstEvent := events[0]           // first
@@ -450,9 +440,7 @@ func (m *historyV2ManagerImpl) readHistoryBranch(
 				tag.FirstEventVersion(firstEvent.GetVersion()), tag.WorkflowFirstEventID(firstEvent.GetEventId()),
 				tag.LastEventVersion(lastEvent.GetVersion()), tag.WorkflowNextEventID(lastEvent.GetEventId()),
 				tag.Counter(eventCount))
-			return nil, nil, nil, 0, 0, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("corrupted history event batch, wrong version and IDs"),
-			}
+			return nil, nil, nil, 0, 0, serviceerror.NewInternal(fmt.Sprintf("corrupted history event batch, wrong version and IDs"))
 		}
 
 		if firstEvent.GetVersion() < token.LastEventVersion {
@@ -476,9 +464,7 @@ func (m *historyV2ManagerImpl) readHistoryBranch(
 					tag.LastEventVersion(lastEvent.GetVersion()), tag.WorkflowNextEventID(lastEvent.GetEventId()),
 					tag.TokenLastEventVersion(token.LastEventVersion), tag.TokenLastEventID(token.LastEventID),
 					tag.Counter(eventCount))
-				return nil, nil, nil, 0, 0, &workflow.InternalServiceError{
-					Message: fmt.Sprintf("corrupted history event batch, eventID is not continouous"),
-				}
+				return nil, nil, nil, 0, 0, serviceerror.NewInternal(fmt.Sprintf("corrupted history event batch, eventID is not continouous"))
 			}
 		}
 

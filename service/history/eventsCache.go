@@ -25,6 +25,8 @@ package history
 import (
 	"time"
 
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -77,7 +79,7 @@ type (
 )
 
 var (
-	errEventNotFoundInBatch = &shared.InternalServiceError{Message: "History event not found within expected batch"}
+	errEventNotFoundInBatch = serviceerror.NewInternal("History event not found within expected batch")
 )
 
 var _ eventsCache = (*eventsCacheImpl)(nil)

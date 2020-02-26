@@ -21,6 +21,8 @@
 package history
 
 import (
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 )
@@ -132,7 +134,7 @@ func scheduleDecision(
 
 	_, err := mutableState.AddDecisionTaskScheduledEvent(false)
 	if err != nil {
-		return &workflow.InternalServiceError{Message: "Failed to add decision scheduled event."}
+		return serviceerror.NewInternal("Failed to add decision scheduled event.")
 	}
 	return nil
 }

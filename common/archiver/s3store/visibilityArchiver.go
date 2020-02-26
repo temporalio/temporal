@@ -25,16 +25,15 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/temporalio/temporal/common/metrics"
-
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
+	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/service/config"
 )
 
@@ -174,16 +173,16 @@ func (v *visibilityArchiver) Query(
 	request *archiver.QueryVisibilityRequest,
 ) (*archiver.QueryVisibilityResponse, error) {
 	if err := softValidateURI(URI); err != nil {
-		return nil, &shared.BadRequestError{Message: archiver.ErrInvalidURI.Error()}
+		return nil, serviceerror.NewInvalidArgument(archiver.ErrInvalidURI.Error())
 	}
 
 	if err := archiver.ValidateQueryRequest(request); err != nil {
-		return nil, &shared.BadRequestError{Message: archiver.ErrInvalidQueryVisibilityRequest.Error()}
+		return nil, serviceerror.NewInvalidArgument(archiver.ErrInvalidQueryVisibilityRequest.Error())
 	}
 
 	parsedQuery, err := v.queryParser.Parse(request.Query)
 	if err != nil {
-		return nil, &shared.BadRequestError{Message: err.Error()}
+		return nil, serviceerror.NewInvalidArgument(err.Error())
 	}
 	if parsedQuery.emptyResult {
 		return &archiver.QueryVisibilityResponse{}, nil
@@ -224,9 +223,9 @@ func (v *visibilityArchiver) query(
 	})
 	if err != nil {
 		if isRetryableError(err) {
-			return nil, &shared.InternalServiceError{Message: err.Error()}
+			return nil, serviceerror.NewInternal(err.Error())
 		}
-		return nil, &shared.BadRequestError{Message: err.Error()}
+		return nil, serviceerror.NewInvalidArgument(err.Error())
 	}
 	if len(results.Contents) == 0 {
 		return &archiver.QueryVisibilityResponse{}, nil
@@ -239,12 +238,12 @@ func (v *visibilityArchiver) query(
 	for _, item := range results.Contents {
 		encodedRecord, err := download(ctx, v.s3cli, URI, *item.Key)
 		if err != nil {
-			return nil, &shared.InternalServiceError{Message: err.Error()}
+			return nil, serviceerror.NewInternal(err.Error())
 		}
 
 		record, err := decodeVisibilityRecord(encodedRecord)
 		if err != nil {
-			return nil, &shared.InternalServiceError{Message: err.Error()}
+			return nil, serviceerror.NewInternal(err.Error())
 		}
 		response.Executions = append(response.Executions, convertToExecutionInfo(record))
 	}

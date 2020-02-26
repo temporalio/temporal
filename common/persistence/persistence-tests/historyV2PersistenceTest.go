@@ -28,20 +28,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/temporalio/temporal/common/primitives"
-
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/temporal-proto/serviceerror"
 
-	gen "github.com/temporalio/temporal/.gen/go/shared"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	p "github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -352,7 +350,7 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 	req.MinEventID = 19
 	req.NextPageToken = nil
 	_, err = s.HistoryV2Mgr.ReadHistoryBranch(req)
-	s.IsType(&gen.EntityNotExistsError{}, err)
+	s.IsType(&serviceerror.NotFound{}, err)
 
 	err = s.deleteHistoryBranch(bi2)
 	s.Nil(err)
@@ -446,7 +444,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 
 			// read to verify override success, at this point history is corrupted, missing 7/8, so we should only see 6 events
 			_, err = s.readWithError(branch, 1, 25)
-			_, ok := err.(*workflow.InternalServiceError)
+			_, ok := err.(*serviceerror.Internal)
 			s.Equal(true, ok)
 
 			events = s.read(branch, 1, 7)

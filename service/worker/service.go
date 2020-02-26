@@ -24,7 +24,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/domain"
@@ -302,7 +303,7 @@ func (s *Service) ensureSystemDomainExists() {
 	switch err.(type) {
 	case nil:
 		// noop
-	case *shared.EntityNotExistsError:
+	case *serviceerror.NotFound:
 		s.GetLogger().Info("cadence-system domain does not exist, attempting to register domain")
 		s.registerSystemDomain()
 	default:
@@ -331,7 +332,7 @@ func (s *Service) registerSystemDomain() {
 		FailoverVersion: common.EmptyVersion,
 	})
 	if err != nil {
-		if _, ok := err.(*shared.DomainAlreadyExistsError); ok {
+		if _, ok := err.(*serviceerror.DomainAlreadyExists); ok {
 			return
 		}
 		s.GetLogger().Fatal("failed to register system domain", tag.Error(err))

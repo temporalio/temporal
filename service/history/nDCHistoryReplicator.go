@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	h "github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/shared"
@@ -234,7 +235,7 @@ func (r *nDCHistoryReplicatorImpl) applyEvents(
 		case nil:
 			// Sanity check to make only 3DC mutable state here
 			if mutableState.GetVersionHistories() == nil {
-				return &shared.InternalServiceError{Message: "The mutable state does not support 3DC."}
+				return serviceerror.NewInternal("The mutable state does not support 3DC.")
 			}
 
 			doContinue, branchIndex, err := r.applyNonStartEventsPrepareBranch(ctx, context, mutableState, task)
@@ -255,7 +256,7 @@ func (r *nDCHistoryReplicatorImpl) applyEvents(
 			}
 			return r.applyNonStartEventsToNoneCurrentBranch(ctx, context, mutableState, branchIndex, releaseFn, task)
 
-		case *shared.EntityNotExistsError:
+		case *serviceerror.NotFound:
 			// mutable state not created, check if is workflow reset
 			mutableState, err := r.applyNonStartEventsMissingMutableState(ctx, context, task)
 			if err != nil {
@@ -344,7 +345,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsPrepareBranch(
 	switch err.(type) {
 	case nil:
 		return doContinue, versionHistoryIndex, nil
-	case *shared.RetryTaskV2Error:
+	case *serviceerror.RetryTaskV2:
 		// replication message can arrive out of order
 		// do not log
 		return false, 0, err
@@ -709,13 +710,14 @@ func newNDCRetryTaskErrorWithHint(
 	endEventVersion int64,
 ) error {
 
-	return &shared.RetryTaskV2Error{
-		DomainId:          common.StringPtr(domainID),
-		WorkflowId:        common.StringPtr(workflowID),
-		RunId:             common.StringPtr(runID),
-		StartEventId:      common.Int64Ptr(startEventID),
-		StartEventVersion: common.Int64Ptr(startEventVersion),
-		EndEventId:        common.Int64Ptr(endEventID),
-		EndEventVersion:   common.Int64Ptr(endEventVersion),
-	}
+	return serviceerror.NewRetryTaskV2(
+		"",
+		domainID,
+		workflowID,
+		runID,
+		startEventID,
+		startEventVersion,
+		endEventID,
+		endEventVersion,
+	)
 }

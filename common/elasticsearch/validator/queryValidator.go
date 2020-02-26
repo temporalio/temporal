@@ -26,9 +26,9 @@ import (
 	"strings"
 
 	"github.com/xwb1989/sqlparser"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
@@ -97,26 +97,26 @@ func (qv *VisibilityQueryValidator) validateListOrCountRequestForQuery(whereClau
 
 		stmt, err := sqlparser.Parse(placeholderQuery)
 		if err != nil {
-			return "", &workflow.BadRequestError{Message: "Invalid query."}
+			return "", serviceerror.NewInvalidArgument("Invalid query.")
 		}
 
 		sel, ok := stmt.(*sqlparser.Select)
 		if !ok {
-			return "", &workflow.BadRequestError{Message: "Invalid select query."}
+			return "", serviceerror.NewInvalidArgument("Invalid select query.")
 		}
 		buf := sqlparser.NewTrackedBuffer(nil)
 		// validate where expr
 		if sel.Where != nil {
 			err = qv.validateWhereExpr(sel.Where.Expr)
 			if err != nil {
-				return "", &workflow.BadRequestError{Message: err.Error()}
+				return "", serviceerror.NewInvalidArgument(err.Error())
 			}
 			sel.Where.Expr.Format(buf)
 		}
 		// validate order by
 		err = qv.validateOrderByExpr(sel.OrderBy)
 		if err != nil {
-			return "", &workflow.BadRequestError{Message: err.Error()}
+			return "", serviceerror.NewInvalidArgument(err.Error())
 		}
 		sel.OrderBy.Format(buf)
 

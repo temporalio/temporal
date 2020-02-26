@@ -23,6 +23,8 @@
 package history
 
 import (
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cluster"
@@ -142,9 +144,7 @@ func (r *conflictResolverImpl) reset(
 	}
 
 	if resetMutableStateBuilder == nil {
-		return nil, &shared.BadRequestError{
-			Message: "unable to create reset mutable state",
-		}
+		return nil, serviceerror.NewInvalidArgument("unable to create reset mutable state")
 	}
 
 	// reset branchToken to the original one(it has been set to a wrong branchToken in applyEvents for startEvent)

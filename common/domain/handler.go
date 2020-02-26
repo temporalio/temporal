@@ -30,6 +30,7 @@ import (
 	"github.com/pborman/uuid"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
@@ -115,7 +116,7 @@ func (d *HandlerImpl) RegisterDomain(
 
 	if !d.clusterMetadata.IsGlobalDomainEnabled() {
 		if registerRequest.GetIsGlobalDomain() {
-			return nil, &shared.BadRequestError{Message: "Cannot register global domain when not enabled"}
+			return nil, serviceerror.NewInvalidArgument("Cannot register global domain when not enabled")
 		}
 
 		registerRequest.IsGlobalDomain = false
@@ -131,8 +132,8 @@ func (d *HandlerImpl) RegisterDomain(
 	switch err.(type) {
 	case nil:
 		// domain already exists, cannot proceed
-		return nil, &shared.DomainAlreadyExistsError{Message: "Domain already exists."}
-	case *shared.EntityNotExistsError:
+		return nil, serviceerror.NewDomainAlreadyExists("Domain already exists.")
+	case *serviceerror.NotFound:
 		// domain does not exists, proceeds
 	default:
 		// other err
@@ -449,9 +450,7 @@ func (d *HandlerImpl) UpdateDomain(
 			// only do merging
 			config.BadBinaries = *adapter.ToThriftBadBinaries(d.mergeBadBinaries(adapter.ToProtoBadBinaries(&config.BadBinaries).Binaries, updatedConfig.BadBinaries.Binaries, time.Now().UnixNano()))
 			if len(config.BadBinaries.Binaries) > maxLength {
-				return nil, &shared.BadRequestError{
-					Message: fmt.Sprintf("Total resetBinaries cannot exceed the max limit: %v", maxLength),
-				}
+				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Total resetBinaries cannot exceed the max limit: %v", maxLength))
 			}
 		}
 	}
@@ -460,9 +459,7 @@ func (d *HandlerImpl) UpdateDomain(
 		binChecksum := updateRequest.GetDeleteBadBinary()
 		_, ok := config.BadBinaries.Binaries[binChecksum]
 		if !ok {
-			return nil, &shared.BadRequestError{
-				Message: fmt.Sprintf("Bad binary checksum %v doesn't exists.", binChecksum),
-			}
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Bad binary checksum %v doesn't exists.", binChecksum))
 		}
 		configurationChanged = true
 		delete(config.BadBinaries.Binaries, binChecksum)

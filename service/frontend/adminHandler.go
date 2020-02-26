@@ -37,7 +37,6 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/domain"
@@ -406,7 +405,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 		common.IntPtr(shardID),
 	)
 	if err != nil {
-		if _, ok := err.(*shared.EntityNotExistsError); ok {
+		if _, ok := err.(*serviceerror.NotFound); ok {
 			// when no events can be returned from DB, DB layer will return
 			// EntityNotExistsError, this API shall return empty response
 			return &adminservice.GetWorkflowExecutionRawHistoryResponse{
@@ -542,7 +541,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 		ShardID:       common.IntPtr(shardID),
 	})
 	if err != nil {
-		if _, ok := err.(*shared.EntityNotExistsError); ok {
+		if _, ok := err.(*serviceerror.NotFound); ok {
 			// when no events can be returned from DB, DB layer will return
 			// EntityNotExistsError, this API shall return empty response
 			return &adminservice.GetWorkflowExecutionRawHistoryV2Response{
@@ -829,7 +828,7 @@ func (adh *AdminHandler) ReadDLQMessages(
 			}
 		}
 	default:
-		return nil, adh.error(&shared.BadRequestError{Message: "The DLQ type is not supported."}, scope)
+		return nil, adh.error(serviceerror.NewInvalidArgument("The DLQ type is not supported."), scope)
 	}
 	retErr = backoff.Retry(op, adminServiceRetryPolicy, common.IsServiceTransientError)
 	if retErr != nil {
@@ -885,7 +884,7 @@ func (adh *AdminHandler) PurgeDLQMessages(
 			}
 		}
 	default:
-		return nil, adh.error(&shared.BadRequestError{Message: "The DLQ type is not supported."}, scope)
+		return nil, adh.error(serviceerror.NewInvalidArgument("The DLQ type is not supported."), scope)
 	}
 	err = backoff.Retry(op, adminServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
@@ -949,7 +948,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 			}
 		}
 	default:
-		return nil, adh.error(&shared.BadRequestError{Message: "The DLQ type is not supported."}, scope)
+		return nil, adh.error(serviceerror.NewInvalidArgument("The DLQ type is not supported."), scope)
 	}
 	err = backoff.Retry(op, adminServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
@@ -1163,9 +1162,6 @@ func (adh *AdminHandler) startRequestProfile(scope int) (metrics.Scope, metrics.
 }
 
 func (adh *AdminHandler) error(err error, scope metrics.Scope) error {
-	// TODO: remove after error migration is done
-	err = adapter.ToServiceError(err)
-
 	switch err.(type) {
 	case *serviceerror.Internal:
 		adh.GetLogger().Error("Internal service error", tag.Error(err))

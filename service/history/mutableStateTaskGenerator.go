@@ -26,6 +26,8 @@ import (
 	"fmt"
 	"time"
 
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
@@ -163,7 +165,7 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowCloseTasks(
 	switch err.(type) {
 	case nil:
 		retentionInDays = domainEntry.GetRetentionDays(executionInfo.WorkflowID)
-	case *shared.EntityNotExistsError:
+	case *serviceerror.NotFound:
 		// domain is not accessible, use default value above
 	default:
 		return err
@@ -200,13 +202,9 @@ func (r *mutableStateTaskGeneratorImpl) generateDelayedDecisionTasks(
 		case shared.ContinueAsNewInitiatorCronSchedule:
 			firstDecisionDelayType = persistence.WorkflowBackoffTimeoutTypeCron
 		case shared.ContinueAsNewInitiatorDecider:
-			return &shared.InternalServiceError{
-				Message: "encounter continue as new iterator & first decision delay not 0",
-			}
+			return serviceerror.NewInternal("encounter continue as new iterator & first decision delay not 0")
 		default:
-			return &shared.InternalServiceError{
-				Message: fmt.Sprintf("unknown iterator retry policy: %v", startAttr.GetInitiator()),
-			}
+			return serviceerror.NewInternal(fmt.Sprintf("unknown iterator retry policy: %v", startAttr.GetInitiator()))
 		}
 	}
 
@@ -247,9 +245,7 @@ func (r *mutableStateTaskGeneratorImpl) generateDecisionScheduleTasks(
 		decisionScheduleID,
 	)
 	if !ok {
-		return &shared.InternalServiceError{
-			Message: fmt.Sprintf("it could be a bug, cannot get pending decision: %v", decisionScheduleID),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending decision: %v", decisionScheduleID))
 	}
 
 	r.mutableState.AddTransferTasks(&persistence.DecisionTask{
@@ -289,9 +285,7 @@ func (r *mutableStateTaskGeneratorImpl) generateDecisionStartTasks(
 		decisionScheduleID,
 	)
 	if !ok {
-		return &shared.InternalServiceError{
-			Message: fmt.Sprintf("it could be a bug, cannot get pending decision: %v", decisionScheduleID),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending decision: %v", decisionScheduleID))
 	}
 
 	startedTime := time.Unix(0, decision.StartedTimestamp)
@@ -321,9 +315,7 @@ func (r *mutableStateTaskGeneratorImpl) generateActivityTransferTasks(
 
 	activityInfo, ok := r.mutableState.GetActivityInfo(activityScheduleID)
 	if !ok {
-		return &shared.InternalServiceError{
-			Message: fmt.Sprintf("it could be a bug, cannot get pending activity: %v", activityScheduleID),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending activity: %v", activityScheduleID))
 	}
 
 	var targetDomainID string
@@ -359,9 +351,7 @@ func (r *mutableStateTaskGeneratorImpl) generateActivityRetryTasks(
 
 	ai, ok := r.mutableState.GetActivityInfo(activityScheduleID)
 	if !ok {
-		return &shared.InternalServiceError{
-			Message: fmt.Sprintf("it could be a bug, cannot get pending activity: %v", activityScheduleID),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending activity: %v", activityScheduleID))
 	}
 
 	r.mutableState.AddTimerTasks(&persistence.ActivityRetryTimerTask{
@@ -385,9 +375,7 @@ func (r *mutableStateTaskGeneratorImpl) generateChildWorkflowTasks(
 
 	childWorkflowInfo, ok := r.mutableState.GetChildExecutionInfo(childWorkflowScheduleID)
 	if !ok {
-		return &shared.InternalServiceError{
-			Message: fmt.Sprintf("it could be a bug, cannot get pending child workflow: %v", childWorkflowScheduleID),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending child workflow: %v", childWorkflowScheduleID))
 	}
 
 	targetDomainID, err := r.getTargetDomainID(childWorkflowTargetDomain)
@@ -422,9 +410,7 @@ func (r *mutableStateTaskGeneratorImpl) generateRequestCancelExternalTasks(
 
 	_, ok := r.mutableState.GetRequestCancelInfo(scheduleID)
 	if !ok {
-		return &shared.InternalServiceError{
-			Message: fmt.Sprintf("it could be a bug, cannot get pending request cancel external workflow: %v", scheduleID),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending request cancel external workflow: %v", scheduleID))
 	}
 
 	targetDomainID, err := r.getTargetDomainID(targetDomainName)
@@ -461,9 +447,7 @@ func (r *mutableStateTaskGeneratorImpl) generateSignalExternalTasks(
 
 	_, ok := r.mutableState.GetSignalInfo(scheduleID)
 	if !ok {
-		return &shared.InternalServiceError{
-			Message: fmt.Sprintf("it could be a bug, cannot get pending signal external workflow: %v", scheduleID),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending signal external workflow: %v", scheduleID))
 	}
 
 	targetDomainID, err := r.getTargetDomainID(targetDomainName)

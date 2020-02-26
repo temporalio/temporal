@@ -32,7 +32,6 @@ import (
 	time "time"
 
 	gomock "github.com/golang/mock/gomock"
-
 	history "github.com/temporalio/temporal/.gen/go/history"
 	shared "github.com/temporalio/temporal/.gen/go/shared"
 	cache "github.com/temporalio/temporal/common/cache"

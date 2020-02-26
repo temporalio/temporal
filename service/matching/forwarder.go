@@ -27,6 +27,7 @@ import (
 
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
@@ -283,7 +284,7 @@ func (fwdr *Forwarder) refreshTokenC(value *atomic.Value, curr *int32, maxLimit 
 }
 
 func (fwdr *Forwarder) handleErr(err error) error {
-	if _, ok := err.(*shared.ServiceBusyError); ok {
+	if _, ok := err.(*serviceerror.ResourceExhausted); ok {
 		return errForwarderSlowDown
 	}
 	return err

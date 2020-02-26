@@ -25,18 +25,14 @@ import (
 	"errors"
 	"time"
 
-	"github.com/temporalio/temporal/common/persistence/serialization"
-
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
-
-	"github.com/temporalio/temporal/common/adapter"
-	"github.com/temporalio/temporal/common/primitives"
-
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/log"
@@ -44,6 +40,8 @@ import (
 	"github.com/temporalio/temporal/common/messaging"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/persistence/serialization"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -161,7 +159,7 @@ func (p *replicatorQueueProcessorImpl) process(
 		return metrics.ReplicatorTaskSyncActivityScope, err
 	case persistence.ReplicationTaskTypeHistory:
 		err := p.processHistoryReplicationTask(task.ReplicationTaskInfo)
-		if _, ok := err.(*shared.EntityNotExistsError); ok {
+		if _, ok := err.(*serviceerror.NotFound); ok {
 			err = errHistoryNotFoundTask
 		}
 		if err == nil {
@@ -774,9 +772,7 @@ func (p *replicatorQueueProcessorImpl) getEventsBlob(
 	}
 
 	if len(eventBatchBlobs) != 1 {
-		return nil, &shared.InternalServiceError{
-			Message: "replicatorQueueProcessor encounter more than 1 NDC raw event batch",
-		}
+		return nil, serviceerror.NewInternal("replicatorQueueProcessor encounter more than 1 NDC raw event batch")
 	}
 
 	return eventBatchBlobs[0].ToThrift(), nil
@@ -790,9 +786,7 @@ func (p *replicatorQueueProcessorImpl) getVersionHistoryItems(
 
 	versionHistories := mutableState.GetVersionHistories()
 	if versionHistories == nil {
-		return nil, nil, &shared.InternalServiceError{
-			Message: "replicatorQueueProcessor encounter workflow without version histories",
-		}
+		return nil, nil, serviceerror.NewInternal("replicatorQueueProcessor encounter workflow without version histories")
 	}
 
 	versionHistoryIndex, err := versionHistories.FindFirstVersionHistoryIndexByItem(
@@ -840,7 +834,7 @@ func (p *replicatorQueueProcessorImpl) processReplication(
 			return nil, nil
 		}
 		return action(msBuilder)
-	case *shared.EntityNotExistsError:
+	case *serviceerror.NotFound:
 		return nil, nil
 	default:
 		return nil, err

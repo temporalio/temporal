@@ -26,9 +26,8 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/temporalio/temporal/common/primitives"
-
 	"github.com/pborman/uuid"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	h "github.com/temporalio/temporal/.gen/go/history"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
@@ -39,11 +38,11 @@ import (
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/definition"
-	"github.com/temporalio/temporal/common/errors"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 const (
@@ -55,25 +54,25 @@ const (
 
 var (
 	// ErrWorkflowFinished indicates trying to mutate mutable state after workflow finished
-	ErrWorkflowFinished = &workflow.InternalServiceError{Message: "invalid mutable state action: mutation after finish"}
+	ErrWorkflowFinished = serviceerror.NewInternal("invalid mutable state action: mutation after finish")
 	// ErrMissingTimerInfo indicates missing timer info
-	ErrMissingTimerInfo = &workflow.InternalServiceError{Message: "unable to get timer info"}
+	ErrMissingTimerInfo = serviceerror.NewInternal("unable to get timer info")
 	// ErrMissingActivityInfo indicates missing activity info
-	ErrMissingActivityInfo = &workflow.InternalServiceError{Message: "unable to get activity info"}
+	ErrMissingActivityInfo = serviceerror.NewInternal("unable to get activity info")
 	// ErrMissingChildWorkflowInfo indicates missing child workflow info
-	ErrMissingChildWorkflowInfo = &workflow.InternalServiceError{Message: "unable to get child workflow info"}
+	ErrMissingChildWorkflowInfo = serviceerror.NewInternal("unable to get child workflow info")
 	// ErrMissingRequestCancelInfo indicates missing request cancel info
-	ErrMissingRequestCancelInfo = &workflow.InternalServiceError{Message: "unable to get request cancel info"}
+	ErrMissingRequestCancelInfo = serviceerror.NewInternal("unable to get request cancel info")
 	// ErrMissingSignalInfo indicates missing signal external
-	ErrMissingSignalInfo = &workflow.InternalServiceError{Message: "unable to get signal info"}
+	ErrMissingSignalInfo = serviceerror.NewInternal("unable to get signal info")
 	// ErrMissingWorkflowStartEvent indicates missing workflow start event
-	ErrMissingWorkflowStartEvent = &workflow.InternalServiceError{Message: "unable to get workflow start event"}
+	ErrMissingWorkflowStartEvent = serviceerror.NewInternal("unable to get workflow start event")
 	// ErrMissingWorkflowCompletionEvent indicates missing workflow completion event
-	ErrMissingWorkflowCompletionEvent = &workflow.InternalServiceError{Message: "unable to get workflow completion event"}
+	ErrMissingWorkflowCompletionEvent = serviceerror.NewInternal("unable to get workflow completion event")
 	// ErrMissingActivityScheduledEvent indicates missing workflow activity scheduled event
-	ErrMissingActivityScheduledEvent = &workflow.InternalServiceError{Message: "unable to get activity scheduled event"}
+	ErrMissingActivityScheduledEvent = serviceerror.NewInternal("unable to get activity scheduled event")
 	// ErrMissingChildWorkflowInitiatedEvent indicates missing child workflow initiated event
-	ErrMissingChildWorkflowInitiatedEvent = &workflow.InternalServiceError{Message: "unable to get child workflow initiated event"}
+	ErrMissingChildWorkflowInitiatedEvent = serviceerror.NewInternal("unable to get child workflow initiated event")
 )
 
 type (
@@ -510,9 +509,7 @@ func (e *mutableStateBuilder) UpdateCurrentVersion(
 	// TODO when NDC is fully rolled out remove this block
 	//  since event local domain workflow will have version history
 	if version != common.EmptyVersion {
-		err := &workflow.InternalServiceError{
-			Message: "cannot update current version of local domain workflow to version other than empty version",
-		}
+		err := serviceerror.NewInternal("cannot update current version of local domain workflow to version other than empty version")
 		e.logError(err.Error())
 		return err
 	}
@@ -1994,19 +1991,13 @@ func (e *mutableStateBuilder) addBinaryCheckSumIfNotExists(
 // TODO: we will release the restriction when reset API allow those pending
 func (e *mutableStateBuilder) CheckResettable() error {
 	if len(e.GetPendingChildExecutionInfos()) > 0 {
-		return &workflow.BadRequestError{
-			Message: fmt.Sprintf("it is not allowed resetting to a point that workflow has pending child workflow."),
-		}
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("it is not allowed resetting to a point that workflow has pending child workflow."))
 	}
 	if len(e.GetPendingRequestCancelExternalInfos()) > 0 {
-		return &workflow.BadRequestError{
-			Message: fmt.Sprintf("it is not allowed resetting to a point that workflow has pending request cancel."),
-		}
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("it is not allowed resetting to a point that workflow has pending request cancel."))
 	}
 	if len(e.GetPendingSignalExternalInfos()) > 0 {
-		return &workflow.BadRequestError{
-			Message: fmt.Sprintf("it is not allowed resetting to a point that workflow has pending signals to send."),
-		}
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("it is not allowed resetting to a point that workflow has pending signals to send."))
 	}
 	return nil
 }
@@ -3332,7 +3323,7 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 		attributes,
 		firstRunID,
 	); err != nil {
-		return nil, nil, &workflow.InternalServiceError{Message: "Failed to add workflow execution started event."}
+		return nil, nil, serviceerror.NewInternal("Failed to add workflow execution started event.")
 	}
 
 	if err = e.ReplicateWorkflowExecutionContinuedAsNewEvent(
@@ -3976,15 +3967,11 @@ func (e *mutableStateBuilder) CloseTransactionAsSnapshot(
 	}
 
 	if len(workflowEventsSeq) > 1 {
-		return nil, nil, &workflow.InternalServiceError{
-			Message: "cannot generate workflow snapshot with transient events",
-		}
+		return nil, nil, serviceerror.NewInternal("cannot generate workflow snapshot with transient events")
 	}
 	if len(e.bufferedEvents) > 0 {
 		// TODO do we need the functionality to generate snapshot with buffered events?
-		return nil, nil, &workflow.InternalServiceError{
-			Message: "cannot generate workflow snapshot with buffered events",
-		}
+		return nil, nil, serviceerror.NewInternal("cannot generate workflow snapshot with buffered events")
 	}
 
 	if len(workflowEventsSeq) > 0 {
@@ -4189,9 +4176,7 @@ func (e *mutableStateBuilder) prepareEventsAndReplicationTasks(
 	)
 
 	if transactionPolicy == transactionPolicyPassive && len(e.insertReplicationTasks) > 0 {
-		return nil, &workflow.InternalServiceError{
-			Message: "should not generate replication task when close transaction as passive",
-		}
+		return nil, serviceerror.NewInternal("should not generate replication task when close transaction as passive")
 	}
 
 	return workflowEventsSeq, nil
@@ -4216,9 +4201,7 @@ func (e *mutableStateBuilder) eventsToReplicationTask(
 	currentCluster := e.clusterMetadata.GetCurrentClusterName()
 
 	if currentCluster != sourceCluster {
-		return nil, &workflow.InternalServiceError{
-			Message: "mutableStateBuilder encounter contradicting version & transaction policy",
-		}
+		return nil, serviceerror.NewInternal("mutableStateBuilder encounter contradicting version & transaction policy")
 	}
 
 	currentBranchToken, err := e.GetCurrentBranchToken()
@@ -4240,9 +4223,7 @@ func (e *mutableStateBuilder) eventsToReplicationTask(
 	} else if e.GetVersionHistories() != nil {
 		replicationTask.LastReplicationInfo = nil
 	} else {
-		return nil, &workflow.InternalServiceError{
-			Message: "should not generate replication task when missing replication state & version history",
-		}
+		return nil, serviceerror.NewInternal("should not generate replication task when missing replication state & version history")
 	}
 
 	return []persistence.Task{replicationTask}, nil
@@ -4367,11 +4348,7 @@ func (e *mutableStateBuilder) startTransactionHandleDecisionFailover() (bool, er
 		return false, err
 	}
 	if lastWriteVersion != decision.Version {
-		return false, &workflow.InternalServiceError{Message: fmt.Sprintf(
-			"mutableStateBuilder encounter mismatch version, decision: %v, last write version %v",
-			decision.Version,
-			lastWriteVersion,
-		)}
+		return false, serviceerror.NewInternal(fmt.Sprintf("mutableStateBuilder encounter mismatch version, decision: %v, last write version %v", decision.Version, lastWriteVersion))
 	}
 
 	lastWriteSourceCluster := e.clusterMetadata.ClusterNameForFailoverVersion(lastWriteVersion)
@@ -4391,9 +4368,7 @@ func (e *mutableStateBuilder) startTransactionHandleDecisionFailover() (bool, er
 	if lastWriteSourceCluster != currentCluster && currentVersionCluster != currentCluster {
 		// do a sanity check on buffered events
 		if e.HasBufferedEvents() {
-			return false, &workflow.InternalServiceError{
-				Message: "mutableStateBuilder encounter previous passive workflow with buffered events",
-			}
+			return false, serviceerror.NewInternal("mutableStateBuilder encounter previous passive workflow with buffered events")
 		}
 		return false, nil
 	}
@@ -4405,9 +4380,7 @@ func (e *mutableStateBuilder) startTransactionHandleDecisionFailover() (bool, er
 	if lastWriteSourceCluster != currentCluster && currentVersionCluster == currentCluster {
 		// do a sanity check on buffered events
 		if e.HasBufferedEvents() {
-			return false, &workflow.InternalServiceError{
-				Message: "mutableStateBuilder encounter previous passive workflow with buffered events",
-			}
+			return false, serviceerror.NewInternal("mutableStateBuilder encounter previous passive workflow with buffered events")
 		}
 		flushBufferVersion = currentVersion
 	}
@@ -4449,7 +4422,7 @@ func (e *mutableStateBuilder) closeTransactionWithPolicyCheck(
 
 	if activeCluster != currentCluster {
 		domainID := e.GetExecutionInfo().DomainID
-		return errors.NewDomainNotActiveError(domainID, currentCluster, activeCluster)
+		return serviceerror.NewDomainNotActive(domainID, currentCluster, activeCluster)
 	}
 	return nil
 }
@@ -4608,16 +4581,14 @@ func (e *mutableStateBuilder) createInternalServerError(
 	actionTag tag.Tag,
 ) error {
 
-	return &workflow.InternalServiceError{Message: actionTag.Field().String + " operation failed"}
+	return serviceerror.NewInternal(actionTag.Field().String + " operation failed")
 }
 
 func (e *mutableStateBuilder) createCallerError(
 	actionTag tag.Tag,
 ) error {
 
-	return &workflow.BadRequestError{
-		Message: fmt.Sprintf(mutableStateInvalidHistoryActionMsgTemplate, actionTag.Field().String),
-	}
+	return serviceerror.NewInvalidArgument(fmt.Sprintf(mutableStateInvalidHistoryActionMsgTemplate, actionTag.Field().String))
 }
 
 func (e *mutableStateBuilder) unixNanoToTime(

@@ -24,8 +24,8 @@ package domain
 
 import (
 	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
@@ -131,7 +131,7 @@ func (d *dlqMessageHandlerImpl) Merge(
 	for _, message := range messages {
 		domainTask := message.GetDomainTaskAttributes()
 		if domainTask == nil {
-			return nil, &shared.InternalServiceError{Message: "Encounter non domain replication task in domain replication queue."}
+			return nil, serviceerror.NewInternal("Encounter non domain replication task in domain replication queue.")
 		}
 
 		if err := d.replicationHandler.Execute(

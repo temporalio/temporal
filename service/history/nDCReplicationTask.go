@@ -23,9 +23,8 @@ package history
 import (
 	"time"
 
-	"github.com/temporalio/temporal/common/persistence/serialization"
-
 	"github.com/pborman/uuid"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	h "github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/shared"
@@ -34,6 +33,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/persistence/serialization"
 )
 
 type (
@@ -75,19 +75,19 @@ type (
 
 var (
 	// ErrInvalidDomainID is returned if domain ID is invalid
-	ErrInvalidDomainID = &shared.BadRequestError{Message: "invalid domain ID"}
+	ErrInvalidDomainID = serviceerror.NewInvalidArgument("invalid domain ID")
 	// ErrInvalidExecution is returned if execution is invalid
-	ErrInvalidExecution = &shared.BadRequestError{Message: "invalid execution"}
+	ErrInvalidExecution = serviceerror.NewInvalidArgument("invalid execution")
 	// ErrInvalidRunID is returned if run ID is invalid
-	ErrInvalidRunID = &shared.BadRequestError{Message: "invalid run ID"}
+	ErrInvalidRunID = serviceerror.NewInvalidArgument("invalid run ID")
 	// ErrEventIDMismatch is returned if event ID mis-matched
-	ErrEventIDMismatch = &shared.BadRequestError{Message: "event ID mismatch"}
+	ErrEventIDMismatch = serviceerror.NewInvalidArgument("event ID mismatch")
 	// ErrEventVersionMismatch is returned if event version mis-matched
-	ErrEventVersionMismatch = &shared.BadRequestError{Message: "event version mismatch"}
+	ErrEventVersionMismatch = serviceerror.NewInvalidArgument("event version mismatch")
 	// ErrNoNewRunHistory is returned if there is no new run history
-	ErrNoNewRunHistory = &shared.BadRequestError{Message: "no new run history events"}
+	ErrNoNewRunHistory = serviceerror.NewInvalidArgument("no new run history events")
 	// ErrLastEventIsNotContinueAsNew is returned if the last event is not continue as new
-	ErrLastEventIsNotContinueAsNew = &shared.BadRequestError{Message: "last event is not continue as new"}
+	ErrLastEventIsNotContinueAsNew = serviceerror.NewInvalidArgument("last event is not continue as new")
 )
 
 func newNDCReplicationTask(

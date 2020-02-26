@@ -23,6 +23,8 @@ package domain
 import (
 	"fmt"
 
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/persistence"
@@ -78,11 +80,11 @@ func (d *AttrValidatorImpl) validateDomainReplicationConfigForLocalDomain(
 	}
 
 	if activeCluster != d.clusterMetadata.GetCurrentClusterName() {
-		return &shared.BadRequestError{Message: "Invalid local domain active cluster"}
+		return serviceerror.NewInvalidArgument("Invalid local domain active cluster")
 	}
 
 	if len(clusters) != 1 || clusters[0].ClusterName != activeCluster {
-		return &shared.BadRequestError{Message: "Invalid local domain clusters"}
+		return serviceerror.NewInvalidArgument("Invalid local domain clusters")
 	}
 
 	return nil
@@ -149,10 +151,7 @@ func (d *AttrValidatorImpl) validateClusterName(
 ) error {
 
 	if info, ok := d.clusterMetadata.GetAllClusterInfo()[clusterName]; !ok || !info.Enabled {
-		return &shared.BadRequestError{Message: fmt.Sprintf(
-			"Invalid cluster name: %v",
-			clusterName,
-		)}
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid cluster name: %v", clusterName))
 	}
 	return nil
 }

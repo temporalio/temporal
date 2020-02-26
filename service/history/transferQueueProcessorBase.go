@@ -25,6 +25,7 @@ import (
 	"time"
 
 	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
@@ -206,7 +207,7 @@ func (t *transferQueueProcessorBase) recordWorkflowStarted(
 	domain := defaultDomainName
 
 	if domainEntry, err := t.shard.GetDomainCache().GetDomainByID(domainID); err != nil {
-		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
+		if _, ok := err.(*serviceerror.NotFound); !ok {
 			return err
 		}
 	} else {
@@ -253,7 +254,7 @@ func (t *transferQueueProcessorBase) upsertWorkflowExecution(
 	domain := defaultDomainName
 	domainEntry, err := t.shard.GetDomainCache().GetDomainByID(domainID)
 	if err != nil {
-		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
+		if _, ok := err.(*serviceerror.NotFound); !ok {
 			return err
 		}
 	} else {
@@ -420,6 +421,6 @@ func copySearchAttributes(
 }
 
 func isWorkflowNotExistError(err error) bool {
-	_, ok := err.(*workflow.EntityNotExistsError)
+	_, ok := err.(*serviceerror.NotFound)
 	return ok
 }

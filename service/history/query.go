@@ -26,6 +26,7 @@ import (
 	"sync/atomic"
 
 	"github.com/pborman/uuid"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 )
@@ -37,9 +38,9 @@ const (
 )
 
 var (
-	errTerminationStateInvalid = &shared.InternalServiceError{Message: "query termination state invalid"}
-	errAlreadyInTerminalState  = &shared.InternalServiceError{Message: "query already in terminal state"}
-	errQueryNotInTerminalState = &shared.InternalServiceError{Message: "query not in terminal state"}
+	errTerminationStateInvalid = serviceerror.NewInternal("query termination state invalid")
+	errAlreadyInTerminalState  = serviceerror.NewInternal("query already in terminal state")
+	errQueryNotInTerminalState = serviceerror.NewInternal("query not in terminal state")
 )
 
 type (

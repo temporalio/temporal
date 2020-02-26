@@ -23,7 +23,7 @@ package persistence
 import (
 	"fmt"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 // NOTE: when modifying this file, plz make each case clear,
@@ -67,9 +67,7 @@ func ValidateCreateWorkflowModeState(
 		return nil
 
 	default:
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("unknown mode: %v", mode),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("unknown mode: %v", mode))
 	}
 }
 
@@ -150,9 +148,7 @@ func ValidateUpdateWorkflowModeState(
 		return nil
 
 	default:
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("unknown mode: %v", mode),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("unknown mode: %v", mode))
 	}
 }
 
@@ -275,12 +271,7 @@ func ValidateConflictResolveWorkflowModeState(
 
 		// precondition
 		if currentWorkflowMutation != nil {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf(
-					"Invalid workflow conflict resolve mode %v, encounter current workflow",
-					mode,
-				),
-			}
+			return serviceerror.NewInternal(fmt.Sprintf("Invalid workflow conflict resolve mode %v, encounter current workflow", mode))
 		}
 
 		// case 1
@@ -311,9 +302,7 @@ func ValidateConflictResolveWorkflowModeState(
 		return nil
 
 	default:
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("unknown mode: %v", mode),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("unknown mode: %v", mode))
 	}
 }
 
@@ -326,9 +315,7 @@ func checkWorkflowState(state int) error {
 		WorkflowStateCorrupted:
 		return nil
 	default:
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("unknown workflow state: %v", state),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))
 	}
 }
 
@@ -336,26 +323,24 @@ func newInvalidCreateWorkflowMode(
 	mode CreateWorkflowMode,
 	workflowState int,
 ) error {
-	return &workflow.InternalServiceError{
-		Message: fmt.Sprintf(
-			"Invalid workflow create mode %v, state: %v",
-			mode,
-			workflowState,
-		),
-	}
+	return serviceerror.NewInternal(fmt.Sprintf(
+		"Invalid workflow create mode %v, state: %v",
+		mode,
+		workflowState,
+	),
+	)
 }
 
 func newInvalidUpdateWorkflowMode(
 	mode UpdateWorkflowMode,
 	currentWorkflowState int,
 ) error {
-	return &workflow.InternalServiceError{
-		Message: fmt.Sprintf(
-			"Invalid workflow update mode %v, state: %v",
-			mode,
-			currentWorkflowState,
-		),
-	}
+	return serviceerror.NewInternal(fmt.Sprintf(
+		"Invalid workflow update mode %v, state: %v",
+		mode,
+		currentWorkflowState,
+	),
+	)
 }
 
 func newInvalidUpdateWorkflowWithNewMode(
@@ -363,27 +348,25 @@ func newInvalidUpdateWorkflowWithNewMode(
 	currentWorkflowState int,
 	newWorkflowState int,
 ) error {
-	return &workflow.InternalServiceError{
-		Message: fmt.Sprintf(
-			"Invalid workflow update mode %v, current state: %v, new state: %v",
-			mode,
-			currentWorkflowState,
-			newWorkflowState,
-		),
-	}
+	return serviceerror.NewInternal(fmt.Sprintf(
+		"Invalid workflow update mode %v, current state: %v, new state: %v",
+		mode,
+		currentWorkflowState,
+		newWorkflowState,
+	),
+	)
 }
 
 func newInvalidConflictResolveWorkflowMode(
 	mode ConflictResolveWorkflowMode,
 	resetWorkflowState int,
 ) error {
-	return &workflow.InternalServiceError{
-		Message: fmt.Sprintf(
-			"Invalid workflow conflict resolve mode %v, reset state: %v",
-			mode,
-			resetWorkflowState,
-		),
-	}
+	return serviceerror.NewInternal(fmt.Sprintf(
+		"Invalid workflow conflict resolve mode %v, reset state: %v",
+		mode,
+		resetWorkflowState,
+	),
+	)
 }
 
 func newInvalidConflictResolveWorkflowWithNewMode(
@@ -391,14 +374,13 @@ func newInvalidConflictResolveWorkflowWithNewMode(
 	resetWorkflowState int,
 	newWorkflowState int,
 ) error {
-	return &workflow.InternalServiceError{
-		Message: fmt.Sprintf(
-			"Invalid workflow conflict resolve mode %v, reset state: %v, new state: %v",
-			mode,
-			resetWorkflowState,
-			newWorkflowState,
-		),
-	}
+	return serviceerror.NewInternal(fmt.Sprintf(
+		"Invalid workflow conflict resolve mode %v, reset state: %v, new state: %v",
+		mode,
+		resetWorkflowState,
+		newWorkflowState,
+	),
+	)
 }
 
 func newInvalidConflictResolveWorkflowWithCurrentMode(
@@ -406,14 +388,13 @@ func newInvalidConflictResolveWorkflowWithCurrentMode(
 	resetWorkflowState int,
 	currentWorkflowState int,
 ) error {
-	return &workflow.InternalServiceError{
-		Message: fmt.Sprintf(
-			"Invalid workflow conflict resolve mode %v, reset state: %v, current state: %v",
-			mode,
-			resetWorkflowState,
-			currentWorkflowState,
-		),
-	}
+	return serviceerror.NewInternal(fmt.Sprintf(
+		"Invalid workflow conflict resolve mode %v, reset state: %v, current state: %v",
+		mode,
+		resetWorkflowState,
+		currentWorkflowState,
+	),
+	)
 }
 
 func newInvalidConflictResolveWorkflowWithCurrentWithNewMode(
@@ -422,13 +403,12 @@ func newInvalidConflictResolveWorkflowWithCurrentWithNewMode(
 	newWorkflowState int,
 	currentWorkflowState int,
 ) error {
-	return &workflow.InternalServiceError{
-		Message: fmt.Sprintf(
-			"Invalid workflow conflict resolve mode %v, reset state: %v, new state: %v, current state: %v",
-			mode,
-			resetWorkflowState,
-			newWorkflowState,
-			currentWorkflowState,
-		),
-	}
+	return serviceerror.NewInternal(fmt.Sprintf(
+		"Invalid workflow conflict resolve mode %v, reset state: %v, new state: %v, current state: %v",
+		mode,
+		resetWorkflowState,
+		newWorkflowState,
+		currentWorkflowState,
+	),
+	)
 }

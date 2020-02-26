@@ -590,7 +590,7 @@ func (t *transferQueueActiveProcessorImpl) processCancelExecution(
 
 		// Check to see if the error is non-transient, in which case add RequestCancelFailed
 		// event and complete transfer task by setting the err = nil
-		if !common.IsServiceNonRetryableErrorGRPC(err) {
+		if !common.IsServiceNonRetryableError(err) {
 			// for retryable error just return
 			return err
 		}
@@ -679,7 +679,7 @@ func (t *transferQueueActiveProcessorImpl) processSignalExecution(
 
 		// Check to see if the error is non-transient, in which case add SignalFailed
 		// event and complete transfer task by setting the err = nil
-		if !common.IsServiceNonRetryableErrorGRPC(err) {
+		if !common.IsServiceNonRetryableError(err) {
 			// for retryable error just return
 			return err
 		}
@@ -1049,14 +1049,14 @@ func (t *transferQueueActiveProcessorImpl) recordChildExecutionStarted(
 	return t.updateWorkflowExecution(context, true,
 		func(mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return &shared.EntityNotExistsError{Message: "Workflow execution already completed."}
+				return serviceerror.NewNotFound("Workflow execution already completed.")
 			}
 
 			domain := initiatedAttributes.Domain
 			initiatedEventID := task.ScheduleID
 			ci, ok := mutableState.GetChildExecutionInfo(initiatedEventID)
 			if !ok || ci.StartedID != common.EmptyEventID {
-				return &shared.EntityNotExistsError{Message: "Pending child execution not found."}
+				return serviceerror.NewNotFound("Pending child execution not found.")
 			}
 
 			_, err := mutableState.AddChildWorkflowExecutionStartedEvent(
@@ -1083,13 +1083,13 @@ func (t *transferQueueActiveProcessorImpl) recordStartChildExecutionFailed(
 	return t.updateWorkflowExecution(context, true,
 		func(mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return &shared.EntityNotExistsError{Message: "Workflow execution already completed."}
+				return serviceerror.NewNotFound("Workflow execution already completed.")
 			}
 
 			initiatedEventID := task.ScheduleID
 			ci, ok := mutableState.GetChildExecutionInfo(initiatedEventID)
 			if !ok || ci.StartedID != common.EmptyEventID {
-				return &shared.EntityNotExistsError{Message: "Pending child execution not found."}
+				return serviceerror.NewNotFound("Pending child execution not found.")
 			}
 
 			_, err := mutableState.AddStartChildWorkflowExecutionFailedEvent(initiatedEventID,
@@ -1136,7 +1136,7 @@ func (t *transferQueueActiveProcessorImpl) requestCancelExternalExecutionComplet
 	err := t.updateWorkflowExecution(context, true,
 		func(mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return &shared.EntityNotExistsError{Message: "Workflow execution already completed."}
+				return serviceerror.NewNotFound("Workflow execution already completed.")
 			}
 
 			initiatedEventID := task.ScheduleID
@@ -1154,7 +1154,7 @@ func (t *transferQueueActiveProcessorImpl) requestCancelExternalExecutionComplet
 			return err
 		})
 
-	if _, ok := err.(*shared.EntityNotExistsError); ok {
+	if _, ok := err.(*serviceerror.NotFound); ok {
 		// this could happen if this is a duplicate processing of the task,
 		// or the execution has already completed.
 		return nil
@@ -1174,7 +1174,7 @@ func (t *transferQueueActiveProcessorImpl) signalExternalExecutionCompleted(
 	err := t.updateWorkflowExecution(context, true,
 		func(mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return &shared.EntityNotExistsError{Message: "Workflow execution already completed."}
+				return serviceerror.NewNotFound("Workflow execution already completed.")
 			}
 
 			initiatedEventID := task.ScheduleID
@@ -1193,7 +1193,7 @@ func (t *transferQueueActiveProcessorImpl) signalExternalExecutionCompleted(
 			return err
 		})
 
-	if _, ok := err.(*shared.EntityNotExistsError); ok {
+	if _, ok := err.(*serviceerror.NotFound); ok {
 		// this could happen if this is a duplicate processing of the task,
 		// or the execution has already completed.
 		return nil
@@ -1212,7 +1212,7 @@ func (t *transferQueueActiveProcessorImpl) requestCancelExternalExecutionFailed(
 	err := t.updateWorkflowExecution(context, true,
 		func(mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return &shared.EntityNotExistsError{Message: "Workflow execution already completed."}
+				return serviceerror.NewNotFound("Workflow execution already completed.")
 			}
 
 			initiatedEventID := task.ScheduleID
@@ -1232,7 +1232,7 @@ func (t *transferQueueActiveProcessorImpl) requestCancelExternalExecutionFailed(
 			return err
 		})
 
-	if _, ok := err.(*shared.EntityNotExistsError); ok {
+	if _, ok := err.(*serviceerror.NotFound); ok {
 		// this could happen if this is a duplicate processing of the task,
 		// or the execution has already completed.
 		return nil
@@ -1252,7 +1252,7 @@ func (t *transferQueueActiveProcessorImpl) signalExternalExecutionFailed(
 	err := t.updateWorkflowExecution(context, true,
 		func(mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return &shared.EntityNotExistsError{Message: "Workflow is not running."}
+				return serviceerror.NewNotFound("Workflow is not running.")
 			}
 
 			initiatedEventID := task.ScheduleID
@@ -1273,7 +1273,7 @@ func (t *transferQueueActiveProcessorImpl) signalExternalExecutionFailed(
 			return err
 		})
 
-	if _, ok := err.(*shared.EntityNotExistsError); ok {
+	if _, ok := err.(*serviceerror.NotFound); ok {
 		// this could happen if this is a duplicate processing of the task,
 		// or the execution has already completed.
 		return nil
@@ -1340,7 +1340,7 @@ func (t *transferQueueActiveProcessorImpl) requestCancelExternalExecutionWithRet
 		return err
 	}
 
-	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientErrorGRPC)
+	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 
 	if _, ok := err.(*serviceerror.CancellationAlreadyRequested); ok {
 		// err is CancellationAlreadyRequested
@@ -1386,7 +1386,7 @@ func (t *transferQueueActiveProcessorImpl) signalExternalExecutionWithRetry(
 		return err
 	}
 
-	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientErrorGRPC)
+	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 }
 
 func (t *transferQueueActiveProcessorImpl) startWorkflowWithRetry(
@@ -1442,7 +1442,7 @@ func (t *transferQueueActiveProcessorImpl) startWorkflowWithRetry(
 		return err
 	}
 
-	err = backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientErrorGRPC)
+	err = backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	if err != nil {
 		return "", err
 	}
@@ -1534,7 +1534,7 @@ func (t *transferQueueActiveProcessorImpl) resetWorkflow(
 	case nil:
 		return nil
 
-	case *shared.BadRequestError:
+	case *serviceerror.InvalidArgument:
 		// This means the reset point is corrupted and not retry able.
 		// There must be a bug in our system that we must fix.(for example, history is not the same in active/passive)
 		t.metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.AutoResetPointCorruptionCounter)
@@ -1647,8 +1647,6 @@ func (t *transferQueueActiveProcessorImpl) applyParentClosePolicy(
 		})
 		return err
 	default:
-		return &shared.InternalServiceError{
-			Message: fmt.Sprintf("unknown parent close policy: %v", childInfo.ParentClosePolicy),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("unknown parent close policy: %v", childInfo.ParentClosePolicy))
 	}
 }

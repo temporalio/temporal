@@ -32,6 +32,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.uber.org/multierr"
 
 	"github.com/temporalio/temporal/common"
@@ -149,7 +150,7 @@ func upload(ctx context.Context, s3cli s3iface.S3API, URI archiver.URI, key stri
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
 			if aerr.Code() == s3.ErrCodeNoSuchBucket {
-				return &shared.BadRequestError{Message: errBucketNotExists.Error()}
+				return serviceerror.NewInvalidArgument(errBucketNotExists.Error())
 			}
 		}
 		return err
@@ -168,11 +169,11 @@ func download(ctx context.Context, s3cli s3iface.S3API, URI archiver.URI, key st
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
 			if aerr.Code() == s3.ErrCodeNoSuchBucket {
-				return nil, &shared.BadRequestError{Message: errBucketNotExists.Error()}
+				return nil, serviceerror.NewInvalidArgument(errBucketNotExists.Error())
 			}
 
 			if aerr.Code() == s3.ErrCodeNoSuchKey {
-				return nil, &shared.BadRequestError{Message: archiver.ErrHistoryNotExist.Error()}
+				return nil, serviceerror.NewInvalidArgument(archiver.ErrHistoryNotExist.Error())
 			}
 		}
 		return nil, err

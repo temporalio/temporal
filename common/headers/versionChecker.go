@@ -25,9 +25,8 @@ import (
 	"fmt"
 
 	"github.com/hashicorp/go-version"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"google.golang.org/grpc/metadata"
-
-	"github.com/temporalio/temporal/.gen/go/shared"
 )
 
 const (
@@ -130,10 +129,10 @@ func (vc *versionChecker) ClientSupported(ctx context.Context, enableClientVersi
 	}
 	cfVersion, err := version.NewVersion(featureVersion)
 	if err != nil {
-		return &shared.ClientVersionNotSupportedError{FeatureVersion: featureVersion, ClientImpl: clientImpl, SupportedVersions: supportedVersions.String()}
+		return serviceerror.NewClientVersionNotSupported(featureVersion, clientImpl, supportedVersions.String())
 	}
 	if !supportedVersions.Check(cfVersion) {
-		return &shared.ClientVersionNotSupportedError{FeatureVersion: featureVersion, ClientImpl: clientImpl, SupportedVersions: supportedVersions.String()}
+		return serviceerror.NewClientVersionNotSupported(featureVersion, clientImpl, supportedVersions.String())
 	}
 	return nil
 }
@@ -152,22 +151,22 @@ func (vc *versionChecker) SupportsConsistentQuery(clientImpl string, featureVers
 
 func (vc *versionChecker) featureSupported(clientImpl string, featureVersion string, feature string) error {
 	if featureVersion == "" {
-		return &shared.ClientVersionNotSupportedError{ClientImpl: clientImpl, FeatureVersion: featureVersion}
+		return serviceerror.NewClientVersionNotSupported(featureVersion, clientImpl, "")
 	}
 	implMap, ok := vc.supportedFeatures[clientImpl]
 	if !ok {
-		return &shared.ClientVersionNotSupportedError{ClientImpl: clientImpl, FeatureVersion: featureVersion}
+		return serviceerror.NewClientVersionNotSupported(featureVersion, clientImpl, "")
 	}
 	supportedVersions, ok := implMap[feature]
 	if !ok {
-		return &shared.ClientVersionNotSupportedError{ClientImpl: clientImpl, FeatureVersion: featureVersion}
+		return serviceerror.NewClientVersionNotSupported(featureVersion, clientImpl, "")
 	}
 	cfVersion, err := version.NewVersion(featureVersion)
 	if err != nil {
-		return &shared.ClientVersionNotSupportedError{FeatureVersion: featureVersion, ClientImpl: clientImpl, SupportedVersions: supportedVersions.String()}
+		return serviceerror.NewClientVersionNotSupported(featureVersion, clientImpl, supportedVersions.String())
 	}
 	if !supportedVersions.Check(cfVersion) {
-		return &shared.ClientVersionNotSupportedError{ClientImpl: clientImpl, FeatureVersion: featureVersion, SupportedVersions: supportedVersions.String()}
+		return serviceerror.NewClientVersionNotSupported(featureVersion, clientImpl, supportedVersions.String())
 	}
 	return nil
 }

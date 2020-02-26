@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
@@ -391,7 +392,7 @@ func (r *nDCTransactionMgrImpl) checkWorkflowExists(
 	switch err.(type) {
 	case nil:
 		return true, nil
-	case *shared.EntityNotExistsError:
+	case *serviceerror.NotFound:
 		return false, nil
 	default:
 		return false, err
@@ -414,7 +415,7 @@ func (r *nDCTransactionMgrImpl) getCurrentWorkflowRunID(
 	switch err.(type) {
 	case nil:
 		return resp.RunID, nil
-	case *shared.EntityNotExistsError:
+	case *serviceerror.NotFound:
 		return "", nil
 	default:
 		return "", err

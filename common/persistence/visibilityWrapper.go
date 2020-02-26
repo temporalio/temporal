@@ -23,7 +23,8 @@ package persistence
 import (
 	"fmt"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
@@ -76,9 +77,7 @@ func (v *visibilityManagerWrapper) RecordWorkflowExecutionStarted(request *Recor
 		}
 		return v.visibilityManager.RecordWorkflowExecutionStarted(request)
 	default:
-		return &shared.InternalServiceError{
-			Message: fmt.Sprintf("Unknown advanced visibility writing mode: %s", v.advancedVisWritingMode()),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("Unknown advanced visibility writing mode: %s", v.advancedVisWritingMode()))
 	}
 }
 
@@ -94,9 +93,7 @@ func (v *visibilityManagerWrapper) RecordWorkflowExecutionClosed(request *Record
 		}
 		return v.visibilityManager.RecordWorkflowExecutionClosed(request)
 	default:
-		return &shared.InternalServiceError{
-			Message: fmt.Sprintf("Unknown advanced visibility writing mode: %s", v.advancedVisWritingMode()),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("Unknown advanced visibility writing mode: %s", v.advancedVisWritingMode()))
 	}
 }
 

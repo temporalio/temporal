@@ -25,7 +25,8 @@ package membership
 import (
 	"errors"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/common"
 )
 
@@ -33,7 +34,7 @@ import (
 var ErrUnknownService = errors.New("Service not tracked by Monitor")
 
 // ErrInsufficientHosts is thrown when there are not enough hosts to serve the request
-var ErrInsufficientHosts = &shared.InternalServiceError{Message: "Not enough hosts to serve the request"}
+var ErrInsufficientHosts = serviceerror.NewInternal("Not enough hosts to serve the request")
 
 // ErrListenerAlreadyExist is thrown on a duplicate AddListener call from the same listener
 var ErrListenerAlreadyExist = errors.New("Listener already exist for the service")

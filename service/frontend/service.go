@@ -254,8 +254,6 @@ func (s *Service) Start() {
 	if err := s.server.Serve(listener); err != nil {
 		logger.Fatal("Failed to serve on frontend listener", tag.Error(err))
 	}
-
-	// base (service is not started in frontend or admin handler) in case of race condition in yarpc registration function
 }
 
 // Stop stops the service

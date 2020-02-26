@@ -27,18 +27,17 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/temporalio/temporal/common/primitives"
-
 	"github.com/pborman/uuid"
-
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 const (
@@ -204,7 +203,7 @@ func (s *integrationSuite) isMutableStateDeleted(domainID string, execution *com
 
 	for i := 0; i < retryLimit; i++ {
 		_, err := s.testCluster.testBase.ExecutionManager.GetWorkflowExecution(request)
-		if _, ok := err.(*workflow.EntityNotExistsError); ok {
+		if _, ok := err.(*serviceerror.NotFound); ok {
 			return true
 		}
 		time.Sleep(retryBackoffTime)

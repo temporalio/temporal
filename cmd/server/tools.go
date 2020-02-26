@@ -25,8 +25,6 @@ package tools
 import (
 	// thriftrw code gen
 	_ "go.uber.org/thriftrw"
-	// yarpc plugin for thriftrw code gen
-	_ "go.uber.org/yarpc/encoding/thrift/thriftrw-plugin-yarpc"
 
 	// goimports
 	_ "golang.org/x/tools/cmd/goimports"

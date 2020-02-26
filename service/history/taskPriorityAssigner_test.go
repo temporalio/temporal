@@ -24,12 +24,12 @@ import (
 	"errors"
 	"testing"
 
-	gomock "github.com/golang/mock/gomock"
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+	"go.temporal.io/temporal-proto/serviceerror"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
@@ -114,7 +114,7 @@ func (s *taskPriorityAssignerSuite) TestGetDomainInfo_Success_Local() {
 func (s *taskPriorityAssignerSuite) TestGetDomainInfo_Fail_DomainNotExist() {
 	s.mockDomainCache.EXPECT().GetDomainByID(testDomainID).Return(
 		nil,
-		&workflow.EntityNotExistsError{Message: "domain not exist"},
+		serviceerror.NewNotFound("domain not exist"),
 	)
 
 	domainName, isActive, err := s.priorityAssigner.getDomainInfo(testDomainID)

@@ -23,7 +23,8 @@ package tasklist
 import (
 	"time"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/common/backoff"
 	p "github.com/temporalio/temporal/common/persistence"
 )
@@ -85,7 +86,7 @@ func (s *Scavenger) deleteTaskList(key *taskListKey, rangeID int64) error {
 			RangeID:      rangeID,
 		})
 	}, retryForeverPolicy, func(err error) bool {
-		_, ok := err.(*shared.ServiceBusyError)
+		_, ok := err.(*serviceerror.ResourceExhausted)
 		return ok
 	})
 }

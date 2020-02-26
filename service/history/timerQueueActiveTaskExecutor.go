@@ -25,6 +25,7 @@ import (
 
 	"github.com/gogo/protobuf/types"
 	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
@@ -128,7 +129,7 @@ Loop:
 		if !ok {
 			errString := fmt.Sprintf("failed to find in user timer event ID: %v", timerSequenceID.eventID)
 			t.logger.Error(errString)
-			return &workflow.InternalServiceError{Message: errString}
+			return serviceerror.NewInternal(errString)
 		}
 
 		if expired := timerSequence.isExpired(referenceTime, timerSequenceID); !expired {
@@ -413,7 +414,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		if scheduledEvent.ActivityTaskScheduledEventAttributes.Domain != nil {
 			domainEntry, err := t.shard.GetDomainCache().GetDomain(scheduledEvent.ActivityTaskScheduledEventAttributes.GetDomain())
 			if err != nil {
-				return &workflow.InternalServiceError{Message: "unable to re-schedule activity across domain."}
+				return serviceerror.NewInternal("unable to re-schedule activity across domain.")
 			}
 			targetDomainID = domainEntry.GetInfo().ID
 		}

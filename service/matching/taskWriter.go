@@ -24,6 +24,8 @@ import (
 	"errors"
 	"sync/atomic"
 
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	s "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -117,7 +119,7 @@ func (w *taskWriter) appendTask(execution *s.WorkflowExecution,
 			return nil, errShutdown
 		}
 	default: // channel is full, throttle
-		return nil, createServiceBusyError("Too many outstanding appends to the TaskList")
+		return nil, serviceerror.NewResourceExhausted("Too many outstanding appends to the TaskList")
 	}
 }
 

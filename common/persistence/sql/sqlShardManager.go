@@ -24,13 +24,12 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/temporalio/temporal/common/persistence/serialization"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/persistence/serialization"
 	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
 )
 
@@ -61,15 +60,11 @@ func (m *sqlShardManager) CreateShard(request *persistence.CreateShardRequest) e
 
 	row, err := shardInfoToShardsRow(*request.ShardInfo)
 	if err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("CreateShard operation failed. Error: %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("CreateShard operation failed. Error: %v", err))
 	}
 
 	if _, err := m.db.InsertIntoShards(row); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("CreateShard operation failed. Failed to insert into shards table. Error: %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("CreateShard operation failed. Failed to insert into shards table. Error: %v", err))
 	}
 
 	return nil
@@ -79,13 +74,9 @@ func (m *sqlShardManager) GetShard(request *persistence.GetShardRequest) (*persi
 	row, err := m.db.SelectFromShards(&sqlplugin.ShardsFilter{ShardID: int64(request.ShardID)})
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, &workflow.EntityNotExistsError{
-				Message: fmt.Sprintf("GetShard operation failed. Shard with ID %v not found. Error: %v", request.ShardID, err),
-			}
+			return nil, serviceerror.NewNotFound(fmt.Sprintf("GetShard operation failed. Shard with ID %v not found. Error: %v", request.ShardID, err))
 		}
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("GetShard operation failed. Failed to get record. ShardId: %v. Error: %v", request.ShardID, err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetShard operation failed. Failed to get record. ShardId: %v. Error: %v", request.ShardID, err))
 	}
 
 	shardInfo, err := serialization.ShardInfoFromBlob(row.Data, row.DataEncoding, m.currentClusterName)
@@ -101,9 +92,7 @@ func (m *sqlShardManager) GetShard(request *persistence.GetShardRequest) (*persi
 func (m *sqlShardManager) UpdateShard(request *persistence.UpdateShardRequest) error {
 	row, err := shardInfoToShardsRow(*request.ShardInfo)
 	if err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("UpdateShard operation failed. Error: %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("UpdateShard operation failed. Error: %v", err))
 	}
 	return m.txExecute("UpdateShard", func(tx sqlplugin.Tx) error {
 		if err := lockShard(tx, int(request.ShardInfo.ShardID), request.PreviousRangeID); err != nil {
@@ -129,13 +118,9 @@ func lockShard(tx sqlplugin.Tx, shardID int, oldRangeID int64) error {
 	rangeID, err := tx.WriteLockShards(&sqlplugin.ShardsFilter{ShardID: int64(shardID)})
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("Failed to lock shard with ID %v that does not exist.", shardID),
-			}
+			return serviceerror.NewInternal(fmt.Sprintf("Failed to lock shard with ID %v that does not exist.", shardID))
 		}
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to lock shard with ID: %v. Error: %v", shardID, err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("Failed to lock shard with ID: %v. Error: %v", shardID, err))
 	}
 
 	if int64(rangeID) != oldRangeID {
@@ -153,13 +138,9 @@ func readLockShard(tx sqlplugin.Tx, shardID int, oldRangeID int64) error {
 	rangeID, err := tx.ReadLockShards(&sqlplugin.ShardsFilter{ShardID: int64(shardID)})
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("Failed to lock shard with ID %v that does not exist.", shardID),
-			}
+			return serviceerror.NewInternal(fmt.Sprintf("Failed to lock shard with ID %v that does not exist.", shardID))
 		}
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to lock shard with ID: %v. Error: %v", shardID, err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("Failed to lock shard with ID: %v. Error: %v", shardID, err))
 	}
 
 	if int64(rangeID) != oldRangeID {

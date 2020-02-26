@@ -23,15 +23,12 @@ package domain
 import (
 	"testing"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/stretchr/testify/suite"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common/cluster"
-
-	"github.com/temporalio/temporal/common/persistence"
-
-	"github.com/stretchr/testify/suite"
-
 	"github.com/temporalio/temporal/common/mocks"
+	"github.com/temporalio/temporal/common/persistence"
 )
 
 type (
@@ -96,7 +93,7 @@ func (s *attrValidatorSuite) TestClusterName() {
 	)
 
 	err := s.validator.validateClusterName("some random foo bar")
-	s.IsType(&shared.BadRequestError{}, err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 
 	err = s.validator.validateClusterName(cluster.TestCurrentClusterName)
 	s.NoError(err)
@@ -121,7 +118,7 @@ func (s *attrValidatorSuite) TestValidateDomainReplicationConfigForLocalDomain()
 			},
 		},
 	)
-	s.IsType(&shared.BadRequestError{}, err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 
 	err = s.validator.validateDomainReplicationConfigForLocalDomain(
 		&persistence.DomainReplicationConfig{
@@ -132,7 +129,7 @@ func (s *attrValidatorSuite) TestValidateDomainReplicationConfigForLocalDomain()
 			},
 		},
 	)
-	s.IsType(&shared.BadRequestError{}, err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 
 	err = s.validator.validateDomainReplicationConfigForLocalDomain(
 		&persistence.DomainReplicationConfig{
@@ -143,7 +140,7 @@ func (s *attrValidatorSuite) TestValidateDomainReplicationConfigForLocalDomain()
 			},
 		},
 	)
-	s.IsType(&shared.BadRequestError{}, err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 
 	err = s.validator.validateDomainReplicationConfigForLocalDomain(
 		&persistence.DomainReplicationConfig{
@@ -240,7 +237,7 @@ func (s *attrValidatorSuite) TestValidateDomainReplicationConfigClustersDoesNotR
 			{ClusterName: cluster.TestAlternativeClusterName},
 		},
 	)
-	s.IsType(&shared.BadRequestError{}, err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 
 	err = s.validator.validateDomainReplicationConfigClustersDoesNotRemove(
 		[]*persistence.ClusterReplicationConfig{
@@ -250,5 +247,5 @@ func (s *attrValidatorSuite) TestValidateDomainReplicationConfigClustersDoesNotR
 			{ClusterName: cluster.TestAlternativeClusterName},
 		},
 	)
-	s.IsType(&shared.BadRequestError{}, err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 }

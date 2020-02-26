@@ -25,6 +25,7 @@ import (
 	"fmt"
 
 	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
@@ -210,9 +211,7 @@ func (v *VersionHistory) DuplicateUntilLCAItem(
 ) (*VersionHistory, error) {
 
 	versionHistory := NewVersionHistory(nil, nil)
-	notFoundErr := &shared.BadRequestError{
-		Message: "version history does not contains the LCA item.",
-	}
+	notFoundErr := serviceerror.NewInvalidArgument("version history does not contains the LCA item.")
 	for _, item := range v.Items {
 
 		if item.Version < lcaItem.Version {
@@ -267,17 +266,11 @@ func (v *VersionHistory) AddOrUpdateItem(
 
 	lastItem := v.Items[len(v.Items)-1]
 	if item.Version < lastItem.Version {
-		return &shared.BadRequestError{Message: fmt.Sprintf(
-			"cannot update version history with a lower version %v. Last version: %v",
-			item.Version, lastItem.Version,
-		)}
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("cannot update version history with a lower version %v. Last version: %v", item.Version, lastItem.Version))
 	}
 
 	if item.EventID <= lastItem.EventID {
-		return &shared.BadRequestError{Message: fmt.Sprintf(
-			"cannot add version history with a lower event id %v. Last event id: %v",
-			item.EventID, lastItem.EventID,
-		)}
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("cannot add version history with a lower event id %v. Last event id: %v", item.EventID, lastItem.EventID))
 	}
 
 	if item.Version > lastItem.Version {
@@ -335,9 +328,7 @@ func (v *VersionHistory) FindLCAItem(
 		}
 	}
 
-	return nil, &shared.BadRequestError{
-		Message: "version history is malformed. No joint point found.",
-	}
+	return nil, serviceerror.NewInvalidArgument("version history is malformed. No joint point found.")
 }
 
 // IsLCAAppendable checks if a LCA version history item is appendable
@@ -359,7 +350,7 @@ func (v *VersionHistory) IsLCAAppendable(
 func (v *VersionHistory) GetFirstItem() (*VersionHistoryItem, error) {
 
 	if len(v.Items) == 0 {
-		return nil, &shared.BadRequestError{Message: "version history is empty."}
+		return nil, serviceerror.NewInvalidArgument("version history is empty.")
 	}
 
 	return v.Items[0].Duplicate(), nil
@@ -369,7 +360,7 @@ func (v *VersionHistory) GetFirstItem() (*VersionHistoryItem, error) {
 func (v *VersionHistory) GetLastItem() (*VersionHistoryItem, error) {
 
 	if len(v.Items) == 0 {
-		return nil, &shared.BadRequestError{Message: "version history is empty."}
+		return nil, serviceerror.NewInvalidArgument("version history is empty.")
 	}
 
 	return v.Items[len(v.Items)-1].Duplicate(), nil
@@ -385,7 +376,7 @@ func (v *VersionHistory) GetEventVersion(
 		return 0, err
 	}
 	if eventID < common.FirstEventID || eventID > lastItem.GetEventID() {
-		return 0, &shared.BadRequestError{Message: "input event ID is not in range."}
+		return 0, serviceerror.NewInvalidArgument("input event ID is not in range.")
 	}
 
 	// items are sorted by eventID & version
@@ -396,7 +387,7 @@ func (v *VersionHistory) GetEventVersion(
 			return currentItem.GetVersion(), nil
 		}
 	}
-	return 0, &shared.BadRequestError{Message: "input event ID is not in range."}
+	return 0, serviceerror.NewInvalidArgument("input event ID is not in range.")
 }
 
 // IsEmpty indicate whether version history is empty
@@ -550,7 +541,7 @@ func (h *VersionHistories) GetVersionHistory(
 ) (*VersionHistory, error) {
 
 	if branchIndex < 0 || branchIndex > len(h.Histories) {
-		return nil, &shared.BadRequestError{Message: "invalid branch index."}
+		return nil, serviceerror.NewInvalidArgument("invalid branch index.")
 	}
 
 	return h.Histories[branchIndex], nil
@@ -562,7 +553,7 @@ func (h *VersionHistories) AddVersionHistory(
 ) (bool, int, error) {
 
 	if v == nil {
-		return false, 0, &shared.BadRequestError{Message: "version histories is null."}
+		return false, 0, serviceerror.NewInvalidArgument("version histories is null.")
 	}
 
 	// assuming existing version histories inside are valid
@@ -581,7 +572,7 @@ func (h *VersionHistories) AddVersionHistory(
 	}
 
 	if incomingFirstItem.Version != currentFirstItem.Version {
-		return false, 0, &shared.BadRequestError{Message: "version history first item does not match."}
+		return false, 0, serviceerror.NewInvalidArgument("version history first item does not match.")
 	}
 
 	// TODO maybe we need more strict validation
@@ -650,7 +641,7 @@ func (h *VersionHistories) FindFirstVersionHistoryIndexByItem(
 			return index, nil
 		}
 	}
-	return 0, &shared.BadRequestError{Message: "version histories does not contains given item."}
+	return 0, serviceerror.NewInvalidArgument("version histories does not contains given item.")
 }
 
 // IsRebuilt returns true if the current branch index's last write version is not the largest
@@ -686,7 +677,7 @@ func (h *VersionHistories) SetCurrentVersionHistoryIndex(
 ) error {
 
 	if index < 0 || index >= len(h.Histories) {
-		return &shared.BadRequestError{Message: "invalid current branch index."}
+		return serviceerror.NewInvalidArgument("invalid current branch index.")
 	}
 
 	h.CurrentVersionHistoryIndex = index

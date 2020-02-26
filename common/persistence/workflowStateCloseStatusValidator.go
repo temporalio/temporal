@@ -23,6 +23,8 @@ package persistence
 import (
 	"fmt"
 
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 )
 
@@ -61,10 +63,7 @@ func ValidateCreateWorkflowStateCloseStatus(
 
 	// validate workflow state & close status
 	if state == WorkflowStateCompleted || closeStatus != WorkflowCloseStatusNone {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Create workflow with invalid state: %v or close status: %v",
-				state, closeStatus),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("Create workflow with invalid state: %v or close status: %v", state, closeStatus))
 	}
 	return nil
 }
@@ -85,10 +84,7 @@ func ValidateUpdateWorkflowStateCloseStatus(
 	// validate workflow state & close status
 	if closeStatus == WorkflowCloseStatusNone {
 		if state == WorkflowStateCompleted {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("Update workflow with invalid state: %v or close status: %v",
-					state, closeStatus),
-			}
+			return serviceerror.NewInternal(fmt.Sprintf("Update workflow with invalid state: %v or close status: %v", state, closeStatus))
 		}
 	} else {
 		// WorkflowCloseStatusCompleted
@@ -98,10 +94,7 @@ func ValidateUpdateWorkflowStateCloseStatus(
 		// WorkflowCloseStatusContinuedAsNew
 		// WorkflowCloseStatusTimedOut
 		if state != WorkflowStateCompleted {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("Update workflow with invalid state: %v or close status: %v",
-					state, closeStatus),
-			}
+			return serviceerror.NewInternal(fmt.Sprintf("Update workflow with invalid state: %v or close status: %v", state, closeStatus))
 		}
 	}
 	return nil
@@ -113,9 +106,7 @@ func validateWorkflowState(
 ) error {
 
 	if _, ok := validWorkflowStates[state]; !ok {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Invalid workflow state: %v", state),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("Invalid workflow state: %v", state))
 	}
 
 	return nil
@@ -127,9 +118,7 @@ func validateWorkflowCloseStatus(
 ) error {
 
 	if _, ok := validWorkflowCloseStatuses[closeStatus]; !ok {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Invalid workflow close status: %v", closeStatus),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("Invalid workflow close status: %v", closeStatus))
 	}
 
 	return nil

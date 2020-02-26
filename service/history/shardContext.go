@@ -26,10 +26,10 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cache"
@@ -478,11 +478,10 @@ Create_Loop:
 		response, err := s.executionManager.CreateWorkflowExecution(request)
 		if err != nil {
 			switch err.(type) {
-			case *shared.WorkflowExecutionAlreadyStartedError,
+			case *serviceerror.WorkflowExecutionAlreadyStarted,
 				*persistence.WorkflowExecutionAlreadyStartedError,
-				*shared.ServiceBusyError,
 				*persistence.TimeoutError,
-				*shared.LimitExceededError:
+				*serviceerror.ResourceExhausted:
 				// No special handling required for these errors
 			case *persistence.ShardOwnershipLostError:
 				{
@@ -572,8 +571,7 @@ Update_Loop:
 		if err != nil {
 			switch err.(type) {
 			case *persistence.ConditionFailedError,
-				*shared.ServiceBusyError,
-				*shared.LimitExceededError:
+				*serviceerror.ResourceExhausted:
 				// No special handling required for these errors
 			case *persistence.ShardOwnershipLostError:
 				{
@@ -657,9 +655,8 @@ Reset_Loop:
 		if err != nil {
 			switch err.(type) {
 			case *persistence.ConditionFailedError,
-				*shared.ServiceBusyError,
 				*persistence.TimeoutError,
-				*shared.LimitExceededError:
+				*serviceerror.ResourceExhausted:
 				// No special handling required for these errors
 			case *persistence.ShardOwnershipLostError:
 				{
@@ -757,8 +754,7 @@ Reset_Loop:
 		if err != nil {
 			switch err.(type) {
 			case *persistence.ConditionFailedError,
-				*shared.ServiceBusyError,
-				*shared.LimitExceededError:
+				*serviceerror.ResourceExhausted:
 				// No special handling required for these errors
 			case *persistence.ShardOwnershipLostError:
 				{
@@ -1174,7 +1170,7 @@ func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContex
 			shardInfo = &persistence.ShardInfoWithFailover{ShardInfo: resp.ShardInfo}
 			return nil
 		}
-		if _, ok := err.(*shared.EntityNotExistsError); !ok {
+		if _, ok := err.(*serviceerror.NotFound); !ok {
 			return err
 		}
 

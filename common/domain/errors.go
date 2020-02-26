@@ -21,16 +21,15 @@
 package domain
 
 import (
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 var (
 	// err indicating that this cluster is not the master, so cannot do domain registration or update
-	errNotMasterCluster                = &workflow.BadRequestError{Message: "Cluster is not master cluster, cannot do domain registration or domain update."}
-	errCannotRemoveClustersFromDomain  = &workflow.BadRequestError{Message: "Cannot remove existing replicated clusters from a domain."}
-	errActiveClusterNotInClusters      = &workflow.BadRequestError{Message: "Active cluster is not contained in all clusters."}
-	errCannotDoDomainFailoverAndUpdate = &workflow.BadRequestError{Message: "Cannot set active cluster to current cluster when other parameters are set."}
-
-	errInvalidRetentionPeriod = &workflow.BadRequestError{Message: "A valid retention period is not set on request."}
-	errInvalidArchivalConfig  = &workflow.BadRequestError{Message: "Invalid to enable archival without specifying a uri."}
+	errNotMasterCluster                = serviceerror.NewInvalidArgument("Cluster is not master cluster, cannot do domain registration or domain update.")
+	errCannotRemoveClustersFromDomain  = serviceerror.NewInvalidArgument("Cannot remove existing replicated clusters from a domain.")
+	errActiveClusterNotInClusters      = serviceerror.NewInvalidArgument("Active cluster is not contained in all clusters.")
+	errCannotDoDomainFailoverAndUpdate = serviceerror.NewInvalidArgument("Cannot set active cluster to current cluster when other parameters are set.")
+	errInvalidRetentionPeriod          = serviceerror.NewInvalidArgument("A valid retention period is not set on request.")
+	errInvalidArchivalConfig           = serviceerror.NewInvalidArgument("Invalid to enable archival without specifying a uri.")
 )

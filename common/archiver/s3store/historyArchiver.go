@@ -30,6 +30,8 @@ import (
 	"strings"
 	"time"
 
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/common/metrics"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -197,11 +199,11 @@ func (h *historyArchiver) Get(
 	request *archiver.GetHistoryRequest,
 ) (*archiver.GetHistoryResponse, error) {
 	if err := softValidateURI(URI); err != nil {
-		return nil, &shared.BadRequestError{Message: archiver.ErrInvalidURI.Error()}
+		return nil, serviceerror.NewInvalidArgument(archiver.ErrInvalidURI.Error())
 	}
 
 	if err := archiver.ValidateGetRequest(request); err != nil {
-		return nil, &shared.BadRequestError{Message: archiver.ErrInvalidGetHistoryRequest.Error()}
+		return nil, serviceerror.NewInvalidArgument(archiver.ErrInvalidGetHistoryRequest.Error())
 	}
 
 	var err error
@@ -209,7 +211,7 @@ func (h *historyArchiver) Get(
 	if request.NextPageToken != nil {
 		token, err = deserializeGetHistoryToken(request.NextPageToken)
 		if err != nil {
-			return nil, &shared.BadRequestError{Message: archiver.ErrNextPageTokenCorrupted.Error()}
+			return nil, serviceerror.NewInvalidArgument(archiver.ErrNextPageTokenCorrupted.Error())
 		}
 	} else if request.CloseFailoverVersion != nil {
 		token = &getHistoryToken{
@@ -219,7 +221,7 @@ func (h *historyArchiver) Get(
 	} else {
 		highestVersion, err := h.getHighestVersion(ctx, URI, request)
 		if err != nil {
-			return nil, &shared.BadRequestError{Message: err.Error()}
+			return nil, serviceerror.NewInvalidArgument(err.Error())
 		}
 		token = &getHistoryToken{
 			CloseFailoverVersion: *highestVersion,
@@ -234,7 +236,7 @@ func (h *historyArchiver) Get(
 	}
 	historyBatches, err := decodeHistoryBatches(encodedHistoryBatches)
 	if err != nil {
-		return nil, &shared.InternalServiceError{Message: err.Error()}
+		return nil, serviceerror.NewInternal(err.Error())
 	}
 	historyBatches = historyBatches[token.NextBatchIdx:]
 
@@ -254,7 +256,7 @@ func (h *historyArchiver) Get(
 		token.NextBatchIdx += numOfBatches
 		nextToken, err := serializeToken(token)
 		if err != nil {
-			return nil, &shared.InternalServiceError{Message: err.Error()}
+			return nil, serviceerror.NewInternal(err.Error())
 		}
 		response.NextPageToken = nextToken
 	}
@@ -298,7 +300,7 @@ func (h *historyArchiver) getHighestVersion(ctx context.Context, URI archiver.UR
 	})
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok && aerr.Code() == s3.ErrCodeNoSuchBucket {
-			return nil, &shared.BadRequestError{Message: errBucketNotExists.Error()}
+			return nil, serviceerror.NewInvalidArgument(errBucketNotExists.Error())
 		}
 		return nil, err
 	}

@@ -30,11 +30,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/errors"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
@@ -340,7 +341,7 @@ func (c *domainCache) GetDomain(
 ) (*DomainCacheEntry, error) {
 
 	if name == "" {
-		return nil, &workflow.BadRequestError{Message: "Domain is empty."}
+		return nil, serviceerror.NewInvalidArgument("Domain is empty.")
 	}
 	return c.getDomain(name)
 }
@@ -352,7 +353,7 @@ func (c *domainCache) GetDomainByID(
 ) (*DomainCacheEntry, error) {
 
 	if id == "" {
-		return nil, &workflow.BadRequestError{Message: "DomainID is empty."}
+		return nil, serviceerror.NewInvalidArgument("DomainID is empty.")
 	}
 	return c.getDomainByID(id, true)
 }
@@ -573,7 +574,7 @@ func (c *domainCache) getDomain(
 		return c.getDomainByID(id, true)
 	}
 	// impossible case
-	return nil, &workflow.InternalServiceError{Message: "domainCache encounter case where domain exists but cannot be loaded"}
+	return nil, serviceerror.NewInternal("domainCache encounter case where domain exists but cannot be loaded")
 }
 
 // getDomainByID retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
@@ -625,7 +626,7 @@ func (c *domainCache) getDomainByID(
 		return result, nil
 	}
 	// impossible case
-	return nil, &workflow.InternalServiceError{Message: "domainCache encounter case where domain exists but cannot be loaded"}
+	return nil, serviceerror.NewInternal("domainCache encounter case where domain exists but cannot be loaded")
 }
 
 func (c *domainCache) triggerDomainChangePrepareCallbackLocked() {
@@ -782,7 +783,7 @@ func (entry *DomainCacheEntry) GetDomainNotActiveErr() error {
 		// domain is consider active
 		return nil
 	}
-	return errors.NewDomainNotActiveError(
+	return serviceerror.NewDomainNotActive(
 		entry.info.Name,
 		entry.clusterMetadata.GetCurrentClusterName(),
 		entry.replicationConfig.ActiveClusterName,
