@@ -29,9 +29,10 @@ import (
 	"math"
 	"time"
 
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/errors"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
 )
@@ -201,7 +202,7 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskStartedEvent(
 	if decision == nil {
 		decision, ok = m.GetDecisionInfo(scheduleID)
 		if !ok {
-			return nil, errors.NewInternalFailureError(fmt.Sprintf("unable to find decision: %v", scheduleID))
+			return nil, serviceerror.NewInternal(fmt.Sprintf("unable to find decision: %v", scheduleID))
 		}
 		// setting decision attempt to 0 for decision task replication
 		// this mainly handles transient decision completion

@@ -34,7 +34,6 @@ import (
 	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
-	"github.com/temporalio/temporal/common/errors"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
@@ -43,13 +42,13 @@ import (
 
 var (
 	// ErrNoHistoryRawEventBatches indicate that number of batches of history raw events is of size 0
-	ErrNoHistoryRawEventBatches = errors.NewInternalFailureError("no history batches are returned")
+	ErrNoHistoryRawEventBatches = serviceerror.NewInternal("no history batches are returned")
 
 	// ErrFirstHistoryRawEventBatch indicate that first batch of history raw events is malformed
-	ErrFirstHistoryRawEventBatch = errors.NewInternalFailureError("encounter malformed first history batch")
+	ErrFirstHistoryRawEventBatch = serviceerror.NewInternal("encounter malformed first history batch")
 
 	// ErrUnknownEncodingType indicate that the encoding type is unknown
-	ErrUnknownEncodingType = errors.NewInternalFailureError("unknown encoding type")
+	ErrUnknownEncodingType = serviceerror.NewInternal("unknown encoding type")
 )
 
 const (

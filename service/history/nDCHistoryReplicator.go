@@ -32,7 +32,6 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/errors"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
@@ -103,7 +102,7 @@ type (
 	}
 )
 
-var errPanic = errors.NewInternalFailureError("encounter panic")
+var errPanic = serviceerror.NewInternal("encounter panic")
 
 func newNDCHistoryReplicator(
 	shard ShardContext,
