@@ -270,7 +270,7 @@ type (
 		TimerInfos          map[string]*persistenceblobs.TimerInfo
 		ChildExecutionInfos map[int64]*InternalChildExecutionInfo
 		RequestCancelInfos  map[int64]*RequestCancelInfo
-		SignalInfos         map[int64]*SignalInfo
+		SignalInfos         map[int64]*persistenceblobs.SignalInfo
 		SignalRequestedIDs  map[string]struct{}
 		BufferedEvents      []*serialization.DataBlob
 
@@ -399,7 +399,7 @@ type (
 		DeleteChildExecutionInfo  *int64
 		UpsertRequestCancelInfos  []*RequestCancelInfo
 		DeleteRequestCancelInfo   *int64
-		UpsertSignalInfos         []*SignalInfo
+		UpsertSignalInfos         []*persistenceblobs.SignalInfo
 		DeleteSignalInfo          *int64
 		UpsertSignalRequestedIDs  []string
 		DeleteSignalRequestedID   string
@@ -427,7 +427,7 @@ type (
 		TimerInfos          []*persistenceblobs.TimerInfo
 		ChildExecutionInfos []*InternalChildExecutionInfo
 		RequestCancelInfos  []*RequestCancelInfo
-		SignalInfos         []*SignalInfo
+		SignalInfos         []*persistenceblobs.SignalInfo
 		SignalRequestedIDs  []string
 
 		TransferTasks    []Task
