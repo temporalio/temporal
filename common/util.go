@@ -35,9 +35,7 @@ import (
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
-	"go.uber.org/yarpc/yarpcerrors"
 
-	h "github.com/temporalio/temporal/.gen/go/history"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
@@ -99,13 +97,6 @@ var (
 	ErrContextTimeoutTooShort = serviceerror.NewInvalidArgument("Context timeout is too short.")
 	// ErrContextTimeoutNotSet is error for not setting a context timeout when calling a long poll API
 	ErrContextTimeoutNotSet = serviceerror.NewInvalidArgument("Context timeout is not set.")
-
-	// ErrBlobSizeExceedsLimit2 is error for event blob size exceeds limit
-	ErrBlobSizeExceedsLimit2 = serviceerror.NewInvalidArgument("Blob data size exceeds limit.")
-	// ErrContextTimeoutTooShort2 is error for setting a very short context timeout when calling a long poll API
-	ErrContextTimeoutTooShort2 = serviceerror.NewInvalidArgument("Context timeout is too short.")
-	// ErrContextTimeoutNotSet2 is error for not setting a context timeout when calling a long poll API
-	ErrContextTimeoutNotSet2 = serviceerror.NewInvalidArgument("Context timeout is not set.")
 )
 
 // AwaitWaitGroup calls Wait on the given wait
@@ -191,16 +182,6 @@ func CreateKafkaOperationRetryPolicy() backoff.RetryPolicy {
 // IsPersistenceTransientError checks if the error is a transient persistence error
 func IsPersistenceTransientError(err error) bool {
 	switch err.(type) {
-	case *serviceerror.Internal, *serviceerror.ResourceExhausted:
-		return true
-	}
-
-	return false
-}
-
-// IsPersistenceTransientError checks if the error is a transient persistence error
-func IsPersistenceTransientErrorGRPC(err error) bool {
-	switch err.(type) {
 	case *serviceerror.Internal,
 		*serviceerror.ResourceExhausted:
 		return true
@@ -219,36 +200,8 @@ func IsServiceTransientError(err error) bool {
 	return !IsServiceNonRetryableError(err)
 }
 
-// IsServiceTransientErrorGRPC checks if the error is a retryable error.
-func IsServiceTransientErrorGRPC(err error) bool {
-	return !IsServiceNonRetryableErrorGRPC(err)
-}
-
 // IsServiceNonRetryableError checks if the error is a non retryable error.
 func IsServiceNonRetryableError(err error) bool {
-	switch err := err.(type) {
-	case *serviceerror.NotFound:
-		return true
-	case *serviceerror.InvalidArgument:
-		return true
-	case *serviceerror.DomainNotActive:
-		return true
-	case *serviceerror.WorkflowExecutionAlreadyStarted:
-		return true
-	case *serviceerror.CancellationAlreadyRequested:
-		return true
-	case *yarpcerrors.Status:
-		if err.Code() != yarpcerrors.CodeDeadlineExceeded {
-			return true
-		}
-		return false
-	}
-
-	return false
-}
-
-// IsServiceNonRetryableErrorGRPC checks if the error is a non retryable error.
-func IsServiceNonRetryableErrorGRPC(err error) bool {
 	switch err.(type) {
 	case *serviceerror.NotFound,
 		*serviceerror.InvalidArgument,
@@ -263,35 +216,6 @@ func IsServiceNonRetryableErrorGRPC(err error) bool {
 
 // IsWhitelistServiceTransientError checks if the error is a transient error.
 func IsWhitelistServiceTransientError(err error) bool {
-	if err == context.DeadlineExceeded {
-		return true
-	}
-
-	switch err.(type) {
-	case *serviceerror.Internal:
-		return true
-	case *serviceerror.ResourceExhausted:
-		return true
-	case *serviceerror.ResourceExhausted:
-		return true
-	case *h.ShardOwnershipLostError:
-		return true
-	case *yarpcerrors.Status:
-		// We only selectively retry the following yarpc errors client can safe retry with a backoff
-		if yarpcerrors.IsDeadlineExceeded(err) ||
-			yarpcerrors.IsUnavailable(err) ||
-			yarpcerrors.IsUnknown(err) ||
-			yarpcerrors.IsInternal(err) {
-			return true
-		}
-		return false
-	}
-
-	return false
-}
-
-// IsWhitelistServiceTransientErrorGRPC checks if the error is a transient error.
-func IsWhitelistServiceTransientErrorGRPC(err error) bool {
 	if err == context.DeadlineExceeded {
 		return true
 	}

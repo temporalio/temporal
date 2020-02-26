@@ -590,7 +590,7 @@ func (t *transferQueueActiveProcessorImpl) processCancelExecution(
 
 		// Check to see if the error is non-transient, in which case add RequestCancelFailed
 		// event and complete transfer task by setting the err = nil
-		if !common.IsServiceNonRetryableErrorGRPC(err) {
+		if !common.IsServiceNonRetryableError(err) {
 			// for retryable error just return
 			return err
 		}
@@ -679,7 +679,7 @@ func (t *transferQueueActiveProcessorImpl) processSignalExecution(
 
 		// Check to see if the error is non-transient, in which case add SignalFailed
 		// event and complete transfer task by setting the err = nil
-		if !common.IsServiceNonRetryableErrorGRPC(err) {
+		if !common.IsServiceNonRetryableError(err) {
 			// for retryable error just return
 			return err
 		}
@@ -1340,7 +1340,7 @@ func (t *transferQueueActiveProcessorImpl) requestCancelExternalExecutionWithRet
 		return err
 	}
 
-	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientErrorGRPC)
+	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 
 	if _, ok := err.(*serviceerror.CancellationAlreadyRequested); ok {
 		// err is CancellationAlreadyRequested
@@ -1386,7 +1386,7 @@ func (t *transferQueueActiveProcessorImpl) signalExternalExecutionWithRetry(
 		return err
 	}
 
-	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientErrorGRPC)
+	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 }
 
 func (t *transferQueueActiveProcessorImpl) startWorkflowWithRetry(
@@ -1442,7 +1442,7 @@ func (t *transferQueueActiveProcessorImpl) startWorkflowWithRetry(
 		return err
 	}
 
-	err = backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientErrorGRPC)
+	err = backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	if err != nil {
 		return "", err
 	}

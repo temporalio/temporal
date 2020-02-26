@@ -30,7 +30,6 @@ import (
 
 	"github.com/temporalio/temporal/.gen/go/health"
 	m "github.com/temporalio/temporal/.gen/go/matching"
-	"github.com/temporalio/temporal/.gen/go/matching/matchingserviceserver"
 	gen "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
@@ -38,8 +37,6 @@ import (
 	"github.com/temporalio/temporal/common/quotas"
 	"github.com/temporalio/temporal/common/resource"
 )
-
-var _ matchingserviceserver.Interface = (*Handler)(nil)
 
 // Handler - Thrift handler interface for history service
 type Handler struct {
@@ -53,7 +50,7 @@ type Handler struct {
 }
 
 var (
-	errMatchingHostThrottle = &gen.ServiceBusyError{Message: "Matching host rps exceeded"}
+	errMatchingHostThrottle = serviceerror.NewResourceExhausted("Matching host rps exceeded")
 )
 
 // NewHandler creates a thrift handler for the history service
@@ -303,35 +300,32 @@ func (h *Handler) handleErr(err error, scope int) error {
 	}
 
 	switch err.(type) {
-	case *gen.InternalServiceError, *serviceerror.Internal:
+	case *serviceerror.Internal:
 		h.metricsClient.IncCounter(scope, metrics.CadenceFailures)
 		return err
-	case *gen.BadRequestError, *serviceerror.InvalidArgument:
+	case *serviceerror.InvalidArgument:
 		h.metricsClient.IncCounter(scope, metrics.CadenceErrBadRequestCounter)
 		return err
-	case *gen.EntityNotExistsError, *serviceerror.NotFound:
+	case *serviceerror.NotFound:
 		h.metricsClient.IncCounter(scope, metrics.CadenceErrEntityNotExistsCounter)
 		return err
-	case *gen.WorkflowExecutionAlreadyStartedError, *serviceerror.WorkflowExecutionAlreadyStarted:
+	case *serviceerror.WorkflowExecutionAlreadyStarted:
 		h.metricsClient.IncCounter(scope, metrics.CadenceErrExecutionAlreadyStartedCounter)
 		return err
-	case *gen.DomainAlreadyExistsError, *serviceerror.DomainAlreadyExists:
+	case *serviceerror.DomainAlreadyExists:
 		h.metricsClient.IncCounter(scope, metrics.CadenceErrDomainAlreadyExistsCounter)
 		return err
-	case *gen.QueryFailedError, *serviceerror.QueryFailed:
+	case *serviceerror.QueryFailed:
 		h.metricsClient.IncCounter(scope, metrics.CadenceErrQueryFailedCounter)
 		return err
-	case *gen.LimitExceededError, *serviceerror.ResourceExhausted:
-		h.metricsClient.IncCounter(scope, metrics.CadenceErrLimitExceededCounter)
-		return err
-	case *gen.ServiceBusyError:
+	case *serviceerror.ResourceExhausted:
 		h.metricsClient.IncCounter(scope, metrics.CadenceErrServiceBusyCounter)
 		return err
-	case *gen.DomainNotActiveError, *serviceerror.DomainNotActive:
+	case *serviceerror.DomainNotActive:
 		h.metricsClient.IncCounter(scope, metrics.CadenceErrDomainNotActiveCounter)
 		return err
 	default:
 		h.metricsClient.IncCounter(scope, metrics.CadenceFailures)
-		return &gen.InternalServiceError{Message: err.Error()}
+		return serviceerror.NewInternal(err.Error())
 	}
 }

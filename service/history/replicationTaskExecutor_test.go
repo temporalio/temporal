@@ -30,14 +30,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 
 	"github.com/temporalio/temporal/.gen/go/history"
-	"github.com/temporalio/temporal/.gen/go/history/historyservicetest"
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
+	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common"
@@ -62,7 +61,7 @@ type (
 		mockShard           ShardContext
 		mockEngine          *MockEngine
 		config              *Config
-		historyClient       *historyservicetest.MockClient
+		historyClient       *historyservicemock.MockHistoryServiceClient
 		mockDomainCache     *cache.MockDomainCache
 		mockClientBean      *client.MockBean
 		adminClient         *adminservicemock.MockAdminServiceClient
@@ -121,7 +120,7 @@ func (s *replicationTaskExecutorSuite) SetupTest() {
 	}
 	s.mockEngine = NewMockEngine(s.controller)
 	s.config = NewDynamicConfigForTest()
-	s.historyClient = historyservicetest.NewMockClient(s.controller)
+	s.historyClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return("active").AnyTimes()
 

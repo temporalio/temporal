@@ -226,7 +226,7 @@ func New(
 	frontendClient := frontend.NewRetryableClient(
 		frontendRawClient,
 		common.CreateFrontendServiceRetryPolicy(),
-		common.IsWhitelistServiceTransientErrorGRPC,
+		common.IsWhitelistServiceTransientError,
 	)
 
 	matchingRawClient, err := clientBean.GetMatchingClient(domainCache.GetDomainName)
@@ -236,14 +236,14 @@ func New(
 	matchingClient := matching.NewRetryableClient(
 		matchingRawClient,
 		common.CreateMatchingServiceRetryPolicy(),
-		common.IsWhitelistServiceTransientErrorGRPC,
+		common.IsWhitelistServiceTransientError,
 	)
 
 	historyRawClient := clientBean.GetHistoryClient()
 	historyClient := history.NewRetryableClient(
 		historyRawClient,
 		common.CreateHistoryServiceRetryPolicy(),
-		common.IsWhitelistServiceTransientErrorGRPC,
+		common.IsWhitelistServiceTransientError,
 	)
 
 	historyArchiverBootstrapContainer := &archiver.HistoryBootstrapContainer{

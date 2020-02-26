@@ -29,12 +29,10 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
-	"go.uber.org/yarpc/yarpcerrors"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common/adapter"
 
-	h "github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/client/history"
 	"github.com/temporalio/temporal/common"
@@ -105,7 +103,7 @@ func newReplicationTaskProcessor(
 ) *replicationTaskProcessor {
 
 	retryableHistoryClient := history.NewRetryableClient(historyClient, common.CreateHistoryServiceRetryPolicy(),
-		common.IsWhitelistServiceTransientErrorGRPC)
+		common.IsWhitelistServiceTransientError)
 
 	return &replicationTaskProcessor{
 		currentCluster:                currentCluster,
@@ -469,8 +467,8 @@ func (p *replicationTaskProcessor) updateFailureMetric(scope int, err error) {
 	p.metricsClient.IncCounter(scope, metrics.ReplicatorFailures)
 
 	// Also update counter to distinguish between type of failures
-	switch err := err.(type) {
-	case *h.ShardOwnershipLostError:
+	switch err.(type) {
+	case *serviceerror.ShardOwnershipLost:
 		p.metricsClient.IncCounter(scope, metrics.CadenceErrShardOwnershipLostCounter)
 	case *serviceerror.InvalidArgument:
 		p.metricsClient.IncCounter(scope, metrics.CadenceErrBadRequestCounter)
@@ -484,10 +482,8 @@ func (p *replicationTaskProcessor) updateFailureMetric(scope int, err error) {
 		p.metricsClient.IncCounter(scope, metrics.CadenceErrLimitExceededCounter)
 	case *serviceerror.RetryTask:
 		p.metricsClient.IncCounter(scope, metrics.CadenceErrRetryTaskCounter)
-	case *yarpcerrors.Status:
-		if err.Code() == yarpcerrors.CodeDeadlineExceeded {
-			p.metricsClient.IncCounter(scope, metrics.CadenceErrContextTimeoutCounter)
-		}
+	case *serviceerror.DeadlineExceeded:
+		p.metricsClient.IncCounter(scope, metrics.CadenceErrContextTimeoutCounter)
 	}
 }
 

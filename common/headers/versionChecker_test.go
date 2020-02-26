@@ -28,8 +28,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
-	"github.com/temporalio/temporal/.gen/go/shared"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type (
@@ -109,7 +108,7 @@ func (s *VersionCheckerSuite) TestClientSupported() {
 		err := versionChecker.ClientSupported(tc.callContext, tc.enableClientVersionCheck)
 		if tc.expectErr {
 			s.Errorf(err, "Case #%d", caseIndex)
-			s.IsType(&shared.ClientVersionNotSupportedError{}, err)
+			s.IsType(&serviceerror.ClientVersionNotSupported{}, err)
 		} else {
 			s.NoErrorf(err, "Case #%d", caseIndex)
 		}
@@ -187,7 +186,7 @@ func (s *VersionCheckerSuite) TestSupportsStickyQuery() {
 		if tc.expectErr {
 			err := vc.SupportsStickyQuery(tc.clientImpl, tc.clientFeatureVersion)
 			s.Error(err)
-			s.IsType(&shared.ClientVersionNotSupportedError{}, err)
+			s.IsType(&serviceerror.ClientVersionNotSupported{}, err)
 		} else {
 			s.NoError(vc.SupportsStickyQuery(tc.clientImpl, tc.clientFeatureVersion))
 		}
@@ -250,7 +249,7 @@ func (s *VersionCheckerSuite) TestSupportsConsistentQuery() {
 		if tc.expectErr {
 			err := vc.SupportsConsistentQuery(tc.clientImpl, tc.clientFeatureVersion)
 			s.Error(err)
-			s.IsType(&shared.ClientVersionNotSupportedError{}, err)
+			s.IsType(&serviceerror.ClientVersionNotSupported{}, err)
 		} else {
 			s.NoError(vc.SupportsConsistentQuery(tc.clientImpl, tc.clientFeatureVersion))
 		}
