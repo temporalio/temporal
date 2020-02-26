@@ -23,12 +23,10 @@ package cassandra
 import (
 	"fmt"
 
+	"github.com/gocql/gocql"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common/cassandra"
-
-	"github.com/gocql/gocql"
-
 	"github.com/temporalio/temporal/common/log"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/service/config"
@@ -151,7 +149,7 @@ func (v *cassandraVisibilityPersistenceV2) ListClosedWorkflowExecutions(
 		p.UnixNanoToDBTimestamp(request.LatestStartTime)).Consistency(v.lowConslevel)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 	if iter == nil {
-		// TODO: should return a bad request error if the token is invalid
+		// TODO: should return serviceerror.InvalidArgument if the token is invalid
 		return nil, serviceerror.NewInternal("ListClosedWorkflowExecutions operation failed.  Not able to create query iterator.")
 	}
 
@@ -186,7 +184,7 @@ func (v *cassandraVisibilityPersistenceV2) ListClosedWorkflowExecutionsByType(
 		request.WorkflowTypeName).Consistency(v.lowConslevel)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 	if iter == nil {
-		// TODO: should return a bad request error if the token is invalid
+		// TODO: should return serviceerror.InvalidArgument if the token is invalid
 		return nil, serviceerror.NewInternal("ListClosedWorkflowExecutionsByType operation failed.  Not able to create query iterator.")
 	}
 
@@ -221,7 +219,7 @@ func (v *cassandraVisibilityPersistenceV2) ListClosedWorkflowExecutionsByWorkflo
 		request.WorkflowID).Consistency(v.lowConslevel)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 	if iter == nil {
-		// TODO: should return a bad request error if the token is invalid
+		// TODO: should return serviceerror.InvalidArgument if the token is invalid
 		return nil, serviceerror.NewInternal("ListClosedWorkflowExecutionsByWorkflowID operation failed.  Not able to create query iterator.")
 	}
 
@@ -256,7 +254,7 @@ func (v *cassandraVisibilityPersistenceV2) ListClosedWorkflowExecutionsByStatus(
 		request.Status).Consistency(v.lowConslevel)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 	if iter == nil {
-		// TODO: should return a bad request error if the token is invalid
+		// TODO: should return serviceerror.InvalidArgument if the token is invalid
 		return nil, serviceerror.NewInternal("ListClosedWorkflowExecutionsByStatus operation failed.  Not able to create query iterator.")
 	}
 

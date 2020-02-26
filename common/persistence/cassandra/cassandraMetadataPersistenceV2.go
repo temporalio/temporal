@@ -23,14 +23,11 @@ package cassandra
 import (
 	"fmt"
 
+	"github.com/gocql/gocql"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/common/cassandra"
-
 	"github.com/temporalio/temporal/common"
-
-	"github.com/gocql/gocql"
-
+	"github.com/temporalio/temporal/common/cassandra"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	p "github.com/temporalio/temporal/common/persistence"

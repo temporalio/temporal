@@ -22,21 +22,17 @@ package cassandra
 
 import (
 	"fmt"
+	"sort"
 
+	"github.com/gocql/gocql"
 	"github.com/gogo/protobuf/types"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common/persistence/serialization"
-
-	"sort"
-
 	"github.com/temporalio/temporal/common/cassandra"
-
-	"github.com/gocql/gocql"
-
 	"github.com/temporalio/temporal/common/log"
 	p "github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/persistence/serialization"
 	"github.com/temporalio/temporal/common/service/config"
 )
 

@@ -27,10 +27,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/temporalio/temporal/common/primitives"
-
 	"github.com/pborman/uuid"
-
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
@@ -40,6 +37,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 const (

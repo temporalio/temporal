@@ -27,15 +27,13 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"go.temporal.io/temporal-proto/serviceerror"
-
-	"github.com/temporalio/temporal/common"
-
-	persist "github.com/temporalio/temporal/.gen/go/persistenceblobs"
-	p "github.com/temporalio/temporal/common/persistence"
-
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/temporal-proto/serviceerror"
+
+	persist "github.com/temporalio/temporal/.gen/go/persistenceblobs"
+	"github.com/temporalio/temporal/common"
+	p "github.com/temporalio/temporal/common/persistence"
 )
 
 type (

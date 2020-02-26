@@ -25,11 +25,8 @@ import (
 	"fmt"
 	"time"
 
-	"go.temporal.io/temporal-proto/serviceerror"
-
-	"github.com/temporalio/temporal/common/persistence/serialization"
-
 	"github.com/pborman/uuid"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	h "github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/shared"
@@ -43,6 +40,7 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/persistence/serialization"
 )
 
 type (
@@ -781,7 +779,7 @@ func (r *historyReplicator) replicateWorkflowStarted(
 		}
 		// if workflow is completed just when the call is made, will get EntityNotExistsError
 		// we are not sure whether the workflow to be terminated ends with continue as new or not
-		// so when encounter EntityNotExistsError, just contiue to execute, if err occurs,
+		// so when encounter EntityNotExistsError, just continue to execute, if err occurs,
 		// there will be retry on the worker level
 	}
 	createMode = persistence.CreateWorkflowModeWorkflowIDReuse

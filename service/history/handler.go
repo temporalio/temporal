@@ -71,7 +71,7 @@ var (
 	errSourceClusterNotSet     = serviceerror.NewInvalidArgument("Source Cluster not set on request.")
 	errShardIDNotSet           = serviceerror.NewInvalidArgument("Shard ID not set on request.")
 	errTimestampNotSet         = serviceerror.NewInvalidArgument("Timestamp not set on request.")
-	errHistoryHostThrottle     = serviceerror.NewResourceExhausted("History host rps exceeded")
+	errHistoryHostThrottle     = serviceerror.NewResourceExhausted("History host rps exceeded.")
 )
 
 // NewHandler creates a thrift handler for the history service

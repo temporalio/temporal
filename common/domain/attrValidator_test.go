@@ -23,15 +23,12 @@ package domain
 import (
 	"testing"
 
+	"github.com/stretchr/testify/suite"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common/cluster"
-
-	"github.com/temporalio/temporal/common/persistence"
-
-	"github.com/stretchr/testify/suite"
-
 	"github.com/temporalio/temporal/common/mocks"
+	"github.com/temporalio/temporal/common/persistence"
 )
 
 type (

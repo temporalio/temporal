@@ -26,14 +26,11 @@ import (
 
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/common/persistence/serialization"
-
-	"github.com/temporalio/temporal/common/primitives"
-
 	"github.com/temporalio/temporal/common"
-
 	p "github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/persistence/serialization"
 	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 func updateSignalsRequested(

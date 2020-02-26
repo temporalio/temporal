@@ -24,14 +24,12 @@ import (
 	"fmt"
 	"time"
 
-	"go.temporal.io/temporal-proto/serviceerror"
-
-	"github.com/temporalio/temporal/common/cassandra"
-
 	"github.com/gocql/gocql"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/cassandra"
 	"github.com/temporalio/temporal/common/log"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/service/config"
@@ -337,7 +335,7 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutions(
 		p.UnixNanoToDBTimestamp(request.LatestStartTime)).Consistency(v.lowConslevel)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 	if iter == nil {
-		// TODO: should return a bad request error if the token is invalid
+		// TODO: should return serviceerror.InvalidArgument if the token is invalid
 		return nil, serviceerror.NewInternal("ListOpenWorkflowExecutions operation failed.  Not able to create query iterator.")
 	}
 
@@ -371,7 +369,7 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutions(
 		p.UnixNanoToDBTimestamp(request.LatestStartTime)).Consistency(v.lowConslevel)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 	if iter == nil {
-		// TODO: should return a bad request error if the token is invalid
+		// TODO: should return serviceerror.InvalidArgument if the token is invalid
 		return nil, serviceerror.NewInternal("ListClosedWorkflowExecutions operation failed.  Not able to create query iterator.")
 	}
 
@@ -406,7 +404,7 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByType(
 		request.WorkflowTypeName).Consistency(v.lowConslevel)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 	if iter == nil {
-		// TODO: should return a bad request error if the token is invalid
+		// TODO: should return serviceerror.InvalidArgument if the token is invalid
 		return nil, serviceerror.NewInternal("ListOpenWorkflowExecutionsByType operation failed.  Not able to create query iterator.")
 	}
 
@@ -441,7 +439,7 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByType(
 		request.WorkflowTypeName).Consistency(v.lowConslevel)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 	if iter == nil {
-		// TODO: should return a bad request error if the token is invalid
+		// TODO: should return serviceerror.InvalidArgument if the token is invalid
 		return nil, serviceerror.NewInternal("ListClosedWorkflowExecutionsByType operation failed.  Not able to create query iterator.")
 	}
 
@@ -476,7 +474,7 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByWorkflowID(
 		request.WorkflowID).Consistency(v.lowConslevel)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 	if iter == nil {
-		// TODO: should return a bad request error if the token is invalid
+		// TODO: should return serviceerror.InvalidArgument if the token is invalid
 		return nil, serviceerror.NewInternal("ListOpenWorkflowExecutionsByWorkflowID operation failed.  Not able to create query iterator.")
 	}
 
@@ -511,7 +509,7 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByWorkflowI
 		request.WorkflowID).Consistency(v.lowConslevel)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 	if iter == nil {
-		// TODO: should return a bad request error if the token is invalid
+		// TODO: should return serviceerror.InvalidArgument if the token is invalid
 		return nil, serviceerror.NewInternal("ListClosedWorkflowExecutionsByWorkflowID operation failed.  Not able to create query iterator.")
 	}
 
@@ -546,7 +544,7 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByStatus(
 		request.Status).Consistency(v.lowConslevel)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 	if iter == nil {
-		// TODO: should return a bad request error if the token is invalid
+		// TODO: should return serviceerror.InvalidArgument if the token is invalid
 		return nil, serviceerror.NewInternal("ListClosedWorkflowExecutionsByStatus operation failed.  Not able to create query iterator.")
 	}
 

@@ -26,13 +26,11 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
+	log "github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	pblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-
-	log "github.com/sirupsen/logrus"
-	"github.com/stretchr/testify/require"
-
 	p "github.com/temporalio/temporal/common/persistence"
 )
 

@@ -26,21 +26,17 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/temporalio/temporal/common/persistence/serialization"
-
 	"github.com/gogo/protobuf/types"
-
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/common/primitives"
-
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-
 	"github.com/temporalio/temporal/.gen/go/sqlblobs"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	p "github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/persistence/serialization"
 	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 func applyWorkflowMutationTx(

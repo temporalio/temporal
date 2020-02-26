@@ -21,9 +21,8 @@
 package sql
 
 import (
-	"fmt"
-
 	"database/sql"
+	"fmt"
 
 	"go.temporal.io/temporal-proto/serviceerror"
 

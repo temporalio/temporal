@@ -25,10 +25,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gocql/gocql"
 	"github.com/pborman/uuid"
 	"go.temporal.io/temporal-proto/serviceerror"
-
-	"github.com/gocql/gocql"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cassandra"
