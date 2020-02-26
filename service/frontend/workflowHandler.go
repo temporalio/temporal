@@ -676,7 +676,7 @@ func (wh *WorkflowHandler) PollForDecisionTask(ctx context.Context, request *wor
 		return err
 	}
 
-	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientErrorGRPC)
+	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
 		err = wh.cancelOutstandingPoll(ctx, err, domainID, persistence.TaskListTypeDecision, request.TaskList, pollerID)
 		if err != nil {
@@ -923,7 +923,7 @@ func (wh *WorkflowHandler) PollForActivityTask(ctx context.Context, request *wor
 		return err
 	}
 
-	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientErrorGRPC)
+	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
 		err = wh.cancelOutstandingPoll(ctx, err, domainID, persistence.TaskListTypeActivity, request.TaskList, pollerID)
 		if err != nil {
@@ -1967,7 +1967,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return err
 	}
 
-	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientErrorGRPC)
+	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -2807,7 +2807,7 @@ func (wh *WorkflowHandler) DescribeTaskList(ctx context.Context, request *workfl
 		return err
 	}
 
-	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientErrorGRPC)
+	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -3203,9 +3203,6 @@ func (wh *WorkflowHandler) getDefaultScope(scope int) metrics.Scope {
 }
 
 func (wh *WorkflowHandler) error(err error, scope metrics.Scope, tagsForErrorLog ...tag.Tag) error {
-	// TODO: remove after error migration is done
-	err = adapter.ToServiceError(err)
-
 	switch err := err.(type) {
 	case *serviceerror.Internal, *serviceerror.DataLoss:
 		wh.GetLogger().WithTags(tagsForErrorLog...).Error("Internal service error", tag.Error(err))

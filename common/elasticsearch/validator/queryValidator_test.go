@@ -64,31 +64,31 @@ func (s *queryValidatorSuite) TestValidateListRequestForQuery() {
 
 	query = "Invalid SQL"
 	listRequest.Query = query
-	s.Equal("BadRequestError{Message: Invalid query.}", qv.ValidateListRequestForQuery(listRequest).Error())
+	s.Equal("Invalid query.", qv.ValidateListRequestForQuery(listRequest).Error())
 
 	query = "InvalidWhereExpr"
 	listRequest.Query = query
-	s.Equal("BadRequestError{Message: invalid where clause}", qv.ValidateListRequestForQuery(listRequest).Error())
+	s.Equal("invalid where clause", qv.ValidateListRequestForQuery(listRequest).Error())
 
 	// Invalid comparison
 	query = "WorkflowID = 'wid' and 1 < 2"
 	listRequest.Query = query
-	s.Equal("BadRequestError{Message: invalid comparison expression}", qv.ValidateListRequestForQuery(listRequest).Error())
+	s.Equal("invalid comparison expression", qv.ValidateListRequestForQuery(listRequest).Error())
 
 	// Invalid range
 	query = "1 between 1 and 2 or WorkflowID = 'wid'"
 	listRequest.Query = query
-	s.Equal("BadRequestError{Message: invalid range expression}", qv.ValidateListRequestForQuery(listRequest).Error())
+	s.Equal("invalid range expression", qv.ValidateListRequestForQuery(listRequest).Error())
 
 	// Invalid search attribute in comparison
 	query = "Invalid = 'a' and 1 < 2"
 	listRequest.Query = query
-	s.Equal("BadRequestError{Message: invalid search attribute}", qv.ValidateListRequestForQuery(listRequest).Error())
+	s.Equal("invalid search attribute", qv.ValidateListRequestForQuery(listRequest).Error())
 
 	// Invalid search attribute in range
 	query = "Invalid between 1 and 2 or WorkflowID = 'wid'"
 	listRequest.Query = query
-	s.Equal("BadRequestError{Message: invalid search attribute}", qv.ValidateListRequestForQuery(listRequest).Error())
+	s.Equal("invalid search attribute", qv.ValidateListRequestForQuery(listRequest).Error())
 
 	// only order by
 	query = "order by CloseTime desc"
@@ -111,17 +111,17 @@ func (s *queryValidatorSuite) TestValidateListRequestForQuery() {
 	// invalid order by attribute
 	query = "order by InvalidField desc"
 	listRequest.Query = query
-	s.Equal("BadRequestError{Message: invalid order by attribute}", qv.ValidateListRequestForQuery(listRequest).Error())
+	s.Equal("invalid order by attribute", qv.ValidateListRequestForQuery(listRequest).Error())
 
 	// invalid order by attribute expr
 	query = "order by 123"
 	listRequest.Query = query
-	s.Equal("BadRequestError{Message: invalid order by expression}", qv.ValidateListRequestForQuery(listRequest).Error())
+	s.Equal("invalid order by expression", qv.ValidateListRequestForQuery(listRequest).Error())
 
 	// security SQL injection
 	query = "WorkflowID = 'wid'; SELECT * FROM important_table;"
 	listRequest.Query = query
-	s.Equal("BadRequestError{Message: Invalid query.}", qv.ValidateListRequestForQuery(listRequest).Error())
+	s.Equal("Invalid query.", qv.ValidateListRequestForQuery(listRequest).Error())
 
 	query = "WorkflowID = 'wid' and (RunID = 'rid' or 1 = 1)"
 	listRequest.Query = query

@@ -25,11 +25,9 @@ import (
 	"strings"
 	"time"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
-
-	"github.com/pborman/uuid"
-
 	"github.com/gocql/gocql"
+	"github.com/pborman/uuid"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cassandra"
@@ -214,9 +212,7 @@ func (m *cassandraClusterMetadata) GetClusterMembers(request *p.GetClusterMember
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
 	if iter == nil {
-		return nil, &workflow.InternalServiceError{
-			Message: "GetClusterMembers operation failed.  Not able to create query iterator.",
-		}
+		return nil, serviceerror.NewInternal("GetClusterMembers operation failed.  Not able to create query iterator.")
 	}
 
 	pagingToken := iter.PageState()

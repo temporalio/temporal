@@ -21,11 +21,11 @@
 package sql
 
 import (
+	"database/sql"
 	"fmt"
 
-	"database/sql"
+	"go.temporal.io/temporal-proto/serviceerror"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
@@ -72,7 +72,7 @@ func (q *sqlQueue) EnqueueMessage(
 		return err
 	})
 	if err != nil {
-		return &workflow.InternalServiceError{Message: err.Error()}
+		return serviceerror.NewInternal(err.Error())
 	}
 	return nil
 }
@@ -109,9 +109,7 @@ func (q *sqlQueue) DeleteMessagesBefore(
 
 	_, err := q.db.DeleteMessagesBefore(q.queueType, messageID)
 	if err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("DeleteMessagesBefore operation failed. Error %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("DeleteMessagesBefore operation failed. Error %v", err))
 	}
 	return nil
 }
@@ -124,17 +122,13 @@ func (q *sqlQueue) UpdateAckLevel(
 	err := q.txExecute("UpdateAckLevel", func(tx sqlplugin.Tx) error {
 		clusterAckLevels, err := tx.GetAckLevels(q.queueType, true)
 		if err != nil {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("UpdateAckLevel operation failed. Error %v", err),
-			}
+			return serviceerror.NewInternal(fmt.Sprintf("UpdateAckLevel operation failed. Error %v", err))
 		}
 
 		if clusterAckLevels == nil {
 			err := tx.InsertAckLevel(q.queueType, messageID, clusterName)
 			if err != nil {
-				return &workflow.InternalServiceError{
-					Message: fmt.Sprintf("UpdateAckLevel operation failed. Error %v", err),
-				}
+				return serviceerror.NewInternal(fmt.Sprintf("UpdateAckLevel operation failed. Error %v", err))
 			}
 			return nil
 		}
@@ -147,15 +141,13 @@ func (q *sqlQueue) UpdateAckLevel(
 		clusterAckLevels[clusterName] = messageID
 		err = tx.UpdateAckLevels(q.queueType, clusterAckLevels)
 		if err != nil {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("UpdateAckLevel operation failed. Error %v", err),
-			}
+			return serviceerror.NewInternal(fmt.Sprintf("UpdateAckLevel operation failed. Error %v", err))
 		}
 		return nil
 	})
 
 	if err != nil {
-		return &workflow.InternalServiceError{Message: err.Error()}
+		return serviceerror.NewInternal(err.Error())
 	}
 	return nil
 }
@@ -183,7 +175,7 @@ func (q *sqlQueue) EnqueueMessageToDLQ(
 		return err
 	})
 	if err != nil {
-		return &workflow.InternalServiceError{Message: err.Error()}
+		return serviceerror.NewInternal(err.Error())
 	}
 	return nil
 }
@@ -198,8 +190,7 @@ func (q *sqlQueue) ReadMessagesFromDLQ(
 	if pageToken != nil && len(pageToken) != 0 {
 		lastReadMessageID, err := deserializePageToken(pageToken)
 		if err != nil {
-			return nil, nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("invalid next page token %v", pageToken)}
+			return nil, nil, serviceerror.NewInternal(fmt.Sprintf("invalid next page token %v", pageToken))
 		}
 		firstMessageID = int(lastReadMessageID)
 	}
@@ -207,9 +198,7 @@ func (q *sqlQueue) ReadMessagesFromDLQ(
 	// Use negative queue type as the dlq type
 	rows, err := q.db.GetMessagesBetween(-q.queueType, firstMessageID, lastMessageID, pageSize)
 	if err != nil {
-		return nil, nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ReadMessagesFromDLQ operation failed. Error %v", err),
-		}
+		return nil, nil, serviceerror.NewInternal(fmt.Sprintf("ReadMessagesFromDLQ operation failed. Error %v", err))
 	}
 
 	var messages []*persistence.QueueMessage
@@ -231,9 +220,7 @@ func (q *sqlQueue) DeleteMessageFromDLQ(
 	// Use negative queue type as the dlq type
 	_, err := q.db.DeleteMessage(-q.queueType, messageID)
 	if err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("DeleteMessageFromDLQ operation failed. Error %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("DeleteMessageFromDLQ operation failed. Error %v", err))
 	}
 	return nil
 }
@@ -245,9 +232,7 @@ func (q *sqlQueue) RangeDeleteMessagesFromDLQ(
 	// Use negative queue type as the dlq type
 	_, err := q.db.RangeDeleteMessages(-q.queueType, firstMessageID, lastMessageID)
 	if err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("RangeDeleteMessagesFromDLQ operation failed. Error %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("RangeDeleteMessagesFromDLQ operation failed. Error %v", err))
 	}
 	return nil
 }
@@ -261,18 +246,14 @@ func (q *sqlQueue) UpdateDLQAckLevel(
 		// Use negative queue type as the dlq type
 		clusterAckLevels, err := tx.GetAckLevels(-q.queueType, true)
 		if err != nil {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("UpdateDLQAckLevel operation failed. Error %v", err),
-			}
+			return serviceerror.NewInternal(fmt.Sprintf("UpdateDLQAckLevel operation failed. Error %v", err))
 		}
 
 		if clusterAckLevels == nil {
 			// Use negative queue type as the dlq type
 			err := tx.InsertAckLevel(-q.queueType, messageID, clusterName)
 			if err != nil {
-				return &workflow.InternalServiceError{
-					Message: fmt.Sprintf("UpdateDLQAckLevel operation failed. Error %v", err),
-				}
+				return serviceerror.NewInternal(fmt.Sprintf("UpdateDLQAckLevel operation failed. Error %v", err))
 			}
 			return nil
 		}
@@ -286,15 +267,13 @@ func (q *sqlQueue) UpdateDLQAckLevel(
 		// Use negative queue type as the dlq type
 		err = tx.UpdateAckLevels(-q.queueType, clusterAckLevels)
 		if err != nil {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("UpdateDLQAckLevel operation failed. Error %v", err),
-			}
+			return serviceerror.NewInternal(fmt.Sprintf("UpdateDLQAckLevel operation failed. Error %v", err))
 		}
 		return nil
 	})
 
 	if err != nil {
-		return &workflow.InternalServiceError{Message: err.Error()}
+		return serviceerror.NewInternal(err.Error())
 	}
 	return nil
 }

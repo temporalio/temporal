@@ -25,8 +25,8 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
+	"go.temporal.io/temporal-proto/serviceerror"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cache"
@@ -269,7 +269,7 @@ func (t *taskProcessor) handleTaskError(
 		return nil
 	}
 
-	if _, ok := err.(*workflow.EntityNotExistsError); ok {
+	if _, ok := err.(*serviceerror.NotFound); ok {
 		return nil
 	}
 
@@ -288,7 +288,7 @@ func (t *taskProcessor) handleTaskError(
 	// this is a transient error
 	// TODO remove this error check special case
 	//  since the new task life cycle will not give up until task processed / verified
-	if _, ok := err.(*workflow.DomainNotActiveError); ok {
+	if _, ok := err.(*serviceerror.DomainNotActive); ok {
 		if t.timeSource.Now().Sub(task.startTime) > 2*cache.DomainCacheRefreshInterval {
 			scope.IncCounter(metrics.TaskNotActiveCounter)
 			return nil

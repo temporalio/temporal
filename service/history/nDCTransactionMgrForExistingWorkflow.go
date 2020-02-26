@@ -27,7 +27,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/common/persistence"
 )
 
@@ -101,16 +102,12 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 	}
 	if currentRunID == "" {
 		// this means a bug in our code or DB is inconsistent...
-		return &shared.InternalServiceError{
-			Message: "nDCTransactionMgr: unable to locate current workflow during update",
-		}
+		return serviceerror.NewInternal("nDCTransactionMgr: unable to locate current workflow during update")
 	}
 
 	if currentRunID == targetRunID {
 		if !isWorkflowRebuilt {
-			return &shared.InternalServiceError{
-				Message: "nDCTransactionMgr: encounter workflow not rebuilt & current workflow not guaranteed",
-			}
+			return serviceerror.NewInternal("nDCTransactionMgr: encounter workflow not rebuilt & current workflow not guaranteed")
 		}
 
 		// update to current record, since target workflow is pointed by current record
@@ -255,9 +252,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 		return err
 	}
 	if targetPolicy != transactionPolicyPassive {
-		return &shared.InternalServiceError{
-			Message: "nDCTransactionMgrForExistingWorkflow updateAsZombie encounter target workflow policy not being passive",
-		}
+		return serviceerror.NewInternal("nDCTransactionMgrForExistingWorkflow updateAsZombie encounter target workflow policy not being passive")
 	}
 
 	var newContext workflowExecutionContext
@@ -271,9 +266,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 			return err
 		}
 		if newWorkflowPolicy != transactionPolicyPassive {
-			return &shared.InternalServiceError{
-				Message: "nDCTransactionMgrForExistingWorkflow updateAsZombie encounter new workflow policy not being passive",
-			}
+			return serviceerror.NewInternal("nDCTransactionMgrForExistingWorkflow updateAsZombie encounter new workflow policy not being passive")
 		}
 
 		// sanity check if new workflow is already created
@@ -404,9 +397,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 		return err
 	}
 	if targetWorkflowPolicy != transactionPolicyPassive {
-		return &shared.InternalServiceError{
-			Message: "nDCTransactionMgrForExistingWorkflow conflictResolveAsZombie encounter target workflow policy not being passive",
-		}
+		return serviceerror.NewInternal("nDCTransactionMgrForExistingWorkflow conflictResolveAsZombie encounter target workflow policy not being passive")
 	}
 
 	var newContext workflowExecutionContext
@@ -419,9 +410,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 			return err
 		}
 		if newWorkflowPolicy != transactionPolicyPassive {
-			return &shared.InternalServiceError{
-				Message: "nDCTransactionMgrForExistingWorkflow conflictResolveAsZombie encounter new workflow policy not being passive",
-			}
+			return serviceerror.NewInternal("nDCTransactionMgrForExistingWorkflow conflictResolveAsZombie encounter new workflow policy not being passive")
 		}
 
 		// sanity check if new workflow is already created
@@ -528,9 +517,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) executeTransaction(
 		)
 
 	default:
-		return &shared.InternalServiceError{
-			Message: fmt.Sprintf("nDCTransactionMgr: encounter unknown transaction type: %v", transactionPolicy),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("nDCTransactionMgr: encounter unknown transaction type: %v", transactionPolicy))
 	}
 }
 

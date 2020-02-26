@@ -21,16 +21,17 @@
 package persistence
 
 import (
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/quotas"
 )
 
 var (
 	// ErrPersistenceLimitExceeded is the error indicating QPS limit reached.
-	ErrPersistenceLimitExceeded = &workflow.ServiceBusyError{Message: "Persistence Max QPS Reached."}
+	ErrPersistenceLimitExceeded = serviceerror.NewResourceExhausted("Persistence Max QPS Reached.")
 	// ErrPersistenceLimitExceededForList is the error indicating QPS limit reached for list visibility.
-	ErrPersistenceLimitExceededForList = &workflow.ServiceBusyError{Message: "Persistence Max QPS Reached for List Operations."}
+	ErrPersistenceLimitExceededForList = serviceerror.NewResourceExhausted("Persistence Max QPS Reached for List Operations.")
 )
 
 type (

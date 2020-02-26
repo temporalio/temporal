@@ -28,13 +28,13 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	h "github.com/temporalio/temporal/.gen/go/history"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
-	ce "github.com/temporalio/temporal/common/errors"
 	"github.com/temporalio/temporal/common/persistence"
 )
 
@@ -146,7 +146,7 @@ func (w *workflowResetorImpl) checkDomainStatus(newMutableState mutableState, pr
 		clusterMetadata := w.eng.shard.GetService().GetClusterMetadata()
 		currentVersion := newMutableState.GetCurrentVersion()
 		if currentVersion < prevRunVersion {
-			return ce.NewDomainNotActiveError(
+			return serviceerror.NewDomainNotActive(
 				domain,
 				clusterMetadata.GetCurrentClusterName(),
 				clusterMetadata.ClusterNameForFailoverVersion(prevRunVersion),
@@ -155,7 +155,7 @@ func (w *workflowResetorImpl) checkDomainStatus(newMutableState mutableState, pr
 		activeCluster := clusterMetadata.ClusterNameForFailoverVersion(currentVersion)
 		currentCluster := clusterMetadata.GetCurrentClusterName()
 		if activeCluster != currentCluster {
-			return ce.NewDomainNotActiveError(domain, currentCluster, activeCluster)
+			return serviceerror.NewDomainNotActive(domain, currentCluster, activeCluster)
 		}
 	}
 	return nil
@@ -163,14 +163,10 @@ func (w *workflowResetorImpl) checkDomainStatus(newMutableState mutableState, pr
 
 func (w *workflowResetorImpl) validateResetWorkflowBeforeReplay(baseMutableState, currMutableState mutableState) error {
 	if len(currMutableState.GetPendingChildExecutionInfos()) > 0 {
-		return &workflow.BadRequestError{
-			Message: fmt.Sprintf("reset is not allowed when current workflow has pending child workflow."),
-		}
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("reset is not allowed when current workflow has pending child workflow."))
 	}
 	if currMutableState.IsWorkflowExecutionRunning() {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("current workflow should already been terminated"),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("current workflow should already been terminated"))
 	}
 	return nil
 }
@@ -180,19 +176,13 @@ func (w *workflowResetorImpl) validateResetWorkflowAfterReplay(newMutableState m
 		return retError
 	}
 	if !newMutableState.HasInFlightDecision() {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("can't find the last started decision"),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("can't find the last started decision"))
 	}
 	if newMutableState.HasBufferedEvents() {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("replay history shouldn't see any bufferred events"),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("replay history shouldn't see any bufferred events"))
 	}
 	if newMutableState.IsStickyTaskListEnabled() {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("replay history shouldn't have stikyness"),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("replay history shouldn't have stikyness"))
 	}
 	return nil
 }
@@ -205,7 +195,7 @@ func (w *workflowResetorImpl) failStartedActivities(msBuilder mutableState) erro
 			request := getRespondActivityTaskFailedRequestFromActivity(ai, "workflowReset")
 			if _, err := msBuilder.AddActivityTaskFailedEvent(ai.ScheduleID, ai.StartedID, request); err != nil {
 				// Unable to add ActivityTaskFailed event to history
-				return &workflow.InternalServiceError{Message: "Unable to add ActivityTaskFailed event to mutableState."}
+				return serviceerror.NewInternal("Unable to add ActivityTaskFailed event to mutableState.")
 			}
 		}
 	}
@@ -221,7 +211,7 @@ func (w *workflowResetorImpl) scheduleUnstartedActivities(msBuilder mutableState
 	// activities
 	for _, ai := range msBuilder.GetPendingActivityInfos() {
 		if ai.StartedID != common.EmptyEventID {
-			return nil, &workflow.InternalServiceError{Message: "started activities should have been failed."}
+			return nil, serviceerror.NewInternal("started activities should have been failed.")
 		}
 		t := &persistence.ActivityTask{
 			DomainID:   exeInfo.DomainID,
@@ -288,7 +278,7 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 	_, err := newMutableState.AddDecisionTaskFailedEvent(decision.ScheduleID, decision.StartedID, workflow.DecisionTaskFailedCauseResetWorkflow, nil,
 		identityHistoryService, resetReason, "", baseRunID, newRunID, forkEventVersion)
 	if err != nil {
-		retError = &workflow.InternalServiceError{Message: "Failed to add decision failed event."}
+		retError = serviceerror.NewInternal("Failed to add decision failed event.")
 		return
 	}
 
@@ -322,7 +312,7 @@ func (w *workflowResetorImpl) buildNewMutableStateForReset(
 	// we always schedule a new decision after reset
 	decision, err = newMutableState.AddDecisionTaskScheduledEvent(false)
 	if err != nil {
-		retError = &workflow.InternalServiceError{Message: "Failed to add decision scheduled event."}
+		retError = serviceerror.NewInternal("Failed to add decision scheduled event.")
 		return
 	}
 
@@ -669,9 +659,7 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 			lastBatch = history
 			if firstEvent.GetEventId() == common.FirstEventID {
 				if firstEvent.GetEventType() != workflow.EventTypeWorkflowExecutionStarted {
-					retError = &workflow.InternalServiceError{
-						Message: fmt.Sprintf("first event type is not EventTypeWorkflowExecutionStarted: %v", firstEvent.GetEventType()),
-					}
+					retError = serviceerror.NewInternal(fmt.Sprintf("first event type is not EventTypeWorkflowExecutionStarted: %v", firstEvent.GetEventType()))
 					return
 				}
 				wfTimeoutSecs = int64(firstEvent.GetWorkflowExecutionStartedEventAttributes().GetExecutionStartToCloseTimeoutSeconds())
@@ -705,9 +693,7 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 
 			// avoid replay this event in stateBuilder which will run into NPE if WF doesn't enable XDC
 			if lastEvent.GetEventType() == workflow.EventTypeWorkflowExecutionContinuedAsNew {
-				retError = &workflow.BadRequestError{
-					Message: fmt.Sprintf("wrong DecisionFinishEventId, cannot replay history to continueAsNew"),
-				}
+				retError = serviceerror.NewInvalidArgument(fmt.Sprintf("wrong DecisionFinishEventId, cannot replay history to continueAsNew"))
 				return
 			}
 
@@ -743,15 +729,11 @@ func validateLastBatchOfReset(lastBatch []*workflow.HistoryEvent, decisionFinish
 	firstEvent := lastBatch[0]
 	lastEvent := lastBatch[len(lastBatch)-1]
 	if decisionFinishEventID != lastEvent.GetEventId()+1 {
-		return &workflow.BadRequestError{
-			Message: fmt.Sprintf("wrong DecisionFinishEventId, it must be DecisionTaskStarted + 1: %v", lastEvent.GetEventId()),
-		}
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("wrong DecisionFinishEventId, it must be DecisionTaskStarted + 1: %v", lastEvent.GetEventId()))
 	}
 
 	if lastEvent.GetEventType() != workflow.EventTypeDecisionTaskStarted {
-		return &workflow.BadRequestError{
-			Message: fmt.Sprintf("wrong DecisionFinishEventId, previous batch doesn't include EventTypeDecisionTaskStarted, lastFirstEventId: %v", firstEvent.GetEventId()),
-		}
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("wrong DecisionFinishEventId, previous batch doesn't include EventTypeDecisionTaskStarted, lastFirstEventId: %v", firstEvent.GetEventId()))
 	}
 
 	return nil
@@ -1067,7 +1049,7 @@ func getWorkflowCleanupTasks(
 	var retentionInDays int32
 	domainEntry, err := domainCache.GetDomainByID(domainID)
 	if err != nil {
-		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
+		if _, ok := err.(*serviceerror.NotFound); !ok {
 			return nil, nil, err
 		}
 	} else {

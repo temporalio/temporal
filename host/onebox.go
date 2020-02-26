@@ -29,6 +29,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/uber-go/tally"
 	"github.com/uber/tchannel-go"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"google.golang.org/grpc"
 
@@ -781,7 +782,7 @@ func (c *cadenceImpl) createSystemDomain() error {
 		FailoverVersion:   common.EmptyVersion,
 	})
 	if err != nil {
-		if _, ok := err.(*shared.DomainAlreadyExistsError); ok {
+		if _, ok := err.(*serviceerror.DomainAlreadyExists); ok {
 			return nil
 		}
 		return fmt.Errorf("failed to create cadence-system domain: %v", err)

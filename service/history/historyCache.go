@@ -25,6 +25,7 @@ import (
 	"sync/atomic"
 
 	"github.com/pborman/uuid"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
@@ -223,7 +224,7 @@ func (c *historyCache) validateWorkflowExecutionInfo(
 ) error {
 
 	if execution.GetWorkflowId() == "" {
-		return &workflow.BadRequestError{Message: "Can't load workflow execution.  WorkflowId not set."}
+		return serviceerror.NewInvalidArgument("Can't load workflow execution.  WorkflowId not set.")
 	}
 
 	// RunID is not provided, lets try to retrieve the RunID for current active execution
@@ -239,7 +240,7 @@ func (c *historyCache) validateWorkflowExecutionInfo(
 
 		execution.RunId = common.StringPtr(response.RunID)
 	} else if uuid.Parse(execution.GetRunId()) == nil { // immediately return if invalid runID
-		return &workflow.BadRequestError{Message: "RunID is not valid UUID."}
+		return serviceerror.NewInvalidArgument("RunID is not valid UUID.")
 	}
 	return nil
 }

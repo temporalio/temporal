@@ -25,11 +25,13 @@ package history
 import (
 	"sync"
 
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 )
 
 var (
-	errQueryNotExists = &shared.InternalServiceError{Message: "query does not exist"}
+	errQueryNotExists = serviceerror.NewInternal("query does not exist")
 )
 
 type (

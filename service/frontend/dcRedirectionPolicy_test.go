@@ -28,8 +28,8 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
@@ -280,10 +280,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 		switch targetCluster {
 		case s.currentClusterName:
 			currentClustercallCount++
-			return &shared.DomainNotActiveError{
-				CurrentCluster: s.currentClusterName,
-				ActiveCluster:  s.alternativeClusterName,
-			}
+			return serviceerror.NewDomainNotActive("", s.currentClusterName, s.alternativeClusterName)
 		case s.alternativeClusterName:
 			alternativeClustercallCount++
 			return nil
@@ -316,10 +313,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 			return nil
 		case s.alternativeClusterName:
 			alternativeClustercallCount++
-			return &shared.DomainNotActiveError{
-				CurrentCluster: s.alternativeClusterName,
-				ActiveCluster:  s.currentClusterName,
-			}
+			return serviceerror.NewDomainNotActive("", s.alternativeClusterName, s.currentClusterName)
 		default:
 			panic(fmt.Sprintf("unknown cluster name %v", targetCluster))
 		}

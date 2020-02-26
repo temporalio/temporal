@@ -21,9 +21,10 @@
 package history
 
 import (
-	"github.com/gogo/protobuf/types"
 	"testing"
 	"time"
+
+	"github.com/gogo/protobuf/types"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 

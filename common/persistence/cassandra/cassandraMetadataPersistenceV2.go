@@ -23,13 +23,11 @@ package cassandra
 import (
 	"fmt"
 
-	"github.com/temporalio/temporal/common/cassandra"
+	"github.com/gocql/gocql"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common"
-
-	"github.com/gocql/gocql"
-
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common/cassandra"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	p "github.com/temporalio/temporal/common/persistence"
@@ -182,14 +180,10 @@ func (m *cassandraMetadataPersistenceV2) CreateDomain(request *p.InternalCreateD
 	query := m.session.Query(templateCreateDomainQuery, request.Info.ID, request.Info.Name)
 	applied, err := query.MapScanCAS(make(map[string]interface{}))
 	if err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("CreateDomain operation failed. Inserting into domains table. Error: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("CreateDomain operation failed. Inserting into domains table. Error: %v", err))
 	}
 	if !applied {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("CreateDomain operation failed because of uuid collision."),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("CreateDomain operation failed because of uuid collision."))
 	}
 
 	return m.CreateDomainInV2Table(request)
@@ -241,9 +235,7 @@ func (m *cassandraMetadataPersistenceV2) CreateDomainInV2Table(request *p.Intern
 	}()
 
 	if err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("CreateDomain operation failed. Inserting into domains_by_name_v2 table. Error: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("CreateDomain operation failed. Inserting into domains_by_name_v2 table. Error: %v", err))
 	}
 
 	if !applied {
@@ -254,14 +246,10 @@ func (m *cassandraMetadataPersistenceV2) CreateDomainInV2Table(request *p.Intern
 
 		if domain, ok := previous["domain"].(map[string]interface{}); ok {
 			msg := fmt.Sprintf("Domain already exists.  DomainId: %v", domain["id"])
-			return nil, &workflow.DomainAlreadyExistsError{
-				Message: msg,
-			}
+			return nil, serviceerror.NewDomainAlreadyExists(msg)
 		}
 
-		return nil, &workflow.DomainAlreadyExistsError{
-			Message: fmt.Sprintf("CreateDomain operation failed because of conditional failure."),
-		}
+		return nil, serviceerror.NewDomainAlreadyExists(fmt.Sprintf("CreateDomain operation failed because of conditional failure."))
 	}
 
 	return &p.CreateDomainResponse{ID: request.Info.ID}, nil
@@ -306,14 +294,10 @@ func (m *cassandraMetadataPersistenceV2) UpdateDomain(request *p.InternalUpdateD
 	}()
 
 	if err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("UpdateDomain operation failed. Error: %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("UpdateDomain operation failed. Error: %v", err))
 	}
 	if !applied {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("UpdateDomain operation failed because of conditional failure."),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("UpdateDomain operation failed because of conditional failure."))
 	}
 
 	return nil
@@ -333,13 +317,9 @@ func (m *cassandraMetadataPersistenceV2) GetDomain(request *p.GetDomainRequest) 
 	var isGlobalDomain bool
 
 	if len(request.ID) > 0 && len(request.Name) > 0 {
-		return nil, &workflow.BadRequestError{
-			Message: "GetDomain operation failed.  Both ID and Name specified in request.",
-		}
+		return nil, serviceerror.NewInvalidArgument("GetDomain operation failed.  Both ID and Name specified in request.")
 	} else if len(request.ID) == 0 && len(request.Name) == 0 {
-		return nil, &workflow.BadRequestError{
-			Message: "GetDomain operation failed.  Both ID and Name are empty.",
-		}
+		return nil, serviceerror.NewInvalidArgument("GetDomain operation failed.  Both ID and Name are empty.")
 	}
 
 	handleError := func(name, ID string, err error) error {
@@ -348,13 +328,9 @@ func (m *cassandraMetadataPersistenceV2) GetDomain(request *p.GetDomainRequest) 
 			identity = ID
 		}
 		if err == gocql.ErrNotFound {
-			return &workflow.EntityNotExistsError{
-				Message: fmt.Sprintf("Domain %s does not exist.", identity),
-			}
+			return serviceerror.NewNotFound(fmt.Sprintf("Domain %s does not exist.", identity))
 		}
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("GetDomain operation failed. Error %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("GetDomain operation failed. Error %v", err))
 	}
 
 	domainName := request.Name
@@ -426,9 +402,7 @@ func (m *cassandraMetadataPersistenceV2) ListDomains(request *p.ListDomainsReque
 	query = m.session.Query(templateListDomainQueryV2, constDomainPartition)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 	if iter == nil {
-		return nil, &workflow.InternalServiceError{
-			Message: "ListDomains operation failed.  Not able to create query iterator.",
-		}
+		return nil, serviceerror.NewInternal("ListDomains operation failed.  Not able to create query iterator.")
 	}
 
 	var name string
@@ -491,9 +465,7 @@ func (m *cassandraMetadataPersistenceV2) ListDomains(request *p.ListDomainsReque
 	response.NextPageToken = make([]byte, len(nextPageToken))
 	copy(response.NextPageToken, nextPageToken)
 	if err := iter.Close(); err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("ListDomains operation failed. Error: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("ListDomains operation failed. Error: %v", err))
 	}
 
 	return response, nil
@@ -559,16 +531,12 @@ func (m *cassandraMetadataPersistenceV2) updateMetadataBatch(batch *gocql.Batch,
 func (m *cassandraMetadataPersistenceV2) deleteDomain(name, ID string) error {
 	query := m.session.Query(templateDeleteDomainByNameQueryV2, constDomainPartition, name)
 	if err := query.Exec(); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("DeleteDomainByName operation failed. Error %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("DeleteDomainByName operation failed. Error %v", err))
 	}
 
 	query = m.session.Query(templateDeleteDomainQuery, ID)
 	if err := query.Exec(); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("DeleteDomain operation failed. Error %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("DeleteDomain operation failed. Error %v", err))
 	}
 
 	return nil

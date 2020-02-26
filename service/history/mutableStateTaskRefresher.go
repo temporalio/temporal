@@ -25,7 +25,8 @@ package history
 import (
 	"time"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
@@ -243,7 +244,7 @@ func (r *mutableStateTaskRefresherImpl) refreshTasksForDecision(
 
 	decision, ok := mutableState.GetPendingDecision()
 	if !ok {
-		return &shared.InternalServiceError{Message: "it could be a bug, cannot get pending decision"}
+		return serviceerror.NewInternal("it could be a bug, cannot get pending decision")
 	}
 
 	// decision already started

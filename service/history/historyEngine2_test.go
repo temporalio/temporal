@@ -27,19 +27,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/temporalio/temporal/common/primitives"
-
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	h "github.com/temporalio/temporal/.gen/go/history"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
@@ -50,6 +48,7 @@ import (
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/mocks"
 	p "github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -305,7 +304,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfNoExecution() {
 	identity := "testIdentity"
 	tl := "testTaskList"
 
-	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(nil, &workflow.EntityNotExistsError{}).Once()
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(nil, serviceerror.NewNotFound("")).Once()
 
 	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &h.RecordDecisionTaskStartedRequest{
 		DomainUUID:        common.StringPtr(domainID),
@@ -322,7 +321,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfNoExecution() {
 	})
 	s.Nil(response)
 	s.NotNil(err)
-	s.IsType(&workflow.EntityNotExistsError{}, err)
+	s.IsType(&serviceerror.NotFound{}, err)
 }
 
 func (s *engine2Suite) TestRecordDecisionTaskStartedIfGetExecutionFailed() {
@@ -385,7 +384,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyStarted() {
 	})
 	s.Nil(response)
 	s.NotNil(err)
-	s.IsType(&h.EventAlreadyStartedError{}, err)
+	s.IsType(&serviceerror.EventAlreadyStarted{}, err)
 	s.logger.Error("RecordDecisionTaskStarted failed with", tag.Error(err))
 }
 
@@ -422,7 +421,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyCompleted() {
 	})
 	s.Nil(response)
 	s.NotNil(err)
-	s.IsType(&workflow.EntityNotExistsError{}, err)
+	s.IsType(&serviceerror.NotFound{}, err)
 	s.logger.Error("RecordDecisionTaskStarted failed with", tag.Error(err))
 }
 
@@ -559,7 +558,7 @@ func (s *engine2Suite) TestRecordDecisionTaskRetryDifferentRequest() {
 
 	s.Nil(response)
 	s.NotNil(err)
-	s.IsType(&h.EventAlreadyStartedError{}, err)
+	s.IsType(&serviceerror.EventAlreadyStarted{}, err)
 	s.logger.Info("Failed with error", tag.Error(err))
 }
 
@@ -674,7 +673,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedIfNoExecution() {
 	identity := "testIdentity"
 	tl := "testTaskList"
 
-	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(nil, &workflow.EntityNotExistsError{}).Once()
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(nil, serviceerror.NewNotFound("")).Once()
 
 	response, err := s.historyEngine.RecordActivityTaskStarted(context.Background(), &h.RecordActivityTaskStartedRequest{
 		DomainUUID:        common.StringPtr(domainID),
@@ -694,7 +693,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedIfNoExecution() {
 	}
 	s.Nil(response)
 	s.NotNil(err)
-	s.IsType(&workflow.EntityNotExistsError{}, err)
+	s.IsType(&serviceerror.NotFound{}, err)
 }
 
 func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
@@ -811,7 +810,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionFail() {
 		},
 	})
 	s.NotNil(err)
-	s.IsType(&workflow.EntityNotExistsError{}, err)
+	s.IsType(&serviceerror.NotFound{}, err)
 }
 
 func (s *engine2Suite) createExecutionStartedState(we workflow.WorkflowExecution, tl, identity string,
@@ -986,8 +985,8 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_NonDeDup() {
 			RequestId:                           common.StringPtr("newRequestID"),
 		},
 	})
-	if _, ok := err.(*workflow.WorkflowExecutionAlreadyStartedError); !ok {
-		s.Fail("return err is not *shared.WorkflowExecutionAlreadyStartedError")
+	if _, ok := err.(*serviceerror.WorkflowExecutionAlreadyStarted); !ok {
+		s.Fail("return err is not *serviceerror.WorkflowExecutionAlreadyStarted")
 	}
 	s.Nil(resp)
 }
@@ -1052,8 +1051,8 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 		})
 
 		if expecedErrs[index] {
-			if _, ok := err.(*workflow.WorkflowExecutionAlreadyStartedError); !ok {
-				s.Fail("return err is not *shared.WorkflowExecutionAlreadyStartedError")
+			if _, ok := err.(*serviceerror.WorkflowExecutionAlreadyStarted); !ok {
+				s.Fail("return err is not *serviceerror.WorkflowExecutionAlreadyStarted")
 			}
 			s.Nil(resp)
 		} else {
@@ -1133,8 +1132,8 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 			})
 
 			if expecedErrs[j] {
-				if _, ok := err.(*workflow.WorkflowExecutionAlreadyStartedError); !ok {
-					s.Fail("return err is not *shared.WorkflowExecutionAlreadyStartedError")
+				if _, ok := err.(*serviceerror.WorkflowExecutionAlreadyStarted); !ok {
+					s.Fail("return err is not *serviceerror.WorkflowExecutionAlreadyStarted")
 				}
 				s.Nil(resp)
 			} else {
@@ -1148,7 +1147,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 func (s *engine2Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 	sRequest := &h.SignalWithStartWorkflowExecutionRequest{}
 	_, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
-	s.EqualError(err, "BadRequestError{Message: Missing domain UUID.}")
+	s.EqualError(err, "Missing domain UUID.")
 
 	domainID := testDomainID
 	workflowID := "wId"
@@ -1188,7 +1187,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 	sRequest := &h.SignalWithStartWorkflowExecutionRequest{}
 	_, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
-	s.EqualError(err, "BadRequestError{Message: Missing domain UUID.}")
+	s.EqualError(err, "Missing domain UUID.")
 
 	domainID := testDomainID
 	workflowID := "wId"
@@ -1215,7 +1214,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 		},
 	}
 
-	notExistErr := &workflow.EntityNotExistsError{Message: "Workflow not exist"}
+	notExistErr := serviceerror.NewNotFound("Workflow not exist")
 
 	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(nil, notExistErr).Once()
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
@@ -1229,7 +1228,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 func (s *engine2Suite) TestSignalWithStartWorkflowExecution_CreateTimeout() {
 	sRequest := &h.SignalWithStartWorkflowExecutionRequest{}
 	_, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
-	s.EqualError(err, "BadRequestError{Message: Missing domain UUID.}")
+	s.EqualError(err, "Missing domain UUID.")
 
 	domainID := testDomainID
 	workflowID := "wId"
@@ -1256,7 +1255,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_CreateTimeout() {
 		},
 	}
 
-	notExistErr := &workflow.EntityNotExistsError{Message: "Workflow not exist"}
+	notExistErr := serviceerror.NewNotFound("Workflow not exist")
 
 	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(nil, notExistErr).Once()
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Once()
@@ -1270,7 +1269,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_CreateTimeout() {
 func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning() {
 	sRequest := &h.SignalWithStartWorkflowExecutionRequest{}
 	_, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
-	s.EqualError(err, "BadRequestError{Message: Missing domain UUID.}")
+	s.EqualError(err, "Missing domain UUID.")
 
 	domainID := testDomainID
 	workflowID := "wId"

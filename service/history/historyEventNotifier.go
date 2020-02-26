@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	gen "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
@@ -138,9 +139,7 @@ func (notifier *historyEventNotifierImpl) WatchHistoryEvent(
 
 		if _, ok := subscribers[subscriberID]; ok {
 			// UUID collision
-			return &gen.InternalServiceError{
-				Message: "Unable to watch on workflow execution.",
-			}
+			return serviceerror.NewInternal("Unable to watch on workflow execution.")
 		}
 		subscribers[subscriberID] = channel
 		return nil
@@ -172,9 +171,7 @@ func (notifier *historyEventNotifierImpl) UnwatchHistoryEvent(
 
 	if !success {
 		// cannot find the subscribe ID, which means there is a bug
-		return &gen.InternalServiceError{
-			Message: "Unable to unwatch on workflow execution.",
-		}
+		return serviceerror.NewInternal("Unable to unwatch on workflow execution.")
 	}
 
 	return nil

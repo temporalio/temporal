@@ -22,8 +22,7 @@ package domain
 
 import (
 	"go.temporal.io/temporal-proto/enums"
-
-	"github.com/temporalio/temporal/.gen/go/shared"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 // domainArchivalConfigStateMachine is only used by domainHandler.
@@ -51,10 +50,10 @@ type (
 
 // the following errors represents impossible code states that should never occur
 var (
-	errInvalidState            = &shared.BadRequestError{Message: "Encountered illegal state: archival is enabled but URI is not set (should be impossible)"}
-	errInvalidEvent            = &shared.BadRequestError{Message: "Encountered illegal event: default URI is not set (should be impossible)"}
-	errCannotHandleStateChange = &shared.BadRequestError{Message: "Encountered current state and event that cannot be handled (should be impossible)"}
-	errURIUpdate               = &shared.BadRequestError{Message: "Cannot update existing archival URI"}
+	errInvalidState            = serviceerror.NewInvalidArgument("Encountered illegal state: archival is enabled but URI is not set (should be impossible)")
+	errInvalidEvent            = serviceerror.NewInvalidArgument("Encountered illegal event: default URI is not set (should be impossible)")
+	errCannotHandleStateChange = serviceerror.NewInvalidArgument("Encountered current state and event that cannot be handled (should be impossible)")
+	errURIUpdate               = serviceerror.NewInvalidArgument("Cannot update existing archival URI")
 )
 
 func neverEnabledState() *ArchivalState {

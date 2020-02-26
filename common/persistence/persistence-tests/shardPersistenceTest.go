@@ -26,13 +26,11 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-
-	pblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/temporal-proto/serviceerror"
 
-	gen "github.com/temporalio/temporal/.gen/go/shared"
+	pblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	p "github.com/temporalio/temporal/common/persistence"
 )
 
@@ -93,7 +91,7 @@ func (s *ShardPersistenceSuite) TestGetShard() {
 
 	_, err2 := s.GetShard(4766)
 	s.NotNil(err2)
-	s.IsType(&gen.EntityNotExistsError{}, err2)
+	s.IsType(&serviceerror.NotFound{}, err2)
 	log.Infof("GetShard failed with error: %v", err2)
 }
 

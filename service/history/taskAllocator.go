@@ -23,7 +23,8 @@ package history
 import (
 	"sync"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -67,7 +68,7 @@ func (t *taskAllocatorImpl) verifyActiveTask(taskDomainID string, task interface
 	if err != nil {
 		// it is possible that the domain is deleted
 		// we should treat that domain as active
-		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
+		if _, ok := err.(*serviceerror.NotFound); !ok {
 			t.logger.Warn("Cannot find domain", tag.WorkflowDomainID(taskDomainID))
 			return false, err
 		}
@@ -103,7 +104,7 @@ func (t *taskAllocatorImpl) verifyStandbyTask(standbyCluster string, taskDomainI
 	if err != nil {
 		// it is possible that the domain is deleted
 		// we should treat that domain as not active
-		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
+		if _, ok := err.(*serviceerror.NotFound); !ok {
 			t.logger.Warn("Cannot find domain", tag.WorkflowDomainID(taskDomainID))
 			return false, err
 		}

@@ -27,6 +27,8 @@ import (
 	"fmt"
 	"time"
 
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -153,11 +155,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 		baseLastEventID,
 		baseLastEventVersion,
 	)) {
-		return nil, 0, &shared.InternalServiceError{Message: fmt.Sprintf(
-			"nDCStateRebuilder unable to rebuild mutable state to event ID: %v, version: %v",
-			baseLastEventID,
-			baseLastEventVersion,
-		)}
+		return nil, 0, serviceerror.NewInternal(fmt.Sprintf("nDCStateRebuilder unable to rebuild mutable state to event ID: %v, version: %v", baseLastEventID, baseLastEventVersion))
 	}
 
 	// close rebuilt mutable state transaction clearing all generated tasks, etc.

@@ -26,6 +26,8 @@ import (
 	ctx "context"
 	"time"
 
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	h "github.com/temporalio/temporal/.gen/go/history"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
@@ -90,7 +92,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 
 	mutableState, err := context.loadWorkflowExecution()
 	if err != nil {
-		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
+		if _, ok := err.(*serviceerror.NotFound); !ok {
 			return err
 		}
 
@@ -298,7 +300,7 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 			)
 		}
 	} else {
-		return false, &workflow.InternalServiceError{Message: "The workflow is neither 2DC nor 3DC enabled."}
+		return false, serviceerror.NewInternal("The workflow is neither 2DC nor 3DC enabled.")
 	}
 
 	return true, nil

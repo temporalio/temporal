@@ -28,11 +28,8 @@ import (
 
 	"github.com/pborman/uuid"
 	"go.temporal.io/temporal-proto/serviceerror"
-	"go.uber.org/yarpc/yarpcerrors"
 
-	"github.com/temporalio/temporal/.gen/go/health"
 	hist "github.com/temporalio/temporal/.gen/go/history"
-	"github.com/temporalio/temporal/.gen/go/history/historyserviceserver"
 	r "github.com/temporalio/temporal/.gen/go/replicator"
 	gen "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
@@ -63,19 +60,18 @@ type (
 	}
 )
 
-var _ historyserviceserver.Interface = (*Handler)(nil)
 var _ EngineFactory = (*Handler)(nil)
 
 var (
-	errDomainNotSet            = &gen.BadRequestError{Message: "Domain not set on request."}
-	errWorkflowExecutionNotSet = &gen.BadRequestError{Message: "WorkflowExecution not set on request."}
-	errTaskListNotSet          = &gen.BadRequestError{Message: "Tasklist not set."}
-	errWorkflowIDNotSet        = &gen.BadRequestError{Message: "WorkflowId is not set on request."}
-	errRunIDNotValid           = &gen.BadRequestError{Message: "RunID is not valid UUID."}
-	errSourceClusterNotSet     = &gen.BadRequestError{Message: "Source Cluster not set on request."}
-	errShardIDNotSet           = &gen.BadRequestError{Message: "Shard ID not set on request."}
-	errTimestampNotSet         = &gen.BadRequestError{Message: "Timestamp not set on request."}
-	errHistoryHostThrottle     = &gen.ServiceBusyError{Message: "History host rps exceeded"}
+	errDomainNotSet            = serviceerror.NewInvalidArgument("Domain not set on request.")
+	errWorkflowExecutionNotSet = serviceerror.NewInvalidArgument("WorkflowExecution not set on request.")
+	errTaskListNotSet          = serviceerror.NewInvalidArgument("Tasklist not set.")
+	errWorkflowIDNotSet        = serviceerror.NewInvalidArgument("WorkflowId is not set on request.")
+	errRunIDNotValid           = serviceerror.NewInvalidArgument("RunID is not valid UUID.")
+	errSourceClusterNotSet     = serviceerror.NewInvalidArgument("Source Cluster not set on request.")
+	errShardIDNotSet           = serviceerror.NewInvalidArgument("Shard ID not set on request.")
+	errTimestampNotSet         = serviceerror.NewInvalidArgument("Timestamp not set on request.")
+	errHistoryHostThrottle     = serviceerror.NewResourceExhausted("History host rps exceeded.")
 )
 
 // NewHandler creates a thrift handler for the history service
@@ -156,14 +152,6 @@ func (h *Handler) CreateEngine(
 	)
 }
 
-// Health is for health check
-func (h *Handler) Health(ctx context.Context) (*health.HealthStatus, error) {
-	h.startWG.Wait()
-	h.GetLogger().Debug("History health check endpoint reached.")
-	hs := &health.HealthStatus{Ok: true, Msg: common.StringPtr("history good")}
-	return hs, nil
-}
-
 // RecordActivityTaskHeartbeat - Record Activity Task Heart beat.
 func (h *Handler) RecordActivityTaskHeartbeat(
 	ctx context.Context,
@@ -190,7 +178,7 @@ func (h *Handler) RecordActivityTaskHeartbeat(
 	heartbeatRequest := wrappedRequest.HeartbeatRequest
 	token, err0 := h.tokenSerializer.Deserialize(heartbeatRequest.TaskToken)
 	if err0 != nil {
-		err0 = &gen.BadRequestError{Message: fmt.Sprintf("Error deserializing task token. Error: %v", err0)}
+		err0 = serviceerror.NewInvalidArgument(fmt.Sprintf("Error deserializing task token. Error: %v", err0))
 		return nil, h.error(err0, scope, domainID, "")
 	}
 
@@ -330,7 +318,7 @@ func (h *Handler) RespondActivityTaskCompleted(
 	completeRequest := wrappedRequest.CompleteRequest
 	token, err0 := h.tokenSerializer.Deserialize(completeRequest.TaskToken)
 	if err0 != nil {
-		err0 = &gen.BadRequestError{Message: fmt.Sprintf("Error deserializing task token. Error: %v", err0)}
+		err0 = serviceerror.NewInvalidArgument(fmt.Sprintf("Error deserializing task token. Error: %v", err0))
 		return h.error(err0, scope, domainID, "")
 	}
 
@@ -379,7 +367,7 @@ func (h *Handler) RespondActivityTaskFailed(
 	failRequest := wrappedRequest.FailedRequest
 	token, err0 := h.tokenSerializer.Deserialize(failRequest.TaskToken)
 	if err0 != nil {
-		err0 = &gen.BadRequestError{Message: fmt.Sprintf("Error deserializing task token. Error: %v", err0)}
+		err0 = serviceerror.NewInvalidArgument(fmt.Sprintf("Error deserializing task token. Error: %v", err0))
 		return h.error(err0, scope, domainID, "")
 	}
 
@@ -428,7 +416,7 @@ func (h *Handler) RespondActivityTaskCanceled(
 	cancelRequest := wrappedRequest.CancelRequest
 	token, err0 := h.tokenSerializer.Deserialize(cancelRequest.TaskToken)
 	if err0 != nil {
-		err0 = &gen.BadRequestError{Message: fmt.Sprintf("Error deserializing task token. Error: %v", err0)}
+		err0 = serviceerror.NewInvalidArgument(fmt.Sprintf("Error deserializing task token. Error: %v", err0))
 		return h.error(err0, scope, domainID, "")
 	}
 
@@ -480,7 +468,7 @@ func (h *Handler) RespondDecisionTaskCompleted(
 	}
 	token, err0 := h.tokenSerializer.Deserialize(completeRequest.TaskToken)
 	if err0 != nil {
-		err0 = &gen.BadRequestError{Message: fmt.Sprintf("Error deserializing task token. Error: %v", err0)}
+		err0 = serviceerror.NewInvalidArgument(fmt.Sprintf("Error deserializing task token. Error: %v", err0))
 		return nil, h.error(err0, scope, domainID, "")
 	}
 
@@ -535,7 +523,7 @@ func (h *Handler) RespondDecisionTaskFailed(
 	failedRequest := wrappedRequest.FailedRequest
 	token, err0 := h.tokenSerializer.Deserialize(failedRequest.TaskToken)
 	if err0 != nil {
-		err0 = &gen.BadRequestError{Message: fmt.Sprintf("Error deserializing task token. Error: %v", err0)}
+		err0 = serviceerror.NewInvalidArgument(fmt.Sprintf("Error deserializing task token. Error: %v", err0))
 		return h.error(err0, scope, domainID, "")
 	}
 
@@ -1648,13 +1636,13 @@ func (h *Handler) convertError(err error) error {
 		return createShardOwnershipLostError(h.GetHostInfo().GetAddress(), "")
 	case *persistence.WorkflowExecutionAlreadyStartedError:
 		err := err.(*persistence.WorkflowExecutionAlreadyStartedError)
-		return &gen.InternalServiceError{Message: err.Msg}
+		return serviceerror.NewInternal(err.Msg)
 	case *persistence.CurrentWorkflowConditionFailedError:
 		err := err.(*persistence.CurrentWorkflowConditionFailedError)
-		return &gen.InternalServiceError{Message: err.Msg}
+		return serviceerror.NewInternal(err.Msg)
 	case *persistence.TransactionSizeLimitError:
 		err := err.(*persistence.TransactionSizeLimitError)
-		return &gen.BadRequestError{Message: err.Msg}
+		return serviceerror.NewInvalidArgument(err.Msg)
 	}
 
 	return err
@@ -1673,36 +1661,29 @@ func (h *Handler) updateErrorMetric(
 	}
 
 	switch err := err.(type) {
-	case *hist.ShardOwnershipLostError, *serviceerror.ShardOwnershipLost:
+	case *serviceerror.ShardOwnershipLost:
 		h.GetMetricsClient().IncCounter(scope, metrics.CadenceErrShardOwnershipLostCounter)
-	case *hist.EventAlreadyStartedError, *serviceerror.EventAlreadyStarted:
+	case *serviceerror.EventAlreadyStarted:
 		h.GetMetricsClient().IncCounter(scope, metrics.CadenceErrEventAlreadyStartedCounter)
-	case *gen.BadRequestError, *serviceerror.InvalidArgument:
+	case *serviceerror.InvalidArgument:
 		h.GetMetricsClient().IncCounter(scope, metrics.CadenceErrBadRequestCounter)
-	case *gen.DomainNotActiveError, *serviceerror.DomainNotActive:
+	case *serviceerror.DomainNotActive:
 		h.GetMetricsClient().IncCounter(scope, metrics.CadenceErrBadRequestCounter)
-	case *gen.WorkflowExecutionAlreadyStartedError, *serviceerror.WorkflowExecutionAlreadyStarted:
+	case *serviceerror.WorkflowExecutionAlreadyStarted:
 		h.GetMetricsClient().IncCounter(scope, metrics.CadenceErrExecutionAlreadyStartedCounter)
-	case *gen.EntityNotExistsError, *serviceerror.NotFound:
+	case *serviceerror.NotFound:
 		h.GetMetricsClient().IncCounter(scope, metrics.CadenceErrEntityNotExistsCounter)
-	case *gen.CancellationAlreadyRequestedError, *serviceerror.CancellationAlreadyRequested:
+	case *serviceerror.CancellationAlreadyRequested:
 		h.GetMetricsClient().IncCounter(scope, metrics.CadenceErrCancellationAlreadyRequestedCounter)
-	case *gen.LimitExceededError, *serviceerror.ResourceExhausted:
-		h.GetMetricsClient().IncCounter(scope, metrics.CadenceErrLimitExceededCounter)
-	case *gen.RetryTaskError, *serviceerror.RetryTask:
-		h.GetMetricsClient().IncCounter(scope, metrics.CadenceErrRetryTaskCounter)
-	case *gen.RetryTaskV2Error, *serviceerror.RetryTaskV2:
-		h.GetMetricsClient().IncCounter(scope, metrics.CadenceErrRetryTaskCounter)
-	case *gen.ServiceBusyError:
+	case *serviceerror.ResourceExhausted:
 		h.GetMetricsClient().IncCounter(scope, metrics.CadenceErrServiceBusyCounter)
-	case *yarpcerrors.Status:
-		if err.Code() == yarpcerrors.CodeDeadlineExceeded {
-			h.GetMetricsClient().IncCounter(scope, metrics.CadenceErrContextTimeoutCounter)
-		}
-		h.GetMetricsClient().IncCounter(scope, metrics.CadenceFailures)
+	case *serviceerror.RetryTask:
+		h.GetMetricsClient().IncCounter(scope, metrics.CadenceErrRetryTaskCounter)
+	case *serviceerror.RetryTaskV2:
+		h.GetMetricsClient().IncCounter(scope, metrics.CadenceErrRetryTaskCounter)
 	case *serviceerror.DeadlineExceeded:
 		h.GetMetricsClient().IncCounter(scope, metrics.CadenceErrContextTimeoutCounter)
-	case *gen.InternalServiceError, *serviceerror.Internal:
+	case *serviceerror.Internal:
 		h.GetMetricsClient().IncCounter(scope, metrics.CadenceFailures)
 		h.GetLogger().Error("Internal service error",
 			tag.Error(err),
@@ -1747,13 +1728,9 @@ func (h *Handler) getLoggerWithTags(
 func createShardOwnershipLostError(
 	currentHost string,
 	ownerHost string,
-) *hist.ShardOwnershipLostError {
+) *serviceerror.ShardOwnershipLost {
 
-	shardLostErr := &hist.ShardOwnershipLostError{}
-	shardLostErr.Message = common.StringPtr(fmt.Sprintf("Shard is not owned by host: %v", currentHost))
-	shardLostErr.Owner = common.StringPtr(ownerHost)
-
-	return shardLostErr
+	return serviceerror.NewShardOwnershipLost(fmt.Sprintf("Shard is not owned by host: %v", currentHost), ownerHost)
 }
 
 func validateTaskToken(token *common.TaskToken) error {

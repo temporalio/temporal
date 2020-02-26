@@ -26,18 +26,16 @@ import (
 	"math"
 	"time"
 
-	"github.com/temporalio/temporal/common/persistence/serialization"
-
-	"github.com/temporalio/temporal/common/primitives"
-
 	"github.com/dgryski/go-farm"
+	"go.temporal.io/temporal-proto/serviceerror"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/go/sqlblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/persistence/serialization"
 	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 type sqlTaskManager struct {
@@ -92,14 +90,10 @@ func (m *sqlTaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest
 			}
 			rows = []sqlplugin.TaskListsRow{row}
 			if _, err := m.db.InsertIntoTaskLists(&row); err != nil {
-				return nil, &workflow.InternalServiceError{
-					Message: fmt.Sprintf("LeaseTaskList operation failed. Failed to make task list %v of type %v. Error: %v", request.TaskList, request.TaskType, err),
-				}
+				return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskList operation failed. Failed to make task list %v of type %v. Error: %v", request.TaskList, request.TaskType, err))
 			}
 		} else {
-			return nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("LeaseTaskList operation failed. Failed to check if task list existed. Error: %v", err),
-			}
+			return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskList operation failed. Failed to check if task list existed. Error: %v", err))
 		}
 	}
 
@@ -190,9 +184,7 @@ func (m *sqlTaskManager) UpdateTaskList(request *persistence.UpdateTaskListReque
 			Data:         blob.Data,
 			DataEncoding: string(blob.Encoding),
 		}); err != nil {
-			return nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("UpdateTaskList operation failed. Failed to make sticky task list. Error: %v", err),
-			}
+			return nil, serviceerror.NewInternal(fmt.Sprintf("UpdateTaskList operation failed. Failed to make sticky task list. Error: %v", err))
 		}
 	}
 	var resp *persistence.UpdateTaskListResponse
@@ -242,7 +234,7 @@ func (m *sqlTaskManager) ListTaskList(request *persistence.ListTaskListRequest) 
 	pageToken := taskListPageToken{TaskType: math.MinInt16, DomainID: minUUID}
 	if request.PageToken != nil {
 		if err := gobDeserialize(request.PageToken, &pageToken); err != nil {
-			return nil, &workflow.InternalServiceError{Message: fmt.Sprintf("error deserializing page token: %v", err)}
+			return nil, serviceerror.NewInternal(fmt.Sprintf("error deserializing page token: %v", err))
 		}
 	}
 	var err error
@@ -257,7 +249,7 @@ func (m *sqlTaskManager) ListTaskList(request *persistence.ListTaskListRequest) 
 			PageSize:            &request.PageSize,
 		})
 		if err != nil {
-			return nil, &workflow.InternalServiceError{Message: err.Error()}
+			return nil, serviceerror.NewInternal(err.Error())
 		}
 		if len(rows) > 0 {
 			break
@@ -280,7 +272,7 @@ func (m *sqlTaskManager) ListTaskList(request *persistence.ListTaskListRequest) 
 	}
 
 	if err != nil {
-		return nil, &workflow.InternalServiceError{Message: fmt.Sprintf("error serializing nextPageToken:%v", err)}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("error serializing nextPageToken:%v", err))
 	}
 
 	resp := &persistence.ListTaskListResponse{
@@ -316,14 +308,14 @@ func (m *sqlTaskManager) DeleteTaskList(request *persistence.DeleteTaskListReque
 		RangeID:  &request.RangeID,
 	})
 	if err != nil {
-		return &workflow.InternalServiceError{Message: err.Error()}
+		return serviceerror.NewInternal(err.Error())
 	}
 	nRows, err := result.RowsAffected()
 	if err != nil {
-		return &workflow.InternalServiceError{Message: fmt.Sprintf("rowsAffected returned error:%v", err)}
+		return serviceerror.NewInternal(fmt.Sprintf("rowsAffected returned error:%v", err))
 	}
 	if nRows != 1 {
-		return &workflow.InternalServiceError{Message: fmt.Sprintf("delete failed: %v rows affected instead of 1", nRows)}
+		return serviceerror.NewInternal(fmt.Sprintf("delete failed: %v rows affected instead of 1", nRows))
 	}
 	return nil
 }
@@ -384,9 +376,7 @@ func (m *sqlTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persis
 		PageSize:     &request.BatchSize,
 	})
 	if err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("GetTasks operation failed. Failed to get rows. Error: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetTasks operation failed. Failed to get rows. Error: %v", err))
 	}
 
 	var tasks = make([]*persistence.TaskInfo, len(rows))
@@ -418,7 +408,7 @@ func (m *sqlTaskManager) CompleteTask(request *persistence.CompleteTaskRequest) 
 		TaskType:     int64(taskList.TaskType),
 		TaskID:       &taskID})
 	if err != nil && err != sql.ErrNoRows {
-		return &workflow.InternalServiceError{Message: err.Error()}
+		return serviceerror.NewInternal(err.Error())
 	}
 	return nil
 }
@@ -432,13 +422,11 @@ func (m *sqlTaskManager) CompleteTasksLessThan(request *persistence.CompleteTask
 		Limit:                &request.Limit,
 	})
 	if err != nil {
-		return 0, &workflow.InternalServiceError{Message: err.Error()}
+		return 0, serviceerror.NewInternal(err.Error())
 	}
 	nRows, err := result.RowsAffected()
 	if err != nil {
-		return 0, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("rowsAffected returned error: %v", err),
-		}
+		return 0, serviceerror.NewInternal(fmt.Sprintf("rowsAffected returned error: %v", err))
 	}
 	return int(nRows), nil
 }
@@ -452,9 +440,7 @@ func lockTaskList(tx sqlplugin.Tx, shardID int, domainID primitives.UUID, name s
 	rangeID, err := tx.LockTaskLists(&sqlplugin.TaskListsFilter{
 		ShardID: shardID, DomainID: &domainID, Name: &name, TaskType: common.Int64Ptr(int64(taskListType))})
 	if err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to lock task list. Error: %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("Failed to lock task list. Error: %v", err))
 	}
 	if rangeID != oldRangeID {
 		return &persistence.ConditionFailedError{

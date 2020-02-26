@@ -26,6 +26,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	gen "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
@@ -136,7 +137,7 @@ func (s *VisibilitySamplingSuite) TestListOpenWorkflowExecutions() {
 	// no remaining tokens
 	_, err = s.client.ListOpenWorkflowExecutions(request)
 	s.Error(err)
-	errDetail, ok := err.(*gen.ServiceBusyError)
+	errDetail, ok := err.(*serviceerror.ResourceExhausted)
 	s.True(ok)
 	s.Equal(listErrMsg, errDetail.Message)
 }
@@ -153,7 +154,7 @@ func (s *VisibilitySamplingSuite) TestListClosedWorkflowExecutions() {
 	// no remaining tokens
 	_, err = s.client.ListClosedWorkflowExecutions(request)
 	s.Error(err)
-	errDetail, ok := err.(*gen.ServiceBusyError)
+	errDetail, ok := err.(*serviceerror.ResourceExhausted)
 	s.True(ok)
 	s.Equal(listErrMsg, errDetail.Message)
 }
@@ -174,7 +175,7 @@ func (s *VisibilitySamplingSuite) TestListOpenWorkflowExecutionsByType() {
 	// no remaining tokens
 	_, err = s.client.ListOpenWorkflowExecutionsByType(request)
 	s.Error(err)
-	errDetail, ok := err.(*gen.ServiceBusyError)
+	errDetail, ok := err.(*serviceerror.ResourceExhausted)
 	s.True(ok)
 	s.Equal(listErrMsg, errDetail.Message)
 }
@@ -195,7 +196,7 @@ func (s *VisibilitySamplingSuite) TestListClosedWorkflowExecutionsByType() {
 	// no remaining tokens
 	_, err = s.client.ListClosedWorkflowExecutionsByType(request)
 	s.Error(err)
-	errDetail, ok := err.(*gen.ServiceBusyError)
+	errDetail, ok := err.(*serviceerror.ResourceExhausted)
 	s.True(ok)
 	s.Equal(listErrMsg, errDetail.Message)
 }
@@ -216,7 +217,7 @@ func (s *VisibilitySamplingSuite) TestListOpenWorkflowExecutionsByWorkflowID() {
 	// no remaining tokens
 	_, err = s.client.ListOpenWorkflowExecutionsByWorkflowID(request)
 	s.Error(err)
-	errDetail, ok := err.(*gen.ServiceBusyError)
+	errDetail, ok := err.(*serviceerror.ResourceExhausted)
 	s.True(ok)
 	s.Equal(listErrMsg, errDetail.Message)
 }
@@ -237,7 +238,7 @@ func (s *VisibilitySamplingSuite) TestListClosedWorkflowExecutionsByWorkflowID()
 	// no remaining tokens
 	_, err = s.client.ListClosedWorkflowExecutionsByWorkflowID(request)
 	s.Error(err)
-	errDetail, ok := err.(*gen.ServiceBusyError)
+	errDetail, ok := err.(*serviceerror.ResourceExhausted)
 	s.True(ok)
 	s.Equal(listErrMsg, errDetail.Message)
 }
@@ -258,7 +259,7 @@ func (s *VisibilitySamplingSuite) TestListClosedWorkflowExecutionsByStatus() {
 	// no remaining tokens
 	_, err = s.client.ListClosedWorkflowExecutionsByStatus(request)
 	s.Error(err)
-	errDetail, ok := err.(*gen.ServiceBusyError)
+	errDetail, ok := err.(*serviceerror.ResourceExhausted)
 	s.True(ok)
 	s.Equal(listErrMsg, errDetail.Message)
 }

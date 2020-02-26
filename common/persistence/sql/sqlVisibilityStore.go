@@ -26,6 +26,8 @@ import (
 	"fmt"
 	"time"
 
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
@@ -225,14 +227,10 @@ func (s *sqlVisibilityStore) GetClosedWorkflowExecution(request *p.GetClosedWork
 	})
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, &workflow.EntityNotExistsError{
-				Message: fmt.Sprintf("Workflow execution not found.  WorkflowId: %v, RunId: %v",
-					execution.GetWorkflowId(), execution.GetRunId()),
-			}
+			return nil, serviceerror.NewNotFound(fmt.Sprintf("Workflow execution not found.  WorkflowId: %v, RunId: %v",
+				execution.GetWorkflowId(), execution.GetRunId()))
 		}
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("GetClosedWorkflowExecution operation failed. Select failed: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetClosedWorkflowExecution operation failed. Select failed: %v", err))
 	}
 	rows[0].DomainID = request.DomainUUID
 	rows[0].RunID = execution.GetRunId()
@@ -246,7 +244,7 @@ func (s *sqlVisibilityStore) DeleteWorkflowExecution(request *p.VisibilityDelete
 		RunID:    &request.RunID,
 	})
 	if err != nil {
-		return &workflow.InternalServiceError{Message: err.Error()}
+		return serviceerror.NewInternal(err.Error())
 	}
 	return nil
 }
@@ -297,9 +295,7 @@ func (s *sqlVisibilityStore) listWorkflowExecutions(opName string, pageToken []b
 	}
 	rows, err := selectOp(readLevel)
 	if err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("%v operation failed. Select failed: %v", opName, err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("%v operation failed. Select failed: %v", opName, err))
 	}
 	if len(rows) == 0 {
 		return &p.InternalListWorkflowExecutionsResponse{}, nil

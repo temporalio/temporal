@@ -27,7 +27,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/common/persistence"
 )
 
@@ -210,9 +211,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 		return err
 	}
 	if targetWorkflowPolicy != transactionPolicyPassive {
-		return &shared.InternalServiceError{
-			Message: "nDCTransactionMgrForNewWorkflow createAsZombie encounter target workflow policy not being passive",
-		}
+		return serviceerror.NewInternal("nDCTransactionMgrForNewWorkflow createAsZombie encounter target workflow policy not being passive")
 	}
 
 	targetWorkflowSnapshot, targetWorkflowEventsSeq, err := targetWorkflow.getMutableState().CloseTransactionAsSnapshot(
@@ -328,9 +327,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) executeTransaction(
 		)
 
 	default:
-		return &shared.InternalServiceError{
-			Message: fmt.Sprintf("nDCTransactionMgr: encounter unknown transaction type: %v", transactionPolicy),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("nDCTransactionMgr: encounter unknown transaction type: %v", transactionPolicy))
 	}
 }
 

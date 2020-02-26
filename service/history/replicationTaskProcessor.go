@@ -29,21 +29,19 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common/primitives"
-
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
-	"go.uber.org/yarpc/yarpcerrors"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	h "github.com/temporalio/temporal/.gen/go/history"
-	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 const (
@@ -56,7 +54,7 @@ const (
 
 var (
 	// ErrUnknownReplicationTask is the error to indicate unknown replication task type
-	ErrUnknownReplicationTask = &shared.BadRequestError{Message: "unknown replication task"}
+	ErrUnknownReplicationTask = serviceerror.NewInvalidArgument("unknown replication task")
 )
 
 type (
@@ -464,7 +462,7 @@ func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
 
 func isTransientRetryableError(err error) bool {
 	switch err.(type) {
-	case *shared.BadRequestError:
+	case *serviceerror.InvalidArgument:
 		return false
 	default:
 		return true
@@ -504,24 +502,22 @@ func (p *ReplicationTaskProcessorImpl) updateFailureMetric(scope int, err error)
 	p.metricsClient.IncCounter(scope, metrics.ReplicatorFailures)
 
 	// Also update counter to distinguish between type of failures
-	switch err := err.(type) {
-	case *h.ShardOwnershipLostError:
+	switch err.(type) {
+	case *serviceerror.ShardOwnershipLost:
 		p.metricsClient.IncCounter(scope, metrics.CadenceErrShardOwnershipLostCounter)
-	case *shared.BadRequestError:
+	case *serviceerror.InvalidArgument:
 		p.metricsClient.IncCounter(scope, metrics.CadenceErrBadRequestCounter)
-	case *shared.DomainNotActiveError:
+	case *serviceerror.DomainNotActive:
 		p.metricsClient.IncCounter(scope, metrics.CadenceErrDomainNotActiveCounter)
-	case *shared.WorkflowExecutionAlreadyStartedError:
+	case *serviceerror.WorkflowExecutionAlreadyStarted:
 		p.metricsClient.IncCounter(scope, metrics.CadenceErrExecutionAlreadyStartedCounter)
-	case *shared.EntityNotExistsError:
+	case *serviceerror.NotFound:
 		p.metricsClient.IncCounter(scope, metrics.CadenceErrEntityNotExistsCounter)
-	case *shared.LimitExceededError:
+	case *serviceerror.ResourceExhausted:
 		p.metricsClient.IncCounter(scope, metrics.CadenceErrLimitExceededCounter)
-	case *shared.RetryTaskError:
+	case *serviceerror.RetryTask:
 		p.metricsClient.IncCounter(scope, metrics.CadenceErrRetryTaskCounter)
-	case *yarpcerrors.Status:
-		if err.Code() == yarpcerrors.CodeDeadlineExceeded {
-			p.metricsClient.IncCounter(scope, metrics.CadenceErrContextTimeoutCounter)
-		}
+	case *serviceerror.DeadlineExceeded:
+		p.metricsClient.IncCounter(scope, metrics.CadenceErrContextTimeoutCounter)
 	}
 }

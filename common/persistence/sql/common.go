@@ -27,7 +27,8 @@ import (
 	"encoding/gob"
 	"fmt"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
@@ -53,9 +54,7 @@ func (m *sqlStore) Close() {
 func (m *sqlStore) txExecute(operation string, f func(tx sqlplugin.Tx) error) error {
 	tx, err := m.db.BeginTx()
 	if err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("%s failed. Failed to start transaction. Error: %v", operation, err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("%s failed. Failed to start transaction. Error: %v", operation, err))
 	}
 	err = f(tx)
 	if err != nil {
@@ -67,21 +66,17 @@ func (m *sqlStore) txExecute(operation string, f func(tx sqlplugin.Tx) error) er
 		switch err.(type) {
 		case *persistence.ConditionFailedError,
 			*persistence.CurrentWorkflowConditionFailedError,
-			*workflow.InternalServiceError,
+			*serviceerror.Internal,
 			*persistence.WorkflowExecutionAlreadyStartedError,
-			*workflow.DomainAlreadyExistsError,
+			*serviceerror.DomainAlreadyExists,
 			*persistence.ShardOwnershipLostError:
 			return err
 		default:
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("%v: %v", operation, err),
-			}
+			return serviceerror.NewInternal(fmt.Sprintf("%v: %v", operation, err))
 		}
 	}
 	if err := tx.Commit(); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("%s operation failed. Failed to commit transaction. Error: %v", operation, err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("%s operation failed. Failed to commit transaction. Error: %v", operation, err))
 	}
 	return nil
 }
@@ -91,9 +86,7 @@ func gobSerialize(x interface{}) ([]byte, error) {
 	e := gob.NewEncoder(&b)
 	err := e.Encode(x)
 	if err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Error in serialization: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Error in serialization: %v", err))
 	}
 	return b.Bytes(), nil
 }
@@ -104,9 +97,7 @@ func gobDeserialize(a []byte, x interface{}) error {
 	err := d.Decode(x)
 
 	if err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Error in deserialization: %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("Error in deserialization: %v", err))
 	}
 	return nil
 }
@@ -129,12 +120,8 @@ func convertCommonErrors(
 	err error,
 ) error {
 	if err == sql.ErrNoRows {
-		return &workflow.EntityNotExistsError{
-			Message: fmt.Sprintf("%v failed. Error: %v ", operation, err),
-		}
+		return serviceerror.NewNotFound(fmt.Sprintf("%v failed. Error: %v ", operation, err))
 	}
 
-	return &workflow.InternalServiceError{
-		Message: fmt.Sprintf("%v operation failed. Error: %v", operation, err),
-	}
+	return serviceerror.NewInternal(fmt.Sprintf("%v operation failed. Error: %v", operation, err))
 }

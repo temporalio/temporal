@@ -24,8 +24,8 @@ import (
 	"fmt"
 
 	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/serviceerror"
 
-	gen "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -71,7 +71,7 @@ func (sv *SearchAttributesValidator) ValidateSearchAttributes(input *commonproto
 	if lengthOfFields > sv.searchAttributesNumberOfKeysLimit(domain) {
 		sv.logger.WithTags(tag.Number(int64(lengthOfFields)), tag.WorkflowDomainName(domain)).
 			Error("number of keys in search attributes exceed limit")
-		return &gen.BadRequestError{Message: fmt.Sprintf("number of keys %d exceed limit", lengthOfFields)}
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("number of keys %d exceed limit", lengthOfFields))
 	}
 
 	totalSize := 0
@@ -80,19 +80,19 @@ func (sv *SearchAttributesValidator) ValidateSearchAttributes(input *commonproto
 		if !sv.isValidSearchAttributes(key) {
 			sv.logger.WithTags(tag.ESKey(key), tag.WorkflowDomainName(domain)).
 				Error("invalid search attribute")
-			return &gen.BadRequestError{Message: fmt.Sprintf("%s is not valid search attribute", key)}
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s is not valid search attribute", key))
 		}
 		// verify: key is not system reserved
 		if definition.IsSystemIndexedKey(key) {
 			sv.logger.WithTags(tag.ESKey(key), tag.WorkflowDomainName(domain)).
 				Error("illegal update of system reserved attribute")
-			return &gen.BadRequestError{Message: fmt.Sprintf("%s is read-only Cadence reservered attribute", key)}
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s is read-only Cadence reservered attribute", key))
 		}
 		// verify: size of single value <= limit
 		if len(val) > sv.searchAttributesSizeOfValueLimit(domain) {
 			sv.logger.WithTags(tag.ESKey(key), tag.Number(int64(len(val))), tag.WorkflowDomainName(domain)).
 				Error("value size of search attribute exceed limit")
-			return &gen.BadRequestError{Message: fmt.Sprintf("size limit exceed for key %s", key)}
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("size limit exceed for key %s", key))
 		}
 		totalSize += len(key) + len(val)
 	}
@@ -101,7 +101,7 @@ func (sv *SearchAttributesValidator) ValidateSearchAttributes(input *commonproto
 	if totalSize > sv.searchAttributesTotalSizeLimit(domain) {
 		sv.logger.WithTags(tag.Number(int64(totalSize)), tag.WorkflowDomainName(domain)).
 			Error("total size of search attributes exceed limit")
-		return &gen.BadRequestError{Message: fmt.Sprintf("total size %d exceed limit", totalSize)}
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("total size %d exceed limit", totalSize))
 	}
 
 	return nil

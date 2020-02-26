@@ -28,16 +28,13 @@ import (
 
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
-	"go.uber.org/yarpc/yarpcerrors"
+	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/common/adapter"
-
-	h "github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/replicator"
-	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/client/history"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/codec"
@@ -81,11 +78,11 @@ const (
 
 var (
 	// ErrEmptyReplicationTask is the error to indicate empty replication task
-	ErrEmptyReplicationTask = &shared.BadRequestError{Message: "empty replication task"}
+	ErrEmptyReplicationTask = serviceerror.NewInvalidArgument("empty replication task")
 	// ErrUnknownReplicationTask is the error to indicate unknown replication task type
-	ErrUnknownReplicationTask = &shared.BadRequestError{Message: "unknown replication task"}
+	ErrUnknownReplicationTask = serviceerror.NewInvalidArgument("unknown replication task")
 	// ErrDeserializeReplicationTask is the error to indicate failure to deserialize replication task
-	ErrDeserializeReplicationTask = &shared.BadRequestError{Message: "Failed to deserialize replication task"}
+	ErrDeserializeReplicationTask = serviceerror.NewInvalidArgument("Failed to deserialize replication task")
 )
 
 func newReplicationTaskProcessor(
@@ -105,7 +102,7 @@ func newReplicationTaskProcessor(
 ) *replicationTaskProcessor {
 
 	retryableHistoryClient := history.NewRetryableClient(historyClient, common.CreateHistoryServiceRetryPolicy(),
-		common.IsWhitelistServiceTransientErrorGRPC)
+		common.IsWhitelistServiceTransientError)
 
 	return &replicationTaskProcessor{
 		currentCluster:                currentCluster,
@@ -288,7 +285,7 @@ func (p *replicationTaskProcessor) decodeAndValidateMsg(msg messaging.Message, l
 	var replicationTask replicator.ReplicationTask
 	err := p.msgEncoder.Decode(msg.Value(), &replicationTask)
 	if err != nil {
-		// return BadRequestError so processWithRetry can nack the message
+		// return InvalidArgument so processWithRetry can nack the message
 		return nil, ErrDeserializeReplicationTask
 	}
 
@@ -469,31 +466,29 @@ func (p *replicationTaskProcessor) updateFailureMetric(scope int, err error) {
 	p.metricsClient.IncCounter(scope, metrics.ReplicatorFailures)
 
 	// Also update counter to distinguish between type of failures
-	switch err := err.(type) {
-	case *h.ShardOwnershipLostError:
+	switch err.(type) {
+	case *serviceerror.ShardOwnershipLost:
 		p.metricsClient.IncCounter(scope, metrics.CadenceErrShardOwnershipLostCounter)
-	case *shared.BadRequestError:
+	case *serviceerror.InvalidArgument:
 		p.metricsClient.IncCounter(scope, metrics.CadenceErrBadRequestCounter)
-	case *shared.DomainNotActiveError:
+	case *serviceerror.DomainNotActive:
 		p.metricsClient.IncCounter(scope, metrics.CadenceErrDomainNotActiveCounter)
-	case *shared.WorkflowExecutionAlreadyStartedError:
+	case *serviceerror.WorkflowExecutionAlreadyStarted:
 		p.metricsClient.IncCounter(scope, metrics.CadenceErrExecutionAlreadyStartedCounter)
-	case *shared.EntityNotExistsError:
+	case *serviceerror.NotFound:
 		p.metricsClient.IncCounter(scope, metrics.CadenceErrEntityNotExistsCounter)
-	case *shared.LimitExceededError:
+	case *serviceerror.ResourceExhausted:
 		p.metricsClient.IncCounter(scope, metrics.CadenceErrLimitExceededCounter)
-	case *shared.RetryTaskError:
+	case *serviceerror.RetryTask:
 		p.metricsClient.IncCounter(scope, metrics.CadenceErrRetryTaskCounter)
-	case *yarpcerrors.Status:
-		if err.Code() == yarpcerrors.CodeDeadlineExceeded {
-			p.metricsClient.IncCounter(scope, metrics.CadenceErrContextTimeoutCounter)
-		}
+	case *serviceerror.DeadlineExceeded:
+		p.metricsClient.IncCounter(scope, metrics.CadenceErrContextTimeoutCounter)
 	}
 }
 
 func isTransientRetryableError(err error) bool {
 	switch err.(type) {
-	case *shared.BadRequestError:
+	case *serviceerror.InvalidArgument:
 		return false
 	default:
 		return true

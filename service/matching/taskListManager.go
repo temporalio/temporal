@@ -504,10 +504,6 @@ func (c *taskListManagerImpl) isFowardingAllowed(taskList *taskListID, kind s.Ta
 	return !taskList.IsRoot() && kind != s.TaskListKindSticky
 }
 
-func createServiceBusyError(msg string) *s.ServiceBusyError {
-	return &s.ServiceBusyError{Message: msg}
-}
-
 func (c *taskListManagerImpl) domainScope() metrics.Scope {
 	scope := c.domainScopeValue.Load().(metrics.Scope)
 	if scope != nil {

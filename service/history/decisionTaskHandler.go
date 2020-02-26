@@ -24,6 +24,7 @@ import (
 	"fmt"
 
 	"github.com/pborman/uuid"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
@@ -167,7 +168,7 @@ func (handler *decisionTaskHandlerImpl) handleDecision(decision *workflow.Decisi
 		return handler.handleDecisionUpsertWorkflowSearchAttributes(decision.UpsertWorkflowSearchAttributesDecisionAttributes)
 
 	default:
-		return &workflow.BadRequestError{Message: fmt.Sprintf("Unknown decision type: %v", decision.GetDecisionType())}
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown decision type: %v", decision.GetDecisionType()))
 	}
 }
 
@@ -186,9 +187,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionScheduleActivity(
 	if attr.GetDomain() != "" {
 		targetDomainEntry, err := handler.domainCache.GetDomain(attr.GetDomain())
 		if err != nil {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("Unable to schedule activity across domain %v.", attr.GetDomain()),
-			}
+			return serviceerror.NewInternal(fmt.Sprintf("Unable to schedule activity across domain %v.", attr.GetDomain()))
 		}
 		targetDomainID = targetDomainEntry.GetInfo().ID
 	}
@@ -220,7 +219,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionScheduleActivity(
 	switch err.(type) {
 	case nil:
 		return nil
-	case *workflow.BadRequestError:
+	case *serviceerror.InvalidArgument:
 		return handler.handlerFailDecision(
 			workflow.DecisionTaskFailedCauseScheduleActivityDuplicateID, "",
 		)
@@ -271,7 +270,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionRequestCancelActivity(
 			handler.activityNotStartedCancelled = true
 		}
 		return nil
-	case *workflow.BadRequestError:
+	case *serviceerror.InvalidArgument:
 		_, err = handler.mutableState.AddRequestCancelActivityTaskFailedEvent(
 			handler.decisionTaskCompletedID,
 			activityID,
@@ -305,7 +304,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionStartTimer(
 	switch err.(type) {
 	case nil:
 		return nil
-	case *workflow.BadRequestError:
+	case *serviceerror.InvalidArgument:
 		return handler.handlerFailDecision(
 			workflow.DecisionTaskFailedCauseStartTimerDuplicateID, "",
 		)
@@ -368,7 +367,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionCompleteWorkflow(
 	if cronBackoff == backoff.NoBackoff {
 		// not cron, so complete this workflow execution
 		if _, err := handler.mutableState.AddCompletedWorkflowEvent(handler.decisionTaskCompletedID, attr); err != nil {
-			return &workflow.InternalServiceError{Message: "Unable to add complete workflow event."}
+			return serviceerror.NewInternal("Unable to add complete workflow event.")
 		}
 		return nil
 	}
@@ -502,7 +501,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionCancelTimer(
 		//  is not entirely correct, since during these decisions processing, new event may appear
 		handler.hasUnhandledEventsBeforeDecisions = handler.mutableState.HasBufferedEvents()
 		return nil
-	case *workflow.BadRequestError:
+	case *serviceerror.InvalidArgument:
 		_, err = handler.mutableState.AddCancelTimerFailedEvent(
 			handler.decisionTaskCompletedID,
 			attr,
@@ -567,9 +566,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionRequestCancelExternalWorkf
 	if attr.GetDomain() != "" {
 		targetDomainEntry, err := handler.domainCache.GetDomain(attr.GetDomain())
 		if err != nil {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("Unable to cancel workflow across domain: %v.", attr.GetDomain()),
-			}
+			return serviceerror.NewInternal(fmt.Sprintf("Unable to cancel workflow across domain: %v.", attr.GetDomain()))
 		}
 		targetDomainID = targetDomainEntry.GetInfo().ID
 	}
@@ -715,9 +712,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionStartChildWorkflow(
 	if attr.GetDomain() != "" {
 		targetDomainEntry, err := handler.domainCache.GetDomain(attr.GetDomain())
 		if err != nil {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("Unable to schedule child execution across domain %v.", attr.GetDomain()),
-			}
+			return serviceerror.NewInternal(fmt.Sprintf("Unable to schedule child execution across domain %v.", attr.GetDomain()))
 		}
 		targetDomainID = targetDomainEntry.GetInfo().ID
 	}
@@ -782,9 +777,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionSignalExternalWorkflow(
 	if attr.GetDomain() != "" {
 		targetDomainEntry, err := handler.domainCache.GetDomain(attr.GetDomain())
 		if err != nil {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("Unable to signal workflow across domain: %v.", attr.GetDomain()),
-			}
+			return serviceerror.NewInternal(fmt.Sprintf("Unable to signal workflow across domain: %v.", attr.GetDomain()))
 		}
 		targetDomainID = targetDomainEntry.GetInfo().ID
 	}
@@ -832,9 +825,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionUpsertWorkflowSearchAttrib
 	domainID := executionInfo.DomainID
 	domainEntry, err := handler.domainCache.GetDomainByID(domainID)
 	if err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Unable to get domain for domainID: %v.", domainID),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("Unable to get domain for domainID: %v.", domainID))
 	}
 	domainName := domainEntry.GetInfo().Name
 
@@ -924,7 +915,7 @@ func (handler *decisionTaskHandlerImpl) validateDecisionAttr(
 ) error {
 
 	if err := validationFn(); err != nil {
-		if _, ok := err.(*workflow.BadRequestError); ok {
+		if _, ok := err.(*serviceerror.InvalidArgument); ok {
 			return handler.handlerFailDecision(failedCause, err.Error())
 		}
 		return err

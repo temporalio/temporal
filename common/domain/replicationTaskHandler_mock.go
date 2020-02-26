@@ -31,7 +31,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	commonproto "go.temporal.io/temporal-proto/common"
+	common "go.temporal.io/temporal-proto/common"
 )
 
 // MockReplicationTaskExecutor is a mock of ReplicationTaskExecutor interface
@@ -58,7 +58,7 @@ func (m *MockReplicationTaskExecutor) EXPECT() *MockReplicationTaskExecutorMockR
 }
 
 // Execute mocks base method
-func (m *MockReplicationTaskExecutor) Execute(task *commonproto.DomainTaskAttributes) error {
+func (m *MockReplicationTaskExecutor) Execute(task *common.DomainTaskAttributes) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Execute", task)
 	ret0, _ := ret[0].(error)

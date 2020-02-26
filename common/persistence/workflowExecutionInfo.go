@@ -23,7 +23,7 @@ package persistence
 import (
 	"fmt"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 // SetNextEventID sets the nextEventID
@@ -75,9 +75,7 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateCloseStatus(
 			}
 
 		default:
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("unknown workflow state: %v", state),
-			}
+			return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))
 		}
 	case WorkflowStateRunning:
 		switch state {
@@ -100,9 +98,7 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateCloseStatus(
 			}
 
 		default:
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("unknown workflow state: %v", state),
-			}
+			return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))
 		}
 	case WorkflowStateCompleted:
 		switch state {
@@ -121,9 +117,7 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateCloseStatus(
 			return e.createInvalidStateTransitionErr(e.State, state, closeStatus)
 
 		default:
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("unknown workflow state: %v", state),
-			}
+			return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))
 		}
 	case WorkflowStateZombie:
 		switch state {
@@ -148,14 +142,10 @@ func (e *WorkflowExecutionInfo) UpdateWorkflowStateCloseStatus(
 			}
 
 		default:
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("unknown workflow state: %v", state),
-			}
+			return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))
 		}
 	default:
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("unknown workflow state: %v", state),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))
 	}
 
 	e.State = state
@@ -170,7 +160,5 @@ func (e *WorkflowExecutionInfo) createInvalidStateTransitionErr(
 	targetState int,
 	targetCloseStatus int,
 ) error {
-	return &workflow.InternalServiceError{
-		Message: fmt.Sprintf(invalidStateTransitionMsg, currentState, targetState, targetCloseStatus),
-	}
+	return serviceerror.NewInternal(fmt.Sprintf(invalidStateTransitionMsg, currentState, targetState, targetCloseStatus))
 }

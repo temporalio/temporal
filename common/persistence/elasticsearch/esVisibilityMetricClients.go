@@ -21,7 +21,8 @@
 package elasticsearch
 
 import (
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
@@ -261,10 +262,10 @@ func (p *visibilityMetricsClient) DeleteWorkflowExecution(request *p.VisibilityD
 
 func (p *visibilityMetricsClient) updateErrorMetric(scope int, err error) {
 	switch err.(type) {
-	case *workflow.BadRequestError:
+	case *serviceerror.InvalidArgument:
 		p.metricClient.IncCounter(scope, metrics.ElasticsearchErrBadRequestCounter)
 		p.metricClient.IncCounter(scope, metrics.ElasticsearchFailures)
-	case *workflow.ServiceBusyError:
+	case *serviceerror.ResourceExhausted:
 		p.metricClient.IncCounter(scope, metrics.ElasticsearchErrBusyCounter)
 		p.metricClient.IncCounter(scope, metrics.ElasticsearchFailures)
 	default:

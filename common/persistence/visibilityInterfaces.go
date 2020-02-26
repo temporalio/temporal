@@ -21,6 +21,8 @@
 package persistence
 
 import (
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	s "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/definition"
 )
@@ -188,7 +190,7 @@ type (
 
 // NewOperationNotSupportErrorForVis create error for operation not support in visibility
 func NewOperationNotSupportErrorForVis() error {
-	return &s.BadRequestError{Message: "Operation not support. Please use on ElasticSearch"}
+	return serviceerror.NewInvalidArgument("Operation not support. Please use on ElasticSearch")
 }
 
 // IsNopUpsertWorkflowRequest return whether upsert request should be no-op

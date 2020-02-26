@@ -24,8 +24,8 @@ import (
 	"fmt"
 
 	"github.com/gocql/gocql"
+	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/persistence"
 )
 
@@ -71,17 +71,11 @@ func convertCommonErrors(
 	err error,
 ) error {
 	if err == gocql.ErrNotFound {
-		return &shared.EntityNotExistsError{
-			Message: fmt.Sprintf("%v failed. Error: %v ", operation, err),
-		}
+		return serviceerror.NewNotFound(fmt.Sprintf("%v failed. Error: %v ", operation, err))
 	} else if isTimeoutError(err) {
 		return &persistence.TimeoutError{Msg: fmt.Sprintf("%v timed out. Error: %v", operation, err)}
 	} else if isThrottlingError(err) {
-		return &shared.ServiceBusyError{
-			Message: fmt.Sprintf("%v operation failed. Error: %v", operation, err),
-		}
+		return serviceerror.NewResourceExhausted(fmt.Sprintf("%v operation failed. Error: %v", operation, err))
 	}
-	return &shared.InternalServiceError{
-		Message: fmt.Sprintf("%v operation failed. Error: %v", operation, err),
-	}
+	return serviceerror.NewInternal(fmt.Sprintf("%v operation failed. Error: %v", operation, err))
 }

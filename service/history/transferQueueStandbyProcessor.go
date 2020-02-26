@@ -23,16 +23,17 @@ package history
 import (
 	"time"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common/primitives"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/client/matching"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/xdc"
 )
 
@@ -703,9 +704,7 @@ func (t *transferQueueStandbyProcessorImpl) fetchHistoryFromRemote(
 			common.EndEventID, // use common.EndEventID since we do not know where is the end
 		)
 	} else {
-		err = &workflow.InternalServiceError{
-			Message: "transferQueueStandbyProcessor encounter empty historyResendInfo",
-		}
+		err = serviceerror.NewInternal("transferQueueStandbyProcessor encounter empty historyResendInfo")
 	}
 
 	if err != nil {

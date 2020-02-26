@@ -26,6 +26,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
@@ -108,25 +109,25 @@ func (s *decisionAttrValidatorSuite) TestValidateSignalExternalWorkflowExecution
 	var attributes *workflow.SignalExternalWorkflowExecutionDecisionAttributes
 
 	err := s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testDomainID, s.testTargetDomainID, attributes)
-	s.EqualError(err, "BadRequestError{Message: SignalExternalWorkflowExecutionDecisionAttributes is not set on decision.}")
+	s.EqualError(err, "SignalExternalWorkflowExecutionDecisionAttributes is not set on decision.")
 
 	attributes = &workflow.SignalExternalWorkflowExecutionDecisionAttributes{}
 	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testDomainID, s.testTargetDomainID, attributes)
-	s.EqualError(err, "BadRequestError{Message: Execution is nil on decision.}")
+	s.EqualError(err, "Execution is nil on decision.")
 
 	attributes.Execution = &workflow.WorkflowExecution{}
 	attributes.Execution.WorkflowId = common.StringPtr("workflow-id")
 	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testDomainID, s.testTargetDomainID, attributes)
-	s.EqualError(err, "BadRequestError{Message: SignalName is not set on decision.}")
+	s.EqualError(err, "SignalName is not set on decision.")
 
 	attributes.Execution.RunId = common.StringPtr("run-id")
 	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testDomainID, s.testTargetDomainID, attributes)
-	s.EqualError(err, "BadRequestError{Message: Invalid RunId set on decision.}")
+	s.EqualError(err, "Invalid RunId set on decision.")
 	attributes.Execution.RunId = common.StringPtr(testRunID)
 
 	attributes.SignalName = common.StringPtr("my signal name")
 	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testDomainID, s.testTargetDomainID, attributes)
-	s.EqualError(err, "BadRequestError{Message: Input is not set on decision.}")
+	s.EqualError(err, "Input is not set on decision.")
 
 	attributes.Input = []byte("test input")
 	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testDomainID, s.testTargetDomainID, attributes)
@@ -138,15 +139,15 @@ func (s *decisionAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes(
 	var attributes *workflow.UpsertWorkflowSearchAttributesDecisionAttributes
 
 	err := s.validator.validateUpsertWorkflowSearchAttributes(domainName, attributes)
-	s.EqualError(err, "BadRequestError{Message: UpsertWorkflowSearchAttributesDecisionAttributes is not set on decision.}")
+	s.EqualError(err, "UpsertWorkflowSearchAttributesDecisionAttributes is not set on decision.")
 
 	attributes = &workflow.UpsertWorkflowSearchAttributesDecisionAttributes{}
 	err = s.validator.validateUpsertWorkflowSearchAttributes(domainName, attributes)
-	s.EqualError(err, "BadRequestError{Message: SearchAttributes is not set on decision.}")
+	s.EqualError(err, "SearchAttributes is not set on decision.")
 
 	attributes.SearchAttributes = &workflow.SearchAttributes{}
 	err = s.validator.validateUpsertWorkflowSearchAttributes(domainName, attributes)
-	s.EqualError(err, "BadRequestError{Message: IndexedFields is empty on decision.}")
+	s.EqualError(err, "IndexedFields is empty on decision.")
 
 	attributes.SearchAttributes.IndexedFields = map[string][]byte{"CustomKeywordField": []byte(`bytes`)}
 	err = s.validator.validateUpsertWorkflowSearchAttributes(domainName, attributes)
@@ -221,7 +222,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_LocalToEffectiv
 	s.mockDomainCache.EXPECT().GetDomainByID(s.testTargetDomainID).Return(targetDomainEntry, nil).Times(1)
 
 	err := s.validator.validateCrossDomainCall(s.testDomainID, s.testTargetDomainID)
-	s.IsType(&workflow.BadRequestError{}, err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
 func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_LocalToGlobal() {
@@ -249,7 +250,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_LocalToGlobal()
 	s.mockDomainCache.EXPECT().GetDomainByID(s.testTargetDomainID).Return(targetDomainEntry, nil).Times(1)
 
 	err := s.validator.validateCrossDomainCall(s.testDomainID, s.testTargetDomainID)
-	s.IsType(&workflow.BadRequestError{}, err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
 func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_EffectiveLocalToLocal_SameCluster() {
@@ -299,7 +300,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_EffectiveLocalT
 	s.mockDomainCache.EXPECT().GetDomainByID(s.testTargetDomainID).Return(targetDomainEntry, nil).Times(1)
 
 	err := s.validator.validateCrossDomainCall(s.testDomainID, s.testTargetDomainID)
-	s.IsType(&workflow.BadRequestError{}, err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
 func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_EffectiveLocalToEffectiveLocal_SameCluster() {
@@ -357,7 +358,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_EffectiveLocalT
 	s.mockDomainCache.EXPECT().GetDomainByID(s.testTargetDomainID).Return(targetDomainEntry, nil).Times(1)
 
 	err := s.validator.validateCrossDomainCall(s.testDomainID, s.testTargetDomainID)
-	s.IsType(&workflow.BadRequestError{}, err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
 func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_EffectiveLocalToGlobal() {
@@ -391,7 +392,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_EffectiveLocalT
 	s.mockDomainCache.EXPECT().GetDomainByID(s.testTargetDomainID).Return(targetDomainEntry, nil).Times(1)
 
 	err := s.validator.validateCrossDomainCall(s.testDomainID, s.testTargetDomainID)
-	s.IsType(&workflow.BadRequestError{}, err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
 func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_GlobalToLocal() {
@@ -419,7 +420,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_GlobalToLocal()
 	s.mockDomainCache.EXPECT().GetDomainByID(s.testTargetDomainID).Return(targetDomainEntry, nil).Times(1)
 
 	err := s.validator.validateCrossDomainCall(s.testDomainID, s.testTargetDomainID)
-	s.IsType(&workflow.BadRequestError{}, err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
 func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_GlobalToEffectiveLocal() {
@@ -453,7 +454,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_GlobalToEffecti
 	s.mockDomainCache.EXPECT().GetDomainByID(s.testTargetDomainID).Return(targetDomainEntry, nil).Times(1)
 
 	err := s.validator.validateCrossDomainCall(s.testDomainID, s.testTargetDomainID)
-	s.IsType(&workflow.BadRequestError{}, err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
 func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_GlobalToGlobal_DiffDomain() {
@@ -488,7 +489,7 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_GlobalToGlobal_
 	s.mockDomainCache.EXPECT().GetDomainByID(s.testTargetDomainID).Return(targetDomainEntry, nil).Times(1)
 
 	err := s.validator.validateCrossDomainCall(s.testDomainID, s.testTargetDomainID)
-	s.IsType(&workflow.BadRequestError{}, err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
 func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_GlobalToGlobal_SameDomain() {

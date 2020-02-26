@@ -41,6 +41,8 @@ import (
 	"path"
 	"strconv"
 
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
@@ -188,27 +190,27 @@ func (h *historyArchiver) Get(
 	request *archiver.GetHistoryRequest,
 ) (*archiver.GetHistoryResponse, error) {
 	if err := h.ValidateURI(URI); err != nil {
-		return nil, &shared.BadRequestError{Message: archiver.ErrInvalidURI.Error()}
+		return nil, serviceerror.NewInvalidArgument(archiver.ErrInvalidURI.Error())
 	}
 
 	if err := archiver.ValidateGetRequest(request); err != nil {
-		return nil, &shared.BadRequestError{Message: archiver.ErrInvalidGetHistoryRequest.Error()}
+		return nil, serviceerror.NewInvalidArgument(archiver.ErrInvalidGetHistoryRequest.Error())
 	}
 
 	dirPath := URI.Path()
 	exists, err := directoryExists(dirPath)
 	if err != nil {
-		return nil, &shared.InternalServiceError{Message: err.Error()}
+		return nil, serviceerror.NewInternal(err.Error())
 	}
 	if !exists {
-		return nil, &shared.BadRequestError{Message: archiver.ErrHistoryNotExist.Error()}
+		return nil, serviceerror.NewInvalidArgument(archiver.ErrHistoryNotExist.Error())
 	}
 
 	var token *getHistoryToken
 	if request.NextPageToken != nil {
 		token, err = deserializeGetHistoryToken(request.NextPageToken)
 		if err != nil {
-			return nil, &shared.BadRequestError{Message: archiver.ErrNextPageTokenCorrupted.Error()}
+			return nil, serviceerror.NewInvalidArgument(archiver.ErrNextPageTokenCorrupted.Error())
 		}
 	} else if request.CloseFailoverVersion != nil {
 		token = &getHistoryToken{
@@ -218,7 +220,7 @@ func (h *historyArchiver) Get(
 	} else {
 		highestVersion, err := getHighestVersion(dirPath, request)
 		if err != nil {
-			return nil, &shared.InternalServiceError{Message: err.Error()}
+			return nil, serviceerror.NewInternal(err.Error())
 		}
 		token = &getHistoryToken{
 			CloseFailoverVersion: *highestVersion,
@@ -230,20 +232,20 @@ func (h *historyArchiver) Get(
 	filepath := path.Join(dirPath, filename)
 	exists, err = fileExists(filepath)
 	if err != nil {
-		return nil, &shared.InternalServiceError{Message: err.Error()}
+		return nil, serviceerror.NewInternal(err.Error())
 	}
 	if !exists {
-		return nil, &shared.EntityNotExistsError{Message: archiver.ErrHistoryNotExist.Error()}
+		return nil, serviceerror.NewNotFound(archiver.ErrHistoryNotExist.Error())
 	}
 
 	encodedHistoryBatches, err := readFile(filepath)
 	if err != nil {
-		return nil, &shared.InternalServiceError{Message: err.Error()}
+		return nil, serviceerror.NewInternal(err.Error())
 	}
 
 	historyBatches, err := decodeHistoryBatches(encodedHistoryBatches)
 	if err != nil {
-		return nil, &shared.InternalServiceError{Message: err.Error()}
+		return nil, serviceerror.NewInternal(err.Error())
 	}
 	historyBatches = historyBatches[token.NextBatchIdx:]
 
@@ -263,7 +265,7 @@ func (h *historyArchiver) Get(
 		token.NextBatchIdx += numOfBatches
 		nextToken, err := serializeToken(token)
 		if err != nil {
-			return nil, &shared.InternalServiceError{Message: err.Error()}
+			return nil, serviceerror.NewInternal(err.Error())
 		}
 		response.NextPageToken = nextToken
 	}

@@ -21,7 +21,8 @@
 package persistence
 
 import (
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
@@ -211,9 +212,9 @@ func (p *shardPersistenceClient) updateErrorMetric(scope int, err error) {
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrShardExistsCounter)
 	case *ShardOwnershipLostError:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrShardOwnershipLostCounter)
-	case *workflow.EntityNotExistsError:
+	case *serviceerror.NotFound:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrEntityNotExistsCounter)
-	case *workflow.ServiceBusyError:
+	case *serviceerror.ResourceExhausted:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrBusyCounter)
 		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
 	default:
@@ -553,7 +554,7 @@ func (p *workflowExecutionPersistenceClient) updateErrorMetric(scope int, err er
 	switch err.(type) {
 	case *WorkflowExecutionAlreadyStartedError:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrExecutionAlreadyStartedCounter)
-	case *workflow.EntityNotExistsError:
+	case *serviceerror.NotFound:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrEntityNotExistsCounter)
 	case *ShardOwnershipLostError:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrShardOwnershipLostCounter)
@@ -564,7 +565,7 @@ func (p *workflowExecutionPersistenceClient) updateErrorMetric(scope int, err er
 	case *TimeoutError:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrTimeoutCounter)
 		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
-	case *workflow.ServiceBusyError:
+	case *serviceerror.ResourceExhausted:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrBusyCounter)
 		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
 	default:
@@ -692,7 +693,7 @@ func (p *taskPersistenceClient) updateErrorMetric(scope int, err error) {
 	case *TimeoutError:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrTimeoutCounter)
 		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
-	case *workflow.ServiceBusyError:
+	case *serviceerror.ResourceExhausted:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrBusyCounter)
 		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
 	default:
@@ -814,13 +815,13 @@ func (p *metadataPersistenceClient) Close() {
 
 func (p *metadataPersistenceClient) updateErrorMetric(scope int, err error) {
 	switch err.(type) {
-	case *workflow.DomainAlreadyExistsError:
+	case *serviceerror.DomainAlreadyExists:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrDomainAlreadyExistsCounter)
-	case *workflow.EntityNotExistsError:
+	case *serviceerror.NotFound:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrEntityNotExistsCounter)
-	case *workflow.BadRequestError:
+	case *serviceerror.InvalidArgument:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrBadRequestCounter)
-	case *workflow.ServiceBusyError:
+	case *serviceerror.ResourceExhausted:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrBusyCounter)
 		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
 	default:
@@ -1051,9 +1052,9 @@ func (p *visibilityPersistenceClient) updateErrorMetric(scope int, err error) {
 	case *TimeoutError:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrTimeoutCounter)
 		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
-	case *workflow.EntityNotExistsError:
+	case *serviceerror.NotFound:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrEntityNotExistsCounter)
-	case *workflow.ServiceBusyError:
+	case *serviceerror.ResourceExhausted:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrBusyCounter)
 		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
 	default:
@@ -1172,14 +1173,14 @@ func (p *historyV2PersistenceClient) GetHistoryTree(request *GetHistoryTreeReque
 
 func (p *historyV2PersistenceClient) updateErrorMetric(scope int, err error) {
 	switch err.(type) {
-	case *workflow.EntityNotExistsError:
+	case *serviceerror.NotFound:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrEntityNotExistsCounter)
 	case *ConditionFailedError:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrConditionFailedCounter)
 	case *TimeoutError:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrTimeoutCounter)
 		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
-	case *workflow.ServiceBusyError:
+	case *serviceerror.ResourceExhausted:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrBusyCounter)
 		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
 	default:

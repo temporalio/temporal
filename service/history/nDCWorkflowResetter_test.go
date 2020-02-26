@@ -25,14 +25,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
@@ -242,19 +242,20 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_Error() {
 		incomingFirstEventVersion,
 	)
 	s.Error(err)
-	s.IsType(&shared.RetryTaskV2Error{}, err)
+	s.IsType(&serviceerror.RetryTaskV2{}, err)
 	s.Nil(rebuiltMutableState)
 
-	retryErr, isRetryError := err.(*shared.RetryTaskV2Error)
+	retryErr, isRetryError := err.(*serviceerror.RetryTaskV2)
 	s.True(isRetryError)
-	expectedErr := &shared.RetryTaskV2Error{
-		DomainId:          common.StringPtr(s.domainID),
-		WorkflowId:        common.StringPtr(s.workflowID),
-		RunId:             common.StringPtr(s.newRunID),
-		StartEventId:      common.Int64Ptr(common.EmptyEventID),
-		StartEventVersion: common.Int64Ptr(common.EmptyVersion),
-		EndEventId:        common.Int64Ptr(incomingFirstEventID),
-		EndEventVersion:   common.Int64Ptr(incomingFirstEventVersion),
-	}
+	expectedErr := serviceerror.NewRetryTaskV2(
+		"",
+		s.domainID,
+		s.workflowID,
+		s.newRunID,
+		common.EmptyEventID,
+		common.EmptyVersion,
+		incomingFirstEventID,
+		incomingFirstEventVersion,
+	)
 	s.Equal(retryErr, expectedErr)
 }

@@ -25,17 +25,16 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-
-	"github.com/temporalio/temporal/common/persistence/serialization"
-
-	"github.com/temporalio/temporal/common/primitives"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/go/sqlblobs"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/persistence/serialization"
 	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 func updateActivityInfos(
@@ -105,9 +104,7 @@ func updateActivityInfos(
 		}
 
 		if _, err := tx.ReplaceIntoActivityInfoMaps(rows); err != nil {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("Failed to update activity info. Failed to execute update query. Error: %v", err),
-			}
+			return serviceerror.NewInternal(fmt.Sprintf("Failed to update activity info. Failed to execute update query. Error: %v", err))
 		}
 	}
 
@@ -121,20 +118,14 @@ func updateActivityInfos(
 				ScheduleID: &v,
 			})
 			if err != nil {
-				return &workflow.InternalServiceError{
-					Message: fmt.Sprintf("Failed to update activity info. Failed to execute delete query. Error: %v", err),
-				}
+				return serviceerror.NewInternal(fmt.Sprintf("Failed to update activity info. Failed to execute delete query. Error: %v", err))
 			}
 			rowsAffected, err := result.RowsAffected()
 			if err != nil {
-				return &workflow.InternalServiceError{
-					Message: fmt.Sprintf("Failed to update activity info. Failed to verify number of rows deleted. Error: %v", err),
-				}
+				return serviceerror.NewInternal(fmt.Sprintf("Failed to update activity info. Failed to verify number of rows deleted. Error: %v", err))
 			}
 			if int(rowsAffected) != 1 {
-				return &workflow.InternalServiceError{
-					Message: fmt.Sprintf("Failed to update activity info. Deleted %v rows instead of 1", rowsAffected),
-				}
+				return serviceerror.NewInternal(fmt.Sprintf("Failed to update activity info. Deleted %v rows instead of 1", rowsAffected))
 			}
 		}
 	}
@@ -157,9 +148,7 @@ func getActivityInfoMap(
 		RunID:      runID,
 	})
 	if err != nil && err != sql.ErrNoRows {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to get activity info. Error: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to get activity info. Error: %v", err))
 	}
 
 	ret := make(map[int64]*persistence.InternalActivityInfo)
@@ -225,9 +214,7 @@ func deleteActivityInfoMap(
 		WorkflowID: workflowID,
 		RunID:      runID,
 	}); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to delete activity info map. Error: %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("Failed to delete activity info map. Error: %v", err))
 	}
 	return nil
 }
@@ -260,9 +247,7 @@ func updateTimerInfos(
 			}
 		}
 		if _, err := tx.ReplaceIntoTimerInfoMaps(rows); err != nil {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("Failed to update timer info. Failed to execute update query. Error: %v", err),
-			}
+			return serviceerror.NewInternal(fmt.Sprintf("Failed to update timer info. Failed to execute update query. Error: %v", err))
 		}
 	}
 	if len(deleteInfos) > 0 {
@@ -275,20 +260,14 @@ func updateTimerInfos(
 				TimerID:    &v,
 			})
 			if err != nil {
-				return &workflow.InternalServiceError{
-					Message: fmt.Sprintf("Failed to update timer info. Failed to execute delete query. Error: %v", err),
-				}
+				return serviceerror.NewInternal(fmt.Sprintf("Failed to update timer info. Failed to execute delete query. Error: %v", err))
 			}
 			rowsAffected, err := result.RowsAffected()
 			if err != nil {
-				return &workflow.InternalServiceError{
-					Message: fmt.Sprintf("Failed to update timer info. Failed to verify number of rows deleted. Error: %v", err),
-				}
+				return serviceerror.NewInternal(fmt.Sprintf("Failed to update timer info. Failed to verify number of rows deleted. Error: %v", err))
 			}
 			if int(rowsAffected) != 1 {
-				return &workflow.InternalServiceError{
-					Message: fmt.Sprintf("Failed to update timer info. Deleted %v rows instead of 1", rowsAffected),
-				}
+				return serviceerror.NewInternal(fmt.Sprintf("Failed to update timer info. Deleted %v rows instead of 1", rowsAffected))
 			}
 		}
 	}
@@ -310,9 +289,7 @@ func getTimerInfoMap(
 		RunID:      runID,
 	})
 	if err != nil && err != sql.ErrNoRows {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to get timer info. Error: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to get timer info. Error: %v", err))
 	}
 	ret := make(map[string]*persistenceblobs.TimerInfo)
 	for _, v := range rows {
@@ -340,9 +317,7 @@ func deleteTimerInfoMap(
 		WorkflowID: workflowID,
 		RunID:      runID,
 	}); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to delete timer info map. Error: %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("Failed to delete timer info map. Error: %v", err))
 	}
 	return nil
 }
@@ -393,9 +368,7 @@ func updateChildExecutionInfos(
 			}
 		}
 		if _, err := tx.ReplaceIntoChildExecutionInfoMaps(rows); err != nil {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("Failed to update child execution info. Failed to execute update query. Error: %v", err),
-			}
+			return serviceerror.NewInternal(fmt.Sprintf("Failed to update child execution info. Failed to execute update query. Error: %v", err))
 		}
 	}
 	if deleteInfos != nil {
@@ -406,9 +379,7 @@ func updateChildExecutionInfos(
 			RunID:       runID,
 			InitiatedID: deleteInfos,
 		}); err != nil {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("Failed to update child execution info. Failed to execute delete query. Error: %v", err),
-			}
+			return serviceerror.NewInternal(fmt.Sprintf("Failed to update child execution info. Failed to execute delete query. Error: %v", err))
 		}
 	}
 
@@ -430,9 +401,7 @@ func getChildExecutionInfoMap(
 		RunID:      runID,
 	})
 	if err != nil && err != sql.ErrNoRows {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to get timer info. Error: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to get timer info. Error: %v", err))
 	}
 
 	ret := make(map[int64]*persistence.InternalChildExecutionInfo)
@@ -479,9 +448,7 @@ func deleteChildExecutionInfoMap(
 		WorkflowID: workflowID,
 		RunID:      runID,
 	}); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to delete timer info map. Error: %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("Failed to delete timer info map. Error: %v", err))
 	}
 	return nil
 }
@@ -519,9 +486,7 @@ func updateRequestCancelInfos(
 		}
 
 		if _, err := tx.ReplaceIntoRequestCancelInfoMaps(rows); err != nil {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("Failed to update request cancel info. Failed to execute update query. Error: %v", err),
-			}
+			return serviceerror.NewInternal(fmt.Sprintf("Failed to update request cancel info. Failed to execute update query. Error: %v", err))
 		}
 	}
 	if deleteInfo == nil {
@@ -535,20 +500,14 @@ func updateRequestCancelInfos(
 		InitiatedID: deleteInfo,
 	})
 	if err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to update request cancel info. Failed to execute delete query. Error: %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("Failed to update request cancel info. Failed to execute delete query. Error: %v", err))
 	}
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to update request cancel info. Failed to verify number of rows deleted. Error: %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("Failed to update request cancel info. Failed to verify number of rows deleted. Error: %v", err))
 	}
 	if int(rowsAffected) != 1 {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to update request cancel info. Deleted %v rows instead of 1", rowsAffected),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("Failed to update request cancel info. Deleted %v rows instead of 1", rowsAffected))
 	}
 	return nil
 }
@@ -568,9 +527,7 @@ func getRequestCancelInfoMap(
 		RunID:      runID,
 	})
 	if err != nil && err != sql.ErrNoRows {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to get request cancel info. Error: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to get request cancel info. Error: %v", err))
 	}
 
 	ret := make(map[int64]*persistence.RequestCancelInfo)
@@ -604,9 +561,7 @@ func deleteRequestCancelInfoMap(
 		WorkflowID: workflowID,
 		RunID:      runID,
 	}); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to delete request cancel info map. Error: %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("Failed to delete request cancel info map. Error: %v", err))
 	}
 	return nil
 }
@@ -647,9 +602,7 @@ func updateSignalInfos(
 		}
 
 		if _, err := tx.ReplaceIntoSignalInfoMaps(rows); err != nil {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("Failed to update signal info. Failed to execute update query. Error: %v", err),
-			}
+			return serviceerror.NewInternal(fmt.Sprintf("Failed to update signal info. Failed to execute update query. Error: %v", err))
 		}
 	}
 	if deleteInfo == nil {
@@ -663,20 +616,14 @@ func updateSignalInfos(
 		InitiatedID: deleteInfo,
 	})
 	if err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to update signal info. Failed to execute delete query. Error: %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("Failed to update signal info. Failed to execute delete query. Error: %v", err))
 	}
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to update signal info. Failed to verify number of rows deleted. Error: %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("Failed to update signal info. Failed to verify number of rows deleted. Error: %v", err))
 	}
 	if int(rowsAffected) != 1 {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to update signal info. Deleted %v rows instead of 1", rowsAffected),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("Failed to update signal info. Deleted %v rows instead of 1", rowsAffected))
 	}
 	return nil
 }
@@ -696,9 +643,7 @@ func getSignalInfoMap(
 		RunID:      runID,
 	})
 	if err != nil && err != sql.ErrNoRows {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to get signal info. Error: %v", err),
-		}
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to get signal info. Error: %v", err))
 	}
 
 	ret := make(map[int64]*persistence.SignalInfo)
@@ -735,9 +680,7 @@ func deleteSignalInfoMap(
 		WorkflowID: workflowID,
 		RunID:      runID,
 	}); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to delete signal info map. Error: %v", err),
-		}
+		return serviceerror.NewInternal(fmt.Sprintf("Failed to delete signal info map. Error: %v", err))
 	}
 	return nil
 }
