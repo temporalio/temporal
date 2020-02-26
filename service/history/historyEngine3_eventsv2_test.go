@@ -266,7 +266,7 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 
 	sRequest := &h.SignalWithStartWorkflowExecutionRequest{}
 	_, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
-	s.EqualError(err, "InvalidArgument{Message: Missing domain UUID.}")
+	s.EqualError(err, "Missing domain UUID.")
 
 	domainID := testDomainID
 	workflowID := "wId"
@@ -312,7 +312,7 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 
 	sRequest := &h.SignalWithStartWorkflowExecutionRequest{}
 	_, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
-	s.EqualError(err, "InvalidArgument{Message: Missing domain UUID.}")
+	s.EqualError(err, "Missing domain UUID.")
 
 	domainID := testDomainID
 	workflowID := "wId"

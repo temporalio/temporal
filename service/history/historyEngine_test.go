@@ -2207,7 +2207,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowFail
 		},
 	})
 
-	s.EqualError(err, "InvalidArgument{Message: RunID is not valid UUID.}")
+	s.EqualError(err, "RunID is not valid UUID.")
 }
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowFailed_UnKnownDomain() {
@@ -2379,7 +2379,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoAIdProvided() {
 			Identity:  &identity,
 		},
 	})
-	s.EqualError(err, "InvalidArgument{Message: Neither ActivityID nor ScheduleID is provided}")
+	s.EqualError(err, "Neither ActivityID nor ScheduleID is provided")
 }
 
 func (s *engineSuite) TestRespondActivityTaskCompletedIfNotFound() {
@@ -2913,7 +2913,7 @@ func (s *engineSuite) TestRespondActivityTaskFailededIfNoAIdProvided() {
 			Identity:  &identity,
 		},
 	})
-	s.EqualError(err, "InvalidArgument{Message: Neither ActivityID nor ScheduleID is provided}")
+	s.EqualError(err, "Neither ActivityID nor ScheduleID is provided")
 }
 
 func (s *engineSuite) TestRespondActivityTaskFailededIfNotFound() {
@@ -3696,7 +3696,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoAIdProvided() {
 			Identity:  &identity,
 		},
 	})
-	s.EqualError(err, "InvalidArgument{Message: Neither ActivityID nor ScheduleID is provided}")
+	s.EqualError(err, "Neither ActivityID nor ScheduleID is provided")
 }
 
 func (s *engineSuite) TestRespondActivityTaskCanceledIfNotFound() {
@@ -4685,7 +4685,7 @@ func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_TimerFired() 
 func (s *engineSuite) TestSignalWorkflowExecution() {
 	signalRequest := &history.SignalWorkflowExecutionRequest{}
 	err := s.mockHistoryEngine.SignalWorkflowExecution(context.Background(), signalRequest)
-	s.EqualError(err, "InvalidArgument{Message: Missing domain UUID.}")
+	s.EqualError(err, "Missing domain UUID.")
 
 	we := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("wId"),
@@ -4726,7 +4726,7 @@ func (s *engineSuite) TestSignalWorkflowExecution() {
 func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest() {
 	signalRequest := &history.SignalWorkflowExecutionRequest{}
 	err := s.mockHistoryEngine.SignalWorkflowExecution(context.Background(), signalRequest)
-	s.EqualError(err, "InvalidArgument{Message: Missing domain UUID.}")
+	s.EqualError(err, "Missing domain UUID.")
 
 	we := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("wId2"),
@@ -4770,7 +4770,7 @@ func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest() {
 func (s *engineSuite) TestSignalWorkflowExecution_Failed() {
 	signalRequest := &history.SignalWorkflowExecutionRequest{}
 	err := s.mockHistoryEngine.SignalWorkflowExecution(context.Background(), signalRequest)
-	s.EqualError(err, "InvalidArgument{Message: Missing domain UUID.}")
+	s.EqualError(err, "Missing domain UUID.")
 
 	we := &workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("wId"),
@@ -4802,13 +4802,13 @@ func (s *engineSuite) TestSignalWorkflowExecution_Failed() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
 
 	err = s.mockHistoryEngine.SignalWorkflowExecution(context.Background(), signalRequest)
-	s.EqualError(err, "EntityNotExistsError{Message: workflow execution already completed}")
+	s.EqualError(err, "workflow execution already completed")
 }
 
 func (s *engineSuite) TestRemoveSignalMutableState() {
 	removeRequest := &history.RemoveSignalMutableStateRequest{}
 	err := s.mockHistoryEngine.RemoveSignalMutableState(context.Background(), removeRequest)
-	s.EqualError(err, "InvalidArgument{Message: Missing domain UUID.}")
+	s.EqualError(err, "Missing domain UUID.")
 
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("wId"),

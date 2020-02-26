@@ -1392,7 +1392,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 	s.mockHistoryV2Mgr.On("ReadHistoryBranchByBatch", readHistoryReq).Return(readHistoryResp, nil).Once()
 
 	_, err := s.historyEngine.ResetWorkflowExecution(context.Background(), request)
-	s.EqualError(err, "InvalidArgument{Message: it is not allowed resetting to a point that workflow has pending request cancel.}")
+	s.EqualError(err, "it is not allowed resetting to a point that workflow has pending request cancel.")
 }
 
 func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCurrent() {

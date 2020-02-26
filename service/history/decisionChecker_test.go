@@ -109,25 +109,25 @@ func (s *decisionAttrValidatorSuite) TestValidateSignalExternalWorkflowExecution
 	var attributes *workflow.SignalExternalWorkflowExecutionDecisionAttributes
 
 	err := s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testDomainID, s.testTargetDomainID, attributes)
-	s.EqualError(err, "InvalidArgument{Message: SignalExternalWorkflowExecutionDecisionAttributes is not set on decision.}")
+	s.EqualError(err, "SignalExternalWorkflowExecutionDecisionAttributes is not set on decision.")
 
 	attributes = &workflow.SignalExternalWorkflowExecutionDecisionAttributes{}
 	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testDomainID, s.testTargetDomainID, attributes)
-	s.EqualError(err, "InvalidArgument{Message: Execution is nil on decision.}")
+	s.EqualError(err, "Execution is nil on decision.")
 
 	attributes.Execution = &workflow.WorkflowExecution{}
 	attributes.Execution.WorkflowId = common.StringPtr("workflow-id")
 	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testDomainID, s.testTargetDomainID, attributes)
-	s.EqualError(err, "InvalidArgument{Message: SignalName is not set on decision.}")
+	s.EqualError(err, "SignalName is not set on decision.")
 
 	attributes.Execution.RunId = common.StringPtr("run-id")
 	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testDomainID, s.testTargetDomainID, attributes)
-	s.EqualError(err, "InvalidArgument{Message: Invalid RunId set on decision.}")
+	s.EqualError(err, "Invalid RunId set on decision.")
 	attributes.Execution.RunId = common.StringPtr(testRunID)
 
 	attributes.SignalName = common.StringPtr("my signal name")
 	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testDomainID, s.testTargetDomainID, attributes)
-	s.EqualError(err, "InvalidArgument{Message: Input is not set on decision.}")
+	s.EqualError(err, "Input is not set on decision.")
 
 	attributes.Input = []byte("test input")
 	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testDomainID, s.testTargetDomainID, attributes)
@@ -139,15 +139,15 @@ func (s *decisionAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes(
 	var attributes *workflow.UpsertWorkflowSearchAttributesDecisionAttributes
 
 	err := s.validator.validateUpsertWorkflowSearchAttributes(domainName, attributes)
-	s.EqualError(err, "InvalidArgument{Message: UpsertWorkflowSearchAttributesDecisionAttributes is not set on decision.}")
+	s.EqualError(err, "UpsertWorkflowSearchAttributesDecisionAttributes is not set on decision.")
 
 	attributes = &workflow.UpsertWorkflowSearchAttributesDecisionAttributes{}
 	err = s.validator.validateUpsertWorkflowSearchAttributes(domainName, attributes)
-	s.EqualError(err, "InvalidArgument{Message: SearchAttributes is not set on decision.}")
+	s.EqualError(err, "SearchAttributes is not set on decision.")
 
 	attributes.SearchAttributes = &workflow.SearchAttributes{}
 	err = s.validator.validateUpsertWorkflowSearchAttributes(domainName, attributes)
-	s.EqualError(err, "InvalidArgument{Message: IndexedFields is empty on decision.}")
+	s.EqualError(err, "IndexedFields is empty on decision.")
 
 	attributes.SearchAttributes.IndexedFields = map[string][]byte{"CustomKeywordField": []byte(`bytes`)}
 	err = s.validator.validateUpsertWorkflowSearchAttributes(domainName, attributes)

@@ -73,7 +73,7 @@ func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
 	}
 	attr.IndexedFields = fields
 	err = validator.ValidateSearchAttributes(attr, domain)
-	s.Equal("InvalidArgument{Message: number of keys 3 exceed limit}", err.Error())
+	s.Equal("number of keys 3 exceed limit", err.Error())
 
 	fields = map[string][]byte{
 		"InvalidKey": []byte(`1`),
