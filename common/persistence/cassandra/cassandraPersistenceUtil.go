@@ -1465,9 +1465,10 @@ func updateTimerInfos(
 		}
 
 		batch.Query(templateUpdateTimerInfoQuery,
-			a.TimerID,
-			datablob.Data,
-			datablob.Encoding,
+			a.TimerID, // timermap key
+			datablob.Data, // timermap data
+			datablob.Encoding, // timermap encoding
+			shardID, // where ...
 			rowTypeExecution,
 			domainID,
 			workflowID,

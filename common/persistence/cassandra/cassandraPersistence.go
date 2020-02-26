@@ -358,7 +358,7 @@ workflow_state = ? ` +
 		`and task_id = ? ` +
 		`IF range_id = ?`
 
-	templateGetWorkflowExecutionQuery = `SELECT execution, replication_state, activity_map, timer_map, timer_map_encoding ` +
+	templateGetWorkflowExecutionQuery = `SELECT execution, replication_state, activity_map, timer_map, timer_map_encoding, ` +
 		`child_executions_map, request_cancel_map, signal_map, signal_requested, buffered_events_list, ` +
 		`buffered_replication_tasks_map, version_histories, version_histories_encoding, checksum ` +
 		`FROM executions ` +
@@ -454,7 +454,7 @@ workflow_state = ? ` +
 		`and task_id = ? `
 
 	templateUpdateTimerInfoQuery = `UPDATE executions ` +
-		`SET timer_map[ ? ] = ? and timer_map_encoding = ? ` +
+		`SET timer_map[ ? ] = ?, timer_map_encoding = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and domain_id = ? ` +
@@ -464,7 +464,7 @@ workflow_state = ? ` +
 		`and task_id = ? `
 
 	templateResetTimerInfoQuery = `UPDATE executions ` +
-		`SET timer_map = ? and timer_map_encoding = ? ` +
+		`SET timer_map = ?, timer_map_encoding = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and domain_id = ? ` +
