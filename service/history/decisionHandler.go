@@ -196,7 +196,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 
 				// Looks like DecisionTask already started as a result of another call.
 				// It is OK to drop the task at this point.
-				return nil, &h.EventAlreadyStartedError{Message: "Decision task already started."}
+				return nil, serviceerror.NewEventAlreadyStarted("Decision task already started.")
 			}
 
 			_, decision, err = mutableState.AddDecisionTaskStartedEvent(scheduleID, requestID, req.PollRequest)

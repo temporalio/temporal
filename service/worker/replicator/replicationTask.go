@@ -27,7 +27,6 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/client/history"
 	"github.com/temporalio/temporal/common/clock"
@@ -318,7 +317,7 @@ func (t *activityReplicationTask) HandleErr(
 	if !okV1 && !okV2 {
 		return err
 	} else if okV1 {
-		if retryV1Err.GetRunId() == "" {
+		if retryV1Err.RunId == "" {
 			return err
 		}
 
@@ -327,8 +326,8 @@ func (t *activityReplicationTask) HandleErr(
 		defer stopwatch.Stop()
 
 		// this is the retry error
-		beginRunID := retryV1Err.GetRunId()
-		beginEventID := retryV1Err.GetNextEventId()
+		beginRunID := retryV1Err.RunId
+		beginEventID := retryV1Err.NextEventId
 		endRunID := t.queueID.RunID
 		endEventID := t.taskID + 1 // the next event ID should be at activity schedule ID + 1
 		resendErr := t.historyRereplicator.SendMultiWorkflowHistory(
@@ -343,13 +342,13 @@ func (t *activityReplicationTask) HandleErr(
 		}
 	} else if okV2 {
 		if resendErr := t.nDCHistoryResender.SendSingleWorkflowHistory(
-			retryV2Err.GetDomainId(),
-			retryV2Err.GetWorkflowId(),
-			retryV2Err.GetRunId(),
-			retryV2Err.GetStartEventId(),
-			retryV2Err.GetStartEventVersion(),
-			retryV2Err.GetEndEventId(),
-			retryV2Err.GetEndEventVersion(),
+			retryV2Err.DomainId,
+			retryV2Err.WorkflowId,
+			retryV2Err.RunId,
+			retryV2Err.StartEventId,
+			retryV2Err.StartEventVersion,
+			retryV2Err.EndEventId,
+			retryV2Err.EndEventVersion,
 		); resendErr != nil {
 			t.logger.Error("error resend history", tag.Error(resendErr))
 			// should return the replication error, not the resending error
@@ -378,7 +377,7 @@ func (t *historyReplicationTask) HandleErr(
 	}
 
 	retryErr, ok := t.convertRetryTaskError(err)
-	if !ok || retryErr.GetRunId() == "" {
+	if !ok || retryErr.RunId == "" {
 		return err
 	}
 
@@ -387,8 +386,8 @@ func (t *historyReplicationTask) HandleErr(
 	defer stopwatch.Stop()
 
 	// this is the retry error
-	beginRunID := retryErr.GetRunId()
-	beginEventID := retryErr.GetNextEventId()
+	beginRunID := retryErr.RunId
+	beginEventID := retryErr.NextEventId
 	endRunID := t.queueID.RunID
 	endEventID := t.taskID
 	resendErr := t.historyRereplicator.SendMultiWorkflowHistory(
@@ -420,7 +419,7 @@ func (t *historyMetadataReplicationTask) HandleErr(
 	err error,
 ) error {
 	retryErr, ok := t.convertRetryTaskError(err)
-	if !ok || retryErr.GetRunId() == "" {
+	if !ok || retryErr.RunId == "" {
 		return err
 	}
 
@@ -429,8 +428,8 @@ func (t *historyMetadataReplicationTask) HandleErr(
 	defer stopwatch.Stop()
 
 	// this is the retry error
-	beginRunID := retryErr.GetRunId()
-	beginEventID := retryErr.GetNextEventId()
+	beginRunID := retryErr.RunId
+	beginEventID := retryErr.NextEventId
 	endRunID := t.queueID.RunID
 	endEventID := t.taskID
 	resendErr := t.historyRereplicator.SendMultiWorkflowHistory(
@@ -468,13 +467,13 @@ func (t *historyReplicationV2Task) HandleErr(err error) error {
 	defer stopwatch.Stop()
 
 	if resendErr := t.nDCHistoryResender.SendSingleWorkflowHistory(
-		retryErr.GetDomainId(),
-		retryErr.GetWorkflowId(),
-		retryErr.GetRunId(),
-		retryErr.GetStartEventId(),
-		retryErr.GetStartEventVersion(),
-		retryErr.GetEndEventId(),
-		retryErr.GetEndEventVersion(),
+		retryErr.DomainId,
+		retryErr.WorkflowId,
+		retryErr.RunId,
+		retryErr.StartEventId,
+		retryErr.StartEventVersion,
+		retryErr.EndEventId,
+		retryErr.EndEventVersion,
 	); resendErr != nil {
 		t.logger.Error("error resend history", tag.Error(resendErr))
 		// should return the replication error, not the resending error
@@ -538,16 +537,6 @@ func (t *workflowReplicationTask) convertRetryTaskError(
 	err error,
 ) (*serviceerror.RetryTask, bool) {
 
-	if rtErr, ok := err.(*serviceerror.RetryTask); ok {
-		return &shared.RetryTaskError{
-			Message:     rtErr.Message,
-			DomainId:    &rtErr.DomainId,
-			WorkflowId:  &rtErr.WorkflowId,
-			RunId:       &rtErr.RunId,
-			NextEventId: &rtErr.NextEventId,
-		}, true
-	}
-
 	retError, ok := err.(*serviceerror.RetryTask)
 	return retError, ok
 }
@@ -555,19 +544,6 @@ func (t *workflowReplicationTask) convertRetryTaskError(
 func (t *workflowReplicationTask) convertRetryTaskV2Error(
 	err error,
 ) (*serviceerror.RetryTaskV2, bool) {
-
-	if rtErr, ok := err.(*serviceerror.RetryTaskV2); ok {
-		return &shared.RetryTaskV2Error{
-			Message:           rtErr.Message,
-			DomainId:          &rtErr.DomainId,
-			WorkflowId:        &rtErr.WorkflowId,
-			RunId:             &rtErr.RunId,
-			StartEventId:      &rtErr.StartEventId,
-			StartEventVersion: &rtErr.StartEventVersion,
-			EndEventId:        &rtErr.EndEventId,
-			EndEventVersion:   &rtErr.EndEventVersion,
-		}, true
-	}
 
 	retError, ok := err.(*serviceerror.RetryTaskV2)
 	return retError, ok

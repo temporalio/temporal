@@ -29,7 +29,6 @@ import (
 	"github.com/pborman/uuid"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/health"
 	hist "github.com/temporalio/temporal/.gen/go/history"
 	r "github.com/temporalio/temporal/.gen/go/replicator"
 	gen "github.com/temporalio/temporal/.gen/go/shared"
@@ -151,14 +150,6 @@ func (h *Handler) CreateEngine(
 		h.replicationTaskFetchers,
 		h.GetMatchingRawClient(),
 	)
-}
-
-// Health is for health check
-func (h *Handler) Health(ctx context.Context) (*health.HealthStatus, error) {
-	h.startWG.Wait()
-	h.GetLogger().Debug("History health check endpoint reached.")
-	hs := &health.HealthStatus{Ok: true, Msg: common.StringPtr("history good")}
-	return hs, nil
 }
 
 // RecordActivityTaskHeartbeat - Record Activity Task Heart beat.

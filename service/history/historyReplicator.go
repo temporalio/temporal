@@ -1335,13 +1335,13 @@ func newRetryTaskErrorWithHint(
 	nextEventID int64,
 ) *serviceerror.RetryTask {
 
-	return &shared.RetryTaskError{
-		Message:     msg,
-		DomainId:    common.StringPtr(domainID),
-		WorkflowId:  common.StringPtr(workflowID),
-		RunId:       common.StringPtr(runID),
-		NextEventId: common.Int64Ptr(nextEventID),
-	}
+	return serviceerror.NewRetryTask(
+		msg,
+		domainID,
+		workflowID,
+		runID,
+		nextEventID,
+	)
 }
 
 func notify(

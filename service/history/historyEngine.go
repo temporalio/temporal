@@ -718,9 +718,7 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 		request.CurrentBranchToken = response.CurrentBranchToken
 	}
 	if !bytes.Equal(request.CurrentBranchToken, response.CurrentBranchToken) {
-		return nil, &workflow.CurrentBranchChangedError{
-			Message:            "current branch token and request branch token doesn't match.",
-			CurrentBranchToken: response.CurrentBranchToken}
+		return nil, serviceerror.NewCurrentBranchChanged("current branch token and request branch token doesn't match.", response.CurrentBranchToken)
 	}
 	// set the run id in case query the current running workflow
 	execution.RunId = response.Execution.RunId
@@ -746,9 +744,7 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 		}
 		// check again if the current branch token changed
 		if !bytes.Equal(request.CurrentBranchToken, response.CurrentBranchToken) {
-			return nil, &workflow.CurrentBranchChangedError{
-				Message:            "current branch token and request branch token doesn't match.",
-				CurrentBranchToken: response.CurrentBranchToken}
+			return nil, serviceerror.NewCurrentBranchChanged("current branch token and request branch token doesn't match.", response.CurrentBranchToken)
 		}
 		if expectedNextEventID < response.GetNextEventId() || !response.GetIsWorkflowRunning() {
 			return response, nil
@@ -770,9 +766,7 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 				response.WorkflowState = common.Int32Ptr(int32(event.workflowState))
 				response.WorkflowCloseState = common.Int32Ptr(int32(event.workflowCloseState))
 				if !bytes.Equal(request.CurrentBranchToken, event.currentBranchToken) {
-					return nil, &workflow.CurrentBranchChangedError{
-						Message:            "Current branch token and request branch token doesn't match.",
-						CurrentBranchToken: event.currentBranchToken}
+					return nil, serviceerror.NewCurrentBranchChanged("Current branch token and request branch token doesn't match.", event.currentBranchToken)
 				}
 				if expectedNextEventID < response.GetNextEventId() || !response.GetIsWorkflowRunning() {
 					return response, nil
@@ -906,7 +900,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 					},
 				}, nil
 			case workflow.QueryResultTypeFailed:
-				return nil, &workflow.QueryFailedError{Message: result.GetErrorMessage()}
+				return nil, serviceerror.NewQueryFailed(result.GetErrorMessage())
 			default:
 				scope.IncCounter(metrics.QueryRegistryInvalidStateCount)
 				return nil, ErrQueryEnteredInvalidState
@@ -1382,7 +1376,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 				// Looks like ActivityTask already started as a result of another call.
 				// It is OK to drop the task at this point.
 				e.logger.Debug("Potentially duplicate task.", tag.TaskID(request.GetTaskId()), tag.WorkflowScheduleID(scheduleID), tag.TaskType(persistence.TransferTaskTypeActivityTask))
-				return &h.EventAlreadyStartedError{Message: "Activity task already started."}
+				return serviceerror.NewEventAlreadyStarted("Activity task already started.")
 			}
 
 			if _, err := mutableState.AddActivityTaskStartedEvent(
@@ -2769,11 +2763,11 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyHelper(
 }
 
 func getWorkflowAlreadyStartedError(errMsg string, createRequestID string, workflowID string, runID string) error {
-	return &workflow.WorkflowExecutionAlreadyStartedError{
-		Message:        common.StringPtr(fmt.Sprintf(errMsg, workflowID, runID)),
-		StartRequestId: common.StringPtr(fmt.Sprintf("%v", createRequestID)),
-		RunId:          common.StringPtr(fmt.Sprintf("%v", runID)),
-	}
+	return serviceerror.NewWorkflowExecutionAlreadyStarted(
+		fmt.Sprintf(errMsg, workflowID, runID),
+		createRequestID,
+		runID,
+	)
 }
 
 func (e *historyEngineImpl) GetReplicationMessages(

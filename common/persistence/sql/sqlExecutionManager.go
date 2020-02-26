@@ -28,8 +28,9 @@ import (
 	"math"
 	"time"
 
-	"github.com/temporalio/temporal/common/persistence/serialization"
 	"go.temporal.io/temporal-proto/serviceerror"
+
+	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/gogo/protobuf/types"
 
@@ -37,7 +38,6 @@ import (
 
 	"github.com/temporalio/temporal/common/primitives"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/collection"
 	"github.com/temporalio/temporal/common/log"
@@ -217,13 +217,9 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, &workflow.EntityNotExistsError{
-				Message: fmt.Sprintf(
-					"Workflow execution not found.  WorkflowId: %v, RunId: %v",
-					request.Execution.GetWorkflowId(),
-					request.Execution.GetRunId(),
-				),
-			}
+			return nil, serviceerror.NewNotFound(fmt.Sprintf("Workflow execution not found.  WorkflowId: %v, RunId: %v",
+				request.Execution.GetWorkflowId(),
+				request.Execution.GetRunId()))
 		}
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed. Error: %v", err))
 	}

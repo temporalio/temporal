@@ -32,6 +32,7 @@ import (
 	"github.com/uber-go/tally"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/shared"
@@ -141,25 +142,25 @@ func (s *replicationTaskExecutorSuite) TearDownTest() {
 }
 
 func (s *replicationTaskExecutorSuite) TestConvertRetryTaskError_OK() {
-	err := &shared.RetryTaskError{}
+	err := serviceerror.NewRetryTask("", "", "", "", common.EmptyEventID)
 	_, ok := s.replicationTaskHandler.convertRetryTaskError(err)
 	s.True(ok)
 }
 
 func (s *replicationTaskExecutorSuite) TestConvertRetryTaskError_NotOK() {
-	err := &shared.RetryTaskV2Error{}
+	err := serviceerror.NewRetryTaskV2("", "", "", "", common.EmptyEventID, common.EmptyVersion, common.EmptyEventID, common.EmptyVersion)
 	_, ok := s.replicationTaskHandler.convertRetryTaskError(err)
 	s.False(ok)
 }
 
 func (s *replicationTaskExecutorSuite) TestConvertRetryTaskV2Error_OK() {
-	err := &shared.RetryTaskV2Error{}
+	err := serviceerror.NewRetryTaskV2("", "", "", "", common.EmptyEventID, common.EmptyVersion, common.EmptyEventID, common.EmptyVersion)
 	_, ok := s.replicationTaskHandler.convertRetryTaskV2Error(err)
 	s.True(ok)
 }
 
 func (s *replicationTaskExecutorSuite) TestConvertRetryTaskV2Error_NotOK() {
-	err := &shared.RetryTaskError{}
+	err := serviceerror.NewRetryTask("", "", "", "", common.EmptyEventID)
 	_, ok := s.replicationTaskHandler.convertRetryTaskV2Error(err)
 	s.False(ok)
 }

@@ -27,8 +27,8 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 
 	persist "github.com/temporalio/temporal/.gen/go/persistenceblobs"
@@ -271,7 +271,7 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 
 	// Validate they match our initializations
 	s.NotNil(err)
-	s.IsType(&shared.EntityNotExistsError{}, err)
+	s.IsType(&serviceerror.NotFound{}, err)
 	s.Nil(getResp)
 
 	var clusterNameToPersist = "testing"
@@ -305,7 +305,7 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 
 	// Case 4 - Init, data persisted
 	// Attempt to overwrite with new values
-	var wrongClusterName string = "overWriteClusterName"
+	var wrongClusterName = "overWriteClusterName"
 	secondResp, err := s.ClusterMetadataManager.InitializeImmutableClusterMetadata(&p.InitializeImmutableClusterMetadataRequest{
 		ImmutableClusterMetadata: persist.ImmutableClusterMetadata{
 			ClusterName:       &wrongClusterName,

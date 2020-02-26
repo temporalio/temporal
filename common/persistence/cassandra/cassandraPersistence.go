@@ -29,7 +29,6 @@ import (
 	"github.com/gogo/protobuf/types"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cassandra"
 	"github.com/temporalio/temporal/common/log"
@@ -1193,10 +1192,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 	result := make(map[string]interface{})
 	if err := query.MapScan(result); err != nil {
 		if err == gocql.ErrNotFound {
-			return nil, &workflow.EntityNotExistsError{
-				Message: fmt.Sprintf("Workflow execution not found.  WorkflowId: %v, RunId: %v",
-					*execution.WorkflowId, *execution.RunId),
-			}
+			return nil, serviceerror.NewNotFound(fmt.Sprintf("Workflow execution not found.  WorkflowId: %v, RunId: %v", *execution.WorkflowId, *execution.RunId))
 		} else if isThrottlingError(err) {
 			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("GetWorkflowExecution operation failed. Error: %v", err))
 		}
@@ -1926,10 +1922,7 @@ func (d *cassandraPersistence) GetCurrentExecution(request *p.GetCurrentExecutio
 	result := make(map[string]interface{})
 	if err := query.MapScan(result); err != nil {
 		if err == gocql.ErrNotFound {
-			return nil, &workflow.EntityNotExistsError{
-				Message: fmt.Sprintf("Workflow execution not found.  WorkflowId: %v",
-					request.WorkflowID),
-			}
+			return nil, serviceerror.NewNotFound(fmt.Sprintf("Workflow execution not found.  WorkflowId: %v", request.WorkflowID))
 		} else if isThrottlingError(err) {
 			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("GetCurrentExecution operation failed. Error: %v", err))
 		}

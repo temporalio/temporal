@@ -28,8 +28,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/temporalio/temporal/common/primitives"
 	"go.temporal.io/temporal-proto/serviceerror"
+
+	"github.com/temporalio/temporal/common/primitives"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
@@ -38,7 +39,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	gen "github.com/temporalio/temporal/.gen/go/shared"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
@@ -353,7 +353,7 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 	req.MinEventID = 19
 	req.NextPageToken = nil
 	_, err = s.HistoryV2Mgr.ReadHistoryBranch(req)
-	s.IsType(&gen.EntityNotExistsError{}, err)
+	s.IsType(&serviceerror.NotFound{}, err)
 
 	err = s.deleteHistoryBranch(bi2)
 	s.Nil(err)

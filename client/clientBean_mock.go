@@ -28,15 +28,12 @@
 package client
 
 import (
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
-	yarpc "go.uber.org/yarpc"
-
 	admin "github.com/temporalio/temporal/client/admin"
 	frontend "github.com/temporalio/temporal/client/frontend"
 	history "github.com/temporalio/temporal/client/history"
 	matching "github.com/temporalio/temporal/client/matching"
+	reflect "reflect"
 )
 
 // MockBean is a mock of Bean interface
@@ -191,42 +188,4 @@ func (m *MockBean) SetRemoteFrontendClient(cluster string, client frontend.Clien
 func (mr *MockBeanMockRecorder) SetRemoteFrontendClient(cluster, client interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetRemoteFrontendClient", reflect.TypeOf((*MockBean)(nil).SetRemoteFrontendClient), cluster, client)
-}
-
-// MockDispatcherProvider is a mock of DispatcherProvider interface
-type MockDispatcherProvider struct {
-	ctrl     *gomock.Controller
-	recorder *MockDispatcherProviderMockRecorder
-}
-
-// MockDispatcherProviderMockRecorder is the mock recorder for MockDispatcherProvider
-type MockDispatcherProviderMockRecorder struct {
-	mock *MockDispatcherProvider
-}
-
-// NewMockDispatcherProvider creates a new mock instance
-func NewMockDispatcherProvider(ctrl *gomock.Controller) *MockDispatcherProvider {
-	mock := &MockDispatcherProvider{ctrl: ctrl}
-	mock.recorder = &MockDispatcherProviderMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use
-func (m *MockDispatcherProvider) EXPECT() *MockDispatcherProviderMockRecorder {
-	return m.recorder
-}
-
-// Get mocks base method
-func (m *MockDispatcherProvider) Get(name, address string) (*yarpc.Dispatcher, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Get", name, address)
-	ret0, _ := ret[0].(*yarpc.Dispatcher)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Get indicates an expected call of Get
-func (mr *MockDispatcherProviderMockRecorder) Get(name, address interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockDispatcherProvider)(nil).Get), name, address)
 }

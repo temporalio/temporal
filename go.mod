@@ -10,13 +10,13 @@ require (
 	github.com/apache/thrift v0.0.0-20161221203622-b2a4d4ae21c7
 	github.com/aws/aws-sdk-go v1.29.4
 	github.com/benbjohnson/clock v1.0.0 // indirect
+	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bitly/go-hostpool v0.1.0 // indirect
 	github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869
 	github.com/bmizerany/perks v0.0.0-20141205001514-d9a9656a3a4b // indirect
 	github.com/bsm/sarama-cluster v2.1.13+incompatible
 	github.com/cactus/go-statsd-client v3.1.1+incompatible
 	github.com/cch123/elasticsql v0.0.0-20190321073543-a1a440758eb9
-	github.com/crossdock/crossdock-go v0.0.0-20160816171116-049aabb0122b // indirect
 	github.com/davecgh/go-spew v1.1.1
 	github.com/dgryski/go-farm v0.0.0-20190423205320-6a90982ecee2
 	github.com/eapache/go-resiliency v1.2.0 // indirect
@@ -49,6 +49,7 @@ require (
 	github.com/mattn/go-isatty v0.0.10 // indirect
 	github.com/mattn/go-runewidth v0.0.6 // indirect
 	github.com/mattn/go-sqlite3 v1.11.0 // indirect
+	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/olekukonko/tablewriter v0.0.1
 	github.com/olivere/elastic v6.2.21+incompatible
 	github.com/onsi/ginkgo v1.10.3 // indirect
@@ -57,15 +58,12 @@ require (
 	github.com/pborman/uuid v0.0.0-20180906182336-adf5a7427709
 	github.com/pierrec/lz4 v0.0.0-20190701081048-057d66e894a4 // indirect
 	github.com/prashantv/protectmem v0.0.0-20171002184600-e20412882b3a // indirect
-	github.com/prometheus/client_golang v1.3.0 // indirect
 	github.com/robfig/cron v1.2.0
-	github.com/samuel/go-thrift v0.0.0-20191111193933-5165175b40af // indirect
 	github.com/sirupsen/logrus v1.4.2
 	github.com/streadway/quantile v0.0.0-20150917103942-b0c588724d25 // indirect
 	github.com/stretchr/testify v1.4.0
 	github.com/uber-common/bark v1.2.1 // indirect
 	github.com/uber-go/kafka-client v0.2.3-0.20191018205945-8b3555b395f9
-	github.com/uber-go/mapdecode v1.0.0 // indirect
 	github.com/uber-go/tally v3.3.15+incompatible
 	github.com/uber/ringpop-go v0.8.5
 	github.com/uber/tchannel-go v1.16.0
@@ -75,11 +73,8 @@ require (
 	go.temporal.io/temporal v0.10.7
 	go.temporal.io/temporal-proto v0.0.0-20200226010821-09e4e1541c59
 	go.uber.org/atomic v1.5.1
-	go.uber.org/fx v1.10.0 // indirect
 	go.uber.org/multierr v1.4.0
-	go.uber.org/net/metrics v1.2.0 // indirect
 	go.uber.org/thriftrw v1.20.2
-	go.uber.org/yarpc v1.42.1
 	go.uber.org/zap v1.13.0
 	golang.org/x/crypto v0.0.0-20190701094942-4def268fd1a4 // indirect
 	golang.org/x/oauth2 v0.0.0-20190226205417-e64efc72b421

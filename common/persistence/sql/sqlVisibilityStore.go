@@ -226,10 +226,8 @@ func (s *sqlVisibilityStore) GetClosedWorkflowExecution(request *p.GetClosedWork
 	})
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, &workflow.EntityNotExistsError{
-				Message: fmt.Sprintf("Workflow execution not found.  WorkflowId: %v, RunId: %v",
-					execution.GetWorkflowId(), execution.GetRunId()),
-			}
+			return nil, serviceerror.NewNotFound(fmt.Sprintf("Workflow execution not found.  WorkflowId: %v, RunId: %v",
+				execution.GetWorkflowId(), execution.GetRunId()))
 		}
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetClosedWorkflowExecution operation failed. Select failed: %v", err))
 	}

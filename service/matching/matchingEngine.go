@@ -498,7 +498,7 @@ func (e *matchingEngineImpl) QueryWorkflow(ctx context.Context, queryRequest *m.
 		case workflow.QueryTaskCompletedTypeCompleted:
 			return &workflow.QueryWorkflowResponse{QueryResult: workerResponse.GetCompletedRequest().GetQueryResult()}, nil
 		case workflow.QueryTaskCompletedTypeFailed:
-			return nil, &workflow.QueryFailedError{Message: workerResponse.GetCompletedRequest().GetErrorMessage()}
+			return nil, serviceerror.NewQueryFailed(workerResponse.GetCompletedRequest().GetErrorMessage())
 		default:
 			return nil, serviceerror.NewInternal("unknown query completed type")
 		}

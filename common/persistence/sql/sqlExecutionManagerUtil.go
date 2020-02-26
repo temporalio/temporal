@@ -37,7 +37,6 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/go/sqlblobs"
 	"github.com/temporalio/temporal/common"
 	p "github.com/temporalio/temporal/common/persistence"
@@ -638,15 +637,11 @@ func lockNextEventID(
 	})
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, &workflow.EntityNotExistsError{
-				Message: fmt.Sprintf(
-					"lockNextEventID failed. Unable to lock executions row with (shard, domain, workflow, run) = (%v,%v,%v,%v) which does not exist.",
-					shardID,
-					domainID,
-					workflowID,
-					runID,
-				),
-			}
+			return nil, serviceerror.NewNotFound(fmt.Sprintf("lockNextEventID failed. Unable to lock executions row with (shard, domain, workflow, run) = (%v,%v,%v,%v) which does not exist.",
+				shardID,
+				domainID,
+				workflowID,
+				runID))
 		}
 		return nil, serviceerror.NewInternal(fmt.Sprintf("lockNextEventID failed. Error: %v", err))
 	}

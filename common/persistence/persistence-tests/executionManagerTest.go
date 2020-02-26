@@ -31,22 +31,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/temporalio/temporal/common/primitives"
-
 	"github.com/gogo/protobuf/types"
-
-	pblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-
-	"github.com/temporalio/temporal/common/checksum"
-
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	gen "github.com/temporalio/temporal/.gen/go/shared"
+	pblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/checksum"
 	"github.com/temporalio/temporal/common/cluster"
 	p "github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -219,7 +216,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateCloseStatus() {
 	for _, invalidCloseStatus := range invalidCloseStatuses {
 		req.NewWorkflowSnapshot.ExecutionInfo.CloseStatus = invalidCloseStatus
 		_, err := s.ExecutionManager.CreateWorkflowExecution(req)
-		s.IsType(&gen.InternalServiceError{}, err)
+		s.IsType(serviceerror.NewInternal(""), err)
 	}
 	req.NewWorkflowSnapshot.ExecutionInfo.CloseStatus = p.WorkflowCloseStatusNone
 	_, err := s.ExecutionManager.CreateWorkflowExecution(req)
@@ -240,7 +237,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateCloseStatus() {
 	for _, invalidCloseStatus := range invalidCloseStatuses {
 		req.NewWorkflowSnapshot.ExecutionInfo.CloseStatus = invalidCloseStatus
 		_, err := s.ExecutionManager.CreateWorkflowExecution(req)
-		s.IsType(&gen.InternalServiceError{}, err)
+		s.IsType(serviceerror.NewInternal(""), err)
 	}
 	req.NewWorkflowSnapshot.ExecutionInfo.CloseStatus = p.WorkflowCloseStatusNone
 	_, err = s.ExecutionManager.CreateWorkflowExecution(req)
@@ -261,11 +258,11 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateCloseStatus() {
 	for _, invalidCloseStatus := range invalidCloseStatuses {
 		req.NewWorkflowSnapshot.ExecutionInfo.CloseStatus = invalidCloseStatus
 		_, err := s.ExecutionManager.CreateWorkflowExecution(req)
-		s.IsType(&gen.InternalServiceError{}, err)
+		s.IsType(serviceerror.NewInternal(""), err)
 	}
 	req.NewWorkflowSnapshot.ExecutionInfo.CloseStatus = p.WorkflowCloseStatusNone
 	_, err = s.ExecutionManager.CreateWorkflowExecution(req)
-	s.IsType(&gen.InternalServiceError{}, err)
+	s.IsType(serviceerror.NewInternal(""), err)
 
 	// for zombie workflow creation, we must use existing workflow ID which got created
 	// since we do not allow creation of zombie workflow without current record
@@ -280,7 +277,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateCloseStatus() {
 	for _, invalidCloseStatus := range invalidCloseStatuses {
 		req.NewWorkflowSnapshot.ExecutionInfo.CloseStatus = invalidCloseStatus
 		_, err := s.ExecutionManager.CreateWorkflowExecution(req)
-		s.IsType(&gen.InternalServiceError{}, err)
+		s.IsType(serviceerror.NewInternal(""), err)
 	}
 	req.NewWorkflowSnapshot.ExecutionInfo.CloseStatus = p.WorkflowCloseStatusNone
 	_, err = s.ExecutionManager.CreateWorkflowExecution(req)
@@ -333,7 +330,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionWithZombieState() {
 	_, err := s.ExecutionManager.CreateWorkflowExecution(req)
 	s.Nil(err) // allow creating a zombie workflow if no current running workflow
 	_, err = s.GetCurrentWorkflowRunID(domainID, workflowID)
-	s.IsType(&gen.EntityNotExistsError{}, err) // no current workflow
+	s.IsType(&serviceerror.NotFound{}, err) // no current workflow
 
 	workflowExecutionRunning := gen.WorkflowExecution{
 		WorkflowId: common.StringPtr(workflowID),
@@ -461,7 +458,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateCloseStatus() {
 			RangeID: s.ShardInfo.RangeID,
 			Mode:    p.UpdateWorkflowModeUpdateCurrent,
 		})
-		s.IsType(&gen.InternalServiceError{}, err)
+		s.IsType(serviceerror.NewInternal(""), err)
 	}
 
 	updatedInfo = copyWorkflowExecutionInfo(info.ExecutionInfo)
@@ -477,7 +474,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateCloseStatus() {
 		RangeID: s.ShardInfo.RangeID,
 		Mode:    p.UpdateWorkflowModeUpdateCurrent,
 	})
-	s.IsType(&gen.InternalServiceError{}, err)
+	s.IsType(serviceerror.NewInternal(""), err)
 
 	for _, closeStatus := range closeStatuses {
 		updatedInfo.CloseStatus = closeStatus
@@ -546,7 +543,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateCloseStatus() {
 			RangeID: s.ShardInfo.RangeID,
 			Mode:    p.UpdateWorkflowModeBypassCurrent,
 		})
-		s.IsType(&gen.InternalServiceError{}, err)
+		s.IsType(serviceerror.NewInternal(""), err)
 	}
 }
 
@@ -1668,7 +1665,7 @@ func (s *ExecutionManagerSuite) TestDeleteWorkflow() {
 
 	_, err3 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	s.Error(err3, "expected non nil error.")
-	s.IsType(&gen.EntityNotExistsError{}, err3)
+	s.IsType(&serviceerror.NotFound{}, err3)
 
 	err5 := s.DeleteWorkflowExecution(info0)
 	s.NoError(err5)
@@ -1726,7 +1723,7 @@ func (s *ExecutionManagerSuite) TestDeleteCurrentWorkflow() {
 	runID0, err1 = s.GetCurrentWorkflowRunID(domainID, workflowExecution.GetWorkflowId())
 	s.Error(err1)
 	s.Empty(runID0)
-	_, ok := err1.(*gen.EntityNotExistsError)
+	_, ok := err1.(*serviceerror.NotFound)
 	s.True(ok)
 
 	// execution record should still be there
@@ -1776,13 +1773,11 @@ func (s *ExecutionManagerSuite) TestUpdateDeleteWorkflow() {
 	runID0, err1 = s.GetCurrentWorkflowRunID(domainID, workflowExecution.GetWorkflowId())
 	s.Error(err1)
 	s.Empty(runID0)
-	_, ok := err1.(*gen.EntityNotExistsError)
-	s.True(ok)
-
+	_, ok := err1.(*serviceerror.NotFound)
 	// execution record should still be there
 	_, err2 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	s.Error(err2)
-	_, ok = err2.(*gen.EntityNotExistsError)
+	_, ok = err2.(*serviceerror.NotFound)
 	s.True(ok)
 }
 
@@ -1811,7 +1806,7 @@ func (s *ExecutionManagerSuite) TestCleanupCorruptedWorkflow() {
 	runID0, err4 := s.GetCurrentWorkflowRunID(domainID, workflowExecution.GetWorkflowId())
 	s.Error(err4)
 	s.Empty(runID0)
-	_, ok := err4.(*gen.EntityNotExistsError)
+	_, ok := err4.(*serviceerror.NotFound)
 	s.True(ok)
 
 	// we should still be able to load with runID
@@ -1848,7 +1843,7 @@ func (s *ExecutionManagerSuite) TestCleanupCorruptedWorkflow() {
 	// execution record should be gone
 	_, err9 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	s.Error(err9)
-	_, ok = err9.(*gen.EntityNotExistsError)
+	_, ok = err9.(*serviceerror.NotFound)
 	s.True(ok)
 }
 

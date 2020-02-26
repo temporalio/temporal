@@ -28,7 +28,6 @@ import (
 	"github.com/uber-go/tally"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/health"
 	m "github.com/temporalio/temporal/.gen/go/matching"
 	gen "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
@@ -89,14 +88,6 @@ func (h *Handler) Start() {
 // Stop stops the handler
 func (h *Handler) Stop() {
 	h.engine.Stop()
-}
-
-// Health is for health check
-func (h *Handler) Health(ctx context.Context) (*health.HealthStatus, error) {
-	h.startWG.Wait()
-	h.GetLogger().Debug("Matching service health check endpoint reached.")
-	hs := &health.HealthStatus{Ok: true, Msg: common.StringPtr("matching good")}
-	return hs, nil
 }
 
 // startRequestProfile initiates recording of request metrics

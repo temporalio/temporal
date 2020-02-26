@@ -586,10 +586,8 @@ func (v *cassandraVisibilityPersistence) GetClosedWorkflowExecution(
 
 	wfexecution, has := readClosedWorkflowExecutionRecord(iter)
 	if !has {
-		return nil, &workflow.EntityNotExistsError{
-			Message: fmt.Sprintf("Workflow execution not found.  WorkflowId: %v, RunId: %v",
-				execution.GetWorkflowId(), execution.GetRunId()),
-		}
+		return nil, serviceerror.NewNotFound(fmt.Sprintf("Workflow execution not found.  WorkflowId: %v, RunId: %v",
+			execution.GetWorkflowId(), execution.GetRunId()))
 	}
 
 	if err := iter.Close(); err != nil {
