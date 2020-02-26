@@ -165,15 +165,6 @@ message ChildExecutionInfo {
     int32 parentClosePolicy = 13;
 }
 
-message SignalInfo {
-    int64 version = 1;
-    int64 initiatedEventBatchID = 2;
-    string requestID = 3;
-    string name = 4;
-    bytes input = 5;
-    bytes control = 6;
-}
-
 message RequestCancelInfo {
     int64 version = 1;
     int64 initiatedEventBatchID = 2;
