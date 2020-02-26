@@ -56,8 +56,8 @@ func (s *VersionTestSuite) SetupTest() {
 }
 
 func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
-	keyspace := "cadence_test"
-	visKeyspace := "cadence_visibility_test"
+	keyspace := "temporal_ver_test_"
+	visKeyspace := "temporal_vis_ver_test_"
 	_, filename, _, ok := runtime.Caller(0)
 	s.True(ok)
 	root := path.Dir(path.Dir(path.Dir(filename)))
