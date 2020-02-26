@@ -21,6 +21,7 @@
 package cassandra
 
 import (
+	"crypto/tls"
 	"strings"
 
 	"github.com/gocql/gocql"
@@ -54,6 +55,10 @@ func NewCassandraCluster(cfg config.Cassandra) *gocql.ClusterConfig {
 			KeyPath:                cfg.TLS.KeyFile,
 			CaPath:                 cfg.TLS.CaFile,
 			EnableHostVerification: cfg.TLS.EnableHostVerification,
+
+			Config: &tls.Config{
+				ServerName: cfg.TLS.ServerName,
+			},
 		}
 	}
 	if cfg.MaxConns > 0 {
