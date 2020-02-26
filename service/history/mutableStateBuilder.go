@@ -38,7 +38,6 @@ import (
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/definition"
-	"github.com/temporalio/temporal/common/errors"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
@@ -4423,7 +4422,7 @@ func (e *mutableStateBuilder) closeTransactionWithPolicyCheck(
 
 	if activeCluster != currentCluster {
 		domainID := e.GetExecutionInfo().DomainID
-		return errors.NewDomainNotActiveError(domainID, currentCluster, activeCluster)
+		return serviceerror.NewDomainNotActive(domainID, currentCluster, activeCluster)
 	}
 	return nil
 }

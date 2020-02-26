@@ -1154,7 +1154,7 @@ func (t *transferQueueActiveProcessorImpl) requestCancelExternalExecutionComplet
 			return err
 		})
 
-	if _, ok := err.(*shared.EntityNotExistsError); ok {
+	if _, ok := err.(*serviceerror.NotFound); ok {
 		// this could happen if this is a duplicate processing of the task,
 		// or the execution has already completed.
 		return nil
@@ -1193,7 +1193,7 @@ func (t *transferQueueActiveProcessorImpl) signalExternalExecutionCompleted(
 			return err
 		})
 
-	if _, ok := err.(*shared.EntityNotExistsError); ok {
+	if _, ok := err.(*serviceerror.NotFound); ok {
 		// this could happen if this is a duplicate processing of the task,
 		// or the execution has already completed.
 		return nil
@@ -1232,7 +1232,7 @@ func (t *transferQueueActiveProcessorImpl) requestCancelExternalExecutionFailed(
 			return err
 		})
 
-	if _, ok := err.(*shared.EntityNotExistsError); ok {
+	if _, ok := err.(*serviceerror.NotFound); ok {
 		// this could happen if this is a duplicate processing of the task,
 		// or the execution has already completed.
 		return nil
@@ -1273,7 +1273,7 @@ func (t *transferQueueActiveProcessorImpl) signalExternalExecutionFailed(
 			return err
 		})
 
-	if _, ok := err.(*shared.EntityNotExistsError); ok {
+	if _, ok := err.(*serviceerror.NotFound); ok {
 		// this could happen if this is a duplicate processing of the task,
 		// or the execution has already completed.
 		return nil
@@ -1534,7 +1534,7 @@ func (t *transferQueueActiveProcessorImpl) resetWorkflow(
 	case nil:
 		return nil
 
-	case *shared.BadRequestError:
+	case *serviceerror.InvalidArgument:
 		// This means the reset point is corrupted and not retry able.
 		// There must be a bug in our system that we must fix.(for example, history is not the same in active/passive)
 		t.metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.AutoResetPointCorruptionCounter)

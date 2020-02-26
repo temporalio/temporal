@@ -164,7 +164,7 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowCloseTasks(
 	switch err.(type) {
 	case nil:
 		retentionInDays = domainEntry.GetRetentionDays(executionInfo.WorkflowID)
-	case *shared.EntityNotExistsError:
+	case *serviceerror.NotFound:
 		// domain is not accessible, use default value above
 	default:
 		return err

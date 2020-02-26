@@ -50,7 +50,6 @@ import (
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/definition"
-	ce "github.com/temporalio/temporal/common/errors"
 	"github.com/temporalio/temporal/common/headers"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -617,7 +616,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 			}
 
 			if mutableState.GetCurrentVersion() < t.LastWriteVersion {
-				return nil, ce.NewDomainNotActiveError(
+				return nil, serviceerror.NewDomainNotActive(
 					*request.Domain,
 					clusterMetadata.GetCurrentClusterName(),
 					clusterMetadata.ClusterNameForFailoverVersion(t.LastWriteVersion),
@@ -1866,7 +1865,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 			// workflow not exist, will create workflow then signal
 			mutableState, err1 := context.loadWorkflowExecution()
 			if err1 != nil {
-				if _, ok := err1.(*workflow.EntityNotExistsError); ok {
+				if _, ok := err1.(*serviceerror.NotFound); ok {
 					break
 				}
 				return nil, err1
@@ -1916,7 +1915,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 			return nil, ErrMaxAttemptsExceeded
 		}
 	} else {
-		if _, ok := err0.(*workflow.EntityNotExistsError); !ok {
+		if _, ok := err0.(*serviceerror.NotFound); !ok {
 			return nil, err0
 		}
 		// workflow not exist, will create workflow then signal
@@ -1960,7 +1959,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 			return nil, err
 		}
 		if prevLastWriteVersion > mutableState.GetCurrentVersion() {
-			return nil, ce.NewDomainNotActiveError(
+			return nil, serviceerror.NewDomainNotActive(
 				domainEntry.GetInfo().Name,
 				clusterMetadata.GetCurrentClusterName(),
 				clusterMetadata.ClusterNameForFailoverVersion(prevLastWriteVersion),

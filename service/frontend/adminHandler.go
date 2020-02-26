@@ -406,7 +406,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 		common.IntPtr(shardID),
 	)
 	if err != nil {
-		if _, ok := err.(*shared.EntityNotExistsError); ok {
+		if _, ok := err.(*serviceerror.NotFound); ok {
 			// when no events can be returned from DB, DB layer will return
 			// EntityNotExistsError, this API shall return empty response
 			return &adminservice.GetWorkflowExecutionRawHistoryResponse{
@@ -542,7 +542,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 		ShardID:       common.IntPtr(shardID),
 	})
 	if err != nil {
-		if _, ok := err.(*shared.EntityNotExistsError); ok {
+		if _, ok := err.(*serviceerror.NotFound); ok {
 			// when no events can be returned from DB, DB layer will return
 			// EntityNotExistsError, this API shall return empty response
 			return &adminservice.GetWorkflowExecutionRawHistoryV2Response{

@@ -34,7 +34,6 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/errors"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
@@ -783,7 +782,7 @@ func (entry *DomainCacheEntry) GetDomainNotActiveErr() error {
 		// domain is consider active
 		return nil
 	}
-	return errors.NewDomainNotActiveError(
+	return serviceerror.NewDomainNotActive(
 		entry.info.Name,
 		entry.clusterMetadata.GetCurrentClusterName(),
 		entry.replicationConfig.ActiveClusterName,

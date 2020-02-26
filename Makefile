@@ -18,7 +18,6 @@ default: test
 # define the list of thrift files the service depends on
 # (if you have some)
 THRIFTRW_SRCS = \
-  idl/github.com/temporalio/temporal/temporal.thrift \
   idl/github.com/temporalio/temporal/health.thrift \
   idl/github.com/temporalio/temporal/history.thrift \
   idl/github.com/temporalio/temporal/matching.thrift \

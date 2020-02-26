@@ -27,6 +27,7 @@ import (
 
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/shared"
@@ -331,16 +332,16 @@ FilterLoop:
 //TODO: remove this code after 2DC deprecation
 func (e *replicationTaskExecutorImpl) convertRetryTaskError(
 	err error,
-) (*shared.RetryTaskError, bool) {
+) (*serviceerror.RetryTask, bool) {
 
-	retError, ok := err.(*shared.RetryTaskError)
+	retError, ok := err.(*serviceerror.RetryTask)
 	return retError, ok
 }
 
 func (e *replicationTaskExecutorImpl) convertRetryTaskV2Error(
 	err error,
-) (*shared.RetryTaskV2Error, bool) {
+) (*serviceerror.RetryTaskV2, bool) {
 
-	retError, ok := err.(*shared.RetryTaskV2Error)
+	retError, ok := err.(*serviceerror.RetryTaskV2)
 	return retError, ok
 }

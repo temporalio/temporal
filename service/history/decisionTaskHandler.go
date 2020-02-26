@@ -219,7 +219,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionScheduleActivity(
 	switch err.(type) {
 	case nil:
 		return nil
-	case *workflow.BadRequestError:
+	case *serviceerror.InvalidArgument:
 		return handler.handlerFailDecision(
 			workflow.DecisionTaskFailedCauseScheduleActivityDuplicateID, "",
 		)
@@ -270,7 +270,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionRequestCancelActivity(
 			handler.activityNotStartedCancelled = true
 		}
 		return nil
-	case *workflow.BadRequestError:
+	case *serviceerror.InvalidArgument:
 		_, err = handler.mutableState.AddRequestCancelActivityTaskFailedEvent(
 			handler.decisionTaskCompletedID,
 			activityID,
@@ -304,7 +304,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionStartTimer(
 	switch err.(type) {
 	case nil:
 		return nil
-	case *workflow.BadRequestError:
+	case *serviceerror.InvalidArgument:
 		return handler.handlerFailDecision(
 			workflow.DecisionTaskFailedCauseStartTimerDuplicateID, "",
 		)
@@ -501,7 +501,7 @@ func (handler *decisionTaskHandlerImpl) handleDecisionCancelTimer(
 		//  is not entirely correct, since during these decisions processing, new event may appear
 		handler.hasUnhandledEventsBeforeDecisions = handler.mutableState.HasBufferedEvents()
 		return nil
-	case *workflow.BadRequestError:
+	case *serviceerror.InvalidArgument:
 		_, err = handler.mutableState.AddCancelTimerFailedEvent(
 			handler.decisionTaskCompletedID,
 			attr,
@@ -915,7 +915,7 @@ func (handler *decisionTaskHandlerImpl) validateDecisionAttr(
 ) error {
 
 	if err := validationFn(); err != nil {
-		if _, ok := err.(*workflow.BadRequestError); ok {
+		if _, ok := err.(*serviceerror.InvalidArgument); ok {
 			return handler.handlerFailDecision(failedCause, err.Error())
 		}
 		return err

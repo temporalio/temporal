@@ -256,7 +256,7 @@ func (r *nDCHistoryReplicatorImpl) applyEvents(
 			}
 			return r.applyNonStartEventsToNoneCurrentBranch(ctx, context, mutableState, branchIndex, releaseFn, task)
 
-		case *shared.EntityNotExistsError:
+		case *serviceerror.NotFound:
 			// mutable state not created, check if is workflow reset
 			mutableState, err := r.applyNonStartEventsMissingMutableState(ctx, context, task)
 			if err != nil {
@@ -345,7 +345,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsPrepareBranch(
 	switch err.(type) {
 	case nil:
 		return doContinue, versionHistoryIndex, nil
-	case *shared.RetryTaskV2Error:
+	case *serviceerror.RetryTaskV2:
 		// replication message can arrive out of order
 		// do not log
 		return false, 0, err

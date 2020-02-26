@@ -221,10 +221,10 @@ func (r *historyReplicator) ApplyEvents(
 	defer func() {
 		if retError != nil {
 			switch retError.(type) {
-			case *shared.EntityNotExistsError:
+			case *serviceerror.NotFound:
 				logger.Debug("Encounter EntityNotExistsError", tag.Error(retError))
 				retError = ErrRetryEntityNotExists
-			case *shared.WorkflowExecutionAlreadyStartedError:
+			case *serviceerror.WorkflowExecutionAlreadyStarted:
 				logger.Debug("Encounter WorkflowExecutionAlreadyStartedError", tag.Error(retError))
 				retError = ErrRetryExecutionAlreadyStarted
 			case *persistence.WorkflowExecutionAlreadyStartedError:
@@ -266,7 +266,7 @@ func (r *historyReplicator) ApplyEvents(
 			r.metricsClient.IncCounter(metrics.ReplicateHistoryEventsScope, metrics.DuplicateReplicationEventsCounter)
 			return nil
 		}
-		if _, ok := err.(*shared.EntityNotExistsError); !ok {
+		if _, ok := err.(*serviceerror.NotFound); !ok {
 			// GetWorkflowExecution failed with some transient error. Return err so we can retry the task later
 			return err
 		}
@@ -277,7 +277,7 @@ func (r *historyReplicator) ApplyEvents(
 		// the continue as new + start workflow execution combination will also be processed here
 		msBuilder, err := context.loadWorkflowExecution()
 		if err != nil {
-			if _, ok := err.(*shared.EntityNotExistsError); !ok {
+			if _, ok := err.(*serviceerror.NotFound); !ok {
 				return err
 			}
 			// mutable state for the target workflow ID & run ID combination does not exist
@@ -331,7 +331,7 @@ func (r *historyReplicator) ApplyOtherEventsMissingMutableState(
 	// we need to check the current workflow execution
 	currentContext, currentMutableState, currentRelease, err := r.getCurrentWorkflowMutableState(ctx, domainID, workflowID)
 	if err != nil {
-		if _, ok := err.(*shared.EntityNotExistsError); !ok {
+		if _, ok := err.(*serviceerror.NotFound); !ok {
 			return err
 		}
 		return newRetryTaskErrorWithHint(ErrWorkflowNotFoundMsg, domainID, workflowID, runID, common.FirstEventID)
@@ -775,7 +775,7 @@ func (r *historyReplicator) replicateWorkflowStarted(
 		logger,
 	)
 	if err != nil {
-		if _, ok := err.(*shared.EntityNotExistsError); !ok {
+		if _, ok := err.(*serviceerror.NotFound); !ok {
 			return err
 		}
 		// if workflow is completed just when the call is made, will get EntityNotExistsError
@@ -977,7 +977,7 @@ func (r *historyReplicator) terminateWorkflow(
 		})
 
 	if err != nil {
-		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
+		if _, ok := err.(*serviceerror.NotFound); !ok {
 			return 0, err
 		}
 		err = nil
@@ -1227,7 +1227,7 @@ func (r *historyReplicator) reapplyEventsToCurrentClosedWorkflow(
 		currMutableState,
 	)
 	if err != nil {
-		if _, ok := err.(*shared.DomainNotActiveError); ok {
+		if _, ok := err.(*serviceerror.DomainNotActive); ok {
 			return nil
 		}
 		return err
@@ -1333,7 +1333,7 @@ func newRetryTaskErrorWithHint(
 	workflowID string,
 	runID string,
 	nextEventID int64,
-) *shared.RetryTaskError {
+) *serviceerror.RetryTask {
 
 	return &shared.RetryTaskError{
 		Message:     msg,

@@ -191,7 +191,7 @@ func CreateKafkaOperationRetryPolicy() backoff.RetryPolicy {
 // IsPersistenceTransientError checks if the error is a transient persistence error
 func IsPersistenceTransientError(err error) bool {
 	switch err.(type) {
-	case *workflow.InternalServiceError, *workflow.ServiceBusyError:
+	case *serviceerror.Internal, *serviceerror.ResourceExhausted:
 		return true
 	}
 
@@ -227,15 +227,15 @@ func IsServiceTransientErrorGRPC(err error) bool {
 // IsServiceNonRetryableError checks if the error is a non retryable error.
 func IsServiceNonRetryableError(err error) bool {
 	switch err := err.(type) {
-	case *workflow.EntityNotExistsError:
+	case *serviceerror.NotFound:
 		return true
-	case *workflow.BadRequestError:
+	case *serviceerror.InvalidArgument:
 		return true
-	case *workflow.DomainNotActiveError:
+	case *serviceerror.DomainNotActive:
 		return true
-	case *workflow.WorkflowExecutionAlreadyStartedError:
+	case *serviceerror.WorkflowExecutionAlreadyStarted:
 		return true
-	case *workflow.CancellationAlreadyRequestedError:
+	case *serviceerror.CancellationAlreadyRequested:
 		return true
 	case *yarpcerrors.Status:
 		if err.Code() != yarpcerrors.CodeDeadlineExceeded {
@@ -268,11 +268,11 @@ func IsWhitelistServiceTransientError(err error) bool {
 	}
 
 	switch err.(type) {
-	case *workflow.InternalServiceError:
+	case *serviceerror.Internal:
 		return true
-	case *workflow.ServiceBusyError:
+	case *serviceerror.ResourceExhausted:
 		return true
-	case *workflow.LimitExceededError:
+	case *serviceerror.ResourceExhausted:
 		return true
 	case *h.ShardOwnershipLostError:
 		return true

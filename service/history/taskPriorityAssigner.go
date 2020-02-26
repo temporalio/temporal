@@ -23,13 +23,13 @@ package history
 import (
 	"sync"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/quotas"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type (
@@ -127,7 +127,7 @@ func (a *taskPriorityAssignerImpl) getDomainInfo(
 ) (string, bool, error) {
 	domainEntry, err := a.domainCache.GetDomainByID(domainID)
 	if err != nil {
-		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
+		if _, ok := err.(*serviceerror.NotFound); !ok {
 			a.logger.Warn("Cannot find domain", tag.WorkflowDomainID(domainID))
 			return "", false, err
 		}

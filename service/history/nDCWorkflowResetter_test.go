@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -245,7 +246,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_Error() {
 	s.IsType(&shared.RetryTaskV2Error{}, err)
 	s.Nil(rebuiltMutableState)
 
-	retryErr, isRetryError := err.(*shared.RetryTaskV2Error)
+	retryErr, isRetryError := err.(*serviceerror.RetryTaskV2)
 	s.True(isRetryError)
 	expectedErr := &shared.RetryTaskV2Error{
 		DomainId:          common.StringPtr(s.domainID),

@@ -24,11 +24,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/headers"
 	"github.com/temporalio/temporal/common/service/config"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 const (
@@ -150,7 +150,7 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) withRedirect(ctx context.
 }
 
 func (policy *SelectedAPIsForwardingRedirectionPolicy) isDomainNotActiveError(err error) (string, bool) {
-	domainNotActiveErr, ok := err.(*shared.DomainNotActiveError)
+	domainNotActiveErr, ok := err.(*serviceerror.DomainNotActive)
 	if !ok {
 		return "", false
 	}

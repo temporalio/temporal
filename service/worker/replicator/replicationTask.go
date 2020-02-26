@@ -536,7 +536,7 @@ func (t *workflowReplicationTask) Nack() {
 
 func (t *workflowReplicationTask) convertRetryTaskError(
 	err error,
-) (*shared.RetryTaskError, bool) {
+) (*serviceerror.RetryTask, bool) {
 
 	if rtErr, ok := err.(*serviceerror.RetryTask); ok {
 		return &shared.RetryTaskError{
@@ -548,13 +548,13 @@ func (t *workflowReplicationTask) convertRetryTaskError(
 		}, true
 	}
 
-	retError, ok := err.(*shared.RetryTaskError)
+	retError, ok := err.(*serviceerror.RetryTask)
 	return retError, ok
 }
 
 func (t *workflowReplicationTask) convertRetryTaskV2Error(
 	err error,
-) (*shared.RetryTaskV2Error, bool) {
+) (*serviceerror.RetryTaskV2, bool) {
 
 	if rtErr, ok := err.(*serviceerror.RetryTaskV2); ok {
 		return &shared.RetryTaskV2Error{
@@ -569,6 +569,6 @@ func (t *workflowReplicationTask) convertRetryTaskV2Error(
 		}, true
 	}
 
-	retError, ok := err.(*shared.RetryTaskV2Error)
+	retError, ok := err.(*serviceerror.RetryTaskV2)
 	return retError, ok
 }

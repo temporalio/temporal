@@ -27,7 +27,6 @@ import (
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
@@ -147,7 +146,7 @@ func (h *domainReplicationTaskExecutorImpl) handleDomainCreationReplicationTask(
 			if resp.Info.ID != task.GetId() {
 				return ErrNameUUIDCollision
 			}
-		case *shared.EntityNotExistsError:
+		case *serviceerror.NotFound:
 			// no check is necessary
 			recordExists = false
 		default:
@@ -163,7 +162,7 @@ func (h *domainReplicationTaskExecutorImpl) handleDomainCreationReplicationTask(
 			if resp.Info.Name != task.Info.GetName() {
 				return ErrNameUUIDCollision
 			}
-		case *shared.EntityNotExistsError:
+		case *serviceerror.NotFound:
 			// no check is necessary
 			recordExists = false
 		default:
@@ -202,7 +201,7 @@ func (h *domainReplicationTaskExecutorImpl) handleDomainUpdateReplicationTask(ta
 		Name: task.Info.GetName(),
 	})
 	if err != nil {
-		if _, ok := err.(*shared.EntityNotExistsError); ok {
+		if _, ok := err.(*serviceerror.NotFound); ok {
 			// this can happen if the create domain replication task is to processed.
 			// e.g. new cluster which does not have anything
 			return h.handleDomainCreationReplicationTask(task)

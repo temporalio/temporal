@@ -24,8 +24,8 @@ import (
 	"fmt"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"go.temporal.io/temporal-proto/serviceerror"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
@@ -74,7 +74,7 @@ func loadMutableStateForTransferTask(
 
 	msBuilder, err := context.loadWorkflowExecution()
 	if err != nil {
-		if _, ok := err.(*workflow.EntityNotExistsError); ok {
+		if _, ok := err.(*serviceerror.NotFound); ok {
 			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
 			return nil, nil
 		}
@@ -119,7 +119,7 @@ func loadMutableStateForTimerTask(
 
 	msBuilder, err := context.loadWorkflowExecution()
 	if err != nil {
-		if _, ok := err.(*workflow.EntityNotExistsError); ok {
+		if _, ok := err.(*serviceerror.NotFound); ok {
 			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
 			return nil, nil
 		}

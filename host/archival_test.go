@@ -33,6 +33,7 @@ import (
 
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
@@ -204,7 +205,7 @@ func (s *integrationSuite) isMutableStateDeleted(domainID string, execution *com
 
 	for i := 0; i < retryLimit; i++ {
 		_, err := s.testCluster.testBase.ExecutionManager.GetWorkflowExecution(request)
-		if _, ok := err.(*workflow.EntityNotExistsError); ok {
+		if _, ok := err.(*serviceerror.NotFound); ok {
 			return true
 		}
 		time.Sleep(retryBackoffTime)

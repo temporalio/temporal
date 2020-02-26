@@ -35,7 +35,6 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
-	ce "github.com/temporalio/temporal/common/errors"
 	"github.com/temporalio/temporal/common/persistence"
 )
 
@@ -147,7 +146,7 @@ func (w *workflowResetorImpl) checkDomainStatus(newMutableState mutableState, pr
 		clusterMetadata := w.eng.shard.GetService().GetClusterMetadata()
 		currentVersion := newMutableState.GetCurrentVersion()
 		if currentVersion < prevRunVersion {
-			return ce.NewDomainNotActiveError(
+			return serviceerror.NewDomainNotActive(
 				domain,
 				clusterMetadata.GetCurrentClusterName(),
 				clusterMetadata.ClusterNameForFailoverVersion(prevRunVersion),
@@ -156,7 +155,7 @@ func (w *workflowResetorImpl) checkDomainStatus(newMutableState mutableState, pr
 		activeCluster := clusterMetadata.ClusterNameForFailoverVersion(currentVersion)
 		currentCluster := clusterMetadata.GetCurrentClusterName()
 		if activeCluster != currentCluster {
-			return ce.NewDomainNotActiveError(domain, currentCluster, activeCluster)
+			return serviceerror.NewDomainNotActive(domain, currentCluster, activeCluster)
 		}
 	}
 	return nil
@@ -1050,7 +1049,7 @@ func getWorkflowCleanupTasks(
 	var retentionInDays int32
 	domainEntry, err := domainCache.GetDomainByID(domainID)
 	if err != nil {
-		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
+		if _, ok := err.(*serviceerror.NotFound); !ok {
 			return nil, nil, err
 		}
 	} else {

@@ -24,11 +24,11 @@ import (
 	"net"
 	"time"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/sql/sqlplugin"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 type sqlClusterMetadataManager struct {
@@ -41,7 +41,7 @@ func (s *sqlClusterMetadataManager) InitializeImmutableClusterMetadata(request *
 	resp, err := s.GetImmutableClusterMetadata()
 
 	if err != nil {
-		if _, ok := err.(*shared.EntityNotExistsError); ok {
+		if _, ok := err.(*serviceerror.NotFound); ok {
 			// If we have received EntityNotExistsError, we have not yet initialized
 			return s.InsertImmutableDataIfNotExists(request)
 		}

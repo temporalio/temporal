@@ -31,6 +31,7 @@ import (
 	"testing"
 
 	"github.com/temporalio/temporal/common/persistence/serialization"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/olivere/elastic"
 	"github.com/stretchr/testify/mock"
@@ -227,7 +228,7 @@ func (s *ESVisibilitySuite) TestListOpenWorkflowExecutions() {
 	s.mockESClient.On("Search", mock.Anything, mock.Anything).Return(nil, errTestESSearch).Once()
 	_, err = s.visibilityStore.ListOpenWorkflowExecutions(testRequest)
 	s.Error(err)
-	_, ok := err.(*workflow.InternalServiceError)
+	_, ok := err.(*serviceerror.Internal)
 	s.True(ok)
 	s.True(strings.Contains(err.Error(), "ListOpenWorkflowExecutions failed"))
 }
@@ -244,7 +245,7 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutions() {
 	s.mockESClient.On("Search", mock.Anything, mock.Anything).Return(nil, errTestESSearch).Once()
 	_, err = s.visibilityStore.ListClosedWorkflowExecutions(testRequest)
 	s.Error(err)
-	_, ok := err.(*workflow.InternalServiceError)
+	_, ok := err.(*serviceerror.Internal)
 	s.True(ok)
 	s.True(strings.Contains(err.Error(), "ListClosedWorkflowExecutions failed"))
 }
@@ -267,7 +268,7 @@ func (s *ESVisibilitySuite) TestListOpenWorkflowExecutionsByType() {
 	s.mockESClient.On("Search", mock.Anything, mock.Anything).Return(nil, errTestESSearch).Once()
 	_, err = s.visibilityStore.ListOpenWorkflowExecutionsByType(request)
 	s.Error(err)
-	_, ok := err.(*workflow.InternalServiceError)
+	_, ok := err.(*serviceerror.Internal)
 	s.True(ok)
 	s.True(strings.Contains(err.Error(), "ListOpenWorkflowExecutionsByType failed"))
 }
@@ -290,7 +291,7 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByType() {
 	s.mockESClient.On("Search", mock.Anything, mock.Anything).Return(nil, errTestESSearch).Once()
 	_, err = s.visibilityStore.ListClosedWorkflowExecutionsByType(request)
 	s.Error(err)
-	_, ok := err.(*workflow.InternalServiceError)
+	_, ok := err.(*serviceerror.Internal)
 	s.True(ok)
 	s.True(strings.Contains(err.Error(), "ListClosedWorkflowExecutionsByType failed"))
 }
@@ -313,7 +314,7 @@ func (s *ESVisibilitySuite) TestListOpenWorkflowExecutionsByWorkflowID() {
 	s.mockESClient.On("Search", mock.Anything, mock.Anything).Return(nil, errTestESSearch).Once()
 	_, err = s.visibilityStore.ListOpenWorkflowExecutionsByWorkflowID(request)
 	s.Error(err)
-	_, ok := err.(*workflow.InternalServiceError)
+	_, ok := err.(*serviceerror.Internal)
 	s.True(ok)
 	s.True(strings.Contains(err.Error(), "ListOpenWorkflowExecutionsByWorkflowID failed"))
 }
@@ -336,7 +337,7 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByWorkflowID() {
 	s.mockESClient.On("Search", mock.Anything, mock.Anything).Return(nil, errTestESSearch).Once()
 	_, err = s.visibilityStore.ListClosedWorkflowExecutionsByWorkflowID(request)
 	s.Error(err)
-	_, ok := err.(*workflow.InternalServiceError)
+	_, ok := err.(*serviceerror.Internal)
 	s.True(ok)
 	s.True(strings.Contains(err.Error(), "ListClosedWorkflowExecutionsByWorkflowID failed"))
 }
@@ -359,7 +360,7 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByStatus() {
 	s.mockESClient.On("Search", mock.Anything, mock.Anything).Return(nil, errTestESSearch).Once()
 	_, err = s.visibilityStore.ListClosedWorkflowExecutionsByStatus(request)
 	s.Error(err)
-	_, ok := err.(*workflow.InternalServiceError)
+	_, ok := err.(*serviceerror.Internal)
 	s.True(ok)
 	s.True(strings.Contains(err.Error(), "ListClosedWorkflowExecutionsByStatus failed"))
 }
@@ -385,7 +386,7 @@ func (s *ESVisibilitySuite) TestGetClosedWorkflowExecution() {
 	s.mockESClient.On("Search", mock.Anything, mock.Anything).Return(nil, errTestESSearch).Once()
 	_, err = s.visibilityStore.GetClosedWorkflowExecution(request)
 	s.Error(err)
-	_, ok := err.(*workflow.InternalServiceError)
+	_, ok := err.(*serviceerror.Internal)
 	s.True(ok)
 	s.True(strings.Contains(err.Error(), "GetClosedWorkflowExecution failed"))
 }
@@ -574,7 +575,7 @@ func (s *ESVisibilitySuite) TestDeserializePageToken() {
 	result, err = s.visibilityStore.deserializePageToken(badInput)
 	s.Error(err)
 	s.Nil(result)
-	err, ok := err.(*workflow.BadRequestError)
+	err, ok := err.(*serviceerror.InvalidArgument)
 	s.True(ok)
 	s.True(strings.Contains(err.Error(), "unable to deserialize page token"))
 
@@ -857,14 +858,14 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions() {
 	s.mockESClient.On("SearchWithDSL", mock.Anything, mock.Anything, mock.Anything).Return(nil, errTestESSearch).Once()
 	_, err = s.visibilityStore.ListWorkflowExecutions(request)
 	s.Error(err)
-	_, ok := err.(*workflow.InternalServiceError)
+	_, ok := err.(*serviceerror.Internal)
 	s.True(ok)
 	s.True(strings.Contains(err.Error(), "ListWorkflowExecutions failed"))
 
 	request.Query = `invalid query`
 	_, err = s.visibilityStore.ListWorkflowExecutions(request)
 	s.Error(err)
-	_, ok = err.(*workflow.BadRequestError)
+	_, ok = err.(*serviceerror.InvalidArgument)
 	s.True(ok)
 	s.True(strings.Contains(err.Error(), "Error when parse query"))
 }
@@ -889,7 +890,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutions() {
 	request.Query = `invalid query`
 	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
 	s.Error(err)
-	_, ok := err.(*workflow.BadRequestError)
+	_, ok := err.(*serviceerror.InvalidArgument)
 	s.True(ok)
 	s.True(strings.Contains(err.Error(), "Error when parse query"))
 
@@ -916,7 +917,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutions() {
 	s.mockESClient.On("Scroll", mock.Anything, scrollID).Return(nil, nil, errTestESSearch).Once()
 	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
 	s.Error(err)
-	_, ok = err.(*workflow.InternalServiceError)
+	_, ok = err.(*serviceerror.Internal)
 	s.True(ok)
 	s.True(strings.Contains(err.Error(), "ScanWorkflowExecutions failed"))
 }
@@ -941,7 +942,7 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions() {
 
 	_, err = s.visibilityStore.CountWorkflowExecutions(request)
 	s.Error(err)
-	_, ok := err.(*workflow.InternalServiceError)
+	_, ok := err.(*serviceerror.Internal)
 	s.True(ok)
 	s.True(strings.Contains(err.Error(), "CountWorkflowExecutions failed"))
 
@@ -949,7 +950,7 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions() {
 	request.Query = `invalid query`
 	_, err = s.visibilityStore.CountWorkflowExecutions(request)
 	s.Error(err)
-	_, ok = err.(*workflow.BadRequestError)
+	_, ok = err.(*serviceerror.InvalidArgument)
 	s.True(ok)
 	s.True(strings.Contains(err.Error(), "Error when parse query"))
 }

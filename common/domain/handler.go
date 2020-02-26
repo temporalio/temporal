@@ -133,7 +133,7 @@ func (d *HandlerImpl) RegisterDomain(
 	case nil:
 		// domain already exists, cannot proceed
 		return nil, serviceerror.NewDomainAlreadyExists("Domain already exists.")
-	case *shared.EntityNotExistsError:
+	case *serviceerror.NotFound:
 		// domain does not exists, proceeds
 	default:
 		// other err

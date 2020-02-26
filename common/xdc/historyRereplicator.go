@@ -167,7 +167,7 @@ func (h *HistoryRereplicatorImpl) SendMultiWorkflowHistory(domainID string, work
 	for len(runID) != 0 {
 		runID, err = rereplicationContext.getPrevRunID(domainID, workflowID, runID)
 		if err != nil {
-			if _, ok := err.(*shared.EntityNotExistsError); ok {
+			if _, ok := err.(*serviceerror.NotFound); ok {
 				// it is possible that this run ID (input)'s corresponding history does not exists
 				break
 			}
@@ -320,7 +320,7 @@ func (c *historyRereplicationContext) sendReplicationRawRequest(request *history
 	// trigger an history reset and this reset can leave a hole in target
 	// workflow, we should amend that hole and continue
 	var retryServiceError *serviceerror.RetryTask
-	if retrySharedError, ok := err.(*shared.RetryTaskError); ok {
+	if retrySharedError, ok := err.(*serviceerror.RetryTask); ok {
 		retryServiceError = &serviceerror.RetryTask{
 			DomainId:    retrySharedError.GetDomainId(),
 			WorkflowId:  retrySharedError.GetWorkflowId(),

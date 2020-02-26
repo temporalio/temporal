@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/temporalio/temporal/common/primitives"
+	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
@@ -446,7 +447,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 
 			// read to verify override success, at this point history is corrupted, missing 7/8, so we should only see 6 events
 			_, err = s.readWithError(branch, 1, 25)
-			_, ok := err.(*workflow.InternalServiceError)
+			_, ok := err.(*serviceerror.Internal)
 			s.Equal(true, ok)
 
 			events = s.read(branch, 1, 7)

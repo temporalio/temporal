@@ -27,6 +27,7 @@ import (
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/persistence"
+	"go.temporal.io/temporal-proto/serviceerror"
 )
 
 const (
@@ -179,7 +180,7 @@ func (i *historyIterator) readHistoryBatches(firstEventID int64) ([]*shared.Hist
 	newIterState := historyIteratorState{}
 	for size < targetSize {
 		currHistoryBatches, err := i.readHistory(firstEventID)
-		if _, ok := err.(*shared.EntityNotExistsError); ok && firstEventID != common.FirstEventID {
+		if _, ok := err.(*serviceerror.NotFound); ok && firstEventID != common.FirstEventID {
 			newIterState.FinishedIteration = true
 			return historyBatches, newIterState, nil
 		}
@@ -208,7 +209,7 @@ func (i *historyIterator) readHistoryBatches(firstEventID int64) ([]*shared.Hist
 	// If you are here, it means the target size is met after adding the last batch of read history.
 	// We need to check if there's more history batches.
 	_, err := i.readHistory(firstEventID)
-	if _, ok := err.(*shared.EntityNotExistsError); ok && firstEventID != common.FirstEventID {
+	if _, ok := err.(*serviceerror.NotFound); ok && firstEventID != common.FirstEventID {
 		newIterState.FinishedIteration = true
 		return historyBatches, newIterState, nil
 	}

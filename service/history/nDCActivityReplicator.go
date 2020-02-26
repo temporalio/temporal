@@ -91,7 +91,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 
 	mutableState, err := context.loadWorkflowExecution()
 	if err != nil {
-		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
+		if _, ok := err.(*serviceerror.NotFound); !ok {
 			return err
 		}
 

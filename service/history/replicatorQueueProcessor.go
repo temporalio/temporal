@@ -162,7 +162,7 @@ func (p *replicatorQueueProcessorImpl) process(
 		return metrics.ReplicatorTaskSyncActivityScope, err
 	case persistence.ReplicationTaskTypeHistory:
 		err := p.processHistoryReplicationTask(task.ReplicationTaskInfo)
-		if _, ok := err.(*shared.EntityNotExistsError); ok {
+		if _, ok := err.(*serviceerror.NotFound); ok {
 			err = errHistoryNotFoundTask
 		}
 		if err == nil {
@@ -837,7 +837,7 @@ func (p *replicatorQueueProcessorImpl) processReplication(
 			return nil, nil
 		}
 		return action(msBuilder)
-	case *shared.EntityNotExistsError:
+	case *serviceerror.NotFound:
 		return nil, nil
 	default:
 		return nil, err

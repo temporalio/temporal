@@ -36,7 +36,6 @@ import (
 
 	h "github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/replicator"
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/client/history"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -473,17 +472,17 @@ func (p *replicationTaskProcessor) updateFailureMetric(scope int, err error) {
 	switch err := err.(type) {
 	case *h.ShardOwnershipLostError:
 		p.metricsClient.IncCounter(scope, metrics.CadenceErrShardOwnershipLostCounter)
-	case *shared.BadRequestError:
+	case *serviceerror.InvalidArgument:
 		p.metricsClient.IncCounter(scope, metrics.CadenceErrBadRequestCounter)
-	case *shared.DomainNotActiveError:
+	case *serviceerror.DomainNotActive:
 		p.metricsClient.IncCounter(scope, metrics.CadenceErrDomainNotActiveCounter)
-	case *shared.WorkflowExecutionAlreadyStartedError:
+	case *serviceerror.WorkflowExecutionAlreadyStarted:
 		p.metricsClient.IncCounter(scope, metrics.CadenceErrExecutionAlreadyStartedCounter)
-	case *shared.EntityNotExistsError:
+	case *serviceerror.NotFound:
 		p.metricsClient.IncCounter(scope, metrics.CadenceErrEntityNotExistsCounter)
-	case *shared.LimitExceededError:
+	case *serviceerror.ResourceExhausted:
 		p.metricsClient.IncCounter(scope, metrics.CadenceErrLimitExceededCounter)
-	case *shared.RetryTaskError:
+	case *serviceerror.RetryTask:
 		p.metricsClient.IncCounter(scope, metrics.CadenceErrRetryTaskCounter)
 	case *yarpcerrors.Status:
 		if err.Code() == yarpcerrors.CodeDeadlineExceeded {
@@ -494,7 +493,7 @@ func (p *replicationTaskProcessor) updateFailureMetric(scope int, err error) {
 
 func isTransientRetryableError(err error) bool {
 	switch err.(type) {
-	case *shared.BadRequestError:
+	case *serviceerror.InvalidArgument:
 		return false
 	default:
 		return true

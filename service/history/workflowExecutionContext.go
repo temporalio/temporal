@@ -904,7 +904,7 @@ func (c *workflowExecutionContextImpl) getWorkflowExecutionWithRetry(
 	switch err.(type) {
 	case nil:
 		return resp, nil
-	case *workflow.EntityNotExistsError:
+	case *serviceerror.NotFound:
 		// it is possible that workflow does not exists
 		return nil, err
 	default:

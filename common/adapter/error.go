@@ -44,7 +44,7 @@ func ToServiceError(in error) error {
 			return serviceerror.NewInvalidArgument(thriftError.Message)
 		}
 	case *shared.DomainNotActiveError:
-		return serviceerror.NewDomainNotActive(thriftError.Message, thriftError.DomainName, thriftError.CurrentCluster, thriftError.ActiveCluster)
+		return serviceerror.NewDomainNotActive(thriftError.DomainName, thriftError.CurrentCluster, thriftError.ActiveCluster)
 	case *shared.EntityNotExistsError:
 		return serviceerror.NewNotFound(thriftError.Message)
 	case *shared.WorkflowExecutionAlreadyStartedError:

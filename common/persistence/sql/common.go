@@ -27,7 +27,6 @@ import (
 	"encoding/gob"
 	"fmt"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
@@ -66,9 +65,9 @@ func (m *sqlStore) txExecute(operation string, f func(tx sqlplugin.Tx) error) er
 		switch err.(type) {
 		case *persistence.ConditionFailedError,
 			*persistence.CurrentWorkflowConditionFailedError,
-			*workflow.InternalServiceError,
+			*serviceerror.Internal,
 			*persistence.WorkflowExecutionAlreadyStartedError,
-			*workflow.DomainAlreadyExistsError,
+			*serviceerror.DomainAlreadyExists,
 			*persistence.ShardOwnershipLostError:
 			return err
 		default:
