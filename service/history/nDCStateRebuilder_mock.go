@@ -33,7 +33,6 @@ import (
 	time "time"
 
 	gomock "github.com/golang/mock/gomock"
-
 	definition "github.com/temporalio/temporal/common/definition"
 )
 

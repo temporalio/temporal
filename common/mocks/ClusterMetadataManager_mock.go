@@ -26,9 +26,10 @@
 package mocks
 
 import (
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	"github.com/temporalio/temporal/common/persistence"
-	reflect "reflect"
 )
 
 // MockCloseable is a mock of Closeable interface
