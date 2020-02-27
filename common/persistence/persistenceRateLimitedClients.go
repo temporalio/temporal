@@ -795,9 +795,9 @@ func (p *queueRateLimitedPersistenceClient) DeleteMessagesBefore(messageID int) 
 	return p.persistence.DeleteMessagesBefore(messageID)
 }
 
-func (p *queueRateLimitedPersistenceClient) EnqueueMessageToDLQ(message []byte) error {
+func (p *queueRateLimitedPersistenceClient) EnqueueMessageToDLQ(message []byte) (int, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
-		return ErrPersistenceLimitExceeded
+		return emptyMessageID, ErrPersistenceLimitExceeded
 	}
 
 	return p.persistence.EnqueueMessageToDLQ(message)

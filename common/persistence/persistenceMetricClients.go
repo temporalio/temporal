@@ -1243,18 +1243,18 @@ func (p *queuePersistenceClient) DeleteMessagesBefore(messageID int) error {
 	return err
 }
 
-func (p *queuePersistenceClient) EnqueueMessageToDLQ(message []byte) error {
+func (p *queuePersistenceClient) EnqueueMessageToDLQ(message []byte) (int, error) {
 	p.metricClient.IncCounter(metrics.PersistenceEnqueueMessageToDLQScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceEnqueueMessageToDLQScope, metrics.PersistenceLatency)
-	err := p.persistence.EnqueueMessageToDLQ(message)
+	messageID, err := p.persistence.EnqueueMessageToDLQ(message)
 	sw.Stop()
 
 	if err != nil {
 		p.metricClient.IncCounter(metrics.PersistenceEnqueueMessageToDLQScope, metrics.PersistenceFailures)
 	}
 
-	return err
+	return messageID, err
 }
 
 func (p *queuePersistenceClient) ReadMessagesFromDLQ(firstMessageID int, lastMessageID int, pageSize int, pageToken []byte) ([]*QueueMessage, []byte, error) {
@@ -1303,7 +1303,7 @@ func (p *queuePersistenceClient) UpdateDLQAckLevel(messageID int, clusterName st
 	p.metricClient.IncCounter(metrics.PersistenceUpdateDLQAckLevelScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceUpdateDLQAckLevelScope, metrics.PersistenceLatency)
-	err := p.persistence.UpdateAckLevel(messageID, clusterName)
+	err := p.persistence.UpdateDLQAckLevel(messageID, clusterName)
 	sw.Stop()
 
 	if err != nil {

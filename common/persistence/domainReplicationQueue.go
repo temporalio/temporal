@@ -130,7 +130,18 @@ func (q *domainReplicationQueueImpl) PublishToDLQ(message interface{}) error {
 	if err != nil {
 		return fmt.Errorf("failed to encode message: %v", err)
 	}
-	return q.queue.EnqueueMessageToDLQ(bytes)
+	messageID, err := q.queue.EnqueueMessageToDLQ(bytes)
+	if err != nil {
+		return err
+	}
+
+	q.metricsClient.Scope(
+		metrics.PersistenceDomainReplicationQueueScope,
+	).UpdateGauge(
+		metrics.DomainReplicationDLQMaxLevelGauge,
+		float64(messageID),
+	)
+	return nil
 }
 
 func (q *domainReplicationQueueImpl) GetReplicationMessages(
@@ -212,7 +223,20 @@ func (q *domainReplicationQueueImpl) UpdateDLQAckLevel(
 	lastProcessedMessageID int,
 ) error {
 
-	return q.queue.UpdateDLQAckLevel(lastProcessedMessageID, localDomainReplicationCluster)
+	if err := q.queue.UpdateDLQAckLevel(
+		lastProcessedMessageID,
+		localDomainReplicationCluster,
+	); err != nil {
+		return err
+	}
+
+	q.metricsClient.Scope(
+		metrics.PersistenceDomainReplicationQueueScope,
+	).UpdateGauge(
+		metrics.DomainReplicationDLQAckLevelGauge,
+		float64(lastProcessedMessageID),
+	)
+	return nil
 }
 
 func (q *domainReplicationQueueImpl) GetDLQAckLevel() (int, error) {
@@ -274,7 +298,7 @@ func (q *domainReplicationQueueImpl) purgeAckedMessages() error {
 
 	q.metricsClient.
 		Scope(metrics.PersistenceDomainReplicationQueueScope).
-		UpdateGauge(metrics.DomainReplicationTaskAckLevel, float64(minAckLevel))
+		UpdateGauge(metrics.DomainReplicationTaskAckLevelGauge, float64(minAckLevel))
 	return nil
 }
 

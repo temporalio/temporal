@@ -144,7 +144,7 @@ type (
 		DeleteMessagesBefore(messageID int) error
 		UpdateAckLevel(messageID int, clusterName string) error
 		GetAckLevels() (map[string]int, error)
-		EnqueueMessageToDLQ(messagePayload []byte) error
+		EnqueueMessageToDLQ(messagePayload []byte) (int, error)
 		ReadMessagesFromDLQ(firstMessageID int, lastMessageID int, pageSize int, pageToken []byte) ([]*QueueMessage, []byte, error)
 		DeleteMessageFromDLQ(messageID int) error
 		RangeDeleteMessagesFromDLQ(firstMessageID int, lastMessageID int) error

@@ -132,16 +132,17 @@ func (q *cassandraQueue) EnqueueMessage(
 		return err
 	}
 
-	return q.tryEnqueue(q.queueType, lastMessageID+1, messagePayload)
+	_, err = q.tryEnqueue(q.queueType, lastMessageID+1, messagePayload)
+	return err
 }
 
 func (q *cassandraQueue) EnqueueMessageToDLQ(
 	messagePayload []byte,
-) error {
+) (int, error) {
 	// Use negative queue type as the dlq type
 	lastMessageID, err := q.getLastMessageID(q.getDLQTypeFromQueueType())
 	if err != nil {
-		return err
+		return emptyMessageID, err
 	}
 
 	// Use negative queue type as the dlq type
@@ -152,26 +153,26 @@ func (q *cassandraQueue) tryEnqueue(
 	queueType persistence.QueueType,
 	messageID int,
 	messagePayload []byte,
-) error {
+) (int, error) {
 	query := q.session.Query(templateEnqueueMessageQuery, queueType, messageID, messagePayload)
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
 		if isThrottlingError(err) {
-			return &workflow.ServiceBusyError{
+			return emptyMessageID, &workflow.ServiceBusyError{
 				Message: fmt.Sprintf("Failed to enqueue message. Error: %v, Type: %v.", err, queueType),
 			}
 		}
-		return &workflow.InternalServiceError{
+		return emptyMessageID, &workflow.InternalServiceError{
 			Message: fmt.Sprintf("Failed to enqueue message. Error: %v, Type: %v.", err, queueType),
 		}
 	}
 
 	if !applied {
-		return &persistence.ConditionFailedError{Msg: fmt.Sprintf("message ID %v exists in queue", previous["message_id"])}
+		return emptyMessageID, &persistence.ConditionFailedError{Msg: fmt.Sprintf("message ID %v exists in queue", previous["message_id"])}
 	}
 
-	return nil
+	return messageID, nil
 }
 
 func (q *cassandraQueue) getLastMessageID(

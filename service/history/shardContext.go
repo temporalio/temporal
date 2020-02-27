@@ -22,6 +22,7 @@ package history
 
 import (
 	"fmt"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -263,9 +264,22 @@ func (s *shardContextImpl) UpdateReplicatorDLQAckLevel(
 
 	s.Lock()
 	defer s.Unlock()
+
 	s.shardInfo.ReplicationDLQAckLevel[sourceCluster] = ackLevel
 	s.shardInfo.StolenSinceRenew = 0
-	return s.updateShardInfoLocked()
+	if err := s.updateShardInfoLocked(); err != nil {
+		return err
+	}
+
+	s.GetMetricsClient().Scope(
+		metrics.ReplicationDLQStatsScope,
+		metrics.TargetClusterTag(sourceCluster),
+		metrics.InstanceTag(strconv.Itoa(s.shardID)),
+	).UpdateGauge(
+		metrics.ReplicationDLQAckLevelGauge,
+		float64(ackLevel),
+	)
+	return nil
 }
 
 func (s *shardContextImpl) GetClusterReplicationLevel(cluster string) int64 {

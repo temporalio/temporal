@@ -26,6 +26,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -197,8 +198,8 @@ Loop:
 func (p *ReplicationTaskProcessorImpl) cleanupReplicationTaskLoop() {
 
 	timer := time.NewTimer(backoff.JitDuration(
-		p.config.ShardSyncMinInterval(),
-		p.config.ShardSyncTimerJitterCoefficient(),
+		p.config.ReplicationTaskProcessorCleanupInterval(),
+		p.config.ReplicationTaskProcessorCleanupJitterCoefficient(),
 	))
 	for {
 		select {
@@ -239,6 +240,12 @@ func (p *ReplicationTaskProcessorImpl) cleanupAckedReplicationTasks() error {
 
 	p.logger.Info("Cleaning up replication task queue.", tag.ReadLevel(minAckLevel))
 	p.metricsClient.Scope(metrics.ReplicationTaskCleanupScope).IncCounter(metrics.ReplicationTaskCleanupCount)
+	p.metricsClient.Scope(metrics.ReplicationTaskFetcherScope,
+		metrics.TargetClusterTag(p.currentCluster),
+	).RecordTimer(
+		metrics.ReplicationTasksLag,
+		time.Duration(p.shard.GetTransferMaxReadLevel()-minAckLevel),
+	)
 	return p.shard.GetExecutionManager().RangeCompleteReplicationTask(
 		&persistence.RangeCompleteReplicationTaskRequest{
 			InclusiveEndTaskID: minAckLevel,
@@ -379,7 +386,21 @@ func (p *ReplicationTaskProcessorImpl) putReplicationTaskToDLQ(replicationTask *
 		// We cannot deserialize the task. Dropping it.
 		return nil
 	}
+	p.logger.Info("Put history replication to DLQ",
+		tag.WorkflowDomainID(request.TaskInfo.GetDomainID()),
+		tag.WorkflowID(request.TaskInfo.GetWorkflowID()),
+		tag.WorkflowRunID(request.TaskInfo.GetRunID()),
+		tag.TaskID(request.TaskInfo.GetTaskID()),
+	)
 
+	p.metricsClient.Scope(
+		metrics.ReplicationDLQStatsScope,
+		metrics.TargetClusterTag(p.sourceCluster),
+		metrics.InstanceTag(strconv.Itoa(p.shard.GetShardID())),
+	).UpdateGauge(
+		metrics.ReplicationDLQMaxLevelGauge,
+		float64(request.TaskInfo.GetTaskID()),
+	)
 	// The following is guaranteed to success or retry forever until processor is shutdown.
 	return backoff.Retry(func() error {
 		err := p.shard.GetExecutionManager().PutReplicationTaskToDLQ(request)
