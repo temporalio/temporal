@@ -5010,7 +5010,7 @@ func addTimerFiredEvent(mutableState mutableState, timerID string) *workflow.His
 }
 
 func addRequestCancelInitiatedEvent(builder mutableState, decisionCompletedEventID int64,
-	cancelRequestID, domain, workflowID, runID string) (*workflow.HistoryEvent, *persistence.RequestCancelInfo) {
+	cancelRequestID, domain, workflowID, runID string) (*workflow.HistoryEvent, *persistenceblobs.RequestCancelInfo) {
 	event, rci, _ := builder.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(decisionCompletedEventID,
 		cancelRequestID, &workflow.RequestCancelExternalWorkflowExecutionDecisionAttributes{
 			Domain:     common.StringPtr(domain),
@@ -5145,7 +5145,7 @@ func createMutableState(ms mutableState) *persistence.WorkflowMutableState {
 	for id, info := range builder.pendingTimerInfoIDs {
 		timerInfos[id] = copyTimerInfo(info)
 	}
-	cancellationInfos := make(map[int64]*persistence.RequestCancelInfo)
+	cancellationInfos := make(map[int64]*persistenceblobs.RequestCancelInfo)
 	for id, info := range builder.pendingRequestCancelInfoIDs {
 		cancellationInfos[id] = copyCancellationInfo(info)
 	}
@@ -5320,8 +5320,8 @@ func copyTimerInfo(sourceInfo *persistenceblobs.TimerInfo) *persistenceblobs.Tim
 	}
 }
 
-func copyCancellationInfo(sourceInfo *persistence.RequestCancelInfo) *persistence.RequestCancelInfo {
-	return &persistence.RequestCancelInfo{
+func copyCancellationInfo(sourceInfo *persistenceblobs.RequestCancelInfo) *persistenceblobs.RequestCancelInfo {
+	return &persistenceblobs.RequestCancelInfo{
 		Version:         sourceInfo.Version,
 		InitiatedID:     sourceInfo.InitiatedID,
 		CancelRequestID: sourceInfo.CancelRequestID,

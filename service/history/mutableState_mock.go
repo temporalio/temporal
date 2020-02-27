@@ -518,11 +518,11 @@ func (mr *MockmutableStateMockRecorder) AddRequestCancelExternalWorkflowExecutio
 }
 
 // AddRequestCancelExternalWorkflowExecutionInitiatedEvent mocks base method
-func (m *MockmutableState) AddRequestCancelExternalWorkflowExecutionInitiatedEvent(arg0 int64, arg1 string, arg2 *shared.RequestCancelExternalWorkflowExecutionDecisionAttributes) (*shared.HistoryEvent, *persistence.RequestCancelInfo, error) {
+func (m *MockmutableState) AddRequestCancelExternalWorkflowExecutionInitiatedEvent(arg0 int64, arg1 string, arg2 *shared.RequestCancelExternalWorkflowExecutionDecisionAttributes) (*shared.HistoryEvent, *persistenceblobs.RequestCancelInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddRequestCancelExternalWorkflowExecutionInitiatedEvent", arg0, arg1, arg2)
 	ret0, _ := ret[0].(*shared.HistoryEvent)
-	ret1, _ := ret[1].(*persistence.RequestCancelInfo)
+	ret1, _ := ret[1].(*persistenceblobs.RequestCancelInfo)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }
@@ -1241,10 +1241,10 @@ func (mr *MockmutableStateMockRecorder) GetPendingChildExecutionInfos() *gomock.
 }
 
 // GetPendingRequestCancelExternalInfos mocks base method
-func (m *MockmutableState) GetPendingRequestCancelExternalInfos() map[int64]*persistence.RequestCancelInfo {
+func (m *MockmutableState) GetPendingRequestCancelExternalInfos() map[int64]*persistenceblobs.RequestCancelInfo {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPendingRequestCancelExternalInfos")
-	ret0, _ := ret[0].(map[int64]*persistence.RequestCancelInfo)
+	ret0, _ := ret[0].(map[int64]*persistenceblobs.RequestCancelInfo)
 	return ret0
 }
 
@@ -1283,10 +1283,10 @@ func (mr *MockmutableStateMockRecorder) GetReplicationState() *gomock.Call {
 }
 
 // GetRequestCancelInfo mocks base method
-func (m *MockmutableState) GetRequestCancelInfo(arg0 int64) (*persistence.RequestCancelInfo, bool) {
+func (m *MockmutableState) GetRequestCancelInfo(arg0 int64) (*persistenceblobs.RequestCancelInfo, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetRequestCancelInfo", arg0)
-	ret0, _ := ret[0].(*persistence.RequestCancelInfo)
+	ret0, _ := ret[0].(*persistenceblobs.RequestCancelInfo)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
@@ -1920,10 +1920,10 @@ func (mr *MockmutableStateMockRecorder) ReplicateRequestCancelExternalWorkflowEx
 }
 
 // ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent mocks base method
-func (m *MockmutableState) ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent(arg0 int64, arg1 *shared.HistoryEvent, arg2 string) (*persistence.RequestCancelInfo, error) {
+func (m *MockmutableState) ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent(arg0 int64, arg1 *shared.HistoryEvent, arg2 string) (*persistenceblobs.RequestCancelInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent", arg0, arg1, arg2)
-	ret0, _ := ret[0].(*persistence.RequestCancelInfo)
+	ret0, _ := ret[0].(*persistenceblobs.RequestCancelInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

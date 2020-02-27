@@ -600,7 +600,7 @@ type (
 		ActivityInfos       map[int64]*ActivityInfo
 		TimerInfos          map[string]*pblobs.TimerInfo
 		ChildExecutionInfos map[int64]*ChildExecutionInfo
-		RequestCancelInfos  map[int64]*RequestCancelInfo
+		RequestCancelInfos  map[int64]*pblobs.RequestCancelInfo
 		SignalInfos         map[int64]*pblobs.SignalInfo
 		SignalRequestedIDs  map[string]struct{}
 		ExecutionInfo       *WorkflowExecutionInfo
@@ -665,14 +665,6 @@ type (
 		DomainName            string
 		WorkflowTypeName      string
 		ParentClosePolicy     workflow.ParentClosePolicy
-	}
-
-	// RequestCancelInfo has details for pending external workflow cancellations
-	RequestCancelInfo struct {
-		Version               int64
-		InitiatedEventBatchID int64
-		InitiatedID           int64
-		CancelRequestID       string
 	}
 
 	// CreateShardRequest is used to create a shard in executions table
@@ -825,7 +817,7 @@ type (
 		DeleteTimerInfos          []string
 		UpsertChildExecutionInfos []*ChildExecutionInfo
 		DeleteChildExecutionInfo  *int64
-		UpsertRequestCancelInfos  []*RequestCancelInfo
+		UpsertRequestCancelInfos  []*pblobs.RequestCancelInfo
 		DeleteRequestCancelInfo   *int64
 		UpsertSignalInfos         []*pblobs.SignalInfo
 		DeleteSignalInfo          *int64
@@ -852,7 +844,7 @@ type (
 		ActivityInfos       []*ActivityInfo
 		TimerInfos          []*pblobs.TimerInfo
 		ChildExecutionInfos []*ChildExecutionInfo
-		RequestCancelInfos  []*RequestCancelInfo
+		RequestCancelInfos  []*pblobs.RequestCancelInfo
 		SignalInfos         []*pblobs.SignalInfo
 		SignalRequestedIDs  []string
 

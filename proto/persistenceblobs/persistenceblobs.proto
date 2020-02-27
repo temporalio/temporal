@@ -159,3 +159,10 @@ message SignalInfo {
     bytes control = 6;
     int64 initiatedID = 7;
 }
+
+message RequestCancelInfo {
+    int64 version = 1;
+    int64 initiatedEventBatchID = 2;
+    string cancelRequestID = 3;
+    int64 initiatedID = 4;
+}
