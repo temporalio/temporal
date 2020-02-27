@@ -398,8 +398,8 @@ pollLoop:
 		}
 
 		var maxDispatch *float64
-		if request.TaskListMetadata != nil {
-			maxDispatch = request.TaskListMetadata.MaxTasksPerSecond
+		if request.TaskListMetadata != nil && request.TaskListMetadata.MaxTasksPerSecond != nil {
+			maxDispatch = &request.TaskListMetadata.MaxTasksPerSecond.Value
 		}
 		// Add frontend generated pollerID to context so tasklistMgr can support cancellation of
 		// long-poll when frontend calls CancelOutstandingPoll API
