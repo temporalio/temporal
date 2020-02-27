@@ -23,9 +23,7 @@ package matching
 import (
 	commonproto "go.temporal.io/temporal-proto/common"
 
-	m "github.com/temporalio/temporal/.gen/go/matching"
-	s "github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/common/adapter"
+	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/common/persistence"
 )
 
@@ -38,13 +36,13 @@ type (
 	// queryTaskInfo contains the info for a query task
 	queryTaskInfo struct {
 		taskID  string
-		request *m.QueryWorkflowRequest
+		request *matchingservice.QueryWorkflowRequest
 	}
 	// startedTaskInfo contains info for any task received from
 	// another matching host. This type of task is already marked as started
 	startedTaskInfo struct {
-		decisionTaskInfo *m.PollForDecisionTaskResponse
-		activityTaskInfo *s.PollForActivityTaskResponse
+		decisionTaskInfo *matchingservice.PollForDecisionTaskResponse
+		activityTaskInfo *matchingservice.PollForActivityTaskResponse
 	}
 	// internalTask represents an activity, decision, query or started (received from another host).
 	// this struct is more like a union and only one of [ query, event, forwarded ] is
@@ -81,7 +79,7 @@ func newInternalTask(
 
 func newInternalQueryTask(
 	taskID string,
-	request *m.QueryWorkflowRequest,
+	request *matchingservice.QueryWorkflowRequest,
 ) *internalTask {
 	return &internalTask{
 		query: &queryTaskInfo{
@@ -117,18 +115,18 @@ func (task *internalTask) workflowExecution() *commonproto.WorkflowExecution {
 	case task.event != nil:
 		return &commonproto.WorkflowExecution{WorkflowId: task.event.WorkflowID, RunId: task.event.RunID}
 	case task.query != nil:
-		return adapter.ToProtoWorkflowExecution(task.query.request.GetQueryRequest().GetExecution())
+		return task.query.request.GetQueryRequest().GetExecution()
 	case task.started != nil && task.started.decisionTaskInfo != nil:
-		return adapter.ToProtoWorkflowExecution(task.started.decisionTaskInfo.WorkflowExecution)
+		return task.started.decisionTaskInfo.WorkflowExecution
 	case task.started != nil && task.started.activityTaskInfo != nil:
-		return adapter.ToProtoWorkflowExecution(task.started.activityTaskInfo.WorkflowExecution)
+		return task.started.activityTaskInfo.WorkflowExecution
 	}
 	return &commonproto.WorkflowExecution{}
 }
 
 // pollForDecisionResponse returns the poll response for a decision task that is
 // already marked as started. This method should only be called when isStarted() is true
-func (task *internalTask) pollForDecisionResponse() *m.PollForDecisionTaskResponse {
+func (task *internalTask) pollForDecisionResponse() *matchingservice.PollForDecisionTaskResponse {
 	if task.isStarted() {
 		return task.started.decisionTaskInfo
 	}
@@ -137,7 +135,7 @@ func (task *internalTask) pollForDecisionResponse() *m.PollForDecisionTaskRespon
 
 // pollForActivityResponse returns the poll response for an activity task that is
 // already marked as started. This method should only be called when isStarted() is true
-func (task *internalTask) pollForActivityResponse() *s.PollForActivityTaskResponse {
+func (task *internalTask) pollForActivityResponse() *matchingservice.PollForActivityTaskResponse {
 	if task.isStarted() {
 		return task.started.activityTaskInfo
 	}

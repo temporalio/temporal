@@ -97,10 +97,9 @@ func (s *Service) Start() {
 	s.handler.Start()
 
 	s.server = grpc.NewServer(grpc.UnaryInterceptor(interceptor))
-	handlerGRPC := NewHandlerGRPC(s.handler)
-	nilCheckHandler := NewNilCheckHandler(handlerGRPC)
+	nilCheckHandler := NewNilCheckHandler(s.handler)
 	matchingservice.RegisterMatchingServiceServer(s.server, nilCheckHandler)
-	healthservice.RegisterMetaServer(s.server, handlerGRPC)
+	healthservice.RegisterMetaServer(s.server, s.handler)
 
 	listener := s.GetGRPCListener()
 	logger.Info("Starting to serve on matching listener")
@@ -123,7 +122,7 @@ func (s *Service) Stop() {
 	s.GetLogger().Info("matching stopped")
 }
 
-func interceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+func interceptor(ctx context.Context, req interface{}, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 	resp, err := handler(ctx, req)
 	return resp, serviceerror.ToStatus(err).Err()
 }

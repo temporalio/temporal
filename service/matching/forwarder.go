@@ -30,10 +30,8 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/client/matching"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/quotas"
@@ -45,7 +43,7 @@ type (
 	Forwarder struct {
 		cfg          *forwarderConfig
 		taskListID   *taskListID
-		taskListKind shared.TaskListKind
+		taskListKind enums.TaskListKind
 		client       matching.Client
 
 		// token channels that vend tokens necessary to make
@@ -106,7 +104,7 @@ var noopForwarderTokenC <-chan *ForwarderReqToken = make(chan *ForwarderReqToken
 func newForwarder(
 	cfg *forwarderConfig,
 	taskListID *taskListID,
-	kind shared.TaskListKind,
+	kind enums.TaskListKind,
 	client matching.Client,
 	scopeFunc func() metrics.Scope,
 ) *Forwarder {
@@ -128,7 +126,7 @@ func newForwarder(
 
 // ForwardTask forwards an activity or decision task to the parent task list partition if it exist
 func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) error {
-	if fwdr.taskListKind == shared.TaskListKindSticky {
+	if fwdr.taskListKind == enums.TaskListKindSticky {
 		return errTaskListKind
 	}
 
@@ -180,9 +178,9 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 func (fwdr *Forwarder) ForwardQueryTask(
 	ctx context.Context,
 	task *internalTask,
-) (*shared.QueryWorkflowResponse, error) {
+) (*matchingservice.QueryWorkflowResponse, error) {
 
-	if fwdr.taskListKind == shared.TaskListKindSticky {
+	if fwdr.taskListKind == enums.TaskListKindSticky {
 		return nil, errTaskListKind
 	}
 
@@ -195,18 +193,18 @@ func (fwdr *Forwarder) ForwardQueryTask(
 		DomainUUID: task.query.request.GetDomainUUID(),
 		TaskList: &commonproto.TaskList{
 			Name: name,
-			Kind: enums.TaskListKind(fwdr.taskListKind),
+			Kind: fwdr.taskListKind,
 		},
-		QueryRequest:  adapter.ToProtoQueryWorkflowRequest(task.query.request.QueryRequest),
+		QueryRequest:  task.query.request.QueryRequest,
 		ForwardedFrom: fwdr.taskListID.name,
 	})
 
-	return adapter.ToThriftQueryWorkflowResponse(resp), fwdr.handleErr(err)
+	return resp, fwdr.handleErr(err)
 }
 
 // ForwardPoll forwards a poll request to parent task list partition if it exist
 func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
-	if fwdr.taskListKind == shared.TaskListKindSticky {
+	if fwdr.taskListKind == enums.TaskListKindSticky {
 		return nil, errTaskListKind
 	}
 
@@ -235,7 +233,7 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 		if err != nil {
 			return nil, fwdr.handleErr(err)
 		}
-		return newInternalStartedTask(&startedTaskInfo{decisionTaskInfo: adapter.ToThriftMatchingPollForDecisionTaskResponse(resp)}), nil
+		return newInternalStartedTask(&startedTaskInfo{decisionTaskInfo: resp}), nil
 	case persistence.TaskListTypeActivity:
 		resp, err := fwdr.client.PollForActivityTask(ctx, &matchingservice.PollForActivityTaskRequest{
 			DomainUUID: fwdr.taskListID.domainID,
@@ -252,7 +250,7 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 		if err != nil {
 			return nil, fwdr.handleErr(err)
 		}
-		return newInternalStartedTask(&startedTaskInfo{activityTaskInfo: adapter.ToThriftMatchingPollForActivityTaskResponse(resp)}), nil
+		return newInternalStartedTask(&startedTaskInfo{activityTaskInfo: resp}), nil
 	}
 
 	return nil, errInvalidTaskListType
