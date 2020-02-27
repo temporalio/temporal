@@ -87,7 +87,6 @@ ringpop:
 services:
     frontend:
         rpc:
-            port: 7933
             grpcPort: 7233
             ringpopPort: 6933
             bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
@@ -105,7 +104,6 @@ services:
 
     matching:
         rpc:
-            port: 7935
             grpcPort: 7235
             ringpopPort: 6935
             bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
@@ -123,7 +121,6 @@ services:
 
     history:
         rpc:
-            port: 7934
             grpcPort: 7234
             ringpopPort: 6934
             bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
@@ -141,7 +138,6 @@ services:
 
     worker:
         rpc:
-            port: 7939
             grpcPort: 7239
             ringpopPort: 6939
             bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
@@ -167,7 +163,7 @@ clusterMetadata:
             enabled: true
             initialFailoverVersion: 0
             rpcName: "cadence-frontend"
-            rpcAddress: "127.0.0.1:7933"
+            rpcAddress: "127.0.0.1:7233"
 
 dcRedirectionPolicy:
     policy: "noop"
@@ -211,7 +207,7 @@ kafka:
             dlq-topic: cadence-visibility-dev-dlq
 
 publicClient:
-    hostPort: {{ default .Env.BIND_ON_IP "127.0.0.1" }}:7933
+    hostPort: {{ default .Env.BIND_ON_IP "127.0.0.1" }}:7233
 
 dynamicConfigClient:
     filepath: {{ default .Env.DYNAMIC_CONFIG_FILE_PATH "/etc/cadence/config/dynamicconfig" }}
