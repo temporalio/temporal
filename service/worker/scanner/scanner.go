@@ -26,6 +26,8 @@ import (
 
 	"github.com/uber-go/tally"
 	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/temporal/activity"
+	"go.temporal.io/temporal/workflow"
 	"go.uber.org/zap"
 
 	cclient "go.temporal.io/temporal/client"
@@ -127,7 +129,13 @@ func (s *Scanner) Start() error {
 		workerTaskListName = historyScannerTaskListName
 	}
 
-	return worker.New(s.context.GetSDKClient(), common.SystemLocalDomainName, workerTaskListName, workerOpts).Start()
+	worker := worker.New(s.context.GetSDKClient(), common.SystemLocalDomainName, workerTaskListName, workerOpts)
+	worker.RegisterWorkflowWithOptions(TaskListScannerWorkflow, workflow.RegisterOptions{Name: tlScannerWFTypeName})
+	worker.RegisterWorkflowWithOptions(HistoryScannerWorkflow, workflow.RegisterOptions{Name: historyScannerWFTypeName})
+	worker.RegisterActivityWithOptions(TaskListScavengerActivity, activity.RegisterOptions{Name: taskListScavengerActivityName})
+	worker.RegisterActivityWithOptions(HistoryScavengerActivity, activity.RegisterOptions{Name: historyScavengerActivityName})
+
+	return worker.Start()
 }
 
 func (s *Scanner) startWorkflowWithRetry(

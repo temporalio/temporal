@@ -80,11 +80,6 @@ var (
 	}
 )
 
-func init() {
-	workflow.RegisterWithOptions(ProcessorWorkflow, workflow.RegisterOptions{Name: processorWFTypeName})
-	activity.RegisterWithOptions(ProcessorActivity, activity.RegisterOptions{Name: processorActivityName})
-}
-
 // ProcessorWorkflow is the workflow that performs actions for ParentClosePolicy
 func ProcessorWorkflow(ctx workflow.Context) error {
 	requestCh := workflow.GetSignalChannel(ctx, processorChannelName)

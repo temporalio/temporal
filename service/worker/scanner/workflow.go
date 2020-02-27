@@ -87,13 +87,6 @@ var (
 	}
 )
 
-func init() {
-	workflow.RegisterWithOptions(TaskListScannerWorkflow, workflow.RegisterOptions{Name: tlScannerWFTypeName})
-	workflow.RegisterWithOptions(HistoryScannerWorkflow, workflow.RegisterOptions{Name: historyScannerWFTypeName})
-	activity.RegisterWithOptions(TaskListScavengerActivity, activity.RegisterOptions{Name: taskListScavengerActivityName})
-	activity.RegisterWithOptions(HistoryScavengerActivity, activity.RegisterOptions{Name: historyScavengerActivityName})
-}
-
 // TaskListScannerWorkflow is the workflow that runs the task-list scanner background daemon
 func TaskListScannerWorkflow(
 	ctx workflow.Context,

@@ -25,6 +25,8 @@ import (
 
 	"github.com/opentracing/opentracing-go"
 	"github.com/uber-go/tally"
+	"go.temporal.io/temporal/activity"
+	"go.temporal.io/temporal/workflow"
 
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/worker"
@@ -82,5 +84,9 @@ func (s *Processor) Start() error {
 		Tracer:                    opentracing.GlobalTracer(),
 	}
 	processorWorker := worker.New(s.svcClient, common.SystemLocalDomainName, processorTaskListName, workerOpts)
+
+	processorWorker.RegisterWorkflowWithOptions(ProcessorWorkflow, workflow.RegisterOptions{Name: processorWFTypeName})
+	processorWorker.RegisterActivityWithOptions(ProcessorActivity, activity.RegisterOptions{Name: processorActivityName})
+
 	return processorWorker.Start()
 }

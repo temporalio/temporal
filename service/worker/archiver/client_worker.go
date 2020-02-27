@@ -90,13 +90,6 @@ var (
 	globalConfig        *Config
 )
 
-func init() {
-	workflow.RegisterWithOptions(archivalWorkflow, workflow.RegisterOptions{Name: archivalWorkflowFnName})
-	activity.RegisterWithOptions(uploadHistoryActivity, activity.RegisterOptions{Name: uploadHistoryActivityFnName})
-	activity.RegisterWithOptions(deleteHistoryActivity, activity.RegisterOptions{Name: deleteHistoryActivityFnName})
-	activity.RegisterWithOptions(archiveVisibilityActivity, activity.RegisterOptions{Name: archiveVisibilityActivityFnName})
-}
-
 // NewClientWorker returns a new ClientWorker
 func NewClientWorker(container *BootstrapContainer) ClientWorker {
 	globalLogger = container.Logger.WithTags(tag.ComponentArchiver, tag.WorkflowDomainName(common.SystemLocalDomainName))
@@ -106,10 +99,17 @@ func NewClientWorker(container *BootstrapContainer) ClientWorker {
 	wo := worker.Options{
 		BackgroundActivityContext: actCtx,
 	}
-	return &clientWorker{
+	clientWorker := &clientWorker{
 		worker:      worker.New(container.PublicClient, common.SystemLocalDomainName, decisionTaskList, wo),
 		domainCache: container.DomainCache,
 	}
+
+	clientWorker.worker.RegisterWorkflowWithOptions(archivalWorkflow, workflow.RegisterOptions{Name: archivalWorkflowFnName})
+	clientWorker.worker.RegisterActivityWithOptions(uploadHistoryActivity, activity.RegisterOptions{Name: uploadHistoryActivityFnName})
+	clientWorker.worker.RegisterActivityWithOptions(deleteHistoryActivity, activity.RegisterOptions{Name: deleteHistoryActivityFnName})
+	clientWorker.worker.RegisterActivityWithOptions(archiveVisibilityActivity, activity.RegisterOptions{Name: archiveVisibilityActivityFnName})
+
+	return clientWorker
 }
 
 // Start the ClientWorker

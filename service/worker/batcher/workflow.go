@@ -167,11 +167,6 @@ var (
 	}
 )
 
-func init() {
-	workflow.RegisterWithOptions(BatchWorkflow, workflow.RegisterOptions{Name: BatchWFTypeName})
-	activity.RegisterWithOptions(BatchActivity, activity.RegisterOptions{Name: batchActivityName})
-}
-
 // BatchWorkflow is the workflow that runs a batch job of resetting workflows
 func BatchWorkflow(ctx workflow.Context, batchParams BatchParams) (HeartBeatDetails, error) {
 	batchParams = setDefaultParams(batchParams)
