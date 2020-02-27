@@ -21,6 +21,7 @@
 package history
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/gogo/protobuf/types"
@@ -360,7 +361,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	task *persistenceblobs.TimerTaskInfo,
 ) (retError error) {
 
-	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
+	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
 		t.getDomainIDAndWorkflowExecution(task),
 	)
 	if err != nil {
@@ -368,7 +369,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(weContext, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
 	}
@@ -430,7 +431,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 
 	release(nil) // release earlier as we don't need the lock anymore
 
-	_, retError = t.shard.GetService().GetMatchingClient().AddActivityTask(nil, &matchingservice.AddActivityTaskRequest{
+	_, retError = t.shard.GetService().GetMatchingClient().AddActivityTask(context.Background(), &matchingservice.AddActivityTaskRequest{
 		DomainUUID:                    targetDomainID,
 		SourceDomainUUID:              domainID,
 		Execution:                     execution,
