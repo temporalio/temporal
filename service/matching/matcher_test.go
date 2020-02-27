@@ -29,9 +29,8 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/temporal-proto/enums"
 
-	gen "github.com/temporalio/temporal/.gen/go/matching"
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservicemock"
 	"github.com/temporalio/temporal/common/cache"
@@ -69,7 +68,7 @@ func (t *MatcherTestSuite) SetupTest() {
 	}
 	t.cfg = tlCfg
 	scope := func() metrics.Scope { return metrics.NoopScope(metrics.Matching) }
-	t.fwdr = newForwarder(&t.cfg.forwarderConfig, t.taskList, shared.TaskListKindNormal, t.client, scope)
+	t.fwdr = newForwarder(&t.cfg.forwarderConfig, t.taskList, enums.TaskListKindNormal, t.client, scope)
 	t.matcher = newTaskMatcher(tlCfg, t.fwdr, func() metrics.Scope { return metrics.NoopScope(metrics.Matching) })
 }
 
@@ -182,7 +181,7 @@ func (t *MatcherTestSuite) TestQueryLocalSyncMatch() {
 
 	<-pollStarted
 	time.Sleep(10 * time.Millisecond)
-	task := newInternalQueryTask(uuid.New(), &gen.QueryWorkflowRequest{})
+	task := newInternalQueryTask(uuid.New(), &matchingservice.QueryWorkflowRequest{})
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	resp, err := t.matcher.OfferQuery(ctx, task)
 	cancel()
@@ -206,7 +205,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 		}
 	}()
 
-	task := newInternalQueryTask(uuid.New(), &gen.QueryWorkflowRequest{})
+	task := newInternalQueryTask(uuid.New(), &matchingservice.QueryWorkflowRequest{})
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 
 	var req *matchingservice.QueryWorkflowRequest
@@ -252,7 +251,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatchError() {
 		}
 	}()
 
-	task := newInternalQueryTask(uuid.New(), &gen.QueryWorkflowRequest{})
+	task := newInternalQueryTask(uuid.New(), &matchingservice.QueryWorkflowRequest{})
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 
 	var req *matchingservice.QueryWorkflowRequest
