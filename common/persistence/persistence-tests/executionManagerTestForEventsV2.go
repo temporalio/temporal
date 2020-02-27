@@ -904,7 +904,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 		ScheduledEvent: &gen.HistoryEvent{EventId: int64Ptr(1)},
 	}}
 
-	insertRequestCancelInfos := []*p.RequestCancelInfo{{
+	insertRequestCancelInfos := []*persistenceblobs.RequestCancelInfo{{
 		Version:         120,
 		InitiatedID:     121,
 		CancelRequestID: uuid.New(),
@@ -1319,7 +1319,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 		ScheduledEvent: &gen.HistoryEvent{EventId: int64Ptr(1)},
 	}}
 
-	insertRequestCancelInfos := []*p.RequestCancelInfo{{
+	insertRequestCancelInfos := []*persistenceblobs.RequestCancelInfo{{
 		Version:         120,
 		InitiatedID:     121,
 		CancelRequestID: uuid.New(),
@@ -1604,7 +1604,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 		ScheduledEvent: &gen.HistoryEvent{EventId: int64Ptr(1)},
 	}}
 
-	insertRequestCancelInfos := []*p.RequestCancelInfo{{
+	insertRequestCancelInfos := []*persistenceblobs.RequestCancelInfo{{
 		Version:         120,
 		InitiatedID:     121,
 		CancelRequestID: uuid.New(),

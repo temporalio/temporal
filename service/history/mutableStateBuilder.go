@@ -94,13 +94,13 @@ type (
 		updateChildExecutionInfos    map[*persistence.ChildExecutionInfo]struct{} // Modified ChildExecution Infos since last update
 		deleteChildExecutionInfo     *int64                                       // Deleted ChildExecution Info since last update
 
-		pendingRequestCancelInfoIDs map[int64]*persistence.RequestCancelInfo    // Initiated Event ID -> RequestCancelInfo
-		updateRequestCancelInfos    map[*persistence.RequestCancelInfo]struct{} // Modified RequestCancel Infos since last update, for persistence update
-		deleteRequestCancelInfo     *int64                                      // Deleted RequestCancel Info since last update, for persistence update
+		pendingRequestCancelInfoIDs map[int64]*persistenceblobs.RequestCancelInfo    // Initiated Event ID -> RequestCancelInfo
+		updateRequestCancelInfos    map[*persistenceblobs.RequestCancelInfo]struct{} // Modified RequestCancel Infos since last update, for persistence update
+		deleteRequestCancelInfo     *int64                                           // Deleted RequestCancel Info since last update, for persistence update
 
 		pendingSignalInfoIDs map[int64]*persistenceblobs.SignalInfo    // Initiated Event ID -> SignalInfo
 		updateSignalInfos    map[*persistenceblobs.SignalInfo]struct{} // Modified SignalInfo since last update
-		deleteSignalInfo     *int64                               // Deleted SignalInfo since last update
+		deleteSignalInfo     *int64                                    // Deleted SignalInfo since last update
 
 		pendingSignalRequestedIDs map[string]struct{} // Set of signaled requestIds
 		updateSignalRequestedIDs  map[string]struct{} // Set of signaled requestIds since last update
@@ -180,8 +180,8 @@ func newMutableStateBuilder(
 		pendingChildExecutionInfoIDs: make(map[int64]*persistence.ChildExecutionInfo),
 		deleteChildExecutionInfo:     nil,
 
-		updateRequestCancelInfos:    make(map[*persistence.RequestCancelInfo]struct{}),
-		pendingRequestCancelInfoIDs: make(map[int64]*persistence.RequestCancelInfo),
+		updateRequestCancelInfos:    make(map[*persistenceblobs.RequestCancelInfo]struct{}),
+		pendingRequestCancelInfoIDs: make(map[int64]*persistenceblobs.RequestCancelInfo),
 		deleteRequestCancelInfo:     nil,
 
 		updateSignalInfos:    make(map[*persistenceblobs.SignalInfo]struct{}),
@@ -1042,7 +1042,7 @@ func (e *mutableStateBuilder) GetChildExecutionInitiatedEvent(
 // GetRequestCancelInfo gives details about a request cancellation that is currently in progress.
 func (e *mutableStateBuilder) GetRequestCancelInfo(
 	initiatedEventID int64,
-) (*persistence.RequestCancelInfo, bool) {
+) (*persistenceblobs.RequestCancelInfo, bool) {
 
 	ri, ok := e.pendingRequestCancelInfoIDs[initiatedEventID]
 	return ri, ok
@@ -1462,7 +1462,7 @@ func (e *mutableStateBuilder) GetPendingChildExecutionInfos() map[int64]*persist
 	return e.pendingChildExecutionInfoIDs
 }
 
-func (e *mutableStateBuilder) GetPendingRequestCancelExternalInfos() map[int64]*persistence.RequestCancelInfo {
+func (e *mutableStateBuilder) GetPendingRequestCancelExternalInfos() map[int64]*persistenceblobs.RequestCancelInfo {
 	return e.pendingRequestCancelInfoIDs
 }
 
@@ -2717,7 +2717,7 @@ func (e *mutableStateBuilder) AddRequestCancelExternalWorkflowExecutionInitiated
 	decisionCompletedEventID int64,
 	cancelRequestID string,
 	request *workflow.RequestCancelExternalWorkflowExecutionDecisionAttributes,
-) (*workflow.HistoryEvent, *persistence.RequestCancelInfo, error) {
+) (*workflow.HistoryEvent, *persistenceblobs.RequestCancelInfo, error) {
 
 	opTag := tag.WorkflowActionExternalWorkflowCancelInitiated
 	if err := e.checkMutability(opTag); err != nil {
@@ -2743,11 +2743,11 @@ func (e *mutableStateBuilder) ReplicateRequestCancelExternalWorkflowExecutionIni
 	firstEventID int64,
 	event *workflow.HistoryEvent,
 	cancelRequestID string,
-) (*persistence.RequestCancelInfo, error) {
+) (*persistenceblobs.RequestCancelInfo, error) {
 
 	// TODO: Evaluate if we need cancelRequestID also part of history event
 	initiatedEventID := event.GetEventId()
-	rci := &persistence.RequestCancelInfo{
+	rci := &persistenceblobs.RequestCancelInfo{
 		Version:               event.GetVersion(),
 		InitiatedEventBatchID: firstEventID,
 		InitiatedID:           initiatedEventID,
@@ -4105,7 +4105,7 @@ func (e *mutableStateBuilder) cleanupTransaction(
 	e.updateChildExecutionInfos = make(map[*persistence.ChildExecutionInfo]struct{})
 	e.deleteChildExecutionInfo = nil
 
-	e.updateRequestCancelInfos = make(map[*persistence.RequestCancelInfo]struct{})
+	e.updateRequestCancelInfos = make(map[*persistenceblobs.RequestCancelInfo]struct{})
 	e.deleteRequestCancelInfo = nil
 
 	e.updateSignalInfos = make(map[*persistenceblobs.SignalInfo]struct{})

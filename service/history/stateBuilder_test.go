@@ -1553,7 +1553,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeRequestCancelExternalWorkfl
 			Control:           control,
 		},
 	}
-	rci := &persistence.RequestCancelInfo{
+	rci := &persistenceblobs.RequestCancelInfo{
 		Version:         event.GetVersion(),
 		InitiatedID:     event.GetEventId(),
 		CancelRequestID: cancellationRequestID,

@@ -786,8 +786,8 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 			Version:               failoverVersion,
 			InitiatedID:           75,
 			InitiatedEventBatchID: 17,
-			RequestID:       uuid.New(),
-			Name:            "test-signal-75",
+			RequestID:             uuid.New(),
+			Name:                  "test-signal-75",
 			Input:                 []byte("signal-input-75"),
 		},
 	}

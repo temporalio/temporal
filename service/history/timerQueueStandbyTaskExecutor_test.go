@@ -626,7 +626,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 				DeleteTimerInfos:          []string{},
 				UpsertChildExecutionInfos: []*persistence.ChildExecutionInfo{},
 				DeleteChildExecutionInfo:  nil,
-				UpsertRequestCancelInfos:  []*persistence.RequestCancelInfo{},
+				UpsertRequestCancelInfos:  []*persistenceblobs.RequestCancelInfo{},
 				DeleteRequestCancelInfo:   nil,
 				UpsertSignalInfos:         []*persistenceblobs.SignalInfo{},
 				DeleteSignalInfo:          nil,

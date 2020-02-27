@@ -455,7 +455,7 @@ func deleteChildExecutionInfoMap(
 
 func updateRequestCancelInfos(
 	tx sqlplugin.Tx,
-	requestCancelInfos []*persistence.RequestCancelInfo,
+	requestCancelInfos []*persistenceblobs.RequestCancelInfo,
 	deleteInfo *int64,
 	shardID int,
 	domainID primitives.UUID,
@@ -466,11 +466,7 @@ func updateRequestCancelInfos(
 	if len(requestCancelInfos) > 0 {
 		rows := make([]sqlplugin.RequestCancelInfoMapsRow, len(requestCancelInfos))
 		for i, v := range requestCancelInfos {
-			blob, err := serialization.RequestCancelInfoToBlob(&sqlblobs.RequestCancelInfo{
-				Version:               &v.Version,
-				InitiatedEventBatchID: &v.InitiatedEventBatchID,
-				CancelRequestID:       &v.CancelRequestID,
-			})
+			blob, err := serialization.RequestCancelInfoToBlob(v)
 			if err != nil {
 				return err
 			}
@@ -518,7 +514,7 @@ func getRequestCancelInfoMap(
 	domainID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
-) (map[int64]*persistence.RequestCancelInfo, error) {
+) (map[int64]*persistenceblobs.RequestCancelInfo, error) {
 
 	rows, err := db.SelectFromRequestCancelInfoMaps(&sqlplugin.RequestCancelInfoMapsFilter{
 		ShardID:    int64(shardID),
@@ -530,13 +526,13 @@ func getRequestCancelInfoMap(
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to get request cancel info. Error: %v", err))
 	}
 
-	ret := make(map[int64]*persistence.RequestCancelInfo)
+	ret := make(map[int64]*persistenceblobs.RequestCancelInfo)
 	for _, v := range rows {
 		rowInfo, err := serialization.RequestCancelInfoFromBlob(v.Data, v.DataEncoding)
 		if err != nil {
 			return nil, err
 		}
-		ret[v.InitiatedID] = &persistence.RequestCancelInfo{
+		ret[v.InitiatedID] = &persistenceblobs.RequestCancelInfo{
 			Version:               rowInfo.GetVersion(),
 			InitiatedID:           v.InitiatedID,
 			InitiatedEventBatchID: rowInfo.GetInitiatedEventBatchID(),

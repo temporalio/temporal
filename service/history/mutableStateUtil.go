@@ -146,10 +146,10 @@ func convertUpdateChildExecutionInfos(
 }
 
 func convertPendingRequestCancelInfos(
-	inputs map[int64]*persistence.RequestCancelInfo,
-) []*persistence.RequestCancelInfo {
+	inputs map[int64]*persistenceblobs.RequestCancelInfo,
+) []*persistenceblobs.RequestCancelInfo {
 
-	outputs := make([]*persistence.RequestCancelInfo, 0, len(inputs))
+	outputs := make([]*persistenceblobs.RequestCancelInfo, 0, len(inputs))
 	for _, item := range inputs {
 		outputs = append(outputs, item)
 	}
@@ -157,10 +157,10 @@ func convertPendingRequestCancelInfos(
 }
 
 func convertUpdateRequestCancelInfos(
-	inputs map[*persistence.RequestCancelInfo]struct{},
-) []*persistence.RequestCancelInfo {
+	inputs map[*persistenceblobs.RequestCancelInfo]struct{},
+) []*persistenceblobs.RequestCancelInfo {
 
-	outputs := make([]*persistence.RequestCancelInfo, 0, len(inputs))
+	outputs := make([]*persistenceblobs.RequestCancelInfo, 0, len(inputs))
 	for item := range inputs {
 		outputs = append(outputs, item)
 	}
