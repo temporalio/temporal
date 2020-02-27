@@ -80,8 +80,8 @@ func (s *clientIntegrationSuite) SetupSuite() {
 	s.worker = worker.New(s.wfService, s.domainName, s.taskList, worker.Options{})
 
 	s.worker.RegisterWorkflow(testDataConverterWorkflow)
-	s.worker.RegisterActivity(testActivity)
 	s.worker.RegisterWorkflow(testParentWorkflow)
+	s.worker.RegisterActivity(testActivity)
 	s.worker.RegisterWorkflow(testChildWorkflow)
 
 	if err := s.worker.Start(); err != nil {
@@ -187,6 +187,9 @@ func (s *clientIntegrationSuite) startWorkerWithDataConverter(tl string, dataCon
 		opts.DataConverter = dataConverter
 	}
 	worker := worker.New(s.wfService, s.domainName, tl, opts)
+	worker.RegisterActivity(testActivity)
+	worker.RegisterWorkflow(testChildWorkflow)
+
 	if err := worker.Start(); err != nil {
 		s.Logger.Fatal("Error when start worker with data converter", tag.Error(err))
 	}
