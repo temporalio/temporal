@@ -39,7 +39,7 @@ type (
 	Scheduler interface {
 		common.Daemon
 		Submit(task PriorityTask) error
-		// TODO: add another method for non-blocking submit
+		TrySubmit(task PriorityTask) (bool, error)
 	}
 
 	// State represents the current state of a task

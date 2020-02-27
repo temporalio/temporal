@@ -31,10 +31,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/metrics"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
 type (
@@ -45,6 +45,8 @@ type (
 		controller    *gomock.Controller
 		mockProcessor *MockProcessor
 
+		queueSize int
+
 		scheduler *weightedRoundRobinTaskSchedulerImpl
 	}
 
@@ -54,7 +56,11 @@ type (
 )
 
 var (
-	testSchedulerWeights = []int{3, 2, 1}
+	testSchedulerWeights = map[int]dynamicconfig.IntPropertyFn{
+		0: dynamicconfig.GetIntPropertyFn(3),
+		1: dynamicconfig.GetIntPropertyFn(2),
+		2: dynamicconfig.GetIntPropertyFn(1),
+	}
 )
 
 func TestWeightedRoundRobinTaskSchedulerSuite(t *testing.T) {
@@ -68,10 +74,11 @@ func (s *weightedRoundRobinTaskSchedulerSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockProcessor = NewMockProcessor(s.controller)
 
+	s.queueSize = 10
 	s.scheduler = s.newTestWeightedRoundRobinTaskScheduler(
 		&WeightedRoundRobinTaskSchedulerOptions{
 			Weights:     testSchedulerWeights,
-			QueueSize:   10,
+			QueueSize:   s.queueSize,
 			WorkerCount: 1,
 			RetryPolicy: backoff.NewExponentialRetryPolicy(time.Millisecond),
 		},
@@ -92,7 +99,6 @@ func (s *weightedRoundRobinTaskSchedulerSuite) TestSubmit_Success() {
 
 	task := <-s.scheduler.taskChs[taskPriority]
 	s.Equal(mockTask, task)
-	s.Equal(len(testSchedulerWeights), s.scheduler.numQueues)
 	for _, taskCh := range s.scheduler.taskChs {
 		s.Empty(taskCh)
 	}
@@ -118,13 +124,31 @@ func (s *weightedRoundRobinTaskSchedulerSuite) TestSubmit_Fail_SchedulerShutDown
 	s.Equal(ErrTaskSchedulerClosed, err)
 }
 
-func (s *weightedRoundRobinTaskSchedulerSuite) TestSubmit_Fail_PriorityExceedsLimit() {
-	taskPriority := 5 // make sure the number >= len(testSchedulerWeights)
+func (s *weightedRoundRobinTaskSchedulerSuite) TestSubmit_Fail_UnknownPriority() {
+	taskPriority := 5 // make sure the number is not in testSchedulerWeights
 	mockTask := NewMockPriorityTask(s.controller)
 	mockTask.EXPECT().Priority().Return(taskPriority)
 	err := s.scheduler.Submit(mockTask)
 	s.Error(err)
 	s.NotEqual(ErrTaskSchedulerClosed, err)
+}
+
+func (s *weightedRoundRobinTaskSchedulerSuite) TestTrySubmit() {
+	taskPriority := 1
+	for i := 0; i != s.queueSize; i++ {
+		mockTask := NewMockPriorityTask(s.controller)
+		mockTask.EXPECT().Priority().Return(taskPriority)
+		submitted, err := s.scheduler.TrySubmit(mockTask)
+		s.NoError(err)
+		s.True(submitted)
+	}
+
+	// now the queue is full, submit one more task, should be non-blocking
+	mockTask := NewMockPriorityTask(s.controller)
+	mockTask.EXPECT().Priority().Return(taskPriority)
+	submitted, err := s.scheduler.TrySubmit(mockTask)
+	s.NoError(err)
+	s.False(submitted)
 }
 
 func (s *weightedRoundRobinTaskSchedulerSuite) TestDispatcher_SubmitWithNoError() {
@@ -134,42 +158,40 @@ func (s *weightedRoundRobinTaskSchedulerSuite) TestDispatcher_SubmitWithNoError(
 	for i := 0; i != numPriorities; i++ {
 		tasks = append(tasks, []*MockPriorityTask{})
 	}
-	for priority := 0; priority != numPriorities; priority++ {
-		for i := 0; i != 5; i++ {
-			mockTask := NewMockPriorityTask(s.controller)
-			mockTask.EXPECT().Priority().Return(priority)
-			s.scheduler.Submit(mockTask)
-			tasks[priority] = append(tasks[priority], mockTask)
-			taskWG.Add(1)
-		}
-	}
 
+	taskPerPriority := 5
+	numSubmittedTask := 0
+	tasksPerRound := []int{6, 5, 2, 1, 1}
+	round := 0
 	mockFn := func(_ Task) error {
+		numSubmittedTask += 1
+		if numSubmittedTask == tasksPerRound[round] {
+			round++
+			numSubmittedTask = 0
+			for priority, weightFn := range testSchedulerWeights {
+				expectedRemainingTasksNum := taskPerPriority - round*weightFn()
+				if expectedRemainingTasksNum < 0 {
+					expectedRemainingTasksNum = 0
+				}
+				s.Equal(expectedRemainingTasksNum, len(s.scheduler.taskChs[priority]))
+			}
+		}
+
 		taskWG.Done()
 		return nil
 	}
-	gomock.InOrder(
-		// first round
-		s.mockProcessor.EXPECT().Submit(newMockPriorityTaskMatcher(tasks[0][0])).DoAndReturn(mockFn),
-		s.mockProcessor.EXPECT().Submit(newMockPriorityTaskMatcher(tasks[0][1])).DoAndReturn(mockFn),
-		s.mockProcessor.EXPECT().Submit(newMockPriorityTaskMatcher(tasks[0][2])).DoAndReturn(mockFn),
-		s.mockProcessor.EXPECT().Submit(newMockPriorityTaskMatcher(tasks[1][0])).DoAndReturn(mockFn),
-		s.mockProcessor.EXPECT().Submit(newMockPriorityTaskMatcher(tasks[1][1])).DoAndReturn(mockFn),
-		s.mockProcessor.EXPECT().Submit(newMockPriorityTaskMatcher(tasks[2][0])).DoAndReturn(mockFn),
-		// second round
-		s.mockProcessor.EXPECT().Submit(newMockPriorityTaskMatcher(tasks[0][3])).DoAndReturn(mockFn),
-		s.mockProcessor.EXPECT().Submit(newMockPriorityTaskMatcher(tasks[0][4])).DoAndReturn(mockFn),
-		s.mockProcessor.EXPECT().Submit(newMockPriorityTaskMatcher(tasks[1][2])).DoAndReturn(mockFn),
-		s.mockProcessor.EXPECT().Submit(newMockPriorityTaskMatcher(tasks[1][3])).DoAndReturn(mockFn),
-		s.mockProcessor.EXPECT().Submit(newMockPriorityTaskMatcher(tasks[2][1])).DoAndReturn(mockFn),
-		// third round
-		s.mockProcessor.EXPECT().Submit(newMockPriorityTaskMatcher(tasks[1][4])).DoAndReturn(mockFn),
-		s.mockProcessor.EXPECT().Submit(newMockPriorityTaskMatcher(tasks[2][2])).DoAndReturn(mockFn),
-		// fourth round
-		s.mockProcessor.EXPECT().Submit(newMockPriorityTaskMatcher(tasks[2][3])).DoAndReturn(mockFn),
-		// fifth round
-		s.mockProcessor.EXPECT().Submit(newMockPriorityTaskMatcher(tasks[2][4])).DoAndReturn(mockFn),
-	)
+
+	for priority, _ := range testSchedulerWeights {
+		for i := 0; i != taskPerPriority; i++ {
+			mockTask := NewMockPriorityTask(s.controller)
+			mockTask.EXPECT().Priority().Return(priority).AnyTimes()
+			s.scheduler.Submit(mockTask)
+			tasks[priority] = append(tasks[priority], mockTask)
+			taskWG.Add(1)
+			s.mockProcessor.EXPECT().Submit(newMockPriorityTaskMatcher(mockTask)).DoAndReturn(mockFn)
+		}
+	}
+
 	s.scheduler.processor = s.mockProcessor
 
 	doneCh := make(chan struct{})
