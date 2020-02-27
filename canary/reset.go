@@ -41,13 +41,13 @@ const (
 	signalAfterReset  = "signalAfterReset"
 )
 
-func init() {
-	registerWorkflow(resetWorkflow, wfTypeReset)
-	registerWorkflow(resetBaseWorkflow, wfTypeResetBase)
+func registerReset(r registrar) {
+	registerWorkflow(r, resetWorkflow, wfTypeReset)
+	registerWorkflow(r, resetBaseWorkflow, wfTypeResetBase)
 
-	registerActivity(triggerResetActivity, activityTypeTriggerReset)
-	registerActivity(verifyResetActivity, activityTypeVerifyReset)
-	registerActivity(resetBaseActivity, activityTypeResetBase)
+	registerActivity(r, triggerResetActivity, activityTypeTriggerReset)
+	registerActivity(r, verifyResetActivity, activityTypeVerifyReset)
+	registerActivity(r, resetBaseActivity, activityTypeResetBase)
 }
 
 func resetWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain string) error {

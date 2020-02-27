@@ -31,13 +31,13 @@ import (
 	"go.temporal.io/temporal/workflow"
 )
 
-func init() {
-	registerWorkflow(batchWorkflow, wfTypeBatch)
-	registerWorkflow(batchWorkflowParent, wfTypeBatchParent)
-	registerWorkflow(batchWorkflowChild, wfTypeBatchChild)
+func registerBatch(r registrar) {
+	registerWorkflow(r, batchWorkflow, wfTypeBatch)
+	registerWorkflow(r, batchWorkflowParent, wfTypeBatchParent)
+	registerWorkflow(r, batchWorkflowChild, wfTypeBatchChild)
 
-	registerActivity(verifyBatchActivity, activityTypeVerifyBatch)
-	registerActivity(startBatchWorkflow, activityTypeStartBatch)
+	registerActivity(r, verifyBatchActivity, activityTypeVerifyBatch)
+	registerActivity(r, startBatchWorkflow, activityTypeStartBatch)
 }
 
 const (

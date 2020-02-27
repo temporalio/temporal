@@ -39,9 +39,9 @@ const (
 	timeSkewToleranceDuration = 5 * time.Minute
 )
 
-func init() {
-	registerWorkflow(visibilityWorkflow, wfTypeVisibility)
-	registerActivity(visibilityActivity, activityTypeVisibility)
+func registerVisibility(r registrar) {
+	registerWorkflow(r, visibilityWorkflow, wfTypeVisibility)
+	registerActivity(r, visibilityActivity, activityTypeVisibility)
 }
 
 // visibilityWorkflow tests the visibility apis

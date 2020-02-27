@@ -35,11 +35,11 @@ const (
 	sleepDuration = time.Second * 10
 )
 
-func init() {
-	registerWorkflow(cancellationWorkflow, wfTypeCancellation)
-	registerWorkflow(cancellationExternalWorkflow, wfTypeCancellationExternal)
-	registerActivity(cancellationActivity, activityTypeCancellation)
-	registerActivity(cancellationChildActivity, activityTypeCancellationChild)
+func registerCancellation(r registrar) {
+	registerWorkflow(r, cancellationWorkflow, wfTypeCancellation)
+	registerWorkflow(r, cancellationExternalWorkflow, wfTypeCancellationExternal)
+	registerActivity(r, cancellationActivity, activityTypeCancellation)
+	registerActivity(r, cancellationChildActivity, activityTypeCancellationChild)
 }
 
 // cancellationWorkflow is the workflow implementation to test for cancellation of workflows

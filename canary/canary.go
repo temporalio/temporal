@@ -26,7 +26,9 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/temporal/activity"
 	"go.temporal.io/temporal/worker"
+	"go.temporal.io/temporal/workflow"
 	"go.uber.org/zap"
 )
 
@@ -34,6 +36,12 @@ type (
 	// Runnable is an interface for anything that exposes a Run method
 	Runnable interface {
 		Run() error
+	}
+
+	registrar interface {
+		RegisterWorkflowWithOptions(w interface{}, options workflow.RegisterOptions)
+		RegisterActivityWithOptions(a interface{}, options activity.RegisterOptions)
+		RegisterActivity(a interface{})
 	}
 
 	canaryImpl struct {
@@ -107,11 +115,27 @@ func (c *canaryImpl) startWorker() error {
 	}
 
 	archivalWorker := worker.New(c.archivalClient.Service, archivalDomain, archivalTaskListName, options)
+	registerArchival(archivalWorker)
 	defer archivalWorker.Stop()
 	if err := archivalWorker.Start(); err != nil {
 		return err
 	}
+
 	canaryWorker := worker.New(c.canaryClient.Service, c.canaryDomain, taskListName, options)
+	registerBatch(canaryWorker)
+	registerCancellation(canaryWorker)
+	registerConcurrentExec(canaryWorker)
+	registerCron(canaryWorker)
+	registerEcho(canaryWorker)
+	registerLocalActivity(canaryWorker)
+	registerQuery(canaryWorker)
+	registerReset(canaryWorker)
+	registerRetry(canaryWorker)
+	registerSanity(canaryWorker)
+	registerSearchAttributes(canaryWorker)
+	registerSignal(canaryWorker)
+	registerTimeout(canaryWorker)
+	registerVisibility(canaryWorker)
 	return canaryWorker.Run()
 }
 

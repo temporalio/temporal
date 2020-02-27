@@ -2269,7 +2269,7 @@ func resetRequestCancelInfoMap(
 
 func resetSignalInfoMap(
 	signalInfos []*persistenceblobs.SignalInfo,
-) (map[int64][]byte, common.EncodingType, error)  {
+) (map[int64][]byte, common.EncodingType, error) {
 
 	sMap := make(map[int64][]byte)
 	var encoding common.EncodingType

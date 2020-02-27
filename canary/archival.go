@@ -40,11 +40,11 @@ const (
 	resultSize   = 1024 // 1KB
 )
 
-func init() {
-	registerWorkflow(archivalWorkflow, wfTypeArchival)
-	registerActivity(archivalActivity, activityTypeArchival)
-	registerWorkflow(archivalExternalWorkflow, wfTypeArchivalExternal)
-	registerActivity(archivalLargeResultActivity, activityTypeLargeResult)
+func registerArchival(r registrar) {
+	registerWorkflow(r, archivalWorkflow, wfTypeArchival)
+	registerActivity(r, archivalActivity, activityTypeArchival)
+	registerWorkflow(r, archivalExternalWorkflow, wfTypeArchivalExternal)
+	registerActivity(r, archivalLargeResultActivity, activityTypeLargeResult)
 }
 
 func archivalWorkflow(ctx workflow.Context, scheduledTimeNanos int64, _ string) error {

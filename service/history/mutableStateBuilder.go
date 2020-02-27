@@ -100,7 +100,7 @@ type (
 
 		pendingSignalInfoIDs map[int64]*persistenceblobs.SignalInfo    // Initiated Event ID -> SignalInfo
 		updateSignalInfos    map[*persistenceblobs.SignalInfo]struct{} // Modified SignalInfo since last update
-		deleteSignalInfo     *int64                               // Deleted SignalInfo since last update
+		deleteSignalInfo     *int64                                    // Deleted SignalInfo since last update
 
 		pendingSignalRequestedIDs map[string]struct{} // Set of signaled requestIds
 		updateSignalRequestedIDs  map[string]struct{} // Set of signaled requestIds since last update

@@ -29,14 +29,14 @@ import (
 	"go.temporal.io/temporal/workflow"
 )
 
-func init() {
-	registerWorkflow(localActivityWorkfow, wfTypeLocalActivity)
+func registerLocalActivity(r registrar) {
+	registerWorkflow(r, localActivityWorkfow, wfTypeLocalActivity)
 
-	activity.Register(activityForCondition0)
-	activity.Register(activityForCondition1)
-	activity.Register(activityForCondition2)
-	activity.Register(activityForCondition3)
-	activity.Register(activityForCondition4)
+	registerActivity(r, activityForCondition0, "")
+	registerActivity(r, activityForCondition1, "")
+	registerActivity(r, activityForCondition2, "")
+	registerActivity(r, activityForCondition3, "")
+	registerActivity(r, activityForCondition4, "")
 }
 
 type conditionAndAction struct {
