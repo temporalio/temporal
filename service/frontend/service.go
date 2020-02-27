@@ -146,7 +146,6 @@ func NewService(
 	serviceConfig := NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger), params.PersistenceConfig.NumHistoryShards, isAdvancedVisExistInConfig)
 
 	params.PersistenceConfig.HistoryMaxConns = serviceConfig.HistoryMgrNumConns()
-	params.PersistenceConfig.SetMaxQPS(params.PersistenceConfig.DefaultStore, serviceConfig.PersistenceMaxQPS())
 	params.PersistenceConfig.VisibilityConfig = &config.VisibilityConfig{
 		VisibilityListMaxQPS:            serviceConfig.VisibilityListMaxQPS,
 		EnableSampling:                  serviceConfig.EnableVisibilitySampling,
@@ -182,6 +181,7 @@ func NewService(
 	serviceResource, err := resource.New(
 		params,
 		common.FrontendServiceName,
+		serviceConfig.PersistenceMaxQPS,
 		serviceConfig.ThrottledLogRPS,
 		visibilityManagerInitializer,
 	)

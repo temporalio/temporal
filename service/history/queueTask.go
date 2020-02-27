@@ -168,8 +168,8 @@ func (t *transferQueueTask) GetQueueType() queueType {
 
 func (t *queueTaskBase) Execute() error {
 	// TODO: after mergering active and standby queue,
-	// the task should be smart enough to tell if it should be 
-	// processed as active or standby and use the corresponding 
+	// the task should be smart enough to tell if it should be
+	// processed as active or standby and use the corresponding
 	// task executor.
 	var err error
 	t.shouldProcessTask, err = t.taskFilter(t.queueTaskInfo)

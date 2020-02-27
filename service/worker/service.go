@@ -77,14 +77,10 @@ func NewService(
 
 	serviceConfig := NewConfig(params)
 
-	params.PersistenceConfig.SetMaxQPS(
-		params.PersistenceConfig.DefaultStore,
-		serviceConfig.ReplicationCfg.PersistenceMaxQPS(),
-	)
-
 	serviceResource, err := resource.New(
 		params,
 		common.WorkerServiceName,
+		serviceConfig.ReplicationCfg.PersistenceMaxQPS,
 		serviceConfig.ThrottledLogRPS,
 		func(
 			persistenceBean persistenceClient.Bean,

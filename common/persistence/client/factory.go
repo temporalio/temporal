@@ -30,6 +30,7 @@ import (
 	"github.com/uber/cadence/common/persistence/sql"
 	"github.com/uber/cadence/common/quotas"
 	"github.com/uber/cadence/common/service/config"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
 type (
@@ -126,6 +127,7 @@ var storeTypes = []storeType{
 // given configuration. In addition, all objects will emit metrics automatically
 func NewFactory(
 	cfg *config.Persistence,
+	persistenceMaxQPS dynamicconfig.IntPropertyFn,
 	abstractDataStoreFactory AbstractDataStoreFactory,
 	clusterName string,
 	metricsClient metrics.Client,
@@ -138,7 +140,7 @@ func NewFactory(
 		logger:                   logger,
 		clusterName:              clusterName,
 	}
-	limiters := buildRatelimiters(cfg)
+	limiters := buildRatelimiters(cfg, persistenceMaxQPS)
 	factory.init(clusterName, limiters)
 	return factory
 }
@@ -322,18 +324,11 @@ func (f *factoryImpl) init(clusterName string, limiters map[string]quotas.Limite
 	f.datastores[storeTypeVisibility] = visibilityDataStore
 }
 
-func buildRatelimiters(cfg *config.Persistence) map[string]quotas.Limiter {
+func buildRatelimiters(cfg *config.Persistence, maxQPS dynamicconfig.IntPropertyFn) map[string]quotas.Limiter {
 	result := make(map[string]quotas.Limiter, len(cfg.DataStores))
-	for dsName, ds := range cfg.DataStores {
-		qps := 0
-		if ds.Cassandra != nil {
-			qps = ds.Cassandra.MaxQPS
-		}
-		if ds.SQL != nil {
-			qps = ds.SQL.MaxQPS
-		}
-		if qps > 0 {
-			result[dsName] = quotas.NewSimpleRateLimiter(qps)
+	for dsName, _ := range cfg.DataStores {
+		if maxQPS != nil && maxQPS() > 0 {
+			result[dsName] = quotas.NewDynamicRateLimiter(func() float64 { return float64(maxQPS()) })
 		}
 	}
 	return result

@@ -132,6 +132,7 @@ var _ Resource = (*Impl)(nil)
 func New(
 	params *service.BootstrapParams,
 	serviceName string,
+	persistenceMaxQPS dynamicconfig.IntPropertyFn,
 	throttledLoggerMaxRPS dynamicconfig.IntPropertyFn,
 	visibilityManagerInitializer VisibilityManagerInitializer,
 ) (impl *Impl, retError error) {
@@ -191,6 +192,7 @@ func New(
 
 	persistenceBean, err := persistenceClient.NewBeanFromFactory(persistenceClient.NewFactory(
 		&params.PersistenceConfig,
+		persistenceMaxQPS,
 		params.AbstractDatastoreFactory,
 		params.ClusterMetadata.GetCurrentClusterName(),
 		params.MetricsClient,
