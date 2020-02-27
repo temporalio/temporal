@@ -129,14 +129,6 @@ CREATE TYPE child_execution_info (
   parent_close_policy       int,
 );
 
--- External workflow cancellation in progress mutable state
-CREATE TYPE request_cancel_info (
-  version                   bigint,
-  initiated_event_batch_id  bigint,
-  initiated_id              bigint,
-  cancel_request_id         text,
-);
-
 -- Activity or workflow task in a task list
 CREATE TYPE task (
   domain_id        uuid,
@@ -233,7 +225,8 @@ CREATE TABLE executions (
   timer_map                      map<text, blob>,
   timer_map_encoding             text,
   child_executions_map           map<bigint, frozen<child_execution_info>>,
-  request_cancel_map             map<bigint, frozen<request_cancel_info>>,
+  request_cancel_map             map<bigint, blob>,
+  request_cancel_map_encoding    text,
   signal_map                     map<bigint, blob>,
   signal_map_encoding            text,
   signal_requested               set<uuid>,

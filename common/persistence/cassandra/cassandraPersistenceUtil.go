@@ -218,14 +218,16 @@ func applyWorkflowSnapshotBatchAsReset(
 		return err
 	}
 
-	resetRequestCancelInfos(
+	if err := resetRequestCancelInfos(
 		batch,
 		workflowSnapshot.RequestCancelInfos,
 		shardID,
 		domainID,
 		workflowID,
 		runID,
-	)
+	); err != nil {
+		return err
+	}
 
 	if err := resetSignalInfos(
 		batch,
@@ -307,7 +309,7 @@ func applyWorkflowSnapshotBatchAsNew(
 		return err
 	}
 
-	updateTimerInfos(
+	if err := updateTimerInfos(
 		batch,
 		workflowSnapshot.TimerInfos,
 		nil,
@@ -315,7 +317,9 @@ func applyWorkflowSnapshotBatchAsNew(
 		domainID,
 		workflowID,
 		runID,
-	)
+	); err != nil {
+		return err
+	}
 
 	if err := updateChildExecutionInfos(
 		batch,
@@ -329,7 +333,7 @@ func applyWorkflowSnapshotBatchAsNew(
 		return err
 	}
 
-	updateRequestCancelInfos(
+	if err := updateRequestCancelInfos(
 		batch,
 		workflowSnapshot.RequestCancelInfos,
 		nil,
@@ -337,9 +341,11 @@ func applyWorkflowSnapshotBatchAsNew(
 		domainID,
 		workflowID,
 		runID,
-	)
+	); err != nil {
+		return err
+	}
 
-	updateSignalInfos(
+	if err := updateSignalInfos(
 		batch,
 		workflowSnapshot.SignalInfos,
 		nil,
@@ -347,7 +353,9 @@ func applyWorkflowSnapshotBatchAsNew(
 		domainID,
 		workflowID,
 		runID,
-	)
+	); err != nil {
+		return err
+	}
 
 	updateSignalsRequested(
 		batch,
@@ -1597,21 +1605,24 @@ func resetChildExecutionInfos(
 
 func updateRequestCancelInfos(
 	batch *gocql.Batch,
-	requestCancelInfos []*p.RequestCancelInfo,
+	requestCancelInfos []*persistenceblobs.RequestCancelInfo,
 	deleteInfo *int64,
 	shardID int,
 	domainID string,
 	workflowID string,
 	runID string,
-) {
+) error {
 
 	for _, c := range requestCancelInfos {
+		datablob, err := serialization.RequestCancelInfoToBlob(c)
+		if err != nil {
+			return err
+		}
+
 		batch.Query(templateUpdateRequestCancelInfoQuery,
 			c.InitiatedID,
-			c.Version,
-			c.InitiatedID,
-			c.InitiatedEventBatchID,
-			c.CancelRequestID,
+			datablob.Data,
+			datablob.Encoding,
 			shardID,
 			rowTypeExecution,
 			domainID,
@@ -1633,19 +1644,28 @@ func updateRequestCancelInfos(
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID)
 	}
+
+	return nil
 }
 
 func resetRequestCancelInfos(
 	batch *gocql.Batch,
-	requestCancelInfos []*p.RequestCancelInfo,
+	requestCancelInfos []*persistenceblobs.RequestCancelInfo,
 	shardID int,
 	domainID string,
 	workflowID string,
 	runID string,
-) {
+) error {
+
+	rciMap, rciMapEncoding, err := resetRequestCancelInfoMap(requestCancelInfos)
+
+	if err != nil {
+		return err
+	}
 
 	batch.Query(templateResetRequestCancelInfoQuery,
-		resetRequestCancelInfoMap(requestCancelInfos),
+		rciMap,
+		rciMapEncoding,
 		shardID,
 		rowTypeExecution,
 		domainID,
@@ -1653,6 +1673,8 @@ func resetRequestCancelInfos(
 		runID,
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID)
+
+	return nil
 }
 
 func updateSignalInfos(
@@ -2119,27 +2141,6 @@ func createChildExecutionInfo(
 	return info
 }
 
-func createRequestCancelInfo(
-	result map[string]interface{},
-) *p.RequestCancelInfo {
-
-	info := &p.RequestCancelInfo{}
-	for k, v := range result {
-		switch k {
-		case "version":
-			info.Version = v.(int64)
-		case "initiated_id":
-			info.InitiatedID = v.(int64)
-		case "initiated_event_batch_id":
-			info.InitiatedEventBatchID = v.(int64)
-		case "cancel_request_id":
-			info.CancelRequestID = v.(string)
-		}
-	}
-
-	return info
-}
-
 func resetActivityInfoMap(
 	activityInfos []*p.InternalActivityInfo,
 ) (map[int64]map[string]interface{}, error) {
@@ -2250,26 +2251,29 @@ func resetChildExecutionInfoMap(
 }
 
 func resetRequestCancelInfoMap(
-	requestCancelInfos []*p.RequestCancelInfo,
-) map[int64]map[string]interface{} {
+	requestCancelInfos []*persistenceblobs.RequestCancelInfo,
+) (map[int64][]byte, common.EncodingType, error) {
 
-	rcMap := make(map[int64]map[string]interface{})
+	rcMap := make(map[int64][]byte)
+	var encoding common.EncodingType
 	for _, rc := range requestCancelInfos {
-		rcInfo := make(map[string]interface{})
-		rcInfo["version"] = rc.Version
-		rcInfo["initiated_id"] = rc.InitiatedID
-		rcInfo["initiated_event_batch_id"] = rc.InitiatedEventBatchID
-		rcInfo["cancel_request_id"] = rc.CancelRequestID
+		datablob, err := serialization.RequestCancelInfoToBlob(rc)
 
-		rcMap[rc.InitiatedID] = rcInfo
+		if err != nil {
+			return nil, common.EncodingTypeUnknown, err
+		}
+
+		encoding = datablob.Encoding
+
+		rcMap[rc.InitiatedID] = datablob.Data
 	}
 
-	return rcMap
+	return rcMap, encoding, nil
 }
 
 func resetSignalInfoMap(
 	signalInfos []*persistenceblobs.SignalInfo,
-) (map[int64][]byte, common.EncodingType, error)  {
+) (map[int64][]byte, common.EncodingType, error) {
 
 	sMap := make(map[int64][]byte)
 	var encoding common.EncodingType

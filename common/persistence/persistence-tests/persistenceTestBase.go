@@ -639,7 +639,7 @@ func (s *TestBase) UpsertChildExecutionsState(updatedInfo *p.WorkflowExecutionIn
 
 // UpsertRequestCancelState is a utility method to update mutable state of workflow execution
 func (s *TestBase) UpsertRequestCancelState(updatedInfo *p.WorkflowExecutionInfo, updatedStats *p.ExecutionStats, updatedVersionHistories *p.VersionHistories,
-	condition int64, upsertCancelInfos []*p.RequestCancelInfo) error {
+	condition int64, upsertCancelInfos []*pblobs.RequestCancelInfo) error {
 	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, updatedStats, updatedVersionHistories, nil, nil,
 		s.ShardInfo.RangeID, condition, nil, nil, nil,
 		nil, nil, nil, nil, upsertCancelInfos, nil,
@@ -714,7 +714,7 @@ func (s *TestBase) UpdateWorkflowExecutionWithRangeID(updatedInfo *p.WorkflowExe
 	decisionScheduleIDs []int64, activityScheduleIDs []int64, rangeID, condition int64, timerTasks []p.Task,
 	upsertActivityInfos []*p.ActivityInfo, deleteActivityInfos []int64, upsertTimerInfos []*pblobs.TimerInfo,
 	deleteTimerInfos []string, upsertChildInfos []*p.ChildExecutionInfo, deleteChildInfo *int64,
-	upsertCancelInfos []*p.RequestCancelInfo, deleteCancelInfo *int64,
+	upsertCancelInfos []*pblobs.RequestCancelInfo, deleteCancelInfo *int64,
 	upsertSignalInfos []*pblobs.SignalInfo, deleteSignalInfo *int64,
 	upsertSignalRequestedIDs []string, deleteSignalRequestedID string) error {
 	return s.UpdateWorkflowExecutionWithReplication(updatedInfo, updatedStats, nil, updatedVersionHistories, decisionScheduleIDs, activityScheduleIDs, rangeID,
@@ -728,7 +728,7 @@ func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *p.Workflo
 	updatedReplicationState *p.ReplicationState, updatedVersionHistories *p.VersionHistories, decisionScheduleIDs []int64, activityScheduleIDs []int64, rangeID,
 	condition int64, timerTasks []p.Task, txTasks []p.Task, upsertActivityInfos []*p.ActivityInfo,
 	deleteActivityInfos []int64, upsertTimerInfos []*pblobs.TimerInfo, deleteTimerInfos []string,
-	upsertChildInfos []*p.ChildExecutionInfo, deleteChildInfo *int64, upsertCancelInfos []*p.RequestCancelInfo,
+	upsertChildInfos []*p.ChildExecutionInfo, deleteChildInfo *int64, upsertCancelInfos []*pblobs.RequestCancelInfo,
 	deleteCancelInfo *int64, upsertSignalInfos []*pblobs.SignalInfo, deleteSignalInfo *int64, upsertSignalRequestedIDs []string,
 	deleteSignalRequestedID string) error {
 	var transferTasks []p.Task
@@ -828,7 +828,7 @@ func (s *TestBase) UpdateWorkflowExecutionForChildExecutionsInitiated(
 // UpdateWorkflowExecutionForRequestCancel is a utility method to update workflow execution
 func (s *TestBase) UpdateWorkflowExecutionForRequestCancel(
 	updatedInfo *p.WorkflowExecutionInfo, updatedStats *p.ExecutionStats, condition int64, transferTasks []p.Task,
-	upsertRequestCancelInfo []*p.RequestCancelInfo) error {
+	upsertRequestCancelInfo []*pblobs.RequestCancelInfo) error {
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:            updatedInfo,
@@ -897,7 +897,7 @@ func (s *TestBase) UpdateAllMutableState(updatedMutableState *p.WorkflowMutableS
 		cInfos = append(cInfos, ci)
 	}
 
-	var rcInfos []*p.RequestCancelInfo
+	var rcInfos []*pblobs.RequestCancelInfo
 	for _, rci := range updatedMutableState.RequestCancelInfos {
 		rcInfos = append(rcInfos, rci)
 	}
@@ -934,7 +934,7 @@ func (s *TestBase) UpdateAllMutableState(updatedMutableState *p.WorkflowMutableS
 func (s *TestBase) ConflictResolveWorkflowExecution(prevRunID string, prevLastWriteVersion int64, prevState int,
 	info *p.WorkflowExecutionInfo, stats *p.ExecutionStats, replicationState *p.ReplicationState, nextEventID int64,
 	activityInfos []*p.ActivityInfo, timerInfos []*pblobs.TimerInfo, childExecutionInfos []*p.ChildExecutionInfo,
-	requestCancelInfos []*p.RequestCancelInfo, signalInfos []*pblobs.SignalInfo, ids []string) error {
+	requestCancelInfos []*pblobs.RequestCancelInfo, signalInfos []*pblobs.SignalInfo, ids []string) error {
 	return s.ExecutionManager.ConflictResolveWorkflowExecution(&p.ConflictResolveWorkflowExecutionRequest{
 		RangeID: s.ShardInfo.RangeID,
 		CurrentWorkflowCAS: &p.CurrentWorkflowCAS{
@@ -963,7 +963,7 @@ func (s *TestBase) ConflictResolveWorkflowExecution(prevRunID string, prevLastWr
 func (s *TestBase) ResetWorkflowExecution(condition int64, info *p.WorkflowExecutionInfo,
 	executionStats *p.ExecutionStats, replicationState *p.ReplicationState,
 	activityInfos []*p.ActivityInfo, timerInfos []*pblobs.TimerInfo, childExecutionInfos []*p.ChildExecutionInfo,
-	requestCancelInfos []*p.RequestCancelInfo, signalInfos []*pblobs.SignalInfo, ids []string, trasTasks, timerTasks, replTasks []p.Task,
+	requestCancelInfos []*pblobs.RequestCancelInfo, signalInfos []*pblobs.SignalInfo, ids []string, trasTasks, timerTasks, replTasks []p.Task,
 	updateCurr bool, currInfo *p.WorkflowExecutionInfo, currExecutionStats *p.ExecutionStats, currReplicationState *p.ReplicationState,
 	currTrasTasks, currTimerTasks []p.Task, forkRunID string, forkRunNextEventID int64) error {
 

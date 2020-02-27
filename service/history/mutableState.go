@@ -87,7 +87,7 @@ type (
 		AddRecordMarkerEvent(int64, *workflow.RecordMarkerDecisionAttributes) (*workflow.HistoryEvent, error)
 		AddRequestCancelActivityTaskFailedEvent(int64, string, string) (*workflow.HistoryEvent, error)
 		AddRequestCancelExternalWorkflowExecutionFailedEvent(int64, int64, string, string, string, workflow.CancelExternalWorkflowExecutionFailedCause) (*workflow.HistoryEvent, error)
-		AddRequestCancelExternalWorkflowExecutionInitiatedEvent(int64, string, *workflow.RequestCancelExternalWorkflowExecutionDecisionAttributes) (*workflow.HistoryEvent, *persistence.RequestCancelInfo, error)
+		AddRequestCancelExternalWorkflowExecutionInitiatedEvent(int64, string, *workflow.RequestCancelExternalWorkflowExecutionDecisionAttributes) (*workflow.HistoryEvent, *persistenceblobs.RequestCancelInfo, error)
 		AddSignalExternalWorkflowExecutionFailedEvent(int64, int64, string, string, string, []uint8, workflow.SignalExternalWorkflowExecutionFailedCause) (*workflow.HistoryEvent, error)
 		AddSignalExternalWorkflowExecutionInitiatedEvent(int64, string, *workflow.SignalExternalWorkflowExecutionDecisionAttributes) (*workflow.HistoryEvent, *persistenceblobs.SignalInfo, error)
 		AddSignalRequested(requestID string)
@@ -137,10 +137,10 @@ type (
 		GetPendingActivityInfos() map[int64]*persistence.ActivityInfo
 		GetPendingTimerInfos() map[string]*persistenceblobs.TimerInfo
 		GetPendingChildExecutionInfos() map[int64]*persistence.ChildExecutionInfo
-		GetPendingRequestCancelExternalInfos() map[int64]*persistence.RequestCancelInfo
+		GetPendingRequestCancelExternalInfos() map[int64]*persistenceblobs.RequestCancelInfo
 		GetPendingSignalExternalInfos() map[int64]*persistenceblobs.SignalInfo
 		GetReplicationState() *persistence.ReplicationState
-		GetRequestCancelInfo(int64) (*persistence.RequestCancelInfo, bool)
+		GetRequestCancelInfo(int64) (*persistenceblobs.RequestCancelInfo, bool)
 		GetRetryBackoffDuration(errReason string) time.Duration
 		GetCronBackoffDuration() (time.Duration, error)
 		GetSignalInfo(int64) (*persistenceblobs.SignalInfo, bool)
@@ -185,7 +185,7 @@ type (
 		ReplicateExternalWorkflowExecutionCancelRequested(*workflow.HistoryEvent) error
 		ReplicateExternalWorkflowExecutionSignaled(*workflow.HistoryEvent) error
 		ReplicateRequestCancelExternalWorkflowExecutionFailedEvent(*workflow.HistoryEvent) error
-		ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent(int64, *workflow.HistoryEvent, string) (*persistence.RequestCancelInfo, error)
+		ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent(int64, *workflow.HistoryEvent, string) (*persistenceblobs.RequestCancelInfo, error)
 		ReplicateSignalExternalWorkflowExecutionFailedEvent(*workflow.HistoryEvent) error
 		ReplicateSignalExternalWorkflowExecutionInitiatedEvent(int64, *workflow.HistoryEvent, string) (*persistenceblobs.SignalInfo, error)
 		ReplicateStartChildWorkflowExecutionFailedEvent(*workflow.HistoryEvent) error

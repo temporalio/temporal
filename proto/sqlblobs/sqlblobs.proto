@@ -164,9 +164,3 @@ message ChildExecutionInfo {
     string workflowTypeName = 12;
     int32 parentClosePolicy = 13;
 }
-
-message RequestCancelInfo {
-    int64 version = 1;
-    int64 initiatedEventBatchID = 2;
-    string cancelRequestID = 3;
-}

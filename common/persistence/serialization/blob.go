@@ -210,13 +210,13 @@ func SignalInfoFromBlob(b []byte, proto string) (*persistenceblobs.SignalInfo, e
 	return result, protoRWDecode(b, proto, result)
 }
 
-func RequestCancelInfoToBlob(info *sqlblobs.RequestCancelInfo) (DataBlob, error) {
-	return thriftRWEncode(info)
+func RequestCancelInfoToBlob(info *persistenceblobs.RequestCancelInfo) (DataBlob, error) {
+	return protoRWEncode(info)
 }
 
-func RequestCancelInfoFromBlob(b []byte, proto string) (*sqlblobs.RequestCancelInfo, error) {
-	result := &sqlblobs.RequestCancelInfo{}
-	return result, thriftRWDecode(b, proto, result)
+func RequestCancelInfoFromBlob(b []byte, proto string) (*persistenceblobs.RequestCancelInfo, error) {
+	result := &persistenceblobs.RequestCancelInfo{}
+	return result, protoRWDecode(b, proto, result)
 }
 
 func TimerInfoToBlob(info *persistenceblobs.TimerInfo) (DataBlob, error) {

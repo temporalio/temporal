@@ -81,10 +81,14 @@ services:
       - |
         make cover_profile
     ports:
-      - "7933:7933"
-      - "7934:7934"
-      - "7935:7935"
-      - "7939:7939"
+      - "7233:7233"
+      - "7234:7234"
+      - "7235:7235"
+      - "7239:7239"
+      - "6933:6933"
+      - "6934:6934"
+      - "6935:6935"
+      - "6939:6939"
     environment:
       - "CASSANDRA_SEEDS=cassandra"
       - "MYSQL_SEEDS=mysql"
@@ -93,7 +97,7 @@ services:
       - mysql
       - postgres
     volumes:
-      - ../../:/cadence
+      - ../../:/temporal
     networks:
       services-network:
         aliases:
@@ -110,10 +114,14 @@ services:
       - |
         make cover_integration_profile
     ports:
-      - "7933:7933"
-      - "7934:7934"
-      - "7935:7935"
-      - "7939:7939"
+      - "7233:7233"
+      - "7234:7234"
+      - "7235:7235"
+      - "7239:7239"
+      - "6933:6933"
+      - "6934:6934"
+      - "6935:6935"
+      - "6939:6939"
     environment:
       - "CASSANDRA_SEEDS=cassandra"
       - "ES_SEEDS=elasticsearch"
@@ -124,7 +132,7 @@ services:
       - elasticsearch
       - kafka
     volumes:
-      - ../../:/cadence
+      - ../../:/temporal
     networks:
       services-network:
         aliases:
@@ -141,10 +149,14 @@ services:
       - |
         make cover_integration_profile
     ports:
-      - "7933:7933"
-      - "7934:7934"
-      - "7935:7935"
-      - "7939:7939"
+      - "7233:7233"
+      - "7234:7234"
+      - "7235:7235"
+      - "7239:7239"
+      - "6933:6933"
+      - "6934:6934"
+      - "6935:6935"
+      - "6939:6939"
     environment:
       - "MYSQL_SEEDS=mysql"
       - "ES_SEEDS=elasticsearch"
@@ -156,7 +168,7 @@ services:
       - elasticsearch
       - kafka
     volumes:
-      - ../../:/cadence
+      - ../../:/temporal
     networks:
       services-network:
         aliases:
@@ -173,10 +185,14 @@ services:
       - |
         make cover_integration_profile EVENTSV2=true
     ports:
-      - "7933:7933"
-      - "7934:7934"
-      - "7935:7935"
-      - "7939:7939"
+      - "7233:7233"
+      - "7234:7234"
+      - "7235:7235"
+      - "7239:7239"
+      - "6933:6933"
+      - "6934:6934"
+      - "6935:6935"
+      - "6939:6939"
     environment:
       - "CASSANDRA_SEEDS=cassandra"
       - "ES_SEEDS=elasticsearch"
@@ -187,7 +203,7 @@ services:
       - elasticsearch
       - kafka
     volumes:
-      - ../../:/cadence
+      - ../../:/temporal
     networks:
       services-network:
         aliases:
@@ -204,10 +220,14 @@ services:
       - |
         make cover_xdc_profile
     ports:
-      - "7933:7933"
-      - "7934:7934"
-      - "7935:7935"
-      - "7939:7939"
+      - "7233:7233"
+      - "7234:7234"
+      - "7235:7235"
+      - "7239:7239"
+      - "6933:6933"
+      - "6934:6934"
+      - "6935:6935"
+      - "6939:6939"
     environment:
       - "CASSANDRA_SEEDS=cassandra"
       - "ES_SEEDS=elasticsearch"
@@ -218,7 +238,7 @@ services:
       - elasticsearch
       - kafka
     volumes:
-      - ../../:/cadence
+      - ../../:/temporal
     networks:
       services-network:
         aliases:
@@ -235,10 +255,14 @@ services:
       - |
         make cover_xdc_profile
     ports:
-      - "7933:7933"
-      - "7934:7934"
-      - "7935:7935"
-      - "7939:7939"
+      - "7233:7233"
+      - "7234:7234"
+      - "7235:7235"
+      - "7239:7239"
+      - "6933:6933"
+      - "6934:6934"
+      - "6935:6935"
+      - "6939:6939"
     environment:
       - "MYSQL_SEEDS=mysql"
       - "ES_SEEDS=elasticsearch"
@@ -250,7 +274,7 @@ services:
       - elasticsearch
       - kafka
     volumes:
-      - ../../:/cadence
+      - ../../:/temporal
     networks:
       services-network:
         aliases:

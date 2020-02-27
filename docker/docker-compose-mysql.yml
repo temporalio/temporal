@@ -13,13 +13,17 @@ services:
       - "2003:2003"
       - "8125:8125"
       - "8126:8126"
-  cadence:
-    image: ubercadence/server:master-auto-setup
+  temporal:
+    image: temporalio/temporal:master-auto-setup
     ports:
-      - "7933:7933"
-      - "7934:7934"
-      - "7935:7935"
-      - "7939:7939"
+     - "7233:7233"
+     - "7234:7234"
+     - "7235:7235"
+     - "7239:7239"
+     - "6933:6933"
+     - "6934:6934"
+     - "6935:6935"
+     - "6939:6939"
     environment:
       - "DB=mysql"
       - "MYSQL_USER=root"
@@ -33,8 +37,8 @@ services:
   cadence-web:
     image: ubercadence/web:3.4.1
     environment:
-      - "CADENCE_TCHANNEL_PEERS=cadence:7933"
+      - "CADENCE_TCHANNEL_PEERS=temporal:7333"
     ports:
       - "8088:8088"
     depends_on:
-      - cadence
+      - temporal
