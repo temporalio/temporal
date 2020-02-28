@@ -30,6 +30,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/temporal-proto/enums"
+	"go.temporal.io/temporal/activity"
 
 	"go.temporal.io/temporal"
 	"go.temporal.io/temporal/testsuite"
@@ -54,10 +55,14 @@ func TestHandlerSuite(t *testing.T) {
 	suite.Run(t, new(handlerSuite))
 }
 
-func (s *handlerSuite) SetupSuite() {
-	workflow.Register(handleHistoryRequestWorkflow)
-	workflow.Register(handleVisibilityRequestWorkflow)
-	workflow.Register(startAndFinishArchiverWorkflow)
+func (s *handlerSuite) registerWorkflows(env *testsuite.TestWorkflowEnvironment) {
+	env.RegisterWorkflow(handleHistoryRequestWorkflow)
+	env.RegisterWorkflow(handleVisibilityRequestWorkflow)
+	env.RegisterWorkflow(startAndFinishArchiverWorkflow)
+
+	env.RegisterActivityWithOptions(uploadHistoryActivity, activity.RegisterOptions{Name: uploadHistoryActivityFnName})
+	env.RegisterActivityWithOptions(deleteHistoryActivity, activity.RegisterOptions{Name: deleteHistoryActivityFnName})
+	env.RegisterActivityWithOptions(archiveVisibilityActivity, activity.RegisterOptions{Name: archiveVisibilityActivityFnName})
 }
 
 func (s *handlerSuite) SetupTest() {
@@ -78,6 +83,7 @@ func (s *handlerSuite) TestHandleHistoryRequest_UploadFails_NonRetryableError() 
 	handlerTestLogger.On("Error", mock.Anything, mock.Anything).Once()
 
 	env := s.NewTestWorkflowEnvironment()
+	s.registerWorkflows(env)
 	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(errors.New("some random error"))
 	env.OnActivity(deleteHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)
 	env.ExecuteWorkflow(handleHistoryRequestWorkflow, ArchiveRequest{})
@@ -94,6 +100,7 @@ func (s *handlerSuite) TestHandleHistoryRequest_UploadFails_ExpireRetryTimeout()
 
 	timeoutErr := workflow.NewTimeoutError(enums.TimeoutTypeStartToClose)
 	env := s.NewTestWorkflowEnvironment()
+	s.registerWorkflows(env)
 	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(timeoutErr)
 	env.OnActivity(deleteHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)
 	env.ExecuteWorkflow(handleHistoryRequestWorkflow, ArchiveRequest{})
@@ -108,6 +115,7 @@ func (s *handlerSuite) TestHandleHistoryRequest_UploadSuccess() {
 	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverDeleteSuccessCount).Once()
 
 	env := s.NewTestWorkflowEnvironment()
+	s.registerWorkflows(env)
 	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)
 	env.OnActivity(deleteHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)
 	env.ExecuteWorkflow(handleHistoryRequestWorkflow, ArchiveRequest{})
@@ -123,6 +131,7 @@ func (s *handlerSuite) TestHandleHistoryRequest_DeleteFails_NonRetryableError() 
 	handlerTestLogger.On("Error", mock.Anything, mock.Anything).Once()
 
 	env := s.NewTestWorkflowEnvironment()
+	s.registerWorkflows(env)
 	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)
 	env.OnActivity(deleteHistoryActivityFnName, mock.Anything, mock.Anything).Return(func(context.Context, ArchiveRequest) error {
 		return temporal.NewCustomError(errDeleteNonRetriable.Error())
@@ -139,6 +148,7 @@ func (s *handlerSuite) TestHandleHistoryRequest_DeleteFailsThenSucceeds() {
 	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverDeleteSuccessCount).Once()
 
 	env := s.NewTestWorkflowEnvironment()
+	s.registerWorkflows(env)
 	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)
 	firstRun := true
 	env.OnActivity(deleteHistoryActivityFnName, mock.Anything, mock.Anything).Return(func(context.Context, ArchiveRequest) error {
@@ -160,6 +170,7 @@ func (s *handlerSuite) TestHandleVisibilityRequest_Fail() {
 	handlerTestLogger.On("Error", mock.Anything, mock.Anything).Once()
 
 	env := s.NewTestWorkflowEnvironment()
+	s.registerWorkflows(env)
 	env.OnActivity(archiveVisibilityActivityFnName, mock.Anything, mock.Anything).Return(errors.New("some random error"))
 	env.ExecuteWorkflow(handleVisibilityRequestWorkflow, ArchiveRequest{})
 
@@ -172,6 +183,7 @@ func (s *handlerSuite) TestHandleVisibilityRequest_Success() {
 	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverHandleVisibilitySuccessCount).Once()
 
 	env := s.NewTestWorkflowEnvironment()
+	s.registerWorkflows(env)
 	env.OnActivity(archiveVisibilityActivityFnName, mock.Anything, mock.Anything).Return(nil)
 	env.ExecuteWorkflow(handleVisibilityRequestWorkflow, ArchiveRequest{})
 
@@ -192,6 +204,7 @@ func (s *handlerSuite) TestRunArchiver() {
 	handlerTestMetrics.On("IncCounter", metrics.ArchiverScope, metrics.ArchiverStoppedCount).Once()
 
 	env := s.NewTestWorkflowEnvironment()
+	s.registerWorkflows(env)
 	env.OnActivity(uploadHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)
 	env.OnActivity(deleteHistoryActivityFnName, mock.Anything, mock.Anything).Return(nil)
 	env.OnActivity(archiveVisibilityActivityFnName, mock.Anything, mock.Anything).Return(nil)

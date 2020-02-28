@@ -27,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -345,7 +346,7 @@ func (s *domainHandlerCommonSuite) TestListDomain() {
 			},
 			Configuration: &commonproto.DomainConfiguration{
 				WorkflowExecutionRetentionPeriodInDays: retention1,
-				EmitMetric:                             &commonproto.BoolValue{Value: emitMetric1},
+				EmitMetric:                             &types.BoolValue{Value: emitMetric1},
 				HistoryArchivalStatus:                  enums.ArchivalStatusDisabled,
 				HistoryArchivalURI:                     "",
 				VisibilityArchivalStatus:               enums.ArchivalStatusDisabled,
@@ -370,7 +371,7 @@ func (s *domainHandlerCommonSuite) TestListDomain() {
 			},
 			Configuration: &commonproto.DomainConfiguration{
 				WorkflowExecutionRetentionPeriodInDays: retention2,
-				EmitMetric:                             &commonproto.BoolValue{Value: emitMetric2},
+				EmitMetric:                             &types.BoolValue{Value: emitMetric2},
 				HistoryArchivalStatus:                  enums.ArchivalStatusDisabled,
 				HistoryArchivalURI:                     "",
 				VisibilityArchivalStatus:               enums.ArchivalStatusDisabled,

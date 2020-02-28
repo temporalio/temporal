@@ -26,6 +26,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 	commonproto "go.temporal.io/temporal-proto/common"
@@ -212,7 +213,7 @@ func (s *domainHandlerGlobalDomainDisabledSuite) TestRegisterGetDomain_AllDefaul
 	}, resp.DomainInfo)
 	s.Equal(&commonproto.DomainConfiguration{
 		WorkflowExecutionRetentionPeriodInDays: retention,
-		EmitMetric:                             &commonproto.BoolValue{Value: false},
+		EmitMetric:                             &types.BoolValue{Value: false},
 		HistoryArchivalStatus:                  enums.ArchivalStatusDisabled,
 		HistoryArchivalURI:                     "",
 		VisibilityArchivalStatus:               enums.ArchivalStatusDisabled,
@@ -280,7 +281,7 @@ func (s *domainHandlerGlobalDomainDisabledSuite) TestRegisterGetDomain_NoDefault
 	}, resp.DomainInfo)
 	s.Equal(&commonproto.DomainConfiguration{
 		WorkflowExecutionRetentionPeriodInDays: retention,
-		EmitMetric:                             &commonproto.BoolValue{Value: emitMetric},
+		EmitMetric:                             &types.BoolValue{Value: emitMetric},
 		HistoryArchivalStatus:                  enums.ArchivalStatusDisabled,
 		HistoryArchivalURI:                     "",
 		VisibilityArchivalStatus:               enums.ArchivalStatusDisabled,
@@ -336,7 +337,7 @@ func (s *domainHandlerGlobalDomainDisabledSuite) TestUpdateGetDomain_NoAttrSet()
 		}, info)
 		s.Equal(&commonproto.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
-			EmitMetric:                             &commonproto.BoolValue{Value: emitMetric},
+			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  enums.ArchivalStatusDisabled,
 			HistoryArchivalURI:                     "",
 			VisibilityArchivalStatus:               enums.ArchivalStatusDisabled,
@@ -418,7 +419,7 @@ func (s *domainHandlerGlobalDomainDisabledSuite) TestUpdateGetDomain_AllAttrSet(
 		}, info)
 		s.Equal(&commonproto.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
-			EmitMetric:                             &commonproto.BoolValue{Value: emitMetric},
+			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  enums.ArchivalStatusDisabled,
 			HistoryArchivalURI:                     "",
 			VisibilityArchivalStatus:               enums.ArchivalStatusDisabled,
@@ -442,7 +443,7 @@ func (s *domainHandlerGlobalDomainDisabledSuite) TestUpdateGetDomain_AllAttrSet(
 		},
 		Configuration: &commonproto.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
-			EmitMetric:                             &commonproto.BoolValue{Value: emitMetric},
+			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  enums.ArchivalStatusDisabled,
 			HistoryArchivalURI:                     "",
 			VisibilityArchivalStatus:               enums.ArchivalStatusDisabled,

@@ -27,6 +27,7 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/temporal/activity"
 	"go.uber.org/zap"
 
 	"go.temporal.io/temporal/testsuite"
@@ -103,6 +104,7 @@ func (s *activitiesSuite) TestUploadHistory_Fail_InvalidURI() {
 		MetricsClient: s.metricsClient,
 	}
 	env := s.NewTestActivityEnvironment()
+	s.registerWorkflows(env)
 	env.SetWorkerOptions(worker.Options{
 		BackgroundActivityContext: context.WithValue(context.Background(), bootstrapContainerKey, container),
 	})
@@ -130,6 +132,7 @@ func (s *activitiesSuite) TestUploadHistory_Fail_GetArchiverError() {
 		ArchiverProvider: s.archiverProvider,
 	}
 	env := s.NewTestActivityEnvironment()
+	s.registerWorkflows(env)
 	env.SetWorkerOptions(worker.Options{
 		BackgroundActivityContext: context.WithValue(context.Background(), bootstrapContainerKey, container),
 	})
@@ -158,6 +161,7 @@ func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveNonRetriableError() {
 		ArchiverProvider: s.archiverProvider,
 	}
 	env := s.NewTestActivityEnvironment()
+	s.registerWorkflows(env)
 	env.SetWorkerOptions(worker.Options{
 		BackgroundActivityContext: context.WithValue(context.Background(), bootstrapContainerKey, container),
 	})
@@ -186,6 +190,7 @@ func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveRetriableError() {
 		ArchiverProvider: s.archiverProvider,
 	}
 	env := s.NewTestActivityEnvironment()
+	s.registerWorkflows(env)
 	env.SetWorkerOptions(worker.Options{
 		BackgroundActivityContext: context.WithValue(context.Background(), bootstrapContainerKey, container),
 	})
@@ -213,6 +218,7 @@ func (s *activitiesSuite) TestUploadHistory_Success() {
 		ArchiverProvider: s.archiverProvider,
 	}
 	env := s.NewTestActivityEnvironment()
+	s.registerWorkflows(env)
 	env.SetWorkerOptions(worker.Options{
 		BackgroundActivityContext: context.WithValue(context.Background(), bootstrapContainerKey, container),
 	})
@@ -241,6 +247,7 @@ func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_DeleteFromV2NonRetryabl
 		HistoryV2Manager: mockHistoryV2Manager,
 	}
 	env := s.NewTestActivityEnvironment()
+	s.registerWorkflows(env)
 	env.SetWorkerOptions(worker.Options{
 		BackgroundActivityContext: context.WithValue(context.Background(), bootstrapContainerKey, container),
 	})
@@ -266,6 +273,7 @@ func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_InvalidURI() {
 		MetricsClient: s.metricsClient,
 	}
 	env := s.NewTestActivityEnvironment()
+	s.registerWorkflows(env)
 	env.SetWorkerOptions(worker.Options{
 		BackgroundActivityContext: context.WithValue(context.Background(), bootstrapContainerKey, container),
 	})
@@ -290,6 +298,7 @@ func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_GetArchiverError() 
 		ArchiverProvider: s.archiverProvider,
 	}
 	env := s.NewTestActivityEnvironment()
+	s.registerWorkflows(env)
 	env.SetWorkerOptions(worker.Options{
 		BackgroundActivityContext: context.WithValue(context.Background(), bootstrapContainerKey, container),
 	})
@@ -315,6 +324,7 @@ func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_ArchiveNonRetriable
 		ArchiverProvider: s.archiverProvider,
 	}
 	env := s.NewTestActivityEnvironment()
+	s.registerWorkflows(env)
 	env.SetWorkerOptions(worker.Options{
 		BackgroundActivityContext: context.WithValue(context.Background(), bootstrapContainerKey, container),
 	})
@@ -340,6 +350,7 @@ func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_ArchiveRetriableErr
 		ArchiverProvider: s.archiverProvider,
 	}
 	env := s.NewTestActivityEnvironment()
+	s.registerWorkflows(env)
 	env.SetWorkerOptions(worker.Options{
 		BackgroundActivityContext: context.WithValue(context.Background(), bootstrapContainerKey, container),
 	})
@@ -364,6 +375,7 @@ func (s *activitiesSuite) TestArchiveVisibilityActivity_Success() {
 		ArchiverProvider: s.archiverProvider,
 	}
 	env := s.NewTestActivityEnvironment()
+	s.registerWorkflows(env)
 	env.SetWorkerOptions(worker.Options{
 		BackgroundActivityContext: context.WithValue(context.Background(), bootstrapContainerKey, container),
 	})
@@ -376,4 +388,10 @@ func (s *activitiesSuite) TestArchiveVisibilityActivity_Success() {
 	}
 	_, err := env.ExecuteActivity(archiveVisibilityActivity, request)
 	s.NoError(err)
+}
+
+func (s *activitiesSuite) registerWorkflows(env *testsuite.TestActivityEnvironment) {
+	env.RegisterActivityWithOptions(uploadHistoryActivity, activity.RegisterOptions{Name: uploadHistoryActivityFnName})
+	env.RegisterActivityWithOptions(deleteHistoryActivity, activity.RegisterOptions{Name: deleteHistoryActivityFnName})
+	env.RegisterActivityWithOptions(archiveVisibilityActivity, activity.RegisterOptions{Name: archiveVisibilityActivityFnName})
 }

@@ -26,6 +26,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
@@ -154,7 +155,7 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestRegisterGetD
 	}, resp.DomainInfo)
 	s.Equal(&commonproto.DomainConfiguration{
 		WorkflowExecutionRetentionPeriodInDays: retention,
-		EmitMetric:                             &commonproto.BoolValue{Value: false},
+		EmitMetric:                             &types.BoolValue{Value: false},
 		HistoryArchivalStatus:                  enums.ArchivalStatusDisabled,
 		HistoryArchivalURI:                     "",
 		VisibilityArchivalStatus:               enums.ArchivalStatusDisabled,
@@ -222,7 +223,7 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestRegisterGetD
 	}, resp.DomainInfo)
 	s.Equal(&commonproto.DomainConfiguration{
 		WorkflowExecutionRetentionPeriodInDays: retention,
-		EmitMetric:                             &commonproto.BoolValue{Value: emitMetric},
+		EmitMetric:                             &types.BoolValue{Value: emitMetric},
 		HistoryArchivalStatus:                  enums.ArchivalStatusDisabled,
 		HistoryArchivalURI:                     "",
 		VisibilityArchivalStatus:               enums.ArchivalStatusDisabled,
@@ -280,7 +281,7 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestUpdateGetDom
 		}, info)
 		s.Equal(&commonproto.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
-			EmitMetric:                             &commonproto.BoolValue{Value: emitMetric},
+			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  enums.ArchivalStatusDisabled,
 			HistoryArchivalURI:                     "",
 			VisibilityArchivalStatus:               enums.ArchivalStatusDisabled,
@@ -357,7 +358,7 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestUpdateGetDom
 		}, info)
 		s.Equal(&commonproto.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
-			EmitMetric:                             &commonproto.BoolValue{Value: emitMetric},
+			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  enums.ArchivalStatusDisabled,
 			HistoryArchivalURI:                     "",
 			VisibilityArchivalStatus:               enums.ArchivalStatusDisabled,
@@ -381,7 +382,7 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestUpdateGetDom
 		},
 		Configuration: &commonproto.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
-			EmitMetric:                             &commonproto.BoolValue{Value: emitMetric},
+			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  enums.ArchivalStatusDisabled,
 			HistoryArchivalURI:                     "",
 			VisibilityArchivalStatus:               enums.ArchivalStatusDisabled,
@@ -604,7 +605,7 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestUpdateGetDom
 		},
 		Configuration: &commonproto.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
-			EmitMetric:                             &commonproto.BoolValue{Value: emitMetric},
+			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  enums.ArchivalStatusDisabled,
 			HistoryArchivalURI:                     "",
 			VisibilityArchivalStatus:               enums.ArchivalStatusDisabled,
@@ -689,7 +690,7 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestUpdateGetDom
 		}, info)
 		s.Equal(&commonproto.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
-			EmitMetric:                             &commonproto.BoolValue{Value: emitMetric},
+			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  enums.ArchivalStatusDisabled,
 			HistoryArchivalURI:                     "",
 			VisibilityArchivalStatus:               enums.ArchivalStatusDisabled,
