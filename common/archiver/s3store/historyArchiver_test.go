@@ -32,28 +32,24 @@ import (
 	"testing"
 	"time"
 
-	"github.com/uber-go/tally"
-
-	"github.com/uber/cadence/common/metrics"
-
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/stretchr/testify/mock"
-
-	"github.com/uber/cadence/common/archiver/s3store/mocks"
-
 	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/uber-go/tally"
 	"go.uber.org/zap"
 
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/archiver"
+	"github.com/uber/cadence/common/archiver/s3store/mocks"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/loggerimpl"
+	"github.com/uber/cadence/common/metrics"
 )
 
 const (
@@ -79,8 +75,8 @@ type historyArchiverSuite struct {
 	container          *archiver.HistoryBootstrapContainer
 	logger             log.Logger
 	testArchivalURI    archiver.URI
-	historyBatchesV1   []*shared.History
-	historyBatchesV100 []*shared.History
+	historyBatchesV1   []*archiver.HistoryBlob
+	historyBatchesV100 []*archiver.HistoryBlob
 }
 
 func TestHistoryArchiverSuite(t *testing.T) {
@@ -127,13 +123,28 @@ func setupFsEmulation(s3cli *mocks.S3API) {
 	s3cli.On("ListObjectsV2WithContext", mock.Anything, mock.Anything).
 		Return(func(_ context.Context, input *s3.ListObjectsV2Input, opts ...request.Option) *s3.ListObjectsV2Output {
 			objects := make([]*s3.Object, 0)
+			commonPrefixMap := map[string]bool{}
 			for k := range fs {
 				if strings.HasPrefix(k, *input.Bucket+*input.Prefix) {
-					objects = append(objects, &s3.Object{
-						Key: aws.String(k[len(*input.Bucket):]),
-					})
+					key := k[len(*input.Bucket):]
+					keyWithoutPrefix := key[len(*input.Prefix):]
+					index := strings.Index(keyWithoutPrefix, "/")
+					if index == -1 || input.Delimiter == nil {
+						objects = append(objects, &s3.Object{
+							Key: aws.String(key),
+						})
+					} else {
+						commonPrefixMap[key[:len(*input.Prefix)+index]] = true
+					}
 				}
 			}
+			commonPrefixes := make([]*s3.CommonPrefix, 0)
+			for k := range commonPrefixMap {
+				commonPrefixes = append(commonPrefixes, &s3.CommonPrefix{
+					Prefix: aws.String(k),
+				})
+			}
+
 			sort.SliceStable(objects, func(i, j int) bool {
 				return *objects[i].Key < *objects[j].Key
 			})
@@ -146,6 +157,14 @@ func setupFsEmulation(s3cli *mocks.S3API) {
 				start, _ = strconv.Atoi(*input.ContinuationToken)
 			}
 
+			if input.StartAfter != nil {
+				for k, v := range objects {
+					if *input.StartAfter == *v.Key {
+						start = k + 1
+					}
+				}
+			}
+
 			isTruncated := false
 			var nextContinuationToken *string
 			if len(objects) > start+maxKeys {
@@ -156,13 +175,36 @@ func setupFsEmulation(s3cli *mocks.S3API) {
 				objects = objects[start:]
 			}
 
+			if input.StartAfter != nil {
+				for k, v := range commonPrefixes {
+					if *input.StartAfter == *v.Prefix {
+						start = k + 1
+					}
+				}
+			}
+
+			if len(commonPrefixes) > start+maxKeys {
+				isTruncated = true
+				nextContinuationToken = common.StringPtr(fmt.Sprintf("%d", start+maxKeys))
+				commonPrefixes = commonPrefixes[start : start+maxKeys]
+			} else if len(commonPrefixes) > 0 {
+				commonPrefixes = commonPrefixes[start:]
+			}
+
 			return &s3.ListObjectsV2Output{
+				CommonPrefixes:        commonPrefixes,
 				Contents:              objects,
 				IsTruncated:           &isTruncated,
 				NextContinuationToken: nextContinuationToken,
 			}
 		}, nil)
 	s3cli.On("PutObjectWithContext", mock.Anything, mock.Anything).Return(putObjectFn, nil)
+
+	s3cli.On("HeadObjectWithContext", mock.Anything, mock.MatchedBy(func(input *s3.HeadObjectInput) bool {
+		_, ok := fs[*input.Bucket+*input.Key]
+		return !ok
+	})).Return(nil, awserr.New("NotFound", "", nil))
+	s3cli.On("HeadObjectWithContext", mock.Anything, mock.Anything).Return(&s3.HeadObjectOutput{}, nil)
 
 	s3cli.On("GetObjectWithContext", mock.Anything, mock.MatchedBy(func(input *s3.GetObjectInput) bool {
 		_, ok := fs[*input.Bucket+*input.Key]
@@ -405,7 +447,7 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 	err = historyArchiver.Archive(context.Background(), URI, request)
 	s.NoError(err)
 
-	expectedkey := constructHistoryKey("", testDomainID, testWorkflowID, testRunID, testCloseFailoverVersion)
+	expectedkey := constructHistoryKey("", testDomainID, testWorkflowID, testRunID, testCloseFailoverVersion, 0)
 	s.assertKeyExists(expectedkey)
 }
 
@@ -469,7 +511,7 @@ func (s *historyArchiverSuite) TestGet_Fail_KeyNotExist() {
 	response, err := historyArchiver.Get(context.Background(), URI, request)
 	s.Nil(response)
 	s.Error(err)
-	s.IsType(&shared.BadRequestError{}, err)
+	s.IsType(&shared.EntityNotExistsError{}, err)
 }
 
 func (s *historyArchiverSuite) TestGet_Success_PickHighestVersion() {
@@ -485,7 +527,7 @@ func (s *historyArchiverSuite) TestGet_Success_PickHighestVersion() {
 	response, err := historyArchiver.Get(context.Background(), URI, request)
 	s.NoError(err)
 	s.Nil(response.NextPageToken)
-	s.Equal(s.historyBatchesV100, response.HistoryBatches)
+	s.Equal(append(s.historyBatchesV100[0].Body, s.historyBatchesV100[1].Body...), response.HistoryBatches)
 }
 
 func (s *historyArchiverSuite) TestGet_Success_UseProvidedVersion() {
@@ -502,7 +544,7 @@ func (s *historyArchiverSuite) TestGet_Success_UseProvidedVersion() {
 	response, err := historyArchiver.Get(context.Background(), URI, request)
 	s.NoError(err)
 	s.Nil(response.NextPageToken)
-	s.Equal(s.historyBatchesV1, response.HistoryBatches)
+	s.Equal(s.historyBatchesV1[0].Body, response.HistoryBatches)
 }
 
 func (s *historyArchiverSuite) TestGet_Success_SmallPageSize() {
@@ -535,22 +577,18 @@ func (s *historyArchiverSuite) TestGet_Success_SmallPageSize() {
 	s.Len(response.HistoryBatches, 1)
 	combinedHistory = append(combinedHistory, response.HistoryBatches...)
 
-	s.Equal(s.historyBatchesV100, combinedHistory)
+	s.Equal(append(s.historyBatchesV100[0].Body, s.historyBatchesV100[1].Body...), combinedHistory)
 }
 
 func (s *historyArchiverSuite) TestArchiveAndGet() {
 	mockCtrl := gomock.NewController(s.T())
 	defer mockCtrl.Finish()
 	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
-	historyBlob := &archiver.HistoryBlob{
-		Header: &archiver.HistoryBlobHeader{
-			IsLast: common.BoolPtr(true),
-		},
-		Body: s.historyBatchesV100,
-	}
 	gomock.InOrder(
 		historyIterator.EXPECT().HasNext().Return(true),
-		historyIterator.EXPECT().Next().Return(historyBlob, nil),
+		historyIterator.EXPECT().Next().Return(s.historyBatchesV100[0], nil),
+		historyIterator.EXPECT().HasNext().Return(true),
+		historyIterator.EXPECT().Next().Return(s.historyBatchesV100[1], nil),
 		historyIterator.EXPECT().HasNext().Return(false),
 	)
 
@@ -569,9 +607,6 @@ func (s *historyArchiverSuite) TestArchiveAndGet() {
 	err = historyArchiver.Archive(context.Background(), URI, archiveRequest)
 	s.NoError(err)
 
-	expectedkey := constructHistoryKey("", testDomainID, testWorkflowID, testRunID, testCloseFailoverVersion)
-	s.assertKeyExists(expectedkey)
-
 	getRequest := &archiver.GetHistoryRequest{
 		DomainID:   testDomainID,
 		WorkflowID: testWorkflowID,
@@ -582,7 +617,7 @@ func (s *historyArchiverSuite) TestArchiveAndGet() {
 	s.NoError(err)
 	s.NotNil(response)
 	s.Nil(response.NextPageToken)
-	s.Equal(s.historyBatchesV100, response.HistoryBatches)
+	s.Equal(append(s.historyBatchesV100[0].Body, s.historyBatchesV100[1].Body...), response.HistoryBatches)
 }
 
 func (s *historyArchiverSuite) newTestHistoryArchiver(historyIterator archiver.HistoryIterator) *historyArchiver {
@@ -597,39 +632,60 @@ func (s *historyArchiverSuite) newTestHistoryArchiver(historyIterator archiver.H
 }
 
 func (s *historyArchiverSuite) setupHistoryDirectory() {
-	s.historyBatchesV1 = []*shared.History{
-		&shared.History{
-			Events: []*shared.HistoryEvent{
-				&shared.HistoryEvent{
-					EventId:   common.Int64Ptr(testNextEventID - 1),
-					Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-					Version:   common.Int64Ptr(1),
+	s.historyBatchesV1 = []*archiver.HistoryBlob{
+		{
+			Header: &archiver.HistoryBlobHeader{
+				IsLast: common.BoolPtr(true),
+			},
+			Body: []*shared.History{
+				{
+					Events: []*shared.HistoryEvent{
+						&shared.HistoryEvent{
+							EventId:   common.Int64Ptr(testNextEventID - 1),
+							Timestamp: common.Int64Ptr(time.Now().UnixNano()),
+							Version:   common.Int64Ptr(1),
+						},
+					},
 				},
 			},
 		},
 	}
 
-	s.historyBatchesV100 = []*shared.History{
-		&shared.History{
-			Events: []*shared.HistoryEvent{
-				&shared.HistoryEvent{
-					EventId:   common.Int64Ptr(common.FirstEventID + 1),
-					Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-					Version:   common.Int64Ptr(testCloseFailoverVersion),
-				},
-				&shared.HistoryEvent{
-					EventId:   common.Int64Ptr(common.FirstEventID + 1),
-					Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-					Version:   common.Int64Ptr(testCloseFailoverVersion),
+	s.historyBatchesV100 = []*archiver.HistoryBlob{
+		{
+			Header: &archiver.HistoryBlobHeader{
+				IsLast: common.BoolPtr(false),
+			},
+			Body: []*shared.History{
+				&shared.History{
+					Events: []*shared.HistoryEvent{
+						&shared.HistoryEvent{
+							EventId:   common.Int64Ptr(common.FirstEventID + 1),
+							Timestamp: common.Int64Ptr(time.Now().UnixNano()),
+							Version:   common.Int64Ptr(testCloseFailoverVersion),
+						},
+						&shared.HistoryEvent{
+							EventId:   common.Int64Ptr(common.FirstEventID + 1),
+							Timestamp: common.Int64Ptr(time.Now().UnixNano()),
+							Version:   common.Int64Ptr(testCloseFailoverVersion),
+						},
+					},
 				},
 			},
 		},
-		&shared.History{
-			Events: []*shared.HistoryEvent{
-				&shared.HistoryEvent{
-					EventId:   common.Int64Ptr(testNextEventID - 1),
-					Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-					Version:   common.Int64Ptr(testCloseFailoverVersion),
+		{
+			Header: &archiver.HistoryBlobHeader{
+				IsLast: common.BoolPtr(true),
+			},
+			Body: []*shared.History{
+				&shared.History{
+					Events: []*shared.HistoryEvent{
+						&shared.HistoryEvent{
+							EventId:   common.Int64Ptr(testNextEventID - 1),
+							Timestamp: common.Int64Ptr(time.Now().UnixNano()),
+							Version:   common.Int64Ptr(testCloseFailoverVersion),
+						},
+					},
 				},
 			},
 		},
@@ -639,16 +695,18 @@ func (s *historyArchiverSuite) setupHistoryDirectory() {
 	s.writeHistoryBatchesForGetTest(s.historyBatchesV100, testCloseFailoverVersion)
 }
 
-func (s *historyArchiverSuite) writeHistoryBatchesForGetTest(historyBatches []*shared.History, version int64) {
-	data, err := encode(historyBatches)
-	s.Require().NoError(err)
-	key := constructHistoryKey("", testDomainID, testWorkflowID, testRunID, version)
-	_, err = s.s3cli.PutObjectWithContext(context.Background(), &s3.PutObjectInput{
-		Bucket: aws.String(testBucket),
-		Key:    aws.String(key),
-		Body:   bytes.NewReader(data),
-	})
-	s.Require().NoError(err)
+func (s *historyArchiverSuite) writeHistoryBatchesForGetTest(historyBatches []*archiver.HistoryBlob, version int64) {
+	for i, batch := range historyBatches {
+		data, err := encode(batch)
+		s.Require().NoError(err)
+		key := constructHistoryKey("", testDomainID, testWorkflowID, testRunID, version, i)
+		_, err = s.s3cli.PutObjectWithContext(context.Background(), &s3.PutObjectInput{
+			Bucket: aws.String(testBucket),
+			Key:    aws.String(key),
+			Body:   bytes.NewReader(data),
+		})
+		s.Require().NoError(err)
+	}
 }
 
 func (s *historyArchiverSuite) assertKeyExists(key string) {

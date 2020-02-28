@@ -30,8 +30,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/uber/cadence/common/metrics"
-
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/request"
@@ -44,6 +42,8 @@ import (
 	"github.com/uber/cadence/common/archiver"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/log/tag"
+	"github.com/uber/cadence/common/metrics"
+	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/config"
 )
 
@@ -73,7 +73,14 @@ type (
 
 	getHistoryToken struct {
 		CloseFailoverVersion int64
-		NextBatchIdx         int
+		BatchIdx             int
+	}
+
+	uploadProgress struct {
+		BatchIdx      int
+		IteratorState []byte
+		uploadedSize  int64
+		historySize   int64
 	}
 )
 
@@ -97,7 +104,6 @@ func newHistoryArchiver(
 		Endpoint:         config.Endpoint,
 		Region:           aws.String(config.Region),
 		S3ForcePathStyle: aws.Bool(config.S3ForcePathStyle),
-		MaxRetries:       aws.Int(0),
 	}
 	sess, err := session.NewSession(s3Config)
 	if err != nil {
@@ -145,12 +151,11 @@ func (h *historyArchiver) Archive(
 		return err
 	}
 
+	var progress uploadProgress
 	historyIterator := h.historyIterator
 	if historyIterator == nil { // will only be set by testing code
-		historyIterator = archiver.NewHistoryIterator(request, h.container.HistoryV2Manager, targetHistoryBlobSize)
+		historyIterator = loadHistoryIterator(ctx, request, h.container.HistoryV2Manager, featureCatalog, &progress)
 	}
-
-	historyBatches := []*shared.History{}
 	for historyIterator.HasNext() {
 		historyBlob, err := getNextHistoryBlob(ctx, historyIterator)
 		if err != nil {
@@ -168,27 +173,84 @@ func (h *historyArchiver) Archive(
 			return archiver.ErrHistoryMutated
 		}
 
-		historyBatches = append(historyBatches, historyBlob.Body...)
+		encodedHistoryBlob, err := encode(historyBlob)
+		if err != nil {
+			logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(errEncodeHistory), tag.Error(err))
+			return err
+		}
+
+		key := constructHistoryKey(URI.Path(), request.DomainID, request.WorkflowID, request.RunID, request.CloseFailoverVersion, progress.BatchIdx)
+
+		exists, err := keyExists(ctx, h.s3cli, URI, key)
+		if err != nil {
+			logger := logger.WithTags(tag.ArchivalArchiveFailReason(errWriteKey), tag.Error(err))
+			if isRetryableError(err) {
+				logger.Error(archiver.ArchiveTransientErrorMsg)
+			} else {
+				logger.Error(archiver.ArchiveNonRetriableErrorMsg)
+			}
+			return err
+		}
+		blobSize := int64(binary.Size(encodedHistoryBlob))
+		if exists {
+			scope.IncCounter(metrics.HistoryArchiverBlobExistsCount)
+		} else {
+			if err := upload(ctx, h.s3cli, URI, key, encodedHistoryBlob); err != nil {
+				logger := logger.WithTags(tag.ArchivalArchiveFailReason(errWriteKey), tag.Error(err))
+				if isRetryableError(err) {
+					logger.Error(archiver.ArchiveTransientErrorMsg)
+				} else {
+					logger.Error(archiver.ArchiveNonRetriableErrorMsg)
+				}
+				return err
+			}
+			progress.uploadedSize += blobSize
+			scope.RecordTimer(metrics.HistoryArchiverBlobSize, time.Duration(blobSize))
+		}
+
+		progress.historySize += blobSize
+		progress.BatchIdx = progress.BatchIdx + 1
+		saveHistoryIteratorState(ctx, featureCatalog, historyIterator, &progress)
 	}
 
-	encodedHistoryBatches, err := encode(historyBatches)
-	if err != nil {
-		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(errEncodeHistory), tag.Error(err))
-		return err
-	}
-
-	key := constructHistoryKey(URI.Path(), request.DomainID, request.WorkflowID, request.RunID, request.CloseFailoverVersion)
-
-	if err := upload(ctx, h.s3cli, URI, key, encodedHistoryBatches); err != nil {
-		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(errWriteKey), tag.Error(err))
-		return err
-	}
-	totalUploadSize := int64(binary.Size(encodedHistoryBatches))
-	scope.AddCounter(metrics.HistoryArchiverTotalUploadSize, totalUploadSize)
-	scope.AddCounter(metrics.HistoryArchiverHistorySize, totalUploadSize)
+	scope.RecordTimer(metrics.HistoryArchiverTotalUploadSize, time.Duration(progress.uploadedSize))
+	scope.RecordTimer(metrics.HistoryArchiverHistorySize, time.Duration(progress.historySize))
 	scope.IncCounter(metrics.HistoryArchiverArchiveSuccessCount)
-
 	return nil
+}
+
+func loadHistoryIterator(ctx context.Context, request *archiver.ArchiveHistoryRequest, historyManager persistence.HistoryManager, featureCatalog *archiver.ArchiveFeatureCatalog, progress *uploadProgress) (historyIterator archiver.HistoryIterator) {
+	if featureCatalog.ProgressManager != nil {
+		if featureCatalog.ProgressManager.HasProgress(ctx) {
+			err := featureCatalog.ProgressManager.LoadProgress(ctx, progress)
+			if err == nil {
+				historyIterator, err := archiver.NewHistoryIteratorFromState(request, historyManager, targetHistoryBlobSize, progress.IteratorState)
+				if err == nil {
+					return historyIterator
+				}
+			}
+			progress.IteratorState = nil
+			progress.BatchIdx = 0
+			progress.historySize = 0
+			progress.uploadedSize = 0
+		}
+	}
+	return archiver.NewHistoryIterator(request, historyManager, targetHistoryBlobSize)
+}
+
+func saveHistoryIteratorState(ctx context.Context, featureCatalog *archiver.ArchiveFeatureCatalog, historyIterator archiver.HistoryIterator, progress *uploadProgress) {
+	// Saving history state is a best effort operation. Ignore errors and continue
+	if featureCatalog.ProgressManager != nil {
+		state, err := historyIterator.GetState()
+		if err != nil {
+			return
+		}
+		progress.IteratorState = state
+		err = featureCatalog.ProgressManager.RecordProgress(ctx, progress)
+		if err != nil {
+			return
+		}
+	}
 }
 
 func (h *historyArchiver) Get(
@@ -214,7 +276,6 @@ func (h *historyArchiver) Get(
 	} else if request.CloseFailoverVersion != nil {
 		token = &getHistoryToken{
 			CloseFailoverVersion: *request.CloseFailoverVersion,
-			NextBatchIdx:         0,
 		}
 	} else {
 		highestVersion, err := h.getHighestVersion(ctx, URI, request)
@@ -223,35 +284,49 @@ func (h *historyArchiver) Get(
 		}
 		token = &getHistoryToken{
 			CloseFailoverVersion: *highestVersion,
-			NextBatchIdx:         0,
 		}
 	}
-
-	key := constructHistoryKey(URI.Path(), request.DomainID, request.WorkflowID, request.RunID, token.CloseFailoverVersion)
-	encodedHistoryBatches, err := download(ctx, h.s3cli, URI, key)
-	if err != nil {
-		return nil, err
-	}
-	historyBatches, err := decodeHistoryBatches(encodedHistoryBatches)
-	if err != nil {
-		return nil, &shared.InternalServiceError{Message: err.Error()}
-	}
-	historyBatches = historyBatches[token.NextBatchIdx:]
 
 	response := &archiver.GetHistoryResponse{}
 	numOfEvents := 0
-	numOfBatches := 0
-	for _, batch := range historyBatches {
-		response.HistoryBatches = append(response.HistoryBatches, batch)
-		numOfBatches++
-		numOfEvents += len(batch.Events)
+	isTruncated := false
+	for {
 		if numOfEvents >= request.PageSize {
+			isTruncated = true
 			break
 		}
+		key := constructHistoryKey(URI.Path(), request.DomainID, request.WorkflowID, request.RunID, token.CloseFailoverVersion, token.BatchIdx)
+
+		encodedRecord, err := download(ctx, h.s3cli, URI, key)
+		if err != nil {
+			if isRetryableError(err) {
+				return nil, &shared.InternalServiceError{Message: err.Error()}
+			}
+			switch err.(type) {
+			case *shared.BadRequestError, *shared.InternalServiceError, *shared.EntityNotExistsError:
+				return nil, err
+			default:
+				return nil, &shared.InternalServiceError{Message: err.Error()}
+			}
+		}
+
+		historyBlob, err := decodeHistoryBlob(encodedRecord)
+		if err != nil {
+			return nil, &shared.InternalServiceError{Message: err.Error()}
+		}
+
+		for _, batch := range historyBlob.Body {
+			response.HistoryBatches = append(response.HistoryBatches, batch)
+			numOfEvents += len(batch.Events)
+		}
+
+		if *historyBlob.Header.IsLast {
+			break
+		}
+		token.BatchIdx++
 	}
 
-	if numOfBatches < len(historyBatches) {
-		token.NextBatchIdx += numOfBatches
+	if isTruncated {
 		nextToken, err := serializeToken(token)
 		if err != nil {
 			return nil, &shared.InternalServiceError{Message: err.Error()}
@@ -293,8 +368,9 @@ func (h *historyArchiver) getHighestVersion(ctx context.Context, URI archiver.UR
 	defer cancel()
 	var prefix = constructHistoryKeyPrefix(URI.Path(), request.DomainID, request.WorkflowID, request.RunID) + "/"
 	results, err := h.s3cli.ListObjectsV2WithContext(ctx, &s3.ListObjectsV2Input{
-		Bucket: aws.String(URI.Hostname()),
-		Prefix: aws.String(prefix),
+		Bucket:    aws.String(URI.Hostname()),
+		Prefix:    aws.String(prefix),
+		Delimiter: aws.String("/"),
 	})
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok && aerr.Code() == s3.ErrCodeNoSuchBucket {
@@ -304,9 +380,9 @@ func (h *historyArchiver) getHighestVersion(ctx context.Context, URI archiver.UR
 	}
 	var highestVersion *int64
 
-	for _, v := range results.Contents {
+	for _, v := range results.CommonPrefixes {
 		var version int64
-		version, err = strconv.ParseInt(strings.Replace(*v.Key, prefix, "", 1), 10, 64)
+		version, err = strconv.ParseInt(strings.Replace(strings.Replace(*v.Prefix, prefix, "", 1), "/", "", 1), 10, 64)
 		if err != nil {
 			continue
 		}
