@@ -35,6 +35,7 @@ import (
 	"go.uber.org/atomic"
 
 	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/rpc"
 )
 
 func (s *integrationSuite) TestQueryWorkflow_Sticky() {
@@ -837,7 +838,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
 	}
 	queryResultCh := make(chan QueryResult)
 	queryWorkflowFn := func(queryType string, rejectCondition enums.QueryRejectCondition) {
-		shortCtx, cancel := NewContextWithCancel(time.Second)
+		shortCtx, cancel := rpc.NewContextWithTimeoutAndHeaders(time.Second)
 		queryResp, err := s.engine.QueryWorkflow(shortCtx, &workflowservice.QueryWorkflowRequest{
 			Domain: s.domainName,
 			Execution: &commonproto.WorkflowExecution{

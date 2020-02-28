@@ -23,7 +23,7 @@
 package history
 
 import (
-	ctx "context"
+	"context"
 
 	"github.com/pborman/uuid"
 	"go.temporal.io/temporal-proto/serviceerror"
@@ -35,7 +35,7 @@ import (
 type (
 	nDCConflictResolver interface {
 		prepareMutableState(
-			ctx ctx.Context,
+			ctx context.Context,
 			branchIndex int,
 			incomingVersion int64,
 		) (mutableState, bool, error)
@@ -71,7 +71,7 @@ func newNDCConflictResolver(
 }
 
 func (r *nDCConflictResolverImpl) prepareMutableState(
-	ctx ctx.Context,
+	ctx context.Context,
 	branchIndex int,
 	incomingVersion int64,
 ) (mutableState, bool, error) {
@@ -113,7 +113,7 @@ func (r *nDCConflictResolverImpl) prepareMutableState(
 }
 
 func (r *nDCConflictResolverImpl) rebuild(
-	ctx ctx.Context,
+	ctx context.Context,
 	branchIndex int,
 	requestID string,
 ) (mutableState, error) {

@@ -36,6 +36,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/rpc"
 )
 
 const (
@@ -236,7 +237,7 @@ func (n *NDCHistoryResenderImpl) getHistory(
 	}
 	domainName := domainEntry.GetInfo().Name
 
-	ctx, cancel := newContextWithTimeout(resendContextTimeout)
+	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(resendContextTimeout)
 	defer cancel()
 	response, err := n.adminClient.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 		Domain: domainName,

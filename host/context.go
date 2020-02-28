@@ -24,16 +24,11 @@ import (
 	"context"
 	"time"
 
-	"github.com/temporalio/temporal/common/headers"
+	"github.com/temporalio/temporal/common/rpc"
 )
 
 // NewContext create new context with default timeout 90 seconds.
 func NewContext() context.Context {
-	ctx, _ := NewContextWithCancel(90 * time.Second)
+	ctx, _ := rpc.NewContextWithTimeoutAndHeaders(90 * time.Second)
 	return ctx
-}
-
-// NewContextWithCancel create new context with timeout.
-func NewContextWithCancel(timeout time.Duration) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(headers.SetVersions(context.Background()), timeout)
 }

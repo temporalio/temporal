@@ -1028,10 +1028,6 @@ func (c *clientImpl) RefreshWorkflowTasks(
 }
 
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
-	if parent == nil {
-		return context.WithTimeout(context.Background(), c.timeout)
-	}
-
 	return context.WithTimeout(parent, c.timeout)
 }
 
@@ -1048,12 +1044,11 @@ func (c *clientImpl) getClientForShardID(shardID int) (historyservice.HistorySer
 	return client.(historyservice.HistoryServiceClient), nil
 }
 
-func (c *clientImpl) executeWithRedirect(ctx context.Context, client historyservice.HistoryServiceClient,
+func (c *clientImpl) executeWithRedirect(ctx context.Context,
+	client historyservice.HistoryServiceClient,
 	op func(ctx context.Context, client historyservice.HistoryServiceClient) error) error {
+
 	var err error
-	if ctx == nil {
-		ctx = context.Background()
-	}
 redirectLoop:
 	for {
 		err = common.IsValidContext(ctx)

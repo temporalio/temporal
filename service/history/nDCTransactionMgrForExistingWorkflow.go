@@ -23,7 +23,7 @@
 package history
 
 import (
-	ctx "context"
+	"context"
 	"fmt"
 	"time"
 
@@ -35,7 +35,7 @@ import (
 type (
 	nDCTransactionMgrForExistingWorkflow interface {
 		dispatchForExistingWorkflow(
-			ctx ctx.Context,
+			ctx context.Context,
 			now time.Time,
 			isWorkflowRebuilt bool,
 			targetWorkflow nDCWorkflow,
@@ -60,7 +60,7 @@ func newNDCTransactionMgrForExistingWorkflow(
 }
 
 func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
-	ctx ctx.Context,
+	ctx context.Context,
 	now time.Time,
 	isWorkflowRebuilt bool,
 	targetWorkflow nDCWorkflow,
@@ -161,7 +161,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 }
 
 func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchWorkflowUpdateAsCurrent(
-	ctx ctx.Context,
+	ctx context.Context,
 	now time.Time,
 	isWorkflowRebuilt bool,
 	targetWorkflow nDCWorkflow,
@@ -190,7 +190,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchWorkflowUpdateAsCurre
 }
 
 func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchWorkflowUpdateAsZombie(
-	ctx ctx.Context,
+	ctx context.Context,
 	now time.Time,
 	isWorkflowRebuilt bool,
 	currentWorkflow nDCWorkflow,
@@ -220,7 +220,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchWorkflowUpdateAsZombi
 }
 
 func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsCurrent(
-	ctx ctx.Context,
+	ctx context.Context,
 	now time.Time,
 	targetWorkflow nDCWorkflow,
 	newWorkflow nDCWorkflow,
@@ -238,7 +238,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsCurrent(
 }
 
 func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
-	ctx ctx.Context,
+	ctx context.Context,
 	now time.Time,
 	currentWorkflow nDCWorkflow,
 	targetWorkflow nDCWorkflow,
@@ -310,7 +310,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 }
 
 func (r *nDCTransactionMgrForExistingWorkflowImpl) suppressCurrentAndUpdateAsCurrent(
-	ctx ctx.Context,
+	ctx context.Context,
 	now time.Time,
 	currentWorkflow nDCWorkflow,
 	targetWorkflow nDCWorkflow,
@@ -356,7 +356,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) suppressCurrentAndUpdateAsCur
 }
 
 func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsCurrent(
-	ctx ctx.Context,
+	ctx context.Context,
 	now time.Time,
 	targetWorkflow nDCWorkflow,
 	newWorkflow nDCWorkflow,
@@ -383,7 +383,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsCurrent(
 }
 
 func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
-	ctx ctx.Context,
+	ctx context.Context,
 	now time.Time,
 	currentWorkflow nDCWorkflow,
 	targetWorkflow nDCWorkflow,
@@ -455,7 +455,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 }
 
 func (r *nDCTransactionMgrForExistingWorkflowImpl) executeTransaction(
-	ctx ctx.Context,
+	ctx context.Context,
 	now time.Time,
 	transactionPolicy nDCTransactionPolicy,
 	currentWorkflow nDCWorkflow,

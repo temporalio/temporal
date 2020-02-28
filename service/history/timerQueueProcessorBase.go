@@ -21,7 +21,7 @@
 package history
 
 import (
-	ctx "context"
+	"context"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -295,7 +295,7 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 }
 
 func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*persistenceblobs.TimerTaskInfo, error) {
-	ctx, cancel := ctx.WithTimeout(ctx.Background(), loadTimerTaskThrottleRetryDelay)
+	ctx, cancel := context.WithTimeout(context.Background(), loadTimerTaskThrottleRetryDelay)
 	if err := t.rateLimiter.Wait(ctx); err != nil {
 		cancel()
 		t.notifyNewTimer(time.Time{}) // re-enqueue the event

@@ -23,7 +23,7 @@
 package history
 
 import (
-	ctx "context"
+	"context"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -106,37 +106,37 @@ const (
 type (
 	nDCTransactionMgr interface {
 		createWorkflow(
-			ctx ctx.Context,
+			ctx context.Context,
 			now time.Time,
 			targetWorkflow nDCWorkflow,
 		) error
 		updateWorkflow(
-			ctx ctx.Context,
+			ctx context.Context,
 			now time.Time,
 			isWorkflowRebuilt bool,
 			targetWorkflow nDCWorkflow,
 			newWorkflow nDCWorkflow,
 		) error
 		backfillWorkflow(
-			ctx ctx.Context,
+			ctx context.Context,
 			now time.Time,
 			targetWorkflow nDCWorkflow,
 			targetWorkflowEvents *persistence.WorkflowEvents,
 		) error
 
 		checkWorkflowExists(
-			ctx ctx.Context,
+			ctx context.Context,
 			domainID string,
 			workflowID string,
 			runID string,
 		) (bool, error)
 		getCurrentWorkflowRunID(
-			ctx ctx.Context,
+			ctx context.Context,
 			domainID string,
 			workflowID string,
 		) (string, error)
 		loadNDCWorkflow(
-			ctx ctx.Context,
+			ctx context.Context,
 			domainID string,
 			workflowID string,
 			runID string,
@@ -194,7 +194,7 @@ func newNDCTransactionMgr(
 }
 
 func (r *nDCTransactionMgrImpl) createWorkflow(
-	ctx ctx.Context,
+	ctx context.Context,
 	now time.Time,
 	targetWorkflow nDCWorkflow,
 ) error {
@@ -207,7 +207,7 @@ func (r *nDCTransactionMgrImpl) createWorkflow(
 }
 
 func (r *nDCTransactionMgrImpl) updateWorkflow(
-	ctx ctx.Context,
+	ctx context.Context,
 	now time.Time,
 	isWorkflowRebuilt bool,
 	targetWorkflow nDCWorkflow,
@@ -224,7 +224,7 @@ func (r *nDCTransactionMgrImpl) updateWorkflow(
 }
 
 func (r *nDCTransactionMgrImpl) backfillWorkflow(
-	ctx ctx.Context,
+	ctx context.Context,
 	now time.Time,
 	targetWorkflow nDCWorkflow,
 	targetWorkflowEvents *persistence.WorkflowEvents,
@@ -265,7 +265,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflow(
 }
 
 func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
-	ctx ctx.Context,
+	ctx context.Context,
 	targetWorkflow nDCWorkflow,
 	targetWorkflowEvents *persistence.WorkflowEvents,
 ) (persistence.UpdateWorkflowMode, transactionPolicy, error) {
@@ -373,7 +373,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 }
 
 func (r *nDCTransactionMgrImpl) checkWorkflowExists(
-	ctx ctx.Context,
+	ctx context.Context,
 	domainID string,
 	workflowID string,
 	runID string,
@@ -400,7 +400,7 @@ func (r *nDCTransactionMgrImpl) checkWorkflowExists(
 }
 
 func (r *nDCTransactionMgrImpl) getCurrentWorkflowRunID(
-	ctx ctx.Context,
+	ctx context.Context,
 	domainID string,
 	workflowID string,
 ) (string, error) {
@@ -423,7 +423,7 @@ func (r *nDCTransactionMgrImpl) getCurrentWorkflowRunID(
 }
 
 func (r *nDCTransactionMgrImpl) loadNDCWorkflow(
-	ctx ctx.Context,
+	ctx context.Context,
 	domainID string,
 	workflowID string,
 	runID string,
@@ -452,7 +452,7 @@ func (r *nDCTransactionMgrImpl) loadNDCWorkflow(
 }
 
 func (r *nDCTransactionMgrImpl) isWorkflowCurrent(
-	ctx ctx.Context,
+	ctx context.Context,
 	targetWorkflow nDCWorkflow,
 ) (bool, error) {
 

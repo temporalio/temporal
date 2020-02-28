@@ -7,18 +7,18 @@
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
 //
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
-package xdc
+package rpc
 
 import (
 	"context"
@@ -27,6 +27,17 @@ import (
 	"github.com/temporalio/temporal/common/headers"
 )
 
-func newContextWithTimeout(timeout time.Duration) (context.Context, context.CancelFunc) {
+// NewContextWithTimeout creates context with timeout.
+func NewContextWithTimeout(timeout time.Duration) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), timeout)
+}
+
+// NewContextWithTimeoutAndHeaders creates context with timeout and version headers.
+func NewContextWithTimeoutAndHeaders(timeout time.Duration) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(headers.SetVersions(context.Background()), timeout)
+}
+
+// NewContextWithTimeoutAndHeaders creates context with timeout and version headers for CLI.
+func NewContextWithTimeoutAndCLIHeaders(timeout time.Duration) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(headers.SetCLIVersions(context.Background()), timeout)
 }

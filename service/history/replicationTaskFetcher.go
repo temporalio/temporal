@@ -36,6 +36,7 @@ import (
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/rpc"
 	serviceConfig "github.com/temporalio/temporal/common/service/config"
 )
 
@@ -266,7 +267,7 @@ func (f *ReplicationTaskFetcherImpl) getMessages(
 		tokens = append(tokens, request.token)
 	}
 
-	ctx, cancel := newContextWithTimeout(fetchTaskRequestTimeout)
+	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(fetchTaskRequestTimeout)
 	defer cancel()
 
 	request := &adminservice.GetReplicationMessagesRequest{

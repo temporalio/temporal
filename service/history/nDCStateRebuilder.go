@@ -23,7 +23,7 @@
 package history
 
 import (
-	ctx "context"
+	"context"
 	"fmt"
 	"time"
 
@@ -43,7 +43,7 @@ import (
 type (
 	nDCStateRebuilder interface {
 		rebuild(
-			ctx ctx.Context,
+			ctx context.Context,
 			now time.Time,
 			baseWorkflowIdentifier definition.WorkflowIdentifier,
 			baseBranchToken []byte,
@@ -93,7 +93,7 @@ func newNDCStateRebuilder(
 }
 
 func (r *nDCStateRebuilderImpl) rebuild(
-	ctx ctx.Context,
+	ctx context.Context,
 	now time.Time,
 	baseWorkflowIdentifier definition.WorkflowIdentifier,
 	baseBranchToken []byte,

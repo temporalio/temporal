@@ -43,7 +43,7 @@ import (
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal/client"
 
-	"github.com/temporalio/temporal/common/headers"
+	"github.com/temporalio/temporal/common/rpc"
 )
 
 // JSONHistorySerializer is used to encode history event in JSON
@@ -717,13 +717,12 @@ func newContextForLongPoll(c *cli.Context) (context.Context, context.CancelFunc)
 	return newContextWithTimeout(c, defaultContextTimeoutForLongPoll)
 }
 
-func newContextWithTimeout(c *cli.Context, defaultTimeout time.Duration) (context.Context, context.CancelFunc) {
-	contextTimeout := defaultTimeout
+func newContextWithTimeout(c *cli.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
 	if c.GlobalIsSet(FlagContextTimeout) {
-		contextTimeout = time.Duration(c.GlobalInt(FlagContextTimeout)) * time.Second
+		timeout = time.Duration(c.GlobalInt(FlagContextTimeout)) * time.Second
 	}
 
-	return context.WithTimeout(headers.SetCLIVersions(context.Background()), contextTimeout)
+	return rpc.NewContextWithTimeoutAndCLIHeaders(timeout)
 }
 
 // process and validate input provided through cmd or file

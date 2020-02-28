@@ -37,6 +37,7 @@ import (
 	"github.com/temporalio/temporal/common/membership"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/rpc"
 )
 
 const (
@@ -137,7 +138,7 @@ func (p *domainReplicationMessageProcessor) getAndHandleDomainReplicationTasks()
 		return
 	}
 
-	ctx, cancel := newContextWithTimeout(fetchTaskRequestTimeout)
+	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(fetchTaskRequestTimeout)
 	request := &adminservice.GetDomainReplicationMessagesRequest{
 		LastRetrievedMessageId: p.lastRetrievedMessageID,
 		LastProcessedMessageId: p.lastProcessedMessageID,

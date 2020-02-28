@@ -41,6 +41,7 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/rpc"
 )
 
 const (
@@ -1238,7 +1239,7 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 	if sourceCluster == nil {
 		return serviceerror.NewInternal(fmt.Sprintf("cannot find cluster config %v to do reapply", activeCluster))
 	}
-	ctx2, cancel2 := newContextWithTimeout(defaultRemoteCallTimeout)
+	ctx2, cancel2 := rpc.NewContextWithTimeoutAndHeaders(defaultRemoteCallTimeout)
 	defer cancel2()
 	_, err = sourceCluster.ReapplyEvents(
 		ctx2,
