@@ -1221,7 +1221,7 @@ func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContex
 		return nil, err
 	}
 
-	context := &shardContextImpl{
+	shardContext := &shardContextImpl{
 		Resource:                       shardItem.Resource,
 		shardItem:                      shardItem,
 		shardID:                        shardItem.shardID,
@@ -1235,14 +1235,14 @@ func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContex
 		throttledLogger:                shardItem.throttledLogger,
 		previousShardOwnerWasDifferent: ownershipChanged,
 	}
-	context.eventsCache = newEventsCache(context)
+	shardContext.eventsCache = newEventsCache(shardContext)
 
-	err1 := context.renewRangeLocked(true)
+	err1 := shardContext.renewRangeLocked(true)
 	if err1 != nil {
 		return nil, err1
 	}
 
-	return context, nil
+	return shardContext, nil
 }
 
 func copyShardInfo(shardInfo *persistence.ShardInfoWithFailover) *persistence.ShardInfoWithFailover {

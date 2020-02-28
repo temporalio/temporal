@@ -21,7 +21,7 @@
 package history
 
 import (
-	ctx "context"
+	"context"
 	"testing"
 	"time"
 
@@ -123,7 +123,7 @@ func (s *nDCWorkflowResetterSuite) TearDownTest() {
 }
 
 func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
-	ctx := ctx.Background()
+	ctx := context.Background()
 	now := time.Now()
 
 	branchToken := []byte("some random branch token")
@@ -202,7 +202,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 }
 
 func (s *nDCWorkflowResetterSuite) TestResetWorkflow_Error() {
-	ctx := ctx.Background()
+	ctx := context.Background()
 	now := time.Now()
 
 	branchToken := []byte("some random branch token")

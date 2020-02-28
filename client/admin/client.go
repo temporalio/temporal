@@ -280,9 +280,6 @@ func (c *clientImpl) RefreshWorkflowTasks(
 }
 
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
-	if parent == nil {
-		return context.WithTimeout(context.Background(), c.timeout)
-	}
 	return context.WithTimeout(parent, c.timeout)
 }
 

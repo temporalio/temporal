@@ -208,7 +208,7 @@ func (s *clientIntegrationSuite) TestClientDataConverter() {
 		TaskList:                     s.taskList,
 		ExecutionStartToCloseTimeout: 60 * time.Second,
 	}
-	ctx, cancel := NewContextWithCancel(60 * time.Second)
+	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(60 * time.Second)
 	defer cancel()
 	we, err := s.wfClient.ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
 	if err != nil {
@@ -239,7 +239,7 @@ func (s *clientIntegrationSuite) TestClientDataConverter_Failed() {
 		TaskList:                     s.taskList,
 		ExecutionStartToCloseTimeout: 60 * time.Second,
 	}
-	ctx, cancel := NewContextWithCancel(60 * time.Second)
+	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(60 * time.Second)
 	defer cancel()
 	we, err := s.wfClient.ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
 	if err != nil {
@@ -342,7 +342,7 @@ func (s *clientIntegrationSuite) TestClientDataConverter_WithChild() {
 		TaskList:                     s.taskList,
 		ExecutionStartToCloseTimeout: 60 * time.Second,
 	}
-	ctx, cancel := NewContextWithCancel(60 * time.Second)
+	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(60 * time.Second)
 	defer cancel()
 	we, err := s.wfClient.ExecuteWorkflow(ctx, workflowOptions, testParentWorkflow)
 	if err != nil {

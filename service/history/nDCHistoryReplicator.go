@@ -21,7 +21,7 @@
 package history
 
 import (
-	ctx "context"
+	"context"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -77,7 +77,7 @@ type (
 
 	nDCHistoryReplicator interface {
 		ApplyEvents(
-			ctx ctx.Context,
+			ctx context.Context,
 			request *h.ReplicateEventsV2Request,
 		) error
 	}
@@ -179,7 +179,7 @@ func newNDCHistoryReplicator(
 }
 
 func (r *nDCHistoryReplicatorImpl) ApplyEvents(
-	ctx ctx.Context,
+	ctx context.Context,
 	request *h.ReplicateEventsV2Request,
 ) (retError error) {
 
@@ -199,7 +199,7 @@ func (r *nDCHistoryReplicatorImpl) ApplyEvents(
 }
 
 func (r *nDCHistoryReplicatorImpl) applyEvents(
-	ctx ctx.Context,
+	ctx context.Context,
 	task nDCReplicationTask,
 ) (retError error) {
 
@@ -272,7 +272,7 @@ func (r *nDCHistoryReplicatorImpl) applyEvents(
 }
 
 func (r *nDCHistoryReplicatorImpl) applyStartEvents(
-	ctx ctx.Context,
+	ctx context.Context,
 	context workflowExecutionContext,
 	releaseFn releaseWorkflowExecutionFunc,
 	task nDCReplicationTask,
@@ -327,7 +327,7 @@ func (r *nDCHistoryReplicatorImpl) applyStartEvents(
 }
 
 func (r *nDCHistoryReplicatorImpl) applyNonStartEventsPrepareBranch(
-	ctx ctx.Context,
+	ctx context.Context,
 	context workflowExecutionContext,
 	mutableState mutableState,
 	task nDCReplicationTask,
@@ -358,7 +358,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsPrepareBranch(
 }
 
 func (r *nDCHistoryReplicatorImpl) applyNonStartEventsPrepareMutableState(
-	ctx ctx.Context,
+	ctx context.Context,
 	context workflowExecutionContext,
 	mutableState mutableState,
 	branchIndex int,
@@ -382,7 +382,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsPrepareMutableState(
 }
 
 func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
-	ctx ctx.Context,
+	ctx context.Context,
 	context workflowExecutionContext,
 	mutableState mutableState,
 	isRebuilt bool,
@@ -460,7 +460,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 }
 
 func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranch(
-	ctx ctx.Context,
+	ctx context.Context,
 	context workflowExecutionContext,
 	mutableState mutableState,
 	branchIndex int,
@@ -488,7 +488,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranch(
 }
 
 func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithoutContinueAsNew(
-	ctx ctx.Context,
+	ctx context.Context,
 	context workflowExecutionContext,
 	mutableState mutableState,
 	branchIndex int,
@@ -538,7 +538,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithout
 }
 
 func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithContinueAsNew(
-	ctx ctx.Context,
+	ctx context.Context,
 	context workflowExecutionContext,
 	releaseFn releaseWorkflowExecutionFunc,
 	task nDCReplicationTask,
@@ -583,7 +583,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithCon
 }
 
 func (r *nDCHistoryReplicatorImpl) applyNonStartEventsMissingMutableState(
-	ctx ctx.Context,
+	ctx context.Context,
 	newContext workflowExecutionContext,
 	task nDCReplicationTask,
 ) (mutableState, error) {
@@ -637,7 +637,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsMissingMutableState(
 }
 
 func (r *nDCHistoryReplicatorImpl) applyNonStartEventsResetWorkflow(
-	ctx ctx.Context,
+	ctx context.Context,
 	context workflowExecutionContext,
 	mutableState mutableState,
 	task nDCReplicationTask,

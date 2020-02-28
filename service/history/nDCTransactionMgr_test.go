@@ -21,7 +21,7 @@
 package history
 
 import (
-	ctx "context"
+	"context"
 	"testing"
 	"time"
 
@@ -106,7 +106,7 @@ func (s *nDCTransactionMgrSuite) TearDownTest() {
 }
 
 func (s *nDCTransactionMgrSuite) TestCreateWorkflow() {
-	ctx := ctx.Background()
+	ctx := context.Background()
 	now := time.Now()
 	targetWorkflow := NewMocknDCWorkflow(s.controller)
 
@@ -119,7 +119,7 @@ func (s *nDCTransactionMgrSuite) TestCreateWorkflow() {
 }
 
 func (s *nDCTransactionMgrSuite) TestUpdateWorkflow() {
-	ctx := ctx.Background()
+	ctx := context.Background()
 	now := time.Now()
 	isWorkflowRebuilt := true
 	targetWorkflow := NewMocknDCWorkflow(s.controller)
@@ -134,13 +134,13 @@ func (s *nDCTransactionMgrSuite) TestUpdateWorkflow() {
 }
 
 func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Open() {
-	ctx := ctx.Background()
+	ctx := context.Background()
 	now := time.Now()
 	releaseCalled := false
 	runID := uuid.New()
 
 	workflow := NewMocknDCWorkflow(s.controller)
-	context := NewMockworkflowExecutionContext(s.controller)
+	weContext := NewMockworkflowExecutionContext(s.controller)
 	mutableState := NewMockmutableState(s.controller)
 	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
 
@@ -148,7 +148,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Ope
 		Events: []*shared.HistoryEvent{{EventId: common.Int64Ptr(1)}},
 	}
 
-	workflow.EXPECT().getContext().Return(context).AnyTimes()
+	workflow.EXPECT().getContext().Return(weContext).AnyTimes()
 	workflow.EXPECT().getMutableState().Return(mutableState).AnyTimes()
 	workflow.EXPECT().getReleaseFn().Return(releaseFn).AnyTimes()
 
@@ -161,8 +161,8 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Ope
 	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	mutableState.EXPECT().GetDomainEntry().Return(s.domainEntry).AnyTimes()
 	mutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{RunID: runID}).Times(1)
-	context.EXPECT().persistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil).Times(1)
-	context.EXPECT().updateWorkflowExecutionWithNew(
+	weContext.EXPECT().persistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil).Times(1)
+	weContext.EXPECT().updateWorkflowExecutionWithNew(
 		now, persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, transactionPolicyActive, (*transactionPolicy)(nil),
 	).Return(nil).Times(1)
 	err := s.transactionMgr.backfillWorkflow(ctx, now, workflow, workflowEvents)
@@ -171,7 +171,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Ope
 }
 
 func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Closed() {
-	ctx := ctx.Background()
+	ctx := context.Background()
 	now := time.Now()
 
 	domainID := "some random domain ID"
@@ -188,13 +188,13 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Clo
 	releaseCalled := false
 
 	workflow := NewMocknDCWorkflow(s.controller)
-	context := NewMockworkflowExecutionContext(s.controller)
+	weContext := NewMockworkflowExecutionContext(s.controller)
 	mutableState := NewMockmutableState(s.controller)
 	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{}
 
-	workflow.EXPECT().getContext().Return(context).AnyTimes()
+	workflow.EXPECT().getContext().Return(weContext).AnyTimes()
 	workflow.EXPECT().getMutableState().Return(mutableState).AnyTimes()
 	workflow.EXPECT().getReleaseFn().Return(releaseFn).AnyTimes()
 
@@ -234,8 +234,8 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Clo
 		WorkflowID: workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil).Once()
 
-	context.EXPECT().persistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil).Times(1)
-	context.EXPECT().updateWorkflowExecutionWithNew(
+	weContext.EXPECT().persistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil).Times(1)
+	weContext.EXPECT().updateWorkflowExecutionWithNew(
 		now, persistence.UpdateWorkflowModeBypassCurrent, nil, nil, transactionPolicyPassive, (*transactionPolicy)(nil),
 	).Return(nil).Times(1)
 
@@ -245,12 +245,12 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Clo
 }
 
 func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Open() {
-	ctx := ctx.Background()
+	ctx := context.Background()
 	now := time.Now()
 	releaseCalled := false
 
 	workflow := NewMocknDCWorkflow(s.controller)
-	context := NewMockworkflowExecutionContext(s.controller)
+	weContext := NewMockworkflowExecutionContext(s.controller)
 	mutableState := NewMockmutableState(s.controller)
 	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
 
@@ -258,7 +258,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Op
 		Events: []*shared.HistoryEvent{{EventId: common.Int64Ptr(1)}},
 	}
 
-	workflow.EXPECT().getContext().Return(context).AnyTimes()
+	workflow.EXPECT().getContext().Return(weContext).AnyTimes()
 	workflow.EXPECT().getMutableState().Return(mutableState).AnyTimes()
 	workflow.EXPECT().getReleaseFn().Return(releaseFn).AnyTimes()
 
@@ -268,9 +268,9 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Op
 	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(true).AnyTimes()
 	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	mutableState.EXPECT().GetDomainEntry().Return(s.domainEntry).AnyTimes()
-	context.EXPECT().reapplyEvents([]*persistence.WorkflowEvents{workflowEvents}).Times(1)
-	context.EXPECT().persistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil).Times(1)
-	context.EXPECT().updateWorkflowExecutionWithNew(
+	weContext.EXPECT().reapplyEvents([]*persistence.WorkflowEvents{workflowEvents}).Times(1)
+	weContext.EXPECT().persistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil).Times(1)
+	weContext.EXPECT().updateWorkflowExecutionWithNew(
 		now, persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, transactionPolicyPassive, (*transactionPolicy)(nil),
 	).Return(nil).Times(1)
 	err := s.transactionMgr.backfillWorkflow(ctx, now, workflow, workflowEvents)
@@ -279,7 +279,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Op
 }
 
 func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Closed() {
-	ctx := ctx.Background()
+	ctx := context.Background()
 	now := time.Now()
 
 	domainID := "some random domain ID"
@@ -289,13 +289,13 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Cl
 	releaseCalled := false
 
 	workflow := NewMocknDCWorkflow(s.controller)
-	context := NewMockworkflowExecutionContext(s.controller)
+	weContext := NewMockworkflowExecutionContext(s.controller)
 	mutableState := NewMockmutableState(s.controller)
 	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{}
 
-	workflow.EXPECT().getContext().Return(context).AnyTimes()
+	workflow.EXPECT().getContext().Return(weContext).AnyTimes()
 	workflow.EXPECT().getMutableState().Return(mutableState).AnyTimes()
 	workflow.EXPECT().getReleaseFn().Return(releaseFn).AnyTimes()
 
@@ -315,9 +315,9 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Cl
 		DomainID:   domainID,
 		WorkflowID: workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil).Once()
-	context.EXPECT().reapplyEvents([]*persistence.WorkflowEvents{workflowEvents}).Times(1)
-	context.EXPECT().persistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil).Times(1)
-	context.EXPECT().updateWorkflowExecutionWithNew(
+	weContext.EXPECT().reapplyEvents([]*persistence.WorkflowEvents{workflowEvents}).Times(1)
+	weContext.EXPECT().persistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil).Times(1)
+	weContext.EXPECT().updateWorkflowExecutionWithNew(
 		now, persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, transactionPolicyPassive, (*transactionPolicy)(nil),
 	).Return(nil).Times(1)
 
@@ -327,7 +327,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Cl
 }
 
 func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Active() {
-	ctx := ctx.Background()
+	ctx := context.Background()
 	now := time.Now()
 
 	domainID := "some random domain ID"
@@ -338,7 +338,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Active(
 	releaseCalled := false
 
 	workflow := NewMocknDCWorkflow(s.controller)
-	context := NewMockworkflowExecutionContext(s.controller)
+	weContext := NewMockworkflowExecutionContext(s.controller)
 	mutableState := NewMockmutableState(s.controller)
 	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
 
@@ -350,7 +350,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Active(
 		WorkflowID: workflowID,
 	}
 
-	workflow.EXPECT().getContext().Return(context).AnyTimes()
+	workflow.EXPECT().getContext().Return(weContext).AnyTimes()
 	workflow.EXPECT().getMutableState().Return(mutableState).AnyTimes()
 	workflow.EXPECT().getReleaseFn().Return(releaseFn).AnyTimes()
 
@@ -370,9 +370,9 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Active(
 		DomainID:   domainID,
 		WorkflowID: workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{RunID: currentRunID}, nil).Once()
-	context.EXPECT().reapplyEvents([]*persistence.WorkflowEvents{workflowEvents}).Times(1)
-	context.EXPECT().persistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil).Times(1)
-	context.EXPECT().updateWorkflowExecutionWithNew(
+	weContext.EXPECT().reapplyEvents([]*persistence.WorkflowEvents{workflowEvents}).Times(1)
+	weContext.EXPECT().persistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil).Times(1)
+	weContext.EXPECT().updateWorkflowExecutionWithNew(
 		now, persistence.UpdateWorkflowModeBypassCurrent, nil, nil, transactionPolicyPassive, (*transactionPolicy)(nil),
 	).Return(nil).Times(1)
 	err := s.transactionMgr.backfillWorkflow(ctx, now, workflow, workflowEvents)
@@ -381,7 +381,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Active(
 }
 
 func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Passive() {
-	ctx := ctx.Background()
+	ctx := context.Background()
 	now := time.Now()
 
 	domainID := "some random domain ID"
@@ -392,7 +392,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Passive
 	releaseCalled := false
 
 	workflow := NewMocknDCWorkflow(s.controller)
-	context := NewMockworkflowExecutionContext(s.controller)
+	weContext := NewMockworkflowExecutionContext(s.controller)
 	mutableState := NewMockmutableState(s.controller)
 	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
 
@@ -404,7 +404,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Passive
 		WorkflowID: workflowID,
 	}
 
-	workflow.EXPECT().getContext().Return(context).AnyTimes()
+	workflow.EXPECT().getContext().Return(weContext).AnyTimes()
 	workflow.EXPECT().getMutableState().Return(mutableState).AnyTimes()
 	workflow.EXPECT().getReleaseFn().Return(releaseFn).AnyTimes()
 
@@ -424,9 +424,9 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Passive
 		DomainID:   domainID,
 		WorkflowID: workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{RunID: currentRunID}, nil).Once()
-	context.EXPECT().reapplyEvents([]*persistence.WorkflowEvents{workflowEvents}).Times(1)
-	context.EXPECT().persistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil).Times(1)
-	context.EXPECT().updateWorkflowExecutionWithNew(
+	weContext.EXPECT().reapplyEvents([]*persistence.WorkflowEvents{workflowEvents}).Times(1)
+	weContext.EXPECT().persistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil).Times(1)
+	weContext.EXPECT().updateWorkflowExecutionWithNew(
 		now, persistence.UpdateWorkflowModeBypassCurrent, nil, nil, transactionPolicyPassive, (*transactionPolicy)(nil),
 	).Return(nil).Times(1)
 	err := s.transactionMgr.backfillWorkflow(ctx, now, workflow, workflowEvents)
@@ -435,7 +435,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Passive
 }
 
 func (s *nDCTransactionMgrSuite) TestCheckWorkflowExists_DoesNotExists() {
-	ctx := ctx.Background()
+	ctx := context.Background()
 	domainID := "some random domain ID"
 	workflowID := "some random workflow ID"
 	runID := "some random run ID"
@@ -454,7 +454,7 @@ func (s *nDCTransactionMgrSuite) TestCheckWorkflowExists_DoesNotExists() {
 }
 
 func (s *nDCTransactionMgrSuite) TestCheckWorkflowExists_DoesExists() {
-	ctx := ctx.Background()
+	ctx := context.Background()
 	domainID := "some random domain ID"
 	workflowID := "some random workflow ID"
 	runID := "some random run ID"
@@ -473,7 +473,7 @@ func (s *nDCTransactionMgrSuite) TestCheckWorkflowExists_DoesExists() {
 }
 
 func (s *nDCTransactionMgrSuite) TestGetWorkflowCurrentRunID_Missing() {
-	ctx := ctx.Background()
+	ctx := context.Background()
 	domainID := "some random domain ID"
 	workflowID := "some random workflow ID"
 
@@ -488,7 +488,7 @@ func (s *nDCTransactionMgrSuite) TestGetWorkflowCurrentRunID_Missing() {
 }
 
 func (s *nDCTransactionMgrSuite) TestGetWorkflowCurrentRunID_Exists() {
-	ctx := ctx.Background()
+	ctx := context.Background()
 	domainID := "some random domain ID"
 	workflowID := "some random workflow ID"
 	runID := "some random run ID"

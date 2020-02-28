@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/rpc"
 )
 
 func (s *integrationSuite) TestSignalWorkflow() {
@@ -1495,7 +1496,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 		Identity:                            identity,
 		WorkflowIdReusePolicy:               enums.WorkflowIdReusePolicyRejectDuplicate,
 	}
-	ctx, _ := NewContextWithCancel(5 * time.Second)
+	ctx, _ := rpc.NewContextWithTimeoutAndHeaders(5 * time.Second)
 	resp, err := s.engine.SignalWithStartWorkflowExecution(ctx, sRequest)
 	s.Nil(resp)
 	s.Error(err)
@@ -1504,7 +1505,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 
 	// test policy WorkflowIdReusePolicyAllowDuplicateFailedOnly
 	sRequest.WorkflowIdReusePolicy = enums.WorkflowIdReusePolicyAllowDuplicateFailedOnly
-	ctx, _ = NewContextWithCancel(5 * time.Second)
+	ctx, _ = rpc.NewContextWithTimeoutAndHeaders(5 * time.Second)
 	resp, err = s.engine.SignalWithStartWorkflowExecution(ctx, sRequest)
 	s.Nil(resp)
 	s.Error(err)
@@ -1513,7 +1514,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 
 	// test policy WorkflowIdReusePolicyAllowDuplicate
 	sRequest.WorkflowIdReusePolicy = enums.WorkflowIdReusePolicyAllowDuplicate
-	ctx, _ = NewContextWithCancel(5 * time.Second)
+	ctx, _ = rpc.NewContextWithTimeoutAndHeaders(5 * time.Second)
 	resp, err = s.engine.SignalWithStartWorkflowExecution(ctx, sRequest)
 	s.NoError(err)
 	s.NotEmpty(resp.GetRunId())

@@ -23,7 +23,7 @@
 package history
 
 import (
-	ctx "context"
+	"context"
 	"fmt"
 
 	"go.temporal.io/temporal-proto/serviceerror"
@@ -50,7 +50,7 @@ type (
 		domainCache     cache.DomainCache
 		clusterMetadata cluster.Metadata
 
-		ctx          ctx.Context
+		ctx          context.Context
 		context      workflowExecutionContext
 		mutableState mutableState
 		releaseFn    releaseWorkflowExecutionFunc
@@ -58,7 +58,7 @@ type (
 )
 
 func newNDCWorkflow(
-	ctx ctx.Context,
+	ctx context.Context,
 	domainCache cache.DomainCache,
 	clusterMetadata cluster.Metadata,
 	context workflowExecutionContext,

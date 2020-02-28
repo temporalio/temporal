@@ -23,7 +23,7 @@
 package history
 
 import (
-	ctx "context"
+	"context"
 	"fmt"
 	"time"
 
@@ -35,7 +35,7 @@ import (
 type (
 	nDCTransactionMgrForNewWorkflow interface {
 		dispatchForNewWorkflow(
-			ctx ctx.Context,
+			ctx context.Context,
 			now time.Time,
 			targetWorkflow nDCWorkflow,
 		) error
@@ -58,7 +58,7 @@ func newNDCTransactionMgrForNewWorkflow(
 }
 
 func (r *nDCTransactionMgrForNewWorkflowImpl) dispatchForNewWorkflow(
-	ctx ctx.Context,
+	ctx context.Context,
 	now time.Time,
 	targetWorkflow nDCWorkflow,
 ) error {
@@ -143,7 +143,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) dispatchForNewWorkflow(
 }
 
 func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
-	ctx ctx.Context,
+	ctx context.Context,
 	now time.Time,
 	currentWorkflow nDCWorkflow,
 	targetWorkflow nDCWorkflow,
@@ -198,7 +198,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 }
 
 func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
-	ctx ctx.Context,
+	ctx context.Context,
 	now time.Time,
 	currentWorkflow nDCWorkflow,
 	targetWorkflow nDCWorkflow,
@@ -258,7 +258,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 }
 
 func (r *nDCTransactionMgrForNewWorkflowImpl) suppressCurrentAndCreateAsCurrent(
-	ctx ctx.Context,
+	ctx context.Context,
 	now time.Time,
 	currentWorkflow nDCWorkflow,
 	targetWorkflow nDCWorkflow,
@@ -285,7 +285,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) suppressCurrentAndCreateAsCurrent(
 }
 
 func (r *nDCTransactionMgrForNewWorkflowImpl) executeTransaction(
-	ctx ctx.Context,
+	ctx context.Context,
 	now time.Time,
 	transactionPolicy nDCTransactionPolicy,
 	currentWorkflow nDCWorkflow,

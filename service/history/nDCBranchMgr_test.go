@@ -21,7 +21,7 @@
 package history
 
 import (
-	ctx "context"
+	"context"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -147,7 +147,7 @@ func (s *nDCBranchMgrSuite) TestCreateNewBranch() {
 		NewBranchToken: newBranchToken,
 	}, nil).Once()
 
-	newIndex, err := s.nDCBranchMgr.createNewBranch(ctx.Background(), baseBranchToken, baseBranchLCAEventID, newVersionHistory)
+	newIndex, err := s.nDCBranchMgr.createNewBranch(context.Background(), baseBranchToken, baseBranchLCAEventID, newVersionHistory)
 	s.Nil(err)
 	s.Equal(1, newIndex)
 
@@ -209,7 +209,7 @@ func (s *nDCBranchMgrSuite) TestFlushBufferedEvents() {
 
 	s.mockContext.EXPECT().updateWorkflowExecutionAsActive(gomock.Any()).Return(nil).Times(1)
 
-	ctx := ctx.Background()
+	ctx := context.Background()
 
 	_, _, err = s.nDCBranchMgr.flushBufferedEvents(ctx, incomingVersionHistory)
 }
@@ -234,7 +234,7 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchAppendable_NoMissing
 	s.mockMutableState.EXPECT().HasBufferedEvents().Return(false).AnyTimes()
 
 	doContinue, index, err := s.nDCBranchMgr.prepareVersionHistory(
-		ctx.Background(),
+		context.Background(),
 		incomingVersionHistory,
 		150+1,
 		300)
@@ -270,7 +270,7 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchAppendable_MissingEv
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(execution).AnyTimes()
 
 	_, _, err = s.nDCBranchMgr.prepareVersionHistory(
-		ctx.Background(),
+		context.Background(),
 		incomingVersionHistory,
 		150+2,
 		300)
@@ -321,7 +321,7 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_NoMiss
 	}, nil).Once()
 
 	doContinue, index, err := s.nDCBranchMgr.prepareVersionHistory(
-		ctx.Background(),
+		context.Background(),
 		incomingVersionHistory,
 		baseBranchLCAEventID+1,
 		baseBranchLCAEventVersion,
@@ -363,7 +363,7 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_Missin
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(execution).AnyTimes()
 
 	_, _, err := s.nDCBranchMgr.prepareVersionHistory(
-		ctx.Background(),
+		context.Background(),
 		incomingVersionHistory,
 		baseBranchLCAEventID+2,
 		baseBranchLCAEventVersion,

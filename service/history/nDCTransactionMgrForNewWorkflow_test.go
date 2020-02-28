@@ -21,7 +21,7 @@
 package history
 
 import (
-	ctx "context"
+	"context"
 	"testing"
 	"time"
 
@@ -63,7 +63,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TearDownTest() {
 }
 
 func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Dup() {
-	ctx := ctx.Background()
+	ctx := context.Background()
 	now := time.Now()
 
 	domainID := "some random domain ID"
@@ -87,7 +87,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Dup() 
 }
 
 func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandNew() {
-	ctx := ctx.Background()
+	ctx := context.Background()
 	now := time.Now()
 
 	domainID := "some random domain ID"
@@ -97,10 +97,10 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandN
 	releaseCalled := false
 
 	workflow := NewMocknDCWorkflow(s.controller)
-	context := NewMockworkflowExecutionContext(s.controller)
+	weContext := NewMockworkflowExecutionContext(s.controller)
 	mutableState := NewMockmutableState(s.controller)
 	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
-	workflow.EXPECT().getContext().Return(context).AnyTimes()
+	workflow.EXPECT().getContext().Return(weContext).AnyTimes()
 	workflow.EXPECT().getMutableState().Return(mutableState).AnyTimes()
 	workflow.EXPECT().getReleaseFn().Return(releaseFn).AnyTimes()
 
@@ -120,10 +120,10 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandN
 		ctx, domainID, workflowID,
 	).Return("", nil).Times(1)
 
-	context.EXPECT().persistFirstWorkflowEvents(
+	weContext.EXPECT().persistFirstWorkflowEvents(
 		workflowEventsSeq[0],
 	).Return(workflowHistorySize, nil).Times(1)
-	context.EXPECT().createWorkflowExecution(
+	weContext.EXPECT().createWorkflowExecution(
 		workflowSnapshot,
 		workflowHistorySize,
 		now,
@@ -138,7 +138,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandN
 }
 
 func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsCurrent() {
-	ctx := ctx.Background()
+	ctx := context.Background()
 	now := time.Now()
 
 	domainID := "some random domain ID"
@@ -207,7 +207,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 }
 
 func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZombie() {
-	ctx := ctx.Background()
+	ctx := context.Background()
 	now := time.Now()
 
 	domainID := "some random domain ID"
@@ -273,7 +273,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 }
 
 func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZombie_Dedup() {
-	ctx := ctx.Background()
+	ctx := context.Background()
 	now := time.Now()
 
 	domainID := "some random domain ID"
@@ -339,7 +339,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 }
 
 func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_SuppressCurrentAndCreateAsCurrent() {
-	ctx := ctx.Background()
+	ctx := context.Background()
 	now := time.Now()
 
 	domainID := "some random domain ID"

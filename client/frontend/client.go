@@ -608,18 +608,11 @@ func (c *clientImpl) ListTaskListPartitions(
 }
 
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
-	return c.createContextWithTimeout(parent, c.timeout)
+	return context.WithTimeout(parent, c.timeout)
 }
 
 func (c *clientImpl) createLongPollContext(parent context.Context) (context.Context, context.CancelFunc) {
-	return c.createContextWithTimeout(parent, c.longPollTimeout)
-}
-
-func (c *clientImpl) createContextWithTimeout(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
-	if parent == nil {
-		return context.WithTimeout(context.Background(), timeout)
-	}
-	return context.WithTimeout(parent, timeout)
+	return context.WithTimeout(parent, c.longPollTimeout)
 }
 
 func (c *clientImpl) getRandomClient() (workflowservice.WorkflowServiceClient, error) {
