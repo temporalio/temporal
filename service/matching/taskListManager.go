@@ -28,8 +28,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/temporalio/temporal/.gen/go/matching"
-	s "github.com/temporalio/temporal/.gen/go/shared"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
+
+	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cache"
@@ -42,12 +44,12 @@ import (
 const (
 	// Time budget for empty task to propagate through the function stack and be returned to
 	// pollForActivityTask or pollForDecisionTask handler.
-	returnEmptyTaskTimeBudget time.Duration = time.Second
+	returnEmptyTaskTimeBudget = time.Second
 )
 
 type (
 	addTaskParams struct {
-		execution     *s.WorkflowExecution
+		execution     *commonproto.WorkflowExecution
 		taskInfo      *persistence.TaskInfo
 		forwardedFrom string
 	}
@@ -68,11 +70,11 @@ type (
 		DispatchTask(ctx context.Context, task *internalTask) error
 		// DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
 		// if dispatched to local poller then nil and nil is returned.
-		DispatchQueryTask(ctx context.Context, taskID string, request *matching.QueryWorkflowRequest) (*s.QueryWorkflowResponse, error)
+		DispatchQueryTask(ctx context.Context, taskID string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
 		CancelPoller(pollerID string)
-		GetAllPollerInfo() []*s.PollerInfo
-		// DescribeTaskList returns information about the target tasklist
-		DescribeTaskList(includeTaskListStatus bool) *s.DescribeTaskListResponse
+		GetAllPollerInfo() []*commonproto.PollerInfo
+		// DescribeTaskList returns information about the target task list
+		DescribeTaskList(includeTaskListStatus bool) *matchingservice.DescribeTaskListResponse
 		String() string
 	}
 
@@ -119,7 +121,7 @@ var _ taskListManager = (*taskListManagerImpl)(nil)
 func newTaskListManager(
 	e *matchingEngineImpl,
 	taskList *taskListID,
-	taskListKind *s.TaskListKind,
+	taskListKind enums.TaskListKind,
 	config *Config,
 ) (taskListManager, error) {
 
@@ -128,11 +130,7 @@ func newTaskListManager(
 		return nil, err
 	}
 
-	if taskListKind == nil {
-		taskListKind = common.TaskListKindPtr(s.TaskListKindNormal)
-	}
-
-	db := newTaskListDB(e.taskManager, taskList.domainID, taskList.name, taskList.taskType, int(*taskListKind), e.logger)
+	db := newTaskListDB(e.taskManager, taskList.domainID, taskList.name, taskList.taskType, int(taskListKind), e.logger)
 	tlMgr := &taskListManagerImpl{
 		domainCache:   e.domainCache,
 		metricsClient: e.metricsClient,
@@ -147,7 +145,7 @@ func newTaskListManager(
 		config:              taskListConfig,
 		pollerHistory:       newPollerHistory(),
 		outstandingPollsMap: make(map[string]context.CancelFunc),
-		taskListKind:        int(*taskListKind),
+		taskListKind:        int(taskListKind),
 	}
 	tlMgr.domainNameValue.Store("")
 	tlMgr.domainScopeValue.Store(e.metricsClient.Scope(metrics.MatchingTaskListMgrScope, metrics.DomainUnknownTag()))
@@ -155,8 +153,8 @@ func newTaskListManager(
 	tlMgr.taskWriter = newTaskWriter(tlMgr)
 	tlMgr.taskReader = newTaskReader(tlMgr)
 	var fwdr *Forwarder
-	if tlMgr.isFowardingAllowed(taskList, *taskListKind) {
-		fwdr = newForwarder(&taskListConfig.forwarderConfig, taskList, *taskListKind, e.matchingClient, tlMgr.domainScope)
+	if tlMgr.isFowardingAllowed(taskList, taskListKind) {
+		fwdr = newForwarder(&taskListConfig.forwarderConfig, taskList, taskListKind, e.matchingClient, tlMgr.domainScope)
 	}
 	tlMgr.matcher = newTaskMatcher(taskListConfig, fwdr, tlMgr.domainScope)
 	tlMgr.startWG.Add(1)
@@ -241,8 +239,8 @@ func (c *taskListManagerImpl) DispatchTask(ctx context.Context, task *internalTa
 func (c *taskListManagerImpl) DispatchQueryTask(
 	ctx context.Context,
 	taskID string,
-	request *matching.QueryWorkflowRequest,
-) (*s.QueryWorkflowResponse, error) {
+	request *matchingservice.QueryWorkflowRequest,
+) (*matchingservice.QueryWorkflowResponse, error) {
 	c.startWG.Wait()
 	task := newInternalQueryTask(taskID, request)
 	return c.matcher.OfferQuery(ctx, task)
@@ -312,7 +310,7 @@ func (c *taskListManagerImpl) getTask(ctx context.Context, maxDispatchPerSecond 
 }
 
 // GetAllPollerInfo returns all pollers that polled from this tasklist in last few minutes
-func (c *taskListManagerImpl) GetAllPollerInfo() []*s.PollerInfo {
+func (c *taskListManagerImpl) GetAllPollerInfo() []*commonproto.PollerInfo {
 	return c.pollerHistory.getAllPollerInfo()
 }
 
@@ -329,21 +327,21 @@ func (c *taskListManagerImpl) CancelPoller(pollerID string) {
 // DescribeTaskList returns information about the target tasklist, right now this API returns the
 // pollers which polled this tasklist in last few minutes and status of tasklist's ackManager
 // (readLevel, ackLevel, backlogCountHint and taskIDBlock).
-func (c *taskListManagerImpl) DescribeTaskList(includeTaskListStatus bool) *s.DescribeTaskListResponse {
-	response := &s.DescribeTaskListResponse{Pollers: c.GetAllPollerInfo()}
+func (c *taskListManagerImpl) DescribeTaskList(includeTaskListStatus bool) *matchingservice.DescribeTaskListResponse {
+	response := &matchingservice.DescribeTaskListResponse{Pollers: c.GetAllPollerInfo()}
 	if !includeTaskListStatus {
 		return response
 	}
 
 	taskIDBlock := c.rangeIDToTaskIDBlock(c.db.RangeID())
-	response.TaskListStatus = &s.TaskListStatus{
-		ReadLevel:        common.Int64Ptr(c.taskAckManager.getReadLevel()),
-		AckLevel:         common.Int64Ptr(c.taskAckManager.getAckLevel()),
-		BacklogCountHint: common.Int64Ptr(c.taskAckManager.getBacklogCountHint()),
-		RatePerSecond:    common.Float64Ptr(c.matcher.Rate()),
-		TaskIDBlock: &s.TaskIDBlock{
-			StartID: common.Int64Ptr(taskIDBlock.start),
-			EndID:   common.Int64Ptr(taskIDBlock.end),
+	response.TaskListStatus = &commonproto.TaskListStatus{
+		ReadLevel:        c.taskAckManager.getReadLevel(),
+		AckLevel:         c.taskAckManager.getAckLevel(),
+		BacklogCountHint: c.taskAckManager.getBacklogCountHint(),
+		RatePerSecond:    c.matcher.Rate(),
+		TaskIDBlock: &commonproto.TaskIDBlock{
+			StartID: taskIDBlock.start,
+			EndID:   taskIDBlock.end,
 		},
 	}
 
@@ -358,11 +356,11 @@ func (c *taskListManagerImpl) String() string {
 		buf.WriteString("Decision")
 	}
 	rangeID := c.db.RangeID()
-	fmt.Fprintf(buf, " task list %v\n", c.taskListID.name)
-	fmt.Fprintf(buf, "RangeID=%v\n", rangeID)
-	fmt.Fprintf(buf, "TaskIDBlock=%+v\n", c.rangeIDToTaskIDBlock(rangeID))
-	fmt.Fprintf(buf, "AckLevel=%v\n", c.taskAckManager.ackLevel)
-	fmt.Fprintf(buf, "MaxReadLevel=%v\n", c.taskAckManager.getReadLevel())
+	_, _ = fmt.Fprintf(buf, " task list %v\n", c.taskListID.name)
+	_, _ = fmt.Fprintf(buf, "RangeID=%v\n", rangeID)
+	_, _ = fmt.Fprintf(buf, "TaskIDBlock=%+v\n", c.rangeIDToTaskIDBlock(rangeID))
+	_, _ = fmt.Fprintf(buf, "AckLevel=%v\n", c.taskAckManager.ackLevel)
+	_, _ = fmt.Fprintf(buf, "MaxReadLevel=%v\n", c.taskAckManager.getReadLevel())
 
 	return buf.String()
 }
@@ -381,7 +379,7 @@ func (c *taskListManagerImpl) completeTask(task *persistence.TaskInfo, err error
 		// Note that RecordTaskStarted only fails after retrying for a long time, so a single task will not be
 		// re-written to persistence frequently.
 		_, err = c.executeWithRetry(func() (interface{}, error) {
-			wf := &s.WorkflowExecution{WorkflowId: &task.WorkflowID, RunId: &task.RunID}
+			wf := &commonproto.WorkflowExecution{WorkflowId: task.WorkflowID, RunId: task.RunID}
 			return c.taskWriter.appendTask(wf, task)
 		})
 
@@ -500,8 +498,8 @@ func (c *taskListManagerImpl) newChildContext(
 	return context.WithTimeout(parent, timeout)
 }
 
-func (c *taskListManagerImpl) isFowardingAllowed(taskList *taskListID, kind s.TaskListKind) bool {
-	return !taskList.IsRoot() && kind != s.TaskListKindSticky
+func (c *taskListManagerImpl) isFowardingAllowed(taskList *taskListID, kind enums.TaskListKind) bool {
+	return !taskList.IsRoot() && kind != enums.TaskListKindSticky
 }
 
 func (c *taskListManagerImpl) domainScope() metrics.Scope {

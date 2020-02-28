@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
@@ -628,7 +629,7 @@ func (d *HandlerImpl) createResponse(
 	}
 
 	configResult := &commonproto.DomainConfiguration{
-		EmitMetric:                             &commonproto.BoolValue{Value: config.EmitMetric},
+		EmitMetric:                             &types.BoolValue{Value: config.EmitMetric},
 		WorkflowExecutionRetentionPeriodInDays: config.Retention,
 		HistoryArchivalStatus:                  adapter.ToProtoArchivalStatus(&config.HistoryArchivalStatus),
 		HistoryArchivalURI:                     config.HistoryArchivalURI,

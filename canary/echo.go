@@ -45,9 +45,9 @@ type echoInput struct {
 // echoOutput is the output from echoActivity
 type echoOutput echoInput
 
-func init() {
-	registerWorkflow(echoWorkflow, wfTypeEcho)
-	registerActivity(echoActivity, activityTypeEcho)
+func registerEcho(r registrar) {
+	registerWorkflow(r, echoWorkflow, wfTypeEcho)
+	registerActivity(r, echoActivity, activityTypeEcho)
 }
 
 // echoWorkflow is a workflow implementation which simply executes an

@@ -27,13 +27,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-
 	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/temporal-proto/enums"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -153,7 +151,7 @@ func createTestTaskListManagerWithConfig(controller *gomock.Controller, cfg *Con
 	tl := "tl"
 	dID := "domain"
 	tlID := newTestTaskListID(dID, tl, persistence.TaskListTypeActivity)
-	tlKind := common.TaskListKindPtr(workflow.TaskListKindNormal)
+	tlKind := enums.TaskListKindNormal
 	tlMgr, err := newTaskListManager(me, tlID, tlKind, cfg)
 	if err != nil {
 		logger.Fatal("error when createTestTaskListManager", tag.Error(err))

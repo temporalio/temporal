@@ -36,10 +36,10 @@ const (
 	queryStatusQueryHandlerFailed = "QueryWorkflow.Status.QueryHandlerFailed"
 )
 
-func init() {
-	registerWorkflow(queryWorkflow, wfTypeQuery)
-	registerActivity(queryActivity, activityTypeQuery1)
-	registerActivity(queryActivity, activityTypeQuery2)
+func registerQuery(r registrar) {
+	registerWorkflow(r, queryWorkflow, wfTypeQuery)
+	registerActivity(r, queryActivity, activityTypeQuery1)
+	registerActivity(r, queryActivity, activityTypeQuery2)
 }
 
 // queryWorkflow is the workflow implementation to test for querying workflow status

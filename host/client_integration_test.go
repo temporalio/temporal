@@ -37,7 +37,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/workflowservice"
-	"go.temporal.io/temporal/activity"
 	"go.temporal.io/temporal/client"
 	"go.temporal.io/temporal/encoded"
 	"go.temporal.io/temporal/worker"
@@ -47,13 +46,6 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/rpc"
 )
-
-func init() {
-	workflow.Register(testDataConverterWorkflow)
-	activity.Register(testActivity)
-	workflow.Register(testParentWorkflow)
-	workflow.Register(testChildWorkflow)
-}
 
 type (
 	clientIntegrationSuite struct {
@@ -86,6 +78,12 @@ func (s *clientIntegrationSuite) SetupSuite() {
 
 	s.taskList = "client-integration-test-tasklist"
 	s.worker = worker.New(s.wfService, s.domainName, s.taskList, worker.Options{})
+
+	s.worker.RegisterWorkflow(testDataConverterWorkflow)
+	s.worker.RegisterWorkflow(testParentWorkflow)
+	s.worker.RegisterActivity(testActivity)
+	s.worker.RegisterWorkflow(testChildWorkflow)
+
 	if err := s.worker.Start(); err != nil {
 		s.Logger.Fatal("Error when start worker", tag.Error(err))
 	}
@@ -189,6 +187,9 @@ func (s *clientIntegrationSuite) startWorkerWithDataConverter(tl string, dataCon
 		opts.DataConverter = dataConverter
 	}
 	worker := worker.New(s.wfService, s.domainName, tl, opts)
+	worker.RegisterActivity(testActivity)
+	worker.RegisterWorkflow(testChildWorkflow)
+
 	if err := worker.Start(); err != nil {
 		s.Logger.Fatal("Error when start worker with data converter", tag.Error(err))
 	}

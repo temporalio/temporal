@@ -49,11 +49,11 @@ func TestPumpSuite(t *testing.T) {
 	suite.Run(t, new(pumpSuite))
 }
 
-func (s *pumpSuite) SetupSuite() {
-	workflow.Register(carryoverSatisfiesLimitWorkflow)
-	workflow.Register(pumpWorkflow)
-	workflow.Register(signalChClosePumpWorkflow)
-	workflow.Register(signalAndCarryoverPumpWorkflow)
+func (s *pumpSuite) registerWorkflows(env *testsuite.TestWorkflowEnvironment) {
+	env.RegisterWorkflow(carryoverSatisfiesLimitWorkflow)
+	env.RegisterWorkflow(pumpWorkflow)
+	env.RegisterWorkflow(signalChClosePumpWorkflow)
+	env.RegisterWorkflow(signalAndCarryoverPumpWorkflow)
 }
 
 func (s *pumpSuite) SetupTest() {
@@ -71,6 +71,7 @@ func (s *pumpSuite) TestPumpRun_CarryoverLargerThanLimit() {
 	pumpTestMetrics.On("UpdateGauge", metrics.ArchiverPumpScope, metrics.ArchiverBacklogSizeGauge, float64(1)).Once()
 
 	env := s.NewTestWorkflowEnvironment()
+	s.registerWorkflows(env)
 	env.ExecuteWorkflow(carryoverSatisfiesLimitWorkflow, 10, 11)
 
 	env.AssertExpectations(s.T())
@@ -82,6 +83,7 @@ func (s *pumpSuite) TestPumpRun_CarryoverExactlyMatchesLimit() {
 	pumpTestMetrics.On("UpdateGauge", metrics.ArchiverPumpScope, metrics.ArchiverBacklogSizeGauge, float64(0)).Once()
 
 	env := s.NewTestWorkflowEnvironment()
+	s.registerWorkflows(env)
 	env.ExecuteWorkflow(carryoverSatisfiesLimitWorkflow, 10, 10)
 
 	env.AssertExpectations(s.T())
@@ -95,6 +97,7 @@ func (s *pumpSuite) TestPumpRun_TimeoutWithoutSignals() {
 	pumpTestMetrics.On("IncCounter", metrics.ArchiverPumpScope, metrics.ArchiverPumpTimeoutWithoutSignalsCount).Once()
 
 	env := s.NewTestWorkflowEnvironment()
+	s.registerWorkflows(env)
 	env.ExecuteWorkflow(pumpWorkflow, 10, 0)
 
 	env.AssertExpectations(s.T())
@@ -107,6 +110,7 @@ func (s *pumpSuite) TestPumpRun_TimeoutWithSignals() {
 	pumpTestMetrics.On("IncCounter", metrics.ArchiverPumpScope, metrics.ArchiverPumpTimeoutCount).Once()
 
 	env := s.NewTestWorkflowEnvironment()
+	s.registerWorkflows(env)
 	env.ExecuteWorkflow(pumpWorkflow, 10, 5)
 
 	env.AssertExpectations(s.T())
@@ -119,6 +123,7 @@ func (s *pumpSuite) TestPumpRun_SignalsGottenSatisfyLimit() {
 	pumpTestMetrics.On("IncCounter", metrics.ArchiverPumpScope, metrics.ArchiverPumpSignalThresholdCount).Once()
 
 	env := s.NewTestWorkflowEnvironment()
+	s.registerWorkflows(env)
 	env.ExecuteWorkflow(pumpWorkflow, 10, 10)
 
 	env.AssertExpectations(s.T())
@@ -131,6 +136,7 @@ func (s *pumpSuite) TestPumpRun_SignalsAndCarryover() {
 	pumpTestMetrics.On("IncCounter", metrics.ArchiverPumpScope, metrics.ArchiverPumpSignalThresholdCount).Once()
 
 	env := s.NewTestWorkflowEnvironment()
+	s.registerWorkflows(env)
 	env.ExecuteWorkflow(signalAndCarryoverPumpWorkflow, 10, 5, 5)
 
 	env.AssertExpectations(s.T())
@@ -144,6 +150,7 @@ func (s *pumpSuite) TestPumpRun_SignalChannelClosedUnexpectedly() {
 	pumpTestLogger.On("Error", mock.Anything, mock.Anything).Once()
 
 	env := s.NewTestWorkflowEnvironment()
+	s.registerWorkflows(env)
 	env.ExecuteWorkflow(signalChClosePumpWorkflow, 10, 5)
 
 	env.AssertExpectations(s.T())

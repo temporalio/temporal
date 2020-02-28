@@ -42,8 +42,8 @@ var sanityChildWFList = []string{
 	wfTypeBatch,
 }
 
-func init() {
-	registerWorkflow(sanityWorkflow, wfTypeSanity)
+func registerSanity(r registrar) {
+	registerWorkflow(r, sanityWorkflow, wfTypeSanity)
 }
 
 // sanityWorkflow represents a canary implementation that tests the

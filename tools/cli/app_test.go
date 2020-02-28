@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/types"
 	"github.com/gogo/status"
 	"github.com/golang/mock/gomock"
 	"github.com/olekukonko/tablewriter"
@@ -144,7 +145,7 @@ var describeDomainResponseServer = &workflowservice.DescribeDomainResponse{
 	},
 	Configuration: &commonproto.DomainConfiguration{
 		WorkflowExecutionRetentionPeriodInDays: 3,
-		EmitMetric:                             &commonproto.BoolValue{Value: true},
+		EmitMetric:                             &types.BoolValue{Value: true},
 	},
 	ReplicationConfiguration: &commonproto.DomainReplicationConfiguration{
 		ActiveClusterName: "active",

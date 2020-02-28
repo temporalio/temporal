@@ -37,9 +37,9 @@ var (
 	cronSleepTime = time.Second * 5
 )
 
-func init() {
-	workflow.RegisterWithOptions(cronWorkflow, workflow.RegisterOptions{Name: wfTypeCron})
-	activity.Register(cronActivity)
+func registerCron(r registrar) {
+	registerWorkflow(r, cronWorkflow, wfTypeCron)
+	registerActivity(r, cronActivity, "")
 }
 
 // cronWorkflow is a generic cron workflow implementation that takes as input

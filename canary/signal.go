@@ -35,10 +35,10 @@ const (
 	signalValue = "canary.signal"
 )
 
-func init() {
-	registerWorkflow(signalWorkflow, wfTypeSignal)
-	registerWorkflow(signalExternalWorkflow, wfTypeSignalExternal)
-	registerActivity(signalActivity, activityTypeSignal)
+func registerSignal(r registrar) {
+	registerWorkflow(r, signalWorkflow, wfTypeSignal)
+	registerWorkflow(r, signalExternalWorkflow, wfTypeSignalExternal)
+	registerActivity(r, signalActivity, activityTypeSignal)
 }
 
 // signalWorkflow is the workflow implementation to test SignalWorkflowExecution API

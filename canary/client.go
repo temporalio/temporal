@@ -129,13 +129,15 @@ func newChildWorkflowOptions(domain string, wfID string) workflow.ChildWorkflowO
 }
 
 // registerWorkflow registers a workflow function with a given friendly name
-func registerWorkflow(workflowFunc interface{}, name string) {
-	opts := workflow.RegisterOptions{Name: name}
-	workflow.RegisterWithOptions(workflowFunc, opts)
+func registerWorkflow(r registrar, workflowFunc interface{}, name string) {
+	r.RegisterWorkflowWithOptions(workflowFunc, workflow.RegisterOptions{Name: name})
 }
 
 // registerActivity registers an activity function with a given friendly name
-func registerActivity(activityFunc interface{}, name string) {
-	opts := activity.RegisterOptions{Name: name}
-	activity.RegisterWithOptions(activityFunc, opts)
+func registerActivity(r registrar, activityFunc interface{}, name string) {
+	if name == "" {
+		r.RegisterActivity(activityFunc)
+	} else {
+		r.RegisterActivityWithOptions(activityFunc, activity.RegisterOptions{Name: name})
+	}
 }

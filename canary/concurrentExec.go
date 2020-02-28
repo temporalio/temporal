@@ -35,9 +35,9 @@ const (
 	totalConcurrentExec = 250
 )
 
-func init() {
-	registerWorkflow(concurrentExecWorkflow, wfTypeConcurrentExec)
-	registerActivity(concurrentExecActivity, activityTypeConcurrentExec)
+func registerConcurrentExec(r registrar) {
+	registerWorkflow(r, concurrentExecWorkflow, wfTypeConcurrentExec)
+	registerActivity(r, concurrentExecActivity, activityTypeConcurrentExec)
 }
 
 // concurrentExecWorkflow is the workflow implementation to test

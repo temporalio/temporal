@@ -24,9 +24,10 @@ import (
 	"errors"
 	"sync/atomic"
 
+	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	s "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
@@ -39,7 +40,7 @@ type (
 	}
 
 	writeTaskRequest struct {
-		execution  *s.WorkflowExecution
+		execution  *commonproto.WorkflowExecution
 		taskInfo   *persistence.TaskInfo
 		responseCh chan<- *writeTaskResponse
 	}
@@ -94,7 +95,7 @@ func (w *taskWriter) isStopped() bool {
 	return atomic.LoadInt64(&w.stopped) == 1
 }
 
-func (w *taskWriter) appendTask(execution *s.WorkflowExecution,
+func (w *taskWriter) appendTask(execution *commonproto.WorkflowExecution,
 	taskInfo *persistence.TaskInfo) (*persistence.CreateTasksResponse, error) {
 
 	if w.isStopped() {
@@ -163,11 +164,11 @@ writerLoop:
 					continue writerLoop
 				}
 
-				tasks := []*persistence.CreateTaskInfo{}
+				var tasks []*persistence.CreateTaskInfo
 				for i, req := range reqs {
 					tasks = append(tasks, &persistence.CreateTaskInfo{
 						TaskID:    taskIDs[i],
-						Execution: *req.execution,
+						Execution: *adapter.ToThriftWorkflowExecution(req.execution),
 						Data:      req.taskInfo,
 					})
 					maxReadLevel = taskIDs[i]

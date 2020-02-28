@@ -37,9 +37,9 @@ const (
 	activityScheduleToCloseTimeoutThreshold = activityStartToCloseTimeoutThreshold + activityScheduleToStartTimeoutThreshold
 )
 
-func init() {
-	registerWorkflow(timeoutWorkflow, wfTypeTimeout)
-	registerActivity(timeoutActivity, activityTypeTimeout)
+func registerTimeout(r registrar) {
+	registerWorkflow(r, timeoutWorkflow, wfTypeTimeout)
+	registerActivity(r, timeoutActivity, activityTypeTimeout)
 }
 
 // timeoutWorkflow is the workflow implementation to test for querying workflow status

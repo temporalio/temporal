@@ -52,6 +52,22 @@ func TestWorkflowTestSuite(t *testing.T) {
 
 func (s *workflowTestSuite) SetupTest() {
 	s.env = s.NewTestWorkflowEnvironment()
+
+	registerArchival(s.env)
+	registerBatch(s.env)
+	registerCancellation(s.env)
+	registerConcurrentExec(s.env)
+	registerCron(s.env)
+	registerEcho(s.env)
+	registerLocalActivity(s.env)
+	registerQuery(s.env)
+	registerReset(s.env)
+	registerRetry(s.env)
+	registerSanity(s.env)
+	registerSearchAttributes(s.env)
+	registerSignal(s.env)
+	registerTimeout(s.env)
+	registerVisibility(s.env)
 }
 
 func (s *workflowTestSuite) TearDownTest() {

@@ -28,6 +28,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/gogo/protobuf/types"
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
 	commonproto "go.temporal.io/temporal-proto/common"
@@ -248,7 +249,7 @@ func (d *domainCLIImpl) UpdateDomain(c *cli.Context) {
 		}
 		updateConfig := &commonproto.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retentionDays,
-			EmitMetric:                             &commonproto.BoolValue{Value: emitMetric},
+			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  archivalStatus(c, FlagHistoryArchivalStatus),
 			HistoryArchivalURI:                     c.String(FlagHistoryArchivalURI),
 			VisibilityArchivalStatus:               archivalStatus(c, FlagVisibilityArchivalStatus),

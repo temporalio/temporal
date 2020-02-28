@@ -25,6 +25,8 @@ import (
 
 	"github.com/opentracing/opentracing-go"
 	"github.com/uber-go/tally"
+	"go.temporal.io/temporal/activity"
+	"go.temporal.io/temporal/workflow"
 
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/worker"
@@ -97,5 +99,8 @@ func (s *Batcher) Start() error {
 		Tracer:                    opentracing.GlobalTracer(),
 	}
 	batchWorker := worker.New(s.svcClient, common.SystemLocalDomainName, BatcherTaskListName, workerOpts)
+	batchWorker.RegisterWorkflowWithOptions(BatchWorkflow, workflow.RegisterOptions{Name: BatchWFTypeName})
+	batchWorker.RegisterActivityWithOptions(BatchActivity, activity.RegisterOptions{Name: batchActivityName})
+
 	return batchWorker.Start()
 }

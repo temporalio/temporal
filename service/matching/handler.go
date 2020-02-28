@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2019 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -28,8 +28,8 @@ import (
 	"github.com/uber-go/tally"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	m "github.com/temporalio/temporal/.gen/go/matching"
-	gen "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/healthservice"
+	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/metrics"
@@ -37,22 +37,26 @@ import (
 	"github.com/temporalio/temporal/common/resource"
 )
 
-// Handler - Thrift handler interface for history service
-type Handler struct {
-	resource.Resource
+type (
+	// Handler - gRPC handler interface for matchingservice
+	Handler struct {
+		resource.Resource
 
-	engine        Engine
-	config        *Config
-	metricsClient metrics.Client
-	startWG       sync.WaitGroup
-	rateLimiter   quotas.Limiter
-}
+		engine        Engine
+		config        *Config
+		metricsClient metrics.Client
+		startWG       sync.WaitGroup
+		rateLimiter   quotas.Limiter
+	}
+)
 
 var (
+	_ matchingservice.MatchingServiceServer = (*Handler)(nil)
+
 	errMatchingHostThrottle = serviceerror.NewResourceExhausted("Matching host RPS exceeded.")
 )
 
-// NewHandler creates a thrift handler for the history service
+// NewHandler creates a gRPC handler for the matchingservice
 func NewHandler(
 	resource resource.Resource,
 	config *Config,
@@ -75,8 +79,10 @@ func NewHandler(
 			resource.GetMatchingServiceResolver(),
 		),
 	}
-	// prevent us from trying to serve requests before matching engine is started and ready
+
+	// prevent from serving requests before matching engine is started and ready
 	handler.startWG.Add(1)
+
 	return handler
 }
 
@@ -91,70 +97,77 @@ func (h *Handler) Stop() {
 }
 
 // startRequestProfile initiates recording of request metrics
-func (h *Handler) startRequestProfile(api string, scope int) tally.Stopwatch {
+func (h *Handler) startRequestProfile(_ string, scope int) tally.Stopwatch {
 	h.startWG.Wait()
 	sw := h.metricsClient.StartTimer(scope, metrics.CadenceLatency)
 	h.metricsClient.IncCounter(scope, metrics.CadenceRequests)
 	return sw
 }
 
+// Health is for health check
+func (h *Handler) Health(_ context.Context, _ *healthservice.HealthRequest) (_ *healthservice.HealthStatus, retError error) {
+	h.startWG.Wait()
+	h.GetLogger().Debug("Matching service health check endpoint (gRPC) reached.")
+	hs := &healthservice.HealthStatus{Ok: true, Msg: "matching good"}
+	return hs, nil
+}
+
 // AddActivityTask - adds an activity task.
-func (h *Handler) AddActivityTask(ctx context.Context, addRequest *m.AddActivityTaskRequest) (retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+func (h *Handler) AddActivityTask(ctx context.Context, request *matchingservice.AddActivityTaskRequest) (_ *matchingservice.AddActivityTaskResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	startT := time.Now()
 	scope := metrics.MatchingAddActivityTaskScope
 	sw := h.startRequestProfile("AddActivityTask", scope)
 	defer sw.Stop()
 
-	if addRequest.GetForwardedFrom() != "" {
+	if request.GetForwardedFrom() != "" {
 		h.metricsClient.IncCounter(scope, metrics.ForwardedCounter)
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return h.handleErr(errMatchingHostThrottle, scope)
+		return &matchingservice.AddActivityTaskResponse{}, h.handleErr(errMatchingHostThrottle, scope)
 	}
 
-	syncMatch, err := h.engine.AddActivityTask(ctx, addRequest)
+	syncMatch, err := h.engine.AddActivityTask(ctx, request)
 	if syncMatch {
 		h.metricsClient.RecordTimer(scope, metrics.SyncMatchLatency, time.Since(startT))
 	}
 
-	return h.handleErr(err, scope)
+	return &matchingservice.AddActivityTaskResponse{}, h.handleErr(err, scope)
 }
 
 // AddDecisionTask - adds a decision task.
-func (h *Handler) AddDecisionTask(ctx context.Context, addRequest *m.AddDecisionTaskRequest) (retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+func (h *Handler) AddDecisionTask(ctx context.Context, request *matchingservice.AddDecisionTaskRequest) (_ *matchingservice.AddDecisionTaskResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	startT := time.Now()
 	scope := metrics.MatchingAddDecisionTaskScope
 	sw := h.startRequestProfile("AddDecisionTask", scope)
 	defer sw.Stop()
 
-	if addRequest.GetForwardedFrom() != "" {
+	if request.GetForwardedFrom() != "" {
 		h.metricsClient.IncCounter(scope, metrics.ForwardedCounter)
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return h.handleErr(errMatchingHostThrottle, scope)
+		return &matchingservice.AddDecisionTaskResponse{}, h.handleErr(errMatchingHostThrottle, scope)
 	}
 
-	syncMatch, err := h.engine.AddDecisionTask(ctx, addRequest)
+	syncMatch, err := h.engine.AddDecisionTask(ctx, request)
 	if syncMatch {
 		h.metricsClient.RecordTimer(scope, metrics.SyncMatchLatency, time.Since(startT))
 	}
-	return h.handleErr(err, scope)
+	return &matchingservice.AddDecisionTaskResponse{}, h.handleErr(err, scope)
 }
 
 // PollForActivityTask - long poll for an activity task.
-func (h *Handler) PollForActivityTask(ctx context.Context,
-	pollRequest *m.PollForActivityTaskRequest) (resp *gen.PollForActivityTaskResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+func (h *Handler) PollForActivityTask(ctx context.Context, request *matchingservice.PollForActivityTaskRequest) (_ *matchingservice.PollForActivityTaskResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 
 	scope := metrics.MatchingPollForActivityTaskScope
 	sw := h.startRequestProfile("PollForActivityTask", scope)
 	defer sw.Stop()
 
-	if pollRequest.GetForwardedFrom() != "" {
+	if request.GetForwardedFrom() != "" {
 		h.metricsClient.IncCounter(scope, metrics.ForwardedCounter)
 	}
 
@@ -170,20 +183,19 @@ func (h *Handler) PollForActivityTask(ctx context.Context,
 		return nil, h.handleErr(err, scope)
 	}
 
-	response, err := h.engine.PollForActivityTask(ctx, pollRequest)
+	response, err := h.engine.PollForActivityTask(ctx, request)
 	return response, h.handleErr(err, scope)
 }
 
 // PollForDecisionTask - long poll for a decision task.
-func (h *Handler) PollForDecisionTask(ctx context.Context,
-	pollRequest *m.PollForDecisionTaskRequest) (resp *m.PollForDecisionTaskResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+func (h *Handler) PollForDecisionTask(ctx context.Context, request *matchingservice.PollForDecisionTaskRequest) (_ *matchingservice.PollForDecisionTaskResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 
 	scope := metrics.MatchingPollForDecisionTaskScope
 	sw := h.startRequestProfile("PollForDecisionTask", scope)
 	defer sw.Stop()
 
-	if pollRequest.GetForwardedFrom() != "" {
+	if request.GetForwardedFrom() != "" {
 		h.metricsClient.IncCounter(scope, metrics.ForwardedCounter)
 	}
 
@@ -199,19 +211,18 @@ func (h *Handler) PollForDecisionTask(ctx context.Context,
 		return nil, h.handleErr(err, scope)
 	}
 
-	response, err := h.engine.PollForDecisionTask(ctx, pollRequest)
+	response, err := h.engine.PollForDecisionTask(ctx, request)
 	return response, h.handleErr(err, scope)
 }
 
 // QueryWorkflow queries a given workflow synchronously and return the query result.
-func (h *Handler) QueryWorkflow(ctx context.Context,
-	queryRequest *m.QueryWorkflowRequest) (resp *gen.QueryWorkflowResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+func (h *Handler) QueryWorkflow(ctx context.Context, request *matchingservice.QueryWorkflowRequest) (_ *matchingservice.QueryWorkflowResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	scope := metrics.MatchingQueryWorkflowScope
 	sw := h.startRequestProfile("QueryWorkflow", scope)
 	defer sw.Stop()
 
-	if queryRequest.GetForwardedFrom() != "" {
+	if request.GetForwardedFrom() != "" {
 		h.metricsClient.IncCounter(scope, metrics.ForwardedCounter)
 	}
 
@@ -219,13 +230,13 @@ func (h *Handler) QueryWorkflow(ctx context.Context,
 		return nil, h.handleErr(errMatchingHostThrottle, scope)
 	}
 
-	response, err := h.engine.QueryWorkflow(ctx, queryRequest)
+	response, err := h.engine.QueryWorkflow(ctx, request)
 	return response, h.handleErr(err, scope)
 }
 
 // RespondQueryTaskCompleted responds a query task completed
-func (h *Handler) RespondQueryTaskCompleted(ctx context.Context, request *m.RespondQueryTaskCompletedRequest) (retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+func (h *Handler) RespondQueryTaskCompleted(ctx context.Context, request *matchingservice.RespondQueryTaskCompletedRequest) (_ *matchingservice.RespondQueryTaskCompletedResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	scope := metrics.MatchingRespondQueryTaskCompletedScope
 	sw := h.startRequestProfile("RespondQueryTaskCompleted", scope)
 	defer sw.Stop()
@@ -234,13 +245,12 @@ func (h *Handler) RespondQueryTaskCompleted(ctx context.Context, request *m.Resp
 	h.rateLimiter.Allow()
 
 	err := h.engine.RespondQueryTaskCompleted(ctx, request)
-	return h.handleErr(err, scope)
+	return &matchingservice.RespondQueryTaskCompletedResponse{}, h.handleErr(err, scope)
 }
 
 // CancelOutstandingPoll is used to cancel outstanding pollers
-func (h *Handler) CancelOutstandingPoll(ctx context.Context,
-	request *m.CancelOutstandingPollRequest) (retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+func (h *Handler) CancelOutstandingPoll(ctx context.Context, request *matchingservice.CancelOutstandingPollRequest) (_ *matchingservice.CancelOutstandingPollResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	scope := metrics.MatchingCancelOutstandingPollScope
 	sw := h.startRequestProfile("CancelOutstandingPoll", scope)
 	defer sw.Stop()
@@ -249,14 +259,14 @@ func (h *Handler) CancelOutstandingPoll(ctx context.Context,
 	h.rateLimiter.Allow()
 
 	err := h.engine.CancelOutstandingPoll(ctx, request)
-	return h.handleErr(err, scope)
+	return &matchingservice.CancelOutstandingPollResponse{}, h.handleErr(err, scope)
 }
 
-// DescribeTaskList returns information about the target tasklist, right now this API returns the
-// pollers which polled this tasklist in last few minutes. If includeTaskListStatus field is true,
-// it will also return status of tasklist's ackManager (readLevel, ackLevel, backlogCountHint and taskIDBlock).
-func (h *Handler) DescribeTaskList(ctx context.Context, request *m.DescribeTaskListRequest) (resp *gen.DescribeTaskListResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+// DescribeTaskList returns information about the target task list, right now this API returns the
+// pollers which polled this task list in last few minutes. If includeTaskListStatus field is true,
+// it will also return status of task list's ackManager (readLevel, ackLevel, backlogCountHint and taskIDBlock).
+func (h *Handler) DescribeTaskList(ctx context.Context, request *matchingservice.DescribeTaskListRequest) (_ *matchingservice.DescribeTaskListResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	scope := metrics.MatchingDescribeTaskListScope
 	sw := h.startRequestProfile("DescribeTaskList", scope)
 	defer sw.Stop()
@@ -270,8 +280,8 @@ func (h *Handler) DescribeTaskList(ctx context.Context, request *m.DescribeTaskL
 }
 
 // ListTaskListPartitions returns information about partitions for a taskList
-func (h *Handler) ListTaskListPartitions(ctx context.Context, request *m.ListTaskListPartitionsRequest) (resp *gen.ListTaskListPartitionsResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+func (h *Handler) ListTaskListPartitions(ctx context.Context, request *matchingservice.ListTaskListPartitionsRequest) (_ *matchingservice.ListTaskListPartitionsResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	scope := metrics.MatchingListTaskListPartitionsScope
 	sw := h.startRequestProfile("ListTaskListPartitions", scope)
 	defer sw.Stop()

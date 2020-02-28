@@ -28,6 +28,8 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/temporal/activity"
+	"go.temporal.io/temporal/workflow"
 	"go.uber.org/zap"
 
 	"go.temporal.io/temporal/testsuite"
@@ -47,8 +49,21 @@ func TestScannerWorkflowTestSuite(t *testing.T) {
 	suite.Run(t, new(scannerWorkflowTestSuite))
 }
 
+func (s *scannerWorkflowTestSuite) registerWorkflows(env *testsuite.TestWorkflowEnvironment) {
+	env.RegisterWorkflowWithOptions(TaskListScannerWorkflow, workflow.RegisterOptions{Name: tlScannerWFTypeName})
+	env.RegisterWorkflowWithOptions(HistoryScannerWorkflow, workflow.RegisterOptions{Name: historyScannerWFTypeName})
+	env.RegisterActivityWithOptions(TaskListScavengerActivity, activity.RegisterOptions{Name: taskListScavengerActivityName})
+	env.RegisterActivityWithOptions(HistoryScavengerActivity, activity.RegisterOptions{Name: historyScavengerActivityName})
+}
+
+func (s *scannerWorkflowTestSuite) registerActivities(env *testsuite.TestActivityEnvironment) {
+	env.RegisterActivityWithOptions(TaskListScavengerActivity, activity.RegisterOptions{Name: taskListScavengerActivityName})
+	env.RegisterActivityWithOptions(HistoryScavengerActivity, activity.RegisterOptions{Name: historyScavengerActivityName})
+}
+
 func (s *scannerWorkflowTestSuite) TestWorkflow() {
 	env := s.NewTestWorkflowEnvironment()
+	s.registerWorkflows(env)
 	env.OnActivity(taskListScavengerActivityName, mock.Anything).Return(nil)
 	env.ExecuteWorkflow(tlScannerWFTypeName)
 	s.True(env.IsWorkflowCompleted())
@@ -56,6 +71,7 @@ func (s *scannerWorkflowTestSuite) TestWorkflow() {
 
 func (s *scannerWorkflowTestSuite) TestScavengerActivity() {
 	env := s.NewTestActivityEnvironment()
+	s.registerActivities(env)
 	controller := gomock.NewController(s.T())
 	defer controller.Finish()
 	mockResource := resource.NewTest(controller, metrics.Worker)

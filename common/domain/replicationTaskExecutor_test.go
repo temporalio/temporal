@@ -23,6 +23,7 @@ package domain
 import (
 	"testing"
 
+	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 	commonproto "go.temporal.io/temporal-proto/common"
@@ -111,7 +112,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_RegisterDomainTask_Name
 		},
 		Config: &commonproto.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
-			EmitMetric:                             &commonproto.BoolValue{Value: emitMetric},
+			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  historyArchivalStatus,
 			HistoryArchivalURI:                     historyArchivalURI,
 			VisibilityArchivalStatus:               visibilityArchivalStatus,
@@ -180,7 +181,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_RegisterDomainTask() {
 		},
 		Config: &commonproto.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
-			EmitMetric:                             &commonproto.BoolValue{Value: emitMetric},
+			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  historyArchivalStatus,
 			HistoryArchivalURI:                     historyArchivalURI,
 			VisibilityArchivalStatus:               visibilityArchivalStatus,
@@ -266,7 +267,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_Domain
 		},
 		Config: &commonproto.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
-			EmitMetric:                             &commonproto.BoolValue{Value: emitMetric},
+			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  historyArchivalStatus,
 			HistoryArchivalURI:                     historyArchivalURI,
 			VisibilityArchivalStatus:               visibilityArchivalStatus,
@@ -348,7 +349,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_Update
 		},
 		Config: &commonproto.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
-			EmitMetric:                             &commonproto.BoolValue{Value: emitMetric},
+			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  historyArchivalStatus,
 			HistoryArchivalURI:                     historyArchivalURI,
 			VisibilityArchivalStatus:               visibilityArchivalStatus,
@@ -401,7 +402,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_Update
 		},
 		Config: &commonproto.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: updateRetention,
-			EmitMetric:                             &commonproto.BoolValue{Value: updateEmitMetric},
+			EmitMetric:                             &types.BoolValue{Value: updateEmitMetric},
 			HistoryArchivalStatus:                  updateHistoryArchivalStatus,
 			HistoryArchivalURI:                     updateHistoryArchivalURI,
 			VisibilityArchivalStatus:               updateVisibilityArchivalStatus,
@@ -481,7 +482,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_Update
 		},
 		Config: &commonproto.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
-			EmitMetric:                             &commonproto.BoolValue{Value: emitMetric},
+			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  historyArchivalStatus,
 			HistoryArchivalURI:                     historyArchivalURI,
 			VisibilityArchivalStatus:               visibilityArchivalStatus,
@@ -534,7 +535,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_Update
 		},
 		Config: &commonproto.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: updateRetention,
-			EmitMetric:                             &commonproto.BoolValue{Value: updateEmitMetric},
+			EmitMetric:                             &types.BoolValue{Value: updateEmitMetric},
 			HistoryArchivalStatus:                  updateHistoryArchivalStatus,
 			HistoryArchivalURI:                     updateHistoryArchivalURI,
 			VisibilityArchivalStatus:               updateVisibilityArchivalStatus,
@@ -614,7 +615,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_NoUpda
 		},
 		Config: &commonproto.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
-			EmitMetric:                             &commonproto.BoolValue{Value: emitMetric},
+			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  historyArchivalStatus,
 			HistoryArchivalURI:                     historyArchivalURI,
 			VisibilityArchivalStatus:               visibilityArchivalStatus,
@@ -663,7 +664,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_NoUpda
 		},
 		Config: &commonproto.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: updateRetention,
-			EmitMetric:                             &commonproto.BoolValue{Value: updateEmitMetric},
+			EmitMetric:                             &types.BoolValue{Value: updateEmitMetric},
 			HistoryArchivalStatus:                  historyArchivalStatus,
 			HistoryArchivalURI:                     historyArchivalURI,
 			VisibilityArchivalStatus:               visibilityArchivalStatus,
@@ -743,7 +744,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_NoUpda
 		},
 		Config: &commonproto.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: retention,
-			EmitMetric:                             &commonproto.BoolValue{Value: emitMetric},
+			EmitMetric:                             &types.BoolValue{Value: emitMetric},
 			HistoryArchivalStatus:                  historyArchivalStatus,
 			HistoryArchivalURI:                     historyArchivalURI,
 			VisibilityArchivalStatus:               visibilityArchivalStatus,
@@ -794,7 +795,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_NoUpda
 		},
 		Config: &commonproto.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: updateRetention,
-			EmitMetric:                             &commonproto.BoolValue{Value: updateEmitMetric},
+			EmitMetric:                             &types.BoolValue{Value: updateEmitMetric},
 			HistoryArchivalStatus:                  historyArchivalStatus,
 			HistoryArchivalURI:                     historyArchivalURI,
 			VisibilityArchivalStatus:               visibilityArchivalStatus,

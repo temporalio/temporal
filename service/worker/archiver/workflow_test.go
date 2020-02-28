@@ -25,6 +25,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+	"go.temporal.io/temporal/activity"
 	"go.uber.org/zap"
 
 	"go.temporal.io/temporal/testsuite"
@@ -51,8 +52,13 @@ type workflowSuite struct {
 	testsuite.WorkflowTestSuite
 }
 
-func (s *workflowSuite) SetupSuite() {
-	workflow.Register(archivalWorkflowTest)
+func (s *workflowSuite) registerWorkflows(env *testsuite.TestWorkflowEnvironment) {
+	env.RegisterWorkflow(archivalWorkflowTest)
+	env.RegisterWorkflowWithOptions(archivalWorkflow, workflow.RegisterOptions{Name: archivalWorkflowFnName})
+
+	env.RegisterActivityWithOptions(uploadHistoryActivity, activity.RegisterOptions{Name: uploadHistoryActivityFnName})
+	env.RegisterActivityWithOptions(deleteHistoryActivity, activity.RegisterOptions{Name: deleteHistoryActivityFnName})
+	env.RegisterActivityWithOptions(archiveVisibilityActivity, activity.RegisterOptions{Name: archiveVisibilityActivityFnName})
 }
 
 func TestWorkflowSuite(t *testing.T) {
@@ -85,6 +91,7 @@ func (s *workflowSuite) TestArchivalWorkflow_Fail_HashesDoNotEqual() {
 	}).Once()
 
 	env := s.NewTestWorkflowEnvironment()
+	s.registerWorkflows(env)
 	env.ExecuteWorkflow(archivalWorkflowTest)
 
 	s.True(env.IsWorkflowCompleted())
@@ -108,6 +115,7 @@ func (s *workflowSuite) TestArchivalWorkflow_Exit_TimeoutWithoutSignals() {
 	}).Once()
 
 	env := s.NewTestWorkflowEnvironment()
+	s.registerWorkflows(env)
 	env.ExecuteWorkflow(archivalWorkflowTest)
 
 	s.True(env.IsWorkflowCompleted())
@@ -128,6 +136,7 @@ func (s *workflowSuite) TestArchivalWorkflow_Success() {
 	}).Once()
 
 	env := s.NewTestWorkflowEnvironment()
+	s.registerWorkflows(env)
 	env.ExecuteWorkflow(archivalWorkflowTest)
 
 	s.True(env.IsWorkflowCompleted())
@@ -145,10 +154,18 @@ func (s *workflowSuite) TestReplayArchiveHistoryWorkflow() {
 		ArchivalsPerIteration:         dynamicconfig.GetIntPropertyFn(1000),
 		TimeLimitPerArchivalIteration: dynamicconfig.GetDurationPropertyFn(MaxArchivalIterationTimeout()),
 	}
-	err := worker.ReplayWorkflowHistoryFromJSONFile(logger, "testdata/archival_workflow_history_v1.json")
+
+	replayer := worker.NewWorkflowReplayer()
+	s.registerWorkflowsForReplayer(replayer)
+	err := replayer.ReplayWorkflowHistoryFromJSONFile(logger, "testdata/archival_workflow_history_v1.json")
 	s.NoError(err)
 }
 
 func archivalWorkflowTest(ctx workflow.Context) error {
 	return archivalWorkflowHelper(ctx, workflowTestLogger, workflowTestMetrics, workflowTestConfig, workflowTestHandler, workflowTestPump, nil)
+}
+
+func (s *workflowSuite) registerWorkflowsForReplayer(env worker.WorkflowReplayer) {
+	env.RegisterWorkflow(archivalWorkflowTest)
+	env.RegisterWorkflowWithOptions(archivalWorkflow, workflow.RegisterOptions{Name: archivalWorkflowFnName})
 }

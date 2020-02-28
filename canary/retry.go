@@ -37,10 +37,10 @@ var (
 	errUnexpectedResult       = errors.New("Unexpected result")
 )
 
-func init() {
-	registerWorkflow(retryWorkflow, wfTypeRetry)
-	registerActivity(retryOnTimeoutActivity, activityTypeRetryOnTimeout)
-	registerActivity(retryOnFailureActivity, activityTypeRetryOnFailure)
+func registerRetry(r registrar) {
+	registerWorkflow(r, retryWorkflow, wfTypeRetry)
+	registerActivity(r, retryOnTimeoutActivity, activityTypeRetryOnTimeout)
+	registerActivity(r, retryOnFailureActivity, activityTypeRetryOnFailure)
 }
 
 func retryWorkflow(ctx workflow.Context, scheduledTimeNanos int64, domain string) error {

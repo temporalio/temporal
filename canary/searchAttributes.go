@@ -36,9 +36,9 @@ const (
 	timeToWaitVisibilityDataOnESInDuration = 2 * time.Second
 )
 
-func init() {
-	registerWorkflow(searchAttributesWorkflow, wfTypeSearchAttributes)
-	registerActivity(searchAttributesActivity, activityTypeSearchAttributes)
+func registerSearchAttributes(r registrar) {
+	registerWorkflow(r, searchAttributesWorkflow, wfTypeSearchAttributes)
+	registerActivity(r, searchAttributesActivity, activityTypeSearchAttributes)
 }
 
 // searchAttributesWorkflow tests the search attributes apis

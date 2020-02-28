@@ -19,7 +19,6 @@ default: test
 # (if you have some)
 THRIFTRW_SRCS = \
   idl/github.com/temporalio/temporal/history.thrift \
-  idl/github.com/temporalio/temporal/matching.thrift \
   idl/github.com/temporalio/temporal/replicator.thrift \
   idl/github.com/temporalio/temporal/indexer.thrift \
   idl/github.com/temporalio/temporal/shared.thrift \
