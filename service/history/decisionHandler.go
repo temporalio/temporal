@@ -362,9 +362,7 @@ Update_History_Loop:
 		}
 
 		var (
-			failDecision                bool
-			failCause                   enums.DecisionTaskFailedCause
-			failMessage                 string
+			failDecision                *failDecisionInfo
 			activityNotStartedCancelled bool
 			continueAsNewBuilder        mutableState
 
@@ -387,9 +385,10 @@ Update_History_Loop:
 
 		binChecksum := request.GetBinaryChecksum()
 		if _, ok := domainEntry.GetConfig().BadBinaries.Binaries[binChecksum]; ok {
-			failDecision = true
-			failCause = enums.DecisionTaskFailedCauseBadBinary
-			failMessage = fmt.Sprintf("binary %v is already marked as bad deployment", binChecksum)
+			failDecision = &failDecisionInfo{
+				cause:   enums.DecisionTaskFailedCauseBadBinary,
+				message: fmt.Sprintf("binary %v is already marked as bad deployment", binChecksum),
+			}
 		} else {
 
 			domainName := domainEntry.GetInfo().Name
@@ -429,11 +428,7 @@ Update_History_Loop:
 
 			// set the vars used by following logic
 			// further refactor should also clean up the vars used below
-			failDecision = decisionTaskHandler.failDecision
-			if failDecision {
-				failCause = decisionTaskHandler.failDecisionCause
-				failMessage = decisionTaskHandler.failMessage
-			}
+			failDecision = decisionTaskHandler.failDecisionInfo
 
 			// failMessage is not used by decisionTaskHandler
 			activityNotStartedCancelled = decisionTaskHandler.activityNotStartedCancelled
@@ -444,13 +439,13 @@ Update_History_Loop:
 			hasUnhandledEvents = decisionTaskHandler.hasUnhandledEventsBeforeDecisions
 		}
 
-		if failDecision {
+		if failDecision != nil {
 			handler.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.FailedDecisionsCounter)
-			handler.logger.Info("Failing the decision.", tag.WorkflowDecisionFailCause(int64(failCause)),
+			handler.logger.Info("Failing the decision.", tag.WorkflowDecisionFailCause(int64(failDecision.cause)),
 				tag.WorkflowID(token.WorkflowID),
 				tag.WorkflowRunID(token.RunID),
 				tag.WorkflowDomainID(domainID))
-			msBuilder, err = handler.historyEngine.failDecision(weContext, scheduleID, startedID, failCause, []byte(failMessage), request)
+			msBuilder, err = handler.historyEngine.failDecision(weContext, scheduleID, startedID, failDecision.cause, []byte(failDecision.message), request)
 			if err != nil {
 				return nil, err
 			}

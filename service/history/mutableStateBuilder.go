@@ -1630,7 +1630,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 	wType.Name = workflowType
 
 	decisionTimeout := previousExecutionInfo.DecisionStartToCloseTimeout
-	if attributes.TaskStartToCloseTimeoutSeconds != nil {
+	if attributes.TaskStartToCloseTimeoutSeconds != 0 {
 		decisionTimeout = attributes.GetTaskStartToCloseTimeoutSeconds()
 	}
 
@@ -1807,8 +1807,8 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 		e.executionInfo.ParentWorkflowID = event.ParentWorkflowExecution.GetWorkflowId()
 		e.executionInfo.ParentRunID = event.ParentWorkflowExecution.GetRunId()
 	}
-	// TODO (shtin): need to check for 0 value?
-	if event.ParentInitiatedEventId != nil {
+
+	if event.ParentInitiatedEventId != 0 {
 		e.executionInfo.InitiatedID = event.GetParentInitiatedEventId()
 	} else {
 		e.executionInfo.InitiatedID = common.EmptyEventID

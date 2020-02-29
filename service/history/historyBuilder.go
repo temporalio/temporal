@@ -730,12 +730,8 @@ func (b *historyBuilder) newWorkflowExecutionCancelRequestedEvent(cause string,
 	attributes := &commonproto.WorkflowExecutionCancelRequestedEventAttributes{}
 	attributes.Cause = cause
 	attributes.Identity = request.CancelRequest.Identity
-	if request.ExternalInitiatedEventId != nil {
-		attributes.ExternalInitiatedEventId = request.ExternalInitiatedEventId
-	}
-	if request.ExternalWorkflowExecution != nil {
-		attributes.ExternalWorkflowExecution = request.ExternalWorkflowExecution
-	}
+	attributes.ExternalInitiatedEventId = request.ExternalInitiatedEventId
+	attributes.ExternalWorkflowExecution = request.ExternalWorkflowExecution
 	event.Attributes = &commonproto.HistoryEvent_WorkflowExecutionCancelRequestedEventAttributes{WorkflowExecutionCancelRequestedEventAttributes: attributes}
 
 	return event
@@ -879,7 +875,7 @@ func (b *historyBuilder) newWorkflowExecutionContinuedAsNewEvent(decisionTaskCom
 	attributes.DecisionTaskCompletedEventId = decisionTaskCompletedEventID
 	attributes.BackoffStartIntervalInSeconds = request.GetBackoffStartIntervalInSeconds()
 	attributes.Initiator = request.Initiator
-	if attributes.Initiator == nil {
+	if attributes.Initiator == enums.ContinueAsNewInitiatorNotSet {
 		attributes.Initiator = enums.ContinueAsNewInitiatorDecider
 	}
 	attributes.FailureReason = request.FailureReason

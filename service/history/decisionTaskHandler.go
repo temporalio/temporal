@@ -46,9 +46,7 @@ type (
 
 		// internal state
 		hasUnhandledEventsBeforeDecisions bool
-		failDecision                      bool
-		failDecisionCause                 enums.DecisionTaskFailedCause
-		failMessage                       string
+		failDecisionInfo                  *failDecisionInfo
 		activityNotStartedCancelled       bool
 		continueAsNewBuilder              mutableState
 		stopProcessing                    bool // should stop processing any more decisions
@@ -62,6 +60,11 @@ type (
 		domainCache   cache.DomainCache
 		metricsClient metrics.Client
 		config        *Config
+	}
+
+	failDecisionInfo struct {
+		cause   enums.DecisionTaskFailedCause
+		message string
 	}
 )
 
@@ -85,9 +88,7 @@ func newDecisionTaskHandler(
 
 		// internal state
 		hasUnhandledEventsBeforeDecisions: mutableState.HasBufferedEvents(),
-		failDecision:                      false,
-		failDecisionCause:                 nil,
-		failMessage:                       nil,
+		failDecisionInfo:                  nil,
 		activityNotStartedCancelled:       false,
 		continueAsNewBuilder:              nil,
 		stopProcessing:                    false,
@@ -741,19 +742,10 @@ func (handler *decisionTaskHandlerImpl) handleDecisionStartChildWorkflow(
 		return err
 	}
 
+	// TODO: (shtin: remove?) for domains that haven't enabled the feature yet, need to use Abandon for backward-compatibility
 	enabled := handler.config.EnableParentClosePolicy(handler.domainEntry.GetInfo().Name)
-	if attr.ParentClosePolicy == nil {
-		// for old clients, this field is empty. If they enable the feature, make default as terminate
-		if enabled {
-			attr.ParentClosePolicy = enums.ParentClosePolicyTerminate
-		} else {
-			attr.ParentClosePolicy = enums.ParentClosePolicyAbandon
-		}
-	} else {
-		// for domains that haven't enabled the feature yet, need to use Abandon for backward-compatibility
-		if !enabled {
-			attr.ParentClosePolicy = enums.ParentClosePolicyAbandon
-		}
+	if !enabled {
+		attr.ParentClosePolicy = enums.ParentClosePolicyAbandon
 	}
 
 	requestID := uuid.New()
@@ -929,9 +921,10 @@ func (handler *decisionTaskHandlerImpl) handlerFailDecision(
 	failedCause enums.DecisionTaskFailedCause,
 	failMessage string,
 ) error {
-	handler.failDecision = true
-	handler.failDecisionCause = failedCause
-	handler.failMessage = failMessage
+	handler.failDecisionInfo = &failDecisionInfo{
+		cause:   failedCause,
+		message: failMessage,
+	}
 	handler.stopProcessing = true
 	return nil
 }

@@ -1962,13 +1962,8 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 				clusterMetadata.ClusterNameForFailoverVersion(prevLastWriteVersion),
 			)
 		}
-		policy := enums.WorkflowIdReusePolicyAllowDuplicate
-		// TODO: nil check and wrong default value
-		if request.WorkflowIdReusePolicy != nil {
-			policy = request.WorkflowIdReusePolicy
-		}
 
-		err = e.applyWorkflowIDReusePolicyForSigWithStart(prevMutableState.GetExecutionInfo(), domainID, execution, policy)
+		err = e.applyWorkflowIDReusePolicyForSigWithStart(prevMutableState.GetExecutionInfo(), domainID, execution, request.WorkflowIdReusePolicy)
 		if err != nil {
 			return nil, err
 		}
