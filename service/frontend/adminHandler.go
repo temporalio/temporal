@@ -33,10 +33,10 @@ import (
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/domain"
@@ -392,7 +392,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 	}
 
 	// TODO need to deal with transient decision if to be used by client getting history
-	var historyBatches []*shared.History
+	var historyBatches []*commonproto.History
 	shardID := common.WorkflowIDToHistoryShard(execution.GetWorkflowId(), adh.numberOfHistoryShards)
 	_, historyBatches, token.PersistenceToken, size, err = history.PaginateHistory(
 		adh.GetHistoryManager(),
@@ -424,7 +424,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 
 	var blobs []*commonproto.DataBlob
 	for _, historyBatch := range historyBatches {
-		blob, err := adh.GetPayloadSerializer().SerializeBatchEvents(historyBatch.Events, common.EncodingTypeThriftRW)
+		blob, err := adh.GetPayloadSerializer().SerializeBatchEvents(adapter.ToThriftHistoryEvents(historyBatch.Events), common.EncodingTypeThriftRW)
 		if err != nil {
 			return nil, err
 		}

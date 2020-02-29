@@ -421,7 +421,7 @@ func timerTypeFromProto(
 func timerTypeToReason(
 	timerType timerType,
 ) string {
-	return fmt.Sprintf("cadenceInternal:Timeout TimeoutType%v", timerTypeToProto(timerType))
+	return fmt.Sprintf("cadenceInternal:Timeout %v", timerTypeToProto(timerType))
 }
 
 // Len implements sort.Interface
