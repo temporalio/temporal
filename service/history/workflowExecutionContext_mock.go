@@ -29,11 +29,13 @@ package history
 
 import (
 	context "context"
-	gomock "github.com/golang/mock/gomock"
-	persistence "github.com/temporalio/temporal/common/persistence"
-	common "go.temporal.io/temporal-proto/common"
 	reflect "reflect"
 	time "time"
+
+	gomock "github.com/golang/mock/gomock"
+	common "go.temporal.io/temporal-proto/common"
+
+	persistence "github.com/temporalio/temporal/common/persistence"
 )
 
 // MockworkflowExecutionContext is a mock of workflowExecutionContext interface

@@ -28,9 +28,10 @@
 package persistence
 
 import (
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	common "go.temporal.io/temporal-proto/common"
-	reflect "reflect"
 )
 
 // MockDomainReplicationQueue is a mock of DomainReplicationQueue interface

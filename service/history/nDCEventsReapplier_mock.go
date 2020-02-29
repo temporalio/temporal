@@ -29,9 +29,10 @@ package history
 
 import (
 	context "context"
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	common "go.temporal.io/temporal-proto/common"
-	reflect "reflect"
 )
 
 // MocknDCEventsReapplier is a mock of nDCEventsReapplier interface
