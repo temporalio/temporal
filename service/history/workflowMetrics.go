@@ -23,8 +23,9 @@ package history
 import (
 	"time"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
+
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
 )
@@ -111,29 +112,24 @@ func emitWorkflowCompletionStats(
 	metricsClient metrics.Client,
 	domainName string,
 	taskList string,
-	event *workflow.HistoryEvent,
+	event *commonproto.HistoryEvent,
 ) {
-
-	if event.EventType == nil {
-		return
-	}
-
 	scope := metricsClient.Scope(
 		metrics.WorkflowCompletionStatsScope,
 		metrics.DomainTag(domainName),
 		metrics.TaskListTag(taskList),
 	)
 
-	switch *event.EventType {
-	case shared.EventTypeWorkflowExecutionCompleted:
+	switch event.EventType {
+	case enums.EventTypeWorkflowExecutionCompleted:
 		scope.IncCounter(metrics.WorkflowSuccessCount)
-	case shared.EventTypeWorkflowExecutionCanceled:
+	case enums.EventTypeWorkflowExecutionCanceled:
 		scope.IncCounter(metrics.WorkflowCancelCount)
-	case shared.EventTypeWorkflowExecutionFailed:
+	case enums.EventTypeWorkflowExecutionFailed:
 		scope.IncCounter(metrics.WorkflowFailedCount)
-	case shared.EventTypeWorkflowExecutionTimedOut:
+	case enums.EventTypeWorkflowExecutionTimedOut:
 		scope.IncCounter(metrics.WorkflowTimeoutCount)
-	case shared.EventTypeWorkflowExecutionTerminated:
+	case enums.EventTypeWorkflowExecutionTerminated:
 		scope.IncCounter(metrics.WorkflowTerminateCount)
 	}
 }

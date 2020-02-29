@@ -28,9 +28,9 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
@@ -40,10 +40,10 @@ import (
 type timerType int32
 
 const (
-	timerTypeStartToClose    = timerType(shared.TimeoutTypeStartToClose)
-	timerTypeScheduleToStart = timerType(shared.TimeoutTypeScheduleToStart)
-	timerTypeScheduleToClose = timerType(shared.TimeoutTypeScheduleToClose)
-	timerTypeHeartbeat       = timerType(shared.TimeoutTypeHeartbeat)
+	timerTypeStartToClose    = timerType(enums.TimeoutTypeStartToClose)
+	timerTypeScheduleToStart = timerType(enums.TimeoutTypeScheduleToStart)
+	timerTypeScheduleToClose = timerType(enums.TimeoutTypeScheduleToClose)
+	timerTypeHeartbeat       = timerType(enums.TimeoutTypeHeartbeat)
 )
 
 const (
@@ -382,36 +382,36 @@ func timerTypeToTimerMask(
 	}
 }
 
-func timerTypeToThrift(
+func timerTypeToProto(
 	timerType timerType,
-) shared.TimeoutType {
+) enums.TimeoutType {
 
 	switch timerType {
 	case timerTypeStartToClose:
-		return shared.TimeoutTypeStartToClose
+		return enums.TimeoutTypeStartToClose
 	case timerTypeScheduleToStart:
-		return shared.TimeoutTypeScheduleToStart
+		return enums.TimeoutTypeScheduleToStart
 	case timerTypeScheduleToClose:
-		return shared.TimeoutTypeScheduleToClose
+		return enums.TimeoutTypeScheduleToClose
 	case timerTypeHeartbeat:
-		return shared.TimeoutTypeHeartbeat
+		return enums.TimeoutTypeHeartbeat
 	default:
 		panic(fmt.Sprintf("invalid timer type: %v", timerType))
 	}
 }
 
-func timerTypeFromThrift(
-	timerType shared.TimeoutType,
+func timerTypeFromProto(
+	timerType enums.TimeoutType,
 ) timerType {
 
 	switch timerType {
-	case shared.TimeoutTypeStartToClose:
+	case enums.TimeoutTypeStartToClose:
 		return timerTypeStartToClose
-	case shared.TimeoutTypeScheduleToStart:
+	case enums.TimeoutTypeScheduleToStart:
 		return timerTypeScheduleToStart
-	case shared.TimeoutTypeScheduleToClose:
+	case enums.TimeoutTypeScheduleToClose:
 		return timerTypeScheduleToClose
-	case shared.TimeoutTypeHeartbeat:
+	case enums.TimeoutTypeHeartbeat:
 		return timerTypeHeartbeat
 	default:
 		panic(fmt.Sprintf("invalid timeout type: %v", timerType))
@@ -421,7 +421,7 @@ func timerTypeFromThrift(
 func timerTypeToReason(
 	timerType timerType,
 ) string {
-	return fmt.Sprintf("cadenceInternal:Timeout TimeoutType%v", timerTypeToThrift(timerType))
+	return fmt.Sprintf("cadenceInternal:Timeout TimeoutType%v", timerTypeToProto(timerType))
 }
 
 // Len implements sort.Interface

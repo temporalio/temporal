@@ -29,9 +29,11 @@ import (
 	"math"
 	"time"
 
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/temporal-proto/workflowservice"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
@@ -57,32 +59,32 @@ type (
 			requestID string,
 			timestamp int64,
 		) (*decisionInfo, error)
-		ReplicateDecisionTaskCompletedEvent(event *workflow.HistoryEvent) error
+		ReplicateDecisionTaskCompletedEvent(event *commonproto.HistoryEvent) error
 		ReplicateDecisionTaskFailedEvent() error
-		ReplicateDecisionTaskTimedOutEvent(timeoutType workflow.TimeoutType) error
+		ReplicateDecisionTaskTimedOutEvent(timeoutType enums.TimeoutType) error
 
-		AddDecisionTaskScheduleToStartTimeoutEvent(scheduleEventID int64) (*workflow.HistoryEvent, error)
+		AddDecisionTaskScheduleToStartTimeoutEvent(scheduleEventID int64) (*commonproto.HistoryEvent, error)
 		AddDecisionTaskScheduledEventAsHeartbeat(
 			bypassTaskGeneration bool,
 			originalScheduledTimestamp int64,
 		) (*decisionInfo, error)
 		AddDecisionTaskScheduledEvent(bypassTaskGeneration bool) (*decisionInfo, error)
-		AddFirstDecisionTaskScheduled(startEvent *workflow.HistoryEvent) error
+		AddFirstDecisionTaskScheduled(startEvent *commonproto.HistoryEvent) error
 		AddDecisionTaskStartedEvent(
 			scheduleEventID int64,
 			requestID string,
-			request *workflow.PollForDecisionTaskRequest,
-		) (*workflow.HistoryEvent, *decisionInfo, error)
+			request *workflowservice.PollForDecisionTaskRequest,
+		) (*commonproto.HistoryEvent, *decisionInfo, error)
 		AddDecisionTaskCompletedEvent(
 			scheduleEventID int64,
 			startedEventID int64,
-			request *workflow.RespondDecisionTaskCompletedRequest,
+			request *workflowservice.RespondDecisionTaskCompletedRequest,
 			maxResetPoints int,
-		) (*workflow.HistoryEvent, error)
+		) (*commonproto.HistoryEvent, error)
 		AddDecisionTaskFailedEvent(
 			scheduleEventID int64,
 			startedEventID int64,
-			cause workflow.DecisionTaskFailedCause,
+			cause enums.DecisionTaskFailedCause,
 			details []byte,
 			identity string,
 			reason string,
@@ -90,8 +92,8 @@ type (
 			baseRunID string,
 			newRunID string,
 			forkEventVersion int64,
-		) (*workflow.HistoryEvent, error)
-		AddDecisionTaskTimedOutEvent(scheduleEventID int64, startedEventID int64) (*workflow.HistoryEvent, error)
+		) (*commonproto.HistoryEvent, error)
+		AddDecisionTaskTimedOutEvent(scheduleEventID int64, startedEventID int64) (*commonproto.HistoryEvent, error)
 
 		FailDecision(incrementAttempt bool)
 		DeleteDecision()
@@ -104,7 +106,7 @@ type (
 		HasProcessedOrPendingDecision() bool
 		GetDecisionInfo(scheduleEventID int64) (*decisionInfo, bool)
 
-		CreateTransientDecisionEvents(decision *decisionInfo, identity string) (*workflow.HistoryEvent, *workflow.HistoryEvent)
+		CreateTransientDecisionEvents(decision *decisionInfo, identity string) (*commonproto.HistoryEvent, *commonproto.HistoryEvent)
 	}
 
 	mutableStateDecisionTaskManagerImpl struct {
@@ -234,7 +236,7 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskStartedEvent(
 }
 
 func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskCompletedEvent(
-	event *workflow.HistoryEvent,
+	event *commonproto.HistoryEvent,
 ) error {
 	m.beforeAddDecisionTaskCompletedEvent()
 	return m.afterAddDecisionTaskCompletedEvent(event, math.MaxInt32)
@@ -246,11 +248,11 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskFailedEvent()
 }
 
 func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskTimedOutEvent(
-	timeoutType workflow.TimeoutType,
+	timeoutType enums.TimeoutType,
 ) error {
 	incrementAttempt := true
 	// Do not increment decision attempt in the case of sticky timeout to prevent creating next decision as transient
-	if timeoutType == workflow.TimeoutTypeScheduleToStart {
+	if timeoutType == enums.TimeoutTypeScheduleToStart {
 		incrementAttempt = false
 	}
 	m.FailDecision(incrementAttempt)
@@ -259,7 +261,7 @@ func (m *mutableStateDecisionTaskManagerImpl) ReplicateDecisionTaskTimedOutEvent
 
 func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskScheduleToStartTimeoutEvent(
 	scheduleEventID int64,
-) (*workflow.HistoryEvent, error) {
+) (*commonproto.HistoryEvent, error) {
 	opTag := tag.WorkflowActionDecisionTaskTimedOut
 	if m.msb.executionInfo.DecisionScheduleID != scheduleEventID || m.msb.executionInfo.DecisionStartedID > 0 {
 		m.msb.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
@@ -273,9 +275,9 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskScheduleToStartTime
 	// Clear stickiness whenever decision fails
 	m.msb.ClearStickyness()
 
-	event := m.msb.hBuilder.AddDecisionTaskTimedOutEvent(scheduleEventID, 0, workflow.TimeoutTypeScheduleToStart)
+	event := m.msb.hBuilder.AddDecisionTaskTimedOutEvent(scheduleEventID, 0, enums.TimeoutTypeScheduleToStart)
 
-	if err := m.ReplicateDecisionTaskTimedOutEvent(workflow.TimeoutTypeScheduleToStart); err != nil {
+	if err := m.ReplicateDecisionTaskTimedOutEvent(enums.TimeoutTypeScheduleToStart); err != nil {
 		return nil, err
 	}
 	return event, nil
@@ -320,7 +322,7 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskScheduledEventAsHea
 		}
 	}
 
-	var newDecisionEvent *workflow.HistoryEvent
+	var newDecisionEvent *commonproto.HistoryEvent
 	scheduleID := m.msb.GetNextEventID() // we will generate the schedule event later for repeatedly failing decisions
 	// Avoid creating new history events when decisions are continuously failing
 	scheduleTime := m.msb.timeSource.Now().UnixNano()
@@ -364,7 +366,7 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskScheduledEvent(
 }
 
 func (m *mutableStateDecisionTaskManagerImpl) AddFirstDecisionTaskScheduled(
-	startEvent *workflow.HistoryEvent,
+	startEvent *commonproto.HistoryEvent,
 ) error {
 	// handle first decision case, i.e. possible delayed decision
 	//
@@ -379,7 +381,7 @@ func (m *mutableStateDecisionTaskManagerImpl) AddFirstDecisionTaskScheduled(
 	//  1. whether has parent workflow or not
 	//   -> schedule decision & schedule delayed decision
 	//
-	startAttr := startEvent.WorkflowExecutionStartedEventAttributes
+	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 	decisionBackoffDuration := time.Duration(startAttr.GetFirstDecisionTaskBackoffSeconds()) * time.Second
 
 	var err error
@@ -404,8 +406,8 @@ func (m *mutableStateDecisionTaskManagerImpl) AddFirstDecisionTaskScheduled(
 func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskStartedEvent(
 	scheduleEventID int64,
 	requestID string,
-	request *workflow.PollForDecisionTaskRequest,
-) (*workflow.HistoryEvent, *decisionInfo, error) {
+	request *workflowservice.PollForDecisionTaskRequest,
+) (*commonproto.HistoryEvent, *decisionInfo, error) {
 	opTag := tag.WorkflowActionDecisionTaskStarted
 	decision, ok := m.GetDecisionInfo(scheduleEventID)
 	if !ok || decision.StartedID != common.EmptyEventID {
@@ -416,7 +418,7 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskStartedEvent(
 		return nil, nil, m.msb.createInternalServerError(opTag)
 	}
 
-	var event *workflow.HistoryEvent
+	var event *commonproto.HistoryEvent
 	scheduleID := decision.ScheduleID
 	startedID := scheduleID + 1
 	tasklist := request.TaskList.GetName()
@@ -451,9 +453,9 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskStartedEvent(
 func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskCompletedEvent(
 	scheduleEventID int64,
 	startedEventID int64,
-	request *workflow.RespondDecisionTaskCompletedRequest,
+	request *workflowservice.RespondDecisionTaskCompletedRequest,
 	maxResetPoints int,
-) (*workflow.HistoryEvent, error) {
+) (*commonproto.HistoryEvent, error) {
 	opTag := tag.WorkflowActionDecisionTaskCompleted
 	decision, ok := m.GetDecisionInfo(scheduleEventID)
 	if !ok || decision.StartedID != startedEventID {
@@ -488,7 +490,7 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskCompletedEvent(
 func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskFailedEvent(
 	scheduleEventID int64,
 	startedEventID int64,
-	cause workflow.DecisionTaskFailedCause,
+	cause enums.DecisionTaskFailedCause,
 	details []byte,
 	identity string,
 	reason string,
@@ -496,19 +498,19 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskFailedEvent(
 	baseRunID string,
 	newRunID string,
 	forkEventVersion int64,
-) (*workflow.HistoryEvent, error) {
+) (*commonproto.HistoryEvent, error) {
 	opTag := tag.WorkflowActionDecisionTaskFailed
-	attr := workflow.DecisionTaskFailedEventAttributes{
-		ScheduledEventId: common.Int64Ptr(scheduleEventID),
-		StartedEventId:   common.Int64Ptr(startedEventID),
-		Cause:            common.DecisionTaskFailedCausePtr(cause),
+	attr := &commonproto.DecisionTaskFailedEventAttributes{
+		ScheduledEventId: scheduleEventID,
+		StartedEventId:   startedEventID,
+		Cause:            cause,
 		Details:          details,
-		Identity:         common.StringPtr(identity),
-		Reason:           common.StringPtr(reason),
-		BinaryChecksum:   common.StringPtr(binChecksum),
-		BaseRunId:        common.StringPtr(baseRunID),
-		NewRunId:         common.StringPtr(newRunID),
-		ForkEventVersion: common.Int64Ptr(forkEventVersion),
+		Identity:         identity,
+		Reason:           reason,
+		BinaryChecksum:   binChecksum,
+		BaseRunId:        baseRunID,
+		NewRunId:         newRunID,
+		ForkEventVersion: forkEventVersion,
 	}
 
 	dt, ok := m.GetDecisionInfo(scheduleEventID)
@@ -521,7 +523,7 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskFailedEvent(
 		return nil, m.msb.createInternalServerError(opTag)
 	}
 
-	var event *workflow.HistoryEvent
+	var event *commonproto.HistoryEvent
 	// Only emit DecisionTaskFailedEvent for the very first time
 	if dt.Attempt == 0 {
 		event = m.msb.hBuilder.AddDecisionTaskFailedEvent(attr)
@@ -532,8 +534,8 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskFailedEvent(
 	}
 
 	// always clear decision attempt for reset
-	if cause == workflow.DecisionTaskFailedCauseResetWorkflow ||
-		cause == workflow.DecisionTaskFailedCauseFailoverCloseDecision {
+	if cause == enums.DecisionTaskFailedCauseResetWorkflow ||
+		cause == enums.DecisionTaskFailedCauseFailoverCloseDecision {
 		m.msb.executionInfo.DecisionAttempt = 0
 	}
 	return event, nil
@@ -542,7 +544,7 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskFailedEvent(
 func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskTimedOutEvent(
 	scheduleEventID int64,
 	startedEventID int64,
-) (*workflow.HistoryEvent, error) {
+) (*commonproto.HistoryEvent, error) {
 	opTag := tag.WorkflowActionDecisionTaskTimedOut
 	dt, ok := m.GetDecisionInfo(scheduleEventID)
 	if !ok || dt.StartedID != startedEventID {
@@ -554,13 +556,13 @@ func (m *mutableStateDecisionTaskManagerImpl) AddDecisionTaskTimedOutEvent(
 		return nil, m.msb.createInternalServerError(opTag)
 	}
 
-	var event *workflow.HistoryEvent
+	var event *commonproto.HistoryEvent
 	// Avoid creating new history events when decisions are continuously timing out
 	if dt.Attempt == 0 {
-		event = m.msb.hBuilder.AddDecisionTaskTimedOutEvent(scheduleEventID, startedEventID, workflow.TimeoutTypeStartToClose)
+		event = m.msb.hBuilder.AddDecisionTaskTimedOutEvent(scheduleEventID, startedEventID, enums.TimeoutTypeStartToClose)
 	}
 
-	if err := m.ReplicateDecisionTaskTimedOutEvent(workflow.TimeoutTypeStartToClose); err != nil {
+	if err := m.ReplicateDecisionTaskTimedOutEvent(enums.TimeoutTypeStartToClose); err != nil {
 		return nil, err
 	}
 	return event, nil
@@ -677,7 +679,7 @@ func (m *mutableStateDecisionTaskManagerImpl) GetDecisionInfo(
 func (m *mutableStateDecisionTaskManagerImpl) CreateTransientDecisionEvents(
 	decision *decisionInfo,
 	identity string,
-) (*workflow.HistoryEvent, *workflow.HistoryEvent) {
+) (*commonproto.HistoryEvent, *commonproto.HistoryEvent) {
 	tasklist := m.msb.executionInfo.TaskList
 	scheduledEvent := newDecisionTaskScheduledEventWithInfo(
 		decision.ScheduleID,
@@ -723,7 +725,7 @@ func (m *mutableStateDecisionTaskManagerImpl) beforeAddDecisionTaskCompletedEven
 }
 
 func (m *mutableStateDecisionTaskManagerImpl) afterAddDecisionTaskCompletedEvent(
-	event *workflow.HistoryEvent,
+	event *commonproto.HistoryEvent,
 	maxResetPoints int,
 ) error {
 	m.msb.executionInfo.LastProcessedEvent = event.GetDecisionTaskCompletedEventAttributes().GetStartedEventId()

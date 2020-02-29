@@ -29,10 +29,7 @@ import (
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/history"
-	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -123,21 +120,21 @@ func (e *replicationTaskExecutorImpl) handleActivityTask(
 		return err
 	}
 
-	request := &history.SyncActivityRequest{
-		DomainId:           &attr.DomainId,
-		WorkflowId:         &attr.WorkflowId,
-		RunId:              &attr.RunId,
-		Version:            &attr.Version,
-		ScheduledId:        &attr.ScheduledId,
-		ScheduledTime:      &attr.ScheduledTime,
-		StartedId:          &attr.StartedId,
-		StartedTime:        &attr.StartedTime,
-		LastHeartbeatTime:  &attr.LastHeartbeatTime,
+	request := &historyservice.SyncActivityRequest{
+		DomainId:           attr.DomainId,
+		WorkflowId:         attr.WorkflowId,
+		RunId:              attr.RunId,
+		Version:            attr.Version,
+		ScheduledId:        attr.ScheduledId,
+		ScheduledTime:      attr.ScheduledTime,
+		StartedId:          attr.StartedId,
+		StartedTime:        attr.StartedTime,
+		LastHeartbeatTime:  attr.LastHeartbeatTime,
 		Details:            attr.Details,
-		Attempt:            &attr.Attempt,
-		LastFailureReason:  &attr.LastFailureReason,
-		LastWorkerIdentity: &attr.LastWorkerIdentity,
-		VersionHistory:     adapter.ToThriftVersionHistory(attr.GetVersionHistory()),
+		Attempt:            attr.Attempt,
+		LastFailureReason:  attr.LastFailureReason,
+		LastWorkerIdentity: attr.LastWorkerIdentity,
+		VersionHistory:     attr.GetVersionHistory(),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
 	defer cancel()
@@ -206,22 +203,22 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTask(
 		return err
 	}
 
-	request := &history.ReplicateEventsRequest{
-		SourceCluster: common.StringPtr(sourceCluster),
-		DomainUUID:    &attr.DomainId,
-		WorkflowExecution: &shared.WorkflowExecution{
-			WorkflowId: &attr.WorkflowId,
-			RunId:      &attr.RunId,
+	request := &historyservice.ReplicateEventsRequest{
+		SourceCluster: sourceCluster,
+		DomainUUID:    attr.DomainId,
+		WorkflowExecution: &commonproto.WorkflowExecution{
+			WorkflowId: attr.WorkflowId,
+			RunId:      attr.RunId,
 		},
-		FirstEventId:      &attr.FirstEventId,
-		NextEventId:       &attr.NextEventId,
-		Version:           &attr.Version,
-		ReplicationInfo:   adapter.ToThriftReplicationInfos(attr.ReplicationInfo),
-		History:           adapter.ToThriftHistory(attr.History),
-		NewRunHistory:     adapter.ToThriftHistory(attr.NewRunHistory),
-		ForceBufferEvents: common.BoolPtr(false),
-		ResetWorkflow:     &attr.ResetWorkflow,
-		NewRunNDC:         &attr.NewRunNDC,
+		FirstEventId:      attr.FirstEventId,
+		NextEventId:       attr.NextEventId,
+		Version:           attr.Version,
+		ReplicationInfo:   attr.ReplicationInfo,
+		History:           attr.History,
+		NewRunHistory:     attr.NewRunHistory,
+		ForceBufferEvents: false,
+		ResetWorkflow:     attr.ResetWorkflow,
+		NewRunNDC:         attr.NewRunNDC,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
 	defer cancel()
@@ -264,16 +261,16 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTaskV2(
 		return err
 	}
 
-	request := &history.ReplicateEventsV2Request{
-		DomainUUID: &attr.DomainId,
-		WorkflowExecution: &shared.WorkflowExecution{
-			WorkflowId: &attr.WorkflowId,
-			RunId:      &attr.RunId,
+	request := &historyservice.ReplicateEventsV2Request{
+		DomainUUID: attr.DomainId,
+		WorkflowExecution: &commonproto.WorkflowExecution{
+			WorkflowId: attr.WorkflowId,
+			RunId:      attr.RunId,
 		},
-		VersionHistoryItems: adapter.ToThriftVersionHistoryItems(attr.VersionHistoryItems),
-		Events:              adapter.ToThriftDataBlob(attr.Events),
+		VersionHistoryItems: attr.VersionHistoryItems,
+		Events:              attr.Events,
 		// new run events does not need version history since there is no prior events
-		NewRunEvents: adapter.ToThriftDataBlob(attr.NewRunEvents),
+		NewRunEvents: attr.NewRunEvents,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
 	defer cancel()

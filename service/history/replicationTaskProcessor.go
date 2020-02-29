@@ -33,7 +33,7 @@ import (
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	h "github.com/temporalio/temporal/.gen/go/history"
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
@@ -330,10 +330,10 @@ func (p *ReplicationTaskProcessorImpl) handleSyncShardStatus(
 	p.metricsClient.Scope(metrics.HistorySyncShardStatusScope).IncCounter(metrics.SyncShardFromRemoteCounter)
 	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
 	defer cancel()
-	return p.historyEngine.SyncShardStatus(ctx, &h.SyncShardStatusRequest{
-		SourceCluster: common.StringPtr(p.sourceCluster),
-		ShardId:       common.Int64Ptr(int64(p.shard.GetShardID())),
-		Timestamp:     &status.Timestamp,
+	return p.historyEngine.SyncShardStatus(ctx, &historyservice.SyncShardStatusRequest{
+		SourceCluster: p.sourceCluster,
+		ShardId:       int64(p.shard.GetShardID()),
+		Timestamp:     status.Timestamp,
 	})
 }
 

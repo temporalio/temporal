@@ -1060,15 +1060,15 @@ func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithoutHeartbeat_St
 }
 
 func (s *timerSequenceSuite) TestConversion() {
-	s.Equal(shared.TimeoutTypeStartToClose, timerTypeToThrift(timerTypeStartToClose))
-	s.Equal(shared.TimeoutTypeScheduleToStart, timerTypeToThrift(timerTypeScheduleToStart))
-	s.Equal(shared.TimeoutTypeScheduleToClose, timerTypeToThrift(timerTypeScheduleToClose))
-	s.Equal(shared.TimeoutTypeHeartbeat, timerTypeToThrift(timerTypeHeartbeat))
+	s.Equal(shared.TimeoutTypeStartToClose, timerTypeToProto(timerTypeStartToClose))
+	s.Equal(shared.TimeoutTypeScheduleToStart, timerTypeToProto(timerTypeScheduleToStart))
+	s.Equal(shared.TimeoutTypeScheduleToClose, timerTypeToProto(timerTypeScheduleToClose))
+	s.Equal(shared.TimeoutTypeHeartbeat, timerTypeToProto(timerTypeHeartbeat))
 
-	s.Equal(timerTypeFromThrift(shared.TimeoutTypeStartToClose), timerTypeStartToClose)
-	s.Equal(timerTypeFromThrift(shared.TimeoutTypeScheduleToStart), timerTypeScheduleToStart)
-	s.Equal(timerTypeFromThrift(shared.TimeoutTypeScheduleToClose), timerTypeScheduleToClose)
-	s.Equal(timerTypeFromThrift(shared.TimeoutTypeHeartbeat), timerTypeHeartbeat)
+	s.Equal(timerTypeFromProto(shared.TimeoutTypeStartToClose), timerTypeStartToClose)
+	s.Equal(timerTypeFromProto(shared.TimeoutTypeScheduleToStart), timerTypeScheduleToStart)
+	s.Equal(timerTypeFromProto(shared.TimeoutTypeScheduleToClose), timerTypeScheduleToClose)
+	s.Equal(timerTypeFromProto(shared.TimeoutTypeHeartbeat), timerTypeHeartbeat)
 
 	s.Equal(int32(timerTaskStatusCreatedStartToClose), timerTypeToTimerMask(timerTypeStartToClose))
 	s.Equal(int32(timerTaskStatusCreatedScheduleToStart), timerTypeToTimerMask(timerTypeScheduleToStart))

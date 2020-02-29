@@ -33,12 +33,11 @@ import (
 // serilized byte array of the given thrift object. The
 // serialization proto used will be of type thriftRW
 func GenerateCRC32(
-	payload codec.ThriftObject,
+	payload codec.ProtoObject,
 	payloadVersion int,
 ) (Checksum, error) {
 
-	encoder := codec.NewThriftRWEncoder()
-	payloadBytes, err := encoder.Encode(payload)
+	payloadBytes, err := payload.Marshal()
 	if err != nil {
 		return Checksum{}, err
 	}
@@ -57,7 +56,7 @@ func GenerateCRC32(
 // given thrift object matches the specified expected checksum
 // Return ErrMismatch when checksums mismatch
 func Verify(
-	payload codec.ThriftObject,
+	payload codec.ProtoObject,
 	checksum Checksum,
 ) error {
 

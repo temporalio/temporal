@@ -25,9 +25,9 @@ import (
 	"sync/atomic"
 
 	"github.com/pborman/uuid"
+	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cache"
@@ -89,9 +89,9 @@ func (c *historyCache) getOrCreateCurrentWorkflowExecution(
 
 	// using empty run ID as current workflow run ID
 	runID := ""
-	execution := workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(runID),
+	execution := commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      runID,
 	}
 
 	return c.getOrCreateWorkflowExecutionInternal(
@@ -107,7 +107,7 @@ func (c *historyCache) getOrCreateCurrentWorkflowExecution(
 func (c *historyCache) getAndCreateWorkflowExecution(
 	ctx context.Context,
 	domainID string,
-	execution workflow.WorkflowExecution,
+	execution commonproto.WorkflowExecution,
 ) (workflowExecutionContext, workflowExecutionContext, releaseWorkflowExecutionFunc, bool, error) {
 
 	scope := metrics.HistoryCacheGetAndCreateScope
@@ -146,7 +146,7 @@ func (c *historyCache) getAndCreateWorkflowExecution(
 
 func (c *historyCache) getOrCreateWorkflowExecutionForBackground(
 	domainID string,
-	execution workflow.WorkflowExecution,
+	execution commonproto.WorkflowExecution,
 ) (workflowExecutionContext, releaseWorkflowExecutionFunc, error) {
 
 	return c.getOrCreateWorkflowExecution(context.Background(), domainID, execution)
@@ -155,7 +155,7 @@ func (c *historyCache) getOrCreateWorkflowExecutionForBackground(
 func (c *historyCache) getOrCreateWorkflowExecution(
 	ctx context.Context,
 	domainID string,
-	execution workflow.WorkflowExecution,
+	execution commonproto.WorkflowExecution,
 ) (workflowExecutionContext, releaseWorkflowExecutionFunc, error) {
 
 	scope := metrics.HistoryCacheGetOrCreateScope
@@ -180,7 +180,7 @@ func (c *historyCache) getOrCreateWorkflowExecution(
 func (c *historyCache) getOrCreateWorkflowExecutionInternal(
 	ctx context.Context,
 	domainID string,
-	execution workflow.WorkflowExecution,
+	execution commonproto.WorkflowExecution,
 	scope int,
 	forceClearContext bool,
 ) (workflowExecutionContext, releaseWorkflowExecutionFunc, error) {
@@ -220,7 +220,7 @@ func (c *historyCache) getOrCreateWorkflowExecutionInternal(
 
 func (c *historyCache) validateWorkflowExecutionInfo(
 	domainID string,
-	execution *workflow.WorkflowExecution,
+	execution *commonproto.WorkflowExecution,
 ) error {
 
 	if execution.GetWorkflowId() == "" {
@@ -238,7 +238,7 @@ func (c *historyCache) validateWorkflowExecutionInfo(
 			return err
 		}
 
-		execution.RunId = common.StringPtr(response.RunID)
+		execution.RunId = response.RunID
 	} else if uuid.Parse(execution.GetRunId()) == nil { // immediately return if invalid runID
 		return serviceerror.NewInvalidArgument("RunID is not valid UUID.")
 	}

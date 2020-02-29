@@ -25,10 +25,12 @@ import (
 	"fmt"
 	"time"
 
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/temporal-proto/workflowservice"
 
-	h "github.com/temporalio/temporal/.gen/go/history"
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
@@ -42,13 +44,13 @@ import (
 type (
 	// decision business logic handler
 	decisionHandler interface {
-		handleDecisionTaskScheduled(context.Context, *h.ScheduleDecisionTaskRequest) error
+		handleDecisionTaskScheduled(context.Context, *historyservice.ScheduleDecisionTaskRequest) error
 		handleDecisionTaskStarted(context.Context,
-			*h.RecordDecisionTaskStartedRequest) (*h.RecordDecisionTaskStartedResponse, error)
+			*historyservice.RecordDecisionTaskStartedRequest) (*historyservice.RecordDecisionTaskStartedResponse, error)
 		handleDecisionTaskFailed(context.Context,
-			*h.RespondDecisionTaskFailedRequest) error
+			*historyservice.RespondDecisionTaskFailedRequest) error
 		handleDecisionTaskCompleted(context.Context,
-			*h.RespondDecisionTaskCompletedRequest) (*h.RespondDecisionTaskCompletedResponse, error)
+			*historyservice.RespondDecisionTaskCompletedRequest) (*historyservice.RespondDecisionTaskCompletedResponse, error)
 		// TODO also include the handle of decision timeout here
 	}
 
@@ -97,7 +99,7 @@ func newDecisionHandler(historyEngine *historyEngineImpl) *decisionHandlerImpl {
 
 func (handler *decisionHandlerImpl) handleDecisionTaskScheduled(
 	ctx context.Context,
-	req *h.ScheduleDecisionTaskRequest,
+	req *historyservice.ScheduleDecisionTaskRequest,
 ) error {
 
 	domainEntry, err := handler.historyEngine.getActiveDomainEntry(req.DomainUUID)
@@ -106,7 +108,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskScheduled(
 	}
 	domainID := domainEntry.GetInfo().ID
 
-	execution := workflow.WorkflowExecution{
+	execution := commonproto.WorkflowExecution{
 		WorkflowId: req.WorkflowExecution.WorkflowId,
 		RunId:      req.WorkflowExecution.RunId,
 	}
@@ -139,8 +141,8 @@ func (handler *decisionHandlerImpl) handleDecisionTaskScheduled(
 
 func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 	ctx context.Context,
-	req *h.RecordDecisionTaskStartedRequest,
-) (*h.RecordDecisionTaskStartedResponse, error) {
+	req *historyservice.RecordDecisionTaskStartedRequest,
+) (*historyservice.RecordDecisionTaskStartedResponse, error) {
 
 	domainEntry, err := handler.historyEngine.getActiveDomainEntry(req.DomainUUID)
 	if err != nil {
@@ -148,7 +150,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 	}
 	domainID := domainEntry.GetInfo().ID
 
-	execution := workflow.WorkflowExecution{
+	execution := commonproto.WorkflowExecution{
 		WorkflowId: req.WorkflowExecution.WorkflowId,
 		RunId:      req.WorkflowExecution.RunId,
 	}
@@ -156,7 +158,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 	scheduleID := req.GetScheduleId()
 	requestID := req.GetRequestId()
 
-	var resp *h.RecordDecisionTaskStartedResponse
+	var resp *historyservice.RecordDecisionTaskStartedResponse
 	err = handler.historyEngine.updateWorkflowExecutionWithAction(ctx, domainID, execution,
 		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
 			if !mutableState.IsWorkflowExecutionRunning() {
@@ -221,7 +223,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskStarted(
 
 func (handler *decisionHandlerImpl) handleDecisionTaskFailed(
 	ctx context.Context,
-	req *h.RespondDecisionTaskFailedRequest,
+	req *historyservice.RespondDecisionTaskFailedRequest,
 ) (retError error) {
 
 	domainEntry, err := handler.historyEngine.getActiveDomainEntry(req.DomainUUID)
@@ -236,9 +238,9 @@ func (handler *decisionHandlerImpl) handleDecisionTaskFailed(
 		return ErrDeserializingToken
 	}
 
-	workflowExecution := workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(token.WorkflowID),
-		RunId:      common.StringPtr(token.RunID),
+	workflowExecution := commonproto.WorkflowExecution{
+		WorkflowId: token.WorkflowID,
+		RunId:      token.RunID,
 	}
 
 	return handler.historyEngine.updateWorkflowExecution(ctx, domainID, workflowExecution, true,
@@ -261,8 +263,8 @@ func (handler *decisionHandlerImpl) handleDecisionTaskFailed(
 
 func (handler *decisionHandlerImpl) handleDecisionTaskCompleted(
 	ctx context.Context,
-	req *h.RespondDecisionTaskCompletedRequest,
-) (resp *h.RespondDecisionTaskCompletedResponse, retError error) {
+	req *historyservice.RespondDecisionTaskCompletedRequest,
+) (resp *historyservice.RespondDecisionTaskCompletedResponse, retError error) {
 
 	domainEntry, err := handler.historyEngine.getActiveDomainEntry(req.DomainUUID)
 	if err != nil {
@@ -276,9 +278,9 @@ func (handler *decisionHandlerImpl) handleDecisionTaskCompleted(
 		return nil, ErrDeserializingToken
 	}
 
-	workflowExecution := workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(token.WorkflowID),
-		RunId:      common.StringPtr(token.RunID),
+	workflowExecution := commonproto.WorkflowExecution{
+		WorkflowId: token.WorkflowID,
+		RunId:      token.RunID,
 	}
 
 	clientHeaders := headers.GetValues(ctx, headers.LibraryVersionHeaderName, headers.FeatureVersionHeaderName, headers.ClientImplHeaderName)
@@ -333,7 +335,7 @@ Update_History_Loop:
 
 		decisionHeartbeating := request.GetForceCreateNewDecisionTask() && len(request.Decisions) == 0
 		var decisionHeartbeatTimeout bool
-		var completedEvent *workflow.HistoryEvent
+		var completedEvent *commonproto.HistoryEvent
 		if decisionHeartbeating {
 			domainName := domainEntry.GetInfo().Name
 			timeout := handler.config.DecisionHeartbeatTimeout(domainName)
@@ -361,7 +363,7 @@ Update_History_Loop:
 
 		var (
 			failDecision                bool
-			failCause                   workflow.DecisionTaskFailedCause
+			failCause                   enums.DecisionTaskFailedCause
 			failMessage                 string
 			activityNotStartedCancelled bool
 			continueAsNewBuilder        mutableState
@@ -386,7 +388,7 @@ Update_History_Loop:
 		binChecksum := request.GetBinaryChecksum()
 		if _, ok := domainEntry.GetConfig().BadBinaries.Binaries[binChecksum]; ok {
 			failDecision = true
-			failCause = workflow.DecisionTaskFailedCauseBadBinary
+			failCause = enums.DecisionTaskFailedCauseBadBinary
 			failMessage = fmt.Sprintf("binary %v is already marked as bad deployment", binChecksum)
 		} else {
 
@@ -429,8 +431,8 @@ Update_History_Loop:
 			// further refactor should also clean up the vars used below
 			failDecision = decisionTaskHandler.failDecision
 			if failDecision {
-				failCause = *decisionTaskHandler.failDecisionCause
-				failMessage = *decisionTaskHandler.failMessage
+				failCause = decisionTaskHandler.failDecisionCause
+				failMessage = decisionTaskHandler.failMessage
 			}
 
 			// failMessage is not used by decisionTaskHandler
@@ -480,8 +482,8 @@ Update_History_Loop:
 			if request.GetReturnNewDecisionTask() {
 				// start the new decision task if request asked to do so
 				// TODO: replace the poll request
-				_, _, err := msBuilder.AddDecisionTaskStartedEvent(newDecision.ScheduleID, "request-from-RespondDecisionTaskCompleted", &workflow.PollForDecisionTaskRequest{
-					TaskList: &workflow.TaskList{Name: common.StringPtr(newDecision.TaskList)},
+				_, _, err := msBuilder.AddDecisionTaskStartedEvent(newDecision.ScheduleID, "request-from-RespondDecisionTaskCompleted", &workflowservice.PollForDecisionTaskRequest{
+					TaskList: &commonproto.TaskList{Name: newDecision.TaskList},
 					Identity: request.Identity,
 				})
 				if err != nil {
@@ -499,9 +501,9 @@ Update_History_Loop:
 				handler.shard.GetTimeSource().Now(),
 				newWorkflowExecutionContext(
 					continueAsNewExecutionInfo.DomainID,
-					workflow.WorkflowExecution{
-						WorkflowId: common.StringPtr(continueAsNewExecutionInfo.WorkflowID),
-						RunId:      common.StringPtr(continueAsNewExecutionInfo.RunID),
+					commonproto.WorkflowExecution{
+						WorkflowId: continueAsNewExecutionInfo.WorkflowID,
+						RunId:      continueAsNewExecutionInfo.RunID,
 					},
 					handler.shard,
 					handler.shard.GetExecutionManager(),
@@ -563,7 +565,7 @@ Update_History_Loop:
 			return nil, serviceerror.NewNotFound(fmt.Sprintf("decision heartbeat timeout"))
 		}
 
-		resp = &h.RespondDecisionTaskCompletedResponse{}
+		resp = &historyservice.RespondDecisionTaskCompletedResponse{}
 		if request.GetReturnNewDecisionTask() && createNewDecisionTask {
 			decision, _ := msBuilder.GetDecisionInfo(newDecisionTaskScheduledID)
 			resp.StartedResponse, err = handler.createRecordDecisionTaskStartedResponse(domainID, msBuilder, decision, request.GetIdentity())
@@ -571,7 +573,7 @@ Update_History_Loop:
 				return nil, err
 			}
 			// sticky is always enabled when worker request for new decision task from RespondDecisionTaskCompleted
-			resp.StartedResponse.StickyExecutionEnabled = common.BoolPtr(true)
+			resp.StartedResponse.StickyExecutionEnabled = true
 		}
 
 		return resp, nil
@@ -585,34 +587,34 @@ func (handler *decisionHandlerImpl) createRecordDecisionTaskStartedResponse(
 	msBuilder mutableState,
 	decision *decisionInfo,
 	identity string,
-) (*h.RecordDecisionTaskStartedResponse, error) {
+) (*historyservice.RecordDecisionTaskStartedResponse, error) {
 
-	response := &h.RecordDecisionTaskStartedResponse{}
+	response := &historyservice.RecordDecisionTaskStartedResponse{}
 	response.WorkflowType = msBuilder.GetWorkflowType()
 	executionInfo := msBuilder.GetExecutionInfo()
 	if executionInfo.LastProcessedEvent != common.EmptyEventID {
-		response.PreviousStartedEventId = common.Int64Ptr(executionInfo.LastProcessedEvent)
+		response.PreviousStartedEventId = executionInfo.LastProcessedEvent
 	}
 
 	// Starting decision could result in different scheduleID if decision was transient and new new events came in
 	// before it was started.
-	response.ScheduledEventId = common.Int64Ptr(decision.ScheduleID)
-	response.StartedEventId = common.Int64Ptr(decision.StartedID)
-	response.StickyExecutionEnabled = common.BoolPtr(msBuilder.IsStickyTaskListEnabled())
-	response.NextEventId = common.Int64Ptr(msBuilder.GetNextEventID())
-	response.Attempt = common.Int64Ptr(decision.Attempt)
-	response.WorkflowExecutionTaskList = common.TaskListPtr(workflow.TaskList{
-		Name: &executionInfo.TaskList,
-		Kind: common.TaskListKindPtr(workflow.TaskListKindNormal),
-	})
-	response.ScheduledTimestamp = common.Int64Ptr(decision.ScheduledTimestamp)
-	response.StartedTimestamp = common.Int64Ptr(decision.StartedTimestamp)
+	response.ScheduledEventId = decision.ScheduleID
+	response.StartedEventId = decision.StartedID
+	response.StickyExecutionEnabled = msBuilder.IsStickyTaskListEnabled()
+	response.NextEventId = msBuilder.GetNextEventID()
+	response.Attempt = decision.Attempt
+	response.WorkflowExecutionTaskList = &commonproto.TaskList{
+		Name: executionInfo.TaskList,
+		Kind: enums.TaskListKindNormal,
+	}
+	response.ScheduledTimestamp = decision.ScheduledTimestamp
+	response.StartedTimestamp = decision.StartedTimestamp
 
 	if decision.Attempt > 0 {
 		// This decision is retried from mutable state
 		// Also return schedule and started which are not written to history yet
 		scheduledEvent, startedEvent := msBuilder.CreateTransientDecisionEvents(decision, identity)
-		response.DecisionInfo = &workflow.TransientDecisionInfo{}
+		response.DecisionInfo = &commonproto.TransientDecisionInfo{}
 		response.DecisionInfo.ScheduledEvent = scheduledEvent
 		response.DecisionInfo.StartedEvent = startedEvent
 	}
@@ -624,7 +626,7 @@ func (handler *decisionHandlerImpl) createRecordDecisionTaskStartedResponse(
 
 	qr := msBuilder.GetQueryRegistry()
 	buffered := qr.getBufferedIDs()
-	queries := make(map[string]*workflow.WorkflowQuery)
+	queries := make(map[string]*commonproto.WorkflowQuery)
 	for _, id := range buffered {
 		input, err := qr.getQueryInput(id)
 		if err != nil {
@@ -640,7 +642,7 @@ func (handler *decisionHandlerImpl) handleBufferedQueries(
 	msBuilder mutableState,
 	clientImpl string,
 	clientFeatureVersion string,
-	queryResults map[string]*workflow.WorkflowQueryResult,
+	queryResults map[string]*commonproto.WorkflowQueryResult,
 	createNewDecisionTask bool,
 	domainEntry *cache.DomainCacheEntry,
 	decisionHeartbeating bool,

@@ -37,6 +37,12 @@ type (
 		FromWire(w wire.Value) error
 		ToWire() (wire.Value, error)
 	}
+
+	// ProtoObject represents a proto object.
+	ProtoObject interface {
+		Marshal() (dAtA []byte, err error)
+		Unmarshal(dAtA []byte) error
+	}
 )
 
 const (

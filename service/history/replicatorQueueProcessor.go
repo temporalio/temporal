@@ -29,7 +29,6 @@ import (
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
@@ -228,7 +227,7 @@ func GenerateReplicationTask(
 	task *persistenceblobs.ReplicationTaskInfo,
 	historyV2Mgr persistence.HistoryManager,
 	metricsClient metrics.Client,
-	history *shared.History,
+	history *commonproto.History,
 	shardID *int,
 ) (*commonproto.ReplicationTask, string, error) {
 	var err error
@@ -246,13 +245,13 @@ func GenerateReplicationTask(
 	}
 
 	var newRunID string
-	var newRunHistory *shared.History
+	var newRunHistory *commonproto.History
 	events := history.Events
 	if len(events) > 0 {
 		lastEvent := events[len(events)-1]
-		if lastEvent.GetEventType() == shared.EventTypeWorkflowExecutionContinuedAsNew {
+		if lastEvent.GetEventType() == enums.EventTypeWorkflowExecutionContinuedAsNew {
 			// Check if this is replication task for ContinueAsNew event, then retrieve the history for new execution
-			newRunID = lastEvent.WorkflowExecutionContinuedAsNewEventAttributes.GetNewExecutionRunId()
+			newRunID = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
 			newRunHistory, _, err = GetAllHistory(
 				historyV2Mgr,
 				metricsClient,
@@ -279,8 +278,8 @@ func GenerateReplicationTask(
 				NextEventId:     task.NextEventID,
 				Version:         task.Version,
 				ReplicationInfo: task.LastReplicationInfo,
-				History:         adapter.ToProtoHistory(history),
-				NewRunHistory:   adapter.ToProtoHistory(newRunHistory),
+				History:         history,
+				NewRunHistory:   newRunHistory,
 				ResetWorkflow:   task.ResetWorkflow,
 			},
 		},
@@ -326,17 +325,17 @@ func GetAllHistory(
 	nextEventID int64,
 	branchToken []byte,
 	shardID *int,
-) (*shared.History, []*shared.History, error) {
+) (*commonproto.History, []*commonproto.History, error) {
 
 	// overall result
-	var historyEvents []*shared.HistoryEvent
-	var historyBatches []*shared.History
+	var historyEvents []*commonproto.HistoryEvent
+	var historyBatches []*commonproto.History
 	historySize := 0
 	var err error
 
 	// variable used for each page
-	var pageHistoryEvents []*shared.HistoryEvent
-	var pageHistoryBatches []*shared.History
+	var pageHistoryEvents []*commonproto.HistoryEvent
+	var pageHistoryBatches []*commonproto.History
 	var pageToken []byte
 	var pageHistorySize int
 
@@ -360,7 +359,7 @@ func GetAllHistory(
 		metricsClient.RecordTimer(metrics.ReplicatorQueueProcessorScope, metrics.HistorySize, time.Duration(historySize))
 	}
 
-	history := &shared.History{
+	history := &commonproto.History{
 		Events: historyEvents,
 	}
 	return history, historyBatches, nil
@@ -376,10 +375,10 @@ func PaginateHistory(
 	tokenIn []byte,
 	pageSize int,
 	shardID *int,
-) ([]*shared.HistoryEvent, []*shared.History, []byte, int, error) {
+) ([]*commonproto.HistoryEvent, []*commonproto.History, []byte, int, error) {
 
-	historyEvents := []*shared.HistoryEvent{}
-	historyBatches := []*shared.History{}
+	var historyEvents []*commonproto.HistoryEvent
+	var historyBatches []*commonproto.History
 	var tokenOut []byte
 	var historySize int
 
@@ -399,7 +398,7 @@ func PaginateHistory(
 
 		// Keep track of total history size
 		historySize += response.Size
-		historyBatches = append(historyBatches, response.History...)
+		historyBatches = append(historyBatches, adapter.ToProtoHistories(response.History)...)
 		tokenOut = response.NextPageToken
 
 	} else {
@@ -410,7 +409,7 @@ func PaginateHistory(
 
 		// Keep track of total history size
 		historySize += response.Size
-		historyEvents = append(historyEvents, response.HistoryEvents...)
+		historyEvents = append(historyEvents, adapter.ToProtoHistoryEvents(response.HistoryEvents)...)
 		tokenOut = response.NextPageToken
 	}
 
@@ -418,12 +417,12 @@ func PaginateHistory(
 }
 
 // TODO deprecate when 3+DC is released
-func convertLastReplicationInfo(info map[string]*commonproto.ReplicationInfo) map[string]*shared.ReplicationInfo {
-	replicationInfoMap := make(map[string]*shared.ReplicationInfo)
+func convertLastReplicationInfo(info map[string]*commonproto.ReplicationInfo) map[string]*commonproto.ReplicationInfo {
+	replicationInfoMap := make(map[string]*commonproto.ReplicationInfo)
 	for k, v := range info {
-		replicationInfoMap[k] = &shared.ReplicationInfo{
-			Version:     common.Int64Ptr(v.Version),
-			LastEventId: common.Int64Ptr(v.LastEventId),
+		replicationInfoMap[k] = &commonproto.ReplicationInfo{
+			Version:     v.Version,
+			LastEventId: v.LastEventId,
 		}
 	}
 
@@ -599,13 +598,13 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 
 			// Version history uses when replicate the sync activity task
 			versionHistories := mutableState.GetVersionHistories()
-			var versionHistory *shared.VersionHistory
+			var versionHistory *commonproto.VersionHistory
 			if versionHistories != nil {
 				rawVersionHistory, err := versionHistories.GetCurrentVersionHistory()
 				if err != nil {
 					return nil, err
 				}
-				versionHistory = rawVersionHistory.ToThrift()
+				versionHistory = rawVersionHistory.ToProto()
 			}
 
 			return &commonproto.ReplicationTask{
@@ -626,7 +625,7 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 						LastFailureReason:  activityInfo.LastFailureReason,
 						LastWorkerIdentity: activityInfo.LastWorkerIdentity,
 						LastFailureDetails: activityInfo.LastFailureDetails,
-						VersionHistory:     adapter.ToProtoVersionHistory(versionHistory),
+						VersionHistory:     versionHistory,
 					},
 				},
 			}, nil
@@ -708,7 +707,7 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 				return nil, err
 			}
 
-			var newRunEventsBlob *shared.DataBlob
+			var newRunEventsBlob *commonproto.DataBlob
 			if len(task.NewRunBranchToken) != 0 {
 				// only get the first batch
 				newRunEventsBlob, err = p.getEventsBlob(
@@ -729,9 +728,9 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 						DomainId:            domainID,
 						WorkflowId:          task.WorkflowID,
 						RunId:               runID,
-						VersionHistoryItems: adapter.ToProtoVersionHistoryItems(versionHistoryItems),
-						Events:              adapter.ToProtoDataBlob(eventsBlob),
-						NewRunEvents:        adapter.ToProtoDataBlob(newRunEventsBlob),
+						VersionHistoryItems: versionHistoryItems,
+						Events:              eventsBlob,
+						NewRunEvents:        newRunEventsBlob,
 					},
 				},
 			}
@@ -744,7 +743,7 @@ func (p *replicatorQueueProcessorImpl) getEventsBlob(
 	branchToken []byte,
 	firstEventID int64,
 	nextEventID int64,
-) (*shared.DataBlob, error) {
+) (*commonproto.DataBlob, error) {
 
 	var eventBatchBlobs []*serialization.DataBlob
 	var pageToken []byte
@@ -775,14 +774,14 @@ func (p *replicatorQueueProcessorImpl) getEventsBlob(
 		return nil, serviceerror.NewInternal("replicatorQueueProcessor encounter more than 1 NDC raw event batch")
 	}
 
-	return eventBatchBlobs[0].ToThrift(), nil
+	return eventBatchBlobs[0].ToProto(), nil
 }
 
 func (p *replicatorQueueProcessorImpl) getVersionHistoryItems(
 	mutableState mutableState,
 	eventID int64,
 	version int64,
-) ([]*shared.VersionHistoryItem, []byte, error) {
+) ([]*commonproto.VersionHistoryItem, []byte, error) {
 
 	versionHistories := mutableState.GetVersionHistories()
 	if versionHistories == nil {
@@ -803,7 +802,7 @@ func (p *replicatorQueueProcessorImpl) getVersionHistoryItems(
 	if err != nil {
 		return nil, nil, err
 	}
-	return versionHistory.ToThrift().Items, versionHistory.GetBranchToken(), nil
+	return versionHistory.ToProto().Items, versionHistory.GetBranchToken(), nil
 }
 
 func (p *replicatorQueueProcessorImpl) processReplication(
@@ -815,9 +814,9 @@ func (p *replicatorQueueProcessorImpl) processReplication(
 	action func(mutableState) (*commonproto.ReplicationTask, error),
 ) (retReplicationTask *commonproto.ReplicationTask, retError error) {
 
-	execution := shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(runID),
+	execution := commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      runID,
 	}
 
 	context, release, err := p.historyCache.getOrCreateWorkflowExecution(ctx, domainID, execution)
@@ -851,9 +850,9 @@ func (p *replicatorQueueProcessorImpl) isNewRunNDCEnabled(
 	context, release, err := p.historyCache.getOrCreateWorkflowExecution(
 		ctx,
 		domainID,
-		shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
+		commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
 		},
 	)
 	if err != nil {

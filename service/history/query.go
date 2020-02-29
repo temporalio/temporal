@@ -26,9 +26,9 @@ import (
 	"sync/atomic"
 
 	"github.com/pborman/uuid"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
-
-	"github.com/temporalio/temporal/.gen/go/shared"
 )
 
 const (
@@ -49,14 +49,14 @@ type (
 	query interface {
 		getQueryID() string
 		getQueryTermCh() <-chan struct{}
-		getQueryInput() *shared.WorkflowQuery
+		getQueryInput() *commonproto.WorkflowQuery
 		getTerminationState() (*queryTerminationState, error)
 		setTerminationState(*queryTerminationState) error
 	}
 
 	queryImpl struct {
 		id         string
-		queryInput *shared.WorkflowQuery
+		queryInput *commonproto.WorkflowQuery
 		termCh     chan struct{}
 
 		terminationState atomic.Value
@@ -64,12 +64,12 @@ type (
 
 	queryTerminationState struct {
 		queryTerminationType queryTerminationType
-		queryResult          *shared.WorkflowQueryResult
+		queryResult          *commonproto.WorkflowQueryResult
 		failure              error
 	}
 )
 
-func newQuery(queryInput *shared.WorkflowQuery) query {
+func newQuery(queryInput *commonproto.WorkflowQuery) query {
 	return &queryImpl{
 		id:         uuid.New(),
 		queryInput: queryInput,
@@ -85,7 +85,7 @@ func (q *queryImpl) getQueryTermCh() <-chan struct{} {
 	return q.termCh
 }
 
-func (q *queryImpl) getQueryInput() *shared.WorkflowQuery {
+func (q *queryImpl) getQueryInput() *commonproto.WorkflowQuery {
 	return q.queryInput
 }
 
@@ -122,12 +122,12 @@ func (q *queryImpl) validateTerminationState(
 			return errTerminationStateInvalid
 		}
 		queryResult := terminationState.queryResult
-		validAnswered := queryResult.GetResultType().Equals(shared.QueryResultTypeAnswered) &&
+		validAnswered := queryResult.GetResultType() == enums.QueryResultTypeAnswered &&
 			queryResult.Answer != nil &&
-			(queryResult.ErrorMessage == nil || *queryResult.ErrorMessage == "")
-		validFailed := queryResult.GetResultType().Equals(shared.QueryResultTypeFailed) &&
+			queryResult.GetErrorMessage() == ""
+		validFailed := queryResult.GetResultType() == enums.QueryResultTypeFailed &&
 			queryResult.Answer == nil &&
-			(queryResult.ErrorMessage != nil && *queryResult.ErrorMessage != "")
+			queryResult.GetErrorMessage() != ""
 		if !validAnswered && !validFailed {
 			return errTerminationStateInvalid
 		}

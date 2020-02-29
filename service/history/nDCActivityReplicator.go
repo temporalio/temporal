@@ -26,10 +26,10 @@ import (
 	"context"
 	"time"
 
+	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	h "github.com/temporalio/temporal/.gen/go/history"
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
@@ -42,7 +42,7 @@ type (
 	nDCActivityReplicator interface {
 		SyncActivity(
 			ctx context.Context,
-			request *h.SyncActivityRequest,
+			request *historyservice.SyncActivityRequest,
 		) error
 	}
 
@@ -68,7 +68,7 @@ func newNDCActivityReplicator(
 
 func (r *nDCActivityReplicatorImpl) SyncActivity(
 	ctx context.Context,
-	request *h.SyncActivityRequest,
+	request *historyservice.SyncActivityRequest,
 ) (retError error) {
 
 	// sync activity info will only be sent from active side, when
@@ -77,7 +77,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	// no sync activity task will be sent when active side fail / timeout activity,
 	// since standby side does not have activity retry timer
 	domainID := request.GetDomainId()
-	execution := workflow.WorkflowExecution{
+	execution := commonproto.WorkflowExecution{
 		WorkflowId: request.WorkflowId,
 		RunId:      request.RunId,
 	}
@@ -206,7 +206,7 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 	scheduleID int64,
 	activityVersion int64,
 	mutableState mutableState,
-	incomingRawVersionHistory *workflow.VersionHistory,
+	incomingRawVersionHistory *commonproto.VersionHistory,
 ) (bool, error) {
 
 	if mutableState.GetVersionHistories() != nil {
@@ -220,7 +220,7 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 			return false, err
 		}
 
-		incomingVersionHistory := persistence.NewVersionHistoryFromThrift(incomingRawVersionHistory)
+		incomingVersionHistory := persistence.NewVersionHistoryFromProto(incomingRawVersionHistory)
 		lastIncomingItem, err := incomingVersionHistory.GetLastItem()
 		if err != nil {
 			return false, err

@@ -23,9 +23,8 @@ package persistence
 import (
 	"fmt"
 
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
-
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 )
 
 var (
@@ -124,24 +123,24 @@ func validateWorkflowCloseStatus(
 	return nil
 }
 
-// ToThriftWorkflowExecutionCloseStatus convert persistence representation of close status to thrift representation
-func ToThriftWorkflowExecutionCloseStatus(
+// ToProtoWorkflowExecutionCloseStatus convert persistence representation of close status to thrift representation
+func ToProtoWorkflowExecutionCloseStatus(
 	closeStatus int,
-) workflow.WorkflowExecutionCloseStatus {
+) enums.WorkflowExecutionCloseStatus {
 
 	switch closeStatus {
 	case WorkflowCloseStatusCompleted:
-		return workflow.WorkflowExecutionCloseStatusCompleted
+		return enums.WorkflowExecutionCloseStatusCompleted
 	case WorkflowCloseStatusFailed:
-		return workflow.WorkflowExecutionCloseStatusFailed
+		return enums.WorkflowExecutionCloseStatusFailed
 	case WorkflowCloseStatusCanceled:
-		return workflow.WorkflowExecutionCloseStatusCanceled
+		return enums.WorkflowExecutionCloseStatusCanceled
 	case WorkflowCloseStatusTerminated:
-		return workflow.WorkflowExecutionCloseStatusTerminated
+		return enums.WorkflowExecutionCloseStatusTerminated
 	case WorkflowCloseStatusContinuedAsNew:
-		return workflow.WorkflowExecutionCloseStatusContinuedAsNew
+		return enums.WorkflowExecutionCloseStatusContinuedAsNew
 	case WorkflowCloseStatusTimedOut:
-		return workflow.WorkflowExecutionCloseStatusTimedOut
+		return enums.WorkflowExecutionCloseStatusTimedOut
 	default:
 		panic("Invalid value for enum WorkflowExecutionCloseStatus")
 	}

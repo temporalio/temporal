@@ -21,9 +21,10 @@
 package history
 
 import (
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 )
 
@@ -103,7 +104,7 @@ func newWorkflowContext(
 func failDecision(
 	mutableState mutableState,
 	decision *decisionInfo,
-	decisionFailureCause workflow.DecisionTaskFailedCause,
+	decisionFailureCause enums.DecisionTaskFailedCause,
 ) error {
 
 	if _, err := mutableState.AddDecisionTaskFailedEvent(
@@ -143,14 +144,14 @@ func retryWorkflow(
 	mutableState mutableState,
 	eventBatchFirstEventID int64,
 	parentDomainName string,
-	continueAsNewAttributes *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes,
+	continueAsNewAttributes *commonproto.ContinueAsNewWorkflowExecutionDecisionAttributes,
 ) (mutableState, error) {
 
 	if decision, ok := mutableState.GetInFlightDecision(); ok {
 		if err := failDecision(
 			mutableState,
 			decision,
-			workflow.DecisionTaskFailedCauseForceCloseDecision,
+			enums.DecisionTaskFailedCauseForceCloseDecision,
 		); err != nil {
 			return nil, err
 		}
@@ -177,7 +178,7 @@ func timeoutWorkflow(
 		if err := failDecision(
 			mutableState,
 			decision,
-			workflow.DecisionTaskFailedCauseForceCloseDecision,
+			enums.DecisionTaskFailedCauseForceCloseDecision,
 		); err != nil {
 			return err
 		}
@@ -201,7 +202,7 @@ func terminateWorkflow(
 		if err := failDecision(
 			mutableState,
 			decision,
-			workflow.DecisionTaskFailedCauseForceCloseDecision,
+			enums.DecisionTaskFailedCauseForceCloseDecision,
 		); err != nil {
 			return err
 		}

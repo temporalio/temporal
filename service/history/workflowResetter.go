@@ -26,9 +26,11 @@ import (
 	"context"
 	"fmt"
 
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/temporal-proto/workflowservice"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
@@ -54,7 +56,7 @@ type (
 			resetRequestID string,
 			currentWorkflow nDCWorkflow,
 			resetReason string,
-			additionalReapplyEvents []*shared.HistoryEvent,
+			additionalReapplyEvents []*commonproto.HistoryEvent,
 		) error
 	}
 
@@ -104,7 +106,7 @@ func (r *workflowResetterImpl) resetWorkflow(
 	resetRequestID string,
 	currentWorkflow nDCWorkflow,
 	resetReason string,
-	additionalReapplyEvents []*shared.HistoryEvent,
+	additionalReapplyEvents []*commonproto.HistoryEvent,
 ) (retError error) {
 
 	domainEntry, err := r.domainCache.GetDomainByID(domainID)
@@ -166,7 +168,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 	resetRequestID string,
 	resetWorkflowVersion int64,
 	resetReason string,
-	additionalReapplyEvents []*shared.HistoryEvent,
+	additionalReapplyEvents []*commonproto.HistoryEvent,
 ) (nDCWorkflow, error) {
 
 	resetWorkflow, err := r.replayResetWorkflow(
@@ -208,7 +210,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 
 	_, err = resetMutableState.AddDecisionTaskFailedEvent(
 		decision.ScheduleID,
-		decision.StartedID, shared.DecisionTaskFailedCauseResetWorkflow,
+		decision.StartedID, enums.DecisionTaskFailedCauseResetWorkflow,
 		nil,
 		identityHistoryService,
 		resetReason,
@@ -318,9 +320,9 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 
 	resetContext := newWorkflowExecutionContext(
 		domainID,
-		shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(resetRunID),
+		commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      resetRunID,
 		},
 		r.shard,
 		r.shard.GetExecutionManager(),
@@ -377,10 +379,10 @@ func (r *workflowResetterImpl) failInflightActivity(
 			if _, err := mutableState.AddActivityTaskFailedEvent(
 				ai.ScheduleID,
 				ai.StartedID,
-				&shared.RespondActivityTaskFailedRequest{
-					Reason:   common.StringPtr(terminateReason),
+				&workflowservice.RespondActivityTaskFailedRequest{
+					Reason:   terminateReason,
 					Details:  ai.Details,
-					Identity: common.StringPtr(ai.StartedIdentity),
+					Identity: ai.StartedIdentity,
 				},
 			); err != nil {
 				return err
@@ -458,9 +460,9 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 		context, release, err := r.historyCache.getOrCreateWorkflowExecution(
 			ctx,
 			domainID,
-			shared.WorkflowExecution{
-				WorkflowId: common.StringPtr(workflowID),
-				RunId:      common.StringPtr(runID),
+			commonproto.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      runID,
 			},
 		)
 		if err != nil {
@@ -519,14 +521,14 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 	))
 
 	var nextRunID string
-	var lastEvents []*shared.HistoryEvent
+	var lastEvents []*commonproto.HistoryEvent
 
 	for iter.HasNext() {
 		batch, err := iter.Next()
 		if err != nil {
 			return "", err
 		}
-		lastEvents = batch.(*shared.History).Events
+		lastEvents = batch.(*commonproto.History).Events
 		if err := r.reapplyEvents(mutableState, lastEvents); err != nil {
 			return "", err
 		}
@@ -534,7 +536,7 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 
 	if len(lastEvents) > 0 {
 		lastEvent := lastEvents[len(lastEvents)-1]
-		if lastEvent.GetEventType() == shared.EventTypeWorkflowExecutionContinuedAsNew {
+		if lastEvent.GetEventType() == enums.EventTypeWorkflowExecutionContinuedAsNew {
 			nextRunID = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
 		}
 	}
@@ -543,12 +545,12 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 
 func (r *workflowResetterImpl) reapplyEvents(
 	mutableState mutableState,
-	events []*shared.HistoryEvent,
+	events []*commonproto.HistoryEvent,
 ) error {
 
 	for _, event := range events {
 		switch event.GetEventType() {
-		case shared.EventTypeWorkflowExecutionSignaled:
+		case enums.EventTypeWorkflowExecutionSignaled:
 			attr := event.GetWorkflowExecutionSignaledEventAttributes()
 			if _, err := mutableState.AddWorkflowExecutionSignaled(
 				attr.GetSignalName(),

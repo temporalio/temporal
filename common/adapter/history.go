@@ -30,6 +30,17 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 )
 
+func ToProtoHistories(in []*shared.History) []*common.History {
+	if in == nil {
+		return nil
+	}
+	var histories []*common.History
+	for _, history := range in {
+		histories = append(histories, ToProtoHistory(history))
+	}
+	return histories
+}
+
 func ToProtoHistory(in *shared.History) *common.History {
 	if in == nil {
 		return nil

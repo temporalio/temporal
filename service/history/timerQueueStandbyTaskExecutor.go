@@ -25,9 +25,9 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
@@ -210,7 +210,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 		if err != nil {
 			return nil, err
 		}
-		isHeartBeatTask := timerTask.TimeoutType == int32(workflow.TimeoutTypeHeartbeat)
+		isHeartBeatTask := timerTask.TimeoutType == int32(enums.TimeoutTypeHeartbeat)
 		if activityInfo, ok := mutableState.GetActivityInfo(timerTask.EventID); isHeartBeatTask && ok {
 			activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ timerTaskStatusCreatedHeartbeat
 			if err := mutableState.UpdateActivity(activityInfo); err != nil {
@@ -263,7 +263,7 @@ func (t *timerQueueStandbyTaskExecutor) executeDecisionTimeoutTask(
 	// decision schedule to start timer task is a special snowflake.
 	// the schedule to start timer is for sticky decision, which is
 	// not applicable on the passive cluster
-	if taskInfo.task.(*persistenceblobs.TimerTaskInfo).TimeoutType == int32(workflow.TimeoutTypeScheduleToStart) {
+	if taskInfo.task.(*persistenceblobs.TimerTaskInfo).TimeoutType == int32(enums.TimeoutTypeScheduleToStart) {
 		return nil
 	}
 
