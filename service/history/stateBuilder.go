@@ -135,7 +135,7 @@ func (b *stateBuilderImpl) applyEvents(
 		switch event.GetEventType() {
 		case enums.EventTypeWorkflowExecutionStarted:
 			attributes := event.GetWorkflowExecutionStartedEventAttributes()
-			var parentDomainID *string
+			var parentDomainID string
 			if attributes.GetParentWorkflowDomain() != "" {
 				parentDomainEntry, err := b.domainCache.GetDomain(
 					attributes.GetParentWorkflowDomain(),
@@ -143,7 +143,7 @@ func (b *stateBuilderImpl) applyEvents(
 				if err != nil {
 					return nil, err
 				}
-				parentDomainID = &parentDomainEntry.GetInfo().ID
+				parentDomainID = parentDomainEntry.GetInfo().ID
 			}
 
 			if err := b.mutableState.ReplicateWorkflowExecutionStartedEvent(
