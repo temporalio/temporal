@@ -29,13 +29,11 @@ package history
 
 import (
 	context "context"
+	gomock "github.com/golang/mock/gomock"
+	persistence "github.com/temporalio/temporal/common/persistence"
+	common "go.temporal.io/temporal-proto/common"
 	reflect "reflect"
 	time "time"
-
-	gomock "github.com/golang/mock/gomock"
-
-	shared "github.com/temporalio/temporal/.gen/go/shared"
-	persistence "github.com/temporalio/temporal/common/persistence"
 )
 
 // MockworkflowExecutionContext is a mock of workflowExecutionContext interface
@@ -90,10 +88,10 @@ func (mr *MockworkflowExecutionContextMockRecorder) getDomainID() *gomock.Call {
 }
 
 // getExecution mocks base method
-func (m *MockworkflowExecutionContext) getExecution() *shared.WorkflowExecution {
+func (m *MockworkflowExecutionContext) getExecution() *common.WorkflowExecution {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "getExecution")
-	ret0, _ := ret[0].(*shared.WorkflowExecution)
+	ret0, _ := ret[0].(*common.WorkflowExecution)
 	return ret0
 }
 

@@ -28,9 +28,8 @@
 package cache
 
 import (
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
+	reflect "reflect"
 )
 
 // MockDomainCache is a mock of DomainCache interface

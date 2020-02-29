@@ -28,11 +28,9 @@
 package history
 
 import (
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
-
-	shared "github.com/temporalio/temporal/.gen/go/shared"
+	common "go.temporal.io/temporal-proto/common"
+	reflect "reflect"
 )
 
 // MockeventsCache is a mock of eventsCache interface
@@ -59,10 +57,10 @@ func (m *MockeventsCache) EXPECT() *MockeventsCacheMockRecorder {
 }
 
 // getEvent mocks base method
-func (m *MockeventsCache) getEvent(domainID, workflowID, runID string, firstEventID, eventID int64, branchToken []byte) (*shared.HistoryEvent, error) {
+func (m *MockeventsCache) getEvent(domainID, workflowID, runID string, firstEventID, eventID int64, branchToken []byte) (*common.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "getEvent", domainID, workflowID, runID, firstEventID, eventID, branchToken)
-	ret0, _ := ret[0].(*shared.HistoryEvent)
+	ret0, _ := ret[0].(*common.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -74,7 +72,7 @@ func (mr *MockeventsCacheMockRecorder) getEvent(domainID, workflowID, runID, fir
 }
 
 // putEvent mocks base method
-func (m *MockeventsCache) putEvent(domainID, workflowID, runID string, eventID int64, event *shared.HistoryEvent) {
+func (m *MockeventsCache) putEvent(domainID, workflowID, runID string, eventID int64, event *common.HistoryEvent) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "putEvent", domainID, workflowID, runID, eventID, event)
 }

@@ -28,9 +28,8 @@
 package filestore
 
 import (
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
+	reflect "reflect"
 )
 
 // MockQueryParser is a mock of QueryParser interface

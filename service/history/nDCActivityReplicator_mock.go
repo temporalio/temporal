@@ -29,11 +29,9 @@ package history
 
 import (
 	context "context"
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
-
-	history "github.com/temporalio/temporal/.gen/go/history"
+	historyservice "github.com/temporalio/temporal/.gen/proto/historyservice"
+	reflect "reflect"
 )
 
 // MocknDCActivityReplicator is a mock of nDCActivityReplicator interface
@@ -60,7 +58,7 @@ func (m *MocknDCActivityReplicator) EXPECT() *MocknDCActivityReplicatorMockRecor
 }
 
 // SyncActivity mocks base method
-func (m *MocknDCActivityReplicator) SyncActivity(ctx context.Context, request *history.SyncActivityRequest) error {
+func (m *MocknDCActivityReplicator) SyncActivity(ctx context.Context, request *historyservice.SyncActivityRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SyncActivity", ctx, request)
 	ret0, _ := ret[0].(error)

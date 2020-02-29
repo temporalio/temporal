@@ -28,10 +28,9 @@
 package domain
 
 import (
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
 	common "go.temporal.io/temporal-proto/common"
+	reflect "reflect"
 )
 
 // MockReplicationTaskExecutor is a mock of ReplicationTaskExecutor interface
