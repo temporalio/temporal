@@ -33,18 +33,21 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/temporal-proto/workflowservice"
 
-	h "github.com/temporalio/temporal/.gen/go/history"
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/mocks"
-	p "github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/persistence"
 )
 
 type (
@@ -101,7 +104,7 @@ func (s *resetorSuite) SetupTest() {
 
 	s.mockShard = newTestShardContext(
 		s.controller,
-		&p.ShardInfoWithFailover{
+		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistenceblobs.ShardInfo{
 				ShardID:          int32(shardID),
 				RangeID:          1,
@@ -152,39 +155,39 @@ func (s *resetorSuite) TearDownTest() {
 
 func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	testDomainEntry := cache.NewLocalDomainCacheEntryForTest(
-		&p.DomainInfo{ID: testDomainID}, &p.DomainConfig{Retention: 1}, "", nil,
+		&persistence.DomainInfo{ID: testDomainID}, &persistence.DomainConfig{Retention: 1}, "", nil,
 	)
 	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
 	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
 
-	request := &h.ResetWorkflowExecutionRequest{}
+	request := &historyservice.ResetWorkflowExecutionRequest{}
 	domainID := testDomainID
-	request.DomainUUID = &domainID
-	request.ResetRequest = &workflow.ResetWorkflowExecutionRequest{}
+	request.DomainUUID = domainID
+	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{}
 
 	wid := "wId"
 	wfType := "wfType"
 	taskListName := "taskList"
 	forkRunID := uuid.New().String()
 	currRunID := uuid.New().String()
-	we := workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(wid),
-		RunId:      common.StringPtr(forkRunID),
+	we := commonproto.WorkflowExecution{
+		WorkflowId: wid,
+		RunId:      forkRunID,
 	}
-	request.ResetRequest = &workflow.ResetWorkflowExecutionRequest{
-		Domain:                common.StringPtr("testDomainName"),
+	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{
+		Domain:                "testDomainName",
 		WorkflowExecution:     &we,
-		Reason:                common.StringPtr("test reset"),
-		DecisionFinishEventId: common.Int64Ptr(29),
-		RequestId:             common.StringPtr(uuid.New().String()),
+		Reason:                "test reset",
+		DecisionFinishEventId: 29,
+		RequestId:             uuid.New().String(),
 	}
 
-	forkGwmsRequest := &p.GetWorkflowExecutionRequest{
+	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: workflow.WorkflowExecution{
-			WorkflowId: common.StringPtr(wid),
-			RunId:      common.StringPtr(forkRunID),
-		},
+		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      forkRunID,
+		}),
 	}
 
 	timerFiredID := "timerID0"
@@ -200,7 +203,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 		"sig1"
 	signalName2 := "sig2"
 	forkBranchToken := []byte("forkBranchToken")
-	forkExeInfo := &p.WorkflowExecutionInfo{
+	forkExeInfo := &persistence.WorkflowExecutionInfo{
 		DomainID:           domainID,
 		WorkflowID:         wid,
 		WorkflowTypeName:   wfType,
@@ -212,19 +215,19 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
 	}
-	forkGwmsResponse := &p.GetWorkflowExecutionResponse{State: &p.WorkflowMutableState{
+	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:  forkExeInfo,
-		ExecutionStats: &p.ExecutionStats{},
+		ExecutionStats: &persistence.ExecutionStats{},
 	}}
 
-	currGwmsRequest := &p.GetWorkflowExecutionRequest{
+	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: workflow.WorkflowExecution{
-			WorkflowId: common.StringPtr(wid),
-			RunId:      common.StringPtr(currRunID),
-		},
+		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      currRunID,
+		}),
 	}
-	currExeInfo := &p.WorkflowExecutionInfo{
+	currExeInfo := &persistence.WorkflowExecutionInfo{
 		DomainID:           domainID,
 		WorkflowID:         wid,
 		WorkflowTypeName:   wfType,
@@ -236,471 +239,472 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 		DecisionStartedID:  common.EmptyEventID,
 	}
 	compareCurrExeInfo := copyWorkflowExecutionInfo(currExeInfo)
-	currGwmsResponse := &p.GetWorkflowExecutionResponse{State: &p.WorkflowMutableState{
+	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:  currExeInfo,
-		ExecutionStats: &p.ExecutionStats{},
+		ExecutionStats: &persistence.ExecutionStats{},
 	}}
 
-	gcurResponse := &p.GetCurrentExecutionResponse{
+	gcurResponse := &persistence.GetCurrentExecutionResponse{
 		RunID: currRunID,
 	}
 
-	readHistoryReq := &p.ReadHistoryBranchRequest{
+	readHistoryReq := &persistence.ReadHistoryBranchRequest{
 		BranchToken:   forkBranchToken,
 		MinEventID:    common.FirstEventID,
 		MaxEventID:    int64(34),
 		PageSize:      defaultHistoryPageSize,
 		NextPageToken: nil,
-		ShardID:       common.IntPtr(s.shardID),
+		ShardID:       &s.shardID,
 	}
 
-	taskList := &workflow.TaskList{
-		Name: common.StringPtr(taskListName),
+	taskList := &commonproto.TaskList{
+		Name: taskListName,
 	}
-	readHistoryResp := &p.ReadHistoryBranchByBatchResponse{
+	readHistoryResp := &persistence.ReadHistoryBranchByBatchResponse{
 		NextPageToken:    nil,
 		Size:             1000,
 		LastFirstEventID: int64(31),
-		History: []*workflow.History{
-			&workflow.History{
-				Events: []*workflow.HistoryEvent{
-					&workflow.HistoryEvent{
-						EventId:   common.Int64Ptr(1),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeWorkflowExecutionStarted),
-						WorkflowExecutionStartedEventAttributes: &workflow.WorkflowExecutionStartedEventAttributes{
-							WorkflowType: &workflow.WorkflowType{
-								Name: common.StringPtr(wfType),
+		History: adapter.ToThriftHistories([]*commonproto.History{
+			{
+				Events: []*commonproto.HistoryEvent{
+					{
+						EventId:   1,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeWorkflowExecutionStarted,
+						Attributes: &commonproto.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &commonproto.WorkflowExecutionStartedEventAttributes{
+							WorkflowType: &commonproto.WorkflowType{
+								Name: wfType,
 							},
 							TaskList:                            taskList,
 							Input:                               []byte("testInput"),
-							ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
-							TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(200),
-						},
+							ExecutionStartToCloseTimeoutSeconds: 100,
+							TaskStartToCloseTimeoutSeconds:      200,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(2),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskScheduled),
-						DecisionTaskScheduledEventAttributes: &workflow.DecisionTaskScheduledEventAttributes{
+						EventId:   2,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeDecisionTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
-							StartToCloseTimeoutSeconds: common.Int32Ptr(100),
-						},
+							StartToCloseTimeoutSeconds: 100,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(3),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskStarted),
-						DecisionTaskStartedEventAttributes: &workflow.DecisionTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(2),
-						},
+						EventId:   3,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeDecisionTaskStarted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+							ScheduledEventId: 2,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(4),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskCompleted),
-						DecisionTaskCompletedEventAttributes: &workflow.DecisionTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(2),
-							StartedEventId:   common.Int64Ptr(3),
-						},
+						EventId:   4,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeDecisionTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+							ScheduledEventId: 2,
+							StartedEventId:   3,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(5),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeMarkerRecorded),
-						MarkerRecordedEventAttributes: &workflow.MarkerRecordedEventAttributes{
-							MarkerName:                   common.StringPtr("Version"),
+						EventId:   5,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeMarkerRecorded,
+						Attributes: &commonproto.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &commonproto.MarkerRecordedEventAttributes{
+							MarkerName:                   "Version",
 							Details:                      []byte("details"),
-							DecisionTaskCompletedEventId: common.Int64Ptr(4),
-						},
+							DecisionTaskCompletedEventId: 4,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(6),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskScheduled),
-						ActivityTaskScheduledEventAttributes: &workflow.ActivityTaskScheduledEventAttributes{
-							ActivityId: common.StringPtr(actIDCompleted1),
-							ActivityType: &workflow.ActivityType{
-								Name: common.StringPtr("actType0"),
+						EventId:   6,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeActivityTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+							ActivityId: actIDCompleted1,
+							ActivityType: &commonproto.ActivityType{
+								Name: "actType0",
 							},
 							TaskList:                      taskList,
-							ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1000),
-							ScheduleToStartTimeoutSeconds: common.Int32Ptr(2000),
-							StartToCloseTimeoutSeconds:    common.Int32Ptr(3000),
-							HeartbeatTimeoutSeconds:       common.Int32Ptr(4000),
-							DecisionTaskCompletedEventId:  common.Int64Ptr(4),
-						},
+							ScheduleToCloseTimeoutSeconds: 1000,
+							ScheduleToStartTimeoutSeconds: 2000,
+							StartToCloseTimeoutSeconds:    3000,
+							HeartbeatTimeoutSeconds:       4000,
+							DecisionTaskCompletedEventId:  4,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(7),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeTimerStarted),
-						TimerStartedEventAttributes: &workflow.TimerStartedEventAttributes{
-							TimerId:                      common.StringPtr(timerFiredID),
-							StartToFireTimeoutSeconds:    common.Int64Ptr(2),
-							DecisionTaskCompletedEventId: common.Int64Ptr(4),
-						},
-					},
-				},
-			},
-			{
-				Events: []*workflow.HistoryEvent{
-					{
-						EventId:   common.Int64Ptr(8),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskStarted),
-						ActivityTaskStartedEventAttributes: &workflow.ActivityTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(6),
-						},
+						EventId:   7,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeTimerStarted,
+						Attributes: &commonproto.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &commonproto.TimerStartedEventAttributes{
+							TimerId:                      timerFiredID,
+							StartToFireTimeoutSeconds:    2,
+							DecisionTaskCompletedEventId: 4,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(9),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskCompleted),
-						ActivityTaskCompletedEventAttributes: &workflow.ActivityTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(6),
-							StartedEventId:   common.Int64Ptr(8),
-						},
+						EventId:   8,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeActivityTaskStarted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{
+							ScheduledEventId: 6,
+						}},
+					},
+				},
+			},
+			{
+				Events: []*commonproto.HistoryEvent{
+					{
+						EventId:   9,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeActivityTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: &commonproto.ActivityTaskCompletedEventAttributes{
+							ScheduledEventId: 6,
+							StartedEventId:   8,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(10),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskScheduled),
-						DecisionTaskScheduledEventAttributes: &workflow.DecisionTaskScheduledEventAttributes{
+						EventId:   10,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeDecisionTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
-							StartToCloseTimeoutSeconds: common.Int32Ptr(100),
-						},
+							StartToCloseTimeoutSeconds: 100,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(11),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskStarted),
-						DecisionTaskStartedEventAttributes: &workflow.DecisionTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(10),
-						},
+						EventId:   11,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeDecisionTaskStarted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+							ScheduledEventId: 10,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(12),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskCompleted),
-						DecisionTaskCompletedEventAttributes: &workflow.DecisionTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(10),
-							StartedEventId:   common.Int64Ptr(11),
-						},
+						EventId:   12,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeDecisionTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+							ScheduledEventId: 10,
+							StartedEventId:   11,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(13),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeTimerFired),
-						TimerFiredEventAttributes: &workflow.TimerFiredEventAttributes{
-							TimerId: common.StringPtr(timerFiredID),
-						},
+						EventId:   13,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeTimerFired,
+						Attributes: &commonproto.HistoryEvent_TimerFiredEventAttributes{TimerFiredEventAttributes: &commonproto.TimerFiredEventAttributes{
+							TimerId: timerFiredID,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(14),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskScheduled),
-						DecisionTaskScheduledEventAttributes: &workflow.DecisionTaskScheduledEventAttributes{
+						EventId:   14,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeDecisionTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
-							StartToCloseTimeoutSeconds: common.Int32Ptr(100),
-						},
+							StartToCloseTimeoutSeconds: 100,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(15),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskStarted),
-						DecisionTaskStartedEventAttributes: &workflow.DecisionTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(14),
-						},
+						EventId:   15,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeDecisionTaskStarted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+							ScheduledEventId: 14,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(16),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskCompleted),
-						DecisionTaskCompletedEventAttributes: &workflow.DecisionTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(14),
-							StartedEventId:   common.Int64Ptr(15),
-						},
+						EventId:   16,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeDecisionTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+							ScheduledEventId: 14,
+							StartedEventId:   15,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(17),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskScheduled),
-						ActivityTaskScheduledEventAttributes: &workflow.ActivityTaskScheduledEventAttributes{
-							ActivityId: common.StringPtr(actIDStarted1),
-							ActivityType: &workflow.ActivityType{
-								Name: common.StringPtr("actType1"),
+						EventId:   17,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeActivityTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+							ActivityId: actIDStarted1,
+							ActivityType: &commonproto.ActivityType{
+								Name: "actType1",
 							},
 							TaskList:                      taskList,
-							ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1000),
-							ScheduleToStartTimeoutSeconds: common.Int32Ptr(2000),
-							StartToCloseTimeoutSeconds:    common.Int32Ptr(3000),
-							HeartbeatTimeoutSeconds:       common.Int32Ptr(4000),
-							DecisionTaskCompletedEventId:  common.Int64Ptr(16),
-							RetryPolicy: &workflow.RetryPolicy{
-								InitialIntervalInSeconds:    common.Int32Ptr(1),
-								BackoffCoefficient:          common.Float64Ptr(0.2),
-								MaximumAttempts:             common.Int32Ptr(10),
-								MaximumIntervalInSeconds:    common.Int32Ptr(1000),
-								ExpirationIntervalInSeconds: common.Int32Ptr(math.MaxInt32),
+							ScheduleToCloseTimeoutSeconds: 1000,
+							ScheduleToStartTimeoutSeconds: 2000,
+							StartToCloseTimeoutSeconds:    3000,
+							HeartbeatTimeoutSeconds:       4000,
+							DecisionTaskCompletedEventId:  16,
+							RetryPolicy: &commonproto.RetryPolicy{
+								InitialIntervalInSeconds:    1,
+								BackoffCoefficient:          0.2,
+								MaximumAttempts:             10,
+								MaximumIntervalInSeconds:    1000,
+								ExpirationIntervalInSeconds: math.MaxInt32,
 							},
-						},
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(18),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskScheduled),
-						ActivityTaskScheduledEventAttributes: &workflow.ActivityTaskScheduledEventAttributes{
-							ActivityId: common.StringPtr(actIDNotStarted),
-							ActivityType: &workflow.ActivityType{
-								Name: common.StringPtr("actType2"),
-							},
-							TaskList:                      taskList,
-							ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1000),
-							ScheduleToStartTimeoutSeconds: common.Int32Ptr(2000),
-							StartToCloseTimeoutSeconds:    common.Int32Ptr(3000),
-							HeartbeatTimeoutSeconds:       common.Int32Ptr(4000),
-							DecisionTaskCompletedEventId:  common.Int64Ptr(16),
-						},
-					},
-					{
-						EventId:   common.Int64Ptr(19),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeTimerStarted),
-						TimerStartedEventAttributes: &workflow.TimerStartedEventAttributes{
-							TimerId:                      common.StringPtr(timerUnfiredID1),
-							StartToFireTimeoutSeconds:    common.Int64Ptr(4),
-							DecisionTaskCompletedEventId: common.Int64Ptr(16),
-						},
-					},
-					{
-						EventId:   common.Int64Ptr(20),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeTimerStarted),
-						TimerStartedEventAttributes: &workflow.TimerStartedEventAttributes{
-							TimerId:                      common.StringPtr(timerUnfiredID2),
-							StartToFireTimeoutSeconds:    common.Int64Ptr(8),
-							DecisionTaskCompletedEventId: common.Int64Ptr(16),
-						},
-					},
-					{
-						EventId:   common.Int64Ptr(21),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskScheduled),
-						ActivityTaskScheduledEventAttributes: &workflow.ActivityTaskScheduledEventAttributes{
-							ActivityId: common.StringPtr(actIDCompleted2),
-							ActivityType: &workflow.ActivityType{
-								Name: common.StringPtr("actType2"),
+						EventId:   18,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeActivityTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+							ActivityId: actIDNotStarted,
+							ActivityType: &commonproto.ActivityType{
+								Name: "actType2",
 							},
 							TaskList:                      taskList,
-							ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1000),
-							ScheduleToStartTimeoutSeconds: common.Int32Ptr(2000),
-							StartToCloseTimeoutSeconds:    common.Int32Ptr(3000),
-							HeartbeatTimeoutSeconds:       common.Int32Ptr(4000),
-							DecisionTaskCompletedEventId:  common.Int64Ptr(16),
-						},
+							ScheduleToCloseTimeoutSeconds: 1000,
+							ScheduleToStartTimeoutSeconds: 2000,
+							StartToCloseTimeoutSeconds:    3000,
+							HeartbeatTimeoutSeconds:       4000,
+							DecisionTaskCompletedEventId:  16,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(22),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskScheduled),
-						ActivityTaskScheduledEventAttributes: &workflow.ActivityTaskScheduledEventAttributes{
-							ActivityId: common.StringPtr(actIDStarted2),
-							ActivityType: &workflow.ActivityType{
-								Name: common.StringPtr("actType2"),
+						EventId:   19,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeTimerStarted,
+						Attributes: &commonproto.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &commonproto.TimerStartedEventAttributes{
+							TimerId:                      timerUnfiredID1,
+							StartToFireTimeoutSeconds:    4,
+							DecisionTaskCompletedEventId: 16,
+						}},
+					},
+					{
+						EventId:   20,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeTimerStarted,
+						Attributes: &commonproto.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &commonproto.TimerStartedEventAttributes{
+							TimerId:                      timerUnfiredID2,
+							StartToFireTimeoutSeconds:    8,
+							DecisionTaskCompletedEventId: 16,
+						}},
+					},
+					{
+						EventId:   21,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeActivityTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+							ActivityId: actIDCompleted2,
+							ActivityType: &commonproto.ActivityType{
+								Name: "actType2",
 							},
 							TaskList:                      taskList,
-							ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1000),
-							ScheduleToStartTimeoutSeconds: common.Int32Ptr(2000),
-							StartToCloseTimeoutSeconds:    common.Int32Ptr(3000),
-							HeartbeatTimeoutSeconds:       common.Int32Ptr(4000),
-							DecisionTaskCompletedEventId:  common.Int64Ptr(16),
-						},
+							ScheduleToCloseTimeoutSeconds: 1000,
+							ScheduleToStartTimeoutSeconds: 2000,
+							StartToCloseTimeoutSeconds:    3000,
+							HeartbeatTimeoutSeconds:       4000,
+							DecisionTaskCompletedEventId:  16,
+						}},
+					},
+					{
+						EventId:   22,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeActivityTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+							ActivityId: actIDStarted2,
+							ActivityType: &commonproto.ActivityType{
+								Name: "actType2",
+							},
+							TaskList:                      taskList,
+							ScheduleToCloseTimeoutSeconds: 1000,
+							ScheduleToStartTimeoutSeconds: 2000,
+							StartToCloseTimeoutSeconds:    3000,
+							HeartbeatTimeoutSeconds:       4000,
+							DecisionTaskCompletedEventId:  16,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(23),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskStarted),
-						ActivityTaskStartedEventAttributes: &workflow.ActivityTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(21),
-						},
+						EventId:   23,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeActivityTaskStarted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{
+							ScheduledEventId: 21,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(24),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskStarted),
-						ActivityTaskStartedEventAttributes: &workflow.ActivityTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(17),
-						},
+						EventId:   24,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeActivityTaskStarted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{
+							ScheduledEventId: 17,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(25),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskStarted),
-						ActivityTaskStartedEventAttributes: &workflow.ActivityTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(22),
-						},
+						EventId:   25,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeActivityTaskStarted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{
+							ScheduledEventId: 22,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(26),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskCompleted),
-						ActivityTaskCompletedEventAttributes: &workflow.ActivityTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(21),
-							StartedEventId:   common.Int64Ptr(23),
-						},
+						EventId:   26,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeActivityTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: &commonproto.ActivityTaskCompletedEventAttributes{
+							ScheduledEventId: 21,
+							StartedEventId:   23,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(27),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskScheduled),
-						DecisionTaskScheduledEventAttributes: &workflow.DecisionTaskScheduledEventAttributes{
+						EventId:   27,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeDecisionTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
-							StartToCloseTimeoutSeconds: common.Int32Ptr(100),
-						},
+							StartToCloseTimeoutSeconds: 100,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(28),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskStarted),
-						DecisionTaskStartedEventAttributes: &workflow.DecisionTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(27),
-						},
+						EventId:   28,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeDecisionTaskStarted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+							ScheduledEventId: 27,
+						}},
 					},
 				},
 			},
 			/////////////// reset point/////////////
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(29),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskCompleted),
-						DecisionTaskCompletedEventAttributes: &workflow.DecisionTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(27),
-							StartedEventId:   common.Int64Ptr(28),
-						},
+						EventId:   29,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeDecisionTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+							ScheduledEventId: 27,
+							StartedEventId:   28,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(30),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeTimerStarted),
-						TimerStartedEventAttributes: &workflow.TimerStartedEventAttributes{
-							TimerId:                      common.StringPtr(timerAfterReset),
-							StartToFireTimeoutSeconds:    common.Int64Ptr(4),
-							DecisionTaskCompletedEventId: common.Int64Ptr(29),
-						},
-					},
-				},
-			},
-			{
-				Events: []*workflow.HistoryEvent{
-					{
-						EventId:   common.Int64Ptr(31),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskStarted),
-						ActivityTaskStartedEventAttributes: &workflow.ActivityTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(18),
-						},
+						EventId:   30,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeTimerStarted,
+						Attributes: &commonproto.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &commonproto.TimerStartedEventAttributes{
+							TimerId:                      timerAfterReset,
+							StartToFireTimeoutSeconds:    4,
+							DecisionTaskCompletedEventId: 29,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(32),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeWorkflowExecutionSignaled),
-						WorkflowExecutionSignaledEventAttributes: &workflow.WorkflowExecutionSignaledEventAttributes{
-							SignalName: common.StringPtr(signalName1),
-						},
+						EventId:   31,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeActivityTaskStarted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{
+							ScheduledEventId: 18,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(33),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeWorkflowExecutionSignaled),
-						WorkflowExecutionSignaledEventAttributes: &workflow.WorkflowExecutionSignaledEventAttributes{
-							SignalName: common.StringPtr(signalName2),
-						},
+						EventId:   32,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeWorkflowExecutionSignaled,
+						Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+							SignalName: signalName1,
+						}},
 					},
 				},
 			},
-		},
+			{
+				Events: []*commonproto.HistoryEvent{
+					{
+						EventId:   33,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeWorkflowExecutionSignaled,
+						Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+							SignalName: signalName2,
+						}},
+					},
+				},
+			},
+		}),
 	}
 
 	eid := int64(0)
+	timestamp := int64(1000)
 	for _, be := range readHistoryResp.History {
 		for _, e := range be.Events {
 			eid++
 			if e.GetEventId() != eid {
 				s.Fail(fmt.Sprintf("inconintous eventID: %v, %v", eid, e.GetEventId()))
 			}
-			e.Timestamp = common.Int64Ptr(1000)
+			e.Timestamp = &timestamp
 		}
 	}
 
 	newBranchToken := []byte("newBranch")
-	forkResp := &p.ForkHistoryBranchResponse{
+	forkResp := &persistence.ForkHistoryBranchResponse{
 		NewBranchToken: newBranchToken,
 	}
 
-	appendV2Resp := &p.AppendHistoryNodesResponse{
+	appendV2Resp := &persistence.AppendHistoryNodesResponse{
 		Size: 200,
 	}
 
@@ -725,17 +729,17 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	s.Equal(4, len(calls))
 	appendCall := calls[3]
 	s.Equal("AppendHistoryNodes", appendCall.Method)
-	appendReq, ok := appendCall.Arguments[0].(*p.AppendHistoryNodesRequest)
+	appendReq, ok := appendCall.Arguments[0].(*persistence.AppendHistoryNodesRequest)
 	s.Equal(true, ok)
 	s.Equal(newBranchToken, appendReq.BranchToken)
 	s.Equal(false, appendReq.IsNewBranch)
 	s.Equal(6, len(appendReq.Events))
-	s.Equal(workflow.EventTypeDecisionTaskFailed, appendReq.Events[0].GetEventType())
-	s.Equal(workflow.EventTypeActivityTaskFailed, appendReq.Events[1].GetEventType())
-	s.Equal(workflow.EventTypeActivityTaskFailed, appendReq.Events[2].GetEventType())
-	s.Equal(workflow.EventTypeWorkflowExecutionSignaled, appendReq.Events[3].GetEventType())
-	s.Equal(workflow.EventTypeWorkflowExecutionSignaled, appendReq.Events[4].GetEventType())
-	s.Equal(workflow.EventTypeDecisionTaskScheduled, appendReq.Events[5].GetEventType())
+	s.Equal(enums.EventTypeDecisionTaskFailed, enums.EventType(appendReq.Events[0].GetEventType()))
+	s.Equal(enums.EventTypeActivityTaskFailed, enums.EventType(appendReq.Events[1].GetEventType()))
+	s.Equal(enums.EventTypeActivityTaskFailed, enums.EventType(appendReq.Events[2].GetEventType()))
+	s.Equal(enums.EventTypeWorkflowExecutionSignaled, enums.EventType(appendReq.Events[3].GetEventType()))
+	s.Equal(enums.EventTypeWorkflowExecutionSignaled, enums.EventType(appendReq.Events[4].GetEventType()))
+	s.Equal(enums.EventTypeDecisionTaskScheduled, enums.EventType(appendReq.Events[5].GetEventType()))
 
 	s.Equal(int64(29), appendReq.Events[0].GetEventId())
 	s.Equal(int64(30), appendReq.Events[1].GetEventId())
@@ -749,20 +753,20 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 	s.Equal(4, len(calls))
 	resetCall := calls[3]
 	s.Equal("ResetWorkflowExecution", resetCall.Method)
-	resetReq, ok := resetCall.Arguments[0].(*p.ResetWorkflowExecutionRequest)
+	resetReq, ok := resetCall.Arguments[0].(*persistence.ResetWorkflowExecutionRequest)
 	s.True(resetReq.CurrentWorkflowMutation.ExecutionInfo.LastEventTaskID > 0)
 	resetReq.CurrentWorkflowMutation.ExecutionInfo.LastEventTaskID = 0
 	s.Equal(true, ok)
 	s.Equal(true, resetReq.CurrentWorkflowMutation != nil)
-	compareCurrExeInfo.State = p.WorkflowStateCompleted
-	compareCurrExeInfo.CloseStatus = p.WorkflowCloseStatusTerminated
+	compareCurrExeInfo.State = persistence.WorkflowStateCompleted
+	compareCurrExeInfo.CloseStatus = persistence.WorkflowCloseStatusTerminated
 	compareCurrExeInfo.NextEventID = 2
 	compareCurrExeInfo.CompletionEventBatchID = 1
 	s.Equal(compareCurrExeInfo, resetReq.CurrentWorkflowMutation.ExecutionInfo)
 	s.Equal(1, len(resetReq.CurrentWorkflowMutation.TransferTasks))
 	s.Equal(1, len(resetReq.CurrentWorkflowMutation.TimerTasks))
-	s.Equal(p.TransferTaskTypeCloseExecution, resetReq.CurrentWorkflowMutation.TransferTasks[0].GetType())
-	s.Equal(p.TaskTypeDeleteHistoryEvent, resetReq.CurrentWorkflowMutation.TimerTasks[0].GetType())
+	s.Equal(persistence.TransferTaskTypeCloseExecution, resetReq.CurrentWorkflowMutation.TransferTasks[0].GetType())
+	s.Equal(persistence.TaskTypeDeleteHistoryEvent, resetReq.CurrentWorkflowMutation.TimerTasks[0].GetType())
 	s.Equal(int64(200), resetReq.CurrentWorkflowMutation.ExecutionStats.HistorySize)
 
 	s.Equal("wfType", resetReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowTypeName)
@@ -774,15 +778,15 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 
 	// one activity task, one decision task and one record workflow started task
 	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TransferTasks))
-	s.Equal(p.TransferTaskTypeActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[0].GetType())
-	s.Equal(p.TransferTaskTypeDecisionTask, resetReq.NewWorkflowSnapshot.TransferTasks[1].GetType())
-	s.Equal(p.TransferTaskTypeRecordWorkflowStarted, resetReq.NewWorkflowSnapshot.TransferTasks[2].GetType())
+	s.Equal(persistence.TransferTaskTypeActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[0].GetType())
+	s.Equal(persistence.TransferTaskTypeDecisionTask, resetReq.NewWorkflowSnapshot.TransferTasks[1].GetType())
+	s.Equal(persistence.TransferTaskTypeRecordWorkflowStarted, resetReq.NewWorkflowSnapshot.TransferTasks[2].GetType())
 
 	// WF timeout task, user timer, activity timeout timer, activity retry timer
 	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TimerTasks))
-	s.Equal(p.TaskTypeWorkflowTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
-	s.Equal(p.TaskTypeUserTimer, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
-	s.Equal(p.TaskTypeActivityTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
+	s.Equal(persistence.TaskTypeWorkflowTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
+	s.Equal(persistence.TaskTypeUserTimer, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
+	s.Equal(persistence.TaskTypeActivityTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
 
 	s.Equal(2, len(resetReq.NewWorkflowSnapshot.TimerInfos))
 	s.assertTimerIDs([]string{timerUnfiredID1, timerUnfiredID2}, resetReq.NewWorkflowSnapshot.TimerInfos)
@@ -813,7 +817,7 @@ func (s *resetorSuite) assertTimerIDs(ids []string, timers []*persistenceblobs.T
 	s.Equal(0, len(m))
 }
 
-func (s *resetorSuite) assertActivityIDs(ids []string, timers []*p.ActivityInfo) {
+func (s *resetorSuite) assertActivityIDs(ids []string, timers []*persistence.ActivityInfo) {
 	m := map[string]bool{}
 	for _, s := range ids {
 		m[s] = true
@@ -828,39 +832,39 @@ func (s *resetorSuite) assertActivityIDs(ids []string, timers []*p.ActivityInfo)
 
 func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCancel() {
 	testDomainEntry := cache.NewLocalDomainCacheEntryForTest(
-		&p.DomainInfo{ID: testDomainID}, &p.DomainConfig{Retention: 1}, "", nil,
+		&persistence.DomainInfo{ID: testDomainID}, &persistence.DomainConfig{Retention: 1}, "", nil,
 	)
 	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
 	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
 
-	request := &h.ResetWorkflowExecutionRequest{}
+	request := &historyservice.ResetWorkflowExecutionRequest{}
 	domainID := testDomainID
-	request.DomainUUID = &domainID
-	request.ResetRequest = &workflow.ResetWorkflowExecutionRequest{}
+	request.DomainUUID = domainID
+	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{}
 
 	wid := "wId"
 	wfType := "wfType"
 	taskListName := "taskList"
 	forkRunID := uuid.New().String()
 	currRunID := uuid.New().String()
-	we := workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(wid),
-		RunId:      common.StringPtr(forkRunID),
+	we := commonproto.WorkflowExecution{
+		WorkflowId: wid,
+		RunId:      forkRunID,
 	}
-	request.ResetRequest = &workflow.ResetWorkflowExecutionRequest{
-		Domain:                common.StringPtr("testDomainName"),
+	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{
+		Domain:                "testDomainName",
 		WorkflowExecution:     &we,
-		Reason:                common.StringPtr("test reset"),
-		DecisionFinishEventId: common.Int64Ptr(30),
-		RequestId:             common.StringPtr(uuid.New().String()),
+		Reason:                "test reset",
+		DecisionFinishEventId: 30,
+		RequestId:             uuid.New().String(),
 	}
 
-	forkGwmsRequest := &p.GetWorkflowExecutionRequest{
+	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: workflow.WorkflowExecution{
-			WorkflowId: common.StringPtr(wid),
-			RunId:      common.StringPtr(forkRunID),
-		},
+		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      forkRunID,
+		}),
 	}
 
 	timerFiredID := "timerID0"
@@ -874,12 +878,12 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 	actIDStartedNoRetry := "actID4"
 	signalName1 := "sig1"
 	signalName2 := "sig2"
-	cancelWE := &workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr("cancel-wfid"),
-		RunId:      common.StringPtr(uuid.New().String()),
+	cancelWE := &commonproto.WorkflowExecution{
+		WorkflowId: "cancel-wfid",
+		RunId:      uuid.New().String(),
 	}
 	forkBranchToken := []byte("forkBranchToken")
-	forkExeInfo := &p.WorkflowExecutionInfo{
+	forkExeInfo := &persistence.WorkflowExecutionInfo{
 		DomainID:           domainID,
 		WorkflowID:         wid,
 		WorkflowTypeName:   wfType,
@@ -891,19 +895,19 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
 	}
-	forkGwmsResponse := &p.GetWorkflowExecutionResponse{State: &p.WorkflowMutableState{
+	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:  forkExeInfo,
-		ExecutionStats: &p.ExecutionStats{},
+		ExecutionStats: &persistence.ExecutionStats{},
 	}}
 
-	currGwmsRequest := &p.GetWorkflowExecutionRequest{
+	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: workflow.WorkflowExecution{
-			WorkflowId: common.StringPtr(wid),
-			RunId:      common.StringPtr(currRunID),
-		},
+		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      currRunID,
+		}),
 	}
-	currExeInfo := &p.WorkflowExecutionInfo{
+	currExeInfo := &persistence.WorkflowExecutionInfo{
 		DomainID:           domainID,
 		WorkflowID:         wid,
 		WorkflowTypeName:   wfType,
@@ -914,473 +918,474 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
 	}
-	currGwmsResponse := &p.GetWorkflowExecutionResponse{State: &p.WorkflowMutableState{
+	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:  currExeInfo,
-		ExecutionStats: &p.ExecutionStats{},
+		ExecutionStats: &persistence.ExecutionStats{},
 	}}
 
-	gcurResponse := &p.GetCurrentExecutionResponse{
+	gcurResponse := &persistence.GetCurrentExecutionResponse{
 		RunID: currRunID,
 	}
 
-	readHistoryReq := &p.ReadHistoryBranchRequest{
+	readHistoryReq := &persistence.ReadHistoryBranchRequest{
 		BranchToken:   forkBranchToken,
 		MinEventID:    common.FirstEventID,
 		MaxEventID:    int64(35),
 		PageSize:      defaultHistoryPageSize,
 		NextPageToken: nil,
-		ShardID:       common.IntPtr(s.shardID),
+		ShardID:       &s.shardID,
 	}
 
-	taskList := &workflow.TaskList{
-		Name: common.StringPtr(taskListName),
+	taskList := &commonproto.TaskList{
+		Name: taskListName,
 	}
-	readHistoryResp := &p.ReadHistoryBranchByBatchResponse{
+	readHistoryResp := &persistence.ReadHistoryBranchByBatchResponse{
 		NextPageToken:    nil,
 		Size:             1000,
 		LastFirstEventID: int64(31),
-		History: []*workflow.History{
-			&workflow.History{
-				Events: []*workflow.HistoryEvent{
-					&workflow.HistoryEvent{
-						EventId:   common.Int64Ptr(1),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeWorkflowExecutionStarted),
-						WorkflowExecutionStartedEventAttributes: &workflow.WorkflowExecutionStartedEventAttributes{
-							WorkflowType: &workflow.WorkflowType{
-								Name: common.StringPtr(wfType),
+		History: adapter.ToThriftHistories([]*commonproto.History{
+			{
+				Events: []*commonproto.HistoryEvent{
+					{
+						EventId:   1,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeWorkflowExecutionStarted,
+						Attributes: &commonproto.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &commonproto.WorkflowExecutionStartedEventAttributes{
+							WorkflowType: &commonproto.WorkflowType{
+								Name: wfType,
 							},
 							TaskList:                            taskList,
 							Input:                               []byte("testInput"),
-							ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
-							TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(200),
-						},
+							ExecutionStartToCloseTimeoutSeconds: 100,
+							TaskStartToCloseTimeoutSeconds:      200,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(2),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskScheduled),
-						DecisionTaskScheduledEventAttributes: &workflow.DecisionTaskScheduledEventAttributes{
+						EventId:   2,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeDecisionTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
-							StartToCloseTimeoutSeconds: common.Int32Ptr(100),
-						},
+							StartToCloseTimeoutSeconds: 100,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(3),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskStarted),
-						DecisionTaskStartedEventAttributes: &workflow.DecisionTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(2),
-						},
+						EventId:   3,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeDecisionTaskStarted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+							ScheduledEventId: 2,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(4),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskCompleted),
-						DecisionTaskCompletedEventAttributes: &workflow.DecisionTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(2),
-							StartedEventId:   common.Int64Ptr(3),
-						},
+						EventId:   4,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeDecisionTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+							ScheduledEventId: 2,
+							StartedEventId:   3,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(5),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeMarkerRecorded),
-						MarkerRecordedEventAttributes: &workflow.MarkerRecordedEventAttributes{
-							MarkerName:                   common.StringPtr("Version"),
+						EventId:   5,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeMarkerRecorded,
+						Attributes: &commonproto.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &commonproto.MarkerRecordedEventAttributes{
+							MarkerName:                   "Version",
 							Details:                      []byte("details"),
-							DecisionTaskCompletedEventId: common.Int64Ptr(4),
-						},
+							DecisionTaskCompletedEventId: 4,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(6),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskScheduled),
-						ActivityTaskScheduledEventAttributes: &workflow.ActivityTaskScheduledEventAttributes{
-							ActivityId: common.StringPtr(actIDCompleted1),
-							ActivityType: &workflow.ActivityType{
-								Name: common.StringPtr("actType0"),
+						EventId:   6,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeActivityTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+							ActivityId: actIDCompleted1,
+							ActivityType: &commonproto.ActivityType{
+								Name: "actType0",
 							},
 							TaskList:                      taskList,
-							ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1000),
-							ScheduleToStartTimeoutSeconds: common.Int32Ptr(2000),
-							StartToCloseTimeoutSeconds:    common.Int32Ptr(3000),
-							HeartbeatTimeoutSeconds:       common.Int32Ptr(4000),
-							DecisionTaskCompletedEventId:  common.Int64Ptr(4),
-						},
+							ScheduleToCloseTimeoutSeconds: 1000,
+							ScheduleToStartTimeoutSeconds: 2000,
+							StartToCloseTimeoutSeconds:    3000,
+							HeartbeatTimeoutSeconds:       4000,
+							DecisionTaskCompletedEventId:  4,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(7),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeTimerStarted),
-						TimerStartedEventAttributes: &workflow.TimerStartedEventAttributes{
-							TimerId:                      common.StringPtr(timerFiredID),
-							StartToFireTimeoutSeconds:    common.Int64Ptr(2),
-							DecisionTaskCompletedEventId: common.Int64Ptr(4),
-						},
-					},
-				},
-			},
-			{
-				Events: []*workflow.HistoryEvent{
-					{
-						EventId:   common.Int64Ptr(8),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskStarted),
-						ActivityTaskStartedEventAttributes: &workflow.ActivityTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(6),
-						},
+						EventId:   7,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeTimerStarted,
+						Attributes: &commonproto.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &commonproto.TimerStartedEventAttributes{
+							TimerId:                      timerFiredID,
+							StartToFireTimeoutSeconds:    2,
+							DecisionTaskCompletedEventId: 4,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(9),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskCompleted),
-						ActivityTaskCompletedEventAttributes: &workflow.ActivityTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(6),
-							StartedEventId:   common.Int64Ptr(8),
-						},
+						EventId:   8,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeActivityTaskStarted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{
+							ScheduledEventId: 6,
+						}},
+					},
+				},
+			},
+			{
+				Events: []*commonproto.HistoryEvent{
+					{
+						EventId:   9,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeActivityTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: &commonproto.ActivityTaskCompletedEventAttributes{
+							ScheduledEventId: 6,
+							StartedEventId:   8,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(10),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskScheduled),
-						DecisionTaskScheduledEventAttributes: &workflow.DecisionTaskScheduledEventAttributes{
+						EventId:   10,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeDecisionTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
-							StartToCloseTimeoutSeconds: common.Int32Ptr(100),
-						},
+							StartToCloseTimeoutSeconds: 100,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(11),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskStarted),
-						DecisionTaskStartedEventAttributes: &workflow.DecisionTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(10),
-						},
+						EventId:   11,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeDecisionTaskStarted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+							ScheduledEventId: 10,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(12),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskCompleted),
-						DecisionTaskCompletedEventAttributes: &workflow.DecisionTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(10),
-							StartedEventId:   common.Int64Ptr(11),
-						},
+						EventId:   12,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeDecisionTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+							ScheduledEventId: 10,
+							StartedEventId:   11,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(13),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeTimerFired),
-						TimerFiredEventAttributes: &workflow.TimerFiredEventAttributes{
-							TimerId: common.StringPtr(timerFiredID),
-						},
+						EventId:   13,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeTimerFired,
+						Attributes: &commonproto.HistoryEvent_TimerFiredEventAttributes{TimerFiredEventAttributes: &commonproto.TimerFiredEventAttributes{
+							TimerId: timerFiredID,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(14),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskScheduled),
-						DecisionTaskScheduledEventAttributes: &workflow.DecisionTaskScheduledEventAttributes{
+						EventId:   14,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeDecisionTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
-							StartToCloseTimeoutSeconds: common.Int32Ptr(100),
-						},
+							StartToCloseTimeoutSeconds: 100,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(15),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskStarted),
-						DecisionTaskStartedEventAttributes: &workflow.DecisionTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(14),
-						},
+						EventId:   15,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeDecisionTaskStarted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+							ScheduledEventId: 14,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(16),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskCompleted),
-						DecisionTaskCompletedEventAttributes: &workflow.DecisionTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(14),
-							StartedEventId:   common.Int64Ptr(15),
-						},
+						EventId:   16,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeDecisionTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+							ScheduledEventId: 14,
+							StartedEventId:   15,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(17),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskScheduled),
-						ActivityTaskScheduledEventAttributes: &workflow.ActivityTaskScheduledEventAttributes{
-							ActivityId: common.StringPtr(actIDStartedRetry),
-							ActivityType: &workflow.ActivityType{
-								Name: common.StringPtr("actType1"),
+						EventId:   17,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeActivityTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+							ActivityId: actIDStartedRetry,
+							ActivityType: &commonproto.ActivityType{
+								Name: "actType1",
 							},
 							TaskList:                      taskList,
-							ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1000),
-							ScheduleToStartTimeoutSeconds: common.Int32Ptr(2000),
-							StartToCloseTimeoutSeconds:    common.Int32Ptr(3000),
-							HeartbeatTimeoutSeconds:       common.Int32Ptr(4000),
-							DecisionTaskCompletedEventId:  common.Int64Ptr(16),
-							RetryPolicy: &workflow.RetryPolicy{
-								InitialIntervalInSeconds:    common.Int32Ptr(1),
-								BackoffCoefficient:          common.Float64Ptr(0.2),
-								MaximumAttempts:             common.Int32Ptr(10),
-								MaximumIntervalInSeconds:    common.Int32Ptr(1000),
-								ExpirationIntervalInSeconds: common.Int32Ptr(math.MaxInt32),
+							ScheduleToCloseTimeoutSeconds: 1000,
+							ScheduleToStartTimeoutSeconds: 2000,
+							StartToCloseTimeoutSeconds:    3000,
+							HeartbeatTimeoutSeconds:       4000,
+							DecisionTaskCompletedEventId:  16,
+							RetryPolicy: &commonproto.RetryPolicy{
+								InitialIntervalInSeconds:    1,
+								BackoffCoefficient:          0.2,
+								MaximumAttempts:             10,
+								MaximumIntervalInSeconds:    1000,
+								ExpirationIntervalInSeconds: math.MaxInt32,
 							},
-						},
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(18),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskScheduled),
-						ActivityTaskScheduledEventAttributes: &workflow.ActivityTaskScheduledEventAttributes{
-							ActivityId: common.StringPtr(actIDNotStarted),
-							ActivityType: &workflow.ActivityType{
-								Name: common.StringPtr("actType2"),
-							},
-							TaskList:                      taskList,
-							ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1000),
-							ScheduleToStartTimeoutSeconds: common.Int32Ptr(2000),
-							StartToCloseTimeoutSeconds:    common.Int32Ptr(3000),
-							HeartbeatTimeoutSeconds:       common.Int32Ptr(4000),
-							DecisionTaskCompletedEventId:  common.Int64Ptr(16),
-						},
-					},
-					{
-						EventId:   common.Int64Ptr(19),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeTimerStarted),
-						TimerStartedEventAttributes: &workflow.TimerStartedEventAttributes{
-							TimerId:                      common.StringPtr(timerUnfiredID1),
-							StartToFireTimeoutSeconds:    common.Int64Ptr(4),
-							DecisionTaskCompletedEventId: common.Int64Ptr(16),
-						},
-					},
-					{
-						EventId:   common.Int64Ptr(20),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeTimerStarted),
-						TimerStartedEventAttributes: &workflow.TimerStartedEventAttributes{
-							TimerId:                      common.StringPtr(timerUnfiredID2),
-							StartToFireTimeoutSeconds:    common.Int64Ptr(8),
-							DecisionTaskCompletedEventId: common.Int64Ptr(16),
-						},
-					},
-					{
-						EventId:   common.Int64Ptr(21),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskScheduled),
-						ActivityTaskScheduledEventAttributes: &workflow.ActivityTaskScheduledEventAttributes{
-							ActivityId: common.StringPtr(actIDCompleted2),
-							ActivityType: &workflow.ActivityType{
-								Name: common.StringPtr("actType2"),
+						EventId:   18,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeActivityTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+							ActivityId: actIDNotStarted,
+							ActivityType: &commonproto.ActivityType{
+								Name: "actType2",
 							},
 							TaskList:                      taskList,
-							ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1000),
-							ScheduleToStartTimeoutSeconds: common.Int32Ptr(2000),
-							StartToCloseTimeoutSeconds:    common.Int32Ptr(3000),
-							HeartbeatTimeoutSeconds:       common.Int32Ptr(4000),
-							DecisionTaskCompletedEventId:  common.Int64Ptr(16),
-						},
+							ScheduleToCloseTimeoutSeconds: 1000,
+							ScheduleToStartTimeoutSeconds: 2000,
+							StartToCloseTimeoutSeconds:    3000,
+							HeartbeatTimeoutSeconds:       4000,
+							DecisionTaskCompletedEventId:  16,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(22),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskScheduled),
-						ActivityTaskScheduledEventAttributes: &workflow.ActivityTaskScheduledEventAttributes{
-							ActivityId: common.StringPtr(actIDStartedNoRetry),
-							ActivityType: &workflow.ActivityType{
-								Name: common.StringPtr("actType2"),
+						EventId:   19,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeTimerStarted,
+						Attributes: &commonproto.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &commonproto.TimerStartedEventAttributes{
+							TimerId:                      timerUnfiredID1,
+							StartToFireTimeoutSeconds:    4,
+							DecisionTaskCompletedEventId: 16,
+						}},
+					},
+					{
+						EventId:   20,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeTimerStarted,
+						Attributes: &commonproto.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &commonproto.TimerStartedEventAttributes{
+							TimerId:                      timerUnfiredID2,
+							StartToFireTimeoutSeconds:    8,
+							DecisionTaskCompletedEventId: 16,
+						}},
+					},
+					{
+						EventId:   21,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeActivityTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+							ActivityId: actIDCompleted2,
+							ActivityType: &commonproto.ActivityType{
+								Name: "actType2",
 							},
 							TaskList:                      taskList,
-							ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1000),
-							ScheduleToStartTimeoutSeconds: common.Int32Ptr(2000),
-							StartToCloseTimeoutSeconds:    common.Int32Ptr(3000),
-							HeartbeatTimeoutSeconds:       common.Int32Ptr(4000),
-							DecisionTaskCompletedEventId:  common.Int64Ptr(16),
-						},
+							ScheduleToCloseTimeoutSeconds: 1000,
+							ScheduleToStartTimeoutSeconds: 2000,
+							StartToCloseTimeoutSeconds:    3000,
+							HeartbeatTimeoutSeconds:       4000,
+							DecisionTaskCompletedEventId:  16,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(23),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeRequestCancelExternalWorkflowExecutionInitiated),
-						RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: &workflow.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
-							Domain:                       common.StringPtr("any-domain-name"),
+						EventId:   22,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeActivityTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+							ActivityId: actIDStartedNoRetry,
+							ActivityType: &commonproto.ActivityType{
+								Name: "actType2",
+							},
+							TaskList:                      taskList,
+							ScheduleToCloseTimeoutSeconds: 1000,
+							ScheduleToStartTimeoutSeconds: 2000,
+							StartToCloseTimeoutSeconds:    3000,
+							HeartbeatTimeoutSeconds:       4000,
+							DecisionTaskCompletedEventId:  16,
+						}},
+					},
+					{
+						EventId:   23,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeRequestCancelExternalWorkflowExecutionInitiated,
+						Attributes: &commonproto.HistoryEvent_RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: &commonproto.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
+							Domain:                       "any-domain-name",
 							WorkflowExecution:            cancelWE,
-							DecisionTaskCompletedEventId: common.Int64Ptr(16),
-							ChildWorkflowOnly:            common.BoolPtr(true),
-						},
+							DecisionTaskCompletedEventId: 16,
+							ChildWorkflowOnly:            true,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(24),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskStarted),
-						ActivityTaskStartedEventAttributes: &workflow.ActivityTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(21),
-						},
+						EventId:   24,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeActivityTaskStarted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{
+							ScheduledEventId: 21,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(25),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskStarted),
-						ActivityTaskStartedEventAttributes: &workflow.ActivityTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(17),
-						},
+						EventId:   25,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeActivityTaskStarted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{
+							ScheduledEventId: 17,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(26),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskStarted),
-						ActivityTaskStartedEventAttributes: &workflow.ActivityTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(22),
-						},
+						EventId:   26,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeActivityTaskStarted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{
+							ScheduledEventId: 22,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(27),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskCompleted),
-						ActivityTaskCompletedEventAttributes: &workflow.ActivityTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(21),
-							StartedEventId:   common.Int64Ptr(24),
-						},
+						EventId:   27,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeActivityTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: &commonproto.ActivityTaskCompletedEventAttributes{
+							ScheduledEventId: 21,
+							StartedEventId:   24,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(28),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskScheduled),
-						DecisionTaskScheduledEventAttributes: &workflow.DecisionTaskScheduledEventAttributes{
+						EventId:   28,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeDecisionTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
-							StartToCloseTimeoutSeconds: common.Int32Ptr(100),
-						},
+							StartToCloseTimeoutSeconds: 100,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(29),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskStarted),
-						DecisionTaskStartedEventAttributes: &workflow.DecisionTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(28),
-						},
+						EventId:   29,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeDecisionTaskStarted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+							ScheduledEventId: 28,
+						}},
 					},
 				},
 			},
 			/////////////// reset point/////////////
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(30),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskCompleted),
-						DecisionTaskCompletedEventAttributes: &workflow.DecisionTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(28),
-							StartedEventId:   common.Int64Ptr(29),
-						},
+						EventId:   30,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeDecisionTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+							ScheduledEventId: 28,
+							StartedEventId:   29,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(31),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeTimerStarted),
-						TimerStartedEventAttributes: &workflow.TimerStartedEventAttributes{
-							TimerId:                      common.StringPtr(timerAfterReset),
-							StartToFireTimeoutSeconds:    common.Int64Ptr(4),
-							DecisionTaskCompletedEventId: common.Int64Ptr(30),
-						},
-					},
-				},
-			},
-			{
-				Events: []*workflow.HistoryEvent{
-					{
-						EventId:   common.Int64Ptr(32),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskStarted),
-						ActivityTaskStartedEventAttributes: &workflow.ActivityTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(18),
-						},
+						EventId:   31,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeTimerStarted,
+						Attributes: &commonproto.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &commonproto.TimerStartedEventAttributes{
+							TimerId:                      timerAfterReset,
+							StartToFireTimeoutSeconds:    4,
+							DecisionTaskCompletedEventId: 30,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(33),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeWorkflowExecutionSignaled),
-						WorkflowExecutionSignaledEventAttributes: &workflow.WorkflowExecutionSignaledEventAttributes{
-							SignalName: common.StringPtr(signalName1),
-						},
+						EventId:   32,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeActivityTaskStarted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{
+							ScheduledEventId: 18,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(34),
-						Version:   common.Int64Ptr(common.EmptyVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeWorkflowExecutionSignaled),
-						WorkflowExecutionSignaledEventAttributes: &workflow.WorkflowExecutionSignaledEventAttributes{
-							SignalName: common.StringPtr(signalName2),
-						},
+						EventId:   33,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeWorkflowExecutionSignaled,
+						Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+							SignalName: signalName1,
+						}},
 					},
 				},
 			},
-		},
+			{
+				Events: []*commonproto.HistoryEvent{
+					{
+						EventId:   34,
+						Version:   common.EmptyVersion,
+						EventType: enums.EventTypeWorkflowExecutionSignaled,
+						Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+							SignalName: signalName2,
+						}},
+					},
+				},
+			},
+		}),
 	}
 
 	eid := int64(0)
+	timestamp := int64(1000)
 	for _, be := range readHistoryResp.History {
 		for _, e := range be.Events {
 			eid++
 			if e.GetEventId() != eid {
 				s.Fail(fmt.Sprintf("inconintous eventID: %v, %v", eid, e.GetEventId()))
 			}
-			e.Timestamp = common.Int64Ptr(1000)
+			e.Timestamp = &timestamp
 		}
 	}
 
@@ -1401,11 +1406,11 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(afterResetVersion).Return("active").AnyTimes()
 
 	testDomainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&p.DomainInfo{ID: testDomainID},
-		&p.DomainConfig{Retention: 1},
-		&p.DomainReplicationConfig{
+		&persistence.DomainInfo{ID: testDomainID},
+		&persistence.DomainConfig{Retention: 1},
+		&persistence.DomainReplicationConfig{
 			ActiveClusterName: "active",
-			Clusters: []*p.ClusterReplicationConfig{
+			Clusters: []*persistence.ClusterReplicationConfig{
 				{
 					ClusterName: "active",
 				}, {
@@ -1420,34 +1425,34 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
 	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
 
-	request := &h.ResetWorkflowExecutionRequest{}
+	request := &historyservice.ResetWorkflowExecutionRequest{}
 	domainID := testDomainID
-	request.DomainUUID = &domainID
-	request.ResetRequest = &workflow.ResetWorkflowExecutionRequest{}
+	request.DomainUUID = domainID
+	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{}
 
 	wid := "wId"
 	wfType := "wfType"
 	taskListName := "taskList"
 	forkRunID := uuid.New().String()
 	currRunID := uuid.New().String()
-	we := workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(wid),
-		RunId:      common.StringPtr(forkRunID),
+	we := commonproto.WorkflowExecution{
+		WorkflowId: wid,
+		RunId:      forkRunID,
 	}
-	request.ResetRequest = &workflow.ResetWorkflowExecutionRequest{
-		Domain:                common.StringPtr(domainName),
+	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{
+		Domain:                domainName,
 		WorkflowExecution:     &we,
-		Reason:                common.StringPtr("test reset"),
-		DecisionFinishEventId: common.Int64Ptr(30),
-		RequestId:             common.StringPtr(uuid.New().String()),
+		Reason:                "test reset",
+		DecisionFinishEventId: 30,
+		RequestId:             uuid.New().String(),
 	}
 
-	forkGwmsRequest := &p.GetWorkflowExecutionRequest{
+	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: workflow.WorkflowExecution{
-			WorkflowId: common.StringPtr(wid),
-			RunId:      common.StringPtr(forkRunID),
-		},
+		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      forkRunID,
+		}),
 	}
 
 	timerFiredID := "timerID0"
@@ -1465,7 +1470,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	signalName4 := "sig4"
 
 	forkBranchToken := []byte("forkBranchToken")
-	forkExeInfo := &p.WorkflowExecutionInfo{
+	forkExeInfo := &persistence.WorkflowExecutionInfo{
 		DomainID:           domainID,
 		WorkflowID:         wid,
 		WorkflowTypeName:   wfType,
@@ -1478,27 +1483,27 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 		DecisionStartedID:  common.EmptyEventID,
 	}
 
-	forkRepState := &p.ReplicationState{
+	forkRepState := &persistence.ReplicationState{
 		CurrentVersion:      beforeResetVersion,
 		StartVersion:        beforeResetVersion,
 		LastWriteEventID:    common.EmptyEventID,
 		LastWriteVersion:    common.EmptyVersion,
-		LastReplicationInfo: map[string]*p.ReplicationInfo{},
+		LastReplicationInfo: map[string]*persistence.ReplicationInfo{},
 	}
-	forkGwmsResponse := &p.GetWorkflowExecutionResponse{State: &p.WorkflowMutableState{
+	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    forkExeInfo,
-		ExecutionStats:   &p.ExecutionStats{},
+		ExecutionStats:   &persistence.ExecutionStats{},
 		ReplicationState: forkRepState,
 	}}
 
-	currGwmsRequest := &p.GetWorkflowExecutionRequest{
+	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: workflow.WorkflowExecution{
-			WorkflowId: common.StringPtr(wid),
-			RunId:      common.StringPtr(currRunID),
-		},
+		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      currRunID,
+		}),
 	}
-	currExeInfo := &p.WorkflowExecutionInfo{
+	currExeInfo := &persistence.WorkflowExecutionInfo{
 		DomainID:           domainID,
 		WorkflowID:         wid,
 		WorkflowTypeName:   wfType,
@@ -1510,480 +1515,481 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 		DecisionStartedID:  common.EmptyEventID,
 	}
 	compareCurrExeInfo := copyWorkflowExecutionInfo(currExeInfo)
-	currGwmsResponse := &p.GetWorkflowExecutionResponse{State: &p.WorkflowMutableState{
+	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    currExeInfo,
-		ExecutionStats:   &p.ExecutionStats{},
+		ExecutionStats:   &persistence.ExecutionStats{},
 		ReplicationState: forkRepState,
 	}}
 
-	gcurResponse := &p.GetCurrentExecutionResponse{
+	gcurResponse := &persistence.GetCurrentExecutionResponse{
 		RunID: currRunID,
 	}
 
-	readHistoryReq := &p.ReadHistoryBranchRequest{
+	readHistoryReq := &persistence.ReadHistoryBranchRequest{
 		BranchToken:   forkBranchToken,
 		MinEventID:    common.FirstEventID,
 		MaxEventID:    int64(35),
 		PageSize:      defaultHistoryPageSize,
 		NextPageToken: nil,
-		ShardID:       common.IntPtr(s.shardID),
+		ShardID:       &s.shardID,
 	}
 
-	taskList := &workflow.TaskList{
-		Name: common.StringPtr(taskListName),
+	taskList := &commonproto.TaskList{
+		Name: taskListName,
 	}
-	readHistoryResp := &p.ReadHistoryBranchByBatchResponse{
+	readHistoryResp := &persistence.ReadHistoryBranchByBatchResponse{
 		NextPageToken:    nil,
 		Size:             1000,
 		LastFirstEventID: int64(31),
-		History: []*workflow.History{
-			&workflow.History{
-				Events: []*workflow.HistoryEvent{
-					&workflow.HistoryEvent{
-						EventId:   common.Int64Ptr(1),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeWorkflowExecutionStarted),
-						WorkflowExecutionStartedEventAttributes: &workflow.WorkflowExecutionStartedEventAttributes{
-							WorkflowType: &workflow.WorkflowType{
-								Name: common.StringPtr(wfType),
+		History: adapter.ToThriftHistories([]*commonproto.History{
+			{
+				Events: []*commonproto.HistoryEvent{
+					{
+						EventId:   1,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeWorkflowExecutionStarted,
+						Attributes: &commonproto.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &commonproto.WorkflowExecutionStartedEventAttributes{
+							WorkflowType: &commonproto.WorkflowType{
+								Name: wfType,
 							},
 							TaskList:                            taskList,
 							Input:                               []byte("testInput"),
-							ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
-							TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(200),
-						},
+							ExecutionStartToCloseTimeoutSeconds: 100,
+							TaskStartToCloseTimeoutSeconds:      200,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(2),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskScheduled),
-						DecisionTaskScheduledEventAttributes: &workflow.DecisionTaskScheduledEventAttributes{
+						EventId:   2,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
-							StartToCloseTimeoutSeconds: common.Int32Ptr(100),
-						},
+							StartToCloseTimeoutSeconds: 100,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(3),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskStarted),
-						DecisionTaskStartedEventAttributes: &workflow.DecisionTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(2),
-						},
+						EventId:   3,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskStarted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+							ScheduledEventId: 2,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(4),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskCompleted),
-						DecisionTaskCompletedEventAttributes: &workflow.DecisionTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(2),
-							StartedEventId:   common.Int64Ptr(3),
-						},
+						EventId:   4,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+							ScheduledEventId: 2,
+							StartedEventId:   3,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(5),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeMarkerRecorded),
-						MarkerRecordedEventAttributes: &workflow.MarkerRecordedEventAttributes{
-							MarkerName:                   common.StringPtr("Version"),
+						EventId:   5,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeMarkerRecorded,
+						Attributes: &commonproto.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &commonproto.MarkerRecordedEventAttributes{
+							MarkerName:                   "Version",
 							Details:                      []byte("details"),
-							DecisionTaskCompletedEventId: common.Int64Ptr(4),
-						},
+							DecisionTaskCompletedEventId: 4,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(6),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskScheduled),
-						ActivityTaskScheduledEventAttributes: &workflow.ActivityTaskScheduledEventAttributes{
-							ActivityId: common.StringPtr(actIDCompleted1),
-							ActivityType: &workflow.ActivityType{
-								Name: common.StringPtr("actType0"),
+						EventId:   6,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+							ActivityId: actIDCompleted1,
+							ActivityType: &commonproto.ActivityType{
+								Name: "actType0",
 							},
 							TaskList:                      taskList,
-							ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1000),
-							ScheduleToStartTimeoutSeconds: common.Int32Ptr(2000),
-							StartToCloseTimeoutSeconds:    common.Int32Ptr(3000),
-							HeartbeatTimeoutSeconds:       common.Int32Ptr(4000),
-							DecisionTaskCompletedEventId:  common.Int64Ptr(4),
-						},
+							ScheduleToCloseTimeoutSeconds: 1000,
+							ScheduleToStartTimeoutSeconds: 2000,
+							StartToCloseTimeoutSeconds:    3000,
+							HeartbeatTimeoutSeconds:       4000,
+							DecisionTaskCompletedEventId:  4,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(7),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeTimerStarted),
-						TimerStartedEventAttributes: &workflow.TimerStartedEventAttributes{
-							TimerId:                      common.StringPtr(timerFiredID),
-							StartToFireTimeoutSeconds:    common.Int64Ptr(2),
-							DecisionTaskCompletedEventId: common.Int64Ptr(4),
-						},
-					},
-				},
-			},
-			{
-				Events: []*workflow.HistoryEvent{
-					{
-						EventId:   common.Int64Ptr(8),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskStarted),
-						ActivityTaskStartedEventAttributes: &workflow.ActivityTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(6),
-						},
+						EventId:   7,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeTimerStarted,
+						Attributes: &commonproto.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &commonproto.TimerStartedEventAttributes{
+							TimerId:                      timerFiredID,
+							StartToFireTimeoutSeconds:    2,
+							DecisionTaskCompletedEventId: 4,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(9),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskCompleted),
-						ActivityTaskCompletedEventAttributes: &workflow.ActivityTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(6),
-							StartedEventId:   common.Int64Ptr(8),
-						},
+						EventId:   8,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskStarted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{
+							ScheduledEventId: 6,
+						}},
+					},
+				},
+			},
+			{
+				Events: []*commonproto.HistoryEvent{
+					{
+						EventId:   9,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: &commonproto.ActivityTaskCompletedEventAttributes{
+							ScheduledEventId: 6,
+							StartedEventId:   8,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(10),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskScheduled),
-						DecisionTaskScheduledEventAttributes: &workflow.DecisionTaskScheduledEventAttributes{
+						EventId:   10,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
-							StartToCloseTimeoutSeconds: common.Int32Ptr(100),
-						},
+							StartToCloseTimeoutSeconds: 100,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(11),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskStarted),
-						DecisionTaskStartedEventAttributes: &workflow.DecisionTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(10),
-						},
+						EventId:   11,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskStarted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+							ScheduledEventId: 10,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(12),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskCompleted),
-						DecisionTaskCompletedEventAttributes: &workflow.DecisionTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(10),
-							StartedEventId:   common.Int64Ptr(11),
-						},
+						EventId:   12,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+							ScheduledEventId: 10,
+							StartedEventId:   11,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(13),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeTimerFired),
-						TimerFiredEventAttributes: &workflow.TimerFiredEventAttributes{
-							TimerId: common.StringPtr(timerFiredID),
-						},
+						EventId:   13,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeTimerFired,
+						Attributes: &commonproto.HistoryEvent_TimerFiredEventAttributes{TimerFiredEventAttributes: &commonproto.TimerFiredEventAttributes{
+							TimerId: timerFiredID,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(14),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskScheduled),
-						DecisionTaskScheduledEventAttributes: &workflow.DecisionTaskScheduledEventAttributes{
+						EventId:   14,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
-							StartToCloseTimeoutSeconds: common.Int32Ptr(100),
-						},
+							StartToCloseTimeoutSeconds: 100,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(15),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskStarted),
-						DecisionTaskStartedEventAttributes: &workflow.DecisionTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(14),
-						},
+						EventId:   15,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskStarted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+							ScheduledEventId: 14,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(16),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskCompleted),
-						DecisionTaskCompletedEventAttributes: &workflow.DecisionTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(14),
-							StartedEventId:   common.Int64Ptr(15),
-						},
+						EventId:   16,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+							ScheduledEventId: 14,
+							StartedEventId:   15,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(17),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskScheduled),
-						ActivityTaskScheduledEventAttributes: &workflow.ActivityTaskScheduledEventAttributes{
-							ActivityId: common.StringPtr(actIDRetry),
-							ActivityType: &workflow.ActivityType{
-								Name: common.StringPtr("actType1"),
+						EventId:   17,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+							ActivityId: actIDRetry,
+							ActivityType: &commonproto.ActivityType{
+								Name: "actType1",
 							},
 							TaskList:                      taskList,
-							ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1000),
-							ScheduleToStartTimeoutSeconds: common.Int32Ptr(2000),
-							StartToCloseTimeoutSeconds:    common.Int32Ptr(3000),
-							HeartbeatTimeoutSeconds:       common.Int32Ptr(4000),
-							DecisionTaskCompletedEventId:  common.Int64Ptr(16),
-							RetryPolicy: &workflow.RetryPolicy{
-								InitialIntervalInSeconds:    common.Int32Ptr(1),
-								BackoffCoefficient:          common.Float64Ptr(0.2),
-								MaximumAttempts:             common.Int32Ptr(10),
-								MaximumIntervalInSeconds:    common.Int32Ptr(1000),
-								ExpirationIntervalInSeconds: common.Int32Ptr(math.MaxInt32),
+							ScheduleToCloseTimeoutSeconds: 1000,
+							ScheduleToStartTimeoutSeconds: 2000,
+							StartToCloseTimeoutSeconds:    3000,
+							HeartbeatTimeoutSeconds:       4000,
+							DecisionTaskCompletedEventId:  16,
+							RetryPolicy: &commonproto.RetryPolicy{
+								InitialIntervalInSeconds:    1,
+								BackoffCoefficient:          0.2,
+								MaximumAttempts:             10,
+								MaximumIntervalInSeconds:    1000,
+								ExpirationIntervalInSeconds: math.MaxInt32,
 							},
-						},
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(18),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskScheduled),
-						ActivityTaskScheduledEventAttributes: &workflow.ActivityTaskScheduledEventAttributes{
-							ActivityId: common.StringPtr(actIDNotStarted),
-							ActivityType: &workflow.ActivityType{
-								Name: common.StringPtr("actType2"),
-							},
-							TaskList:                      taskList,
-							ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1000),
-							ScheduleToStartTimeoutSeconds: common.Int32Ptr(2000),
-							StartToCloseTimeoutSeconds:    common.Int32Ptr(3000),
-							HeartbeatTimeoutSeconds:       common.Int32Ptr(4000),
-							DecisionTaskCompletedEventId:  common.Int64Ptr(16),
-						},
-					},
-					{
-						EventId:   common.Int64Ptr(19),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeTimerStarted),
-						TimerStartedEventAttributes: &workflow.TimerStartedEventAttributes{
-							TimerId:                      common.StringPtr(timerUnfiredID1),
-							StartToFireTimeoutSeconds:    common.Int64Ptr(4),
-							DecisionTaskCompletedEventId: common.Int64Ptr(16),
-						},
-					},
-					{
-						EventId:   common.Int64Ptr(20),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeTimerStarted),
-						TimerStartedEventAttributes: &workflow.TimerStartedEventAttributes{
-							TimerId:                      common.StringPtr(timerUnfiredID2),
-							StartToFireTimeoutSeconds:    common.Int64Ptr(8),
-							DecisionTaskCompletedEventId: common.Int64Ptr(16),
-						},
-					},
-					{
-						EventId:   common.Int64Ptr(21),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskScheduled),
-						ActivityTaskScheduledEventAttributes: &workflow.ActivityTaskScheduledEventAttributes{
-							ActivityId: common.StringPtr(actIDCompleted2),
-							ActivityType: &workflow.ActivityType{
-								Name: common.StringPtr("actType2"),
+						EventId:   18,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+							ActivityId: actIDNotStarted,
+							ActivityType: &commonproto.ActivityType{
+								Name: "actType2",
 							},
 							TaskList:                      taskList,
-							ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1000),
-							ScheduleToStartTimeoutSeconds: common.Int32Ptr(2000),
-							StartToCloseTimeoutSeconds:    common.Int32Ptr(3000),
-							HeartbeatTimeoutSeconds:       common.Int32Ptr(4000),
-							DecisionTaskCompletedEventId:  common.Int64Ptr(16),
-						},
+							ScheduleToCloseTimeoutSeconds: 1000,
+							ScheduleToStartTimeoutSeconds: 2000,
+							StartToCloseTimeoutSeconds:    3000,
+							HeartbeatTimeoutSeconds:       4000,
+							DecisionTaskCompletedEventId:  16,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(22),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskScheduled),
-						ActivityTaskScheduledEventAttributes: &workflow.ActivityTaskScheduledEventAttributes{
-							ActivityId: common.StringPtr(actIDStartedNoRetry),
-							ActivityType: &workflow.ActivityType{
-								Name: common.StringPtr("actType2"),
+						EventId:   19,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeTimerStarted,
+						Attributes: &commonproto.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &commonproto.TimerStartedEventAttributes{
+							TimerId:                      timerUnfiredID1,
+							StartToFireTimeoutSeconds:    4,
+							DecisionTaskCompletedEventId: 16,
+						}},
+					},
+					{
+						EventId:   20,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeTimerStarted,
+						Attributes: &commonproto.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &commonproto.TimerStartedEventAttributes{
+							TimerId:                      timerUnfiredID2,
+							StartToFireTimeoutSeconds:    8,
+							DecisionTaskCompletedEventId: 16,
+						}},
+					},
+					{
+						EventId:   21,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+							ActivityId: actIDCompleted2,
+							ActivityType: &commonproto.ActivityType{
+								Name: "actType2",
 							},
 							TaskList:                      taskList,
-							ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1000),
-							ScheduleToStartTimeoutSeconds: common.Int32Ptr(2000),
-							StartToCloseTimeoutSeconds:    common.Int32Ptr(3000),
-							HeartbeatTimeoutSeconds:       common.Int32Ptr(4000),
-							DecisionTaskCompletedEventId:  common.Int64Ptr(16),
-						},
+							ScheduleToCloseTimeoutSeconds: 1000,
+							ScheduleToStartTimeoutSeconds: 2000,
+							StartToCloseTimeoutSeconds:    3000,
+							HeartbeatTimeoutSeconds:       4000,
+							DecisionTaskCompletedEventId:  16,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(23),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeWorkflowExecutionSignaled),
-						WorkflowExecutionSignaledEventAttributes: &workflow.WorkflowExecutionSignaledEventAttributes{
-							SignalName: common.StringPtr(signalName3),
-						},
+						EventId:   22,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+							ActivityId: actIDStartedNoRetry,
+							ActivityType: &commonproto.ActivityType{
+								Name: "actType2",
+							},
+							TaskList:                      taskList,
+							ScheduleToCloseTimeoutSeconds: 1000,
+							ScheduleToStartTimeoutSeconds: 2000,
+							StartToCloseTimeoutSeconds:    3000,
+							HeartbeatTimeoutSeconds:       4000,
+							DecisionTaskCompletedEventId:  16,
+						}},
 					},
-				},
-			},
-			{
-				Events: []*workflow.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(24),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskStarted),
-						ActivityTaskStartedEventAttributes: &workflow.ActivityTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(21),
-						},
-					},
-				},
-			},
-			{
-				Events: []*workflow.HistoryEvent{
-					{
-						EventId:   common.Int64Ptr(25),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeWorkflowExecutionSignaled),
-						WorkflowExecutionSignaledEventAttributes: &workflow.WorkflowExecutionSignaledEventAttributes{
-							SignalName: common.StringPtr(signalName4),
-						},
+						EventId:   23,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeWorkflowExecutionSignaled,
+						Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+							SignalName: signalName3,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(26),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskStarted),
-						ActivityTaskStartedEventAttributes: &workflow.ActivityTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(22),
-						},
+						EventId:   24,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskStarted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{
+							ScheduledEventId: 21,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(27),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskCompleted),
-						ActivityTaskCompletedEventAttributes: &workflow.ActivityTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(21),
-							StartedEventId:   common.Int64Ptr(24),
-						},
+						EventId:   25,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeWorkflowExecutionSignaled,
+						Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+							SignalName: signalName4,
+						}},
+					},
+				},
+			},
+			{
+				Events: []*commonproto.HistoryEvent{
+					{
+						EventId:   26,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskStarted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{
+							ScheduledEventId: 22,
+						}},
+					},
+				},
+			},
+			{
+				Events: []*commonproto.HistoryEvent{
+					{
+						EventId:   27,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: &commonproto.ActivityTaskCompletedEventAttributes{
+							ScheduledEventId: 21,
+							StartedEventId:   24,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(28),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskScheduled),
-						DecisionTaskScheduledEventAttributes: &workflow.DecisionTaskScheduledEventAttributes{
+						EventId:   28,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
-							StartToCloseTimeoutSeconds: common.Int32Ptr(100),
-						},
+							StartToCloseTimeoutSeconds: 100,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(29),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskStarted),
-						DecisionTaskStartedEventAttributes: &workflow.DecisionTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(28),
-						},
+						EventId:   29,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskStarted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+							ScheduledEventId: 28,
+						}},
 					},
 				},
 			},
 			/////////////// reset point/////////////
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(30),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskCompleted),
-						DecisionTaskCompletedEventAttributes: &workflow.DecisionTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(28),
-							StartedEventId:   common.Int64Ptr(29),
-						},
+						EventId:   30,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+							ScheduledEventId: 28,
+							StartedEventId:   29,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(31),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeTimerStarted),
-						TimerStartedEventAttributes: &workflow.TimerStartedEventAttributes{
-							TimerId:                      common.StringPtr(timerAfterReset),
-							StartToFireTimeoutSeconds:    common.Int64Ptr(4),
-							DecisionTaskCompletedEventId: common.Int64Ptr(30),
-						},
-					},
-				},
-			},
-			{
-				Events: []*workflow.HistoryEvent{
-					{
-						EventId:   common.Int64Ptr(32),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskStarted),
-						ActivityTaskStartedEventAttributes: &workflow.ActivityTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(18),
-						},
+						EventId:   31,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeTimerStarted,
+						Attributes: &commonproto.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &commonproto.TimerStartedEventAttributes{
+							TimerId:                      timerAfterReset,
+							StartToFireTimeoutSeconds:    4,
+							DecisionTaskCompletedEventId: 30,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(33),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeWorkflowExecutionSignaled),
-						WorkflowExecutionSignaledEventAttributes: &workflow.WorkflowExecutionSignaledEventAttributes{
-							SignalName: common.StringPtr(signalName1),
-						},
+						EventId:   32,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskStarted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{
+							ScheduledEventId: 18,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(34),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeWorkflowExecutionSignaled),
-						WorkflowExecutionSignaledEventAttributes: &workflow.WorkflowExecutionSignaledEventAttributes{
-							SignalName: common.StringPtr(signalName2),
-						},
+						EventId:   33,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeWorkflowExecutionSignaled,
+						Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+							SignalName: signalName1,
+						}},
 					},
 				},
 			},
-		},
+			{
+				Events: []*commonproto.HistoryEvent{
+					{
+						EventId:   34,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeWorkflowExecutionSignaled,
+						Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+							SignalName: signalName2,
+						}},
+					},
+				},
+			},
+		}),
 	}
 
 	eid := int64(0)
+	timestamp := int64(1000)
 	for _, be := range readHistoryResp.History {
 		for _, e := range be.Events {
 			eid++
 			if e.GetEventId() != eid {
 				s.Fail(fmt.Sprintf("inconintous eventID: %v, %v", eid, e.GetEventId()))
 			}
-			e.Timestamp = common.Int64Ptr(1000)
+			e.Timestamp = &timestamp
 		}
 	}
 
 	newBranchToken := []byte("newBranch")
-	forkResp := &p.ForkHistoryBranchResponse{
+	forkResp := &persistence.ForkHistoryBranchResponse{
 		NewBranchToken: newBranchToken,
 	}
 
-	appendV2Resp := &p.AppendHistoryNodesResponse{
+	appendV2Resp := &persistence.AppendHistoryNodesResponse{
 		Size: 200,
 	}
 
@@ -2009,16 +2015,16 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	s.Equal(4, len(calls))
 	appendCall := calls[3]
 	s.Equal("AppendHistoryNodes", appendCall.Method)
-	appendReq, ok := appendCall.Arguments[0].(*p.AppendHistoryNodesRequest)
+	appendReq, ok := appendCall.Arguments[0].(*persistence.AppendHistoryNodesRequest)
 	s.Equal(true, ok)
 	s.Equal(newBranchToken, appendReq.BranchToken)
 	s.Equal(false, appendReq.IsNewBranch)
 	s.Equal(5, len(appendReq.Events))
-	s.Equal(workflow.EventTypeDecisionTaskFailed, appendReq.Events[0].GetEventType())
-	s.Equal(workflow.EventTypeActivityTaskFailed, appendReq.Events[1].GetEventType())
-	s.Equal(workflow.EventTypeWorkflowExecutionSignaled, appendReq.Events[2].GetEventType())
-	s.Equal(workflow.EventTypeWorkflowExecutionSignaled, appendReq.Events[3].GetEventType())
-	s.Equal(workflow.EventTypeDecisionTaskScheduled, appendReq.Events[4].GetEventType())
+	s.Equal(enums.EventTypeDecisionTaskFailed, enums.EventType(appendReq.Events[0].GetEventType()))
+	s.Equal(enums.EventTypeActivityTaskFailed, enums.EventType(appendReq.Events[1].GetEventType()))
+	s.Equal(enums.EventTypeWorkflowExecutionSignaled, enums.EventType(appendReq.Events[2].GetEventType()))
+	s.Equal(enums.EventTypeWorkflowExecutionSignaled, enums.EventType(appendReq.Events[3].GetEventType()))
+	s.Equal(enums.EventTypeDecisionTaskScheduled, enums.EventType(appendReq.Events[4].GetEventType()))
 
 	s.Equal(int64(30), appendReq.Events[0].GetEventId())
 	s.Equal(int64(31), appendReq.Events[1].GetEventId())
@@ -2031,21 +2037,21 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	s.Equal(4, len(calls))
 	resetCall := calls[3]
 	s.Equal("ResetWorkflowExecution", resetCall.Method)
-	resetReq, ok := resetCall.Arguments[0].(*p.ResetWorkflowExecutionRequest)
+	resetReq, ok := resetCall.Arguments[0].(*persistence.ResetWorkflowExecutionRequest)
 	s.True(resetReq.CurrentWorkflowMutation.ExecutionInfo.LastEventTaskID > 0)
 	resetReq.CurrentWorkflowMutation.ExecutionInfo.LastEventTaskID = 0
 	s.Equal(true, ok)
 	s.Equal(true, resetReq.CurrentWorkflowMutation != nil)
-	compareCurrExeInfo.State = p.WorkflowStateCompleted
-	compareCurrExeInfo.CloseStatus = p.WorkflowCloseStatusTerminated
+	compareCurrExeInfo.State = persistence.WorkflowStateCompleted
+	compareCurrExeInfo.CloseStatus = persistence.WorkflowCloseStatusTerminated
 	compareCurrExeInfo.NextEventID = 2
 	compareCurrExeInfo.LastFirstEventID = 1
 	compareCurrExeInfo.CompletionEventBatchID = 1
 	s.Equal(compareCurrExeInfo, resetReq.CurrentWorkflowMutation.ExecutionInfo)
 	s.Equal(1, len(resetReq.CurrentWorkflowMutation.TransferTasks))
 	s.Equal(1, len(resetReq.CurrentWorkflowMutation.TimerTasks))
-	s.Equal(p.TransferTaskTypeCloseExecution, resetReq.CurrentWorkflowMutation.TransferTasks[0].GetType())
-	s.Equal(p.TaskTypeDeleteHistoryEvent, resetReq.CurrentWorkflowMutation.TimerTasks[0].GetType())
+	s.Equal(persistence.TransferTaskTypeCloseExecution, resetReq.CurrentWorkflowMutation.TransferTasks[0].GetType())
+	s.Equal(persistence.TaskTypeDeleteHistoryEvent, resetReq.CurrentWorkflowMutation.TimerTasks[0].GetType())
 	s.Equal(int64(200), resetReq.CurrentWorkflowMutation.ExecutionStats.HistorySize)
 
 	s.Equal("wfType", resetReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowTypeName)
@@ -2056,16 +2062,16 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	s.Equal(int64(35), resetReq.NewWorkflowSnapshot.ExecutionInfo.NextEventID)
 
 	s.Equal(4, len(resetReq.NewWorkflowSnapshot.TransferTasks))
-	s.Equal(p.TransferTaskTypeActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[0].GetType())
-	s.Equal(p.TransferTaskTypeActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[1].GetType())
-	s.Equal(p.TransferTaskTypeDecisionTask, resetReq.NewWorkflowSnapshot.TransferTasks[2].GetType())
-	s.Equal(p.TransferTaskTypeRecordWorkflowStarted, resetReq.NewWorkflowSnapshot.TransferTasks[3].GetType())
+	s.Equal(persistence.TransferTaskTypeActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[0].GetType())
+	s.Equal(persistence.TransferTaskTypeActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[1].GetType())
+	s.Equal(persistence.TransferTaskTypeDecisionTask, resetReq.NewWorkflowSnapshot.TransferTasks[2].GetType())
+	s.Equal(persistence.TransferTaskTypeRecordWorkflowStarted, resetReq.NewWorkflowSnapshot.TransferTasks[3].GetType())
 
 	// WF timeout task, user timer, activity timeout timer, activity retry timer
 	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TimerTasks))
-	s.Equal(p.TaskTypeWorkflowTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
-	s.Equal(p.TaskTypeUserTimer, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
-	s.Equal(p.TaskTypeActivityTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
+	s.Equal(persistence.TaskTypeWorkflowTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
+	s.Equal(persistence.TaskTypeUserTimer, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
+	s.Equal(persistence.TaskTypeActivityTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
 
 	s.Equal(2, len(resetReq.NewWorkflowSnapshot.TimerInfos))
 	s.assertTimerIDs([]string{timerUnfiredID1, timerUnfiredID2}, resetReq.NewWorkflowSnapshot.TimerInfos)
@@ -2074,17 +2080,17 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	s.assertActivityIDs([]string{actIDRetry, actIDNotStarted}, resetReq.NewWorkflowSnapshot.ActivityInfos)
 
 	s.Equal(1, len(resetReq.NewWorkflowSnapshot.ReplicationTasks))
-	s.Equal(p.ReplicationTaskTypeHistory, resetReq.NewWorkflowSnapshot.ReplicationTasks[0].GetType())
+	s.Equal(persistence.ReplicationTaskTypeHistory, resetReq.NewWorkflowSnapshot.ReplicationTasks[0].GetType())
 	s.Equal(1, len(resetReq.CurrentWorkflowMutation.ReplicationTasks))
-	s.Equal(p.ReplicationTaskTypeHistory, resetReq.CurrentWorkflowMutation.ReplicationTasks[0].GetType())
+	s.Equal(persistence.ReplicationTaskTypeHistory, resetReq.CurrentWorkflowMutation.ReplicationTasks[0].GetType())
 
 	compareRepState := copyReplicationState(forkRepState)
 	compareRepState.StartVersion = beforeResetVersion
 	compareRepState.CurrentVersion = afterResetVersion
 	compareRepState.LastWriteEventID = 34
 	compareRepState.LastWriteVersion = afterResetVersion
-	compareRepState.LastReplicationInfo = map[string]*p.ReplicationInfo{
-		"standby": &p.ReplicationInfo{
+	compareRepState.LastReplicationInfo = map[string]*persistence.ReplicationInfo{
+		"standby": &persistence.ReplicationInfo{
 			LastEventID: 29,
 			Version:     beforeResetVersion,
 		},
@@ -2106,11 +2112,11 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(afterResetVersion).Return("standby").AnyTimes()
 
 	testDomainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&p.DomainInfo{ID: testDomainID},
-		&p.DomainConfig{Retention: 1},
-		&p.DomainReplicationConfig{
+		&persistence.DomainInfo{ID: testDomainID},
+		&persistence.DomainConfig{Retention: 1},
+		&persistence.DomainReplicationConfig{
 			ActiveClusterName: "active",
-			Clusters: []*p.ClusterReplicationConfig{
+			Clusters: []*persistence.ClusterReplicationConfig{
 				{
 					ClusterName: "active",
 				}, {
@@ -2125,34 +2131,34 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
 	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
 
-	request := &h.ResetWorkflowExecutionRequest{}
+	request := &historyservice.ResetWorkflowExecutionRequest{}
 	domainID := testDomainID
-	request.DomainUUID = &domainID
-	request.ResetRequest = &workflow.ResetWorkflowExecutionRequest{}
+	request.DomainUUID = domainID
+	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{}
 
 	wid := "wId"
 	wfType := "wfType"
 	taskListName := "taskList"
 	forkRunID := uuid.New().String()
 	currRunID := uuid.New().String()
-	we := workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(wid),
-		RunId:      common.StringPtr(forkRunID),
+	we := commonproto.WorkflowExecution{
+		WorkflowId: wid,
+		RunId:      forkRunID,
 	}
-	request.ResetRequest = &workflow.ResetWorkflowExecutionRequest{
-		Domain:                common.StringPtr(domainName),
+	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{
+		Domain:                domainName,
 		WorkflowExecution:     &we,
-		Reason:                common.StringPtr("test reset"),
-		DecisionFinishEventId: common.Int64Ptr(30),
-		RequestId:             common.StringPtr(uuid.New().String()),
+		Reason:                "test reset",
+		DecisionFinishEventId: 30,
+		RequestId:             uuid.New().String(),
 	}
 
-	forkGwmsRequest := &p.GetWorkflowExecutionRequest{
+	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: workflow.WorkflowExecution{
-			WorkflowId: common.StringPtr(wid),
-			RunId:      common.StringPtr(forkRunID),
-		},
+		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      forkRunID,
+		}),
 	}
 
 	timerFiredID := "timerID0"
@@ -2170,7 +2176,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 	signalName4 := "sig4"
 
 	forkBranchToken := []byte("forkBranchToken")
-	forkExeInfo := &p.WorkflowExecutionInfo{
+	forkExeInfo := &persistence.WorkflowExecutionInfo{
 		DomainID:           domainID,
 		WorkflowID:         wid,
 		WorkflowTypeName:   wfType,
@@ -2183,27 +2189,27 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 		DecisionStartedID:  common.EmptyEventID,
 	}
 
-	forkRepState := &p.ReplicationState{
+	forkRepState := &persistence.ReplicationState{
 		CurrentVersion:      beforeResetVersion,
 		StartVersion:        beforeResetVersion,
 		LastWriteEventID:    common.EmptyEventID,
 		LastWriteVersion:    common.EmptyVersion,
-		LastReplicationInfo: map[string]*p.ReplicationInfo{},
+		LastReplicationInfo: map[string]*persistence.ReplicationInfo{},
 	}
-	forkGwmsResponse := &p.GetWorkflowExecutionResponse{State: &p.WorkflowMutableState{
+	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    forkExeInfo,
-		ExecutionStats:   &p.ExecutionStats{},
+		ExecutionStats:   &persistence.ExecutionStats{},
 		ReplicationState: forkRepState,
 	}}
 
-	currGwmsRequest := &p.GetWorkflowExecutionRequest{
+	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: workflow.WorkflowExecution{
-			WorkflowId: common.StringPtr(wid),
-			RunId:      common.StringPtr(currRunID),
-		},
+		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      currRunID,
+		}),
 	}
-	currExeInfo := &p.WorkflowExecutionInfo{
+	currExeInfo := &persistence.WorkflowExecutionInfo{
 		DomainID:           domainID,
 		WorkflowID:         wid,
 		WorkflowTypeName:   wfType,
@@ -2214,476 +2220,477 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
 	}
-	currGwmsResponse := &p.GetWorkflowExecutionResponse{State: &p.WorkflowMutableState{
+	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    currExeInfo,
-		ExecutionStats:   &p.ExecutionStats{},
+		ExecutionStats:   &persistence.ExecutionStats{},
 		ReplicationState: forkRepState,
 	}}
 
-	gcurResponse := &p.GetCurrentExecutionResponse{
+	gcurResponse := &persistence.GetCurrentExecutionResponse{
 		RunID: currRunID,
 	}
 
-	readHistoryReq := &p.ReadHistoryBranchRequest{
+	readHistoryReq := &persistence.ReadHistoryBranchRequest{
 		BranchToken:   forkBranchToken,
 		MinEventID:    common.FirstEventID,
 		MaxEventID:    int64(35),
 		PageSize:      defaultHistoryPageSize,
 		NextPageToken: nil,
-		ShardID:       common.IntPtr(s.shardID),
+		ShardID:       &s.shardID,
 	}
 
-	taskList := &workflow.TaskList{
-		Name: common.StringPtr(taskListName),
+	taskList := &commonproto.TaskList{
+		Name: taskListName,
 	}
-	readHistoryResp := &p.ReadHistoryBranchByBatchResponse{
+	readHistoryResp := &persistence.ReadHistoryBranchByBatchResponse{
 		NextPageToken:    nil,
 		Size:             1000,
 		LastFirstEventID: int64(31),
-		History: []*workflow.History{
-			&workflow.History{
-				Events: []*workflow.HistoryEvent{
-					&workflow.HistoryEvent{
-						EventId:   common.Int64Ptr(1),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeWorkflowExecutionStarted),
-						WorkflowExecutionStartedEventAttributes: &workflow.WorkflowExecutionStartedEventAttributes{
-							WorkflowType: &workflow.WorkflowType{
-								Name: common.StringPtr(wfType),
+		History: adapter.ToThriftHistories([]*commonproto.History{
+			{
+				Events: []*commonproto.HistoryEvent{
+					{
+						EventId:   1,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeWorkflowExecutionStarted,
+						Attributes: &commonproto.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &commonproto.WorkflowExecutionStartedEventAttributes{
+							WorkflowType: &commonproto.WorkflowType{
+								Name: wfType,
 							},
 							TaskList:                            taskList,
 							Input:                               []byte("testInput"),
-							ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
-							TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(200),
-						},
+							ExecutionStartToCloseTimeoutSeconds: 100,
+							TaskStartToCloseTimeoutSeconds:      200,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(2),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskScheduled),
-						DecisionTaskScheduledEventAttributes: &workflow.DecisionTaskScheduledEventAttributes{
+						EventId:   2,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
-							StartToCloseTimeoutSeconds: common.Int32Ptr(100),
-						},
+							StartToCloseTimeoutSeconds: 100,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(3),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskStarted),
-						DecisionTaskStartedEventAttributes: &workflow.DecisionTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(2),
-						},
+						EventId:   3,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskStarted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+							ScheduledEventId: 2,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(4),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskCompleted),
-						DecisionTaskCompletedEventAttributes: &workflow.DecisionTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(2),
-							StartedEventId:   common.Int64Ptr(3),
-						},
+						EventId:   4,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+							ScheduledEventId: 2,
+							StartedEventId:   3,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(5),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeMarkerRecorded),
-						MarkerRecordedEventAttributes: &workflow.MarkerRecordedEventAttributes{
-							MarkerName:                   common.StringPtr("Version"),
+						EventId:   5,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeMarkerRecorded,
+						Attributes: &commonproto.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &commonproto.MarkerRecordedEventAttributes{
+							MarkerName:                   "Version",
 							Details:                      []byte("details"),
-							DecisionTaskCompletedEventId: common.Int64Ptr(4),
-						},
+							DecisionTaskCompletedEventId: 4,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(6),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskScheduled),
-						ActivityTaskScheduledEventAttributes: &workflow.ActivityTaskScheduledEventAttributes{
-							ActivityId: common.StringPtr(actIDCompleted1),
-							ActivityType: &workflow.ActivityType{
-								Name: common.StringPtr("actType0"),
+						EventId:   6,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+							ActivityId: actIDCompleted1,
+							ActivityType: &commonproto.ActivityType{
+								Name: "actType0",
 							},
 							TaskList:                      taskList,
-							ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1000),
-							ScheduleToStartTimeoutSeconds: common.Int32Ptr(2000),
-							StartToCloseTimeoutSeconds:    common.Int32Ptr(3000),
-							HeartbeatTimeoutSeconds:       common.Int32Ptr(4000),
-							DecisionTaskCompletedEventId:  common.Int64Ptr(4),
-						},
+							ScheduleToCloseTimeoutSeconds: 1000,
+							ScheduleToStartTimeoutSeconds: 2000,
+							StartToCloseTimeoutSeconds:    3000,
+							HeartbeatTimeoutSeconds:       4000,
+							DecisionTaskCompletedEventId:  4,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(7),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeTimerStarted),
-						TimerStartedEventAttributes: &workflow.TimerStartedEventAttributes{
-							TimerId:                      common.StringPtr(timerFiredID),
-							StartToFireTimeoutSeconds:    common.Int64Ptr(2),
-							DecisionTaskCompletedEventId: common.Int64Ptr(4),
-						},
-					},
-				},
-			},
-			{
-				Events: []*workflow.HistoryEvent{
-					{
-						EventId:   common.Int64Ptr(8),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskStarted),
-						ActivityTaskStartedEventAttributes: &workflow.ActivityTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(6),
-						},
+						EventId:   7,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeTimerStarted,
+						Attributes: &commonproto.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &commonproto.TimerStartedEventAttributes{
+							TimerId:                      timerFiredID,
+							StartToFireTimeoutSeconds:    2,
+							DecisionTaskCompletedEventId: 4,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(9),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskCompleted),
-						ActivityTaskCompletedEventAttributes: &workflow.ActivityTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(6),
-							StartedEventId:   common.Int64Ptr(8),
-						},
+						EventId:   8,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskStarted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{
+							ScheduledEventId: 6,
+						}},
+					},
+				},
+			},
+			{
+				Events: []*commonproto.HistoryEvent{
+					{
+						EventId:   9,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: &commonproto.ActivityTaskCompletedEventAttributes{
+							ScheduledEventId: 6,
+							StartedEventId:   8,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(10),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskScheduled),
-						DecisionTaskScheduledEventAttributes: &workflow.DecisionTaskScheduledEventAttributes{
+						EventId:   10,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
-							StartToCloseTimeoutSeconds: common.Int32Ptr(100),
-						},
+							StartToCloseTimeoutSeconds: 100,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(11),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskStarted),
-						DecisionTaskStartedEventAttributes: &workflow.DecisionTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(10),
-						},
+						EventId:   11,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskStarted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+							ScheduledEventId: 10,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(12),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskCompleted),
-						DecisionTaskCompletedEventAttributes: &workflow.DecisionTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(10),
-							StartedEventId:   common.Int64Ptr(11),
-						},
+						EventId:   12,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+							ScheduledEventId: 10,
+							StartedEventId:   11,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(13),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeTimerFired),
-						TimerFiredEventAttributes: &workflow.TimerFiredEventAttributes{
-							TimerId: common.StringPtr(timerFiredID),
-						},
+						EventId:   13,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeTimerFired,
+						Attributes: &commonproto.HistoryEvent_TimerFiredEventAttributes{TimerFiredEventAttributes: &commonproto.TimerFiredEventAttributes{
+							TimerId: timerFiredID,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(14),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskScheduled),
-						DecisionTaskScheduledEventAttributes: &workflow.DecisionTaskScheduledEventAttributes{
+						EventId:   14,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
-							StartToCloseTimeoutSeconds: common.Int32Ptr(100),
-						},
+							StartToCloseTimeoutSeconds: 100,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(15),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskStarted),
-						DecisionTaskStartedEventAttributes: &workflow.DecisionTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(14),
-						},
+						EventId:   15,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskStarted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+							ScheduledEventId: 14,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(16),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskCompleted),
-						DecisionTaskCompletedEventAttributes: &workflow.DecisionTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(14),
-							StartedEventId:   common.Int64Ptr(15),
-						},
+						EventId:   16,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+							ScheduledEventId: 14,
+							StartedEventId:   15,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(17),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskScheduled),
-						ActivityTaskScheduledEventAttributes: &workflow.ActivityTaskScheduledEventAttributes{
-							ActivityId: common.StringPtr(actIDRetry),
-							ActivityType: &workflow.ActivityType{
-								Name: common.StringPtr("actType1"),
+						EventId:   17,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+							ActivityId: actIDRetry,
+							ActivityType: &commonproto.ActivityType{
+								Name: "actType1",
 							},
 							TaskList:                      taskList,
-							ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1000),
-							ScheduleToStartTimeoutSeconds: common.Int32Ptr(2000),
-							StartToCloseTimeoutSeconds:    common.Int32Ptr(3000),
-							HeartbeatTimeoutSeconds:       common.Int32Ptr(4000),
-							DecisionTaskCompletedEventId:  common.Int64Ptr(16),
-							RetryPolicy: &workflow.RetryPolicy{
-								InitialIntervalInSeconds:    common.Int32Ptr(1),
-								BackoffCoefficient:          common.Float64Ptr(0.2),
-								MaximumAttempts:             common.Int32Ptr(10),
-								MaximumIntervalInSeconds:    common.Int32Ptr(1000),
-								ExpirationIntervalInSeconds: common.Int32Ptr(math.MaxInt32),
+							ScheduleToCloseTimeoutSeconds: 1000,
+							ScheduleToStartTimeoutSeconds: 2000,
+							StartToCloseTimeoutSeconds:    3000,
+							HeartbeatTimeoutSeconds:       4000,
+							DecisionTaskCompletedEventId:  16,
+							RetryPolicy: &commonproto.RetryPolicy{
+								InitialIntervalInSeconds:    1,
+								BackoffCoefficient:          0.2,
+								MaximumAttempts:             10,
+								MaximumIntervalInSeconds:    1000,
+								ExpirationIntervalInSeconds: math.MaxInt32,
 							},
-						},
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(18),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskScheduled),
-						ActivityTaskScheduledEventAttributes: &workflow.ActivityTaskScheduledEventAttributes{
-							ActivityId: common.StringPtr(actIDNotStarted),
-							ActivityType: &workflow.ActivityType{
-								Name: common.StringPtr("actType2"),
-							},
-							TaskList:                      taskList,
-							ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1000),
-							ScheduleToStartTimeoutSeconds: common.Int32Ptr(2000),
-							StartToCloseTimeoutSeconds:    common.Int32Ptr(3000),
-							HeartbeatTimeoutSeconds:       common.Int32Ptr(4000),
-							DecisionTaskCompletedEventId:  common.Int64Ptr(16),
-						},
-					},
-					{
-						EventId:   common.Int64Ptr(19),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeTimerStarted),
-						TimerStartedEventAttributes: &workflow.TimerStartedEventAttributes{
-							TimerId:                      common.StringPtr(timerUnfiredID1),
-							StartToFireTimeoutSeconds:    common.Int64Ptr(4),
-							DecisionTaskCompletedEventId: common.Int64Ptr(16),
-						},
-					},
-					{
-						EventId:   common.Int64Ptr(20),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeTimerStarted),
-						TimerStartedEventAttributes: &workflow.TimerStartedEventAttributes{
-							TimerId:                      common.StringPtr(timerUnfiredID2),
-							StartToFireTimeoutSeconds:    common.Int64Ptr(8),
-							DecisionTaskCompletedEventId: common.Int64Ptr(16),
-						},
-					},
-					{
-						EventId:   common.Int64Ptr(21),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskScheduled),
-						ActivityTaskScheduledEventAttributes: &workflow.ActivityTaskScheduledEventAttributes{
-							ActivityId: common.StringPtr(actIDCompleted2),
-							ActivityType: &workflow.ActivityType{
-								Name: common.StringPtr("actType2"),
+						EventId:   18,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+							ActivityId: actIDNotStarted,
+							ActivityType: &commonproto.ActivityType{
+								Name: "actType2",
 							},
 							TaskList:                      taskList,
-							ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1000),
-							ScheduleToStartTimeoutSeconds: common.Int32Ptr(2000),
-							StartToCloseTimeoutSeconds:    common.Int32Ptr(3000),
-							HeartbeatTimeoutSeconds:       common.Int32Ptr(4000),
-							DecisionTaskCompletedEventId:  common.Int64Ptr(16),
-						},
+							ScheduleToCloseTimeoutSeconds: 1000,
+							ScheduleToStartTimeoutSeconds: 2000,
+							StartToCloseTimeoutSeconds:    3000,
+							HeartbeatTimeoutSeconds:       4000,
+							DecisionTaskCompletedEventId:  16,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(22),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskScheduled),
-						ActivityTaskScheduledEventAttributes: &workflow.ActivityTaskScheduledEventAttributes{
-							ActivityId: common.StringPtr(actIDStartedNoRetry),
-							ActivityType: &workflow.ActivityType{
-								Name: common.StringPtr("actType2"),
+						EventId:   19,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeTimerStarted,
+						Attributes: &commonproto.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &commonproto.TimerStartedEventAttributes{
+							TimerId:                      timerUnfiredID1,
+							StartToFireTimeoutSeconds:    4,
+							DecisionTaskCompletedEventId: 16,
+						}},
+					},
+					{
+						EventId:   20,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeTimerStarted,
+						Attributes: &commonproto.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &commonproto.TimerStartedEventAttributes{
+							TimerId:                      timerUnfiredID2,
+							StartToFireTimeoutSeconds:    8,
+							DecisionTaskCompletedEventId: 16,
+						}},
+					},
+					{
+						EventId:   21,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+							ActivityId: actIDCompleted2,
+							ActivityType: &commonproto.ActivityType{
+								Name: "actType2",
 							},
 							TaskList:                      taskList,
-							ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1000),
-							ScheduleToStartTimeoutSeconds: common.Int32Ptr(2000),
-							StartToCloseTimeoutSeconds:    common.Int32Ptr(3000),
-							HeartbeatTimeoutSeconds:       common.Int32Ptr(4000),
-							DecisionTaskCompletedEventId:  common.Int64Ptr(16),
-						},
+							ScheduleToCloseTimeoutSeconds: 1000,
+							ScheduleToStartTimeoutSeconds: 2000,
+							StartToCloseTimeoutSeconds:    3000,
+							HeartbeatTimeoutSeconds:       4000,
+							DecisionTaskCompletedEventId:  16,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(23),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeWorkflowExecutionSignaled),
-						WorkflowExecutionSignaledEventAttributes: &workflow.WorkflowExecutionSignaledEventAttributes{
-							SignalName: common.StringPtr(signalName3),
-						},
+						EventId:   22,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+							ActivityId: actIDStartedNoRetry,
+							ActivityType: &commonproto.ActivityType{
+								Name: "actType2",
+							},
+							TaskList:                      taskList,
+							ScheduleToCloseTimeoutSeconds: 1000,
+							ScheduleToStartTimeoutSeconds: 2000,
+							StartToCloseTimeoutSeconds:    3000,
+							HeartbeatTimeoutSeconds:       4000,
+							DecisionTaskCompletedEventId:  16,
+						}},
 					},
-				},
-			},
-			{
-				Events: []*workflow.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(24),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskStarted),
-						ActivityTaskStartedEventAttributes: &workflow.ActivityTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(21),
-						},
-					},
-				},
-			},
-			{
-				Events: []*workflow.HistoryEvent{
-					{
-						EventId:   common.Int64Ptr(25),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeWorkflowExecutionSignaled),
-						WorkflowExecutionSignaledEventAttributes: &workflow.WorkflowExecutionSignaledEventAttributes{
-							SignalName: common.StringPtr(signalName4),
-						},
+						EventId:   23,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeWorkflowExecutionSignaled,
+						Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+							SignalName: signalName3,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(26),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskStarted),
-						ActivityTaskStartedEventAttributes: &workflow.ActivityTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(22),
-						},
+						EventId:   24,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskStarted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{
+							ScheduledEventId: 21,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(27),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskCompleted),
-						ActivityTaskCompletedEventAttributes: &workflow.ActivityTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(21),
-							StartedEventId:   common.Int64Ptr(24),
-						},
+						EventId:   25,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeWorkflowExecutionSignaled,
+						Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+							SignalName: signalName4,
+						}},
+					},
+				},
+			},
+			{
+				Events: []*commonproto.HistoryEvent{
+					{
+						EventId:   26,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskStarted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{
+							ScheduledEventId: 22,
+						}},
+					},
+				},
+			},
+			{
+				Events: []*commonproto.HistoryEvent{
+					{
+						EventId:   27,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: &commonproto.ActivityTaskCompletedEventAttributes{
+							ScheduledEventId: 21,
+							StartedEventId:   24,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(28),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskScheduled),
-						DecisionTaskScheduledEventAttributes: &workflow.DecisionTaskScheduledEventAttributes{
+						EventId:   28,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
-							StartToCloseTimeoutSeconds: common.Int32Ptr(100),
-						},
+							StartToCloseTimeoutSeconds: 100,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(29),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskStarted),
-						DecisionTaskStartedEventAttributes: &workflow.DecisionTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(28),
-						},
+						EventId:   29,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskStarted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+							ScheduledEventId: 28,
+						}},
 					},
 				},
 			},
 			/////////////// reset point/////////////
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(30),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskCompleted),
-						DecisionTaskCompletedEventAttributes: &workflow.DecisionTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(28),
-							StartedEventId:   common.Int64Ptr(29),
-						},
+						EventId:   30,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+							ScheduledEventId: 28,
+							StartedEventId:   29,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(31),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeTimerStarted),
-						TimerStartedEventAttributes: &workflow.TimerStartedEventAttributes{
-							TimerId:                      common.StringPtr(timerAfterReset),
-							StartToFireTimeoutSeconds:    common.Int64Ptr(4),
-							DecisionTaskCompletedEventId: common.Int64Ptr(30),
-						},
-					},
-				},
-			},
-			{
-				Events: []*workflow.HistoryEvent{
-					{
-						EventId:   common.Int64Ptr(32),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskStarted),
-						ActivityTaskStartedEventAttributes: &workflow.ActivityTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(18),
-						},
+						EventId:   31,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeTimerStarted,
+						Attributes: &commonproto.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &commonproto.TimerStartedEventAttributes{
+							TimerId:                      timerAfterReset,
+							StartToFireTimeoutSeconds:    4,
+							DecisionTaskCompletedEventId: 30,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(33),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeWorkflowExecutionSignaled),
-						WorkflowExecutionSignaledEventAttributes: &workflow.WorkflowExecutionSignaledEventAttributes{
-							SignalName: common.StringPtr(signalName1),
-						},
+						EventId:   32,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskStarted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{
+							ScheduledEventId: 18,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(34),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeWorkflowExecutionSignaled),
-						WorkflowExecutionSignaledEventAttributes: &workflow.WorkflowExecutionSignaledEventAttributes{
-							SignalName: common.StringPtr(signalName2),
-						},
+						EventId:   33,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeWorkflowExecutionSignaled,
+						Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+							SignalName: signalName1,
+						}},
 					},
 				},
 			},
-		},
+			{
+				Events: []*commonproto.HistoryEvent{
+					{
+						EventId:   34,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeWorkflowExecutionSignaled,
+						Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+							SignalName: signalName2,
+						}},
+					},
+				},
+			},
+		}),
 	}
 
 	eid := int64(0)
+	timestamp := int64(1000)
 	for _, be := range readHistoryResp.History {
 		for _, e := range be.Events {
 			eid++
 			if e.GetEventId() != eid {
 				s.Fail(fmt.Sprintf("inconintous eventID: %v, %v", eid, e.GetEventId()))
 			}
-			e.Timestamp = common.Int64Ptr(1000)
+			e.Timestamp = &timestamp
 		}
 	}
 
 	newBranchToken := []byte("newBranch")
-	forkResp := &p.ForkHistoryBranchResponse{
+	forkResp := &persistence.ForkHistoryBranchResponse{
 		NewBranchToken: newBranchToken,
 	}
 
@@ -2705,11 +2712,11 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(afterResetVersion).Return("active").AnyTimes()
 
 	testDomainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&p.DomainInfo{ID: testDomainID},
-		&p.DomainConfig{Retention: 1},
-		&p.DomainReplicationConfig{
+		&persistence.DomainInfo{ID: testDomainID},
+		&persistence.DomainConfig{Retention: 1},
+		&persistence.DomainReplicationConfig{
 			ActiveClusterName: "active",
-			Clusters: []*p.ClusterReplicationConfig{
+			Clusters: []*persistence.ClusterReplicationConfig{
 				{
 					ClusterName: "active",
 				}, {
@@ -2724,34 +2731,34 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
 	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(testDomainEntry, nil).AnyTimes()
 
-	request := &h.ResetWorkflowExecutionRequest{}
+	request := &historyservice.ResetWorkflowExecutionRequest{}
 	domainID := testDomainID
-	request.DomainUUID = &domainID
-	request.ResetRequest = &workflow.ResetWorkflowExecutionRequest{}
+	request.DomainUUID = domainID
+	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{}
 
 	wid := "wId"
 	wfType := "wfType"
 	taskListName := "taskList"
 	forkRunID := uuid.New().String()
 	currRunID := uuid.New().String()
-	we := workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(wid),
-		RunId:      common.StringPtr(forkRunID),
+	we := commonproto.WorkflowExecution{
+		WorkflowId: wid,
+		RunId:      forkRunID,
 	}
-	request.ResetRequest = &workflow.ResetWorkflowExecutionRequest{
-		Domain:                common.StringPtr(domainName),
+	request.ResetRequest = &workflowservice.ResetWorkflowExecutionRequest{
+		Domain:                domainName,
 		WorkflowExecution:     &we,
-		Reason:                common.StringPtr("test reset"),
-		DecisionFinishEventId: common.Int64Ptr(30),
-		RequestId:             common.StringPtr(uuid.New().String()),
+		Reason:                "test reset",
+		DecisionFinishEventId: 30,
+		RequestId:             uuid.New().String(),
 	}
 
-	forkGwmsRequest := &p.GetWorkflowExecutionRequest{
+	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: workflow.WorkflowExecution{
-			WorkflowId: common.StringPtr(wid),
-			RunId:      common.StringPtr(forkRunID),
-		},
+		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      forkRunID,
+		}),
 	}
 
 	timerFiredID := "timerID0"
@@ -2769,7 +2776,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	signalName4 := "sig4"
 
 	forkBranchToken := []byte("forkBranchToken")
-	forkExeInfo := &p.WorkflowExecutionInfo{
+	forkExeInfo := &persistence.WorkflowExecutionInfo{
 		DomainID:           domainID,
 		WorkflowID:         wid,
 		WorkflowTypeName:   wfType,
@@ -2782,513 +2789,514 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 		DecisionStartedID:  common.EmptyEventID,
 	}
 
-	forkRepState := &p.ReplicationState{
+	forkRepState := &persistence.ReplicationState{
 		CurrentVersion:      beforeResetVersion,
 		StartVersion:        beforeResetVersion,
 		LastWriteEventID:    common.EmptyEventID,
 		LastWriteVersion:    common.EmptyVersion,
-		LastReplicationInfo: map[string]*p.ReplicationInfo{},
+		LastReplicationInfo: map[string]*persistence.ReplicationInfo{},
 	}
-	forkGwmsResponse := &p.GetWorkflowExecutionResponse{State: &p.WorkflowMutableState{
+	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    forkExeInfo,
-		ExecutionStats:   &p.ExecutionStats{},
+		ExecutionStats:   &persistence.ExecutionStats{},
 		ReplicationState: forkRepState,
 	}}
 
-	currGwmsRequest := &p.GetWorkflowExecutionRequest{
+	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: workflow.WorkflowExecution{
-			WorkflowId: common.StringPtr(wid),
-			RunId:      common.StringPtr(currRunID),
-		},
+		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      currRunID,
+		}),
 	}
-	currExeInfo := &p.WorkflowExecutionInfo{
+	currExeInfo := &persistence.WorkflowExecutionInfo{
 		DomainID:           domainID,
 		WorkflowID:         wid,
 		WorkflowTypeName:   wfType,
 		TaskList:           taskListName,
 		RunID:              currRunID,
 		NextEventID:        common.FirstEventID,
-		State:              p.WorkflowStateCompleted,
+		State:              persistence.WorkflowStateCompleted,
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
 	}
 	compareCurrExeInfo := copyWorkflowExecutionInfo(currExeInfo)
-	currGwmsResponse := &p.GetWorkflowExecutionResponse{State: &p.WorkflowMutableState{
+	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    currExeInfo,
-		ExecutionStats:   &p.ExecutionStats{},
+		ExecutionStats:   &persistence.ExecutionStats{},
 		ReplicationState: forkRepState,
 	}}
 
-	gcurResponse := &p.GetCurrentExecutionResponse{
+	gcurResponse := &persistence.GetCurrentExecutionResponse{
 		RunID: currRunID,
 	}
 
-	readHistoryReq := &p.ReadHistoryBranchRequest{
+	readHistoryReq := &persistence.ReadHistoryBranchRequest{
 		BranchToken:   forkBranchToken,
 		MinEventID:    common.FirstEventID,
 		MaxEventID:    int64(35),
 		PageSize:      defaultHistoryPageSize,
 		NextPageToken: nil,
-		ShardID:       common.IntPtr(s.shardID),
+		ShardID:       &s.shardID,
 	}
 
-	taskList := &workflow.TaskList{
-		Name: common.StringPtr(taskListName),
+	taskList := &commonproto.TaskList{
+		Name: taskListName,
 	}
-	readHistoryResp := &p.ReadHistoryBranchByBatchResponse{
+	readHistoryResp := &persistence.ReadHistoryBranchByBatchResponse{
 		NextPageToken:    nil,
 		Size:             1000,
 		LastFirstEventID: int64(31),
-		History: []*workflow.History{
-			&workflow.History{
-				Events: []*workflow.HistoryEvent{
-					&workflow.HistoryEvent{
-						EventId:   common.Int64Ptr(1),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeWorkflowExecutionStarted),
-						WorkflowExecutionStartedEventAttributes: &workflow.WorkflowExecutionStartedEventAttributes{
-							WorkflowType: &workflow.WorkflowType{
-								Name: common.StringPtr(wfType),
+		History: adapter.ToThriftHistories([]*commonproto.History{
+			{
+				Events: []*commonproto.HistoryEvent{
+					{
+						EventId:   1,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeWorkflowExecutionStarted,
+						Attributes: &commonproto.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &commonproto.WorkflowExecutionStartedEventAttributes{
+							WorkflowType: &commonproto.WorkflowType{
+								Name: wfType,
 							},
 							TaskList:                            taskList,
 							Input:                               []byte("testInput"),
-							ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
-							TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(200),
-						},
+							ExecutionStartToCloseTimeoutSeconds: 100,
+							TaskStartToCloseTimeoutSeconds:      200,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(2),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskScheduled),
-						DecisionTaskScheduledEventAttributes: &workflow.DecisionTaskScheduledEventAttributes{
+						EventId:   2,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
-							StartToCloseTimeoutSeconds: common.Int32Ptr(100),
-						},
+							StartToCloseTimeoutSeconds: 100,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(3),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskStarted),
-						DecisionTaskStartedEventAttributes: &workflow.DecisionTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(2),
-						},
+						EventId:   3,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskStarted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+							ScheduledEventId: 2,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(4),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskCompleted),
-						DecisionTaskCompletedEventAttributes: &workflow.DecisionTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(2),
-							StartedEventId:   common.Int64Ptr(3),
-						},
+						EventId:   4,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+							ScheduledEventId: 2,
+							StartedEventId:   3,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(5),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeMarkerRecorded),
-						MarkerRecordedEventAttributes: &workflow.MarkerRecordedEventAttributes{
-							MarkerName:                   common.StringPtr("Version"),
+						EventId:   5,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeMarkerRecorded,
+						Attributes: &commonproto.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &commonproto.MarkerRecordedEventAttributes{
+							MarkerName:                   "Version",
 							Details:                      []byte("details"),
-							DecisionTaskCompletedEventId: common.Int64Ptr(4),
-						},
+							DecisionTaskCompletedEventId: 4,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(6),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskScheduled),
-						ActivityTaskScheduledEventAttributes: &workflow.ActivityTaskScheduledEventAttributes{
-							ActivityId: common.StringPtr(actIDCompleted1),
-							ActivityType: &workflow.ActivityType{
-								Name: common.StringPtr("actType0"),
+						EventId:   6,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+							ActivityId: actIDCompleted1,
+							ActivityType: &commonproto.ActivityType{
+								Name: "actType0",
 							},
 							TaskList:                      taskList,
-							ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1000),
-							ScheduleToStartTimeoutSeconds: common.Int32Ptr(2000),
-							StartToCloseTimeoutSeconds:    common.Int32Ptr(3000),
-							HeartbeatTimeoutSeconds:       common.Int32Ptr(4000),
-							DecisionTaskCompletedEventId:  common.Int64Ptr(4),
-						},
+							ScheduleToCloseTimeoutSeconds: 1000,
+							ScheduleToStartTimeoutSeconds: 2000,
+							StartToCloseTimeoutSeconds:    3000,
+							HeartbeatTimeoutSeconds:       4000,
+							DecisionTaskCompletedEventId:  4,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(7),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeTimerStarted),
-						TimerStartedEventAttributes: &workflow.TimerStartedEventAttributes{
-							TimerId:                      common.StringPtr(timerFiredID),
-							StartToFireTimeoutSeconds:    common.Int64Ptr(2),
-							DecisionTaskCompletedEventId: common.Int64Ptr(4),
-						},
-					},
-				},
-			},
-			{
-				Events: []*workflow.HistoryEvent{
-					{
-						EventId:   common.Int64Ptr(8),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskStarted),
-						ActivityTaskStartedEventAttributes: &workflow.ActivityTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(6),
-						},
+						EventId:   7,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeTimerStarted,
+						Attributes: &commonproto.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &commonproto.TimerStartedEventAttributes{
+							TimerId:                      timerFiredID,
+							StartToFireTimeoutSeconds:    2,
+							DecisionTaskCompletedEventId: 4,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(9),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskCompleted),
-						ActivityTaskCompletedEventAttributes: &workflow.ActivityTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(6),
-							StartedEventId:   common.Int64Ptr(8),
-						},
+						EventId:   8,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskStarted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{
+							ScheduledEventId: 6,
+						}},
+					},
+				},
+			},
+			{
+				Events: []*commonproto.HistoryEvent{
+					{
+						EventId:   9,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: &commonproto.ActivityTaskCompletedEventAttributes{
+							ScheduledEventId: 6,
+							StartedEventId:   8,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(10),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskScheduled),
-						DecisionTaskScheduledEventAttributes: &workflow.DecisionTaskScheduledEventAttributes{
+						EventId:   10,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
-							StartToCloseTimeoutSeconds: common.Int32Ptr(100),
-						},
+							StartToCloseTimeoutSeconds: 100,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(11),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskStarted),
-						DecisionTaskStartedEventAttributes: &workflow.DecisionTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(10),
-						},
+						EventId:   11,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskStarted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+							ScheduledEventId: 10,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(12),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskCompleted),
-						DecisionTaskCompletedEventAttributes: &workflow.DecisionTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(10),
-							StartedEventId:   common.Int64Ptr(11),
-						},
+						EventId:   12,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+							ScheduledEventId: 10,
+							StartedEventId:   11,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(13),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeTimerFired),
-						TimerFiredEventAttributes: &workflow.TimerFiredEventAttributes{
-							TimerId: common.StringPtr(timerFiredID),
-						},
+						EventId:   13,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeTimerFired,
+						Attributes: &commonproto.HistoryEvent_TimerFiredEventAttributes{TimerFiredEventAttributes: &commonproto.TimerFiredEventAttributes{
+							TimerId: timerFiredID,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(14),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskScheduled),
-						DecisionTaskScheduledEventAttributes: &workflow.DecisionTaskScheduledEventAttributes{
+						EventId:   14,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
-							StartToCloseTimeoutSeconds: common.Int32Ptr(100),
-						},
+							StartToCloseTimeoutSeconds: 100,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(15),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskStarted),
-						DecisionTaskStartedEventAttributes: &workflow.DecisionTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(14),
-						},
+						EventId:   15,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskStarted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+							ScheduledEventId: 14,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(16),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskCompleted),
-						DecisionTaskCompletedEventAttributes: &workflow.DecisionTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(14),
-							StartedEventId:   common.Int64Ptr(15),
-						},
+						EventId:   16,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+							ScheduledEventId: 14,
+							StartedEventId:   15,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(17),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskScheduled),
-						ActivityTaskScheduledEventAttributes: &workflow.ActivityTaskScheduledEventAttributes{
-							ActivityId: common.StringPtr(actIDRetry),
-							ActivityType: &workflow.ActivityType{
-								Name: common.StringPtr("actType1"),
+						EventId:   17,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+							ActivityId: actIDRetry,
+							ActivityType: &commonproto.ActivityType{
+								Name: "actType1",
 							},
 							TaskList:                      taskList,
-							ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1000),
-							ScheduleToStartTimeoutSeconds: common.Int32Ptr(2000),
-							StartToCloseTimeoutSeconds:    common.Int32Ptr(3000),
-							HeartbeatTimeoutSeconds:       common.Int32Ptr(4000),
-							DecisionTaskCompletedEventId:  common.Int64Ptr(16),
-							RetryPolicy: &workflow.RetryPolicy{
-								InitialIntervalInSeconds:    common.Int32Ptr(1),
-								BackoffCoefficient:          common.Float64Ptr(0.2),
-								MaximumAttempts:             common.Int32Ptr(10),
-								MaximumIntervalInSeconds:    common.Int32Ptr(1000),
-								ExpirationIntervalInSeconds: common.Int32Ptr(math.MaxInt32),
+							ScheduleToCloseTimeoutSeconds: 1000,
+							ScheduleToStartTimeoutSeconds: 2000,
+							StartToCloseTimeoutSeconds:    3000,
+							HeartbeatTimeoutSeconds:       4000,
+							DecisionTaskCompletedEventId:  16,
+							RetryPolicy: &commonproto.RetryPolicy{
+								InitialIntervalInSeconds:    1,
+								BackoffCoefficient:          0.2,
+								MaximumAttempts:             10,
+								MaximumIntervalInSeconds:    1000,
+								ExpirationIntervalInSeconds: math.MaxInt32,
 							},
-						},
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(18),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskScheduled),
-						ActivityTaskScheduledEventAttributes: &workflow.ActivityTaskScheduledEventAttributes{
-							ActivityId: common.StringPtr(actIDNotStarted),
-							ActivityType: &workflow.ActivityType{
-								Name: common.StringPtr("actType2"),
-							},
-							TaskList:                      taskList,
-							ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1000),
-							ScheduleToStartTimeoutSeconds: common.Int32Ptr(2000),
-							StartToCloseTimeoutSeconds:    common.Int32Ptr(3000),
-							HeartbeatTimeoutSeconds:       common.Int32Ptr(4000),
-							DecisionTaskCompletedEventId:  common.Int64Ptr(16),
-						},
-					},
-					{
-						EventId:   common.Int64Ptr(19),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeTimerStarted),
-						TimerStartedEventAttributes: &workflow.TimerStartedEventAttributes{
-							TimerId:                      common.StringPtr(timerUnfiredID1),
-							StartToFireTimeoutSeconds:    common.Int64Ptr(4),
-							DecisionTaskCompletedEventId: common.Int64Ptr(16),
-						},
-					},
-					{
-						EventId:   common.Int64Ptr(20),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeTimerStarted),
-						TimerStartedEventAttributes: &workflow.TimerStartedEventAttributes{
-							TimerId:                      common.StringPtr(timerUnfiredID2),
-							StartToFireTimeoutSeconds:    common.Int64Ptr(8),
-							DecisionTaskCompletedEventId: common.Int64Ptr(16),
-						},
-					},
-					{
-						EventId:   common.Int64Ptr(21),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskScheduled),
-						ActivityTaskScheduledEventAttributes: &workflow.ActivityTaskScheduledEventAttributes{
-							ActivityId: common.StringPtr(actIDCompleted2),
-							ActivityType: &workflow.ActivityType{
-								Name: common.StringPtr("actType2"),
+						EventId:   18,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+							ActivityId: actIDNotStarted,
+							ActivityType: &commonproto.ActivityType{
+								Name: "actType2",
 							},
 							TaskList:                      taskList,
-							ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1000),
-							ScheduleToStartTimeoutSeconds: common.Int32Ptr(2000),
-							StartToCloseTimeoutSeconds:    common.Int32Ptr(3000),
-							HeartbeatTimeoutSeconds:       common.Int32Ptr(4000),
-							DecisionTaskCompletedEventId:  common.Int64Ptr(16),
-						},
+							ScheduleToCloseTimeoutSeconds: 1000,
+							ScheduleToStartTimeoutSeconds: 2000,
+							StartToCloseTimeoutSeconds:    3000,
+							HeartbeatTimeoutSeconds:       4000,
+							DecisionTaskCompletedEventId:  16,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(22),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskScheduled),
-						ActivityTaskScheduledEventAttributes: &workflow.ActivityTaskScheduledEventAttributes{
-							ActivityId: common.StringPtr(actIDStartedNoRetry),
-							ActivityType: &workflow.ActivityType{
-								Name: common.StringPtr("actType2"),
+						EventId:   19,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeTimerStarted,
+						Attributes: &commonproto.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &commonproto.TimerStartedEventAttributes{
+							TimerId:                      timerUnfiredID1,
+							StartToFireTimeoutSeconds:    4,
+							DecisionTaskCompletedEventId: 16,
+						}},
+					},
+					{
+						EventId:   20,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeTimerStarted,
+						Attributes: &commonproto.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &commonproto.TimerStartedEventAttributes{
+							TimerId:                      timerUnfiredID2,
+							StartToFireTimeoutSeconds:    8,
+							DecisionTaskCompletedEventId: 16,
+						}},
+					},
+					{
+						EventId:   21,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+							ActivityId: actIDCompleted2,
+							ActivityType: &commonproto.ActivityType{
+								Name: "actType2",
 							},
 							TaskList:                      taskList,
-							ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1000),
-							ScheduleToStartTimeoutSeconds: common.Int32Ptr(2000),
-							StartToCloseTimeoutSeconds:    common.Int32Ptr(3000),
-							HeartbeatTimeoutSeconds:       common.Int32Ptr(4000),
-							DecisionTaskCompletedEventId:  common.Int64Ptr(16),
-						},
+							ScheduleToCloseTimeoutSeconds: 1000,
+							ScheduleToStartTimeoutSeconds: 2000,
+							StartToCloseTimeoutSeconds:    3000,
+							HeartbeatTimeoutSeconds:       4000,
+							DecisionTaskCompletedEventId:  16,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(23),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeWorkflowExecutionSignaled),
-						WorkflowExecutionSignaledEventAttributes: &workflow.WorkflowExecutionSignaledEventAttributes{
-							SignalName: common.StringPtr(signalName3),
-						},
+						EventId:   22,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+							ActivityId: actIDStartedNoRetry,
+							ActivityType: &commonproto.ActivityType{
+								Name: "actType2",
+							},
+							TaskList:                      taskList,
+							ScheduleToCloseTimeoutSeconds: 1000,
+							ScheduleToStartTimeoutSeconds: 2000,
+							StartToCloseTimeoutSeconds:    3000,
+							HeartbeatTimeoutSeconds:       4000,
+							DecisionTaskCompletedEventId:  16,
+						}},
 					},
-				},
-			},
-			{
-				Events: []*workflow.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(24),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskStarted),
-						ActivityTaskStartedEventAttributes: &workflow.ActivityTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(21),
-						},
-					},
-				},
-			},
-			{
-				Events: []*workflow.HistoryEvent{
-					{
-						EventId:   common.Int64Ptr(25),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeWorkflowExecutionSignaled),
-						WorkflowExecutionSignaledEventAttributes: &workflow.WorkflowExecutionSignaledEventAttributes{
-							SignalName: common.StringPtr(signalName4),
-						},
+						EventId:   23,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeWorkflowExecutionSignaled,
+						Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+							SignalName: signalName3,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(26),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskStarted),
-						ActivityTaskStartedEventAttributes: &workflow.ActivityTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(22),
-						},
+						EventId:   24,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskStarted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{
+							ScheduledEventId: 21,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(27),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskCompleted),
-						ActivityTaskCompletedEventAttributes: &workflow.ActivityTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(21),
-							StartedEventId:   common.Int64Ptr(24),
-						},
+						EventId:   25,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeWorkflowExecutionSignaled,
+						Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+							SignalName: signalName4,
+						}},
+					},
+				},
+			},
+			{
+				Events: []*commonproto.HistoryEvent{
+					{
+						EventId:   26,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskStarted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{
+							ScheduledEventId: 22,
+						}},
+					},
+				},
+			},
+			{
+				Events: []*commonproto.HistoryEvent{
+					{
+						EventId:   27,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: &commonproto.ActivityTaskCompletedEventAttributes{
+							ScheduledEventId: 21,
+							StartedEventId:   24,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(28),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskScheduled),
-						DecisionTaskScheduledEventAttributes: &workflow.DecisionTaskScheduledEventAttributes{
+						EventId:   28,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
-							StartToCloseTimeoutSeconds: common.Int32Ptr(100),
-						},
+							StartToCloseTimeoutSeconds: 100,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(29),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskStarted),
-						DecisionTaskStartedEventAttributes: &workflow.DecisionTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(28),
-						},
+						EventId:   29,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskStarted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+							ScheduledEventId: 28,
+						}},
 					},
 				},
 			},
 			/////////////// reset point/////////////
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(30),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskCompleted),
-						DecisionTaskCompletedEventAttributes: &workflow.DecisionTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(28),
-							StartedEventId:   common.Int64Ptr(29),
-						},
+						EventId:   30,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+							ScheduledEventId: 28,
+							StartedEventId:   29,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(31),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeTimerStarted),
-						TimerStartedEventAttributes: &workflow.TimerStartedEventAttributes{
-							TimerId:                      common.StringPtr(timerAfterReset),
-							StartToFireTimeoutSeconds:    common.Int64Ptr(4),
-							DecisionTaskCompletedEventId: common.Int64Ptr(30),
-						},
-					},
-				},
-			},
-			{
-				Events: []*workflow.HistoryEvent{
-					{
-						EventId:   common.Int64Ptr(32),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskStarted),
-						ActivityTaskStartedEventAttributes: &workflow.ActivityTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(18),
-						},
+						EventId:   31,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeTimerStarted,
+						Attributes: &commonproto.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &commonproto.TimerStartedEventAttributes{
+							TimerId:                      timerAfterReset,
+							StartToFireTimeoutSeconds:    4,
+							DecisionTaskCompletedEventId: 30,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(33),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeWorkflowExecutionSignaled),
-						WorkflowExecutionSignaledEventAttributes: &workflow.WorkflowExecutionSignaledEventAttributes{
-							SignalName: common.StringPtr(signalName1),
-						},
+						EventId:   32,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskStarted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{
+							ScheduledEventId: 18,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(34),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeWorkflowExecutionSignaled),
-						WorkflowExecutionSignaledEventAttributes: &workflow.WorkflowExecutionSignaledEventAttributes{
-							SignalName: common.StringPtr(signalName2),
-						},
+						EventId:   33,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeWorkflowExecutionSignaled,
+						Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+							SignalName: signalName1,
+						}},
 					},
 				},
 			},
-		},
+			{
+				Events: []*commonproto.HistoryEvent{
+					{
+						EventId:   34,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeWorkflowExecutionSignaled,
+						Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+							SignalName: signalName2,
+						}},
+					},
+				},
+			},
+		}),
 	}
 
 	eid := int64(0)
+	timestamp := int64(1000)
 	for _, be := range readHistoryResp.History {
 		for _, e := range be.Events {
 			eid++
 			if e.GetEventId() != eid {
 				s.Fail(fmt.Sprintf("inconintous eventID: %v, %v", eid, e.GetEventId()))
 			}
-			e.Timestamp = common.Int64Ptr(1000)
+			e.Timestamp = &timestamp
 		}
 	}
 
 	newBranchToken := []byte("newBranch")
-	forkResp := &p.ForkHistoryBranchResponse{
+	forkResp := &persistence.ForkHistoryBranchResponse{
 		NewBranchToken: newBranchToken,
 	}
 
-	appendV2Resp := &p.AppendHistoryNodesResponse{
+	appendV2Resp := &persistence.AppendHistoryNodesResponse{
 		Size: 200,
 	}
 
@@ -3313,16 +3321,16 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	s.Equal(3, len(calls))
 	appendCall := calls[2]
 	s.Equal("AppendHistoryNodes", appendCall.Method)
-	appendReq, ok := appendCall.Arguments[0].(*p.AppendHistoryNodesRequest)
+	appendReq, ok := appendCall.Arguments[0].(*persistence.AppendHistoryNodesRequest)
 	s.Equal(true, ok)
 	s.Equal(newBranchToken, appendReq.BranchToken)
 	s.Equal(false, appendReq.IsNewBranch)
 	s.Equal(5, len(appendReq.Events))
-	s.Equal(workflow.EventTypeDecisionTaskFailed, appendReq.Events[0].GetEventType())
-	s.Equal(workflow.EventTypeActivityTaskFailed, appendReq.Events[1].GetEventType())
-	s.Equal(workflow.EventTypeWorkflowExecutionSignaled, appendReq.Events[2].GetEventType())
-	s.Equal(workflow.EventTypeWorkflowExecutionSignaled, appendReq.Events[3].GetEventType())
-	s.Equal(workflow.EventTypeDecisionTaskScheduled, appendReq.Events[4].GetEventType())
+	s.Equal(enums.EventTypeDecisionTaskFailed, enums.EventType(appendReq.Events[0].GetEventType()))
+	s.Equal(enums.EventTypeActivityTaskFailed, enums.EventType(appendReq.Events[1].GetEventType()))
+	s.Equal(enums.EventTypeWorkflowExecutionSignaled, enums.EventType(appendReq.Events[2].GetEventType()))
+	s.Equal(enums.EventTypeWorkflowExecutionSignaled, enums.EventType(appendReq.Events[3].GetEventType()))
+	s.Equal(enums.EventTypeDecisionTaskScheduled, enums.EventType(appendReq.Events[4].GetEventType()))
 
 	s.Equal(int64(30), appendReq.Events[0].GetEventId())
 	s.Equal(int64(31), appendReq.Events[1].GetEventId())
@@ -3335,7 +3343,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	s.Equal(4, len(calls))
 	resetCall := calls[3]
 	s.Equal("ResetWorkflowExecution", resetCall.Method)
-	resetReq, ok := resetCall.Arguments[0].(*p.ResetWorkflowExecutionRequest)
+	resetReq, ok := resetCall.Arguments[0].(*persistence.ResetWorkflowExecutionRequest)
 	s.Equal(true, ok)
 	s.Equal(false, resetReq.CurrentWorkflowMutation != nil)
 	s.Equal(compareCurrExeInfo.RunID, resetReq.CurrentRunID)
@@ -3349,16 +3357,16 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	s.Equal(int64(35), resetReq.NewWorkflowSnapshot.ExecutionInfo.NextEventID)
 
 	s.Equal(4, len(resetReq.NewWorkflowSnapshot.TransferTasks))
-	s.Equal(p.TransferTaskTypeActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[0].GetType())
-	s.Equal(p.TransferTaskTypeActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[1].GetType())
-	s.Equal(p.TransferTaskTypeDecisionTask, resetReq.NewWorkflowSnapshot.TransferTasks[2].GetType())
-	s.Equal(p.TransferTaskTypeRecordWorkflowStarted, resetReq.NewWorkflowSnapshot.TransferTasks[3].GetType())
+	s.Equal(persistence.TransferTaskTypeActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[0].GetType())
+	s.Equal(persistence.TransferTaskTypeActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[1].GetType())
+	s.Equal(persistence.TransferTaskTypeDecisionTask, resetReq.NewWorkflowSnapshot.TransferTasks[2].GetType())
+	s.Equal(persistence.TransferTaskTypeRecordWorkflowStarted, resetReq.NewWorkflowSnapshot.TransferTasks[3].GetType())
 
 	// WF timeout task, user timer, activity timeout timer, activity retry timer
 	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TimerTasks))
-	s.Equal(p.TaskTypeWorkflowTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
-	s.Equal(p.TaskTypeUserTimer, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
-	s.Equal(p.TaskTypeActivityTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
+	s.Equal(persistence.TaskTypeWorkflowTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
+	s.Equal(persistence.TaskTypeUserTimer, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
+	s.Equal(persistence.TaskTypeActivityTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
 
 	s.Equal(2, len(resetReq.NewWorkflowSnapshot.TimerInfos))
 	s.assertTimerIDs([]string{timerUnfiredID1, timerUnfiredID2}, resetReq.NewWorkflowSnapshot.TimerInfos)
@@ -3367,15 +3375,15 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	s.assertActivityIDs([]string{actIDRetry, actIDNotStarted}, resetReq.NewWorkflowSnapshot.ActivityInfos)
 
 	s.Equal(1, len(resetReq.NewWorkflowSnapshot.ReplicationTasks))
-	s.Equal(p.ReplicationTaskTypeHistory, resetReq.NewWorkflowSnapshot.ReplicationTasks[0].GetType())
+	s.Equal(persistence.ReplicationTaskTypeHistory, resetReq.NewWorkflowSnapshot.ReplicationTasks[0].GetType())
 
 	compareRepState := copyReplicationState(forkRepState)
 	compareRepState.StartVersion = beforeResetVersion
 	compareRepState.CurrentVersion = afterResetVersion
 	compareRepState.LastWriteEventID = 34
 	compareRepState.LastWriteVersion = afterResetVersion
-	compareRepState.LastReplicationInfo = map[string]*p.ReplicationInfo{
-		"standby": &p.ReplicationInfo{
+	compareRepState.LastReplicationInfo = map[string]*persistence.ReplicationInfo{
+		"standby": &persistence.ReplicationInfo{
 			LastEventID: 29,
 			Version:     beforeResetVersion,
 		},
@@ -3397,11 +3405,11 @@ func (s *resetorSuite) TestApplyReset() {
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(afterResetVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	testDomainEntry := cache.NewGlobalDomainCacheEntryForTest(
-		&p.DomainInfo{ID: testDomainID},
-		&p.DomainConfig{Retention: 1},
-		&p.DomainReplicationConfig{
+		&persistence.DomainInfo{ID: testDomainID},
+		&persistence.DomainConfig{Retention: 1},
+		&persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
-			Clusters: []*p.ClusterReplicationConfig{
+			Clusters: []*persistence.ClusterReplicationConfig{
 				{ClusterName: cluster.TestCurrentClusterName},
 				{ClusterName: cluster.TestAlternativeClusterName},
 			},
@@ -3419,17 +3427,17 @@ func (s *resetorSuite) TestApplyReset() {
 	forkRunID := uuid.New().String()
 	currRunID := uuid.New().String()
 	newRunID := uuid.New().String()
-	we := workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(wid),
-		RunId:      common.StringPtr(newRunID),
+	we := commonproto.WorkflowExecution{
+		WorkflowId: wid,
+		RunId:      newRunID,
 	}
 
-	forkGwmsRequest := &p.GetWorkflowExecutionRequest{
+	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: workflow.WorkflowExecution{
-			WorkflowId: common.StringPtr(wid),
-			RunId:      common.StringPtr(forkRunID),
-		},
+		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      forkRunID,
+		}),
 	}
 
 	timerFiredID := "timerID0"
@@ -3446,7 +3454,7 @@ func (s *resetorSuite) TestApplyReset() {
 	signalName4 := "sig4"
 
 	forkBranchToken := []byte("forkBranchToken")
-	forkExeInfo := &p.WorkflowExecutionInfo{
+	forkExeInfo := &persistence.WorkflowExecutionInfo{
 		DomainID:           domainID,
 		WorkflowID:         wid,
 		WorkflowTypeName:   wfType,
@@ -3459,523 +3467,524 @@ func (s *resetorSuite) TestApplyReset() {
 		DecisionStartedID:  common.EmptyEventID,
 	}
 
-	forkRepState := &p.ReplicationState{
+	forkRepState := &persistence.ReplicationState{
 		CurrentVersion:      beforeResetVersion,
 		StartVersion:        beforeResetVersion,
 		LastWriteEventID:    common.EmptyEventID,
 		LastWriteVersion:    common.EmptyVersion,
-		LastReplicationInfo: map[string]*p.ReplicationInfo{},
+		LastReplicationInfo: map[string]*persistence.ReplicationInfo{},
 	}
-	forkGwmsResponse := &p.GetWorkflowExecutionResponse{State: &p.WorkflowMutableState{
+	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    forkExeInfo,
-		ExecutionStats:   &p.ExecutionStats{},
+		ExecutionStats:   &persistence.ExecutionStats{},
 		ReplicationState: forkRepState,
 	}}
 
-	currGwmsRequest := &p.GetWorkflowExecutionRequest{
+	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: workflow.WorkflowExecution{
-			WorkflowId: common.StringPtr(wid),
-			RunId:      common.StringPtr(currRunID),
-		},
+		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      currRunID,
+		}),
 	}
-	currExeInfo := &p.WorkflowExecutionInfo{
+	currExeInfo := &persistence.WorkflowExecutionInfo{
 		DomainID:           domainID,
 		WorkflowID:         wid,
 		WorkflowTypeName:   wfType,
 		TaskList:           taskListName,
 		RunID:              currRunID,
 		NextEventID:        common.FirstEventID,
-		State:              p.WorkflowStateCompleted,
+		State:              persistence.WorkflowStateCompleted,
 		DecisionVersion:    common.EmptyVersion,
 		DecisionScheduleID: common.EmptyEventID,
 		DecisionStartedID:  common.EmptyEventID,
 	}
 	compareCurrExeInfo := copyWorkflowExecutionInfo(currExeInfo)
-	currGwmsResponse := &p.GetWorkflowExecutionResponse{State: &p.WorkflowMutableState{
+	currGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    currExeInfo,
-		ExecutionStats:   &p.ExecutionStats{},
+		ExecutionStats:   &persistence.ExecutionStats{},
 		ReplicationState: forkRepState,
 	}}
 
-	readHistoryReq := &p.ReadHistoryBranchRequest{
+	readHistoryReq := &persistence.ReadHistoryBranchRequest{
 		BranchToken:   forkBranchToken,
 		MinEventID:    common.FirstEventID,
 		MaxEventID:    int64(30),
 		PageSize:      defaultHistoryPageSize,
 		NextPageToken: nil,
-		ShardID:       common.IntPtr(s.shardID),
+		ShardID:       &s.shardID,
 	}
 
-	taskList := &workflow.TaskList{
-		Name: common.StringPtr(taskListName),
+	taskList := &commonproto.TaskList{
+		Name: taskListName,
 	}
 
-	readHistoryResp := &p.ReadHistoryBranchByBatchResponse{
+	readHistoryResp := &persistence.ReadHistoryBranchByBatchResponse{
 		NextPageToken:    nil,
 		Size:             1000,
 		LastFirstEventID: int64(31),
-		History: []*workflow.History{
-			&workflow.History{
-				Events: []*workflow.HistoryEvent{
-					&workflow.HistoryEvent{
-						EventId:   common.Int64Ptr(1),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeWorkflowExecutionStarted),
-						WorkflowExecutionStartedEventAttributes: &workflow.WorkflowExecutionStartedEventAttributes{
-							WorkflowType: &workflow.WorkflowType{
-								Name: common.StringPtr(wfType),
+		History: adapter.ToThriftHistories([]*commonproto.History{
+			{
+				Events: []*commonproto.HistoryEvent{
+					{
+						EventId:   1,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeWorkflowExecutionStarted,
+						Attributes: &commonproto.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &commonproto.WorkflowExecutionStartedEventAttributes{
+							WorkflowType: &commonproto.WorkflowType{
+								Name: wfType,
 							},
 							TaskList:                            taskList,
 							Input:                               []byte("testInput"),
-							ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
-							TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(200),
-						},
+							ExecutionStartToCloseTimeoutSeconds: 100,
+							TaskStartToCloseTimeoutSeconds:      200,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(2),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskScheduled),
-						DecisionTaskScheduledEventAttributes: &workflow.DecisionTaskScheduledEventAttributes{
+						EventId:   2,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
-							StartToCloseTimeoutSeconds: common.Int32Ptr(100),
-						},
+							StartToCloseTimeoutSeconds: 100,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(3),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskStarted),
-						DecisionTaskStartedEventAttributes: &workflow.DecisionTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(2),
-						},
+						EventId:   3,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskStarted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+							ScheduledEventId: 2,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(4),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskCompleted),
-						DecisionTaskCompletedEventAttributes: &workflow.DecisionTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(2),
-							StartedEventId:   common.Int64Ptr(3),
-						},
+						EventId:   4,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+							ScheduledEventId: 2,
+							StartedEventId:   3,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(5),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeMarkerRecorded),
-						MarkerRecordedEventAttributes: &workflow.MarkerRecordedEventAttributes{
-							MarkerName:                   common.StringPtr("Version"),
+						EventId:   5,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeMarkerRecorded,
+						Attributes: &commonproto.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &commonproto.MarkerRecordedEventAttributes{
+							MarkerName:                   "Version",
 							Details:                      []byte("details"),
-							DecisionTaskCompletedEventId: common.Int64Ptr(4),
-						},
+							DecisionTaskCompletedEventId: 4,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(6),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskScheduled),
-						ActivityTaskScheduledEventAttributes: &workflow.ActivityTaskScheduledEventAttributes{
-							ActivityId: common.StringPtr(actIDCompleted1),
-							ActivityType: &workflow.ActivityType{
-								Name: common.StringPtr("actType0"),
+						EventId:   6,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+							ActivityId: actIDCompleted1,
+							ActivityType: &commonproto.ActivityType{
+								Name: "actType0",
 							},
 							TaskList:                      taskList,
-							ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1000),
-							ScheduleToStartTimeoutSeconds: common.Int32Ptr(2000),
-							StartToCloseTimeoutSeconds:    common.Int32Ptr(3000),
-							HeartbeatTimeoutSeconds:       common.Int32Ptr(4000),
-							DecisionTaskCompletedEventId:  common.Int64Ptr(4),
-						},
+							ScheduleToCloseTimeoutSeconds: 1000,
+							ScheduleToStartTimeoutSeconds: 2000,
+							StartToCloseTimeoutSeconds:    3000,
+							HeartbeatTimeoutSeconds:       4000,
+							DecisionTaskCompletedEventId:  4,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(7),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeTimerStarted),
-						TimerStartedEventAttributes: &workflow.TimerStartedEventAttributes{
-							TimerId:                      common.StringPtr(timerFiredID),
-							StartToFireTimeoutSeconds:    common.Int64Ptr(2),
-							DecisionTaskCompletedEventId: common.Int64Ptr(4),
-						},
-					},
-				},
-			},
-			{
-				Events: []*workflow.HistoryEvent{
-					{
-						EventId:   common.Int64Ptr(8),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskStarted),
-						ActivityTaskStartedEventAttributes: &workflow.ActivityTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(6),
-						},
+						EventId:   7,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeTimerStarted,
+						Attributes: &commonproto.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &commonproto.TimerStartedEventAttributes{
+							TimerId:                      timerFiredID,
+							StartToFireTimeoutSeconds:    2,
+							DecisionTaskCompletedEventId: 4,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(9),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskCompleted),
-						ActivityTaskCompletedEventAttributes: &workflow.ActivityTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(6),
-							StartedEventId:   common.Int64Ptr(8),
-						},
+						EventId:   8,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskStarted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{
+							ScheduledEventId: 6,
+						}},
+					},
+				},
+			},
+			{
+				Events: []*commonproto.HistoryEvent{
+					{
+						EventId:   9,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: &commonproto.ActivityTaskCompletedEventAttributes{
+							ScheduledEventId: 6,
+							StartedEventId:   8,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(10),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskScheduled),
-						DecisionTaskScheduledEventAttributes: &workflow.DecisionTaskScheduledEventAttributes{
+						EventId:   10,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
-							StartToCloseTimeoutSeconds: common.Int32Ptr(100),
-						},
+							StartToCloseTimeoutSeconds: 100,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(11),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskStarted),
-						DecisionTaskStartedEventAttributes: &workflow.DecisionTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(10),
-						},
+						EventId:   11,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskStarted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+							ScheduledEventId: 10,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(12),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskCompleted),
-						DecisionTaskCompletedEventAttributes: &workflow.DecisionTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(10),
-							StartedEventId:   common.Int64Ptr(11),
-						},
+						EventId:   12,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+							ScheduledEventId: 10,
+							StartedEventId:   11,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(13),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeTimerFired),
-						TimerFiredEventAttributes: &workflow.TimerFiredEventAttributes{
-							TimerId: common.StringPtr(timerFiredID),
-						},
+						EventId:   13,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeTimerFired,
+						Attributes: &commonproto.HistoryEvent_TimerFiredEventAttributes{TimerFiredEventAttributes: &commonproto.TimerFiredEventAttributes{
+							TimerId: timerFiredID,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(14),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskScheduled),
-						DecisionTaskScheduledEventAttributes: &workflow.DecisionTaskScheduledEventAttributes{
+						EventId:   14,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
-							StartToCloseTimeoutSeconds: common.Int32Ptr(100),
-						},
+							StartToCloseTimeoutSeconds: 100,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(15),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskStarted),
-						DecisionTaskStartedEventAttributes: &workflow.DecisionTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(14),
-						},
+						EventId:   15,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskStarted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+							ScheduledEventId: 14,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(16),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskCompleted),
-						DecisionTaskCompletedEventAttributes: &workflow.DecisionTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(14),
-							StartedEventId:   common.Int64Ptr(15),
-						},
+						EventId:   16,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{
+							ScheduledEventId: 14,
+							StartedEventId:   15,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(17),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskScheduled),
-						ActivityTaskScheduledEventAttributes: &workflow.ActivityTaskScheduledEventAttributes{
-							ActivityId: common.StringPtr(actIDRetry),
-							ActivityType: &workflow.ActivityType{
-								Name: common.StringPtr("actType1"),
+						EventId:   17,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+							ActivityId: actIDRetry,
+							ActivityType: &commonproto.ActivityType{
+								Name: "actType1",
 							},
 							TaskList:                      taskList,
-							ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1000),
-							ScheduleToStartTimeoutSeconds: common.Int32Ptr(2000),
-							StartToCloseTimeoutSeconds:    common.Int32Ptr(3000),
-							HeartbeatTimeoutSeconds:       common.Int32Ptr(4000),
-							DecisionTaskCompletedEventId:  common.Int64Ptr(16),
-							RetryPolicy: &workflow.RetryPolicy{
-								InitialIntervalInSeconds:    common.Int32Ptr(1),
-								BackoffCoefficient:          common.Float64Ptr(0.2),
-								MaximumAttempts:             common.Int32Ptr(10),
-								MaximumIntervalInSeconds:    common.Int32Ptr(1000),
-								ExpirationIntervalInSeconds: common.Int32Ptr(math.MaxInt32),
+							ScheduleToCloseTimeoutSeconds: 1000,
+							ScheduleToStartTimeoutSeconds: 2000,
+							StartToCloseTimeoutSeconds:    3000,
+							HeartbeatTimeoutSeconds:       4000,
+							DecisionTaskCompletedEventId:  16,
+							RetryPolicy: &commonproto.RetryPolicy{
+								InitialIntervalInSeconds:    1,
+								BackoffCoefficient:          0.2,
+								MaximumAttempts:             10,
+								MaximumIntervalInSeconds:    1000,
+								ExpirationIntervalInSeconds: math.MaxInt32,
 							},
-						},
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(18),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskScheduled),
-						ActivityTaskScheduledEventAttributes: &workflow.ActivityTaskScheduledEventAttributes{
-							ActivityId: common.StringPtr(actIDNotStarted),
-							ActivityType: &workflow.ActivityType{
-								Name: common.StringPtr("actType2"),
-							},
-							TaskList:                      taskList,
-							ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1000),
-							ScheduleToStartTimeoutSeconds: common.Int32Ptr(2000),
-							StartToCloseTimeoutSeconds:    common.Int32Ptr(3000),
-							HeartbeatTimeoutSeconds:       common.Int32Ptr(4000),
-							DecisionTaskCompletedEventId:  common.Int64Ptr(16),
-						},
-					},
-					{
-						EventId:   common.Int64Ptr(19),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeTimerStarted),
-						TimerStartedEventAttributes: &workflow.TimerStartedEventAttributes{
-							TimerId:                      common.StringPtr(timerUnfiredID1),
-							StartToFireTimeoutSeconds:    common.Int64Ptr(4),
-							DecisionTaskCompletedEventId: common.Int64Ptr(16),
-						},
-					},
-					{
-						EventId:   common.Int64Ptr(20),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeTimerStarted),
-						TimerStartedEventAttributes: &workflow.TimerStartedEventAttributes{
-							TimerId:                      common.StringPtr(timerUnfiredID2),
-							StartToFireTimeoutSeconds:    common.Int64Ptr(8),
-							DecisionTaskCompletedEventId: common.Int64Ptr(16),
-						},
-					},
-					{
-						EventId:   common.Int64Ptr(21),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskScheduled),
-						ActivityTaskScheduledEventAttributes: &workflow.ActivityTaskScheduledEventAttributes{
-							ActivityId: common.StringPtr(actIDCompleted2),
-							ActivityType: &workflow.ActivityType{
-								Name: common.StringPtr("actType2"),
+						EventId:   18,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+							ActivityId: actIDNotStarted,
+							ActivityType: &commonproto.ActivityType{
+								Name: "actType2",
 							},
 							TaskList:                      taskList,
-							ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1000),
-							ScheduleToStartTimeoutSeconds: common.Int32Ptr(2000),
-							StartToCloseTimeoutSeconds:    common.Int32Ptr(3000),
-							HeartbeatTimeoutSeconds:       common.Int32Ptr(4000),
-							DecisionTaskCompletedEventId:  common.Int64Ptr(16),
-						},
+							ScheduleToCloseTimeoutSeconds: 1000,
+							ScheduleToStartTimeoutSeconds: 2000,
+							StartToCloseTimeoutSeconds:    3000,
+							HeartbeatTimeoutSeconds:       4000,
+							DecisionTaskCompletedEventId:  16,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(22),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskScheduled),
-						ActivityTaskScheduledEventAttributes: &workflow.ActivityTaskScheduledEventAttributes{
-							ActivityId: common.StringPtr(actIDStartedNoRetry),
-							ActivityType: &workflow.ActivityType{
-								Name: common.StringPtr("actType2"),
+						EventId:   19,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeTimerStarted,
+						Attributes: &commonproto.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &commonproto.TimerStartedEventAttributes{
+							TimerId:                      timerUnfiredID1,
+							StartToFireTimeoutSeconds:    4,
+							DecisionTaskCompletedEventId: 16,
+						}},
+					},
+					{
+						EventId:   20,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeTimerStarted,
+						Attributes: &commonproto.HistoryEvent_TimerStartedEventAttributes{TimerStartedEventAttributes: &commonproto.TimerStartedEventAttributes{
+							TimerId:                      timerUnfiredID2,
+							StartToFireTimeoutSeconds:    8,
+							DecisionTaskCompletedEventId: 16,
+						}},
+					},
+					{
+						EventId:   21,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+							ActivityId: actIDCompleted2,
+							ActivityType: &commonproto.ActivityType{
+								Name: "actType2",
 							},
 							TaskList:                      taskList,
-							ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1000),
-							ScheduleToStartTimeoutSeconds: common.Int32Ptr(2000),
-							StartToCloseTimeoutSeconds:    common.Int32Ptr(3000),
-							HeartbeatTimeoutSeconds:       common.Int32Ptr(4000),
-							DecisionTaskCompletedEventId:  common.Int64Ptr(16),
-						},
+							ScheduleToCloseTimeoutSeconds: 1000,
+							ScheduleToStartTimeoutSeconds: 2000,
+							StartToCloseTimeoutSeconds:    3000,
+							HeartbeatTimeoutSeconds:       4000,
+							DecisionTaskCompletedEventId:  16,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(23),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeWorkflowExecutionSignaled),
-						WorkflowExecutionSignaledEventAttributes: &workflow.WorkflowExecutionSignaledEventAttributes{
-							SignalName: common.StringPtr(signalName3),
-						},
+						EventId:   22,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{
+							ActivityId: actIDStartedNoRetry,
+							ActivityType: &commonproto.ActivityType{
+								Name: "actType2",
+							},
+							TaskList:                      taskList,
+							ScheduleToCloseTimeoutSeconds: 1000,
+							ScheduleToStartTimeoutSeconds: 2000,
+							StartToCloseTimeoutSeconds:    3000,
+							HeartbeatTimeoutSeconds:       4000,
+							DecisionTaskCompletedEventId:  16,
+						}},
 					},
-				},
-			},
-			{
-				Events: []*workflow.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(24),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskStarted),
-						ActivityTaskStartedEventAttributes: &workflow.ActivityTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(21),
-						},
-					},
-				},
-			},
-			{
-				Events: []*workflow.HistoryEvent{
-					{
-						EventId:   common.Int64Ptr(25),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeWorkflowExecutionSignaled),
-						WorkflowExecutionSignaledEventAttributes: &workflow.WorkflowExecutionSignaledEventAttributes{
-							SignalName: common.StringPtr(signalName4),
-						},
+						EventId:   23,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeWorkflowExecutionSignaled,
+						Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+							SignalName: signalName3,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(26),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskStarted),
-						ActivityTaskStartedEventAttributes: &workflow.ActivityTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(22),
-						},
+						EventId:   24,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskStarted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{
+							ScheduledEventId: 21,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(27),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeActivityTaskCompleted),
-						ActivityTaskCompletedEventAttributes: &workflow.ActivityTaskCompletedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(21),
-							StartedEventId:   common.Int64Ptr(24),
-						},
+						EventId:   25,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeWorkflowExecutionSignaled,
+						Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+							SignalName: signalName4,
+						}},
+					},
+				},
+			},
+			{
+				Events: []*commonproto.HistoryEvent{
+					{
+						EventId:   26,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskStarted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{
+							ScheduledEventId: 22,
+						}},
+					},
+				},
+			},
+			{
+				Events: []*commonproto.HistoryEvent{
+					{
+						EventId:   27,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeActivityTaskCompleted,
+						Attributes: &commonproto.HistoryEvent_ActivityTaskCompletedEventAttributes{ActivityTaskCompletedEventAttributes: &commonproto.ActivityTaskCompletedEventAttributes{
+							ScheduledEventId: 21,
+							StartedEventId:   24,
+						}},
 					},
 					{
-						EventId:   common.Int64Ptr(28),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskScheduled),
-						DecisionTaskScheduledEventAttributes: &workflow.DecisionTaskScheduledEventAttributes{
+						EventId:   28,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskScheduled,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
 							TaskList:                   taskList,
-							StartToCloseTimeoutSeconds: common.Int32Ptr(100),
-						},
+							StartToCloseTimeoutSeconds: 100,
+						}},
 					},
 				},
 			},
 			{
-				Events: []*workflow.HistoryEvent{
+				Events: []*commonproto.HistoryEvent{
 					{
-						EventId:   common.Int64Ptr(29),
-						Version:   common.Int64Ptr(beforeResetVersion),
-						EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskStarted),
-						DecisionTaskStartedEventAttributes: &workflow.DecisionTaskStartedEventAttributes{
-							ScheduledEventId: common.Int64Ptr(28),
-						},
+						EventId:   29,
+						Version:   beforeResetVersion,
+						EventType: enums.EventTypeDecisionTaskStarted,
+						Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+							ScheduledEventId: 28,
+						}},
 					},
 				},
 			},
 			/////////////// reset point/////////////
-		},
+		}),
 	}
 
 	eid := int64(0)
+	timestamp := int64(1000)
 	for _, be := range readHistoryResp.History {
 		for _, e := range be.Events {
 			eid++
 			if e.GetEventId() != eid {
 				s.Fail(fmt.Sprintf("inconintous eventID: %v, %v", eid, e.GetEventId()))
 			}
-			e.Timestamp = common.Int64Ptr(1000)
+			e.Timestamp = &timestamp
 		}
 	}
 
 	newBranchToken := []byte("newBranch")
-	forkReq := &p.ForkHistoryBranchRequest{
+	forkReq := &persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: forkBranchToken,
 		ForkNodeID:      30,
-		Info:            p.BuildHistoryGarbageCleanupInfo(domainID, wid, newRunID),
-		ShardID:         common.IntPtr(s.shardID),
+		Info:            persistence.BuildHistoryGarbageCleanupInfo(domainID, wid, newRunID),
+		ShardID:         &s.shardID,
 	}
-	forkResp := &p.ForkHistoryBranchResponse{
+	forkResp := &persistence.ForkHistoryBranchResponse{
 		NewBranchToken: newBranchToken,
 	}
 
-	historyAfterReset := &workflow.History{
-		Events: []*workflow.HistoryEvent{
-			&workflow.HistoryEvent{
-				EventId:   common.Int64Ptr(30),
-				Version:   common.Int64Ptr(afterResetVersion),
-				EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskFailed),
-				DecisionTaskFailedEventAttributes: &workflow.DecisionTaskFailedEventAttributes{
-					ScheduledEventId: common.Int64Ptr(int64(28)),
-					StartedEventId:   common.Int64Ptr(int64(29)),
-					Cause:            common.DecisionTaskFailedCausePtr(workflow.DecisionTaskFailedCauseResetWorkflow),
+	historyAfterReset := &commonproto.History{
+		Events: []*commonproto.HistoryEvent{
+			&commonproto.HistoryEvent{
+				EventId:   30,
+				Version:   afterResetVersion,
+				EventType: enums.EventTypeDecisionTaskFailed,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskFailedEventAttributes{DecisionTaskFailedEventAttributes: &commonproto.DecisionTaskFailedEventAttributes{
+					ScheduledEventId: int64(28),
+					StartedEventId:   int64(29),
+					Cause:            enums.DecisionTaskFailedCauseResetWorkflow,
 					Details:          nil,
-					Identity:         common.StringPtr(identityHistoryService),
-					Reason:           common.StringPtr("resetWFtest"),
-					BaseRunId:        common.StringPtr(forkRunID),
-					NewRunId:         common.StringPtr(newRunID),
-					ForkEventVersion: common.Int64Ptr(beforeResetVersion),
-				},
+					Identity:         identityHistoryService,
+					Reason:           "resetWFtest",
+					BaseRunId:        forkRunID,
+					NewRunId:         newRunID,
+					ForkEventVersion: beforeResetVersion,
+				}},
 			},
 			{
-				EventId:   common.Int64Ptr(31),
-				Version:   common.Int64Ptr(afterResetVersion),
-				EventType: common.EventTypePtr(workflow.EventTypeActivityTaskFailed),
-				ActivityTaskFailedEventAttributes: &workflow.ActivityTaskFailedEventAttributes{
-					Reason:           common.StringPtr("resetWF"),
-					ScheduledEventId: common.Int64Ptr(22),
-					StartedEventId:   common.Int64Ptr(26),
-					Identity:         common.StringPtr(identityHistoryService),
-				},
+				EventId:   31,
+				Version:   afterResetVersion,
+				EventType: enums.EventTypeActivityTaskFailed,
+				Attributes: &commonproto.HistoryEvent_ActivityTaskFailedEventAttributes{ActivityTaskFailedEventAttributes: &commonproto.ActivityTaskFailedEventAttributes{
+					Reason:           "resetWF",
+					ScheduledEventId: 22,
+					StartedEventId:   26,
+					Identity:         identityHistoryService,
+				}},
 			},
 			{
-				EventId:   common.Int64Ptr(32),
-				Version:   common.Int64Ptr(afterResetVersion),
-				EventType: common.EventTypePtr(workflow.EventTypeWorkflowExecutionSignaled),
-				WorkflowExecutionSignaledEventAttributes: &workflow.WorkflowExecutionSignaledEventAttributes{
-					SignalName: common.StringPtr(signalName1),
-				},
+				EventId:   32,
+				Version:   afterResetVersion,
+				EventType: enums.EventTypeWorkflowExecutionSignaled,
+				Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+					SignalName: signalName1,
+				}},
 			},
 			{
-				EventId:   common.Int64Ptr(33),
-				Version:   common.Int64Ptr(afterResetVersion),
-				EventType: common.EventTypePtr(workflow.EventTypeWorkflowExecutionSignaled),
-				WorkflowExecutionSignaledEventAttributes: &workflow.WorkflowExecutionSignaledEventAttributes{
-					SignalName: common.StringPtr(signalName2),
-				},
+				EventId:   33,
+				Version:   afterResetVersion,
+				EventType: enums.EventTypeWorkflowExecutionSignaled,
+				Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+					SignalName: signalName2,
+				}},
 			},
 			{
-				EventId:   common.Int64Ptr(34),
-				Version:   common.Int64Ptr(afterResetVersion),
-				EventType: common.EventTypePtr(workflow.EventTypeDecisionTaskScheduled),
-				DecisionTaskScheduledEventAttributes: &workflow.DecisionTaskScheduledEventAttributes{
+				EventId:   34,
+				Version:   afterResetVersion,
+				EventType: enums.EventTypeDecisionTaskScheduled,
+				Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{
 					TaskList:                   taskList,
-					StartToCloseTimeoutSeconds: common.Int32Ptr(100),
-				},
+					StartToCloseTimeoutSeconds: 100,
+				}},
 			},
 		},
 	}
 
-	appendV2Resp := &p.AppendHistoryNodesResponse{
+	appendV2Resp := &persistence.AppendHistoryNodesResponse{
 		Size: 200,
 	}
 
-	request := &h.ReplicateEventsRequest{
-		SourceCluster:     common.StringPtr("standby"),
-		DomainUUID:        common.StringPtr(domainID),
+	request := &historyservice.ReplicateEventsRequest{
+		SourceCluster:     "standby",
+		DomainUUID:        domainID,
 		WorkflowExecution: &we,
-		FirstEventId:      common.Int64Ptr(30),
-		NextEventId:       common.Int64Ptr(35),
+		FirstEventId:      30,
+		NextEventId:       35,
 		History:           historyAfterReset,
 	}
 
@@ -3998,16 +4007,16 @@ func (s *resetorSuite) TestApplyReset() {
 	s.Equal(3, len(calls))
 	appendCall := calls[2]
 	s.Equal("AppendHistoryNodes", appendCall.Method)
-	appendReq, ok := appendCall.Arguments[0].(*p.AppendHistoryNodesRequest)
+	appendReq, ok := appendCall.Arguments[0].(*persistence.AppendHistoryNodesRequest)
 	s.Equal(true, ok)
 	s.Equal(newBranchToken, appendReq.BranchToken)
 	s.Equal(false, appendReq.IsNewBranch)
 	s.Equal(5, len(appendReq.Events))
-	s.Equal(workflow.EventTypeDecisionTaskFailed, appendReq.Events[0].GetEventType())
-	s.Equal(workflow.EventTypeActivityTaskFailed, appendReq.Events[1].GetEventType())
-	s.Equal(workflow.EventTypeWorkflowExecutionSignaled, appendReq.Events[2].GetEventType())
-	s.Equal(workflow.EventTypeWorkflowExecutionSignaled, appendReq.Events[3].GetEventType())
-	s.Equal(workflow.EventTypeDecisionTaskScheduled, appendReq.Events[4].GetEventType())
+	s.Equal(enums.EventTypeDecisionTaskFailed, enums.EventType(appendReq.Events[0].GetEventType()))
+	s.Equal(enums.EventTypeActivityTaskFailed, enums.EventType(appendReq.Events[1].GetEventType()))
+	s.Equal(enums.EventTypeWorkflowExecutionSignaled, enums.EventType(appendReq.Events[2].GetEventType()))
+	s.Equal(enums.EventTypeWorkflowExecutionSignaled, enums.EventType(appendReq.Events[3].GetEventType()))
+	s.Equal(enums.EventTypeDecisionTaskScheduled, enums.EventType(appendReq.Events[4].GetEventType()))
 
 	s.Equal(int64(30), appendReq.Events[0].GetEventId())
 	s.Equal(int64(31), appendReq.Events[1].GetEventId())
@@ -4022,7 +4031,7 @@ func (s *resetorSuite) TestApplyReset() {
 	s.Equal(3, len(calls))
 	resetCall := calls[2]
 	s.Equal("ResetWorkflowExecution", resetCall.Method)
-	resetReq, ok := resetCall.Arguments[0].(*p.ResetWorkflowExecutionRequest)
+	resetReq, ok := resetCall.Arguments[0].(*persistence.ResetWorkflowExecutionRequest)
 	s.Equal(true, ok)
 	s.Equal(false, resetReq.CurrentWorkflowMutation != nil)
 	s.Equal(compareCurrExeInfo.RunID, resetReq.CurrentRunID)
@@ -4036,15 +4045,15 @@ func (s *resetorSuite) TestApplyReset() {
 	s.Equal(int64(35), resetReq.NewWorkflowSnapshot.ExecutionInfo.NextEventID)
 
 	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TransferTasks))
-	s.Equal(p.TransferTaskTypeActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[0].GetType())
-	s.Equal(p.TransferTaskTypeActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[1].GetType())
-	s.Equal(p.TransferTaskTypeDecisionTask, resetReq.NewWorkflowSnapshot.TransferTasks[2].GetType())
+	s.Equal(persistence.TransferTaskTypeActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[0].GetType())
+	s.Equal(persistence.TransferTaskTypeActivityTask, resetReq.NewWorkflowSnapshot.TransferTasks[1].GetType())
+	s.Equal(persistence.TransferTaskTypeDecisionTask, resetReq.NewWorkflowSnapshot.TransferTasks[2].GetType())
 
 	// WF timeout task, user timer, activity timeout timer, activity retry timer
 	s.Equal(3, len(resetReq.NewWorkflowSnapshot.TimerTasks))
-	s.Equal(p.TaskTypeWorkflowTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
-	s.Equal(p.TaskTypeUserTimer, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
-	s.Equal(p.TaskTypeActivityTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
+	s.Equal(persistence.TaskTypeWorkflowTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[0].GetType())
+	s.Equal(persistence.TaskTypeUserTimer, resetReq.NewWorkflowSnapshot.TimerTasks[1].GetType())
+	s.Equal(persistence.TaskTypeActivityTimeout, resetReq.NewWorkflowSnapshot.TimerTasks[2].GetType())
 
 	s.Equal(2, len(resetReq.NewWorkflowSnapshot.TimerInfos))
 	s.assertTimerIDs([]string{timerUnfiredID1, timerUnfiredID2}, resetReq.NewWorkflowSnapshot.TimerInfos)
@@ -4057,8 +4066,8 @@ func (s *resetorSuite) TestApplyReset() {
 	compareRepState.CurrentVersion = afterResetVersion
 	compareRepState.LastWriteEventID = 34
 	compareRepState.LastWriteVersion = afterResetVersion
-	compareRepState.LastReplicationInfo = map[string]*p.ReplicationInfo{
-		"standby": &p.ReplicationInfo{
+	compareRepState.LastReplicationInfo = map[string]*persistence.ReplicationInfo{
+		"standby": &persistence.ReplicationInfo{
 			LastEventID: 29,
 			Version:     beforeResetVersion,
 		},
@@ -4081,110 +4090,110 @@ func TestFindAutoResetPoint(t *testing.T) {
 	assert.Nil(t, pt)
 
 	// case 2: empty
-	_, pt = FindAutoResetPoint(timeSource, &workflow.BadBinaries{}, &workflow.ResetPoints{})
+	_, pt = FindAutoResetPoint(timeSource, &commonproto.BadBinaries{}, &commonproto.ResetPoints{})
 	assert.Nil(t, pt)
 
-	pt0 := &workflow.ResetPointInfo{
-		BinaryChecksum: common.StringPtr("abc"),
-		Resettable:     common.BoolPtr(true),
+	pt0 := &commonproto.ResetPointInfo{
+		BinaryChecksum: "abc",
+		Resettable:     true,
 	}
-	pt1 := &workflow.ResetPointInfo{
-		BinaryChecksum: common.StringPtr("def"),
-		Resettable:     common.BoolPtr(true),
+	pt1 := &commonproto.ResetPointInfo{
+		BinaryChecksum: "def",
+		Resettable:     true,
 	}
-	pt3 := &workflow.ResetPointInfo{
-		BinaryChecksum: common.StringPtr("ghi"),
-		Resettable:     common.BoolPtr(false),
+	pt3 := &commonproto.ResetPointInfo{
+		BinaryChecksum: "ghi",
+		Resettable:     false,
 	}
 
 	expiredNowNano := time.Now().UnixNano() - int64(time.Hour)
 	notExpiredNowNano := time.Now().UnixNano() + int64(time.Hour)
-	pt4 := &workflow.ResetPointInfo{
-		BinaryChecksum:   common.StringPtr("expired"),
-		Resettable:       common.BoolPtr(true),
-		ExpiringTimeNano: common.Int64Ptr(expiredNowNano),
+	pt4 := &commonproto.ResetPointInfo{
+		BinaryChecksum:   "expired",
+		Resettable:       true,
+		ExpiringTimeNano: expiredNowNano,
 	}
 
-	pt5 := &workflow.ResetPointInfo{
-		BinaryChecksum:   common.StringPtr("notExpired"),
-		Resettable:       common.BoolPtr(true),
-		ExpiringTimeNano: common.Int64Ptr(notExpiredNowNano),
+	pt5 := &commonproto.ResetPointInfo{
+		BinaryChecksum:   "notExpired",
+		Resettable:       true,
+		ExpiringTimeNano: notExpiredNowNano,
 	}
 
 	// case 3: two intersection
-	_, pt = FindAutoResetPoint(timeSource, &workflow.BadBinaries{
-		Binaries: map[string]*workflow.BadBinaryInfo{
+	_, pt = FindAutoResetPoint(timeSource, &commonproto.BadBinaries{
+		Binaries: map[string]*commonproto.BadBinaryInfo{
 			"abc": {},
 			"def": {},
 		},
-	}, &workflow.ResetPoints{
-		Points: []*workflow.ResetPointInfo{
+	}, &commonproto.ResetPoints{
+		Points: []*commonproto.ResetPointInfo{
 			pt0, pt1, pt3,
 		},
 	})
 	assert.Equal(t, pt.String(), pt0.String())
 
 	// case 4: one intersection
-	_, pt = FindAutoResetPoint(timeSource, &workflow.BadBinaries{
-		Binaries: map[string]*workflow.BadBinaryInfo{
+	_, pt = FindAutoResetPoint(timeSource, &commonproto.BadBinaries{
+		Binaries: map[string]*commonproto.BadBinaryInfo{
 			"none":    {},
 			"def":     {},
 			"expired": {},
 		},
-	}, &workflow.ResetPoints{
-		Points: []*workflow.ResetPointInfo{
+	}, &commonproto.ResetPoints{
+		Points: []*commonproto.ResetPointInfo{
 			pt4, pt0, pt1, pt3,
 		},
 	})
 	assert.Equal(t, pt.String(), pt1.String())
 
 	// case 4: no intersection
-	_, pt = FindAutoResetPoint(timeSource, &workflow.BadBinaries{
-		Binaries: map[string]*workflow.BadBinaryInfo{
+	_, pt = FindAutoResetPoint(timeSource, &commonproto.BadBinaries{
+		Binaries: map[string]*commonproto.BadBinaryInfo{
 			"none1": {},
 			"none2": {},
 		},
-	}, &workflow.ResetPoints{
-		Points: []*workflow.ResetPointInfo{
+	}, &commonproto.ResetPoints{
+		Points: []*commonproto.ResetPointInfo{
 			pt0, pt1, pt3,
 		},
 	})
 	assert.Nil(t, pt)
 
 	// case 5: not resettable
-	_, pt = FindAutoResetPoint(timeSource, &workflow.BadBinaries{
-		Binaries: map[string]*workflow.BadBinaryInfo{
+	_, pt = FindAutoResetPoint(timeSource, &commonproto.BadBinaries{
+		Binaries: map[string]*commonproto.BadBinaryInfo{
 			"none1": {},
 			"ghi":   {},
 		},
-	}, &workflow.ResetPoints{
-		Points: []*workflow.ResetPointInfo{
+	}, &commonproto.ResetPoints{
+		Points: []*commonproto.ResetPointInfo{
 			pt0, pt1, pt3,
 		},
 	})
 	assert.Nil(t, pt)
 
 	// case 6: one intersection of expired
-	_, pt = FindAutoResetPoint(timeSource, &workflow.BadBinaries{
-		Binaries: map[string]*workflow.BadBinaryInfo{
+	_, pt = FindAutoResetPoint(timeSource, &commonproto.BadBinaries{
+		Binaries: map[string]*commonproto.BadBinaryInfo{
 			"none":    {},
 			"expired": {},
 		},
-	}, &workflow.ResetPoints{
-		Points: []*workflow.ResetPointInfo{
+	}, &commonproto.ResetPoints{
+		Points: []*commonproto.ResetPointInfo{
 			pt0, pt1, pt3, pt4, pt5,
 		},
 	})
 	assert.Nil(t, pt)
 
 	// case 7: one intersection of not expired
-	_, pt = FindAutoResetPoint(timeSource, &workflow.BadBinaries{
-		Binaries: map[string]*workflow.BadBinaryInfo{
+	_, pt = FindAutoResetPoint(timeSource, &commonproto.BadBinaries{
+		Binaries: map[string]*commonproto.BadBinaryInfo{
 			"none":       {},
 			"notExpired": {},
 		},
-	}, &workflow.ResetPoints{
-		Points: []*workflow.ResetPointInfo{
+	}, &commonproto.ResetPoints{
+		Points: []*commonproto.ResetPointInfo{
 			pt0, pt1, pt3, pt4, pt5,
 		},
 	})

@@ -28,9 +28,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+	commonproto "go.temporal.io/temporal-proto/common"
 
-	gen "github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/metrics"
@@ -78,9 +77,9 @@ func (s *historyEventNotifierSuite) TearDownTest() {
 
 func (s *historyEventNotifierSuite) TestSingleSubscriberWatchingEvents() {
 	domainID := "domain ID"
-	execution := &gen.WorkflowExecution{
-		WorkflowId: common.StringPtr("workflow ID"),
-		RunId:      common.StringPtr("run ID"),
+	execution := &commonproto.WorkflowExecution{
+		WorkflowId: "workflow ID",
+		RunId:      "run ID",
 	}
 	lastFirstEventID := int64(3)
 	previousStartedEventID := int64(5)
@@ -110,9 +109,9 @@ func (s *historyEventNotifierSuite) TestSingleSubscriberWatchingEvents() {
 
 func (s *historyEventNotifierSuite) TestMultipleSubscriberWatchingEvents() {
 	domainID := "domain ID"
-	execution := &gen.WorkflowExecution{
-		WorkflowId: common.StringPtr("workflow ID"),
-		RunId:      common.StringPtr("run ID"),
+	execution := &commonproto.WorkflowExecution{
+		WorkflowId: "workflow ID",
+		RunId:      "run ID",
 	}
 
 	lastFirstEventID := int64(3)

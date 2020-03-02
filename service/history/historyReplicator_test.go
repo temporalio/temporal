@@ -32,13 +32,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	h "github.com/temporalio/temporal/.gen/go/history"
-	"github.com/temporalio/temporal/.gen/go/shared"
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
@@ -47,7 +48,6 @@ import (
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/persistence"
-	p "github.com/temporalio/temporal/common/persistence"
 )
 
 const (
@@ -164,12 +164,12 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Missing
 	runID := uuid.New()
 	version := int64(123)
 	now := time.Now().UnixNano()
-	req := &h.ReplicateEventsRequest{
-		History: &shared.History{
-			Events: []*shared.HistoryEvent{
+	req := &historyservice.ReplicateEventsRequest{
+		History: &commonproto.History{
+			Events: []*commonproto.HistoryEvent{
 				{
-					Version:   common.Int64Ptr(version),
-					Timestamp: common.Int64Ptr(now),
+					Version:   version,
+					Timestamp: now,
 				},
 			},
 		},
@@ -193,13 +193,13 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	currentRunID := uuid.New()
 	currentVersion := version + 1
 	currentNextEventID := int64(2333)
-	req := &h.ReplicateEventsRequest{
-		History: &shared.History{
-			Events: []*shared.HistoryEvent{
+	req := &historyservice.ReplicateEventsRequest{
+		History: &commonproto.History{
+			Events: []*commonproto.HistoryEvent{
 				{
-					Version:   common.Int64Ptr(version),
-					Timestamp: common.Int64Ptr(now),
-					EventType: shared.EventTypeWorkflowExecutionCanceled.Ptr(),
+					Version:   version,
+					Timestamp: now,
+					EventType: enums.EventTypeWorkflowExecutionCanceled,
 				},
 			},
 		},
@@ -212,9 +212,9 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	msBuilderCurrent := NewMockmutableState(s.controller)
 
 	contextCurrent.EXPECT().loadWorkflowExecution().Return(msBuilderCurrent, nil).Times(1)
-	currentExecution := &shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(currentRunID),
+	currentExecution := &commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      currentRunID,
 	}
 	contextCurrentCacheKey := definition.NewWorkflowIdentifier(domainID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
 	_, _ = s.historyReplicator.historyCache.PutIfNotExist(contextCurrentCacheKey, contextCurrent)
@@ -256,18 +256,18 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	signalInput := []byte("some random signal input")
 	signalIdentity := "some random signal identity"
 
-	req := &h.ReplicateEventsRequest{
-		History: &shared.History{
-			Events: []*shared.HistoryEvent{
+	req := &historyservice.ReplicateEventsRequest{
+		History: &commonproto.History{
+			Events: []*commonproto.HistoryEvent{
 				{
-					Version:   common.Int64Ptr(version),
-					Timestamp: common.Int64Ptr(now),
-					EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
-					WorkflowExecutionSignaledEventAttributes: &shared.WorkflowExecutionSignaledEventAttributes{
-						SignalName: common.StringPtr(signalName),
+					Version:   version,
+					Timestamp: now,
+					EventType: enums.EventTypeWorkflowExecutionSignaled,
+					Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+						SignalName: signalName,
 						Input:      signalInput,
-						Identity:   common.StringPtr(signalIdentity),
-					},
+						Identity:   signalIdentity,
+					}},
 				},
 			},
 		},
@@ -280,9 +280,9 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	msBuilderCurrent := NewMockmutableState(s.controller)
 
 	contextCurrent.EXPECT().loadWorkflowExecution().Return(msBuilderCurrent, nil).Times(1)
-	currentExecution := &shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(currentRunID),
+	currentExecution := &commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      currentRunID,
 	}
 	contextCurrentCacheKey := definition.NewWorkflowIdentifier(domainID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
 	_, _ = s.historyReplicator.historyCache.PutIfNotExist(contextCurrentCacheKey, contextCurrent)
@@ -306,14 +306,14 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(currentVersion, nil).AnyTimes()
 	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	msBuilderCurrent.EXPECT().UpdateCurrentVersion(currentVersion, true).Return(nil).Times(1)
-	msBuilderCurrent.EXPECT().AddWorkflowExecutionSignaled(signalName, signalInput, signalIdentity).Return(&shared.HistoryEvent{
-		EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
-		Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-		WorkflowExecutionSignaledEventAttributes: &shared.WorkflowExecutionSignaledEventAttributes{
-			SignalName: common.StringPtr(signalName),
+	msBuilderCurrent.EXPECT().AddWorkflowExecutionSignaled(signalName, signalInput, signalIdentity).Return(&commonproto.HistoryEvent{
+		EventType: enums.EventTypeWorkflowExecutionSignaled,
+		Timestamp: time.Now().UnixNano(),
+		Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+			SignalName: signalName,
 			Input:      signalInput,
-			Identity:   common.StringPtr(signalIdentity),
-		},
+			Identity:   signalIdentity,
+		}},
 	}, nil).Times(1)
 	msBuilderCurrent.EXPECT().HasPendingDecision().Return(true).Times(1)
 
@@ -344,18 +344,18 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	currentDecisionTasklist := "some random decision tasklist"
 	currentDecisionStickyTasklist := "some random decision sticky tasklist"
 
-	req := &h.ReplicateEventsRequest{
-		History: &shared.History{
-			Events: []*shared.HistoryEvent{
+	req := &historyservice.ReplicateEventsRequest{
+		History: &commonproto.History{
+			Events: []*commonproto.HistoryEvent{
 				{
-					Version:   common.Int64Ptr(version),
-					Timestamp: common.Int64Ptr(now),
-					EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
-					WorkflowExecutionSignaledEventAttributes: &shared.WorkflowExecutionSignaledEventAttributes{
-						SignalName: common.StringPtr(signalName),
+					Version:   version,
+					Timestamp: now,
+					EventType: enums.EventTypeWorkflowExecutionSignaled,
+					Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+						SignalName: signalName,
 						Input:      signalInput,
-						Identity:   common.StringPtr(signalIdentity),
-					},
+						Identity:   signalIdentity,
+					}},
 				},
 			},
 		},
@@ -368,9 +368,9 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	msBuilderCurrent := NewMockmutableState(s.controller)
 
 	contextCurrent.EXPECT().loadWorkflowExecution().Return(msBuilderCurrent, nil).Times(1)
-	currentExecution := &shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(currentRunID),
+	currentExecution := &commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      currentRunID,
 	}
 	contextCurrentCacheKey := definition.NewWorkflowIdentifier(domainID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
 	_, _ = s.historyReplicator.historyCache.PutIfNotExist(contextCurrentCacheKey, contextCurrent)
@@ -399,14 +399,14 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(currentVersion, nil).AnyTimes()
 	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	msBuilderCurrent.EXPECT().UpdateCurrentVersion(currentVersion, true).Return(nil).Times(1)
-	msBuilderCurrent.EXPECT().AddWorkflowExecutionSignaled(signalName, signalInput, signalIdentity).Return(&shared.HistoryEvent{
-		EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
-		Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-		WorkflowExecutionSignaledEventAttributes: &shared.WorkflowExecutionSignaledEventAttributes{
-			SignalName: common.StringPtr(signalName),
+	msBuilderCurrent.EXPECT().AddWorkflowExecutionSignaled(signalName, signalInput, signalIdentity).Return(&commonproto.HistoryEvent{
+		EventType: enums.EventTypeWorkflowExecutionSignaled,
+		Timestamp: time.Now().UnixNano(),
+		Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+			SignalName: signalName,
 			Input:      signalInput,
-			Identity:   common.StringPtr(signalIdentity),
-		},
+			Identity:   signalIdentity,
+		}},
 	}, nil).Times(1)
 	msBuilderCurrent.EXPECT().HasPendingDecision().Return(false).Times(1)
 	newDecision := &decisionInfo{
@@ -437,12 +437,12 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	currentRunID := uuid.New()
 	currentVersion := version
 	currentNextEventID := int64(2333)
-	req := &h.ReplicateEventsRequest{
-		History: &shared.History{
-			Events: []*shared.HistoryEvent{
+	req := &historyservice.ReplicateEventsRequest{
+		History: &commonproto.History{
+			Events: []*commonproto.HistoryEvent{
 				{
-					Version:   common.Int64Ptr(version),
-					Timestamp: common.Int64Ptr(now),
+					Version:   version,
+					Timestamp: now,
 				},
 			},
 		},
@@ -473,10 +473,10 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	}, nil)
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(currentRunID),
-		},
+		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      currentRunID,
+		}),
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State: &persistence.WorkflowMutableState{
 			ExecutionInfo: &persistence.WorkflowExecutionInfo{
@@ -508,13 +508,13 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	currentVersion := version
 	currentNextEventID := int64(2333)
 	currentLastEventTaskID := lastEventTaskID + 10
-	req := &h.ReplicateEventsRequest{
-		History: &shared.History{
-			Events: []*shared.HistoryEvent{
+	req := &historyservice.ReplicateEventsRequest{
+		History: &commonproto.History{
+			Events: []*commonproto.HistoryEvent{
 				{
-					Version:   common.Int64Ptr(version),
-					TaskId:    common.Int64Ptr(lastEventTaskID),
-					Timestamp: common.Int64Ptr(now),
+					Version:   version,
+					TaskId:    lastEventTaskID,
+					Timestamp: now,
 				},
 			},
 		},
@@ -545,10 +545,10 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	}, nil)
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(currentRunID),
-		},
+		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      currentRunID,
+		}),
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State: &persistence.WorkflowMutableState{
 			ExecutionInfo: &persistence.WorkflowExecutionInfo{
@@ -578,12 +578,12 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	currentRunID := uuid.New()
 	currentVersion := version - 100
 	currentNextEventID := int64(2333)
-	req := &h.ReplicateEventsRequest{
-		History: &shared.History{
-			Events: []*shared.HistoryEvent{
+	req := &historyservice.ReplicateEventsRequest{
+		History: &commonproto.History{
+			Events: []*commonproto.HistoryEvent{
 				{
-					Version:   common.Int64Ptr(version),
-					Timestamp: common.Int64Ptr(now),
+					Version:   version,
+					Timestamp: now,
 				},
 			},
 		},
@@ -600,9 +600,9 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	msBuilderCurrent := NewMockmutableState(s.controller)
 
 	contextCurrent.EXPECT().loadWorkflowExecution().Return(msBuilderCurrent, nil).Times(2)
-	currentExecution := &shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(currentRunID),
+	currentExecution := &commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      currentRunID,
 	}
 	contextCurrent.EXPECT().getExecution().Return(currentExecution).AnyTimes()
 	contextCurrentCacheKey := definition.NewWorkflowIdentifier(domainID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
@@ -637,7 +637,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 
 	msBuilderCurrent.EXPECT().AddWorkflowExecutionTerminatedEvent(
 		currentNextEventID, workflowTerminationReason, gomock.Any(), workflowTerminationIdentity,
-	).Return(&workflow.HistoryEvent{}, nil).Times(1)
+	).Return(&commonproto.HistoryEvent{}, nil).Times(1)
 	contextCurrent.EXPECT().updateWorkflowExecutionAsActive(gomock.Any()).Return(nil).Times(1)
 
 	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(context.Background(), domainID, workflowID, runID, req, s.logger)
@@ -654,12 +654,12 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	currentRunID := uuid.New()
 	currentVersion := version - 100
 	currentNextEventID := int64(2333)
-	req := &h.ReplicateEventsRequest{
-		History: &shared.History{
-			Events: []*shared.HistoryEvent{
+	req := &historyservice.ReplicateEventsRequest{
+		History: &commonproto.History{
+			Events: []*commonproto.HistoryEvent{
 				{
-					Version:   common.Int64Ptr(version),
-					Timestamp: common.Int64Ptr(now),
+					Version:   version,
+					Timestamp: now,
 				},
 			},
 		},
@@ -690,10 +690,10 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	}, nil)
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(currentRunID),
-		},
+		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      currentRunID,
+		}),
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State: &persistence.WorkflowMutableState{
 			ExecutionInfo: &persistence.WorkflowExecutionInfo{
@@ -723,16 +723,16 @@ func (s *historyReplicatorSuite) TestWorkflowReset() {
 	currentRunID := uuid.New()
 	currentVersion := version - 100
 	currentNextEventID := int64(2333)
-	req := &h.ReplicateEventsRequest{
-		History: &shared.History{
-			Events: []*shared.HistoryEvent{
+	req := &historyservice.ReplicateEventsRequest{
+		History: &commonproto.History{
+			Events: []*commonproto.HistoryEvent{
 				{
-					Version:   common.Int64Ptr(version),
-					Timestamp: common.Int64Ptr(now),
+					Version:   version,
+					Timestamp: now,
 				},
 			},
 		},
-		ResetWorkflow: common.BoolPtr(true),
+		ResetWorkflow: true,
 	}
 
 	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
@@ -760,10 +760,10 @@ func (s *historyReplicatorSuite) TestWorkflowReset() {
 	}, nil)
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(currentRunID),
-		},
+		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      currentRunID,
+		}),
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State: &persistence.WorkflowMutableState{
 			ExecutionInfo: &persistence.WorkflowExecutionInfo{
@@ -798,12 +798,12 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	now := time.Now().UnixNano()
 	currentRunID := uuid.New()
 	currentVersion := version + 100
-	req := &h.ReplicateEventsRequest{
-		History: &shared.History{
-			Events: []*shared.HistoryEvent{
+	req := &historyservice.ReplicateEventsRequest{
+		History: &commonproto.History{
+			Events: []*commonproto.HistoryEvent{
 				{
-					Version:   common.Int64Ptr(version),
-					Timestamp: common.Int64Ptr(now),
+					Version:   version,
+					Timestamp: now,
 				},
 			},
 		},
@@ -834,10 +834,10 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	}, nil)
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(currentRunID),
-		},
+		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      currentRunID,
+		}),
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State: &persistence.WorkflowMutableState{
 			ExecutionInfo: &persistence.WorkflowExecutionInfo{
@@ -864,18 +864,18 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	weContext.EXPECT().getDomainID().Return(domainID).AnyTimes()
-	weContext.EXPECT().getExecution().Return(&shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(runID),
+	weContext.EXPECT().getExecution().Return(&commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      runID,
 	}).AnyTimes()
 
 	msBuilderIn := NewMockmutableState(s.controller)
-	request := &h.ReplicateEventsRequest{
-		Version: common.Int64Ptr(incomingVersion),
-		History: &shared.History{Events: []*shared.HistoryEvent{
+	request := &historyservice.ReplicateEventsRequest{
+		Version: incomingVersion,
+		History: &commonproto.History{Events: []*commonproto.HistoryEvent{
 			{
-				EventType: shared.EventTypeWorkflowExecutionCanceled.Ptr(),
-				Timestamp: common.Int64Ptr(time.Now().UnixNano()),
+				EventType: enums.EventTypeWorkflowExecutionCanceled,
+				Timestamp: time.Now().UnixNano(),
 			},
 		}},
 	}
@@ -908,18 +908,18 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	weContext.EXPECT().getDomainID().Return(domainID).AnyTimes()
-	weContext.EXPECT().getExecution().Return(&shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(runID),
+	weContext.EXPECT().getExecution().Return(&commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      runID,
 	}).AnyTimes()
 
 	msBuilderIn := NewMockmutableState(s.controller)
-	request := &h.ReplicateEventsRequest{
-		Version: common.Int64Ptr(incomingVersion),
-		History: &shared.History{Events: []*shared.HistoryEvent{
+	request := &historyservice.ReplicateEventsRequest{
+		Version: incomingVersion,
+		History: &commonproto.History{Events: []*commonproto.HistoryEvent{
 			{
-				EventType: shared.EventTypeWorkflowExecutionCanceled.Ptr(),
-				Timestamp: common.Int64Ptr(time.Now().UnixNano()),
+				EventType: enums.EventTypeWorkflowExecutionCanceled,
+				Timestamp: time.Now().UnixNano(),
 			},
 		}},
 	}
@@ -940,9 +940,9 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	msBuilderCurrent := NewMockmutableState(s.controller)
 
 	contextCurrent.EXPECT().loadWorkflowExecution().Return(msBuilderCurrent, nil).Times(1)
-	currentExecution := &shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(currentRunID),
+	currentExecution := &commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      currentRunID,
 	}
 	contextCurrentCacheKey := definition.NewWorkflowIdentifier(domainID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
 	_, _ = s.historyReplicator.historyCache.PutIfNotExist(contextCurrentCacheKey, contextCurrent)
@@ -971,23 +971,23 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	weContext.EXPECT().getDomainID().Return(domainID).AnyTimes()
-	weContext.EXPECT().getExecution().Return(&shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(runID),
+	weContext.EXPECT().getExecution().Return(&commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      runID,
 	}).AnyTimes()
 
 	msBuilderIn := NewMockmutableState(s.controller)
-	request := &h.ReplicateEventsRequest{
-		Version: common.Int64Ptr(incomingVersion),
-		History: &shared.History{Events: []*shared.HistoryEvent{
+	request := &historyservice.ReplicateEventsRequest{
+		Version: incomingVersion,
+		History: &commonproto.History{Events: []*commonproto.HistoryEvent{
 			{
-				EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
-				Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-				WorkflowExecutionSignaledEventAttributes: &shared.WorkflowExecutionSignaledEventAttributes{
-					SignalName: common.StringPtr(signalName),
+				EventType: enums.EventTypeWorkflowExecutionSignaled,
+				Timestamp: time.Now().UnixNano(),
+				Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+					SignalName: signalName,
 					Input:      signalInput,
-					Identity:   common.StringPtr(signalIdentity),
-				},
+					Identity:   signalIdentity,
+				}},
 			},
 		}},
 	}
@@ -1008,9 +1008,9 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	msBuilderCurrent := NewMockmutableState(s.controller)
 
 	contextCurrent.EXPECT().loadWorkflowExecution().Return(msBuilderCurrent, nil).Times(1)
-	currentExecution := &shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(currentRunID),
+	currentExecution := &commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      currentRunID,
 	}
 	contextCurrentCacheKey := definition.NewWorkflowIdentifier(domainID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
 	_, _ = s.historyReplicator.historyCache.PutIfNotExist(contextCurrentCacheKey, contextCurrent)
@@ -1018,14 +1018,14 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(currentLastWriteVersion, nil).AnyTimes()
 	msBuilderCurrent.EXPECT().UpdateCurrentVersion(currentLastWriteVersion, true).Return(nil).Times(1)
-	msBuilderCurrent.EXPECT().AddWorkflowExecutionSignaled(signalName, signalInput, signalIdentity).Return(&shared.HistoryEvent{
-		EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
-		Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-		WorkflowExecutionSignaledEventAttributes: &shared.WorkflowExecutionSignaledEventAttributes{
-			SignalName: common.StringPtr(signalName),
+	msBuilderCurrent.EXPECT().AddWorkflowExecutionSignaled(signalName, signalInput, signalIdentity).Return(&commonproto.HistoryEvent{
+		EventType: enums.EventTypeWorkflowExecutionSignaled,
+		Timestamp: time.Now().UnixNano(),
+		Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+			SignalName: signalName,
 			Input:      signalInput,
-			Identity:   common.StringPtr(signalIdentity),
-		},
+			Identity:   signalIdentity,
+		}},
 	}, nil).Times(1)
 	msBuilderCurrent.EXPECT().HasPendingDecision().Return(true).Times(1)
 
@@ -1057,23 +1057,23 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	weContext.EXPECT().getDomainID().Return(domainID).AnyTimes()
-	weContext.EXPECT().getExecution().Return(&shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(runID),
+	weContext.EXPECT().getExecution().Return(&commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      runID,
 	}).AnyTimes()
 
 	msBuilderIn := NewMockmutableState(s.controller)
-	request := &h.ReplicateEventsRequest{
-		Version: common.Int64Ptr(incomingVersion),
-		History: &shared.History{Events: []*shared.HistoryEvent{
+	request := &historyservice.ReplicateEventsRequest{
+		Version: incomingVersion,
+		History: &commonproto.History{Events: []*commonproto.HistoryEvent{
 			{
-				EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
-				Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-				WorkflowExecutionSignaledEventAttributes: &shared.WorkflowExecutionSignaledEventAttributes{
-					SignalName: common.StringPtr(signalName),
+				EventType: enums.EventTypeWorkflowExecutionSignaled,
+				Timestamp: time.Now().UnixNano(),
+				Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+					SignalName: signalName,
 					Input:      signalInput,
-					Identity:   common.StringPtr(signalIdentity),
-				},
+					Identity:   signalIdentity,
+				}},
 			},
 		}},
 	}
@@ -1094,9 +1094,9 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	msBuilderCurrent := NewMockmutableState(s.controller)
 
 	contextCurrent.EXPECT().loadWorkflowExecution().Return(msBuilderCurrent, nil).Times(1)
-	currentExecution := &shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(currentRunID),
+	currentExecution := &commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      currentRunID,
 	}
 	contextCurrentCacheKey := definition.NewWorkflowIdentifier(domainID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
 	_, _ = s.historyReplicator.historyCache.PutIfNotExist(contextCurrentCacheKey, contextCurrent)
@@ -1104,14 +1104,14 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(currentLastWriteVersion, nil).AnyTimes()
 	msBuilderCurrent.EXPECT().UpdateCurrentVersion(currentLastWriteVersion, true).Return(nil).Times(1)
-	msBuilderCurrent.EXPECT().AddWorkflowExecutionSignaled(signalName, signalInput, signalIdentity).Return(&shared.HistoryEvent{
-		EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
-		Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-		WorkflowExecutionSignaledEventAttributes: &shared.WorkflowExecutionSignaledEventAttributes{
-			SignalName: common.StringPtr(signalName),
+	msBuilderCurrent.EXPECT().AddWorkflowExecutionSignaled(signalName, signalInput, signalIdentity).Return(&commonproto.HistoryEvent{
+		EventType: enums.EventTypeWorkflowExecutionSignaled,
+		Timestamp: time.Now().UnixNano(),
+		Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+			SignalName: signalName,
 			Input:      signalInput,
-			Identity:   common.StringPtr(signalIdentity),
-		},
+			Identity:   signalIdentity,
+		}},
 	}, nil).Times(1)
 	msBuilderCurrent.EXPECT().HasPendingDecision().Return(false).Times(1)
 
@@ -1141,12 +1141,12 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	msBuilderIn := NewMockmutableState(s.controller)
-	request := &h.ReplicateEventsRequest{
-		Version: common.Int64Ptr(incomingVersion),
-		History: &shared.History{Events: []*shared.HistoryEvent{
+	request := &historyservice.ReplicateEventsRequest{
+		Version: incomingVersion,
+		History: &commonproto.History{Events: []*commonproto.HistoryEvent{
 			{
-				EventType: shared.EventTypeWorkflowExecutionCanceled.Ptr(),
-				Timestamp: common.Int64Ptr(time.Now().UnixNano()),
+				EventType: enums.EventTypeWorkflowExecutionCanceled,
+				Timestamp: time.Now().UnixNano(),
 			},
 		}},
 	}
@@ -1172,17 +1172,17 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	msBuilderIn := NewMockmutableState(s.controller)
-	request := &h.ReplicateEventsRequest{
-		Version: common.Int64Ptr(incomingVersion),
-		History: &shared.History{Events: []*shared.HistoryEvent{
+	request := &historyservice.ReplicateEventsRequest{
+		Version: incomingVersion,
+		History: &commonproto.History{Events: []*commonproto.HistoryEvent{
 			{
-				EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
-				Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-				WorkflowExecutionSignaledEventAttributes: &shared.WorkflowExecutionSignaledEventAttributes{
-					SignalName: common.StringPtr(signalName),
+				EventType: enums.EventTypeWorkflowExecutionSignaled,
+				Timestamp: time.Now().UnixNano(),
+				Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+					SignalName: signalName,
 					Input:      signalInput,
-					Identity:   common.StringPtr(signalIdentity),
-				},
+					Identity:   signalIdentity,
+				}},
 			},
 		}},
 	}
@@ -1190,14 +1190,14 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	msBuilderIn.EXPECT().GetLastWriteVersion().Return(currentLastWriteVersion, nil).AnyTimes()
 	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	msBuilderIn.EXPECT().UpdateCurrentVersion(currentLastWriteVersion, true).Return(nil).Times(1)
-	msBuilderIn.EXPECT().AddWorkflowExecutionSignaled(signalName, signalInput, signalIdentity).Return(&shared.HistoryEvent{
-		EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
-		Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-		WorkflowExecutionSignaledEventAttributes: &shared.WorkflowExecutionSignaledEventAttributes{
-			SignalName: common.StringPtr(signalName),
+	msBuilderIn.EXPECT().AddWorkflowExecutionSignaled(signalName, signalInput, signalIdentity).Return(&commonproto.HistoryEvent{
+		EventType: enums.EventTypeWorkflowExecutionSignaled,
+		Timestamp: time.Now().UnixNano(),
+		Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+			SignalName: signalName,
 			Input:      signalInput,
-			Identity:   common.StringPtr(signalIdentity),
-		},
+			Identity:   signalIdentity,
+		}},
 	}, nil).Times(1)
 	msBuilderIn.EXPECT().HasPendingDecision().Return(true).Times(1)
 
@@ -1223,17 +1223,17 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	msBuilderIn := NewMockmutableState(s.controller)
-	request := &h.ReplicateEventsRequest{
-		Version: common.Int64Ptr(incomingVersion),
-		History: &shared.History{Events: []*shared.HistoryEvent{
+	request := &historyservice.ReplicateEventsRequest{
+		Version: incomingVersion,
+		History: &commonproto.History{Events: []*commonproto.HistoryEvent{
 			{
-				EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
-				Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-				WorkflowExecutionSignaledEventAttributes: &shared.WorkflowExecutionSignaledEventAttributes{
-					SignalName: common.StringPtr(signalName),
+				EventType: enums.EventTypeWorkflowExecutionSignaled,
+				Timestamp: time.Now().UnixNano(),
+				Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+					SignalName: signalName,
 					Input:      signalInput,
-					Identity:   common.StringPtr(signalIdentity),
-				},
+					Identity:   signalIdentity,
+				}},
 			},
 		}},
 	}
@@ -1241,14 +1241,14 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	msBuilderIn.EXPECT().GetLastWriteVersion().Return(currentLastWriteVersion, nil).AnyTimes()
 	msBuilderIn.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	msBuilderIn.EXPECT().UpdateCurrentVersion(currentLastWriteVersion, true).Return(nil).Times(1)
-	msBuilderIn.EXPECT().AddWorkflowExecutionSignaled(signalName, signalInput, signalIdentity).Return(&shared.HistoryEvent{
-		EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
-		Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-		WorkflowExecutionSignaledEventAttributes: &shared.WorkflowExecutionSignaledEventAttributes{
-			SignalName: common.StringPtr(signalName),
+	msBuilderIn.EXPECT().AddWorkflowExecutionSignaled(signalName, signalInput, signalIdentity).Return(&commonproto.HistoryEvent{
+		EventType: enums.EventTypeWorkflowExecutionSignaled,
+		Timestamp: time.Now().UnixNano(),
+		Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+			SignalName: signalName,
 			Input:      signalInput,
-			Identity:   common.StringPtr(signalIdentity),
-		},
+			Identity:   signalIdentity,
+		}},
 	}, nil).Times(1)
 	msBuilderIn.EXPECT().HasPendingDecision().Return(false).Times(1)
 
@@ -1278,10 +1278,10 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingEqu
 
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	msBuilderIn := NewMockmutableState(s.controller)
-	request := &h.ReplicateEventsRequest{
-		Version: common.Int64Ptr(incomingVersion),
-		History: &shared.History{Events: []*shared.HistoryEvent{
-			{Timestamp: common.Int64Ptr(time.Now().UnixNano())},
+	request := &historyservice.ReplicateEventsRequest{
+		Version: incomingVersion,
+		History: &commonproto.History{Events: []*commonproto.HistoryEvent{
+			{Timestamp: time.Now().UnixNano()},
 		}},
 	}
 	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{LastWriteVersion: currentLastWriteVersion}).AnyTimes()
@@ -1299,10 +1299,10 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	msBuilderIn := NewMockmutableState(s.controller)
 
-	request := &h.ReplicateEventsRequest{
-		Version: common.Int64Ptr(incomingVersion),
-		History: &shared.History{Events: []*shared.HistoryEvent{
-			{Timestamp: common.Int64Ptr(time.Now().UnixNano())},
+	request := &historyservice.ReplicateEventsRequest{
+		Version: incomingVersion,
+		History: &commonproto.History{Events: []*commonproto.HistoryEvent{
+			{Timestamp: time.Now().UnixNano()},
 		}},
 	}
 	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{
@@ -1326,10 +1326,10 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	msBuilderIn := NewMockmutableState(s.controller)
 
-	request := &h.ReplicateEventsRequest{
-		Version: common.Int64Ptr(incomingVersion),
-		History: &shared.History{Events: []*shared.HistoryEvent{
-			{Timestamp: common.Int64Ptr(time.Now().UnixNano())},
+	request := &historyservice.ReplicateEventsRequest{
+		Version: incomingVersion,
+		History: &commonproto.History{Events: []*commonproto.HistoryEvent{
+			{Timestamp: time.Now().UnixNano()},
 		}},
 	}
 	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{
@@ -1361,11 +1361,11 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	msBuilderIn := NewMockmutableState(s.controller)
 
-	request := &h.ReplicateEventsRequest{
-		Version:         common.Int64Ptr(incomingVersion),
-		ReplicationInfo: map[string]*shared.ReplicationInfo{},
-		History: &shared.History{Events: []*shared.HistoryEvent{
-			{Timestamp: common.Int64Ptr(time.Now().UnixNano())},
+	request := &historyservice.ReplicateEventsRequest{
+		Version:         incomingVersion,
+		ReplicationInfo: map[string]*commonproto.ReplicationInfo{},
+		History: &commonproto.History{Events: []*commonproto.HistoryEvent{
+			{Timestamp: time.Now().UnixNano()},
 		}},
 	}
 	startTimeStamp := time.Now()
@@ -1427,16 +1427,16 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	msBuilderIn := NewMockmutableState(s.controller)
 
-	request := &h.ReplicateEventsRequest{
-		Version: common.Int64Ptr(incomingVersion),
-		ReplicationInfo: map[string]*shared.ReplicationInfo{
+	request := &historyservice.ReplicateEventsRequest{
+		Version: incomingVersion,
+		ReplicationInfo: map[string]*commonproto.ReplicationInfo{
 			prevActiveCluster: {
-				Version:     common.Int64Ptr(incomingReplicationInfoLastWriteVersion),
-				LastEventId: common.Int64Ptr(incomingReplicationInfoLastEventID),
+				Version:     incomingReplicationInfoLastWriteVersion,
+				LastEventId: incomingReplicationInfoLastEventID,
 			},
 		},
-		History: &shared.History{Events: []*shared.HistoryEvent{
-			{Timestamp: common.Int64Ptr(time.Now().UnixNano())},
+		History: &commonproto.History{Events: []*commonproto.HistoryEvent{
+			{Timestamp: time.Now().UnixNano()},
 		}},
 	}
 	startTimeStamp := time.Now()
@@ -1491,16 +1491,16 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	msBuilderIn := NewMockmutableState(s.controller)
 
-	request := &h.ReplicateEventsRequest{
-		Version: common.Int64Ptr(incomingVersion),
-		ReplicationInfo: map[string]*shared.ReplicationInfo{
+	request := &historyservice.ReplicateEventsRequest{
+		Version: incomingVersion,
+		ReplicationInfo: map[string]*commonproto.ReplicationInfo{
 			prevActiveCluster: {
-				Version:     common.Int64Ptr(incomingReplicationInfoLastWriteVersion),
-				LastEventId: common.Int64Ptr(incomingReplicationInfoLastEventID),
+				Version:     incomingReplicationInfoLastWriteVersion,
+				LastEventId: incomingReplicationInfoLastEventID,
 			},
 		},
-		History: &shared.History{Events: []*shared.HistoryEvent{
-			{Timestamp: common.Int64Ptr(time.Now().UnixNano())},
+		History: &commonproto.History{Events: []*commonproto.HistoryEvent{
+			{Timestamp: time.Now().UnixNano()},
 		}},
 	}
 	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{
@@ -1529,16 +1529,16 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	msBuilderIn := NewMockmutableState(s.controller)
 
-	request := &h.ReplicateEventsRequest{
-		Version: common.Int64Ptr(incomingVersion),
-		ReplicationInfo: map[string]*shared.ReplicationInfo{
+	request := &historyservice.ReplicateEventsRequest{
+		Version: incomingVersion,
+		ReplicationInfo: map[string]*commonproto.ReplicationInfo{
 			prevActiveCluster: {
-				Version:     common.Int64Ptr(incomingReplicationInfoLastWriteVersion),
-				LastEventId: common.Int64Ptr(incomingReplicationInfoLastEventID),
+				Version:     incomingReplicationInfoLastWriteVersion,
+				LastEventId: incomingReplicationInfoLastEventID,
 			},
 		},
-		History: &shared.History{Events: []*shared.HistoryEvent{
-			{Timestamp: common.Int64Ptr(time.Now().UnixNano())},
+		History: &commonproto.History{Events: []*commonproto.HistoryEvent{
+			{Timestamp: time.Now().UnixNano()},
 		}},
 	}
 	startTimeStamp := time.Now()
@@ -1588,16 +1588,16 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	msBuilderIn := NewMockmutableState(s.controller)
 
-	request := &h.ReplicateEventsRequest{
-		Version: common.Int64Ptr(incomingVersion),
-		ReplicationInfo: map[string]*shared.ReplicationInfo{
+	request := &historyservice.ReplicateEventsRequest{
+		Version: incomingVersion,
+		ReplicationInfo: map[string]*commonproto.ReplicationInfo{
 			prevActiveCluster: {
-				Version:     common.Int64Ptr(incomingReplicationInfoLastWriteVersion),
-				LastEventId: common.Int64Ptr(incomingReplicationInfoLastEventID),
+				Version:     incomingReplicationInfoLastWriteVersion,
+				LastEventId: incomingReplicationInfoLastEventID,
 			},
 		},
-		History: &shared.History{Events: []*shared.HistoryEvent{
-			{Timestamp: common.Int64Ptr(time.Now().UnixNano())},
+		History: &commonproto.History{Events: []*commonproto.HistoryEvent{
+			{Timestamp: time.Now().UnixNano()},
 		}},
 	}
 	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{
@@ -1626,16 +1626,16 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	msBuilderIn := NewMockmutableState(s.controller)
 
-	request := &h.ReplicateEventsRequest{
-		Version: common.Int64Ptr(incomingVersion),
-		ReplicationInfo: map[string]*shared.ReplicationInfo{
+	request := &historyservice.ReplicateEventsRequest{
+		Version: incomingVersion,
+		ReplicationInfo: map[string]*commonproto.ReplicationInfo{
 			prevActiveCluster: {
-				Version:     common.Int64Ptr(incomingReplicationInfoLastWriteVersion),
-				LastEventId: common.Int64Ptr(incomingReplicationInfoLastEventID),
+				Version:     incomingReplicationInfoLastWriteVersion,
+				LastEventId: incomingReplicationInfoLastEventID,
 			},
 		},
-		History: &shared.History{Events: []*shared.HistoryEvent{
-			{Timestamp: common.Int64Ptr(time.Now().UnixNano())},
+		History: &commonproto.History{Events: []*commonproto.HistoryEvent{
+			{Timestamp: time.Now().UnixNano()},
 		}},
 	}
 
@@ -1673,16 +1673,16 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	msBuilderIn := NewMockmutableState(s.controller)
 
-	request := &h.ReplicateEventsRequest{
-		Version: common.Int64Ptr(incomingVersion),
-		ReplicationInfo: map[string]*shared.ReplicationInfo{
+	request := &historyservice.ReplicateEventsRequest{
+		Version: incomingVersion,
+		ReplicationInfo: map[string]*commonproto.ReplicationInfo{
 			prevActiveCluster: {
-				Version:     common.Int64Ptr(incomingReplicationInfoLastWriteVersion),
-				LastEventId: common.Int64Ptr(incomingReplicationInfoLastEventID),
+				Version:     incomingReplicationInfoLastWriteVersion,
+				LastEventId: incomingReplicationInfoLastEventID,
 			},
 		},
-		History: &shared.History{Events: []*shared.HistoryEvent{
-			{Timestamp: common.Int64Ptr(time.Now().UnixNano())},
+		History: &commonproto.History{Events: []*commonproto.HistoryEvent{
+			{Timestamp: time.Now().UnixNano()},
 		}},
 	}
 	startTimeStamp := time.Now()
@@ -1700,8 +1700,8 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	msBuilderIn.EXPECT().GetInFlightDecision().Return(pendingDecisionInfo, true).Times(1)
 	msBuilderIn.EXPECT().UpdateCurrentVersion(currentLastWriteVersion, true).Return(nil).Times(1)
 	msBuilderIn.EXPECT().AddDecisionTaskFailedEvent(pendingDecisionInfo.ScheduleID, pendingDecisionInfo.StartedID,
-		workflow.DecisionTaskFailedCauseFailoverCloseDecision, ([]byte)(nil), identityHistoryService, "", "", "", "", int64(0),
-	).Return(&shared.HistoryEvent{}, nil).Times(1)
+		enums.DecisionTaskFailedCauseFailoverCloseDecision, ([]byte)(nil), identityHistoryService, "", "", "", "", int64(0),
+	).Return(&commonproto.HistoryEvent{}, nil).Times(1)
 	msBuilderIn.EXPECT().HasPendingDecision().Return(false).Times(1)
 	currentState := persistence.WorkflowStateRunning
 	exeInfo := &persistence.WorkflowExecutionInfo{
@@ -1761,9 +1761,9 @@ func (s *historyReplicatorSuite) TestApplyOtherEvents_IncomingLessThanCurrent() 
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	msBuilder := NewMockmutableState(s.controller)
 
-	request := &h.ReplicateEventsRequest{
-		FirstEventId: common.Int64Ptr(incomingFirstEventID),
-		History:      &shared.History{},
+	request := &historyservice.ReplicateEventsRequest{
+		FirstEventId: incomingFirstEventID,
+		History:      &commonproto.History{},
 	}
 	msBuilder.EXPECT().GetNextEventID().Return(currentNextEventID).AnyTimes()
 	msBuilder.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{}).AnyTimes() // logger will use this
@@ -1790,19 +1790,19 @@ func (s *historyReplicatorSuite) TestApplyOtherEvents_IncomingGreaterThanCurrent
 
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	weContext.EXPECT().getDomainID().Return(domainID).AnyTimes()
-	weContext.EXPECT().getExecution().Return(&workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(runID),
+	weContext.EXPECT().getExecution().Return(&commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      runID,
 	}).AnyTimes()
 
 	msBuilder := NewMockmutableState(s.controller)
 
-	request := &h.ReplicateEventsRequest{
-		SourceCluster: common.StringPtr(incomingSourceCluster),
-		Version:       common.Int64Ptr(incomingVersion),
-		FirstEventId:  common.Int64Ptr(incomingFirstEventID),
-		NextEventId:   common.Int64Ptr(incomingNextEventID),
-		History:       &shared.History{},
+	request := &historyservice.ReplicateEventsRequest{
+		SourceCluster: incomingSourceCluster,
+		Version:       incomingVersion,
+		FirstEventId:  incomingFirstEventID,
+		NextEventId:   incomingNextEventID,
+		History:       &commonproto.History{},
 	}
 
 	msBuilder.EXPECT().GetNextEventID().Return(currentNextEventID).AnyTimes()
@@ -1828,13 +1828,13 @@ func (s *historyReplicatorSuite) TestApplyReplicationTask_WorkflowClosed() {
 	weContext := NewMockworkflowExecutionContext(s.controller)
 	msBuilder := NewMockmutableState(s.controller)
 
-	request := &h.ReplicateEventsRequest{
-		SourceCluster:     common.StringPtr(incomingSourceCluster),
-		Version:           common.Int64Ptr(incomingVersion),
-		FirstEventId:      common.Int64Ptr(incomingFirstEventID),
-		NextEventId:       common.Int64Ptr(incomingNextEventID),
-		ForceBufferEvents: common.BoolPtr(true),
-		History:           &shared.History{Events: []*shared.HistoryEvent{{}}},
+	request := &historyservice.ReplicateEventsRequest{
+		SourceCluster:     incomingSourceCluster,
+		Version:           incomingVersion,
+		FirstEventId:      incomingFirstEventID,
+		NextEventId:       incomingNextEventID,
+		ForceBufferEvents: true,
+		History:           &commonproto.History{Events: []*commonproto.HistoryEvent{{}}},
 	}
 
 	msBuilder.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
@@ -1858,9 +1858,9 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 	parentWorkflowID := "some random workflow ID"
 	parentRunID := uuid.New()
 
-	weContext := newWorkflowExecutionContext(domainID, shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(runID),
+	weContext := newWorkflowExecutionContext(domainID, commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      runID,
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
@@ -1874,10 +1874,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 
 	requestID := uuid.New()
 	now := time.Now()
-	history := &shared.History{
-		Events: []*shared.HistoryEvent{
-			{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(1), Timestamp: common.Int64Ptr(now.UnixNano())},
-			{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(2), Timestamp: common.Int64Ptr(now.UnixNano())},
+	history := &commonproto.History{
+		Events: []*commonproto.HistoryEvent{
+			{Version: version, EventId: 1, Timestamp: now.UnixNano()},
+			{Version: version, EventId: 2, Timestamp: now.UnixNano()},
 		},
 	}
 	nextEventID := di.ScheduleID + 1
@@ -1928,10 +1928,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		BranchToken: executionInfo.BranchToken,
-		Events:      history.Events,
+		Events:      adapter.ToThriftHistoryEvents(history.Events),
 	}}
 	msBuilder.EXPECT().CloseTransactionAsSnapshot(now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
-	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.MatchedBy(func(input *persistence.CreateWorkflowExecutionRequest) bool {
 		input.RangeID = 0
 		s.Equal(&persistence.CreateWorkflowExecutionRequest{
@@ -1976,9 +1976,9 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 	parentWorkflowID := "some random workflow ID"
 	parentRunID := uuid.New()
 
-	weContext := newWorkflowExecutionContext(domainID, shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(runID),
+	weContext := newWorkflowExecutionContext(domainID, commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      runID,
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
@@ -1992,10 +1992,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 
 	requestID := uuid.New()
 	now := time.Now()
-	history := &shared.History{
-		Events: []*shared.HistoryEvent{
-			{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(1), Timestamp: common.Int64Ptr(now.UnixNano())},
-			{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(2), Timestamp: common.Int64Ptr(now.UnixNano())},
+	history := &commonproto.History{
+		Events: []*commonproto.HistoryEvent{
+			{Version: version, EventId: 1, Timestamp: now.UnixNano()},
+			{Version: version, EventId: 2, Timestamp: now.UnixNano()},
 		},
 	}
 	nextEventID := di.ScheduleID + 1
@@ -2046,10 +2046,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		BranchToken: executionInfo.BranchToken,
-		Events:      history.Events,
+		Events:      adapter.ToThriftHistoryEvents(history.Events),
 	}}
 	msBuilder.EXPECT().CloseTransactionAsSnapshot(now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
-	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
 	errRet := serviceerror.NewInternal("")
 	// the test above already assert the create workflow request, so here just use anyting
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, errRet)
@@ -2090,9 +2090,9 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 	parentWorkflowID := "some random workflow ID"
 	parentRunID := uuid.New()
 
-	weContext := newWorkflowExecutionContext(domainID, shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(runID),
+	weContext := newWorkflowExecutionContext(domainID, commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      runID,
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
@@ -2106,10 +2106,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 
 	requestID := uuid.New()
 	now := time.Now()
-	history := &shared.History{
-		Events: []*shared.HistoryEvent{
-			{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(1), Timestamp: common.Int64Ptr(now.UnixNano())},
-			{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(2), Timestamp: common.Int64Ptr(now.UnixNano())},
+	history := &commonproto.History{
+		Events: []*commonproto.HistoryEvent{
+			{Version: version, EventId: 1, Timestamp: now.UnixNano()},
+			{Version: version, EventId: 2, Timestamp: now.UnixNano()},
 		},
 	}
 	nextEventID := di.ScheduleID + 1
@@ -2160,10 +2160,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		BranchToken: executionInfo.BranchToken,
-		Events:      history.Events,
+		Events:      adapter.ToThriftHistoryEvents(history.Events),
 	}}
 	msBuilder.EXPECT().CloseTransactionAsSnapshot(now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
-	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
 
 	currentVersion := version
 	currentRunID := runID
@@ -2205,13 +2205,13 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	workflowTimeout := int32(3721)
 	decisionTimeout := int32(4411)
 	cronSchedule := "some random cron scredule"
-	retryPolicy := &workflow.RetryPolicy{
-		InitialIntervalInSeconds:    common.Int32Ptr(1),
-		MaximumAttempts:             common.Int32Ptr(3),
-		MaximumIntervalInSeconds:    common.Int32Ptr(1),
+	retryPolicy := &commonproto.RetryPolicy{
+		InitialIntervalInSeconds:    1,
+		MaximumAttempts:             3,
+		MaximumIntervalInSeconds:    1,
 		NonRetriableErrorReasons:    []string{"bad-bug"},
-		BackoffCoefficient:          common.Float64Ptr(1),
-		ExpirationIntervalInSeconds: common.Int32Ptr(100),
+		BackoffCoefficient:          1,
+		ExpirationIntervalInSeconds: 100,
 	}
 
 	initiatedID := int64(4810)
@@ -2219,9 +2219,9 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	parentWorkflowID := "some random workflow ID"
 	parentRunID := uuid.New()
 
-	weContext := newWorkflowExecutionContext(domainID, shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(runID),
+	weContext := newWorkflowExecutionContext(domainID, commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      runID,
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
@@ -2235,10 +2235,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 
 	requestID := uuid.New()
 	now := time.Now()
-	history := &shared.History{
-		Events: []*shared.HistoryEvent{
-			{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(1), Timestamp: common.Int64Ptr(now.UnixNano())},
-			{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(2), Timestamp: common.Int64Ptr(now.UnixNano())},
+	history := &commonproto.History{
+		Events: []*commonproto.HistoryEvent{
+			{Version: version, EventId: 1, Timestamp: now.UnixNano()},
+			{Version: version, EventId: 2, Timestamp: now.UnixNano()},
 		},
 	}
 	nextEventID := di.ScheduleID + 1
@@ -2297,10 +2297,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		BranchToken: executionInfo.BranchToken,
-		Events:      history.Events,
+		Events:      adapter.ToThriftHistoryEvents(history.Events),
 	}}
 	msBuilder.EXPECT().CloseTransactionAsSnapshot(now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
-	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
 
 	currentVersion := version + 1
 	currentRunID := uuid.New()
@@ -2363,9 +2363,9 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	parentWorkflowID := "some random workflow ID"
 	parentRunID := uuid.New()
 
-	weContext := newWorkflowExecutionContext(domainID, shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(runID),
+	weContext := newWorkflowExecutionContext(domainID, commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      runID,
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
@@ -2379,10 +2379,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 
 	requestID := uuid.New()
 	now := time.Now()
-	history := &shared.History{
-		Events: []*shared.HistoryEvent{
-			{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(1), Timestamp: common.Int64Ptr(now.UnixNano())},
-			{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(2), Timestamp: common.Int64Ptr(now.UnixNano())},
+	history := &commonproto.History{
+		Events: []*commonproto.HistoryEvent{
+			{Version: version, EventId: 1, Timestamp: now.UnixNano()},
+			{Version: version, EventId: 2, Timestamp: now.UnixNano()},
 		},
 	}
 	nextEventID := di.ScheduleID + 1
@@ -2433,10 +2433,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		BranchToken: executionInfo.BranchToken,
-		Events:      history.Events,
+		Events:      adapter.ToThriftHistoryEvents(history.Events),
 	}}
 	msBuilder.EXPECT().CloseTransactionAsSnapshot(now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
-	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
 
 	currentVersion := version
 	currentRunID := uuid.New()
@@ -2499,9 +2499,9 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	parentWorkflowID := "some random workflow ID"
 	parentRunID := uuid.New()
 
-	weContext := newWorkflowExecutionContext(domainID, shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(runID),
+	weContext := newWorkflowExecutionContext(domainID, commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      runID,
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
@@ -2515,10 +2515,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 
 	requestID := uuid.New()
 	now := time.Now()
-	history := &shared.History{
-		Events: []*shared.HistoryEvent{
-			{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(1), Timestamp: common.Int64Ptr(now.UnixNano())},
-			{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(2), Timestamp: common.Int64Ptr(now.UnixNano())},
+	history := &commonproto.History{
+		Events: []*commonproto.HistoryEvent{
+			{Version: version, EventId: 1, Timestamp: now.UnixNano()},
+			{Version: version, EventId: 2, Timestamp: now.UnixNano()},
 		},
 	}
 	nextEventID := di.ScheduleID + 1
@@ -2569,10 +2569,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		BranchToken: executionInfo.BranchToken,
-		Events:      history.Events,
+		Events:      adapter.ToThriftHistoryEvents(history.Events),
 	}}
 	msBuilder.EXPECT().CloseTransactionAsSnapshot(now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
-	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
 
 	currentVersion := version - 1
 	currentRunID := uuid.New()
@@ -2635,9 +2635,9 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	parentWorkflowID := "some random workflow ID"
 	parentRunID := uuid.New()
 
-	weContext := newWorkflowExecutionContext(domainID, shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(runID),
+	weContext := newWorkflowExecutionContext(domainID, commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      runID,
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
@@ -2651,10 +2651,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 
 	requestID := uuid.New()
 	now := time.Now()
-	history := &shared.History{
-		Events: []*shared.HistoryEvent{
-			{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(1), Timestamp: common.Int64Ptr(now.UnixNano())},
-			{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(2), Timestamp: common.Int64Ptr(now.UnixNano())},
+	history := &commonproto.History{
+		Events: []*commonproto.HistoryEvent{
+			{Version: version, EventId: 1, Timestamp: now.UnixNano()},
+			{Version: version, EventId: 2, Timestamp: now.UnixNano()},
 		},
 	}
 	nextEventID := di.ScheduleID + 1
@@ -2706,10 +2706,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		BranchToken: executionInfo.BranchToken,
-		Events:      history.Events,
+		Events:      adapter.ToThriftHistoryEvents(history.Events),
 	}}
 	msBuilder.EXPECT().CloseTransactionAsSnapshot(now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
-	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
 
 	currentVersion := version + 1
 	currentRunID := uuid.New()
@@ -2719,9 +2719,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		State:            currentState,
 		LastWriteVersion: currentVersion,
 	}
+	shardId := testShardID
 	delReq := &persistence.DeleteHistoryBranchRequest{
 		BranchToken: executionInfo.BranchToken,
-		ShardID:     common.IntPtr(testShardID),
+		ShardID:     &shardId,
 	}
 	// the test above already assert the create workflow request, so here just use anything
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, errRet).Once()
@@ -2749,9 +2750,9 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	msBuilderCurrent := NewMockmutableState(s.controller)
 
 	contextCurrent.EXPECT().loadWorkflowExecution().Return(msBuilderCurrent, nil).Times(1)
-	currentExecution := &shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(currentRunID),
+	currentExecution := &commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      currentRunID,
 	}
 	contextCurrentCacheKey := definition.NewWorkflowIdentifier(domainID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
 	_, _ = s.historyReplicator.historyCache.PutIfNotExist(contextCurrentCacheKey, contextCurrent)
@@ -2787,9 +2788,9 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	signalInput := []byte("some random signal input")
 	signalIdentity := "some random signal identity"
 
-	weContext := newWorkflowExecutionContext(domainID, shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(runID),
+	weContext := newWorkflowExecutionContext(domainID, commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      runID,
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
@@ -2803,19 +2804,19 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 
 	requestID := uuid.New()
 	now := time.Now()
-	history := &shared.History{
-		Events: []*shared.HistoryEvent{
-			{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(1), Timestamp: common.Int64Ptr(now.UnixNano())},
+	history := &commonproto.History{
+		Events: []*commonproto.HistoryEvent{
+			{Version: version, EventId: 1, Timestamp: now.UnixNano()},
 			{
-				Version:   common.Int64Ptr(version),
-				EventId:   common.Int64Ptr(2),
-				EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
-				Timestamp: common.Int64Ptr(now.UnixNano()),
-				WorkflowExecutionSignaledEventAttributes: &shared.WorkflowExecutionSignaledEventAttributes{
-					SignalName: common.StringPtr(signalName),
+				Version:   version,
+				EventId:   2,
+				EventType: enums.EventTypeWorkflowExecutionSignaled,
+				Timestamp: now.UnixNano(),
+				Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+					SignalName: signalName,
 					Input:      signalInput,
-					Identity:   common.StringPtr(signalIdentity),
-				},
+					Identity:   signalIdentity,
+				}},
 			},
 		},
 	}
@@ -2868,10 +2869,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		BranchToken: executionInfo.BranchToken,
-		Events:      history.Events,
+		Events:      adapter.ToThriftHistoryEvents(history.Events),
 	}}
 	msBuilder.EXPECT().CloseTransactionAsSnapshot(now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
-	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
 
 	currentVersion := version + 1
 	currentRunID := uuid.New()
@@ -2907,9 +2908,9 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	msBuilderCurrent := NewMockmutableState(s.controller)
 
 	contextCurrent.EXPECT().loadWorkflowExecution().Return(msBuilderCurrent, nil).Times(1)
-	currentExecution := &shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(currentRunID),
+	currentExecution := &commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      currentRunID,
 	}
 	contextCurrentCacheKey := definition.NewWorkflowIdentifier(domainID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
 	_, _ = s.historyReplicator.historyCache.PutIfNotExist(contextCurrentCacheKey, contextCurrent)
@@ -2924,14 +2925,14 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 
 	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(currentVersion, nil).AnyTimes()
-	msBuilderCurrent.EXPECT().AddWorkflowExecutionSignaled(signalName, signalInput, signalIdentity).Return(&shared.HistoryEvent{
-		EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
-		Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-		WorkflowExecutionSignaledEventAttributes: &shared.WorkflowExecutionSignaledEventAttributes{
-			SignalName: common.StringPtr(signalName),
+	msBuilderCurrent.EXPECT().AddWorkflowExecutionSignaled(signalName, signalInput, signalIdentity).Return(&commonproto.HistoryEvent{
+		EventType: enums.EventTypeWorkflowExecutionSignaled,
+		Timestamp: time.Now().UnixNano(),
+		Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+			SignalName: signalName,
 			Input:      signalInput,
-			Identity:   common.StringPtr(signalIdentity),
-		},
+			Identity:   signalIdentity,
+		}},
 	}, nil).Times(1)
 	msBuilderCurrent.EXPECT().UpdateCurrentVersion(currentVersion, true).Return(nil).Times(1)
 	msBuilderCurrent.EXPECT().HasPendingDecision().Return(true).Times(1)
@@ -2963,9 +2964,9 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	signalInput := []byte("some random signal input")
 	signalIdentity := "some random signal identity"
 
-	weContext := newWorkflowExecutionContext(domainID, shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(runID),
+	weContext := newWorkflowExecutionContext(domainID, commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      runID,
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
@@ -2979,19 +2980,19 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 
 	requestID := uuid.New()
 	now := time.Now()
-	history := &shared.History{
-		Events: []*shared.HistoryEvent{
-			{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(1), Timestamp: common.Int64Ptr(now.UnixNano())},
+	history := &commonproto.History{
+		Events: []*commonproto.HistoryEvent{
+			{Version: version, EventId: 1, Timestamp: now.UnixNano()},
 			{
-				Version:   common.Int64Ptr(version),
-				EventId:   common.Int64Ptr(2),
-				EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
-				Timestamp: common.Int64Ptr(now.UnixNano()),
-				WorkflowExecutionSignaledEventAttributes: &shared.WorkflowExecutionSignaledEventAttributes{
-					SignalName: common.StringPtr(signalName),
+				Version:   version,
+				EventId:   2,
+				EventType: enums.EventTypeWorkflowExecutionSignaled,
+				Timestamp: now.UnixNano(),
+				Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+					SignalName: signalName,
 					Input:      signalInput,
-					Identity:   common.StringPtr(signalIdentity),
-				},
+					Identity:   signalIdentity,
+				}},
 			},
 		},
 	}
@@ -3044,10 +3045,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		BranchToken: executionInfo.BranchToken,
-		Events:      history.Events,
+		Events:      adapter.ToThriftHistoryEvents(history.Events),
 	}}
 	msBuilder.EXPECT().CloseTransactionAsSnapshot(now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
-	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
 
 	currentVersion := version + 1
 	currentRunID := uuid.New()
@@ -3085,9 +3086,9 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	msBuilderCurrent := NewMockmutableState(s.controller)
 
 	contextCurrent.EXPECT().loadWorkflowExecution().Return(msBuilderCurrent, nil).Times(1)
-	currentExecution := &shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(currentRunID),
+	currentExecution := &commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      currentRunID,
 	}
 	contextCurrentCacheKey := definition.NewWorkflowIdentifier(domainID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
 	_, _ = s.historyReplicator.historyCache.PutIfNotExist(contextCurrentCacheKey, contextCurrent)
@@ -3102,14 +3103,14 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 
 	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(currentVersion, nil).AnyTimes()
-	msBuilderCurrent.EXPECT().AddWorkflowExecutionSignaled(signalName, signalInput, signalIdentity).Return(&shared.HistoryEvent{
-		EventType: shared.EventTypeWorkflowExecutionSignaled.Ptr(),
-		Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-		WorkflowExecutionSignaledEventAttributes: &shared.WorkflowExecutionSignaledEventAttributes{
-			SignalName: common.StringPtr(signalName),
+	msBuilderCurrent.EXPECT().AddWorkflowExecutionSignaled(signalName, signalInput, signalIdentity).Return(&commonproto.HistoryEvent{
+		EventType: enums.EventTypeWorkflowExecutionSignaled,
+		Timestamp: time.Now().UnixNano(),
+		Attributes: &commonproto.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &commonproto.WorkflowExecutionSignaledEventAttributes{
+			SignalName: signalName,
 			Input:      signalInput,
-			Identity:   common.StringPtr(signalIdentity),
-		},
+			Identity:   signalIdentity,
+		}},
 	}, nil).Times(1)
 	msBuilderCurrent.EXPECT().UpdateCurrentVersion(currentVersion, true).Return(nil).Times(1)
 	msBuilderCurrent.EXPECT().HasPendingDecision().Return(false).Times(1)
@@ -3147,9 +3148,9 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	parentWorkflowID := "some random workflow ID"
 	parentRunID := uuid.New()
 
-	weContext := newWorkflowExecutionContext(domainID, shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(runID),
+	weContext := newWorkflowExecutionContext(domainID, commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      runID,
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
@@ -3163,10 +3164,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 
 	requestID := uuid.New()
 	now := time.Now()
-	history := &shared.History{
-		Events: []*shared.HistoryEvent{
-			{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(1), Timestamp: common.Int64Ptr(now.UnixNano())},
-			{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(2), Timestamp: common.Int64Ptr(now.UnixNano())},
+	history := &commonproto.History{
+		Events: []*commonproto.HistoryEvent{
+			{Version: version, EventId: 1, Timestamp: now.UnixNano()},
+			{Version: version, EventId: 2, Timestamp: now.UnixNano()},
 		},
 	}
 	nextEventID := di.ScheduleID + 1
@@ -3217,10 +3218,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		BranchToken: executionInfo.BranchToken,
-		Events:      history.Events,
+		Events:      adapter.ToThriftHistoryEvents(history.Events),
 	}}
 	msBuilder.EXPECT().CloseTransactionAsSnapshot(now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
-	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
 
 	currentVersion := version
 	currentRunID := uuid.New()
@@ -3241,9 +3242,9 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	msBuilderCurrent := NewMockmutableState(s.controller)
 
 	contextCurrent.EXPECT().loadWorkflowExecution().Return(msBuilderCurrent, nil).Times(1)
-	currentExecution := &shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(currentRunID),
+	currentExecution := &commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      currentRunID,
 	}
 	contextCurrentCacheKey := definition.NewWorkflowIdentifier(domainID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
 	_, _ = s.historyReplicator.historyCache.PutIfNotExist(contextCurrentCacheKey, contextCurrent)
@@ -3302,9 +3303,9 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	parentRunID := uuid.New()
 	lastEventTaskID := int64(2333)
 
-	weContext := newWorkflowExecutionContext(domainID, shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(runID),
+	weContext := newWorkflowExecutionContext(domainID, commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      runID,
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
@@ -3318,10 +3319,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 
 	requestID := uuid.New()
 	now := time.Now()
-	history := &shared.History{
-		Events: []*shared.HistoryEvent{
-			{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(1), Timestamp: common.Int64Ptr(now.UnixNano())},
-			{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(2), Timestamp: common.Int64Ptr(now.UnixNano())},
+	history := &commonproto.History{
+		Events: []*commonproto.HistoryEvent{
+			{Version: version, EventId: 1, Timestamp: now.UnixNano()},
+			{Version: version, EventId: 2, Timestamp: now.UnixNano()},
 		},
 	}
 	nextEventID := di.ScheduleID + 1
@@ -3372,10 +3373,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		BranchToken: executionInfo.BranchToken,
-		Events:      history.Events,
+		Events:      adapter.ToThriftHistoryEvents(history.Events),
 	}}
 	msBuilder.EXPECT().CloseTransactionAsSnapshot(now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
-	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
 
 	currentVersion := version
 	currentRunID := uuid.New()
@@ -3396,9 +3397,9 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	msBuilderCurrent := NewMockmutableState(s.controller)
 
 	contextCurrent.EXPECT().loadWorkflowExecution().Return(msBuilderCurrent, nil).Times(1)
-	currentExecution := &shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(currentRunID),
+	currentExecution := &commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      currentRunID,
 	}
 	contextCurrentCacheKey := definition.NewWorkflowIdentifier(domainID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
 	_, _ = s.historyReplicator.historyCache.PutIfNotExist(contextCurrentCacheKey, contextCurrent)
@@ -3452,13 +3453,13 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	workflowTimeout := int32(3721)
 	decisionTimeout := int32(4411)
 	cronSchedule := "some random cron scredule"
-	retryPolicy := &workflow.RetryPolicy{
-		InitialIntervalInSeconds:    common.Int32Ptr(1),
-		MaximumAttempts:             common.Int32Ptr(3),
-		MaximumIntervalInSeconds:    common.Int32Ptr(1),
+	retryPolicy := &commonproto.RetryPolicy{
+		InitialIntervalInSeconds:    1,
+		MaximumAttempts:             3,
+		MaximumIntervalInSeconds:    1,
 		NonRetriableErrorReasons:    []string{"bad-bug"},
-		BackoffCoefficient:          common.Float64Ptr(1),
-		ExpirationIntervalInSeconds: common.Int32Ptr(100),
+		BackoffCoefficient:          1,
+		ExpirationIntervalInSeconds: 100,
 	}
 
 	initiatedID := int64(4810)
@@ -3466,9 +3467,9 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	parentWorkflowID := "some random workflow ID"
 	parentRunID := uuid.New()
 
-	weContext := newWorkflowExecutionContext(domainID, shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(runID),
+	weContext := newWorkflowExecutionContext(domainID, commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      runID,
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	msBuilder := NewMockmutableState(s.controller)
 
@@ -3482,10 +3483,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 
 	requestID := uuid.New()
 	now := time.Now()
-	history := &shared.History{
-		Events: []*shared.HistoryEvent{
-			{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(1), Timestamp: common.Int64Ptr(now.UnixNano())},
-			{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(2), Timestamp: common.Int64Ptr(now.UnixNano())},
+	history := &commonproto.History{
+		Events: []*commonproto.HistoryEvent{
+			{Version: version, EventId: 1, Timestamp: now.UnixNano()},
+			{Version: version, EventId: 2, Timestamp: now.UnixNano()},
 		},
 	}
 	nextEventID := di.ScheduleID + 1
@@ -3544,10 +3545,10 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		BranchToken: executionInfo.BranchToken,
-		Events:      history.Events,
+		Events:      adapter.ToThriftHistoryEvents(history.Events),
 	}}
 	msBuilder.EXPECT().CloseTransactionAsSnapshot(now.Local(), transactionPolicyPassive).Return(newWorkflowSnapshot, newWorkflowEventsSeq, nil).Times(1)
-	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&p.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
+	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: historySize}, nil).Once()
 
 	currentNextEventID := int64(2333)
 	currentVersion := version - 1
@@ -3602,9 +3603,9 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	msBuilderCurrent := NewMockmutableState(s.controller)
 
 	contextCurrent.EXPECT().loadWorkflowExecution().Return(msBuilderCurrent, nil).Times(1)
-	currentExecution := &shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(currentRunID),
+	currentExecution := &commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      currentRunID,
 	}
 	contextCurrent.EXPECT().getExecution().Return(currentExecution).AnyTimes()
 	contextCurrentCacheKey := definition.NewWorkflowIdentifier(domainID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
@@ -3620,7 +3621,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 
 	msBuilderCurrent.EXPECT().AddWorkflowExecutionTerminatedEvent(
 		currentNextEventID, workflowTerminationReason, gomock.Any(), workflowTerminationIdentity,
-	).Return(&workflow.HistoryEvent{}, nil).Times(1)
+	).Return(&commonproto.HistoryEvent{}, nil).Times(1)
 	contextCurrent.EXPECT().updateWorkflowExecutionAsActive(gomock.Any()).Return(nil).Times(1)
 
 	err := s.historyReplicator.replicateWorkflowStarted(context.Background(), weContext, msBuilder, history, s.mockStateBuilder, s.logger)
@@ -3728,9 +3729,9 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 	msBuilderCurrent := NewMockmutableState(s.controller)
 
 	contextCurrent.EXPECT().loadWorkflowExecution().Return(msBuilderCurrent, nil).Times(1)
-	currentExecution := &shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(currentRunID),
+	currentExecution := &commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      currentRunID,
 	}
 	contextCurrent.EXPECT().getExecution().Return(currentExecution).AnyTimes()
 	contextCurrentCacheKey := definition.NewWorkflowIdentifier(domainID, currentExecution.GetWorkflowId(), currentExecution.GetRunId())
@@ -3758,7 +3759,7 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateCurrentRunningIf
 
 	msBuilderCurrent.EXPECT().AddWorkflowExecutionTerminatedEvent(
 		currentNextEventID, workflowTerminationReason, gomock.Any(), workflowTerminationIdentity,
-	).Return(&workflow.HistoryEvent{}, nil).Times(1)
+	).Return(&commonproto.HistoryEvent{}, nil).Times(1)
 	contextCurrent.EXPECT().updateWorkflowExecutionAsActive(gomock.Any()).Return(nil).Times(1)
 
 	prevRunID, prevLastWriteVersion, prevState, err := s.historyReplicator.conflictResolutionTerminateCurrentRunningIfNotSelf(context.Background(), msBuilderTarget, incomingVersion, incomingTimestamp, s.logger)

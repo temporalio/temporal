@@ -27,9 +27,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/headers"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/metrics"
@@ -116,11 +116,11 @@ func (s *DecisionHandlerSuite) TestHandleBufferedQueries_QueryTooLarge() {
 	s.assertQueryCounts(s.queryRegistry, 0, 5, 0, 5)
 }
 
-func (s *DecisionHandlerSuite) constructQueryResults(ids []string, resultSize int) map[string]*shared.WorkflowQueryResult {
-	results := make(map[string]*shared.WorkflowQueryResult)
+func (s *DecisionHandlerSuite) constructQueryResults(ids []string, resultSize int) map[string]*commonproto.WorkflowQueryResult {
+	results := make(map[string]*commonproto.WorkflowQueryResult)
 	for _, id := range ids {
-		results[id] = &shared.WorkflowQueryResult{
-			ResultType: common.QueryResultTypePtr(shared.QueryResultTypeAnswered),
+		results[id] = &commonproto.WorkflowQueryResult{
+			ResultType: enums.QueryResultTypeAnswered,
 			Answer:     make([]byte, resultSize, resultSize),
 		}
 	}
@@ -130,7 +130,7 @@ func (s *DecisionHandlerSuite) constructQueryResults(ids []string, resultSize in
 func (s *DecisionHandlerSuite) constructQueryRegistry(numQueries int) queryRegistry {
 	queryRegistry := newQueryRegistry()
 	for i := 0; i < numQueries; i++ {
-		queryRegistry.bufferQuery(&shared.WorkflowQuery{})
+		queryRegistry.bufferQuery(&commonproto.WorkflowQuery{})
 	}
 	return queryRegistry
 }

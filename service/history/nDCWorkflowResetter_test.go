@@ -29,9 +29,9 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
@@ -101,9 +101,9 @@ func (s *nDCWorkflowResetterSuite) SetupTest() {
 	s.baseRunID = uuid.New()
 	s.newContext = newWorkflowExecutionContext(
 		s.domainID,
-		shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(s.workflowID),
-			RunId:      common.StringPtr(s.newRunID),
+		commonproto.WorkflowExecution{
+			WorkflowId: s.workflowID,
+			RunId:      s.newRunID,
 		},
 		s.mockShard,
 		nil,
@@ -180,11 +180,12 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 		gomock.Any(),
 	).Return(s.mockRebuiltMutableState, rebuiltHistorySize, nil).Times(1)
 
+	shardId := s.mockShard.GetShardID()
 	s.mockHistoryV2Mgr.On("ForkHistoryBranch", &persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: branchToken,
 		ForkNodeID:      baseEventID + 1,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.domainID, s.workflowID, s.newRunID),
-		ShardID:         common.IntPtr(s.mockShard.GetShardID()),
+		ShardID:         &shardId,
 	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: newBranchToken}, nil).Times(1)
 
 	rebuiltMutableState, err := s.nDCWorkflowResetter.resetWorkflow(

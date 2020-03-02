@@ -25,12 +25,11 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/temporal-proto/enums"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
@@ -186,7 +185,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated() {
 		VisibilityTimestamp: activityInfo.ScheduledTime.Add(
 			time.Duration(activityInfo.ScheduleToStartTimeout) * time.Second,
 		),
-		TimeoutType: int(shared.TimeoutTypeScheduleToStart),
+		TimeoutType: int(enums.TimeoutTypeScheduleToStart),
 		EventID:     activityInfo.ScheduleID,
 		Attempt:     int64(activityInfo.Attempt),
 		Version:     currentVersion,
@@ -231,7 +230,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer() {
 	s.mockMutableState.EXPECT().AddTimerTasks(&persistence.ActivityTimeoutTask{
 		// TaskID is set by shard
 		VisibilityTimestamp: taskVisibilityTimestamp,
-		TimeoutType:         int(shared.TimeoutTypeHeartbeat),
+		TimeoutType:         int(enums.TimeoutTypeHeartbeat),
 		EventID:             activityInfo.ScheduleID,
 		Attempt:             int64(activityInfo.Attempt),
 		Version:             currentVersion,
@@ -1060,15 +1059,15 @@ func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithoutHeartbeat_St
 }
 
 func (s *timerSequenceSuite) TestConversion() {
-	s.Equal(shared.TimeoutTypeStartToClose, timerTypeToProto(timerTypeStartToClose))
-	s.Equal(shared.TimeoutTypeScheduleToStart, timerTypeToProto(timerTypeScheduleToStart))
-	s.Equal(shared.TimeoutTypeScheduleToClose, timerTypeToProto(timerTypeScheduleToClose))
-	s.Equal(shared.TimeoutTypeHeartbeat, timerTypeToProto(timerTypeHeartbeat))
+	s.Equal(enums.TimeoutTypeStartToClose, timerTypeToProto(timerTypeStartToClose))
+	s.Equal(enums.TimeoutTypeScheduleToStart, timerTypeToProto(timerTypeScheduleToStart))
+	s.Equal(enums.TimeoutTypeScheduleToClose, timerTypeToProto(timerTypeScheduleToClose))
+	s.Equal(enums.TimeoutTypeHeartbeat, timerTypeToProto(timerTypeHeartbeat))
 
-	s.Equal(timerTypeFromProto(shared.TimeoutTypeStartToClose), timerTypeStartToClose)
-	s.Equal(timerTypeFromProto(shared.TimeoutTypeScheduleToStart), timerTypeScheduleToStart)
-	s.Equal(timerTypeFromProto(shared.TimeoutTypeScheduleToClose), timerTypeScheduleToClose)
-	s.Equal(timerTypeFromProto(shared.TimeoutTypeHeartbeat), timerTypeHeartbeat)
+	s.Equal(timerTypeFromProto(enums.TimeoutTypeStartToClose), timerTypeStartToClose)
+	s.Equal(timerTypeFromProto(enums.TimeoutTypeScheduleToStart), timerTypeScheduleToStart)
+	s.Equal(timerTypeFromProto(enums.TimeoutTypeScheduleToClose), timerTypeScheduleToClose)
+	s.Equal(timerTypeFromProto(enums.TimeoutTypeHeartbeat), timerTypeHeartbeat)
 
 	s.Equal(int32(timerTaskStatusCreatedStartToClose), timerTypeToTimerMask(timerTypeStartToClose))
 	s.Equal(int32(timerTaskStatusCreatedScheduleToStart), timerTypeToTimerMask(timerTypeScheduleToStart))

@@ -730,6 +730,18 @@ func ToProtoUpsertWorkflowSearchAttributesEventAttributes(in *shared.UpsertWorkf
 	}
 }
 
+func ToThriftHistories(in []*common.History) []*shared.History {
+	if in == nil {
+		return nil
+	}
+
+	var ret []*shared.History
+	for _, item := range in {
+		ret = append(ret, ToThriftHistory(item))
+	}
+	return ret
+}
+
 // ToThriftHistory ...
 func ToThriftHistory(in *common.History) *shared.History {
 	if in == nil {

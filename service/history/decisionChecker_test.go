@@ -26,10 +26,10 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/definition"
@@ -106,26 +106,26 @@ func (s *decisionAttrValidatorSuite) TestValidateSignalExternalWorkflowExecution
 	s.mockDomainCache.EXPECT().GetDomainByID(s.testDomainID).Return(domainEntry, nil).AnyTimes()
 	s.mockDomainCache.EXPECT().GetDomainByID(s.testTargetDomainID).Return(targetDomainEntry, nil).AnyTimes()
 
-	var attributes *workflow.SignalExternalWorkflowExecutionDecisionAttributes
+	var attributes *commonproto.SignalExternalWorkflowExecutionDecisionAttributes
 
 	err := s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testDomainID, s.testTargetDomainID, attributes)
 	s.EqualError(err, "SignalExternalWorkflowExecutionDecisionAttributes is not set on decision.")
 
-	attributes = &workflow.SignalExternalWorkflowExecutionDecisionAttributes{}
+	attributes = &commonproto.SignalExternalWorkflowExecutionDecisionAttributes{}
 	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testDomainID, s.testTargetDomainID, attributes)
 	s.EqualError(err, "Execution is nil on decision.")
 
-	attributes.Execution = &workflow.WorkflowExecution{}
-	attributes.Execution.WorkflowId = common.StringPtr("workflow-id")
+	attributes.Execution = &commonproto.WorkflowExecution{}
+	attributes.Execution.WorkflowId = "workflow-id"
 	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testDomainID, s.testTargetDomainID, attributes)
 	s.EqualError(err, "SignalName is not set on decision.")
 
-	attributes.Execution.RunId = common.StringPtr("run-id")
+	attributes.Execution.RunId = "run-id"
 	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testDomainID, s.testTargetDomainID, attributes)
 	s.EqualError(err, "Invalid RunId set on decision.")
-	attributes.Execution.RunId = common.StringPtr(testRunID)
+	attributes.Execution.RunId = testRunID
 
-	attributes.SignalName = common.StringPtr("my signal name")
+	attributes.SignalName = "my signal name"
 	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testDomainID, s.testTargetDomainID, attributes)
 	s.EqualError(err, "Input is not set on decision.")
 
@@ -136,16 +136,16 @@ func (s *decisionAttrValidatorSuite) TestValidateSignalExternalWorkflowExecution
 
 func (s *decisionAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes() {
 	domainName := "testDomain"
-	var attributes *workflow.UpsertWorkflowSearchAttributesDecisionAttributes
+	var attributes *commonproto.UpsertWorkflowSearchAttributesDecisionAttributes
 
 	err := s.validator.validateUpsertWorkflowSearchAttributes(domainName, attributes)
 	s.EqualError(err, "UpsertWorkflowSearchAttributesDecisionAttributes is not set on decision.")
 
-	attributes = &workflow.UpsertWorkflowSearchAttributesDecisionAttributes{}
+	attributes = &commonproto.UpsertWorkflowSearchAttributesDecisionAttributes{}
 	err = s.validator.validateUpsertWorkflowSearchAttributes(domainName, attributes)
 	s.EqualError(err, "SearchAttributes is not set on decision.")
 
-	attributes.SearchAttributes = &workflow.SearchAttributes{}
+	attributes.SearchAttributes = &commonproto.SearchAttributes{}
 	err = s.validator.validateUpsertWorkflowSearchAttributes(domainName, attributes)
 	s.EqualError(err, "IndexedFields is empty on decision.")
 
@@ -500,23 +500,22 @@ func (s *decisionAttrValidatorSuite) TestValidateCrossDomainCall_GlobalToGlobal_
 }
 
 func (s *decisionAttrValidatorSuite) TestValidateTaskListName() {
-	taskList := func(name string) *workflow.TaskList {
-		kind := workflow.TaskListKindNormal
-		return &workflow.TaskList{Name: &name, Kind: &kind}
+	taskList := func(name string) *commonproto.TaskList {
+		return &commonproto.TaskList{Name: name, Kind: enums.TaskListKindNormal}
 	}
 
 	testCases := []struct {
 		defaultVal  string
-		input       *workflow.TaskList
-		output      *workflow.TaskList
+		input       *commonproto.TaskList
+		output      *commonproto.TaskList
 		isOutputErr bool
 	}{
-		{"tl-1", nil, &workflow.TaskList{Name: common.StringPtr("tl-1")}, false},
+		{"tl-1", nil, &commonproto.TaskList{Name: "tl-1"}, false},
 		{"", taskList("tl-1"), taskList("tl-1"), false},
 		{"tl-1", taskList("tl-1"), taskList("tl-1"), false},
 		{"", taskList("/tl-1"), taskList("/tl-1"), false},
 		{"", taskList("/__cadence_sys"), taskList("/__cadence_sys"), false},
-		{"", nil, &workflow.TaskList{}, true},
+		{"", nil, &commonproto.TaskList{}, true},
 		{"", taskList(""), taskList(""), true},
 		{"", taskList(reservedTaskListPrefix), taskList(reservedTaskListPrefix), true},
 		{"tl-1", taskList(reservedTaskListPrefix), taskList(reservedTaskListPrefix), true},

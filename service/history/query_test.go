@@ -28,9 +28,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
-	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/common"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 )
 
 type QuerySuite struct {
@@ -64,7 +63,7 @@ func (s *QuerySuite) TestValidateTerminationState() {
 		{
 			ts: &queryTerminationState{
 				queryTerminationType: queryTerminationTypeCompleted,
-				queryResult:          &shared.WorkflowQueryResult{},
+				queryResult:          &commonproto.WorkflowQueryResult{},
 				failure:              errors.New("err"),
 			},
 			expectErr: true,
@@ -72,8 +71,8 @@ func (s *QuerySuite) TestValidateTerminationState() {
 		{
 			ts: &queryTerminationState{
 				queryTerminationType: queryTerminationTypeCompleted,
-				queryResult: &shared.WorkflowQueryResult{
-					ResultType: common.QueryResultTypePtr(shared.QueryResultTypeAnswered),
+				queryResult: &commonproto.WorkflowQueryResult{
+					ResultType: enums.QueryResultTypeAnswered,
 				},
 			},
 			expectErr: true,
@@ -81,10 +80,10 @@ func (s *QuerySuite) TestValidateTerminationState() {
 		{
 			ts: &queryTerminationState{
 				queryTerminationType: queryTerminationTypeCompleted,
-				queryResult: &shared.WorkflowQueryResult{
-					ResultType:   common.QueryResultTypePtr(shared.QueryResultTypeAnswered),
+				queryResult: &commonproto.WorkflowQueryResult{
+					ResultType:   enums.QueryResultTypeAnswered,
 					Answer:       []byte{1, 2, 3},
-					ErrorMessage: common.StringPtr("err"),
+					ErrorMessage: "err",
 				},
 			},
 			expectErr: true,
@@ -92,8 +91,8 @@ func (s *QuerySuite) TestValidateTerminationState() {
 		{
 			ts: &queryTerminationState{
 				queryTerminationType: queryTerminationTypeCompleted,
-				queryResult: &shared.WorkflowQueryResult{
-					ResultType: common.QueryResultTypePtr(shared.QueryResultTypeFailed),
+				queryResult: &commonproto.WorkflowQueryResult{
+					ResultType: enums.QueryResultTypeFailed,
 					Answer:     []byte{1, 2, 3},
 				},
 			},
@@ -102,9 +101,9 @@ func (s *QuerySuite) TestValidateTerminationState() {
 		{
 			ts: &queryTerminationState{
 				queryTerminationType: queryTerminationTypeCompleted,
-				queryResult: &shared.WorkflowQueryResult{
-					ResultType:   common.QueryResultTypePtr(shared.QueryResultTypeFailed),
-					ErrorMessage: common.StringPtr("err"),
+				queryResult: &commonproto.WorkflowQueryResult{
+					ResultType:   enums.QueryResultTypeFailed,
+					ErrorMessage: "err",
 				},
 			},
 			expectErr: false,
@@ -112,8 +111,8 @@ func (s *QuerySuite) TestValidateTerminationState() {
 		{
 			ts: &queryTerminationState{
 				queryTerminationType: queryTerminationTypeCompleted,
-				queryResult: &shared.WorkflowQueryResult{
-					ResultType: common.QueryResultTypePtr(shared.QueryResultTypeAnswered),
+				queryResult: &commonproto.WorkflowQueryResult{
+					ResultType: enums.QueryResultTypeAnswered,
 					Answer:     []byte{1, 2, 3},
 				},
 			},
@@ -122,7 +121,7 @@ func (s *QuerySuite) TestValidateTerminationState() {
 		{
 			ts: &queryTerminationState{
 				queryTerminationType: queryTerminationTypeUnblocked,
-				queryResult:          &shared.WorkflowQueryResult{},
+				queryResult:          &commonproto.WorkflowQueryResult{},
 			},
 			expectErr: true,
 		},
@@ -148,7 +147,7 @@ func (s *QuerySuite) TestValidateTerminationState() {
 		{
 			ts: &queryTerminationState{
 				queryTerminationType: queryTerminationTypeFailed,
-				queryResult:          &shared.WorkflowQueryResult{},
+				queryResult:          &commonproto.WorkflowQueryResult{},
 			},
 			expectErr: true,
 		},
@@ -182,8 +181,8 @@ func (s *QuerySuite) TestTerminationState_Failed() {
 func (s *QuerySuite) TestTerminationState_Completed() {
 	answeredTerminationState := &queryTerminationState{
 		queryTerminationType: queryTerminationTypeCompleted,
-		queryResult: &shared.WorkflowQueryResult{
-			ResultType: common.QueryResultTypePtr(shared.QueryResultTypeAnswered),
+		queryResult: &commonproto.WorkflowQueryResult{
+			ResultType: enums.QueryResultTypeAnswered,
 			Answer:     []byte{1, 2, 3},
 		},
 	}
@@ -217,7 +216,7 @@ func (s *QuerySuite) assertTerminationStateEqual(expected *queryTerminationState
 		s.Equal(expected.failure.Error(), actual.failure.Error())
 	}
 	if expected.queryResult != nil {
-		s.True(expected.queryResult.Equals(actual.queryResult))
+		s.EqualValues(actual.queryResult, expected.queryResult)
 	}
 }
 

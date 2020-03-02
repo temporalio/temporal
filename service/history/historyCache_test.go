@@ -25,15 +25,13 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonproto "go.temporal.io/temporal-proto/common"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
@@ -89,9 +87,9 @@ func (s *historyCacheSuite) TestHistoryCacheBasic() {
 	s.cache = newHistoryCache(s.mockShard)
 
 	domainID := "test_domain_id"
-	execution1 := workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(uuid.New()),
+	execution1 := commonproto.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.New(),
 	}
 	mockMS1 := NewMockmutableState(s.controller)
 	context, release, err := s.cache.getOrCreateWorkflowExecutionForBackground(domainID, execution1)
@@ -103,9 +101,9 @@ func (s *historyCacheSuite) TestHistoryCacheBasic() {
 	s.Equal(mockMS1, context.(*workflowExecutionContextImpl).mutableState)
 	release(nil)
 
-	execution2 := workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(uuid.New()),
+	execution2 := commonproto.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.New(),
 	}
 	context, release, err = s.cache.getOrCreateWorkflowExecutionForBackground(domainID, execution2)
 	s.Nil(err)
@@ -117,17 +115,17 @@ func (s *historyCacheSuite) TestHistoryCachePinning() {
 	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(2)
 	domainID := "test_domain_id"
 	s.cache = newHistoryCache(s.mockShard)
-	we := workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr("wf-cache-test-pinning"),
-		RunId:      common.StringPtr(uuid.New()),
+	we := commonproto.WorkflowExecution{
+		WorkflowId: "wf-cache-test-pinning",
+		RunId:      uuid.New(),
 	}
 
 	context, release, err := s.cache.getOrCreateWorkflowExecutionForBackground(domainID, we)
 	s.Nil(err)
 
-	we2 := workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr("wf-cache-test-pinning"),
-		RunId:      common.StringPtr(uuid.New()),
+	we2 := commonproto.WorkflowExecution{
+		WorkflowId: "wf-cache-test-pinning",
+		RunId:      uuid.New(),
 	}
 
 	// Cache is full because context is pinned, should get an error now
@@ -152,9 +150,9 @@ func (s *historyCacheSuite) TestHistoryCacheClear() {
 	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(20)
 	domainID := "test_domain_id"
 	s.cache = newHistoryCache(s.mockShard)
-	we := workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr("wf-cache-test-clear"),
-		RunId:      common.StringPtr(uuid.New()),
+	we := commonproto.WorkflowExecution{
+		WorkflowId: "wf-cache-test-clear",
+		RunId:      uuid.New(),
 	}
 
 	context, release, err := s.cache.getOrCreateWorkflowExecutionForBackground(domainID, we)
@@ -183,9 +181,9 @@ func (s *historyCacheSuite) TestHistoryCacheConcurrentAccess() {
 	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(20)
 	domainID := "test_domain_id"
 	s.cache = newHistoryCache(s.mockShard)
-	we := workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr("wf-cache-test-pinning"),
-		RunId:      common.StringPtr(uuid.New()),
+	we := commonproto.WorkflowExecution{
+		WorkflowId: "wf-cache-test-pinning",
+		RunId:      uuid.New(),
 	}
 
 	coroutineCount := 50

@@ -26,12 +26,10 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/temporalio/temporal/common"
-
-	"github.com/temporalio/temporal/.gen/go/shared"
-
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 )
 
 type QueryRegistrySuite struct {
@@ -52,7 +50,7 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 	ids := make([]string, 100, 100)
 	termChans := make([]<-chan struct{}, 100, 100)
 	for i := 0; i < 100; i++ {
-		ids[i], termChans[i] = qr.bufferQuery(&shared.WorkflowQuery{})
+		ids[i], termChans[i] = qr.bufferQuery(&commonproto.WorkflowQuery{})
 	}
 	s.assertBufferedState(qr, ids...)
 	s.assertHasQueries(qr, true, false, false, false)
@@ -62,8 +60,8 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 	for i := 0; i < 25; i++ {
 		err := qr.setTerminationState(ids[i], &queryTerminationState{
 			queryTerminationType: queryTerminationTypeCompleted,
-			queryResult: &shared.WorkflowQueryResult{
-				ResultType: common.QueryResultTypePtr(shared.QueryResultTypeAnswered),
+			queryResult: &commonproto.WorkflowQueryResult{
+				ResultType: enums.QueryResultTypeAnswered,
 				Answer:     []byte{1, 2, 3},
 			},
 		})
@@ -111,7 +109,7 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 		case 0:
 			s.Equal(errQueryNotExists, qr.setTerminationState(ids[i], &queryTerminationState{
 				queryTerminationType: queryTerminationTypeCompleted,
-				queryResult:          &shared.WorkflowQueryResult{},
+				queryResult:          &commonproto.WorkflowQueryResult{},
 			}))
 		case 1:
 			s.Equal(errQueryNotExists, qr.setTerminationState(ids[i], &queryTerminationState{

@@ -29,11 +29,11 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/mocks"
@@ -134,13 +134,14 @@ func (s *nDCBranchMgrSuite) TestCreateNewBranch() {
 		RunID:      s.runID,
 	}).AnyTimes()
 
+	shardId := s.mockShard.GetShardID()
 	s.mockHistoryV2Mgr.On("ForkHistoryBranch", mock.MatchedBy(func(input *persistence.ForkHistoryBranchRequest) bool {
 		input.Info = ""
 		s.Equal(&persistence.ForkHistoryBranchRequest{
 			ForkBranchToken: baseBranchToken,
 			ForkNodeID:      baseBranchLCAEventID + 1,
 			Info:            "",
-			ShardID:         common.IntPtr(s.mockShard.GetShardID()),
+			ShardID:         &shardId,
 		}, input)
 		return true
 	})).Return(&persistence.ForkHistoryBranchResponse{
@@ -193,7 +194,7 @@ func (s *nDCBranchMgrSuite) TestFlushBufferedEvents() {
 	s.mockMutableState.EXPECT().AddDecisionTaskFailedEvent(
 		decisionInfo.ScheduleID,
 		decisionInfo.StartedID,
-		shared.DecisionTaskFailedCauseFailoverCloseDecision,
+		enums.DecisionTaskFailedCauseFailoverCloseDecision,
 		[]byte(nil),
 		identityHistoryService,
 		"",
@@ -201,7 +202,7 @@ func (s *nDCBranchMgrSuite) TestFlushBufferedEvents() {
 		"",
 		"",
 		int64(0),
-	).Return(&shared.HistoryEvent{}, nil).Times(1)
+	).Return(&commonproto.HistoryEvent{}, nil).Times(1)
 	s.mockMutableState.EXPECT().FlushBufferedEvents().Return(nil).Times(1)
 
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(lastWriteVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -307,13 +308,14 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_NoMiss
 		RunID:      s.runID,
 	}).AnyTimes()
 
+	shardId := s.mockShard.GetShardID()
 	s.mockHistoryV2Mgr.On("ForkHistoryBranch", mock.MatchedBy(func(input *persistence.ForkHistoryBranchRequest) bool {
 		input.Info = ""
 		s.Equal(&persistence.ForkHistoryBranchRequest{
 			ForkBranchToken: baseBranchToken,
 			ForkNodeID:      baseBranchLCAEventID + 1,
 			Info:            "",
-			ShardID:         common.IntPtr(s.mockShard.GetShardID()),
+			ShardID:         &shardId,
 		}, input)
 		return true
 	})).Return(&persistence.ForkHistoryBranchResponse{
