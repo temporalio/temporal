@@ -40,6 +40,7 @@ type (
 		sync.Mutex
 		queueTaskInfo
 
+		shardID       int
 		state         task.State
 		priority      int
 		attempt       int
@@ -72,6 +73,7 @@ type (
 )
 
 func newTimerQueueTask(
+	shardID int,
 	taskInfo queueTaskInfo,
 	scope metrics.Scope,
 	logger log.Logger,
@@ -83,6 +85,7 @@ func newTimerQueueTask(
 ) queueTask {
 	return &timerQueueTask{
 		queueTaskBase: newQueueTaskBase(
+			shardID,
 			taskInfo,
 			scope,
 			logger,
@@ -96,6 +99,7 @@ func newTimerQueueTask(
 }
 
 func newTransferQueueTask(
+	shardID int,
 	taskInfo queueTaskInfo,
 	scope metrics.Scope,
 	logger log.Logger,
@@ -107,6 +111,7 @@ func newTransferQueueTask(
 ) queueTask {
 	return &transferQueueTask{
 		queueTaskBase: newQueueTaskBase(
+			shardID,
 			taskInfo,
 			scope,
 			logger,
@@ -120,6 +125,7 @@ func newTransferQueueTask(
 }
 
 func newQueueTaskBase(
+	shardID int,
 	queueTaskInfo queueTaskInfo,
 	scope metrics.Scope,
 	logger log.Logger,
@@ -130,6 +136,7 @@ func newQueueTaskBase(
 ) *queueTaskBase {
 	return &queueTaskBase{
 		queueTaskInfo: queueTaskInfo,
+		shardID:       shardID,
 		state:         task.TaskStatePending,
 		scope:         scope,
 		logger:        logger,
@@ -294,4 +301,8 @@ func (t *queueTaskBase) SetPriority(
 	defer t.Unlock()
 
 	t.priority = priority
+}
+
+func (t *queueTaskBase) GetShardID() int {
+	return t.shardID
 }

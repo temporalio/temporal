@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/log/loggerimpl"
 	"github.com/uber/cadence/common/metrics"

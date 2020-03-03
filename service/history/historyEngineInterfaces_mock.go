@@ -398,6 +398,20 @@ func (mr *MockqueueTaskMockRecorder) GetQueueType() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetQueueType", reflect.TypeOf((*MockqueueTask)(nil).GetQueueType))
 }
 
+// GetShardID mocks base method
+func (m *MockqueueTask) GetShardID() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetShardID")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// GetShardID indicates an expected call of GetShardID
+func (mr *MockqueueTaskMockRecorder) GetShardID() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetShardID", reflect.TypeOf((*MockqueueTask)(nil).GetShardID))
+}
+
 // MockqueueTaskExecutor is a mock of queueTaskExecutor interface
 type MockqueueTaskExecutor struct {
 	ctrl     *gomock.Controller

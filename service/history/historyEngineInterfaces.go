@@ -79,11 +79,18 @@ type (
 		task.PriorityTask
 		queueTaskInfo
 		GetQueueType() queueType
-		// TODO: add a method for getting task shardID
+		GetShardID() int
 	}
 
 	queueTaskExecutor interface {
 		execute(taskInfo queueTaskInfo, shouldProcessTask bool) error
+	}
+
+	queueTaskProcessor interface {
+		common.Daemon
+		StopShardProcessor(int)
+		Submit(queueTask) error
+		TrySubmit(queueTask) (bool, error)
 	}
 
 	// TODO: deprecate this interface in favor of the task interface
