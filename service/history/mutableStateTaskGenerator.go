@@ -195,10 +195,6 @@ func (r *mutableStateTaskGeneratorImpl) generateDelayedDecisionTasks(
 
 	var firstDecisionDelayType int
 	switch startAttr.GetInitiator() {
-	// noParentWorkflow case
-	case enums.ContinueAsNewInitiatorNotSet:
-		firstDecisionDelayType = persistence.WorkflowBackoffTimeoutTypeCron
-	// continue as new case
 	case enums.ContinueAsNewInitiatorRetryPolicy:
 		firstDecisionDelayType = persistence.WorkflowBackoffTimeoutTypeRetry
 	case enums.ContinueAsNewInitiatorCronSchedule:

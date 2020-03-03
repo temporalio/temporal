@@ -742,7 +742,6 @@ func (handler *decisionTaskHandlerImpl) handleDecisionStartChildWorkflow(
 		return err
 	}
 
-	// TODO: (shtin: remove?) for domains that haven't enabled the feature yet, need to use Abandon for backward-compatibility
 	enabled := handler.config.EnableParentClosePolicy(handler.domainEntry.GetInfo().Name)
 	if !enabled {
 		attr.ParentClosePolicy = enums.ParentClosePolicyAbandon
