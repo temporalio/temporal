@@ -340,6 +340,10 @@ func (t *activityReplicationTask) HandleErr(
 			return err
 		}
 	} else if okV2 {
+		t.metricsClient.IncCounter(metrics.HistoryRereplicationByActivityReplicationScope, metrics.CadenceClientRequests)
+		stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByActivityReplicationScope, metrics.CadenceClientLatency)
+		defer stopwatch.Stop()
+
 		if resendErr := t.nDCHistoryResender.SendSingleWorkflowHistory(
 			retryV2Err.GetDomainId(),
 			retryV2Err.GetWorkflowId(),

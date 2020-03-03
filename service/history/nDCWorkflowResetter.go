@@ -34,6 +34,10 @@ import (
 	"github.com/uber/cadence/common/persistence"
 )
 
+const (
+	resendOnResetWorkflowMessage = "Resend events due to reset workflow"
+)
+
 type (
 	nDCWorkflowResetter interface {
 		resetWorkflow(
@@ -172,6 +176,7 @@ func (r *nDCWorkflowResetterImpl) getBaseBranchToken(
 		// only re-replicate the gap on the incoming branch
 		// the base branch event will eventually arrived
 		return nil, newNDCRetryTaskErrorWithHint(
+			resendOnResetWorkflowMessage,
 			r.domainID,
 			r.workflowID,
 			r.newRunID,

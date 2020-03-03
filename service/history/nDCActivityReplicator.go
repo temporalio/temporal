@@ -38,6 +38,11 @@ import (
 	"github.com/uber/cadence/common/persistence"
 )
 
+const (
+	resendMissingEventMessage  = "Resend missed sync activity events"
+	resendHigherVersionMessage = "Resend sync activity events due to a higher version received"
+)
+
 type (
 	nDCActivityReplicator interface {
 		SyncActivity(
@@ -242,6 +247,7 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 			// case 1
 			if scheduleID > lcaItem.GetEventID() {
 				return false, newNDCRetryTaskErrorWithHint(
+					resendMissingEventMessage,
 					domainID,
 					workflowID,
 					runID,
@@ -259,6 +265,7 @@ func (r *nDCActivityReplicatorImpl) shouldApplySyncActivity(
 			} else if lastIncomingItem.GetVersion() > lastLocalItem.GetVersion() {
 				// case 2-2
 				return false, newNDCRetryTaskErrorWithHint(
+					resendHigherVersionMessage,
 					domainID,
 					workflowID,
 					runID,

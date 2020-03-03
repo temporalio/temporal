@@ -44,6 +44,10 @@ var (
 	workflowResetReason         = "Reset Workflow Due To Events Re-application."
 )
 
+const (
+	mutableStateMissingMessage = "Resend events due to missing mutable state"
+)
+
 type (
 	stateBuilderProvider func(
 		mutableState mutableState,
@@ -592,6 +596,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsMissingMutableState(
 	if !task.isWorkflowReset() {
 		firstEvent := task.getFirstEvent()
 		return nil, newNDCRetryTaskErrorWithHint(
+			mutableStateMissingMessage,
 			task.getDomainID(),
 			task.getWorkflowID(),
 			task.getRunID(),
@@ -700,6 +705,7 @@ func (r *nDCHistoryReplicatorImpl) notify(
 }
 
 func newNDCRetryTaskErrorWithHint(
+	message string,
 	domainID string,
 	workflowID string,
 	runID string,
@@ -710,6 +716,7 @@ func newNDCRetryTaskErrorWithHint(
 ) error {
 
 	return &shared.RetryTaskV2Error{
+		Message:           message,
 		DomainId:          common.StringPtr(domainID),
 		WorkflowId:        common.StringPtr(workflowID),
 		RunId:             common.StringPtr(runID),

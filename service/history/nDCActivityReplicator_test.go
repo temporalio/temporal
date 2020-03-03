@@ -479,6 +479,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_DifferentVersionHistories_Inc
 
 	err = s.nDCActivityReplicator.SyncActivity(ctx.Background(), request)
 	s.Equal(newNDCRetryTaskErrorWithHint(
+		resendHigherVersionMessage,
 		domainID,
 		workflowID,
 		runID,
@@ -567,6 +568,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_IncomingSche
 
 	err = s.nDCActivityReplicator.SyncActivity(ctx.Background(), request)
 	s.Equal(newNDCRetryTaskErrorWithHint(
+		resendMissingEventMessage,
 		domainID,
 		workflowID,
 		runID,
