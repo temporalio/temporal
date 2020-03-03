@@ -24,9 +24,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	commonproto "go.temporal.io/temporal-proto/common"
-
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
@@ -179,14 +178,14 @@ func (p *domainReplicationMessageProcessor) getAndHandleDomainReplicationTasks()
 }
 
 func (p *domainReplicationMessageProcessor) putDomainReplicationTaskToDLQ(
-	task *commonproto.ReplicationTask,
+	task *replication.ReplicationTask,
 ) error {
 
 	return p.domainReplicationQueue.PublishToDLQ(adapter.ToThriftReplicationTask(task))
 }
 
 func (p *domainReplicationMessageProcessor) handleDomainReplicationTask(
-	task *commonproto.ReplicationTask,
+	task *replication.ReplicationTask,
 ) error {
 	p.metricsClient.IncCounter(metrics.DomainReplicationTaskScope, metrics.ReplicatorMessages)
 	sw := p.metricsClient.StartTimer(metrics.DomainReplicationTaskScope, metrics.ReplicatorLatency)

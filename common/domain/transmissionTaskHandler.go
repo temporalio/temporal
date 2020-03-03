@@ -24,6 +24,7 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -71,7 +72,7 @@ func (domainReplicator *domainReplicatorImpl) HandleTransmissionTask(domainOpera
 	}
 
 	taskType := enums.ReplicationTaskTypeDomain
-	task := &commonproto.DomainTaskAttributes{
+	task := &replication.DomainTaskAttributes{
 		DomainOperation: domainOperation,
 		Id:              info.ID,
 		Info: &commonproto.DomainInfo{
@@ -99,9 +100,9 @@ func (domainReplicator *domainReplicatorImpl) HandleTransmissionTask(domainOpera
 	}
 
 	return domainReplicator.replicationMessageSink.Publish(
-		&commonproto.ReplicationTask{
+		&replication.ReplicationTask{
 			TaskType: taskType,
-			Attributes: &commonproto.ReplicationTask_DomainTaskAttributes{
+			Attributes: &replication.ReplicationTask_DomainTaskAttributes{
 				DomainTaskAttributes: task,
 			},
 		})

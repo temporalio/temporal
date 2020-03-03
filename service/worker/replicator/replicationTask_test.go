@@ -35,6 +35,7 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/definition"
@@ -775,8 +776,8 @@ func (s *historyMetadataReplicationTaskSuite) TestNack() {
 	task.Nack()
 }
 
-func (s *activityReplicationTaskSuite) getActivityReplicationTask() *commonproto.ReplicationTask {
-	replicationAttr := &commonproto.SyncActivityTaskAttributes{
+func (s *activityReplicationTaskSuite) getActivityReplicationTask() *replication.ReplicationTask {
+	replicationAttr := &replication.SyncActivityTaskAttributes{
 		DomainId:           "some random domain ID",
 		WorkflowId:         "some random workflow ID",
 		RunId:              "some random run ID",
@@ -792,15 +793,15 @@ func (s *activityReplicationTaskSuite) getActivityReplicationTask() *commonproto
 		LastWorkerIdentity: "some random worker identity",
 		LastFailureDetails: []byte("some random failure details"),
 	}
-	replicationTask := &commonproto.ReplicationTask{
+	replicationTask := &replication.ReplicationTask{
 		TaskType:   enums.ReplicationTaskTypeSyncActivity,
-		Attributes: &commonproto.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: replicationAttr},
+		Attributes: &replication.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: replicationAttr},
 	}
 	return replicationTask
 }
 
-func (s *historyReplicationTaskSuite) getHistoryReplicationTask() *commonproto.ReplicationTask {
-	replicationAttr := &commonproto.HistoryTaskAttributes{
+func (s *historyReplicationTaskSuite) getHistoryReplicationTask() *replication.ReplicationTask {
+	replicationAttr := &replication.HistoryTaskAttributes{
 		TargetClusters: []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
 		DomainId:       "some random domain ID",
 		WorkflowId:     "some random workflow ID",
@@ -808,7 +809,7 @@ func (s *historyReplicationTaskSuite) getHistoryReplicationTask() *commonproto.R
 		Version:        1394,
 		FirstEventId:   728,
 		NextEventId:    1015,
-		ReplicationInfo: map[string]*commonproto.ReplicationInfo{
+		ReplicationInfo: map[string]*replication.ReplicationInfo{
 			cluster.TestCurrentClusterName: {
 				Version:     0644,
 				LastEventId: 0755,
@@ -826,15 +827,15 @@ func (s *historyReplicationTaskSuite) getHistoryReplicationTask() *commonproto.R
 		},
 		ResetWorkflow: true,
 	}
-	replicationTask := &commonproto.ReplicationTask{
+	replicationTask := &replication.ReplicationTask{
 		TaskType:   enums.ReplicationTaskTypeHistory,
-		Attributes: &commonproto.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: replicationAttr},
+		Attributes: &replication.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: replicationAttr},
 	}
 	return replicationTask
 }
 
-func (s *historyMetadataReplicationTaskSuite) getHistoryMetadataReplicationTask() *commonproto.ReplicationTask {
-	replicationAttr := &commonproto.HistoryMetadataTaskAttributes{
+func (s *historyMetadataReplicationTaskSuite) getHistoryMetadataReplicationTask() *replication.ReplicationTask {
+	replicationAttr := &replication.HistoryMetadataTaskAttributes{
 		TargetClusters: []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
 		DomainId:       "some random domain ID",
 		WorkflowId:     "some random workflow ID",
@@ -842,9 +843,9 @@ func (s *historyMetadataReplicationTaskSuite) getHistoryMetadataReplicationTask(
 		FirstEventId:   728,
 		NextEventId:    1015,
 	}
-	replicationTask := &commonproto.ReplicationTask{
+	replicationTask := &replication.ReplicationTask{
 		TaskType:   enums.ReplicationTaskTypeHistoryMetadata,
-		Attributes: &commonproto.ReplicationTask_HistoryMetadataTaskAttributes{HistoryMetadataTaskAttributes: replicationAttr},
+		Attributes: &replication.ReplicationTask_HistoryMetadataTaskAttributes{HistoryMetadataTaskAttributes: replicationAttr},
 	}
 	return replicationTask
 }

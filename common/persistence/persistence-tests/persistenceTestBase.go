@@ -32,10 +32,9 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 
-	commonproto "go.temporal.io/temporal-proto/common"
-
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	pblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cluster"
@@ -1478,7 +1477,7 @@ func isMessageIDConflictError(err error) bool {
 func (s *TestBase) GetReplicationMessages(
 	lastMessageID int,
 	maxCount int,
-) ([]*commonproto.ReplicationTask, int, error) {
+) ([]*replication.ReplicationTask, int, error) {
 
 	return s.DomainReplicationQueue.GetReplicationMessages(lastMessageID, maxCount)
 }
@@ -1522,7 +1521,7 @@ func (s *TestBase) GetMessagesFromDomainDLQ(
 	lastMessageID int,
 	pageSize int,
 	pageToken []byte,
-) ([]*commonproto.ReplicationTask, []byte, error) {
+) ([]*replication.ReplicationTask, []byte, error) {
 
 	return s.DomainReplicationQueue.GetMessagesFromDLQ(
 		firstMessageID,

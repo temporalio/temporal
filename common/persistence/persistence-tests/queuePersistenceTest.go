@@ -28,8 +28,9 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
-	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
+
+	"github.com/temporalio/temporal/.gen/proto/replication"
 )
 
 type (
@@ -70,10 +71,10 @@ func (s *QueuePersistenceSuite) TestDomainReplicationQueue() {
 	taskType := enums.ReplicationTaskTypeDomain
 	go func() {
 		for i := 0; i < numMessages; i++ {
-			messageChan <- &commonproto.ReplicationTask{
+			messageChan <- &replication.ReplicationTask{
 				TaskType: taskType,
-				Attributes: &commonproto.ReplicationTask_DomainTaskAttributes{
-					DomainTaskAttributes: &commonproto.DomainTaskAttributes{
+				Attributes: &replication.ReplicationTask_DomainTaskAttributes{
+					DomainTaskAttributes: &replication.DomainTaskAttributes{
 						Id: fmt.Sprintf("message-%v", i),
 					},
 				},
@@ -145,10 +146,10 @@ func (s *QueuePersistenceSuite) TestDomainReplicationDLQ() {
 	taskType := enums.ReplicationTaskTypeDomain
 	go func() {
 		for i := 0; i < numMessages; i++ {
-			messageChan <- &commonproto.ReplicationTask{
+			messageChan <- &replication.ReplicationTask{
 				TaskType: taskType,
-				Attributes: &commonproto.ReplicationTask_DomainTaskAttributes{
-					DomainTaskAttributes: &commonproto.DomainTaskAttributes{
+				Attributes: &replication.ReplicationTask_DomainTaskAttributes{
+					DomainTaskAttributes: &replication.DomainTaskAttributes{
 						Id: fmt.Sprintf("message-%v", i),
 					},
 				},

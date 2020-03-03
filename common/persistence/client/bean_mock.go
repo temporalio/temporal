@@ -28,11 +28,9 @@
 package client
 
 import (
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
-
 	persistence "github.com/temporalio/temporal/common/persistence"
+	reflect "reflect"
 )
 
 // MockBean is a mock of Bean interface

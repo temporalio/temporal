@@ -23,9 +23,9 @@
 package domain
 
 import (
-	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
@@ -34,7 +34,7 @@ import (
 type (
 	// DLQMessageHandler is the interface handles domain DLQ messages
 	DLQMessageHandler interface {
-		Read(lastMessageID int, pageSize int, pageToken []byte) ([]*commonproto.ReplicationTask, []byte, error)
+		Read(lastMessageID int, pageSize int, pageToken []byte) ([]*replication.ReplicationTask, []byte, error)
 		Purge(lastMessageID int) error
 		Merge(lastMessageID int, pageSize int, pageToken []byte) ([]byte, error)
 	}
@@ -64,7 +64,7 @@ func (d *dlqMessageHandlerImpl) Read(
 	lastMessageID int,
 	pageSize int,
 	pageToken []byte,
-) ([]*commonproto.ReplicationTask, []byte, error) {
+) ([]*replication.ReplicationTask, []byte, error) {
 
 	ackLevel, err := d.domainReplicationQueue.GetDLQAckLevel()
 	if err != nil {

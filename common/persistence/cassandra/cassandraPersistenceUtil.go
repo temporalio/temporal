@@ -26,11 +26,11 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/gogo/protobuf/types"
-	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/checksum"
 	p "github.com/temporalio/temporal/common/persistence"
@@ -1087,7 +1087,7 @@ func createReplicationTasks(
 		firstEventID := common.EmptyEventID
 		nextEventID := common.EmptyEventID
 		version := common.EmptyVersion //nolint:ineffassign
-		var lastReplicationInfo map[string]*commonproto.ReplicationInfo
+		var lastReplicationInfo map[string]*replication.ReplicationInfo
 		activityScheduleID := common.EmptyEventID
 		var branchToken, newRunBranchToken []byte
 		resetWorkflow := false
@@ -1100,7 +1100,7 @@ func createReplicationTasks(
 			firstEventID = histTask.FirstEventID
 			nextEventID = histTask.NextEventID
 			version = task.GetVersion()
-			lastReplicationInfo = make(map[string]*commonproto.ReplicationInfo)
+			lastReplicationInfo = make(map[string]*replication.ReplicationInfo)
 			for k, v := range histTask.LastReplicationInfo {
 				lastReplicationInfo[k] = v.ToProto()
 			}
@@ -1110,7 +1110,7 @@ func createReplicationTasks(
 			version = task.GetVersion()
 			activityScheduleID = task.(*p.SyncActivityTask).ScheduledID
 			// cassandra does not like null
-			lastReplicationInfo = make(map[string]*commonproto.ReplicationInfo)
+			lastReplicationInfo = make(map[string]*replication.ReplicationInfo)
 
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("Unknow replication type: %v", task.GetType()))
