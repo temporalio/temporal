@@ -305,7 +305,7 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 			s.Equal(int32(i+1), pendingActivity.GetAttempt())
 			s.Equal(enums.PendingActivityStateScheduled, pendingActivity.GetState())
 			if i == 0 {
-				s.Equal("cadenceInternal:Timeout TimeoutTypeHeartbeat", pendingActivity.GetLastFailureReason())
+				s.Equal("temporalInternal:Timeout TimeoutTypeHeartbeat", pendingActivity.GetLastFailureReason())
 				s.Nil(pendingActivity.GetLastFailureDetails())
 			} else { // i == 1
 				expectedErrString := "retryable-error"

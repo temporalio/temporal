@@ -1672,7 +1672,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	s.Equal(1, len(pendingActivities))
 	s.Equal(enums.PendingActivityStateScheduled, pendingActivities[0].GetState())
 	s.Equal(heartbeatDetails, pendingActivities[0].GetHeartbeatDetails())
-	s.Equal("cadenceInternal:Timeout TimeoutTypeHeartbeat", pendingActivities[0].GetLastFailureReason())
+	s.Equal("temporalInternal:Timeout TimeoutTypeHeartbeat", pendingActivities[0].GetLastFailureReason())
 	s.Equal(identity1, pendingActivities[0].GetLastWorkerIdentity())
 
 	for i := 0; i < 10; i++ {
