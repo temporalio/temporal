@@ -28,9 +28,8 @@
 package task
 
 import (
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
+	reflect "reflect"
 )
 
 // MockProcessor is a mock of Processor interface

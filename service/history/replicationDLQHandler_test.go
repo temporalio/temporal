@@ -31,13 +31,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	pblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
@@ -206,17 +206,17 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages_OK() {
 	}).Return(resp, nil).Times(1)
 
 	s.mockClientBean.EXPECT().GetRemoteAdminClient(sourceCluster).Return(s.adminClient).AnyTimes()
-	replicationTask := &commonproto.ReplicationTask{
+	replicationTask := &replication.ReplicationTask{
 		TaskType:     enums.ReplicationTaskTypeHistory,
 		SourceTaskId: lastMessageID,
-		Attributes: &commonproto.ReplicationTask_HistoryTaskAttributes{
-			HistoryTaskAttributes: &commonproto.HistoryTaskAttributes{},
+		Attributes: &replication.ReplicationTask_HistoryTaskAttributes{
+			HistoryTaskAttributes: &replication.HistoryTaskAttributes{},
 		},
 	}
 	s.adminClient.EXPECT().
 		GetDLQReplicationMessages(ctx, gomock.Any()).
 		Return(&adminservice.GetDLQReplicationMessagesResponse{
-			ReplicationTasks: []*commonproto.ReplicationTask{
+			ReplicationTasks: []*replication.ReplicationTask{
 				replicationTask,
 			},
 		}, nil)

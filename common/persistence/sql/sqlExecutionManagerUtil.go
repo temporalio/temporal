@@ -27,11 +27,11 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/go/sqlblobs"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/serialization"
@@ -772,7 +772,7 @@ func createReplicationTasks(
 		nextEventID := common.EmptyEventID
 		version := common.EmptyVersion
 		activityScheduleID := common.EmptyEventID
-		var lastReplicationInfo map[string]*commonproto.ReplicationInfo
+		var lastReplicationInfo map[string]*replication.ReplicationInfo
 
 		var branchToken, newRunBranchToken []byte
 		var resetWorkflow bool
@@ -789,15 +789,15 @@ func createReplicationTasks(
 			branchToken = historyReplicationTask.BranchToken
 			newRunBranchToken = historyReplicationTask.NewRunBranchToken
 			resetWorkflow = historyReplicationTask.ResetWorkflow
-			lastReplicationInfo = make(map[string]*commonproto.ReplicationInfo, len(historyReplicationTask.LastReplicationInfo))
+			lastReplicationInfo = make(map[string]*replication.ReplicationInfo, len(historyReplicationTask.LastReplicationInfo))
 			for k, v := range historyReplicationTask.LastReplicationInfo {
-				lastReplicationInfo[k] = &commonproto.ReplicationInfo{Version: v.Version, LastEventId: v.LastEventID}
+				lastReplicationInfo[k] = &replication.ReplicationInfo{Version: v.Version, LastEventId: v.LastEventID}
 			}
 
 		case p.ReplicationTaskTypeSyncActivity:
 			version = task.GetVersion()
 			activityScheduleID = task.(*p.SyncActivityTask).ScheduledID
-			lastReplicationInfo = map[string]*commonproto.ReplicationInfo{}
+			lastReplicationInfo = map[string]*replication.ReplicationInfo{}
 
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("Unknown replication task: %v", task.GetType()))

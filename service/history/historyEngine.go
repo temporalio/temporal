@@ -31,13 +31,13 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/client/history"
 	"github.com/temporalio/temporal/client/matching"
 	"github.com/temporalio/temporal/common"
@@ -2788,7 +2788,7 @@ func (e *historyEngineImpl) GetReplicationMessages(
 	}
 
 	// Set cluster status for sync shard info
-	replicationMessages.SyncShardStatus = &commonproto.SyncShardStatus{
+	replicationMessages.SyncShardStatus = &replication.SyncShardStatus{
 		Timestamp: e.timeSource.Now().UnixNano(),
 	}
 	e.logger.Debug("Successfully fetched replication messages.", tag.Counter(len(replicationMessages.ReplicationTasks)))

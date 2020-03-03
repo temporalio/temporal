@@ -37,6 +37,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/replication"
+	"github.com/temporalio/temporal/common/primitives"
+
+	"github.com/temporalio/temporal/common/auth"
+
 	"github.com/Shopify/sarama"
 	cluster "github.com/bsm/sarama-cluster"
 	"github.com/gocql/gocql"
@@ -503,7 +509,7 @@ func doRereplicate(shardID int, domainID, wid, rid string, minID, maxID int64, t
 		}
 
 		currVersion := resp.State.ReplicationState.CurrentVersion
-		repInfo := map[string]*commonproto.ReplicationInfo{
+		repInfo := map[string]*replication.ReplicationInfo{
 			"": {
 				Version:     currVersion,
 				LastEventId: 0,

@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/client/history"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/definition"
@@ -94,7 +95,7 @@ const (
 )
 
 func newActivityReplicationTask(
-	replicationTask *commonproto.ReplicationTask,
+	replicationTask *replication.ReplicationTask,
 	msg messaging.Message,
 	logger log.Logger,
 	config *Config,
@@ -152,7 +153,7 @@ func newActivityReplicationTask(
 }
 
 func newHistoryReplicationTask(
-	replicationTask *commonproto.ReplicationTask,
+	replicationTask *replication.ReplicationTask,
 	msg messaging.Message,
 	sourceCluster string,
 	logger log.Logger,
@@ -209,7 +210,7 @@ func newHistoryReplicationTask(
 }
 
 func newHistoryMetadataReplicationTask(
-	replicationTask *commonproto.ReplicationTask,
+	replicationTask *replication.ReplicationTask,
 	msg messaging.Message,
 	sourceCluster string,
 	logger log.Logger,
@@ -251,7 +252,7 @@ func newHistoryMetadataReplicationTask(
 }
 
 func newHistoryReplicationV2Task(
-	replicationTask *commonproto.ReplicationTask,
+	replicationTask *replication.ReplicationTask,
 	msg messaging.Message,
 	logger log.Logger,
 	config *Config,

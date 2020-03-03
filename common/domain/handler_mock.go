@@ -29,10 +29,9 @@ package domain
 
 import (
 	context "context"
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
 	workflowservice "go.temporal.io/temporal-proto/workflowservice"
+	reflect "reflect"
 )
 
 // MockHandler is a mock of Handler interface

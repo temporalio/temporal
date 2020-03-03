@@ -36,6 +36,7 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
@@ -153,7 +154,7 @@ func (s *replicationTaskProcessorSuite) TestHandleSyncShardStatus() {
 		Timestamp:     now.UnixNano(),
 	}).Return(nil).Times(1)
 
-	err := s.replicationTaskProcessor.handleSyncShardStatus(&commonproto.SyncShardStatus{
+	err := s.replicationTaskProcessor.handleSyncShardStatus(&replication.SyncShardStatus{
 		Timestamp: now.UnixNano(),
 	})
 	s.NoError(err)
@@ -163,9 +164,9 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_SyncActivity
 	domainID := uuid.NewRandom()
 	workflowID := uuid.New()
 	runID := uuid.NewRandom()
-	task := &commonproto.ReplicationTask{
+	task := &replication.ReplicationTask{
 		TaskType: enums.ReplicationTaskTypeSyncActivity,
-		Attributes: &commonproto.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: &commonproto.SyncActivityTaskAttributes{
+		Attributes: &replication.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: &replication.SyncActivityTaskAttributes{
 			DomainId:   domainID.String(),
 			WorkflowId: workflowID,
 			RunId:      runID.String(),
@@ -189,9 +190,9 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryRepli
 	domainID := uuid.NewRandom()
 	workflowID := uuid.New()
 	runID := uuid.NewRandom()
-	task := &commonproto.ReplicationTask{
+	task := &replication.ReplicationTask{
 		TaskType: enums.ReplicationTaskTypeHistory,
-		Attributes: &commonproto.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: &commonproto.HistoryTaskAttributes{
+		Attributes: &replication.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: &replication.HistoryTaskAttributes{
 			DomainId:   domainID.String(),
 			WorkflowId: workflowID,
 			RunId:      runID.String(),
@@ -224,9 +225,9 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryV2Rep
 	serializer := s.mockResource.GetPayloadSerializer()
 	data, err := serializer.SerializeBatchEvents(adapter.ToThriftHistoryEvents(events), common.EncodingTypeThriftRW)
 	s.NoError(err)
-	task := &commonproto.ReplicationTask{
+	task := &replication.ReplicationTask{
 		TaskType: enums.ReplicationTaskTypeHistoryV2,
-		Attributes: &commonproto.ReplicationTask_HistoryTaskV2Attributes{HistoryTaskV2Attributes: &commonproto.HistoryTaskV2Attributes{
+		Attributes: &replication.ReplicationTask_HistoryTaskV2Attributes{HistoryTaskV2Attributes: &replication.HistoryTaskV2Attributes{
 			DomainId:   domainID.String(),
 			WorkflowId: workflowID,
 			RunId:      runID.String(),

@@ -28,14 +28,12 @@
 package client
 
 import (
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
-
 	admin "github.com/temporalio/temporal/client/admin"
 	frontend "github.com/temporalio/temporal/client/frontend"
 	history "github.com/temporalio/temporal/client/history"
 	matching "github.com/temporalio/temporal/client/matching"
+	reflect "reflect"
 )
 
 // MockBean is a mock of Bean interface

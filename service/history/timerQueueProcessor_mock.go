@@ -28,11 +28,9 @@
 package history
 
 import (
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
-
 	persistence "github.com/temporalio/temporal/common/persistence"
+	reflect "reflect"
 )
 
 // MocktimerQueueProcessor is a mock of timerQueueProcessor interface

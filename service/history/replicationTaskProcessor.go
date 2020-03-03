@@ -29,12 +29,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/log"
@@ -79,7 +79,7 @@ type (
 		lastRetrievedMessageID int64
 
 		requestChan   chan<- *request
-		syncShardChan chan *commonproto.SyncShardStatus
+		syncShardChan chan *replication.SyncShardStatus
 		done          chan struct{}
 	}
 
@@ -89,8 +89,8 @@ type (
 	}
 
 	request struct {
-		token    *commonproto.ReplicationToken
-		respChan chan<- *commonproto.ReplicationMessages
+		token    *replication.ReplicationToken
+		respChan chan<- *replication.ReplicationMessages
 	}
 )
 
@@ -128,7 +128,7 @@ func NewReplicationTaskProcessor(
 		taskRetryPolicy:         taskRetryPolicy,
 		noTaskRetrier:           noTaskRetrier,
 		requestChan:             replicationTaskFetcher.GetRequestChan(),
-		syncShardChan:           make(chan *commonproto.SyncShardStatus),
+		syncShardChan:           make(chan *replication.SyncShardStatus),
 		done:                    make(chan struct{}),
 		lastProcessedMessageID:  emptyMessageID,
 		lastRetrievedMessageID:  emptyMessageID,
@@ -248,11 +248,11 @@ func (p *ReplicationTaskProcessorImpl) cleanupAckedReplicationTasks() error {
 	)
 }
 
-func (p *ReplicationTaskProcessorImpl) sendFetchMessageRequest() <-chan *commonproto.ReplicationMessages {
-	respChan := make(chan *commonproto.ReplicationMessages, 1)
+func (p *ReplicationTaskProcessorImpl) sendFetchMessageRequest() <-chan *replication.ReplicationMessages {
+	respChan := make(chan *replication.ReplicationMessages, 1)
 	// TODO: when we support prefetching, LastRetrievedMessageId can be different than LastProcessedMessageId
 	p.requestChan <- &request{
-		token: &commonproto.ReplicationToken{
+		token: &replication.ReplicationToken{
 			ShardID:                int32(p.shard.GetShardID()),
 			LastRetrievedMessageId: p.lastRetrievedMessageID,
 			LastProcessedMessageId: p.lastProcessedMessageID,
@@ -262,7 +262,7 @@ func (p *ReplicationTaskProcessorImpl) sendFetchMessageRequest() <-chan *commonp
 	return respChan
 }
 
-func (p *ReplicationTaskProcessorImpl) processResponse(response *commonproto.ReplicationMessages) {
+func (p *ReplicationTaskProcessorImpl) processResponse(response *replication.ReplicationMessages) {
 
 	p.syncShardChan <- response.GetSyncShardStatus()
 	// Note here we check replication tasks instead of hasMore. The expectation is that in a steady state
@@ -295,7 +295,7 @@ func (p *ReplicationTaskProcessorImpl) syncShardStatusLoop() {
 		p.config.ShardSyncMinInterval(),
 		p.config.ShardSyncTimerJitterCoefficient(),
 	))
-	var syncShardTask *commonproto.SyncShardStatus
+	var syncShardTask *replication.SyncShardStatus
 	for {
 		select {
 		case syncShardRequest := <-p.syncShardChan:
@@ -319,7 +319,7 @@ func (p *ReplicationTaskProcessorImpl) syncShardStatusLoop() {
 }
 
 func (p *ReplicationTaskProcessorImpl) handleSyncShardStatus(
-	status *commonproto.SyncShardStatus,
+	status *replication.SyncShardStatus,
 ) error {
 
 	if status == nil ||
@@ -337,7 +337,7 @@ func (p *ReplicationTaskProcessorImpl) handleSyncShardStatus(
 	})
 }
 
-func (p *ReplicationTaskProcessorImpl) processSingleTask(replicationTask *commonproto.ReplicationTask) error {
+func (p *ReplicationTaskProcessorImpl) processSingleTask(replicationTask *replication.ReplicationTask) error {
 	err := backoff.Retry(func() error {
 		return p.processTaskOnce(replicationTask)
 	}, p.taskRetryPolicy, isTransientRetryableError)
@@ -355,7 +355,7 @@ func (p *ReplicationTaskProcessorImpl) processSingleTask(replicationTask *common
 	return nil
 }
 
-func (p *ReplicationTaskProcessorImpl) processTaskOnce(replicationTask *commonproto.ReplicationTask) error {
+func (p *ReplicationTaskProcessorImpl) processTaskOnce(replicationTask *replication.ReplicationTask) error {
 	scope, err := p.replicationTaskExecutor.execute(
 		p.sourceCluster,
 		replicationTask,
@@ -374,7 +374,7 @@ func (p *ReplicationTaskProcessorImpl) processTaskOnce(replicationTask *commonpr
 	return err
 }
 
-func (p *ReplicationTaskProcessorImpl) putReplicationTaskToDLQ(replicationTask *commonproto.ReplicationTask) error {
+func (p *ReplicationTaskProcessorImpl) putReplicationTaskToDLQ(replicationTask *replication.ReplicationTask) error {
 	request, err := p.generateDLQRequest(replicationTask)
 	if err != nil {
 		p.logger.Error("Failed to generate DLQ replication task.", tag.Error(err))
@@ -394,7 +394,7 @@ func (p *ReplicationTaskProcessorImpl) putReplicationTaskToDLQ(replicationTask *
 }
 
 func (p *ReplicationTaskProcessorImpl) generateDLQRequest(
-	replicationTask *commonproto.ReplicationTask,
+	replicationTask *replication.ReplicationTask,
 ) (*persistence.PutReplicationTaskToDLQRequest, error) {
 	switch replicationTask.TaskType {
 	case enums.ReplicationTaskTypeSyncActivity:
@@ -484,7 +484,7 @@ func (p *ReplicationTaskProcessorImpl) shouldRetryDLQ(err error) bool {
 }
 
 func toPersistenceReplicationInfo(
-	info map[string]*commonproto.ReplicationInfo,
+	info map[string]*replication.ReplicationInfo,
 ) map[string]*persistence.ReplicationInfo {
 	replicationInfoMap := make(map[string]*persistence.ReplicationInfo)
 	for k, v := range info {

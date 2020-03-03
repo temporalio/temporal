@@ -35,6 +35,7 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/backoff"
@@ -704,7 +705,7 @@ func (adh *AdminHandler) GetDomainReplicationMessages(ctx context.Context, reque
 	}
 
 	return &adminservice.GetDomainReplicationMessagesResponse{
-		Messages: &commonproto.ReplicationMessages{
+		Messages: &replication.ReplicationMessages{
 			ReplicationTasks:       replicationTasks,
 			LastRetrievedMessageId: int64(lastMessageID),
 		},
@@ -790,7 +791,7 @@ func (adh *AdminHandler) ReadDLQMessages(
 		request.InclusiveEndMessageID = common.EndMessageID
 	}
 
-	var tasks []*commonproto.ReplicationTask
+	var tasks []*replication.ReplicationTask
 	var token []byte
 	var op func() error
 	switch request.GetType() {

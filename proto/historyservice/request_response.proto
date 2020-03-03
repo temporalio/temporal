@@ -29,7 +29,7 @@ import "common/history.proto";
 import "common/decision.proto";
 import "common/workflow_execution.proto";
 import "common/domain.proto";
-import "common/replication.proto";
+import "replication/replication.proto";
 
 // TODO: remove these dependencies
 import "workflowservice/request_response.proto";
@@ -75,7 +75,7 @@ message GetMutableStateResponse {
     int32 stickyTaskListScheduleToStartTimeout = 12;
     int32 eventStoreVersion = 13;
     bytes currentBranchToken = 14;
-    map<string, common.ReplicationInfo> replicationInfo = 15;
+    map<string, replication.ReplicationInfo> replicationInfo = 15;
     // TODO: when migrating to gRPC, make this a enum
     // TODO: when migrating to gRPC, unify internal & external representation
     // NOTE: workflowState & workflowCloseState are the same as persistence representation
@@ -105,7 +105,7 @@ message PollMutableStateResponse {
     string clientImpl = 10;
     int32 stickyTaskListScheduleToStartTimeout = 11;
     bytes currentBranchToken = 12;
-    map<string, common.ReplicationInfo> replicationInfo = 13;
+    map<string, replication.ReplicationInfo> replicationInfo = 13;
     common.VersionHistories versionHistories = 14;
     // TODO: when migrating to gRPC, make this a enum
     // TODO: when migrating to gRPC, unify internal & external representation
@@ -321,7 +321,7 @@ message ReplicateEventsRequest {
     int64 firstEventId = 4;
     int64 nextEventId = 5;
     int64 version = 6;
-    map<string, common.ReplicationInfo> replicationInfo = 7;
+    map<string, replication.ReplicationInfo> replicationInfo = 7;
     common.History history = 8;
     common.History newRunHistory = 9;
     // this attribute is deprecated
@@ -338,7 +338,7 @@ message ReplicateEventsResponse {
 message ReplicateRawEventsRequest {
     string domainUUID = 1;
     common.WorkflowExecution workflowExecution = 2;
-    map<string, common.ReplicationInfo> replicationInfo = 3;
+    map<string, replication.ReplicationInfo> replicationInfo = 3;
     common.DataBlob history = 4;
     common.DataBlob newRunHistory = 5;
     int32 eventStoreVersion = 6;
@@ -434,20 +434,20 @@ message RemoveTaskResponse {
 }
 
 message GetReplicationMessagesRequest {
-    repeated common.ReplicationToken tokens = 1;
+    repeated replication.ReplicationToken tokens = 1;
     string clusterName = 2;
 }
 
 message GetReplicationMessagesResponse {
-    map<int32, common.ReplicationMessages> messagesByShard = 1;
+    map<int32, replication.ReplicationMessages> messagesByShard = 1;
 }
 
 message GetDLQReplicationMessagesRequest {
-    repeated common.ReplicationTaskInfo taskInfos = 1;
+    repeated replication.ReplicationTaskInfo taskInfos = 1;
 }
 
 message GetDLQReplicationMessagesResponse {
-    repeated common.ReplicationTask replicationTasks = 1;
+    repeated replication.ReplicationTask replicationTasks = 1;
 }
 
 message QueryWorkflowRequest {
@@ -478,7 +478,7 @@ message ReadDLQMessagesRequest {
 
 message ReadDLQMessagesResponse {
     enums.DLQType type = 1;
-    repeated common.ReplicationTask replicationTasks = 2;
+    repeated replication.ReplicationTask replicationTasks = 2;
     bytes nextPageToken = 3;
 }
 

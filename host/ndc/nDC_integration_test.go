@@ -30,6 +30,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/golang/mock/gomock"
@@ -75,7 +76,7 @@ type (
 		version                     int64
 		versionIncrement            int64
 		mockAdminClient             map[string]adminClient.Client
-		standByReplicationTasksChan chan *commonproto.ReplicationTask
+		standByReplicationTasksChan chan *replication.ReplicationTask
 		standByTaskID               int64
 	}
 )
@@ -117,7 +118,7 @@ func (s *nDCIntegrationTestSuite) SetupSuite() {
 	clusterConfigs[0].WorkerConfig = &host.WorkerConfig{}
 	clusterConfigs[1].WorkerConfig = &host.WorkerConfig{}
 
-	s.standByReplicationTasksChan = make(chan *commonproto.ReplicationTask, 100)
+	s.standByReplicationTasksChan = make(chan *replication.ReplicationTask, 100)
 
 	s.standByTaskID = 0
 	s.mockAdminClient = make(map[string]adminClient.Client)
@@ -127,7 +128,7 @@ func (s *nDCIntegrationTestSuite) SetupSuite() {
 	mockOtherClient := adminservicemock.NewMockAdminServiceClient(controller)
 	mockOtherClient.EXPECT().GetReplicationMessages(gomock.Any(), gomock.Any()).Return(
 		&adminservice.GetReplicationMessagesResponse{
-			MessagesByShard: make(map[int32]*commonproto.ReplicationMessages),
+			MessagesByShard: make(map[int32]*replication.ReplicationMessages),
 		}, nil).AnyTimes()
 	s.mockAdminClient["standby"] = mockStandbyClient
 	s.mockAdminClient["other"] = mockOtherClient
@@ -153,7 +154,7 @@ func (s *nDCIntegrationTestSuite) GetReplicationMessagesMock(
 	case task := <-s.standByReplicationTasksChan:
 		taskID := atomic.AddInt64(&s.standByTaskID, 1)
 		task.SourceTaskId = taskID
-		tasks := []*commonproto.ReplicationTask{task}
+		tasks := []*replication.ReplicationTask{task}
 		for len(s.standByReplicationTasksChan) > 0 {
 			task = <-s.standByReplicationTasksChan
 			taskID := atomic.AddInt64(&s.standByTaskID, 1)
@@ -161,18 +162,18 @@ func (s *nDCIntegrationTestSuite) GetReplicationMessagesMock(
 			tasks = append(tasks, task)
 		}
 
-		replicationMessage := &commonproto.ReplicationMessages{
+		replicationMessage := &replication.ReplicationMessages{
 			ReplicationTasks:       tasks,
 			LastRetrievedMessageId: tasks[len(tasks)-1].SourceTaskId,
 			HasMore:                true,
 		}
 
 		return &adminservice.GetReplicationMessagesResponse{
-			MessagesByShard: map[int32]*commonproto.ReplicationMessages{0: replicationMessage},
+			MessagesByShard: map[int32]*replication.ReplicationMessages{0: replicationMessage},
 		}, nil
 	default:
 		return &adminservice.GetReplicationMessagesResponse{
-			MessagesByShard: make(map[int32]*commonproto.ReplicationMessages),
+			MessagesByShard: make(map[int32]*replication.ReplicationMessages),
 		}, nil
 	}
 }
@@ -1747,10 +1748,10 @@ func (s *nDCIntegrationTestSuite) applyEventsThroughFetcher(
 		eventBlob, newRunEventBlob := s.generateEventBlobs(workflowID, runID, workflowType, tasklist, batch)
 
 		taskType := enums.ReplicationTaskTypeHistoryV2
-		replicationTask := &commonproto.ReplicationTask{
+		replicationTask := &replication.ReplicationTask{
 			TaskType:     taskType,
 			SourceTaskId: 1,
-			Attributes: &commonproto.ReplicationTask_HistoryTaskV2Attributes{HistoryTaskV2Attributes: &commonproto.HistoryTaskV2Attributes{
+			Attributes: &replication.ReplicationTask_HistoryTaskV2Attributes{HistoryTaskV2Attributes: &replication.HistoryTaskV2Attributes{
 				TaskId:              1,
 				DomainId:            s.domainID,
 				WorkflowId:          workflowID,
