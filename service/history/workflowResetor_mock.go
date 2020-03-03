@@ -29,11 +29,10 @@ package history
 
 import (
 	context "context"
+	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
 	workflowservice "go.temporal.io/temporal-proto/workflowservice"
-
-	reflect "reflect"
 
 	historyservice "github.com/temporalio/temporal/.gen/proto/historyservice"
 )

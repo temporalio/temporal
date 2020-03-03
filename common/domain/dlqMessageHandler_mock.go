@@ -28,9 +28,11 @@
 package domain
 
 import (
-	gomock "github.com/golang/mock/gomock"
-	replication "github.com/temporalio/temporal/.gen/proto/replication"
 	reflect "reflect"
+
+	gomock "github.com/golang/mock/gomock"
+
+	replication "github.com/temporalio/temporal/.gen/proto/replication"
 )
 
 // MockDLQMessageHandler is a mock of DLQMessageHandler interface

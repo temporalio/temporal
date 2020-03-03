@@ -32,6 +32,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+
 	historyservice "github.com/temporalio/temporal/.gen/proto/historyservice"
 )
 

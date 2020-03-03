@@ -28,13 +28,13 @@
 package history
 
 import (
+	reflect "reflect"
+	time "time"
+
 	gomock "github.com/golang/mock/gomock"
 	common "go.temporal.io/temporal-proto/common"
 	enums "go.temporal.io/temporal-proto/enums"
 	workflowservice "go.temporal.io/temporal-proto/workflowservice"
-
-	reflect "reflect"
-	time "time"
 
 	historyservice "github.com/temporalio/temporal/.gen/proto/historyservice"
 	persistenceblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
