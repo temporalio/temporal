@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
@@ -60,7 +61,7 @@ var (
 type (
 	// ReplicationTaskExecutor is the interface which is to execute domain replication task
 	ReplicationTaskExecutor interface {
-		Execute(task *commonproto.DomainTaskAttributes) error
+		Execute(task *replication.DomainTaskAttributes) error
 	}
 
 	domainReplicationTaskExecutorImpl struct {
@@ -82,7 +83,7 @@ func NewReplicationTaskExecutor(
 }
 
 // Execute handles receiving of the domain replication task
-func (h *domainReplicationTaskExecutorImpl) Execute(task *commonproto.DomainTaskAttributes) error {
+func (h *domainReplicationTaskExecutorImpl) Execute(task *replication.DomainTaskAttributes) error {
 	if err := h.validateDomainReplicationTask(task); err != nil {
 		return err
 	}
@@ -98,7 +99,7 @@ func (h *domainReplicationTaskExecutorImpl) Execute(task *commonproto.DomainTask
 }
 
 // handleDomainCreationReplicationTask handles the domain creation replication task
-func (h *domainReplicationTaskExecutorImpl) handleDomainCreationReplicationTask(task *commonproto.DomainTaskAttributes) error {
+func (h *domainReplicationTaskExecutorImpl) handleDomainCreationReplicationTask(task *replication.DomainTaskAttributes) error {
 	// task already validated
 	status, err := h.convertDomainStatusFromProto(task.Info.Status)
 	if err != nil {
@@ -181,7 +182,7 @@ func (h *domainReplicationTaskExecutorImpl) handleDomainCreationReplicationTask(
 }
 
 // handleDomainUpdateReplicationTask handles the domain update replication task
-func (h *domainReplicationTaskExecutorImpl) handleDomainUpdateReplicationTask(task *commonproto.DomainTaskAttributes) error {
+func (h *domainReplicationTaskExecutorImpl) handleDomainUpdateReplicationTask(task *replication.DomainTaskAttributes) error {
 	// task already validated
 	status, err := h.convertDomainStatusFromProto(task.Info.Status)
 	if err != nil {
@@ -258,7 +259,7 @@ func (h *domainReplicationTaskExecutorImpl) handleDomainUpdateReplicationTask(ta
 	return h.metadataManagerV2.UpdateDomain(request)
 }
 
-func (h *domainReplicationTaskExecutorImpl) validateDomainReplicationTask(task *commonproto.DomainTaskAttributes) error {
+func (h *domainReplicationTaskExecutorImpl) validateDomainReplicationTask(task *replication.DomainTaskAttributes) error {
 	if task == nil {
 		return ErrEmptyDomainReplicationTask
 	}

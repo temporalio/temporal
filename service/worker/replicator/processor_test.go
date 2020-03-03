@@ -29,13 +29,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 
 	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
@@ -165,7 +165,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_BadEncoding() {
 }
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_Domain_Success() {
-	replicationAttr := &commonproto.DomainTaskAttributes{
+	replicationAttr := &replication.DomainTaskAttributes{
 		DomainOperation: enums.DomainOperationUpdate,
 		Id:              "some random domain ID",
 	}
@@ -183,7 +183,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_Domain_Success() 
 }
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_Domain_FailedThenSuccess() {
-	replicationAttr := &commonproto.DomainTaskAttributes{
+	replicationAttr := &replication.DomainTaskAttributes{
 		DomainOperation: enums.DomainOperationUpdate,
 		Id:              "some random domain ID",
 	}
@@ -202,14 +202,14 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_Domain_FailedThen
 }
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_Success() {
-	replicationAttr := &commonproto.SyncShardStatusTaskAttributes{
+	replicationAttr := &replication.SyncShardStatusTaskAttributes{
 		SourceCluster: "some random source cluster",
 		ShardId:       2333,
 		Timestamp:     time.Now().UnixNano(),
 	}
-	replicationTask := &commonproto.ReplicationTask{
+	replicationTask := &replication.ReplicationTask{
 		TaskType:   enums.ReplicationTaskTypeSyncShardStatus,
-		Attributes: &commonproto.ReplicationTask_SyncShardStatusTaskAttributes{SyncShardStatusTaskAttributes: replicationAttr},
+		Attributes: &replication.ReplicationTask_SyncShardStatusTaskAttributes{SyncShardStatusTaskAttributes: replicationAttr},
 	}
 	replicationTaskBinary, err := s.msgEncoder.Encode(adapter.ToThriftReplicationTask(replicationTask))
 	s.Nil(err)
@@ -246,14 +246,14 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_Success
 }
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_FailedThenSuccess() {
-	replicationAttr := &commonproto.SyncShardStatusTaskAttributes{
+	replicationAttr := &replication.SyncShardStatusTaskAttributes{
 		SourceCluster: "some random source cluster",
 		ShardId:       2333,
 		Timestamp:     time.Now().UnixNano(),
 	}
-	replicationTask := &commonproto.ReplicationTask{
+	replicationTask := &replication.ReplicationTask{
 		TaskType:   enums.ReplicationTaskTypeSyncShardStatus,
-		Attributes: &commonproto.ReplicationTask_SyncShardStatusTaskAttributes{SyncShardStatusTaskAttributes: replicationAttr},
+		Attributes: &replication.ReplicationTask_SyncShardStatusTaskAttributes{SyncShardStatusTaskAttributes: replicationAttr},
 	}
 	replicationTaskBinary, err := s.msgEncoder.Encode(adapter.ToThriftReplicationTask(replicationTask))
 	s.Nil(err)

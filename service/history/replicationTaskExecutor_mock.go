@@ -28,10 +28,9 @@
 package history
 
 import (
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
-	common "go.temporal.io/temporal-proto/common"
+	replication "github.com/temporalio/temporal/.gen/proto/replication"
+	reflect "reflect"
 )
 
 // MockreplicationTaskExecutor is a mock of replicationTaskExecutor interface
@@ -58,7 +57,7 @@ func (m *MockreplicationTaskExecutor) EXPECT() *MockreplicationTaskExecutorMockR
 }
 
 // execute mocks base method
-func (m *MockreplicationTaskExecutor) execute(sourceCluster string, replicationTask *common.ReplicationTask, forceApply bool) (int, error) {
+func (m *MockreplicationTaskExecutor) execute(sourceCluster string, replicationTask *replication.ReplicationTask, forceApply bool) (int, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "execute", sourceCluster, replicationTask, forceApply)
 	ret0, _ := ret[0].(int)

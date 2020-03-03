@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/temporal-proto/enums"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/mocks"
@@ -119,10 +120,10 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterDomainTask_Is
 	}
 	isGlobalDomain := true
 
-	s.kafkaProducer.On("Publish", &commonproto.ReplicationTask{
+	s.kafkaProducer.On("Publish", &replication.ReplicationTask{
 		TaskType: taskType,
-		Attributes: &commonproto.ReplicationTask_DomainTaskAttributes{
-			DomainTaskAttributes: &commonproto.DomainTaskAttributes{
+		Attributes: &replication.ReplicationTask_DomainTaskAttributes{
+			DomainTaskAttributes: &replication.DomainTaskAttributes{
 				DomainOperation: domainOperation,
 				Id:              id,
 				Info: &commonproto.DomainInfo{
@@ -259,10 +260,10 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateDomainTask_IsGl
 	}
 	isGlobalDomain := true
 
-	s.kafkaProducer.On("Publish", &commonproto.ReplicationTask{
+	s.kafkaProducer.On("Publish", &replication.ReplicationTask{
 		TaskType: taskType,
-		Attributes: &commonproto.ReplicationTask_DomainTaskAttributes{
-			DomainTaskAttributes: &commonproto.DomainTaskAttributes{
+		Attributes: &replication.ReplicationTask_DomainTaskAttributes{
+			DomainTaskAttributes: &replication.DomainTaskAttributes{
 				DomainOperation: domainOperation,
 				Id:              id,
 				Info: &commonproto.DomainInfo{

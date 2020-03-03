@@ -38,6 +38,7 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
@@ -136,7 +137,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_SameRunID() {
 	firstEventID := int64(123)
 	nextEventID := firstEventID + 100
 	pageSize := defaultPageSize
-	replicationInfo := map[string]*commonproto.ReplicationInfo{
+	replicationInfo := map[string]*replication.ReplicationInfo{
 		"random data center": {
 			Version:     777,
 			LastEventId: 999,
@@ -201,7 +202,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 	// beginingRunID -> midRunID1; not continue relationship; midRunID2 -> endingRunID
 
 	beginingRunID := "00001111-2222-3333-4444-555566661111"
-	beginingReplicationInfo := map[string]*commonproto.ReplicationInfo{
+	beginingReplicationInfo := map[string]*replication.ReplicationInfo{
 		"random data center 1": {
 			Version:     111,
 			LastEventId: 222,
@@ -209,7 +210,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 	}
 
 	midRunID1 := "00001111-2222-3333-4444-555566662222"
-	midReplicationInfo1 := map[string]*commonproto.ReplicationInfo{
+	midReplicationInfo1 := map[string]*replication.ReplicationInfo{
 		"random data center 2": {
 			Version:     111,
 			LastEventId: 222,
@@ -217,7 +218,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 	}
 
 	midRunID2 := "00001111-2222-3333-4444-555566663333"
-	midReplicationInfo2 := map[string]*commonproto.ReplicationInfo{
+	midReplicationInfo2 := map[string]*replication.ReplicationInfo{
 		"random data center 3": {
 			Version:     111,
 			LastEventId: 222,
@@ -225,7 +226,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_DiffRunID_Contin
 	}
 
 	endingRunID := "00001111-2222-3333-4444-555566664444"
-	endingReplicationInfo := map[string]*commonproto.ReplicationInfo{
+	endingReplicationInfo := map[string]*replication.ReplicationInfo{
 		"random data center 4": {
 			Version:     777,
 			LastEventId: 888,
@@ -452,7 +453,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_NotContinueAsNe
 	runID := uuid.New()
 	nextToken := []byte("some random next token")
 	pageSize := defaultPageSize
-	replicationInfo := map[string]*commonproto.ReplicationInfo{
+	replicationInfo := map[string]*replication.ReplicationInfo{
 		"random data center": {
 			Version:     777,
 			LastEventId: 999,
@@ -568,13 +569,13 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 	newRunID := uuid.New()
 	nextToken := []byte("some random next token")
 	pageSize := defaultPageSize
-	replicationInfo := map[string]*commonproto.ReplicationInfo{
+	replicationInfo := map[string]*replication.ReplicationInfo{
 		"random data center": {
 			Version:     777,
 			LastEventId: 999,
 		},
 	}
-	replicationInfoNew := map[string]*commonproto.ReplicationInfo{
+	replicationInfoNew := map[string]*replication.ReplicationInfo{
 		"random data center": {
 			Version:     222,
 			LastEventId: 111,
@@ -759,7 +760,7 @@ func (s *historyRereplicatorSuite) TestCreateReplicationRawRequest() {
 		EncodingType: enums.EncodingTypeThriftRW,
 		Data:         []byte("some random history blob"),
 	}
-	replicationInfo := map[string]*commonproto.ReplicationInfo{
+	replicationInfo := map[string]*replication.ReplicationInfo{
 		"random data center": {
 			Version:     777,
 			LastEventId: 999,
@@ -788,7 +789,7 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest() {
 			WorkflowId: "some random workflow ID",
 			RunId:      uuid.New(),
 		},
-		ReplicationInfo: map[string]*commonproto.ReplicationInfo{
+		ReplicationInfo: map[string]*replication.ReplicationInfo{
 			"random data center": {
 				Version:     777,
 				LastEventId: 999,
@@ -812,7 +813,7 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest() {
 func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_HistoryReset_MissingHistory() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
-	replicationInfo := map[string]*commonproto.ReplicationInfo{
+	replicationInfo := map[string]*replication.ReplicationInfo{
 		"random data center": {
 			Version:     777,
 			LastEventId: 999,
@@ -890,7 +891,7 @@ func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_HistoryReset_Mi
 func (s *historyRereplicatorSuite) TestSendReplicationRawRequest_Err() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
-	replicationInfo := map[string]*commonproto.ReplicationInfo{
+	replicationInfo := map[string]*replication.ReplicationInfo{
 		"random data center": {
 			Version:     777,
 			LastEventId: 999,
@@ -933,7 +934,7 @@ func (s *historyRereplicatorSuite) TestHandleEmptyHistory_SeenMoreThanOnce() {
 	runID := uuid.New()
 	lastVersion := int64(777)
 	lastEventID := int64(999)
-	replicationInfo := map[string]*commonproto.ReplicationInfo{
+	replicationInfo := map[string]*replication.ReplicationInfo{
 		s.targetClusterName: {
 			Version:     lastVersion,
 			LastEventId: lastEventID,
@@ -951,7 +952,7 @@ func (s *historyRereplicatorSuite) TestHandleEmptyHistory_FoundReplicationInfoEn
 	runID := uuid.New()
 	lastVersion := int64(777)
 	lastEventID := int64(999)
-	replicationInfo := map[string]*commonproto.ReplicationInfo{
+	replicationInfo := map[string]*replication.ReplicationInfo{
 		s.targetClusterName: {
 			Version:     lastVersion,
 			LastEventId: lastEventID,
@@ -1004,7 +1005,7 @@ func (s *historyRereplicatorSuite) TestHandleEmptyHistory_NoReplicationInfoEntry
 	runID := uuid.New()
 	lastVersion := int64(777)
 	lastEventID := int64(999)
-	replicationInfo := map[string]*commonproto.ReplicationInfo{
+	replicationInfo := map[string]*replication.ReplicationInfo{
 		"some randon cluster": {
 			Version:     lastVersion,
 			LastEventId: lastEventID,
@@ -1068,7 +1069,7 @@ func (s *historyRereplicatorSuite) TestGetHistory() {
 			Data:         blob,
 		}},
 		NextPageToken: nextTokenOut,
-		ReplicationInfo: map[string]*commonproto.ReplicationInfo{
+		ReplicationInfo: map[string]*replication.ReplicationInfo{
 			"random data center": {
 				Version:     777,
 				LastEventId: 999,

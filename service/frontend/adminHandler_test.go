@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/golang/mock/gomock"
@@ -239,7 +240,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2() {
 		NextEventId:        11,
 		CurrentBranchToken: branchToken,
 		VersionHistories:   versionHistories,
-		ReplicationInfo:    make(map[string]*commonproto.ReplicationInfo),
+		ReplicationInfo:    make(map[string]*replication.ReplicationInfo),
 	}
 	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(mState, nil).AnyTimes()
 
@@ -278,7 +279,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_SameStartIDAnd
 		NextEventId:        11,
 		CurrentBranchToken: branchToken,
 		VersionHistories:   versionHistories,
-		ReplicationInfo:    make(map[string]*commonproto.ReplicationInfo),
+		ReplicationInfo:    make(map[string]*replication.ReplicationInfo),
 	}
 	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(mState, nil).AnyTimes()
 

@@ -28,10 +28,9 @@
 package domain
 
 import (
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
-	common "go.temporal.io/temporal-proto/common"
+	replication "github.com/temporalio/temporal/.gen/proto/replication"
+	reflect "reflect"
 )
 
 // MockDLQMessageHandler is a mock of DLQMessageHandler interface
@@ -58,10 +57,10 @@ func (m *MockDLQMessageHandler) EXPECT() *MockDLQMessageHandlerMockRecorder {
 }
 
 // Read mocks base method
-func (m *MockDLQMessageHandler) Read(lastMessageID, pageSize int, pageToken []byte) ([]*common.ReplicationTask, []byte, error) {
+func (m *MockDLQMessageHandler) Read(lastMessageID, pageSize int, pageToken []byte) ([]*replication.ReplicationTask, []byte, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Read", lastMessageID, pageSize, pageToken)
-	ret0, _ := ret[0].([]*common.ReplicationTask)
+	ret0, _ := ret[0].([]*replication.ReplicationTask)
 	ret1, _ := ret[1].([]byte)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2

@@ -27,7 +27,7 @@ import "enums/enums.proto";
 import "common/common.proto";
 import "common/domain.proto";
 import "common/workflow_execution.proto";
-import "common/replication.proto";
+import "replication/replication.proto";
 
 message DescribeWorkflowExecutionRequest {
     string domain = 1;
@@ -86,7 +86,7 @@ message GetWorkflowExecutionRawHistoryRequest {
 message GetWorkflowExecutionRawHistoryResponse {
     bytes nextPageToken = 1;
     repeated common.DataBlob historyBatches = 2;
-    map<string, common.ReplicationInfo> replicationInfo = 3;
+    map<string, replication.ReplicationInfo> replicationInfo = 3;
     int32 eventStoreVersion = 4;
 }
 
@@ -112,12 +112,12 @@ message GetWorkflowExecutionRawHistoryV2Response {
 }
 
 message GetReplicationMessagesRequest {
-    repeated common.ReplicationToken tokens = 1;
+    repeated replication.ReplicationToken tokens = 1;
     string clusterName = 2;
 }
 
 message GetReplicationMessagesResponse {
-    map<int32, common.ReplicationMessages> messagesByShard = 1;
+    map<int32, replication.ReplicationMessages> messagesByShard = 1;
 }
 
 message GetDomainReplicationMessagesRequest {
@@ -131,15 +131,15 @@ message GetDomainReplicationMessagesRequest {
 }
 
 message GetDomainReplicationMessagesResponse {
-    common.ReplicationMessages messages = 1;
+    replication.ReplicationMessages messages = 1;
 }
 
 message GetDLQReplicationMessagesRequest {
-    repeated common.ReplicationTaskInfo taskInfos = 1;
+    repeated replication.ReplicationTaskInfo taskInfos = 1;
 }
 
 message GetDLQReplicationMessagesResponse {
-    repeated common.ReplicationTask replicationTasks = 1;
+    repeated replication.ReplicationTask replicationTasks = 1;
 }
 
 // ReapplyEventsRequest is the request for reapply events API.
@@ -179,7 +179,7 @@ message ReadDLQMessagesRequest {
 
 message ReadDLQMessagesResponse {
     enums.DLQType type = 1;
-    repeated common.ReplicationTask replicationTasks = 2;
+    repeated replication.ReplicationTask replicationTasks = 2;
     bytes nextPageToken = 3;
 }
 

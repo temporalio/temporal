@@ -31,6 +31,7 @@ import (
 	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -199,7 +200,7 @@ func (c *historyRereplicationContext) sendSingleWorkflowHistory(domainID string,
 
 	var pendingRequest *historyservice.ReplicateRawEventsRequest // pending replication request to history, initialized to nil
 
-	var replicationInfo map[string]*commonproto.ReplicationInfo
+	var replicationInfo map[string]*replication.ReplicationInfo
 
 	var token []byte
 	for doPaging := true; doPaging; doPaging = len(token) > 0 {
@@ -281,7 +282,7 @@ func (c *historyRereplicationContext) eventIDRange(currentRunID string,
 func (c *historyRereplicationContext) createReplicationRawRequest(
 	domainID string, workflowID string, runID string,
 	historyBlob *commonproto.DataBlob,
-	replicationInfo map[string]*commonproto.ReplicationInfo,
+	replicationInfo map[string]*replication.ReplicationInfo,
 ) *historyservice.ReplicateRawEventsRequest {
 
 	request := &historyservice.ReplicateRawEventsRequest{
@@ -351,7 +352,7 @@ func (c *historyRereplicationContext) sendReplicationRawRequest(request *history
 }
 
 func (c *historyRereplicationContext) handleEmptyHistory(domainID string, workflowID string, runID string,
-	replicationInfo map[string]*commonproto.ReplicationInfo) error {
+	replicationInfo map[string]*replication.ReplicationInfo) error {
 
 	if c.seenEmptyEvents {
 		c.logger.Error("error, encounter empty history more than once", tag.WorkflowRunID(runID))

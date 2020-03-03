@@ -30,7 +30,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
@@ -39,6 +38,7 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
 	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -207,10 +207,10 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicati
 	domainID := uuid.New()
 	workflowID := uuid.New()
 	runID := uuid.New()
-	task := &commonproto.ReplicationTask{
+	task := &replication.ReplicationTask{
 		TaskType: enums.ReplicationTaskTypeSyncActivity,
-		Attributes: &commonproto.ReplicationTask_SyncActivityTaskAttributes{
-			SyncActivityTaskAttributes: &commonproto.SyncActivityTaskAttributes{
+		Attributes: &replication.ReplicationTask_SyncActivityTaskAttributes{
+			SyncActivityTaskAttributes: &replication.SyncActivityTaskAttributes{
 				DomainId:   domainID,
 				WorkflowId: workflowID,
 				RunId:      runID,
@@ -241,10 +241,10 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_HistoryReplicationTas
 	domainID := uuid.New()
 	workflowID := uuid.New()
 	runID := uuid.New()
-	task := &commonproto.ReplicationTask{
+	task := &replication.ReplicationTask{
 		TaskType: enums.ReplicationTaskTypeHistory,
-		Attributes: &commonproto.ReplicationTask_HistoryTaskAttributes{
-			HistoryTaskAttributes: &commonproto.HistoryTaskAttributes{
+		Attributes: &replication.ReplicationTask_HistoryTaskAttributes{
+			HistoryTaskAttributes: &replication.HistoryTaskAttributes{
 				DomainId:     domainID,
 				WorkflowId:   workflowID,
 				RunId:        runID,
@@ -278,10 +278,10 @@ func (s *replicationTaskExecutorSuite) TestProcess_HistoryV2ReplicationTask() {
 	domainID := uuid.New()
 	workflowID := uuid.New()
 	runID := uuid.New()
-	task := &commonproto.ReplicationTask{
+	task := &replication.ReplicationTask{
 		TaskType: enums.ReplicationTaskTypeHistoryV2,
-		Attributes: &commonproto.ReplicationTask_HistoryTaskV2Attributes{
-			HistoryTaskV2Attributes: &commonproto.HistoryTaskV2Attributes{
+		Attributes: &replication.ReplicationTask_HistoryTaskV2Attributes{
+			HistoryTaskV2Attributes: &replication.HistoryTaskV2Attributes{
 				DomainId:   domainID,
 				WorkflowId: workflowID,
 				RunId:      runID,
