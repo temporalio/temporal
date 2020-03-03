@@ -45,8 +45,8 @@ var (
 	errDeleteNonRetriable            = errors.New("delete non-retriable error")
 	errArchiveVisibilityNonRetriable = errors.New("archive visibility non-retriable error")
 
-	uploadHistoryActivityNonRetryableErrors = []string{"cadenceInternal:Panic", errUploadNonRetriable.Error()}
-	deleteHistoryActivityNonRetryableErrors = []string{"cadenceInternal:Panic", errDeleteNonRetriable.Error()}
+	uploadHistoryActivityNonRetryableErrors = []string{"temporalInternal:Panic", errUploadNonRetriable.Error()}
+	deleteHistoryActivityNonRetryableErrors = []string{"temporalInternal:Panic", errDeleteNonRetriable.Error()}
 )
 
 func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err error) {

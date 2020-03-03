@@ -421,7 +421,7 @@ func timerTypeFromThrift(
 func timerTypeToReason(
 	timerType timerType,
 ) string {
-	return fmt.Sprintf("cadenceInternal:Timeout TimeoutType%v", timerTypeToThrift(timerType))
+	return fmt.Sprintf("temporalInternal:Timeout TimeoutType%v", timerTypeToThrift(timerType))
 }
 
 // Len implements sort.Interface
