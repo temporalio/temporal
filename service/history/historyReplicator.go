@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
@@ -987,7 +988,7 @@ func (r *historyReplicator) terminateWorkflow(
 }
 
 func (r *historyReplicator) getLatestCheckpoint(
-	replicationInfoRemote map[string]*commonproto.ReplicationInfo,
+	replicationInfoRemote map[string]*replication.ReplicationInfo,
 	replicationInfoLocal map[string]*persistence.ReplicationInfo,
 ) (int64, int64) {
 

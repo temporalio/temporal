@@ -33,6 +33,7 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/healthservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/definition"
@@ -1331,7 +1332,7 @@ func (h *Handler) GetReplicationMessages(ctx context.Context, request *historyse
 	result := new(sync.Map)
 
 	for _, token := range request.Tokens {
-		go func(token *commonproto.ReplicationToken) {
+		go func(token *replication.ReplicationToken) {
 			defer wg.Done()
 
 			engine, err := h.controller.getEngineForShard(int(token.GetShardID()))
@@ -1355,10 +1356,10 @@ func (h *Handler) GetReplicationMessages(ctx context.Context, request *historyse
 
 	wg.Wait()
 
-	messagesByShard := make(map[int32]*commonproto.ReplicationMessages)
+	messagesByShard := make(map[int32]*replication.ReplicationMessages)
 	result.Range(func(key, value interface{}) bool {
 		shardID := key.(int32)
-		tasks := value.(*commonproto.ReplicationMessages)
+		tasks := value.(*replication.ReplicationMessages)
 		messagesByShard[shardID] = tasks
 		return true
 	})
@@ -1378,7 +1379,7 @@ func (h *Handler) GetDLQReplicationMessages(ctx context.Context, request *histor
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
 
-	taskInfoPerExecution := map[definition.WorkflowIdentifier][]*commonproto.ReplicationTaskInfo{}
+	taskInfoPerExecution := map[definition.WorkflowIdentifier][]*replication.ReplicationTaskInfo{}
 	// do batch based on workflow ID and run ID
 	for _, taskInfo := range request.GetTaskInfos() {
 		identity := definition.NewWorkflowIdentifier(
@@ -1387,15 +1388,15 @@ func (h *Handler) GetDLQReplicationMessages(ctx context.Context, request *histor
 			taskInfo.GetRunId(),
 		)
 		if _, ok := taskInfoPerExecution[identity]; !ok {
-			taskInfoPerExecution[identity] = []*commonproto.ReplicationTaskInfo{}
+			taskInfoPerExecution[identity] = []*replication.ReplicationTaskInfo{}
 		}
 		taskInfoPerExecution[identity] = append(taskInfoPerExecution[identity], taskInfo)
 	}
 
 	var wg sync.WaitGroup
 	wg.Add(len(taskInfoPerExecution))
-	tasksChan := make(chan *commonproto.ReplicationTask, len(request.GetTaskInfos()))
-	handleTaskInfoPerExecution := func(taskInfos []*commonproto.ReplicationTaskInfo) {
+	tasksChan := make(chan *replication.ReplicationTask, len(request.GetTaskInfos()))
+	handleTaskInfoPerExecution := func(taskInfos []*replication.ReplicationTaskInfo) {
 		defer wg.Done()
 		if len(taskInfos) == 0 {
 			return
@@ -1429,7 +1430,7 @@ func (h *Handler) GetDLQReplicationMessages(ctx context.Context, request *histor
 	wg.Wait()
 	close(tasksChan)
 
-	replicationTasks := make([]*commonproto.ReplicationTask, len(tasksChan))
+	replicationTasks := make([]*replication.ReplicationTask, len(tasksChan))
 	for task := range tasksChan {
 		replicationTasks = append(replicationTasks, task)
 	}

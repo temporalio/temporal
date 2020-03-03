@@ -418,10 +418,10 @@ func PaginateHistory(
 }
 
 // TODO deprecate when 3+DC is released
-func convertLastReplicationInfo(info map[string]*replication.ReplicationInfo) map[string]*commonproto.ReplicationInfo {
-	replicationInfoMap := make(map[string]*commonproto.ReplicationInfo)
+func convertLastReplicationInfo(info map[string]*replication.ReplicationInfo) map[string]*replication.ReplicationInfo {
+	replicationInfoMap := make(map[string]*replication.ReplicationInfo)
 	for k, v := range info {
-		replicationInfoMap[k] = &commonproto.ReplicationInfo{
+		replicationInfoMap[k] = &replication.ReplicationInfo{
 			Version:     v.Version,
 			LastEventId: v.LastEventId,
 		}

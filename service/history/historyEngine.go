@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
@@ -99,8 +100,8 @@ type (
 		ReplicateEventsV2(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error
 		SyncShardStatus(ctx context.Context, request *historyservice.SyncShardStatusRequest) error
 		SyncActivity(ctx context.Context, request *historyservice.SyncActivityRequest) error
-		GetReplicationMessages(ctx context.Context, pollingCluster string, lastReadMessageID int64) (*commonproto.ReplicationMessages, error)
-		GetDLQReplicationMessages(ctx context.Context, taskInfos []*commonproto.ReplicationTaskInfo) ([]*commonproto.ReplicationTask, error)
+		GetReplicationMessages(ctx context.Context, pollingCluster string, lastReadMessageID int64) (*replication.ReplicationMessages, error)
+		GetDLQReplicationMessages(ctx context.Context, taskInfos []*replication.ReplicationTaskInfo) ([]*replication.ReplicationTask, error)
 		QueryWorkflow(ctx context.Context, request *historyservice.QueryWorkflowRequest) (*historyservice.QueryWorkflowResponse, error)
 		ReapplyEvents(ctx context.Context, domainUUID string, workflowID string, runID string, events []*commonproto.HistoryEvent) error
 		ReadDLQMessages(ctx context.Context, messagesRequest *historyservice.ReadDLQMessagesRequest) (*historyservice.ReadDLQMessagesResponse, error)
@@ -1077,9 +1078,9 @@ func (e *historyEngineImpl) getMutableState(
 	}
 	replicationState := mutableState.GetReplicationState()
 	if replicationState != nil {
-		retResp.ReplicationInfo = map[string]*commonproto.ReplicationInfo{}
+		retResp.ReplicationInfo = map[string]*replication.ReplicationInfo{}
 		for k, v := range replicationState.LastReplicationInfo {
-			retResp.ReplicationInfo[k] = &commonproto.ReplicationInfo{
+			retResp.ReplicationInfo[k] = &replication.ReplicationInfo{
 				Version:     v.Version,
 				LastEventId: v.LastEventID,
 			}
@@ -2771,7 +2772,7 @@ func (e *historyEngineImpl) GetReplicationMessages(
 	ctx context.Context,
 	pollingCluster string,
 	lastReadMessageID int64,
-) (*commonproto.ReplicationMessages, error) {
+) (*replication.ReplicationMessages, error) {
 
 	scope := metrics.HistoryGetReplicationMessagesScope
 	sw := e.metricsClient.StartTimer(scope, metrics.GetReplicationMessagesForShardLatency)
@@ -2797,14 +2798,14 @@ func (e *historyEngineImpl) GetReplicationMessages(
 
 func (e *historyEngineImpl) GetDLQReplicationMessages(
 	ctx context.Context,
-	taskInfos []*commonproto.ReplicationTaskInfo,
-) ([]*commonproto.ReplicationTask, error) {
+	taskInfos []*replication.ReplicationTaskInfo,
+) ([]*replication.ReplicationTask, error) {
 
 	scope := metrics.HistoryGetDLQReplicationMessagesScope
 	sw := e.metricsClient.StartTimer(scope, metrics.GetDLQReplicationMessagesLatency)
 	defer sw.Stop()
 
-	tasks := make([]*commonproto.ReplicationTask, len(taskInfos))
+	tasks := make([]*replication.ReplicationTask, len(taskInfos))
 	for _, taskInfo := range taskInfos {
 		task, err := e.replicatorProcessor.getTask(ctx, taskInfo)
 		if err != nil {
