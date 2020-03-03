@@ -28,10 +28,10 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.uber.org/zap"
 
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/persistence"
 )
@@ -87,7 +87,7 @@ func (s *dlqMessageHandlerSuite) TestReadMessages() {
 	pageSize := 100
 	pageToken := []byte{}
 
-	tasks := []*commonproto.ReplicationTask{
+	tasks := []*replication.ReplicationTask{
 		{
 			TaskType:     enums.ReplicationTaskTypeDomain,
 			SourceTaskId: 1,
@@ -109,7 +109,7 @@ func (s *dlqMessageHandlerSuite) TestReadMessages_ThrowErrorOnGetDLQAckLevel() {
 	pageSize := 100
 	pageToken := []byte{}
 
-	tasks := []*commonproto.ReplicationTask{
+	tasks := []*replication.ReplicationTask{
 		{
 			TaskType:     enums.ReplicationTaskTypeDomain,
 			SourceTaskId: 1,
@@ -185,15 +185,15 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages() {
 	pageToken := []byte{}
 	messageID := 11
 
-	domainAttribute := &commonproto.DomainTaskAttributes{
+	domainAttribute := &replication.DomainTaskAttributes{
 		Id: uuid.New(),
 	}
 
-	tasks := []*commonproto.ReplicationTask{
+	tasks := []*replication.ReplicationTask{
 		{
 			TaskType:     enums.ReplicationTaskTypeDomain,
 			SourceTaskId: int64(messageID),
-			Attributes: &commonproto.ReplicationTask_DomainTaskAttributes{
+			Attributes: &replication.ReplicationTask_DomainTaskAttributes{
 				DomainTaskAttributes: domainAttribute,
 			},
 		},
@@ -216,15 +216,15 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages_ThrowErrorOnGetDLQAckLevel() 
 	pageToken := []byte{}
 	messageID := 11
 	testError := fmt.Errorf("test")
-	domainAttribute := &commonproto.DomainTaskAttributes{
+	domainAttribute := &replication.DomainTaskAttributes{
 		Id: uuid.New(),
 	}
 
-	tasks := []*commonproto.ReplicationTask{
+	tasks := []*replication.ReplicationTask{
 		{
 			TaskType:     enums.ReplicationTaskTypeDomain,
 			SourceTaskId: int64(messageID),
-			Attributes: &commonproto.ReplicationTask_DomainTaskAttributes{
+			Attributes: &replication.ReplicationTask_DomainTaskAttributes{
 				DomainTaskAttributes: domainAttribute,
 			},
 		},
@@ -268,24 +268,24 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages_ThrowErrorOnHandleReceivingTa
 	messageID1 := 11
 	messageID2 := 12
 	testError := fmt.Errorf("test")
-	domainAttribute1 := &commonproto.DomainTaskAttributes{
+	domainAttribute1 := &replication.DomainTaskAttributes{
 		Id: uuid.New(),
 	}
-	domainAttribute2 := &commonproto.DomainTaskAttributes{
+	domainAttribute2 := &replication.DomainTaskAttributes{
 		Id: uuid.New(),
 	}
-	tasks := []*commonproto.ReplicationTask{
+	tasks := []*replication.ReplicationTask{
 		{
 			TaskType:     enums.ReplicationTaskTypeDomain,
 			SourceTaskId: int64(messageID1),
-			Attributes: &commonproto.ReplicationTask_DomainTaskAttributes{
+			Attributes: &replication.ReplicationTask_DomainTaskAttributes{
 				DomainTaskAttributes: domainAttribute1,
 			},
 		},
 		{
 			TaskType:     enums.ReplicationTaskTypeDomain,
 			SourceTaskId: int64(messageID2),
-			Attributes: &commonproto.ReplicationTask_DomainTaskAttributes{
+			Attributes: &replication.ReplicationTask_DomainTaskAttributes{
 				DomainTaskAttributes: domainAttribute2,
 			},
 		},
@@ -312,24 +312,24 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages_ThrowErrorOnDeleteMessages() 
 	messageID1 := 11
 	messageID2 := 12
 	testError := fmt.Errorf("test")
-	domainAttribute1 := &commonproto.DomainTaskAttributes{
+	domainAttribute1 := &replication.DomainTaskAttributes{
 		Id: uuid.New(),
 	}
-	domainAttribute2 := &commonproto.DomainTaskAttributes{
+	domainAttribute2 := &replication.DomainTaskAttributes{
 		Id: uuid.New(),
 	}
-	tasks := []*commonproto.ReplicationTask{
+	tasks := []*replication.ReplicationTask{
 		{
 			TaskType:     enums.ReplicationTaskTypeDomain,
 			SourceTaskId: int64(messageID1),
-			Attributes: &commonproto.ReplicationTask_DomainTaskAttributes{
+			Attributes: &replication.ReplicationTask_DomainTaskAttributes{
 				DomainTaskAttributes: domainAttribute1,
 			},
 		},
 		{
 			TaskType:     enums.ReplicationTaskTypeDomain,
 			SourceTaskId: int64(messageID2),
-			Attributes: &commonproto.ReplicationTask_DomainTaskAttributes{
+			Attributes: &replication.ReplicationTask_DomainTaskAttributes{
 				DomainTaskAttributes: domainAttribute2,
 			},
 		},
@@ -354,15 +354,15 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages_IgnoreErrorOnUpdateDLQAckLeve
 	pageToken := []byte{}
 	messageID := 11
 	testError := fmt.Errorf("test")
-	domainAttribute := &commonproto.DomainTaskAttributes{
+	domainAttribute := &replication.DomainTaskAttributes{
 		Id: uuid.New(),
 	}
 
-	tasks := []*commonproto.ReplicationTask{
+	tasks := []*replication.ReplicationTask{
 		{
 			TaskType:     enums.ReplicationTaskTypeDomain,
 			SourceTaskId: int64(messageID),
-			Attributes: &commonproto.ReplicationTask_DomainTaskAttributes{
+			Attributes: &replication.ReplicationTask_DomainTaskAttributes{
 				DomainTaskAttributes: domainAttribute,
 			},
 		},

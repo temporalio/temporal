@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.uber.org/zap"
 
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/persistence"
@@ -100,7 +101,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_RegisterDomainTask_Name
 		},
 	}
 
-	task := &commonproto.DomainTaskAttributes{
+	task := &replication.DomainTaskAttributes{
 		DomainOperation: operation,
 		Id:              id,
 		Info: &commonproto.DomainInfo{
@@ -169,7 +170,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_RegisterDomainTask() {
 		},
 	}
 
-	task := &commonproto.DomainTaskAttributes{
+	task := &replication.DomainTaskAttributes{
 		DomainOperation: operation,
 		Id:              id,
 		Info: &commonproto.DomainInfo{
@@ -255,7 +256,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_Domain
 		},
 	}
 
-	updateTask := &commonproto.DomainTaskAttributes{
+	updateTask := &replication.DomainTaskAttributes{
 		DomainOperation: operation,
 		Id:              id,
 		Info: &commonproto.DomainInfo{
@@ -337,7 +338,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_Update
 		},
 	}
 
-	createTask := &commonproto.DomainTaskAttributes{
+	createTask := &replication.DomainTaskAttributes{
 		DomainOperation: operation,
 		Id:              id,
 		Info: &commonproto.DomainInfo{
@@ -390,7 +391,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_Update
 			ClusterName: updateClusterStandby,
 		},
 	}
-	updateTask := &commonproto.DomainTaskAttributes{
+	updateTask := &replication.DomainTaskAttributes{
 		DomainOperation: updateOperation,
 		Id:              id,
 		Info: &commonproto.DomainInfo{
@@ -470,7 +471,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_Update
 		},
 	}
 
-	createTask := &commonproto.DomainTaskAttributes{
+	createTask := &replication.DomainTaskAttributes{
 		DomainOperation: operation,
 		Id:              id,
 		Info: &commonproto.DomainInfo{
@@ -523,7 +524,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_Update
 			ClusterName: updateClusterStandby,
 		},
 	}
-	updateTask := &commonproto.DomainTaskAttributes{
+	updateTask := &replication.DomainTaskAttributes{
 		DomainOperation: updateOperation,
 		Id:              id,
 		Info: &commonproto.DomainInfo{
@@ -603,7 +604,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_NoUpda
 		},
 	}
 
-	createTask := &commonproto.DomainTaskAttributes{
+	createTask := &replication.DomainTaskAttributes{
 		DomainOperation: operation,
 		Id:              id,
 		Info: &commonproto.DomainInfo{
@@ -652,7 +653,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_NoUpda
 			ClusterName: updateClusterStandby,
 		},
 	}
-	updateTask := &commonproto.DomainTaskAttributes{
+	updateTask := &replication.DomainTaskAttributes{
 		DomainOperation: updateOperation,
 		Id:              id,
 		Info: &commonproto.DomainInfo{
@@ -732,7 +733,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_NoUpda
 		},
 	}
 
-	createTask := &commonproto.DomainTaskAttributes{
+	createTask := &replication.DomainTaskAttributes{
 		DomainOperation: operation,
 		Id:              id,
 		Info: &commonproto.DomainInfo{
@@ -783,7 +784,7 @@ func (s *domainReplicationTaskExecutorSuite) TestExecute_UpdateDomainTask_NoUpda
 			ClusterName: updateClusterStandby,
 		},
 	}
-	updateTask := &commonproto.DomainTaskAttributes{
+	updateTask := &replication.DomainTaskAttributes{
 		DomainOperation: updateOperation,
 		Id:              id,
 		Info: &commonproto.DomainInfo{

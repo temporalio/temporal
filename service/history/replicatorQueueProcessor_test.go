@@ -28,13 +28,13 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
@@ -342,10 +342,10 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 		nil,
 	), nil).AnyTimes()
 
-	s.mockProducer.On("Publish", &commonproto.ReplicationTask{
+	s.mockProducer.On("Publish", &replication.ReplicationTask{
 		TaskType: enums.ReplicationTaskTypeSyncActivity,
-		Attributes: &commonproto.ReplicationTask_SyncActivityTaskAttributes{
-			SyncActivityTaskAttributes: &commonproto.SyncActivityTaskAttributes{
+		Attributes: &replication.ReplicationTask_SyncActivityTaskAttributes{
+			SyncActivityTaskAttributes: &replication.SyncActivityTaskAttributes{
 				DomainId:           domainID,
 				WorkflowId:         workflowID,
 				RunId:              runID,
@@ -454,10 +454,10 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 		version,
 		nil,
 	), nil).AnyTimes()
-	s.mockProducer.On("Publish", &commonproto.ReplicationTask{
+	s.mockProducer.On("Publish", &replication.ReplicationTask{
 		TaskType: enums.ReplicationTaskTypeSyncActivity,
-		Attributes: &commonproto.ReplicationTask_SyncActivityTaskAttributes{
-			SyncActivityTaskAttributes: &commonproto.SyncActivityTaskAttributes{
+		Attributes: &replication.ReplicationTask_SyncActivityTaskAttributes{
+			SyncActivityTaskAttributes: &replication.SyncActivityTaskAttributes{
 				DomainId:           domainID,
 				WorkflowId:         workflowID,
 				RunId:              runID,

@@ -24,9 +24,9 @@ import (
 	"context"
 
 	"github.com/gogo/protobuf/types"
-	commonproto "go.temporal.io/temporal-proto/common"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/persistence"
@@ -51,11 +51,11 @@ type (
 			ctx context.Context,
 			pollingCluster string,
 			lastReadTaskID int64,
-		) (*commonproto.ReplicationMessages, error)
+		) (*replication.ReplicationMessages, error)
 		getTask(
 			ctx context.Context,
-			taskInfo *commonproto.ReplicationTaskInfo,
-		) (*commonproto.ReplicationTask, error)
+			taskInfo *replication.ReplicationTaskInfo,
+		) (*replication.ReplicationTask, error)
 	}
 
 	queueAckMgr interface {

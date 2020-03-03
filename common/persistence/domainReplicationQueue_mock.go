@@ -28,10 +28,9 @@
 package persistence
 
 import (
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
-	common "go.temporal.io/temporal-proto/common"
+	replication "github.com/temporalio/temporal/.gen/proto/replication"
+	reflect "reflect"
 )
 
 // MockDomainReplicationQueue is a mock of DomainReplicationQueue interface
@@ -110,10 +109,10 @@ func (mr *MockDomainReplicationQueueMockRecorder) PublishToDLQ(message interface
 }
 
 // GetReplicationMessages mocks base method
-func (m *MockDomainReplicationQueue) GetReplicationMessages(lastMessageID, maxCount int) ([]*common.ReplicationTask, int, error) {
+func (m *MockDomainReplicationQueue) GetReplicationMessages(lastMessageID, maxCount int) ([]*replication.ReplicationTask, int, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetReplicationMessages", lastMessageID, maxCount)
-	ret0, _ := ret[0].([]*common.ReplicationTask)
+	ret0, _ := ret[0].([]*replication.ReplicationTask)
 	ret1, _ := ret[1].(int)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
@@ -155,10 +154,10 @@ func (mr *MockDomainReplicationQueueMockRecorder) GetAckLevels() *gomock.Call {
 }
 
 // GetMessagesFromDLQ mocks base method
-func (m *MockDomainReplicationQueue) GetMessagesFromDLQ(firstMessageID, lastMessageID, pageSize int, pageToken []byte) ([]*common.ReplicationTask, []byte, error) {
+func (m *MockDomainReplicationQueue) GetMessagesFromDLQ(firstMessageID, lastMessageID, pageSize int, pageToken []byte) ([]*replication.ReplicationTask, []byte, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetMessagesFromDLQ", firstMessageID, lastMessageID, pageSize, pageToken)
-	ret0, _ := ret[0].([]*common.ReplicationTask)
+	ret0, _ := ret[0].([]*replication.ReplicationTask)
 	ret1, _ := ret[1].([]byte)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2

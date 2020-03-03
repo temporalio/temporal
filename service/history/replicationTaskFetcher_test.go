@@ -26,10 +26,10 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonproto "go.temporal.io/temporal-proto/common"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/resource"
@@ -85,7 +85,7 @@ func (s *replicationTaskFetcherSuite) TearDownTest() {
 
 func (s *replicationTaskFetcherSuite) TestGetMessages() {
 	requestByShard := make(map[int32]*request)
-	token := &commonproto.ReplicationToken{
+	token := &replication.ReplicationToken{
 		ShardID:                0,
 		LastProcessedMessageId: 1,
 		LastRetrievedMessageId: 2,
@@ -94,13 +94,13 @@ func (s *replicationTaskFetcherSuite) TestGetMessages() {
 		token: token,
 	}
 	replicationMessageRequest := &adminservice.GetReplicationMessagesRequest{
-		Tokens: []*commonproto.ReplicationToken{
+		Tokens: []*replication.ReplicationToken{
 			token,
 		},
 		ClusterName: "active",
 	}
-	messageByShared := make(map[int32]*commonproto.ReplicationMessages)
-	messageByShared[0] = &commonproto.ReplicationMessages{}
+	messageByShared := make(map[int32]*replication.ReplicationMessages)
+	messageByShared[0] = &replication.ReplicationMessages{}
 	expectedResponse := &adminservice.GetReplicationMessagesResponse{
 		MessagesByShard: messageByShared,
 	}
@@ -112,24 +112,24 @@ func (s *replicationTaskFetcherSuite) TestGetMessages() {
 
 func (s *replicationTaskFetcherSuite) TestFetchAndDistributeTasks() {
 	requestByShard := make(map[int32]*request)
-	token := &commonproto.ReplicationToken{
+	token := &replication.ReplicationToken{
 		ShardID:                0,
 		LastProcessedMessageId: 1,
 		LastRetrievedMessageId: 2,
 	}
-	respChan := make(chan *commonproto.ReplicationMessages, 1)
+	respChan := make(chan *replication.ReplicationMessages, 1)
 	requestByShard[0] = &request{
 		token:    token,
 		respChan: respChan,
 	}
 	replicationMessageRequest := &adminservice.GetReplicationMessagesRequest{
-		Tokens: []*commonproto.ReplicationToken{
+		Tokens: []*replication.ReplicationToken{
 			token,
 		},
 		ClusterName: "active",
 	}
-	messageByShared := make(map[int32]*commonproto.ReplicationMessages)
-	messageByShared[0] = &commonproto.ReplicationMessages{}
+	messageByShared := make(map[int32]*replication.ReplicationMessages)
+	messageByShared[0] = &replication.ReplicationMessages{}
 	expectedResponse := &adminservice.GetReplicationMessagesResponse{
 		MessagesByShard: messageByShared,
 	}

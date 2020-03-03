@@ -26,13 +26,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/gogo/protobuf/types"
 
 	"github.com/temporalio/temporal/common/primitives"
-
-	commonproto "go.temporal.io/temporal-proto/common"
 
 	pblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
@@ -2340,8 +2339,8 @@ func (config *ClusterReplicationConfig) GetCopy() *ClusterReplicationConfig {
 	return &res
 }
 
-func (r *ReplicationInfo) ToProto() *commonproto.ReplicationInfo {
-	return &commonproto.ReplicationInfo{Version: r.Version, LastEventId: r.LastEventID}
+func (r *ReplicationInfo) ToProto() *replication.ReplicationInfo {
+	return &replication.ReplicationInfo{Version: r.Version, LastEventId: r.LastEventID}
 }
 
 // DBTimestampToUnixNano converts CQL timestamp to UnixNano

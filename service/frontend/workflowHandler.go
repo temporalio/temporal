@@ -34,6 +34,7 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/archiver"
@@ -73,7 +74,7 @@ type (
 		PersistenceToken  []byte
 		TransientDecision *commonproto.TransientDecisionInfo
 		BranchToken       []byte
-		ReplicationInfo   map[string]*commonproto.ReplicationInfo
+		ReplicationInfo   map[string]*replication.ReplicationInfo
 	}
 )
 

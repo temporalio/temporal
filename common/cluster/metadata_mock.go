@@ -28,11 +28,9 @@
 package cluster
 
 import (
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
-
 	config "github.com/temporalio/temporal/common/service/config"
+	reflect "reflect"
 )
 
 // MockMetadata is a mock of Metadata interface

@@ -25,12 +25,12 @@ package history
 import (
 	"context"
 
-	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
@@ -42,7 +42,7 @@ import (
 
 type (
 	replicationTaskExecutor interface {
-		execute(sourceCluster string, replicationTask *commonproto.ReplicationTask, forceApply bool) (int, error)
+		execute(sourceCluster string, replicationTask *replication.ReplicationTask, forceApply bool) (int, error)
 	}
 
 	replicationTaskExecutorImpl struct {
@@ -81,7 +81,7 @@ func newReplicationTaskExecutor(
 
 func (e *replicationTaskExecutorImpl) execute(
 	sourceCluster string,
-	replicationTask *commonproto.ReplicationTask,
+	replicationTask *replication.ReplicationTask,
 	forceApply bool,
 ) (int, error) {
 
@@ -113,7 +113,7 @@ func (e *replicationTaskExecutorImpl) execute(
 }
 
 func (e *replicationTaskExecutorImpl) handleActivityTask(
-	task *commonproto.ReplicationTask,
+	task *replication.ReplicationTask,
 	forceApply bool,
 ) error {
 
@@ -196,7 +196,7 @@ func (e *replicationTaskExecutorImpl) handleActivityTask(
 //TODO: remove this part after 2DC deprecation
 func (e *replicationTaskExecutorImpl) handleHistoryReplicationTask(
 	sourceCluster string,
-	task *commonproto.ReplicationTask,
+	task *replication.ReplicationTask,
 	forceApply bool,
 ) error {
 
@@ -254,7 +254,7 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTask(
 }
 
 func (e *replicationTaskExecutorImpl) handleHistoryReplicationTaskV2(
-	task *commonproto.ReplicationTask,
+	task *replication.ReplicationTask,
 	forceApply bool,
 ) error {
 

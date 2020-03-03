@@ -26,12 +26,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/client/history"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
@@ -296,7 +296,7 @@ func (p *replicationTaskProcessor) decodeAndValidateMsg(msg messaging.Message, l
 	return &replicationTask, nil
 }
 
-func (p *replicationTaskProcessor) handleDomainReplicationTask(task *commonproto.ReplicationTask, msg messaging.Message, logger log.Logger) (retError error) {
+func (p *replicationTaskProcessor) handleDomainReplicationTask(task *replication.ReplicationTask, msg messaging.Message, logger log.Logger) (retError error) {
 	p.metricsClient.IncCounter(metrics.DomainReplicationTaskScope, metrics.ReplicatorMessages)
 	sw := p.metricsClient.StartTimer(metrics.DomainReplicationTaskScope, metrics.ReplicatorLatency)
 	defer sw.Stop()
@@ -314,7 +314,7 @@ func (p *replicationTaskProcessor) handleDomainReplicationTask(task *commonproto
 	return nil
 }
 
-func (p *replicationTaskProcessor) handleSyncShardTask(task *commonproto.ReplicationTask, msg messaging.Message, logger log.Logger) (retError error) {
+func (p *replicationTaskProcessor) handleSyncShardTask(task *replication.ReplicationTask, msg messaging.Message, logger log.Logger) (retError error) {
 	p.metricsClient.IncCounter(metrics.SyncShardTaskScope, metrics.ReplicatorMessages)
 	sw := p.metricsClient.StartTimer(metrics.SyncShardTaskScope, metrics.ReplicatorLatency)
 	defer sw.Stop()
@@ -342,7 +342,7 @@ func (p *replicationTaskProcessor) handleSyncShardTask(task *commonproto.Replica
 }
 
 func (p *replicationTaskProcessor) handleActivityTask(
-	task *commonproto.ReplicationTask,
+	task *replication.ReplicationTask,
 	msg messaging.Message,
 	logger log.Logger,
 ) error {
@@ -367,7 +367,7 @@ func (p *replicationTaskProcessor) handleActivityTask(
 }
 
 func (p *replicationTaskProcessor) handleHistoryReplicationTask(
-	task *commonproto.ReplicationTask,
+	task *replication.ReplicationTask,
 	msg messaging.Message,
 	logger log.Logger,
 ) error {
@@ -392,7 +392,7 @@ func (p *replicationTaskProcessor) handleHistoryReplicationTask(
 }
 
 func (p *replicationTaskProcessor) handleHistoryMetadataReplicationTask(
-	task *commonproto.ReplicationTask,
+	task *replication.ReplicationTask,
 	msg messaging.Message,
 	logger log.Logger,
 ) error {
@@ -417,7 +417,7 @@ func (p *replicationTaskProcessor) handleHistoryMetadataReplicationTask(
 }
 
 func (p *replicationTaskProcessor) handleHistoryReplicationV2Task(
-	task *commonproto.ReplicationTask,
+	task *replication.ReplicationTask,
 	msg messaging.Message,
 	logger log.Logger,
 ) error {

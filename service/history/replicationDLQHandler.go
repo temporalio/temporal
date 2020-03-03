@@ -25,9 +25,8 @@ package history
 import (
 	"context"
 
-	commonproto "go.temporal.io/temporal-proto/common"
-
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
@@ -43,7 +42,7 @@ type (
 			lastMessageID int64,
 			pageSize int,
 			pageToken []byte,
-		) ([]*commonproto.ReplicationTask, []byte, error)
+		) ([]*replication.ReplicationTask, []byte, error)
 		purgeMessages(
 			sourceCluster string,
 			lastMessageID int64,
@@ -82,7 +81,7 @@ func (r *replicationDLQHandlerImpl) readMessages(
 	lastMessageID int64,
 	pageSize int,
 	pageToken []byte,
-) ([]*commonproto.ReplicationTask, []byte, error) {
+) ([]*replication.ReplicationTask, []byte, error) {
 
 	tasks, _, token, err := r.readMessagesWithAckLevel(
 		ctx,
@@ -100,7 +99,7 @@ func (r *replicationDLQHandlerImpl) readMessagesWithAckLevel(
 	lastMessageID int64,
 	pageSize int,
 	pageToken []byte,
-) ([]*commonproto.ReplicationTask, int64, []byte, error) {
+) ([]*replication.ReplicationTask, int64, []byte, error) {
 
 	ackLevel := r.shard.GetReplicatorDLQAckLevel(sourceCluster)
 	resp, err := r.shard.GetExecutionManager().GetReplicationTasksFromDLQ(&persistence.GetReplicationTasksFromDLQRequest{
@@ -117,9 +116,9 @@ func (r *replicationDLQHandlerImpl) readMessagesWithAckLevel(
 	}
 
 	remoteAdminClient := r.shard.GetService().GetClientBean().GetRemoteAdminClient(sourceCluster)
-	taskInfo := make([]*commonproto.ReplicationTaskInfo, len(resp.Tasks))
+	taskInfo := make([]*replication.ReplicationTaskInfo, len(resp.Tasks))
 	for _, task := range resp.Tasks {
-		taskInfo = append(taskInfo, &commonproto.ReplicationTaskInfo{
+		taskInfo = append(taskInfo, &replication.ReplicationTaskInfo{
 			DomainId:     primitives.UUIDString(task.DomainID),
 			WorkflowId:   task.GetWorkflowID(),
 			RunId:        primitives.UUIDString(task.GetRunID()),
