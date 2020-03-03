@@ -26,18 +26,17 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/temporalio/temporal/common/persistence/serialization"
-
 	"github.com/pborman/uuid"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/workflowservice"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/persistence/serialization"
 )
 
 func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
@@ -466,8 +465,8 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	}
 
 	serializer := persistence.NewPayloadSerializer()
-	convertBlob := func(blobs []*commonproto.DataBlob) []*shared.HistoryEvent {
-		var events []*shared.HistoryEvent
+	convertBlob := func(blobs []*commonproto.DataBlob) []*commonproto.HistoryEvent {
+		var events []*commonproto.HistoryEvent
 		for _, blob := range blobs {
 			s.True(blob.GetEncodingType() == enums.EncodingTypeThriftRW)
 			blobEvents, err := serializer.DeserializeBatchEvents(&serialization.DataBlob{
@@ -475,7 +474,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 				Data:     blob.Data,
 			})
 			s.NoError(err)
-			events = append(events, blobEvents...)
+			events = append(events, adapter.ToProtoHistoryEvents(blobEvents)...)
 		}
 		return events
 	}
@@ -829,8 +828,8 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 
 	serializer := persistence.NewPayloadSerializer()
 
-	convertBlob := func(blobs []*commonproto.DataBlob) []*shared.HistoryEvent {
-		var events []*shared.HistoryEvent
+	convertBlob := func(blobs []*commonproto.DataBlob) []*commonproto.HistoryEvent {
+		var events []*commonproto.HistoryEvent
 		for _, blob := range blobs {
 			s.True(blob.GetEncodingType() == enums.EncodingTypeThriftRW)
 			blobEvents, err := serializer.DeserializeBatchEvents(&serialization.DataBlob{
@@ -838,7 +837,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 				Data:     blob.Data,
 			})
 			s.NoError(err)
-			events = append(events, blobEvents...)
+			events = append(events, adapter.ToProtoHistoryEvents(blobEvents)...)
 		}
 		return events
 	}

@@ -29,15 +29,16 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/uber-go/tally"
 	"github.com/uber/tchannel-go"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"google.golang.org/grpc"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	adminClient "github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	carchiver "github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
 	"github.com/temporalio/temporal/common/authorization"
@@ -775,8 +776,8 @@ func (c *cadenceImpl) createSystemDomain() error {
 		},
 		Config: &persistence.DomainConfig{
 			Retention:                1,
-			HistoryArchivalStatus:    shared.ArchivalStatusDisabled,
-			VisibilityArchivalStatus: shared.ArchivalStatusDisabled,
+			HistoryArchivalStatus:    *adapter.ToThriftArchivalStatus(enums.ArchivalStatusDisabled),
+			VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(enums.ArchivalStatusDisabled),
 		},
 		ReplicationConfig: &persistence.DomainReplicationConfig{},
 		FailoverVersion:   common.EmptyVersion,
