@@ -34,8 +34,8 @@ import (
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
@@ -215,11 +215,11 @@ func (s *IntegrationBase) registerArchivalDomain() error {
 		},
 		Config: &persistence.DomainConfig{
 			Retention:                0,
-			HistoryArchivalStatus:    workflow.ArchivalStatusEnabled,
+			HistoryArchivalStatus:    *adapter.ToThriftArchivalStatus(enums.ArchivalStatusEnabled),
 			HistoryArchivalURI:       s.testCluster.archiverBase.historyURI,
-			VisibilityArchivalStatus: workflow.ArchivalStatusEnabled,
+			VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(enums.ArchivalStatusEnabled),
 			VisibilityArchivalURI:    s.testCluster.archiverBase.visibilityURI,
-			BadBinaries:              workflow.BadBinaries{Binaries: map[string]*workflow.BadBinaryInfo{}},
+			BadBinaries:              *adapter.ToThriftBadBinaries(&commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}}),
 		},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: currentClusterName,
