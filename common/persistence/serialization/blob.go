@@ -228,22 +228,22 @@ func TimerInfoFromBlob(b []byte, proto string) (*persistenceblobs.TimerInfo, err
 	return result, protoRWDecode(b, proto, result)
 }
 
-func TaskInfoToBlob(info *sqlblobs.TaskInfo) (DataBlob, error) {
-	return thriftRWEncode(info)
+func TaskInfoToBlob(info *persistenceblobs.PersistedTaskInfo) (DataBlob, error) {
+	return protoRWEncode(info)
 }
 
-func TaskInfoFromBlob(b []byte, proto string) (*sqlblobs.TaskInfo, error) {
-	result := &sqlblobs.TaskInfo{}
-	return result, thriftRWDecode(b, proto, result)
+func TaskInfoFromBlob(b []byte, proto string) (*persistenceblobs.PersistedTaskInfo, error) {
+	result := &persistenceblobs.PersistedTaskInfo{}
+	return result, protoRWDecode(b, proto, result)
 }
 
-func TaskListInfoToBlob(info *sqlblobs.TaskListInfo) (DataBlob, error) {
-	return thriftRWEncode(info)
+func TaskListInfoToBlob(info *persistenceblobs.PersistedTaskListInfo) (DataBlob, error) {
+	return protoRWEncode(info)
 }
 
-func TaskListInfoFromBlob(b []byte, proto string) (*sqlblobs.TaskListInfo, error) {
-	result := &sqlblobs.TaskListInfo{}
-	return result, thriftRWDecode(b, proto, result)
+func TaskListInfoFromBlob(b []byte, proto string) (*persistenceblobs.PersistedTaskListInfo, error) {
+	result := &persistenceblobs.PersistedTaskListInfo{}
+	return result, protoRWDecode(b, proto, result)
 }
 
 func TransferTaskInfoToBlob(info *persistenceblobs.TransferTaskInfo) (DataBlob, error) {
