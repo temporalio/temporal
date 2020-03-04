@@ -38,6 +38,7 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
@@ -1363,7 +1364,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 
 	request := &historyservice.ReplicateEventsRequest{
 		Version:         incomingVersion,
-		ReplicationInfo: map[string]*commonproto.ReplicationInfo{},
+		ReplicationInfo: map[string]*replication.ReplicationInfo{},
 		History: &commonproto.History{Events: []*commonproto.HistoryEvent{
 			{Timestamp: time.Now().UnixNano()},
 		}},
@@ -1429,7 +1430,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 
 	request := &historyservice.ReplicateEventsRequest{
 		Version: incomingVersion,
-		ReplicationInfo: map[string]*commonproto.ReplicationInfo{
+		ReplicationInfo: map[string]*replication.ReplicationInfo{
 			prevActiveCluster: {
 				Version:     incomingReplicationInfoLastWriteVersion,
 				LastEventId: incomingReplicationInfoLastEventID,
@@ -1493,7 +1494,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 
 	request := &historyservice.ReplicateEventsRequest{
 		Version: incomingVersion,
-		ReplicationInfo: map[string]*commonproto.ReplicationInfo{
+		ReplicationInfo: map[string]*replication.ReplicationInfo{
 			prevActiveCluster: {
 				Version:     incomingReplicationInfoLastWriteVersion,
 				LastEventId: incomingReplicationInfoLastEventID,
@@ -1531,7 +1532,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 
 	request := &historyservice.ReplicateEventsRequest{
 		Version: incomingVersion,
-		ReplicationInfo: map[string]*commonproto.ReplicationInfo{
+		ReplicationInfo: map[string]*replication.ReplicationInfo{
 			prevActiveCluster: {
 				Version:     incomingReplicationInfoLastWriteVersion,
 				LastEventId: incomingReplicationInfoLastEventID,
@@ -1590,7 +1591,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 
 	request := &historyservice.ReplicateEventsRequest{
 		Version: incomingVersion,
-		ReplicationInfo: map[string]*commonproto.ReplicationInfo{
+		ReplicationInfo: map[string]*replication.ReplicationInfo{
 			prevActiveCluster: {
 				Version:     incomingReplicationInfoLastWriteVersion,
 				LastEventId: incomingReplicationInfoLastEventID,
@@ -1628,7 +1629,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 
 	request := &historyservice.ReplicateEventsRequest{
 		Version: incomingVersion,
-		ReplicationInfo: map[string]*commonproto.ReplicationInfo{
+		ReplicationInfo: map[string]*replication.ReplicationInfo{
 			prevActiveCluster: {
 				Version:     incomingReplicationInfoLastWriteVersion,
 				LastEventId: incomingReplicationInfoLastEventID,
@@ -1675,7 +1676,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 
 	request := &historyservice.ReplicateEventsRequest{
 		Version: incomingVersion,
-		ReplicationInfo: map[string]*commonproto.ReplicationInfo{
+		ReplicationInfo: map[string]*replication.ReplicationInfo{
 			prevActiveCluster: {
 				Version:     incomingReplicationInfoLastWriteVersion,
 				LastEventId: incomingReplicationInfoLastEventID,

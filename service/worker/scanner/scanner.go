@@ -167,7 +167,7 @@ func (s *Scanner) startWorkflow(
 ) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	_, err := client.StartWorkflow(ctx, options, workflowType)
+	_, err := client.ExecuteWorkflow(ctx, options, workflowType)
 	cancel()
 	if err != nil {
 		if _, ok := err.(*serviceerror.WorkflowExecutionAlreadyStarted); ok {

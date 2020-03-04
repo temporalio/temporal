@@ -875,9 +875,6 @@ func (b *historyBuilder) newWorkflowExecutionContinuedAsNewEvent(decisionTaskCom
 	attributes.DecisionTaskCompletedEventId = decisionTaskCompletedEventID
 	attributes.BackoffStartIntervalInSeconds = request.GetBackoffStartIntervalInSeconds()
 	attributes.Initiator = request.Initiator
-	if attributes.Initiator == enums.ContinueAsNewInitiatorNotSet {
-		attributes.Initiator = enums.ContinueAsNewInitiatorDecider
-	}
 	attributes.FailureReason = request.FailureReason
 	attributes.FailureDetails = request.FailureDetails
 	attributes.LastCompletionResult = request.LastCompletionResult
