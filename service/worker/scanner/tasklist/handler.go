@@ -25,8 +25,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/gogo/protobuf/types"
+
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/log/tag"
 	p "github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives/timestamp"
 	"github.com/temporalio/temporal/service/worker/scanner/executor"
 )
 
@@ -55,7 +59,7 @@ const scannerTaskListPrefix = "cadence-sys-scanner"
 //    - Delete the entire batch of tasks
 //    - If the number of tasks retrieved is less than batchSize, there are no more tasks in the task-list
 //      Try deleting the task-list if its idle
-func (s *Scavenger) deleteHandler(key *taskListKey, state *taskListState) handlerStatus {
+func (s *Scavenger) deleteHandler(key *p.TaskListKey, state *taskListState) handlerStatus {
 	var err error
 	var nProcessed, nDeleted int
 
@@ -76,7 +80,7 @@ func (s *Scavenger) deleteHandler(key *taskListKey, state *taskListState) handle
 
 		for _, task := range resp.Tasks {
 			nProcessed++
-			if !s.isTaskExpired(task) {
+			if !IsTaskExpired(task) {
 				return handlerStatusDone
 			}
 		}
@@ -96,11 +100,13 @@ func (s *Scavenger) deleteHandler(key *taskListKey, state *taskListState) handle
 	return handlerStatusDefer
 }
 
-func (s *Scavenger) tryDeleteTaskList(key *taskListKey, state *taskListState) {
+func (s *Scavenger) tryDeleteTaskList(key *p.TaskListKey, state *taskListState) {
 	if strings.HasPrefix(key.Name, scannerTaskListPrefix) {
 		return // avoid deleting our own task list
 	}
-	delta := time.Now().Sub(state.lastUpdated)
+
+	lastUpdated, _ := types.TimestampFromProto(&state.lastUpdated)
+	delta := time.Now().Sub(lastUpdated)
 	if delta < taskListGracePeriod {
 		return
 	}
@@ -117,23 +123,26 @@ func (s *Scavenger) tryDeleteTaskList(key *taskListKey, state *taskListState) {
 		return
 	}
 	atomic.AddInt64(&s.stats.tasklist.nDeleted, 1)
-	s.logger.Info("tasklist deleted", tag.WorkflowDomainID(key.DomainID), tag.WorkflowTaskListName(key.Name), tag.TaskType(key.TaskType))
+	s.logger.Info("tasklist deleted", tag.WorkflowDomainIDBytes(key.DomainID), tag.WorkflowTaskListName(key.Name), tag.TaskType(key.TaskType))
 }
 
-func (s *Scavenger) deleteHandlerLog(key *taskListKey, state *taskListState, nProcessed int, nDeleted int, err error) {
+func (s *Scavenger) deleteHandlerLog(key *p.TaskListKey, state *taskListState, nProcessed int, nDeleted int, err error) {
 	atomic.AddInt64(&s.stats.task.nDeleted, int64(nDeleted))
 	atomic.AddInt64(&s.stats.task.nProcessed, int64(nProcessed))
 	if err != nil {
 		s.logger.Error("scavenger.deleteHandler processed.",
-			tag.Error(err), tag.WorkflowDomainID(key.DomainID), tag.WorkflowTaskListName(key.Name), tag.TaskType(key.TaskType), tag.NumberProcessed(nProcessed), tag.NumberDeleted(nDeleted))
+			tag.Error(err), tag.WorkflowDomainIDBytes(key.DomainID), tag.WorkflowTaskListName(key.Name), tag.TaskType(key.TaskType), tag.NumberProcessed(nProcessed), tag.NumberDeleted(nDeleted))
 		return
 	}
 	if nProcessed > 0 {
 		s.logger.Info("scavenger.deleteHandler processed.",
-			tag.WorkflowDomainID(key.DomainID), tag.WorkflowTaskListName(key.Name), tag.TaskType(key.TaskType), tag.NumberProcessed(nProcessed), tag.NumberDeleted(nDeleted))
+			tag.WorkflowDomainIDBytes(key.DomainID), tag.WorkflowTaskListName(key.Name), tag.TaskType(key.TaskType), tag.NumberProcessed(nProcessed), tag.NumberDeleted(nDeleted))
 	}
 }
 
-func (s *Scavenger) isTaskExpired(t *p.TaskInfo) bool {
-	return t.Expiry.After(epochStartTime) && time.Now().After(t.Expiry)
+func IsTaskExpired(t *persistenceblobs.PersistedTaskInfo) bool {
+	tExpiry := timestamp.TimestampFromProto(t.TaskData.Expiry)
+	tEpoch := timestamp.TimestampEpoch()
+	tNow := timestamp.TimestampNow()
+	return tExpiry.After(tEpoch) && tNow.After(tExpiry)
 }
