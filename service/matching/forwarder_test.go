@@ -22,7 +22,7 @@ package matching
 
 import (
 	"context"
-	"math/rand"
+	"math"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -35,9 +35,12 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservicemock"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
+	"github.com/temporalio/temporal/common/primitives/timestamp"
 )
 
 type ForwarderTestSuite struct {
@@ -72,7 +75,7 @@ func (t *ForwarderTestSuite) TearDownTest() {
 }
 
 func (t *ForwarderTestSuite) TestForwardTaskError() {
-	task := newInternalTask(&persistence.TaskInfo{}, nil, "", false)
+	task := newInternalTask(&persistenceblobs.PersistedTaskInfo{}, nil, "", false)
 	t.Equal(errNoParent, t.fwdr.ForwardTask(context.Background(), task))
 
 	t.usingTasklistPartition(persistence.TaskListTypeActivity)
@@ -90,17 +93,20 @@ func (t *ForwarderTestSuite) TestForwardDecisionTask() {
 		},
 	).Return(&matchingservice.AddDecisionTaskResponse{}, nil).Times(1)
 
-	taskInfo := t.newTaskInfo()
+	taskInfo := randomTaskInfo()
 	task := newInternalTask(taskInfo, nil, "", false)
 	t.NoError(t.fwdr.ForwardTask(context.Background(), task))
 	t.NotNil(request)
 	t.Equal(t.taskList.Parent(20), request.TaskList.GetName())
 	t.Equal(enums.TaskListKind(t.fwdr.taskListKind), request.TaskList.GetKind())
-	t.Equal(taskInfo.DomainID, request.GetDomainUUID())
-	t.Equal(taskInfo.WorkflowID, request.GetExecution().GetWorkflowId())
-	t.Equal(taskInfo.RunID, request.GetExecution().GetRunId())
-	t.Equal(taskInfo.ScheduleID, request.GetScheduleId())
-	t.Equal(taskInfo.ScheduleToStartTimeout, request.GetScheduleToStartTimeoutSeconds())
+	t.Equal(primitives.UUIDString(taskInfo.TaskData.DomainID), request.GetDomainUUID())
+	t.Equal(taskInfo.TaskData.WorkflowID, request.GetExecution().GetWorkflowId())
+	t.Equal(primitives.UUIDString(taskInfo.TaskData.RunID), request.GetExecution().GetRunId())
+	t.Equal(taskInfo.TaskData.ScheduleID, request.GetScheduleId())
+
+	schedToStart := request.GetScheduleToStartTimeoutSeconds()
+	rewritten := int32(math.Ceil(time.Until(*timestamp.TimestampFromProto(taskInfo.TaskData.Expiry).ToTime()).Seconds()))
+	t.Equal(schedToStart, rewritten)
 	t.Equal(t.taskList.name, request.GetForwardedFrom())
 }
 
@@ -114,18 +120,18 @@ func (t *ForwarderTestSuite) TestForwardActivityTask() {
 		},
 	).Return(&matchingservice.AddActivityTaskResponse{}, nil).Times(1)
 
-	taskInfo := t.newTaskInfo()
+	taskInfo := randomTaskInfo()
 	task := newInternalTask(taskInfo, nil, "", false)
 	t.NoError(t.fwdr.ForwardTask(context.Background(), task))
 	t.NotNil(request)
 	t.Equal(t.taskList.Parent(20), request.TaskList.GetName())
 	t.Equal(enums.TaskListKind(t.fwdr.taskListKind), request.TaskList.GetKind())
 	t.Equal(t.taskList.domainID, request.GetDomainUUID())
-	t.Equal(taskInfo.DomainID, request.GetSourceDomainUUID())
-	t.Equal(taskInfo.WorkflowID, request.GetExecution().GetWorkflowId())
-	t.Equal(taskInfo.RunID, request.GetExecution().GetRunId())
-	t.Equal(taskInfo.ScheduleID, request.GetScheduleId())
-	t.Equal(taskInfo.ScheduleToStartTimeout, request.GetScheduleToStartTimeoutSeconds())
+	t.Equal(primitives.UUIDString(taskInfo.TaskData.DomainID), request.GetSourceDomainUUID())
+	t.Equal(taskInfo.TaskData.WorkflowID, request.GetExecution().GetWorkflowId())
+	t.Equal(primitives.UUIDString(taskInfo.TaskData.RunID), request.GetExecution().GetRunId())
+	t.Equal(taskInfo.TaskData.ScheduleID, request.GetScheduleId())
+	t.EqualValues(int(math.Ceil(time.Until(*timestamp.TimestampFromProto(taskInfo.TaskData.Expiry).ToTime()).Seconds())), request.GetScheduleToStartTimeoutSeconds())
 	t.Equal(t.taskList.name, request.GetForwardedFrom())
 }
 
@@ -134,7 +140,7 @@ func (t *ForwarderTestSuite) TestForwardTaskRateExceeded() {
 
 	rps := 2
 	t.client.EXPECT().AddActivityTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddActivityTaskResponse{}, nil).Times(rps)
-	taskInfo := t.newTaskInfo()
+	taskInfo := randomTaskInfo()
 	task := newInternalTask(taskInfo, nil, "", false)
 	for i := 0; i < rps; i++ {
 		t.NoError(t.fwdr.ForwardTask(context.Background(), task))
@@ -333,18 +339,7 @@ func (t *ForwarderTestSuite) TestMaxOutstandingConfigUpdate() {
 	t.Equal(10, cap(t.fwdr.pollReqToken.Load().(*ForwarderReqToken).ch))
 }
 
-func (t *ForwarderTestSuite) usingTasklistPartition(taskType int) {
+func (t *ForwarderTestSuite) usingTasklistPartition(taskType int32) {
 	t.taskList = newTestTaskListID("fwdr", taskListPartitionPrefix+"tl0/1", taskType)
 	t.fwdr.taskListID = t.taskList
-}
-
-func (t *ForwarderTestSuite) newTaskInfo() *persistence.TaskInfo {
-	return &persistence.TaskInfo{
-		DomainID:               uuid.New(),
-		WorkflowID:             uuid.New(),
-		RunID:                  uuid.New(),
-		TaskID:                 rand.Int63(),
-		ScheduleID:             rand.Int63(),
-		ScheduleToStartTimeout: rand.Int31(),
-	}
 }
