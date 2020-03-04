@@ -42,13 +42,10 @@ import (
 	"github.com/gocql/gocql"
 	"github.com/urfave/cli"
 	"go.temporal.io/temporal-proto/enums"
-	"go.uber.org/thriftrw/protocol"
-	"go.uber.org/thriftrw/wire"
 	yaml "gopkg.in/yaml.v2"
 
-	"github.com/temporalio/temporal/.gen/go/indexer"
-	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/indexer"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
@@ -62,7 +59,7 @@ import (
 	"github.com/temporalio/temporal/service/history"
 )
 
-type filterFn func(*replicator.ReplicationTask) bool
+type filterFn func(*replication.ReplicationTask) bool
 type filterFnForVisibility func(*indexer.Message) bool
 
 type kafkaMessageType int
@@ -86,7 +83,7 @@ var (
 
 type writerChannel struct {
 	Type                   kafkaMessageType
-	ReplicationTaskChannel chan *replicator.ReplicationTask
+	ReplicationTaskChannel chan *replication.ReplicationTask
 	VisibilityMsgChannel   chan *indexer.Message
 }
 
@@ -96,7 +93,7 @@ func newWriterChannel(messageType kafkaMessageType) *writerChannel {
 	}
 	switch messageType {
 	case kafkaMessageTypeReplicationTask:
-		ch.ReplicationTaskChannel = make(chan *replicator.ReplicationTask, chanBufferSize)
+		ch.ReplicationTaskChannel = make(chan *replication.ReplicationTask, chanBufferSize)
 	case kafkaMessageTypeVisibilityMsg:
 		ch.VisibilityMsgChannel = make(chan *indexer.Message, chanBufferSize)
 	}
@@ -139,16 +136,16 @@ func AdminKafkaParse(c *cli.Context) {
 }
 
 func buildFilterFn(workflowID, runID string) filterFn {
-	return func(task *replicator.ReplicationTask) bool {
+	return func(task *replication.ReplicationTask) bool {
 		if len(workflowID) != 0 || len(runID) != 0 {
 			if task.GetHistoryTaskAttributes() == nil {
 				return false
 			}
 		}
-		if len(workflowID) != 0 && *task.HistoryTaskAttributes.WorkflowId != workflowID {
+		if len(workflowID) != 0 && task.GetHistoryTaskAttributes().GetWorkflowId() != workflowID {
 			return false
 		}
-		if len(runID) != 0 && *task.HistoryTaskAttributes.RunId != runID {
+		if len(runID) != 0 && task.GetHistoryTaskAttributes().GetRunId() != runID {
 			return false
 		}
 		return true
@@ -293,11 +290,11 @@ Loop:
 				} else {
 					outStr = fmt.Sprintf(
 						"%v, %v, %v, %v, %v",
-						*task.HistoryTaskAttributes.DomainId,
-						*task.HistoryTaskAttributes.WorkflowId,
-						*task.HistoryTaskAttributes.RunId,
-						*task.HistoryTaskAttributes.FirstEventId,
-						*task.HistoryTaskAttributes.NextEventId,
+						task.GetHistoryTaskAttributes().GetDomainId(),
+						task.GetHistoryTaskAttributes().GetWorkflowId(),
+						task.GetHistoryTaskAttributes().GetRunId(),
+						task.GetHistoryTaskAttributes().GetFirstEventId(),
+						task.GetHistoryTaskAttributes().GetNextEventId(),
 					)
 				}
 				_, err = outputFile.WriteString(fmt.Sprintf("%v\n", outStr))
@@ -413,11 +410,11 @@ func getMessages(data []byte, skipErrors bool) ([][]byte, int32) {
 	return rawMessages, skipped
 }
 
-func deserializeMessages(messages [][]byte, skipErrors bool) ([]*replicator.ReplicationTask, int32) {
-	var replicationTasks []*replicator.ReplicationTask
+func deserializeMessages(messages [][]byte, skipErrors bool) ([]*replication.ReplicationTask, int32) {
+	var replicationTasks []*replication.ReplicationTask
 	var skipped int32
 	for _, m := range messages {
-		var task replicator.ReplicationTask
+		var task replication.ReplicationTask
 		err := decode(m, &task)
 		if err != nil {
 			if !skipErrors {
@@ -432,13 +429,8 @@ func deserializeMessages(messages [][]byte, skipErrors bool) ([]*replicator.Repl
 	return replicationTasks, skipped
 }
 
-func decode(message []byte, val *replicator.ReplicationTask) error {
-	reader := bytes.NewReader(message[1:])
-	wireVal, err := protocol.Binary.Decode(reader, wire.TStruct)
-	if err != nil {
-		return err
-	}
-	return val.FromWire(wireVal)
+func decode(message []byte, val *replication.ReplicationTask) error {
+	return val.Unmarshal(message[1:])
 }
 
 func deserializeVisibilityMessages(messages [][]byte, skipErrors bool) ([]*indexer.Message, int32) {
@@ -461,12 +453,7 @@ func deserializeVisibilityMessages(messages [][]byte, skipErrors bool) ([]*index
 }
 
 func decodeVisibility(message []byte, val *indexer.Message) error {
-	reader := bytes.NewReader(message[1:])
-	wireVal, err := protocol.Binary.Decode(reader, wire.TStruct)
-	if err != nil {
-		return err
-	}
-	return val.FromWire(wireVal)
+	return val.Unmarshal(message[1:])
 }
 
 // ClustersConfig describes the kafka clusters
@@ -718,7 +705,7 @@ func AdminMergeDLQ(c *cli.Context) {
 
 	var err error
 	var inFile string
-	var tasks []*replicator.ReplicationTask
+	var tasks []*replication.ReplicationTask
 	if c.IsSet(FlagInputFile) && (c.IsSet(FlagInputCluster) || c.IsSet(FlagInputTopic) || c.IsSet(FlagStartOffset)) {
 		ErrorAndExit("", fmt.Errorf("ONLY Either from JSON file or from DLQ topic"))
 	}
@@ -737,7 +724,7 @@ func AdminMergeDLQ(c *cli.Context) {
 				fmt.Printf("cannot publish task %v to topic \n", idx)
 				ErrorAndExit("", err)
 			} else {
-				fmt.Printf("replication task sent: %v firstID %v, nextID %v \n", idx, t.HistoryTaskAttributes.GetFirstEventId(), t.HistoryTaskAttributes.GetNextEventId())
+				fmt.Printf("replication task sent: %v firstID %v, nextID %v \n", idx, t.GetHistoryTaskAttributes().GetFirstEventId(), t.GetHistoryTaskAttributes().GetNextEventId())
 			}
 		}
 	} else {
@@ -780,7 +767,7 @@ func AdminMergeDLQ(c *cli.Context) {
 					ErrorAndExit("", fmt.Errorf("offset is not correct"))
 					continue
 				} else {
-					var task replicator.ReplicationTask
+					var task replication.ReplicationTask
 					err := decode(msg.Value, &task)
 					if err != nil {
 						ErrorAndExit("failed to deserialize message due to error", err)
@@ -833,7 +820,7 @@ func createConsumerAndWaitForReady(brokers []string, tlsConfig *tls.Config, grou
 	return consumer
 }
 
-func parseReplicationTask(in string) (tasks []*replicator.ReplicationTask, err error) {
+func parseReplicationTask(in string) (tasks []*replication.ReplicationTask, err error) {
 	// This code is executed from the CLI. All user input is from a CLI user.
 	// #nosec
 	file, err := os.Open(in)
@@ -852,7 +839,7 @@ func parseReplicationTask(in string) (tasks []*replicator.ReplicationTask, err e
 			continue
 		}
 
-		t := &replicator.ReplicationTask{}
+		t := &replication.ReplicationTask{}
 		err := json.Unmarshal([]byte(line), t)
 		if err != nil {
 			fmt.Printf("line %v cannot be deserialized to replicaiton task: %v.\n", idx, line)

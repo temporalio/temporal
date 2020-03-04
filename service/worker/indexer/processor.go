@@ -28,9 +28,10 @@ import (
 	"time"
 
 	"github.com/olivere/elastic"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/indexer"
+	"github.com/temporalio/temporal/.gen/proto/indexer"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/definition"
@@ -185,7 +186,7 @@ func (p *indexProcessor) process(kafkaMsg messaging.Message) error {
 
 func (p *indexProcessor) deserialize(payload []byte) (*indexer.Message, error) {
 	var msg indexer.Message
-	if err := p.msgEncoder.Decode(payload, &msg); err != nil {
+	if err := msg.Unmarshal(payload); err != nil {
 		return nil, err
 	}
 	return &msg, nil
@@ -197,7 +198,7 @@ func (p *indexProcessor) addMessageToES(indexMsg *indexer.Message, kafkaMsg mess
 	var keyToKafkaMsg string
 	var req elastic.BulkableRequest
 	switch indexMsg.GetMessageType() {
-	case indexer.MessageTypeIndex:
+	case enums.MessageTypeIndex:
 		keyToKafkaMsg = fmt.Sprintf("%v-%v", kafkaMsg.Partition(), kafkaMsg.Offset())
 		doc := p.generateESDoc(indexMsg, keyToKafkaMsg)
 		req = elastic.NewBulkIndexRequest().
@@ -207,7 +208,7 @@ func (p *indexProcessor) addMessageToES(indexMsg *indexer.Message, kafkaMsg mess
 			VersionType(versionTypeExternal).
 			Version(indexMsg.GetVersion()).
 			Doc(doc)
-	case indexer.MessageTypeDelete:
+	case enums.MessageTypeDelete:
 		keyToKafkaMsg = docID
 		req = elastic.NewBulkDeleteRequest().
 			Index(p.esIndexName).
@@ -252,13 +253,13 @@ func (p *indexProcessor) dumpFieldsToMap(fields map[string]*indexer.Field) map[s
 		}
 
 		switch v.GetType() {
-		case indexer.FieldTypeString:
+		case enums.FieldTypeString:
 			doc[k] = v.GetStringData()
-		case indexer.FieldTypeInt:
+		case enums.FieldTypeInt:
 			doc[k] = v.GetIntData()
-		case indexer.FieldTypeBool:
+		case enums.FieldTypeBool:
 			doc[k] = v.GetBoolData()
-		case indexer.FieldTypeBinary:
+		case enums.FieldTypeBinary:
 			if k == definition.Memo {
 				doc[k] = v.GetBinaryData()
 			} else { // custom search attributes
