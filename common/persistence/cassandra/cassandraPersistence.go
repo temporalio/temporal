@@ -22,6 +22,7 @@ package cassandra
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -724,14 +725,14 @@ workflow_state = ? ` +
 		`and visibility_ts < ?`
 
 	templateCreateTaskQuery = `INSERT INTO tasks (` +
-		`domain_id, task_list_name, task_list_type, type, task_id, task) ` +
-		`VALUES(?, ?, ?, ?, ?, ` + templateTaskType + `)`
+		`domain_id, task_list_name, task_list_type, type, task_id, task, task_encoding) ` +
+		`VALUES(?, ?, ?, ?, ?, ?, ?)`
 
 	templateCreateTaskWithTTLQuery = `INSERT INTO tasks (` +
-		`domain_id, task_list_name, task_list_type, type, task_id, task) ` +
-		`VALUES(?, ?, ?, ?, ?, ` + templateTaskType + `) USING TTL ?`
+		`domain_id, task_list_name, task_list_type, type, task_id, task, task_encoding) ` +
+		`VALUES(?, ?, ?, ?, ?, ?, ?) USING TTL ?`
 
-	templateGetTasksQuery = `SELECT task_id, task ` +
+	templateGetTasksQuery = `SELECT task_id, task, task_encoding ` +
 		`FROM tasks ` +
 		`WHERE domain_id = ? ` +
 		`and task_list_name = ? ` +
@@ -756,7 +757,8 @@ workflow_state = ? ` +
 
 	templateGetTaskList = `SELECT ` +
 		`range_id, ` +
-		`task_list ` +
+		`task_list, ` +
+		`task_list_encoding ` +
 		`FROM tasks ` +
 		`WHERE domain_id = ? ` +
 		`and task_list_name = ? ` +
@@ -771,12 +773,14 @@ workflow_state = ? ` +
 		`type, ` +
 		`task_id, ` +
 		`range_id, ` +
-		`task_list ` +
-		`) VALUES (?, ?, ?, ?, ?, ?, ` + templateTaskListType + `) IF NOT EXISTS`
+		`task_list, ` +
+		`task_list_encoding ` +
+		`) VALUES (?, ?, ?, ?, ?, ?, ?, ?) IF NOT EXISTS`
 
 	templateUpdateTaskListQuery = `UPDATE tasks SET ` +
 		`range_id = ?, ` +
-		`task_list = ` + templateTaskListType + " " +
+		`task_list = ?, ` +
+		`task_list_encoding = ? ` +
 		`WHERE domain_id = ? ` +
 		`and task_list_name = ? ` +
 		`and task_list_type = ? ` +
@@ -791,8 +795,9 @@ workflow_state = ? ` +
 		`type, ` +
 		`task_id, ` +
 		`range_id, ` +
-		`task_list ` +
-		`) VALUES (?, ?, ?, ?, ?, ?, ` + templateTaskListType + `) USING TTL ?`
+		`task_list, ` +
+		`task_list_encoding ` +
+		`) VALUES (?, ?, ?, ?, ?, ?, ?, ?) USING TTL ?`
 
 	templateDeleteTaskListQuery = `DELETE FROM tasks ` +
 		`WHERE domain_id = ? ` +
@@ -2190,32 +2195,48 @@ func (d *cassandraPersistence) LeaseTaskList(request *p.LeaseTaskListRequest) (*
 	if len(request.TaskList) == 0 {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskList requires non empty task list"))
 	}
-	now := time.Now()
+	now := types.TimestampNow()
 	query := d.session.Query(templateGetTaskList,
-		request.DomainID,
+		request.DomainID.Downcast(),
 		request.TaskList,
 		request.TaskType,
 		rowTypeTaskList,
 		taskListTaskID,
 	)
-	var rangeID, ackLevel int64
-	var tlDB map[string]interface{}
-	err := query.Scan(&rangeID, &tlDB)
+	var rangeID int64
+	var tlBytes []byte
+	var tlEncoding string
+	err := query.Scan(&rangeID, &tlBytes, &tlEncoding)
+	var tl *persistenceblobs.PersistedTaskListInfo
 	if err != nil {
 		if err == gocql.ErrNotFound { // First time task list is used
+			tl = &persistenceblobs.PersistedTaskListInfo{
+				ListData: &persistenceblobs.TaskListInfo{
+					DomainID: request.DomainID,
+					Name:     request.TaskList,
+					TaskType: request.TaskType,
+					Kind:     request.TaskListKind,
+					AckLevel: 0,
+				},
+				RangeID:     initialRangeID,
+				Expiry:      nil,
+				LastUpdated: now,
+			}
+			datablob, err := serialization.TaskListInfoToBlob(tl)
+
+			if err != nil {
+				return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskList operation failed during serialization. TaskList: %v, TaskType: %v, Error: %v", request.TaskList, request.TaskType, err))
+			}
+
 			query = d.session.Query(templateInsertTaskListQuery,
-				request.DomainID,
+				request.DomainID.Downcast(),
 				request.TaskList,
 				request.TaskType,
 				rowTypeTaskList,
 				taskListTaskID,
 				initialRangeID,
-				request.DomainID,
-				request.TaskList,
-				request.TaskType,
-				0,
-				request.TaskListKind,
-				now,
+				datablob.Data,
+				datablob.Encoding,
 			)
 		} else if isThrottlingError(err) {
 			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("LeaseTaskList operation failed. TaskList: %v, TaskType: %v, Error: %v", request.TaskList, request.TaskType, err))
@@ -2223,6 +2244,11 @@ func (d *cassandraPersistence) LeaseTaskList(request *p.LeaseTaskListRequest) (*
 			return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskList operation failed. TaskList: %v, TaskType: %v, Error: %v", request.TaskList, request.TaskType, err))
 		}
 	} else {
+		tl, err = serialization.TaskListInfoFromBlob(tlBytes, tlEncoding)
+		if err != nil {
+			return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskList operation failed during serialization. TaskList: %v, TaskType: %v, Error: %v", request.TaskList, request.TaskType, err))
+		}
+
 		// if request.RangeID is > 0, we are trying to renew an already existing
 		// lease on the task list. If request.RangeID=0, we are trying to steal
 		// the tasklist from its current owner
@@ -2232,17 +2258,23 @@ func (d *cassandraPersistence) LeaseTaskList(request *p.LeaseTaskListRequest) (*
 					request.TaskList, request.TaskType, request.RangeID, rangeID),
 			}
 		}
-		ackLevel = tlDB["ack_level"].(int64)
-		taskListKind := tlDB["kind"].(int)
+
+		tl = &persistenceblobs.PersistedTaskListInfo{
+			ListData:    tl.ListData,
+			Expiry:      tl.Expiry,
+			LastUpdated: now,
+			RangeID:     rangeID + 1,
+		}
+
+		datablob, err := serialization.TaskListInfoToBlob(tl)
+		if err != nil {
+			return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskList operation failed during serialization. TaskList: %v, TaskType: %v, Error: %v", request.TaskList, request.TaskType, err))
+		}
 		query = d.session.Query(templateUpdateTaskListQuery,
 			rangeID+1,
-			request.DomainID,
-			&request.TaskList,
-			request.TaskType,
-			ackLevel,
-			taskListKind,
-			now,
-			request.DomainID,
+			datablob.Data,
+			datablob.Encoding,
+			request.DomainID.Downcast(),
 			&request.TaskList,
 			request.TaskType,
 			rowTypeTaskList,
@@ -2265,62 +2297,65 @@ func (d *cassandraPersistence) LeaseTaskList(request *p.LeaseTaskListRequest) (*
 				request.TaskList, request.TaskType, rangeID, previousRangeID),
 		}
 	}
-	tli := &p.TaskListInfo{
-		DomainID:    request.DomainID,
-		Name:        request.TaskList,
-		TaskType:    request.TaskType,
-		RangeID:     rangeID + 1,
-		AckLevel:    ackLevel,
-		Kind:        request.TaskListKind,
-		LastUpdated: now,
-	}
-	return &p.LeaseTaskListResponse{TaskListInfo: tli}, nil
+
+	return &p.LeaseTaskListResponse{TaskListInfo: tl}, nil
 }
 
 // From TaskManager interface
 func (d *cassandraPersistence) UpdateTaskList(request *p.UpdateTaskListRequest) (*p.UpdateTaskListResponse, error) {
 	tli := request.TaskListInfo
-
+	now := types.TimestampNow()
 	if tli.Kind == p.TaskListKindSticky { // if task_list is sticky, then update with TTL
+		expiry := types.TimestampNow()
+		expiry.Seconds += int64(stickyTaskListTTL)
+
+		datablob, err := serialization.TaskListInfoToBlob(&persistenceblobs.PersistedTaskListInfo{
+			ListData:    request.TaskListInfo,
+			Expiry:      expiry,
+			LastUpdated: now,
+		})
+		if err != nil {
+			return nil, convertCommonErrors("UpdateTaskList", err)
+		}
+
 		query := d.session.Query(templateUpdateTaskListQueryWithTTL,
 			tli.DomainID,
 			&tli.Name,
 			tli.TaskType,
 			rowTypeTaskList,
 			taskListTaskID,
-			tli.RangeID,
-			tli.DomainID,
-			&tli.Name,
-			tli.TaskType,
-			tli.AckLevel,
-			tli.Kind,
-			time.Now(),
+			request.RangeID,
+			datablob.Data,
+			datablob.Encoding,
 			stickyTaskListTTL,
 		)
-		err := query.Exec()
+		err = query.Exec()
 		if err != nil {
-			if isThrottlingError(err) {
-				return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("UpdateTaskList operation failed. Error: %v", err))
-			}
-			return nil, serviceerror.NewInternal(fmt.Sprintf("UpdateTaskList operation failed. Error: %v", err))
+			return nil, convertCommonErrors("UpdateTaskList", err)
 		}
+
 		return &p.UpdateTaskListResponse{}, nil
 	}
 
+	datablob, err := serialization.TaskListInfoToBlob(&persistenceblobs.PersistedTaskListInfo{
+		ListData:    request.TaskListInfo,
+		Expiry:      nil,
+		LastUpdated: now,
+	})
+	if err != nil {
+		return nil, convertCommonErrors("UpdateTaskList", err)
+	}
+
 	query := d.session.Query(templateUpdateTaskListQuery,
-		tli.RangeID,
-		tli.DomainID,
-		&tli.Name,
-		tli.TaskType,
-		tli.AckLevel,
-		tli.Kind,
-		time.Now(),
+		request.RangeID,
+		datablob.Data,
+		datablob.Encoding,
 		tli.DomainID,
 		&tli.Name,
 		tli.TaskType,
 		rowTypeTaskList,
 		taskListTaskID,
-		tli.RangeID,
+		request.RangeID,
 	)
 
 	previous := make(map[string]interface{})
@@ -2340,7 +2375,7 @@ func (d *cassandraPersistence) UpdateTaskList(request *p.UpdateTaskListRequest) 
 
 		return nil, &p.ConditionFailedError{
 			Msg: fmt.Sprintf("Failed to update task list. name: %v, type: %v, rangeID: %v, columns: (%v)",
-				tli.Name, tli.TaskType, tli.RangeID, strings.Join(columns, ",")),
+				tli.Name, tli.TaskType, request.RangeID, strings.Join(columns, ",")),
 		}
 	}
 
@@ -2353,7 +2388,7 @@ func (d *cassandraPersistence) ListTaskList(request *p.ListTaskListRequest) (*p.
 
 func (d *cassandraPersistence) DeleteTaskList(request *p.DeleteTaskListRequest) error {
 	query := d.session.Query(templateDeleteTaskListQuery,
-		request.DomainID, request.TaskListName, request.TaskListType, rowTypeTaskList, taskListTaskID, request.RangeID)
+		request.TaskList.DomainID.Downcast(), request.TaskList.Name, request.TaskList.TaskType, rowTypeTaskList, taskListTaskID, request.RangeID)
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
@@ -2370,19 +2405,29 @@ func (d *cassandraPersistence) DeleteTaskList(request *p.DeleteTaskListRequest) 
 	return nil
 }
 
+func MintPersistedTaskInfo(taskID *int64, info *persistenceblobs.TaskInfo) *persistenceblobs.PersistedTaskInfo {
+	return &persistenceblobs.PersistedTaskInfo{
+		TaskData: info,
+		TaskID:   *taskID,
+	}
+}
+
 // From TaskManager interface
 func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.CreateTasksResponse, error) {
 	batch := d.session.NewBatch(gocql.LoggedBatch)
-	domainID := request.TaskListInfo.DomainID
-	taskList := request.TaskListInfo.Name
-	taskListType := request.TaskListInfo.TaskType
-	taskListKind := request.TaskListInfo.Kind
-	ackLevel := request.TaskListInfo.AckLevel
-	cqlNowTimestamp := p.UnixNanoToDBTimestamp(time.Now().UnixNano())
+	domainID := request.TaskListInfo.ListData.DomainID
+	taskList := request.TaskListInfo.ListData.Name
+	taskListType := request.TaskListInfo.ListData.TaskType
+	now := *types.TimestampNow()
 
 	for _, task := range request.Tasks {
-		scheduleID := task.Data.ScheduleID
-		ttl := int64(task.Data.ScheduleToStartTimeout)
+		ttl := GetTaskTTL(task.Data)
+		taskToPersist := MintPersistedTaskInfo(&task.TaskID, task.Data)
+		datablob, err := serialization.TaskInfoToBlob(taskToPersist)
+		if err != nil {
+			return nil, serviceerror.NewInternal(fmt.Sprintf("CreateTasks operation failed during serialization. Error : %v", err))
+		}
+
 		if ttl <= 0 {
 			batch.Query(templateCreateTaskQuery,
 				domainID,
@@ -2390,39 +2435,37 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 				taskListType,
 				rowTypeTask,
 				task.TaskID,
-				domainID,
-				task.Execution.GetWorkflowId(),
-				task.Execution.GetRunId(),
-				scheduleID,
-				cqlNowTimestamp)
+				datablob.Data,
+				datablob.Encoding)
 		} else {
 			if ttl > maxCassandraTTL {
 				ttl = maxCassandraTTL
 			}
+
 			batch.Query(templateCreateTaskWithTTLQuery,
 				domainID,
 				taskList,
 				taskListType,
 				rowTypeTask,
 				task.TaskID,
-				domainID,
-				task.Execution.GetWorkflowId(),
-				task.Execution.GetRunId(),
-				scheduleID,
-				cqlNowTimestamp,
+				datablob.Data,
+				datablob.Encoding,
 				ttl)
 		}
+	}
+
+	request.TaskListInfo.LastUpdated = &now
+	datablob, err := serialization.TaskListInfoToBlob(request.TaskListInfo)
+
+	if err != nil {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("CreateTasks operation failed during serialization. Error : %v", err))
 	}
 
 	// The following query is used to ensure that range_id didn't change
 	batch.Query(templateUpdateTaskListQuery,
 		request.TaskListInfo.RangeID,
-		domainID,
-		taskList,
-		taskListType,
-		ackLevel,
-		taskListKind,
-		time.Now(),
+		datablob.Data,
+		datablob.Encoding,
 		domainID,
 		taskList,
 		taskListType,
@@ -2450,6 +2493,18 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 	return &p.CreateTasksResponse{}, nil
 }
 
+func GetTaskTTL(task *persistenceblobs.TaskInfo) int64 {
+	var ttl int64 = 0
+	if task.Expiry != nil {
+		// Ignoring error since err is just validating 0 < yyyy < 1000 and nanos < 1e9
+		// and we'd have checked this upstream
+		expiryGo, _ := types.TimestampFromProto(task.Expiry)
+		expiryTtl := int64(math.Ceil(expiryGo.Sub(time.Now()).Seconds()))
+		ttl = expiryTtl
+	}
+	return ttl
+}
+
 // From TaskManager interface
 func (d *cassandraPersistence) GetTasks(request *p.GetTasksRequest) (*p.GetTasksResponse, error) {
 	if request.MaxReadLevel == nil {
@@ -2461,7 +2516,7 @@ func (d *cassandraPersistence) GetTasks(request *p.GetTasksRequest) (*p.GetTasks
 
 	// Reading tasklist tasks need to be quorum level consistent, otherwise we could loose task
 	query := d.session.Query(templateGetTasksQuery,
-		request.DomainID,
+		request.DomainID.Downcast(),
 		request.TaskList,
 		request.TaskType,
 		rowTypeTask,
@@ -2478,12 +2533,37 @@ func (d *cassandraPersistence) GetTasks(request *p.GetTasksRequest) (*p.GetTasks
 	task := make(map[string]interface{})
 PopulateTasks:
 	for iter.MapScan(task) {
-		taskID, ok := task["task_id"]
+		_, ok := task["task_id"]
 		if !ok { // no tasks, but static column record returned
 			continue
 		}
-		t := createTaskInfo(task["task"].(map[string]interface{}))
-		t.TaskID = taskID.(int64)
+
+		rawTask, ok := task["task"]
+		if !ok {
+			return nil, newFieldNotFoundError("task", task)
+		}
+		taskVal, ok := rawTask.([]byte)
+		if !ok {
+			var byteSliceType []byte
+			return nil, newPersistedTypeMismatchError("task", byteSliceType, rawTask, task)
+
+		}
+
+		rawEncoding, ok := task["task_encoding"]
+		if !ok {
+			return nil, newFieldNotFoundError("task_encoding", task)
+		}
+		encodingVal, ok := rawEncoding.(string)
+		if !ok {
+			var byteSliceType []byte
+			return nil, newPersistedTypeMismatchError("task_encoding", byteSliceType, rawEncoding, task)
+		}
+
+		t, err := serialization.TaskInfoFromBlob(taskVal, encodingVal)
+		if err != nil {
+			return nil, convertCommonErrors("GetTasks", err)
+		}
+
 		response.Tasks = append(response.Tasks, t)
 		if len(response.Tasks) == request.BatchSize {
 			break PopulateTasks
@@ -2502,7 +2582,7 @@ PopulateTasks:
 func (d *cassandraPersistence) CompleteTask(request *p.CompleteTaskRequest) error {
 	tli := request.TaskList
 	query := d.session.Query(templateCompleteTaskQuery,
-		tli.DomainID,
+		tli.DomainID.Downcast(),
 		tli.Name,
 		tli.TaskType,
 		rowTypeTask,
@@ -2524,7 +2604,7 @@ func (d *cassandraPersistence) CompleteTask(request *p.CompleteTaskRequest) erro
 // be returned to the caller
 func (d *cassandraPersistence) CompleteTasksLessThan(request *p.CompleteTasksLessThanRequest) (int, error) {
 	query := d.session.Query(templateCompleteTasksLessThanQuery,
-		request.DomainID, request.TaskListName, request.TaskType, rowTypeTask, request.TaskID)
+		request.DomainID.Downcast(), request.TaskListName, request.TaskType, rowTypeTask, request.TaskID)
 	err := query.Exec()
 	if err != nil {
 		if isThrottlingError(err) {
