@@ -126,7 +126,7 @@
           "maximumIntervalInSeconds": 100,
           "maximumAttempts": 0,
           "nonRetriableErrorReasons": [
-            "cadenceInternal:Panic",
+            "temporalInternal:Panic",
             "upload non-retriable error"
           ],
           "expirationIntervalInSeconds": 300
@@ -287,7 +287,7 @@
           "maximumIntervalInSeconds": 100,
           "maximumAttempts": 0,
           "nonRetriableErrorReasons": [
-            "cadenceInternal:Panic",
+            "temporalInternal:Panic",
             "upload non-retriable error"
           ],
           "expirationIntervalInSeconds": 300
@@ -472,7 +472,7 @@
           "maximumIntervalInSeconds": 100,
           "maximumAttempts": 0,
           "nonRetriableErrorReasons": [
-            "cadenceInternal:Panic",
+            "temporalInternal:Panic",
             "upload non-retriable error"
           ],
           "expirationIntervalInSeconds": 300
@@ -506,7 +506,7 @@
           "maximumIntervalInSeconds": 100,
           "maximumAttempts": 0,
           "nonRetriableErrorReasons": [
-            "cadenceInternal:Panic",
+            "temporalInternal:Panic",
             "upload non-retriable error"
           ],
           "expirationIntervalInSeconds": 300
@@ -540,7 +540,7 @@
           "maximumIntervalInSeconds": 100,
           "maximumAttempts": 0,
           "nonRetriableErrorReasons": [
-            "cadenceInternal:Panic",
+            "temporalInternal:Panic",
             "upload non-retriable error"
           ],
           "expirationIntervalInSeconds": 300
@@ -775,7 +775,7 @@
           "maximumIntervalInSeconds": 100,
           "maximumAttempts": 0,
           "nonRetriableErrorReasons": [
-            "cadenceInternal:Panic",
+            "temporalInternal:Panic",
             "upload non-retriable error"
           ],
           "expirationIntervalInSeconds": 300
@@ -936,7 +936,7 @@
           "maximumIntervalInSeconds": 100,
           "maximumAttempts": 0,
           "nonRetriableErrorReasons": [
-            "cadenceInternal:Panic",
+            "temporalInternal:Panic",
             "upload non-retriable error"
           ],
           "expirationIntervalInSeconds": 300
@@ -1097,7 +1097,7 @@
           "maximumIntervalInSeconds": 100,
           "maximumAttempts": 0,
           "nonRetriableErrorReasons": [
-            "cadenceInternal:Panic",
+            "temporalInternal:Panic",
             "upload non-retriable error"
           ],
           "expirationIntervalInSeconds": 300
@@ -1258,7 +1258,7 @@
           "maximumIntervalInSeconds": 100,
           "maximumAttempts": 0,
           "nonRetriableErrorReasons": [
-            "cadenceInternal:Panic",
+            "temporalInternal:Panic",
             "upload non-retriable error"
           ],
           "expirationIntervalInSeconds": 300
@@ -1419,7 +1419,7 @@
           "maximumIntervalInSeconds": 100,
           "maximumAttempts": 0,
           "nonRetriableErrorReasons": [
-            "cadenceInternal:Panic",
+            "temporalInternal:Panic",
             "upload non-retriable error"
           ],
           "expirationIntervalInSeconds": 300
@@ -1580,7 +1580,7 @@
           "maximumIntervalInSeconds": 100,
           "maximumAttempts": 0,
           "nonRetriableErrorReasons": [
-            "cadenceInternal:Panic",
+            "temporalInternal:Panic",
             "upload non-retriable error"
           ],
           "expirationIntervalInSeconds": 300
