@@ -129,24 +129,6 @@ CREATE TYPE child_execution_info (
   parent_close_policy       int,
 );
 
--- Activity or workflow task in a task list
-CREATE TYPE task (
-  domain_id        uuid,
-  workflow_id      text,
-  run_id           uuid,
-  schedule_id      bigint,
-  created_time     timestamp
-);
-
-CREATE TYPE task_list (
-  domain_id        uuid,
-  name             text,
-  type             int, -- enum TaskRowType {ActivityTask, DecisionTask}
-  ack_level        bigint, -- task_id of the last acknowledged message
-  kind             int, -- enum TaskListKind {Normal, Sticky}
-  last_updated     timestamp
-);
-
 CREATE TYPE domain (
   id          uuid,
   name        text,
@@ -268,14 +250,16 @@ CREATE TABLE history_tree (
 
 -- Stores activity or workflow tasks
 CREATE TABLE tasks (
-  domain_id        uuid,
-  task_list_name   text,
-  task_list_type   int, -- enum TaskListType {ActivityTask, DecisionTask}
-  type             int, -- enum rowType {Task, TaskList}
-  task_id          bigint,  -- unique identifier for tasks, monotonically increasing
-  range_id         bigint, -- Used to ensure that only one process can write to the table
-  task             frozen<task>,
-  task_list        frozen<task_list>,
+  domain_id          uuid,
+  task_list_name     text,
+  task_list_type     int, -- enum TaskListType {ActivityTask, DecisionTask}
+  type               int, -- enum rowType {Task, TaskList}
+  task_id            bigint,  -- unique identifier for tasks, monotonically increasing
+  range_id           bigint, -- Used to ensure that only one process can write to the table
+  task               blob,
+  task_encoding      text,
+  task_list          blob,
+  task_list_encoding text,
   PRIMARY KEY ((domain_id, task_list_name, task_list_type), type, task_id)
 ) WITH COMPACTION = {
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
