@@ -252,7 +252,8 @@ func (e *matchingEngineImpl) AddDecisionTask(ctx context.Context, addRequest *ma
 // AddActivityTask either delivers task directly to waiting poller or save it into task list persistence.
 func (e *matchingEngineImpl) AddActivityTask(ctx context.Context, addRequest *matchingservice.AddActivityTaskRequest) (bool, error) {
 	domainID := addRequest.GetDomainUUID()
-	sourceDomainID := addRequest.GetSourceDomainUUID()
+	sourceDomainID := primitives.MustParseUUID(addRequest.GetSourceDomainUUID())
+	runID := primitives.MustParseUUID(addRequest.Execution.GetRunId())
 	taskListName := addRequest.TaskList.GetName()
 	taskListKind := addRequest.TaskList.GetKind()
 
