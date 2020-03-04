@@ -30,8 +30,8 @@ import (
 
 	"go.temporal.io/temporal-proto/enums"
 
-	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/collection"
 )
@@ -84,13 +84,13 @@ func AdminGetDLQMessages(c *cli.Context) {
 			ErrorAndExit(fmt.Sprintf("fail to read dlq message. Last read message id: %v", lastReadMessageID), err)
 		}
 
-		task := item.(*replicator.ReplicationTask)
+		task := item.(*replication.ReplicationTask)
 		taskStr, err := json.MarshalIndent(task, "", " ")
 		if err != nil {
 			ErrorAndExit(fmt.Sprintf("fail to encode dlq message. Last read message id: %v", lastReadMessageID), err)
 		}
 
-		lastReadMessageID = int(*task.SourceTaskId)
+		lastReadMessageID = int(task.SourceTaskId)
 		remainingMessageCount--
 		_, err = outputFile.WriteString(fmt.Sprintf("%v\n", string(taskStr)))
 		if err != nil {

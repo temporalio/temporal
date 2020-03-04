@@ -36,10 +36,11 @@ import (
 	"github.com/cch123/elasticsql"
 	"github.com/olivere/elastic"
 	"github.com/valyala/fastjson"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/indexer"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/indexer"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
 	es "github.com/temporalio/temporal/common/elasticsearch"
@@ -887,26 +888,26 @@ func getVisibilityMessage(domainID string, wid, rid string, workflowTypeName str
 	startTimeUnixNano, executionTimeUnixNano int64, taskID int64, memo []byte, encoding common.EncodingType,
 	searchAttributes map[string][]byte) *indexer.Message {
 
-	msgType := indexer.MessageTypeIndex
+	msgType := enums.MessageTypeIndex
 	fields := map[string]*indexer.Field{
-		es.WorkflowType:  {Type: &es.FieldTypeString, StringData: common.StringPtr(workflowTypeName)},
-		es.StartTime:     {Type: &es.FieldTypeInt, IntData: common.Int64Ptr(startTimeUnixNano)},
-		es.ExecutionTime: {Type: &es.FieldTypeInt, IntData: common.Int64Ptr(executionTimeUnixNano)},
+		es.WorkflowType:  {Type: es.FieldTypeString, StringData: workflowTypeName},
+		es.StartTime:     {Type: es.FieldTypeInt, IntData: startTimeUnixNano},
+		es.ExecutionTime: {Type: es.FieldTypeInt, IntData: executionTimeUnixNano},
 	}
 	if len(memo) != 0 {
-		fields[es.Memo] = &indexer.Field{Type: &es.FieldTypeBinary, BinaryData: memo}
-		fields[es.Encoding] = &indexer.Field{Type: &es.FieldTypeString, StringData: common.StringPtr(string(encoding))}
+		fields[es.Memo] = &indexer.Field{Type: es.FieldTypeBinary, BinaryData: memo}
+		fields[es.Encoding] = &indexer.Field{Type: es.FieldTypeString, StringData: string(encoding)}
 	}
 	for k, v := range searchAttributes {
-		fields[k] = &indexer.Field{Type: &es.FieldTypeBinary, BinaryData: v}
+		fields[k] = &indexer.Field{Type: es.FieldTypeBinary, BinaryData: v}
 	}
 
 	msg := &indexer.Message{
-		MessageType: &msgType,
-		DomainID:    common.StringPtr(domainID),
-		WorkflowID:  common.StringPtr(wid),
-		RunID:       common.StringPtr(rid),
-		Version:     common.Int64Ptr(taskID),
+		MessageType: msgType,
+		DomainID:    domainID,
+		WorkflowID:  wid,
+		RunID:       rid,
+		Version:     taskID,
 		Fields:      fields,
 	}
 	return msg
@@ -917,42 +918,42 @@ func getVisibilityMessageForCloseExecution(domainID string, wid, rid string, wor
 	historyLength int64, taskID int64, memo []byte, encoding common.EncodingType,
 	searchAttributes map[string][]byte) *indexer.Message {
 
-	msgType := indexer.MessageTypeIndex
+	msgType := enums.MessageTypeIndex
 	fields := map[string]*indexer.Field{
-		es.WorkflowType:  {Type: &es.FieldTypeString, StringData: common.StringPtr(workflowTypeName)},
-		es.StartTime:     {Type: &es.FieldTypeInt, IntData: common.Int64Ptr(startTimeUnixNano)},
-		es.ExecutionTime: {Type: &es.FieldTypeInt, IntData: common.Int64Ptr(executionTimeUnixNano)},
-		es.CloseTime:     {Type: &es.FieldTypeInt, IntData: common.Int64Ptr(endTimeUnixNano)},
-		es.CloseStatus:   {Type: &es.FieldTypeInt, IntData: common.Int64Ptr(int64(closeStatus))},
-		es.HistoryLength: {Type: &es.FieldTypeInt, IntData: common.Int64Ptr(historyLength)},
+		es.WorkflowType:  {Type: es.FieldTypeString, StringData: workflowTypeName},
+		es.StartTime:     {Type: es.FieldTypeInt, IntData: startTimeUnixNano},
+		es.ExecutionTime: {Type: es.FieldTypeInt, IntData: executionTimeUnixNano},
+		es.CloseTime:     {Type: es.FieldTypeInt, IntData: endTimeUnixNano},
+		es.CloseStatus:   {Type: es.FieldTypeInt, IntData: int64(closeStatus)},
+		es.HistoryLength: {Type: es.FieldTypeInt, IntData: historyLength},
 	}
 	if len(memo) != 0 {
-		fields[es.Memo] = &indexer.Field{Type: &es.FieldTypeBinary, BinaryData: memo}
-		fields[es.Encoding] = &indexer.Field{Type: &es.FieldTypeString, StringData: common.StringPtr(string(encoding))}
+		fields[es.Memo] = &indexer.Field{Type: es.FieldTypeBinary, BinaryData: memo}
+		fields[es.Encoding] = &indexer.Field{Type: es.FieldTypeString, StringData: string(encoding)}
 	}
 	for k, v := range searchAttributes {
-		fields[k] = &indexer.Field{Type: &es.FieldTypeBinary, BinaryData: v}
+		fields[k] = &indexer.Field{Type: es.FieldTypeBinary, BinaryData: v}
 	}
 
 	msg := &indexer.Message{
-		MessageType: &msgType,
-		DomainID:    common.StringPtr(domainID),
-		WorkflowID:  common.StringPtr(wid),
-		RunID:       common.StringPtr(rid),
-		Version:     common.Int64Ptr(taskID),
+		MessageType: msgType,
+		DomainID:    domainID,
+		WorkflowID:  wid,
+		RunID:       rid,
+		Version:     taskID,
 		Fields:      fields,
 	}
 	return msg
 }
 
 func getVisibilityMessageForDeletion(domainID, workflowID, runID string, docVersion int64) *indexer.Message {
-	msgType := indexer.MessageTypeDelete
+	msgType := enums.MessageTypeDelete
 	msg := &indexer.Message{
-		MessageType: &msgType,
-		DomainID:    common.StringPtr(domainID),
-		WorkflowID:  common.StringPtr(workflowID),
-		RunID:       common.StringPtr(runID),
-		Version:     common.Int64Ptr(docVersion),
+		MessageType: msgType,
+		DomainID:    domainID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+		Version:     docVersion,
 	}
 	return msg
 }

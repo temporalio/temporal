@@ -34,8 +34,9 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"github.com/olivere/elastic"
 	"github.com/urfave/cli"
+	"go.temporal.io/temporal-proto/enums"
 
-	"github.com/temporalio/temporal/.gen/go/indexer"
+	"github.com/temporalio/temporal/.gen/proto/indexer"
 	"github.com/temporalio/temporal/common/clock"
 	es "github.com/temporalio/temporal/common/elasticsearch"
 	"github.com/temporalio/temporal/common/elasticsearch/esql"
@@ -147,7 +148,7 @@ func AdminIndex(c *cli.Context) {
 		docID := message.GetWorkflowID() + esDocIDDelimiter + message.GetRunID()
 		var req elastic.BulkableRequest
 		switch message.GetMessageType() {
-		case indexer.MessageTypeIndex:
+		case enums.MessageTypeIndex:
 			doc := generateESDoc(message)
 			req = elastic.NewBulkIndexRequest().
 				Index(indexName).
@@ -156,7 +157,7 @@ func AdminIndex(c *cli.Context) {
 				VersionType(versionTypeExternal).
 				Version(message.GetVersion()).
 				Doc(doc)
-		case indexer.MessageTypeDelete:
+		case enums.MessageTypeDelete:
 			req = elastic.NewBulkDeleteRequest().
 				Index(indexName).
 				Type(esDocType).
@@ -275,13 +276,13 @@ func generateESDoc(msg *indexer.Message) map[string]interface{} {
 
 	for k, v := range msg.Fields {
 		switch v.GetType() {
-		case indexer.FieldTypeString:
+		case enums.FieldTypeString:
 			doc[k] = v.GetStringData()
-		case indexer.FieldTypeInt:
+		case enums.FieldTypeInt:
 			doc[k] = v.GetIntData()
-		case indexer.FieldTypeBool:
+		case enums.FieldTypeBool:
 			doc[k] = v.GetBoolData()
-		case indexer.FieldTypeBinary:
+		case enums.FieldTypeBinary:
 			doc[k] = v.GetBinaryData()
 		default:
 			ErrorAndExit("Unknown field type", nil)

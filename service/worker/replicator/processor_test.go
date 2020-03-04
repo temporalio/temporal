@@ -29,18 +29,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 
-	"github.com/temporalio/temporal/.gen/go/replicator"
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
 	"github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/domain"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
@@ -68,7 +64,6 @@ type (
 		config         *Config
 		logger         log.Logger
 		metricsClient  metrics.Client
-		msgEncoder     codec.BinaryEncoder
 
 		mockMsg                           *messageMocks.Message
 		mockDomainReplicationTaskExecutor *domain.MockReplicationTaskExecutor
@@ -123,7 +118,6 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 		ReplicationTaskContextTimeout: dynamicconfig.GetDurationPropertyFn(30 * time.Second),
 	}
 	s.metricsClient = metrics.NewClient(tally.NoopScope, metrics.Worker)
-	s.msgEncoder = codec.NewThriftRWEncoder()
 
 	s.mockMsg = &messageMocks.Message{}
 	s.mockMsg.On("Partition").Return(int32(0))
@@ -169,11 +163,11 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_Domain_Success() 
 		DomainOperation: enums.DomainOperationUpdate,
 		Id:              "some random domain ID",
 	}
-	replicationTask := &replicator.ReplicationTask{
-		TaskType:             replicator.ReplicationTaskTypeDomain.Ptr(),
-		DomainTaskAttributes: adapter.ToThriftDomainTaskAttributes(replicationAttr),
+	replicationTask := &replication.ReplicationTask{
+		TaskType:   enums.ReplicationTaskTypeDomain,
+		Attributes: &replication.ReplicationTask_DomainTaskAttributes{DomainTaskAttributes: replicationAttr},
 	}
-	replicationTaskBinary, err := s.msgEncoder.Encode(replicationTask)
+	replicationTaskBinary, err := replicationTask.Marshal()
 	s.Nil(err)
 	s.mockMsg.On("Value").Return(replicationTaskBinary)
 	s.mockDomainReplicationTaskExecutor.EXPECT().Execute(replicationAttr).Return(nil).Times(1)
@@ -187,11 +181,11 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_Domain_FailedThen
 		DomainOperation: enums.DomainOperationUpdate,
 		Id:              "some random domain ID",
 	}
-	replicationTask := &replicator.ReplicationTask{
-		TaskType:             replicator.ReplicationTaskTypeDomain.Ptr(),
-		DomainTaskAttributes: adapter.ToThriftDomainTaskAttributes(replicationAttr),
+	replicationTask := &replication.ReplicationTask{
+		TaskType:   enums.ReplicationTaskTypeDomain,
+		Attributes: &replication.ReplicationTask_DomainTaskAttributes{DomainTaskAttributes: replicationAttr},
 	}
-	replicationTaskBinary, err := s.msgEncoder.Encode(replicationTask)
+	replicationTaskBinary, err := replicationTask.Marshal()
 	s.Nil(err)
 	s.mockMsg.On("Value").Return(replicationTaskBinary)
 	s.mockDomainReplicationTaskExecutor.EXPECT().Execute(replicationAttr).Return(errors.New("some random error")).Times(1)
@@ -211,7 +205,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_Success
 		TaskType:   enums.ReplicationTaskTypeSyncShardStatus,
 		Attributes: &replication.ReplicationTask_SyncShardStatusTaskAttributes{SyncShardStatusTaskAttributes: replicationAttr},
 	}
-	replicationTaskBinary, err := s.msgEncoder.Encode(adapter.ToThriftReplicationTask(replicationTask))
+	replicationTaskBinary, err := replicationTask.Marshal()
 	s.Nil(err)
 	s.mockMsg.On("Value").Return(replicationTaskBinary)
 	s.mockHistoryClient.EXPECT().SyncShardStatus(
@@ -228,16 +222,16 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_Success
 }
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_Success_Overdue() {
-	replicationAttr := &replicator.SyncShardStatusTaskAttributes{
-		SourceCluster: common.StringPtr("some random source cluster"),
-		ShardId:       common.Int64Ptr(2333),
-		Timestamp:     common.Int64Ptr(time.Now().Add(-2 * dropSyncShardTaskTimeThreshold).UnixNano()),
+	replicationAttr := &replication.SyncShardStatusTaskAttributes{
+		SourceCluster: "some random source cluster",
+		ShardId:       2333,
+		Timestamp:     time.Now().Add(-2 * dropSyncShardTaskTimeThreshold).UnixNano(),
 	}
-	replicationTask := &replicator.ReplicationTask{
-		TaskType:                      replicator.ReplicationTaskTypeSyncShardStatus.Ptr(),
-		SyncShardStatusTaskAttributes: replicationAttr,
+	replicationTask := &replication.ReplicationTask{
+		TaskType:   enums.ReplicationTaskTypeSyncShardStatus,
+		Attributes: &replication.ReplicationTask_SyncShardStatusTaskAttributes{SyncShardStatusTaskAttributes: replicationAttr},
 	}
-	replicationTaskBinary, err := s.msgEncoder.Encode(replicationTask)
+	replicationTaskBinary, err := replicationTask.Marshal()
 	s.Nil(err)
 	s.mockMsg.On("Value").Return(replicationTaskBinary)
 	s.mockMsg.On("Ack").Return(nil).Once()
@@ -255,7 +249,7 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_FailedT
 		TaskType:   enums.ReplicationTaskTypeSyncShardStatus,
 		Attributes: &replication.ReplicationTask_SyncShardStatusTaskAttributes{SyncShardStatusTaskAttributes: replicationAttr},
 	}
-	replicationTaskBinary, err := s.msgEncoder.Encode(adapter.ToThriftReplicationTask(replicationTask))
+	replicationTaskBinary, err := replicationTask.Marshal()
 	s.Nil(err)
 	s.mockMsg.On("Value").Return(replicationTaskBinary)
 	s.mockHistoryClient.EXPECT().SyncShardStatus(gomock.Any(), gomock.Any()).Return(nil, errors.New("some random error")).Times(1)
@@ -273,24 +267,24 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncShard_FailedT
 }
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncActivity_Success() {
-	replicationAttr := &replicator.SyncActivityTaskAttributes{
-		DomainId:          common.StringPtr("some random domain ID"),
-		WorkflowId:        common.StringPtr("some random workflow ID"),
-		RunId:             common.StringPtr("some random run ID"),
-		Version:           common.Int64Ptr(1234),
-		ScheduledId:       common.Int64Ptr(1235),
-		ScheduledTime:     common.Int64Ptr(time.Now().UnixNano()),
-		StartedId:         common.Int64Ptr(1236),
-		StartedTime:       common.Int64Ptr(time.Now().UnixNano()),
-		LastHeartbeatTime: common.Int64Ptr(time.Now().UnixNano()),
+	replicationAttr := &replication.SyncActivityTaskAttributes{
+		DomainId:          "some random domain ID",
+		WorkflowId:        "some random workflow ID",
+		RunId:             "some random run ID",
+		Version:           1234,
+		ScheduledId:       1235,
+		ScheduledTime:     time.Now().UnixNano(),
+		StartedId:         1236,
+		StartedTime:       time.Now().UnixNano(),
+		LastHeartbeatTime: time.Now().UnixNano(),
 		Details:           []byte("some random details"),
-		Attempt:           common.Int32Ptr(1048576),
+		Attempt:           1048576,
 	}
-	replicationTask := &replicator.ReplicationTask{
-		TaskType:                   replicator.ReplicationTaskTypeSyncActivity.Ptr(),
-		SyncActivityTaskAttributes: replicationAttr,
+	replicationTask := &replication.ReplicationTask{
+		TaskType:   enums.ReplicationTaskTypeSyncActivity,
+		Attributes: &replication.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: replicationAttr},
 	}
-	replicationTaskBinary, err := s.msgEncoder.Encode(replicationTask)
+	replicationTaskBinary, err := replicationTask.Marshal()
 	s.Nil(err)
 	s.mockMsg.On("Value").Return(replicationTaskBinary)
 	s.mockSequentialTaskProcessor.EXPECT().Submit(gomock.Any()).Return(nil).Times(1)
@@ -299,24 +293,24 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncActivity_Succ
 }
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncActivity_FailedThenSuccess() {
-	replicationAttr := &replicator.SyncActivityTaskAttributes{
-		DomainId:          common.StringPtr("some random domain ID"),
-		WorkflowId:        common.StringPtr("some random workflow ID"),
-		RunId:             common.StringPtr("some random run ID"),
-		Version:           common.Int64Ptr(1234),
-		ScheduledId:       common.Int64Ptr(1235),
-		ScheduledTime:     common.Int64Ptr(time.Now().UnixNano()),
-		StartedId:         common.Int64Ptr(1236),
-		StartedTime:       common.Int64Ptr(time.Now().UnixNano()),
-		LastHeartbeatTime: common.Int64Ptr(time.Now().UnixNano()),
+	replicationAttr := &replication.SyncActivityTaskAttributes{
+		DomainId:          "some random domain ID",
+		WorkflowId:        "some random workflow ID",
+		RunId:             "some random run ID",
+		Version:           1234,
+		ScheduledId:       1235,
+		ScheduledTime:     time.Now().UnixNano(),
+		StartedId:         1236,
+		StartedTime:       time.Now().UnixNano(),
+		LastHeartbeatTime: time.Now().UnixNano(),
 		Details:           []byte("some random details"),
-		Attempt:           common.Int32Ptr(1048576),
+		Attempt:           1048576,
 	}
-	replicationTask := &replicator.ReplicationTask{
-		TaskType:                   replicator.ReplicationTaskTypeSyncActivity.Ptr(),
-		SyncActivityTaskAttributes: replicationAttr,
+	replicationTask := &replication.ReplicationTask{
+		TaskType:   enums.ReplicationTaskTypeSyncActivity,
+		Attributes: &replication.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: replicationAttr},
 	}
-	replicationTaskBinary, err := s.msgEncoder.Encode(replicationTask)
+	replicationTaskBinary, err := replicationTask.Marshal()
 	s.Nil(err)
 	s.mockMsg.On("Value").Return(replicationTaskBinary)
 	s.mockSequentialTaskProcessor.EXPECT().Submit(gomock.Any()).Return(errors.New("some random error")).Times(1)
@@ -326,26 +320,26 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_SyncActivity_Fail
 }
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_History_Success() {
-	replicationAttr := &replicator.HistoryTaskAttributes{
+	replicationAttr := &replication.HistoryTaskAttributes{
 		TargetClusters:  []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
-		DomainId:        common.StringPtr("some random domain ID"),
-		WorkflowId:      common.StringPtr("some random workflow ID"),
-		RunId:           common.StringPtr("some random run ID"),
-		Version:         common.Int64Ptr(1394),
-		FirstEventId:    common.Int64Ptr(728),
-		NextEventId:     common.Int64Ptr(1015),
-		ReplicationInfo: map[string]*shared.ReplicationInfo{},
-		History: &shared.History{
-			Events: []*shared.HistoryEvent{&shared.HistoryEvent{EventId: common.Int64Ptr(1)}},
+		DomainId:        "some random domain ID",
+		WorkflowId:      "some random workflow ID",
+		RunId:           "some random run ID",
+		Version:         1394,
+		FirstEventId:    728,
+		NextEventId:     1015,
+		ReplicationInfo: map[string]*replication.ReplicationInfo{},
+		History: &commonproto.History{
+			Events: []*commonproto.HistoryEvent{{EventId: 1}},
 		},
 		NewRunHistory: nil,
-		ResetWorkflow: common.BoolPtr(true),
+		ResetWorkflow: true,
 	}
-	replicationTask := &replicator.ReplicationTask{
-		TaskType:              replicator.ReplicationTaskTypeHistory.Ptr(),
-		HistoryTaskAttributes: replicationAttr,
+	replicationTask := &replication.ReplicationTask{
+		TaskType:   enums.ReplicationTaskTypeHistory,
+		Attributes: &replication.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: replicationAttr},
 	}
-	replicationTaskBinary, err := s.msgEncoder.Encode(replicationTask)
+	replicationTaskBinary, err := replicationTask.Marshal()
 	s.Nil(err)
 	s.mockMsg.On("Value").Return(replicationTaskBinary)
 	s.mockSequentialTaskProcessor.EXPECT().Submit(gomock.Any()).Return(nil).Times(1)
@@ -354,26 +348,26 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_History_Success()
 }
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_History_FailedThenSuccess() {
-	replicationAttr := &replicator.HistoryTaskAttributes{
+	replicationAttr := &replication.HistoryTaskAttributes{
 		TargetClusters:  []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
-		DomainId:        common.StringPtr("some random domain ID"),
-		WorkflowId:      common.StringPtr("some random workflow ID"),
-		RunId:           common.StringPtr("some random run ID"),
-		Version:         common.Int64Ptr(1394),
-		FirstEventId:    common.Int64Ptr(728),
-		NextEventId:     common.Int64Ptr(1015),
-		ReplicationInfo: map[string]*shared.ReplicationInfo{},
-		History: &shared.History{
-			Events: []*shared.HistoryEvent{&shared.HistoryEvent{EventId: common.Int64Ptr(1)}},
+		DomainId:        "some random domain ID",
+		WorkflowId:      "some random workflow ID",
+		RunId:           "some random run ID",
+		Version:         1394,
+		FirstEventId:    728,
+		NextEventId:     1015,
+		ReplicationInfo: map[string]*replication.ReplicationInfo{},
+		History: &commonproto.History{
+			Events: []*commonproto.HistoryEvent{{EventId: 1}},
 		},
 		NewRunHistory: nil,
-		ResetWorkflow: common.BoolPtr(true),
+		ResetWorkflow: true,
 	}
-	replicationTask := &replicator.ReplicationTask{
-		TaskType:              replicator.ReplicationTaskTypeHistory.Ptr(),
-		HistoryTaskAttributes: replicationAttr,
+	replicationTask := &replication.ReplicationTask{
+		TaskType:   enums.ReplicationTaskTypeHistory,
+		Attributes: &replication.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: replicationAttr},
 	}
-	replicationTaskBinary, err := s.msgEncoder.Encode(replicationTask)
+	replicationTaskBinary, err := replicationTask.Marshal()
 	s.Nil(err)
 	s.mockMsg.On("Value").Return(replicationTaskBinary)
 	s.mockSequentialTaskProcessor.EXPECT().Submit(gomock.Any()).Return(errors.New("some random error")).Times(1)
@@ -383,19 +377,19 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_History_FailedThe
 }
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_HistoryMetadata_Success() {
-	replicationAttr := &replicator.HistoryMetadataTaskAttributes{
+	replicationAttr := &replication.HistoryMetadataTaskAttributes{
 		TargetClusters: []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
-		DomainId:       common.StringPtr("some random domain ID"),
-		WorkflowId:     common.StringPtr("some random workflow ID"),
-		RunId:          common.StringPtr("some random run ID"),
-		FirstEventId:   common.Int64Ptr(728),
-		NextEventId:    common.Int64Ptr(1015),
+		DomainId:       "some random domain ID",
+		WorkflowId:     "some random workflow ID",
+		RunId:          "some random run ID",
+		FirstEventId:   728,
+		NextEventId:    1015,
 	}
-	replicationTask := &replicator.ReplicationTask{
-		TaskType:                      replicator.ReplicationTaskTypeHistoryMetadata.Ptr(),
-		HistoryMetadataTaskAttributes: replicationAttr,
+	replicationTask := &replication.ReplicationTask{
+		TaskType:   enums.ReplicationTaskTypeHistoryMetadata,
+		Attributes: &replication.ReplicationTask_HistoryMetadataTaskAttributes{HistoryMetadataTaskAttributes: replicationAttr},
 	}
-	replicationTaskBinary, err := s.msgEncoder.Encode(replicationTask)
+	replicationTaskBinary, err := replicationTask.Marshal()
 	s.Nil(err)
 	s.mockMsg.On("Value").Return(replicationTaskBinary)
 	s.mockSequentialTaskProcessor.EXPECT().Submit(gomock.Any()).Return(nil).Times(1)
@@ -404,19 +398,19 @@ func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_HistoryMetadata_S
 }
 
 func (s *replicationTaskProcessorSuite) TestDecodeMsgAndSubmit_HistoryMetadata_FailedThenSuccess() {
-	replicationAttr := &replicator.HistoryMetadataTaskAttributes{
+	replicationAttr := &replication.HistoryMetadataTaskAttributes{
 		TargetClusters: []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
-		DomainId:       common.StringPtr("some random domain ID"),
-		WorkflowId:     common.StringPtr("some random workflow ID"),
-		RunId:          common.StringPtr("some random run ID"),
-		FirstEventId:   common.Int64Ptr(728),
-		NextEventId:    common.Int64Ptr(1015),
+		DomainId:       "some random domain ID",
+		WorkflowId:     "some random workflow ID",
+		RunId:          "some random run ID",
+		FirstEventId:   728,
+		NextEventId:    1015,
 	}
-	replicationTask := &replicator.ReplicationTask{
-		TaskType:                      replicator.ReplicationTaskTypeHistoryMetadata.Ptr(),
-		HistoryMetadataTaskAttributes: replicationAttr,
+	replicationTask := &replication.ReplicationTask{
+		TaskType:   enums.ReplicationTaskTypeHistoryMetadata,
+		Attributes: &replication.ReplicationTask_HistoryMetadataTaskAttributes{HistoryMetadataTaskAttributes: replicationAttr},
 	}
-	replicationTaskBinary, err := s.msgEncoder.Encode(replicationTask)
+	replicationTaskBinary, err := replicationTask.Marshal()
 	s.Nil(err)
 	s.mockMsg.On("Value").Return(replicationTaskBinary)
 	s.mockSequentialTaskProcessor.EXPECT().Submit(gomock.Any()).Return(errors.New("some random error")).Times(1)

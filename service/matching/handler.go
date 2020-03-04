@@ -108,7 +108,7 @@ func (h *Handler) startRequestProfile(_ string, scope int) tally.Stopwatch {
 func (h *Handler) Health(_ context.Context, _ *healthservice.HealthRequest) (_ *healthservice.HealthStatus, retError error) {
 	h.startWG.Wait()
 	h.GetLogger().Debug("Matching service health check endpoint (gRPC) reached.")
-	hs := &healthservice.HealthStatus{Ok: true, Msg: "matching good"}
+	hs := &healthservice.HealthStatus{Ok: true, Msg: "Matching service is healthy."}
 	return hs, nil
 }
 
