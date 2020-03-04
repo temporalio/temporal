@@ -140,7 +140,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterDomainTask_Is
 					HistoryArchivalURI:                     historyArchivalURI,
 					VisibilityArchivalStatus:               adapter.ToProtoArchivalStatus(&visibilityArchivalStatus),
 					VisibilityArchivalURI:                  visibilityArchivalURI,
-					BadBinaries:                            adapter.ToProtoBadBinaries(&shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}}),
+					BadBinaries:                            adapter.ToProtoBadBinariesPtr(&shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}}),
 				},
 				ReplicationConfig: &commonproto.DomainReplicationConfiguration{
 					ActiveClusterName: clusterActive,
@@ -280,7 +280,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateDomainTask_IsGl
 					HistoryArchivalURI:                     historyArchivalURI,
 					VisibilityArchivalStatus:               adapter.ToProtoArchivalStatus(&visibilityArchivalStatus),
 					VisibilityArchivalURI:                  visibilityArchivalURI,
-					BadBinaries:                            adapter.ToProtoBadBinaries(&shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}}),
+					BadBinaries:                            adapter.ToProtoBadBinariesPtr(&shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}}),
 				},
 				ReplicationConfig: &commonproto.DomainReplicationConfiguration{
 					ActiveClusterName: clusterActive,

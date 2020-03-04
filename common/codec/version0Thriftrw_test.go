@@ -27,7 +27,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/go/shared"
 )
 
 type (
@@ -38,14 +38,14 @@ type (
 )
 
 var (
-	thriftObject = &workflow.HistoryEvent{
+	thriftObject = &shared.HistoryEvent{
 		Version:   int64Ptr(1234),
 		EventId:   int64Ptr(130),
 		Timestamp: int64Ptr(112345132134),
-		EventType: workflow.EventTypeRequestCancelExternalWorkflowExecutionInitiated.Ptr(),
-		RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: &workflow.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
+		EventType: shared.EventTypeRequestCancelExternalWorkflowExecutionInitiated.Ptr(),
+		RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: &shared.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
 			Domain: stringPtr("some random target domain"),
-			WorkflowExecution: &workflow.WorkflowExecution{
+			WorkflowExecution: &shared.WorkflowExecution{
 				WorkflowId: stringPtr("some random target workflow ID"),
 				RunId:      stringPtr("some random target run ID"),
 			},
@@ -85,7 +85,7 @@ func (s *thriftRWEncoderSuite) TestEncode() {
 }
 
 func (s *thriftRWEncoderSuite) TestDecode() {
-	var val workflow.HistoryEvent
+	var val shared.HistoryEvent
 	err := s.encoder.Decode(thriftEncodedBinary, &val)
 	s.Nil(err)
 	val.Equals(thriftObject)
@@ -93,7 +93,7 @@ func (s *thriftRWEncoderSuite) TestDecode() {
 
 func (s *thriftRWEncoderSuite) TestDecode_MissingVersion() {
 	binary := []byte{}
-	var val workflow.HistoryEvent
+	var val shared.HistoryEvent
 	err := s.encoder.Decode(binary, &val)
 	s.Equal(MissingBinaryEncodingVersion, err)
 }
@@ -103,7 +103,7 @@ func (s *thriftRWEncoderSuite) TestDecode_InvalidVersion() {
 	binary = append(binary, thriftEncodedBinary...)
 	binary[0] = preambleVersion0 - 1
 
-	var val workflow.HistoryEvent
+	var val shared.HistoryEvent
 	err := s.encoder.Decode(binary, &val)
 	s.Equal(InvalidBinaryEncodingVersion, err)
 }

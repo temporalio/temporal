@@ -195,7 +195,7 @@ func (s *domainHandlerCommonSuite) TestMergeBadBinaries_Overriding() {
 		}, nowInt64,
 	)
 
-	assert.True(s.T(), out.Equal(&commonproto.BadBinaries{
+	assert.True(s.T(), out.Equal(commonproto.BadBinaries{
 		Binaries: map[string]*commonproto.BadBinaryInfo{
 			"k0": {Reason: "reason2", CreatedTimeNano: nowInt64},
 		},
@@ -212,7 +212,7 @@ func (s *domainHandlerCommonSuite) TestMergeBadBinaries_Adding() {
 		}, nowInt64,
 	)
 
-	expected := &commonproto.BadBinaries{
+	expected := commonproto.BadBinaries{
 		Binaries: map[string]*commonproto.BadBinaryInfo{
 			"k0": {Reason: "reason0"},
 			"k1": {Reason: "reason2", CreatedTimeNano: nowInt64},
@@ -232,7 +232,7 @@ func (s *domainHandlerCommonSuite) TestMergeBadBinaries_Merging() {
 		}, nowInt64,
 	)
 
-	assert.True(s.T(), out.Equal(&commonproto.BadBinaries{
+	assert.True(s.T(), out.Equal(commonproto.BadBinaries{
 		Binaries: map[string]*commonproto.BadBinaryInfo{
 			"k0": {Reason: "reason1", CreatedTimeNano: nowInt64},
 			"k1": {Reason: "reason2", CreatedTimeNano: nowInt64},
@@ -249,7 +249,7 @@ func (s *domainHandlerCommonSuite) TestMergeBadBinaries_Nil() {
 		}, nowInt64,
 	)
 
-	assert.True(s.T(), out.Equal(&commonproto.BadBinaries{
+	assert.True(s.T(), out.Equal(commonproto.BadBinaries{
 		Binaries: map[string]*commonproto.BadBinaryInfo{
 			"k0": {Reason: "reason1", CreatedTimeNano: nowInt64},
 			"k1": {Reason: "reason2", CreatedTimeNano: nowInt64},

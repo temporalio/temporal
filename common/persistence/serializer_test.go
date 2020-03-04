@@ -68,10 +68,11 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 
 	serializer := NewPayloadSerializer()
 
+	eventType := workflow.EventTypeActivityTaskCompleted
 	event0 := &workflow.HistoryEvent{
 		EventId:   common.Int64Ptr(999),
 		Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-		EventType: common.EventTypePtr(workflow.EventTypeActivityTaskCompleted),
+		EventType: &eventType,
 		ActivityTaskCompletedEventAttributes: &workflow.ActivityTaskCompletedEventAttributes{
 			Result:           []byte("result-1-event-1"),
 			ScheduledEventId: common.Int64Ptr(4),

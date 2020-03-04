@@ -89,7 +89,7 @@ func (domainReplicator *domainReplicatorImpl) HandleTransmissionTask(domainOpera
 			HistoryArchivalURI:                     config.HistoryArchivalURI,
 			VisibilityArchivalStatus:               adapter.ToProtoArchivalStatus(&config.VisibilityArchivalStatus),
 			VisibilityArchivalURI:                  config.VisibilityArchivalURI,
-			BadBinaries:                            adapter.ToProtoBadBinaries(&config.BadBinaries),
+			BadBinaries:                            adapter.ToProtoBadBinariesPtr(&config.BadBinaries),
 		},
 		ReplicationConfig: &commonproto.DomainReplicationConfiguration{
 			ActiveClusterName: replicationConfig.ActiveClusterName,

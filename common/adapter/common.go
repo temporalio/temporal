@@ -95,7 +95,7 @@ func ToProtoDomainConfiguration(in *shared.DomainConfiguration) *common.DomainCo
 	return &common.DomainConfiguration{
 		WorkflowExecutionRetentionPeriodInDays: in.GetWorkflowExecutionRetentionPeriodInDays(),
 		EmitMetric:                             ToProtoBool(in.EmitMetric),
-		BadBinaries:                            ToProtoBadBinaries(in.GetBadBinaries()),
+		BadBinaries:                            ToProtoBadBinariesPtr(in.GetBadBinaries()),
 		HistoryArchivalStatus:                  ToProtoArchivalStatus(in.HistoryArchivalStatus),
 		HistoryArchivalURI:                     in.GetHistoryArchivalURI(),
 		VisibilityArchivalStatus:               ToProtoArchivalStatus(in.VisibilityArchivalStatus),
@@ -103,18 +103,23 @@ func ToProtoDomainConfiguration(in *shared.DomainConfiguration) *common.DomainCo
 	}
 }
 
-func ToProtoBadBinaries(in *shared.BadBinaries) *common.BadBinaries {
+func ToProtoBadBinariesPtr(in *shared.BadBinaries) *common.BadBinaries {
 	if in == nil {
 		return nil
 	}
 
+	ret := ToProtoBadBinaries(*in)
+	return &ret
+}
+
+func ToProtoBadBinaries(in shared.BadBinaries) common.BadBinaries {
 	ret := make(map[string]*common.BadBinaryInfo, len(in.GetBinaries()))
 
 	for key, value := range in.GetBinaries() {
 		ret[key] = ToProtoBadBinaryInfo(value)
 	}
 
-	return &common.BadBinaries{
+	return common.BadBinaries{
 		Binaries: ret,
 	}
 }
@@ -165,7 +170,7 @@ func ToThriftDomainConfiguration(in *common.DomainConfiguration) *shared.DomainC
 	return &shared.DomainConfiguration{
 		WorkflowExecutionRetentionPeriodInDays: &in.WorkflowExecutionRetentionPeriodInDays,
 		EmitMetric:                             ToThriftBool(in.EmitMetric),
-		BadBinaries:                            ToThriftBadBinaries(in.BadBinaries),
+		BadBinaries:                            ToThriftBadBinariesPtr(in.BadBinaries),
 		HistoryArchivalStatus:                  ToThriftArchivalStatus(in.HistoryArchivalStatus),
 		HistoryArchivalURI:                     &in.HistoryArchivalURI,
 		VisibilityArchivalStatus:               ToThriftArchivalStatus(in.VisibilityArchivalStatus),
@@ -182,18 +187,24 @@ func ToThriftDomainReplicationConfiguration(in *common.DomainReplicationConfigur
 	}
 }
 
-// ToThriftBadBinaries ...
-func ToThriftBadBinaries(in *common.BadBinaries) *shared.BadBinaries {
+func ToThriftBadBinariesPtr(in *common.BadBinaries) *shared.BadBinaries {
 	if in == nil {
 		return nil
 	}
+
+	ret := ToThriftBadBinaries(*in)
+	return &ret
+}
+
+// ToThriftBadBinaries ...
+func ToThriftBadBinaries(in common.BadBinaries) shared.BadBinaries {
 	ret := make(map[string]*shared.BadBinaryInfo, len(in.Binaries))
 
 	for key, value := range in.Binaries {
 		ret[key] = ToThriftBadBinaryInfo(value)
 	}
 
-	return &shared.BadBinaries{
+	return shared.BadBinaries{
 		Binaries: ret,
 	}
 }

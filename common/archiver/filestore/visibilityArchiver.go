@@ -29,10 +29,9 @@ import (
 	"strconv"
 	"strings"
 
+	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/service/config"
@@ -323,22 +322,22 @@ func matchQuery(record *visibilityRecord, query *parsedQuery) bool {
 	return true
 }
 
-func convertToExecutionInfo(record *visibilityRecord) *shared.WorkflowExecutionInfo {
-	return &shared.WorkflowExecutionInfo{
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(record.WorkflowID),
-			RunId:      common.StringPtr(record.RunID),
+func convertToExecutionInfo(record *visibilityRecord) *commonproto.WorkflowExecutionInfo {
+	return &commonproto.WorkflowExecutionInfo{
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: record.WorkflowID,
+			RunId:      record.RunID,
 		},
-		Type: &shared.WorkflowType{
-			Name: common.StringPtr(record.WorkflowTypeName),
+		Type: &commonproto.WorkflowType{
+			Name: record.WorkflowTypeName,
 		},
-		StartTime:     common.Int64Ptr(record.StartTimestamp),
-		ExecutionTime: common.Int64Ptr(record.ExecutionTimestamp),
-		CloseTime:     common.Int64Ptr(record.CloseTimestamp),
-		CloseStatus:   record.CloseStatus.Ptr(),
-		HistoryLength: common.Int64Ptr(record.HistoryLength),
+		StartTime:     record.StartTimestamp,
+		ExecutionTime: record.ExecutionTimestamp,
+		CloseTime:     record.CloseTimestamp,
+		CloseStatus:   record.CloseStatus,
+		HistoryLength: record.HistoryLength,
 		Memo:          record.Memo,
-		SearchAttributes: &shared.SearchAttributes{
+		SearchAttributes: &commonproto.SearchAttributes{
 			IndexedFields: archiver.ConvertSearchAttrToBytes(record.SearchAttributes),
 		},
 	}

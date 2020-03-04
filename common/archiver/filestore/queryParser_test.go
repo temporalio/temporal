@@ -25,8 +25,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/temporal-proto/enums"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 )
 
@@ -151,21 +151,21 @@ func (s *queryParserSuite) TestParseCloseStatus() {
 			query:     "CloseStatus = \"Completed\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				closeStatus: shared.WorkflowExecutionCloseStatusCompleted.Ptr(),
+				closeStatus: toWorkflowExecutionCloseStatusPtr(enums.WorkflowExecutionCloseStatusCompleted),
 			},
 		},
 		{
 			query:     "CloseStatus = 'continuedasnew'",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				closeStatus: shared.WorkflowExecutionCloseStatusContinuedAsNew.Ptr(),
+				closeStatus: toWorkflowExecutionCloseStatusPtr(enums.WorkflowExecutionCloseStatusContinuedAsNew),
 			},
 		},
 		{
 			query:     "CloseStatus = 'Failed' and CloseStatus = \"Failed\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				closeStatus: shared.WorkflowExecutionCloseStatusFailed.Ptr(),
+				closeStatus: toWorkflowExecutionCloseStatusPtr(enums.WorkflowExecutionCloseStatusFailed),
 			},
 		},
 		{
@@ -296,7 +296,7 @@ func (s *queryParserSuite) TestParse() {
 				earliestCloseTime: 2000,
 				latestCloseTime:   9999,
 				runID:             common.StringPtr("random runID"),
-				closeStatus:       shared.WorkflowExecutionCloseStatusFailed.Ptr(),
+				closeStatus:       toWorkflowExecutionCloseStatusPtr(enums.WorkflowExecutionCloseStatusFailed),
 			},
 		},
 		{

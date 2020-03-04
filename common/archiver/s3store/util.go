@@ -32,12 +32,11 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
+	"github.com/gogo/protobuf/jsonpb"
+	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.uber.org/multierr"
 
-	"github.com/temporalio/temporal/common"
-
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/archiver"
 )
 
@@ -47,14 +46,46 @@ func encode(v interface{}) ([]byte, error) {
 	return json.Marshal(v)
 }
 
-func decodeHistoryBatches(data []byte) ([]*shared.History, error) {
-	historyBatches := []*shared.History{}
-	err := json.Unmarshal(data, &historyBatches)
+func encodeHistoryBatches(histories []*commonproto.History) ([]byte, error) {
+	m := jsonpb.Marshaler{}
+	var buf bytes.Buffer
+	buf.WriteString("[")
+	lastHistoryIndex := len(histories) - 1
+	for i, history := range histories {
+		if err := m.Marshal(&buf, history); err != nil {
+			return nil, err
+		}
+
+		if i == lastHistoryIndex {
+			buf.WriteString("]")
+		} else {
+			buf.WriteString(",")
+		}
+	}
+
+	return buf.Bytes(), nil
+}
+
+func decodeHistoryBatches(data []byte) ([]*commonproto.History, error) {
+	jsonDecoder := json.NewDecoder(bytes.NewReader(data))
+
+	_, err := jsonDecoder.Token()
 	if err != nil {
 		return nil, err
 	}
-	return historyBatches, nil
+	var histories []*commonproto.History
+	for jsonDecoder.More() {
+		history := &commonproto.History{}
+		err := jsonpb.UnmarshalNext(jsonDecoder, history)
+		if err != nil {
+			return nil, err
+		}
+		histories = append(histories, history)
+	}
+
+	return histories, nil
 }
+
 func decodeVisibilityRecord(data []byte) (*visibilityRecord, error) {
 	record := &visibilityRecord{}
 	err := json.Unmarshal(data, record)
@@ -192,7 +223,7 @@ func download(ctx context.Context, s3cli s3iface.S3API, URI archiver.URI, key st
 	return body, nil
 }
 
-func historyMutated(request *archiver.ArchiveHistoryRequest, historyBatches []*shared.History, isLast bool) bool {
+func historyMutated(request *archiver.ArchiveHistoryRequest, historyBatches []*commonproto.History, isLast bool) bool {
 	lastBatch := historyBatches[len(historyBatches)-1].Events
 	lastEvent := lastBatch[len(lastBatch)-1]
 	lastFailoverVersion := lastEvent.GetVersion()
@@ -216,22 +247,22 @@ func contextExpired(ctx context.Context) bool {
 	}
 }
 
-func convertToExecutionInfo(record *visibilityRecord) *shared.WorkflowExecutionInfo {
-	return &shared.WorkflowExecutionInfo{
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(record.WorkflowID),
-			RunId:      common.StringPtr(record.RunID),
+func convertToExecutionInfo(record *visibilityRecord) *commonproto.WorkflowExecutionInfo {
+	return &commonproto.WorkflowExecutionInfo{
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: record.WorkflowID,
+			RunId:      record.RunID,
 		},
-		Type: &shared.WorkflowType{
-			Name: common.StringPtr(record.WorkflowTypeName),
+		Type: &commonproto.WorkflowType{
+			Name: record.WorkflowTypeName,
 		},
-		StartTime:     common.Int64Ptr(record.StartTimestamp),
-		ExecutionTime: common.Int64Ptr(record.ExecutionTimestamp),
-		CloseTime:     common.Int64Ptr(record.CloseTimestamp),
-		CloseStatus:   record.CloseStatus.Ptr(),
-		HistoryLength: common.Int64Ptr(record.HistoryLength),
+		StartTime:     record.StartTimestamp,
+		ExecutionTime: record.ExecutionTimestamp,
+		CloseTime:     record.CloseTimestamp,
+		CloseStatus:   record.CloseStatus,
+		HistoryLength: record.HistoryLength,
 		Memo:          record.Memo,
-		SearchAttributes: &shared.SearchAttributes{
+		SearchAttributes: &commonproto.SearchAttributes{
 			IndexedFields: archiver.ConvertSearchAttrToBytes(record.SearchAttributes),
 		},
 	}
