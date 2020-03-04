@@ -45,6 +45,8 @@ import (
 	"github.com/temporalio/temporal/common/persistence/cassandra"
 	"github.com/temporalio/temporal/common/persistence/client"
 	"github.com/temporalio/temporal/common/persistence/sql"
+	"github.com/temporalio/temporal/common/primitives"
+	"github.com/temporalio/temporal/common/primitives/timestamp"
 	"github.com/temporalio/temporal/common/service/config"
 )
 
@@ -1233,7 +1235,7 @@ func (s *TestBase) RangeCompleteTimerTask(inclusiveBeginTimestamp time.Time, exc
 }
 
 // CreateDecisionTask is a utility method to create a task
-func (s *TestBase) CreateDecisionTask(domainID string, workflowExecution workflow.WorkflowExecution, taskList string,
+func (s *TestBase) CreateDecisionTask(domainID primitives.UUID, workflowExecution workflow.WorkflowExecution, taskList string,
 	decisionScheduleID int64) (int64, error) {
 	leaseResponse, err := s.TaskMgr.LeaseTaskList(&p.LeaseTaskListRequest{
 		DomainID: domainID,
@@ -1249,12 +1251,12 @@ func (s *TestBase) CreateDecisionTask(domainID string, workflowExecution workflo
 		{
 			TaskID:    taskID,
 			Execution: workflowExecution,
-			Data: &p.TaskInfo{
-				DomainID:   domainID,
-				WorkflowID: *workflowExecution.WorkflowId,
-				RunID:      *workflowExecution.RunId,
-				TaskID:     taskID,
-				ScheduleID: decisionScheduleID,
+			Data: &pblobs.TaskInfo{
+				DomainID:    domainID,
+				WorkflowID:  *workflowExecution.WorkflowId,
+				RunID:       primitives.MustParseUUID(*workflowExecution.RunId),
+				ScheduleID:  decisionScheduleID,
+				CreatedTime: types.TimestampNow(),
 			},
 		},
 	}
@@ -1272,10 +1274,10 @@ func (s *TestBase) CreateDecisionTask(domainID string, workflowExecution workflo
 }
 
 // CreateActivityTasks is a utility method to create tasks
-func (s *TestBase) CreateActivityTasks(domainID string, workflowExecution workflow.WorkflowExecution,
+func (s *TestBase) CreateActivityTasks(domainID primitives.UUID, workflowExecution workflow.WorkflowExecution,
 	activities map[int64]string) ([]int64, error) {
 
-	taskLists := make(map[string]*p.TaskListInfo)
+	taskLists := make(map[string]*pblobs.PersistedTaskListInfo)
 	for _, tl := range activities {
 		_, ok := taskLists[tl]
 		if !ok {
@@ -1293,16 +1295,16 @@ func (s *TestBase) CreateActivityTasks(domainID string, workflowExecution workfl
 		taskID := s.GetNextSequenceNumber()
 		tasks := []*p.CreateTaskInfo{
 			{
-				TaskID:    taskID,
 				Execution: workflowExecution,
-				Data: &p.TaskInfo{
-					DomainID:               domainID,
-					WorkflowID:             *workflowExecution.WorkflowId,
-					RunID:                  *workflowExecution.RunId,
-					TaskID:                 taskID,
-					ScheduleID:             activityScheduleID,
-					ScheduleToStartTimeout: defaultScheduleToStartTimeout,
+				Data: &pblobs.TaskInfo{
+					DomainID:    domainID,
+					WorkflowID:  *workflowExecution.WorkflowId,
+					RunID:       primitives.MustParseUUID(*workflowExecution.RunId),
+					ScheduleID:  activityScheduleID,
+					Expiry:      timestamp.TimestampNowAddSeconds(defaultScheduleToStartTimeout).ToProto(),
+					CreatedTime: types.TimestampNow(),
 				},
+				TaskID: taskID,
 			},
 		}
 		_, err := s.TaskMgr.CreateTasks(&p.CreateTasksRequest{
@@ -1319,7 +1321,7 @@ func (s *TestBase) CreateActivityTasks(domainID string, workflowExecution workfl
 }
 
 // GetTasks is a utility method to get tasks from persistence
-func (s *TestBase) GetTasks(domainID, taskList string, taskType int, batchSize int) (*p.GetTasksResponse, error) {
+func (s *TestBase) GetTasks(domainID primitives.UUID, taskList string, taskType int32, batchSize int) (*p.GetTasksResponse, error) {
 	response, err := s.TaskMgr.GetTasks(&p.GetTasksRequest{
 		DomainID:     domainID,
 		TaskList:     taskList,
@@ -1336,11 +1338,10 @@ func (s *TestBase) GetTasks(domainID, taskList string, taskType int, batchSize i
 }
 
 // CompleteTask is a utility method to complete a task
-func (s *TestBase) CompleteTask(domainID, taskList string, taskType int, taskID int64, ackLevel int64) error {
+func (s *TestBase) CompleteTask(domainID primitives.UUID, taskList string, taskType int32, taskID int64) error {
 	return s.TaskMgr.CompleteTask(&p.CompleteTaskRequest{
-		TaskList: &p.TaskListInfo{
+		TaskList: &p.TaskListKey{
 			DomainID: domainID,
-			AckLevel: ackLevel,
 			TaskType: taskType,
 			Name:     taskList,
 		},
