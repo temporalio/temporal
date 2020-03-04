@@ -430,7 +430,15 @@ func deserializeMessages(messages [][]byte, skipErrors bool) ([]*replication.Rep
 }
 
 func decode(message []byte, val *replication.ReplicationTask) error {
-	return val.Unmarshal(message[1:])
+	// TODO (shtin): Current proto implementation is most likely broken. It used to be:
+	// reader := bytes.NewReader(message[1:])
+	// wireVal, err := protocol.Binary.Decode(reader, wire.TStruct)
+	// if err != nil {
+	// 	return err
+	// }
+	// return val.FromWire(wireVal)
+
+	return val.Unmarshal(message)
 }
 
 func deserializeVisibilityMessages(messages [][]byte, skipErrors bool) ([]*indexer.Message, int32) {
@@ -453,7 +461,14 @@ func deserializeVisibilityMessages(messages [][]byte, skipErrors bool) ([]*index
 }
 
 func decodeVisibility(message []byte, val *indexer.Message) error {
-	return val.Unmarshal(message[1:])
+	// TODO (shtin): Current proto implementation is most likely broken. It used to be:
+	// reader := bytes.NewReader(message[1:])
+	// wireVal, err := protocol.Binary.Decode(reader, wire.TStruct)
+	// if err != nil {
+	// 	return err
+	// }
+	// return val.FromWire(wireVal)
+	return val.Unmarshal(message)
 }
 
 // ClustersConfig describes the kafka clusters
