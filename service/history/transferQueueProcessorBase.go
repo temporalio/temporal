@@ -25,9 +25,9 @@ import (
 	"time"
 
 	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/client/matching"
@@ -131,11 +131,11 @@ func (t *transferQueueProcessorBase) queueShutdown() error {
 
 func (t *transferQueueProcessorBase) getDomainIDAndWorkflowExecution(
 	task *persistenceblobs.TransferTaskInfo,
-) (string, workflow.WorkflowExecution) {
+) (string, commonproto.WorkflowExecution) {
 
-	return primitives.UUID(task.DomainID).String(), workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(task.WorkflowID),
-		RunId:      common.StringPtr(primitives.UUID(task.RunID).String()),
+	return primitives.UUID(task.DomainID).String(), commonproto.WorkflowExecution{
+		WorkflowId: task.WorkflowID,
+		RunId:      primitives.UUID(task.RunID).String(),
 	}
 }
 
@@ -168,7 +168,7 @@ func (t *transferQueueProcessorBase) pushActivity(
 
 func (t *transferQueueProcessorBase) pushDecision(
 	task *persistenceblobs.TransferTaskInfo,
-	tasklist *workflow.TaskList,
+	tasklist *commonproto.TaskList,
 	decisionScheduleToStartTimeout int32,
 ) error {
 
@@ -185,7 +185,7 @@ func (t *transferQueueProcessorBase) pushDecision(
 			WorkflowId: task.WorkflowID,
 			RunId:      primitives.UUID(task.RunID).String(),
 		},
-		TaskList:                      adapter.ToProtoTaskList(tasklist),
+		TaskList:                      tasklist,
 		ScheduleId:                    task.ScheduleID,
 		ScheduleToStartTimeoutSeconds: decisionScheduleToStartTimeout,
 	})
@@ -201,7 +201,7 @@ func (t *transferQueueProcessorBase) recordWorkflowStarted(
 	executionTimeUnixNano int64,
 	workflowTimeout int32,
 	taskID int64,
-	visibilityMemo *workflow.Memo,
+	visibilityMemo *commonproto.Memo,
 	searchAttributes map[string][]byte,
 ) error {
 
@@ -223,16 +223,16 @@ func (t *transferQueueProcessorBase) recordWorkflowStarted(
 	request := &persistence.RecordWorkflowExecutionStartedRequest{
 		DomainUUID: domainID,
 		Domain:     domain,
-		Execution: workflow.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
-		},
+		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
+		}),
 		WorkflowTypeName:   workflowTypeName,
 		StartTimestamp:     startTimeUnixNano,
 		ExecutionTimestamp: executionTimeUnixNano,
 		WorkflowTimeout:    int64(workflowTimeout),
 		TaskID:             taskID,
-		Memo:               visibilityMemo,
+		Memo:               adapter.ToThriftMemo(visibilityMemo),
 		SearchAttributes:   searchAttributes,
 	}
 
@@ -248,7 +248,7 @@ func (t *transferQueueProcessorBase) upsertWorkflowExecution(
 	executionTimeUnixNano int64,
 	workflowTimeout int32,
 	taskID int64,
-	visibilityMemo *workflow.Memo,
+	visibilityMemo *commonproto.Memo,
 	searchAttributes map[string][]byte,
 ) error {
 
@@ -265,16 +265,16 @@ func (t *transferQueueProcessorBase) upsertWorkflowExecution(
 	request := &persistence.UpsertWorkflowExecutionRequest{
 		DomainUUID: domainID,
 		Domain:     domain,
-		Execution: workflow.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
-		},
+		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
+		}),
 		WorkflowTypeName:   workflowTypeName,
 		StartTimestamp:     startTimeUnixNano,
 		ExecutionTimestamp: executionTimeUnixNano,
 		WorkflowTimeout:    int64(workflowTimeout),
 		TaskID:             taskID,
-		Memo:               visibilityMemo,
+		Memo:               adapter.ToThriftMemo(visibilityMemo),
 		SearchAttributes:   searchAttributes,
 	}
 
@@ -289,10 +289,10 @@ func (t *transferQueueProcessorBase) recordWorkflowClosed(
 	startTimeUnixNano int64,
 	executionTimeUnixNano int64,
 	endTimeUnixNano int64,
-	closeStatus workflow.WorkflowExecutionCloseStatus,
+	closeStatus enums.WorkflowExecutionCloseStatus,
 	historyLength int64,
 	taskID int64,
-	visibilityMemo *workflow.Memo,
+	visibilityMemo *commonproto.Memo,
 	searchAttributes map[string][]byte,
 ) error {
 
@@ -318,7 +318,7 @@ func (t *transferQueueProcessorBase) recordWorkflowClosed(
 		}
 
 		clusterConfiguredForVisibilityArchival := t.shard.GetService().GetArchivalMetadata().GetVisibilityConfig().ClusterConfiguredForArchival()
-		domainConfiguredForVisibilityArchival := domainEntry.GetConfig().VisibilityArchivalStatus == workflow.ArchivalStatusEnabled
+		domainConfiguredForVisibilityArchival := domainEntry.GetConfig().VisibilityArchivalStatus == *adapter.ToThriftArchivalStatus(enums.ArchivalStatusEnabled)
 		archiveVisibility = clusterConfiguredForVisibilityArchival && domainConfiguredForVisibilityArchival
 	}
 
@@ -326,19 +326,19 @@ func (t *transferQueueProcessorBase) recordWorkflowClosed(
 		if err := t.visibilityMgr.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{
 			DomainUUID: domainID,
 			Domain:     domain,
-			Execution: workflow.WorkflowExecution{
-				WorkflowId: common.StringPtr(workflowID),
-				RunId:      common.StringPtr(runID),
-			},
+			Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      runID,
+			}),
 			WorkflowTypeName:   workflowTypeName,
 			StartTimestamp:     startTimeUnixNano,
 			ExecutionTimestamp: executionTimeUnixNano,
 			CloseTimestamp:     endTimeUnixNano,
-			Status:             closeStatus,
+			Status:             *adapter.ToThriftWorkflowExecutionCloseStatus(closeStatus),
 			HistoryLength:      historyLength,
 			RetentionSeconds:   retentionSeconds,
 			TaskID:             taskID,
-			Memo:               visibilityMemo,
+			Memo:               adapter.ToThriftMemo(visibilityMemo),
 			SearchAttributes:   searchAttributes,
 		}); err != nil {
 			return err
@@ -358,9 +358,9 @@ func (t *transferQueueProcessorBase) recordWorkflowClosed(
 				StartTimestamp:     startTimeUnixNano,
 				ExecutionTimestamp: executionTimeUnixNano,
 				CloseTimestamp:     endTimeUnixNano,
-				CloseStatus:        closeStatus,
+				CloseStatus:        *adapter.ToThriftWorkflowExecutionCloseStatus(closeStatus),
 				HistoryLength:      historyLength,
-				Memo:               visibilityMemo,
+				Memo:               adapter.ToThriftMemo(visibilityMemo),
 				SearchAttributes:   searchAttributes,
 				VisibilityURI:      domainEntry.GetConfig().VisibilityArchivalURI,
 				URI:                domainEntry.GetConfig().HistoryArchivalURI,
@@ -377,7 +377,7 @@ func (t *transferQueueProcessorBase) recordWorkflowClosed(
 // Argument startEvent is to save additional call of msBuilder.GetStartEvent
 func getWorkflowExecutionTimestamp(
 	msBuilder mutableState,
-	startEvent *workflow.HistoryEvent,
+	startEvent *commonproto.HistoryEvent,
 ) time.Time {
 	// Use value 0 to represent workflows that don't need backoff. Since ES doesn't support
 	// comparison between two field, we need a value to differentiate them from cron workflows
@@ -387,7 +387,7 @@ func getWorkflowExecutionTimestamp(
 		return executionTimestamp
 	}
 
-	if backoffSeconds := startEvent.WorkflowExecutionStartedEventAttributes.GetFirstDecisionTaskBackoffSeconds(); backoffSeconds != 0 {
+	if backoffSeconds := startEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstDecisionTaskBackoffSeconds(); backoffSeconds != 0 {
 		startTimestamp := time.Unix(0, startEvent.GetTimestamp())
 		executionTimestamp = startTimestamp.Add(time.Duration(backoffSeconds) * time.Second)
 	}
@@ -396,12 +396,12 @@ func getWorkflowExecutionTimestamp(
 
 func getWorkflowMemo(
 	memo map[string][]byte,
-) *workflow.Memo {
+) *commonproto.Memo {
 
 	if memo == nil {
 		return nil
 	}
-	return &workflow.Memo{Fields: memo}
+	return &commonproto.Memo{Fields: memo}
 }
 
 func copySearchAttributes(

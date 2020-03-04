@@ -28,8 +28,9 @@
 package membership
 
 import (
-	gomock "github.com/golang/mock/gomock"
 	reflect "reflect"
+
+	gomock "github.com/golang/mock/gomock"
 )
 
 // MockMonitor is a mock of Monitor interface

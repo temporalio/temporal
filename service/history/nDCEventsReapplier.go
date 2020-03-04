@@ -25,9 +25,10 @@ package history
 import (
 	"context"
 
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/metrics"
@@ -38,9 +39,9 @@ type (
 		reapplyEvents(
 			ctx context.Context,
 			msBuilder mutableState,
-			historyEvents []*workflow.HistoryEvent,
+			historyEvents []*commonproto.HistoryEvent,
 			runID string,
-		) ([]*workflow.HistoryEvent, error)
+		) ([]*commonproto.HistoryEvent, error)
 	}
 
 	nDCEventsReapplierImpl struct {
@@ -61,16 +62,16 @@ func newNDCEventsReapplier(
 }
 
 func (r *nDCEventsReapplierImpl) reapplyEvents(
-	ctx context.Context,
+	_ context.Context,
 	msBuilder mutableState,
-	historyEvents []*workflow.HistoryEvent,
+	historyEvents []*commonproto.HistoryEvent,
 	runID string,
-) ([]*workflow.HistoryEvent, error) {
+) ([]*commonproto.HistoryEvent, error) {
 
-	var reappliedEvents []*workflow.HistoryEvent
+	var reappliedEvents []*commonproto.HistoryEvent
 	for _, event := range historyEvents {
 		switch event.GetEventType() {
-		case workflow.EventTypeWorkflowExecutionSignaled:
+		case enums.EventTypeWorkflowExecutionSignaled:
 			dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
 			if msBuilder.IsResourceDuplicated(dedupResource) {
 				// skip already applied event

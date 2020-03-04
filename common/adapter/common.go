@@ -331,14 +331,22 @@ func ToProtoResetPoints(in *shared.ResetPoints) *common.ResetPoints {
 	if in == nil {
 		return nil
 	}
+
+	return &common.ResetPoints{
+		Points: ToProtoResetPointInfos(in.GetPoints()),
+	}
+}
+
+func ToProtoResetPointInfos(in []*shared.ResetPointInfo) []*common.ResetPointInfo {
+	if in == nil {
+		return nil
+	}
 	var points []*common.ResetPointInfo
-	for _, point := range in.GetPoints() {
+	for _, point := range in {
 		points = append(points, ToProtoResetPointInfo(point))
 	}
 
-	return &common.ResetPoints{
-		Points: points,
-	}
+	return points
 }
 
 func ToProtoHeader(in *shared.Header) *common.Header {

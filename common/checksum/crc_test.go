@@ -28,8 +28,8 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
+	commonproto "go.temporal.io/temporal-proto/common"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 )
 
@@ -38,13 +38,13 @@ func TestCRC32OverThrift(t *testing.T) {
 	// iteration order is not guaranteed in Go and
 	// so, each call to thrift encode will result in
 	// different set of serialized bytes
-	obj := &shared.WorkflowExecutionInfo{
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(uuid.New()),
-			RunId:      common.StringPtr(uuid.New()),
+	obj := &commonproto.WorkflowExecutionInfo{
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: uuid.New(),
+			RunId:      uuid.New(),
 		},
-		StartTime:     common.Int64Ptr(time.Now().UnixNano()),
-		HistoryLength: common.Int64Ptr(550),
+		StartTime:     time.Now().UnixNano(),
+		HistoryLength: 550,
 	}
 
 	parallism := 10

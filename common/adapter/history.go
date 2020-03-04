@@ -30,6 +30,17 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 )
 
+func ToProtoHistories(in []*shared.History) []*common.History {
+	if in == nil {
+		return nil
+	}
+	var histories []*common.History
+	for _, history := range in {
+		histories = append(histories, ToProtoHistory(history))
+	}
+	return histories
+}
+
 func ToProtoHistory(in *shared.History) *common.History {
 	if in == nil {
 		return nil
@@ -166,7 +177,7 @@ func ToProtoWorkflowExecutionStartedEventAttributes(in *shared.WorkflowExecution
 		ExecutionStartToCloseTimeoutSeconds: in.GetExecutionStartToCloseTimeoutSeconds(),
 		TaskStartToCloseTimeoutSeconds:      in.GetTaskStartToCloseTimeoutSeconds(),
 		ContinuedExecutionRunId:             in.GetContinuedExecutionRunId(),
-		Initiator:                           ToProtoContinueAsNewInitiator(in.Initiator),
+		Initiator:                           enums.ContinueAsNewInitiator(in.GetInitiator()),
 		ContinuedFailureReason:              in.GetContinuedFailureReason(),
 		ContinuedFailureDetails:             in.GetContinuedFailureDetails(),
 		LastCompletionResult:                in.GetLastCompletionResult(),
@@ -536,7 +547,7 @@ func ToProtoWorkflowExecutionContinuedAsNewEventAttributes(in *shared.WorkflowEx
 		TaskStartToCloseTimeoutSeconds:      in.GetTaskStartToCloseTimeoutSeconds(),
 		DecisionTaskCompletedEventId:        in.GetDecisionTaskCompletedEventId(),
 		BackoffStartIntervalInSeconds:       in.GetBackoffStartIntervalInSeconds(),
-		Initiator:                           ToProtoContinueAsNewInitiator(in.Initiator),
+		Initiator:                           enums.ContinueAsNewInitiator(in.GetInitiator()),
 		FailureReason:                       in.GetFailureReason(),
 		FailureDetails:                      in.GetFailureDetails(),
 		LastCompletionResult:                in.GetLastCompletionResult(),
@@ -717,6 +728,18 @@ func ToProtoUpsertWorkflowSearchAttributesEventAttributes(in *shared.UpsertWorkf
 		DecisionTaskCompletedEventId: in.GetDecisionTaskCompletedEventId(),
 		SearchAttributes:             ToProtoSearchAttributes(in.GetSearchAttributes()),
 	}
+}
+
+func ToThriftHistories(in []*common.History) []*shared.History {
+	if in == nil {
+		return nil
+	}
+
+	var ret []*shared.History
+	for _, item := range in {
+		ret = append(ret, ToThriftHistory(item))
+	}
+	return ret
 }
 
 // ToThriftHistory ...

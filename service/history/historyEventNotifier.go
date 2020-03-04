@@ -25,9 +25,9 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	gen "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/collection"
@@ -75,7 +75,7 @@ var _ historyEventNotifier = (*historyEventNotifierImpl)(nil)
 
 func newHistoryEventNotification(
 	domainID string,
-	workflowExecution *gen.WorkflowExecution,
+	workflowExecution *commonproto.WorkflowExecution,
 	lastFirstEventID int64,
 	nextEventID int64,
 	previousStartedEventID int64,

@@ -28,9 +28,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/metrics"
@@ -79,8 +80,9 @@ func (s *eventsCacheSuite) TearDownTest() {
 }
 
 func (s *eventsCacheSuite) newTestEventsCache() *eventsCacheImpl {
+	shardId := 10
 	return newEventsCacheWithOptions(16, 32, time.Minute, s.mockEventsV2Mgr, false, s.logger,
-		metrics.NewClient(tally.NoopScope, metrics.History), common.IntPtr(10))
+		metrics.NewClient(tally.NoopScope, metrics.History), &shardId)
 }
 
 func (s *eventsCacheSuite) TestEventsCacheHitSuccess() {
@@ -88,10 +90,10 @@ func (s *eventsCacheSuite) TestEventsCacheHitSuccess() {
 	workflowID := "events-cache-hit-success-workflow-id"
 	runID := "events-cache-hit-success-run-id"
 	eventID := int64(23)
-	event := &shared.HistoryEvent{
-		EventId:                            &eventID,
-		EventType:                          shared.EventTypeActivityTaskStarted.Ptr(),
-		ActivityTaskStartedEventAttributes: &shared.ActivityTaskStartedEventAttributes{},
+	event := &commonproto.HistoryEvent{
+		EventId:    eventID,
+		EventType:  enums.EventTypeActivityTaskStarted,
+		Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{}},
 	}
 
 	s.cache.putEvent(domainID, workflowID, runID, eventID, event)
@@ -104,46 +106,47 @@ func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
 	domainID := "events-cache-miss-multi-events-batch-v2-success-domain"
 	workflowID := "events-cache-miss-multi-events-batch-v2-success-workflow-id"
 	runID := "events-cache-miss-multi-events-batch-v2-success-run-id"
-	event1 := &shared.HistoryEvent{
-		EventId:                              common.Int64Ptr(11),
-		EventType:                            shared.EventTypeDecisionTaskCompleted.Ptr(),
-		DecisionTaskCompletedEventAttributes: &shared.DecisionTaskCompletedEventAttributes{},
+	event1 := &commonproto.HistoryEvent{
+		EventId:    11,
+		EventType:  enums.EventTypeDecisionTaskCompleted,
+		Attributes: &commonproto.HistoryEvent_DecisionTaskCompletedEventAttributes{DecisionTaskCompletedEventAttributes: &commonproto.DecisionTaskCompletedEventAttributes{}},
 	}
-	event2 := &shared.HistoryEvent{
-		EventId:                              common.Int64Ptr(12),
-		EventType:                            shared.EventTypeActivityTaskScheduled.Ptr(),
-		ActivityTaskScheduledEventAttributes: &shared.ActivityTaskScheduledEventAttributes{},
+	event2 := &commonproto.HistoryEvent{
+		EventId:    12,
+		EventType:  enums.EventTypeActivityTaskScheduled,
+		Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{}},
 	}
-	event3 := &shared.HistoryEvent{
-		EventId:                              common.Int64Ptr(13),
-		EventType:                            shared.EventTypeActivityTaskScheduled.Ptr(),
-		ActivityTaskScheduledEventAttributes: &shared.ActivityTaskScheduledEventAttributes{},
+	event3 := &commonproto.HistoryEvent{
+		EventId:    13,
+		EventType:  enums.EventTypeActivityTaskScheduled,
+		Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{}},
 	}
-	event4 := &shared.HistoryEvent{
-		EventId:                              common.Int64Ptr(14),
-		EventType:                            shared.EventTypeActivityTaskScheduled.Ptr(),
-		ActivityTaskScheduledEventAttributes: &shared.ActivityTaskScheduledEventAttributes{},
+	event4 := &commonproto.HistoryEvent{
+		EventId:    14,
+		EventType:  enums.EventTypeActivityTaskScheduled,
+		Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{}},
 	}
-	event5 := &shared.HistoryEvent{
-		EventId:                              common.Int64Ptr(15),
-		EventType:                            shared.EventTypeActivityTaskScheduled.Ptr(),
-		ActivityTaskScheduledEventAttributes: &shared.ActivityTaskScheduledEventAttributes{},
+	event5 := &commonproto.HistoryEvent{
+		EventId:    15,
+		EventType:  enums.EventTypeActivityTaskScheduled,
+		Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{}},
 	}
-	event6 := &shared.HistoryEvent{
-		EventId:                              common.Int64Ptr(16),
-		EventType:                            shared.EventTypeActivityTaskScheduled.Ptr(),
-		ActivityTaskScheduledEventAttributes: &shared.ActivityTaskScheduledEventAttributes{},
+	event6 := &commonproto.HistoryEvent{
+		EventId:    16,
+		EventType:  enums.EventTypeActivityTaskScheduled,
+		Attributes: &commonproto.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &commonproto.ActivityTaskScheduledEventAttributes{}},
 	}
 
+	shardId := 10
 	s.mockEventsV2Mgr.On("ReadHistoryBranch", &persistence.ReadHistoryBranchRequest{
 		BranchToken:   []byte("store_token"),
 		MinEventID:    event1.GetEventId(),
 		MaxEventID:    event6.GetEventId() + 1,
 		PageSize:      1,
 		NextPageToken: nil,
-		ShardID:       common.IntPtr(10),
+		ShardID:       &shardId,
 	}).Return(&persistence.ReadHistoryBranchResponse{
-		HistoryEvents:    []*shared.HistoryEvent{event1, event2, event3, event4, event5, event6},
+		HistoryEvents:    adapter.ToThriftHistoryEvents([]*commonproto.HistoryEvent{event1, event2, event3, event4, event5, event6}),
 		NextPageToken:    nil,
 		LastFirstEventID: event1.GetEventId(),
 	}, nil)
@@ -160,6 +163,7 @@ func (s *eventsCacheSuite) TestEventsCacheMissV2Failure() {
 	workflowID := "events-cache-miss-failure-workflow-id"
 	runID := "events-cache-miss-failure-run-id"
 
+	shardId := 10
 	expectedErr := errors.New("persistence call failed")
 	s.mockEventsV2Mgr.On("ReadHistoryBranch", &persistence.ReadHistoryBranchRequest{
 		BranchToken:   []byte("store_token"),
@@ -167,7 +171,7 @@ func (s *eventsCacheSuite) TestEventsCacheMissV2Failure() {
 		MaxEventID:    int64(15),
 		PageSize:      1,
 		NextPageToken: nil,
-		ShardID:       common.IntPtr(10),
+		ShardID:       &shardId,
 	}).Return(nil, expectedErr)
 
 	actualEvent, err := s.cache.getEvent(domainID, workflowID, runID, int64(11), int64(14),
@@ -180,26 +184,27 @@ func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
 	domainID := "events-cache-disable-success-domain"
 	workflowID := "events-cache-disable-success-workflow-id"
 	runID := "events-cache-disable-success-run-id"
-	event1 := &shared.HistoryEvent{
-		EventId:                            common.Int64Ptr(23),
-		EventType:                          shared.EventTypeActivityTaskStarted.Ptr(),
-		ActivityTaskStartedEventAttributes: &shared.ActivityTaskStartedEventAttributes{},
+	event1 := &commonproto.HistoryEvent{
+		EventId:    23,
+		EventType:  enums.EventTypeActivityTaskStarted,
+		Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{}},
 	}
-	event2 := &shared.HistoryEvent{
-		EventId:                            common.Int64Ptr(32),
-		EventType:                          shared.EventTypeActivityTaskStarted.Ptr(),
-		ActivityTaskStartedEventAttributes: &shared.ActivityTaskStartedEventAttributes{},
+	event2 := &commonproto.HistoryEvent{
+		EventId:    32,
+		EventType:  enums.EventTypeActivityTaskStarted,
+		Attributes: &commonproto.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &commonproto.ActivityTaskStartedEventAttributes{}},
 	}
 
+	shardId := 10
 	s.mockEventsV2Mgr.On("ReadHistoryBranch", &persistence.ReadHistoryBranchRequest{
 		BranchToken:   []byte("store_token"),
 		MinEventID:    event2.GetEventId(),
 		MaxEventID:    event2.GetEventId() + 1,
 		PageSize:      1,
 		NextPageToken: nil,
-		ShardID:       common.IntPtr(10),
+		ShardID:       &shardId,
 	}).Return(&persistence.ReadHistoryBranchResponse{
-		HistoryEvents:    []*shared.HistoryEvent{event2},
+		HistoryEvents:    adapter.ToThriftHistoryEvents([]*commonproto.HistoryEvent{event2}),
 		NextPageToken:    nil,
 		LastFirstEventID: event2.GetEventId(),
 	}, nil)

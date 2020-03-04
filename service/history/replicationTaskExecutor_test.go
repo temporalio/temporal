@@ -30,12 +30,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/history"
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/.gen/proto/replication"
@@ -217,19 +217,19 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicati
 			},
 		},
 	}
-	request := &history.SyncActivityRequest{
-		DomainId:           common.StringPtr(domainID),
-		WorkflowId:         common.StringPtr(workflowID),
-		RunId:              common.StringPtr(runID),
-		Version:            common.Int64Ptr(0),
-		ScheduledId:        common.Int64Ptr(0),
-		ScheduledTime:      common.Int64Ptr(0),
-		StartedId:          common.Int64Ptr(0),
-		StartedTime:        common.Int64Ptr(0),
-		LastHeartbeatTime:  common.Int64Ptr(0),
-		Attempt:            common.Int32Ptr(0),
-		LastFailureReason:  common.StringPtr(""),
-		LastWorkerIdentity: common.StringPtr(""),
+	request := &historyservice.SyncActivityRequest{
+		DomainId:           domainID,
+		WorkflowId:         workflowID,
+		RunId:              runID,
+		Version:            0,
+		ScheduledId:        0,
+		ScheduledTime:      0,
+		StartedId:          0,
+		StartedTime:        0,
+		LastHeartbeatTime:  0,
+		Attempt:            0,
+		LastFailureReason:  "",
+		LastWorkerIdentity: "",
 	}
 
 	s.mockEngine.EXPECT().SyncActivity(gomock.Any(), request).Return(nil).Times(1)
@@ -254,19 +254,19 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_HistoryReplicationTas
 			},
 		},
 	}
-	request := &history.ReplicateEventsRequest{
-		DomainUUID: common.StringPtr(domainID),
-		WorkflowExecution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
+	request := &historyservice.ReplicateEventsRequest{
+		DomainUUID: domainID,
+		WorkflowExecution: &commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
 		},
-		SourceCluster:     common.StringPtr("test"),
-		ForceBufferEvents: common.BoolPtr(false),
-		FirstEventId:      common.Int64Ptr(1),
-		NextEventId:       common.Int64Ptr(5),
-		Version:           common.Int64Ptr(common.EmptyVersion),
-		ResetWorkflow:     common.BoolPtr(false),
-		NewRunNDC:         common.BoolPtr(false),
+		SourceCluster:     "test",
+		ForceBufferEvents: false,
+		FirstEventId:      1,
+		NextEventId:       5,
+		Version:           common.EmptyVersion,
+		ResetWorkflow:     false,
+		NewRunNDC:         false,
 	}
 
 	s.mockEngine.EXPECT().ReplicateEvents(gomock.Any(), request).Return(nil).Times(1)
@@ -288,11 +288,11 @@ func (s *replicationTaskExecutorSuite) TestProcess_HistoryV2ReplicationTask() {
 			},
 		},
 	}
-	request := &history.ReplicateEventsV2Request{
-		DomainUUID: common.StringPtr(domainID),
-		WorkflowExecution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
+	request := &historyservice.ReplicateEventsV2Request{
+		DomainUUID: domainID,
+		WorkflowExecution: &commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
 		},
 	}
 

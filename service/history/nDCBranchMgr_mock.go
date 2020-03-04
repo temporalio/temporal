@@ -29,9 +29,11 @@ package history
 
 import (
 	context "context"
-	gomock "github.com/golang/mock/gomock"
-	persistence "github.com/temporalio/temporal/common/persistence"
 	reflect "reflect"
+
+	gomock "github.com/golang/mock/gomock"
+
+	persistence "github.com/temporalio/temporal/common/persistence"
 )
 
 // MocknDCBranchMgr is a mock of nDCBranchMgr interface

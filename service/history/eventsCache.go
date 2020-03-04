@@ -25,10 +25,11 @@ package history
 import (
 	"time"
 
+	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -45,13 +46,13 @@ type (
 			firstEventID int64,
 			eventID int64,
 			branchToken []byte,
-		) (*shared.HistoryEvent, error)
+		) (*commonproto.HistoryEvent, error)
 		putEvent(
 			domainID string,
 			workflowID string,
 			runID string,
 			eventID int64,
-			event *shared.HistoryEvent,
+			event *commonproto.HistoryEvent,
 		)
 		deleteEvent(
 			domainID string,
@@ -117,7 +118,7 @@ func newEventKey(domainID, workflowID, runID string, eventID int64) eventKey {
 }
 
 func (e *eventsCacheImpl) getEvent(domainID, workflowID, runID string, firstEventID, eventID int64,
-	branchToken []byte) (*shared.HistoryEvent, error) {
+	branchToken []byte) (*commonproto.HistoryEvent, error) {
 	e.metricsClient.IncCounter(metrics.EventsCacheGetEventScope, metrics.CacheRequests)
 	sw := e.metricsClient.StartTimer(metrics.EventsCacheGetEventScope, metrics.CacheLatency)
 	defer sw.Stop()
@@ -125,7 +126,7 @@ func (e *eventsCacheImpl) getEvent(domainID, workflowID, runID string, firstEven
 	key := newEventKey(domainID, workflowID, runID, eventID)
 	// Test hook for disabling cache
 	if !e.disabled {
-		event, cacheHit := e.Cache.Get(key).(*shared.HistoryEvent)
+		event, cacheHit := e.Cache.Get(key).(*commonproto.HistoryEvent)
 		if cacheHit {
 			return event, nil
 		}
@@ -148,7 +149,7 @@ func (e *eventsCacheImpl) getEvent(domainID, workflowID, runID string, firstEven
 	return event, nil
 }
 
-func (e *eventsCacheImpl) putEvent(domainID, workflowID, runID string, eventID int64, event *shared.HistoryEvent) {
+func (e *eventsCacheImpl) putEvent(domainID, workflowID, runID string, eventID int64, event *commonproto.HistoryEvent) {
 	e.metricsClient.IncCounter(metrics.EventsCachePutEventScope, metrics.CacheRequests)
 	sw := e.metricsClient.StartTimer(metrics.EventsCachePutEventScope, metrics.CacheLatency)
 	defer sw.Stop()
@@ -167,12 +168,10 @@ func (e *eventsCacheImpl) deleteEvent(domainID, workflowID, runID string, eventI
 }
 
 func (e *eventsCacheImpl) getHistoryEventFromStore(domainID, workflowID, runID string, firstEventID, eventID int64,
-	branchToken []byte) (*shared.HistoryEvent, error) {
+	branchToken []byte) (*commonproto.HistoryEvent, error) {
 	e.metricsClient.IncCounter(metrics.EventsCacheGetFromStoreScope, metrics.CacheRequests)
 	sw := e.metricsClient.StartTimer(metrics.EventsCacheGetFromStoreScope, metrics.CacheLatency)
 	defer sw.Stop()
-
-	var historyEvents []*shared.HistoryEvent
 
 	response, err := e.eventsV2Mgr.ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
@@ -188,12 +187,10 @@ func (e *eventsCacheImpl) getHistoryEventFromStore(domainID, workflowID, runID s
 		return nil, err
 	}
 
-	historyEvents = response.HistoryEvents
-
 	// find history event from batch and return back single event to caller
-	for _, e := range historyEvents {
+	for _, e := range response.HistoryEvents {
 		if e.GetEventId() == eventID {
-			return e, nil
+			return adapter.ToProtoHistoryEvent(e), nil
 		}
 	}
 

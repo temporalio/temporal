@@ -23,10 +23,11 @@
 package history
 
 import (
+	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -91,7 +92,7 @@ func (r *conflictResolverImpl) reset(
 	var nextPageToken []byte
 	var resetMutableStateBuilder *mutableStateBuilder
 	var sBuilder stateBuilder
-	var history []*shared.HistoryEvent
+	var history []*commonproto.HistoryEvent
 	var totalSize int64
 
 	eventsToApply := replayNextEventID - common.FirstEventID
@@ -192,8 +193,8 @@ func (r *conflictResolverImpl) reset(
 	return r.context.loadWorkflowExecution()
 }
 
-func (r *conflictResolverImpl) getHistory(domainID string, execution shared.WorkflowExecution, firstEventID,
-	nextEventID int64, nextPageToken []byte, branchToken []byte) ([]*shared.HistoryEvent, int, int64, []byte, error) {
+func (r *conflictResolverImpl) getHistory(domainID string, execution commonproto.WorkflowExecution, firstEventID,
+	nextEventID int64, nextPageToken []byte, branchToken []byte) ([]*commonproto.HistoryEvent, int, int64, []byte, error) {
 
 	response, err := r.historyV2Mgr.ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
@@ -206,7 +207,7 @@ func (r *conflictResolverImpl) getHistory(domainID string, execution shared.Work
 	if err != nil {
 		return nil, 0, 0, nil, err
 	}
-	return response.HistoryEvents, response.Size, response.LastFirstEventID, response.NextPageToken, nil
+	return adapter.ToProtoHistoryEvents(response.HistoryEvents), response.Size, response.LastFirstEventID, response.NextPageToken, nil
 }
 
 func (r *conflictResolverImpl) logError(msg string, err error) {

@@ -28,9 +28,11 @@
 package history
 
 import (
-	gomock "github.com/golang/mock/gomock"
-	persistence "github.com/temporalio/temporal/common/persistence"
 	reflect "reflect"
+
+	gomock "github.com/golang/mock/gomock"
+
+	persistence "github.com/temporalio/temporal/common/persistence"
 )
 
 // MocktransferQueueProcessor is a mock of transferQueueProcessor interface

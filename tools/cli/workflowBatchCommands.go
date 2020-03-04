@@ -197,13 +197,13 @@ func StartBatchJob(c *cli.Context) {
 		},
 		RPS: rps,
 	}
-	wf, err := client.StartWorkflow(tcCtx, options, batcher.BatchWFTypeName, params)
+	wf, err := client.ExecuteWorkflow(tcCtx, options, batcher.BatchWFTypeName, params)
 	if err != nil {
 		ErrorAndExit("Failed to start batch job", err)
 	}
 	output := map[string]interface{}{
 		"msg":   "batch job is started",
-		"jobID": wf.ID,
+		"jobID": wf.GetID(),
 	}
 	prettyPrintJSONObject(output)
 }

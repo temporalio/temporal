@@ -33,7 +33,6 @@ import (
 	"github.com/temporalio/temporal/client/history"
 	"github.com/temporalio/temporal/client/matching"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
@@ -101,7 +100,7 @@ func newTransferQueueProcessor(
 				shard.GetDomainCache(),
 				shard.GetService().GetClientBean().GetRemoteAdminClient(clusterName),
 				func(ctx context.Context, request *historyservice.ReplicateRawEventsRequest) error {
-					return historyService.ReplicateRawEvents(ctx, adapter.ToThriftReplicateRawEventsRequest(request))
+					return historyService.ReplicateRawEvents(ctx, request)
 				},
 				persistence.NewPayloadSerializer(),
 				historyRereplicationTimeout,
@@ -111,7 +110,7 @@ func newTransferQueueProcessor(
 				shard.GetDomainCache(),
 				shard.GetService().GetClientBean().GetRemoteAdminClient(clusterName),
 				func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-					return historyService.ReplicateEventsV2(ctx, adapter.ToThriftReplicateEventsV2Request(request))
+					return historyService.ReplicateEventsV2(ctx, request)
 				},
 				shard.GetService().GetPayloadSerializer(),
 				logger,

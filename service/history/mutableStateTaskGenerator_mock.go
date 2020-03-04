@@ -28,10 +28,11 @@
 package history
 
 import (
-	gomock "github.com/golang/mock/gomock"
-	shared "github.com/temporalio/temporal/.gen/go/shared"
 	reflect "reflect"
 	time "time"
+
+	gomock "github.com/golang/mock/gomock"
+	common "go.temporal.io/temporal-proto/common"
 )
 
 // MockmutableStateTaskGenerator is a mock of mutableStateTaskGenerator interface
@@ -58,7 +59,7 @@ func (m *MockmutableStateTaskGenerator) EXPECT() *MockmutableStateTaskGeneratorM
 }
 
 // generateWorkflowStartTasks mocks base method
-func (m *MockmutableStateTaskGenerator) generateWorkflowStartTasks(now time.Time, startEvent *shared.HistoryEvent) error {
+func (m *MockmutableStateTaskGenerator) generateWorkflowStartTasks(now time.Time, startEvent *common.HistoryEvent) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "generateWorkflowStartTasks", now, startEvent)
 	ret0, _ := ret[0].(error)
@@ -86,7 +87,7 @@ func (mr *MockmutableStateTaskGeneratorMockRecorder) generateWorkflowCloseTasks(
 }
 
 // generateRecordWorkflowStartedTasks mocks base method
-func (m *MockmutableStateTaskGenerator) generateRecordWorkflowStartedTasks(now time.Time, startEvent *shared.HistoryEvent) error {
+func (m *MockmutableStateTaskGenerator) generateRecordWorkflowStartedTasks(now time.Time, startEvent *common.HistoryEvent) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "generateRecordWorkflowStartedTasks", now, startEvent)
 	ret0, _ := ret[0].(error)
@@ -100,7 +101,7 @@ func (mr *MockmutableStateTaskGeneratorMockRecorder) generateRecordWorkflowStart
 }
 
 // generateDelayedDecisionTasks mocks base method
-func (m *MockmutableStateTaskGenerator) generateDelayedDecisionTasks(now time.Time, startEvent *shared.HistoryEvent) error {
+func (m *MockmutableStateTaskGenerator) generateDelayedDecisionTasks(now time.Time, startEvent *common.HistoryEvent) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "generateDelayedDecisionTasks", now, startEvent)
 	ret0, _ := ret[0].(error)
@@ -142,7 +143,7 @@ func (mr *MockmutableStateTaskGeneratorMockRecorder) generateDecisionStartTasks(
 }
 
 // generateActivityTransferTasks mocks base method
-func (m *MockmutableStateTaskGenerator) generateActivityTransferTasks(now time.Time, event *shared.HistoryEvent) error {
+func (m *MockmutableStateTaskGenerator) generateActivityTransferTasks(now time.Time, event *common.HistoryEvent) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "generateActivityTransferTasks", now, event)
 	ret0, _ := ret[0].(error)
@@ -170,7 +171,7 @@ func (mr *MockmutableStateTaskGeneratorMockRecorder) generateActivityRetryTasks(
 }
 
 // generateChildWorkflowTasks mocks base method
-func (m *MockmutableStateTaskGenerator) generateChildWorkflowTasks(now time.Time, event *shared.HistoryEvent) error {
+func (m *MockmutableStateTaskGenerator) generateChildWorkflowTasks(now time.Time, event *common.HistoryEvent) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "generateChildWorkflowTasks", now, event)
 	ret0, _ := ret[0].(error)
@@ -184,7 +185,7 @@ func (mr *MockmutableStateTaskGeneratorMockRecorder) generateChildWorkflowTasks(
 }
 
 // generateRequestCancelExternalTasks mocks base method
-func (m *MockmutableStateTaskGenerator) generateRequestCancelExternalTasks(now time.Time, event *shared.HistoryEvent) error {
+func (m *MockmutableStateTaskGenerator) generateRequestCancelExternalTasks(now time.Time, event *common.HistoryEvent) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "generateRequestCancelExternalTasks", now, event)
 	ret0, _ := ret[0].(error)
@@ -198,7 +199,7 @@ func (mr *MockmutableStateTaskGeneratorMockRecorder) generateRequestCancelExtern
 }
 
 // generateSignalExternalTasks mocks base method
-func (m *MockmutableStateTaskGenerator) generateSignalExternalTasks(now time.Time, event *shared.HistoryEvent) error {
+func (m *MockmutableStateTaskGenerator) generateSignalExternalTasks(now time.Time, event *common.HistoryEvent) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "generateSignalExternalTasks", now, event)
 	ret0, _ := ret[0].(error)

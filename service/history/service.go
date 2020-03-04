@@ -426,10 +426,9 @@ func (s *Service) Start() {
 	s.handler.Start()
 
 	s.server = grpc.NewServer(grpc.UnaryInterceptor(interceptor))
-	handlerGRPC := NewHandlerGRPC(s.handler)
-	nilCheckHandler := NewNilCheckHandler(handlerGRPC)
+	nilCheckHandler := NewNilCheckHandler(s.handler)
 	historyservice.RegisterHistoryServiceServer(s.server, nilCheckHandler)
-	healthservice.RegisterMetaServer(s.server, handlerGRPC)
+	healthservice.RegisterMetaServer(s.server, s.handler)
 
 	listener := s.GetGRPCListener()
 	logger.Info("Starting to serve on history listener")

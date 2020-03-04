@@ -24,10 +24,9 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
+	commonproto "go.temporal.io/temporal-proto/common"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -118,7 +117,7 @@ type (
 
 	pushDecisionToMatchingInfo struct {
 		decisionScheduleToStartTimeout int32
-		tasklist                       shared.TaskList
+		tasklist                       commonproto.TaskList
 	}
 )
 
@@ -154,7 +153,7 @@ func newPushActivityToMatchingInfo(
 
 func newPushDecisionToMatchingInfo(
 	decisionScheduleToStartTimeout int32,
-	tasklist shared.TaskList,
+	tasklist commonproto.TaskList,
 ) *pushDecisionToMatchingInfo {
 
 	return &pushDecisionToMatchingInfo{

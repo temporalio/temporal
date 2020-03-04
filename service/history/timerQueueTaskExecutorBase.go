@@ -23,9 +23,12 @@ package history
 import (
 	"context"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
+
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/log"
@@ -67,13 +70,13 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	task *persistenceblobs.TimerTaskInfo,
 ) (retError error) {
 
-	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(t.getDomainIDAndWorkflowExecution(task))
+	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(t.getDomainIDAndWorkflowExecution(task))
 	if err != nil {
 		return err
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(weContext, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
 	}
@@ -95,17 +98,17 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 		return err
 	}
 	clusterConfiguredForHistoryArchival := t.shard.GetService().GetArchivalMetadata().GetHistoryConfig().ClusterConfiguredForArchival()
-	domainConfiguredForHistoryArchival := domainCacheEntry.GetConfig().HistoryArchivalStatus == workflow.ArchivalStatusEnabled
+	domainConfiguredForHistoryArchival := domainCacheEntry.GetConfig().HistoryArchivalStatus == *adapter.ToThriftArchivalStatus(enums.ArchivalStatusEnabled)
 	archiveHistory := clusterConfiguredForHistoryArchival && domainConfiguredForHistoryArchival
 
 	// TODO: @ycyang once archival backfill is in place cluster:paused && domain:enabled should be a nop rather than a delete
 	if archiveHistory {
 		t.metricsClient.IncCounter(metrics.HistoryProcessDeleteHistoryEventScope, metrics.WorkflowCleanupArchiveCount)
-		return t.archiveWorkflow(task, context, mutableState, domainCacheEntry)
+		return t.archiveWorkflow(task, weContext, mutableState, domainCacheEntry)
 	}
 
 	t.metricsClient.IncCounter(metrics.HistoryProcessDeleteHistoryEventScope, metrics.WorkflowCleanupDeleteCount)
-	return t.deleteWorkflow(task, context, mutableState)
+	return t.deleteWorkflow(task, weContext, mutableState)
 }
 
 func (t *timerQueueTaskExecutorBase) deleteWorkflow(
@@ -268,10 +271,10 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowVisibility(
 
 func (t *timerQueueTaskExecutorBase) getDomainIDAndWorkflowExecution(
 	task *persistenceblobs.TimerTaskInfo,
-) (string, workflow.WorkflowExecution) {
+) (string, commonproto.WorkflowExecution) {
 
-	return primitives.UUIDString(task.DomainID), workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(task.WorkflowID),
-		RunId:      common.StringPtr(primitives.UUIDString(task.RunID)),
+	return primitives.UUIDString(task.DomainID), commonproto.WorkflowExecution{
+		WorkflowId: task.WorkflowID,
+		RunId:      primitives.UUIDString(task.RunID),
 	}
 }

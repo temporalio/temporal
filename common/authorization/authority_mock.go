@@ -29,8 +29,9 @@ package authorization
 
 import (
 	context "context"
-	gomock "github.com/golang/mock/gomock"
 	reflect "reflect"
+
+	gomock "github.com/golang/mock/gomock"
 )
 
 // MockAuthorizer is a mock of Authorizer interface

@@ -46,8 +46,6 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/client"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/service/history"
 )
@@ -1830,11 +1828,11 @@ func getBadDecisionCompletedID(ctx context.Context, domain, wid, rid, binChecksu
 		return "", 0, printErrorAndReturn("DescribeWorkflowExecution failed", err)
 	}
 
-	_, p := history.FindAutoResetPoint(clock.NewRealTimeSource(), &shared.BadBinaries{
-		Binaries: map[string]*shared.BadBinaryInfo{
+	_, p := history.FindAutoResetPoint(clock.NewRealTimeSource(), &commonproto.BadBinaries{
+		Binaries: map[string]*commonproto.BadBinaryInfo{
 			binChecksum: {},
 		},
-	}, adapter.ToThriftResetPoints(resp.WorkflowExecutionInfo.AutoResetPoints))
+	}, resp.WorkflowExecutionInfo.AutoResetPoints)
 	if p != nil {
 		decisionFinishID = p.GetFirstDecisionCompletedId()
 	}

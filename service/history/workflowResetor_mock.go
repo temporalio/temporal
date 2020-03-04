@@ -29,10 +29,12 @@ package history
 
 import (
 	context "context"
-	gomock "github.com/golang/mock/gomock"
-	history "github.com/temporalio/temporal/.gen/go/history"
-	shared "github.com/temporalio/temporal/.gen/go/shared"
 	reflect "reflect"
+
+	gomock "github.com/golang/mock/gomock"
+	workflowservice "go.temporal.io/temporal-proto/workflowservice"
+
+	historyservice "github.com/temporalio/temporal/.gen/proto/historyservice"
 )
 
 // MockworkflowResetor is a mock of workflowResetor interface
@@ -59,10 +61,10 @@ func (m *MockworkflowResetor) EXPECT() *MockworkflowResetorMockRecorder {
 }
 
 // ResetWorkflowExecution mocks base method
-func (m *MockworkflowResetor) ResetWorkflowExecution(ctx context.Context, resetRequest *shared.ResetWorkflowExecutionRequest, baseContext workflowExecutionContext, baseMutableState mutableState, currContext workflowExecutionContext, currMutableState mutableState) (*shared.ResetWorkflowExecutionResponse, error) {
+func (m *MockworkflowResetor) ResetWorkflowExecution(ctx context.Context, resetRequest *workflowservice.ResetWorkflowExecutionRequest, baseContext workflowExecutionContext, baseMutableState mutableState, currContext workflowExecutionContext, currMutableState mutableState) (*historyservice.ResetWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ResetWorkflowExecution", ctx, resetRequest, baseContext, baseMutableState, currContext, currMutableState)
-	ret0, _ := ret[0].(*shared.ResetWorkflowExecutionResponse)
+	ret0, _ := ret[0].(*historyservice.ResetWorkflowExecutionResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -74,7 +76,7 @@ func (mr *MockworkflowResetorMockRecorder) ResetWorkflowExecution(ctx, resetRequ
 }
 
 // ApplyResetEvent mocks base method
-func (m *MockworkflowResetor) ApplyResetEvent(ctx context.Context, request *history.ReplicateEventsRequest, domainID, workflowID, currentRunID string) error {
+func (m *MockworkflowResetor) ApplyResetEvent(ctx context.Context, request *historyservice.ReplicateEventsRequest, domainID, workflowID, currentRunID string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ApplyResetEvent", ctx, request, domainID, workflowID, currentRunID)
 	ret0, _ := ret[0].(error)

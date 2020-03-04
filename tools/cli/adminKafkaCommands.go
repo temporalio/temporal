@@ -37,16 +37,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/common/primitives"
-
-	"github.com/temporalio/temporal/common/auth"
-
 	"github.com/Shopify/sarama"
 	cluster "github.com/bsm/sarama-cluster"
 	"github.com/gocql/gocql"
 	"github.com/urfave/cli"
+	"go.temporal.io/temporal-proto/enums"
 	"go.uber.org/thriftrw/protocol"
 	"go.uber.org/thriftrw/wire"
 	yaml "gopkg.in/yaml.v2"
@@ -54,11 +49,15 @@ import (
 	"github.com/temporalio/temporal/.gen/go/indexer"
 	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/auth"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/messaging"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/cassandra"
+	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 	"github.com/temporalio/temporal/service/history"
 )
@@ -535,9 +534,9 @@ func doRereplicate(shardID int, domainID, wid, rid string, minID, maxID int64, t
 			events := batch.Events
 			firstEvent := events[0]
 			lastEvent := events[len(events)-1]
-			if lastEvent.GetEventType() == shared.EventTypeWorkflowExecutionContinuedAsNew {
+			if lastEvent.GetEventType() == enums.EventTypeWorkflowExecutionContinuedAsNew {
 				continueAsNew = true
-				newRunID = lastEvent.WorkflowExecutionContinuedAsNewEventAttributes.GetNewExecutionRunId()
+				newRunID = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
 				resp, err := exeMgr.GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
 					DomainID: domainID,
 					Execution: shared.WorkflowExecution{

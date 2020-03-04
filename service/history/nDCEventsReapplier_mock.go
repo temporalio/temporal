@@ -29,9 +29,10 @@ package history
 
 import (
 	context "context"
-	gomock "github.com/golang/mock/gomock"
-	shared "github.com/temporalio/temporal/.gen/go/shared"
 	reflect "reflect"
+
+	gomock "github.com/golang/mock/gomock"
+	common "go.temporal.io/temporal-proto/common"
 )
 
 // MocknDCEventsReapplier is a mock of nDCEventsReapplier interface
@@ -58,10 +59,10 @@ func (m *MocknDCEventsReapplier) EXPECT() *MocknDCEventsReapplierMockRecorder {
 }
 
 // reapplyEvents mocks base method
-func (m *MocknDCEventsReapplier) reapplyEvents(ctx context.Context, msBuilder mutableState, historyEvents []*shared.HistoryEvent, runID string) ([]*shared.HistoryEvent, error) {
+func (m *MocknDCEventsReapplier) reapplyEvents(ctx context.Context, msBuilder mutableState, historyEvents []*common.HistoryEvent, runID string) ([]*common.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "reapplyEvents", ctx, msBuilder, historyEvents, runID)
-	ret0, _ := ret[0].([]*shared.HistoryEvent)
+	ret0, _ := ret[0].([]*common.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

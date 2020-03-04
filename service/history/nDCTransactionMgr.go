@@ -27,10 +27,11 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
@@ -295,7 +296,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 			if _, err := r.eventsReapplier.reapplyEvents(
 				ctx,
 				targetWorkflow.getMutableState(),
-				targetWorkflowEvents.Events,
+				adapter.ToProtoHistoryEvents(targetWorkflowEvents.Events),
 				targetWorkflow.getMutableState().GetExecutionInfo().RunID,
 			); err != nil {
 				return 0, transactionPolicyActive, err
@@ -349,7 +350,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 			uuid.New(),
 			targetWorkflow,
 			eventsReapplicationResetWorkflowReason,
-			targetWorkflowEvents.Events,
+			adapter.ToProtoHistoryEvents(targetWorkflowEvents.Events),
 		); err != nil {
 			return 0, transactionPolicyActive, err
 		}
@@ -373,7 +374,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 }
 
 func (r *nDCTransactionMgrImpl) checkWorkflowExists(
-	ctx context.Context,
+	_ context.Context,
 	domainID string,
 	workflowID string,
 	runID string,
@@ -382,10 +383,10 @@ func (r *nDCTransactionMgrImpl) checkWorkflowExists(
 	_, err := r.shard.GetExecutionManager().GetWorkflowExecution(
 		&persistence.GetWorkflowExecutionRequest{
 			DomainID: domainID,
-			Execution: shared.WorkflowExecution{
-				WorkflowId: common.StringPtr(workflowID),
-				RunId:      common.StringPtr(runID),
-			},
+			Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      runID,
+			}),
 		},
 	)
 
@@ -400,7 +401,7 @@ func (r *nDCTransactionMgrImpl) checkWorkflowExists(
 }
 
 func (r *nDCTransactionMgrImpl) getCurrentWorkflowRunID(
-	ctx context.Context,
+	_ context.Context,
 	domainID string,
 	workflowID string,
 ) (string, error) {
@@ -430,25 +431,25 @@ func (r *nDCTransactionMgrImpl) loadNDCWorkflow(
 ) (nDCWorkflow, error) {
 
 	// we need to check the current workflow execution
-	context, release, err := r.historyCache.getOrCreateWorkflowExecution(
+	weContext, release, err := r.historyCache.getOrCreateWorkflowExecution(
 		ctx,
 		domainID,
-		shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
+		commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
 		},
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	msBuilder, err := context.loadWorkflowExecution()
+	msBuilder, err := weContext.loadWorkflowExecution()
 	if err != nil {
 		// no matter what error happen, we need to retry
 		release(err)
 		return nil, err
 	}
-	return newNDCWorkflow(ctx, r.domainCache, r.clusterMetadata, context, msBuilder, release), nil
+	return newNDCWorkflow(ctx, r.domainCache, r.clusterMetadata, weContext, msBuilder, release), nil
 }
 
 func (r *nDCTransactionMgrImpl) isWorkflowCurrent(
@@ -456,7 +457,7 @@ func (r *nDCTransactionMgrImpl) isWorkflowCurrent(
 	targetWorkflow nDCWorkflow,
 ) (bool, error) {
 
-	// since we are not rebuilding the mutable state (when doing backfill) then we
+	// since we are not rebuilding the mutable state (when doing back fill) then we
 	// can trust the result from IsCurrentWorkflowGuaranteed
 	if targetWorkflow.getMutableState().IsCurrentWorkflowGuaranteed() {
 		return true, nil

@@ -25,11 +25,13 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	h "github.com/temporalio/temporal/.gen/go/history"
-	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
@@ -78,7 +80,7 @@ type (
 	nDCHistoryReplicator interface {
 		ApplyEvents(
 			ctx context.Context,
-			request *h.ReplicateEventsV2Request,
+			request *historyservice.ReplicateEventsV2Request,
 		) error
 	}
 
@@ -180,7 +182,7 @@ func newNDCHistoryReplicator(
 
 func (r *nDCHistoryReplicatorImpl) ApplyEvents(
 	ctx context.Context,
-	request *h.ReplicateEventsV2Request,
+	request *historyservice.ReplicateEventsV2Request,
 ) (retError error) {
 
 	startTime := time.Now()
@@ -223,7 +225,7 @@ func (r *nDCHistoryReplicatorImpl) applyEvents(
 	}()
 
 	switch task.getFirstEvent().GetEventType() {
-	case shared.EventTypeWorkflowExecutionStarted:
+	case enums.EventTypeWorkflowExecutionStarted:
 		return r.applyStartEvents(ctx, context, releaseFn, task)
 
 	default:
@@ -422,9 +424,9 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 		newExecutionInfo := newMutableState.GetExecutionInfo()
 		newContext := newWorkflowExecutionContext(
 			newExecutionInfo.DomainID,
-			shared.WorkflowExecution{
-				WorkflowId: common.StringPtr(newExecutionInfo.WorkflowID),
-				RunId:      common.StringPtr(newExecutionInfo.RunID),
+			commonproto.WorkflowExecution{
+				WorkflowId: newExecutionInfo.WorkflowID,
+				RunId:      newExecutionInfo.RunID,
 			},
 			r.shard,
 			r.shard.GetExecutionManager(),
@@ -524,7 +526,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithout
 			WorkflowID:  task.getExecution().GetWorkflowId(),
 			RunID:       task.getExecution().GetRunId(),
 			BranchToken: versionHistory.GetBranchToken(),
-			Events:      task.getEvents(),
+			Events:      adapter.ToThriftHistoryEvents(task.getEvents()),
 		},
 	)
 	if err != nil {
@@ -603,7 +605,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsMissingMutableState(
 	}
 
 	decisionTaskFailedEvent := task.getFirstEvent()
-	attr := decisionTaskFailedEvent.DecisionTaskFailedEventAttributes
+	attr := decisionTaskFailedEvent.GetDecisionTaskFailedEventAttributes()
 	baseRunID := attr.GetBaseRunId()
 	baseEventID := decisionTaskFailedEvent.GetEventId() - 1
 	baseEventVersion := attr.GetForkEventVersion()

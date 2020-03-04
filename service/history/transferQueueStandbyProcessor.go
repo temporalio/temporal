@@ -23,9 +23,9 @@ package history
 import (
 	"time"
 
+	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/client/matching"
 	"github.com/temporalio/temporal/common"
@@ -287,7 +287,7 @@ func (t *transferQueueStandbyProcessorImpl) processDecisionTask(
 		if decisionInfo.StartedID == common.EmptyEventID {
 			return newPushDecisionToMatchingInfo(
 				decisionTimeout,
-				workflow.TaskList{Name: &transferTask.TaskList},
+				commonproto.TaskList{Name: transferTask.TaskList},
 			), nil
 		}
 
@@ -332,7 +332,7 @@ func (t *transferQueueStandbyProcessorImpl) processCloseExecution(
 		executionInfo := mutableState.GetExecutionInfo()
 		workflowTypeName := executionInfo.WorkflowTypeName
 		workflowCloseTimestamp := wfCloseTime
-		workflowCloseStatus := persistence.ToThriftWorkflowExecutionCloseStatus(executionInfo.CloseStatus)
+		workflowCloseStatus := persistence.ToProtoWorkflowExecutionCloseStatus(executionInfo.CloseStatus)
 		workflowHistoryLength := mutableState.GetNextEventID() - 1
 		startEvent, err := mutableState.GetStartEvent()
 		if err != nil {

@@ -27,12 +27,15 @@ import (
 	"sync/atomic"
 
 	"github.com/pborman/uuid"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	hist "github.com/temporalio/temporal/.gen/go/history"
-	r "github.com/temporalio/temporal/.gen/go/replicator"
-	gen "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/healthservice"
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -44,8 +47,9 @@ import (
 	"github.com/temporalio/temporal/common/resource"
 )
 
-// Handler - Thrift handler interface for history service
 type (
+
+	// Handler - gRPC handler interface for historyservice
 	Handler struct {
 		resource.Resource
 
@@ -60,9 +64,10 @@ type (
 	}
 )
 
-var _ EngineFactory = (*Handler)(nil)
-
 var (
+	_ EngineFactory                       = (*Handler)(nil)
+	_ historyservice.HistoryServiceServer = (*Handler)(nil)
+
 	errDomainNotSet            = serviceerror.NewInvalidArgument("Domain not set on request.")
 	errWorkflowExecutionNotSet = serviceerror.NewInvalidArgument("WorkflowExecution not set on request.")
 	errTaskListNotSet          = serviceerror.NewInvalidArgument("Task list not set.")
@@ -154,13 +159,18 @@ func (h *Handler) CreateEngine(
 	)
 }
 
-// RecordActivityTaskHeartbeat - Record Activity Task Heart beat.
-func (h *Handler) RecordActivityTaskHeartbeat(
-	ctx context.Context,
-	wrappedRequest *hist.RecordActivityTaskHeartbeatRequest,
-) (resp *gen.RecordActivityTaskHeartbeatResponse, retError error) {
+// Health is for health check
+func (h *Handler) Health(context.Context, *healthservice.HealthRequest) (_ *healthservice.HealthStatus, retError error) {
+	h.startWG.Wait()
+	h.GetLogger().Debug("Matching service health check endpoint (gRPC) reached.")
+	hs := &healthservice.HealthStatus{Ok: true, Msg: "matching good"}
+	return hs, nil
+}
 
-	defer log.CapturePanic(h.GetLogger(), &retError)
+// RecordActivityTaskHeartbeat - Record Activity Task Heart beat.
+func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *historyservice.RecordActivityTaskHeartbeatRequest) (_ *historyservice.RecordActivityTaskHeartbeatResponse, retError error) {
+
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
 	scope := metrics.HistoryRecordActivityTaskHeartbeatScope
@@ -168,7 +178,7 @@ func (h *Handler) RecordActivityTaskHeartbeat(
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
 
-	domainID := wrappedRequest.GetDomainUUID()
+	domainID := request.GetDomainUUID()
 	if domainID == "" {
 		return nil, h.error(errDomainNotSet, scope, domainID, "")
 	}
@@ -177,7 +187,7 @@ func (h *Handler) RecordActivityTaskHeartbeat(
 		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
-	heartbeatRequest := wrappedRequest.HeartbeatRequest
+	heartbeatRequest := request.HeartbeatRequest
 	token, err0 := h.tokenSerializer.Deserialize(heartbeatRequest.TaskToken)
 	if err0 != nil {
 		return nil, h.error(errDeserializeTaskToken.MessageArgs(err0), scope, domainID, "")
@@ -194,7 +204,7 @@ func (h *Handler) RecordActivityTaskHeartbeat(
 		return nil, h.error(err1, scope, domainID, workflowID)
 	}
 
-	response, err2 := engine.RecordActivityTaskHeartbeat(ctx, wrappedRequest)
+	response, err2 := engine.RecordActivityTaskHeartbeat(ctx, request)
 	if err2 != nil {
 		return nil, h.error(err2, scope, domainID, workflowID)
 	}
@@ -203,12 +213,9 @@ func (h *Handler) RecordActivityTaskHeartbeat(
 }
 
 // RecordActivityTaskStarted - Record Activity Task started.
-func (h *Handler) RecordActivityTaskStarted(
-	ctx context.Context,
-	recordRequest *hist.RecordActivityTaskStartedRequest,
-) (resp *hist.RecordActivityTaskStartedResponse, retError error) {
+func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *historyservice.RecordActivityTaskStartedRequest) (_ *historyservice.RecordActivityTaskStartedResponse, retError error) {
 
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
 	scope := metrics.HistoryRecordActivityTaskStartedScope
@@ -216,10 +223,10 @@ func (h *Handler) RecordActivityTaskStarted(
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
 
-	domainID := recordRequest.GetDomainUUID()
-	workflowExecution := recordRequest.WorkflowExecution
+	domainID := request.GetDomainUUID()
+	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
-	if recordRequest.GetDomainUUID() == "" {
+	if request.GetDomainUUID() == "" {
 		return nil, h.error(errDomainNotSet, scope, domainID, workflowID)
 	}
 
@@ -232,7 +239,7 @@ func (h *Handler) RecordActivityTaskStarted(
 		return nil, h.error(err1, scope, domainID, workflowID)
 	}
 
-	response, err2 := engine.RecordActivityTaskStarted(ctx, recordRequest)
+	response, err2 := engine.RecordActivityTaskStarted(ctx, request)
 	if err2 != nil {
 		return nil, h.error(err2, scope, domainID, workflowID)
 	}
@@ -241,26 +248,23 @@ func (h *Handler) RecordActivityTaskStarted(
 }
 
 // RecordDecisionTaskStarted - Record Decision Task started.
-func (h *Handler) RecordDecisionTaskStarted(
-	ctx context.Context,
-	recordRequest *hist.RecordDecisionTaskStartedRequest,
-) (resp *hist.RecordDecisionTaskStartedResponse, retError error) {
+func (h *Handler) RecordDecisionTaskStarted(ctx context.Context, request *historyservice.RecordDecisionTaskStartedRequest) (_ *historyservice.RecordDecisionTaskStartedResponse, retError error) {
 
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	h.startWG.Wait()
 	h.GetLogger().Debug("RecordDecisionTaskStarted",
-		tag.WorkflowDomainID(recordRequest.GetDomainUUID()),
-		tag.WorkflowID(recordRequest.WorkflowExecution.GetWorkflowId()),
-		tag.WorkflowRunID(common.StringDefault(recordRequest.WorkflowExecution.RunId)),
-		tag.WorkflowScheduleID(recordRequest.GetScheduleId()))
+		tag.WorkflowDomainID(request.GetDomainUUID()),
+		tag.WorkflowID(request.WorkflowExecution.GetWorkflowId()),
+		tag.WorkflowRunID(request.WorkflowExecution.GetRunId()),
+		tag.WorkflowScheduleID(request.GetScheduleId()))
 
 	scope := metrics.HistoryRecordDecisionTaskStartedScope
 	h.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
 
-	domainID := recordRequest.GetDomainUUID()
-	workflowExecution := recordRequest.WorkflowExecution
+	domainID := request.GetDomainUUID()
+	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
 	if domainID == "" {
 		return nil, h.error(errDomainNotSet, scope, domainID, workflowID)
@@ -270,7 +274,7 @@ func (h *Handler) RecordDecisionTaskStarted(
 		return nil, h.error(errHistoryHostThrottle, scope, domainID, workflowID)
 	}
 
-	if recordRequest.PollRequest == nil || recordRequest.PollRequest.TaskList.GetName() == "" {
+	if request.PollRequest == nil || request.PollRequest.TaskList.GetName() == "" {
 		return nil, h.error(errTaskListNotSet, scope, domainID, workflowID)
 	}
 
@@ -278,14 +282,14 @@ func (h *Handler) RecordDecisionTaskStarted(
 	if err1 != nil {
 		h.GetLogger().Error("RecordDecisionTaskStarted failed.",
 			tag.Error(err1),
-			tag.WorkflowID(recordRequest.WorkflowExecution.GetWorkflowId()),
-			tag.WorkflowRunID(recordRequest.WorkflowExecution.GetRunId()),
-			tag.WorkflowScheduleID(recordRequest.GetScheduleId()),
+			tag.WorkflowID(request.WorkflowExecution.GetWorkflowId()),
+			tag.WorkflowRunID(request.WorkflowExecution.GetRunId()),
+			tag.WorkflowScheduleID(request.GetScheduleId()),
 		)
 		return nil, h.error(err1, scope, domainID, workflowID)
 	}
 
-	response, err2 := engine.RecordDecisionTaskStarted(ctx, recordRequest)
+	response, err2 := engine.RecordDecisionTaskStarted(ctx, request)
 	if err2 != nil {
 		return nil, h.error(err2, scope, domainID, workflowID)
 	}
@@ -294,12 +298,9 @@ func (h *Handler) RecordDecisionTaskStarted(
 }
 
 // RespondActivityTaskCompleted - records completion of an activity task
-func (h *Handler) RespondActivityTaskCompleted(
-	ctx context.Context,
-	wrappedRequest *hist.RespondActivityTaskCompletedRequest,
-) (retError error) {
+func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *historyservice.RespondActivityTaskCompletedRequest) (_ *historyservice.RespondActivityTaskCompletedResponse, retError error) {
 
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
 	scope := metrics.HistoryRespondActivityTaskCompletedScope
@@ -307,151 +308,7 @@ func (h *Handler) RespondActivityTaskCompleted(
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
 
-	domainID := wrappedRequest.GetDomainUUID()
-	if domainID == "" {
-		return h.error(errDomainNotSet, scope, domainID, "")
-	}
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return h.error(errHistoryHostThrottle, scope, domainID, "")
-	}
-
-	completeRequest := wrappedRequest.CompleteRequest
-	token, err0 := h.tokenSerializer.Deserialize(completeRequest.TaskToken)
-	if err0 != nil {
-		return h.error(errDeserializeTaskToken.MessageArgs(err0), scope, domainID, "")
-	}
-
-	err0 = validateTaskToken(token)
-	if err0 != nil {
-		return h.error(err0, scope, domainID, "")
-	}
-	workflowID := token.WorkflowID
-
-	engine, err1 := h.controller.GetEngine(workflowID)
-	if err1 != nil {
-		return h.error(err1, scope, domainID, workflowID)
-	}
-
-	err2 := engine.RespondActivityTaskCompleted(ctx, wrappedRequest)
-	if err2 != nil {
-		return h.error(err2, scope, domainID, workflowID)
-	}
-
-	return nil
-}
-
-// RespondActivityTaskFailed - records failure of an activity task
-func (h *Handler) RespondActivityTaskFailed(
-	ctx context.Context,
-	wrappedRequest *hist.RespondActivityTaskFailedRequest,
-) (retError error) {
-
-	defer log.CapturePanic(h.GetLogger(), &retError)
-	h.startWG.Wait()
-
-	scope := metrics.HistoryRespondActivityTaskFailedScope
-	h.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
-	defer sw.Stop()
-
-	domainID := wrappedRequest.GetDomainUUID()
-	if domainID == "" {
-		return h.error(errDomainNotSet, scope, domainID, "")
-	}
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return h.error(errHistoryHostThrottle, scope, domainID, "")
-	}
-
-	failRequest := wrappedRequest.FailedRequest
-	token, err0 := h.tokenSerializer.Deserialize(failRequest.TaskToken)
-	if err0 != nil {
-		return h.error(errDeserializeTaskToken.MessageArgs(err0), scope, domainID, "")
-	}
-
-	err0 = validateTaskToken(token)
-	if err0 != nil {
-		return h.error(err0, scope, domainID, "")
-	}
-	workflowID := token.WorkflowID
-
-	engine, err1 := h.controller.GetEngine(workflowID)
-	if err1 != nil {
-		return h.error(err1, scope, domainID, workflowID)
-	}
-
-	err2 := engine.RespondActivityTaskFailed(ctx, wrappedRequest)
-	if err2 != nil {
-		return h.error(err2, scope, domainID, workflowID)
-	}
-
-	return nil
-}
-
-// RespondActivityTaskCanceled - records failure of an activity task
-func (h *Handler) RespondActivityTaskCanceled(
-	ctx context.Context,
-	wrappedRequest *hist.RespondActivityTaskCanceledRequest,
-) (retError error) {
-
-	defer log.CapturePanic(h.GetLogger(), &retError)
-	h.startWG.Wait()
-
-	scope := metrics.HistoryRespondActivityTaskCanceledScope
-	h.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
-	defer sw.Stop()
-
-	domainID := wrappedRequest.GetDomainUUID()
-	if domainID == "" {
-		return h.error(errDomainNotSet, scope, domainID, "")
-	}
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return h.error(errHistoryHostThrottle, scope, domainID, "")
-	}
-
-	cancelRequest := wrappedRequest.CancelRequest
-	token, err0 := h.tokenSerializer.Deserialize(cancelRequest.TaskToken)
-	if err0 != nil {
-		return h.error(errDeserializeTaskToken.MessageArgs(err0), scope, domainID, "")
-	}
-
-	err0 = validateTaskToken(token)
-	if err0 != nil {
-		return h.error(err0, scope, domainID, "")
-	}
-	workflowID := token.WorkflowID
-
-	engine, err1 := h.controller.GetEngine(workflowID)
-	if err1 != nil {
-		return h.error(err1, scope, domainID, workflowID)
-	}
-
-	err2 := engine.RespondActivityTaskCanceled(ctx, wrappedRequest)
-	if err2 != nil {
-		return h.error(err2, scope, domainID, workflowID)
-	}
-
-	return nil
-}
-
-// RespondDecisionTaskCompleted - records completion of a decision task
-func (h *Handler) RespondDecisionTaskCompleted(
-	ctx context.Context,
-	wrappedRequest *hist.RespondDecisionTaskCompletedRequest,
-) (resp *hist.RespondDecisionTaskCompletedResponse, retError error) {
-
-	defer log.CapturePanic(h.GetLogger(), &retError)
-	h.startWG.Wait()
-
-	scope := metrics.HistoryRespondDecisionTaskCompletedScope
-	h.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
-	defer sw.Stop()
-
-	domainID := wrappedRequest.GetDomainUUID()
+	domainID := request.GetDomainUUID()
 	if domainID == "" {
 		return nil, h.error(errDomainNotSet, scope, domainID, "")
 	}
@@ -460,7 +317,139 @@ func (h *Handler) RespondDecisionTaskCompleted(
 		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
-	completeRequest := wrappedRequest.CompleteRequest
+	completeRequest := request.CompleteRequest
+	token, err0 := h.tokenSerializer.Deserialize(completeRequest.TaskToken)
+	if err0 != nil {
+		return nil, h.error(errDeserializeTaskToken.MessageArgs(err0), scope, domainID, "")
+	}
+
+	err0 = validateTaskToken(token)
+	if err0 != nil {
+		return nil, h.error(err0, scope, domainID, "")
+	}
+	workflowID := token.WorkflowID
+
+	engine, err1 := h.controller.GetEngine(workflowID)
+	if err1 != nil {
+		return nil, h.error(err1, scope, domainID, workflowID)
+	}
+
+	err2 := engine.RespondActivityTaskCompleted(ctx, request)
+	if err2 != nil {
+		return nil, h.error(err2, scope, domainID, workflowID)
+	}
+
+	return &historyservice.RespondActivityTaskCompletedResponse{}, nil
+}
+
+// RespondActivityTaskFailed - records failure of an activity task
+func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *historyservice.RespondActivityTaskFailedRequest) (_ *historyservice.RespondActivityTaskFailedResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
+	h.startWG.Wait()
+
+	scope := metrics.HistoryRespondActivityTaskFailedScope
+	h.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
+	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	domainID := request.GetDomainUUID()
+	if domainID == "" {
+		return nil, h.error(errDomainNotSet, scope, domainID, "")
+	}
+
+	if ok := h.rateLimiter.Allow(); !ok {
+		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
+	}
+
+	failRequest := request.FailedRequest
+	token, err0 := h.tokenSerializer.Deserialize(failRequest.TaskToken)
+	if err0 != nil {
+		return nil, h.error(errDeserializeTaskToken.MessageArgs(err0), scope, domainID, "")
+	}
+
+	err0 = validateTaskToken(token)
+	if err0 != nil {
+		return nil, h.error(err0, scope, domainID, "")
+	}
+	workflowID := token.WorkflowID
+
+	engine, err1 := h.controller.GetEngine(workflowID)
+	if err1 != nil {
+		return nil, h.error(err1, scope, domainID, workflowID)
+	}
+
+	err2 := engine.RespondActivityTaskFailed(ctx, request)
+	if err2 != nil {
+		return nil, h.error(err2, scope, domainID, workflowID)
+	}
+
+	return &historyservice.RespondActivityTaskFailedResponse{}, nil
+}
+
+// RespondActivityTaskCanceled - records failure of an activity task
+func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *historyservice.RespondActivityTaskCanceledRequest) (_ *historyservice.RespondActivityTaskCanceledResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
+	h.startWG.Wait()
+
+	scope := metrics.HistoryRespondActivityTaskCanceledScope
+	h.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
+	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	domainID := request.GetDomainUUID()
+	if domainID == "" {
+		return nil, h.error(errDomainNotSet, scope, domainID, "")
+	}
+
+	if ok := h.rateLimiter.Allow(); !ok {
+		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
+	}
+
+	cancelRequest := request.CancelRequest
+	token, err0 := h.tokenSerializer.Deserialize(cancelRequest.TaskToken)
+	if err0 != nil {
+		return nil, h.error(errDeserializeTaskToken.MessageArgs(err0), scope, domainID, "")
+	}
+
+	err0 = validateTaskToken(token)
+	if err0 != nil {
+		return nil, h.error(err0, scope, domainID, "")
+	}
+	workflowID := token.WorkflowID
+
+	engine, err1 := h.controller.GetEngine(workflowID)
+	if err1 != nil {
+		return nil, h.error(err1, scope, domainID, workflowID)
+	}
+
+	err2 := engine.RespondActivityTaskCanceled(ctx, request)
+	if err2 != nil {
+		return nil, h.error(err2, scope, domainID, workflowID)
+	}
+
+	return &historyservice.RespondActivityTaskCanceledResponse{}, nil
+}
+
+// RespondDecisionTaskCompleted - records completion of a decision task
+func (h *Handler) RespondDecisionTaskCompleted(ctx context.Context, request *historyservice.RespondDecisionTaskCompletedRequest) (_ *historyservice.RespondDecisionTaskCompletedResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
+	h.startWG.Wait()
+
+	scope := metrics.HistoryRespondDecisionTaskCompletedScope
+	h.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
+	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	domainID := request.GetDomainUUID()
+	if domainID == "" {
+		return nil, h.error(errDomainNotSet, scope, domainID, "")
+	}
+
+	if ok := h.rateLimiter.Allow(); !ok {
+		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
+	}
+
+	completeRequest := request.CompleteRequest
 	if len(completeRequest.Decisions) == 0 {
 		h.GetMetricsClient().IncCounter(scope, metrics.EmptyCompletionDecisionsCounter)
 	}
@@ -486,7 +475,7 @@ func (h *Handler) RespondDecisionTaskCompleted(
 		return nil, h.error(err1, scope, domainID, workflowID)
 	}
 
-	response, err2 := engine.RespondDecisionTaskCompleted(ctx, wrappedRequest)
+	response, err2 := engine.RespondDecisionTaskCompleted(ctx, request)
 	if err2 != nil {
 		return nil, h.error(err2, scope, domainID, workflowID)
 	}
@@ -495,12 +484,9 @@ func (h *Handler) RespondDecisionTaskCompleted(
 }
 
 // RespondDecisionTaskFailed - failed response to decision task
-func (h *Handler) RespondDecisionTaskFailed(
-	ctx context.Context,
-	wrappedRequest *hist.RespondDecisionTaskFailedRequest,
-) (retError error) {
+func (h *Handler) RespondDecisionTaskFailed(ctx context.Context, request *historyservice.RespondDecisionTaskFailedRequest) (_ *historyservice.RespondDecisionTaskFailedResponse, retError error) {
 
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
 	scope := metrics.HistoryRespondDecisionTaskFailedScope
@@ -508,19 +494,19 @@ func (h *Handler) RespondDecisionTaskFailed(
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
 
-	domainID := wrappedRequest.GetDomainUUID()
+	domainID := request.GetDomainUUID()
 	if domainID == "" {
-		return h.error(errDomainNotSet, scope, domainID, "")
+		return nil, h.error(errDomainNotSet, scope, domainID, "")
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return h.error(errHistoryHostThrottle, scope, domainID, "")
+		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
-	failedRequest := wrappedRequest.FailedRequest
+	failedRequest := request.FailedRequest
 	token, err0 := h.tokenSerializer.Deserialize(failedRequest.TaskToken)
 	if err0 != nil {
-		return h.error(errDeserializeTaskToken.MessageArgs(err0), scope, domainID, "")
+		return nil, h.error(errDeserializeTaskToken.MessageArgs(err0), scope, domainID, "")
 	}
 
 	h.GetLogger().Debug("RespondDecisionTaskFailed",
@@ -529,7 +515,7 @@ func (h *Handler) RespondDecisionTaskFailed(
 		tag.WorkflowRunID(token.RunID),
 		tag.WorkflowScheduleID(token.ScheduleID))
 
-	if failedRequest != nil && failedRequest.GetCause() == gen.DecisionTaskFailedCauseUnhandledDecision {
+	if failedRequest != nil && failedRequest.GetCause() == enums.DecisionTaskFailedCauseUnhandledDecision {
 		h.GetLogger().Info("Non-Deterministic Error", tag.WorkflowDomainID(token.DomainID), tag.WorkflowID(token.WorkflowID), tag.WorkflowRunID(token.RunID))
 		domainName, err := h.GetDomainCache().GetDomainName(token.DomainID)
 		var domainTag metrics.Tag
@@ -544,30 +530,27 @@ func (h *Handler) RespondDecisionTaskFailed(
 	}
 	err0 = validateTaskToken(token)
 	if err0 != nil {
-		return h.error(err0, scope, domainID, "")
+		return nil, h.error(err0, scope, domainID, "")
 	}
 	workflowID := token.WorkflowID
 
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
-		return h.error(err1, scope, domainID, workflowID)
+		return nil, h.error(err1, scope, domainID, workflowID)
 	}
 
-	err2 := engine.RespondDecisionTaskFailed(ctx, wrappedRequest)
+	err2 := engine.RespondDecisionTaskFailed(ctx, request)
 	if err2 != nil {
-		return h.error(err2, scope, domainID, workflowID)
+		return nil, h.error(err2, scope, domainID, workflowID)
 	}
 
-	return nil
+	return &historyservice.RespondDecisionTaskFailedResponse{}, nil
 }
 
 // StartWorkflowExecution - creates a new workflow execution
-func (h *Handler) StartWorkflowExecution(
-	ctx context.Context,
-	wrappedRequest *hist.StartWorkflowExecutionRequest,
-) (resp *gen.StartWorkflowExecutionResponse, retError error) {
+func (h *Handler) StartWorkflowExecution(ctx context.Context, request *historyservice.StartWorkflowExecutionRequest) (_ *historyservice.StartWorkflowExecutionResponse, retError error) {
 
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
 	scope := metrics.HistoryStartWorkflowExecutionScope
@@ -575,7 +558,7 @@ func (h *Handler) StartWorkflowExecution(
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
 
-	domainID := wrappedRequest.GetDomainUUID()
+	domainID := request.GetDomainUUID()
 	if domainID == "" {
 		return nil, h.error(errDomainNotSet, scope, domainID, "")
 	}
@@ -584,14 +567,14 @@ func (h *Handler) StartWorkflowExecution(
 		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
-	startRequest := wrappedRequest.StartRequest
+	startRequest := request.StartRequest
 	workflowID := startRequest.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, domainID, workflowID)
 	}
 
-	response, err2 := engine.StartWorkflowExecution(ctx, wrappedRequest)
+	response, err2 := engine.StartWorkflowExecution(ctx, request)
 	if err2 != nil {
 		return nil, h.error(err2, scope, domainID, workflowID)
 	}
@@ -600,12 +583,8 @@ func (h *Handler) StartWorkflowExecution(
 }
 
 // DescribeHistoryHost returns information about the internal states of a history host
-func (h *Handler) DescribeHistoryHost(
-	ctx context.Context,
-	request *gen.DescribeHistoryHostRequest,
-) (resp *gen.DescribeHistoryHostResponse, retError error) {
-
-	defer log.CapturePanic(h.GetLogger(), &retError)
+func (h *Handler) DescribeHistoryHost(_ context.Context, _ *historyservice.DescribeHistoryHostRequest) (_ *historyservice.DescribeHistoryHostResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
 	numOfItemsInCacheByID, numOfItemsInCacheByName := h.GetDomainCache().GetCacheSize()
@@ -619,27 +598,24 @@ func (h *Handler) DescribeHistoryHost(
 		status = "stopped"
 	}
 
-	resp = &gen.DescribeHistoryHostResponse{
-		NumberOfShards: common.Int32Ptr(int32(h.controller.numShards())),
+	resp := &historyservice.DescribeHistoryHostResponse{
+		NumberOfShards: int32(h.controller.numShards()),
 		ShardIDs:       h.controller.shardIDs(),
-		DomainCache: &gen.DomainCacheInfo{
-			NumOfItemsInCacheByID:   &numOfItemsInCacheByID,
-			NumOfItemsInCacheByName: &numOfItemsInCacheByName,
+		DomainCache: &commonproto.DomainCacheInfo{
+			NumOfItemsInCacheByID:   numOfItemsInCacheByID,
+			NumOfItemsInCacheByName: numOfItemsInCacheByName,
 		},
-		ShardControllerStatus: &status,
-		Address:               common.StringPtr(h.GetHostInfo().GetAddress()),
+		ShardControllerStatus: status,
+		Address:               h.GetHostInfo().GetAddress(),
 	}
 	return resp, nil
 }
 
 // RemoveTask returns information about the internal states of a history host
-func (h *Handler) RemoveTask(
-	ctx context.Context,
-	request *gen.RemoveTaskRequest,
-) (retError error) {
+func (h *Handler) RemoveTask(_ context.Context, request *historyservice.RemoveTaskRequest) (_ *historyservice.RemoveTaskResponse, retError error) {
 	executionMgr, err := h.GetExecutionManager(int(request.GetShardID()))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	deleteTaskRequest := &persistence.DeleteTaskRequest{
 		TaskID:  request.GetTaskID(),
@@ -647,25 +623,19 @@ func (h *Handler) RemoveTask(
 		ShardID: int(request.GetShardID()),
 	}
 	err = executionMgr.DeleteTask(deleteTaskRequest)
-	return err
+	return &historyservice.RemoveTaskResponse{}, err
 }
 
 // CloseShard returns information about the internal states of a history host
-func (h *Handler) CloseShard(
-	ctx context.Context,
-	request *gen.CloseShardRequest,
-) (retError error) {
+func (h *Handler) CloseShard(_ context.Context, request *historyservice.CloseShardRequest) (_ *historyservice.CloseShardResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	h.controller.removeEngineForShard(int(request.GetShardID()))
-	return nil
+	return &historyservice.CloseShardResponse{}, nil
 }
 
 // DescribeMutableState - returns the internal analysis of workflow execution state
-func (h *Handler) DescribeMutableState(
-	ctx context.Context,
-	request *hist.DescribeMutableStateRequest,
-) (resp *hist.DescribeMutableStateResponse, retError error) {
-
-	defer log.CapturePanic(h.GetLogger(), &retError)
+func (h *Handler) DescribeMutableState(ctx context.Context, request *historyservice.DescribeMutableStateRequest) (_ *historyservice.DescribeMutableStateResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
 	scope := metrics.HistoryRecordActivityTaskHeartbeatScope
@@ -693,12 +663,8 @@ func (h *Handler) DescribeMutableState(
 }
 
 // GetMutableState - returns the id of the next event in the execution's history
-func (h *Handler) GetMutableState(
-	ctx context.Context,
-	getRequest *hist.GetMutableStateRequest,
-) (resp *hist.GetMutableStateResponse, retError error) {
-
-	defer log.CapturePanic(h.GetLogger(), &retError)
+func (h *Handler) GetMutableState(ctx context.Context, request *historyservice.GetMutableStateRequest) (_ *historyservice.GetMutableStateResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
 	scope := metrics.HistoryGetMutableStateScope
@@ -706,7 +672,7 @@ func (h *Handler) GetMutableState(
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
 
-	domainID := getRequest.GetDomainUUID()
+	domainID := request.GetDomainUUID()
 	if domainID == "" {
 		return nil, h.error(errDomainNotSet, scope, domainID, "")
 	}
@@ -715,14 +681,14 @@ func (h *Handler) GetMutableState(
 		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
-	workflowExecution := getRequest.Execution
+	workflowExecution := request.Execution
 	workflowID := workflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, domainID, workflowID)
 	}
 
-	resp, err2 := engine.GetMutableState(ctx, getRequest)
+	resp, err2 := engine.GetMutableState(ctx, request)
 	if err2 != nil {
 		return nil, h.error(err2, scope, domainID, workflowID)
 	}
@@ -730,12 +696,8 @@ func (h *Handler) GetMutableState(
 }
 
 // PollMutableState - returns the id of the next event in the execution's history
-func (h *Handler) PollMutableState(
-	ctx context.Context,
-	getRequest *hist.PollMutableStateRequest,
-) (resp *hist.PollMutableStateResponse, retError error) {
-
-	defer log.CapturePanic(h.GetLogger(), &retError)
+func (h *Handler) PollMutableState(ctx context.Context, request *historyservice.PollMutableStateRequest) (_ *historyservice.PollMutableStateResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
 	scope := metrics.HistoryPollMutableStateScope
@@ -743,7 +705,7 @@ func (h *Handler) PollMutableState(
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
 
-	domainID := getRequest.GetDomainUUID()
+	domainID := request.GetDomainUUID()
 	if domainID == "" {
 		return nil, h.error(errDomainNotSet, scope, domainID, "")
 	}
@@ -752,14 +714,14 @@ func (h *Handler) PollMutableState(
 		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
-	workflowExecution := getRequest.Execution
+	workflowExecution := request.Execution
 	workflowID := workflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, domainID, workflowID)
 	}
 
-	resp, err2 := engine.PollMutableState(ctx, getRequest)
+	resp, err2 := engine.PollMutableState(ctx, request)
 	if err2 != nil {
 		return nil, h.error(err2, scope, domainID, workflowID)
 	}
@@ -767,12 +729,8 @@ func (h *Handler) PollMutableState(
 }
 
 // DescribeWorkflowExecution returns information about the specified workflow execution.
-func (h *Handler) DescribeWorkflowExecution(
-	ctx context.Context,
-	request *hist.DescribeWorkflowExecutionRequest,
-) (resp *gen.DescribeWorkflowExecutionResponse, retError error) {
-
-	defer log.CapturePanic(h.GetLogger(), &retError)
+func (h *Handler) DescribeWorkflowExecution(ctx context.Context, request *historyservice.DescribeWorkflowExecutionRequest) (_ *historyservice.DescribeWorkflowExecutionResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
 	scope := metrics.HistoryDescribeWorkflowExecutionScope
@@ -804,12 +762,8 @@ func (h *Handler) DescribeWorkflowExecution(
 }
 
 // RequestCancelWorkflowExecution - requests cancellation of a workflow
-func (h *Handler) RequestCancelWorkflowExecution(
-	ctx context.Context,
-	request *hist.RequestCancelWorkflowExecutionRequest,
-) (retError error) {
-
-	defer log.CapturePanic(h.GetLogger(), &retError)
+func (h *Handler) RequestCancelWorkflowExecution(ctx context.Context, request *historyservice.RequestCancelWorkflowExecutionRequest) (_ *historyservice.RequestCancelWorkflowExecutionResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
 	scope := metrics.HistoryRequestCancelWorkflowExecutionScope
@@ -819,11 +773,11 @@ func (h *Handler) RequestCancelWorkflowExecution(
 
 	domainID := request.GetDomainUUID()
 	if domainID == "" || request.CancelRequest.GetDomain() == "" {
-		return h.error(errDomainNotSet, scope, domainID, "")
+		return nil, h.error(errDomainNotSet, scope, domainID, "")
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return h.error(errHistoryHostThrottle, scope, domainID, "")
+		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
 	cancelRequest := request.CancelRequest
@@ -836,25 +790,21 @@ func (h *Handler) RequestCancelWorkflowExecution(
 	workflowID := cancelRequest.WorkflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
-		return h.error(err1, scope, domainID, workflowID)
+		return nil, h.error(err1, scope, domainID, workflowID)
 	}
 
 	err2 := engine.RequestCancelWorkflowExecution(ctx, request)
 	if err2 != nil {
-		return h.error(err2, scope, domainID, workflowID)
+		return nil, h.error(err2, scope, domainID, workflowID)
 	}
 
-	return nil
+	return &historyservice.RequestCancelWorkflowExecutionResponse{}, nil
 }
 
 // SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in
 // WorkflowExecutionSignaled event recorded in the history and a decision task being created for the execution.
-func (h *Handler) SignalWorkflowExecution(
-	ctx context.Context,
-	wrappedRequest *hist.SignalWorkflowExecutionRequest,
-) (retError error) {
-
-	defer log.CapturePanic(h.GetLogger(), &retError)
+func (h *Handler) SignalWorkflowExecution(ctx context.Context, request *historyservice.SignalWorkflowExecutionRequest) (_ *historyservice.SignalWorkflowExecutionResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
 	scope := metrics.HistorySignalWorkflowExecutionScope
@@ -862,49 +812,7 @@ func (h *Handler) SignalWorkflowExecution(
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
 
-	domainID := wrappedRequest.GetDomainUUID()
-	if domainID == "" {
-		return h.error(errDomainNotSet, scope, domainID, "")
-	}
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return h.error(errHistoryHostThrottle, scope, domainID, "")
-	}
-
-	workflowExecution := wrappedRequest.SignalRequest.WorkflowExecution
-	workflowID := workflowExecution.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
-	if err1 != nil {
-		return h.error(err1, scope, domainID, workflowID)
-	}
-
-	err2 := engine.SignalWorkflowExecution(ctx, wrappedRequest)
-	if err2 != nil {
-		return h.error(err2, scope, domainID, workflowID)
-	}
-
-	return nil
-}
-
-// SignalWithStartWorkflowExecution is used to ensure sending a signal event to a workflow execution.
-// If workflow is running, this results in WorkflowExecutionSignaled event recorded in the history
-// and a decision task being created for the execution.
-// If workflow is not running or not found, this results in WorkflowExecutionStarted and WorkflowExecutionSignaled
-// event recorded in history, and a decision task being created for the execution
-func (h *Handler) SignalWithStartWorkflowExecution(
-	ctx context.Context,
-	wrappedRequest *hist.SignalWithStartWorkflowExecutionRequest,
-) (resp *gen.StartWorkflowExecutionResponse, retError error) {
-
-	defer log.CapturePanic(h.GetLogger(), &retError)
-	h.startWG.Wait()
-
-	scope := metrics.HistorySignalWithStartWorkflowExecutionScope
-	h.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
-	defer sw.Stop()
-
-	domainID := wrappedRequest.GetDomainUUID()
+	domainID := request.GetDomainUUID()
 	if domainID == "" {
 		return nil, h.error(errDomainNotSet, scope, domainID, "")
 	}
@@ -913,14 +821,52 @@ func (h *Handler) SignalWithStartWorkflowExecution(
 		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
-	signalWithStartRequest := wrappedRequest.SignalWithStartRequest
+	workflowExecution := request.SignalRequest.WorkflowExecution
+	workflowID := workflowExecution.GetWorkflowId()
+	engine, err1 := h.controller.GetEngine(workflowID)
+	if err1 != nil {
+		return nil, h.error(err1, scope, domainID, workflowID)
+	}
+
+	err2 := engine.SignalWorkflowExecution(ctx, request)
+	if err2 != nil {
+		return nil, h.error(err2, scope, domainID, workflowID)
+	}
+
+	return &historyservice.SignalWorkflowExecutionResponse{}, nil
+}
+
+// SignalWithStartWorkflowExecution is used to ensure sending a signal event to a workflow execution.
+// If workflow is running, this results in WorkflowExecutionSignaled event recorded in the history
+// and a decision task being created for the execution.
+// If workflow is not running or not found, this results in WorkflowExecutionStarted and WorkflowExecutionSignaled
+// event recorded in history, and a decision task being created for the execution
+func (h *Handler) SignalWithStartWorkflowExecution(ctx context.Context, request *historyservice.SignalWithStartWorkflowExecutionRequest) (_ *historyservice.SignalWithStartWorkflowExecutionResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
+	h.startWG.Wait()
+
+	scope := metrics.HistorySignalWithStartWorkflowExecutionScope
+	h.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
+	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	domainID := request.GetDomainUUID()
+	if domainID == "" {
+		return nil, h.error(errDomainNotSet, scope, domainID, "")
+	}
+
+	if ok := h.rateLimiter.Allow(); !ok {
+		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
+	}
+
+	signalWithStartRequest := request.SignalWithStartRequest
 	workflowID := signalWithStartRequest.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, domainID, workflowID)
 	}
 
-	resp, err2 := engine.SignalWithStartWorkflowExecution(ctx, wrappedRequest)
+	resp, err2 := engine.SignalWithStartWorkflowExecution(ctx, request)
 	if err2 != nil {
 		return nil, h.error(err2, scope, domainID, workflowID)
 	}
@@ -930,12 +876,8 @@ func (h *Handler) SignalWithStartWorkflowExecution(
 
 // RemoveSignalMutableState is used to remove a signal request ID that was previously recorded.  This is currently
 // used to clean execution info when signal decision finished.
-func (h *Handler) RemoveSignalMutableState(
-	ctx context.Context,
-	wrappedRequest *hist.RemoveSignalMutableStateRequest,
-) (retError error) {
-
-	defer log.CapturePanic(h.GetLogger(), &retError)
+func (h *Handler) RemoveSignalMutableState(ctx context.Context, request *historyservice.RemoveSignalMutableStateRequest) (_ *historyservice.RemoveSignalMutableStateResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
 	scope := metrics.HistoryRemoveSignalMutableStateScope
@@ -943,85 +885,7 @@ func (h *Handler) RemoveSignalMutableState(
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
 
-	domainID := wrappedRequest.GetDomainUUID()
-	if domainID == "" {
-		return h.error(errDomainNotSet, scope, domainID, "")
-	}
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return h.error(errHistoryHostThrottle, scope, domainID, "")
-	}
-
-	workflowExecution := wrappedRequest.WorkflowExecution
-	workflowID := workflowExecution.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
-	if err1 != nil {
-		return h.error(err1, scope, domainID, workflowID)
-	}
-
-	err2 := engine.RemoveSignalMutableState(ctx, wrappedRequest)
-	if err2 != nil {
-		return h.error(err2, scope, domainID, workflowID)
-	}
-
-	return nil
-}
-
-// TerminateWorkflowExecution terminates an existing workflow execution by recording WorkflowExecutionTerminated event
-// in the history and immediately terminating the execution instance.
-func (h *Handler) TerminateWorkflowExecution(
-	ctx context.Context,
-	wrappedRequest *hist.TerminateWorkflowExecutionRequest,
-) (retError error) {
-
-	defer log.CapturePanic(h.GetLogger(), &retError)
-	h.startWG.Wait()
-
-	scope := metrics.HistoryTerminateWorkflowExecutionScope
-	h.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
-	defer sw.Stop()
-
-	domainID := wrappedRequest.GetDomainUUID()
-	if domainID == "" {
-		return h.error(errDomainNotSet, scope, domainID, "")
-	}
-
-	if ok := h.rateLimiter.Allow(); !ok {
-		return h.error(errHistoryHostThrottle, scope, domainID, "")
-	}
-
-	workflowExecution := wrappedRequest.TerminateRequest.WorkflowExecution
-	workflowID := workflowExecution.GetWorkflowId()
-	engine, err1 := h.controller.GetEngine(workflowID)
-	if err1 != nil {
-		return h.error(err1, scope, domainID, workflowID)
-	}
-
-	err2 := engine.TerminateWorkflowExecution(ctx, wrappedRequest)
-	if err2 != nil {
-		return h.error(err2, scope, domainID, workflowID)
-	}
-
-	return nil
-}
-
-// ResetWorkflowExecution reset an existing workflow execution
-// in the history and immediately terminating the execution instance.
-func (h *Handler) ResetWorkflowExecution(
-	ctx context.Context,
-	wrappedRequest *hist.ResetWorkflowExecutionRequest,
-) (resp *gen.ResetWorkflowExecutionResponse, retError error) {
-
-	defer log.CapturePanic(h.GetLogger(), &retError)
-	h.startWG.Wait()
-
-	scope := metrics.HistoryResetWorkflowExecutionScope
-	h.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
-	defer sw.Stop()
-
-	domainID := wrappedRequest.GetDomainUUID()
+	domainID := request.GetDomainUUID()
 	if domainID == "" {
 		return nil, h.error(errDomainNotSet, scope, domainID, "")
 	}
@@ -1030,14 +894,84 @@ func (h *Handler) ResetWorkflowExecution(
 		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
-	workflowExecution := wrappedRequest.ResetRequest.WorkflowExecution
+	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
 		return nil, h.error(err1, scope, domainID, workflowID)
 	}
 
-	resp, err2 := engine.ResetWorkflowExecution(ctx, wrappedRequest)
+	err2 := engine.RemoveSignalMutableState(ctx, request)
+	if err2 != nil {
+		return nil, h.error(err2, scope, domainID, workflowID)
+	}
+
+	return &historyservice.RemoveSignalMutableStateResponse{}, nil
+}
+
+// TerminateWorkflowExecution terminates an existing workflow execution by recording WorkflowExecutionTerminated event
+// in the history and immediately terminating the execution instance.
+func (h *Handler) TerminateWorkflowExecution(ctx context.Context, request *historyservice.TerminateWorkflowExecutionRequest) (_ *historyservice.TerminateWorkflowExecutionResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
+	h.startWG.Wait()
+
+	scope := metrics.HistoryTerminateWorkflowExecutionScope
+	h.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
+	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	domainID := request.GetDomainUUID()
+	if domainID == "" {
+		return nil, h.error(errDomainNotSet, scope, domainID, "")
+	}
+
+	if ok := h.rateLimiter.Allow(); !ok {
+		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
+	}
+
+	workflowExecution := request.TerminateRequest.WorkflowExecution
+	workflowID := workflowExecution.GetWorkflowId()
+	engine, err1 := h.controller.GetEngine(workflowID)
+	if err1 != nil {
+		return nil, h.error(err1, scope, domainID, workflowID)
+	}
+
+	err2 := engine.TerminateWorkflowExecution(ctx, request)
+	if err2 != nil {
+		return nil, h.error(err2, scope, domainID, workflowID)
+	}
+
+	return &historyservice.TerminateWorkflowExecutionResponse{}, nil
+}
+
+// ResetWorkflowExecution reset an existing workflow execution
+// in the history and immediately terminating the execution instance.
+func (h *Handler) ResetWorkflowExecution(ctx context.Context, request *historyservice.ResetWorkflowExecutionRequest) (_ *historyservice.ResetWorkflowExecutionResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
+	h.startWG.Wait()
+
+	scope := metrics.HistoryResetWorkflowExecutionScope
+	h.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
+	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	domainID := request.GetDomainUUID()
+	if domainID == "" {
+		return nil, h.error(errDomainNotSet, scope, domainID, "")
+	}
+
+	if ok := h.rateLimiter.Allow(); !ok {
+		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
+	}
+
+	workflowExecution := request.ResetRequest.WorkflowExecution
+	workflowID := workflowExecution.GetWorkflowId()
+	engine, err1 := h.controller.GetEngine(workflowID)
+	if err1 != nil {
+		return nil, h.error(err1, scope, domainID, workflowID)
+	}
+
+	resp, err2 := engine.ResetWorkflowExecution(ctx, request)
 	if err2 != nil {
 		return nil, h.error(err2, scope, domainID, workflowID)
 	}
@@ -1046,11 +980,8 @@ func (h *Handler) ResetWorkflowExecution(
 }
 
 // QueryWorkflow queries a workflow.
-func (h *Handler) QueryWorkflow(
-	ctx context.Context,
-	request *hist.QueryWorkflowRequest,
-) (resp *hist.QueryWorkflowResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+func (h *Handler) QueryWorkflow(ctx context.Context, request *historyservice.QueryWorkflowRequest) (_ *historyservice.QueryWorkflowResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
 	scope := metrics.HistoryQueryWorkflowScope
@@ -1085,12 +1016,8 @@ func (h *Handler) QueryWorkflow(
 // used by transfer queue processor during the processing of StartChildWorkflowExecution task, where it first starts
 // child execution without creating the decision task and then calls this API after updating the mutable state of
 // parent execution.
-func (h *Handler) ScheduleDecisionTask(
-	ctx context.Context,
-	request *hist.ScheduleDecisionTaskRequest,
-) (retError error) {
-
-	defer log.CapturePanic(h.GetLogger(), &retError)
+func (h *Handler) ScheduleDecisionTask(ctx context.Context, request *historyservice.ScheduleDecisionTaskRequest) (_ *historyservice.ScheduleDecisionTaskResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
 	scope := metrics.HistoryScheduleDecisionTaskScope
@@ -1100,40 +1027,36 @@ func (h *Handler) ScheduleDecisionTask(
 
 	domainID := request.GetDomainUUID()
 	if domainID == "" {
-		return h.error(errDomainNotSet, scope, domainID, "")
+		return nil, h.error(errDomainNotSet, scope, domainID, "")
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return h.error(errHistoryHostThrottle, scope, domainID, "")
+		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
 	if request.WorkflowExecution == nil {
-		return h.error(errWorkflowExecutionNotSet, scope, domainID, "")
+		return nil, h.error(errWorkflowExecutionNotSet, scope, domainID, "")
 	}
 
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
-		return h.error(err1, scope, domainID, workflowID)
+		return nil, h.error(err1, scope, domainID, workflowID)
 	}
 
 	err2 := engine.ScheduleDecisionTask(ctx, request)
 	if err2 != nil {
-		return h.error(err2, scope, domainID, workflowID)
+		return nil, h.error(err2, scope, domainID, workflowID)
 	}
 
-	return nil
+	return &historyservice.ScheduleDecisionTaskResponse{}, nil
 }
 
 // RecordChildExecutionCompleted is used for reporting the completion of child workflow execution to parent.
 // This is mainly called by transfer queue processor during the processing of DeleteExecution task.
-func (h *Handler) RecordChildExecutionCompleted(
-	ctx context.Context,
-	request *hist.RecordChildExecutionCompletedRequest,
-) (retError error) {
-
-	defer log.CapturePanic(h.GetLogger(), &retError)
+func (h *Handler) RecordChildExecutionCompleted(ctx context.Context, request *historyservice.RecordChildExecutionCompletedRequest) (_ *historyservice.RecordChildExecutionCompletedResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
 	scope := metrics.HistoryRecordChildExecutionCompletedScope
@@ -1143,30 +1066,30 @@ func (h *Handler) RecordChildExecutionCompleted(
 
 	domainID := request.GetDomainUUID()
 	if domainID == "" {
-		return h.error(errDomainNotSet, scope, domainID, "")
+		return nil, h.error(errDomainNotSet, scope, domainID, "")
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return h.error(errHistoryHostThrottle, scope, domainID, "")
+		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
 	if request.WorkflowExecution == nil {
-		return h.error(errWorkflowExecutionNotSet, scope, domainID, "")
+		return nil, h.error(errWorkflowExecutionNotSet, scope, domainID, "")
 	}
 
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
-		return h.error(err1, scope, domainID, workflowID)
+		return nil, h.error(err1, scope, domainID, workflowID)
 	}
 
 	err2 := engine.RecordChildExecutionCompleted(ctx, request)
 	if err2 != nil {
-		return h.error(err2, scope, domainID, workflowID)
+		return nil, h.error(err2, scope, domainID, workflowID)
 	}
 
-	return nil
+	return &historyservice.RecordChildExecutionCompletedResponse{}, nil
 }
 
 // ResetStickyTaskList reset the volatile information in mutable state of a given workflow.
@@ -1176,12 +1099,9 @@ func (h *Handler) RecordChildExecutionCompleted(
 // 3. ClientLibraryVersion
 // 4. ClientFeatureVersion
 // 5. ClientImpl
-func (h *Handler) ResetStickyTaskList(
-	ctx context.Context,
-	resetRequest *hist.ResetStickyTaskListRequest,
-) (resp *hist.ResetStickyTaskListResponse, retError error) {
+func (h *Handler) ResetStickyTaskList(ctx context.Context, request *historyservice.ResetStickyTaskListRequest) (_ *historyservice.ResetStickyTaskListResponse, retError error) {
 
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
 	scope := metrics.HistoryResetStickyTaskListScope
@@ -1189,7 +1109,7 @@ func (h *Handler) ResetStickyTaskList(
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
 
-	domainID := resetRequest.GetDomainUUID()
+	domainID := request.GetDomainUUID()
 	if domainID == "" {
 		return nil, h.error(errDomainNotSet, scope, domainID, "")
 	}
@@ -1198,13 +1118,13 @@ func (h *Handler) ResetStickyTaskList(
 		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
-	workflowID := resetRequest.Execution.GetWorkflowId()
+	workflowID := request.Execution.GetWorkflowId()
 	engine, err := h.controller.GetEngine(workflowID)
 	if err != nil {
 		return nil, h.error(err, scope, domainID, workflowID)
 	}
 
-	resp, err = engine.ResetStickyTaskList(ctx, resetRequest)
+	resp, err := engine.ResetStickyTaskList(ctx, request)
 	if err != nil {
 		return nil, h.error(err, scope, domainID, workflowID)
 	}
@@ -1213,12 +1133,8 @@ func (h *Handler) ResetStickyTaskList(
 }
 
 // ReplicateEvents is called by processor to replicate history events for passive domains
-func (h *Handler) ReplicateEvents(
-	ctx context.Context,
-	replicateRequest *hist.ReplicateEventsRequest,
-) (retError error) {
-
-	defer log.CapturePanic(h.GetLogger(), &retError)
+func (h *Handler) ReplicateEvents(ctx context.Context, request *historyservice.ReplicateEventsRequest) (_ *historyservice.ReplicateEventsResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
 	scope := metrics.HistoryReplicateEventsScope
@@ -1226,37 +1142,33 @@ func (h *Handler) ReplicateEvents(
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
 
-	domainID := replicateRequest.GetDomainUUID()
+	domainID := request.GetDomainUUID()
 	if domainID == "" {
-		return h.error(errDomainNotSet, scope, domainID, "")
+		return nil, h.error(errDomainNotSet, scope, domainID, "")
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return h.error(errHistoryHostThrottle, scope, domainID, "")
+		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
-	workflowExecution := replicateRequest.WorkflowExecution
+	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
-		return h.error(err1, scope, domainID, workflowID)
+		return nil, h.error(err1, scope, domainID, workflowID)
 	}
 
-	err2 := engine.ReplicateEvents(ctx, replicateRequest)
+	err2 := engine.ReplicateEvents(ctx, request)
 	if err2 != nil {
-		return h.error(err2, scope, domainID, workflowID)
+		return nil, h.error(err2, scope, domainID, workflowID)
 	}
 
-	return nil
+	return &historyservice.ReplicateEventsResponse{}, nil
 }
 
 // ReplicateRawEvents is called by processor to replicate history raw events for passive domains
-func (h *Handler) ReplicateRawEvents(
-	ctx context.Context,
-	replicateRequest *hist.ReplicateRawEventsRequest,
-) (retError error) {
-
-	defer log.CapturePanic(h.GetLogger(), &retError)
+func (h *Handler) ReplicateRawEvents(ctx context.Context, request *historyservice.ReplicateRawEventsRequest) (_ *historyservice.ReplicateRawEventsResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
 	scope := metrics.HistoryReplicateRawEventsScope
@@ -1264,37 +1176,33 @@ func (h *Handler) ReplicateRawEvents(
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
 
-	domainID := replicateRequest.GetDomainUUID()
+	domainID := request.GetDomainUUID()
 	if domainID == "" {
-		return h.error(errDomainNotSet, scope, domainID, "")
+		return nil, h.error(errDomainNotSet, scope, domainID, "")
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return h.error(errHistoryHostThrottle, scope, domainID, "")
+		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
-	workflowExecution := replicateRequest.WorkflowExecution
+	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
-		return h.error(err1, scope, domainID, workflowID)
+		return nil, h.error(err1, scope, domainID, workflowID)
 	}
 
-	err2 := engine.ReplicateRawEvents(ctx, replicateRequest)
+	err2 := engine.ReplicateRawEvents(ctx, request)
 	if err2 != nil {
-		return h.error(err2, scope, domainID, workflowID)
+		return nil, h.error(err2, scope, domainID, workflowID)
 	}
 
-	return nil
+	return &historyservice.ReplicateRawEventsResponse{}, nil
 }
 
 // ReplicateEventsV2 is called by processor to replicate history events for passive domains
-func (h *Handler) ReplicateEventsV2(
-	ctx context.Context,
-	replicateRequest *hist.ReplicateEventsV2Request,
-) (retError error) {
-
-	defer log.CapturePanic(h.GetLogger(), &retError)
+func (h *Handler) ReplicateEventsV2(ctx context.Context, request *historyservice.ReplicateEventsV2Request) (_ *historyservice.ReplicateEventsV2Response, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
 	scope := metrics.HistoryReplicateEventsV2Scope
@@ -1302,37 +1210,33 @@ func (h *Handler) ReplicateEventsV2(
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
 
-	domainID := replicateRequest.GetDomainUUID()
+	domainID := request.GetDomainUUID()
 	if domainID == "" {
-		return h.error(errDomainNotSet, scope, domainID, "")
+		return nil, h.error(errDomainNotSet, scope, domainID, "")
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return h.error(errHistoryHostThrottle, scope, domainID, "")
+		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
-	workflowExecution := replicateRequest.WorkflowExecution
+	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
-		return h.error(err1, scope, domainID, workflowID)
+		return nil, h.error(err1, scope, domainID, workflowID)
 	}
 
-	err2 := engine.ReplicateEventsV2(ctx, replicateRequest)
+	err2 := engine.ReplicateEventsV2(ctx, request)
 	if err2 != nil {
-		return h.error(err2, scope, domainID, workflowID)
+		return nil, h.error(err2, scope, domainID, workflowID)
 	}
 
-	return nil
+	return &historyservice.ReplicateEventsV2Response{}, nil
 }
 
 // SyncShardStatus is called by processor to sync history shard information from another cluster
-func (h *Handler) SyncShardStatus(
-	ctx context.Context,
-	syncShardStatusRequest *hist.SyncShardStatusRequest,
-) (retError error) {
-
-	defer log.CapturePanic(h.GetLogger(), &retError)
+func (h *Handler) SyncShardStatus(ctx context.Context, request *historyservice.SyncShardStatusRequest) (_ *historyservice.SyncShardStatusResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
 	scope := metrics.HistorySyncShardStatusScope
@@ -1341,42 +1245,38 @@ func (h *Handler) SyncShardStatus(
 	defer sw.Stop()
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return h.error(errHistoryHostThrottle, scope, "", "")
+		return nil, h.error(errHistoryHostThrottle, scope, "", "")
 	}
 
-	if syncShardStatusRequest.SourceCluster == nil {
-		return h.error(errSourceClusterNotSet, scope, "", "")
+	if request.GetSourceCluster() == "" {
+		return nil, h.error(errSourceClusterNotSet, scope, "", "")
 	}
 
-	if syncShardStatusRequest.ShardId == nil {
-		return h.error(errShardIDNotSet, scope, "", "")
+	if request.GetShardId() == 0 {
+		return nil, h.error(errShardIDNotSet, scope, "", "")
 	}
 
-	if syncShardStatusRequest.Timestamp == nil {
-		return h.error(errTimestampNotSet, scope, "", "")
+	if request.GetTimestamp() == 0 {
+		return nil, h.error(errTimestampNotSet, scope, "", "")
 	}
 
 	// shard ID is already provided in the request
-	engine, err := h.controller.getEngineForShard(int(syncShardStatusRequest.GetShardId()))
+	engine, err := h.controller.getEngineForShard(int(request.GetShardId()))
 	if err != nil {
-		return h.error(err, scope, "", "")
+		return nil, h.error(err, scope, "", "")
 	}
 
-	err = engine.SyncShardStatus(ctx, syncShardStatusRequest)
+	err = engine.SyncShardStatus(ctx, request)
 	if err != nil {
-		return h.error(err, scope, "", "")
+		return nil, h.error(err, scope, "", "")
 	}
 
-	return nil
+	return &historyservice.SyncShardStatusResponse{}, nil
 }
 
 // SyncActivity is called by processor to sync activity
-func (h *Handler) SyncActivity(
-	ctx context.Context,
-	syncActivityRequest *hist.SyncActivityRequest,
-) (retError error) {
-
-	defer log.CapturePanic(h.GetLogger(), &retError)
+func (h *Handler) SyncActivity(ctx context.Context, request *historyservice.SyncActivityRequest) (_ *historyservice.SyncActivityResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
 	scope := metrics.HistorySyncActivityScope
@@ -1384,43 +1284,40 @@ func (h *Handler) SyncActivity(
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
 
-	domainID := syncActivityRequest.GetDomainId()
-	if syncActivityRequest.GetDomainId() == "" || uuid.Parse(syncActivityRequest.GetDomainId()) == nil {
-		return h.error(errDomainNotSet, scope, domainID, "")
+	domainID := request.GetDomainId()
+	if request.GetDomainId() == "" || uuid.Parse(request.GetDomainId()) == nil {
+		return nil, h.error(errDomainNotSet, scope, domainID, "")
 	}
 
 	if ok := h.rateLimiter.Allow(); !ok {
-		return h.error(errHistoryHostThrottle, scope, domainID, "")
+		return nil, h.error(errHistoryHostThrottle, scope, domainID, "")
 	}
 
-	if syncActivityRequest.GetWorkflowId() == "" {
-		return h.error(errWorkflowIDNotSet, scope, domainID, "")
+	if request.GetWorkflowId() == "" {
+		return nil, h.error(errWorkflowIDNotSet, scope, domainID, "")
 	}
 
-	if syncActivityRequest.GetRunId() == "" || uuid.Parse(syncActivityRequest.GetRunId()) == nil {
-		return h.error(errRunIDNotValid, scope, domainID, "")
+	if request.GetRunId() == "" || uuid.Parse(request.GetRunId()) == nil {
+		return nil, h.error(errRunIDNotValid, scope, domainID, "")
 	}
 
-	workflowID := syncActivityRequest.GetWorkflowId()
+	workflowID := request.GetWorkflowId()
 	engine, err := h.controller.GetEngine(workflowID)
 	if err != nil {
-		return h.error(err, scope, domainID, workflowID)
+		return nil, h.error(err, scope, domainID, workflowID)
 	}
 
-	err = engine.SyncActivity(ctx, syncActivityRequest)
+	err = engine.SyncActivity(ctx, request)
 	if err != nil {
-		return h.error(err, scope, domainID, workflowID)
+		return nil, h.error(err, scope, domainID, workflowID)
 	}
 
-	return nil
+	return &historyservice.SyncActivityResponse{}, nil
 }
 
 // GetReplicationMessages is called by remote peers to get replicated messages for cross DC replication
-func (h *Handler) GetReplicationMessages(
-	ctx context.Context,
-	request *r.GetReplicationMessagesRequest,
-) (resp *r.GetReplicationMessagesResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+func (h *Handler) GetReplicationMessages(ctx context.Context, request *historyservice.GetReplicationMessagesRequest) (_ *historyservice.GetReplicationMessagesResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
 	h.GetLogger().Debug("Received GetReplicationMessages call.")
@@ -1435,7 +1332,7 @@ func (h *Handler) GetReplicationMessages(
 	result := new(sync.Map)
 
 	for _, token := range request.Tokens {
-		go func(token *r.ReplicationToken) {
+		go func(token *replication.ReplicationToken) {
 			defer wg.Done()
 
 			engine, err := h.controller.getEngineForShard(int(token.GetShardID()))
@@ -1459,25 +1356,22 @@ func (h *Handler) GetReplicationMessages(
 
 	wg.Wait()
 
-	messagesByShard := make(map[int32]*r.ReplicationMessages)
+	messagesByShard := make(map[int32]*replication.ReplicationMessages)
 	result.Range(func(key, value interface{}) bool {
 		shardID := key.(int32)
-		tasks := value.(*r.ReplicationMessages)
+		tasks := value.(*replication.ReplicationMessages)
 		messagesByShard[shardID] = tasks
 		return true
 	})
 
 	h.GetLogger().Debug("GetReplicationMessages succeeded.")
 
-	return &r.GetReplicationMessagesResponse{MessagesByShard: messagesByShard}, nil
+	return &historyservice.GetReplicationMessagesResponse{MessagesByShard: messagesByShard}, nil
 }
 
 // GetDLQReplicationMessages is called by remote peers to get replicated messages for DLQ merging
-func (h *Handler) GetDLQReplicationMessages(
-	ctx context.Context,
-	request *r.GetDLQReplicationMessagesRequest,
-) (resp *r.GetDLQReplicationMessagesResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+func (h *Handler) GetDLQReplicationMessages(ctx context.Context, request *historyservice.GetDLQReplicationMessagesRequest) (_ *historyservice.GetDLQReplicationMessagesResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
 	scope := metrics.HistoryGetDLQReplicationMessagesScope
@@ -1485,31 +1379,31 @@ func (h *Handler) GetDLQReplicationMessages(
 	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
 
-	taskInfoPerExecution := map[definition.WorkflowIdentifier][]*r.ReplicationTaskInfo{}
+	taskInfoPerExecution := map[definition.WorkflowIdentifier][]*replication.ReplicationTaskInfo{}
 	// do batch based on workflow ID and run ID
 	for _, taskInfo := range request.GetTaskInfos() {
 		identity := definition.NewWorkflowIdentifier(
-			taskInfo.GetDomainID(),
-			taskInfo.GetWorkflowID(),
-			taskInfo.GetRunID(),
+			taskInfo.GetDomainId(),
+			taskInfo.GetWorkflowId(),
+			taskInfo.GetRunId(),
 		)
 		if _, ok := taskInfoPerExecution[identity]; !ok {
-			taskInfoPerExecution[identity] = []*r.ReplicationTaskInfo{}
+			taskInfoPerExecution[identity] = []*replication.ReplicationTaskInfo{}
 		}
 		taskInfoPerExecution[identity] = append(taskInfoPerExecution[identity], taskInfo)
 	}
 
 	var wg sync.WaitGroup
 	wg.Add(len(taskInfoPerExecution))
-	tasksChan := make(chan *r.ReplicationTask, len(request.GetTaskInfos()))
-	handleTaskInfoPerExecution := func(taskInfos []*r.ReplicationTaskInfo) {
+	tasksChan := make(chan *replication.ReplicationTask, len(request.GetTaskInfos()))
+	handleTaskInfoPerExecution := func(taskInfos []*replication.ReplicationTaskInfo) {
 		defer wg.Done()
 		if len(taskInfos) == 0 {
 			return
 		}
 
 		engine, err := h.controller.GetEngine(
-			taskInfos[0].GetWorkflowID(),
+			taskInfos[0].GetWorkflowId(),
 		)
 		if err != nil {
 			h.GetLogger().Warn("History engine not found for workflow ID.", tag.Error(err))
@@ -1536,22 +1430,18 @@ func (h *Handler) GetDLQReplicationMessages(
 	wg.Wait()
 	close(tasksChan)
 
-	replicationTasks := make([]*r.ReplicationTask, len(tasksChan))
+	replicationTasks := make([]*replication.ReplicationTask, len(tasksChan))
 	for task := range tasksChan {
 		replicationTasks = append(replicationTasks, task)
 	}
-	return &r.GetDLQReplicationMessagesResponse{
+	return &historyservice.GetDLQReplicationMessagesResponse{
 		ReplicationTasks: replicationTasks,
 	}, nil
 }
 
 // ReapplyEvents applies stale events to the current workflow and the current run
-func (h *Handler) ReapplyEvents(
-	ctx context.Context,
-	request *hist.ReapplyEventsRequest,
-) (retError error) {
-
-	defer log.CapturePanic(h.GetLogger(), &retError)
+func (h *Handler) ReapplyEvents(ctx context.Context, request *historyservice.ReapplyEventsRequest) (_ *historyservice.ReapplyEventsResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
 	scope := metrics.HistoryReapplyEventsScope
@@ -1563,7 +1453,7 @@ func (h *Handler) ReapplyEvents(
 	workflowID := request.GetRequest().GetWorkflowExecution().GetWorkflowId()
 	engine, err := h.controller.GetEngine(workflowID)
 	if err != nil {
-		return h.error(err, scope, domainID, workflowID)
+		return nil, h.error(err, scope, domainID, workflowID)
 	}
 	// deserialize history event object
 	historyEvents, err := h.GetPayloadSerializer().DeserializeBatchEvents(&serialization.DataBlob{
@@ -1571,7 +1461,7 @@ func (h *Handler) ReapplyEvents(
 		Data:     request.GetRequest().GetEvents().GetData(),
 	})
 	if err != nil {
-		return h.error(err, scope, domainID, workflowID)
+		return nil, h.error(err, scope, domainID, workflowID)
 	}
 
 	execution := request.GetRequest().GetWorkflowExecution()
@@ -1580,42 +1470,120 @@ func (h *Handler) ReapplyEvents(
 		request.GetDomainUUID(),
 		execution.GetWorkflowId(),
 		execution.GetRunId(),
-		historyEvents,
+		adapter.ToProtoHistoryEvents(historyEvents),
 	); err != nil {
-		return h.error(err, scope, domainID, workflowID)
+		return nil, h.error(err, scope, domainID, workflowID)
 	}
-	return nil
+	return &historyservice.ReapplyEventsResponse{}, nil
 }
 
-// ReadDLQMessages reads replication DLQ messages
-func (h *Handler) ReadDLQMessages(
-	ctx context.Context,
-	request *r.ReadDLQMessagesRequest,
-) (resp *r.ReadDLQMessagesResponse, retError error) {
-	panic("ReadDLQMessages should not be called for thrift handler")
+func (h *Handler) ReadDLQMessages(ctx context.Context, request *historyservice.ReadDLQMessagesRequest) (_ *historyservice.ReadDLQMessagesResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
+
+	h.startWG.Wait()
+
+	scope := metrics.HistoryReadDLQMessagesScope
+	h.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
+	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	engine, err := h.controller.getEngineForShard(int(request.GetShardID()))
+	if err != nil {
+		err = h.error(err, scope, "", "")
+		return nil, err
+	}
+
+	resp, err := engine.ReadDLQMessages(ctx, request)
+	if err != nil {
+		err = h.error(err, scope, "", "")
+		return nil, err
+	}
+
+	return resp, nil
 }
 
-// PurgeDLQMessages deletes replication DLQ messages
-func (h *Handler) PurgeDLQMessages(
-	ctx context.Context,
-	request *r.PurgeDLQMessagesRequest,
-) (retError error) {
-	panic("PurgeDLQMessages should not be called for thrift handler")
+func (h *Handler) PurgeDLQMessages(ctx context.Context, request *historyservice.PurgeDLQMessagesRequest) (_ *historyservice.PurgeDLQMessagesResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
+
+	h.startWG.Wait()
+
+	scope := metrics.HistoryPurgeDLQMessagesScope
+	h.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
+	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	engine, err := h.controller.getEngineForShard(int(request.GetShardID()))
+	if err != nil {
+		err = h.error(err, scope, "", "")
+		return nil, err
+	}
+
+	err = engine.PurgeDLQMessages(ctx, request)
+	if err != nil {
+		err = h.error(err, scope, "", "")
+		return nil, err
+	}
+	return &historyservice.PurgeDLQMessagesResponse{}, nil
 }
 
-// MergeDLQMessages reads and applies replication DLQ messages
-func (h *Handler) MergeDLQMessages(
-	ctx context.Context,
-	request *r.MergeDLQMessagesRequest,
-) (resp *r.MergeDLQMessagesResponse, retError error) {
-	panic("MergeDLQMessages should not be called for thrift handler")
+func (h *Handler) MergeDLQMessages(ctx context.Context, request *historyservice.MergeDLQMessagesRequest) (_ *historyservice.MergeDLQMessagesResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
+
+	h.startWG.Wait()
+
+	scope := metrics.HistoryMergeDLQMessagesScope
+	h.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
+	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	engine, err := h.controller.getEngineForShard(int(request.GetShardID()))
+	if err != nil {
+		err = h.error(err, scope, "", "")
+		return nil, err
+	}
+
+	resp, err := engine.MergeDLQMessages(ctx, request)
+	if err != nil {
+		err = h.error(err, scope, "", "")
+		return nil, err
+	}
+
+	return resp, nil
 }
 
-// RefreshWorkflowTasks refreshes all the tasks of a workflow
-func (h *Handler) RefreshWorkflowTasks(
-	ctx context.Context,
-	request *hist.RefreshWorkflowTasksRequest) (retError error) {
-	panic("RefreshWorkflowTasks should not be called for thrift handler")
+func (h *Handler) RefreshWorkflowTasks(ctx context.Context, request *historyservice.RefreshWorkflowTasksRequest) (_ *historyservice.RefreshWorkflowTasksResponse, retError error) {
+	defer log.CapturePanicGRPC(h.GetLogger(), &retError)
+
+	h.startWG.Wait()
+
+	scope := metrics.HistoryRefreshWorkflowTasksScope
+	h.GetMetricsClient().IncCounter(scope, metrics.CadenceRequests)
+	sw := h.GetMetricsClient().StartTimer(scope, metrics.CadenceLatency)
+	defer sw.Stop()
+	domainID := request.GetDomainUUID()
+	execution := request.GetRequest().GetExecution()
+	workflowID := execution.GetWorkflowId()
+	engine, err := h.controller.GetEngine(workflowID)
+	if err != nil {
+		err = h.error(err, scope, domainID, workflowID)
+		return nil, err
+	}
+
+	err = engine.RefreshWorkflowTasks(
+		ctx,
+		domainID,
+		commonproto.WorkflowExecution{
+			WorkflowId: execution.WorkflowId,
+			RunId:      execution.RunId,
+		},
+	)
+
+	if err != nil {
+		err = h.error(err, scope, domainID, workflowID)
+		return nil, err
+	}
+
+	return &historyservice.RefreshWorkflowTasksResponse{}, nil
 }
 
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various

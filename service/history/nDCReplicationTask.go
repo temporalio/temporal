@@ -24,11 +24,13 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	h "github.com/temporalio/temporal/.gen/go/history"
-	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -39,16 +41,16 @@ import (
 type (
 	nDCReplicationTask interface {
 		getDomainID() string
-		getExecution() *shared.WorkflowExecution
+		getExecution() *commonproto.WorkflowExecution
 		getWorkflowID() string
 		getRunID() string
 		getEventTime() time.Time
-		getFirstEvent() *shared.HistoryEvent
-		getLastEvent() *shared.HistoryEvent
+		getFirstEvent() *commonproto.HistoryEvent
+		getLastEvent() *commonproto.HistoryEvent
 		getVersion() int64
 		getSourceCluster() string
-		getEvents() []*shared.HistoryEvent
-		getNewEvents() []*shared.HistoryEvent
+		getEvents() []*commonproto.HistoryEvent
+		getNewEvents() []*commonproto.HistoryEvent
 		getLogger() log.Logger
 		getVersionHistory() *persistence.VersionHistory
 		isWorkflowReset() bool
@@ -59,13 +61,13 @@ type (
 	nDCReplicationTaskImpl struct {
 		sourceCluster  string
 		domainID       string
-		execution      *shared.WorkflowExecution
+		execution      *commonproto.WorkflowExecution
 		version        int64
-		firstEvent     *shared.HistoryEvent
-		lastEvent      *shared.HistoryEvent
+		firstEvent     *commonproto.HistoryEvent
+		lastEvent      *commonproto.HistoryEvent
 		eventTime      time.Time
-		events         []*shared.HistoryEvent
-		newEvents      []*shared.HistoryEvent
+		events         []*commonproto.HistoryEvent
+		newEvents      []*commonproto.HistoryEvent
 		versionHistory *persistence.VersionHistory
 
 		startTime time.Time
@@ -95,7 +97,7 @@ func newNDCReplicationTask(
 	historySerializer persistence.PayloadSerializer,
 	taskStartTime time.Time,
 	logger log.Logger,
-	request *h.ReplicateEventsV2Request,
+	request *historyservice.ReplicateEventsV2Request,
 ) (*nDCReplicationTaskImpl, error) {
 
 	events, newEvents, err := validateReplicateEventsRequest(
@@ -108,7 +110,7 @@ func newNDCReplicationTask(
 
 	domainID := request.GetDomainUUID()
 	execution := request.WorkflowExecution
-	versionHistory := &shared.VersionHistory{
+	versionHistory := &commonproto.VersionHistory{
 		BranchToken: nil,
 		Items:       request.VersionHistoryItems,
 	}
@@ -150,7 +152,7 @@ func newNDCReplicationTask(
 		eventTime:      time.Unix(0, eventTime),
 		events:         events,
 		newEvents:      newEvents,
-		versionHistory: persistence.NewVersionHistoryFromThrift(versionHistory),
+		versionHistory: persistence.NewVersionHistoryFromProto(versionHistory),
 
 		startTime: taskStartTime,
 		logger:    logger,
@@ -161,7 +163,7 @@ func (t *nDCReplicationTaskImpl) getDomainID() string {
 	return t.domainID
 }
 
-func (t *nDCReplicationTaskImpl) getExecution() *shared.WorkflowExecution {
+func (t *nDCReplicationTaskImpl) getExecution() *commonproto.WorkflowExecution {
 	return t.execution
 }
 
@@ -177,11 +179,11 @@ func (t *nDCReplicationTaskImpl) getEventTime() time.Time {
 	return t.eventTime
 }
 
-func (t *nDCReplicationTaskImpl) getFirstEvent() *shared.HistoryEvent {
+func (t *nDCReplicationTaskImpl) getFirstEvent() *commonproto.HistoryEvent {
 	return t.firstEvent
 }
 
-func (t *nDCReplicationTaskImpl) getLastEvent() *shared.HistoryEvent {
+func (t *nDCReplicationTaskImpl) getLastEvent() *commonproto.HistoryEvent {
 	return t.lastEvent
 }
 
@@ -193,11 +195,11 @@ func (t *nDCReplicationTaskImpl) getSourceCluster() string {
 	return t.sourceCluster
 }
 
-func (t *nDCReplicationTaskImpl) getEvents() []*shared.HistoryEvent {
+func (t *nDCReplicationTaskImpl) getEvents() []*commonproto.HistoryEvent {
 	return t.events
 }
 
-func (t *nDCReplicationTaskImpl) getNewEvents() []*shared.HistoryEvent {
+func (t *nDCReplicationTaskImpl) getNewEvents() []*commonproto.HistoryEvent {
 	return t.newEvents
 }
 
@@ -211,9 +213,9 @@ func (t *nDCReplicationTaskImpl) getVersionHistory() *persistence.VersionHistory
 
 func (t *nDCReplicationTaskImpl) isWorkflowReset() bool {
 	switch t.getFirstEvent().GetEventType() {
-	case shared.EventTypeDecisionTaskFailed:
+	case enums.EventTypeDecisionTaskFailed:
 		decisionTaskFailedEvent := t.getFirstEvent()
-		attr := decisionTaskFailedEvent.DecisionTaskFailedEventAttributes
+		attr := decisionTaskFailedEvent.GetDecisionTaskFailedEventAttributes()
 		baseRunID := attr.GetBaseRunId()
 		baseEventVersion := attr.GetForkEventVersion()
 		newRunID := attr.GetNewRunId()
@@ -234,11 +236,11 @@ func (t *nDCReplicationTaskImpl) splitTask(
 	}
 	newHistoryEvents := t.newEvents
 
-	if t.getLastEvent().GetEventType() != shared.EventTypeWorkflowExecutionContinuedAsNew ||
-		t.getLastEvent().WorkflowExecutionContinuedAsNewEventAttributes == nil {
+	if t.getLastEvent().GetEventType() != enums.EventTypeWorkflowExecutionContinuedAsNew ||
+		t.getLastEvent().GetWorkflowExecutionContinuedAsNewEventAttributes() == nil {
 		return nil, nil, ErrLastEventIsNotContinueAsNew
 	}
-	newRunID := t.getLastEvent().WorkflowExecutionContinuedAsNewEventAttributes.GetNewExecutionRunId()
+	newRunID := t.getLastEvent().GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
 
 	newFirstEvent := newHistoryEvents[0]
 	newLastEvent := newHistoryEvents[len(newHistoryEvents)-1]
@@ -250,11 +252,11 @@ func (t *nDCReplicationTaskImpl) splitTask(
 		}
 	}
 
-	newVersionHistory := persistence.NewVersionHistoryFromThrift(&shared.VersionHistory{
+	newVersionHistory := persistence.NewVersionHistoryFromProto(&commonproto.VersionHistory{
 		BranchToken: nil,
-		Items: []*shared.VersionHistoryItem{{
-			EventID: common.Int64Ptr(newLastEvent.GetEventId()),
-			Version: common.Int64Ptr(newLastEvent.GetVersion()),
+		Items: []*commonproto.VersionHistoryItem{{
+			EventID: newLastEvent.GetEventId(),
+			Version: newLastEvent.GetVersion(),
 		}},
 	})
 
@@ -270,16 +272,16 @@ func (t *nDCReplicationTaskImpl) splitTask(
 	newRunTask := &nDCReplicationTaskImpl{
 		sourceCluster: t.sourceCluster,
 		domainID:      t.domainID,
-		execution: &shared.WorkflowExecution{
+		execution: &commonproto.WorkflowExecution{
 			WorkflowId: t.execution.WorkflowId,
-			RunId:      common.StringPtr(newRunID),
+			RunId:      newRunID,
 		},
 		version:        t.version,
 		firstEvent:     newFirstEvent,
 		lastEvent:      newLastEvent,
 		eventTime:      time.Unix(0, newEventTime),
 		events:         newHistoryEvents,
-		newEvents:      []*shared.HistoryEvent{},
+		newEvents:      []*commonproto.HistoryEvent{},
 		versionHistory: newVersionHistory,
 
 		startTime: taskStartTime,
@@ -292,8 +294,8 @@ func (t *nDCReplicationTaskImpl) splitTask(
 
 func validateReplicateEventsRequest(
 	historySerializer persistence.PayloadSerializer,
-	request *h.ReplicateEventsV2Request,
-) ([]*shared.HistoryEvent, []*shared.HistoryEvent, error) {
+	request *historyservice.ReplicateEventsV2Request,
+) ([]*commonproto.HistoryEvent, []*commonproto.HistoryEvent, error) {
 
 	// TODO add validation on version history
 
@@ -346,7 +348,7 @@ func validateUUID(input string) bool {
 	return true
 }
 
-func validateEvents(events []*shared.HistoryEvent) (int64, error) {
+func validateEvents(events []*commonproto.HistoryEvent) (int64, error) {
 
 	firstEvent := events[0]
 	firstEventID := firstEvent.GetEventId()
@@ -365,15 +367,17 @@ func validateEvents(events []*shared.HistoryEvent) (int64, error) {
 
 func deserializeBlob(
 	historySerializer persistence.PayloadSerializer,
-	blob *shared.DataBlob,
-) ([]*shared.HistoryEvent, error) {
+	blob *commonproto.DataBlob,
+) ([]*commonproto.HistoryEvent, error) {
 
 	if blob == nil {
 		return nil, nil
 	}
 
-	return historySerializer.DeserializeBatchEvents(&serialization.DataBlob{
+	events, err := historySerializer.DeserializeBatchEvents(&serialization.DataBlob{
 		Encoding: common.EncodingTypeThriftRW,
 		Data:     blob.Data,
 	})
+
+	return adapter.ToProtoHistoryEvents(events), err
 }

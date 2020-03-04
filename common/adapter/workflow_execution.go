@@ -25,7 +25,6 @@ package adapter
 import (
 	"go.temporal.io/temporal-proto/common"
 
-	"github.com/temporalio/temporal/.gen/go/history"
 	"github.com/temporalio/temporal/.gen/go/shared"
 )
 
@@ -37,18 +36,5 @@ func ToThriftWorkflowExecution(in *common.WorkflowExecution) *shared.WorkflowExe
 	return &shared.WorkflowExecution{
 		WorkflowId: &in.WorkflowId,
 		RunId:      &in.RunId,
-	}
-}
-
-// ToThriftParentExecutionInfo ...
-func ToThriftParentExecutionInfo(in *common.ParentExecutionInfo) *history.ParentExecutionInfo {
-	if in == nil {
-		return nil
-	}
-	return &history.ParentExecutionInfo{
-		DomainUUID:  &in.DomainUUID,
-		Domain:      &in.Domain,
-		Execution:   ToThriftWorkflowExecution(in.Execution),
-		InitiatedId: &in.InitiatedId,
 	}
 }

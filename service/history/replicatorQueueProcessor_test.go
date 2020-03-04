@@ -28,14 +28,14 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
@@ -135,10 +135,10 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 	s.mockExecutionMgr.On("CompleteReplicationTask", &persistence.CompleteReplicationTaskRequest{TaskID: taskID}).Return(nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
-		},
+		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
+		}),
 	}).Return(nil, serviceerror.NewNotFound(""))
 	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(cache.NewGlobalDomainCacheEntryForTest(
 		&persistence.DomainInfo{ID: domainID, Name: domainName},
@@ -179,9 +179,9 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 
 	context, release, _ := s.replicatorQueueProcessor.historyCache.getOrCreateWorkflowExecutionForBackground(
 		domainID,
-		shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
+		commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
 		},
 	)
 	context.(*workflowExecutionContextImpl).mutableState = s.mockMutableState
@@ -227,9 +227,9 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 
 	context, release, _ := s.replicatorQueueProcessor.historyCache.getOrCreateWorkflowExecutionForBackground(
 		domainID,
-		shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
+		commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
 		},
 	)
 
@@ -277,9 +277,9 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 
 	context, release, _ := s.replicatorQueueProcessor.historyCache.getOrCreateWorkflowExecutionForBackground(
 		domainID,
-		shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
+		commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
 		},
 	)
 
@@ -390,9 +390,9 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 
 	context, release, _ := s.replicatorQueueProcessor.historyCache.getOrCreateWorkflowExecutionForBackground(
 		domainID,
-		shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
+		commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
 		},
 	)
 
@@ -486,7 +486,7 @@ func (s *replicatorQueueProcessorSuite) TestPaginateHistoryWithShardID() {
 	firstEventID := int64(133)
 	nextEventID := int64(134)
 	pageSize := 1
-	shardID := common.IntPtr(1)
+	shardID := 1
 
 	req := &persistence.ReadHistoryBranchRequest{
 		BranchToken:   []byte("asd"),
@@ -494,22 +494,32 @@ func (s *replicatorQueueProcessorSuite) TestPaginateHistoryWithShardID() {
 		MaxEventID:    nextEventID,
 		PageSize:      pageSize,
 		NextPageToken: []byte{},
-		ShardID:       shardID,
+		ShardID:       &shardID,
 	}
 	s.mockHistoryV2Mgr.On("ReadHistoryBranch", req).Return(&persistence.ReadHistoryBranchResponse{
-		HistoryEvents: []*workflow.HistoryEvent{
+		HistoryEvents: adapter.ToThriftHistoryEvents([]*commonproto.HistoryEvent{
 			{
-				EventId: common.Int64Ptr(int64(1)),
+				EventId: int64(1),
+				// EventType:  enums.EventTypeWorkflowExecutionStarted,
+				// Attributes: &commonproto.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &commonproto.WorkflowExecutionStartedEventAttributes{}},
 			},
-		},
+		}),
 		NextPageToken:    []byte{},
 		Size:             1,
 		LastFirstEventID: nextEventID,
 	}, nil).Once()
-	hEvents, bEvents, token, size, err := PaginateHistory(s.mockHistoryV2Mgr, false, []byte("asd"),
-		firstEventID, nextEventID, []byte{}, pageSize, shardID)
-	s.NotNil(hEvents)
-	s.NotNil(bEvents)
+	hEvents, bEvents, token, size, err := PaginateHistory(
+		s.mockHistoryV2Mgr,
+		false,
+		[]byte("asd"),
+		firstEventID,
+		nextEventID,
+		[]byte{},
+		pageSize,
+		&shardID)
+
+	s.Equal(1, len(hEvents))
+	s.Equal(0, len(bEvents))
 	s.NotNil(token)
 	s.Equal(1, size)
 	s.NoError(err)

@@ -26,9 +26,10 @@ import (
 	"fmt"
 	"time"
 
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/log"
@@ -39,18 +40,18 @@ type (
 	mutableStateTaskGenerator interface {
 		generateWorkflowStartTasks(
 			now time.Time,
-			startEvent *shared.HistoryEvent,
+			startEvent *commonproto.HistoryEvent,
 		) error
 		generateWorkflowCloseTasks(
 			now time.Time,
 		) error
 		generateRecordWorkflowStartedTasks(
 			now time.Time,
-			startEvent *shared.HistoryEvent,
+			startEvent *commonproto.HistoryEvent,
 		) error
 		generateDelayedDecisionTasks(
 			now time.Time,
-			startEvent *shared.HistoryEvent,
+			startEvent *commonproto.HistoryEvent,
 		) error
 		generateDecisionScheduleTasks(
 			now time.Time,
@@ -62,22 +63,22 @@ type (
 		) error
 		generateActivityTransferTasks(
 			now time.Time,
-			event *shared.HistoryEvent,
+			event *commonproto.HistoryEvent,
 		) error
 		generateActivityRetryTasks(
 			activityScheduleID int64,
 		) error
 		generateChildWorkflowTasks(
 			now time.Time,
-			event *shared.HistoryEvent,
+			event *commonproto.HistoryEvent,
 		) error
 		generateRequestCancelExternalTasks(
 			now time.Time,
-			event *shared.HistoryEvent,
+			event *commonproto.HistoryEvent,
 		) error
 		generateSignalExternalTasks(
 			now time.Time,
-			event *shared.HistoryEvent,
+			event *commonproto.HistoryEvent,
 		) error
 		generateWorkflowSearchAttrTasks(
 			now time.Time,
@@ -123,10 +124,10 @@ func newMutableStateTaskGenerator(
 
 func (r *mutableStateTaskGeneratorImpl) generateWorkflowStartTasks(
 	now time.Time,
-	startEvent *shared.HistoryEvent,
+	startEvent *commonproto.HistoryEvent,
 ) error {
 
-	attr := startEvent.WorkflowExecutionStartedEventAttributes
+	attr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 	firstDecisionDelayDuration := time.Duration(attr.GetFirstDecisionTaskBackoffSeconds()) * time.Second
 
 	executionInfo := r.mutableState.GetExecutionInfo()
@@ -183,29 +184,24 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowCloseTasks(
 
 func (r *mutableStateTaskGeneratorImpl) generateDelayedDecisionTasks(
 	now time.Time,
-	startEvent *shared.HistoryEvent,
+	startEvent *commonproto.HistoryEvent,
 ) error {
 
 	startVersion := startEvent.GetVersion()
 
-	startAttr := startEvent.WorkflowExecutionStartedEventAttributes
+	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 	decisionBackoffDuration := time.Duration(startAttr.GetFirstDecisionTaskBackoffSeconds()) * time.Second
 	executionTimestamp := now.Add(decisionBackoffDuration)
 
-	// noParentWorkflow case
-	firstDecisionDelayType := persistence.WorkflowBackoffTimeoutTypeCron
-	// continue as new case
-	if startAttr.Initiator != nil {
-		switch startAttr.GetInitiator() {
-		case shared.ContinueAsNewInitiatorRetryPolicy:
-			firstDecisionDelayType = persistence.WorkflowBackoffTimeoutTypeRetry
-		case shared.ContinueAsNewInitiatorCronSchedule:
-			firstDecisionDelayType = persistence.WorkflowBackoffTimeoutTypeCron
-		case shared.ContinueAsNewInitiatorDecider:
-			return serviceerror.NewInternal("encounter continue as new iterator & first decision delay not 0")
-		default:
-			return serviceerror.NewInternal(fmt.Sprintf("unknown iterator retry policy: %v", startAttr.GetInitiator()))
-		}
+	var firstDecisionDelayType int
+	switch startAttr.GetInitiator() {
+	case enums.ContinueAsNewInitiatorRetryPolicy:
+		firstDecisionDelayType = persistence.WorkflowBackoffTimeoutTypeRetry
+	case enums.ContinueAsNewInitiatorCronSchedule,
+		enums.ContinueAsNewInitiatorDecider:
+		firstDecisionDelayType = persistence.WorkflowBackoffTimeoutTypeCron
+	default:
+		return serviceerror.NewInternal(fmt.Sprintf("unknown iterator retry policy: %v", startAttr.GetInitiator()))
 	}
 
 	r.mutableState.AddTimerTasks(&persistence.WorkflowBackoffTimerTask{
@@ -221,7 +217,7 @@ func (r *mutableStateTaskGeneratorImpl) generateDelayedDecisionTasks(
 
 func (r *mutableStateTaskGeneratorImpl) generateRecordWorkflowStartedTasks(
 	now time.Time,
-	startEvent *shared.HistoryEvent,
+	startEvent *commonproto.HistoryEvent,
 ) error {
 
 	startVersion := startEvent.GetVersion()
@@ -277,7 +273,7 @@ func (r *mutableStateTaskGeneratorImpl) generateDecisionScheduleTasks(
 }
 
 func (r *mutableStateTaskGeneratorImpl) generateDecisionStartTasks(
-	now time.Time,
+	_ time.Time,
 	decisionScheduleID int64,
 ) error {
 
@@ -307,10 +303,10 @@ func (r *mutableStateTaskGeneratorImpl) generateDecisionStartTasks(
 
 func (r *mutableStateTaskGeneratorImpl) generateActivityTransferTasks(
 	now time.Time,
-	event *shared.HistoryEvent,
+	event *commonproto.HistoryEvent,
 ) error {
 
-	attr := event.ActivityTaskScheduledEventAttributes
+	attr := event.GetActivityTaskScheduledEventAttributes()
 	activityScheduleID := event.GetEventId()
 
 	activityInfo, ok := r.mutableState.GetActivityInfo(activityScheduleID)
@@ -366,10 +362,10 @@ func (r *mutableStateTaskGeneratorImpl) generateActivityRetryTasks(
 
 func (r *mutableStateTaskGeneratorImpl) generateChildWorkflowTasks(
 	now time.Time,
-	event *shared.HistoryEvent,
+	event *commonproto.HistoryEvent,
 ) error {
 
-	attr := event.StartChildWorkflowExecutionInitiatedEventAttributes
+	attr := event.GetStartChildWorkflowExecutionInitiatedEventAttributes()
 	childWorkflowScheduleID := event.GetEventId()
 	childWorkflowTargetDomain := attr.GetDomain()
 
@@ -397,10 +393,10 @@ func (r *mutableStateTaskGeneratorImpl) generateChildWorkflowTasks(
 
 func (r *mutableStateTaskGeneratorImpl) generateRequestCancelExternalTasks(
 	now time.Time,
-	event *shared.HistoryEvent,
+	event *commonproto.HistoryEvent,
 ) error {
 
-	attr := event.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes
+	attr := event.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes()
 	scheduleID := event.GetEventId()
 	version := event.GetVersion()
 	targetDomainName := attr.GetDomain()
@@ -434,10 +430,10 @@ func (r *mutableStateTaskGeneratorImpl) generateRequestCancelExternalTasks(
 
 func (r *mutableStateTaskGeneratorImpl) generateSignalExternalTasks(
 	now time.Time,
-	event *shared.HistoryEvent,
+	event *commonproto.HistoryEvent,
 ) error {
 
-	attr := event.SignalExternalWorkflowExecutionInitiatedEventAttributes
+	attr := event.GetSignalExternalWorkflowExecutionInitiatedEventAttributes()
 	scheduleID := event.GetEventId()
 	version := event.GetVersion()
 	targetDomainName := attr.GetDomain()

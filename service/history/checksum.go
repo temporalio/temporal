@@ -23,7 +23,7 @@ package history
 import (
 	"fmt"
 
-	checksumgen "github.com/temporalio/temporal/.gen/go/checksum"
+	checksumproto "github.com/temporalio/temporal/.gen/proto/checksum"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/checksum"
 )
@@ -52,31 +52,31 @@ func verifyMutableStateChecksum(
 	return checksum.Verify(payload, csum)
 }
 
-func newMutableStateChecksumPayload(ms mutableState) *checksumgen.MutableStateChecksumPayload {
+func newMutableStateChecksumPayload(ms mutableState) *checksumproto.MutableStateChecksumPayload {
 	executionInfo := ms.GetExecutionInfo()
 	replicationState := ms.GetReplicationState()
-	payload := &checksumgen.MutableStateChecksumPayload{
-		CancelRequested:      common.BoolPtr(executionInfo.CancelRequested),
-		State:                common.Int16Ptr(int16(executionInfo.State)),
-		LastFirstEventID:     common.Int64Ptr(executionInfo.LastFirstEventID),
-		NextEventID:          common.Int64Ptr(executionInfo.NextEventID),
-		LastProcessedEventID: common.Int64Ptr(executionInfo.LastProcessedEvent),
-		SignalCount:          common.Int64Ptr(int64(executionInfo.SignalCount)),
-		DecisionAttempt:      common.Int32Ptr(int32(executionInfo.DecisionAttempt)),
-		DecisionScheduledID:  common.Int64Ptr(executionInfo.DecisionScheduleID),
-		DecisionStartedID:    common.Int64Ptr(executionInfo.DecisionStartedID),
-		DecisionVersion:      common.Int64Ptr(executionInfo.DecisionVersion),
-		StickyTaskListName:   common.StringPtr(executionInfo.StickyTaskList),
+	payload := &checksumproto.MutableStateChecksumPayload{
+		CancelRequested:      executionInfo.CancelRequested,
+		State:                int32(executionInfo.State),
+		LastFirstEventId:     executionInfo.LastFirstEventID,
+		NextEventID:          executionInfo.NextEventID,
+		LastProcessedEventId: executionInfo.LastProcessedEvent,
+		SignalCount:          int64(executionInfo.SignalCount),
+		DecisionAttempt:      int32(executionInfo.DecisionAttempt),
+		DecisionScheduledId:  executionInfo.DecisionScheduleID,
+		DecisionStartedId:    executionInfo.DecisionStartedID,
+		DecisionVersion:      executionInfo.DecisionVersion,
+		StickyTaskListName:   executionInfo.StickyTaskList,
 	}
 
 	if replicationState != nil {
-		payload.LastWriteVersion = common.Int64Ptr(replicationState.LastWriteVersion)
-		payload.LastWriteEventID = common.Int64Ptr(replicationState.LastWriteEventID)
+		payload.LastWriteVersion = replicationState.LastWriteVersion
+		payload.LastWriteEventId = replicationState.LastWriteEventID
 	}
 
 	versionHistories := ms.GetVersionHistories()
 	if versionHistories != nil {
-		payload.VersionHistories = versionHistories.ToThrift()
+		payload.VersionHistories = versionHistories.ToProto()
 	}
 
 	// for each of the pendingXXX ids below, sorting is needed to guarantee that
@@ -86,34 +86,34 @@ func newMutableStateChecksumPayload(ms mutableState) *checksumgen.MutableStateCh
 		pendingTimerIDs = append(pendingTimerIDs, ti.StartedID)
 	}
 	common.SortInt64Slice(pendingTimerIDs)
-	payload.PendingTimerStartedIDs = pendingTimerIDs
+	payload.PendingTimerStartedIds = pendingTimerIDs
 
 	pendingActivityIDs := make([]int64, 0, len(ms.GetPendingActivityInfos()))
 	for id := range ms.GetPendingActivityInfos() {
 		pendingActivityIDs = append(pendingActivityIDs, id)
 	}
 	common.SortInt64Slice(pendingActivityIDs)
-	payload.PendingActivityScheduledIDs = pendingActivityIDs
+	payload.PendingActivityScheduledIds = pendingActivityIDs
 
 	pendingChildIDs := make([]int64, 0, len(ms.GetPendingChildExecutionInfos()))
 	for id := range ms.GetPendingChildExecutionInfos() {
 		pendingChildIDs = append(pendingChildIDs, id)
 	}
 	common.SortInt64Slice(pendingChildIDs)
-	payload.PendingChildInitiatedIDs = pendingChildIDs
+	payload.PendingChildInitiatedIds = pendingChildIDs
 
 	signalIDs := make([]int64, 0, len(ms.GetPendingSignalExternalInfos()))
 	for id := range ms.GetPendingSignalExternalInfos() {
 		signalIDs = append(signalIDs, id)
 	}
 	common.SortInt64Slice(signalIDs)
-	payload.PendingSignalInitiatedIDs = signalIDs
+	payload.PendingSignalInitiatedIds = signalIDs
 
 	requestCancelIDs := make([]int64, 0, len(ms.GetPendingRequestCancelExternalInfos()))
 	for id := range ms.GetPendingRequestCancelExternalInfos() {
 		requestCancelIDs = append(requestCancelIDs, id)
 	}
 	common.SortInt64Slice(requestCancelIDs)
-	payload.PendingReqCancelInitiatedIDs = requestCancelIDs
+	payload.PendingReqCancelInitiatedIds = requestCancelIDs
 	return payload
 }

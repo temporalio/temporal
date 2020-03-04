@@ -27,9 +27,9 @@ import (
 	"fmt"
 	"time"
 
+	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
@@ -121,7 +121,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 	if err != nil {
 		return nil, 0, err
 	}
-	firstEventBatch := batch.(*shared.History).Events
+	firstEventBatch := batch.(*commonproto.History).Events
 	rebuiltMutableState, stateBuilder := r.initializeBuilders(
 		domainEntry,
 	)
@@ -134,7 +134,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 		if err != nil {
 			return nil, 0, err
 		}
-		events := batch.(*shared.History).Events
+		events := batch.(*commonproto.History).Events
 		if err := r.applyEvents(targetWorkflowIdentifier, stateBuilder, events, requestID); err != nil {
 			return nil, 0, err
 		}
@@ -197,16 +197,16 @@ func (r *nDCStateRebuilderImpl) initializeBuilders(
 func (r *nDCStateRebuilderImpl) applyEvents(
 	workflowIdentifier definition.WorkflowIdentifier,
 	stateBuilder stateBuilder,
-	events []*shared.HistoryEvent,
+	events []*commonproto.HistoryEvent,
 	requestID string,
 ) error {
 
 	_, err := stateBuilder.applyEvents(
 		workflowIdentifier.DomainID,
 		requestID,
-		shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowIdentifier.WorkflowID),
-			RunId:      common.StringPtr(workflowIdentifier.RunID),
+		commonproto.WorkflowExecution{
+			WorkflowId: workflowIdentifier.WorkflowID,
+			RunId:      workflowIdentifier.RunID,
 		},
 		events,
 		nil, // no new run history when rebuilding mutable state

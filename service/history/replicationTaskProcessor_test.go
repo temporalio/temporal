@@ -24,9 +24,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/.gen/proto/replication"
-
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
@@ -35,12 +32,14 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 
-	"github.com/temporalio/temporal/.gen/go/history"
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
+	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
@@ -149,10 +148,10 @@ func (s *replicationTaskProcessorSuite) TestSendFetchMessageRequest() {
 
 func (s *replicationTaskProcessorSuite) TestHandleSyncShardStatus() {
 	now := time.Now()
-	s.mockEngine.EXPECT().SyncShardStatus(gomock.Any(), &history.SyncShardStatusRequest{
-		SourceCluster: common.StringPtr("standby"),
-		ShardId:       common.Int64Ptr(0),
-		Timestamp:     common.Int64Ptr(now.UnixNano()),
+	s.mockEngine.EXPECT().SyncShardStatus(gomock.Any(), &historyservice.SyncShardStatusRequest{
+		SourceCluster: "standby",
+		ShardId:       0,
+		Timestamp:     now.UnixNano(),
 	}).Return(nil).Times(1)
 
 	err := s.replicationTaskProcessor.handleSyncShardStatus(&replication.SyncShardStatus{
@@ -217,14 +216,14 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryV2Rep
 	domainID := uuid.NewRandom()
 	workflowID := uuid.New()
 	runID := uuid.NewRandom()
-	events := []*shared.HistoryEvent{
+	events := []*commonproto.HistoryEvent{
 		{
-			EventId: common.Int64Ptr(1),
-			Version: common.Int64Ptr(1),
+			EventId: 1,
+			Version: 1,
 		},
 	}
 	serializer := s.mockResource.GetPayloadSerializer()
-	data, err := serializer.SerializeBatchEvents(events, common.EncodingTypeThriftRW)
+	data, err := serializer.SerializeBatchEvents(adapter.ToThriftHistoryEvents(events), common.EncodingTypeThriftRW)
 	s.NoError(err)
 	task := &replication.ReplicationTask{
 		TaskType: enums.ReplicationTaskTypeHistoryV2,

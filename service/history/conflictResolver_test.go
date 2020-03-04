@@ -24,17 +24,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+	commonproto "go.temporal.io/temporal-proto/common"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
@@ -122,9 +122,9 @@ func (s *conflictResolverSuite) SetupTest() {
 	}
 	s.mockShard.SetEngine(h)
 
-	s.mockContext = newWorkflowExecutionContext(testDomainID, shared.WorkflowExecution{
-		WorkflowId: common.StringPtr("some random workflow ID"),
-		RunId:      common.StringPtr(testRunID),
+	s.mockContext = newWorkflowExecutionContext(testDomainID, commonproto.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      testRunID,
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	s.conflictResolver = newConflictResolver(s.mockShard, s.mockContext, s.mockHistoryV2Mgr, s.logger)
 
@@ -151,33 +151,33 @@ func (s *conflictResolverSuite) TestReset() {
 	nextEventID := int64(2)
 	branchToken := []byte("some random branch token")
 
-	event1 := &shared.HistoryEvent{
-		EventId: common.Int64Ptr(1),
-		Version: common.Int64Ptr(version),
-		WorkflowExecutionStartedEventAttributes: &shared.WorkflowExecutionStartedEventAttributes{
-			WorkflowType:                        &shared.WorkflowType{Name: common.StringPtr("some random workflow type")},
-			TaskList:                            &shared.TaskList{Name: common.StringPtr("some random workflow type")},
+	event1 := &commonproto.HistoryEvent{
+		EventId: 1,
+		Version: version,
+		Attributes: &commonproto.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &commonproto.WorkflowExecutionStartedEventAttributes{
+			WorkflowType:                        &commonproto.WorkflowType{Name: "some random workflow type"},
+			TaskList:                            &commonproto.TaskList{Name: "some random workflow type"},
 			Input:                               []byte("some random input"),
-			ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(123),
-			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(233),
-			Identity:                            common.StringPtr("some random identity"),
-		},
+			ExecutionStartToCloseTimeoutSeconds: 123,
+			TaskStartToCloseTimeoutSeconds:      233,
+			Identity:                            "some random identity",
+		}},
 	}
-	event2 := &shared.HistoryEvent{
-		EventId:                              common.Int64Ptr(2),
-		DecisionTaskScheduledEventAttributes: &shared.DecisionTaskScheduledEventAttributes{},
-	}
+	event2 := &commonproto.HistoryEvent{
+		EventId:    2,
+		Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{}}}
 
 	historySize := int64(1234567)
+	shardId := s.mockShard.GetShardID()
 	s.mockHistoryV2Mgr.On("ReadHistoryBranch", &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    common.FirstEventID,
 		MaxEventID:    nextEventID,
 		PageSize:      defaultHistoryPageSize,
 		NextPageToken: nil,
-		ShardID:       common.IntPtr(s.mockShard.GetShardID()),
+		ShardID:       &shardId,
 	}).Return(&persistence.ReadHistoryBranchResponse{
-		HistoryEvents:    []*shared.HistoryEvent{event1, event2},
+		HistoryEvents:    adapter.ToThriftHistoryEvents([]*commonproto.HistoryEvent{event1, event2}),
 		NextPageToken:    nil,
 		LastFirstEventID: event1.GetEventId(),
 		Size:             int(historySize),
@@ -194,10 +194,10 @@ func (s *conflictResolverSuite) TestReset() {
 		ParentWorkflowID:            "",
 		ParentRunID:                 "",
 		InitiatedID:                 common.EmptyEventID,
-		TaskList:                    event1.WorkflowExecutionStartedEventAttributes.TaskList.GetName(),
-		WorkflowTypeName:            event1.WorkflowExecutionStartedEventAttributes.WorkflowType.GetName(),
-		WorkflowTimeout:             *event1.WorkflowExecutionStartedEventAttributes.ExecutionStartToCloseTimeoutSeconds,
-		DecisionStartToCloseTimeout: *event1.WorkflowExecutionStartedEventAttributes.TaskStartToCloseTimeoutSeconds,
+		TaskList:                    event1.GetWorkflowExecutionStartedEventAttributes().TaskList.GetName(),
+		WorkflowTypeName:            event1.GetWorkflowExecutionStartedEventAttributes().WorkflowType.GetName(),
+		WorkflowTimeout:             event1.GetWorkflowExecutionStartedEventAttributes().ExecutionStartToCloseTimeoutSeconds,
+		DecisionStartToCloseTimeout: event1.GetWorkflowExecutionStartedEventAttributes().TaskStartToCloseTimeoutSeconds,
 		State:                       persistence.WorkflowStateCreated,
 		CloseStatus:                 persistence.WorkflowCloseStatusNone,
 		LastFirstEventID:            event1.GetEventId(),
@@ -267,7 +267,7 @@ func (s *conflictResolverSuite) TestReset() {
 	})).Return(nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
 		DomainID:  domainID,
-		Execution: execution,
+		Execution: *adapter.ToThriftWorkflowExecution(&execution),
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State: &persistence.WorkflowMutableState{
 			ExecutionInfo:  &persistence.WorkflowExecutionInfo{},

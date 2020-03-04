@@ -27,9 +27,10 @@ import (
 	"fmt"
 	"time"
 
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
@@ -52,7 +53,7 @@ type (
 	workflowExecutionContext interface {
 		getDomainName() string
 		getDomainID() string
-		getExecution() *workflow.WorkflowExecution
+		getExecution() *commonproto.WorkflowExecution
 
 		loadWorkflowExecution() (mutableState, error)
 		loadExecutionStats() (*persistence.ExecutionStats, error)
@@ -139,7 +140,7 @@ type (
 type (
 	workflowExecutionContextImpl struct {
 		domainID          string
-		workflowExecution workflow.WorkflowExecution
+		workflowExecution commonproto.WorkflowExecution
 		shard             ShardContext
 		engine            Engine
 		executionManager  persistence.ExecutionManager
@@ -162,7 +163,7 @@ var (
 
 func newWorkflowExecutionContext(
 	domainID string,
-	execution workflow.WorkflowExecution,
+	execution commonproto.WorkflowExecution,
 	shard ShardContext,
 	executionManager persistence.ExecutionManager,
 	logger log.Logger,
@@ -203,7 +204,7 @@ func (c *workflowExecutionContextImpl) getDomainID() string {
 	return c.domainID
 }
 
-func (c *workflowExecutionContextImpl) getExecution() *workflow.WorkflowExecution {
+func (c *workflowExecutionContextImpl) getExecution() *commonproto.WorkflowExecution {
 	return &c.workflowExecution
 }
 
@@ -241,7 +242,7 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, er
 	if c.mutableState == nil {
 		response, err := c.getWorkflowExecutionWithRetry(&persistence.GetWorkflowExecutionRequest{
 			DomainID:  c.domainID,
-			Execution: c.workflowExecution,
+			Execution: *adapter.ToThriftWorkflowExecution(&c.workflowExecution),
 		})
 		if err != nil {
 			return nil, err
@@ -780,9 +781,9 @@ func (c *workflowExecutionContextImpl) persistFirstWorkflowEvents(
 	domainID := workflowEvents.DomainID
 	workflowID := workflowEvents.WorkflowID
 	runID := workflowEvents.RunID
-	execution := workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowEvents.WorkflowID),
-		RunId:      common.StringPtr(workflowEvents.RunID),
+	execution := commonproto.WorkflowExecution{
+		WorkflowId: workflowEvents.WorkflowID,
+		RunId:      workflowEvents.RunID,
 	}
 	branchToken := workflowEvents.BranchToken
 	events := workflowEvents.Events
@@ -810,9 +811,9 @@ func (c *workflowExecutionContextImpl) persistNonFirstWorkflowEvents(
 	}
 
 	domainID := workflowEvents.DomainID
-	execution := workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowEvents.WorkflowID),
-		RunId:      common.StringPtr(workflowEvents.RunID),
+	execution := commonproto.WorkflowExecution{
+		WorkflowId: workflowEvents.WorkflowID,
+		RunId:      workflowEvents.RunID,
 	}
 	branchToken := workflowEvents.BranchToken
 	events := workflowEvents.Events
@@ -832,7 +833,7 @@ func (c *workflowExecutionContextImpl) persistNonFirstWorkflowEvents(
 
 func (c *workflowExecutionContextImpl) appendHistoryV2EventsWithRetry(
 	domainID string,
-	execution workflow.WorkflowExecution,
+	execution commonproto.WorkflowExecution,
 	request *persistence.AppendHistoryNodesRequest,
 ) (int64, error) {
 
@@ -1022,7 +1023,7 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 			WorkflowID:  currentExecutionInfo.WorkflowID,
 			RunID:       currentExecutionInfo.RunID,
 			BranchToken: currentBranchToken,
-			Events:      hBuilder.GetHistory().GetEvents(),
+			Events:      adapter.ToThriftHistoryEvents(hBuilder.GetHistory().GetEvents()),
 		})
 		if retError != nil {
 			return
@@ -1097,7 +1098,7 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 			DeleteSignalInfo:          nil,
 			UpsertSignalRequestedIDs:  []string{},
 			DeleteSignalRequestedID:   "",
-			NewBufferedEvents:         []*workflow.HistoryEvent{},
+			NewBufferedEvents:         adapter.ToThriftHistoryEvents([]*commonproto.HistoryEvent{}),
 			ClearBufferedEvents:       false,
 
 			TransferTasks:    currTransferTasks,
@@ -1177,16 +1178,17 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 	domainID := eventBatches[0].DomainID
 	workflowID := eventBatches[0].WorkflowID
 	runID := eventBatches[0].RunID
-	var reapplyEvents []*workflow.HistoryEvent
+	var reapplyEvents []*commonproto.HistoryEvent
 	for _, events := range eventBatches {
 		if events.DomainID != domainID ||
 			events.WorkflowID != workflowID {
 			return serviceerror.NewInternal("workflowExecutionContext encounter mismatch domainID / workflowID in events reapplication.")
 		}
 
-		for _, event := range events.Events {
+		for _, e := range events.Events {
+			event := adapter.ToProtoHistoryEvent(e)
 			switch event.GetEventType() {
-			case workflow.EventTypeWorkflowExecutionSignaled:
+			case enums.EventTypeWorkflowExecutionSignaled:
 				reapplyEvents = append(reapplyEvents, event)
 			}
 		}
@@ -1197,9 +1199,9 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 
 	// Reapply events only reapply to the current run.
 	// The run id is only used for reapply event de-duplication
-	execution := &workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(runID),
+	execution := &commonproto.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      runID,
 	}
 	domainCache := c.shard.GetDomainCache()
 	clientBean := c.shard.GetService().GetClientBean()
@@ -1226,7 +1228,7 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 	// The active cluster of the domain is the same as current cluster.
 	// Use the history from the same cluster to reapply events
 	reapplyEventsDataBlob, err := serializer.SerializeBatchEvents(
-		reapplyEvents,
+		adapter.ToThriftHistoryEvents(reapplyEvents),
 		common.EncodingTypeThriftRW,
 	)
 	if err != nil {
@@ -1245,8 +1247,8 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 		ctx2,
 		&adminservice.ReapplyEventsRequest{
 			DomainName:        domainEntry.GetInfo().Name,
-			WorkflowExecution: adapter.ToProtoWorkflowExecution(execution),
-			Events:            adapter.ToProtoDataBlob(reapplyEventsDataBlob.ToThrift()),
+			WorkflowExecution: execution,
+			Events:            reapplyEventsDataBlob.ToProto(),
 		},
 	)
 

@@ -25,21 +25,19 @@ import (
 	"testing"
 
 	"github.com/gogo/protobuf/types"
-
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common/primitives"
-
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonproto "go.temporal.io/temporal-proto/common"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/service/worker/archiver"
 )
 
@@ -130,9 +128,9 @@ func (s *timerQueueTaskExecutorBaseSuite) TestDeleteWorkflow_NoErr() {
 		TaskID:              12345,
 		VisibilityTimestamp: types.TimestampNow(),
 	}
-	executionInfo := workflow.WorkflowExecution{
-		WorkflowId: &task.WorkflowID,
-		RunId:      common.StringPtr(primitives.UUIDString(task.RunID)),
+	executionInfo := commonproto.WorkflowExecution{
+		WorkflowId: task.WorkflowID,
+		RunId:      primitives.UUIDString(task.RunID),
 	}
 	ctx := newWorkflowExecutionContext(primitives.UUIDString(task.DomainID), executionInfo, s.mockShard, s.mockExecutionManager, log.NewNoop())
 

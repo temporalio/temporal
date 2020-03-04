@@ -29,11 +29,12 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
@@ -145,7 +146,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Ope
 	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{
-		Events: []*shared.HistoryEvent{{EventId: common.Int64Ptr(1)}},
+		Events: adapter.ToThriftHistoryEvents([]*commonproto.HistoryEvent{{EventId: 1}}),
 	}
 
 	workflow.EXPECT().getContext().Return(weContext).AnyTimes()
@@ -155,7 +156,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Ope
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.domainEntry.GetFailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
 
-	s.mockEventsReapplier.EXPECT().reapplyEvents(ctx, mutableState, workflowEvents.Events, runID).Return(workflowEvents.Events, nil).Times(1)
+	s.mockEventsReapplier.EXPECT().reapplyEvents(ctx, mutableState, adapter.ToProtoHistoryEvents(workflowEvents.Events), runID).Return(adapter.ToProtoHistoryEvents(workflowEvents.Events), nil).Times(1)
 
 	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(true).AnyTimes()
 	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
@@ -226,7 +227,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Clo
 		gomock.Any(),
 		workflow,
 		eventsReapplicationResetWorkflowReason,
-		workflowEvents.Events,
+		adapter.ToProtoHistoryEvents(workflowEvents.Events),
 	).Return(nil).Times(1)
 
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
@@ -255,7 +256,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Op
 	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{
-		Events: []*shared.HistoryEvent{{EventId: common.Int64Ptr(1)}},
+		Events: adapter.ToThriftHistoryEvents([]*commonproto.HistoryEvent{{EventId: 1}}),
 	}
 
 	workflow.EXPECT().getContext().Return(weContext).AnyTimes()
@@ -343,9 +344,9 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Active(
 	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{
-		Events: []*shared.HistoryEvent{{
-			EventType: common.EventTypePtr(shared.EventTypeWorkflowExecutionSignaled),
-		}},
+		Events: adapter.ToThriftHistoryEvents([]*commonproto.HistoryEvent{{
+			EventType: enums.EventTypeWorkflowExecutionSignaled,
+		}}),
 		DomainID:   domainID,
 		WorkflowID: workflowID,
 	}
@@ -397,9 +398,9 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Passive
 	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{
-		Events: []*shared.HistoryEvent{{
-			EventType: common.EventTypePtr(shared.EventTypeWorkflowExecutionSignaled),
-		}},
+		Events: adapter.ToThriftHistoryEvents([]*commonproto.HistoryEvent{{
+			EventType: enums.EventTypeWorkflowExecutionSignaled,
+		}}),
 		DomainID:   domainID,
 		WorkflowID: workflowID,
 	}
@@ -442,10 +443,10 @@ func (s *nDCTransactionMgrSuite) TestCheckWorkflowExists_DoesNotExists() {
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
-		},
+		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
+		}),
 	}).Return(nil, serviceerror.NewNotFound("")).Once()
 
 	exists, err := s.transactionMgr.checkWorkflowExists(ctx, domainID, workflowID, runID)
@@ -461,10 +462,10 @@ func (s *nDCTransactionMgrSuite) TestCheckWorkflowExists_DoesExists() {
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
-		},
+		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
+		}),
 	}).Return(&persistence.GetWorkflowExecutionResponse{}, nil).Once()
 
 	exists, err := s.transactionMgr.checkWorkflowExists(ctx, domainID, workflowID, runID)

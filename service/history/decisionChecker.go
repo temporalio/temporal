@@ -25,11 +25,10 @@ import (
 	"strings"
 
 	"github.com/pborman/uuid"
+	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/elasticsearch/validator"
@@ -134,8 +133,8 @@ func (c *workflowSizeChecker) failWorkflowIfBlobSizeExceedsLimit(
 		return false, nil
 	}
 
-	attributes := &workflow.FailWorkflowExecutionDecisionAttributes{
-		Reason:  common.StringPtr(common.FailureReasonDecisionBlobSizeExceedsLimit),
+	attributes := &commonproto.FailWorkflowExecutionDecisionAttributes{
+		Reason:  common.FailureReasonDecisionBlobSizeExceedsLimit,
 		Details: []byte(message),
 	}
 
@@ -159,8 +158,8 @@ func (c *workflowSizeChecker) failWorkflowSizeExceedsLimit() (bool, error) {
 			tag.WorkflowHistorySize(historySize),
 			tag.WorkflowEventCount(historyCount))
 
-		attributes := &workflow.FailWorkflowExecutionDecisionAttributes{
-			Reason:  common.StringPtr(common.FailureReasonSizeExceedsLimit),
+		attributes := &commonproto.FailWorkflowExecutionDecisionAttributes{
+			Reason:  common.FailureReasonSizeExceedsLimit,
 			Details: []byte("Workflow history size / count exceeds limit."),
 		}
 
@@ -187,7 +186,7 @@ func (c *workflowSizeChecker) failWorkflowSizeExceedsLimit() (bool, error) {
 func (v *decisionAttrValidator) validateActivityScheduleAttributes(
 	domainID string,
 	targetDomainID string,
-	attributes *workflow.ScheduleActivityTaskDecisionAttributes,
+	attributes *commonproto.ScheduleActivityTaskDecisionAttributes,
 	wfTimeout int32,
 ) error {
 
@@ -215,7 +214,7 @@ func (v *decisionAttrValidator) validateActivityScheduleAttributes(
 		return serviceerror.NewInvalidArgument("ActivityType is not set on decision.")
 	}
 
-	if err := common.ValidateRetryPolicy(adapter.ToProtoRetryPolicy(attributes.RetryPolicy)); err != nil {
+	if err := common.ValidateRetryPolicy(attributes.RetryPolicy); err != nil {
 		return err
 	}
 
@@ -239,16 +238,16 @@ func (v *decisionAttrValidator) validateActivityScheduleAttributes(
 
 	// ensure activity timeout never larger than workflow timeout
 	if attributes.GetScheduleToCloseTimeoutSeconds() > wfTimeout {
-		attributes.ScheduleToCloseTimeoutSeconds = common.Int32Ptr(wfTimeout)
+		attributes.ScheduleToCloseTimeoutSeconds = wfTimeout
 	}
 	if attributes.GetScheduleToStartTimeoutSeconds() > wfTimeout {
-		attributes.ScheduleToStartTimeoutSeconds = common.Int32Ptr(wfTimeout)
+		attributes.ScheduleToStartTimeoutSeconds = wfTimeout
 	}
 	if attributes.GetStartToCloseTimeoutSeconds() > wfTimeout {
-		attributes.StartToCloseTimeoutSeconds = common.Int32Ptr(wfTimeout)
+		attributes.StartToCloseTimeoutSeconds = wfTimeout
 	}
 	if attributes.GetHeartbeatTimeoutSeconds() > wfTimeout {
-		attributes.HeartbeatTimeoutSeconds = common.Int32Ptr(wfTimeout)
+		attributes.HeartbeatTimeoutSeconds = wfTimeout
 	}
 
 	validScheduleToClose := attributes.GetScheduleToCloseTimeoutSeconds() > 0
@@ -257,15 +256,15 @@ func (v *decisionAttrValidator) validateActivityScheduleAttributes(
 
 	if validScheduleToClose {
 		if !validScheduleToStart {
-			attributes.ScheduleToStartTimeoutSeconds = common.Int32Ptr(attributes.GetScheduleToCloseTimeoutSeconds())
+			attributes.ScheduleToStartTimeoutSeconds = attributes.GetScheduleToCloseTimeoutSeconds()
 		}
 		if !validStartToClose {
-			attributes.StartToCloseTimeoutSeconds = common.Int32Ptr(attributes.GetScheduleToCloseTimeoutSeconds())
+			attributes.StartToCloseTimeoutSeconds = attributes.GetScheduleToCloseTimeoutSeconds()
 		}
 	} else if validScheduleToStart && validStartToClose {
-		attributes.ScheduleToCloseTimeoutSeconds = common.Int32Ptr(attributes.GetScheduleToStartTimeoutSeconds() + attributes.GetStartToCloseTimeoutSeconds())
+		attributes.ScheduleToCloseTimeoutSeconds = attributes.GetScheduleToStartTimeoutSeconds() + attributes.GetStartToCloseTimeoutSeconds()
 		if attributes.GetScheduleToCloseTimeoutSeconds() > wfTimeout {
-			attributes.ScheduleToCloseTimeoutSeconds = common.Int32Ptr(wfTimeout)
+			attributes.ScheduleToCloseTimeoutSeconds = wfTimeout
 		}
 	} else {
 		// Deduction failed as there's not enough information to fill in missing timeouts.
@@ -279,17 +278,17 @@ func (v *decisionAttrValidator) validateActivityScheduleAttributes(
 			expiration = wfTimeout
 		}
 		if attributes.GetScheduleToStartTimeoutSeconds() < expiration {
-			attributes.ScheduleToStartTimeoutSeconds = common.Int32Ptr(expiration)
+			attributes.ScheduleToStartTimeoutSeconds = expiration
 		}
 		if attributes.GetScheduleToCloseTimeoutSeconds() < expiration {
-			attributes.ScheduleToCloseTimeoutSeconds = common.Int32Ptr(expiration)
+			attributes.ScheduleToCloseTimeoutSeconds = expiration
 		}
 	}
 	return nil
 }
 
 func (v *decisionAttrValidator) validateTimerScheduleAttributes(
-	attributes *workflow.StartTimerDecisionAttributes,
+	attributes *commonproto.StartTimerDecisionAttributes,
 ) error {
 
 	if attributes == nil {
@@ -308,7 +307,7 @@ func (v *decisionAttrValidator) validateTimerScheduleAttributes(
 }
 
 func (v *decisionAttrValidator) validateActivityCancelAttributes(
-	attributes *workflow.RequestCancelActivityTaskDecisionAttributes,
+	attributes *commonproto.RequestCancelActivityTaskDecisionAttributes,
 ) error {
 
 	if attributes == nil {
@@ -324,7 +323,7 @@ func (v *decisionAttrValidator) validateActivityCancelAttributes(
 }
 
 func (v *decisionAttrValidator) validateTimerCancelAttributes(
-	attributes *workflow.CancelTimerDecisionAttributes,
+	attributes *commonproto.CancelTimerDecisionAttributes,
 ) error {
 
 	if attributes == nil {
@@ -340,7 +339,7 @@ func (v *decisionAttrValidator) validateTimerCancelAttributes(
 }
 
 func (v *decisionAttrValidator) validateRecordMarkerAttributes(
-	attributes *workflow.RecordMarkerDecisionAttributes,
+	attributes *commonproto.RecordMarkerDecisionAttributes,
 ) error {
 
 	if attributes == nil {
@@ -357,7 +356,7 @@ func (v *decisionAttrValidator) validateRecordMarkerAttributes(
 }
 
 func (v *decisionAttrValidator) validateCompleteWorkflowExecutionAttributes(
-	attributes *workflow.CompleteWorkflowExecutionDecisionAttributes,
+	attributes *commonproto.CompleteWorkflowExecutionDecisionAttributes,
 ) error {
 
 	if attributes == nil {
@@ -367,20 +366,20 @@ func (v *decisionAttrValidator) validateCompleteWorkflowExecutionAttributes(
 }
 
 func (v *decisionAttrValidator) validateFailWorkflowExecutionAttributes(
-	attributes *workflow.FailWorkflowExecutionDecisionAttributes,
+	attributes *commonproto.FailWorkflowExecutionDecisionAttributes,
 ) error {
 
 	if attributes == nil {
 		return serviceerror.NewInvalidArgument("FailWorkflowExecutionDecisionAttributes is not set on decision.")
 	}
-	if attributes.Reason == nil {
+	if attributes.GetReason() == "" {
 		return serviceerror.NewInvalidArgument("Reason is not set on decision.")
 	}
 	return nil
 }
 
 func (v *decisionAttrValidator) validateCancelWorkflowExecutionAttributes(
-	attributes *workflow.CancelWorkflowExecutionDecisionAttributes,
+	attributes *commonproto.CancelWorkflowExecutionDecisionAttributes,
 ) error {
 
 	if attributes == nil {
@@ -392,7 +391,7 @@ func (v *decisionAttrValidator) validateCancelWorkflowExecutionAttributes(
 func (v *decisionAttrValidator) validateCancelExternalWorkflowExecutionAttributes(
 	domainID string,
 	targetDomainID string,
-	attributes *workflow.RequestCancelExternalWorkflowExecutionDecisionAttributes,
+	attributes *commonproto.RequestCancelExternalWorkflowExecutionDecisionAttributes,
 ) error {
 
 	if err := v.validateCrossDomainCall(
@@ -405,7 +404,7 @@ func (v *decisionAttrValidator) validateCancelExternalWorkflowExecutionAttribute
 	if attributes == nil {
 		return serviceerror.NewInvalidArgument("RequestCancelExternalWorkflowExecutionDecisionAttributes is not set on decision.")
 	}
-	if attributes.WorkflowId == nil {
+	if attributes.GetWorkflowId() == "" {
 		return serviceerror.NewInvalidArgument("WorkflowId is not set on decision.")
 	}
 	if len(attributes.GetDomain()) > v.maxIDLengthLimit {
@@ -425,7 +424,7 @@ func (v *decisionAttrValidator) validateCancelExternalWorkflowExecutionAttribute
 func (v *decisionAttrValidator) validateSignalExternalWorkflowExecutionAttributes(
 	domainID string,
 	targetDomainID string,
-	attributes *workflow.SignalExternalWorkflowExecutionDecisionAttributes,
+	attributes *commonproto.SignalExternalWorkflowExecutionDecisionAttributes,
 ) error {
 
 	if err := v.validateCrossDomainCall(
@@ -441,7 +440,7 @@ func (v *decisionAttrValidator) validateSignalExternalWorkflowExecutionAttribute
 	if attributes.Execution == nil {
 		return serviceerror.NewInvalidArgument("Execution is nil on decision.")
 	}
-	if attributes.Execution.WorkflowId == nil {
+	if attributes.Execution.GetWorkflowId() == "" {
 		return serviceerror.NewInvalidArgument("WorkflowId is not set on decision.")
 	}
 	if len(attributes.GetDomain()) > v.maxIDLengthLimit {
@@ -455,7 +454,7 @@ func (v *decisionAttrValidator) validateSignalExternalWorkflowExecutionAttribute
 	if targetRunID != "" && uuid.Parse(targetRunID) == nil {
 		return serviceerror.NewInvalidArgument("Invalid RunId set on decision.")
 	}
-	if attributes.SignalName == nil {
+	if attributes.GetSignalName() == "" {
 		return serviceerror.NewInvalidArgument("SignalName is not set on decision.")
 	}
 	if attributes.Input == nil {
@@ -467,14 +466,14 @@ func (v *decisionAttrValidator) validateSignalExternalWorkflowExecutionAttribute
 
 func (v *decisionAttrValidator) validateUpsertWorkflowSearchAttributes(
 	domainName string,
-	attributes *workflow.UpsertWorkflowSearchAttributesDecisionAttributes,
+	attributes *commonproto.UpsertWorkflowSearchAttributesDecisionAttributes,
 ) error {
 
 	if attributes == nil {
 		return serviceerror.NewInvalidArgument("UpsertWorkflowSearchAttributesDecisionAttributes is not set on decision.")
 	}
 
-	if !attributes.IsSetSearchAttributes() {
+	if attributes.SearchAttributes == nil {
 		return serviceerror.NewInvalidArgument("SearchAttributes is not set on decision.")
 	}
 
@@ -482,11 +481,11 @@ func (v *decisionAttrValidator) validateUpsertWorkflowSearchAttributes(
 		return serviceerror.NewInvalidArgument("IndexedFields is empty on decision.")
 	}
 
-	return v.searchAttributesValidator.ValidateSearchAttributes(adapter.ToProtoSearchAttributes(attributes.GetSearchAttributes()), domainName)
+	return v.searchAttributesValidator.ValidateSearchAttributes(attributes.GetSearchAttributes(), domainName)
 }
 
 func (v *decisionAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
-	attributes *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes,
+	attributes *commonproto.ContinueAsNewWorkflowExecutionDecisionAttributes,
 	executionInfo *persistence.WorkflowExecutionInfo,
 ) error {
 
@@ -496,7 +495,7 @@ func (v *decisionAttrValidator) validateContinueAsNewWorkflowExecutionAttributes
 
 	// Inherit workflow type from previous execution if not provided on decision
 	if attributes.WorkflowType == nil || attributes.WorkflowType.GetName() == "" {
-		attributes.WorkflowType = &workflow.WorkflowType{Name: common.StringPtr(executionInfo.WorkflowTypeName)}
+		attributes.WorkflowType = &commonproto.WorkflowType{Name: executionInfo.WorkflowTypeName}
 	}
 
 	if len(attributes.WorkflowType.GetName()) > v.maxIDLengthLimit {
@@ -512,12 +511,12 @@ func (v *decisionAttrValidator) validateContinueAsNewWorkflowExecutionAttributes
 
 	// Inherit workflow timeout from previous execution if not provided on decision
 	if attributes.GetExecutionStartToCloseTimeoutSeconds() <= 0 {
-		attributes.ExecutionStartToCloseTimeoutSeconds = common.Int32Ptr(executionInfo.WorkflowTimeout)
+		attributes.ExecutionStartToCloseTimeoutSeconds = executionInfo.WorkflowTimeout
 	}
 
 	// Inherit decision task timeout from previous execution if not provided on decision
 	if attributes.GetTaskStartToCloseTimeoutSeconds() <= 0 {
-		attributes.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(executionInfo.DecisionStartToCloseTimeout)
+		attributes.TaskStartToCloseTimeoutSeconds = executionInfo.DecisionStartToCloseTimeout
 	}
 
 	// Check next run decision task delay
@@ -529,13 +528,13 @@ func (v *decisionAttrValidator) validateContinueAsNewWorkflowExecutionAttributes
 	if err != nil {
 		return err
 	}
-	return v.searchAttributesValidator.ValidateSearchAttributes(adapter.ToProtoSearchAttributes(attributes.GetSearchAttributes()), domainEntry.GetInfo().Name)
+	return v.searchAttributesValidator.ValidateSearchAttributes(attributes.GetSearchAttributes(), domainEntry.GetInfo().Name)
 }
 
 func (v *decisionAttrValidator) validateStartChildExecutionAttributes(
 	domainID string,
 	targetDomainID string,
-	attributes *workflow.StartChildWorkflowExecutionDecisionAttributes,
+	attributes *commonproto.StartChildWorkflowExecutionDecisionAttributes,
 	parentInfo *persistence.WorkflowExecutionInfo,
 ) error {
 
@@ -570,7 +569,7 @@ func (v *decisionAttrValidator) validateStartChildExecutionAttributes(
 		return serviceerror.NewInvalidArgument("WorkflowType exceeds length limit.")
 	}
 
-	if err := common.ValidateRetryPolicy(adapter.ToProtoRetryPolicy(attributes.RetryPolicy)); err != nil {
+	if err := common.ValidateRetryPolicy(attributes.RetryPolicy); err != nil {
 		return err
 	}
 
@@ -587,31 +586,31 @@ func (v *decisionAttrValidator) validateStartChildExecutionAttributes(
 
 	// Inherit workflow timeout from parent workflow execution if not provided on decision
 	if attributes.GetExecutionStartToCloseTimeoutSeconds() <= 0 {
-		attributes.ExecutionStartToCloseTimeoutSeconds = common.Int32Ptr(parentInfo.WorkflowTimeout)
+		attributes.ExecutionStartToCloseTimeoutSeconds = parentInfo.WorkflowTimeout
 	}
 
 	// Inherit decision task timeout from parent workflow execution if not provided on decision
 	if attributes.GetTaskStartToCloseTimeoutSeconds() <= 0 {
-		attributes.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(parentInfo.DecisionStartToCloseTimeout)
+		attributes.TaskStartToCloseTimeoutSeconds = parentInfo.DecisionStartToCloseTimeout
 	}
 
 	return nil
 }
 
 func (v *decisionAttrValidator) validatedTaskList(
-	taskList *workflow.TaskList,
+	taskList *commonproto.TaskList,
 	defaultVal string,
-) (*workflow.TaskList, error) {
+) (*commonproto.TaskList, error) {
 
 	if taskList == nil {
-		taskList = &workflow.TaskList{}
+		taskList = &commonproto.TaskList{}
 	}
 
 	if taskList.GetName() == "" {
 		if defaultVal == "" {
 			return taskList, serviceerror.NewInvalidArgument("missing task list name")
 		}
-		taskList.Name = &defaultVal
+		taskList.Name = defaultVal
 		return taskList, nil
 	}
 
