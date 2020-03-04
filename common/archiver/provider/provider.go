@@ -197,7 +197,11 @@ func (p *archiverProvider) GetVisibilityArchiver(scheme, serviceName string) (ar
 		}
 		visibilityArchiver, err = s3store.NewVisibilityArchiver(container, p.visibilityArchiverConfigs.S3store)
 	case gcloud.URIScheme:
-		return nil, ErrNotSupported
+		if p.visibilityArchiverConfigs.Gstorage == nil {
+			return nil, ErrArchiverConfigNotFound
+		}
+		visibilityArchiver, err = gcloud.NewVisibilityArchiver(container, p.visibilityArchiverConfigs.Gstorage)
+
 	default:
 		return nil, ErrUnknownScheme
 	}

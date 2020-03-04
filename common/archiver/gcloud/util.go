@@ -27,10 +27,14 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/dgryski/go-farm"
 
 	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/archiver"
+	"github.com/uber/cadence/common/archiver/gcloud/connector"
 )
 
 func encode(v interface{}) ([]byte, error) {
@@ -60,8 +64,35 @@ func constructHistoryFilenamePrefix(domainID, workflowID, runID string) string {
 	return strings.Join([]string{hash(domainID), hash(workflowID), hash(runID)}, "")
 }
 
-func hash(s string) string {
-	return fmt.Sprintf("%v", farm.Fingerprint64([]byte(s)))
+func constructVisibilityFilenamePrefix(domainID, tag string) string {
+	return fmt.Sprintf("%s/%s", domainID, tag)
+}
+
+func constructTimeBasedSearchKey(domainID, tag string, timestamp int64, precision string) string {
+	t := time.Unix(0, timestamp).In(time.UTC)
+	var timeFormat = ""
+	switch precision {
+	case PrecisionSecond:
+		timeFormat = ":05"
+		fallthrough
+	case PrecisionMinute:
+		timeFormat = ":04" + timeFormat
+		fallthrough
+	case PrecisionHour:
+		timeFormat = "15" + timeFormat
+		fallthrough
+	case PrecisionDay:
+		timeFormat = "2006-01-02T" + timeFormat
+	}
+
+	return fmt.Sprintf("%s_%s", constructVisibilityFilenamePrefix(domainID, tag), t.Format(timeFormat))
+}
+
+func hash(s string) (result string) {
+	if s != "" {
+		return fmt.Sprintf("%v", farm.Fingerprint64([]byte(s)))
+	}
+	return
 }
 
 func contextExpired(ctx context.Context) bool {
@@ -101,4 +132,131 @@ func serializeToken(token interface{}) ([]byte, error) {
 		return nil, nil
 	}
 	return json.Marshal(token)
+}
+
+func decodeVisibilityRecord(data []byte) (*visibilityRecord, error) {
+	record := &visibilityRecord{}
+	err := json.Unmarshal(data, record)
+	if err != nil {
+		return nil, err
+	}
+	return record, nil
+}
+
+func constructVisibilityFilename(domain, workflowTypeName, workflowID, runID, tag string, timestamp int64) string {
+	t := time.Unix(0, timestamp).In(time.UTC)
+	prefix := constructVisibilityFilenamePrefix(domain, tag)
+	return fmt.Sprintf("%s_%s_%s_%s_%s.visibility", prefix, t.Format(time.RFC3339), hash(workflowTypeName), hash(workflowID), hash(runID))
+}
+
+func deserializeQueryVisibilityToken(bytes []byte) (*queryVisibilityToken, error) {
+	token := &queryVisibilityToken{}
+	err := json.Unmarshal(bytes, token)
+	return token, err
+}
+
+func convertToExecutionInfo(record *visibilityRecord) *shared.WorkflowExecutionInfo {
+	return &shared.WorkflowExecutionInfo{
+		Execution: &shared.WorkflowExecution{
+			WorkflowId: common.StringPtr(record.WorkflowID),
+			RunId:      common.StringPtr(record.RunID),
+		},
+		Type: &shared.WorkflowType{
+			Name: common.StringPtr(record.WorkflowTypeName),
+		},
+		StartTime:     common.Int64Ptr(record.StartTimestamp),
+		ExecutionTime: common.Int64Ptr(record.ExecutionTimestamp),
+		CloseTime:     common.Int64Ptr(record.CloseTimestamp),
+		CloseStatus:   record.CloseStatus.Ptr(),
+		HistoryLength: common.Int64Ptr(record.HistoryLength),
+		Memo:          record.Memo,
+		SearchAttributes: &shared.SearchAttributes{
+			IndexedFields: archiver.ConvertSearchAttrToBytes(record.SearchAttributes),
+		},
+	}
+}
+
+func newRunIDPrecondition(runID string) connector.Precondition {
+	return func(subject interface{}) bool {
+
+		if runID == "" {
+			return true
+		}
+
+		fileName, ok := subject.(string)
+		if !ok {
+			return false
+		}
+
+		if strings.Contains(fileName, runID) {
+			fileNameParts := strings.Split(fileName, "_")
+			if len(fileNameParts) != 5 {
+				return true
+			}
+			return strings.Contains(fileName, fileNameParts[4])
+		}
+
+		return false
+	}
+}
+
+func newWorkflowIDPrecondition(workflowID string) connector.Precondition {
+	return func(subject interface{}) bool {
+
+		if workflowID == "" {
+			return true
+		}
+
+		fileName, ok := subject.(string)
+		if !ok {
+			return false
+		}
+
+		if strings.Contains(fileName, workflowID) {
+			fileNameParts := strings.Split(fileName, "_")
+			if len(fileNameParts) != 5 {
+				return true
+			}
+			return strings.Contains(fileName, fileNameParts[3])
+		}
+
+		return false
+	}
+}
+
+func newWorkflowTypeNamePrecondition(workflowTypeName string) connector.Precondition {
+	return func(subject interface{}) bool {
+
+		if workflowTypeName == "" {
+			return true
+		}
+
+		fileName, ok := subject.(string)
+		if !ok {
+			return false
+		}
+
+		if strings.Contains(fileName, workflowTypeName) {
+			fileNameParts := strings.Split(fileName, "_")
+			if len(fileNameParts) != 5 {
+				return true
+			}
+			return strings.Contains(fileName, fileNameParts[2])
+		}
+
+		return false
+	}
+}
+
+func isRetryableError(err error) (retryable bool) {
+	switch err.Error() {
+	case connector.ErrBucketNotFound.Error(),
+		archiver.ErrURISchemeMismatch.Error(),
+		archiver.ErrInvalidURI.Error():
+		retryable = false
+	default:
+		retryable = true
+	}
+
+	return
 }

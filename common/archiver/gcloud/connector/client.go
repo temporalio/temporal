@@ -28,7 +28,6 @@ import (
 	"io/ioutil"
 	"os"
 	"regexp"
-	"strings"
 
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/iterator"
@@ -42,18 +41,23 @@ const (
 )
 
 var (
-	errInvalidBucketURI = errors.New("invalid bucket URI format")
-	errBucketNotFound   = errors.New("bucket not found")
-	errObjectNotFound   = errors.New("object not found")
-	bucketNameRegExp    = regexp.MustCompile(bucketNameRegExpRaw)
+	// ErrBucketNotFound is non retriable error that is thrown when the bucket doesn't exist
+	ErrBucketNotFound = errors.New("bucket not found")
+	errObjectNotFound = errors.New("object not found")
+	bucketNameRegExp  = regexp.MustCompile(bucketNameRegExpRaw)
 )
 
 type (
+	// Precondition is a function that allow you to filter a query result.
+	// If subject match params conditions then return true, else return false.
+	Precondition func(subject interface{}) bool
+
 	// Client is a wrapper around Google cloud storages client library.
 	Client interface {
 		Upload(ctx context.Context, URI archiver.URI, fileName string, file []byte) error
 		Get(ctx context.Context, URI archiver.URI, file string) ([]byte, error)
 		Query(ctx context.Context, URI archiver.URI, fileNamePrefix string) ([]string, error)
+		QueryWithFilters(ctx context.Context, URI archiver.URI, fileNamePrefix string, pageSize, offset int, filters []Precondition) ([]string, bool, int, error)
 		Exist(ctx context.Context, URI archiver.URI, fileName string) (bool, error)
 	}
 
@@ -105,7 +109,7 @@ func (s *storageWrapper) Upload(ctx context.Context, URI archiver.URI, fileName 
 // Exist check if a bucket or an object exist
 // If fileName is empty, then 'Exist' function will only check if the given bucket exist.
 func (s *storageWrapper) Exist(ctx context.Context, URI archiver.URI, fileName string) (exists bool, err error) {
-	err = errBucketNotFound
+	err = ErrBucketNotFound
 	bucket := s.client.Bucket(URI.Hostname())
 	if _, err := bucket.Attrs(ctx); err != nil {
 		return false, err
@@ -153,19 +157,52 @@ func (s *storageWrapper) Query(ctx context.Context, URI archiver.URI, fileNamePr
 
 }
 
-func formatSinkPath(sinkPath string) string {
-	return sinkPath[1:]
-}
+// QueryWithFilter, retieves filenames that match filter parameters. PageSize is optional, 0 means all records.
+func (s *storageWrapper) QueryWithFilters(ctx context.Context, URI archiver.URI, fileNamePrefix string, pageSize, offset int, filters []Precondition) ([]string, bool, int, error) {
 
-// GetBucketNameFromURI return a bucket name from a given google cloud storage URI
-// example:
-// gsBucketName := GetBucketNameFromURI("gs://my-bucket-cad/cadence_archival/development") // my-bucket-cad
-func getBucketNameFromURI(URI string) (gsBucketName string, err error) {
-	gsBucketName = bucketNameRegExp.FindString(URI)
-	gsBucketName = strings.Replace(gsBucketName, "gs://", "", -1)
-	if gsBucketName == "" {
-		err = errInvalidBucketURI
+	var err error
+	currentPos := offset
+	resultSet := make([]string, 0)
+	bucket := s.client.Bucket(URI.Hostname())
+	var attrs = new(storage.ObjectAttrs)
+	it := bucket.Objects(ctx, &storage.Query{
+		Prefix: formatSinkPath(URI.Path()) + "/" + fileNamePrefix,
+	})
+
+	for {
+		attrs, err = it.Next()
+		if err == iterator.Done {
+			return resultSet, true, currentPos, nil
+		}
+
+		if completed := isPageCompleted(pageSize, len(resultSet)); completed {
+			return resultSet, completed, currentPos, err
+		}
+
+		valid := true
+		for _, f := range filters {
+			if valid = f(attrs.Name); !valid {
+				break
+			}
+		}
+
+		if valid {
+			if offset > 0 {
+				offset--
+				continue
+			}
+			// if match parsedQuery criteria and current cursor position is the last known position (offset is zero), append fileName to resultSet
+			resultSet = append(resultSet, attrs.Name)
+			currentPos++
+		}
 	}
 
-	return
+}
+
+func isPageCompleted(pageSize, currentPosition int) bool {
+	return pageSize != 0 && currentPosition > 0 && pageSize <= currentPosition
+}
+
+func formatSinkPath(sinkPath string) string {
+	return sinkPath[1:]
 }

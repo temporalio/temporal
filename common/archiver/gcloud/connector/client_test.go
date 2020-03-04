@@ -257,3 +257,74 @@ func (s *clientSuite) TestQuery() {
 	s.Require().NoError(err)
 	s.Equal(strings.Join(fileNames, ", "), "fileName_01")
 }
+
+func (s *clientSuite) TestQueryWithFilter() {
+
+	ctx := context.Background()
+	mockBucketHandleClient := &mocks.BucketHandleWrapper{}
+	mockStorageClient := &mocks.GcloudStorageClient{}
+	mockObjectIterator := &mocks.ObjectIteratorWrapper{}
+	storageWrapper, _ := connector.NewClientWithParams(mockStorageClient)
+
+	attr := new(storage.ObjectAttrs)
+	attr.Name = "closeTimeout_2020-02-27T09:42:28Z_12851121011173788097_4418294404690464320_15619178330501475177.visibility"
+	attrInvalid := new(storage.ObjectAttrs)
+	attrInvalid.Name = "closeTimeout_2020-02-27T09:42:28Z_12851121011173788097_4418294404690464321_15619178330501475177.visibility"
+
+	mockStorageClient.On("Bucket", "my-bucket-cad").Return(mockBucketHandleClient).Times(1)
+	mockBucketHandleClient.On("Objects", ctx, mock.Anything).Return(mockObjectIterator).Times(1)
+	mockIterator := 0
+	mockObjectIterator.On("Next").Return(func() *storage.ObjectAttrs {
+		mockIterator++
+		switch mockIterator {
+		case 1:
+			return attr
+		case 2:
+			return attrInvalid
+		default:
+			return nil
+		}
+
+	}, func() error {
+		switch mockIterator {
+		case 1:
+			return nil
+		case 2:
+			return nil
+		default:
+			return iterator.Done
+		}
+
+	}).Times(3)
+
+	var fileNames []string
+	URI, err := archiver.NewURI("gs://my-bucket-cad/cadence_archival/development")
+	fileNames, _, _, err = storageWrapper.QueryWithFilters(ctx, URI, "closeTimeout_2020-02-27T09:42:28Z", 0, 0, []connector.Precondition{newWorkflowIDPrecondition("4418294404690464320")})
+
+	s.Require().NoError(err)
+	s.Equal(strings.Join(fileNames, ", "), "closeTimeout_2020-02-27T09:42:28Z_12851121011173788097_4418294404690464320_15619178330501475177.visibility")
+}
+
+func newWorkflowIDPrecondition(workflowID string) connector.Precondition {
+	return func(subject interface{}) bool {
+
+		if workflowID == "" {
+			return true
+		}
+
+		fileName, ok := subject.(string)
+		if !ok {
+			return false
+		}
+
+		if strings.Contains(fileName, workflowID) {
+			fileNameParts := strings.Split(fileName, "_")
+			if len(fileNameParts) != 5 {
+				return true
+			}
+			return strings.Contains(fileName, fileNameParts[3])
+		}
+
+		return false
+	}
+}
