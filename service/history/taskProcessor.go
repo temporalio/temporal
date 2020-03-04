@@ -208,7 +208,7 @@ FilterLoop:
 			if task.attempt >= t.config.TimerTaskMaxRetryCount() {
 				scope.RecordTimer(metrics.TaskAttemptTimer, time.Duration(task.attempt))
 				task.logger.Error("Critical error processing task, retrying.",
-					tag.Error(err), tag.OperationCritical, tag.TaskType(int(task.task.GetTaskType())))
+					tag.Error(err), tag.OperationCritical, tag.TaskType(task.task.GetTaskType()))
 			}
 		}
 		return err

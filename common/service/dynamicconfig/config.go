@@ -84,7 +84,7 @@ type IntPropertyFn func(opts ...FilterOption) int
 type IntPropertyFnWithDomainFilter func(domain string) int
 
 // IntPropertyFnWithTaskListInfoFilters is a wrapper to get int property from dynamic config with three filters: domain, taskList, taskType
-type IntPropertyFnWithTaskListInfoFilters func(domain string, taskList string, taskType int) int
+type IntPropertyFnWithTaskListInfoFilters func(domain string, taskList string, taskType int32) int
 
 // FloatPropertyFn is a wrapper to get float property from dynamic config
 type FloatPropertyFn func(opts ...FilterOption) float64
@@ -96,7 +96,7 @@ type DurationPropertyFn func(opts ...FilterOption) time.Duration
 type DurationPropertyFnWithDomainFilter func(domain string) time.Duration
 
 // DurationPropertyFnWithTaskListInfoFilters is a wrapper to get duration property from dynamic config  with three filters: domain, taskList, taskType
-type DurationPropertyFnWithTaskListInfoFilters func(domain string, taskList string, taskType int) time.Duration
+type DurationPropertyFnWithTaskListInfoFilters func(domain string, taskList string, taskType int32) time.Duration
 
 // BoolPropertyFn is a wrapper to get bool property from dynamic config
 type BoolPropertyFn func(opts ...FilterOption) bool
@@ -114,7 +114,7 @@ type StringPropertyFnWithDomainFilter func(domain string) string
 type BoolPropertyFnWithDomainFilter func(domain string) bool
 
 // BoolPropertyFnWithTaskListInfoFilters is a wrapper to get bool property from dynamic config with three filters: domain, taskList, taskType
-type BoolPropertyFnWithTaskListInfoFilters func(domain string, taskList string, taskType int) bool
+type BoolPropertyFnWithTaskListInfoFilters func(domain string, taskList string, taskType int32) bool
 
 // GetProperty gets a interface property and returns defaultValue if property is not found
 func (c *Collection) GetProperty(key Key, defaultValue interface{}) PropertyFn {
@@ -163,7 +163,7 @@ func (c *Collection) GetIntPropertyFilteredByDomain(key Key, defaultValue int) I
 
 // GetIntPropertyFilteredByTaskListInfo gets property with taskListInfo as filters and asserts that it's an integer
 func (c *Collection) GetIntPropertyFilteredByTaskListInfo(key Key, defaultValue int) IntPropertyFnWithTaskListInfoFilters {
-	return func(domain string, taskList string, taskType int) int {
+	return func(domain string, taskList string, taskType int32) int {
 		val, err := c.client.GetIntValue(
 			key,
 			getFilterMap(DomainFilter(domain), TaskListFilter(taskList), TaskTypeFilter(taskType)),
@@ -215,7 +215,7 @@ func (c *Collection) GetDurationPropertyFilteredByDomain(key Key, defaultValue t
 
 // GetDurationPropertyFilteredByTaskListInfo gets property with taskListInfo as filters and asserts that it's a duration
 func (c *Collection) GetDurationPropertyFilteredByTaskListInfo(key Key, defaultValue time.Duration) DurationPropertyFnWithTaskListInfoFilters {
-	return func(domain string, taskList string, taskType int) time.Duration {
+	return func(domain string, taskList string, taskType int32) time.Duration {
 		val, err := c.client.GetDurationValue(
 			key,
 			getFilterMap(DomainFilter(domain), TaskListFilter(taskList), TaskTypeFilter(taskType)),
@@ -291,7 +291,7 @@ func (c *Collection) GetBoolPropertyFnWithDomainFilter(key Key, defaultValue boo
 
 // GetBoolPropertyFilteredByTaskListInfo gets property with taskListInfo as filters and asserts that it's an bool
 func (c *Collection) GetBoolPropertyFilteredByTaskListInfo(key Key, defaultValue bool) BoolPropertyFnWithTaskListInfoFilters {
-	return func(domain string, taskList string, taskType int) bool {
+	return func(domain string, taskList string, taskType int32) bool {
 		val, err := c.client.GetBoolValue(
 			key,
 			getFilterMap(DomainFilter(domain), TaskListFilter(taskList), TaskTypeFilter(taskType)),

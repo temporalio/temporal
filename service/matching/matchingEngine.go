@@ -523,7 +523,7 @@ func (e *matchingEngineImpl) deliverQueryResult(taskID string, queryResult *quer
 
 func (e *matchingEngineImpl) CancelOutstandingPoll(ctx context.Context, request *matchingservice.CancelOutstandingPollRequest) error {
 	domainID := request.GetDomainUUID()
-	taskListType := int(request.GetTaskListType())
+	taskListType := request.GetTaskListType()
 	taskListName := request.TaskList.GetName()
 	pollerID := request.GetPollerID()
 
@@ -577,7 +577,7 @@ func (e *matchingEngineImpl) ListTaskListPartitions(ctx context.Context, request
 	return &resp, nil
 }
 
-func (e *matchingEngineImpl) listTaskListPartitions(request *matchingservice.ListTaskListPartitionsRequest, taskListType int) ([]*commonproto.TaskListPartitionMetadata, error) {
+func (e *matchingEngineImpl) listTaskListPartitions(request *matchingservice.ListTaskListPartitionsRequest, taskListType int32) ([]*commonproto.TaskListPartitionMetadata, error) {
 	partitions, err := e.getAllPartitions(
 		request.GetDomain(),
 		*request.TaskList,
@@ -614,7 +614,7 @@ func (e *matchingEngineImpl) getHostInfo(partitionKey string) (string, error) {
 func (e *matchingEngineImpl) getAllPartitions(
 	domain string,
 	taskList commonproto.TaskList,
-	taskListType int,
+	taskListType int32,
 ) ([]string, error) {
 	var partitionKeys []string
 	domainID, err := e.domainCache.GetDomainID(domain)

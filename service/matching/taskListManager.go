@@ -130,7 +130,7 @@ func newTaskListManager(
 		return nil, err
 	}
 
-	db := newTaskListDB(e.taskManager, taskList.domainID, taskList.name, taskList.taskType, int(taskListKind), e.logger)
+	db := newTaskListDB(e.taskManager, primitives.MustParseUUID(taskList.domainID), taskList.name, taskList.taskType, int32(taskListKind), e.logger)
 	tlMgr := &taskListManagerImpl{
 		domainCache:   e.domainCache,
 		metricsClient: e.metricsClient,
