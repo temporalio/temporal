@@ -27,9 +27,7 @@ import (
 	"go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 
-	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/.gen/proto/replication"
 )
 
 func ToProtoBool(in *bool) *types.BoolValue {
@@ -619,29 +617,6 @@ func ToThriftWorkflowQuery(in *common.WorkflowQuery) *shared.WorkflowQuery {
 	}
 }
 
-// ToThriftReplicationToken ...
-func ToThriftReplicationToken(in *replication.ReplicationToken) *replicator.ReplicationToken {
-	if in == nil {
-		return nil
-	}
-	return &replicator.ReplicationToken{
-		ShardID:                &in.ShardID,
-		LastRetrievedMessageId: &in.LastRetrievedMessageId,
-		LastProcessedMessageId: &in.LastProcessedMessageId,
-	}
-}
-func ToThriftReplicationTokens(in []*replication.ReplicationToken) []*replicator.ReplicationToken {
-	if in == nil {
-		return nil
-	}
-
-	var ret []*replicator.ReplicationToken
-	for _, item := range in {
-		ret = append(ret, ToThriftReplicationToken(item))
-	}
-	return ret
-}
-
 // ToThriftDataBlob ...
 func ToThriftDataBlob(in *common.DataBlob) *shared.DataBlob {
 	if in == nil {
@@ -721,183 +696,6 @@ func ToProtoTaskIDBlock(in *shared.TaskIDBlock) *common.TaskIDBlock {
 	}
 }
 
-// ToProtoReplicationMessages ...
-func ToProtoReplicationMessages(in *replicator.ReplicationMessages) *replication.ReplicationMessages {
-	if in == nil {
-		return nil
-	}
-	return &replication.ReplicationMessages{
-		ReplicationTasks:       ToProtoReplicationTasks(in.GetReplicationTasks()),
-		LastRetrievedMessageId: in.GetLastRetrievedMessageId(),
-		HasMore:                in.GetHasMore(),
-		SyncShardStatus:        ToProtoSyncShardStatusTask(in.GetSyncShardStatus()),
-	}
-}
-
-func ToProtoSyncShardStatusTask(in *replicator.SyncShardStatus) *replication.SyncShardStatus {
-	if in == nil {
-		return nil
-	}
-	return &replication.SyncShardStatus{
-		Timestamp: in.GetTimestamp(),
-	}
-}
-
-func ToProtoReplicationTasks(in []*replicator.ReplicationTask) []*replication.ReplicationTask {
-	if in == nil {
-		return nil
-	}
-
-	var ret []*replication.ReplicationTask
-	for _, item := range in {
-		ret = append(ret, ToProtoReplicationTask(item))
-	}
-	return ret
-}
-
-// ToProtoReplicationTask ...
-func ToProtoReplicationTask(in *replicator.ReplicationTask) *replication.ReplicationTask {
-	if in == nil {
-		return nil
-	}
-
-	ret := &replication.ReplicationTask{
-		TaskType:     enums.ReplicationTaskType(in.GetTaskType()),
-		SourceTaskId: in.GetSourceTaskId(),
-	}
-
-	switch ret.TaskType {
-	case enums.ReplicationTaskTypeDomain:
-		ret.Attributes = &replication.ReplicationTask_DomainTaskAttributes{DomainTaskAttributes: ToProtoDomainTaskAttributes(in.GetDomainTaskAttributes())}
-	case enums.ReplicationTaskTypeHistory:
-		ret.Attributes = &replication.ReplicationTask_HistoryTaskAttributes{HistoryTaskAttributes: ToProtoHistoryTaskAttributes(in.GetHistoryTaskAttributes())}
-	case enums.ReplicationTaskTypeSyncShardStatus:
-		ret.Attributes = &replication.ReplicationTask_SyncShardStatusTaskAttributes{SyncShardStatusTaskAttributes: ToProtoSyncShardStatusTaskAttributes(in.GetSyncShardStatusTaskAttributes())}
-	case enums.ReplicationTaskTypeSyncActivity:
-		ret.Attributes = &replication.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: ToProtoSyncActivityTaskAttributes(in.GetSyncActivityTaskAttributes())}
-	case enums.ReplicationTaskTypeHistoryMetadata:
-		ret.Attributes = &replication.ReplicationTask_HistoryMetadataTaskAttributes{HistoryMetadataTaskAttributes: ToProtoHistoryMetadataTaskAttributes(in.GetHistoryMetadataTaskAttributes())}
-	case enums.ReplicationTaskTypeHistoryV2:
-		ret.Attributes = &replication.ReplicationTask_HistoryTaskV2Attributes{HistoryTaskV2Attributes: ToProtoHistoryTaskV2Attributes(in.GetHistoryTaskV2Attributes())}
-	}
-
-	return ret
-}
-
-// ToProtoDomainTaskAttributes ...
-func ToProtoDomainTaskAttributes(in *replicator.DomainTaskAttributes) *replication.DomainTaskAttributes {
-	if in == nil {
-		return nil
-	}
-	return &replication.DomainTaskAttributes{
-		DomainOperation:   enums.DomainOperation(in.GetDomainOperation()),
-		Id:                in.GetID(),
-		Info:              ToProtoDomainInfo(in.GetInfo()),
-		Config:            ToProtoDomainConfiguration(in.GetConfig()),
-		ReplicationConfig: ToProtoDomainReplicationConfiguration(in.GetReplicationConfig()),
-		ConfigVersion:     in.GetConfigVersion(),
-		FailoverVersion:   in.GetFailoverVersion(),
-	}
-}
-
-// ToProtoHistoryTaskAttributes ...
-func ToProtoHistoryTaskAttributes(in *replicator.HistoryTaskAttributes) *replication.HistoryTaskAttributes {
-	if in == nil {
-		return nil
-	}
-	return &replication.HistoryTaskAttributes{
-		TargetClusters:          in.GetTargetClusters(),
-		DomainId:                in.GetDomainId(),
-		WorkflowId:              in.GetWorkflowId(),
-		RunId:                   in.GetRunId(),
-		FirstEventId:            in.GetFirstEventId(),
-		NextEventId:             in.GetNextEventId(),
-		Version:                 in.GetVersion(),
-		ReplicationInfo:         ToProtoReplicationInfos(in.GetReplicationInfo()),
-		History:                 ToProtoHistory(in.GetHistory()),
-		NewRunHistory:           ToProtoHistory(in.GetNewRunHistory()),
-		EventStoreVersion:       in.GetEventStoreVersion(),
-		NewRunEventStoreVersion: in.GetNewRunEventStoreVersion(),
-		ResetWorkflow:           in.GetResetWorkflow(),
-		NewRunNDC:               in.GetNewRunNDC(),
-	}
-}
-
-func ToProtoReplicationInfos(in map[string]*shared.ReplicationInfo) map[string]*replication.ReplicationInfo {
-	if in == nil {
-		return nil
-	}
-
-	ret := make(map[string]*replication.ReplicationInfo, len(in))
-	for k, v := range in {
-		ret[k] = ToProtoReplicationInfo(v)
-	}
-
-	return ret
-}
-
-// ToProtoReplicationInfo ...
-func ToProtoReplicationInfo(in *shared.ReplicationInfo) *replication.ReplicationInfo {
-	if in == nil {
-		return nil
-	}
-	return &replication.ReplicationInfo{
-		Version:     in.GetVersion(),
-		LastEventId: in.GetLastEventId(),
-	}
-}
-
-// ToProtoHistoryMetadataTaskAttributes ...
-func ToProtoHistoryMetadataTaskAttributes(in *replicator.HistoryMetadataTaskAttributes) *replication.HistoryMetadataTaskAttributes {
-	if in == nil {
-		return nil
-	}
-	return &replication.HistoryMetadataTaskAttributes{
-		TargetClusters: in.GetTargetClusters(),
-		DomainId:       in.GetDomainId(),
-		WorkflowId:     in.GetWorkflowId(),
-		RunId:          in.GetRunId(),
-		FirstEventId:   in.GetFirstEventId(),
-		NextEventId:    in.GetNextEventId(),
-	}
-}
-
-// ToProtoSyncShardStatusTaskAttributes ...
-func ToProtoSyncShardStatusTaskAttributes(in *replicator.SyncShardStatusTaskAttributes) *replication.SyncShardStatusTaskAttributes {
-	if in == nil {
-		return nil
-	}
-	return &replication.SyncShardStatusTaskAttributes{
-		SourceCluster: in.GetSourceCluster(),
-		ShardId:       in.GetShardId(),
-		Timestamp:     in.GetTimestamp(),
-	}
-}
-
-// ToProtoSyncActivityTaskAttributes ...
-func ToProtoSyncActivityTaskAttributes(in *replicator.SyncActivityTaskAttributes) *replication.SyncActivityTaskAttributes {
-	if in == nil {
-		return nil
-	}
-	return &replication.SyncActivityTaskAttributes{
-		DomainId:           in.GetDomainId(),
-		WorkflowId:         in.GetWorkflowId(),
-		RunId:              in.GetRunId(),
-		Version:            in.GetVersion(),
-		ScheduledId:        in.GetScheduledId(),
-		ScheduledTime:      in.GetScheduledTime(),
-		StartedId:          in.GetStartedId(),
-		StartedTime:        in.GetStartedTime(),
-		LastHeartbeatTime:  in.GetLastHeartbeatTime(),
-		Details:            in.GetDetails(),
-		Attempt:            in.GetAttempt(),
-		LastFailureReason:  in.GetLastFailureReason(),
-		LastWorkerIdentity: in.GetLastWorkerIdentity(),
-		LastFailureDetails: in.GetLastFailureDetails(),
-		VersionHistory:     ToProtoVersionHistory(in.GetVersionHistory()),
-	}
-}
-
 // ToProtoVersionHistoryItem ...
 func ToProtoVersionHistoryItem(in *shared.VersionHistoryItem) *common.VersionHistoryItem {
 	if in == nil {
@@ -933,22 +731,6 @@ func ToProtoVersionHistoryItems(in []*shared.VersionHistoryItem) []*common.Versi
 	return ret
 }
 
-// ToProtoHistoryTaskV2Attributes ...
-func ToProtoHistoryTaskV2Attributes(in *replicator.HistoryTaskV2Attributes) *replication.HistoryTaskV2Attributes {
-	if in == nil {
-		return nil
-	}
-	return &replication.HistoryTaskV2Attributes{
-		TaskId:              in.GetTaskId(),
-		DomainId:            in.GetDomainId(),
-		WorkflowId:          in.GetWorkflowId(),
-		RunId:               in.GetRunId(),
-		VersionHistoryItems: ToProtoVersionHistoryItems(in.GetVersionHistoryItems()),
-		Events:              ToProtoDataBlob(in.GetEvents()),
-		NewRunEvents:        ToProtoDataBlob(in.GetNewRunEvents()),
-	}
-}
-
 // ToProtoDataBlob ...
 func ToProtoDataBlob(in *shared.DataBlob) *common.DataBlob {
 	if in == nil {
@@ -968,19 +750,6 @@ func ToProtoIndexedValueTypes(in map[string]shared.IndexedValueType) map[string]
 	ret := make(map[string]enums.IndexedValueType, len(in))
 	for k, v := range in {
 		ret[k] = enums.IndexedValueType(v)
-	}
-
-	return ret
-}
-
-func ToProtoReplicationMessagess(in map[int32]*replicator.ReplicationMessages) map[int32]*replication.ReplicationMessages {
-	if in == nil {
-		return nil
-	}
-
-	ret := make(map[int32]*replication.ReplicationMessages, len(in))
-	for k, v := range in {
-		ret[k] = ToProtoReplicationMessages(v)
 	}
 
 	return ret
@@ -1103,47 +872,6 @@ func ToThriftVersionHistoryItem(in *common.VersionHistoryItem) *shared.VersionHi
 
 }
 
-// ToThriftReplicationInfos ...
-func ToThriftReplicationInfos(in map[string]*replication.ReplicationInfo) map[string]*shared.ReplicationInfo {
-	if in == nil {
-		return nil
-	}
-	ret := make(map[string]*shared.ReplicationInfo, len(in))
-
-	for key, value := range in {
-		ret[key] = ToThriftReplicationInfo(value)
-	}
-
-	return ret
-}
-
-func ToThriftReplicationInfo(in *replication.ReplicationInfo) *shared.ReplicationInfo {
-	if in == nil {
-		return nil
-	}
-
-	return &shared.ReplicationInfo{
-		Version:     &in.Version,
-		LastEventId: &in.LastEventId,
-	}
-}
-
-// ToThriftDomainTaskAttributes ...
-func ToThriftDomainTaskAttributes(in *replication.DomainTaskAttributes) *replicator.DomainTaskAttributes {
-	if in == nil {
-		return nil
-	}
-	return &replicator.DomainTaskAttributes{
-		DomainOperation:   ToThriftDomainOperation(in.DomainOperation),
-		ID:                &in.Id,
-		Info:              ToThriftDomainInfo(in.Info),
-		Config:            ToThriftDomainConfiguration(in.Config),
-		ReplicationConfig: ToThriftDomainReplicationConfiguration(in.ReplicationConfig),
-		ConfigVersion:     &in.ConfigVersion,
-		FailoverVersion:   &in.FailoverVersion,
-	}
-}
-
 // ToThriftDomainInfo ...
 func ToThriftDomainInfo(in *common.DomainInfo) *shared.DomainInfo {
 	if in == nil {
@@ -1156,186 +884,6 @@ func ToThriftDomainInfo(in *common.DomainInfo) *shared.DomainInfo {
 		OwnerEmail:  &in.OwnerEmail,
 		Data:        in.Data,
 		UUID:        &in.Uuid,
-	}
-}
-
-// ToProtoReplicationToken ...
-func ToProtoReplicationToken(in *replicator.ReplicationToken) *replication.ReplicationToken {
-	if in == nil {
-		return nil
-	}
-	return &replication.ReplicationToken{
-		ShardID:                in.GetShardID(),
-		LastRetrievedMessageId: in.GetLastRetrievedMessageId(),
-		LastProcessedMessageId: in.GetLastProcessedMessageId(),
-	}
-}
-
-// ToThriftReplicationMessagesByShard ...
-func ToThriftReplicationMessagesByShard(in map[int32]*replication.ReplicationMessages) map[int32]*replicator.ReplicationMessages {
-	if in == nil {
-		return nil
-	}
-	ret := make(map[int32]*replicator.ReplicationMessages, len(in))
-
-	for key, value := range in {
-		ret[key] = ToThriftReplicationMessages(value)
-	}
-
-	return ret
-}
-
-// ToThriftReplicationMessages ...
-func ToThriftReplicationMessages(in *replication.ReplicationMessages) *replicator.ReplicationMessages {
-	if in == nil {
-		return nil
-	}
-	return &replicator.ReplicationMessages{
-		ReplicationTasks:       ToThriftReplicationTasks(in.ReplicationTasks),
-		LastRetrievedMessageId: &in.LastRetrievedMessageId,
-		HasMore:                &in.HasMore,
-		SyncShardStatus:        ToThriftSyncShardStatus(in.SyncShardStatus),
-	}
-}
-
-// ToThriftSyncShardStatus ...
-func ToThriftSyncShardStatus(in *replication.SyncShardStatus) *replicator.SyncShardStatus {
-	if in == nil {
-		return nil
-	}
-	return &replicator.SyncShardStatus{
-		Timestamp: &in.Timestamp,
-	}
-}
-
-// ToThriftReplicationTasks ...
-func ToThriftReplicationTasks(in []*replication.ReplicationTask) []*replicator.ReplicationTask {
-	if in == nil {
-		return nil
-	}
-
-	var ret []*replicator.ReplicationTask
-	for _, item := range in {
-		ret = append(ret, ToThriftReplicationTask(item))
-	}
-	return ret
-}
-
-// ToThriftReplicationTask ...
-func ToThriftReplicationTask(in *replication.ReplicationTask) *replicator.ReplicationTask {
-	if in == nil {
-		return nil
-	}
-	ret := &replicator.ReplicationTask{
-		TaskType:     ToThriftReplicationTaskType(in.TaskType),
-		SourceTaskId: &in.SourceTaskId,
-	}
-
-	switch in.TaskType {
-	case enums.ReplicationTaskTypeDomain:
-		ret.DomainTaskAttributes = ToThriftDomainTaskAttributes(in.GetDomainTaskAttributes())
-	case enums.ReplicationTaskTypeHistory:
-		ret.HistoryTaskAttributes = ToThriftHistoryTaskAttributes(in.GetHistoryTaskAttributes())
-	case enums.ReplicationTaskTypeSyncShardStatus:
-		ret.SyncShardStatusTaskAttributes = ToThriftSyncShardStatusTaskAttributes(in.GetSyncShardStatusTaskAttributes())
-	case enums.ReplicationTaskTypeSyncActivity:
-		ret.SyncActivityTaskAttributes = ToThriftSyncActivityTaskAttributes(in.GetSyncActivityTaskAttributes())
-	case enums.ReplicationTaskTypeHistoryMetadata:
-		ret.HistoryMetadataTaskAttributes = ToThriftHistoryMetadataTaskAttributes(in.GetHistoryMetadataTaskAttributes())
-	case enums.ReplicationTaskTypeHistoryV2:
-		ret.HistoryTaskV2Attributes = ToThriftHistoryTaskV2Attributes(in.GetHistoryTaskV2Attributes())
-	}
-
-	return ret
-}
-
-// ToThriftHistoryTaskAttributes ...
-func ToThriftHistoryTaskAttributes(in *replication.HistoryTaskAttributes) *replicator.HistoryTaskAttributes {
-	if in == nil {
-		return nil
-	}
-	return &replicator.HistoryTaskAttributes{
-		TargetClusters:          in.TargetClusters,
-		DomainId:                &in.DomainId,
-		WorkflowId:              &in.WorkflowId,
-		RunId:                   &in.RunId,
-		FirstEventId:            &in.FirstEventId,
-		NextEventId:             &in.NextEventId,
-		Version:                 &in.Version,
-		ReplicationInfo:         ToThriftReplicationInfos(in.ReplicationInfo),
-		History:                 ToThriftHistory(in.History),
-		NewRunHistory:           ToThriftHistory(in.NewRunHistory),
-		EventStoreVersion:       &in.EventStoreVersion,
-		NewRunEventStoreVersion: &in.NewRunEventStoreVersion,
-		ResetWorkflow:           &in.ResetWorkflow,
-		NewRunNDC:               &in.NewRunNDC,
-	}
-}
-
-// ToThriftHistoryMetadataTaskAttributes ...
-func ToThriftHistoryMetadataTaskAttributes(in *replication.HistoryMetadataTaskAttributes) *replicator.HistoryMetadataTaskAttributes {
-	if in == nil {
-		return nil
-	}
-	return &replicator.HistoryMetadataTaskAttributes{
-		TargetClusters: in.TargetClusters,
-		DomainId:       &in.DomainId,
-		WorkflowId:     &in.WorkflowId,
-		RunId:          &in.RunId,
-		FirstEventId:   &in.FirstEventId,
-		NextEventId:    &in.NextEventId,
-	}
-}
-
-// ToThriftSyncShardStatusTaskAttributes ...
-func ToThriftSyncShardStatusTaskAttributes(in *replication.SyncShardStatusTaskAttributes) *replicator.SyncShardStatusTaskAttributes {
-	if in == nil {
-		return nil
-	}
-	return &replicator.SyncShardStatusTaskAttributes{
-		SourceCluster: &in.SourceCluster,
-		ShardId:       &in.ShardId,
-		Timestamp:     &in.Timestamp,
-	}
-}
-
-// ToThriftSyncActivityTaskAttributes ...
-func ToThriftSyncActivityTaskAttributes(in *replication.SyncActivityTaskAttributes) *replicator.SyncActivityTaskAttributes {
-	if in == nil {
-		return nil
-	}
-	return &replicator.SyncActivityTaskAttributes{
-		DomainId:           &in.DomainId,
-		WorkflowId:         &in.WorkflowId,
-		RunId:              &in.RunId,
-		Version:            &in.Version,
-		ScheduledId:        &in.ScheduledId,
-		ScheduledTime:      &in.ScheduledTime,
-		StartedId:          &in.StartedId,
-		StartedTime:        &in.StartedTime,
-		LastHeartbeatTime:  &in.LastHeartbeatTime,
-		Details:            in.Details,
-		Attempt:            &in.Attempt,
-		LastFailureReason:  &in.LastFailureReason,
-		LastWorkerIdentity: &in.LastWorkerIdentity,
-		LastFailureDetails: in.LastFailureDetails,
-		VersionHistory:     ToThriftVersionHistory(in.VersionHistory),
-	}
-}
-
-// ToThriftHistoryTaskV2Attributes ...
-func ToThriftHistoryTaskV2Attributes(in *replication.HistoryTaskV2Attributes) *replicator.HistoryTaskV2Attributes {
-	if in == nil {
-		return nil
-	}
-	return &replicator.HistoryTaskV2Attributes{
-		TaskId:              &in.TaskId,
-		DomainId:            &in.DomainId,
-		WorkflowId:          &in.WorkflowId,
-		RunId:               &in.RunId,
-		VersionHistoryItems: ToThriftVersionHistoryItems(in.VersionHistoryItems),
-		Events:              ToThriftDataBlob(in.Events),
-		NewRunEvents:        ToThriftDataBlob(in.NewRunEvents),
 	}
 }
 
@@ -1386,59 +934,6 @@ func ToThriftIndexedValueTypes(in map[string]enums.IndexedValueType) map[string]
 		ret[k] = shared.IndexedValueType(v)
 	}
 
-	return ret
-}
-
-// ToThriftReplicationTaskInfo ...
-func ToThriftReplicationTaskInfo(in *replication.ReplicationTaskInfo) *replicator.ReplicationTaskInfo {
-	if in == nil {
-		return nil
-	}
-
-	taskType := int16(in.TaskType)
-
-	return &replicator.ReplicationTaskInfo{
-		DomainID:     &in.DomainId,
-		WorkflowID:   &in.WorkflowId,
-		RunID:        &in.RunId,
-		TaskType:     &taskType,
-		TaskID:       &in.TaskId,
-		Version:      &in.Version,
-		FirstEventID: &in.FirstEventId,
-		NextEventID:  &in.NextEventId,
-		ScheduledID:  &in.ScheduledId,
-	}
-}
-
-// ToProtoReplicationTaskInfo ...
-func ToProtoReplicationTaskInfo(in *replicator.ReplicationTaskInfo) *replication.ReplicationTaskInfo {
-	if in == nil {
-		return nil
-	}
-
-	return &replication.ReplicationTaskInfo{
-		DomainId:     in.GetDomainID(),
-		WorkflowId:   in.GetWorkflowID(),
-		RunId:        in.GetRunID(),
-		TaskType:     int32(in.GetTaskType()),
-		TaskId:       in.GetTaskID(),
-		Version:      in.GetVersion(),
-		FirstEventId: in.GetFirstEventID(),
-		NextEventId:  in.GetNextEventID(),
-		ScheduledId:  in.GetScheduledID(),
-	}
-}
-
-// ToThriftReplicationTaskInfos ...
-func ToThriftReplicationTaskInfos(in []*replication.ReplicationTaskInfo) []*replicator.ReplicationTaskInfo {
-	if in == nil {
-		return nil
-	}
-
-	var ret []*replicator.ReplicationTaskInfo
-	for _, item := range in {
-		ret = append(ret, ToThriftReplicationTaskInfo(item))
-	}
 	return ret
 }
 

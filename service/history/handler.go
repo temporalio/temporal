@@ -162,8 +162,8 @@ func (h *Handler) CreateEngine(
 // Health is for health check
 func (h *Handler) Health(context.Context, *healthservice.HealthRequest) (_ *healthservice.HealthStatus, retError error) {
 	h.startWG.Wait()
-	h.GetLogger().Debug("Matching service health check endpoint (gRPC) reached.")
-	hs := &healthservice.HealthStatus{Ok: true, Msg: "matching good"}
+	h.GetLogger().Debug("History service health check endpoint (gRPC) reached.")
+	hs := &healthservice.HealthStatus{Ok: true, Msg: "History service is healthy."}
 	return hs, nil
 }
 

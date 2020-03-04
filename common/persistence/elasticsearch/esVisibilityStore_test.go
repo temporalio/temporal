@@ -35,10 +35,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/valyala/fastjson"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/indexer"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/.gen/proto/indexer"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
 	es "github.com/temporalio/temporal/common/elasticsearch"
@@ -152,7 +153,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted_EmptyRequest() {
 		Memo: &serialization.DataBlob{},
 	}
 	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexer.Message) bool {
-		s.Equal(indexer.MessageTypeIndex, input.GetMessageType())
+		s.Equal(enums.MessageTypeIndex, input.GetMessageType())
 		_, ok := input.Fields[es.Memo]
 		s.False(ok)
 		_, ok = input.Fields[es.Encoding]
@@ -204,7 +205,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed_EmptyRequest() {
 		Memo: &serialization.DataBlob{},
 	}
 	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexer.Message) bool {
-		s.Equal(indexer.MessageTypeIndex, input.GetMessageType())
+		s.Equal(enums.MessageTypeIndex, input.GetMessageType())
 		_, ok := input.Fields[es.Memo]
 		s.False(ok)
 		_, ok = input.Fields[es.Encoding]

@@ -29,7 +29,6 @@ import (
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence/serialization"
@@ -43,7 +42,6 @@ type (
 		historySerializer     PayloadSerializer
 		persistence           HistoryStore
 		logger                log.Logger
-		thriftEncoder         codec.BinaryEncoder
 		pagingTokenSerializer *jsonHistoryTokenSerializer
 		transactionSizeLimit  dynamicconfig.IntPropertyFn
 	}
@@ -67,7 +65,6 @@ func NewHistoryV2ManagerImpl(
 		historySerializer:     NewPayloadSerializer(),
 		persistence:           persistence,
 		logger:                logger,
-		thriftEncoder:         codec.NewThriftRWEncoder(),
 		pagingTokenSerializer: newJSONHistoryTokenSerializer(),
 		transactionSizeLimit:  transactionSizeLimit,
 	}
