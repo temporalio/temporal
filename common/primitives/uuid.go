@@ -44,12 +44,17 @@ func MustParseUUID(s string) UUID {
 	return u[:]
 }
 
+// Downcast returns the UUID as a byte slice. This is necessary when passing to type sensitive interfaces such as cql.
+func (u UUID) Downcast() []byte {
+	return u
+}
+
 // UUIDPtr simply returns a pointer for the given value type
 func UUIDPtr(u UUID) *UUID {
 	return &u
 }
 
-// String returns the 36 byet hexstring representation of this uuid
+// String returns the 36 byte hexstring representation of this uuid
 // return empty string if this uuid is nil
 func (u UUID) String() string {
 	if len(u) != 16 {
@@ -60,8 +65,23 @@ func (u UUID) String() string {
 	return string(buf[:])
 }
 
+// StringPtr returns a pointer to the 36 byte hexstring representation of this uuid
+// return empty string if this uuid is nil
+func (u UUID) StringPtr() *string {
+	if len(u) != 16 {
+		return stringPtr("")
+	}
+	var buf [36]byte
+	u.encodeHex(buf[:])
+	return stringPtr(string(buf[:]))
+}
+
 func UUIDString(b []byte) string {
 	return UUID(b).String()
+}
+
+func stringPtr(v string) *string {
+	return &v
 }
 
 // Scan implements sql.Scanner interface to allow this type to be
