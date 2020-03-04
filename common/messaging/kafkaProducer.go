@@ -35,10 +35,9 @@ import (
 
 type (
 	kafkaProducer struct {
-		topic      string
-		producer   sarama.SyncProducer
-		msgEncoder codec.BinaryEncoder
-		logger     log.Logger
+		topic    string
+		producer sarama.SyncProducer
+		logger   log.Logger
 	}
 )
 
@@ -47,10 +46,9 @@ var _ Producer = (*kafkaProducer)(nil)
 // NewKafkaProducer is used to create the Kafka based producer implementation
 func NewKafkaProducer(topic string, producer sarama.SyncProducer, logger log.Logger) Producer {
 	return &kafkaProducer{
-		topic:      topic,
-		producer:   producer,
-		msgEncoder: codec.NewThriftRWEncoder(),
-		logger:     logger.WithTags(tag.KafkaTopicName(topic)),
+		topic:    topic,
+		producer: producer,
+		logger:   logger.WithTags(tag.KafkaTopicName(topic)),
 	}
 }
 
