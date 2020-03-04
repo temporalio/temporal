@@ -24,14 +24,15 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
-	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
 	// genericTaskInfo contains the info for an activity or decision task
 	genericTaskInfo struct {
-		*persistence.TaskInfo
-		completionFunc func(*persistence.TaskInfo, error)
+		*persistenceblobs.PersistedTaskInfo
+		completionFunc func(*persistenceblobs.PersistedTaskInfo, error)
 	}
 	// queryTaskInfo contains the info for a query task
 	queryTaskInfo struct {
@@ -59,15 +60,15 @@ type (
 )
 
 func newInternalTask(
-	info *persistence.TaskInfo,
-	completionFunc func(*persistence.TaskInfo, error),
+	info *persistenceblobs.PersistedTaskInfo,
+	completionFunc func(*persistenceblobs.PersistedTaskInfo, error),
 	forwardedFrom string,
 	forSyncMatch bool,
 ) *internalTask {
 	task := &internalTask{
 		event: &genericTaskInfo{
-			TaskInfo:       info,
-			completionFunc: completionFunc,
+			PersistedTaskInfo: info,
+			completionFunc:    completionFunc,
 		},
 		forwardedFrom: forwardedFrom,
 	}
@@ -150,6 +151,6 @@ func (task *internalTask) finish(err error) {
 	case task.responseC != nil:
 		task.responseC <- err
 	case task.event.completionFunc != nil:
-		task.event.completionFunc(task.event.TaskInfo, err)
+		task.event.completionFunc(task.event.PersistedTaskInfo, err)
 	}
 }

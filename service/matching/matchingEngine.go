@@ -29,6 +29,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
@@ -37,6 +38,7 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/client/history"
 	"github.com/temporalio/temporal/client/matching"
 	"github.com/temporalio/temporal/common"
@@ -48,6 +50,7 @@ import (
 	"github.com/temporalio/temporal/common/membership"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 // Implements matching.Engine
@@ -234,14 +237,19 @@ func (e *matchingEngineImpl) AddDecisionTask(ctx context.Context, addRequest *ma
 		return false, err
 	}
 
-	taskInfo := &persistence.TaskInfo{
-		DomainID:               domainID,
-		RunID:                  addRequest.Execution.GetRunId(),
-		WorkflowID:             addRequest.Execution.GetWorkflowId(),
-		ScheduleID:             addRequest.GetScheduleId(),
-		ScheduleToStartTimeout: addRequest.GetScheduleToStartTimeoutSeconds(),
-		CreatedTime:            time.Now(),
+	// This needs to move to history see - https://github.com/temporalio/temporal/issues/181
+	now := types.TimestampNow()
+	expiry := types.TimestampNow()
+	expiry.Seconds += int64(addRequest.ScheduleToStartTimeoutSeconds)
+	taskInfo := &persistenceblobs.TaskInfo{
+		DomainID:    primitives.MustParseUUID(domainID),
+		RunID:       primitives.MustParseUUID(addRequest.Execution.GetRunId()),
+		WorkflowID:  addRequest.Execution.GetWorkflowId(),
+		ScheduleID:  addRequest.GetScheduleId(),
+		Expiry:      expiry,
+		CreatedTime: now,
 	}
+
 	return tlMgr.AddTask(ctx, addTaskParams{
 		execution:     addRequest.Execution,
 		taskInfo:      taskInfo,
@@ -273,14 +281,18 @@ func (e *matchingEngineImpl) AddActivityTask(ctx context.Context, addRequest *ma
 		return false, err
 	}
 
-	taskInfo := &persistence.TaskInfo{
-		DomainID:               sourceDomainID,
-		RunID:                  addRequest.Execution.GetRunId(),
-		WorkflowID:             addRequest.Execution.GetWorkflowId(),
-		ScheduleID:             addRequest.GetScheduleId(),
-		ScheduleToStartTimeout: addRequest.GetScheduleToStartTimeoutSeconds(),
-		CreatedTime:            time.Now(),
+	now := types.TimestampNow()
+	expiry := types.TimestampNow()
+	expiry.Seconds += int64(addRequest.GetScheduleToStartTimeoutSeconds())
+	taskInfo := &persistenceblobs.TaskInfo{
+		DomainID:    sourceDomainID,
+		RunID:       runID,
+		WorkflowID:  addRequest.Execution.GetWorkflowId(),
+		ScheduleID:  addRequest.GetScheduleId(),
+		CreatedTime: now,
+		Expiry:      expiry,
 	}
+
 	return tlMgr.AddTask(ctx, addTaskParams{
 		execution:     addRequest.Execution,
 		taskInfo:      taskInfo,
@@ -680,17 +692,18 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(
 		}
 		token, _ = e.tokenSerializer.SerializeQueryTaskToken(taskToken)
 	} else {
-		taskoken := &common.TaskToken{
-			DomainID:        task.event.DomainID,
-			WorkflowID:      task.event.WorkflowID,
-			RunID:           task.event.RunID,
+		taskToken := &common.TaskToken{
+			DomainID:        task.event.TaskData.DomainID,
+			WorkflowID:      task.event.TaskData.WorkflowID,
+			RunID:           task.event.TaskData.RunID,
 			ScheduleID:      historyResponse.GetScheduledEventId(),
 			ScheduleAttempt: historyResponse.GetAttempt(),
 		}
-		token, _ = e.tokenSerializer.Serialize(taskoken)
+		token, _ = e.tokenSerializer.Serialize(taskToken)
 		if task.responseC == nil {
 			scope := e.metricsClient.Scope(metrics.MatchingPollForDecisionTaskScope)
-			scope.Tagged(metrics.DomainTag(task.domainName)).RecordTimer(metrics.AsyncMatchLatency, time.Since(task.event.CreatedTime))
+			ct, _ := types.TimestampFromProto(task.event.TaskData.CreatedTime)
+			scope.Tagged(metrics.DomainTag(task.domainName)).RecordTimer(metrics.AsyncMatchLatency, time.Since(ct))
 		}
 	}
 
@@ -721,14 +734,15 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(
 	}
 	if task.responseC == nil {
 		scope := e.metricsClient.Scope(metrics.MatchingPollForActivityTaskScope)
-		scope.Tagged(metrics.DomainTag(task.domainName)).RecordTimer(metrics.AsyncMatchLatency, time.Since(task.event.CreatedTime))
+		ct, _ := types.TimestampFromProto(task.event.TaskData.CreatedTime)
+		scope.Tagged(metrics.DomainTag(task.domainName)).RecordTimer(metrics.AsyncMatchLatency, time.Since(ct))
 	}
 
 	token := &common.TaskToken{
-		DomainID:        task.event.DomainID,
-		WorkflowID:      task.event.WorkflowID,
-		RunID:           task.event.RunID,
-		ScheduleID:      task.event.ScheduleID,
+		DomainID:        task.event.TaskData.DomainID,
+		WorkflowID:      task.event.TaskData.WorkflowID,
+		RunID:           task.event.TaskData.RunID,
+		ScheduleID:      task.event.TaskData.ScheduleID,
 		ScheduleAttempt: historyResponse.GetAttempt(),
 	}
 
@@ -760,9 +774,9 @@ func (e *matchingEngineImpl) recordDecisionTaskStarted(
 	task *internalTask,
 ) (*historyservice.RecordDecisionTaskStartedResponse, error) {
 	request := &historyservice.RecordDecisionTaskStartedRequest{
-		DomainUUID:        task.event.DomainID,
+		DomainUUID:        primitives.UUIDString(task.event.TaskData.DomainID),
 		WorkflowExecution: task.workflowExecution(),
-		ScheduleId:        task.event.ScheduleID,
+		ScheduleId:        task.event.TaskData.ScheduleID,
 		TaskId:            task.event.TaskID,
 		RequestId:         uuid.New(),
 		PollRequest:       pollReq,
@@ -789,9 +803,9 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 	task *internalTask,
 ) (*historyservice.RecordActivityTaskStartedResponse, error) {
 	request := &historyservice.RecordActivityTaskStartedRequest{
-		DomainUUID:        task.event.DomainID,
+		DomainUUID:        primitives.UUIDString(task.event.TaskData.DomainID),
 		WorkflowExecution: task.workflowExecution(),
-		ScheduleId:        task.event.ScheduleID,
+		ScheduleId:        task.event.TaskData.ScheduleID,
 		TaskId:            task.event.TaskID,
 		RequestId:         uuid.New(),
 		PollRequest:       pollReq,

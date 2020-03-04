@@ -23,8 +23,11 @@ package matching
 import (
 	"context"
 	"errors"
+	"math"
 	"sync/atomic"
+	"time"
 
+	"github.com/gogo/protobuf/types"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
@@ -34,6 +37,7 @@ import (
 	"github.com/temporalio/temporal/client/matching"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/quotas"
 )
 
@@ -141,30 +145,43 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 
 	var err error
 
+	// todo: Vet recomputing ScheduleToStart and rechecking expiry here
+	expiryGo, err := types.TimestampFromProto(task.event.TaskData.Expiry)
+	if err != nil {
+		return err
+	}
+
+	newScheduleToStartTimeout := int32(math.Ceil(time.Until(expiryGo).Seconds()))
+
+	// Todo - should we noop expired tasks? This will be moot once history stamp absolute time
+	/*if newScheduleToStartTimeout <= 0 {
+		return nil
+	}*/
+
 	switch fwdr.taskListID.taskType {
 	case persistence.TaskListTypeDecision:
 		_, err = fwdr.client.AddDecisionTask(ctx, &matchingservice.AddDecisionTaskRequest{
-			DomainUUID: task.event.DomainID,
+			DomainUUID: primitives.UUIDString(task.event.TaskData.DomainID),
 			Execution:  task.workflowExecution(),
 			TaskList: &commonproto.TaskList{
 				Name: name,
 				Kind: enums.TaskListKind(fwdr.taskListKind),
 			},
-			ScheduleId:                    task.event.ScheduleID,
-			ScheduleToStartTimeoutSeconds: task.event.ScheduleToStartTimeout,
+			ScheduleId:                    task.event.TaskData.ScheduleID,
+			ScheduleToStartTimeoutSeconds: newScheduleToStartTimeout,
 			ForwardedFrom:                 fwdr.taskListID.name,
 		})
 	case persistence.TaskListTypeActivity:
 		_, err = fwdr.client.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 			DomainUUID:       fwdr.taskListID.domainID,
-			SourceDomainUUID: task.event.DomainID,
+			SourceDomainUUID: primitives.UUIDString(task.event.TaskData.DomainID),
 			Execution:        task.workflowExecution(),
 			TaskList: &commonproto.TaskList{
 				Name: name,
 				Kind: enums.TaskListKind(fwdr.taskListKind),
 			},
-			ScheduleId:                    task.event.ScheduleID,
-			ScheduleToStartTimeoutSeconds: task.event.ScheduleToStartTimeout,
+			ScheduleId:                    task.event.TaskData.ScheduleID,
+			ScheduleToStartTimeoutSeconds: newScheduleToStartTimeout,
 			ForwardedFrom:                 fwdr.taskListID.name,
 		})
 	default:
