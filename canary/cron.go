@@ -29,6 +29,7 @@ import (
 	"github.com/uber-go/tally"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal/activity"
+	"go.temporal.io/temporal/client"
 	"go.temporal.io/temporal/workflow"
 	"go.uber.org/zap"
 )
@@ -93,7 +94,7 @@ func cronActivity(
 		}
 	} else {
 		logger.Info("cronActivity: started new job",
-			zap.String("wfID", jobID), zap.String("runID", wf.RunID))
+			zap.String("wfID", jobID), zap.String("runID", wf.GetRunID()))
 	}
 
 	return nil
@@ -104,7 +105,7 @@ func startJob(
 	scope tally.Scope,
 	jobID string,
 	jobName string,
-	domain string) (*workflow.Execution, error) {
+	domain string) (client.WorkflowRun, error) {
 
 	scope.Counter(startWorkflowCount).Inc(1)
 	sw := scope.Timer(startWorkflowLatency).Start()
@@ -117,7 +118,7 @@ func startJob(
 	ctx = opentracing.ContextWithSpan(ctx, span)
 
 	opts := newWorkflowOptions(jobID, cronJobTimeout)
-	wf, err := cadenceClient.StartWorkflow(ctx, opts, jobName, time.Now().UnixNano(), domain)
+	wf, err := cadenceClient.ExecuteWorkflow(ctx, opts, jobName, time.Now().UnixNano(), domain)
 	if err != nil {
 		scope.Counter(startWorkflowFailureCount).Inc(1)
 		switch err.(type) {
