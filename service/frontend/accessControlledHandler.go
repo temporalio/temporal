@@ -59,7 +59,8 @@ func NewAccessControlledHandlerImpl(wfHandler *DCRedirectionHandlerImpl, authori
 
 // Health is for health check
 func (a *AccessControlledWorkflowHandler) Health(context.Context, *healthservice.HealthRequest) (*healthservice.HealthStatus, error) {
-	hs := &healthservice.HealthStatus{Ok: true, Msg: "Frontend health check endpoint (gRPC) reached."}
+	a.GetLogger().Debug("Frontend service health check endpoint (gRPC) reached.")
+	hs := &healthservice.HealthStatus{Ok: true, Msg: "Frontend service is healthy."}
 	return hs, nil
 }
 
