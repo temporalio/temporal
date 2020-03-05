@@ -41,14 +41,15 @@ import (
 	cluster "github.com/bsm/sarama-cluster"
 	"github.com/gocql/gocql"
 	"github.com/urfave/cli"
+	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	yaml "gopkg.in/yaml.v2"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/indexer"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/auth"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/messaging"
@@ -495,10 +496,10 @@ func doRereplicate(shardID int, domainID, wid, rid string, minID, maxID int64, t
 		fmt.Printf("Start rereplicate for wid: %v, rid:%v \n", wid, rid)
 		resp, err := exeMgr.GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
 			DomainID: domainID,
-			Execution: shared.WorkflowExecution{
-				WorkflowId: common.StringPtr(wid),
-				RunId:      common.StringPtr(rid),
-			},
+			Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+				WorkflowId: wid,
+				RunId:      rid,
+			}),
 		})
 		if err != nil {
 			ErrorAndExit("GetWorkflowExecution error", err)
@@ -541,10 +542,10 @@ func doRereplicate(shardID int, domainID, wid, rid string, minID, maxID int64, t
 				newRunID = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
 				resp, err := exeMgr.GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
 					DomainID: domainID,
-					Execution: shared.WorkflowExecution{
-						WorkflowId: common.StringPtr(wid),
-						RunId:      common.StringPtr(newRunID),
-					},
+					Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+						WorkflowId: wid,
+						RunId:      newRunID,
+					}),
 				})
 				if err != nil {
 					ErrorAndExit("GetWorkflowExecution error", err)

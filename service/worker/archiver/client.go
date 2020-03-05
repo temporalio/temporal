@@ -27,10 +27,11 @@ import (
 	"math/rand"
 	"time"
 
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/workflowservice"
 	cclient "go.temporal.io/temporal/client"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	carchiver "github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
@@ -73,9 +74,9 @@ type (
 		StartTimestamp     int64
 		ExecutionTimestamp int64
 		CloseTimestamp     int64
-		CloseStatus        shared.WorkflowExecutionCloseStatus
+		CloseStatus        enums.WorkflowExecutionCloseStatus
 		HistoryLength      int64
-		Memo               *shared.Memo
+		Memo               *commonproto.Memo
 		SearchAttributes   map[string][]byte
 		VisibilityURI      string
 

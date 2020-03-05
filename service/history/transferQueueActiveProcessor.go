@@ -986,7 +986,7 @@ func (t *transferQueueActiveProcessorImpl) processResetWorkflow(
 	}
 	logger = logger.WithTags(tag.WorkflowDomainName(domainEntry.GetInfo().Name))
 
-	reason, resetPoint := FindAutoResetPoint(t.timeSource, adapter.ToProtoBadBinaries(&domainEntry.GetConfig().BadBinaries), adapter.ToProtoResetPoints(executionInfo.AutoResetPoints))
+	reason, resetPoint := FindAutoResetPoint(t.timeSource, adapter.ToProtoBadBinariesPtr(&domainEntry.GetConfig().BadBinaries), adapter.ToProtoResetPoints(executionInfo.AutoResetPoints))
 	if resetPoint == nil {
 		logger.Warn("Auto-Reset is skipped, because reset point is not found.")
 		return nil
@@ -1563,14 +1563,14 @@ func (t *transferQueueActiveProcessorImpl) processParentClosePolicy(
 
 		executions := make([]parentclosepolicy.RequestDetail, 0, len(childInfos))
 		for _, childInfo := range childInfos {
-			if childInfo.ParentClosePolicy == *adapter.ToThriftParentClosePolicy(enums.ParentClosePolicyAbandon) {
+			if enums.ParentClosePolicy(childInfo.ParentClosePolicy) == enums.ParentClosePolicyAbandon {
 				continue
 			}
 
 			executions = append(executions, parentclosepolicy.RequestDetail{
 				WorkflowID: childInfo.StartedWorkflowID,
 				RunID:      childInfo.StartedRunID,
-				Policy:     childInfo.ParentClosePolicy,
+				Policy:     enums.ParentClosePolicy(childInfo.ParentClosePolicy),
 			})
 		}
 

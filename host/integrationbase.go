@@ -219,7 +219,7 @@ func (s *IntegrationBase) registerArchivalDomain() error {
 			HistoryArchivalURI:       s.testCluster.archiverBase.historyURI,
 			VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(enums.ArchivalStatusEnabled),
 			VisibilityArchivalURI:    s.testCluster.archiverBase.visibilityURI,
-			BadBinaries:              *adapter.ToThriftBadBinaries(&commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}}),
+			BadBinaries:              adapter.ToThriftBadBinaries(commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}}),
 		},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: currentClusterName,

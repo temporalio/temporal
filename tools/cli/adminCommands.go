@@ -27,21 +27,20 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/temporalio/temporal/common/persistence/serialization"
-	"github.com/temporalio/temporal/common/primitives"
-
 	"github.com/gocql/gocql"
 	"github.com/urfave/cli"
 	commonproto "go.temporal.io/temporal-proto/common"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/auth"
 	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/persistence"
 	cassp "github.com/temporalio/temporal/common/persistence/cassandra"
+	"github.com/temporalio/temporal/common/persistence/serialization"
+	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/tools/cassandra"
 )
@@ -80,7 +79,7 @@ func AdminShowWorkflow(c *cli.Context) {
 	if len(history) == 0 {
 		ErrorAndExit("no events", nil)
 	}
-	allEvents := &shared.History{}
+	allEvents := &commonproto.History{}
 	totalSize := 0
 	for idx, b := range history {
 		totalSize += len(b.Data)
@@ -89,7 +88,7 @@ func AdminShowWorkflow(c *cli.Context) {
 		if err != nil {
 			ErrorAndExit("DeserializeBatchEvents err", err)
 		}
-		allEvents.Events = append(allEvents.Events, historyBatch...)
+		allEvents.Events = append(allEvents.Events, adapter.ToProtoHistoryEvents(historyBatch)...)
 		for _, e := range historyBatch {
 			jsonstr, err := json.Marshal(e)
 			if err != nil {
@@ -134,7 +133,7 @@ func AdminDescribeWorkflow(c *cli.Context) {
 			currentBranchToken = currentVersionHistory.GetBranchToken()
 		}
 
-		branchInfo := shared.HistoryBranch{}
+		branchInfo := commonproto.HistoryBranch{}
 		thriftrwEncoder := codec.NewThriftRWEncoder()
 		err = thriftrwEncoder.Decode(currentBranchToken, &branchInfo)
 		if err != nil {

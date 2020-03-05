@@ -26,12 +26,12 @@ import (
 
 	"go.temporal.io/temporal"
 	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/activity"
 	"go.temporal.io/temporal/workflow"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -54,7 +54,7 @@ type (
 	RequestDetail struct {
 		WorkflowID string
 		RunID      string
-		Policy     shared.ParentClosePolicy
+		Policy     enums.ParentClosePolicy
 	}
 
 	// Request defines the request for parent close policy
@@ -103,10 +103,10 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 	for _, execution := range request.Executions {
 		var err error
 		switch execution.Policy {
-		case shared.ParentClosePolicyAbandon:
+		case enums.ParentClosePolicyAbandon:
 			//no-op
 			continue
-		case shared.ParentClosePolicyTerminate:
+		case enums.ParentClosePolicyTerminate:
 			_, err = client.TerminateWorkflowExecution(nil, &historyservice.TerminateWorkflowExecutionRequest{
 				DomainUUID: request.DomainUUID,
 				TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
@@ -119,7 +119,7 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 					Identity: processorWFTypeName,
 				},
 			})
-		case shared.ParentClosePolicyRequestCancel:
+		case enums.ParentClosePolicyRequestCancel:
 			_, err = client.RequestCancelWorkflowExecution(nil, &historyservice.RequestCancelWorkflowExecutionRequest{
 				DomainUUID: request.DomainUUID,
 				CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{

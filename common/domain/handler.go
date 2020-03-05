@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/archiver"
@@ -210,7 +209,7 @@ func (d *HandlerImpl) RegisterDomain(
 		HistoryArchivalURI:       nextHistoryArchivalState.URI,
 		VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(nextVisibilityArchivalState.Status),
 		VisibilityArchivalURI:    nextVisibilityArchivalState.URI,
-		BadBinaries:              shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
+		BadBinaries:              adapter.ToThriftBadBinaries(commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}}),
 	}
 	replicationConfig := &persistence.DomainReplicationConfig{
 		ActiveClusterName: activeClusterName,

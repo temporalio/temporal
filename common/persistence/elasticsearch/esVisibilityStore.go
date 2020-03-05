@@ -39,9 +39,9 @@ import (
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/indexer"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/definition"
 	es "github.com/temporalio/temporal/common/elasticsearch"
 	"github.com/temporalio/temporal/common/log"
@@ -81,7 +81,7 @@ type (
 		StartTime     int64
 		ExecutionTime int64
 		CloseTime     int64
-		CloseStatus   workflow.WorkflowExecutionCloseStatus
+		CloseStatus   enums.WorkflowExecutionCloseStatus
 		HistoryLength int64
 		Memo          []byte
 		Encoding      string
@@ -139,7 +139,7 @@ func (v *esVisibilityStore) RecordWorkflowExecutionClosed(request *p.InternalRec
 		request.StartTimestamp,
 		request.ExecutionTimestamp,
 		request.CloseTimestamp,
-		request.Status,
+		adapter.ToProtoWorkflowExecutionCloseStatus(&request.Status),
 		request.HistoryLength,
 		request.TaskID,
 		request.Memo.Data,
@@ -624,7 +624,7 @@ func (v *esVisibilityStore) processSortField(dsl *fastjson.Value) (string, error
 		obj.Visit(func(k []byte, v *fastjson.Value) { // visit is only way to get object key in fastjson
 			sortField = string(k)
 		})
-		if v.getFieldType(sortField) == workflow.IndexedValueTypeString {
+		if v.getFieldType(sortField) == enums.IndexedValueTypeString {
 			return "", errors.New("not able to sort by IndexedValueTypeString field, use IndexedValueTypeKeyword field")
 		}
 		// add RunID as tie-breaker
@@ -634,7 +634,7 @@ func (v *esVisibilityStore) processSortField(dsl *fastjson.Value) (string, error
 	return sortField, nil
 }
 
-func (v *esVisibilityStore) getFieldType(fieldName string) workflow.IndexedValueType {
+func (v *esVisibilityStore) getFieldType(fieldName string) enums.IndexedValueType {
 	if strings.HasPrefix(fieldName, definition.Attr) {
 		fieldName = fieldName[len(definition.Attr)+1:] // remove prefix
 	}
@@ -654,7 +654,7 @@ func (v *esVisibilityStore) getValueOfSearchAfterInJSON(token *esVisibilityPageT
 	var sortVal interface{}
 	var err error
 	switch v.getFieldType(sortField) {
-	case workflow.IndexedValueTypeInt, workflow.IndexedValueTypeDatetime, workflow.IndexedValueTypeBool:
+	case enums.IndexedValueTypeInt, enums.IndexedValueTypeDatetime, enums.IndexedValueTypeBool:
 		sortVal, err = token.SortValue.(json.Number).Int64()
 		if err != nil {
 			err, ok := err.(*strconv.NumError) // field not present, ES will return big int +-9223372036854776000
@@ -667,7 +667,7 @@ func (v *esVisibilityStore) getValueOfSearchAfterInJSON(token *esVisibilityPageT
 				sortVal = math.MaxInt64
 			}
 		}
-	case workflow.IndexedValueTypeDouble:
+	case enums.IndexedValueTypeDouble:
 		switch token.SortValue.(type) {
 		case json.Number:
 			sortVal, err = token.SortValue.(json.Number).Float64()
@@ -677,7 +677,7 @@ func (v *esVisibilityStore) getValueOfSearchAfterInJSON(token *esVisibilityPageT
 		case string: // field not present, ES will return "-Infinity" or "Infinity"
 			sortVal = fmt.Sprintf(`"%s"`, token.SortValue.(string))
 		}
-	case workflow.IndexedValueTypeKeyword:
+	case enums.IndexedValueTypeKeyword:
 		if token.SortValue != nil {
 			sortVal = fmt.Sprintf(`"%s"`, token.SortValue.(string))
 		} else { // field not present, ES will return null (so token.SortValue is nil)
@@ -877,7 +877,7 @@ func (v *esVisibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.S
 	}
 	if source.CloseTime != 0 {
 		record.CloseTime = time.Unix(0, source.CloseTime)
-		record.Status = &source.CloseStatus
+		record.Status = adapter.ToThriftWorkflowExecutionCloseStatus(source.CloseStatus)
 		record.HistoryLength = source.HistoryLength
 	}
 
@@ -914,7 +914,7 @@ func getVisibilityMessage(domainID string, wid, rid string, workflowTypeName str
 }
 
 func getVisibilityMessageForCloseExecution(domainID string, wid, rid string, workflowTypeName string,
-	startTimeUnixNano int64, executionTimeUnixNano int64, endTimeUnixNano int64, closeStatus workflow.WorkflowExecutionCloseStatus,
+	startTimeUnixNano int64, executionTimeUnixNano int64, endTimeUnixNano int64, closeStatus enums.WorkflowExecutionCloseStatus,
 	historyLength int64, taskID int64, memo []byte, encoding common.EncodingType,
 	searchAttributes map[string][]byte) *indexer.Message {
 
