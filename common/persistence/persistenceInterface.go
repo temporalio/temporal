@@ -154,8 +154,9 @@ type (
 
 	// QueueMessage is the message that stores in the queue
 	QueueMessage struct {
-		ID      int
-		Payload []byte
+		ID        int       `json:"message_id"`
+		QueueType QueueType `json:"queue_type"`
+		Payload   []byte    `json:"message_payload"`
 	}
 
 	// DataBlob represents a blob for any binary data.
