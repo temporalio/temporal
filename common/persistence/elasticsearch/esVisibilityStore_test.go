@@ -73,7 +73,7 @@ var (
 	testWorkflowType = "test-wf-type"
 	testWorkflowID   = "test-wid"
 	testRunID        = "1601da05-4db9-4eeb-89e4-da99481bdfc9"
-	testCloseStatus  = 1
+	testCloseStatus  = enums.WorkflowExecutionCloseStatusFailed
 
 	testRequest = &p.ListWorkflowExecutionsRequest{
 		DomainUUID:        testDomainID,
@@ -92,7 +92,7 @@ var (
 	filterByType   = fmt.Sprintf("map[match:map[WorkflowType:map[query:%s]]]", testWorkflowType)
 	filterByWID    = fmt.Sprintf("map[match:map[WorkflowID:map[query:%s]]]", testWorkflowID)
 	filterByRunID  = fmt.Sprintf("map[match:map[RunID:map[query:%s]]]", testRunID)
-	filterByStatus = fmt.Sprintf("map[match:map[CloseStatus:map[query:%v]]]", testCloseStatus)
+	filterByStatus = fmt.Sprintf("map[match:map[CloseStatus:map[query:%d]]]", *adapter.ToThriftWorkflowExecutionCloseStatus(testCloseStatus))
 )
 
 func TestESVisibilitySuite(t *testing.T) {
@@ -192,7 +192,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 		s.Equal(memoBytes, fields[es.Memo].GetBinaryData())
 		s.Equal(string(common.EncodingTypeThriftRW), fields[es.Encoding].GetStringData())
 		s.Equal(request.CloseTimestamp, fields[es.CloseTime].GetIntData())
-		s.Equal(int64(request.Status), fields[es.CloseStatus].GetIntData())
+		s.EqualValues(adapter.ToProtoWorkflowExecutionCloseStatus(&request.Status), fields[es.CloseStatus].GetIntData())
 		s.Equal(request.HistoryLength, fields[es.HistoryLength].GetIntData())
 		return true
 	})).Return(nil).Once()
@@ -353,7 +353,7 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByStatus() {
 
 	request := &p.ListClosedWorkflowExecutionsByStatusRequest{
 		ListWorkflowExecutionsRequest: *testRequest,
-		Status:                        *adapter.ToThriftWorkflowExecutionCloseStatus(enums.WorkflowExecutionCloseStatus(testCloseStatus)),
+		Status:                        *adapter.ToThriftWorkflowExecutionCloseStatus(testCloseStatus),
 	}
 	_, err := s.visibilityStore.ListClosedWorkflowExecutionsByStatus(request)
 	s.NoError(err)
@@ -622,7 +622,7 @@ func (s *ESVisibilitySuite) TestSerializePageToken() {
 }
 
 func (s *ESVisibilitySuite) TestConvertSearchResultToVisibilityRecord() {
-	data := []byte(`{"CloseStatus": 0,
+	data := []byte(`{"CloseStatus": 1,
           "CloseTime": 1547596872817380000,
           "DomainID": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
           "HistoryLength": 29,
@@ -652,7 +652,7 @@ func (s *ESVisibilitySuite) TestConvertSearchResultToVisibilityRecord() {
 	s.Equal("TestWorkflowExecute", info.TypeName)
 	s.Equal(int64(1547596872371000000), info.StartTime.UnixNano())
 	s.Equal(int64(1547596872817380000), info.CloseTime.UnixNano())
-	s.Equal(enums.WorkflowExecutionCloseStatusCompleted, *info.Status)
+	s.Equal(enums.WorkflowExecutionCloseStatusCompleted, adapter.ToProtoWorkflowExecutionCloseStatus(info.Status))
 	s.Equal(int64(29), info.HistoryLength)
 
 	// test for error case
