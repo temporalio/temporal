@@ -26,8 +26,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
+	"go.temporal.io/temporal-proto/enums"
+
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/definition"
 	p "github.com/temporalio/temporal/common/persistence"
 )
@@ -66,7 +68,7 @@ func BenchmarkJSONDecodeToType(b *testing.B) {
 			Memo:          p.NewDataBlob(source.Memo, common.EncodingType(source.Encoding)),
 		}
 		record.CloseTime = time.Unix(0, source.CloseTime)
-		record.Status = &source.CloseStatus
+		record.Status = adapter.ToThriftWorkflowExecutionCloseStatus(source.CloseStatus)
 		record.HistoryLength = source.HistoryLength
 	}
 }
@@ -94,8 +96,8 @@ func BenchmarkJSONDecodeToMap(b *testing.B) {
 			Memo:          p.NewDataBlob([]byte(source[definition.Memo].(string)), common.EncodingType(source[definition.Encoding].(string))),
 		}
 		record.CloseTime = time.Unix(0, closeTime)
-		status := (shared.WorkflowExecutionCloseStatus)(int32(closeStatus))
-		record.Status = &status
+		status := enums.WorkflowExecutionCloseStatus(closeStatus)
+		record.Status = adapter.ToThriftWorkflowExecutionCloseStatus(status)
 		record.HistoryLength = historyLen
 	}
 }

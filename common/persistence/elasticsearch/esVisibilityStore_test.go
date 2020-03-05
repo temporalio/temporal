@@ -35,12 +35,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/valyala/fastjson"
+	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/indexer"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/definition"
 	es "github.com/temporalio/temporal/common/elasticsearch"
 	esMocks "github.com/temporalio/temporal/common/elasticsearch/mocks"
@@ -177,7 +178,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 	memoBytes := []byte(`test bytes`)
 	request.Memo = p.NewDataBlob(memoBytes, common.EncodingTypeThriftRW)
 	request.CloseTimestamp = int64(999)
-	request.Status = workflow.WorkflowExecutionCloseStatusTerminated
+	request.Status = *adapter.ToThriftWorkflowExecutionCloseStatus(enums.WorkflowExecutionCloseStatusTerminated)
 	request.HistoryLength = int64(20)
 	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexer.Message) bool {
 		fields := input.Fields
@@ -352,7 +353,7 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByStatus() {
 
 	request := &p.ListClosedWorkflowExecutionsByStatusRequest{
 		ListWorkflowExecutionsRequest: *testRequest,
-		Status:                        workflow.WorkflowExecutionCloseStatus(testCloseStatus),
+		Status:                        *adapter.ToThriftWorkflowExecutionCloseStatus(enums.WorkflowExecutionCloseStatus(testCloseStatus)),
 	}
 	_, err := s.visibilityStore.ListClosedWorkflowExecutionsByStatus(request)
 	s.NoError(err)
@@ -375,10 +376,10 @@ func (s *ESVisibilitySuite) TestGetClosedWorkflowExecution() {
 	})).Return(testSearchResult, nil).Once()
 	request := &p.GetClosedWorkflowExecutionRequest{
 		DomainUUID: testDomainID,
-		Execution: workflow.WorkflowExecution{
-			WorkflowId: common.StringPtr(testWorkflowID),
-			RunId:      common.StringPtr(testRunID),
-		},
+		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+			WorkflowId: testWorkflowID,
+			RunId:      testRunID,
+		}),
 	}
 	_, err := s.visibilityStore.GetClosedWorkflowExecution(request)
 	s.NoError(err)
@@ -401,9 +402,9 @@ func (s *ESVisibilitySuite) TestGetClosedWorkflowExecution_NoRunID() {
 	})).Return(testSearchResult, nil).Once()
 	request := &p.GetClosedWorkflowExecutionRequest{
 		DomainUUID: testDomainID,
-		Execution: workflow.WorkflowExecution{
-			WorkflowId: common.StringPtr(testWorkflowID),
-		},
+		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+			WorkflowId: testWorkflowID,
+		}),
 	}
 	_, err := s.visibilityStore.GetClosedWorkflowExecution(request)
 	s.NoError(err)
@@ -651,7 +652,7 @@ func (s *ESVisibilitySuite) TestConvertSearchResultToVisibilityRecord() {
 	s.Equal("TestWorkflowExecute", info.TypeName)
 	s.Equal(int64(1547596872371000000), info.StartTime.UnixNano())
 	s.Equal(int64(1547596872817380000), info.CloseTime.UnixNano())
-	s.Equal(workflow.WorkflowExecutionCloseStatusCompleted, *info.Status)
+	s.Equal(enums.WorkflowExecutionCloseStatusCompleted, *info.Status)
 	s.Equal(int64(29), info.HistoryLength)
 
 	// test for error case
@@ -1025,8 +1026,8 @@ func (s *ESVisibilitySuite) TestProcessAllValuesForKey() {
 }
 
 func (s *ESVisibilitySuite) TestGetFieldType() {
-	s.Equal(workflow.IndexedValueTypeInt, s.visibilityStore.getFieldType("StartTime"))
-	s.Equal(workflow.IndexedValueTypeDatetime, s.visibilityStore.getFieldType("Attr.CustomDatetimeField"))
+	s.Equal(enums.IndexedValueTypeInt, s.visibilityStore.getFieldType("StartTime"))
+	s.Equal(enums.IndexedValueTypeDatetime, s.visibilityStore.getFieldType("Attr.CustomDatetimeField"))
 }
 
 func (s *ESVisibilitySuite) TestGetValueOfSearchAfterInJSON() {
