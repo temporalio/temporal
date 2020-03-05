@@ -32,10 +32,10 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/auth"
-	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/persistence"
 	cassp "github.com/temporalio/temporal/common/persistence/cassandra"
@@ -133,11 +133,10 @@ func AdminDescribeWorkflow(c *cli.Context) {
 			currentBranchToken = currentVersionHistory.GetBranchToken()
 		}
 
-		branchInfo := commonproto.HistoryBranch{}
-		thriftrwEncoder := codec.NewThriftRWEncoder()
-		err = thriftrwEncoder.Decode(currentBranchToken, &branchInfo)
+		branchInfo := persistenceblobs.HistoryBranch{}
+		err = branchInfo.Unmarshal(currentBranchToken)
 		if err != nil {
-			ErrorAndExit("thriftrwEncoder.Decode err", err)
+			ErrorAndExit("failed to unmarshal current branch token from proto", err)
 		}
 		prettyPrintJSONObject(branchInfo)
 		if ms.ExecutionInfo.AutoResetPoints != nil {
