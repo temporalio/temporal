@@ -29,15 +29,12 @@ import (
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/replicator"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/client/history"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
-	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/domain"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -66,7 +63,6 @@ type (
 		nDCHistoryResender            xdc.NDCHistoryResender
 		historyClient                 history.Client
 		domainCache                   cache.DomainCache
-		msgEncoder                    codec.BinaryEncoder
 		timeSource                    clock.TimeSource
 		sequentialTaskProcessor       task.Processor
 	}
@@ -117,7 +113,6 @@ func newReplicationTaskProcessor(
 		historyRereplicator:           historyRereplicator,
 		nDCHistoryResender:            nDCHistoryResender,
 		historyClient:                 retryableHistoryClient,
-		msgEncoder:                    codec.NewThriftRWEncoder(),
 		timeSource:                    clock.NewRealTimeSource(),
 		domainCache:                   domainCache,
 		sequentialTaskProcessor:       sequentialTaskProcessor,
@@ -206,12 +201,11 @@ func (p *replicationTaskProcessor) messageProcessLoop(workerWG *sync.WaitGroup, 
 
 func (p *replicationTaskProcessor) decodeMsgAndSubmit(msg messaging.Message) {
 	logger := p.initLogger(msg)
-	replicationTaskThrift, err := p.decodeAndValidateMsg(msg, logger)
+	replicationTask, err := p.decodeAndValidateMsg(msg, logger)
 	if err != nil {
 		p.nackMsg(msg, err, logger)
 		return
 	}
-	replicationTask := adapter.ToProtoReplicationTask(replicationTaskThrift)
 
 SubmitLoop:
 	for {
@@ -281,16 +275,12 @@ func (p *replicationTaskProcessor) nackMsg(msg messaging.Message, err error, log
 	}
 }
 
-func (p *replicationTaskProcessor) decodeAndValidateMsg(msg messaging.Message, logger log.Logger) (*replicator.ReplicationTask, error) {
-	var replicationTask replicator.ReplicationTask
-	err := p.msgEncoder.Decode(msg.Value(), &replicationTask)
+func (p *replicationTaskProcessor) decodeAndValidateMsg(msg messaging.Message, logger log.Logger) (*replication.ReplicationTask, error) {
+	var replicationTask replication.ReplicationTask
+	err := replicationTask.Unmarshal(msg.Value())
 	if err != nil {
 		// return InvalidArgument so processWithRetry can nack the message
 		return nil, ErrDeserializeReplicationTask
-	}
-
-	if replicationTask.TaskType == nil {
-		return nil, ErrEmptyReplicationTask
 	}
 
 	return &replicationTask, nil

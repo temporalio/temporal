@@ -28,7 +28,6 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/domain"
 	"github.com/temporalio/temporal/common/log"
@@ -181,7 +180,7 @@ func (p *domainReplicationMessageProcessor) putDomainReplicationTaskToDLQ(
 	task *replication.ReplicationTask,
 ) error {
 
-	return p.domainReplicationQueue.PublishToDLQ(adapter.ToThriftReplicationTask(task))
+	return p.domainReplicationQueue.PublishToDLQ(task)
 }
 
 func (p *domainReplicationMessageProcessor) handleDomainReplicationTask(

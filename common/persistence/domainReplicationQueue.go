@@ -31,7 +31,6 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
@@ -57,7 +56,6 @@ func NewDomainReplicationQueue(
 		clusterName:         clusterName,
 		metricsClient:       metricsClient,
 		logger:              logger,
-		encoder:             codec.NewThriftRWEncoder(),
 		ackNotificationChan: make(chan bool),
 		done:                make(chan bool),
 		status:              common.DaemonStatusInitialized,
@@ -70,7 +68,6 @@ type (
 		clusterName         string
 		metricsClient       metrics.Client
 		logger              log.Logger
-		encoder             codec.BinaryEncoder
 		ackLevelUpdated     bool
 		ackNotificationChan chan bool
 		done                chan bool

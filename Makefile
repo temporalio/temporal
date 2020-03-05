@@ -18,8 +18,6 @@ default: test
 # define the list of thrift files the service depends on
 # (if you have some)
 THRIFTRW_SRCS = \
-  idl/github.com/temporalio/temporal/replicator.thrift \
-  idl/github.com/temporalio/temporal/indexer.thrift \
   idl/github.com/temporalio/temporal/shared.thrift \
   idl/github.com/temporalio/temporal/sqlblobs.thrift \
   idl/github.com/temporalio/temporal/persistenceblobs.thrift \
