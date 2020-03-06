@@ -31,7 +31,7 @@ import (
 
 var retryForeverPolicy = newRetryForeverPolicy()
 
-func (s *Scavenger) completeTasks(key *taskListKey, taskID int64, limit int) (int, error) {
+func (s *Scavenger) completeTasks(key *p.TaskListKey, taskID int64, limit int) (int, error) {
 	var n int
 	var err error
 	err = s.retryForever(func() error {
@@ -47,7 +47,7 @@ func (s *Scavenger) completeTasks(key *taskListKey, taskID int64, limit int) (in
 	return n, err
 }
 
-func (s *Scavenger) getTasks(key *taskListKey, batchSize int) (*p.GetTasksResponse, error) {
+func (s *Scavenger) getTasks(key *p.TaskListKey, batchSize int) (*p.GetTasksResponse, error) {
 	var err error
 	var resp *p.GetTasksResponse
 	err = s.retryForever(func() error {
@@ -76,14 +76,16 @@ func (s *Scavenger) listTaskList(pageSize int, pageToken []byte) (*p.ListTaskLis
 	return resp, err
 }
 
-func (s *Scavenger) deleteTaskList(key *taskListKey, rangeID int64) error {
+func (s *Scavenger) deleteTaskList(key *p.TaskListKey, rangeID int64) error {
 	// retry only on service busy errors
 	return backoff.Retry(func() error {
 		return s.db.DeleteTaskList(&p.DeleteTaskListRequest{
-			DomainID:     key.DomainID,
-			TaskListName: key.Name,
-			TaskListType: key.TaskType,
-			RangeID:      rangeID,
+			TaskList: &p.TaskListKey{
+				DomainID: key.DomainID,
+				Name:     key.Name,
+				TaskType: key.TaskType,
+			},
+			RangeID: rangeID,
 		})
 	}, retryForeverPolicy, func(err error) bool {
 		_, ok := err.(*serviceerror.ResourceExhausted)

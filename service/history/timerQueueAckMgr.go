@@ -246,7 +246,7 @@ TaskFilterLoop:
 		if isLoaded {
 			// timer already loaded
 			t.logger.Debug("Skipping timer task",
-				tag.Task(timerKey), tag.WorkflowID(task.WorkflowID), tag.WorkflowRunIDBytes(task.RunID), tag.TaskType32(task.TaskType))
+				tag.Task(timerKey), tag.WorkflowID(task.WorkflowID), tag.WorkflowRunIDBytes(task.RunID), tag.TaskType(task.TaskType))
 			continue TaskFilterLoop
 		}
 

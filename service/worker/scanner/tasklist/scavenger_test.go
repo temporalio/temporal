@@ -186,7 +186,7 @@ func (s *ScavengerTestSuite) setupTaskMgrMocks() {
 		}, nil)
 	s.taskMgr.On("DeleteTaskList", mock.Anything).Return(
 		func(req *p.DeleteTaskListRequest) error {
-			s.taskListTable.delete(req.TaskListName)
+			s.taskListTable.delete(req.TaskList.Name)
 			return nil
 		})
 	s.taskMgr.On("GetTasks", mock.Anything).Return(

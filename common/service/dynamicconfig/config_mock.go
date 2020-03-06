@@ -35,8 +35,8 @@ func GetIntPropertyFilteredByDomain(value int) func(domain string) int {
 }
 
 // GetIntPropertyFilteredByTaskListInfo returns value as IntPropertyFnWithTaskListInfoFilters
-func GetIntPropertyFilteredByTaskListInfo(value int) func(domain string, taskList string, taskType int) int {
-	return func(domain string, taskList string, taskType int) int { return value }
+func GetIntPropertyFilteredByTaskListInfo(value int) func(domain string, taskList string, taskType int32) int {
+	return func(domain string, taskList string, taskType int32) int { return value }
 }
 
 // GetFloatPropertyFn returns value as FloatPropertyFn
@@ -65,8 +65,8 @@ func GetDurationPropertyFn(value time.Duration) func(opts ...FilterOption) time.
 }
 
 // GetDurationPropertyFnFilteredByTaskListInfo returns value as DurationPropertyFnWithTaskListInfoFilters
-func GetDurationPropertyFnFilteredByTaskListInfo(value time.Duration) func(domain string, taskList string, taskType int) time.Duration {
-	return func(domain string, taskList string, taskType int) time.Duration { return value }
+func GetDurationPropertyFnFilteredByTaskListInfo(value time.Duration) func(domain string, taskList string, taskType int32) time.Duration {
+	return func(domain string, taskList string, taskType int32) time.Duration { return value }
 }
 
 // GetStringPropertyFn returns value as StringPropertyFn

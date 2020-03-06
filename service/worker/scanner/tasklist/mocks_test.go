@@ -25,47 +25,51 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	p "github.com/temporalio/temporal/common/persistence"
 )
 
 type (
 	mockTaskTable struct {
-		domainID   string
+		domainID   []byte
 		workflowID string
-		runID      string
+		runID      []byte
 		nextTaskID int64
-		tasks      []*p.TaskInfo
+		tasks      []*persistenceblobs.AllocatedTaskInfo
 	}
 	mockTaskListTable struct {
 		sync.Mutex
-		info []p.TaskListInfo
+		info []*p.PersistedTaskListInfo
 	}
 )
 
 func newMockTaskTable() *mockTaskTable {
 	return &mockTaskTable{
-		domainID:   uuid.New(),
+		domainID:   uuid.NewRandom(),
 		workflowID: uuid.New(),
-		runID:      uuid.New(),
+		runID:      uuid.NewRandom(),
 	}
 }
 
 func (tbl *mockTaskListTable) generate(name string, idle bool) {
-	tl := p.TaskListInfo{
-		DomainID:    uuid.New(),
-		Name:        name,
+	tl := p.PersistedTaskListInfo{
+		Data: &persistenceblobs.TaskListInfo{
+			DomainID: uuid.NewRandom(),
+			Name:     name,
+			LastUpdated: types.TimestampNow(),
+		},
 		RangeID:     22,
-		LastUpdated: time.Now(),
 	}
 	if idle {
-		tl.LastUpdated = time.Unix(1000, 1000)
+		tl.Data.LastUpdated, _ = types.TimestampProto(time.Unix(1000, 1000))
 	}
-	tbl.info = append(tbl.info, tl)
+	tbl.info = append(tbl.info, &tl)
 }
 
-func (tbl *mockTaskListTable) list(token []byte, count int) ([]p.TaskListInfo, []byte) {
+func (tbl *mockTaskListTable) list(token []byte, count int) ([]*p.PersistedTaskListInfo, []byte) {
 	tbl.Lock()
 	defer tbl.Unlock()
 	if tbl.info == nil {
@@ -87,21 +91,21 @@ func (tbl *mockTaskListTable) list(token []byte, count int) ([]p.TaskListInfo, [
 func (tbl *mockTaskListTable) delete(name string) {
 	tbl.Lock()
 	defer tbl.Unlock()
-	var newInfo []p.TaskListInfo
+	var newInfo []*p.PersistedTaskListInfo
 	for _, tl := range tbl.info {
-		if tl.Name != name {
+		if tl.Data.Name != name {
 			newInfo = append(newInfo, tl)
 		}
 	}
 	tbl.info = newInfo
 }
 
-func (tbl *mockTaskListTable) get(name string) *p.TaskListInfo {
+func (tbl *mockTaskListTable) get(name string) *p.PersistedTaskListInfo {
 	tbl.Lock()
 	defer tbl.Unlock()
 	for _, tl := range tbl.info {
-		if tl.Name == name {
-			return &tl
+		if tl.Data.Name == name {
+			return tl
 		}
 	}
 	return nil
@@ -109,25 +113,27 @@ func (tbl *mockTaskListTable) get(name string) *p.TaskListInfo {
 
 func (tbl *mockTaskTable) generate(count int, expired bool) {
 	for i := 0; i < count; i++ {
-		ti := &p.TaskInfo{
-			DomainID:               tbl.domainID,
-			WorkflowID:             tbl.workflowID,
-			RunID:                  tbl.runID,
-			TaskID:                 tbl.nextTaskID,
-			ScheduleID:             3,
-			ScheduleToStartTimeout: 30,
-			Expiry:                 time.Now().Add(time.Hour),
+		exp, _ := types.TimestampProto(time.Now().Add(time.Hour))
+		ti := &persistenceblobs.AllocatedTaskInfo{
+			Data: &persistenceblobs.TaskInfo{
+				DomainID:   tbl.domainID,
+				WorkflowID: tbl.workflowID,
+				RunID:      tbl.runID,
+				ScheduleID: 3,
+				Expiry: exp,
+			},
+			TaskID: tbl.nextTaskID,
+
 		}
 		if expired {
-			ti.ScheduleToStartTimeout = -33
-			ti.Expiry = time.Unix(0, time.Now().UnixNano()-int64(time.Second*33))
+			ti.Data.Expiry, _ = types.TimestampProto(time.Unix(0, time.Now().UnixNano()-int64(time.Second*33)))
 		}
 		tbl.tasks = append(tbl.tasks, ti)
 		tbl.nextTaskID++
 	}
 }
 
-func (tbl *mockTaskTable) get(count int) []*p.TaskInfo {
+func (tbl *mockTaskTable) get(count int) []*persistenceblobs.AllocatedTaskInfo {
 	if len(tbl.tasks) >= count {
 		return tbl.tasks[:count]
 	}

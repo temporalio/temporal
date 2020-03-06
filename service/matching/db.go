@@ -24,18 +24,20 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
 	taskListDB struct {
 		sync.Mutex
-		domainID     string
+		domainID     primitives.UUID
 		taskListName string
-		taskListKind int
-		taskType     int
+		taskListKind int32
+		taskType     int32
 		rangeID      int64
 		ackLevel     int64
 		store        persistence.TaskManager
@@ -57,7 +59,7 @@ type (
 // - To provide the guarantee that there is only writer who updates taskList in persistence at any given point in time
 //   This guarantee makes some of the other code simpler and there is no impact to perf because updates to tasklist are
 //   spread out and happen in background routines
-func newTaskListDB(store persistence.TaskManager, domainID string, name string, taskType int, kind int, logger log.Logger) *taskListDB {
+func newTaskListDB(store persistence.TaskManager, domainID primitives.UUID, name string, taskType int32, kind int32, logger log.Logger) *taskListDB {
 	return &taskListDB{
 		domainID:     domainID,
 		taskListName: name,
@@ -90,7 +92,7 @@ func (db *taskListDB) RenewLease() (taskListState, error) {
 	if err != nil {
 		return taskListState{}, err
 	}
-	db.ackLevel = resp.TaskListInfo.AckLevel
+	db.ackLevel = resp.TaskListInfo.Data.AckLevel
 	db.rangeID = resp.TaskListInfo.RangeID
 	return taskListState{rangeID: db.rangeID, ackLevel: db.ackLevel}, nil
 }
@@ -100,14 +102,14 @@ func (db *taskListDB) UpdateState(ackLevel int64) error {
 	db.Lock()
 	defer db.Unlock()
 	_, err := db.store.UpdateTaskList(&persistence.UpdateTaskListRequest{
-		TaskListInfo: &persistence.TaskListInfo{
+		TaskListInfo: &persistenceblobs.TaskListInfo{
 			DomainID: db.domainID,
 			Name:     db.taskListName,
 			TaskType: db.taskType,
 			AckLevel: ackLevel,
-			RangeID:  db.rangeID,
 			Kind:     db.taskListKind,
 		},
+		RangeID: db.rangeID,
 	})
 	if err == nil {
 		db.ackLevel = ackLevel
@@ -116,20 +118,23 @@ func (db *taskListDB) UpdateState(ackLevel int64) error {
 }
 
 // CreateTasks creates a batch of given tasks for this task list
-func (db *taskListDB) CreateTasks(tasks []*persistence.CreateTaskInfo) (*persistence.CreateTasksResponse, error) {
+func (db *taskListDB) CreateTasks(tasks []*persistenceblobs.AllocatedTaskInfo) (*persistence.CreateTasksResponse, error) {
 	db.Lock()
 	defer db.Unlock()
-	return db.store.CreateTasks(&persistence.CreateTasksRequest{
-		TaskListInfo: &persistence.TaskListInfo{
-			DomainID: db.domainID,
-			Name:     db.taskListName,
-			TaskType: db.taskType,
-			AckLevel: db.ackLevel,
-			RangeID:  db.rangeID,
-			Kind:     db.taskListKind,
-		},
-		Tasks: tasks,
-	})
+	return db.store.CreateTasks(
+		&persistence.CreateTasksRequest{
+			TaskListInfo: &persistence.PersistedTaskListInfo{
+				Data: &persistenceblobs.TaskListInfo{
+					DomainID: db.domainID,
+					Name:     db.taskListName,
+					TaskType: db.taskType,
+					AckLevel: db.ackLevel,
+					Kind:     db.taskListKind,
+				},
+				RangeID: db.rangeID,
+			},
+			Tasks: tasks,
+		})
 }
 
 // GetTasks returns a batch of tasks between the given range
@@ -147,7 +152,7 @@ func (db *taskListDB) GetTasks(minTaskID int64, maxTaskID int64, batchSize int) 
 // CompleteTask deletes a single task from this task list
 func (db *taskListDB) CompleteTask(taskID int64) error {
 	err := db.store.CompleteTask(&persistence.CompleteTaskRequest{
-		TaskList: &persistence.TaskListInfo{
+		TaskList: &persistence.TaskListKey{
 			DomainID: db.domainID,
 			Name:     db.taskListName,
 			TaskType: db.taskType,

@@ -33,9 +33,11 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservicemock"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives/timestamp"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
@@ -95,7 +97,7 @@ func (t *MatcherTestSuite) TestLocalSyncMatch() {
 
 	<-pollStarted
 	time.Sleep(10 * time.Millisecond)
-	task := newInternalTask(t.newTaskInfo(), nil, "", true)
+	task := newInternalTask(randomTaskInfo(), nil, "", true)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	syncMatch, err := t.matcher.Offer(ctx, task)
 	cancel()
@@ -118,7 +120,7 @@ func (t *MatcherTestSuite) TestRemoteSyncMatch() {
 		}
 	}()
 
-	task := newInternalTask(t.newTaskInfo(), nil, "", true)
+	task := newInternalTask(randomTaskInfo(), nil, "", true)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 
 	var err error
@@ -145,8 +147,8 @@ func (t *MatcherTestSuite) TestRemoteSyncMatch() {
 }
 
 func (t *MatcherTestSuite) TestSyncMatchFailure() {
-	task := newInternalTask(t.newTaskInfo(), nil, "", true)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	task := newInternalTask(randomTaskInfo(), nil, "", true)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
 
 	var req *matchingservice.AddDecisionTaskRequest
 	t.client.EXPECT().AddDecisionTask(gomock.Any(), gomock.Any()).Do(
@@ -271,6 +273,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatchError() {
 	t.True(matched)
 }
 
+// todo: note from shawn, when does this case happen in production?
 func (t *MatcherTestSuite) TestMustOfferLocalMatch() {
 	// force disable remote forwarding
 	<-t.fwdr.AddReqTokenC()
@@ -290,7 +293,7 @@ func (t *MatcherTestSuite) TestMustOfferLocalMatch() {
 
 	<-pollStarted
 	time.Sleep(10 * time.Millisecond)
-	task := newInternalTask(t.newTaskInfo(), nil, "", false)
+	task := newInternalTask(randomTaskInfo(), nil, "", false)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	err := t.matcher.MustOffer(ctx, task)
 	cancel()
@@ -312,7 +315,7 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 		}
 	}()
 
-	task := newInternalTask(t.newTaskInfo(), nil, "", true)
+	task := newInternalTask(randomTaskInfo(), nil, "", true)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 
 	var err error
@@ -331,8 +334,8 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 
 	t.NoError(t.matcher.MustOffer(ctx, task))
 	cancel()
-	t.NotNil(req)
 	t.NoError(err)
+	t.NotNil(req)
 	t.True(syncMatch)
 	t.Equal(t.taskList.name, req.GetForwardedFrom())
 	t.Equal(t.taskList.Parent(20), req.GetTaskList().GetName())
@@ -397,13 +400,19 @@ func (t *MatcherTestSuite) newDomainCache() cache.DomainCache {
 	return dc
 }
 
-func (t *MatcherTestSuite) newTaskInfo() *persistence.TaskInfo {
-	return &persistence.TaskInfo{
-		DomainID:               uuid.New(),
-		WorkflowID:             uuid.New(),
-		RunID:                  uuid.New(),
-		TaskID:                 rand.Int63(),
-		ScheduleID:             rand.Int63(),
-		ScheduleToStartTimeout: rand.Int31(),
+func randomTaskInfo() *persistenceblobs.AllocatedTaskInfo {
+	rt1 := time.Date(rand.Intn(9999), time.Month(rand.Intn(12)+1), rand.Intn(28)+1, rand.Intn(24)+1, rand.Intn(60), rand.Intn(60), rand.Intn(1e9), time.UTC)
+	rt2 := time.Date(rand.Intn(5000)+3000, time.Month(rand.Intn(12)+1), rand.Intn(28)+1, rand.Intn(24)+1, rand.Intn(60), rand.Intn(60), rand.Intn(1e9), time.UTC)
+
+	return &persistenceblobs.AllocatedTaskInfo{
+		Data: &persistenceblobs.TaskInfo{
+			DomainID:    uuid.NewRandom(),
+			WorkflowID:  uuid.New(),
+			RunID:       uuid.NewRandom(),
+			ScheduleID:  rand.Int63(),
+			CreatedTime: timestamp.TimestampFromTime(&rt1).ToProto(),
+			Expiry:      timestamp.TimestampFromTime(&rt2).ToProto(),
+		},
+		TaskID: rand.Int63(),
 	}
 }

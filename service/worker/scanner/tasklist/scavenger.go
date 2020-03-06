@@ -25,6 +25,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/gogo/protobuf/types"
+
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -46,15 +48,9 @@ type (
 		stopWG   sync.WaitGroup
 	}
 
-	taskListKey struct {
-		DomainID string
-		Name     string
-		TaskType int
-	}
-
 	taskListState struct {
 		rangeID     int64
-		lastUpdated time.Time
+		lastUpdated types.Timestamp
 	}
 
 	stats struct {
@@ -71,7 +67,7 @@ type (
 	// executorTask is a runnable task that adheres to the executor.Task interface
 	// for the scavenger, each of this task processes a single task list
 	executorTask struct {
-		taskListKey
+		p.TaskListKey
 		taskListState
 		scvg *Scavenger
 	}
@@ -82,7 +78,6 @@ var (
 	taskBatchSize            = 16             // number of tasks we read from persistence in one call
 	maxTasksPerJob           = 256            // maximum number of tasks we process for a executorTask list as part of a single job
 	taskListGracePeriod      = 48 * time.Hour // amount of time a executorTask list has to be idle before it becomes a candidate for deletion
-	epochStartTime           = time.Unix(0, 0)
 	executorPollInterval     = time.Minute
 	executorMaxDeferredTasks = 10000
 )
@@ -161,7 +156,7 @@ func (s *Scavenger) run() {
 
 		for _, item := range resp.Items {
 			atomic.AddInt64(&s.stats.tasklist.nProcessed, 1)
-			if !s.executor.Submit(s.newTask(&item)) {
+			if !s.executor.Submit(s.newTask(item)) {
 				return
 			}
 		}
@@ -176,7 +171,7 @@ func (s *Scavenger) run() {
 }
 
 // process is a callback function that gets invoked from within the executor.Run() method
-func (s *Scavenger) process(key *taskListKey, state *taskListState) executor.TaskStatus {
+func (s *Scavenger) process(key *p.TaskListKey, state *taskListState) executor.TaskStatus {
 	return s.deleteHandler(key, state)
 }
 
@@ -201,16 +196,16 @@ func (s *Scavenger) emitStats() {
 }
 
 // newTask returns a new instance of an executable task which will process a single task list
-func (s *Scavenger) newTask(info *p.TaskListInfo) executor.Task {
+func (s *Scavenger) newTask(info *p.PersistedTaskListInfo) executor.Task {
 	return &executorTask{
-		taskListKey: taskListKey{
-			DomainID: info.DomainID,
-			Name:     info.Name,
-			TaskType: info.TaskType,
+		TaskListKey: p.TaskListKey{
+			DomainID: info.Data.DomainID,
+			Name:     info.Data.Name,
+			TaskType: info.Data.TaskType,
 		},
 		taskListState: taskListState{
 			rangeID:     info.RangeID,
-			lastUpdated: info.LastUpdated,
+			lastUpdated: *info.Data.LastUpdated,
 		},
 		scvg: s,
 	}
@@ -218,5 +213,5 @@ func (s *Scavenger) newTask(info *p.TaskListInfo) executor.Task {
 
 // Run runs the task
 func (t *executorTask) Run() executor.TaskStatus {
-	return t.scvg.process(&t.taskListKey, &t.taskListState)
+	return t.scvg.process(&t.TaskListKey, &t.taskListState)
 }

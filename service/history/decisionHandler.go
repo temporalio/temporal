@@ -39,6 +39,7 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -240,7 +241,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskFailed(
 
 	workflowExecution := commonproto.WorkflowExecution{
 		WorkflowId: token.WorkflowID,
-		RunId:      token.RunID,
+		RunId:      primitives.UUIDString(token.RunID),
 	}
 
 	return handler.historyEngine.updateWorkflowExecution(ctx, domainID, workflowExecution, true,
@@ -280,7 +281,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskCompleted(
 
 	workflowExecution := commonproto.WorkflowExecution{
 		WorkflowId: token.WorkflowID,
-		RunId:      token.RunID,
+		RunId:      primitives.UUIDString(token.RunID),
 	}
 
 	clientHeaders := headers.GetValues(ctx, headers.LibraryVersionHeaderName, headers.FeatureVersionHeaderName, headers.ClientImplHeaderName)
@@ -443,7 +444,7 @@ Update_History_Loop:
 			handler.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.FailedDecisionsCounter)
 			handler.logger.Info("Failing the decision.", tag.WorkflowDecisionFailCause(int64(failDecision.cause)),
 				tag.WorkflowID(token.WorkflowID),
-				tag.WorkflowRunID(token.RunID),
+				tag.WorkflowRunIDBytes(token.RunID),
 				tag.WorkflowDomainID(domainID))
 			msBuilder, err = handler.historyEngine.failDecision(weContext, scheduleID, startedID, failDecision.cause, []byte(failDecision.message), request)
 			if err != nil {

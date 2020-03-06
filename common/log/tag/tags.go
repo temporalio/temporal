@@ -275,8 +275,8 @@ func WorkflowDecisionFailCause(decisionFailCause int64) Tag {
 }
 
 // WorkflowTaskListType returns tag for WorkflowTaskListType
-func WorkflowTaskListType(taskListType int) Tag {
-	return newInt("wf-task-list-type", taskListType)
+func WorkflowTaskListType(taskListType int32) Tag {
+	return newInt32("wf-task-list-type", taskListType)
 }
 
 // WorkflowTaskListName returns tag for WorkflowTaskListName
@@ -516,12 +516,7 @@ func TaskID(taskID int64) Tag {
 }
 
 // TaskType returns tag for TaskType for queue processor
-func TaskType(taskType int) Tag {
-	return newInt("queue-task-type", taskType)
-}
-
-// TaskType returns tag for TaskType for queue processor
-func TaskType32(taskType int32) Tag {
+func TaskType(taskType int32) Tag {
 	return newInt32("queue-task-type", taskType)
 }
 

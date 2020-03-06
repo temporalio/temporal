@@ -25,18 +25,18 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/service/worker/scanner/tasklist"
 )
-
-var epochStartTime = time.Unix(0, 0)
 
 type (
 	taskReader struct {
-		taskBuffer chan *persistence.TaskInfo // tasks loaded from persistence
-		notifyC    chan struct{}              // Used as signal to notify pump of new tasks
+		taskBuffer chan *persistenceblobs.AllocatedTaskInfo // tasks loaded from persistence
+		notifyC    chan struct{}                            // Used as signal to notify pump of new tasks
 		tlMgr      *taskListManagerImpl
 		// The cancel objects are to cancel the ratelimiter Wait in dispatchBufferedTasks. The ideal
 		// approach is to use request-scoped contexts and use a unique one for each call to Wait. However
@@ -61,7 +61,7 @@ func newTaskReader(tlMgr *taskListManagerImpl) *taskReader {
 		dispatcherShutdownC: make(chan struct{}),
 		// we always dequeue the head of the buffer and try to dispatch it to a poller
 		// so allocate one less than desired target buffer size
-		taskBuffer: make(chan *persistence.TaskInfo, tlMgr.config.GetTasksBatchSize()-1),
+		taskBuffer: make(chan *persistenceblobs.AllocatedTaskInfo, tlMgr.config.GetTasksBatchSize()-1),
 	}
 }
 
@@ -182,7 +182,7 @@ getTasksPumpLoop:
 	checkIdleTaskListTimer.Stop()
 }
 
-func (tr *taskReader) getTaskBatchWithRange(readLevel int64, maxReadLevel int64) ([]*persistence.TaskInfo, error) {
+func (tr *taskReader) getTaskBatchWithRange(readLevel int64, maxReadLevel int64) ([]*persistenceblobs.AllocatedTaskInfo, error) {
 	response, err := tr.tlMgr.executeWithRetry(func() (interface{}, error) {
 		return tr.tlMgr.db.GetTasks(readLevel, maxReadLevel, tr.tlMgr.config.GetTasksBatchSize())
 	})
@@ -195,8 +195,8 @@ func (tr *taskReader) getTaskBatchWithRange(readLevel int64, maxReadLevel int64)
 // Returns a batch of tasks from persistence starting form current read level.
 // Also return a number that can be used to update readLevel
 // Also return a bool to indicate whether read is finished
-func (tr *taskReader) getTaskBatch() ([]*persistence.TaskInfo, int64, bool, error) {
-	var tasks []*persistence.TaskInfo
+func (tr *taskReader) getTaskBatch() ([]*persistenceblobs.AllocatedTaskInfo, int64, bool, error) {
+	var tasks []*persistenceblobs.AllocatedTaskInfo
 	readLevel := tr.tlMgr.taskAckManager.getReadLevel()
 	maxReadLevel := tr.tlMgr.taskWriter.GetMaxReadLevel()
 
@@ -219,25 +219,19 @@ func (tr *taskReader) getTaskBatch() ([]*persistence.TaskInfo, int64, bool, erro
 	return tasks, readLevel, readLevel == maxReadLevel, nil // caller will update readLevel when no task grabbed
 }
 
-func (tr *taskReader) isTaskExpired(t *persistence.TaskInfo, now time.Time) bool {
-	return t.Expiry.After(epochStartTime) && time.Now().After(t.Expiry)
-}
-
 func (tr *taskReader) isIdle(lastWriteTime time.Time) bool {
 	return !tr.isTaskAddedRecently(lastWriteTime) && len(tr.tlMgr.GetAllPollerInfo()) == 0
 }
 
 func (tr *taskReader) handleIdleTimeout() {
-	tr.persistAckLevel() //nolint:errcheck
+	_ = tr.persistAckLevel()
 	tr.tlMgr.taskGC.RunNow(tr.tlMgr.taskAckManager.getAckLevel())
 	tr.tlMgr.Stop()
 }
 
-func (tr *taskReader) addTasksToBuffer(
-	tasks []*persistence.TaskInfo, lastWriteTime time.Time, idleTimer *time.Timer) bool {
-	now := time.Now()
+func (tr *taskReader) addTasksToBuffer(tasks []*persistenceblobs.AllocatedTaskInfo, lastWriteTime time.Time, idleTimer *time.Timer) bool {
 	for _, t := range tasks {
-		if tr.isTaskExpired(t, now) {
+		if tasklist.IsTaskExpired(t) {
 			tr.scope().IncCounter(metrics.ExpiredTasksCounter)
 			// Also increment readLevel for expired tasks otherwise it could result in
 			// looping over the same tasks if all tasks read in the batch are expired
@@ -252,7 +246,7 @@ func (tr *taskReader) addTasksToBuffer(
 }
 
 func (tr *taskReader) addSingleTaskToBuffer(
-	task *persistence.TaskInfo, lastWriteTime time.Time, idleTimer *time.Timer) bool {
+	task *persistenceblobs.AllocatedTaskInfo, lastWriteTime time.Time, idleTimer *time.Timer) bool {
 	tr.tlMgr.taskAckManager.addTask(task.TaskID)
 	for {
 		select {

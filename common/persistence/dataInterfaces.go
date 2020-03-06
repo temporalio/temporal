@@ -138,13 +138,13 @@ const (
 
 // Types of task lists
 const (
-	TaskListTypeDecision = iota
+	TaskListTypeDecision int32 = iota
 	TaskListTypeActivity
 )
 
 // Kinds of task lists
 const (
-	TaskListKindNormal = iota
+	TaskListKindNormal int32 = iota
 	TaskListKindSticky
 )
 
@@ -367,30 +367,6 @@ type (
 		Version             int64
 	}
 
-	// TaskListInfo describes a state of a task list implementation.
-	TaskListInfo struct {
-		DomainID    string
-		Name        string
-		TaskType    int
-		RangeID     int64
-		AckLevel    int64
-		Kind        int
-		Expiry      time.Time
-		LastUpdated time.Time
-	}
-
-	// TaskInfo describes either activity or decision task
-	TaskInfo struct {
-		DomainID               string
-		WorkflowID             string
-		RunID                  string
-		TaskID                 int64
-		ScheduleID             int64
-		ScheduleToStartTimeout int32
-		Expiry                 time.Time
-		CreatedTime            time.Time
-	}
-
 	// Task is the generic interface for workflow tasks
 	Task interface {
 		GetType() int
@@ -400,6 +376,13 @@ type (
 		SetTaskID(id int64)
 		GetVisibilityTimestamp() time.Time
 		SetVisibilityTimestamp(timestamp time.Time)
+	}
+
+	// TaskListKey is the struct used to identity TaskLists
+	TaskListKey struct {
+		DomainID primitives.UUID
+		Name     string
+		TaskType int32
 	}
 
 	// ActivityTask identifies a transfer task for activity
@@ -968,21 +951,22 @@ type (
 
 	// LeaseTaskListRequest is used to request lease of a task list
 	LeaseTaskListRequest struct {
-		DomainID     string
+		DomainID     primitives.UUID
 		TaskList     string
-		TaskType     int
-		TaskListKind int
+		TaskType     int32
+		TaskListKind int32
 		RangeID      int64
 	}
 
 	// LeaseTaskListResponse is response to LeaseTaskListRequest
 	LeaseTaskListResponse struct {
-		TaskListInfo *TaskListInfo
+		TaskListInfo *PersistedTaskListInfo
 	}
 
 	// UpdateTaskListRequest is used to update task list implementation information
 	UpdateTaskListRequest struct {
-		TaskListInfo *TaskListInfo
+		RangeID      int64
+		TaskListInfo *pblobs.TaskListInfo
 	}
 
 	// UpdateTaskListResponse is the response to UpdateTaskList
@@ -997,40 +981,36 @@ type (
 
 	// ListTaskListResponse is the response from ListTaskList API
 	ListTaskListResponse struct {
-		Items         []TaskListInfo
+		Items         []*PersistedTaskListInfo
 		NextPageToken []byte
 	}
 
 	// DeleteTaskListRequest contains the request params needed to invoke DeleteTaskList API
 	DeleteTaskListRequest struct {
-		DomainID     string
-		TaskListName string
-		TaskListType int
-		RangeID      int64
+		TaskList *TaskListKey
+		RangeID  int64
 	}
 
-	// CreateTasksRequest is used to create a new task for a workflow exectution
+	// CreateTasksRequest is used to create a new task for a workflow execution
 	CreateTasksRequest struct {
-		TaskListInfo *TaskListInfo
-		Tasks        []*CreateTaskInfo
-	}
-
-	// CreateTaskInfo describes a task to be created in CreateTasksRequest
-	CreateTaskInfo struct {
-		Execution workflow.WorkflowExecution
-		Data      *TaskInfo
-		TaskID    int64
+		TaskListInfo *PersistedTaskListInfo
+		Tasks        []*pblobs.AllocatedTaskInfo
 	}
 
 	// CreateTasksResponse is the response to CreateTasksRequest
 	CreateTasksResponse struct {
 	}
 
+	PersistedTaskListInfo struct {
+		Data    *pblobs.TaskListInfo
+		RangeID int64
+	}
+
 	// GetTasksRequest is used to retrieve tasks of a task list
 	GetTasksRequest struct {
-		DomainID     string
+		DomainID     primitives.UUID
 		TaskList     string
-		TaskType     int
+		TaskType     int32
 		ReadLevel    int64  // range exclusive
 		MaxReadLevel *int64 // optional: range inclusive when specified
 		BatchSize    int
@@ -1038,20 +1018,20 @@ type (
 
 	// GetTasksResponse is the response to GetTasksRequests
 	GetTasksResponse struct {
-		Tasks []*TaskInfo
+		Tasks []*pblobs.AllocatedTaskInfo
 	}
 
 	// CompleteTaskRequest is used to complete a task
 	CompleteTaskRequest struct {
-		TaskList *TaskListInfo
+		TaskList *TaskListKey
 		TaskID   int64
 	}
 
 	// CompleteTasksLessThanRequest contains the request params needed to invoke CompleteTasksLessThan API
 	CompleteTasksLessThanRequest struct {
-		DomainID     string
+		DomainID     primitives.UUID
 		TaskListName string
-		TaskType     int
+		TaskType     int32
 		TaskID       int64 // Tasks less than or equal to this ID will be completed
 		Limit        int   // Limit on the max number of tasks that can be completed. Required param
 	}

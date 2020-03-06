@@ -69,7 +69,7 @@ func standbyTransferTaskPostActionTaskDiscarded(
 		tag.WorkflowRunIDBytes(transferTask.RunID),
 		tag.WorkflowDomainIDBytes(transferTask.DomainID),
 		tag.TaskID(transferTask.TaskID),
-		tag.TaskType32(transferTask.TaskType),
+		tag.TaskType(transferTask.TaskType),
 		tag.FailoverVersion(transferTask.GetVersion()),
 		tag.TimestampProto(transferTask.VisibilityTimestamp),
 		tag.WorkflowEventID(transferTask.ScheduleID))
@@ -92,7 +92,7 @@ func standbyTimerTaskPostActionTaskDiscarded(
 		tag.WorkflowRunIDBytes(timerTask.RunID),
 		tag.WorkflowDomainIDBytes(timerTask.DomainID),
 		tag.TaskID(timerTask.TaskID),
-		tag.TaskType32(timerTask.TaskType),
+		tag.TaskType(timerTask.TaskType),
 		tag.WorkflowTimeoutType(int64(timerTask.TimeoutType)),
 		tag.FailoverVersion(timerTask.GetVersion()),
 		tag.TimestampProto(timerTask.VisibilityTimestamp),

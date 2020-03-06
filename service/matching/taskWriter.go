@@ -27,7 +27,7 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/common/adapter"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
@@ -41,7 +41,7 @@ type (
 
 	writeTaskRequest struct {
 		execution  *commonproto.WorkflowExecution
-		taskInfo   *persistence.TaskInfo
+		taskInfo   *persistenceblobs.TaskInfo
 		responseCh chan<- *writeTaskResponse
 	}
 
@@ -96,7 +96,7 @@ func (w *taskWriter) isStopped() bool {
 }
 
 func (w *taskWriter) appendTask(execution *commonproto.WorkflowExecution,
-	taskInfo *persistence.TaskInfo) (*persistence.CreateTasksResponse, error) {
+	taskInfo *persistenceblobs.TaskInfo) (*persistence.CreateTasksResponse, error) {
 
 	if w.isStopped() {
 		return nil, errShutdown
@@ -164,12 +164,11 @@ writerLoop:
 					continue writerLoop
 				}
 
-				var tasks []*persistence.CreateTaskInfo
+				var tasks []*persistenceblobs.AllocatedTaskInfo
 				for i, req := range reqs {
-					tasks = append(tasks, &persistence.CreateTaskInfo{
-						TaskID:    taskIDs[i],
-						Execution: *adapter.ToThriftWorkflowExecution(req.execution),
-						Data:      req.taskInfo,
+					tasks = append(tasks, &persistenceblobs.AllocatedTaskInfo{
+						TaskID: taskIDs[i],
+						Data:   req.taskInfo,
 					})
 					maxReadLevel = taskIDs[i]
 				}

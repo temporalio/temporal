@@ -842,7 +842,7 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 	tl := "testTaskList"
 	taskToken, _ := json.Marshal(&common.TaskToken{
 		WorkflowID: "wId",
-		RunID:      we.GetRunId(),
+		RunID:      primitives.MustParseUUID(we.GetRunId()),
 		ScheduleID: 2,
 	})
 	identity := "testIdentity"

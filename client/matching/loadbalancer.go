@@ -45,7 +45,7 @@ type (
 		PickWritePartition(
 			domainID string,
 			taskList commonproto.TaskList,
-			taskListType int,
+			taskListType int32,
 			forwardedFrom string,
 		) string
 
@@ -55,7 +55,7 @@ type (
 		PickReadPartition(
 			domainID string,
 			taskList commonproto.TaskList,
-			taskListType int,
+			taskListType int32,
 			forwardedFrom string,
 		) string
 	}
@@ -87,7 +87,7 @@ func NewLoadBalancer(
 func (lb *defaultLoadBalancer) PickWritePartition(
 	domainID string,
 	taskList commonproto.TaskList,
-	taskListType int,
+	taskListType int32,
 	forwardedFrom string,
 ) string {
 	return lb.pickPartition(domainID, taskList, taskListType, forwardedFrom, lb.nWritePartitions)
@@ -96,7 +96,7 @@ func (lb *defaultLoadBalancer) PickWritePartition(
 func (lb *defaultLoadBalancer) PickReadPartition(
 	domainID string,
 	taskList commonproto.TaskList,
-	taskListType int,
+	taskListType int32,
 	forwardedFrom string,
 ) string {
 	return lb.pickPartition(domainID, taskList, taskListType, forwardedFrom, lb.nReadPartitions)
@@ -105,7 +105,7 @@ func (lb *defaultLoadBalancer) PickReadPartition(
 func (lb *defaultLoadBalancer) pickPartition(
 	domainID string,
 	taskList commonproto.TaskList,
-	taskListType int,
+	taskListType int32,
 	forwardedFrom string,
 	nPartitions dynamicconfig.IntPropertyFnWithTaskListInfoFilters,
 ) string {

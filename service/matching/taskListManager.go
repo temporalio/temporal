@@ -32,6 +32,8 @@ import (
 	"go.temporal.io/temporal-proto/enums"
 
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
+
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cache"
@@ -39,18 +41,22 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 const (
 	// Time budget for empty task to propagate through the function stack and be returned to
 	// pollForActivityTask or pollForDecisionTask handler.
 	returnEmptyTaskTimeBudget = time.Second
+
+	// Fake Task ID to wrap a task for syncmatch
+	syncMatchTaskId = -137
 )
 
 type (
 	addTaskParams struct {
 		execution     *commonproto.WorkflowExecution
-		taskInfo      *persistence.TaskInfo
+		taskInfo      *persistenceblobs.TaskInfo
 		forwardedFrom string
 	}
 
@@ -130,7 +136,7 @@ func newTaskListManager(
 		return nil, err
 	}
 
-	db := newTaskListDB(e.taskManager, taskList.domainID, taskList.name, taskList.taskType, int(taskListKind), e.logger)
+	db := newTaskListDB(e.taskManager, primitives.MustParseUUID(taskList.domainID), taskList.name, taskList.taskType, int32(taskListKind), e.logger)
 	tlMgr := &taskListManagerImpl{
 		domainCache:   e.domainCache,
 		metricsClient: e.metricsClient,
@@ -200,14 +206,15 @@ func (c *taskListManagerImpl) AddTask(ctx context.Context, params addTaskParams)
 	c.startWG.Wait()
 	var syncMatch bool
 	_, err := c.executeWithRetry(func() (interface{}, error) {
+		td := params.taskInfo
 
-		domainEntry, err := c.domainCache.GetDomainByID(params.taskInfo.DomainID)
+		domainEntry, err := c.domainCache.GetDomainByID(primitives.UUIDString(td.DomainID))
 		if err != nil {
 			return nil, err
 		}
 
 		if domainEntry.GetDomainNotActiveErr() != nil {
-			r, err := c.taskWriter.appendTask(params.execution, params.taskInfo)
+			r, err := c.taskWriter.appendTask(params.execution, td)
 			syncMatch = false
 			return r, err
 		}
@@ -217,7 +224,7 @@ func (c *taskListManagerImpl) AddTask(ctx context.Context, params addTaskParams)
 			return &persistence.CreateTasksResponse{}, err
 		}
 
-		r, err := c.taskWriter.appendTask(params.execution, params.taskInfo)
+		r, err := c.taskWriter.appendTask(params.execution, td)
 		syncMatch = false
 		return r, err
 	})
@@ -369,7 +376,7 @@ func (c *taskListManagerImpl) String() string {
 // here. As part of completion:
 //   - task is deleted from the database when err is nil
 //   - new task is created and current task is deleted when err is not nil
-func (c *taskListManagerImpl) completeTask(task *persistence.TaskInfo, err error) {
+func (c *taskListManagerImpl) completeTask(task *persistenceblobs.AllocatedTaskInfo, err error) {
 	if err != nil {
 		// failed to start the task.
 		// We cannot just remove it from persistence because then it will be lost.
@@ -379,8 +386,8 @@ func (c *taskListManagerImpl) completeTask(task *persistence.TaskInfo, err error
 		// Note that RecordTaskStarted only fails after retrying for a long time, so a single task will not be
 		// re-written to persistence frequently.
 		_, err = c.executeWithRetry(func() (interface{}, error) {
-			wf := &commonproto.WorkflowExecution{WorkflowId: task.WorkflowID, RunId: task.RunID}
-			return c.taskWriter.appendTask(wf, task)
+			wf := &commonproto.WorkflowExecution{WorkflowId: task.Data.WorkflowID, RunId: primitives.UUIDString(task.Data.RunID)}
+			return c.taskWriter.appendTask(wf, task.Data)
 		})
 
 		if err != nil {
@@ -397,6 +404,7 @@ func (c *taskListManagerImpl) completeTask(task *persistence.TaskInfo, err error
 		}
 		c.taskReader.Signal()
 	}
+
 	ackLevel := c.taskAckManager.completeTask(task.TaskID)
 	c.taskGC.Run(ackLevel)
 }
@@ -465,7 +473,14 @@ func (c *taskListManagerImpl) executeWithRetry(
 
 func (c *taskListManagerImpl) trySyncMatch(ctx context.Context, params addTaskParams) (bool, error) {
 	childCtx, cancel := c.newChildContext(ctx, maxSyncMatchWaitTime, time.Second)
-	task := newInternalTask(params.taskInfo, c.completeTask, params.forwardedFrom, true)
+
+	// Mocking out TaskId for syncmatch as it hasn't been allocated yet
+	fakeTaskIdWrapper := &persistenceblobs.AllocatedTaskInfo{
+		Data:   params.taskInfo,
+		TaskID: syncMatchTaskId,
+	}
+
+	task := newInternalTask(fakeTaskIdWrapper, c.completeTask, params.forwardedFrom, true)
 	matched, err := c.matcher.Offer(childCtx, task)
 	cancel()
 	return matched, err
@@ -524,7 +539,7 @@ func (c *taskListManagerImpl) domainName() string {
 func (c *taskListManagerImpl) tryInitDomainNameAndScope() {
 	domainName := c.domainNameValue.Load().(string)
 	if len(domainName) == 0 {
-		domainName, scope := domainNameAndMetricScope(c.domainCache, c.taskListID.domainID, c.metricsClient, metrics.MatchingTaskListMgrScope)
+		domainName, scope := domainNameAndMetricScope(c.domainCache, primitives.MustParseUUID(c.taskListID.domainID), c.metricsClient, metrics.MatchingTaskListMgrScope)
 		if len(domainName) > 0 && scope != nil {
 			c.domainNameValue.Store(domainName)
 			c.domainScopeValue.Store(scope)
@@ -533,8 +548,8 @@ func (c *taskListManagerImpl) tryInitDomainNameAndScope() {
 }
 
 // if domainCache return error, it will return "" as domainName and a scope without domainName tagged
-func domainNameAndMetricScope(cache cache.DomainCache, domainID string, client metrics.Client, scope int) (string, metrics.Scope) {
-	entry, err := cache.GetDomainByID(domainID)
+func domainNameAndMetricScope(cache cache.DomainCache, domainID primitives.UUID, client metrics.Client, scope int) (string, metrics.Scope) {
+	entry, err := cache.GetDomainByID(domainID.String())
 	if err != nil {
 		return "", nil
 	}

@@ -46,12 +46,6 @@ struct DomainInfo {
   48: optional string visibilityArchivalURI
 }
 
-struct HistoryTreeInfo {
-  10: optional i64 (js.type = "Long") createdTimeNanos // For fork operation to prevent race condition of leaking event data when forking branches fail. Also can be used for clean up leaked data
-  12: optional list<shared.HistoryBranchRange> ancestors
-  14: optional string info // For lookup back to workflow during debugging, also background cleanup when fork operation cannot finish self cleanup due to crash.
-}
-
 struct ReplicationInfo {
   10: optional i64 (js.type = "Long") version
   12: optional i64 (js.type = "Long") lastEventID
@@ -168,19 +162,4 @@ struct ChildExecutionInfo {
   30: optional string domainName
   32: optional string workflowTypeName
   35: optional i32 parentClosePolicy
-}
-
-struct TaskInfo {
-  10: optional string workflowID
-  12: optional binary runID
-  13: optional i64 (js.type = "Long") scheduleID
-  14: optional i64 (js.type = "Long") expiryTimeNanos
-  15: optional i64 (js.type = "Long") createdTimeNanos
-}
-
-struct TaskListInfo {
-  10: optional i16 kind // {Normal, Sticky}
-  12: optional i64 (js.type = "Long") ackLevel
-  14: optional i64 (js.type = "Long") expiryTimeNanos
-  16: optional i64 (js.type = "Long") lastUpdatedNanos
 }

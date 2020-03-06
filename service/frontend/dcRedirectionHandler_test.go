@@ -35,6 +35,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/resource"
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
@@ -78,7 +79,7 @@ func (s *dcRedirectionHandlerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.domainName = "some random domain name"
-	s.domainID = "some random domain ID"
+	s.domainID = "deadbeef-0123-4567-890a-bcdef0123456"
 	s.currentClusterName = cluster.TestCurrentClusterName
 	s.alternativeClusterName = cluster.TestAlternativeClusterName
 
@@ -391,7 +392,7 @@ func (s *dcRedirectionHandlerSuite) TestRecordActivityTaskHeartbeat() {
 		s.domainID, apiName, mock.Anything).Return(nil).Times(1)
 
 	token, err := s.handler.tokenSerializer.Serialize(&common.TaskToken{
-		DomainID: s.domainID,
+		DomainID: primitives.MustParseUUID(s.domainID),
 	})
 	s.Nil(err)
 	req := &workflowservice.RecordActivityTaskHeartbeatRequest{
@@ -510,7 +511,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskCanceled() {
 		s.domainID, apiName, mock.Anything).Return(nil).Times(1)
 
 	token, err := s.handler.tokenSerializer.Serialize(&common.TaskToken{
-		DomainID: s.domainID,
+		DomainID: primitives.MustParseUUID(s.domainID),
 	})
 	s.Nil(err)
 	req := &workflowservice.RespondActivityTaskCanceledRequest{
@@ -558,7 +559,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskCompleted() {
 		s.domainID, apiName, mock.Anything).Return(nil).Times(1)
 
 	token, err := s.handler.tokenSerializer.Serialize(&common.TaskToken{
-		DomainID: s.domainID,
+		DomainID: primitives.MustParseUUID(s.domainID),
 	})
 	s.Nil(err)
 	req := &workflowservice.RespondActivityTaskCompletedRequest{
@@ -606,7 +607,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskFailed() {
 		s.domainID, apiName, mock.Anything).Return(nil).Times(1)
 
 	token, err := s.handler.tokenSerializer.Serialize(&common.TaskToken{
-		DomainID: s.domainID,
+		DomainID: primitives.MustParseUUID(s.domainID),
 	})
 	s.Nil(err)
 	req := &workflowservice.RespondActivityTaskFailedRequest{
@@ -654,7 +655,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondDecisionTaskCompleted() {
 		s.domainID, apiName, mock.Anything).Return(nil).Times(1)
 
 	token, err := s.handler.tokenSerializer.Serialize(&common.TaskToken{
-		DomainID: s.domainID,
+		DomainID: primitives.MustParseUUID(s.domainID),
 	})
 	s.Nil(err)
 	req := &workflowservice.RespondDecisionTaskCompletedRequest{
@@ -681,7 +682,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondDecisionTaskFailed() {
 		s.domainID, apiName, mock.Anything).Return(nil).Times(1)
 
 	token, err := s.handler.tokenSerializer.Serialize(&common.TaskToken{
-		DomainID: s.domainID,
+		DomainID: primitives.MustParseUUID(s.domainID),
 	})
 	s.Nil(err)
 	req := &workflowservice.RespondDecisionTaskFailedRequest{

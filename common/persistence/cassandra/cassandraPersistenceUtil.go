@@ -2309,62 +2309,6 @@ func createHistoryEventBatchBlob(
 	return eventBatch
 }
 
-func createTaskInfo(
-	result map[string]interface{},
-) *p.TaskInfo {
-
-	info := &p.TaskInfo{}
-	for k, v := range result {
-		switch k {
-		case "domain_id":
-			info.DomainID = v.(gocql.UUID).String()
-		case "workflow_id":
-			info.WorkflowID = v.(string)
-		case "run_id":
-			info.RunID = v.(gocql.UUID).String()
-		case "schedule_id":
-			info.ScheduleID = v.(int64)
-		case "created_time":
-			info.CreatedTime = v.(time.Time)
-		}
-	}
-
-	return info
-}
-
-func createTimerTaskInfo(
-	result map[string]interface{},
-) *p.TimerTaskInfo {
-
-	info := &p.TimerTaskInfo{}
-	for k, v := range result {
-		switch k {
-		case "domain_id":
-			info.DomainID = v.(gocql.UUID).String()
-		case "workflow_id":
-			info.WorkflowID = v.(string)
-		case "run_id":
-			info.RunID = v.(gocql.UUID).String()
-		case "visibility_ts":
-			info.VisibilityTimestamp = v.(time.Time)
-		case "task_id":
-			info.TaskID = v.(int64)
-		case "type":
-			info.TaskType = v.(int)
-		case "timeout_type":
-			info.TimeoutType = v.(int)
-		case "event_id":
-			info.EventID = v.(int64)
-		case "schedule_attempt":
-			info.ScheduleAttempt = v.(int64)
-		case "version":
-			info.Version = v.(int64)
-		}
-	}
-
-	return info
-}
-
 func createReplicationInfo(
 	result map[string]interface{},
 ) *p.ReplicationInfo {
