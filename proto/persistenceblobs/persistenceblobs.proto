@@ -33,6 +33,40 @@ message ImmutableClusterMetadata {
     int32 historyShardCount = 2;
 }
 
+message ActivityInfo {
+    int64 version = 1;
+    int64 scheduledEventBatchID = 2;
+    bytes scheduledEvent = 3;
+    string scheduledEventEncoding = 4;
+    int64 scheduledTimeNanos = 5;
+    int64 startedID = 6;
+    bytes startedEvent = 7;
+    string startedEventEncoding = 8;
+    int64 startedTimeNanos = 9;
+    string activityID = 10;
+    string requestID = 11;
+    int32 scheduleToStartTimeoutSeconds = 12;
+    int32 scheduleToCloseTimeoutSeconds = 13;
+    int32 startToCloseTimeoutSeconds = 14;
+    int32 heartbeatTimeoutSeconds = 15;
+    bool cancelRequested = 16;
+    int64 cancelRequestID = 17;
+    int32 timerTaskStatus = 18;
+    int32 attempt = 19;
+    string taskList = 20;
+    string startedIdentity = 21;
+    bool hasRetryPolicy = 22;
+    int32 retryInitialIntervalSeconds = 23;
+    int32 retryMaximumIntervalSeconds = 24;
+    int32 retryMaximumAttempts = 25;
+    int64 retryExpirationTimeNanos = 26;
+    double retryBackoffCoefficient = 27;
+    repeated string retryNonRetryableErrors = 28;
+    string retryLastFailureReason = 29;
+    string retryLastWorkerIdentity = 30;
+    bytes retryLastFailureDetails = 31;
+}
+
 message ShardInfo {
     int32 shardID = 1;
     int64 rangeID = 2;
