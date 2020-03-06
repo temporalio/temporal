@@ -13,43 +13,6 @@ CREATE TYPE replication_state (
   last_replication_info            map<text, frozen<replication_info>>, -- information about replication events from other clusters
 );
 
--- Workflow activity in progress mutable state
-CREATE TYPE activity_info (
-  version                   bigint,
-  schedule_id               bigint,
-  scheduled_event_batch_id  bigint,
-  scheduled_event           blob,  -- deprecated
-  scheduled_time            timestamp,
-  started_id                bigint,
-  started_event             blob,
-  started_time              timestamp,
-  activity_id               text,    -- Client generated unique ID for the activity.
-  request_id                text,    -- Identifier used by matching engine for retrying history service calls for recording task is started
-  details                   blob,
-  schedule_to_start_timeout int,
-  schedule_to_close_timeout int,
-  start_to_close_timeout    int,
-  heart_beat_timeout        int,
-  cancel_requested          boolean, -- If a cancel request is made to cancel the activity in progress.
-  cancel_request_id         bigint,  -- Event ID that identifies the cancel request.
-  last_hb_updated_time      timestamp, -- Last time the heartbeat is received.
-  timer_task_status         int,    -- Indicates whether timers are created for this activity.
-  attempt                   int,    -- starting from 0 (for initial non-retry)
-  task_list                 text,
-  started_identity          text,   -- last started poller's identity
-  has_retry_policy          boolean,-- If there is a retry policy
-  init_interval             int,    -- initial retry interval, in seconds
-  backoff_coefficient       double,
-  max_interval              int,    -- max retry interval in seconds
-  expiration_time           timestamp, -- retry expiration time
-  max_attempts              int,    -- max number of attempts including initial non-retry attempt
-  non_retriable_errors      list<text>,
-  last_failure_reason       text,
-  last_worker_identity      text, -- Worker that returns the last failure reason
-  last_failure_details      blob,
-  event_data_encoding       text, -- Protocol used for history serialization
-);
-
 -- Child execution in progress mutable state
 CREATE TYPE child_execution_info (
   version                   bigint,
@@ -138,7 +101,8 @@ CREATE TABLE executions (
   timer_encoding                 text,
   next_event_id                  bigint,  -- This is needed to make conditional updates on session history
   range_id                       bigint, -- Increasing sequence identifier for transfer queue, checkpointed into shard info
-  activity_map                   map<bigint, frozen<activity_info>>,
+  activity_map                   map<bigint, blob>,
+  activity_map_encoding          text,
   timer_map                      map<text, blob>,
   timer_map_encoding             text,
   child_executions_map           map<bigint, frozen<child_execution_info>>,
