@@ -51,6 +51,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/auth"
+	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/messaging"
 	"github.com/temporalio/temporal/common/persistence"
@@ -267,6 +268,7 @@ func writeReplicationTask(
 	c *cli.Context,
 ) {
 	filter := buildFilterFn(c.String(FlagWorkflowID), c.String(FlagRunID))
+	encoder := codec.NewJSONPBEncoder()
 Loop:
 	for {
 		select {
@@ -275,7 +277,7 @@ Loop:
 				break Loop
 			}
 			if filter(task) {
-				jsonStr, err := json.Marshal(task)
+				jsonStr, err := encoder.Encode(task)
 				if err != nil {
 					if !skipErrMode {
 						ErrorAndExit(malformedMessage, fmt.Errorf("failed to encode into json, err: %v", err))
@@ -316,6 +318,7 @@ func writeVisibilityMessage(
 	c *cli.Context,
 ) {
 	filter := buildFilterFnForVisibility(c.String(FlagWorkflowID), c.String(FlagRunID))
+	encoder := codec.NewJSONPBEncoder()
 Loop:
 	for {
 		select {
@@ -324,7 +327,7 @@ Loop:
 				break Loop
 			}
 			if filter(msg) {
-				jsonStr, err := json.Marshal(msg)
+				jsonStr, err := encoder.Encode(msg)
 				if err != nil {
 					if !skipErrMode {
 						ErrorAndExit(malformedMessage, fmt.Errorf("failed to encode into json, err: %v", err))

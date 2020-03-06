@@ -22,7 +22,6 @@ package cli
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"os"
 
@@ -33,6 +32,7 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/collection"
 )
 
@@ -85,7 +85,8 @@ func AdminGetDLQMessages(c *cli.Context) {
 		}
 
 		task := item.(*replication.ReplicationTask)
-		taskStr, err := json.MarshalIndent(task, "", " ")
+		encoder := codec.NewJSONPBIndentEncoder(" ")
+		taskStr, err := encoder.Encode(task)
 		if err != nil {
 			ErrorAndExit(fmt.Sprintf("fail to encode dlq message. Last read message id: %v", lastReadMessageID), err)
 		}

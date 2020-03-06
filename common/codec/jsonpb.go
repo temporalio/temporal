@@ -47,6 +47,14 @@ func NewJSONPBEncoder() *JSONPBEncoder {
 	}
 }
 
+// NewJSONPBIndentEncoder creates a new JSONPBEncoder with indent.
+func NewJSONPBIndentEncoder(indent string) *JSONPBEncoder {
+	return &JSONPBEncoder{
+		marshaler:   jsonpb.Marshaler{Indent: indent},
+		ubmarshaler: jsonpb.Unmarshaler{},
+	}
+}
+
 // Encode protobuf struct to bytes.
 func (e *JSONPBEncoder) Encode(pb proto.Message) ([]byte, error) {
 	var buf bytes.Buffer

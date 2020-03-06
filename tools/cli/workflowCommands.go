@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/temporal/client"
 
 	"github.com/temporalio/temporal/common/clock"
+	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/service/history"
 )
 
@@ -142,8 +143,8 @@ func showHistoryHelper(c *cli.Context, wid, rid string) {
 	}
 
 	if outputFileName != "" {
-		serializer := &JSONHistorySerializer{}
-		data, err := serializer.Serialize(history)
+		serializer := codec.NewJSONPBEncoder()
+		data, err := serializer.Encode(history)
 		if err != nil {
 			ErrorAndExit("Failed to serialize history data.", err)
 		}
@@ -831,14 +832,11 @@ func describeWorkflowHelper(c *cli.Context, wid, rid string) {
 		return
 	}
 
-	var o interface{}
 	if printRaw {
-		o = resp
+		prettyPrintJSONObject(resp)
 	} else {
-		o = convertDescribeWorkflowExecutionResponse(resp, frontendClient, c)
+		prettyPrintJSONObject(convertDescribeWorkflowExecutionResponse(resp, frontendClient, c))
 	}
-
-	prettyPrintJSONObject(o)
 }
 
 func printAutoResetPoints(resp *workflowservice.DescribeWorkflowExecutionResponse) {
@@ -1361,9 +1359,10 @@ func getWorkflowIDReusePolicy(value int) enums.WorkflowIdReusePolicy {
 
 // default will print decoded raw
 func printListResults(executions []*commonproto.WorkflowExecutionInfo, inJSON bool, more bool) {
+	encoder := codec.NewJSONPBEncoder()
 	for i, execution := range executions {
 		if inJSON {
-			j, _ := json.Marshal(execution)
+			j, _ := encoder.Encode(execution)
 			if more || i < len(executions)-1 {
 				fmt.Println(string(j) + ",")
 			} else {
