@@ -192,13 +192,13 @@ func WorkflowExecutionStateFromBlob(b []byte, proto string) (*persistenceblobs.W
 	return result, protoRWDecode(b, proto, result)
 }
 
-func ActivityInfoToBlob(info *sqlblobs.ActivityInfo) (DataBlob, error) {
-	return thriftRWEncode(info)
+func ActivityInfoToBlob(info *persistenceblobs.ActivityInfo) (DataBlob, error) {
+	return protoRWEncode(info)
 }
 
-func ActivityInfoFromBlob(b []byte, proto string) (*sqlblobs.ActivityInfo, error) {
-	result := &sqlblobs.ActivityInfo{}
-	return result, thriftRWDecode(b, proto, result)
+func ActivityInfoFromBlob(b []byte, proto string) (*persistenceblobs.ActivityInfo, error) {
+	result := &persistenceblobs.ActivityInfo{}
+	return result, protoRWDecode(b, proto, result)
 }
 
 func ChildExecutionInfoToBlob(info *sqlblobs.ChildExecutionInfo) (DataBlob, error) {
