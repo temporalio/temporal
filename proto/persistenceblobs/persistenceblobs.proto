@@ -65,6 +65,11 @@ message ActivityInfo {
     string retryLastFailureReason = 29;
     string retryLastWorkerIdentity = 30;
     bytes retryLastFailureDetails = 31;
+    bytes domainID = 32;
+    int64 scheduleID = 33;
+    bytes lastHeartbeatDetails = 34;
+    google.protobuf.Timestamp lastHeartbeatUpdatedTime = 35;
+
 }
 
 message ShardInfo {
