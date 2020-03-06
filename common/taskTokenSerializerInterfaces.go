@@ -31,9 +31,9 @@ type (
 
 	// TaskToken identifies a task
 	TaskToken struct {
-		DomainID        string `json:"domainId"`
+		DomainID        []byte `json:"domainId"`
 		WorkflowID      string `json:"workflowId"`
-		RunID           string `json:"runId"`
+		RunID           []byte `json:"runId"`
 		ScheduleID      int64  `json:"scheduleId"`
 		ScheduleAttempt int64  `json:"scheduleAttempt"`
 		ActivityID      string `json:"activityId"`

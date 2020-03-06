@@ -43,6 +43,7 @@ import (
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/serialization"
+	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/quotas"
 	"github.com/temporalio/temporal/common/resource"
 )
@@ -459,9 +460,9 @@ func (h *Handler) RespondDecisionTaskCompleted(ctx context.Context, request *his
 	}
 
 	h.GetLogger().Debug("RespondDecisionTaskCompleted",
-		tag.WorkflowDomainID(token.DomainID),
+		tag.WorkflowDomainIDBytes(token.DomainID),
 		tag.WorkflowID(token.WorkflowID),
-		tag.WorkflowRunID(token.RunID),
+		tag.WorkflowRunIDBytes(token.RunID),
 		tag.WorkflowScheduleID(token.ScheduleID))
 
 	err0 = validateTaskToken(token)
@@ -510,14 +511,14 @@ func (h *Handler) RespondDecisionTaskFailed(ctx context.Context, request *histor
 	}
 
 	h.GetLogger().Debug("RespondDecisionTaskFailed",
-		tag.WorkflowDomainID(token.DomainID),
+		tag.WorkflowDomainIDBytes(token.DomainID),
 		tag.WorkflowID(token.WorkflowID),
-		tag.WorkflowRunID(token.RunID),
+		tag.WorkflowRunIDBytes(token.RunID),
 		tag.WorkflowScheduleID(token.ScheduleID))
 
 	if failedRequest != nil && failedRequest.GetCause() == enums.DecisionTaskFailedCauseUnhandledDecision {
-		h.GetLogger().Info("Non-Deterministic Error", tag.WorkflowDomainID(token.DomainID), tag.WorkflowID(token.WorkflowID), tag.WorkflowRunID(token.RunID))
-		domainName, err := h.GetDomainCache().GetDomainName(token.DomainID)
+		h.GetLogger().Info("Non-Deterministic Error", tag.WorkflowDomainIDBytes(token.DomainID), tag.WorkflowID(token.WorkflowID), tag.WorkflowRunIDBytes(token.RunID))
+		domainName, err := h.GetDomainCache().GetDomainName(primitives.UUIDString(token.DomainID))
 		var domainTag metrics.Tag
 
 		if err == nil {
@@ -1700,9 +1701,6 @@ func createShardOwnershipLostError(
 func validateTaskToken(token *common.TaskToken) error {
 	if token.WorkflowID == "" {
 		return errWorkflowIDNotSet
-	}
-	if token.RunID != "" && uuid.Parse(token.RunID) == nil {
-		return errRunIDNotValid
 	}
 	return nil
 }

@@ -163,7 +163,7 @@ func initializeLoggerForTask(
 		tag.ShardID(shardID),
 		tag.TaskID(task.GetTaskID()),
 		tag.FailoverVersion(task.GetVersion()),
-		tag.TaskType(int(task.GetTaskType())),
+		tag.TaskType(task.GetTaskType()),
 		tag.WorkflowDomainIDBytes(task.GetDomainID()),
 		tag.WorkflowID(task.GetWorkflowID()),
 		tag.WorkflowRunIDBytes(task.GetRunID()),

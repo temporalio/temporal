@@ -483,20 +483,6 @@ func (p *ReplicationTaskProcessorImpl) shouldRetryDLQ(err error) bool {
 	}
 }
 
-func toPersistenceReplicationInfo(
-	info map[string]*replication.ReplicationInfo,
-) map[string]*persistence.ReplicationInfo {
-	replicationInfoMap := make(map[string]*persistence.ReplicationInfo)
-	for k, v := range info {
-		replicationInfoMap[k] = &persistence.ReplicationInfo{
-			Version:     v.GetVersion(),
-			LastEventID: v.GetLastEventId(),
-		}
-	}
-
-	return replicationInfoMap
-}
-
 func (p *ReplicationTaskProcessorImpl) updateFailureMetric(scope int, err error) {
 	// Always update failure counter for all replicator errors
 	p.metricsClient.IncCounter(scope, metrics.ReplicatorFailures)

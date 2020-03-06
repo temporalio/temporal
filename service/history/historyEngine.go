@@ -1458,7 +1458,7 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 
 	workflowExecution := commonproto.WorkflowExecution{
 		WorkflowId: token.WorkflowID,
-		RunId:      token.RunID,
+		RunId:      primitives.UUIDString(token.RunID),
 	}
 
 	return e.updateWorkflowExecution(ctx, domainID, workflowExecution, true,
@@ -1516,7 +1516,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 
 	workflowExecution := commonproto.WorkflowExecution{
 		WorkflowId: token.WorkflowID,
-		RunId:      token.RunID,
+		RunId:      primitives.UUIDString(token.RunID),
 	}
 
 	return e.updateWorkflowExecutionWithAction(ctx, domainID, workflowExecution,
@@ -1584,7 +1584,7 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 
 	workflowExecution := commonproto.WorkflowExecution{
 		WorkflowId: token.WorkflowID,
-		RunId:      token.RunID,
+		RunId:      primitives.UUIDString(token.RunID),
 	}
 
 	return e.updateWorkflowExecution(ctx, domainID, workflowExecution, true,
@@ -1652,7 +1652,7 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 
 	workflowExecution := commonproto.WorkflowExecution{
 		WorkflowId: token.WorkflowID,
-		RunId:      token.RunID,
+		RunId:      primitives.UUIDString(token.RunID),
 	}
 
 	var cancelRequested bool

@@ -691,7 +691,7 @@ func DomainFilter(name string) FilterOption {
 }
 
 // TaskTypeFilter filters by task type
-func TaskTypeFilter(taskType int) FilterOption {
+func TaskTypeFilter(taskType int32) FilterOption {
 	return func(filterMap map[Filter]interface{}) {
 		filterMap[TaskType] = taskType
 	}

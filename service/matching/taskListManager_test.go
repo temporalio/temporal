@@ -32,10 +32,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/temporal-proto/enums"
 
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives/timestamp"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
@@ -49,7 +52,7 @@ func TestDeliverBufferTasks(t *testing.T) {
 		func(tlm *taskListManagerImpl) {
 			rps := 0.1
 			tlm.matcher.UpdateRatelimit(&rps)
-			tlm.taskReader.taskBuffer <- &persistence.TaskInfo{}
+			tlm.taskReader.taskBuffer <- &persistenceblobs.AllocatedTaskInfo{}
 			_, err := tlm.matcher.ratelimit(context.Background()) // consume the token
 			assert.NoError(t, err)
 			tlm.taskReader.cancelFunc()
@@ -74,7 +77,7 @@ func TestDeliverBufferTasks_NoPollers(t *testing.T) {
 	defer controller.Finish()
 
 	tlm := createTestTaskListManager(controller)
-	tlm.taskReader.taskBuffer <- &persistence.TaskInfo{}
+	tlm.taskReader.taskBuffer <- &persistenceblobs.AllocatedTaskInfo{}
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -99,16 +102,20 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 	require.Equal(t, int64(0), tlm.taskAckManager.getReadLevel())
 
 	// Add all expired tasks
-	tasks := []*persistence.TaskInfo{
-		&persistence.TaskInfo{
-			TaskID:      11,
-			Expiry:      time.Now().Add(-time.Minute),
-			CreatedTime: time.Now().Add(-time.Hour),
+	tasks := []*persistenceblobs.AllocatedTaskInfo{
+		{
+			Data: &persistenceblobs.TaskInfo{
+				Expiry:      timestamp.TimestampNowAddSeconds(-60).ToProto(),
+				CreatedTime: timestamp.TimestampNowAddSeconds(-60 * 60).ToProto(),
+			},
+			TaskID: 11,
 		},
-		&persistence.TaskInfo{
-			TaskID:      12,
-			Expiry:      time.Now().Add(-time.Minute),
-			CreatedTime: time.Now().Add(-time.Hour),
+		{
+			Data: &persistenceblobs.TaskInfo{
+				Expiry:      timestamp.TimestampNowAddSeconds(-60).ToProto(),
+				CreatedTime: timestamp.TimestampNowAddSeconds(-60 * 60).ToProto(),
+			},
+			TaskID: 12,
 		},
 	}
 
@@ -117,16 +124,20 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 	require.Equal(t, int64(12), tlm.taskAckManager.getReadLevel())
 
 	// Now add a mix of valid and expired tasks
-	require.True(t, tlm.taskReader.addTasksToBuffer([]*persistence.TaskInfo{
-		&persistence.TaskInfo{
-			TaskID:      13,
-			Expiry:      time.Now().Add(-time.Minute),
-			CreatedTime: time.Now().Add(-time.Hour),
+	require.True(t, tlm.taskReader.addTasksToBuffer([]*persistenceblobs.AllocatedTaskInfo{
+		{
+			Data: &persistenceblobs.TaskInfo{
+				Expiry:      timestamp.TimestampNowAddSeconds(-60).ToProto(),
+				CreatedTime: timestamp.TimestampNowAddSeconds(-60 * 60).ToProto(),
+			},
+			TaskID: 13,
 		},
-		&persistence.TaskInfo{
-			TaskID:      14,
-			Expiry:      time.Now().Add(time.Hour),
-			CreatedTime: time.Now().Add(time.Minute),
+		{
+			Data: &persistenceblobs.TaskInfo{
+				Expiry:      timestamp.TimestampNowAddSeconds(-60).ToProto(),
+				CreatedTime: timestamp.TimestampNowAddSeconds(-60 * 60).ToProto(),
+			},
+			TaskID: 14,
 		},
 	}, time.Now(), time.NewTimer(time.Minute)))
 	require.Equal(t, int64(0), tlm.taskAckManager.getAckLevel())
@@ -149,7 +160,7 @@ func createTestTaskListManagerWithConfig(controller *gomock.Controller, cfg *Con
 		cfg, tm, nil, logger, mockDomainCache,
 	)
 	tl := "tl"
-	dID := "domain"
+	dID := "deadbeef-0123-4567-890a-bcdef0123456"
 	tlID := newTestTaskListID(dID, tl, persistence.TaskListTypeActivity)
 	tlKind := enums.TaskListKindNormal
 	tlMgr, err := newTaskListManager(me, tlID, tlKind, cfg)

@@ -134,19 +134,28 @@ message TimerInfo {
 }
 
 message TaskInfo {
-    string workflowID = 1;
-    bytes runID = 2;
-    int64 scheduleID = 3;
-    google.protobuf.Timestamp expiryTime = 4;
+    bytes domainID = 1;
+    string workflowID = 2;
+    bytes runID = 3;
+    int64 scheduleID = 4;
     google.protobuf.Timestamp createdTime = 5;
+    google.protobuf.Timestamp expiry = 6;
+}
+
+message AllocatedTaskInfo {
+    TaskInfo data = 1;
+    int64 taskID = 8;
 }
 
 message TaskListInfo {
+    bytes domainID = 1;
+    string name = 2;
+    int32 taskType = 3;
     // {Normal, Sticky}
-    int32 kind = 1;
-    int64 ackLevel = 2;
-    google.protobuf.Timestamp expiryTime = 3;
-    google.protobuf.Timestamp lastUpdated = 4;
+    int32 kind = 5;
+    int64 ackLevel = 6;
+    google.protobuf.Timestamp expiry = 7;
+    google.protobuf.Timestamp lastUpdated = 8;
 }
 
 message SignalInfo {
