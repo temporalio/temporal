@@ -33,7 +33,6 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.uber.org/zap"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
@@ -1097,25 +1096,25 @@ func (s *historyRereplicatorSuite) TestGetPrevEventID() {
 	workflowID := "some random workflow ID"
 	currentRunID := uuid.New()
 
-	prepareFn := func(prevRunID *string) {
-		eventBatch := []*shared.HistoryEvent{
-			&shared.HistoryEvent{
-				EventId:   common.Int64Ptr(1),
-				Version:   common.Int64Ptr(123),
-				Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-				EventType: shared.EventTypeWorkflowExecutionStarted.Ptr(),
-				WorkflowExecutionStartedEventAttributes: &shared.WorkflowExecutionStartedEventAttributes{
+	prepareFn := func(prevRunID string) {
+		eventBatch := []*commonproto.HistoryEvent{
+			{
+				EventId:   1,
+				Version:   123,
+				Timestamp: time.Now().UnixNano(),
+				EventType: enums.EventTypeWorkflowExecutionStarted,
+				Attributes: &commonproto.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &commonproto.WorkflowExecutionStartedEventAttributes{
 					ContinuedExecutionRunId: prevRunID,
-				},
+				}},
 			},
-			&shared.HistoryEvent{
-				EventId:   common.Int64Ptr(2),
-				Version:   common.Int64Ptr(223),
-				Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-				EventType: shared.EventTypeDecisionTaskScheduled.Ptr(),
+			{
+				EventId:   2,
+				Version:   223,
+				Timestamp: time.Now().UnixNano(),
+				EventType: enums.EventTypeDecisionTaskScheduled,
 			},
 		}
-		blob, err := s.serializer.SerializeBatchEvents(eventBatch, common.EncodingTypeThriftRW)
+		blob, err := s.serializer.SerializeBatchEvents(adapter.ToThriftHistoryEvents(eventBatch), common.EncodingTypeThriftRW)
 		s.Nil(err)
 
 		s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
@@ -1138,13 +1137,13 @@ func (s *historyRereplicatorSuite) TestGetPrevEventID() {
 
 	// has prev run
 	prevRunID := uuid.New()
-	prepareFn(common.StringPtr(prevRunID))
+	prepareFn(prevRunID)
 	runID, err := s.getDummyRereplicationContext().getPrevRunID(s.domainID, workflowID, currentRunID)
 	s.Nil(err)
 	s.Equal(prevRunID, runID)
 
 	// no prev run
-	prepareFn(nil)
+	prepareFn("")
 	runID, err = s.getDummyRereplicationContext().getPrevRunID(s.domainID, workflowID, currentRunID)
 	s.Nil(err)
 	s.Equal("", runID)
@@ -1175,24 +1174,24 @@ func (s *historyRereplicatorSuite) TestGetPrevEventID_EmptyEvents() {
 
 func (s *historyRereplicatorSuite) TestGetNextRunID_ContinueAsNew() {
 	nextRunID := uuid.New()
-	eventBatchIn := []*shared.HistoryEvent{
-		&shared.HistoryEvent{
-			EventId:   common.Int64Ptr(233),
-			Version:   common.Int64Ptr(123),
-			Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-			EventType: shared.EventTypeDecisionTaskCompleted.Ptr(),
+	eventBatchIn := []*commonproto.HistoryEvent{
+		{
+			EventId:   233,
+			Version:   123,
+			Timestamp: time.Now().UnixNano(),
+			EventType: enums.EventTypeDecisionTaskCompleted,
 		},
-		&shared.HistoryEvent{
-			EventId:   common.Int64Ptr(234),
-			Version:   common.Int64Ptr(223),
-			Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-			EventType: shared.EventTypeWorkflowExecutionContinuedAsNew.Ptr(),
-			WorkflowExecutionContinuedAsNewEventAttributes: &shared.WorkflowExecutionContinuedAsNewEventAttributes{
-				NewExecutionRunId: common.StringPtr(nextRunID),
-			},
+		{
+			EventId:   234,
+			Version:   223,
+			Timestamp: time.Now().UnixNano(),
+			EventType: enums.EventTypeWorkflowExecutionContinuedAsNew,
+			Attributes: &commonproto.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &commonproto.WorkflowExecutionContinuedAsNewEventAttributes{
+				NewExecutionRunId: nextRunID,
+			}},
 		},
 	}
-	blob, err := s.serializer.SerializeBatchEvents(eventBatchIn, common.EncodingTypeThriftRW)
+	blob, err := s.serializer.SerializeBatchEvents(adapter.ToThriftHistoryEvents(eventBatchIn), common.EncodingTypeThriftRW)
 	s.Nil(err)
 
 	runID, err := s.getDummyRereplicationContext().getNextRunID(&commonproto.DataBlob{
@@ -1204,22 +1203,22 @@ func (s *historyRereplicatorSuite) TestGetNextRunID_ContinueAsNew() {
 }
 
 func (s *historyRereplicatorSuite) TestGetNextRunID_NotContinueAsNew() {
-	eventBatchIn := []*shared.HistoryEvent{
-		&shared.HistoryEvent{
-			EventId:   common.Int64Ptr(233),
-			Version:   common.Int64Ptr(123),
-			Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-			EventType: shared.EventTypeDecisionTaskCompleted.Ptr(),
+	eventBatchIn := []*commonproto.HistoryEvent{
+		{
+			EventId:   233,
+			Version:   123,
+			Timestamp: time.Now().UnixNano(),
+			EventType: enums.EventTypeDecisionTaskCompleted,
 		},
-		&shared.HistoryEvent{
-			EventId:   common.Int64Ptr(234),
-			Version:   common.Int64Ptr(223),
-			Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-			EventType: shared.EventTypeWorkflowExecutionCanceled.Ptr(),
-			WorkflowExecutionCancelRequestedEventAttributes: &shared.WorkflowExecutionCancelRequestedEventAttributes{},
+		{
+			EventId:    234,
+			Version:    223,
+			Timestamp:  time.Now().UnixNano(),
+			EventType:  enums.EventTypeWorkflowExecutionCanceled,
+			Attributes: &commonproto.HistoryEvent_WorkflowExecutionCancelRequestedEventAttributes{WorkflowExecutionCancelRequestedEventAttributes: &commonproto.WorkflowExecutionCancelRequestedEventAttributes{}},
 		},
 	}
-	blob, err := s.serializer.SerializeBatchEvents(eventBatchIn, common.EncodingTypeThriftRW)
+	blob, err := s.serializer.SerializeBatchEvents(adapter.ToThriftHistoryEvents(eventBatchIn), common.EncodingTypeThriftRW)
 	s.Nil(err)
 
 	runID, err := s.getDummyRereplicationContext().getNextRunID(&commonproto.DataBlob{
@@ -1231,22 +1230,24 @@ func (s *historyRereplicatorSuite) TestGetNextRunID_NotContinueAsNew() {
 }
 
 func (s *historyRereplicatorSuite) TestDeserializeBlob() {
-	eventBatchIn := []*shared.HistoryEvent{
-		&shared.HistoryEvent{
-			EventId:   common.Int64Ptr(1),
-			Version:   common.Int64Ptr(123),
-			Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-			EventType: shared.EventTypeWorkflowExecutionStarted.Ptr(),
+	eventBatchIn := []*commonproto.HistoryEvent{
+		{
+			EventId:    1,
+			Version:    123,
+			Timestamp:  time.Now().UnixNano(),
+			EventType:  enums.EventTypeWorkflowExecutionStarted,
+			Attributes: &commonproto.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &commonproto.WorkflowExecutionStartedEventAttributes{}},
 		},
-		&shared.HistoryEvent{
-			EventId:   common.Int64Ptr(2),
-			Version:   common.Int64Ptr(223),
-			Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-			EventType: shared.EventTypeDecisionTaskScheduled.Ptr(),
+		{
+			EventId:    2,
+			Version:    223,
+			Timestamp:  time.Now().UnixNano(),
+			EventType:  enums.EventTypeDecisionTaskScheduled,
+			Attributes: &commonproto.HistoryEvent_DecisionTaskScheduledEventAttributes{DecisionTaskScheduledEventAttributes: &commonproto.DecisionTaskScheduledEventAttributes{}},
 		},
 	}
 
-	blob, err := s.serializer.SerializeBatchEvents(eventBatchIn, common.EncodingTypeThriftRW)
+	blob, err := s.serializer.SerializeBatchEvents(adapter.ToThriftHistoryEvents(eventBatchIn), common.EncodingTypeThriftRW)
 	s.Nil(err)
 
 	eventBatchOut, err := s.getDummyRereplicationContext().deserializeBlob(&commonproto.DataBlob{

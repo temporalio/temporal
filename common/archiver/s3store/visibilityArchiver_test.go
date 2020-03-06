@@ -30,25 +30,21 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/stretchr/testify/mock"
-
-	"github.com/uber-go/tally"
-
-	"github.com/temporalio/temporal/common/metrics"
-
-	"go.uber.org/zap"
-
-	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/archiver/s3store/mocks"
-	"github.com/temporalio/temporal/common/log/loggerimpl"
-
 	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/uber-go/tally"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
+	"go.uber.org/zap"
 
+	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
+	"github.com/temporalio/temporal/common/archiver/s3store/mocks"
 	"github.com/temporalio/temporal/common/log"
+	"github.com/temporalio/temporal/common/log/loggerimpl"
+	"github.com/temporalio/temporal/common/metrics"
 )
 
 type visibilityArchiverSuite struct {
@@ -163,7 +159,7 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidURI() {
 		StartTimestamp:     time.Now().UnixNano(),
 		ExecutionTimestamp: 0, // workflow without backoff
 		CloseTimestamp:     time.Now().UnixNano(),
-		CloseStatus:        shared.WorkflowExecutionCloseStatusFailed,
+		CloseStatus:        enums.WorkflowExecutionCloseStatusFailed,
 		HistoryLength:      int64(101),
 	}
 	err = visibilityArchiver.Archive(context.Background(), URI, request)
@@ -202,9 +198,9 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 		StartTimestamp:     closeTimestamp.Add(-time.Hour).UnixNano(),
 		ExecutionTimestamp: 0, // workflow without backoff
 		CloseTimestamp:     closeTimestamp.UnixNano(),
-		CloseStatus:        shared.WorkflowExecutionCloseStatusFailed,
+		CloseStatus:        enums.WorkflowExecutionCloseStatusFailed,
 		HistoryLength:      int64(101),
-		Memo: &shared.Memo{
+		Memo: &commonproto.Memo{
 			Fields: map[string][]byte{
 				"testFields": {1, 2, 3},
 			},
@@ -433,7 +429,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQueryPrecisions() {
 			WorkflowTypeName: testWorkflowTypeName,
 			StartTimestamp:   testData.day*int64(time.Hour)*24 + testData.hour*int64(time.Hour) + testData.minute*int64(time.Minute) + testData.second*int64(time.Second),
 			CloseTimestamp:   (testData.day+30)*int64(time.Hour)*24 + testData.hour*int64(time.Hour) + testData.minute*int64(time.Minute) + testData.second*int64(time.Second),
-			CloseStatus:      shared.WorkflowExecutionCloseStatusFailed,
+			CloseStatus:      enums.WorkflowExecutionCloseStatusFailed,
 			HistoryLength:    101,
 		}
 		err := visibilityArchiver.Archive(context.Background(), URI, &record)
@@ -495,7 +491,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 		PageSize: 1,
 		Query:    "parsed by mockParser",
 	}
-	executions := []*shared.WorkflowExecutionInfo{}
+	executions := []*commonproto.WorkflowExecutionInfo{}
 	var first = true
 	for first || request.NextPageToken != nil {
 		response, err := visibilityArchiver.Query(context.Background(), URI, request)
@@ -520,7 +516,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			WorkflowTypeName: testWorkflowTypeName,
 			StartTimestamp:   1,
 			CloseTimestamp:   int64(1 * time.Hour),
-			CloseStatus:      shared.WorkflowExecutionCloseStatusFailed,
+			CloseStatus:      enums.WorkflowExecutionCloseStatusFailed,
 			HistoryLength:    101,
 		},
 		{
@@ -531,7 +527,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			WorkflowTypeName: testWorkflowTypeName,
 			StartTimestamp:   1,
 			CloseTimestamp:   int64(1*time.Hour + 30*time.Minute),
-			CloseStatus:      shared.WorkflowExecutionCloseStatusFailed,
+			CloseStatus:      enums.WorkflowExecutionCloseStatusFailed,
 			HistoryLength:    101,
 		},
 		{
@@ -542,7 +538,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			WorkflowTypeName: testWorkflowTypeName,
 			StartTimestamp:   1,
 			CloseTimestamp:   int64(3 * time.Hour),
-			CloseStatus:      shared.WorkflowExecutionCloseStatusFailed,
+			CloseStatus:      enums.WorkflowExecutionCloseStatusFailed,
 			HistoryLength:    101,
 		},
 	}

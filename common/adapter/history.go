@@ -27,7 +27,6 @@ import (
 	"go.temporal.io/temporal-proto/enums"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 )
 
 func ToProtoHistories(in []*shared.History) []*common.History {
@@ -1473,16 +1472,5 @@ func ToThriftChildWorkflowExecutionTerminatedEventAttributes(in *common.ChildWor
 		WorkflowType:      ToThriftWorkflowType(in.WorkflowType),
 		InitiatedEventId:  &in.InitiatedEventId,
 		StartedEventId:    &in.StartedEventId,
-	}
-}
-
-// ToThriftQueryWorkflowResponse ...
-func ToThriftQueryWorkflowResponse(in *matchingservice.QueryWorkflowResponse) *shared.QueryWorkflowResponse {
-	if in == nil {
-		return nil
-	}
-	return &shared.QueryWorkflowResponse{
-		QueryResult:   in.QueryResult,
-		QueryRejected: ToThriftQueryRejected(in.QueryRejected),
 	}
 }

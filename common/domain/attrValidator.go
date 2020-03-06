@@ -23,9 +23,10 @@ package domain
 import (
 	"fmt"
 
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/persistence"
 )
@@ -54,10 +55,10 @@ func (d *AttrValidatorImpl) validateDomainConfig(config *persistence.DomainConfi
 	if config.Retention < int32(d.minRetentionDays) {
 		return errInvalidRetentionPeriod
 	}
-	if config.HistoryArchivalStatus == shared.ArchivalStatusEnabled && len(config.HistoryArchivalURI) == 0 {
+	if config.HistoryArchivalStatus == *adapter.ToThriftArchivalStatus(enums.ArchivalStatusEnabled) && len(config.HistoryArchivalURI) == 0 {
 		return errInvalidArchivalConfig
 	}
-	if config.VisibilityArchivalStatus == shared.ArchivalStatusEnabled && len(config.VisibilityArchivalURI) == 0 {
+	if config.VisibilityArchivalStatus == *adapter.ToThriftArchivalStatus(enums.ArchivalStatusEnabled) && len(config.VisibilityArchivalURI) == 0 {
 		return errInvalidArchivalConfig
 	}
 	return nil

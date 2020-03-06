@@ -26,18 +26,17 @@ import (
 	"errors"
 	"path/filepath"
 
+	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/common/archiver/gcloud/connector"
-	"github.com/temporalio/temporal/common/persistence"
-	"github.com/temporalio/temporal/common/service/config"
-
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
+	"github.com/temporalio/temporal/common/archiver/gcloud/connector"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
+	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/service/config"
 )
 
 var (
@@ -155,12 +154,12 @@ func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request
 			return err
 		}
 
-		if historyMutated(request, historyBlob.Body, *historyBlob.Header.IsLast) {
+		if historyMutated(request, historyBlob.Body, historyBlob.Header.IsLast) {
 			logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonHistoryMutated))
 			return archiver.ErrHistoryMutated
 		}
 
-		encodedHistoryPart, err := encode(historyBlob.Body)
+		encodedHistoryPart, err := encodeHistoryBatches(historyBlob.Body)
 		if err != nil {
 			logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(errEncodeHistory), tag.Error(err))
 			return errUploadNonRetriable
@@ -220,7 +219,7 @@ func (h *historyArchiver) Get(ctx context.Context, URI archiver.URI, request *ar
 	}
 
 	response := &archiver.GetHistoryResponse{}
-	response.HistoryBatches = []*shared.History{}
+	response.HistoryBatches = []*commonproto.History{}
 	numOfEvents := 0
 
 outer:
@@ -316,7 +315,7 @@ func getNextHistoryBlob(ctx context.Context, historyIterator archiver.HistoryIte
 	return historyBlob, nil
 }
 
-func historyMutated(request *archiver.ArchiveHistoryRequest, historyBatches []*shared.History, isLast bool) bool {
+func historyMutated(request *archiver.ArchiveHistoryRequest, historyBatches []*commonproto.History, isLast bool) bool {
 	lastBatch := historyBatches[len(historyBatches)-1].Events
 	lastEvent := lastBatch[len(lastBatch)-1]
 	lastFailoverVersion := lastEvent.GetVersion()

@@ -2402,12 +2402,12 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 	// special handling of ExecutionTime for cron or retry
 	for _, execution := range archiverResponse.Executions {
 		if execution.GetExecutionTime() == 0 {
-			execution.ExecutionTime = common.Int64Ptr(execution.GetStartTime())
+			execution.ExecutionTime = execution.GetStartTime()
 		}
 	}
 
 	return &workflowservice.ListArchivedWorkflowExecutionsResponse{
-		Executions:    adapter.ToProtoWorkflowExecutionInfos(archiverResponse.Executions),
+		Executions:    archiverResponse.Executions,
 		NextPageToken: archiverResponse.NextPageToken,
 	}, nil
 }
@@ -3519,7 +3519,7 @@ func (wh *WorkflowHandler) getArchivedHistory(
 
 	history := &commonproto.History{}
 	for _, batch := range resp.HistoryBatches {
-		history.Events = append(history.Events, adapter.ToProtoHistoryEvents(batch.Events)...)
+		history.Events = append(history.Events, batch.Events...)
 	}
 	return &workflowservice.GetWorkflowExecutionHistoryResponse{
 		History:       history,

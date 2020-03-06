@@ -494,7 +494,7 @@ func (s *cliAppSuite) TestAdminDescribeWorkflow() {
 	resp := &adminservice.DescribeWorkflowExecutionResponse{
 		ShardId:                "test-shard-id",
 		HistoryAddr:            "ip:port",
-		MutableStateInDatabase: "{\"ExecutionInfo\":{\"BranchToken\":\"WQsACgAAACQ2MzI5YzEzMi1mMGI0LTQwZmUtYWYxMS1hODVmMDA3MzAzODQLABQAAAAkOWM5OWI1MjItMGEyZi00NTdmLWEyNDgtMWU0OTA0ZDg4YzVhDwAeDAAAAAAA\"}}",
+		MutableStateInDatabase: `{"ExecutionInfo":{"BranchToken":"ChBNWvyipehOuYvioA1u+suwEhDyawZ9XsdN6Liiof+Novu5"}}`,
 	}
 
 	s.serverAdminClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(resp, nil)

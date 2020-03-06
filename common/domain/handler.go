@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/archiver"
@@ -210,7 +209,7 @@ func (d *HandlerImpl) RegisterDomain(
 		HistoryArchivalURI:       nextHistoryArchivalState.URI,
 		VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(nextVisibilityArchivalState.Status),
 		VisibilityArchivalURI:    nextVisibilityArchivalState.URI,
-		BadBinaries:              shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
+		BadBinaries:              adapter.ToThriftBadBinaries(commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}}),
 	}
 	replicationConfig := &persistence.DomainReplicationConfig{
 		ActiveClusterName: activeClusterName,
@@ -449,7 +448,7 @@ func (d *HandlerImpl) UpdateDomain(
 		if updatedConfig.BadBinaries != nil {
 			maxLength := d.maxBadBinaryCount(updateRequest.GetName())
 			// only do merging
-			config.BadBinaries = *adapter.ToThriftBadBinaries(d.mergeBadBinaries(adapter.ToProtoBadBinaries(&config.BadBinaries).Binaries, updatedConfig.BadBinaries.Binaries, time.Now().UnixNano()))
+			config.BadBinaries = adapter.ToThriftBadBinaries(d.mergeBadBinaries(adapter.ToProtoBadBinaries(config.BadBinaries).Binaries, updatedConfig.BadBinaries.Binaries, time.Now().UnixNano()))
 			if len(config.BadBinaries.Binaries) > maxLength {
 				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Total resetBinaries cannot exceed the max limit: %v", maxLength))
 			}
@@ -635,7 +634,7 @@ func (d *HandlerImpl) createResponse(
 		HistoryArchivalURI:                     config.HistoryArchivalURI,
 		VisibilityArchivalStatus:               adapter.ToProtoArchivalStatus(&config.VisibilityArchivalStatus),
 		VisibilityArchivalURI:                  config.VisibilityArchivalURI,
-		BadBinaries:                            adapter.ToProtoBadBinaries(&config.BadBinaries),
+		BadBinaries:                            adapter.ToProtoBadBinariesPtr(&config.BadBinaries),
 	}
 
 	var clusters []*commonproto.ClusterReplicationConfiguration
@@ -657,7 +656,7 @@ func (d *HandlerImpl) mergeBadBinaries(
 	old map[string]*commonproto.BadBinaryInfo,
 	new map[string]*commonproto.BadBinaryInfo,
 	createTimeNano int64,
-) *commonproto.BadBinaries {
+) commonproto.BadBinaries {
 
 	if old == nil {
 		old = map[string]*commonproto.BadBinaryInfo{}
@@ -666,7 +665,7 @@ func (d *HandlerImpl) mergeBadBinaries(
 		v.CreatedTimeNano = createTimeNano
 		old[k] = v
 	}
-	return &commonproto.BadBinaries{
+	return commonproto.BadBinaries{
 		Binaries: old,
 	}
 }

@@ -28,12 +28,12 @@ import (
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -444,7 +444,7 @@ func (c *historyRereplicationContext) getPrevRunID(domainID string, workflowID s
 	}
 
 	firstEvent := historyEvents[0]
-	attr := firstEvent.WorkflowExecutionStartedEventAttributes
+	attr := firstEvent.GetWorkflowExecutionStartedEventAttributes()
 	if attr == nil {
 		// malformed first event batch
 		return "", ErrFirstHistoryRawEventBatch
@@ -460,7 +460,7 @@ func (c *historyRereplicationContext) getNextRunID(blob *commonproto.DataBlob) (
 	}
 
 	lastEvent := historyEvents[len(historyEvents)-1]
-	attr := lastEvent.WorkflowExecutionContinuedAsNewEventAttributes
+	attr := lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
 	if attr == nil {
 		// either workflow has not finished, or finished but not continue as new
 		return "", nil
@@ -468,20 +468,19 @@ func (c *historyRereplicationContext) getNextRunID(blob *commonproto.DataBlob) (
 	return attr.GetNewExecutionRunId(), nil
 }
 
-func (c *historyRereplicationContext) deserializeBlob(blob *commonproto.DataBlob) ([]*shared.HistoryEvent, error) {
-
-	var err error
-	var historyEvents []*shared.HistoryEvent
+func (c *historyRereplicationContext) deserializeBlob(blob *commonproto.DataBlob) ([]*commonproto.HistoryEvent, error) {
+	var historyEvents []*commonproto.HistoryEvent
 
 	switch blob.GetEncodingType() {
 	case enums.EncodingTypeThriftRW:
-		historyEvents, err = c.rereplicator.serializer.DeserializeBatchEvents(&serialization.DataBlob{
+		he, err := c.rereplicator.serializer.DeserializeBatchEvents(&serialization.DataBlob{
 			Encoding: common.EncodingTypeThriftRW,
 			Data:     blob.Data,
 		})
 		if err != nil {
 			return nil, err
 		}
+		historyEvents = adapter.ToProtoHistoryEvents(he)
 	default:
 		return nil, ErrUnknownEncodingType
 	}

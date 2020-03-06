@@ -20,7 +20,9 @@
 
 package definition
 
-import "github.com/temporalio/temporal/.gen/go/shared"
+import (
+	"go.temporal.io/temporal-proto/enums"
+)
 
 // valid indexed fields on ES
 const (
@@ -59,14 +61,14 @@ var defaultIndexedKeys = createDefaultIndexedKeys()
 
 func createDefaultIndexedKeys() map[string]interface{} {
 	defaultIndexedKeys := map[string]interface{}{
-		CustomStringField:    shared.IndexedValueTypeString,
-		CustomKeywordField:   shared.IndexedValueTypeKeyword,
-		CustomIntField:       shared.IndexedValueTypeInt,
-		CustomBoolField:      shared.IndexedValueTypeBool,
-		CustomDoubleField:    shared.IndexedValueTypeDouble,
-		CustomDatetimeField:  shared.IndexedValueTypeDatetime,
-		CadenceChangeVersion: shared.IndexedValueTypeKeyword,
-		BinaryChecksums:      shared.IndexedValueTypeKeyword,
+		CustomStringField:    enums.IndexedValueTypeString,
+		CustomKeywordField:   enums.IndexedValueTypeKeyword,
+		CustomIntField:       enums.IndexedValueTypeInt,
+		CustomBoolField:      enums.IndexedValueTypeBool,
+		CustomDoubleField:    enums.IndexedValueTypeDouble,
+		CustomDatetimeField:  enums.IndexedValueTypeDatetime,
+		CadenceChangeVersion: enums.IndexedValueTypeKeyword,
+		BinaryChecksums:      enums.IndexedValueTypeKeyword,
 	}
 	for k, v := range systemIndexedKeys {
 		defaultIndexedKeys[k] = v
@@ -81,15 +83,15 @@ func GetDefaultIndexedKeys() map[string]interface{} {
 
 // systemIndexedKeys is Cadence created visibility keys
 var systemIndexedKeys = map[string]interface{}{
-	DomainID:      shared.IndexedValueTypeKeyword,
-	WorkflowID:    shared.IndexedValueTypeKeyword,
-	RunID:         shared.IndexedValueTypeKeyword,
-	WorkflowType:  shared.IndexedValueTypeKeyword,
-	StartTime:     shared.IndexedValueTypeInt,
-	ExecutionTime: shared.IndexedValueTypeInt,
-	CloseTime:     shared.IndexedValueTypeInt,
-	CloseStatus:   shared.IndexedValueTypeInt,
-	HistoryLength: shared.IndexedValueTypeInt,
+	DomainID:      enums.IndexedValueTypeKeyword,
+	WorkflowID:    enums.IndexedValueTypeKeyword,
+	RunID:         enums.IndexedValueTypeKeyword,
+	WorkflowType:  enums.IndexedValueTypeKeyword,
+	StartTime:     enums.IndexedValueTypeInt,
+	ExecutionTime: enums.IndexedValueTypeInt,
+	CloseTime:     enums.IndexedValueTypeInt,
+	CloseStatus:   enums.IndexedValueTypeInt,
+	HistoryLength: enums.IndexedValueTypeInt,
 }
 
 // IsSystemIndexedKey return true is key is system added

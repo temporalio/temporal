@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/common/backoff"
@@ -478,23 +477,6 @@ func IsJustOrderByClause(clause string) bool {
 	return strings.HasPrefix(whereClause, "order by")
 }
 
-// ConvertIndexedValueTypeToThriftType takes fieldType as interface{} and convert to IndexedValueType.
-// Because different implementation of dynamic config client may lead to different types
-func ConvertIndexedValueTypeToThriftType(fieldType interface{}, logger log.Logger) workflow.IndexedValueType {
-	switch t := fieldType.(type) {
-	case float64:
-		return workflow.IndexedValueType(fieldType.(float64))
-	case int:
-		return workflow.IndexedValueType(fieldType.(int))
-	case workflow.IndexedValueType:
-		return fieldType.(workflow.IndexedValueType)
-	default:
-		// Unknown fieldType, please make sure dynamic config return correct value type
-		logger.Error("unknown index value type", tag.Value(fieldType), tag.ValueType(t))
-		return fieldType.(workflow.IndexedValueType) // it will panic and been captured by logger
-	}
-}
-
 // ConvertIndexedValueTypeToProtoType takes fieldType as interface{} and convert to IndexedValueType.
 // Because different implementation of dynamic config client may lead to different types
 func ConvertIndexedValueTypeToProtoType(fieldType interface{}, logger log.Logger) enums.IndexedValueType {
@@ -503,8 +485,8 @@ func ConvertIndexedValueTypeToProtoType(fieldType interface{}, logger log.Logger
 		return enums.IndexedValueType(fieldType.(float64))
 	case int:
 		return enums.IndexedValueType(fieldType.(int))
-	case workflow.IndexedValueType:
-		return enums.IndexedValueType(fieldType.(workflow.IndexedValueType))
+	case enums.IndexedValueType:
+		return fieldType.(enums.IndexedValueType)
 	default:
 		// Unknown fieldType, please make sure dynamic config return correct value type
 		logger.Error("unknown index value type", tag.Value(fieldType), tag.ValueType(t))

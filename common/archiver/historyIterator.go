@@ -24,10 +24,11 @@ import (
 	"encoding/json"
 	"errors"
 
+	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/persistence"
 )
 
@@ -45,22 +46,22 @@ type (
 
 	// HistoryBlobHeader is the header attached to all history blobs
 	HistoryBlobHeader struct {
-		DomainName           *string `json:"domain_name,omitempty"`
-		DomainID             *string `json:"domain_id,omitempty"`
-		WorkflowID           *string `json:"workflow_id,omitempty"`
-		RunID                *string `json:"run_id,omitempty"`
-		IsLast               *bool   `json:"is_last,omitempty"`
-		FirstFailoverVersion *int64  `json:"first_failover_version,omitempty"`
-		LastFailoverVersion  *int64  `json:"last_failover_version,omitempty"`
-		FirstEventID         *int64  `json:"first_event_id,omitempty"`
-		LastEventID          *int64  `json:"last_event_id,omitempty"`
-		EventCount           *int64  `json:"event_count,omitempty"`
+		DomainName           string `json:"domain_name,omitempty"`
+		DomainID             string `json:"domain_id,omitempty"`
+		WorkflowID           string `json:"workflow_id,omitempty"`
+		RunID                string `json:"run_id,omitempty"`
+		IsLast               bool   `json:"is_last,omitempty"`
+		FirstFailoverVersion int64  `json:"first_failover_version,omitempty"`
+		LastFailoverVersion  int64  `json:"last_failover_version,omitempty"`
+		FirstEventID         int64  `json:"first_event_id,omitempty"`
+		LastEventID          int64  `json:"last_event_id,omitempty"`
+		EventCount           int64  `json:"event_count,omitempty"`
 	}
 
 	// HistoryBlob is the serializable data that forms the body of a blob
 	HistoryBlob struct {
-		Header *HistoryBlobHeader `json:"header"`
-		Body   []*shared.History  `json:"body"`
+		Header *HistoryBlobHeader     `json:"header"`
+		Body   []*commonproto.History `json:"body"`
 	}
 
 	historyIteratorState struct {
@@ -146,16 +147,16 @@ func (i *historyIterator) Next() (*HistoryBlob, error) {
 		eventCount += int64(len(batch.Events))
 	}
 	header := &HistoryBlobHeader{
-		DomainName:           common.StringPtr(i.request.DomainName),
-		DomainID:             common.StringPtr(i.request.DomainID),
-		WorkflowID:           common.StringPtr(i.request.WorkflowID),
-		RunID:                common.StringPtr(i.request.RunID),
-		IsLast:               common.BoolPtr(i.FinishedIteration),
+		DomainName:           i.request.DomainName,
+		DomainID:             i.request.DomainID,
+		WorkflowID:           i.request.WorkflowID,
+		RunID:                i.request.RunID,
+		IsLast:               i.FinishedIteration,
 		FirstFailoverVersion: firstEvent.Version,
 		LastFailoverVersion:  lastEvent.Version,
 		FirstEventID:         firstEvent.EventId,
 		LastEventID:          lastEvent.EventId,
-		EventCount:           common.Int64Ptr(eventCount),
+		EventCount:           eventCount,
 	}
 
 	return &HistoryBlob{
@@ -174,10 +175,10 @@ func (i *historyIterator) GetState() ([]byte, error) {
 	return json.Marshal(i.historyIteratorState)
 }
 
-func (i *historyIterator) readHistoryBatches(firstEventID int64) ([]*shared.History, historyIteratorState, error) {
+func (i *historyIterator) readHistoryBatches(firstEventID int64) ([]*commonproto.History, historyIteratorState, error) {
 	size := 0
 	targetSize := i.targetHistoryBlobSize
-	var historyBatches []*shared.History
+	var historyBatches []*commonproto.History
 	newIterState := historyIteratorState{}
 	for size < targetSize {
 		currHistoryBatches, err := i.readHistory(firstEventID)
@@ -195,7 +196,7 @@ func (i *historyIterator) readHistoryBatches(firstEventID int64) ([]*shared.Hist
 			}
 			size += historyBatchSize
 			historyBatches = append(historyBatches, batch)
-			firstEventID = *batch.Events[len(batch.Events)-1].EventId + 1
+			firstEventID = batch.Events[len(batch.Events)-1].EventId + 1
 
 			// In case targetSize is satisfied before reaching the end of current set of batches, return immediately.
 			// Otherwise, we need to look ahead to see if there's more history batches.
@@ -222,17 +223,16 @@ func (i *historyIterator) readHistoryBatches(firstEventID int64) ([]*shared.Hist
 	return historyBatches, newIterState, nil
 }
 
-func (i *historyIterator) readHistory(firstEventID int64) ([]*shared.History, error) {
+func (i *historyIterator) readHistory(firstEventID int64) ([]*commonproto.History, error) {
 	req := &persistence.ReadHistoryBranchRequest{
 		BranchToken: i.request.BranchToken,
 		MinEventID:  firstEventID,
 		MaxEventID:  common.EndEventID,
 		PageSize:    i.historyPageSize,
-		ShardID:     common.IntPtr(i.request.ShardID),
+		ShardID:     &i.request.ShardID,
 	}
 	historyBatches, _, _, err := persistence.ReadFullPageV2EventsByBatch(i.historyV2Manager, req)
-	return historyBatches, err
-
+	return adapter.ToProtoHistories(historyBatches), err
 }
 
 // reset resets iterator to a certain state given its encoded representation

@@ -30,10 +30,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
@@ -670,12 +671,12 @@ func (c *domainCache) buildEntryFromRecord(
 	return newEntry
 }
 
-func copyResetBinary(bins workflow.BadBinaries) workflow.BadBinaries {
-	newbins := make(map[string]*workflow.BadBinaryInfo, len(bins.Binaries))
+func copyResetBinary(bins commonproto.BadBinaries) commonproto.BadBinaries {
+	newbins := make(map[string]*commonproto.BadBinaryInfo, len(bins.Binaries))
 	for k, v := range bins.Binaries {
 		newbins[k] = v
 	}
-	return workflow.BadBinaries{
+	return commonproto.BadBinaries{
 		Binaries: newbins,
 	}
 }
@@ -701,7 +702,7 @@ func (entry *DomainCacheEntry) duplicate() *DomainCacheEntry {
 		HistoryArchivalURI:       entry.config.HistoryArchivalURI,
 		VisibilityArchivalStatus: entry.config.VisibilityArchivalStatus,
 		VisibilityArchivalURI:    entry.config.VisibilityArchivalURI,
-		BadBinaries:              copyResetBinary(entry.config.BadBinaries),
+		BadBinaries:              adapter.ToThriftBadBinaries(copyResetBinary(adapter.ToProtoBadBinaries(entry.config.BadBinaries))),
 	}
 	result.replicationConfig = &persistence.DomainReplicationConfig{
 		ActiveClusterName: entry.replicationConfig.ActiveClusterName,
