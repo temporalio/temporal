@@ -25,6 +25,7 @@ option go_package = "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
 import "google/protobuf/timestamp.proto";
 import "replication/replication.proto";
+import "google/protobuf/wrappers.proto";
 
 // ImmutableClusterMetadata contains initialization configuration and metadata for the cluster
 message ImmutableClusterMetadata {
@@ -173,4 +174,83 @@ message RequestCancelInfo {
     int64 initiatedEventBatchID = 2;
     string cancelRequestID = 3;
     int64 initiatedID = 4;
+}
+
+message WorkflowExecutionState {
+    string createRequestID = 1;
+    bytes runID = 2;
+    int32 state = 3;
+    int32 closeStatus = 4;
+}
+
+message WorkflowExecutionInfo {
+    bytes domainID = 61;
+    string workflowID = 62;
+    bytes parentDomainID = 1;
+    string parentWorkflowID = 2;
+    bytes parentRunID = 3;
+    int64 initiatedID = 4;
+    int64 completionEventBatchID = 5;
+    bytes completionEvent = 6;
+    string completionEventEncoding = 7;
+    string taskList = 8;
+    string workflowTypeName = 9;
+    int32 workflowTimeoutSeconds = 10;
+    int32 decisionTaskTimeoutSeconds = 11;
+    bytes executionContext = 12;
+    int64 startVersion = 15;
+    int64 currentVersion = 16;
+    google.protobuf.Int64Value lastWriteEventID = 17;
+    map<string, replication.ReplicationInfo> lastReplicationInfo = 18;
+    int64 lastEventTaskID = 19;
+    int64 lastFirstEventID = 20;
+    int64 lastProcessedEvent = 21;
+    int64 startTimeNanos = 22;
+    int64 lastUpdatedTimeNanos = 23;
+    int64 decisionVersion = 24;
+    int64 decisionScheduleID = 25;
+    int64 decisionStartedID = 26;
+    int32 decisionTimeout = 27;
+    int64 decisionAttempt = 28;
+    int64 decisionStartedTimestampNanos = 29;
+    int64 decisionScheduledTimestampNanos = 30;
+    bool cancelRequested = 31;
+    int64 decisionOriginalScheduledTimestampNanos = 32;
+    string decisionRequestID = 34;
+    string cancelRequestID = 35;
+    string stickyTaskList = 36;
+    int64 stickyScheduleToStartTimeout = 37;
+    int64 retryAttempt = 38;
+    int32 retryInitialIntervalSeconds = 39;
+    int32 retryMaximumIntervalSeconds = 40;
+    int32 retryMaximumAttempts = 41;
+    int32 retryExpirationSeconds = 42;
+    double retryBackoffCoefficient = 43;
+    int64 retryExpirationTimeNanos = 44;
+    repeated string retryNonRetryableErrors = 45;
+    bool hasRetryPolicy = 46;
+    string cronSchedule = 47;
+    int32 eventStoreVersion = 48;
+    bytes eventBranchToken = 49;
+    int64 signalCount = 50;
+    int64 historySize = 51;
+    string clientLibraryVersion = 52;
+    string clientFeatureVersion = 53;
+    string clientImpl = 54;
+    bytes autoResetPoints = 55;
+    string autoResetPointsEncoding = 56;
+    map<string, bytes> searchAttributes = 57;
+    map<string, bytes> memo = 58;
+    bytes versionHistories = 59;
+    string versionHistoriesEncoding = 60;
+}
+
+message Checksum {
+    int32 version = 1;
+    enum ChecksumFlavor {
+        FlavorUnknown = 0;
+        FlavorIEEECRC32OverThriftBinary = 1;
+    }
+    ChecksumFlavor Flavor = 2;
+    bytes value = 3;
 }

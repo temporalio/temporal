@@ -29,6 +29,7 @@ import (
 	"github.com/gogo/protobuf/types"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 
 	"github.com/temporalio/temporal/common/primitives"
 
@@ -405,14 +406,14 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 		FirstEventID: int64(1),
 		NextEventID:  int64(3),
 		Version:      int64(9),
-		LastReplicationInfo: map[string]*p.ReplicationInfo{
+		LastReplicationInfo: map[string]*replication.ReplicationInfo{
 			"dc1": {
 				Version:     int64(3),
-				LastEventID: int64(1),
+				LastEventId: int64(1),
 			},
 			"dc2": {
 				Version:     int64(5),
-				LastEventID: int64(2),
+				LastEventId: int64(2),
 			},
 		},
 		BranchToken:       []byte("branchToken1"),
@@ -425,14 +426,14 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 			StartVersion:     int64(8),
 			LastWriteVersion: int64(7),
 			LastWriteEventID: int64(6),
-			LastReplicationInfo: map[string]*p.ReplicationInfo{
+			LastReplicationInfo: map[string]*replication.ReplicationInfo{
 				"dc1": {
 					Version:     int64(3),
-					LastEventID: int64(1),
+					LastEventId: int64(1),
 				},
 				"dc2": {
 					Version:     int64(5),
-					LastEventID: int64(2),
+					LastEventId: int64(2),
 				},
 			},
 		}, replicationTasks, []byte("branchToken1"))
@@ -459,7 +460,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 	s.Equal([]byte("branchToken2"), tsk.NewRunBranchToken)
 	s.Equal(2, len(tsk.LastReplicationInfo))
 	for k, v := range tsk.LastReplicationInfo {
-		log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventId)
+		log.Infof("replication.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(3), v.Version)
@@ -495,14 +496,14 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 	s.Equal(2, len(replicationState0.LastReplicationInfo))
 	s.assertChecksumsEqual(testWorkflowChecksum, state0.Checksum)
 	for k, v := range replicationState0.LastReplicationInfo {
-		log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventID)
+		log.Infof("replication.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(3), v.Version)
-			s.Equal(int64(1), v.LastEventID)
+			s.Equal(int64(1), v.LastEventId)
 		case "dc2":
 			s.Equal(int64(5), v.Version)
-			s.Equal(int64(2), v.LastEventID)
+			s.Equal(int64(2), v.LastEventId)
 		default:
 			s.Fail("Unexpected key")
 		}
@@ -520,21 +521,21 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 	updatedReplicationState.LastWriteVersion = int64(12)
 	updatedReplicationState.LastWriteEventID = int64(13)
 	updatedReplicationState.LastReplicationInfo["dc1"].Version = int64(4)
-	updatedReplicationState.LastReplicationInfo["dc1"].LastEventID = int64(2)
+	updatedReplicationState.LastReplicationInfo["dc1"].LastEventId = int64(2)
 
 	replicationTasks1 := []p.Task{&p.HistoryReplicationTask{
 		TaskID:       s.GetNextSequenceNumber(),
 		FirstEventID: int64(3),
 		NextEventID:  int64(5),
 		Version:      int64(10),
-		LastReplicationInfo: map[string]*p.ReplicationInfo{
+		LastReplicationInfo: map[string]*replication.ReplicationInfo{
 			"dc1": {
 				Version:     int64(4),
-				LastEventID: int64(2),
+				LastEventId: int64(2),
 			},
 			"dc2": {
 				Version:     int64(5),
-				LastEventID: int64(2),
+				LastEventId: int64(2),
 			},
 		},
 		BranchToken:       []byte("branchToken3"),
@@ -558,7 +559,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 
 	s.Equal(2, len(tsk1.LastReplicationInfo))
 	for k, v := range tsk1.LastReplicationInfo {
-		log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventId)
+		log.Infof("replication.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(4), v.Version)
@@ -594,14 +595,14 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 	s.Equal(2, len(replicationState1.LastReplicationInfo))
 	s.assertChecksumsEqual(testWorkflowChecksum, state1.Checksum)
 	for k, v := range replicationState1.LastReplicationInfo {
-		log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventID)
+		log.Infof("replication.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(4), v.Version)
-			s.Equal(int64(2), v.LastEventID)
+			s.Equal(int64(2), v.LastEventId)
 		case "dc2":
 			s.Equal(int64(5), v.Version)
-			s.Equal(int64(2), v.LastEventID)
+			s.Equal(int64(2), v.LastEventId)
 		default:
 			s.Fail("Unexpected key")
 		}
@@ -681,14 +682,14 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 		FirstEventID: int64(1),
 		NextEventID:  int64(3),
 		Version:      int64(9),
-		LastReplicationInfo: map[string]*p.ReplicationInfo{
+		LastReplicationInfo: map[string]*replication.ReplicationInfo{
 			"dc1": {
 				Version:     int64(3),
-				LastEventID: int64(1),
+				LastEventId: int64(1),
 			},
 			"dc2": {
 				Version:     int64(5),
-				LastEventID: int64(2),
+				LastEventId: int64(2),
 			},
 		},
 		BranchToken:       []byte("branchToken1"),
@@ -705,14 +706,14 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 			StartVersion:     int64(8),
 			LastWriteVersion: int64(7),
 			LastWriteEventID: int64(6),
-			LastReplicationInfo: map[string]*p.ReplicationInfo{
+			LastReplicationInfo: map[string]*replication.ReplicationInfo{
 				"dc1": {
 					Version:     int64(3),
-					LastEventID: int64(1),
+					LastEventId: int64(1),
 				},
 				"dc2": {
 					Version:     int64(5),
-					LastEventID: int64(2),
+					LastEventId: int64(2),
 				},
 			},
 		}, txTasks, []byte("branchToken1"))
@@ -750,7 +751,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 	s.Equal([]byte("branchToken2"), tsk.NewRunBranchToken)
 	s.Equal(2, len(tsk.LastReplicationInfo))
 	for k, v := range tsk.LastReplicationInfo {
-		log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventId)
+		log.Infof("replication.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(3), v.Version)
@@ -788,14 +789,14 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 	s.Equal(int64(6), replicationState0.LastWriteEventID)
 	s.Equal(2, len(replicationState0.LastReplicationInfo))
 	for k, v := range replicationState0.LastReplicationInfo {
-		log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventID)
+		log.Infof("replication.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(3), v.Version)
-			s.Equal(int64(1), v.LastEventID)
+			s.Equal(int64(1), v.LastEventId)
 		case "dc2":
 			s.Equal(int64(5), v.Version)
-			s.Equal(int64(2), v.LastEventID)
+			s.Equal(int64(2), v.LastEventId)
 		default:
 			s.Fail("Unexpected key")
 		}
@@ -813,7 +814,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 	updatedReplicationState.LastWriteVersion = int64(12)
 	updatedReplicationState.LastWriteEventID = int64(13)
 	updatedReplicationState.LastReplicationInfo["dc1"].Version = int64(30)
-	updatedReplicationState.LastReplicationInfo["dc1"].LastEventID = int64(10)
+	updatedReplicationState.LastReplicationInfo["dc1"].LastEventId = int64(10)
 
 	currTransTasks := []p.Task{
 		&p.CloseExecutionTask{
@@ -849,7 +850,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 	insertReplicationState.LastWriteVersion = int64(120)
 	insertReplicationState.LastWriteEventID = int64(130)
 	insertReplicationState.LastReplicationInfo["dc1"].Version = int64(300)
-	insertReplicationState.LastReplicationInfo["dc1"].LastEventID = int64(100)
+	insertReplicationState.LastReplicationInfo["dc1"].LastEventId = int64(100)
 
 	insertTransTasks := []p.Task{
 		&p.DecisionTask{
@@ -874,14 +875,14 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 		FirstEventID: int64(10),
 		NextEventID:  int64(30),
 		Version:      int64(90),
-		LastReplicationInfo: map[string]*p.ReplicationInfo{
+		LastReplicationInfo: map[string]*replication.ReplicationInfo{
 			"dc1": {
 				Version:     int64(30),
-				LastEventID: int64(10),
+				LastEventId: int64(10),
 			},
 			"dc2": {
 				Version:     int64(50),
-				LastEventID: int64(20),
+				LastEventId: int64(20),
 			},
 		},
 		BranchToken:   []byte("branchToken5"),
@@ -981,7 +982,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 	s.Equal(0, len(tsk.NewRunBranchToken))
 	s.Equal(2, len(tsk.LastReplicationInfo))
 	for k, v := range tsk.LastReplicationInfo {
-		log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventId)
+		log.Infof("replication.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(30), v.Version)
@@ -1027,14 +1028,14 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 	s.Equal(int64(13), replicationState1.LastWriteEventID)
 	s.Equal(2, len(replicationState1.LastReplicationInfo))
 	for k, v := range replicationState1.LastReplicationInfo {
-		log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventID)
+		log.Infof("replication.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(30), v.Version)
-			s.Equal(int64(10), v.LastEventID)
+			s.Equal(int64(10), v.LastEventId)
 		case "dc2":
 			s.Equal(int64(5), v.Version)
-			s.Equal(int64(2), v.LastEventID)
+			s.Equal(int64(2), v.LastEventId)
 		default:
 			s.Fail("Unexpected key")
 		}
@@ -1064,14 +1065,14 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 	s.Equal(int64(130), replicationState2.LastWriteEventID)
 	s.Equal(2, len(replicationState2.LastReplicationInfo))
 	for k, v := range replicationState2.LastReplicationInfo {
-		log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventID)
+		log.Infof("replication.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(300), v.Version)
-			s.Equal(int64(100), v.LastEventID)
+			s.Equal(int64(100), v.LastEventId)
 		case "dc2":
 			s.Equal(int64(5), v.Version)
-			s.Equal(int64(2), v.LastEventID)
+			s.Equal(int64(2), v.LastEventId)
 		default:
 			s.Fail("Unexpected key")
 		}
@@ -1113,14 +1114,14 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 		FirstEventID: int64(1),
 		NextEventID:  int64(3),
 		Version:      int64(9),
-		LastReplicationInfo: map[string]*p.ReplicationInfo{
+		LastReplicationInfo: map[string]*replication.ReplicationInfo{
 			"dc1": {
 				Version:     int64(3),
-				LastEventID: int64(1),
+				LastEventId: int64(1),
 			},
 			"dc2": {
 				Version:     int64(5),
-				LastEventID: int64(2),
+				LastEventId: int64(2),
 			},
 		},
 		BranchToken:       []byte("branchToken1"),
@@ -1137,14 +1138,14 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 			StartVersion:     int64(8),
 			LastWriteVersion: int64(7),
 			LastWriteEventID: int64(6),
-			LastReplicationInfo: map[string]*p.ReplicationInfo{
+			LastReplicationInfo: map[string]*replication.ReplicationInfo{
 				"dc1": {
 					Version:     int64(3),
-					LastEventID: int64(1),
+					LastEventId: int64(1),
 				},
 				"dc2": {
 					Version:     int64(5),
-					LastEventID: int64(2),
+					LastEventId: int64(2),
 				},
 			},
 		}, txTasks, []byte("branchToken1"))
@@ -1182,7 +1183,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	s.Equal([]byte("branchToken2"), tsk.NewRunBranchToken)
 	s.Equal(2, len(tsk.LastReplicationInfo))
 	for k, v := range tsk.LastReplicationInfo {
-		log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventId)
+		log.Infof("replication.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(3), v.Version)
@@ -1223,14 +1224,14 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	s.Equal(int64(6), replicationState0.LastWriteEventID)
 	s.Equal(2, len(replicationState0.LastReplicationInfo))
 	for k, v := range replicationState0.LastReplicationInfo {
-		log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventID)
+		log.Infof("replication.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(3), v.Version)
-			s.Equal(int64(1), v.LastEventID)
+			s.Equal(int64(1), v.LastEventId)
 		case "dc2":
 			s.Equal(int64(5), v.Version)
-			s.Equal(int64(2), v.LastEventID)
+			s.Equal(int64(2), v.LastEventId)
 		default:
 			s.Fail("Unexpected key")
 		}
@@ -1265,7 +1266,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	insertReplicationState.LastWriteVersion = int64(120)
 	insertReplicationState.LastWriteEventID = int64(130)
 	insertReplicationState.LastReplicationInfo["dc1"].Version = int64(300)
-	insertReplicationState.LastReplicationInfo["dc1"].LastEventID = int64(100)
+	insertReplicationState.LastReplicationInfo["dc1"].LastEventId = int64(100)
 
 	insertTransTasks := []p.Task{
 		&p.DecisionTask{
@@ -1290,14 +1291,14 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 		FirstEventID: int64(10),
 		NextEventID:  int64(30),
 		Version:      int64(90),
-		LastReplicationInfo: map[string]*p.ReplicationInfo{
+		LastReplicationInfo: map[string]*replication.ReplicationInfo{
 			"dc1": {
 				Version:     int64(30),
-				LastEventID: int64(10),
+				LastEventId: int64(10),
 			},
 			"dc2": {
 				Version:     int64(50),
-				LastEventID: int64(20),
+				LastEventId: int64(20),
 			},
 		},
 		BranchToken: []byte("branchToken5"),
@@ -1388,7 +1389,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	s.Equal(0, len(tsk.NewRunBranchToken))
 	s.Equal(2, len(tsk.LastReplicationInfo))
 	for k, v := range tsk.LastReplicationInfo {
-		log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventId)
+		log.Infof("replication.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(30), v.Version)
@@ -1434,14 +1435,14 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	s.Equal(int64(6), replicationState1.LastWriteEventID)
 	s.Equal(2, len(replicationState1.LastReplicationInfo))
 	for k, v := range replicationState1.LastReplicationInfo {
-		log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventID)
+		log.Infof("replication.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(3), v.Version)
-			s.Equal(int64(1), v.LastEventID)
+			s.Equal(int64(1), v.LastEventId)
 		case "dc2":
 			s.Equal(int64(5), v.Version)
-			s.Equal(int64(2), v.LastEventID)
+			s.Equal(int64(2), v.LastEventId)
 		default:
 			s.Fail("Unexpected key")
 		}
@@ -1471,14 +1472,14 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 	s.Equal(int64(130), replicationState2.LastWriteEventID)
 	s.Equal(2, len(replicationState2.LastReplicationInfo))
 	for k, v := range replicationState2.LastReplicationInfo {
-		log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventID)
+		log.Infof("replication.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(300), v.Version)
-			s.Equal(int64(100), v.LastEventID)
+			s.Equal(int64(100), v.LastEventId)
 		case "dc2":
 			s.Equal(int64(5), v.Version)
-			s.Equal(int64(2), v.LastEventID)
+			s.Equal(int64(2), v.LastEventId)
 		default:
 			s.Fail("Unexpected key")
 		}

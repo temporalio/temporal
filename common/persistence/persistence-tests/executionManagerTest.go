@@ -39,6 +39,7 @@ import (
 
 	gen "github.com/temporalio/temporal/.gen/go/shared"
 	pblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/checksum"
 	"github.com/temporalio/temporal/common/cluster"
@@ -1267,8 +1268,8 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 				StartVersion:     int64(rand.Int31()),
 				LastWriteVersion: int64(rand.Int31()),
 				LastWriteEventID: int64(rand.Int31()),
-				LastReplicationInfo: map[string]*p.ReplicationInfo{
-					"r2": &p.ReplicationInfo{Version: math.MaxInt32, LastEventID: math.MaxInt32},
+				LastReplicationInfo: map[string]*replication.ReplicationInfo{
+					"r2": {Version: math.MaxInt32, LastEventId: math.MaxInt32},
 				},
 			},
 			Checksum: csum,
@@ -1339,7 +1340,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 		v1, ok := state.ReplicationState.LastReplicationInfo[k]
 		s.True(ok)
 		s.Equal(v.Version, v1.Version)
-		s.Equal(v.LastEventID, v1.LastEventID)
+		s.Equal(v.LastEventId, v1.LastEventId)
 	}
 	s.assertChecksumsEqual(csum, state.Checksum)
 }
@@ -2193,10 +2194,10 @@ func (s *ExecutionManagerSuite) TestReplicationTasks() {
 			FirstEventID: int64(1),
 			NextEventID:  int64(3),
 			Version:      123,
-			LastReplicationInfo: map[string]*p.ReplicationInfo{
+			LastReplicationInfo: map[string]*replication.ReplicationInfo{
 				"dc1": {
 					Version:     int64(3),
-					LastEventID: int64(1),
+					LastEventId: int64(1),
 				},
 			},
 		},
@@ -2205,10 +2206,10 @@ func (s *ExecutionManagerSuite) TestReplicationTasks() {
 			FirstEventID: int64(1),
 			NextEventID:  int64(3),
 			Version:      456,
-			LastReplicationInfo: map[string]*p.ReplicationInfo{
+			LastReplicationInfo: map[string]*replication.ReplicationInfo{
 				"dc1": {
 					Version:     int64(3),
-					LastEventID: int64(1),
+					LastEventId: int64(1),
 				},
 			},
 		},
@@ -2242,7 +2243,7 @@ func (s *ExecutionManagerSuite) TestReplicationTasks() {
 				got, ok := respTasks[index].LastReplicationInfo[k]
 				s.True(ok, "replication info missing key")
 				s.Equal(v.Version, got.Version)
-				s.Equal(v.LastEventID, got.LastEventId)
+				s.Equal(v.LastEventId, got.LastEventId)
 			}
 		case p.ReplicationTaskTypeSyncActivity:
 			expected := replicationTasks[index].(*p.SyncActivityTask)
@@ -3076,14 +3077,14 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskTasks() {
 		FirstEventID: int64(1),
 		NextEventID:  int64(3),
 		Version:      int64(9),
-		LastReplicationInfo: map[string]*p.ReplicationInfo{
+		LastReplicationInfo: map[string]*replication.ReplicationInfo{
 			"dc1": {
 				Version:     int64(3),
-				LastEventID: int64(1),
+				LastEventId: int64(1),
 			},
 			"dc2": {
 				Version:     int64(5),
-				LastEventID: int64(2),
+				LastEventId: int64(2),
 			},
 		},
 	}}
@@ -3104,7 +3105,7 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskTasks() {
 	s.Equal(int64(9), task1.Version)
 	s.Equal(2, len(task1.LastReplicationInfo))
 	for k, v := range task1.LastReplicationInfo {
-		log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventId)
+		log.Infof("replication.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(3), v.Version)
@@ -3155,14 +3156,14 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskRangeComplete() {
 			FirstEventID: int64(1),
 			NextEventID:  int64(3),
 			Version:      int64(9),
-			LastReplicationInfo: map[string]*p.ReplicationInfo{
+			LastReplicationInfo: map[string]*replication.ReplicationInfo{
 				"dc1": {
 					Version:     int64(3),
-					LastEventID: int64(1),
+					LastEventId: int64(1),
 				},
 				"dc2": {
 					Version:     int64(5),
-					LastEventID: int64(2),
+					LastEventId: int64(2),
 				},
 			},
 		},
@@ -3171,14 +3172,14 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskRangeComplete() {
 			FirstEventID: int64(4),
 			NextEventID:  int64(5),
 			Version:      int64(9),
-			LastReplicationInfo: map[string]*p.ReplicationInfo{
+			LastReplicationInfo: map[string]*replication.ReplicationInfo{
 				"dc1": {
 					Version:     int64(3),
-					LastEventID: int64(1),
+					LastEventId: int64(1),
 				},
 				"dc2": {
 					Version:     int64(5),
-					LastEventID: int64(2),
+					LastEventId: int64(2),
 				},
 			},
 		},
@@ -3242,14 +3243,14 @@ func (s *ExecutionManagerSuite) TestWorkflowReplicationState() {
 		FirstEventID: int64(1),
 		NextEventID:  int64(3),
 		Version:      int64(9),
-		LastReplicationInfo: map[string]*p.ReplicationInfo{
+		LastReplicationInfo: map[string]*replication.ReplicationInfo{
 			"dc1": {
 				Version:     int64(3),
-				LastEventID: int64(1),
+				LastEventId: int64(1),
 			},
 			"dc2": {
 				Version:     int64(5),
-				LastEventID: int64(2),
+				LastEventId: int64(2),
 			},
 		},
 	}}
@@ -3260,14 +3261,14 @@ func (s *ExecutionManagerSuite) TestWorkflowReplicationState() {
 			StartVersion:     int64(8),
 			LastWriteVersion: int64(7),
 			LastWriteEventID: int64(6),
-			LastReplicationInfo: map[string]*p.ReplicationInfo{
+			LastReplicationInfo: map[string]*replication.ReplicationInfo{
 				"dc1": {
 					Version:     int64(3),
-					LastEventID: int64(1),
+					LastEventId: int64(1),
 				},
 				"dc2": {
 					Version:     int64(5),
-					LastEventID: int64(2),
+					LastEventId: int64(2),
 				},
 			},
 		}, replicationTasks)
@@ -3292,7 +3293,7 @@ func (s *ExecutionManagerSuite) TestWorkflowReplicationState() {
 	s.Equal(int64(9), tsk.Version)
 	s.Equal(2, len(tsk.LastReplicationInfo))
 	for k, v := range tsk.LastReplicationInfo {
-		log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventId)
+		log.Infof("replication.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(3), v.Version)
@@ -3327,14 +3328,14 @@ func (s *ExecutionManagerSuite) TestWorkflowReplicationState() {
 	s.Equal(int64(6), replicationState0.LastWriteEventID)
 	s.Equal(2, len(replicationState0.LastReplicationInfo))
 	for k, v := range replicationState0.LastReplicationInfo {
-		log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventID)
+		log.Infof("replication.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(3), v.Version)
-			s.Equal(int64(1), v.LastEventID)
+			s.Equal(int64(1), v.LastEventId)
 		case "dc2":
 			s.Equal(int64(5), v.Version)
-			s.Equal(int64(2), v.LastEventID)
+			s.Equal(int64(2), v.LastEventId)
 		default:
 			s.Fail("Unexpected key")
 		}
@@ -3350,21 +3351,21 @@ func (s *ExecutionManagerSuite) TestWorkflowReplicationState() {
 	updatedReplicationState.LastWriteVersion = int64(12)
 	updatedReplicationState.LastWriteEventID = int64(13)
 	updatedReplicationState.LastReplicationInfo["dc1"].Version = int64(4)
-	updatedReplicationState.LastReplicationInfo["dc1"].LastEventID = int64(2)
+	updatedReplicationState.LastReplicationInfo["dc1"].LastEventId = int64(2)
 
 	replicationTasks1 := []p.Task{&p.HistoryReplicationTask{
 		TaskID:       s.GetNextSequenceNumber(),
 		FirstEventID: int64(3),
 		NextEventID:  int64(5),
 		Version:      int64(10),
-		LastReplicationInfo: map[string]*p.ReplicationInfo{
+		LastReplicationInfo: map[string]*replication.ReplicationInfo{
 			"dc1": {
 				Version:     int64(4),
-				LastEventID: int64(2),
+				LastEventId: int64(2),
 			},
 			"dc2": {
 				Version:     int64(5),
-				LastEventID: int64(2),
+				LastEventId: int64(2),
 			},
 		},
 	}}
@@ -3383,7 +3384,7 @@ func (s *ExecutionManagerSuite) TestWorkflowReplicationState() {
 	s.Equal(int64(10), tsk1.Version)
 	s.Equal(2, len(tsk1.LastReplicationInfo))
 	for k, v := range tsk1.LastReplicationInfo {
-		log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventId)
+		log.Infof("replication.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(4), v.Version)
@@ -3417,14 +3418,14 @@ func (s *ExecutionManagerSuite) TestWorkflowReplicationState() {
 	s.Equal(int64(13), replicationState1.LastWriteEventID)
 	s.Equal(2, len(replicationState1.LastReplicationInfo))
 	for k, v := range replicationState1.LastReplicationInfo {
-		log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventID)
+		log.Infof("replication.ReplicationInfo for %v: {Version: %v, LastEventId: %v}", k, v.Version, v.LastEventId)
 		switch k {
 		case "dc1":
 			s.Equal(int64(4), v.Version)
-			s.Equal(int64(2), v.LastEventID)
+			s.Equal(int64(2), v.LastEventId)
 		case "dc2":
 			s.Equal(int64(5), v.Version)
-			s.Equal(int64(2), v.LastEventID)
+			s.Equal(int64(2), v.LastEventId)
 		default:
 			s.Fail("Unexpected key")
 		}
@@ -4338,7 +4339,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 		CurrentVersion:      int64(8789),
 		StartVersion:        int64(8780),
 		LastWriteVersion:    int64(8912),
-		LastReplicationInfo: map[string]*p.ReplicationInfo{},
+		LastReplicationInfo: map[string]*replication.ReplicationInfo{},
 	}
 
 	resetReq := &p.ConflictResolveWorkflowExecutionRequest{
@@ -4491,7 +4492,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 		CurrentVersion:      int64(8989),
 		StartVersion:        int64(8980),
 		LastWriteVersion:    int64(8912),
-		LastReplicationInfo: map[string]*p.ReplicationInfo{},
+		LastReplicationInfo: map[string]*replication.ReplicationInfo{},
 	}
 
 	resetReq := &p.ConflictResolveWorkflowExecutionRequest{
@@ -4503,7 +4504,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 			ReplicationState: &p.ReplicationState{
 				CurrentVersion:      int64(8789),
 				StartVersion:        int64(8780),
-				LastReplicationInfo: map[string]*p.ReplicationInfo{},
+				LastReplicationInfo: map[string]*replication.ReplicationInfo{},
 			},
 			Condition: int64(5),
 
@@ -4641,7 +4642,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 		CurrentVersion:      int64(8789),
 		StartVersion:        int64(8780),
 		LastWriteVersion:    int64(8912),
-		LastReplicationInfo: map[string]*p.ReplicationInfo{},
+		LastReplicationInfo: map[string]*replication.ReplicationInfo{},
 	}
 
 	resetReq := &p.ConflictResolveWorkflowExecutionRequest{
@@ -4750,7 +4751,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 		CurrentVersion:      int64(8989),
 		StartVersion:        int64(8980),
 		LastWriteVersion:    int64(8912),
-		LastReplicationInfo: map[string]*p.ReplicationInfo{},
+		LastReplicationInfo: map[string]*replication.ReplicationInfo{},
 	}
 
 	resetReq := &p.ConflictResolveWorkflowExecutionRequest{
@@ -4762,7 +4763,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 			ReplicationState: &p.ReplicationState{
 				CurrentVersion:      int64(8789),
 				StartVersion:        int64(8780),
-				LastReplicationInfo: map[string]*p.ReplicationInfo{},
+				LastReplicationInfo: map[string]*replication.ReplicationInfo{},
 			},
 			Condition: nextEventID,
 
@@ -4897,7 +4898,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 		CurrentVersion:      int64(8789),
 		StartVersion:        int64(8780),
 		LastWriteVersion:    int64(8912),
-		LastReplicationInfo: map[string]*p.ReplicationInfo{},
+		LastReplicationInfo: map[string]*replication.ReplicationInfo{},
 	}
 
 	resetReq := &p.ConflictResolveWorkflowExecutionRequest{
@@ -5019,7 +5020,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 		CurrentVersion:      int64(8989),
 		StartVersion:        int64(8980),
 		LastWriteVersion:    int64(8912),
-		LastReplicationInfo: map[string]*p.ReplicationInfo{},
+		LastReplicationInfo: map[string]*replication.ReplicationInfo{},
 	}
 
 	resetReq := &p.ConflictResolveWorkflowExecutionRequest{
@@ -5031,7 +5032,7 @@ func (s *ExecutionManagerSuite) TestConflictResolveWorkflowExecutionWithTransact
 			ReplicationState: &p.ReplicationState{
 				CurrentVersion:      int64(8789),
 				StartVersion:        int64(8780),
-				LastReplicationInfo: map[string]*p.ReplicationInfo{},
+				LastReplicationInfo: map[string]*replication.ReplicationInfo{},
 			},
 			Condition: int64(5),
 
@@ -5355,7 +5356,7 @@ func copyReplicationState(sourceState *p.ReplicationState) *p.ReplicationState {
 		LastWriteEventID: sourceState.LastWriteEventID,
 	}
 	if sourceState.LastReplicationInfo != nil {
-		state.LastReplicationInfo = map[string]*p.ReplicationInfo{}
+		state.LastReplicationInfo = map[string]*replication.ReplicationInfo{}
 		for k, v := range sourceState.LastReplicationInfo {
 			state.LastReplicationInfo[k] = copyReplicationInfo(v)
 		}
@@ -5364,9 +5365,9 @@ func copyReplicationState(sourceState *p.ReplicationState) *p.ReplicationState {
 	return state
 }
 
-func copyReplicationInfo(sourceInfo *p.ReplicationInfo) *p.ReplicationInfo {
-	return &p.ReplicationInfo{
+func copyReplicationInfo(sourceInfo *replication.ReplicationInfo) *replication.ReplicationInfo {
+	return &replication.ReplicationInfo{
 		Version:     sourceInfo.Version,
-		LastEventID: sourceInfo.LastEventID,
+		LastEventId: sourceInfo.LastEventId,
 	}
 }

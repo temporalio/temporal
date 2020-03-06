@@ -1,65 +1,3 @@
---- Workflow execution and mutable state ---
-CREATE TYPE workflow_execution (
-  domain_id                        uuid,
-  workflow_id                      text,
-  run_id                           uuid,
-  parent_domain_id                 uuid,   -- Domain ID of parent workflow which started the workflow execution
-  parent_workflow_id               text,   -- ID of parent workflow which started the workflow execution
-  parent_run_id                    uuid,   -- RunID of parent workflow which started the workflow execution
-  initiated_id                     bigint, -- Initiated event ID of parent workflow which started this execution
-  completion_event_batch_id        bigint,
-  completion_event                 blob,   -- Completion event used to communicate result to parent workflow execution
-  completion_event_data_encoding   text, -- Protocol used for history serialization
-  task_list                        text,
-  workflow_type_name               text,
-  workflow_timeout                 int,  -- Workflow ExecutionStartToCloseTimeoutSeconds
-  decision_task_timeout            int,  -- decision start to close timeout
-  execution_context                blob,
-  state                            int,  -- enum WorkflowState {Created, Running, Completed}
-  close_status                     int,  -- enum WorkflowCloseStatus {None, Completed, Failed, Canceled, Terminated, ContinuedAsNew, TimedOut}
-  last_processed_event             bigint,
-  start_time                       timestamp,
-  last_updated_time                timestamp,
-  create_request_id                uuid,
-  decision_version                 bigint,
-  decision_schedule_id             bigint,
-  decision_started_id              bigint,
-  decision_request_id              text,    -- Identifier used by matching engine for retrying history service calls for recording task is started
-  decision_timeout                 int,
-  decision_attempt                 bigint,
-  decision_timestamp               bigint,  -- this is decision started time
-  decision_scheduled_timestamp     bigint,   -- this is decision scheduled time
-  decision_original_scheduled_timestamp     bigint,   -- this is scheduled time of the first decision during heartbeat
-  cancel_requested                 boolean,
-  cancel_request_id                text,
-  sticky_task_list                 text,   -- sticky worker task list
-  sticky_schedule_to_start_timeout int,
-  client_library_version           text,
-  client_feature_version           text,
-  client_impl                      text,
-  attempt                          int,    -- starting from 0 (for initial non-retry)
-  has_retry_policy                 boolean,-- If there is a retry policy
-  init_interval                    int,    -- initial retry interval, in seconds
-  backoff_coefficient              double,
-  max_interval                     int,    -- max retry interval in seconds
-  expiration_time                  timestamp, -- retry expiration time
-  max_attempts                     int,    -- max number of attempts including initial non-retry attempt
-  non_retriable_errors             list<text>,
-  event_store_version              int, -- indicates which version of events persistence is using
-  signal_count                     int,
-  branch_token                     blob,
-  history_size                     bigint,
-  last_first_event_id              bigint,
-  next_event_id                    bigint,
-  cron_schedule                    text,
-  expiration_seconds               int,    -- retry expiration duration in seconds
-  last_event_task_id               bigint,
-  auto_reset_points                blob, -- the resetting points for auto-reset feature
-  auto_reset_points_encoding       text, -- encoding for auto_reset_points_data
-  search_attributes                map<text, blob>,
-  memo                             map<text, blob>
-);
-
 -- Replication information for each cluster
 CREATE TYPE replication_info (
   version       bigint,
@@ -188,7 +126,10 @@ CREATE TABLE executions (
   task_id                        bigint, -- unique identifier for transfer and timer tasks for an execution
   shard                          blob,
   shard_encoding                 text,
-  execution                      frozen<workflow_execution>,
+  execution                      blob,
+  execution_encoding             text,
+  execution_state                blob,
+  execution_state_encoding       text,
   transfer                       blob,
   transfer_encoding              text,
   replication                    blob,
@@ -213,6 +154,8 @@ CREATE TABLE executions (
   workflow_state                 int,
   version_histories              blob, -- the metadata of history branching
   version_histories_encoding     text,
+  checksum                       blob,
+  checksum_encoding              text,
   PRIMARY KEY  (shard_id, type, domain_id, workflow_id, run_id, visibility_ts, task_id)
 ) WITH COMPACTION = {
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
@@ -351,10 +294,6 @@ INSERT INTO domains_by_name_v2 (
    -1,
    -1
 ) IF NOT EXISTS;
-
-
-CREATE TYPE checksum (version int, flavor int, value blob);
-ALTER TABLE executions ADD checksum frozen<checksum>;
 
 CREATE TABLE cluster_membership
 (

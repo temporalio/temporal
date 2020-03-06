@@ -33,6 +33,7 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
@@ -243,10 +244,10 @@ func (s *conflictResolverSuite) TestReset() {
 					StartVersion:     event1.GetVersion(),
 					LastWriteVersion: event1.GetVersion(),
 					LastWriteEventID: event1.GetEventId(),
-					LastReplicationInfo: map[string]*persistence.ReplicationInfo{
-						sourceCluster: &persistence.ReplicationInfo{
+					LastReplicationInfo: map[string]*replication.ReplicationInfo{
+						sourceCluster: {
 							Version:     event1.GetVersion(),
-							LastEventID: event1.GetEventId(),
+							LastEventId: event1.GetEventId(),
 						},
 					},
 				},

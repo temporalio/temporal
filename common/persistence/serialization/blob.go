@@ -174,13 +174,22 @@ func HistoryBranchFromBlob(b []byte, proto string) (*persistenceblobs.HistoryBra
 	return result, protoRWDecode(b, proto, result)
 }
 
-func WorkflowExecutionInfoToBlob(info *sqlblobs.WorkflowExecutionInfo) (DataBlob, error) {
-	return thriftRWEncode(info)
+func WorkflowExecutionInfoToBlob(info *persistenceblobs.WorkflowExecutionInfo) (DataBlob, error) {
+	return protoRWEncode(info)
 }
 
-func WorkflowExecutionInfoFromBlob(b []byte, proto string) (*sqlblobs.WorkflowExecutionInfo, error) {
-	result := &sqlblobs.WorkflowExecutionInfo{}
-	return result, thriftRWDecode(b, proto, result)
+func WorkflowExecutionInfoFromBlob(b []byte, proto string) (*persistenceblobs.WorkflowExecutionInfo, error) {
+	result := &persistenceblobs.WorkflowExecutionInfo{}
+	return result, protoRWDecode(b, proto, result)
+}
+
+func WorkflowExecutionStateToBlob(info *persistenceblobs.WorkflowExecutionState) (DataBlob, error) {
+	return protoRWEncode(info)
+}
+
+func WorkflowExecutionStateFromBlob(b []byte, proto string) (*persistenceblobs.WorkflowExecutionState, error) {
+	result := &persistenceblobs.WorkflowExecutionState{}
+	return result, protoRWDecode(b, proto, result)
 }
 
 func ActivityInfoToBlob(info *sqlblobs.ActivityInfo) (DataBlob, error) {
@@ -270,6 +279,15 @@ func ReplicationTaskInfoToBlob(info *persistenceblobs.ReplicationTaskInfo) (Data
 
 func ReplicationTaskInfoFromBlob(b []byte, proto string) (*persistenceblobs.ReplicationTaskInfo, error) {
 	result := &persistenceblobs.ReplicationTaskInfo{}
+	return result, protoRWDecode(b, proto, result)
+}
+
+func ChecksumToBlob(info *persistenceblobs.Checksum) (DataBlob, error) {
+	return protoRWEncode(info)
+}
+
+func ChecksumFromBlob(b []byte, proto string) (*persistenceblobs.Checksum, error) {
+	result := &persistenceblobs.Checksum{}
 	return result, protoRWDecode(b, proto, result)
 }
 

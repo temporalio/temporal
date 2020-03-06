@@ -20,7 +20,11 @@
 
 package checksum
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+)
 
 type (
 	// Checksum represents a checksum value along
@@ -53,4 +57,22 @@ var ErrMismatch = errors.New("checksum mismatch error")
 // IsValid returns true if the checksum flavor is valid
 func (f Flavor) IsValid() bool {
 	return f > FlavorUnknown && f < maxFlavors
+}
+
+// FromProto returns a new checksum using the proto fields
+func FromProto(c *persistenceblobs.Checksum) *Checksum {
+	return &Checksum{
+		Version: int(c.Version),
+		Flavor:  Flavor(c.Flavor),
+		Value:   c.Value,
+	}
+}
+
+// FromProto returns a new checksum using the proto fields
+func (c *Checksum) ToProto() *persistenceblobs.Checksum {
+	return &persistenceblobs.Checksum{
+		Version: int32(c.Version),
+		Flavor:  persistenceblobs.Checksum_ChecksumFlavor(c.Flavor),
+		Value:   c.Value,
+	}
 }

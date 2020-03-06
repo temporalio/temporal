@@ -43,6 +43,7 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservicemock"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
@@ -5355,13 +5356,13 @@ func copyChildInfo(sourceInfo *persistence.ChildExecutionInfo) *persistence.Chil
 }
 
 func copyReplicationState(source *persistence.ReplicationState) *persistence.ReplicationState {
-	var lastReplicationInfo map[string]*persistence.ReplicationInfo
+	var lastReplicationInfo map[string]*replication.ReplicationInfo
 	if source.LastReplicationInfo != nil {
-		lastReplicationInfo = map[string]*persistence.ReplicationInfo{}
+		lastReplicationInfo = map[string]*replication.ReplicationInfo{}
 		for k, v := range source.LastReplicationInfo {
-			lastReplicationInfo[k] = &persistence.ReplicationInfo{
+			lastReplicationInfo[k] = &replication.ReplicationInfo{
 				Version:     v.Version,
-				LastEventID: v.LastEventID,
+				LastEventId: v.LastEventId,
 			}
 		}
 	}
