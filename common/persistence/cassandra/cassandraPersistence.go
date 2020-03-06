@@ -1087,6 +1087,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 						return nil, newPersistedTypeMismatchError("execution_state_encoding", "", stateEncoding, previous)
 					}
 
+					// todo: Move serialization to manager
 					protoState, err := serialization.WorkflowExecutionStateFromBlob(state, stateEncoding)
 					if err != nil {
 						return nil, err
@@ -1098,6 +1099,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 					msg := fmt.Sprintf("Workflow execution already running. WorkflowId: %v, RunId: %v, rangeID: %v, columns: (%v)",
 						executionInfo.WorkflowID, primitives.UUIDString(protoState.RunID), request.RangeID, strings.Join(columns, ","))
 					if request.Mode == p.CreateWorkflowModeBrandNew {
+						// todo: Look at moving these errors upstream to manager
 						return nil, &p.WorkflowExecutionAlreadyStartedError{
 							Msg:              msg,
 							StartRequestID:   protoState.CreateRequestID,
