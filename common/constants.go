@@ -60,6 +60,7 @@ const (
 
 // Data encoding types
 const (
+	// todo: Deprecate and use protoEncodingEnum.ToString()
 	EncodingTypeJSON     EncodingType = "json"
 	EncodingTypeThriftRW EncodingType = "thriftrw"
 	EncodingTypeGob      EncodingType = "gob"
