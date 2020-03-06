@@ -1383,9 +1383,9 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 	s.NoError(err)
 
 	s.NotEqual(ctx.event.TaskID, ctx2.event.TaskID)
-	s.Equal(ctx.event.TaskData.WorkflowID, ctx2.event.TaskData.WorkflowID)
-	s.Equal(ctx.event.TaskData.RunID, ctx2.event.TaskData.RunID)
-	s.Equal(ctx.event.TaskData.ScheduleID, ctx2.event.TaskData.ScheduleID)
+	s.Equal(ctx.event.Data.WorkflowID, ctx2.event.Data.WorkflowID)
+	s.Equal(ctx.event.Data.RunID, ctx2.event.Data.RunID)
+	s.Equal(ctx.event.Data.ScheduleID, ctx2.event.Data.ScheduleID)
 
 	ctx2.finish(nil)
 	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
@@ -1741,7 +1741,7 @@ func (m *testTaskManager) LeaseTaskList(request *persistence.LeaseTaskListReques
 
 	return &persistence.LeaseTaskListResponse{
 		TaskListInfo: &persistence.PersistedTaskListInfo{
-			ListData: &persistenceblobs.TaskListInfo{
+			Data: &persistenceblobs.TaskListInfo{
 				AckLevel: tlm.ackLevel,
 				DomainID: request.DomainID,
 				Name:     request.TaskList,
@@ -1817,9 +1817,9 @@ func (m *testTaskManager) DeleteTaskList(request *persistence.DeleteTaskListRequ
 
 // CreateTask provides a mock function with given fields: request
 func (m *testTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (*persistence.CreateTasksResponse, error) {
-	domainID := request.TaskListInfo.ListData.DomainID
-	taskList := request.TaskListInfo.ListData.Name
-	taskType := request.TaskListInfo.ListData.TaskType
+	domainID := request.TaskListInfo.Data.DomainID
+	taskList := request.TaskListInfo.Data.Name
+	taskType := request.TaskListInfo.Data.TaskType
 	rangeID := request.TaskListInfo.RangeID
 
 	tlm := m.getTaskListManager(newTestTaskListID(primitives.UUIDString(domainID), taskList, taskType))
@@ -1851,8 +1851,8 @@ func (m *testTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (
 	// Then insert all tasks if no errors
 	for _, task := range request.Tasks {
 		tlm.tasks.Put(task.TaskID, &persistenceblobs.AllocatedTaskInfo{
-			TaskData: task.TaskData,
-			TaskID:   task.TaskID,
+			Data:   task.Data,
+			TaskID: task.TaskID,
 		})
 		tlm.createTaskCount++
 	}

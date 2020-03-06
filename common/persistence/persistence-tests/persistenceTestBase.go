@@ -1250,7 +1250,7 @@ func (s *TestBase) CreateDecisionTask(domainID primitives.UUID, workflowExecutio
 	tasks := []*pblobs.AllocatedTaskInfo{
 		{
 			TaskID: taskID,
-			TaskData: &pblobs.TaskInfo{
+			Data: &pblobs.TaskInfo{
 				DomainID:    domainID,
 				WorkflowID:  *workflowExecution.WorkflowId,
 				RunID:       primitives.MustParseUUID(*workflowExecution.RunId),
@@ -1294,7 +1294,7 @@ func (s *TestBase) CreateActivityTasks(domainID primitives.UUID, workflowExecuti
 		taskID := s.GetNextSequenceNumber()
 		tasks := []*pblobs.AllocatedTaskInfo{
 			{
-				TaskData: &pblobs.TaskInfo{
+				Data: &pblobs.TaskInfo{
 					DomainID:    domainID,
 					WorkflowID:  *workflowExecution.WorkflowId,
 					RunID:       primitives.MustParseUUID(*workflowExecution.RunId),

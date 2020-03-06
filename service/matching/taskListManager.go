@@ -386,8 +386,8 @@ func (c *taskListManagerImpl) completeTask(task *persistenceblobs.AllocatedTaskI
 		// Note that RecordTaskStarted only fails after retrying for a long time, so a single task will not be
 		// re-written to persistence frequently.
 		_, err = c.executeWithRetry(func() (interface{}, error) {
-			wf := &commonproto.WorkflowExecution{WorkflowId: task.TaskData.WorkflowID, RunId: primitives.UUIDString(task.TaskData.RunID)}
-			return c.taskWriter.appendTask(wf, task.TaskData)
+			wf := &commonproto.WorkflowExecution{WorkflowId: task.Data.WorkflowID, RunId: primitives.UUIDString(task.Data.RunID)}
+			return c.taskWriter.appendTask(wf, task.Data)
 		})
 
 		if err != nil {
@@ -476,8 +476,8 @@ func (c *taskListManagerImpl) trySyncMatch(ctx context.Context, params addTaskPa
 
 	// Mocking out TaskId for syncmatch as it hasn't been allocated yet
 	fakeTaskIdWrapper := &persistenceblobs.AllocatedTaskInfo{
-		TaskData: params.taskInfo,
-		TaskID:   syncMatchTaskId,
+		Data:   params.taskInfo,
+		TaskID: syncMatchTaskId,
 	}
 
 	task := newInternalTask(fakeTaskIdWrapper, c.completeTask, params.forwardedFrom, true)

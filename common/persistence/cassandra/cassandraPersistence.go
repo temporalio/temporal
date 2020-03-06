@@ -2211,7 +2211,7 @@ func (d *cassandraPersistence) LeaseTaskList(request *p.LeaseTaskListRequest) (*
 	if err != nil {
 		if err == gocql.ErrNotFound { // First time task list is used
 			tl = &p.PersistedTaskListInfo{
-				ListData: &persistenceblobs.TaskListInfo{
+				Data: &persistenceblobs.TaskListInfo{
 					DomainID:    request.DomainID,
 					Name:        request.TaskList,
 					TaskType:    request.TaskType,
@@ -2222,7 +2222,7 @@ func (d *cassandraPersistence) LeaseTaskList(request *p.LeaseTaskListRequest) (*
 				},
 				RangeID: initialRangeID,
 			}
-			datablob, err := serialization.TaskListInfoToBlob(tl.ListData)
+			datablob, err := serialization.TaskListInfoToBlob(tl.Data)
 
 			if err != nil {
 				return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskList operation failed during serialization. TaskList: %v, TaskType: %v, Error: %v", request.TaskList, request.TaskType, err))
@@ -2261,11 +2261,11 @@ func (d *cassandraPersistence) LeaseTaskList(request *p.LeaseTaskListRequest) (*
 
 		tli.LastUpdated = now
 		tl = &p.PersistedTaskListInfo{
-			ListData: tli,
-			RangeID:  rangeID + 1,
+			Data:    tli,
+			RangeID: rangeID + 1,
 		}
 
-		datablob, err := serialization.TaskListInfoToBlob(tl.ListData)
+		datablob, err := serialization.TaskListInfoToBlob(tl.Data)
 		if err != nil {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskList operation failed during serialization. TaskList: %v, TaskType: %v, Error: %v", request.TaskList, request.TaskType, err))
 		}
@@ -2400,20 +2400,20 @@ func (d *cassandraPersistence) DeleteTaskList(request *p.DeleteTaskListRequest) 
 
 func MintAllocatedTaskInfo(taskID *int64, info *persistenceblobs.TaskInfo) *persistenceblobs.AllocatedTaskInfo {
 	return &persistenceblobs.AllocatedTaskInfo{
-		TaskData: info,
-		TaskID:   *taskID,
+		Data:   info,
+		TaskID: *taskID,
 	}
 }
 
 // From TaskManager interface
 func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.CreateTasksResponse, error) {
 	batch := d.session.NewBatch(gocql.LoggedBatch)
-	domainID := request.TaskListInfo.ListData.DomainID
-	taskList := request.TaskListInfo.ListData.Name
-	taskListType := request.TaskListInfo.ListData.TaskType
+	domainID := request.TaskListInfo.Data.DomainID
+	taskList := request.TaskListInfo.Data.Name
+	taskListType := request.TaskListInfo.Data.TaskType
 
 	for _, task := range request.Tasks {
-		ttl := GetTaskTTL(task.TaskData)
+		ttl := GetTaskTTL(task.Data)
 		datablob, err := serialization.TaskInfoToBlob(task)
 		if err != nil {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("CreateTasks operation failed during serialization. Error : %v", err))
@@ -2445,7 +2445,7 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 		}
 	}
 
-	tl := *request.TaskListInfo.ListData
+	tl := *request.TaskListInfo.Data
 	tl.LastUpdated = types.TimestampNow()
 	datablob, err := serialization.TaskListInfoToBlob(&tl)
 

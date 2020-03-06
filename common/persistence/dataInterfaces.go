@@ -1002,8 +1002,8 @@ type (
 	}
 
 	PersistedTaskListInfo struct {
-		ListData *pblobs.TaskListInfo
-		RangeID  int64
+		Data    *pblobs.TaskListInfo
+		RangeID int64
 	}
 
 	// GetTasksRequest is used to retrieve tasks of a task list

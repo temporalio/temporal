@@ -199,13 +199,13 @@ func (s *Scavenger) emitStats() {
 func (s *Scavenger) newTask(info *p.PersistedTaskListInfo) executor.Task {
 	return &executorTask{
 		TaskListKey: p.TaskListKey{
-			DomainID: info.ListData.DomainID,
-			Name:     info.ListData.Name,
-			TaskType: info.ListData.TaskType,
+			DomainID: info.Data.DomainID,
+			Name:     info.Data.Name,
+			TaskType: info.Data.TaskType,
 		},
 		taskListState: taskListState{
 			rangeID:     info.RangeID,
-			lastUpdated: *info.ListData.LastUpdated,
+			lastUpdated: *info.Data.LastUpdated,
 		},
 		scvg: s,
 	}

@@ -56,7 +56,7 @@ func newMockTaskTable() *mockTaskTable {
 
 func (tbl *mockTaskListTable) generate(name string, idle bool) {
 	tl := p.PersistedTaskListInfo{
-		ListData: &persistenceblobs.TaskListInfo{
+		Data: &persistenceblobs.TaskListInfo{
 			DomainID: uuid.NewRandom(),
 			Name:     name,
 			LastUpdated: types.TimestampNow(),
@@ -64,7 +64,7 @@ func (tbl *mockTaskListTable) generate(name string, idle bool) {
 		RangeID:     22,
 	}
 	if idle {
-		tl.ListData.LastUpdated, _ = types.TimestampProto(time.Unix(1000, 1000))
+		tl.Data.LastUpdated, _ = types.TimestampProto(time.Unix(1000, 1000))
 	}
 	tbl.info = append(tbl.info, &tl)
 }
@@ -93,7 +93,7 @@ func (tbl *mockTaskListTable) delete(name string) {
 	defer tbl.Unlock()
 	var newInfo []*p.PersistedTaskListInfo
 	for _, tl := range tbl.info {
-		if tl.ListData.Name != name {
+		if tl.Data.Name != name {
 			newInfo = append(newInfo, tl)
 		}
 	}
@@ -104,7 +104,7 @@ func (tbl *mockTaskListTable) get(name string) *p.PersistedTaskListInfo {
 	tbl.Lock()
 	defer tbl.Unlock()
 	for _, tl := range tbl.info {
-		if tl.ListData.Name == name {
+		if tl.Data.Name == name {
 			return tl
 		}
 	}
@@ -115,7 +115,7 @@ func (tbl *mockTaskTable) generate(count int, expired bool) {
 	for i := 0; i < count; i++ {
 		exp, _ := types.TimestampProto(time.Now().Add(time.Hour))
 		ti := &persistenceblobs.AllocatedTaskInfo{
-			TaskData: &persistenceblobs.TaskInfo{
+			Data: &persistenceblobs.TaskInfo{
 				DomainID:   tbl.domainID,
 				WorkflowID: tbl.workflowID,
 				RunID:      tbl.runID,
@@ -126,7 +126,7 @@ func (tbl *mockTaskTable) generate(count int, expired bool) {
 
 		}
 		if expired {
-			ti.TaskData.Expiry, _ = types.TimestampProto(time.Unix(0, time.Now().UnixNano()-int64(time.Second*33)))
+			ti.Data.Expiry, _ = types.TimestampProto(time.Unix(0, time.Now().UnixNano()-int64(time.Second*33)))
 		}
 		tbl.tasks = append(tbl.tasks, ti)
 		tbl.nextTaskID++

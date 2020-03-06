@@ -92,7 +92,7 @@ func (db *taskListDB) RenewLease() (taskListState, error) {
 	if err != nil {
 		return taskListState{}, err
 	}
-	db.ackLevel = resp.TaskListInfo.ListData.AckLevel
+	db.ackLevel = resp.TaskListInfo.Data.AckLevel
 	db.rangeID = resp.TaskListInfo.RangeID
 	return taskListState{rangeID: db.rangeID, ackLevel: db.ackLevel}, nil
 }
@@ -124,7 +124,7 @@ func (db *taskListDB) CreateTasks(tasks []*persistenceblobs.AllocatedTaskInfo) (
 	return db.store.CreateTasks(
 		&persistence.CreateTasksRequest{
 			TaskListInfo: &persistence.PersistedTaskListInfo{
-				ListData: &persistenceblobs.TaskListInfo{
+				Data: &persistenceblobs.TaskListInfo{
 					DomainID: db.domainID,
 					Name:     db.taskListName,
 					TaskType: db.taskType,

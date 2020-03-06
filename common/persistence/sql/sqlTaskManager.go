@@ -152,8 +152,8 @@ func (m *sqlTaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest
 			return fmt.Errorf("%v rows affected instead of 1", rowsAffected)
 		}
 		resp = &persistence.LeaseTaskListResponse{TaskListInfo: &persistence.PersistedTaskListInfo{
-			ListData: tlInfo,
-			RangeID:  row.RangeID + 1,
+			Data:    tlInfo,
+			RangeID: row.RangeID + 1,
 		}}
 		return nil
 	})
@@ -289,8 +289,8 @@ func (m *sqlTaskManager) ListTaskList(request *persistence.ListTaskListRequest) 
 			return nil, err
 		}
 		resp.Items[i] = &persistence.PersistedTaskListInfo{
-			ListData: info,
-			RangeID:  rows[i].RangeID,
+			Data:    info,
+			RangeID: rows[i].RangeID,
 		}
 	}
 
@@ -328,9 +328,9 @@ func (m *sqlTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (*
 			return nil, err
 		}
 		tasksRows[i] = sqlplugin.TasksRow{
-			DomainID:     v.TaskData.DomainID,
-			TaskListName: request.TaskListInfo.ListData.Name,
-			TaskType:     int64(request.TaskListInfo.ListData.TaskType),
+			DomainID:     v.Data.DomainID,
+			TaskListName: request.TaskListInfo.Data.Name,
+			TaskType:     int64(request.TaskListInfo.Data.TaskType),
 			TaskID:       v.TaskID,
 			Data:         blob.Data,
 			DataEncoding: string(blob.Encoding),
@@ -343,11 +343,11 @@ func (m *sqlTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (*
 		}
 		// Lock task list before committing.
 		err1 := lockTaskList(tx,
-			m.shardID(request.TaskListInfo.ListData.DomainID,
-				request.TaskListInfo.ListData.Name),
-			request.TaskListInfo.ListData.DomainID,
-			request.TaskListInfo.ListData.Name,
-			request.TaskListInfo.ListData.TaskType,
+			m.shardID(request.TaskListInfo.Data.DomainID,
+				request.TaskListInfo.Data.Name),
+			request.TaskListInfo.Data.DomainID,
+			request.TaskListInfo.Data.Name,
+			request.TaskListInfo.Data.TaskType,
 			request.TaskListInfo.RangeID)
 		if err1 != nil {
 			return err1

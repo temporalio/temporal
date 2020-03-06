@@ -103,13 +103,13 @@ func (s *MatchingPersistenceSuite) TestCreateTask() {
 		resp, err := s.GetTasks(domainID, tlName, p.TaskListTypeActivity, 100)
 		s.NoError(err)
 		s.Equal(1, len(resp.Tasks))
-		s.EqualValues(domainID, resp.Tasks[0].TaskData.DomainID)
-		s.Equal(*workflowExecution.WorkflowId, resp.Tasks[0].TaskData.WorkflowID)
-		s.EqualValues(primitives.MustParseUUID(*workflowExecution.RunId), resp.Tasks[0].TaskData.RunID)
-		s.Equal(sid, resp.Tasks[0].TaskData.ScheduleID)
-		cTime, err := types.TimestampFromProto(resp.Tasks[0].TaskData.CreatedTime)
+		s.EqualValues(domainID, resp.Tasks[0].Data.DomainID)
+		s.Equal(*workflowExecution.WorkflowId, resp.Tasks[0].Data.WorkflowID)
+		s.EqualValues(primitives.MustParseUUID(*workflowExecution.RunId), resp.Tasks[0].Data.RunID)
+		s.Equal(sid, resp.Tasks[0].Data.ScheduleID)
+		cTime, err := types.TimestampFromProto(resp.Tasks[0].Data.CreatedTime)
 		s.NoError(err)
-		eTime, err := types.TimestampFromProto(resp.Tasks[0].TaskData.Expiry)
+		eTime, err := types.TimestampFromProto(resp.Tasks[0].Data.Expiry)
 		s.NoError(err)
 		s.True(cTime.UnixNano() > 0)
 		if s.TaskMgr.GetName() != "cassandra" {
@@ -134,7 +134,7 @@ func (s *MatchingPersistenceSuite) TestGetDecisionTasks() {
 	s.NoError(err1)
 	s.NotNil(tasks1Response.Tasks, "expected valid list of tasks.")
 	s.Equal(1, len(tasks1Response.Tasks), "Expected 1 decision task.")
-	s.Equal(int64(5), tasks1Response.Tasks[0].TaskData.ScheduleID)
+	s.Equal(int64(5), tasks1Response.Tasks[0].Data.ScheduleID)
 }
 
 // TestGetTasksWithNoMaxReadLevel test
@@ -214,9 +214,9 @@ func (s *MatchingPersistenceSuite) TestCompleteDecisionTask() {
 
 	s.Equal(5, len(tasksWithID1), "Expected 5 activity tasks.")
 	for _, t := range tasksWithID1 {
-		s.EqualValues(domainID, t.TaskData.DomainID)
-		s.Equal(*workflowExecution.WorkflowId, t.TaskData.WorkflowID)
-		s.EqualValues(primitives.MustParseUUID(*workflowExecution.RunId), t.TaskData.RunID)
+		s.EqualValues(domainID, t.Data.DomainID)
+		s.Equal(*workflowExecution.WorkflowId, t.Data.WorkflowID)
+		s.EqualValues(primitives.MustParseUUID(*workflowExecution.RunId), t.Data.RunID)
 		s.True(t.TaskID > 0)
 
 		err2 := s.CompleteTask(domainID, taskList, p.TaskListTypeActivity, t.TaskID)
@@ -307,8 +307,8 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskList() {
 	s.NoError(err)
 	tli := response.TaskListInfo
 	s.EqualValues(1, tli.RangeID)
-	s.EqualValues(0, tli.ListData.AckLevel)
-	lu, err := types.TimestampFromProto(tli.ListData.LastUpdated)
+	s.EqualValues(0, tli.Data.AckLevel)
+	lu, err := types.TimestampFromProto(tli.Data.LastUpdated)
 	s.NoError(err)
 	s.True(lu.After(leaseTime) || lu.Equal(leaseTime))
 
@@ -322,8 +322,8 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskList() {
 	tli = response.TaskListInfo
 	s.NotNil(tli)
 	s.EqualValues(2, tli.RangeID)
-	s.EqualValues(0, tli.ListData.AckLevel)
-	lu2, err := types.TimestampFromProto(tli.ListData.LastUpdated)
+	s.EqualValues(0, tli.Data.AckLevel)
+	lu2, err := types.TimestampFromProto(tli.Data.LastUpdated)
 	s.NoError(err)
 	s.True(lu2.After(leaseTime) || lu2.Equal(leaseTime))
 
@@ -371,8 +371,8 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskListSticky() {
 	s.NoError(err)
 	tli := response.TaskListInfo
 	s.EqualValues(1, tli.RangeID)
-	s.EqualValues(0, tli.ListData.AckLevel)
-	s.EqualValues(p.TaskListKindSticky, tli.ListData.Kind)
+	s.EqualValues(0, tli.Data.AckLevel)
+	s.EqualValues(p.TaskListKindSticky, tli.Data.Kind)
 
 	taskListInfo := &persistenceblobs.TaskListInfo{
 		DomainID: domainID,
@@ -394,7 +394,7 @@ func (s *MatchingPersistenceSuite) deleteAllTaskList() {
 		resp, err := s.TaskMgr.ListTaskList(&p.ListTaskListRequest{PageSize: 10, PageToken: nextPageToken})
 		s.NoError(err)
 		for _, i := range resp.Items {
-			it := i.ListData
+			it := i.Data
 			err = s.TaskMgr.DeleteTaskList(&p.DeleteTaskListRequest{
 				TaskList: &p.TaskListKey{
 					DomainID: it.DomainID,
@@ -441,18 +441,18 @@ func (s *MatchingPersistenceSuite) TestListWithOneTaskList() {
 		s.NoError(err)
 
 		s.Equal(1, len(resp.Items))
-		s.EqualValues(domainID, resp.Items[0].ListData.DomainID)
-		s.Equal("list-task-list-test-tl0", resp.Items[0].ListData.Name)
-		s.Equal(p.TaskListTypeActivity, resp.Items[0].ListData.TaskType)
-		s.EqualValues(p.TaskListKindSticky, resp.Items[0].ListData.Kind)
+		s.EqualValues(domainID, resp.Items[0].Data.DomainID)
+		s.Equal("list-task-list-test-tl0", resp.Items[0].Data.Name)
+		s.Equal(p.TaskListTypeActivity, resp.Items[0].Data.TaskType)
+		s.EqualValues(p.TaskListKindSticky, resp.Items[0].Data.Kind)
 		s.Equal(rangeID, resp.Items[0].RangeID)
-		s.Equal(ackLevel, resp.Items[0].ListData.AckLevel)
-		lu0, err := types.TimestampFromProto(resp.Items[0].ListData.LastUpdated)
+		s.Equal(ackLevel, resp.Items[0].Data.AckLevel)
+		lu0, err := types.TimestampFromProto(resp.Items[0].Data.LastUpdated)
 		s.NoError(err)
 		s.True(lu0.After(updatedTime) || lu0.Equal(updatedTime))
 
 		ackLevel++
-		updateTL := resp.Items[0].ListData
+		updateTL := resp.Items[0].Data
 		updateTL.AckLevel = ackLevel
 		updatedTime = time.Now()
 		_, err = s.TaskMgr.UpdateTaskList(&p.UpdateTaskListRequest{
@@ -464,7 +464,7 @@ func (s *MatchingPersistenceSuite) TestListWithOneTaskList() {
 		resp, err = s.TaskMgr.ListTaskList(&p.ListTaskListRequest{PageSize: 10})
 		s.NoError(err)
 		s.Equal(1, len(resp.Items))
-		lu0, err = types.TimestampFromProto(resp.Items[0].ListData.LastUpdated)
+		lu0, err = types.TimestampFromProto(resp.Items[0].Data.LastUpdated)
 		s.NoError(err)
 		s.True(lu0.After(updatedTime) || lu0.Equal(updatedTime))
 	}
@@ -496,7 +496,7 @@ func (s *MatchingPersistenceSuite) TestListWithMultipleTaskList() {
 			resp, err := s.TaskMgr.ListTaskList(&p.ListTaskListRequest{PageSize: 10, PageToken: nextPageToken})
 			s.NoError(err)
 			for _, i := range resp.Items {
-				it := i.ListData
+				it := i.Data
 				s.EqualValues(primitives.MustParseUUID(domainID), it.DomainID)
 				s.Equal(p.TaskListTypeActivity, it.TaskType)
 				s.Equal(p.TaskListKindNormal, it.Kind)

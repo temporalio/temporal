@@ -146,7 +146,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 	var err error
 
 	// todo: Vet recomputing ScheduleToStart and rechecking expiry here
-	expiryGo, err := types.TimestampFromProto(task.event.TaskData.Expiry)
+	expiryGo, err := types.TimestampFromProto(task.event.Data.Expiry)
 	if err != nil {
 		return err
 	}
@@ -161,26 +161,26 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 	switch fwdr.taskListID.taskType {
 	case persistence.TaskListTypeDecision:
 		_, err = fwdr.client.AddDecisionTask(ctx, &matchingservice.AddDecisionTaskRequest{
-			DomainUUID: primitives.UUIDString(task.event.TaskData.DomainID),
+			DomainUUID: primitives.UUIDString(task.event.Data.DomainID),
 			Execution:  task.workflowExecution(),
 			TaskList: &commonproto.TaskList{
 				Name: name,
 				Kind: enums.TaskListKind(fwdr.taskListKind),
 			},
-			ScheduleId:                    task.event.TaskData.ScheduleID,
+			ScheduleId:                    task.event.Data.ScheduleID,
 			ScheduleToStartTimeoutSeconds: newScheduleToStartTimeout,
 			ForwardedFrom:                 fwdr.taskListID.name,
 		})
 	case persistence.TaskListTypeActivity:
 		_, err = fwdr.client.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 			DomainUUID:       fwdr.taskListID.domainID,
-			SourceDomainUUID: primitives.UUIDString(task.event.TaskData.DomainID),
+			SourceDomainUUID: primitives.UUIDString(task.event.Data.DomainID),
 			Execution:        task.workflowExecution(),
 			TaskList: &commonproto.TaskList{
 				Name: name,
 				Kind: enums.TaskListKind(fwdr.taskListKind),
 			},
-			ScheduleId:                    task.event.TaskData.ScheduleID,
+			ScheduleId:                    task.event.Data.ScheduleID,
 			ScheduleToStartTimeoutSeconds: newScheduleToStartTimeout,
 			ForwardedFrom:                 fwdr.taskListID.name,
 		})

@@ -693,16 +693,16 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(
 		token, _ = e.tokenSerializer.SerializeQueryTaskToken(taskToken)
 	} else {
 		taskToken := &common.TaskToken{
-			DomainID:        task.event.TaskData.DomainID,
-			WorkflowID:      task.event.TaskData.WorkflowID,
-			RunID:           task.event.TaskData.RunID,
+			DomainID:        task.event.Data.DomainID,
+			WorkflowID:      task.event.Data.WorkflowID,
+			RunID:           task.event.Data.RunID,
 			ScheduleID:      historyResponse.GetScheduledEventId(),
 			ScheduleAttempt: historyResponse.GetAttempt(),
 		}
 		token, _ = e.tokenSerializer.Serialize(taskToken)
 		if task.responseC == nil {
 			scope := e.metricsClient.Scope(metrics.MatchingPollForDecisionTaskScope)
-			ct, _ := types.TimestampFromProto(task.event.TaskData.CreatedTime)
+			ct, _ := types.TimestampFromProto(task.event.Data.CreatedTime)
 			scope.Tagged(metrics.DomainTag(task.domainName)).RecordTimer(metrics.AsyncMatchLatency, time.Since(ct))
 		}
 	}
@@ -734,15 +734,15 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(
 	}
 	if task.responseC == nil {
 		scope := e.metricsClient.Scope(metrics.MatchingPollForActivityTaskScope)
-		ct, _ := types.TimestampFromProto(task.event.TaskData.CreatedTime)
+		ct, _ := types.TimestampFromProto(task.event.Data.CreatedTime)
 		scope.Tagged(metrics.DomainTag(task.domainName)).RecordTimer(metrics.AsyncMatchLatency, time.Since(ct))
 	}
 
 	token := &common.TaskToken{
-		DomainID:        task.event.TaskData.DomainID,
-		WorkflowID:      task.event.TaskData.WorkflowID,
-		RunID:           task.event.TaskData.RunID,
-		ScheduleID:      task.event.TaskData.ScheduleID,
+		DomainID:        task.event.Data.DomainID,
+		WorkflowID:      task.event.Data.WorkflowID,
+		RunID:           task.event.Data.RunID,
+		ScheduleID:      task.event.Data.ScheduleID,
 		ScheduleAttempt: historyResponse.GetAttempt(),
 	}
 
@@ -774,9 +774,9 @@ func (e *matchingEngineImpl) recordDecisionTaskStarted(
 	task *internalTask,
 ) (*historyservice.RecordDecisionTaskStartedResponse, error) {
 	request := &historyservice.RecordDecisionTaskStartedRequest{
-		DomainUUID:        primitives.UUIDString(task.event.TaskData.DomainID),
+		DomainUUID:        primitives.UUIDString(task.event.Data.DomainID),
 		WorkflowExecution: task.workflowExecution(),
-		ScheduleId:        task.event.TaskData.ScheduleID,
+		ScheduleId:        task.event.Data.ScheduleID,
 		TaskId:            task.event.TaskID,
 		RequestId:         uuid.New(),
 		PollRequest:       pollReq,
@@ -803,9 +803,9 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 	task *internalTask,
 ) (*historyservice.RecordActivityTaskStartedResponse, error) {
 	request := &historyservice.RecordActivityTaskStartedRequest{
-		DomainUUID:        primitives.UUIDString(task.event.TaskData.DomainID),
+		DomainUUID:        primitives.UUIDString(task.event.Data.DomainID),
 		WorkflowExecution: task.workflowExecution(),
-		ScheduleId:        task.event.TaskData.ScheduleID,
+		ScheduleId:        task.event.Data.ScheduleID,
 		TaskId:            task.event.TaskID,
 		RequestId:         uuid.New(),
 		PollRequest:       pollReq,
