@@ -35,6 +35,7 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/backoff"
@@ -243,7 +244,7 @@ func newMutableStateBuilderWithReplicationState(
 		CurrentVersion:      s.currentVersion,
 		LastWriteVersion:    common.EmptyVersion,
 		LastWriteEventID:    common.EmptyEventID,
-		LastReplicationInfo: make(map[string]*persistence.ReplicationInfo),
+		LastReplicationInfo: make(map[string]*replication.ReplicationInfo),
 	}
 	return s
 }
@@ -604,13 +605,13 @@ func (e *mutableStateBuilder) UpdateReplicationStateLastEventID(
 	if lastEventSourceCluster != currentCluster {
 		info, ok := e.replicationState.LastReplicationInfo[lastEventSourceCluster]
 		if !ok {
-			// ReplicationInfo doesn't exist for this cluster, create one
-			info = &persistence.ReplicationInfo{}
+			// replication.ReplicationInfo doesn't exist for this cluster, create one
+			info = &replication.ReplicationInfo{}
 			e.replicationState.LastReplicationInfo[lastEventSourceCluster] = info
 		}
 
 		info.Version = lastWriteVersion
-		info.LastEventID = lastEventID
+		info.LastEventId = lastEventID
 	}
 }
 

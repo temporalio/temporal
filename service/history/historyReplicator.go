@@ -989,7 +989,7 @@ func (r *historyReplicator) terminateWorkflow(
 
 func (r *historyReplicator) getLatestCheckpoint(
 	replicationInfoRemote map[string]*replication.ReplicationInfo,
-	replicationInfoLocal map[string]*persistence.ReplicationInfo,
+	replicationInfoLocal map[string]*replication.ReplicationInfo,
 ) (int64, int64) {
 
 	// this only applies to 2 data center case
@@ -1007,7 +1007,7 @@ func (r *historyReplicator) getLatestCheckpoint(
 	for _, ri := range replicationInfoLocal {
 		if lastValidVersion == common.EmptyVersion || ri.Version > lastValidVersion {
 			lastValidVersion = ri.Version
-			lastValidEventID = ri.LastEventID
+			lastValidEventID = ri.LastEventId
 		}
 	}
 

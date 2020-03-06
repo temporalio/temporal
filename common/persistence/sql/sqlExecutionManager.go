@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/collection"
 	"github.com/temporalio/temporal/common/log"
@@ -225,65 +226,25 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 		return nil, err
 	}
 
-	var state p.InternalWorkflowMutableState
-	state.ExecutionInfo = &p.InternalWorkflowExecutionInfo{
-		DomainID:                           execution.DomainID.String(),
-		WorkflowID:                         execution.WorkflowID,
-		RunID:                              execution.RunID.String(),
-		NextEventID:                        execution.NextEventID,
-		TaskList:                           info.GetTaskList(),
-		WorkflowTypeName:                   info.GetWorkflowTypeName(),
-		WorkflowTimeout:                    info.GetWorkflowTimeoutSeconds(),
-		DecisionStartToCloseTimeout:        info.GetDecisionTaskTimeoutSeconds(),
-		State:                              int(info.GetState()),
-		CloseStatus:                        int(info.GetCloseStatus()),
-		LastFirstEventID:                   info.GetLastFirstEventID(),
-		LastProcessedEvent:                 info.GetLastProcessedEvent(),
-		StartTimestamp:                     time.Unix(0, info.GetStartTimeNanos()),
-		LastUpdatedTimestamp:               time.Unix(0, info.GetLastUpdatedTimeNanos()),
-		CreateRequestID:                    info.GetCreateRequestID(),
-		DecisionVersion:                    info.GetDecisionVersion(),
-		DecisionScheduleID:                 info.GetDecisionScheduleID(),
-		DecisionStartedID:                  info.GetDecisionStartedID(),
-		DecisionRequestID:                  info.GetDecisionRequestID(),
-		DecisionTimeout:                    info.GetDecisionTimeout(),
-		DecisionAttempt:                    info.GetDecisionAttempt(),
-		DecisionStartedTimestamp:           info.GetDecisionStartedTimestampNanos(),
-		DecisionScheduledTimestamp:         info.GetDecisionScheduledTimestampNanos(),
-		DecisionOriginalScheduledTimestamp: info.GetDecisionOriginalScheduledTimestampNanos(),
-		StickyTaskList:                     info.GetStickyTaskList(),
-		StickyScheduleToStartTimeout:       int32(info.GetStickyScheduleToStartTimeout()),
-		ClientLibraryVersion:               info.GetClientLibraryVersion(),
-		ClientFeatureVersion:               info.GetClientFeatureVersion(),
-		ClientImpl:                         info.GetClientImpl(),
-		SignalCount:                        int32(info.GetSignalCount()),
-		HistorySize:                        info.GetHistorySize(),
-		CronSchedule:                       info.GetCronSchedule(),
-		CompletionEventBatchID:             common.EmptyEventID,
-		HasRetryPolicy:                     info.GetHasRetryPolicy(),
-		Attempt:                            int32(info.GetRetryAttempt()),
-		InitialInterval:                    info.GetRetryInitialIntervalSeconds(),
-		BackoffCoefficient:                 info.GetRetryBackoffCoefficient(),
-		MaximumInterval:                    info.GetRetryMaximumIntervalSeconds(),
-		MaximumAttempts:                    info.GetRetryMaximumAttempts(),
-		ExpirationSeconds:                  info.GetRetryExpirationSeconds(),
-		ExpirationTime:                     time.Unix(0, info.GetRetryExpirationTimeNanos()),
-		BranchToken:                        info.GetEventBranchToken(),
-		ExecutionContext:                   info.GetExecutionContext(),
-		NonRetriableErrors:                 info.GetRetryNonRetryableErrors(),
-		SearchAttributes:                   info.GetSearchAttributes(),
-		Memo:                               info.GetMemo(),
+	executionState, err := serialization.WorkflowExecutionStateFromBlob(execution.State, execution.StateEncoding)
+	if err != nil {
+		return nil, err
 	}
+
+	// Build partial from proto
+	executionInfo := p.ProtoWorkflowExecutionToPartialInternalExecution(info, executionState, execution.NextEventID)
+
+	state := &p.InternalWorkflowMutableState{ExecutionInfo: executionInfo}
 
 	if info.LastWriteEventID != nil {
 		state.ReplicationState = &p.ReplicationState{}
 		state.ReplicationState.StartVersion = info.GetStartVersion()
 		state.ReplicationState.CurrentVersion = info.GetCurrentVersion()
 		state.ReplicationState.LastWriteVersion = execution.LastWriteVersion
-		state.ReplicationState.LastWriteEventID = info.GetLastWriteEventID()
-		state.ReplicationState.LastReplicationInfo = make(map[string]*p.ReplicationInfo, len(info.LastReplicationInfo))
+		state.ReplicationState.LastWriteEventID = info.GetLastWriteEventID().Value
+		state.ReplicationState.LastReplicationInfo = make(map[string]*replication.ReplicationInfo, len(info.LastReplicationInfo))
 		for k, v := range info.LastReplicationInfo {
-			state.ReplicationState.LastReplicationInfo[k] = &p.ReplicationInfo{Version: v.GetVersion(), LastEventID: v.GetLastEventID()}
+			state.ReplicationState.LastReplicationInfo[k] = &replication.ReplicationInfo{Version: v.GetVersion(), LastEventId: v.LastEventId}
 		}
 	}
 
@@ -407,7 +368,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 		}
 	}
 
-	return &p.InternalGetWorkflowExecutionResponse{State: &state}, nil
+	return &p.InternalGetWorkflowExecutionResponse{State: state}, nil
 }
 
 func (m *sqlExecutionManager) UpdateWorkflowExecution(
@@ -890,11 +851,11 @@ func (m *sqlExecutionManager) populateGetReplicationTasksResponse(
 			return nil, err
 		}
 
-		var lastReplicationInfo map[string]*p.ReplicationInfo
+		var lastReplicationInfo map[string]*replication.ReplicationInfo
 		if info.GetTaskType() == p.ReplicationTaskTypeHistory {
-			lastReplicationInfo = make(map[string]*p.ReplicationInfo, len(info.LastReplicationInfo))
+			lastReplicationInfo = make(map[string]*replication.ReplicationInfo, len(info.LastReplicationInfo))
 			for k, v := range info.LastReplicationInfo {
-				lastReplicationInfo[k] = &p.ReplicationInfo{Version: v.GetVersion(), LastEventID: v.GetLastEventId()}
+				lastReplicationInfo[k] = &replication.ReplicationInfo{Version: v.GetVersion(), LastEventId: v.GetLastEventId()}
 			}
 		}
 

@@ -22,13 +22,16 @@ package persistence
 
 import (
 	"fmt"
+	"time"
 
+	"github.com/gogo/protobuf/types"
+	"go.temporal.io/temporal-proto/serviceerror"
+
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/primitives"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/persistence/serialization"
-
-	"time"
 
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
@@ -704,7 +707,7 @@ func NewDataBlob(data []byte, encodingType common.EncodingType) *serialization.D
 	if data == nil || len(data) == 0 {
 		return nil
 	}
-	if encodingType != "thriftrw" && data[0] == 'Y' {
+	if encodingType != common.EncodingTypeThriftRW && data[0] == 'Y' {
 		panic(fmt.Sprintf("Invalid incoding: \"%v\"", encodingType))
 	}
 	return &serialization.DataBlob{

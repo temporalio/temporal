@@ -1082,7 +1082,7 @@ func (e *historyEngineImpl) getMutableState(
 		for k, v := range replicationState.LastReplicationInfo {
 			retResp.ReplicationInfo[k] = &replication.ReplicationInfo{
 				Version:     v.Version,
-				LastEventId: v.LastEventID,
+				LastEventId: v.LastEventId,
 			}
 		}
 	}
