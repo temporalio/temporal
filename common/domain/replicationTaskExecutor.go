@@ -240,7 +240,7 @@ func (h *domainReplicationTaskExecutorImpl) handleDomainUpdateReplicationTask(ta
 			VisibilityArchivalURI:    task.Config.GetVisibilityArchivalURI(),
 		}
 		if task.Config.GetBadBinaries() != nil {
-			request.Config.BadBinaries = *adapter.ToThriftBadBinaries(task.Config.GetBadBinaries())
+			request.Config.BadBinaries = adapter.ToThriftBadBinaries(*task.Config.GetBadBinaries())
 		}
 		request.ReplicationConfig.Clusters = h.convertClusterReplicationConfigFromProto(task.ReplicationConfig.Clusters)
 		request.ConfigVersion = task.GetConfigVersion()

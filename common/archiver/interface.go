@@ -23,7 +23,9 @@ package archiver
 import (
 	"context"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
+
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
@@ -56,7 +58,7 @@ type (
 
 	// GetHistoryResponse is the response of Get archived history
 	GetHistoryResponse struct {
-		HistoryBatches []*shared.History
+		HistoryBatches []*commonproto.History
 		NextPageToken  []byte
 	}
 
@@ -94,9 +96,9 @@ type (
 		StartTimestamp     int64
 		ExecutionTimestamp int64
 		CloseTimestamp     int64
-		CloseStatus        shared.WorkflowExecutionCloseStatus
+		CloseStatus        enums.WorkflowExecutionCloseStatus
 		HistoryLength      int64
-		Memo               *shared.Memo
+		Memo               *commonproto.Memo
 		SearchAttributes   map[string]string
 		HistoryArchivalURI string
 	}
@@ -111,7 +113,7 @@ type (
 
 	// QueryVisibilityResponse is the response of querying archived visibility records
 	QueryVisibilityResponse struct {
-		Executions    []*shared.WorkflowExecutionInfo
+		Executions    []*commonproto.WorkflowExecutionInfo
 		NextPageToken []byte
 	}
 

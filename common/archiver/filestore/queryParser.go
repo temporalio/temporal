@@ -30,8 +30,8 @@ import (
 	"time"
 
 	"github.com/xwb1989/sqlparser"
+	"go.temporal.io/temporal-proto/enums"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 )
 
@@ -49,7 +49,7 @@ type (
 		workflowID        *string
 		runID             *string
 		workflowTypeName  *string
-		closeStatus       *shared.WorkflowExecutionCloseStatus
+		closeStatus       *enums.WorkflowExecutionCloseStatus
 		emptyResult       bool
 	}
 )
@@ -187,7 +187,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 			parsedQuery.emptyResult = true
 			return nil
 		}
-		parsedQuery.closeStatus = status.Ptr()
+		parsedQuery.closeStatus = &status
 	case CloseTime:
 		timestamp, err := convertToTimestamp(valStr)
 		if err != nil {
@@ -240,19 +240,19 @@ func convertToTimestamp(timeStr string) (int64, error) {
 	return parsedTime.UnixNano(), nil
 }
 
-func convertStatusStr(statusStr string) (shared.WorkflowExecutionCloseStatus, error) {
+func convertStatusStr(statusStr string) (enums.WorkflowExecutionCloseStatus, error) {
 	statusStr = strings.ToLower(statusStr)
 	switch statusStr {
 	case "completed":
-		return shared.WorkflowExecutionCloseStatusCompleted, nil
+		return enums.WorkflowExecutionCloseStatusCompleted, nil
 	case "failed":
-		return shared.WorkflowExecutionCloseStatusFailed, nil
+		return enums.WorkflowExecutionCloseStatusFailed, nil
 	case "canceled":
-		return shared.WorkflowExecutionCloseStatusCanceled, nil
+		return enums.WorkflowExecutionCloseStatusCanceled, nil
 	case "continuedasnew":
-		return shared.WorkflowExecutionCloseStatusContinuedAsNew, nil
+		return enums.WorkflowExecutionCloseStatusContinuedAsNew, nil
 	case "timedout":
-		return shared.WorkflowExecutionCloseStatusTimedOut, nil
+		return enums.WorkflowExecutionCloseStatusTimedOut, nil
 	default:
 		return 0, fmt.Errorf("unknown workflow close status: %s", statusStr)
 	}

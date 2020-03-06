@@ -21,6 +21,7 @@
 package gcloud
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -29,21 +30,52 @@ import (
 	"strings"
 
 	"github.com/dgryski/go-farm"
-
-	"github.com/temporalio/temporal/.gen/go/shared"
+	"github.com/gogo/protobuf/jsonpb"
+	commonproto "go.temporal.io/temporal-proto/common"
 )
 
 func encode(v interface{}) ([]byte, error) {
 	return json.Marshal(v)
 }
 
-func decodeHistoryBatches(data []byte) ([]*shared.History, error) {
-	historyBatches := []*shared.History{}
-	err := json.Unmarshal(data, &historyBatches)
+func encodeHistoryBatches(histories []*commonproto.History) ([]byte, error) {
+	m := jsonpb.Marshaler{}
+	var buf bytes.Buffer
+	buf.WriteString("[")
+	lastHistoryIndex := len(histories) - 1
+	for i, history := range histories {
+		if err := m.Marshal(&buf, history); err != nil {
+			return nil, err
+		}
+
+		if i == lastHistoryIndex {
+			buf.WriteString("]")
+		} else {
+			buf.WriteString(",")
+		}
+	}
+
+	return buf.Bytes(), nil
+}
+
+func decodeHistoryBatches(data []byte) ([]*commonproto.History, error) {
+	jsonDecoder := json.NewDecoder(bytes.NewReader(data))
+
+	_, err := jsonDecoder.Token()
 	if err != nil {
 		return nil, err
 	}
-	return historyBatches, nil
+	var histories []*commonproto.History
+	for jsonDecoder.More() {
+		history := &commonproto.History{}
+		err := jsonpb.UnmarshalNext(jsonDecoder, history)
+		if err != nil {
+			return nil, err
+		}
+		histories = append(histories, history)
+	}
+
+	return histories, nil
 }
 
 func constructHistoryFilename(domainID, workflowID, runID string, version int64) string {

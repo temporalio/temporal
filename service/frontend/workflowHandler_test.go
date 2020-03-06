@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.temporal.io/temporal-proto/workflowservice"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
@@ -135,7 +134,7 @@ func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 }
 
 func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
-	domain := "test-domain"
+	testDomain := "test-domain"
 	domainID := uuid.New()
 	config := s.newConfig()
 	config.DisableListVisibilityByFilter = dc.GetBoolPropertyFnFilteredByDomain(true)
@@ -146,7 +145,7 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 
 	// test list open by wid
 	listRequest := &workflowservice.ListOpenWorkflowExecutionsRequest{
-		Domain: domain,
+		Domain: testDomain,
 		StartTimeFilter: &commonproto.StartTimeFilter{
 			EarliestTime: 0,
 			LatestTime:   time.Now().UnixNano(),
@@ -169,7 +168,7 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 
 	// test list close by wid
 	listRequest2 := &workflowservice.ListClosedWorkflowExecutionsRequest{
-		Domain: domain,
+		Domain: testDomain,
 		StartTimeFilter: &commonproto.StartTimeFilter{
 			EarliestTime: 0,
 			LatestTime:   time.Now().UnixNano(),
@@ -876,9 +875,9 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_ArchivalURIEmpty()
 	domainEntry := cache.NewLocalDomainCacheEntryForTest(
 		&persistence.DomainInfo{Name: "test-domain"},
 		&persistence.DomainConfig{
-			HistoryArchivalStatus:    shared.ArchivalStatusDisabled,
+			HistoryArchivalStatus:    *adapter.ToThriftArchivalStatus(enums.ArchivalStatusDisabled),
 			HistoryArchivalURI:       "",
-			VisibilityArchivalStatus: shared.ArchivalStatusDisabled,
+			VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(enums.ArchivalStatusDisabled),
 			VisibilityArchivalURI:    "",
 		},
 		"",
@@ -896,9 +895,9 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_InvalidURI() {
 	domainEntry := cache.NewLocalDomainCacheEntryForTest(
 		&persistence.DomainInfo{Name: "test-domain"},
 		&persistence.DomainConfig{
-			HistoryArchivalStatus:    shared.ArchivalStatusEnabled,
+			HistoryArchivalStatus:    *adapter.ToThriftArchivalStatus(enums.ArchivalStatusEnabled),
 			HistoryArchivalURI:       "uri without scheme",
-			VisibilityArchivalStatus: shared.ArchivalStatusDisabled,
+			VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(enums.ArchivalStatusDisabled),
 			VisibilityArchivalURI:    "",
 		},
 		"",
@@ -916,9 +915,9 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 	domainEntry := cache.NewLocalDomainCacheEntryForTest(
 		&persistence.DomainInfo{Name: "test-domain"},
 		&persistence.DomainConfig{
-			HistoryArchivalStatus:    shared.ArchivalStatusEnabled,
+			HistoryArchivalStatus:    *adapter.ToThriftArchivalStatus(enums.ArchivalStatusEnabled),
 			HistoryArchivalURI:       testHistoryArchivalURI,
-			VisibilityArchivalStatus: shared.ArchivalStatusDisabled,
+			VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(enums.ArchivalStatusDisabled),
 			VisibilityArchivalURI:    "",
 		},
 		"",
@@ -926,25 +925,25 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 	s.mockDomainCache.EXPECT().GetDomainByID(gomock.Any()).Return(domainEntry, nil).AnyTimes()
 
 	nextPageToken := []byte{'1', '2', '3'}
-	historyBatch1 := &shared.History{
-		Events: []*shared.HistoryEvent{
-			&shared.HistoryEvent{EventId: common.Int64Ptr(1)},
-			&shared.HistoryEvent{EventId: common.Int64Ptr(2)},
+	historyBatch1 := &commonproto.History{
+		Events: []*commonproto.HistoryEvent{
+			{EventId: 1},
+			{EventId: 2},
 		},
 	}
-	historyBatch2 := &shared.History{
-		Events: []*shared.HistoryEvent{
-			&shared.HistoryEvent{EventId: common.Int64Ptr(3)},
-			&shared.HistoryEvent{EventId: common.Int64Ptr(4)},
-			&shared.HistoryEvent{EventId: common.Int64Ptr(5)},
+	historyBatch2 := &commonproto.History{
+		Events: []*commonproto.HistoryEvent{
+			{EventId: 3},
+			{EventId: 4},
+			{EventId: 5},
 		},
 	}
-	history := &shared.History{}
+	history := &commonproto.History{}
 	history.Events = append(history.Events, historyBatch1.Events...)
 	history.Events = append(history.Events, historyBatch2.Events...)
 	s.mockHistoryArchiver.On("Get", mock.Anything, mock.Anything, mock.Anything).Return(&archiver.GetHistoryResponse{
 		NextPageToken:  nextPageToken,
-		HistoryBatches: []*shared.History{historyBatch1, historyBatch2},
+		HistoryBatches: []*commonproto.History{historyBatch1, historyBatch2},
 	}, nil)
 	s.mockArchiverProvider.On("GetHistoryArchiver", mock.Anything, mock.Anything).Return(s.mockHistoryArchiver, nil)
 
@@ -954,7 +953,7 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 	s.NoError(err)
 	s.NotNil(resp)
 	s.NotNil(resp.History)
-	s.Equal(adapter.ToProtoHistory(history), resp.History)
+	s.Equal(history, resp.History)
 	s.Equal(nextPageToken, resp.NextPageToken)
 	s.True(resp.GetArchived())
 }
@@ -978,11 +977,11 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 		ShardID:       common.IntPtr(shardID),
 	}
 	s.mockHistoryV2Mgr.On("ReadHistoryBranch", req).Return(&persistence.ReadHistoryBranchResponse{
-		HistoryEvents: []*shared.HistoryEvent{
+		HistoryEvents: adapter.ToThriftHistoryEvents([]*commonproto.HistoryEvent{
 			{
-				EventId: common.Int64Ptr(int64(100)),
+				EventId: int64(100),
 			},
-		},
+		}),
 		NextPageToken:    []byte{},
 		Size:             1,
 		LastFirstEventID: nextEventID,
@@ -1030,7 +1029,7 @@ func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_DomainNotConfi
 	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(cache.NewLocalDomainCacheEntryForTest(
 		nil,
 		&persistence.DomainConfig{
-			VisibilityArchivalStatus: shared.ArchivalStatusDisabled,
+			VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(enums.ArchivalStatusDisabled),
 		},
 		"",
 		nil,
@@ -1048,7 +1047,7 @@ func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_InvalidURI() {
 	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(cache.NewLocalDomainCacheEntryForTest(
 		&persistence.DomainInfo{Name: "test-domain"},
 		&persistence.DomainConfig{
-			VisibilityArchivalStatus: shared.ArchivalStatusDisabled,
+			VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(enums.ArchivalStatusDisabled),
 			VisibilityArchivalURI:    "uri without scheme",
 		},
 		"",
@@ -1067,7 +1066,7 @@ func (s *workflowHandlerSuite) TestListArchivedVisibility_Success() {
 	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(cache.NewLocalDomainCacheEntryForTest(
 		&persistence.DomainInfo{Name: "test-domain"},
 		&persistence.DomainConfig{
-			VisibilityArchivalStatus: shared.ArchivalStatusEnabled,
+			VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(enums.ArchivalStatusEnabled),
 			VisibilityArchivalURI:    testVisibilityArchivalURI,
 		},
 		"",

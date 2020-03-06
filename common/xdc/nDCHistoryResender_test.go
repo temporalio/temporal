@@ -33,12 +33,12 @@ import (
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/adminservicemock"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
@@ -135,18 +135,18 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 	startEventVersion := int64(100)
 	token := []byte{1}
 	pageSize := defaultPageSize
-	eventBatch := []*shared.HistoryEvent{
+	eventBatch := []*commonproto.HistoryEvent{
 		{
-			EventId:   common.Int64Ptr(2),
-			Version:   common.Int64Ptr(123),
-			Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-			EventType: shared.EventTypeDecisionTaskScheduled.Ptr(),
+			EventId:   2,
+			Version:   123,
+			Timestamp: time.Now().UnixNano(),
+			EventType: enums.EventTypeDecisionTaskScheduled,
 		},
 		{
-			EventId:   common.Int64Ptr(3),
-			Version:   common.Int64Ptr(123),
-			Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-			EventType: shared.EventTypeDecisionTaskStarted.Ptr(),
+			EventId:   3,
+			Version:   123,
+			Timestamp: time.Now().UnixNano(),
+			EventType: enums.EventTypeDecisionTaskStarted,
 		},
 	}
 	blob := s.serializeEvents(eventBatch)
@@ -362,8 +362,8 @@ func (s *nDCHistoryResenderSuite) TestGetHistory() {
 	s.Equal(response, out)
 }
 
-func (s *nDCHistoryResenderSuite) serializeEvents(events []*shared.HistoryEvent) *commonproto.DataBlob {
-	blob, err := s.serializer.SerializeBatchEvents(events, common.EncodingTypeThriftRW)
+func (s *nDCHistoryResenderSuite) serializeEvents(events []*commonproto.HistoryEvent) *commonproto.DataBlob {
+	blob, err := s.serializer.SerializeBatchEvents(adapter.ToThriftHistoryEvents(events), common.EncodingTypeThriftRW)
 	s.Nil(err)
 	return &commonproto.DataBlob{
 		EncodingType: enums.EncodingTypeThriftRW,

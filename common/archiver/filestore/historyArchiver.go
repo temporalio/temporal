@@ -41,9 +41,9 @@ import (
 	"path"
 	"strconv"
 
+	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/backoff"
@@ -142,7 +142,7 @@ func (h *historyArchiver) Archive(
 		historyIterator = archiver.NewHistoryIterator(request, h.container.HistoryV2Manager, targetHistoryBlobSize)
 	}
 
-	historyBatches := []*shared.History{}
+	var historyBatches []*commonproto.History
 	for historyIterator.HasNext() {
 		historyBlob, err := getNextHistoryBlob(ctx, historyIterator)
 		if err != nil {
@@ -155,7 +155,7 @@ func (h *historyArchiver) Archive(
 			return err
 		}
 
-		if historyMutated(request, historyBlob.Body, *historyBlob.Header.IsLast) {
+		if historyMutated(request, historyBlob.Body, historyBlob.Header.IsLast) {
 			logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonHistoryMutated))
 			return archiver.ErrHistoryMutated
 		}
@@ -163,7 +163,7 @@ func (h *historyArchiver) Archive(
 		historyBatches = append(historyBatches, historyBlob.Body...)
 	}
 
-	encodedHistoryBatches, err := encode(historyBatches)
+	encodedHistoryBatches, err := encodeHistoryBatches(historyBatches)
 	if err != nil {
 		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(errEncodeHistory), tag.Error(err))
 		return err

@@ -26,8 +26,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonproto "go.temporal.io/temporal-proto/common"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 )
 
@@ -44,34 +44,34 @@ type utilSuite struct {
 }
 
 func (s *utilSuite) TestEncodeDecodeHistoryBatches() {
-	historyBatches := []*shared.History{
-		&shared.History{
-			Events: []*shared.HistoryEvent{
-				&shared.HistoryEvent{
-					EventId: common.Int64Ptr(common.FirstEventID),
-					Version: common.Int64Ptr(1),
+	historyBatches := []*commonproto.History{
+		{
+			Events: []*commonproto.HistoryEvent{
+				{
+					EventId: common.FirstEventID,
+					Version: 1,
 				},
 			},
 		},
-		&shared.History{
-			Events: []*shared.HistoryEvent{
-				&shared.HistoryEvent{
-					EventId:   common.Int64Ptr(common.FirstEventID + 1),
-					Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-					Version:   common.Int64Ptr(1),
+		{
+			Events: []*commonproto.HistoryEvent{
+				{
+					EventId:   common.FirstEventID + 1,
+					Timestamp: time.Now().UnixNano(),
+					Version:   1,
 				},
-				&shared.HistoryEvent{
-					EventId: common.Int64Ptr(common.FirstEventID + 2),
-					Version: common.Int64Ptr(2),
-					DecisionTaskStartedEventAttributes: &shared.DecisionTaskStartedEventAttributes{
-						Identity: common.StringPtr("some random identity"),
-					},
+				{
+					EventId: common.FirstEventID + 2,
+					Version: 2,
+					Attributes: &commonproto.HistoryEvent_DecisionTaskStartedEventAttributes{DecisionTaskStartedEventAttributes: &commonproto.DecisionTaskStartedEventAttributes{
+						Identity: "some random identity",
+					}},
 				},
 			},
 		},
 	}
 
-	encodedHistoryBatches, err := encode(historyBatches)
+	encodedHistoryBatches, err := encodeHistoryBatches(historyBatches)
 	s.NoError(err)
 
 	decodedHistoryBatches, err := decodeHistoryBatches(encodedHistoryBatches)

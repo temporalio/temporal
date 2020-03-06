@@ -23,13 +23,12 @@ package domain
 import (
 	"testing"
 
+	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
-
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
@@ -79,9 +78,9 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterDomainTask_Is
 	data := map[string]string{"k": "v"}
 	retention := int32(10)
 	emitMetric := true
-	historyArchivalStatus := shared.ArchivalStatusEnabled
+	historyArchivalStatus := enums.ArchivalStatusEnabled
 	historyArchivalURI := "some random history archival uri"
-	visibilityArchivalStatus := shared.ArchivalStatusEnabled
+	visibilityArchivalStatus := enums.ArchivalStatusEnabled
 	visibilityArchivalURI := "some random visibility archival uri"
 	clusterActive := "some random active cluster name"
 	clusterStandby := "some random standby cluster name"
@@ -108,11 +107,11 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterDomainTask_Is
 	config := &p.DomainConfig{
 		Retention:                retention,
 		EmitMetric:               emitMetric,
-		HistoryArchivalStatus:    historyArchivalStatus,
+		HistoryArchivalStatus:    *adapter.ToThriftArchivalStatus(historyArchivalStatus),
 		HistoryArchivalURI:       historyArchivalURI,
-		VisibilityArchivalStatus: visibilityArchivalStatus,
+		VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(visibilityArchivalStatus),
 		VisibilityArchivalURI:    visibilityArchivalURI,
-		BadBinaries:              shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
+		BadBinaries:              adapter.ToThriftBadBinaries(commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}}),
 	}
 	replicationConfig := &p.DomainReplicationConfig{
 		ActiveClusterName: clusterActive,
@@ -135,12 +134,12 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterDomainTask_Is
 				},
 				Config: &commonproto.DomainConfiguration{
 					WorkflowExecutionRetentionPeriodInDays: retention,
-					EmitMetric:                             adapter.ToProtoBool(&emitMetric),
-					HistoryArchivalStatus:                  adapter.ToProtoArchivalStatus(&historyArchivalStatus),
+					EmitMetric:                             &types.BoolValue{Value: emitMetric},
+					HistoryArchivalStatus:                  historyArchivalStatus,
 					HistoryArchivalURI:                     historyArchivalURI,
-					VisibilityArchivalStatus:               adapter.ToProtoArchivalStatus(&visibilityArchivalStatus),
+					VisibilityArchivalStatus:               visibilityArchivalStatus,
 					VisibilityArchivalURI:                  visibilityArchivalURI,
-					BadBinaries:                            adapter.ToProtoBadBinaries(&shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}}),
+					BadBinaries:                            &commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}},
 				},
 				ReplicationConfig: &commonproto.DomainReplicationConfiguration{
 					ActiveClusterName: clusterActive,
@@ -164,9 +163,9 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterDomainTask_No
 	data := map[string]string{"k": "v"}
 	retention := int32(10)
 	emitMetric := true
-	historyArchivalStatus := shared.ArchivalStatusEnabled
+	historyArchivalStatus := enums.ArchivalStatusEnabled
 	historyArchivalURI := "some random history archival uri"
-	visibilityArchivalStatus := shared.ArchivalStatusEnabled
+	visibilityArchivalStatus := enums.ArchivalStatusEnabled
 	visibilityArchivalURI := "some random visibility archival uri"
 	clusterActive := "some random active cluster name"
 	clusterStandby := "some random standby cluster name"
@@ -193,11 +192,11 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterDomainTask_No
 	config := &p.DomainConfig{
 		Retention:                retention,
 		EmitMetric:               emitMetric,
-		HistoryArchivalStatus:    historyArchivalStatus,
+		HistoryArchivalStatus:    *adapter.ToThriftArchivalStatus(historyArchivalStatus),
 		HistoryArchivalURI:       historyArchivalURI,
-		VisibilityArchivalStatus: visibilityArchivalStatus,
+		VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(visibilityArchivalStatus),
 		VisibilityArchivalURI:    visibilityArchivalURI,
-		BadBinaries:              shared.BadBinaries{},
+		BadBinaries:              adapter.ToThriftBadBinaries(commonproto.BadBinaries{}),
 	}
 	replicationConfig := &p.DomainReplicationConfig{
 		ActiveClusterName: clusterActive,
@@ -213,15 +212,15 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateDomainTask_IsGl
 	taskType := enums.ReplicationTaskTypeDomain
 	id := uuid.New()
 	name := "some random domain test name"
-	status, _ := s.domainReplicator.convertDomainStatusToProto(int(shared.DomainStatusDeprecated))
+	status, _ := s.domainReplicator.convertDomainStatusToProto(int(enums.DomainStatusDeprecated))
 	description := "some random test description"
 	ownerEmail := "some random test owner"
 	data := map[string]string{"k": "v"}
 	retention := int32(10)
 	emitMetric := true
-	historyArchivalStatus := shared.ArchivalStatusEnabled
+	historyArchivalStatus := enums.ArchivalStatusEnabled
 	historyArchivalURI := "some random history archival uri"
-	visibilityArchivalStatus := shared.ArchivalStatusEnabled
+	visibilityArchivalStatus := enums.ArchivalStatusEnabled
 	visibilityArchivalURI := "some random visibility archival uri"
 	clusterActive := "some random active cluster name"
 	clusterStandby := "some random standby cluster name"
@@ -248,11 +247,11 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateDomainTask_IsGl
 	config := &p.DomainConfig{
 		Retention:                retention,
 		EmitMetric:               emitMetric,
-		HistoryArchivalStatus:    historyArchivalStatus,
+		HistoryArchivalStatus:    *adapter.ToThriftArchivalStatus(historyArchivalStatus),
 		HistoryArchivalURI:       historyArchivalURI,
-		VisibilityArchivalStatus: visibilityArchivalStatus,
+		VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(visibilityArchivalStatus),
 		VisibilityArchivalURI:    visibilityArchivalURI,
-		BadBinaries:              shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}},
+		BadBinaries:              adapter.ToThriftBadBinaries(commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}}),
 	}
 	replicationConfig := &p.DomainReplicationConfig{
 		ActiveClusterName: clusterActive,
@@ -275,12 +274,12 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateDomainTask_IsGl
 				},
 				Config: &commonproto.DomainConfiguration{
 					WorkflowExecutionRetentionPeriodInDays: retention,
-					EmitMetric:                             adapter.ToProtoBool(&emitMetric),
-					HistoryArchivalStatus:                  adapter.ToProtoArchivalStatus(&historyArchivalStatus),
+					EmitMetric:                             &types.BoolValue{Value: emitMetric},
+					HistoryArchivalStatus:                  historyArchivalStatus,
 					HistoryArchivalURI:                     historyArchivalURI,
-					VisibilityArchivalStatus:               adapter.ToProtoArchivalStatus(&visibilityArchivalStatus),
+					VisibilityArchivalStatus:               visibilityArchivalStatus,
 					VisibilityArchivalURI:                  visibilityArchivalURI,
-					BadBinaries:                            adapter.ToProtoBadBinaries(&shared.BadBinaries{Binaries: map[string]*shared.BadBinaryInfo{}}),
+					BadBinaries:                            &commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}},
 				},
 				ReplicationConfig: &commonproto.DomainReplicationConfiguration{
 					ActiveClusterName: clusterActive,
@@ -303,9 +302,9 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateDomainTask_NotG
 	data := map[string]string{"k": "v"}
 	retention := int32(10)
 	emitMetric := true
-	historyArchivalStatus := shared.ArchivalStatusEnabled
+	historyArchivalStatus := enums.ArchivalStatusEnabled
 	historyArchivalURI := "some random history archival uri"
-	visibilityArchivalStatus := shared.ArchivalStatusEnabled
+	visibilityArchivalStatus := enums.ArchivalStatusEnabled
 	visibilityArchivalURI := "some random visibility archival uri"
 	clusterActive := "some random active cluster name"
 	clusterStandby := "some random standby cluster name"
@@ -332,9 +331,9 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateDomainTask_NotG
 	config := &p.DomainConfig{
 		Retention:                retention,
 		EmitMetric:               emitMetric,
-		HistoryArchivalStatus:    historyArchivalStatus,
+		HistoryArchivalStatus:    *adapter.ToThriftArchivalStatus(historyArchivalStatus),
 		HistoryArchivalURI:       historyArchivalURI,
-		VisibilityArchivalStatus: visibilityArchivalStatus,
+		VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(visibilityArchivalStatus),
 		VisibilityArchivalURI:    visibilityArchivalURI,
 	}
 	replicationConfig := &p.DomainReplicationConfig{
