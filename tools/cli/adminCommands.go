@@ -36,6 +36,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/auth"
+	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/persistence"
 	cassp "github.com/temporalio/temporal/common/persistence/cassandra"
@@ -84,23 +85,24 @@ func AdminShowWorkflow(c *cli.Context) {
 	for idx, b := range history {
 		totalSize += len(b.Data)
 		fmt.Printf("======== batch %v, blob len: %v ======\n", idx+1, len(b.Data))
-		historyBatch, err := serializer.DeserializeBatchEvents(b)
+		historyBatchThrift, err := serializer.DeserializeBatchEvents(b)
 		if err != nil {
 			ErrorAndExit("DeserializeBatchEvents err", err)
 		}
-		allEvents.Events = append(allEvents.Events, adapter.ToProtoHistoryEvents(historyBatch)...)
-		for _, e := range historyBatch {
-			jsonstr, err := json.Marshal(e)
-			if err != nil {
-				ErrorAndExit("json.Marshal err", err)
-			}
-			fmt.Println(string(jsonstr))
+		historyBatch := adapter.ToProtoHistoryEvents(historyBatchThrift)
+		allEvents.Events = append(allEvents.Events, historyBatch...)
+		encoder := codec.NewJSONPBEncoder()
+		data, err := encoder.EncodeHistoryEvents(historyBatch)
+		if err != nil {
+			ErrorAndExit("EncodeHistoryEvents err", err)
 		}
+		fmt.Println(string(data))
 	}
 	fmt.Printf("======== total batches %v, total blob len: %v ======\n", len(history), totalSize)
 
 	if outputFileName != "" {
-		data, err := json.Marshal(allEvents.Events)
+		encoder := codec.NewJSONPBEncoder()
+		data, err := encoder.EncodeHistoryEvents(allEvents.Events)
 		if err != nil {
 			ErrorAndExit("Failed to serialize history data.", err)
 		}
