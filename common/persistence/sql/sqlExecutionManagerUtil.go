@@ -1112,92 +1112,17 @@ func buildExecutionRow(
 	shardID int,
 ) (row *sqlplugin.ExecutionsRow, err error) {
 
-	info := &sqlblobs.WorkflowExecutionInfo{
-		TaskList:                                &executionInfo.TaskList,
-		WorkflowTypeName:                        &executionInfo.WorkflowTypeName,
-		WorkflowTimeoutSeconds:                  &executionInfo.WorkflowTimeout,
-		DecisionTaskTimeoutSeconds:              &executionInfo.DecisionStartToCloseTimeout,
-		ExecutionContext:                        executionInfo.ExecutionContext,
-		State:                                   common.Int32Ptr(int32(executionInfo.State)),
-		CloseStatus:                             common.Int32Ptr(int32(executionInfo.CloseStatus)),
-		LastFirstEventID:                        &executionInfo.LastFirstEventID,
-		LastEventTaskID:                         &executionInfo.LastEventTaskID,
-		LastProcessedEvent:                      &executionInfo.LastProcessedEvent,
-		StartTimeNanos:                          common.Int64Ptr(executionInfo.StartTimestamp.UnixNano()),
-		LastUpdatedTimeNanos:                    common.Int64Ptr(executionInfo.LastUpdatedTimestamp.UnixNano()),
-		CreateRequestID:                         &executionInfo.CreateRequestID,
-		DecisionVersion:                         &executionInfo.DecisionVersion,
-		DecisionScheduleID:                      &executionInfo.DecisionScheduleID,
-		DecisionStartedID:                       &executionInfo.DecisionStartedID,
-		DecisionRequestID:                       &executionInfo.DecisionRequestID,
-		DecisionTimeout:                         &executionInfo.DecisionTimeout,
-		DecisionAttempt:                         &executionInfo.DecisionAttempt,
-		DecisionStartedTimestampNanos:           &executionInfo.DecisionStartedTimestamp,
-		DecisionScheduledTimestampNanos:         &executionInfo.DecisionScheduledTimestamp,
-		DecisionOriginalScheduledTimestampNanos: &executionInfo.DecisionOriginalScheduledTimestamp,
-		StickyTaskList:                          &executionInfo.StickyTaskList,
-		StickyScheduleToStartTimeout:            common.Int64Ptr(int64(executionInfo.StickyScheduleToStartTimeout)),
-		ClientLibraryVersion:                    &executionInfo.ClientLibraryVersion,
-		ClientFeatureVersion:                    &executionInfo.ClientFeatureVersion,
-		ClientImpl:                              &executionInfo.ClientImpl,
-		SignalCount:                             common.Int64Ptr(int64(executionInfo.SignalCount)),
-		HistorySize:                             &executionInfo.HistorySize,
-		CronSchedule:                            &executionInfo.CronSchedule,
-		CompletionEventBatchID:                  &executionInfo.CompletionEventBatchID,
-		HasRetryPolicy:                          &executionInfo.HasRetryPolicy,
-		RetryAttempt:                            common.Int64Ptr(int64(executionInfo.Attempt)),
-		RetryInitialIntervalSeconds:             &executionInfo.InitialInterval,
-		RetryBackoffCoefficient:                 &executionInfo.BackoffCoefficient,
-		RetryMaximumIntervalSeconds:             &executionInfo.MaximumInterval,
-		RetryMaximumAttempts:                    &executionInfo.MaximumAttempts,
-		RetryExpirationSeconds:                  &executionInfo.ExpirationSeconds,
-		RetryExpirationTimeNanos:                common.Int64Ptr(executionInfo.ExpirationTime.UnixNano()),
-		RetryNonRetryableErrors:                 executionInfo.NonRetriableErrors,
-		EventStoreVersion:                       common.Int32Ptr(p.EventStoreVersion),
-		EventBranchToken:                        executionInfo.BranchToken,
-		AutoResetPoints:                         executionInfo.AutoResetPoints.Data,
-		AutoResetPointsEncoding:                 common.StringPtr(string(executionInfo.AutoResetPoints.GetEncoding())),
-		SearchAttributes:                        executionInfo.SearchAttributes,
-		Memo:                                    executionInfo.Memo,
+	info, state, err := p.InternalWorkflowExecutionInfoToProto(executionInfo, startVersion, currentVersion, replicationState, versionHistories)
+	if err != nil {
+		return nil, err
 	}
 
-	completionEvent := executionInfo.CompletionEvent
-	if completionEvent != nil {
-		info.CompletionEvent = completionEvent.Data
-		info.CompletionEventEncoding = common.StringPtr(string(completionEvent.Encoding))
+	infoBlob, err := serialization.WorkflowExecutionInfoToBlob(info)
+	if err != nil {
+		return nil, err
 	}
 
-	info.StartVersion = &startVersion
-	info.CurrentVersion = &currentVersion
-	if replicationState == nil && versionHistories == nil {
-		// this is allowed
-	} else if replicationState != nil {
-		info.LastWriteEventID = &replicationState.LastWriteEventID
-		info.LastReplicationInfo = make(map[string]*sqlblobs.ReplicationInfo, len(replicationState.LastReplicationInfo))
-		for k, v := range replicationState.LastReplicationInfo {
-			info.LastReplicationInfo[k] = &sqlblobs.ReplicationInfo{Version: &v.Version, LastEventID: &v.LastEventID}
-		}
-	} else if versionHistories != nil {
-		info.VersionHistories = versionHistories.Data
-		info.VersionHistoriesEncoding = common.StringPtr(string(versionHistories.GetEncoding()))
-	} else {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("build workflow execution with both version histories and replication state."))
-	}
-
-	if executionInfo.ParentDomainID != "" {
-		info.ParentDomainID = primitives.MustParseUUID(executionInfo.ParentDomainID)
-		info.ParentWorkflowID = &executionInfo.ParentWorkflowID
-		info.ParentRunID = primitives.MustParseUUID(executionInfo.ParentRunID)
-		info.InitiatedID = &executionInfo.InitiatedID
-		info.CompletionEvent = nil
-	}
-
-	if executionInfo.CancelRequested {
-		info.CancelRequested = common.BoolPtr(true)
-		info.CancelRequestID = &executionInfo.CancelRequestID
-	}
-
-	blob, err := serialization.WorkflowExecutionInfoToBlob(info)
+	stateBlob, err := serialization.WorkflowExecutionStateToBlob(state)
 	if err != nil {
 		return nil, err
 	}
@@ -1207,10 +1132,12 @@ func buildExecutionRow(
 		DomainID:         primitives.MustParseUUID(executionInfo.DomainID),
 		WorkflowID:       executionInfo.WorkflowID,
 		RunID:            primitives.MustParseUUID(executionInfo.RunID),
-		NextEventID:      int64(executionInfo.NextEventID),
+		NextEventID:      executionInfo.NextEventID,
 		LastWriteVersion: lastWriteVersion,
-		Data:             blob.Data,
-		DataEncoding:     string(blob.Encoding),
+		Data:             infoBlob.Data,
+		DataEncoding:     infoBlob.Encoding.String(),
+		State:            stateBlob.Data,
+		StateEncoding:    stateBlob.Encoding.String(),
 	}, nil
 }
 

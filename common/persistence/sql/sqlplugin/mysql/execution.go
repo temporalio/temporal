@@ -27,13 +27,13 @@ import (
 )
 
 const (
-	executionsColumns = `shard_id, domain_id, workflow_id, run_id, next_event_id, last_write_version, data, data_encoding`
+	executionsColumns = `shard_id, domain_id, workflow_id, run_id, next_event_id, last_write_version, data, data_encoding, state, state_encoding`
 
 	createExecutionQuery = `INSERT INTO executions(` + executionsColumns + `)
- VALUES(:shard_id, :domain_id, :workflow_id, :run_id, :next_event_id, :last_write_version, :data, :data_encoding)`
+ VALUES(:shard_id, :domain_id, :workflow_id, :run_id, :next_event_id, :last_write_version, :data, :data_encoding, :state, :state_encoding)`
 
 	updateExecutionQuery = `UPDATE executions SET
- next_event_id = :next_event_id, last_write_version = :last_write_version, data = :data, data_encoding = :data_encoding
+ next_event_id = :next_event_id, last_write_version = :last_write_version, data = :data, data_encoding = :data_encoding, state = :state, state_encoding = :state_encoding
  WHERE shard_id = :shard_id AND domain_id = :domain_id AND workflow_id = :workflow_id AND run_id = :run_id`
 
 	getExecutionQuery = `SELECT ` + executionsColumns + ` FROM executions

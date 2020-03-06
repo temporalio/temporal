@@ -743,3 +743,176 @@ func NewDataBlobFromProto(blob *commonproto.DataBlob) *serialization.DataBlob {
 		panic(fmt.Sprintf("NewDataBlobFromThrift seeing unsupported enconding type: %v", blob.GetEncodingType()))
 	}
 }
+
+func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecutionInfo, startVersion int64, currentVersion int64, replicationState *ReplicationState, versionHistories *serialization.DataBlob) (*persistenceblobs.WorkflowExecutionInfo, *persistenceblobs.WorkflowExecutionState, error) {
+	state := &persistenceblobs.WorkflowExecutionState{
+		CreateRequestID: executionInfo.CreateRequestID,
+		State:           int32(executionInfo.State),
+		CloseStatus:     int32(executionInfo.CloseStatus),
+		RunID:           primitives.MustParseUUID(executionInfo.RunID),
+	}
+
+	info := &persistenceblobs.WorkflowExecutionInfo{
+		DomainID:                                primitives.MustParseUUID(executionInfo.DomainID),
+		WorkflowID:                              executionInfo.WorkflowID,
+		TaskList:                                executionInfo.TaskList,
+		WorkflowTypeName:                        executionInfo.WorkflowTypeName,
+		WorkflowTimeoutSeconds:                  executionInfo.WorkflowTimeout,
+		DecisionTaskTimeoutSeconds:              executionInfo.DecisionStartToCloseTimeout,
+		ExecutionContext:                        executionInfo.ExecutionContext,
+		LastFirstEventID:                        executionInfo.LastFirstEventID,
+		LastEventTaskID:                         executionInfo.LastEventTaskID,
+		LastProcessedEvent:                      executionInfo.LastProcessedEvent,
+		StartTimeNanos:                          executionInfo.StartTimestamp.UnixNano(),
+		LastUpdatedTimeNanos:                    executionInfo.LastUpdatedTimestamp.UnixNano(),
+		DecisionVersion:                         executionInfo.DecisionVersion,
+		DecisionScheduleID:                      executionInfo.DecisionScheduleID,
+		DecisionStartedID:                       executionInfo.DecisionStartedID,
+		DecisionRequestID:                       executionInfo.DecisionRequestID,
+		DecisionTimeout:                         executionInfo.DecisionTimeout,
+		DecisionAttempt:                         executionInfo.DecisionAttempt,
+		DecisionStartedTimestampNanos:           executionInfo.DecisionStartedTimestamp,
+		DecisionScheduledTimestampNanos:         executionInfo.DecisionScheduledTimestamp,
+		DecisionOriginalScheduledTimestampNanos: executionInfo.DecisionOriginalScheduledTimestamp,
+		StickyTaskList:                          executionInfo.StickyTaskList,
+		StickyScheduleToStartTimeout:            int64(executionInfo.StickyScheduleToStartTimeout),
+		ClientLibraryVersion:                    executionInfo.ClientLibraryVersion,
+		ClientFeatureVersion:                    executionInfo.ClientFeatureVersion,
+		ClientImpl:                              executionInfo.ClientImpl,
+		SignalCount:                             int64(executionInfo.SignalCount),
+		HistorySize:                             executionInfo.HistorySize,
+		CronSchedule:                            executionInfo.CronSchedule,
+		CompletionEventBatchID:                  executionInfo.CompletionEventBatchID,
+		HasRetryPolicy:                          executionInfo.HasRetryPolicy,
+		RetryAttempt:                            int64(executionInfo.Attempt),
+		RetryInitialIntervalSeconds:             executionInfo.InitialInterval,
+		RetryBackoffCoefficient:                 executionInfo.BackoffCoefficient,
+		RetryMaximumIntervalSeconds:             executionInfo.MaximumInterval,
+		RetryMaximumAttempts:                    executionInfo.MaximumAttempts,
+		RetryExpirationSeconds:                  executionInfo.ExpirationSeconds,
+		RetryExpirationTimeNanos:                executionInfo.ExpirationTime.UnixNano(),
+		RetryNonRetryableErrors:                 executionInfo.NonRetriableErrors,
+		EventStoreVersion:                       EventStoreVersion,
+		EventBranchToken:                        executionInfo.BranchToken,
+		AutoResetPoints:                         executionInfo.AutoResetPoints.Data,
+		AutoResetPointsEncoding:                 executionInfo.AutoResetPoints.GetEncoding().String(),
+		SearchAttributes:                        executionInfo.SearchAttributes,
+		Memo:                                    executionInfo.Memo,
+	}
+
+	completionEvent := executionInfo.CompletionEvent
+	if completionEvent != nil {
+		info.CompletionEvent = completionEvent.Data
+		info.CompletionEventEncoding = string(completionEvent.Encoding)
+	}
+
+	info.StartVersion = startVersion
+	info.CurrentVersion = currentVersion
+	if replicationState == nil && versionHistories == nil {
+		// this is allowed
+	} else if replicationState != nil {
+		info.LastWriteEventID = &types.Int64Value{Value: replicationState.LastWriteEventID}
+		info.LastReplicationInfo = make(map[string]*replication.ReplicationInfo, len(replicationState.LastReplicationInfo))
+		for k, v := range replicationState.LastReplicationInfo {
+			info.LastReplicationInfo[k] = &replication.ReplicationInfo{Version: v.Version, LastEventId: v.LastEventId}
+		}
+	} else if versionHistories != nil {
+		info.VersionHistories = versionHistories.Data
+		info.VersionHistoriesEncoding = string(versionHistories.GetEncoding())
+	} else {
+		return nil, nil, serviceerror.NewInternal(fmt.Sprintf("build workflow execution with both version histories and replication state."))
+	}
+
+	if executionInfo.ParentDomainID != "" {
+		info.ParentDomainID = primitives.MustParseUUID(executionInfo.ParentDomainID)
+		info.ParentWorkflowID = executionInfo.ParentWorkflowID
+		info.ParentRunID = primitives.MustParseUUID(executionInfo.ParentRunID)
+		info.InitiatedID = executionInfo.InitiatedID
+		info.CompletionEvent = nil
+	}
+
+	if executionInfo.CancelRequested {
+		info.CancelRequested = true
+		info.CancelRequestID = executionInfo.CancelRequestID
+	}
+	return info, state, nil
+}
+
+func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.WorkflowExecutionInfo, state *persistenceblobs.WorkflowExecutionState, nextEventID int64) *InternalWorkflowExecutionInfo {
+	executionInfo := &InternalWorkflowExecutionInfo{
+		DomainID:                           primitives.UUIDString(info.DomainID),
+		WorkflowID:                         info.WorkflowID,
+		RunID:                              primitives.UUIDString(state.RunID),
+		NextEventID:                        nextEventID,
+		TaskList:                           info.GetTaskList(),
+		WorkflowTypeName:                   info.GetWorkflowTypeName(),
+		WorkflowTimeout:                    info.GetWorkflowTimeoutSeconds(),
+		DecisionStartToCloseTimeout:        info.GetDecisionTaskTimeoutSeconds(),
+		State:                              int(state.GetState()),
+		CloseStatus:                        int(state.GetCloseStatus()),
+		LastFirstEventID:                   info.GetLastFirstEventID(),
+		LastProcessedEvent:                 info.GetLastProcessedEvent(),
+		StartTimestamp:                     time.Unix(0, info.GetStartTimeNanos()),
+		LastUpdatedTimestamp:               time.Unix(0, info.GetLastUpdatedTimeNanos()),
+		CreateRequestID:                    state.GetCreateRequestID(),
+		DecisionVersion:                    info.GetDecisionVersion(),
+		DecisionScheduleID:                 info.GetDecisionScheduleID(),
+		DecisionStartedID:                  info.GetDecisionStartedID(),
+		DecisionRequestID:                  info.GetDecisionRequestID(),
+		DecisionTimeout:                    info.GetDecisionTimeout(),
+		DecisionAttempt:                    info.GetDecisionAttempt(),
+		DecisionStartedTimestamp:           info.GetDecisionStartedTimestampNanos(),
+		DecisionScheduledTimestamp:         info.GetDecisionScheduledTimestampNanos(),
+		DecisionOriginalScheduledTimestamp: info.GetDecisionOriginalScheduledTimestampNanos(),
+		StickyTaskList:                     info.GetStickyTaskList(),
+		StickyScheduleToStartTimeout:       int32(info.GetStickyScheduleToStartTimeout()),
+		ClientLibraryVersion:               info.GetClientLibraryVersion(),
+		ClientFeatureVersion:               info.GetClientFeatureVersion(),
+		ClientImpl:                         info.GetClientImpl(),
+		SignalCount:                        int32(info.GetSignalCount()),
+		HistorySize:                        info.GetHistorySize(),
+		CronSchedule:                       info.GetCronSchedule(),
+		CompletionEventBatchID:             common.EmptyEventID,
+		HasRetryPolicy:                     info.GetHasRetryPolicy(),
+		Attempt:                            int32(info.GetRetryAttempt()),
+		InitialInterval:                    info.GetRetryInitialIntervalSeconds(),
+		BackoffCoefficient:                 info.GetRetryBackoffCoefficient(),
+		MaximumInterval:                    info.GetRetryMaximumIntervalSeconds(),
+		MaximumAttempts:                    info.GetRetryMaximumAttempts(),
+		ExpirationSeconds:                  info.GetRetryExpirationSeconds(),
+		ExpirationTime:                     time.Unix(0, info.GetRetryExpirationTimeNanos()),
+		BranchToken:                        info.GetEventBranchToken(),
+		ExecutionContext:                   info.GetExecutionContext(),
+		NonRetriableErrors:                 info.GetRetryNonRetryableErrors(),
+		SearchAttributes:                   info.GetSearchAttributes(),
+		Memo:                               info.GetMemo(),
+	}
+
+	if info.ParentDomainID != nil {
+		executionInfo.ParentDomainID = primitives.UUID(info.ParentDomainID).String()
+		executionInfo.ParentWorkflowID = info.GetParentWorkflowID()
+		executionInfo.ParentRunID = primitives.UUID(info.ParentRunID).String()
+		executionInfo.InitiatedID = info.GetInitiatedID()
+		if executionInfo.CompletionEvent != nil {
+			executionInfo.CompletionEvent = nil
+		}
+	}
+
+	if info.GetCancelRequested() {
+		executionInfo.CancelRequested = true
+		executionInfo.CancelRequestID = info.GetCancelRequestID()
+	}
+
+	executionInfo.CompletionEventBatchID = info.CompletionEventBatchID
+
+	if info.CompletionEvent != nil {
+		executionInfo.CompletionEvent = NewDataBlob(info.CompletionEvent,
+			common.EncodingType(info.GetCompletionEventEncoding()))
+	}
+
+	if info.AutoResetPoints != nil {
+		executionInfo.AutoResetPoints = NewDataBlob(info.AutoResetPoints,
+			common.EncodingType(info.GetAutoResetPointsEncoding()))
+	}
+	return executionInfo
+}

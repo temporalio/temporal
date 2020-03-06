@@ -139,6 +139,8 @@ type (
 		LastWriteVersion         int64
 		Data                     []byte
 		DataEncoding             string
+		State                    []byte
+		StateEncoding            string
 		VersionHistories         []byte
 		VersionHistoriesEncoding string
 	}

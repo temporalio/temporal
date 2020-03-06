@@ -255,35 +255,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 		)
 	}
 
-	if info.ParentDomainID != nil {
-		state.ExecutionInfo.ParentDomainID = primitives.UUID(info.ParentDomainID).String()
-		state.ExecutionInfo.ParentWorkflowID = info.GetParentWorkflowID()
-		state.ExecutionInfo.ParentRunID = primitives.UUID(info.ParentRunID).String()
-		state.ExecutionInfo.InitiatedID = info.GetInitiatedID()
-		if state.ExecutionInfo.CompletionEvent != nil {
-			state.ExecutionInfo.CompletionEvent = nil
-		}
-	}
-
-	if info.GetCancelRequested() {
-		state.ExecutionInfo.CancelRequested = true
-		state.ExecutionInfo.CancelRequestID = info.GetCancelRequestID()
-	}
-
-	if info.CompletionEventBatchID != nil {
-		state.ExecutionInfo.CompletionEventBatchID = info.GetCompletionEventBatchID()
-	}
-
-	if info.CompletionEvent != nil {
-		state.ExecutionInfo.CompletionEvent = p.NewDataBlob(info.CompletionEvent,
-			common.EncodingType(info.GetCompletionEventEncoding()))
-	}
-
-	if info.AutoResetPoints != nil {
-		state.ExecutionInfo.AutoResetPoints = p.NewDataBlob(info.AutoResetPoints,
-			common.EncodingType(info.GetAutoResetPointsEncoding()))
-	}
-
+	// Populate Maps
 	{
 		var err error
 		state.ActivityInfos, err = getActivityInfoMap(m.db,
