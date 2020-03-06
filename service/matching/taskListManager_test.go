@@ -52,7 +52,7 @@ func TestDeliverBufferTasks(t *testing.T) {
 		func(tlm *taskListManagerImpl) {
 			rps := 0.1
 			tlm.matcher.UpdateRatelimit(&rps)
-			tlm.taskReader.taskBuffer <- &persistenceblobs.PersistedTaskInfo{}
+			tlm.taskReader.taskBuffer <- &persistenceblobs.AllocatedTaskInfo{}
 			_, err := tlm.matcher.ratelimit(context.Background()) // consume the token
 			assert.NoError(t, err)
 			tlm.taskReader.cancelFunc()
@@ -77,7 +77,7 @@ func TestDeliverBufferTasks_NoPollers(t *testing.T) {
 	defer controller.Finish()
 
 	tlm := createTestTaskListManager(controller)
-	tlm.taskReader.taskBuffer <- &persistenceblobs.PersistedTaskInfo{}
+	tlm.taskReader.taskBuffer <- &persistenceblobs.AllocatedTaskInfo{}
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -102,7 +102,7 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 	require.Equal(t, int64(0), tlm.taskAckManager.getReadLevel())
 
 	// Add all expired tasks
-	tasks := []*persistenceblobs.PersistedTaskInfo{
+	tasks := []*persistenceblobs.AllocatedTaskInfo{
 		{
 			TaskData: &persistenceblobs.TaskInfo{
 				Expiry:      timestamp.TimestampNowAddSeconds(-60).ToProto(),
@@ -124,7 +124,7 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 	require.Equal(t, int64(12), tlm.taskAckManager.getReadLevel())
 
 	// Now add a mix of valid and expired tasks
-	require.True(t, tlm.taskReader.addTasksToBuffer([]*persistenceblobs.PersistedTaskInfo{
+	require.True(t, tlm.taskReader.addTasksToBuffer([]*persistenceblobs.AllocatedTaskInfo{
 		{
 			TaskData: &persistenceblobs.TaskInfo{
 				Expiry:      timestamp.TimestampNowAddSeconds(-60).ToProto(),

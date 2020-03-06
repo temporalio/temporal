@@ -75,7 +75,7 @@ func (t *ForwarderTestSuite) TearDownTest() {
 }
 
 func (t *ForwarderTestSuite) TestForwardTaskError() {
-	task := newInternalTask(&persistenceblobs.PersistedTaskInfo{}, nil, "", false)
+	task := newInternalTask(&persistenceblobs.AllocatedTaskInfo{}, nil, "", false)
 	t.Equal(errNoParent, t.fwdr.ForwardTask(context.Background(), task))
 
 	t.usingTasklistPartition(persistence.TaskListTypeActivity)

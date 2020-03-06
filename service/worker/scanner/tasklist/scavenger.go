@@ -27,7 +27,6 @@ import (
 
 	"github.com/gogo/protobuf/types"
 
-	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -197,7 +196,7 @@ func (s *Scavenger) emitStats() {
 }
 
 // newTask returns a new instance of an executable task which will process a single task list
-func (s *Scavenger) newTask(info *persistenceblobs.PersistedTaskListInfo) executor.Task {
+func (s *Scavenger) newTask(info *p.PersistedTaskListInfo) executor.Task {
 	return &executorTask{
 		TaskListKey: p.TaskListKey{
 			DomainID: info.ListData.DomainID,
@@ -206,7 +205,7 @@ func (s *Scavenger) newTask(info *persistenceblobs.PersistedTaskListInfo) execut
 		},
 		taskListState: taskListState{
 			rangeID:     info.RangeID,
-			lastUpdated: *info.LastUpdated,
+			lastUpdated: *info.ListData.LastUpdated,
 		},
 		scvg: s,
 	}

@@ -31,8 +31,8 @@ import (
 type (
 	// genericTaskInfo contains the info for an activity or decision task
 	genericTaskInfo struct {
-		*persistenceblobs.PersistedTaskInfo
-		completionFunc func(*persistenceblobs.PersistedTaskInfo, error)
+		*persistenceblobs.AllocatedTaskInfo
+		completionFunc func(*persistenceblobs.AllocatedTaskInfo, error)
 	}
 	// queryTaskInfo contains the info for a query task
 	queryTaskInfo struct {
@@ -60,14 +60,14 @@ type (
 )
 
 func newInternalTask(
-	info *persistenceblobs.PersistedTaskInfo,
-	completionFunc func(*persistenceblobs.PersistedTaskInfo, error),
+	info *persistenceblobs.AllocatedTaskInfo,
+	completionFunc func(*persistenceblobs.AllocatedTaskInfo, error),
 	forwardedFrom string,
 	forSyncMatch bool,
 ) *internalTask {
 	task := &internalTask{
 		event: &genericTaskInfo{
-			PersistedTaskInfo: info,
+			AllocatedTaskInfo: info,
 			completionFunc:    completionFunc,
 		},
 		forwardedFrom: forwardedFrom,
@@ -151,6 +151,6 @@ func (task *internalTask) finish(err error) {
 	case task.responseC != nil:
 		task.responseC <- err
 	case task.event.completionFunc != nil:
-		task.event.completionFunc(task.event.PersistedTaskInfo, err)
+		task.event.completionFunc(task.event.AllocatedTaskInfo, err)
 	}
 }

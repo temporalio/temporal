@@ -71,14 +71,12 @@ func (m *sqlTaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest
 		TaskType: common.Int64Ptr(int64(request.TaskType))})
 	if err != nil {
 		if err == sql.ErrNoRows {
-			tlInfo := &persistenceblobs.PersistedTaskListInfo{
-				ListData: &persistenceblobs.TaskListInfo{
-					DomainID: domainID,
-					Name:     request.TaskList,
-					TaskType: request.TaskType,
-					AckLevel: ackLevel,
-					Kind:     request.TaskListKind,
-				},
+			tlInfo := &persistenceblobs.TaskListInfo{
+				DomainID:    domainID,
+				Name:        request.TaskList,
+				TaskType:    request.TaskType,
+				AckLevel:    ackLevel,
+				Kind:        request.TaskListKind,
 				Expiry:      nil,
 				LastUpdated: types.TimestampNow(),
 			}
@@ -127,14 +125,10 @@ func (m *sqlTaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest
 			return err1
 		}
 
-		candidateTL := &persistenceblobs.PersistedTaskListInfo{
-			ListData:    tlInfo.ListData,
-			Expiry:      tlInfo.Expiry,
-			LastUpdated: types.TimestampNow(),
-			RangeID:     rangeID + 1,
-		}
+		// todo: we shoudnt edit protobufs
+		tlInfo.LastUpdated = types.TimestampNow()
 
-		blob, err1 := serialization.TaskListInfoToBlob(candidateTL)
+		blob, err1 := serialization.TaskListInfoToBlob(tlInfo)
 		if err1 != nil {
 			return err1
 		}
@@ -157,7 +151,10 @@ func (m *sqlTaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest
 		if rowsAffected == 0 {
 			return fmt.Errorf("%v rows affected instead of 1", rowsAffected)
 		}
-		resp = &persistence.LeaseTaskListResponse{TaskListInfo: candidateTL}
+		resp = &persistence.LeaseTaskListResponse{TaskListInfo: &persistence.PersistedTaskListInfo{
+			ListData: tlInfo,
+			RangeID:  row.RangeID + 1,
+		}}
 		return nil
 	})
 	return resp, err
@@ -166,20 +163,18 @@ func (m *sqlTaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest
 func (m *sqlTaskManager) UpdateTaskList(request *persistence.UpdateTaskListRequest) (*persistence.UpdateTaskListResponse, error) {
 	shardID := m.shardID(request.TaskListInfo.DomainID, request.TaskListInfo.Name)
 	domainID := request.TaskListInfo.DomainID
-	candidateTL := &persistenceblobs.PersistedTaskListInfo{
-		ListData:    request.TaskListInfo,
-		LastUpdated: types.TimestampNow(),
-		RangeID:     request.RangeID,
-	}
+
+	tl := request.TaskListInfo
+	tl.LastUpdated = types.TimestampNow()
 
 	var blob serialization.DataBlob
 	var err error
 	if request.TaskListInfo.Kind == persistence.TaskListKindSticky {
-		candidateTL.Expiry, err = types.TimestampProto(stickyTaskListTTL())
+		tl.Expiry, err = types.TimestampProto(stickyTaskListTTL())
 		if err != nil {
 			return nil, err
 		}
-		blob, err = serialization.TaskListInfoToBlob(candidateTL)
+		blob, err = serialization.TaskListInfoToBlob(tl)
 		if err != nil {
 			return nil, err
 		}
@@ -196,7 +191,7 @@ func (m *sqlTaskManager) UpdateTaskList(request *persistence.UpdateTaskListReque
 		}
 	}
 	var resp *persistence.UpdateTaskListResponse
-	blob, err = serialization.TaskListInfoToBlob(candidateTL)
+	blob, err = serialization.TaskListInfoToBlob(tl)
 	if err != nil {
 		return nil, err
 	}
@@ -284,7 +279,7 @@ func (m *sqlTaskManager) ListTaskList(request *persistence.ListTaskListRequest) 
 	}
 
 	resp := &persistence.ListTaskListResponse{
-		Items:         make([]*persistenceblobs.PersistedTaskListInfo, len(rows)),
+		Items:         make([]*persistence.PersistedTaskListInfo, len(rows)),
 		NextPageToken: nextPageToken,
 	}
 
@@ -293,7 +288,10 @@ func (m *sqlTaskManager) ListTaskList(request *persistence.ListTaskListRequest) 
 		if err != nil {
 			return nil, err
 		}
-		resp.Items[i] = info
+		resp.Items[i] = &persistence.PersistedTaskListInfo{
+			ListData: info,
+			RangeID:  rows[i].RangeID,
+		}
 	}
 
 	return resp, nil
@@ -324,16 +322,13 @@ func (m *sqlTaskManager) DeleteTaskList(request *persistence.DeleteTaskListReque
 func (m *sqlTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (*persistence.CreateTasksResponse, error) {
 	tasksRows := make([]sqlplugin.TasksRow, len(request.Tasks))
 	for i, v := range request.Tasks {
-		blob, err := serialization.TaskInfoToBlob(&persistenceblobs.PersistedTaskInfo{
-			TaskData: v.Data,
-			TaskID:   v.TaskID,
-		})
+		blob, err := serialization.TaskInfoToBlob(v)
 
 		if err != nil {
 			return nil, err
 		}
 		tasksRows[i] = sqlplugin.TasksRow{
-			DomainID:     v.Data.DomainID,
+			DomainID:     v.TaskData.DomainID,
 			TaskListName: request.TaskListInfo.ListData.Name,
 			TaskType:     int64(request.TaskListInfo.ListData.TaskType),
 			TaskID:       v.TaskID,
@@ -376,7 +371,7 @@ func (m *sqlTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persis
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetTasks operation failed. Failed to get rows. Error: %v", err))
 	}
 
-	var tasks = make([]*persistenceblobs.PersistedTaskInfo, len(rows))
+	var tasks = make([]*persistenceblobs.AllocatedTaskInfo, len(rows))
 	for i, v := range rows {
 		info, err := serialization.TaskInfoFromBlob(v.Data, v.DataEncoding)
 		if err != nil {

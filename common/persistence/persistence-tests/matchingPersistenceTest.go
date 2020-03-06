@@ -308,7 +308,7 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskList() {
 	tli := response.TaskListInfo
 	s.EqualValues(1, tli.RangeID)
 	s.EqualValues(0, tli.ListData.AckLevel)
-	lu, err := types.TimestampFromProto(tli.LastUpdated)
+	lu, err := types.TimestampFromProto(tli.ListData.LastUpdated)
 	s.NoError(err)
 	s.True(lu.After(leaseTime) || lu.Equal(leaseTime))
 
@@ -320,9 +320,10 @@ func (s *MatchingPersistenceSuite) TestLeaseAndUpdateTaskList() {
 	})
 	s.NoError(err)
 	tli = response.TaskListInfo
+	s.NotNil(tli)
 	s.EqualValues(2, tli.RangeID)
 	s.EqualValues(0, tli.ListData.AckLevel)
-	lu2, err := types.TimestampFromProto(tli.LastUpdated)
+	lu2, err := types.TimestampFromProto(tli.ListData.LastUpdated)
 	s.NoError(err)
 	s.True(lu2.After(leaseTime) || lu2.Equal(leaseTime))
 
@@ -446,7 +447,7 @@ func (s *MatchingPersistenceSuite) TestListWithOneTaskList() {
 		s.EqualValues(p.TaskListKindSticky, resp.Items[0].ListData.Kind)
 		s.Equal(rangeID, resp.Items[0].RangeID)
 		s.Equal(ackLevel, resp.Items[0].ListData.AckLevel)
-		lu0, err := types.TimestampFromProto(resp.Items[0].LastUpdated)
+		lu0, err := types.TimestampFromProto(resp.Items[0].ListData.LastUpdated)
 		s.NoError(err)
 		s.True(lu0.After(updatedTime) || lu0.Equal(updatedTime))
 
@@ -463,7 +464,7 @@ func (s *MatchingPersistenceSuite) TestListWithOneTaskList() {
 		resp, err = s.TaskMgr.ListTaskList(&p.ListTaskListRequest{PageSize: 10})
 		s.NoError(err)
 		s.Equal(1, len(resp.Items))
-		lu0, err = types.TimestampFromProto(resp.Items[0].LastUpdated)
+		lu0, err = types.TimestampFromProto(resp.Items[0].ListData.LastUpdated)
 		s.NoError(err)
 		s.True(lu0.After(updatedTime) || lu0.Equal(updatedTime))
 	}

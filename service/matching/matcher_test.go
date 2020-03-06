@@ -400,11 +400,11 @@ func (t *MatcherTestSuite) newDomainCache() cache.DomainCache {
 	return dc
 }
 
-func randomTaskInfo() *persistenceblobs.PersistedTaskInfo {
+func randomTaskInfo() *persistenceblobs.AllocatedTaskInfo {
 	rt1 := time.Date(rand.Intn(9999), time.Month(rand.Intn(12)+1), rand.Intn(28)+1, rand.Intn(24)+1, rand.Intn(60), rand.Intn(60), rand.Intn(1e9), time.UTC)
 	rt2 := time.Date(rand.Intn(5000)+3000, time.Month(rand.Intn(12)+1), rand.Intn(28)+1, rand.Intn(24)+1, rand.Intn(60), rand.Intn(60), rand.Intn(1e9), time.UTC)
 
-	return &persistenceblobs.PersistedTaskInfo{
+	return &persistenceblobs.AllocatedTaskInfo{
 		TaskData: &persistenceblobs.TaskInfo{
 			DomainID:    uuid.NewRandom(),
 			WorkflowID:  uuid.New(),

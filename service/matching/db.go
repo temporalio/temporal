@@ -118,12 +118,12 @@ func (db *taskListDB) UpdateState(ackLevel int64) error {
 }
 
 // CreateTasks creates a batch of given tasks for this task list
-func (db *taskListDB) CreateTasks(tasks []*persistence.CreateTaskInfo) (*persistence.CreateTasksResponse, error) {
+func (db *taskListDB) CreateTasks(tasks []*persistenceblobs.AllocatedTaskInfo) (*persistence.CreateTasksResponse, error) {
 	db.Lock()
 	defer db.Unlock()
 	return db.store.CreateTasks(
 		&persistence.CreateTasksRequest{
-			TaskListInfo: &persistenceblobs.PersistedTaskListInfo{
+			TaskListInfo: &persistence.PersistedTaskListInfo{
 				ListData: &persistenceblobs.TaskListInfo{
 					DomainID: db.domainID,
 					Name:     db.taskListName,

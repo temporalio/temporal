@@ -1740,7 +1740,7 @@ func (m *testTaskManager) LeaseTaskList(request *persistence.LeaseTaskListReques
 	m.logger.Debug("LeaseTaskList", tag.ShardRangeID(tlm.rangeID))
 
 	return &persistence.LeaseTaskListResponse{
-		TaskListInfo: &persistenceblobs.PersistedTaskListInfo{
+		TaskListInfo: &persistence.PersistedTaskListInfo{
 			ListData: &persistenceblobs.TaskListInfo{
 				AckLevel: tlm.ackLevel,
 				DomainID: request.DomainID,
@@ -1850,8 +1850,8 @@ func (m *testTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (
 
 	// Then insert all tasks if no errors
 	for _, task := range request.Tasks {
-		tlm.tasks.Put(task.TaskID, &persistenceblobs.PersistedTaskInfo{
-			TaskData: task.Data,
+		tlm.tasks.Put(task.TaskID, &persistenceblobs.AllocatedTaskInfo{
+			TaskData: task.TaskData,
 			TaskID:   task.TaskID,
 		})
 		tlm.createTaskCount++
@@ -1871,7 +1871,7 @@ func (m *testTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persi
 	tlm := m.getTaskListManager(newTestTaskListID(primitives.UUIDString(request.DomainID), request.TaskList, request.TaskType))
 	tlm.Lock()
 	defer tlm.Unlock()
-	var tasks []*persistenceblobs.PersistedTaskInfo
+	var tasks []*persistenceblobs.AllocatedTaskInfo
 
 	it := tlm.tasks.Iterator()
 	for it.Next() {
@@ -1882,7 +1882,7 @@ func (m *testTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persi
 		if taskID > *request.MaxReadLevel {
 			break
 		}
-		tasks = append(tasks, it.Value().(*persistenceblobs.PersistedTaskInfo))
+		tasks = append(tasks, it.Value().(*persistenceblobs.AllocatedTaskInfo))
 	}
 	return &persistence.GetTasksResponse{
 		Tasks: tasks,

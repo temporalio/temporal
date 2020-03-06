@@ -142,7 +142,7 @@ message TaskInfo {
     google.protobuf.Timestamp expiry = 6;
 }
 
-message PersistedTaskInfo {
+message AllocatedTaskInfo {
     TaskInfo taskData = 1;
     int64 taskID = 8;
 }
@@ -154,13 +154,8 @@ message TaskListInfo {
     // {Normal, Sticky}
     int32 kind = 5;
     int64 ackLevel = 6;
-}
-
-message PersistedTaskListInfo {
-    TaskListInfo listData = 1;
-    google.protobuf.Timestamp expiry = 2;
-    google.protobuf.Timestamp lastUpdated = 3;
-    int64 rangeID = 4;
+    google.protobuf.Timestamp expiry = 7;
+    google.protobuf.Timestamp lastUpdated = 8;
 }
 
 message SignalInfo {

@@ -1247,11 +1247,10 @@ func (s *TestBase) CreateDecisionTask(domainID primitives.UUID, workflowExecutio
 	}
 
 	taskID := s.GetNextSequenceNumber()
-	tasks := []*p.CreateTaskInfo{
+	tasks := []*pblobs.AllocatedTaskInfo{
 		{
-			TaskID:    taskID,
-			Execution: workflowExecution,
-			Data: &pblobs.TaskInfo{
+			TaskID: taskID,
+			TaskData: &pblobs.TaskInfo{
 				DomainID:    domainID,
 				WorkflowID:  *workflowExecution.WorkflowId,
 				RunID:       primitives.MustParseUUID(*workflowExecution.RunId),
@@ -1277,7 +1276,7 @@ func (s *TestBase) CreateDecisionTask(domainID primitives.UUID, workflowExecutio
 func (s *TestBase) CreateActivityTasks(domainID primitives.UUID, workflowExecution workflow.WorkflowExecution,
 	activities map[int64]string) ([]int64, error) {
 
-	taskLists := make(map[string]*pblobs.PersistedTaskListInfo)
+	taskLists := make(map[string]*p.PersistedTaskListInfo)
 	for _, tl := range activities {
 		_, ok := taskLists[tl]
 		if !ok {
@@ -1293,10 +1292,9 @@ func (s *TestBase) CreateActivityTasks(domainID primitives.UUID, workflowExecuti
 	var taskIDs []int64
 	for activityScheduleID, taskList := range activities {
 		taskID := s.GetNextSequenceNumber()
-		tasks := []*p.CreateTaskInfo{
+		tasks := []*pblobs.AllocatedTaskInfo{
 			{
-				Execution: workflowExecution,
-				Data: &pblobs.TaskInfo{
+				TaskData: &pblobs.TaskInfo{
 					DomainID:    domainID,
 					WorkflowID:  *workflowExecution.WorkflowId,
 					RunID:       primitives.MustParseUUID(*workflowExecution.RunId),

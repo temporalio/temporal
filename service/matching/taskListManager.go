@@ -376,7 +376,7 @@ func (c *taskListManagerImpl) String() string {
 // here. As part of completion:
 //   - task is deleted from the database when err is nil
 //   - new task is created and current task is deleted when err is not nil
-func (c *taskListManagerImpl) completeTask(task *persistenceblobs.PersistedTaskInfo, err error) {
+func (c *taskListManagerImpl) completeTask(task *persistenceblobs.AllocatedTaskInfo, err error) {
 	if err != nil {
 		// failed to start the task.
 		// We cannot just remove it from persistence because then it will be lost.
@@ -475,7 +475,7 @@ func (c *taskListManagerImpl) trySyncMatch(ctx context.Context, params addTaskPa
 	childCtx, cancel := c.newChildContext(ctx, maxSyncMatchWaitTime, time.Second)
 
 	// Mocking out TaskId for syncmatch as it hasn't been allocated yet
-	fakeTaskIdWrapper := &persistenceblobs.PersistedTaskInfo{
+	fakeTaskIdWrapper := &persistenceblobs.AllocatedTaskInfo{
 		TaskData: params.taskInfo,
 		TaskID:   syncMatchTaskId,
 	}

@@ -960,7 +960,7 @@ type (
 
 	// LeaseTaskListResponse is response to LeaseTaskListRequest
 	LeaseTaskListResponse struct {
-		TaskListInfo *pblobs.PersistedTaskListInfo
+		TaskListInfo *PersistedTaskListInfo
 	}
 
 	// UpdateTaskListRequest is used to update task list implementation information
@@ -981,7 +981,7 @@ type (
 
 	// ListTaskListResponse is the response from ListTaskList API
 	ListTaskListResponse struct {
-		Items         []*pblobs.PersistedTaskListInfo
+		Items         []*PersistedTaskListInfo
 		NextPageToken []byte
 	}
 
@@ -991,21 +991,19 @@ type (
 		RangeID  int64
 	}
 
-	// CreateTasksRequest is used to create a new task for a workflow exectution
+	// CreateTasksRequest is used to create a new task for a workflow execution
 	CreateTasksRequest struct {
-		TaskListInfo *pblobs.PersistedTaskListInfo
-		Tasks        []*CreateTaskInfo
-	}
-
-	// CreateTaskInfo describes a task to be created in CreateTasksRequest
-	CreateTaskInfo struct {
-		Execution workflow.WorkflowExecution
-		Data      *pblobs.TaskInfo
-		TaskID    int64
+		TaskListInfo *PersistedTaskListInfo
+		Tasks        []*pblobs.AllocatedTaskInfo
 	}
 
 	// CreateTasksResponse is the response to CreateTasksRequest
 	CreateTasksResponse struct {
+	}
+
+	PersistedTaskListInfo struct {
+		ListData *pblobs.TaskListInfo
+		RangeID  int64
 	}
 
 	// GetTasksRequest is used to retrieve tasks of a task list
@@ -1020,7 +1018,7 @@ type (
 
 	// GetTasksResponse is the response to GetTasksRequests
 	GetTasksResponse struct {
-		Tasks []*pblobs.PersistedTaskInfo
+		Tasks []*pblobs.AllocatedTaskInfo
 	}
 
 	// CompleteTaskRequest is used to complete a task

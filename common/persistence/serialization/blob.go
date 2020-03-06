@@ -228,21 +228,21 @@ func TimerInfoFromBlob(b []byte, proto string) (*persistenceblobs.TimerInfo, err
 	return result, protoRWDecode(b, proto, result)
 }
 
-func TaskInfoToBlob(info *persistenceblobs.PersistedTaskInfo) (DataBlob, error) {
+func TaskInfoToBlob(info *persistenceblobs.AllocatedTaskInfo) (DataBlob, error) {
 	return protoRWEncode(info)
 }
 
-func TaskInfoFromBlob(b []byte, proto string) (*persistenceblobs.PersistedTaskInfo, error) {
-	result := &persistenceblobs.PersistedTaskInfo{}
+func TaskInfoFromBlob(b []byte, proto string) (*persistenceblobs.AllocatedTaskInfo, error) {
+	result := &persistenceblobs.AllocatedTaskInfo{}
 	return result, protoRWDecode(b, proto, result)
 }
 
-func TaskListInfoToBlob(info *persistenceblobs.PersistedTaskListInfo) (DataBlob, error) {
+func TaskListInfoToBlob(info *persistenceblobs.TaskListInfo) (DataBlob, error) {
 	return protoRWEncode(info)
 }
 
-func TaskListInfoFromBlob(b []byte, proto string) (*persistenceblobs.PersistedTaskListInfo, error) {
-	result := &persistenceblobs.PersistedTaskListInfo{}
+func TaskListInfoFromBlob(b []byte, proto string) (*persistenceblobs.TaskListInfo, error) {
+	result := &persistenceblobs.TaskListInfo{}
 	return result, protoRWDecode(b, proto, result)
 }
 
