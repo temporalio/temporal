@@ -121,6 +121,8 @@ func AdminDescribeWorkflow(c *cli.Context) {
 	if resp != nil {
 		msStr := resp.GetMutableStateInDatabase()
 		ms := persistence.WorkflowMutableState{}
+		// TODO: this won't work for some cases because json.Unmarshal can't be used for proto object
+		// Proper refactoring is required here: resp.GetMutableStateInDatabase() should return proto object.
 		err := json.Unmarshal([]byte(msStr), &ms)
 		if err != nil {
 			ErrorAndExit("json.Unmarshal err", err)
