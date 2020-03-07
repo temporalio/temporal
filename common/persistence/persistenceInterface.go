@@ -29,6 +29,7 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/primitives"
+	"github.com/temporalio/temporal/common/primitives/timestamp"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/persistence/serialization"
@@ -303,7 +304,7 @@ type (
 		TimerTaskStatus          int32
 		// For retry
 		Attempt            int32
-		DomainID           string
+		DomainID           primitives.UUID
 		StartedIdentity    string
 		TaskList           string
 		HasRetryPolicy     bool
@@ -916,3 +917,89 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 	}
 	return executionInfo
 }
+
+func ProtoActivityInfoToInternalActivityInfo(decoded *persistenceblobs.ActivityInfo) *InternalActivityInfo {
+	info := &InternalActivityInfo{
+		DomainID:                 decoded.DomainID,
+		ScheduleID:               decoded.ScheduleID,
+		Details:                  decoded.LastHeartbeatDetails,
+		LastHeartBeatUpdatedTime: *timestamp.TimestampFromProto(decoded.LastHeartbeatUpdatedTime).ToTime(),
+		Version:                  decoded.GetVersion(),
+		ScheduledEventBatchID:    decoded.GetScheduledEventBatchID(),
+		ScheduledEvent:           NewDataBlob(decoded.ScheduledEvent, common.EncodingType(decoded.GetScheduledEventEncoding())),
+		ScheduledTime:            time.Unix(0, decoded.GetScheduledTimeNanos()),
+		StartedID:                decoded.GetStartedID(),
+		StartedTime:              time.Unix(0, decoded.GetStartedTimeNanos()),
+		ActivityID:               decoded.GetActivityID(),
+		RequestID:                decoded.GetRequestID(),
+		ScheduleToStartTimeout:   decoded.GetScheduleToStartTimeoutSeconds(),
+		ScheduleToCloseTimeout:   decoded.GetScheduleToCloseTimeoutSeconds(),
+		StartToCloseTimeout:      decoded.GetStartToCloseTimeoutSeconds(),
+		HeartbeatTimeout:         decoded.GetHeartbeatTimeoutSeconds(),
+		CancelRequested:          decoded.GetCancelRequested(),
+		CancelRequestID:          decoded.GetCancelRequestID(),
+		TimerTaskStatus:          decoded.GetTimerTaskStatus(),
+		Attempt:                  decoded.GetAttempt(),
+		StartedIdentity:          decoded.GetStartedIdentity(),
+		TaskList:                 decoded.GetTaskList(),
+		HasRetryPolicy:           decoded.GetHasRetryPolicy(),
+		InitialInterval:          decoded.GetRetryInitialIntervalSeconds(),
+		BackoffCoefficient:       decoded.GetRetryBackoffCoefficient(),
+		MaximumInterval:          decoded.GetRetryMaximumIntervalSeconds(),
+		ExpirationTime:           time.Unix(0, decoded.GetRetryExpirationTimeNanos()),
+		MaximumAttempts:          decoded.GetRetryMaximumAttempts(),
+		NonRetriableErrors:       decoded.GetRetryNonRetryableErrors(),
+		LastFailureReason:        decoded.GetRetryLastFailureReason(),
+		LastWorkerIdentity:       decoded.GetRetryLastWorkerIdentity(),
+		LastFailureDetails:       decoded.GetRetryLastFailureDetails(),
+	}
+	if decoded.StartedEvent != nil {
+		info.StartedEvent = NewDataBlob(decoded.StartedEvent, common.EncodingType(decoded.GetStartedEventEncoding()))
+	}
+	return info
+}
+
+func (v *InternalActivityInfo) ToProto() *persistenceblobs.ActivityInfo {
+	scheduledEvent, scheduledEncoding := FromDataBlob(v.ScheduledEvent)
+	startEvent, startEncoding := FromDataBlob(v.StartedEvent)
+
+	info := &persistenceblobs.ActivityInfo{
+		DomainID:                 	   v.DomainID,
+		ScheduleID:               	   v.ScheduleID,
+		LastHeartbeatDetails:          v.Details,
+		LastHeartbeatUpdatedTime: 	   timestamp.TimestampFromTime(&v.LastHeartBeatUpdatedTime).ToProto(),
+		Version:                       v.Version,
+		ScheduledEventBatchID:         v.ScheduledEventBatchID,
+		ScheduledEvent:                scheduledEvent,
+		ScheduledEventEncoding:        scheduledEncoding,
+		ScheduledTimeNanos:            v.ScheduledTime.UnixNano(),
+		StartedID:                     v.StartedID,
+		StartedEvent:                  startEvent,
+		StartedEventEncoding:          startEncoding,
+		StartedTimeNanos:              v.StartedTime.UnixNano(),
+		ActivityID:                    v.ActivityID,
+		RequestID:                     v.RequestID,
+		ScheduleToStartTimeoutSeconds: v.ScheduleToStartTimeout,
+		ScheduleToCloseTimeoutSeconds: v.ScheduleToCloseTimeout,
+		StartToCloseTimeoutSeconds:    v.StartToCloseTimeout,
+		HeartbeatTimeoutSeconds:       v.HeartbeatTimeout,
+		CancelRequested:               v.CancelRequested,
+		CancelRequestID:               v.CancelRequestID,
+		TimerTaskStatus:               v.TimerTaskStatus,
+		Attempt:                       v.Attempt,
+		TaskList:                      v.TaskList,
+		StartedIdentity:               v.StartedIdentity,
+		HasRetryPolicy:                v.HasRetryPolicy,
+		RetryInitialIntervalSeconds:   v.InitialInterval,
+		RetryBackoffCoefficient:       v.BackoffCoefficient,
+		RetryMaximumIntervalSeconds:   v.MaximumInterval,
+		RetryExpirationTimeNanos:      v.ExpirationTime.UnixNano(),
+		RetryMaximumAttempts:          v.MaximumAttempts,
+		RetryNonRetryableErrors:       v.NonRetriableErrors,
+		RetryLastFailureReason:        v.LastFailureReason,
+		RetryLastWorkerIdentity:       v.LastWorkerIdentity,
+		RetryLastFailureDetails:       v.LastFailureDetails,
+	}
+	return info
+}
+

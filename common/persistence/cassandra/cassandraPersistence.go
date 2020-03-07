@@ -316,7 +316,7 @@ workflow_state = ? ` +
 		`and task_id = ? ` +
 		`IF range_id = ?`
 
-	templateGetWorkflowExecutionQuery = `SELECT execution, execution_encoding, execution_state, execution_state_encoding, next_event_id, replication_state, activity_map, timer_map, timer_map_encoding, ` +
+	templateGetWorkflowExecutionQuery = `SELECT execution, execution_encoding, execution_state, execution_state_encoding, next_event_id, replication_state, activity_map, activity_map_encoding, timer_map, timer_map_encoding, ` +
 		`child_executions_map, request_cancel_map, request_cancel_map_encoding, signal_map, signal_map_encoding, signal_requested, buffered_events_list, ` +
 		`buffered_replication_tasks_map, version_histories, version_histories_encoding, checksum, checksum_encoding ` +
 		`FROM executions ` +
@@ -404,7 +404,7 @@ workflow_state = ? ` +
 		`IF next_event_id = ? `
 
 	templateUpdateActivityInfoQuery = `UPDATE executions ` +
-		`SET activity_map[ ? ] =` + templateActivityInfoType + ` ` +
+		`SET activity_map[ ? ] = ?, activity_map_encoding = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and domain_id = ? ` +
@@ -414,7 +414,7 @@ workflow_state = ? ` +
 		`and task_id = ? `
 
 	templateResetActivityInfoQuery = `UPDATE executions ` +
-		`SET activity_map = ?` +
+		`SET activity_map = ?, activity_map_encoding = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and domain_id = ? ` +
@@ -1198,9 +1198,14 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 	}
 
 	activityInfos := make(map[int64]*p.InternalActivityInfo)
-	aMap := result["activity_map"].(map[int64]map[string]interface{})
+	aMap := result["activity_map"].(map[int64][]byte)
+	aMapEncoding := result["activity_map_encoding"].(string)
 	for key, value := range aMap {
-		info := createActivityInfo(request.DomainID, value)
+		aInfo, err := serialization.ActivityInfoFromBlob(value, aMapEncoding)
+		if err != nil {
+			return nil, err
+		}
+		info := p.ProtoActivityInfoToInternalActivityInfo(aInfo)
 		activityInfos[key] = info
 	}
 	state.ActivityInfos = activityInfos
@@ -1274,6 +1279,24 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 }
 
 func protoExecutionStateFromRow(result map[string]interface{}) (*persistenceblobs.WorkflowExecutionState, error) {
+	state, ok := result["execution_state"].([]byte)
+	if !ok {
+		return nil, newPersistedTypeMismatchError("execution_state", "", state, result)
+	}
+
+	stateEncoding, ok := result["execution_state_encoding"].(string)
+	if !ok {
+		return nil, newPersistedTypeMismatchError("execution_state_encoding", "", stateEncoding, result)
+	}
+
+	protoState, err := serialization.WorkflowExecutionStateFromBlob(state, stateEncoding)
+	if err != nil {
+		return nil, err
+	}
+	return protoState, nil
+}
+
+func protoActivityInfoFromRow(result map[string]interface{}) (*persistenceblobs.WorkflowExecutionState, error) {
 	state, ok := result["execution_state"].([]byte)
 	if !ok {
 		return nil, newPersistedTypeMismatchError("execution_state", "", state, result)

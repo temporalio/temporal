@@ -23,7 +23,6 @@ package sql
 import (
 	"database/sql"
 	"fmt"
-	"time"
 
 	"go.temporal.io/temporal-proto/serviceerror"
 
@@ -50,46 +49,11 @@ func updateActivityInfos(
 	if len(activityInfos) > 0 {
 		rows := make([]sqlplugin.ActivityInfoMapsRow, len(activityInfos))
 		for i, v := range activityInfos {
-			scheduledEvent, scheduledEncoding := persistence.FromDataBlob(v.ScheduledEvent)
-			startEvent, startEncoding := persistence.FromDataBlob(v.StartedEvent)
-
-			info := &sqlblobs.ActivityInfo{
-				Version:                       &v.Version,
-				ScheduledEventBatchID:         &v.ScheduledEventBatchID,
-				ScheduledEvent:                scheduledEvent,
-				ScheduledEventEncoding:        common.StringPtr(scheduledEncoding),
-				ScheduledTimeNanos:            common.Int64Ptr(v.ScheduledTime.UnixNano()),
-				StartedID:                     &v.StartedID,
-				StartedEvent:                  startEvent,
-				StartedEventEncoding:          common.StringPtr(startEncoding),
-				StartedTimeNanos:              common.Int64Ptr(v.StartedTime.UnixNano()),
-				ActivityID:                    &v.ActivityID,
-				RequestID:                     &v.RequestID,
-				ScheduleToStartTimeoutSeconds: &v.ScheduleToStartTimeout,
-				ScheduleToCloseTimeoutSeconds: &v.ScheduleToCloseTimeout,
-				StartToCloseTimeoutSeconds:    &v.StartToCloseTimeout,
-				HeartbeatTimeoutSeconds:       &v.HeartbeatTimeout,
-				CancelRequested:               &v.CancelRequested,
-				CancelRequestID:               &v.CancelRequestID,
-				TimerTaskStatus:               &v.TimerTaskStatus,
-				Attempt:                       &v.Attempt,
-				TaskList:                      &v.TaskList,
-				StartedIdentity:               &v.StartedIdentity,
-				HasRetryPolicy:                &v.HasRetryPolicy,
-				RetryInitialIntervalSeconds:   &v.InitialInterval,
-				RetryBackoffCoefficient:       &v.BackoffCoefficient,
-				RetryMaximumIntervalSeconds:   &v.MaximumInterval,
-				RetryExpirationTimeNanos:      common.Int64Ptr(v.ExpirationTime.UnixNano()),
-				RetryMaximumAttempts:          &v.MaximumAttempts,
-				RetryNonRetryableErrors:       v.NonRetriableErrors,
-				RetryLastFailureReason:        &v.LastFailureReason,
-				RetryLastWorkerIdentity:       &v.LastWorkerIdentity,
-				RetryLastFailureDetails:       v.LastFailureDetails,
-			}
-			blob, err := serialization.ActivityInfoToBlob(info)
+			blob, err := serialization.ActivityInfoToBlob(v.ToProto())
 			if err != nil {
 				return err
 			}
+
 			rows[i] = sqlplugin.ActivityInfoMapsRow{
 				ShardID:                  int64(shardID),
 				DomainID:                 domainID,
@@ -157,43 +121,7 @@ func getActivityInfoMap(
 		if err != nil {
 			return nil, err
 		}
-		info := &persistence.InternalActivityInfo{
-			DomainID:                 v.DomainID.String(),
-			ScheduleID:               v.ScheduleID,
-			Details:                  v.LastHeartbeatDetails,
-			LastHeartBeatUpdatedTime: v.LastHeartbeatUpdatedTime,
-			Version:                  decoded.GetVersion(),
-			ScheduledEventBatchID:    decoded.GetScheduledEventBatchID(),
-			ScheduledEvent:           persistence.NewDataBlob(decoded.ScheduledEvent, common.EncodingType(decoded.GetScheduledEventEncoding())),
-			ScheduledTime:            time.Unix(0, decoded.GetScheduledTimeNanos()),
-			StartedID:                decoded.GetStartedID(),
-			StartedTime:              time.Unix(0, decoded.GetStartedTimeNanos()),
-			ActivityID:               decoded.GetActivityID(),
-			RequestID:                decoded.GetRequestID(),
-			ScheduleToStartTimeout:   decoded.GetScheduleToStartTimeoutSeconds(),
-			ScheduleToCloseTimeout:   decoded.GetScheduleToCloseTimeoutSeconds(),
-			StartToCloseTimeout:      decoded.GetStartToCloseTimeoutSeconds(),
-			HeartbeatTimeout:         decoded.GetHeartbeatTimeoutSeconds(),
-			CancelRequested:          decoded.GetCancelRequested(),
-			CancelRequestID:          decoded.GetCancelRequestID(),
-			TimerTaskStatus:          decoded.GetTimerTaskStatus(),
-			Attempt:                  decoded.GetAttempt(),
-			StartedIdentity:          decoded.GetStartedIdentity(),
-			TaskList:                 decoded.GetTaskList(),
-			HasRetryPolicy:           decoded.GetHasRetryPolicy(),
-			InitialInterval:          decoded.GetRetryInitialIntervalSeconds(),
-			BackoffCoefficient:       decoded.GetRetryBackoffCoefficient(),
-			MaximumInterval:          decoded.GetRetryMaximumIntervalSeconds(),
-			ExpirationTime:           time.Unix(0, decoded.GetRetryExpirationTimeNanos()),
-			MaximumAttempts:          decoded.GetRetryMaximumAttempts(),
-			NonRetriableErrors:       decoded.GetRetryNonRetryableErrors(),
-			LastFailureReason:        decoded.GetRetryLastFailureReason(),
-			LastWorkerIdentity:       decoded.GetRetryLastWorkerIdentity(),
-			LastFailureDetails:       decoded.GetRetryLastFailureDetails(),
-		}
-		if decoded.StartedEvent != nil {
-			info.StartedEvent = persistence.NewDataBlob(decoded.StartedEvent, common.EncodingType(decoded.GetStartedEventEncoding()))
-		}
+		info := persistence.ProtoActivityInfoToInternalActivityInfo(decoded)
 		ret[v.ScheduleID] = info
 	}
 
