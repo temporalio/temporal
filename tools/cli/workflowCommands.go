@@ -46,7 +46,9 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.temporal.io/temporal/client"
 
+	cliproto "github.com/temporalio/temporal/.gen/proto/cli"
 	"github.com/temporalio/temporal/common/clock"
+	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/service/history"
 )
 
@@ -142,8 +144,8 @@ func showHistoryHelper(c *cli.Context, wid, rid string) {
 	}
 
 	if outputFileName != "" {
-		serializer := &JSONHistorySerializer{}
-		data, err := serializer.Serialize(history)
+		serializer := codec.NewJSONPBEncoder()
+		data, err := serializer.Encode(history)
 		if err != nil {
 			ErrorAndExit("Failed to serialize history data.", err)
 		}
@@ -831,14 +833,11 @@ func describeWorkflowHelper(c *cli.Context, wid, rid string) {
 		return
 	}
 
-	var o interface{}
 	if printRaw {
-		o = resp
+		prettyPrintJSONObject(resp)
 	} else {
-		o = convertDescribeWorkflowExecutionResponse(resp, frontendClient, c)
+		prettyPrintJSONObject(convertDescribeWorkflowExecutionResponse(resp, frontendClient, c))
 	}
-
-	prettyPrintJSONObject(o)
 }
 
 func printAutoResetPoints(resp *workflowservice.DescribeWorkflowExecutionResponse) {
@@ -863,68 +862,28 @@ func printAutoResetPoints(resp *workflowservice.DescribeWorkflowExecutionRespons
 	table.Render()
 }
 
-// describeWorkflowExecutionResponse is used to print datetime instead of print raw time
-type describeWorkflowExecutionResponse struct {
-	ExecutionConfiguration *commonproto.WorkflowExecutionConfiguration
-	WorkflowExecutionInfo  workflowExecutionInfo
-	PendingActivities      []*pendingActivityInfo
-	PendingChildren        []*commonproto.PendingChildExecutionInfo
-}
-
-// workflowExecutionInfo has same fields as commonproto.WorkflowExecutionInfo, but has datetime instead of raw time
-type workflowExecutionInfo struct {
-	Execution        *commonproto.WorkflowExecution
-	Type             *commonproto.WorkflowType
-	StartTime        string // change from *int64
-	CloseTime        string // change from *int64
-	CloseStatus      enums.WorkflowExecutionCloseStatus
-	HistoryLength    int64
-	ParentDomainID   string
-	ParentExecution  *commonproto.WorkflowExecution
-	Memo             *commonproto.Memo
-	SearchAttributes map[string]interface{}
-	AutoResetPoints  *commonproto.ResetPoints
-}
-
-// pendingActivityInfo has same fields as commonproto.PendingActivityInfo, but different field type for better display
-type pendingActivityInfo struct {
-	ActivityID             string
-	ActivityType           *commonproto.ActivityType
-	State                  enums.PendingActivityState
-	ScheduledTimestamp     string `json:",omitempty"` // change from *int64
-	LastStartedTimestamp   string `json:",omitempty"` // change from *int64
-	HeartbeatDetails       string `json:",omitempty"` // change from []byte
-	LastHeartbeatTimestamp string `json:",omitempty"` // change from *int64
-	Attempt                int32  `json:",omitempty"`
-	MaximumAttempts        int32  `json:",omitempty"`
-	ExpirationTimestamp    string `json:",omitempty"` // change from *int64
-	LastFailureReason      string `json:",omitempty"`
-	LastWorkerIdentity     string `json:",omitempty"`
-	LastFailureDetails     string `json:",omitempty"` // change from []byte
-}
-
 func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWorkflowExecutionResponse,
-	wfClient workflowservice.WorkflowServiceClient, c *cli.Context) *describeWorkflowExecutionResponse {
+	wfClient workflowservice.WorkflowServiceClient, c *cli.Context) *cliproto.DescribeWorkflowExecutionResponse {
 
 	info := resp.WorkflowExecutionInfo
-	executionInfo := workflowExecutionInfo{
+	executionInfo := &cliproto.WorkflowExecutionInfo{
 		Execution:        info.Execution,
 		Type:             info.Type,
 		CloseTime:        convertTime(info.GetCloseTime(), false),
 		StartTime:        convertTime(info.GetStartTime(), false),
 		CloseStatus:      info.CloseStatus,
 		HistoryLength:    info.HistoryLength,
-		ParentDomainID:   info.ParentDomainId,
+		ParentDomainId:   info.ParentDomainId,
 		ParentExecution:  info.ParentExecution,
 		Memo:             info.Memo,
-		SearchAttributes: convertSearchAttributesToMapOfInterface(info.SearchAttributes, wfClient, c),
+		SearchAttributes: convertSearchAttributes(info.SearchAttributes, wfClient, c),
 		AutoResetPoints:  info.AutoResetPoints,
 	}
 
-	var pendingActs []*pendingActivityInfo
-	var tmpAct *pendingActivityInfo
+	var pendingActs []*cliproto.PendingActivityInfo
+	var tmpAct *cliproto.PendingActivityInfo
 	for _, pa := range resp.PendingActivities {
-		tmpAct = &pendingActivityInfo{
+		tmpAct = &cliproto.PendingActivityInfo{
 			ActivityID:             pa.ActivityID,
 			ActivityType:           pa.ActivityType,
 			State:                  pa.State,
@@ -946,7 +905,7 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 		pendingActs = append(pendingActs, tmpAct)
 	}
 
-	return &describeWorkflowExecutionResponse{
+	return &cliproto.DescribeWorkflowExecutionResponse{
 		ExecutionConfiguration: resp.ExecutionConfiguration,
 		WorkflowExecutionInfo:  executionInfo,
 		PendingActivities:      pendingActs,
@@ -954,14 +913,14 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 	}
 }
 
-func convertSearchAttributesToMapOfInterface(searchAttributes *commonproto.SearchAttributes,
-	wfClient workflowservice.WorkflowServiceClient, c *cli.Context) map[string]interface{} {
+func convertSearchAttributes(searchAttributes *commonproto.SearchAttributes,
+	wfClient workflowservice.WorkflowServiceClient, c *cli.Context) *cliproto.SearchAttributes {
 
 	if searchAttributes == nil || len(searchAttributes.GetIndexedFields()) == 0 {
 		return nil
 	}
 
-	result := make(map[string]interface{})
+	result := &cliproto.SearchAttributes{}
 	ctx, cancel := newContext(c)
 	defer cancel()
 	validSearchAttributes, err := wfClient.GetSearchAttributes(ctx, nil)
@@ -977,23 +936,23 @@ func convertSearchAttributesToMapOfInterface(searchAttributes *commonproto.Searc
 		case enums.IndexedValueTypeString, enums.IndexedValueTypeKeyword:
 			var val string
 			json.Unmarshal(v, &val)
-			result[k] = val
+			result.IndexedFields[k] = val
 		case enums.IndexedValueTypeInt:
 			var val int64
 			json.Unmarshal(v, &val)
-			result[k] = val
+			result.IndexedFields[k] = strconv.FormatInt(val, 10)
 		case enums.IndexedValueTypeDouble:
 			var val float64
 			json.Unmarshal(v, &val)
-			result[k] = val
+			result.IndexedFields[k] = strconv.FormatFloat(val, 'f', 6, 64)
 		case enums.IndexedValueTypeBool:
 			var val bool
 			json.Unmarshal(v, &val)
-			result[k] = val
+			result.IndexedFields[k] = strconv.FormatBool(val)
 		case enums.IndexedValueTypeDatetime:
 			var val time.Time
 			json.Unmarshal(v, &val)
-			result[k] = val
+			result.IndexedFields[k] = val.Format(time.RFC3339)
 		default:
 			ErrorAndExit(fmt.Sprintf("Error unknown index value type [%v]", valueType), nil)
 		}
@@ -1361,9 +1320,10 @@ func getWorkflowIDReusePolicy(value int) enums.WorkflowIdReusePolicy {
 
 // default will print decoded raw
 func printListResults(executions []*commonproto.WorkflowExecutionInfo, inJSON bool, more bool) {
+	encoder := codec.NewJSONPBEncoder()
 	for i, execution := range executions {
 		if inJSON {
-			j, _ := json.Marshal(execution)
+			j, _ := encoder.Encode(execution)
 			if more || i < len(executions)-1 {
 				fmt.Println(string(j) + ",")
 			} else {

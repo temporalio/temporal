@@ -33,6 +33,7 @@ import (
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/gcloud/connector"
 	"github.com/temporalio/temporal/common/backoff"
+	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
@@ -140,6 +141,8 @@ func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request
 		historyIterator, _ = loadHistoryIterator(ctx, request, h.container.HistoryV2Manager, featureCatalog, &progress)
 	}
 
+	encoder := codec.NewJSONPBEncoder()
+
 	for historyIterator.HasNext() {
 		part := progress.CurrentPageNumber
 		historyBlob, err := getNextHistoryBlob(ctx, historyIterator)
@@ -159,7 +162,7 @@ func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request
 			return archiver.ErrHistoryMutated
 		}
 
-		encodedHistoryPart, err := encodeHistoryBatches(historyBlob.Body)
+		encodedHistoryPart, err := encoder.EncodeHistories(historyBlob.Body)
 		if err != nil {
 			logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(errEncodeHistory), tag.Error(err))
 			return errUploadNonRetriable
@@ -221,6 +224,7 @@ func (h *historyArchiver) Get(ctx context.Context, URI archiver.URI, request *ar
 	response := &archiver.GetHistoryResponse{}
 	response.HistoryBatches = []*commonproto.History{}
 	numOfEvents := 0
+	encoder := codec.NewJSONPBEncoder()
 
 outer:
 	for token.CurrentPart <= token.HighestPart {
@@ -236,7 +240,7 @@ outer:
 			return nil, serviceerror.NewInternal("Fail retrieving history file: " + URI.String() + "/" + filename)
 		}
 
-		batches, err := decodeHistoryBatches(encodedHistoryBatches)
+		batches, err := encoder.DecodeHistories(encodedHistoryBatches)
 		if err != nil {
 			return nil, serviceerror.NewInternal(err.Error())
 		}

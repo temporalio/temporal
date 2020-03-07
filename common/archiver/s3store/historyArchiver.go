@@ -42,6 +42,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/backoff"
+	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/service/config"
@@ -171,7 +172,8 @@ func (h *historyArchiver) Archive(
 		historyBatches = append(historyBatches, historyBlob.Body...)
 	}
 
-	encodedHistoryBatches, err := encodeHistoryBatches(historyBatches)
+	encoder := codec.NewJSONPBEncoder()
+	encodedHistoryBatches, err := encoder.EncodeHistories(historyBatches)
 	if err != nil {
 		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(errEncodeHistory), tag.Error(err))
 		return err
@@ -232,7 +234,8 @@ func (h *historyArchiver) Get(
 	if err != nil {
 		return nil, err
 	}
-	historyBatches, err := decodeHistoryBatches(encodedHistoryBatches)
+	encoder := codec.NewJSONPBEncoder()
+	historyBatches, err := encoder.DecodeHistories(encodedHistoryBatches)
 	if err != nil {
 		return nil, serviceerror.NewInternal(err.Error())
 	}
