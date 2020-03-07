@@ -1003,3 +1003,43 @@ func (v *InternalActivityInfo) ToProto() *persistenceblobs.ActivityInfo {
 	return info
 }
 
+func (v *InternalChildExecutionInfo) ToProto() *persistenceblobs.ChildExecutionInfo {
+	initiateEvent, initiateEncoding := FromDataBlob(v.InitiatedEvent)
+	startEvent, startEncoding := FromDataBlob(v.StartedEvent)
+
+	info := &persistenceblobs.ChildExecutionInfo{
+		Version:                v.Version,
+		InitiatedID:            v.InitiatedID,
+		InitiatedEventBatchID:  v.InitiatedEventBatchID,
+		InitiatedEvent:         initiateEvent,
+		InitiatedEventEncoding: initiateEncoding,
+		StartedEvent:           startEvent,
+		StartedEventEncoding:   startEncoding,
+		StartedID:              v.StartedID,
+		StartedWorkflowID:      v.StartedWorkflowID,
+		StartedRunID:           primitives.MustParseUUID(v.StartedRunID),
+		CreateRequestID:        v.CreateRequestID,
+		DomainName:             v.DomainName,
+		WorkflowTypeName:       v.WorkflowTypeName,
+		ParentClosePolicy:      int32(v.ParentClosePolicy),
+	}
+	return info
+}
+
+func ProtoChildExecutionInfoToInternal(rowInfo *persistenceblobs.ChildExecutionInfo) *InternalChildExecutionInfo {
+	return &InternalChildExecutionInfo{
+		InitiatedID:           rowInfo.InitiatedID,
+		InitiatedEventBatchID: rowInfo.GetInitiatedEventBatchID(),
+		Version:               rowInfo.GetVersion(),
+		StartedID:             rowInfo.GetStartedID(),
+		StartedWorkflowID:     rowInfo.GetStartedWorkflowID(),
+		StartedRunID:          primitives.UUID(rowInfo.GetStartedRunID()).String(),
+		CreateRequestID:       rowInfo.GetCreateRequestID(),
+		DomainName:            rowInfo.GetDomainName(),
+		WorkflowTypeName:      rowInfo.GetWorkflowTypeName(),
+		ParentClosePolicy:     workflow.ParentClosePolicy(rowInfo.GetParentClosePolicy()),
+		InitiatedEvent:        NewDataBlob(rowInfo.InitiatedEvent, common.EncodingType(rowInfo.InitiatedEventEncoding)),
+		StartedEvent:          NewDataBlob(rowInfo.StartedEvent, common.EncodingType(rowInfo.StartedEventEncoding)),
+	}
+}
+
