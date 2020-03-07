@@ -1069,47 +1069,20 @@ func updateActivityInfos(
 ) error {
 
 	for _, a := range activityInfos {
-		scheduledEventData, scheduleEncoding := p.FromDataBlob(a.ScheduledEvent)
-		startedEventData, startEncoding := p.FromDataBlob(a.StartedEvent)
-		if a.StartedEvent != nil && scheduleEncoding != startEncoding {
-			return p.NewCadenceSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", scheduleEncoding, startEncoding))
+		if a.StartedEvent != nil && a.ScheduledEvent.Encoding != a.StartedEvent.Encoding {
+			return p.NewCadenceSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", a.ScheduledEvent.Encoding, a.StartedEvent.Encoding))
+		}
+
+		protoActivityInfo := a.ToProto()
+		activityBlob, err := serialization.ActivityInfoToBlob(protoActivityInfo)
+		if err != nil {
+			return p.NewCadenceSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", a.ScheduledEvent.Encoding, a.StartedEvent.Encoding))
 		}
 
 		batch.Query(templateUpdateActivityInfoQuery,
 			a.ScheduleID,
-			a.Version,
-			a.ScheduleID,
-			a.ScheduledEventBatchID,
-			scheduledEventData,
-			a.ScheduledTime,
-			a.StartedID,
-			startedEventData,
-			a.StartedTime,
-			a.ActivityID,
-			a.RequestID,
-			a.Details,
-			a.ScheduleToStartTimeout,
-			a.ScheduleToCloseTimeout,
-			a.StartToCloseTimeout,
-			a.HeartbeatTimeout,
-			a.CancelRequested,
-			a.CancelRequestID,
-			a.LastHeartBeatUpdatedTime,
-			a.TimerTaskStatus,
-			a.Attempt,
-			a.TaskList,
-			a.StartedIdentity,
-			a.HasRetryPolicy,
-			a.InitialInterval,
-			a.BackoffCoefficient,
-			a.MaximumInterval,
-			a.ExpirationTime,
-			a.MaximumAttempts,
-			a.NonRetriableErrors,
-			a.LastFailureReason,
-			a.LastWorkerIdentity,
-			a.LastFailureDetails,
-			scheduleEncoding,
+			activityBlob.Data,
+			activityBlob.Encoding,
 			shardID,
 			rowTypeExecution,
 			domainID,
@@ -1161,13 +1134,14 @@ func resetActivityInfos(
 	runID string,
 ) error {
 
-	infoMap, err := resetActivityInfoMap(activityInfos)
+	infoMap, encoding, err := resetActivityInfoMap(activityInfos)
 	if err != nil {
 		return err
 	}
 
 	batch.Query(templateResetActivityInfoQuery,
 		infoMap,
+		encoding,
 		shardID,
 		rowTypeExecution,
 		domainID,
@@ -1610,7 +1584,6 @@ func createActivityInfo(
 	domainID string,
 	result map[string]interface{},
 ) *p.InternalActivityInfo {
-
 	info := &p.InternalActivityInfo{}
 	var sharedEncoding common.EncodingType
 	var scheduledEventData, startedEventData []byte
@@ -1684,7 +1657,8 @@ func createActivityInfo(
 			sharedEncoding = common.EncodingType(v.(string))
 		}
 	}
-	info.DomainID = domainID
+
+	info.DomainID = primitives.MustParseUUID(domainID)
 	info.ScheduledEvent = p.NewDataBlob(scheduledEventData, sharedEncoding)
 	info.StartedEvent = p.NewDataBlob(startedEventData, sharedEncoding)
 
@@ -1736,54 +1710,25 @@ func createChildExecutionInfo(
 
 func resetActivityInfoMap(
 	activityInfos []*p.InternalActivityInfo,
-) (map[int64]map[string]interface{}, error) {
+) (map[int64][]byte, common.EncodingType, error) {
 
-	aMap := make(map[int64]map[string]interface{})
+	encoding := common.EncodingTypeUnknown
+	aMap := make(map[int64][]byte)
 	for _, a := range activityInfos {
-		scheduledEventData, scheduleEncoding := p.FromDataBlob(a.ScheduledEvent)
-		startedEventData, startEncoding := p.FromDataBlob(a.StartedEvent)
-		if a.StartedEvent != nil && scheduleEncoding != startEncoding {
-			return nil, p.NewCadenceSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", scheduleEncoding, startEncoding))
+		if a.StartedEvent != nil && a.ScheduledEvent.Encoding != a.StartedEvent.Encoding {
+			return nil, common.EncodingTypeUnknown, p.NewCadenceSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", a.ScheduledEvent.Encoding, a.StartedEvent.Encoding))
 		}
-		aInfo := make(map[string]interface{})
-		aInfo["version"] = a.Version
-		aInfo["event_data_encoding"] = scheduleEncoding
-		aInfo["schedule_id"] = a.ScheduleID
-		aInfo["scheduled_event_batch_id"] = a.ScheduledEventBatchID
-		aInfo["scheduled_event"] = scheduledEventData
-		aInfo["scheduled_time"] = a.ScheduledTime
-		aInfo["started_id"] = a.StartedID
-		aInfo["started_event"] = startedEventData
-		aInfo["started_time"] = a.StartedTime
-		aInfo["activity_id"] = a.ActivityID
-		aInfo["request_id"] = a.RequestID
-		aInfo["details"] = a.Details
-		aInfo["schedule_to_start_timeout"] = a.ScheduleToStartTimeout
-		aInfo["schedule_to_close_timeout"] = a.ScheduleToCloseTimeout
-		aInfo["start_to_close_timeout"] = a.StartToCloseTimeout
-		aInfo["heart_beat_timeout"] = a.HeartbeatTimeout
-		aInfo["cancel_requested"] = a.CancelRequested
-		aInfo["cancel_request_id"] = a.CancelRequestID
-		aInfo["last_hb_updated_time"] = a.LastHeartBeatUpdatedTime
-		aInfo["timer_task_status"] = a.TimerTaskStatus
-		aInfo["attempt"] = a.Attempt
-		aInfo["task_list"] = a.TaskList
-		aInfo["started_identity"] = a.StartedIdentity
-		aInfo["has_retry_policy"] = a.HasRetryPolicy
-		aInfo["init_interval"] = a.InitialInterval
-		aInfo["backoff_coefficient"] = a.BackoffCoefficient
-		aInfo["max_interval"] = a.MaximumInterval
-		aInfo["expiration_time"] = a.ExpirationTime
-		aInfo["max_attempts"] = a.MaximumAttempts
-		aInfo["non_retriable_errors"] = a.NonRetriableErrors
-		aInfo["last_failure_reason"] = a.LastFailureReason
-		aInfo["last_worker_identity"] = a.LastWorkerIdentity
-		aInfo["last_failure_details"] = a.LastFailureDetails
 
-		aMap[a.ScheduleID] = aInfo
+		aBlob, err := serialization.ActivityInfoToBlob(a.ToProto())
+		if err != nil {
+			return nil, common.EncodingTypeUnknown, p.NewCadenceSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", a.ScheduledEvent.Encoding, a.StartedEvent.Encoding))
+		}
+
+		aMap[a.ScheduleID] = aBlob.Data
+		encoding = aBlob.Encoding
 	}
 
-	return aMap, nil
+	return aMap, encoding, nil
 }
 
 func resetTimerInfoMap(

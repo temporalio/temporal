@@ -27,6 +27,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence/serialization"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 type (
@@ -283,7 +284,7 @@ func (m *executionManagerImpl) DeserializeActivityInfos(
 			LastHeartBeatUpdatedTime:       v.LastHeartBeatUpdatedTime,
 			TimerTaskStatus:                v.TimerTaskStatus,
 			Attempt:                        v.Attempt,
-			DomainID:                       v.DomainID,
+			DomainID:                       v.DomainID.String(),
 			StartedIdentity:                v.StartedIdentity,
 			TaskList:                       v.TaskList,
 			HasRetryPolicy:                 v.HasRetryPolicy,
@@ -404,7 +405,7 @@ func (m *executionManagerImpl) SerializeUpsertActivityInfos(
 			LastHeartBeatUpdatedTime:       v.LastHeartBeatUpdatedTime,
 			TimerTaskStatus:                v.TimerTaskStatus,
 			Attempt:                        v.Attempt,
-			DomainID:                       v.DomainID,
+			DomainID:                       primitives.MustParseUUID(v.DomainID),
 			StartedIdentity:                v.StartedIdentity,
 			TaskList:                       v.TaskList,
 			HasRetryPolicy:                 v.HasRetryPolicy,

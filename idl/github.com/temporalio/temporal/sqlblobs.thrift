@@ -46,40 +46,6 @@ struct DomainInfo {
   48: optional string visibilityArchivalURI
 }
 
-struct ActivityInfo {
-  10: optional i64 (js.type = "Long") version
-  12: optional i64 (js.type = "Long") scheduledEventBatchID
-  14: optional binary scheduledEvent
-  16: optional string scheduledEventEncoding
-  18: optional i64 (js.type = "Long") scheduledTimeNanos
-  20: optional i64 (js.type = "Long") startedID
-  22: optional binary startedEvent
-  24: optional string startedEventEncoding
-  26: optional i64 (js.type = "Long") startedTimeNanos
-  28: optional string activityID
-  30: optional string requestID
-  32: optional i32 scheduleToStartTimeoutSeconds
-  34: optional i32 scheduleToCloseTimeoutSeconds
-  36: optional i32 startToCloseTimeoutSeconds
-  38: optional i32 heartbeatTimeoutSeconds
-  40: optional bool cancelRequested
-  42: optional i64 (js.type = "Long") cancelRequestID
-  44: optional i32 timerTaskStatus
-  46: optional i32 attempt
-  48: optional string taskList
-  50: optional string startedIdentity
-  52: optional bool hasRetryPolicy
-  54: optional i32 retryInitialIntervalSeconds
-  56: optional i32 retryMaximumIntervalSeconds
-  58: optional i32 retryMaximumAttempts
-  60: optional i64 (js.type = "Long") retryExpirationTimeNanos
-  62: optional double retryBackoffCoefficient
-  64: optional list<string> retryNonRetryableErrors
-  66: optional string retryLastFailureReason
-  68: optional string retryLastWorkerIdentity
-  70: optional binary retryLastFailureDetails
-}
-
 struct ChildExecutionInfo {
   10: optional i64 (js.type = "Long") version
   12: optional i64 (js.type = "Long") initiatedEventBatchID
