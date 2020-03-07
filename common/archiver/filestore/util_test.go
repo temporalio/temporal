@@ -34,6 +34,7 @@ import (
 
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
+	"github.com/temporalio/temporal/common/codec"
 )
 
 const (
@@ -209,10 +210,11 @@ func (s *UtilSuite) TestEncodeDecodeHistoryBatches() {
 		},
 	}
 
-	encodedHistoryBatches, err := encodeHistoryBatches(historyBatches)
+	encoder := codec.NewJSONPBEncoder()
+	encodedHistoryBatches, err := encoder.EncodeHistories(historyBatches)
 	s.NoError(err)
 
-	decodedHistoryBatches, err := decodeHistoryBatches(encodedHistoryBatches)
+	decodedHistoryBatches, err := encoder.DecodeHistories(encodedHistoryBatches)
 	s.NoError(err)
 	s.Equal(historyBatches, decodedHistoryBatches)
 }

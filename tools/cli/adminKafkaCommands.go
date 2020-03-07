@@ -24,7 +24,6 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/tls"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -51,6 +50,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/auth"
+	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/messaging"
 	"github.com/temporalio/temporal/common/persistence"
@@ -267,6 +267,7 @@ func writeReplicationTask(
 	c *cli.Context,
 ) {
 	filter := buildFilterFn(c.String(FlagWorkflowID), c.String(FlagRunID))
+	encoder := codec.NewJSONPBEncoder()
 Loop:
 	for {
 		select {
@@ -275,7 +276,7 @@ Loop:
 				break Loop
 			}
 			if filter(task) {
-				jsonStr, err := json.Marshal(task)
+				jsonStr, err := encoder.Encode(task)
 				if err != nil {
 					if !skipErrMode {
 						ErrorAndExit(malformedMessage, fmt.Errorf("failed to encode into json, err: %v", err))
@@ -316,6 +317,7 @@ func writeVisibilityMessage(
 	c *cli.Context,
 ) {
 	filter := buildFilterFnForVisibility(c.String(FlagWorkflowID), c.String(FlagRunID))
+	encoder := codec.NewJSONPBEncoder()
 Loop:
 	for {
 		select {
@@ -324,7 +326,7 @@ Loop:
 				break Loop
 			}
 			if filter(msg) {
-				jsonStr, err := json.Marshal(msg)
+				jsonStr, err := encoder.Encode(msg)
 				if err != nil {
 					if !skipErrMode {
 						ErrorAndExit(malformedMessage, fmt.Errorf("failed to encode into json, err: %v", err))
@@ -847,6 +849,7 @@ func parseReplicationTask(in string) (tasks []*replication.ReplicationTask, err 
 
 	scanner := bufio.NewScanner(file)
 	idx := 0
+	encoder := codec.NewJSONPBEncoder()
 	for scanner.Scan() {
 		idx++
 		line := strings.TrimSpace(scanner.Text())
@@ -856,7 +859,7 @@ func parseReplicationTask(in string) (tasks []*replication.ReplicationTask, err 
 		}
 
 		t := &replication.ReplicationTask{}
-		err := json.Unmarshal([]byte(line), t)
+		err := encoder.Decode([]byte(line), t)
 		if err != nil {
 			fmt.Printf("line %v cannot be deserialized to replicaiton task: %v.\n", idx, line)
 			return nil, err

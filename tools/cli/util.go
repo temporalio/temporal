@@ -37,32 +37,16 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/gogo/protobuf/proto"
 	"github.com/urfave/cli"
 	"github.com/valyala/fastjson"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal/client"
 
+	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/rpc"
 )
-
-// JSONHistorySerializer is used to encode history event in JSON
-type JSONHistorySerializer struct{}
-
-// Serialize serializes history.
-func (j *JSONHistorySerializer) Serialize(h *commonproto.History) ([]byte, error) {
-	return json.Marshal(h)
-}
-
-// Deserialize deserializes history
-func (j *JSONHistorySerializer) Deserialize(data []byte) (*commonproto.History, error) {
-	var events []*commonproto.HistoryEvent
-	err := json.Unmarshal(data, &events)
-	if err != nil {
-		return nil, err
-	}
-	return &commonproto.History{Events: events}, nil
-}
 
 // GetHistory helper method to iterate over all pages and return complete list of history events
 func GetHistory(ctx context.Context, workflowClient client.Client, workflowID, runID string) (*commonproto.History, error) {
@@ -494,7 +478,15 @@ func getCurrentUserFromEnv() string {
 }
 
 func prettyPrintJSONObject(o interface{}) {
-	b, err := json.MarshalIndent(o, "", "  ")
+	var b []byte
+	var err error
+	if pb, ok := o.(proto.Message); ok {
+		encoder := codec.NewJSONPBIndentEncoder("  ")
+		b, err = encoder.Encode(pb)
+	} else {
+		b, err = json.MarshalIndent(o, "", "  ")
+	}
+
 	if err != nil {
 		fmt.Printf("Error when try to print pretty: %v\n", err)
 		fmt.Println(o)
