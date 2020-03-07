@@ -13,23 +13,6 @@ CREATE TYPE replication_state (
   last_replication_info            map<text, frozen<replication_info>>, -- information about replication events from other clusters
 );
 
--- Child execution in progress mutable state
-CREATE TYPE child_execution_info (
-  version                   bigint,
-  initiated_id              bigint,
-  initiated_event_batch_id  bigint,
-  initiated_event           blob,
-  started_id                bigint,
-  started_workflow_id       text,
-  started_run_id            uuid,
-  started_event             blob, -- deprecated
-  create_request_id         uuid,
-  event_data_encoding       text, -- Protocol used for history serialization
-  domain_name               text,
-  workflow_type_name        text,
-  parent_close_policy       int,
-);
-
 CREATE TYPE domain (
   id          uuid,
   name        text,
@@ -105,7 +88,8 @@ CREATE TABLE executions (
   activity_map_encoding          text,
   timer_map                      map<text, blob>,
   timer_map_encoding             text,
-  child_executions_map           map<bigint, frozen<child_execution_info>>,
+  child_executions_map           map<bigint, blob>,
+  child_executions_map_encoding  text,
   request_cancel_map             map<bigint, blob>,
   request_cancel_map_encoding    text,
   signal_map                     map<bigint, blob>,

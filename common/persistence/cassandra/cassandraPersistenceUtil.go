@@ -28,7 +28,6 @@ import (
 	"github.com/gogo/protobuf/types"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
@@ -1234,32 +1233,19 @@ func updateChildExecutionInfos(
 ) error {
 
 	for _, c := range childExecutionInfos {
-		initiatedEventData, initiatedEncoding := p.FromDataBlob(c.InitiatedEvent)
-		startedEventData, startEncoding := p.FromDataBlob(c.StartedEvent)
-		if c.StartedEvent != nil && initiatedEncoding != startEncoding {
-			return p.NewCadenceSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", initiatedEncoding, startEncoding))
+		if c.StartedEvent != nil && c.InitiatedEvent.Encoding != c.StartedEvent.Encoding {
+			return p.NewCadenceSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", c.InitiatedEvent.Encoding, c.StartedEvent.Encoding))
 		}
 
-		startedRunID := emptyRunID
-		if c.StartedRunID != "" {
-			startedRunID = c.StartedRunID
+		datablob, err := serialization.ChildExecutionInfoToBlob(c.ToProto())
+		if err != nil {
+			return nil
 		}
 
 		batch.Query(templateUpdateChildExecutionInfoQuery,
 			c.InitiatedID,
-			c.Version,
-			c.InitiatedID,
-			c.InitiatedEventBatchID,
-			initiatedEventData,
-			c.StartedID,
-			c.StartedWorkflowID,
-			startedRunID,
-			startedEventData,
-			c.CreateRequestID,
-			initiatedEncoding,
-			c.DomainName,
-			c.WorkflowTypeName,
-			int32(c.ParentClosePolicy),
+			datablob.Data,
+			datablob.Encoding,
 			shardID,
 			rowTypeExecution,
 			domainID,
@@ -1293,12 +1279,13 @@ func resetChildExecutionInfos(
 	runID string,
 ) error {
 
-	infoMap, err := resetChildExecutionInfoMap(childExecutionInfos)
+	infoMap, encoding, err := resetChildExecutionInfoMap(childExecutionInfos)
 	if err != nil {
 		return err
 	}
 	batch.Query(templateResetChildExecutionInfoQuery,
 		infoMap,
+		encoding,
 		shardID,
 		rowTypeExecution,
 		domainID,
@@ -1580,134 +1567,6 @@ func createReplicationState(
 	return info
 }
 
-func createActivityInfo(
-	domainID string,
-	result map[string]interface{},
-) *p.InternalActivityInfo {
-	info := &p.InternalActivityInfo{}
-	var sharedEncoding common.EncodingType
-	var scheduledEventData, startedEventData []byte
-	for k, v := range result {
-		switch k {
-		case "version":
-			info.Version = v.(int64)
-		case "schedule_id":
-			info.ScheduleID = v.(int64)
-		case "scheduled_event_batch_id":
-			info.ScheduledEventBatchID = v.(int64)
-		case "scheduled_event":
-			scheduledEventData = v.([]byte)
-		case "scheduled_time":
-			info.ScheduledTime = v.(time.Time)
-		case "started_id":
-			info.StartedID = v.(int64)
-		case "started_event":
-			startedEventData = v.([]byte)
-		case "started_time":
-			info.StartedTime = v.(time.Time)
-		case "activity_id":
-			info.ActivityID = v.(string)
-		case "request_id":
-			info.RequestID = v.(string)
-		case "details":
-			info.Details = v.([]byte)
-		case "schedule_to_start_timeout":
-			info.ScheduleToStartTimeout = int32(v.(int))
-		case "schedule_to_close_timeout":
-			info.ScheduleToCloseTimeout = int32(v.(int))
-		case "start_to_close_timeout":
-			info.StartToCloseTimeout = int32(v.(int))
-		case "heart_beat_timeout":
-			info.HeartbeatTimeout = int32(v.(int))
-		case "cancel_requested":
-			info.CancelRequested = v.(bool)
-		case "cancel_request_id":
-			info.CancelRequestID = v.(int64)
-		case "last_hb_updated_time":
-			info.LastHeartBeatUpdatedTime = v.(time.Time)
-		case "timer_task_status":
-			info.TimerTaskStatus = int32(v.(int))
-		case "attempt":
-			info.Attempt = int32(v.(int))
-		case "task_list":
-			info.TaskList = v.(string)
-		case "started_identity":
-			info.StartedIdentity = v.(string)
-		case "has_retry_policy":
-			info.HasRetryPolicy = v.(bool)
-		case "init_interval":
-			info.InitialInterval = (int32)(v.(int))
-		case "backoff_coefficient":
-			info.BackoffCoefficient = v.(float64)
-		case "max_interval":
-			info.MaximumInterval = (int32)(v.(int))
-		case "max_attempts":
-			info.MaximumAttempts = (int32)(v.(int))
-		case "expiration_time":
-			info.ExpirationTime = v.(time.Time)
-		case "non_retriable_errors":
-			info.NonRetriableErrors = v.([]string)
-		case "last_failure_reason":
-			info.LastFailureReason = v.(string)
-		case "last_worker_identity":
-			info.LastWorkerIdentity = v.(string)
-		case "last_failure_details":
-			info.LastFailureDetails = v.([]byte)
-		case "event_data_encoding":
-			sharedEncoding = common.EncodingType(v.(string))
-		}
-	}
-
-	info.DomainID = primitives.MustParseUUID(domainID)
-	info.ScheduledEvent = p.NewDataBlob(scheduledEventData, sharedEncoding)
-	info.StartedEvent = p.NewDataBlob(startedEventData, sharedEncoding)
-
-	return info
-}
-
-func createChildExecutionInfo(
-	result map[string]interface{},
-) *p.InternalChildExecutionInfo {
-
-	info := &p.InternalChildExecutionInfo{}
-	var encoding common.EncodingType
-	var initiatedData []byte
-	var startedData []byte
-	for k, v := range result {
-		switch k {
-		case "version":
-			info.Version = v.(int64)
-		case "initiated_id":
-			info.InitiatedID = v.(int64)
-		case "initiated_event_batch_id":
-			info.InitiatedEventBatchID = v.(int64)
-		case "initiated_event":
-			initiatedData = v.([]byte)
-		case "started_id":
-			info.StartedID = v.(int64)
-		case "started_workflow_id":
-			info.StartedWorkflowID = v.(string)
-		case "started_run_id":
-			info.StartedRunID = v.(gocql.UUID).String()
-		case "started_event":
-			startedData = v.([]byte)
-		case "create_request_id":
-			info.CreateRequestID = v.(gocql.UUID).String()
-		case "event_data_encoding":
-			encoding = common.EncodingType(v.(string))
-		case "domain_name":
-			info.DomainName = v.(string)
-		case "workflow_type_name":
-			info.WorkflowTypeName = v.(string)
-		case "parent_close_policy":
-			info.ParentClosePolicy = workflow.ParentClosePolicy(v.(int))
-		}
-	}
-	info.InitiatedEvent = p.NewDataBlob(initiatedData, encoding)
-	info.StartedEvent = p.NewDataBlob(startedData, encoding)
-	return info
-}
-
 func resetActivityInfoMap(
 	activityInfos []*p.InternalActivityInfo,
 ) (map[int64][]byte, common.EncodingType, error) {
@@ -1721,7 +1580,7 @@ func resetActivityInfoMap(
 
 		aBlob, err := serialization.ActivityInfoToBlob(a.ToProto())
 		if err != nil {
-			return nil, common.EncodingTypeUnknown, p.NewCadenceSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", a.ScheduledEvent.Encoding, a.StartedEvent.Encoding))
+			return nil, common.EncodingTypeUnknown, p.NewCadenceSerializationError(fmt.Sprintf("failed to serialize activity infos - ActivityId: %v", a.ActivityID))
 		}
 
 		aMap[a.ScheduleID] = aBlob.Data
@@ -1754,38 +1613,24 @@ func resetTimerInfoMap(
 
 func resetChildExecutionInfoMap(
 	childExecutionInfos []*p.InternalChildExecutionInfo,
-) (map[int64]map[string]interface{}, error) {
+) (map[int64][]byte, common.EncodingType, error) {
 
-	cMap := make(map[int64]map[string]interface{})
+	cMap := make(map[int64][]byte)
+	encoding := common.EncodingTypeUnknown
 	for _, c := range childExecutionInfos {
-		cInfo := make(map[string]interface{})
-		initiatedEventData, initiatedEncoding := p.FromDataBlob(c.InitiatedEvent)
-		startedEventData, startEncoding := p.FromDataBlob(c.StartedEvent)
-		if c.StartedEvent != nil && initiatedEncoding != startEncoding {
-			return nil, p.NewCadenceSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", initiatedEncoding, startEncoding))
+		if c.StartedEvent != nil && c.InitiatedEvent.Encoding != c.StartedEvent.Encoding {
+			return nil, common.EncodingTypeUnknown, p.NewCadenceSerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", c.InitiatedEvent.Encoding, c.StartedEvent.Encoding))
 		}
-		cInfo["version"] = c.Version
-		cInfo["event_data_encoding"] = initiatedEncoding
-		cInfo["initiated_id"] = c.InitiatedID
-		cInfo["initiated_event_batch_id"] = c.InitiatedEventBatchID
-		cInfo["initiated_event"] = initiatedEventData
-		cInfo["started_id"] = c.StartedID
-		cInfo["started_event"] = startedEventData
-		cInfo["create_request_id"] = c.CreateRequestID
-		cInfo["started_workflow_id"] = c.StartedWorkflowID
-		startedRunID := emptyRunID
-		if c.StartedRunID != "" {
-			startedRunID = c.StartedRunID
-		}
-		cInfo["started_run_id"] = startedRunID
-		cInfo["domain_name"] = c.DomainName
-		cInfo["workflow_type_name"] = c.WorkflowTypeName
-		cInfo["parent_close_policy"] = int32(c.ParentClosePolicy)
 
-		cMap[c.InitiatedID] = cInfo
+		datablob, err := serialization.ChildExecutionInfoToBlob(c.ToProto())
+		if err != nil {
+			return nil, common.EncodingTypeUnknown, p.NewCadenceSerializationError(fmt.Sprintf("failed to serialize child execution infos - Execution: %v", c.InitiatedID))
+		}
+		cMap[c.InitiatedID] = datablob.Data
+		encoding = datablob.Encoding
 	}
 
-	return cMap, nil
+	return cMap, encoding, nil
 }
 
 func resetRequestCancelInfoMap(

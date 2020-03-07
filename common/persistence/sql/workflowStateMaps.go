@@ -26,8 +26,6 @@ import (
 
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/.gen/go/sqlblobs"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/persistence"
@@ -263,25 +261,7 @@ func updateChildExecutionInfos(
 	if len(childExecutionInfos) > 0 {
 		rows := make([]sqlplugin.ChildExecutionInfoMapsRow, len(childExecutionInfos))
 		for i, v := range childExecutionInfos {
-			initiateEvent, initiateEncoding := persistence.FromDataBlob(v.InitiatedEvent)
-			startEvent, startEncoding := persistence.FromDataBlob(v.StartedEvent)
-
-			info := &sqlblobs.ChildExecutionInfo{
-				Version:                &v.Version,
-				InitiatedEventBatchID:  &v.InitiatedEventBatchID,
-				InitiatedEvent:         initiateEvent,
-				InitiatedEventEncoding: &initiateEncoding,
-				StartedEvent:           startEvent,
-				StartedEventEncoding:   &startEncoding,
-				StartedID:              &v.StartedID,
-				StartedWorkflowID:      &v.StartedWorkflowID,
-				StartedRunID:           primitives.MustParseUUID(v.StartedRunID),
-				CreateRequestID:        &v.CreateRequestID,
-				DomainName:             &v.DomainName,
-				WorkflowTypeName:       &v.WorkflowTypeName,
-				ParentClosePolicy:      common.Int32Ptr(int32(v.ParentClosePolicy)),
-			}
-			blob, err := serialization.ChildExecutionInfoToBlob(info)
+			blob, err := serialization.ChildExecutionInfoToBlob(v.ToProto())
 			if err != nil {
 				return err
 			}
@@ -338,18 +318,7 @@ func getChildExecutionInfoMap(
 		if err != nil {
 			return nil, err
 		}
-		info := &persistence.InternalChildExecutionInfo{
-			InitiatedID:           v.InitiatedID,
-			InitiatedEventBatchID: rowInfo.GetInitiatedEventBatchID(),
-			Version:               rowInfo.GetVersion(),
-			StartedID:             rowInfo.GetStartedID(),
-			StartedWorkflowID:     rowInfo.GetStartedWorkflowID(),
-			StartedRunID:          primitives.UUID(rowInfo.GetStartedRunID()).String(),
-			CreateRequestID:       rowInfo.GetCreateRequestID(),
-			DomainName:            rowInfo.GetDomainName(),
-			WorkflowTypeName:      rowInfo.GetWorkflowTypeName(),
-			ParentClosePolicy:     workflow.ParentClosePolicy(rowInfo.GetParentClosePolicy()),
-		}
+		info := persistence.ProtoChildExecutionInfoToInternal(rowInfo)
 		if rowInfo.InitiatedEvent != nil {
 			info.InitiatedEvent = persistence.NewDataBlob(rowInfo.InitiatedEvent, common.EncodingType(rowInfo.GetInitiatedEventEncoding()))
 		}
