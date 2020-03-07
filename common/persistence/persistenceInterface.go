@@ -964,10 +964,10 @@ func (v *InternalActivityInfo) ToProto() *persistenceblobs.ActivityInfo {
 	startEvent, startEncoding := FromDataBlob(v.StartedEvent)
 
 	info := &persistenceblobs.ActivityInfo{
-		DomainID:                 	   v.DomainID,
-		ScheduleID:               	   v.ScheduleID,
+		DomainID:                      v.DomainID,
+		ScheduleID:                    v.ScheduleID,
 		LastHeartbeatDetails:          v.Details,
-		LastHeartbeatUpdatedTime: 	   timestamp.TimestampFromTime(&v.LastHeartBeatUpdatedTime).ToProto(),
+		LastHeartbeatUpdatedTime:      timestamp.TimestampFromTime(&v.LastHeartBeatUpdatedTime).ToProto(),
 		Version:                       v.Version,
 		ScheduledEventBatchID:         v.ScheduledEventBatchID,
 		ScheduledEvent:                scheduledEvent,
@@ -1042,4 +1042,3 @@ func ProtoChildExecutionInfoToInternal(rowInfo *persistenceblobs.ChildExecutionI
 		StartedEvent:          NewDataBlob(rowInfo.StartedEvent, common.EncodingType(rowInfo.StartedEventEncoding)),
 	}
 }
-
