@@ -43,6 +43,8 @@ CREATE TABLE executions(
   last_write_version BIGINT NOT NULL,
   data BLOB NOT NULL,
   data_encoding VARCHAR(16) NOT NULL,
+  state BLOB NOT NULL,
+  state_encoding VARCHAR(16) NOT NULL,
   PRIMARY KEY (shard_id, domain_id, workflow_id, run_id)
 );
 

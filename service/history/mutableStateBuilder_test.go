@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/temporal-proto/enums"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
@@ -326,7 +327,7 @@ func (s *mutableStateSuite) TestReorderEvents() {
 		CurrentVersion:      int64(1),
 		LastWriteVersion:    common.EmptyVersion,
 		LastWriteEventID:    common.EmptyEventID,
-		LastReplicationInfo: make(map[string]*persistence.ReplicationInfo),
+		LastReplicationInfo: make(map[string]*replication.ReplicationInfo),
 	}
 
 	dbState := &persistence.WorkflowMutableState{
@@ -811,7 +812,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		CurrentVersion:      failoverVersion,
 		LastWriteVersion:    common.EmptyVersion,
 		LastWriteEventID:    common.EmptyEventID,
-		LastReplicationInfo: make(map[string]*persistence.ReplicationInfo),
+		LastReplicationInfo: make(map[string]*replication.ReplicationInfo),
 	}
 
 	versionHistories := &persistence.VersionHistories{

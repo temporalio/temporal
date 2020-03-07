@@ -40,6 +40,7 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
@@ -1488,7 +1489,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 		StartVersion:        beforeResetVersion,
 		LastWriteEventID:    common.EmptyEventID,
 		LastWriteVersion:    common.EmptyVersion,
-		LastReplicationInfo: map[string]*persistence.ReplicationInfo{},
+		LastReplicationInfo: map[string]*replication.ReplicationInfo{},
 	}
 	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    forkExeInfo,
@@ -2089,9 +2090,9 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 	compareRepState.CurrentVersion = afterResetVersion
 	compareRepState.LastWriteEventID = 34
 	compareRepState.LastWriteVersion = afterResetVersion
-	compareRepState.LastReplicationInfo = map[string]*persistence.ReplicationInfo{
-		"standby": &persistence.ReplicationInfo{
-			LastEventID: 29,
+	compareRepState.LastReplicationInfo = map[string]*replication.ReplicationInfo{
+		"standby": {
+			LastEventId: 29,
 			Version:     beforeResetVersion,
 		},
 	}
@@ -2194,7 +2195,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 		StartVersion:        beforeResetVersion,
 		LastWriteEventID:    common.EmptyEventID,
 		LastWriteVersion:    common.EmptyVersion,
-		LastReplicationInfo: map[string]*persistence.ReplicationInfo{},
+		LastReplicationInfo: map[string]*replication.ReplicationInfo{},
 	}
 	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    forkExeInfo,
@@ -2794,7 +2795,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 		StartVersion:        beforeResetVersion,
 		LastWriteEventID:    common.EmptyEventID,
 		LastWriteVersion:    common.EmptyVersion,
-		LastReplicationInfo: map[string]*persistence.ReplicationInfo{},
+		LastReplicationInfo: map[string]*replication.ReplicationInfo{},
 	}
 	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    forkExeInfo,
@@ -3382,9 +3383,9 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 	compareRepState.CurrentVersion = afterResetVersion
 	compareRepState.LastWriteEventID = 34
 	compareRepState.LastWriteVersion = afterResetVersion
-	compareRepState.LastReplicationInfo = map[string]*persistence.ReplicationInfo{
-		"standby": &persistence.ReplicationInfo{
-			LastEventID: 29,
+	compareRepState.LastReplicationInfo = map[string]*replication.ReplicationInfo{
+		"standby": &replication.ReplicationInfo{
+			LastEventId: 29,
 			Version:     beforeResetVersion,
 		},
 	}
@@ -3472,7 +3473,7 @@ func (s *resetorSuite) TestApplyReset() {
 		StartVersion:        beforeResetVersion,
 		LastWriteEventID:    common.EmptyEventID,
 		LastWriteVersion:    common.EmptyVersion,
-		LastReplicationInfo: map[string]*persistence.ReplicationInfo{},
+		LastReplicationInfo: map[string]*replication.ReplicationInfo{},
 	}
 	forkGwmsResponse := &persistence.GetWorkflowExecutionResponse{State: &persistence.WorkflowMutableState{
 		ExecutionInfo:    forkExeInfo,
@@ -4066,9 +4067,9 @@ func (s *resetorSuite) TestApplyReset() {
 	compareRepState.CurrentVersion = afterResetVersion
 	compareRepState.LastWriteEventID = 34
 	compareRepState.LastWriteVersion = afterResetVersion
-	compareRepState.LastReplicationInfo = map[string]*persistence.ReplicationInfo{
-		"standby": &persistence.ReplicationInfo{
-			LastEventID: 29,
+	compareRepState.LastReplicationInfo = map[string]*replication.ReplicationInfo{
+		"standby": &replication.ReplicationInfo{
+			LastEventId: 29,
 			Version:     beforeResetVersion,
 		},
 	}

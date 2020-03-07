@@ -345,7 +345,7 @@ type (
 		StartVersion        int64
 		LastWriteVersion    int64
 		LastWriteEventID    int64
-		LastReplicationInfo map[string]*ReplicationInfo
+		LastReplicationInfo map[string]*replication.ReplicationInfo
 	}
 
 	// ReplicationTaskInfoWrapper describes a replication task.
@@ -542,7 +542,7 @@ type (
 
 		// TODO when 2DC is deprecated remove these 2 attributes
 		ResetWorkflow       bool
-		LastReplicationInfo map[string]*ReplicationInfo
+		LastReplicationInfo map[string]*replication.ReplicationInfo
 	}
 
 	// SyncActivityTask is the replication task created for shipping activity info to other clusters
@@ -551,12 +551,6 @@ type (
 		TaskID              int64
 		Version             int64
 		ScheduledID         int64
-	}
-
-	// ReplicationInfo represents the information stored for last replication event details per cluster
-	ReplicationInfo struct {
-		Version     int64
-		LastEventID int64
 	}
 
 	// VersionHistoryItem contains the event id and the associated version
@@ -2317,10 +2311,6 @@ func (config *ClusterReplicationConfig) deserialize(input map[string]interface{}
 func (config *ClusterReplicationConfig) GetCopy() *ClusterReplicationConfig {
 	res := *config
 	return &res
-}
-
-func (r *ReplicationInfo) ToProto() *replication.ReplicationInfo {
-	return &replication.ReplicationInfo{Version: r.Version, LastEventId: r.LastEventID}
 }
 
 // DBTimestampToUnixNano converts CQL timestamp to UnixNano

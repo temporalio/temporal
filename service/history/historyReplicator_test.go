@@ -1373,10 +1373,10 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{
 		LastWriteVersion: currentLastWriteVersion,
 		LastWriteEventID: currentLastEventID,
-		LastReplicationInfo: map[string]*persistence.ReplicationInfo{
+		LastReplicationInfo: map[string]*replication.ReplicationInfo{
 			incomingActiveCluster: {
 				Version:     currentReplicationInfoLastWriteVersion,
-				LastEventID: currentReplicationInfoLastEventID,
+				LastEventId: currentReplicationInfoLastEventID,
 			},
 		},
 	}).AnyTimes()
@@ -1444,10 +1444,10 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	msBuilderIn.EXPECT().GetReplicationState().Return(&persistence.ReplicationState{
 		LastWriteVersion: currentLastWriteVersion,
 		LastWriteEventID: currentLastEventID,
-		LastReplicationInfo: map[string]*persistence.ReplicationInfo{
+		LastReplicationInfo: map[string]*replication.ReplicationInfo{
 			incomingActiveCluster: {
 				Version:     currentReplicationInfoLastWriteVersion,
-				LastEventID: currentReplicationInfoLastEventID,
+				LastEventId: currentReplicationInfoLastEventID,
 			},
 		},
 	}).AnyTimes()
