@@ -24,7 +24,6 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/tls"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -850,6 +849,7 @@ func parseReplicationTask(in string) (tasks []*replication.ReplicationTask, err 
 
 	scanner := bufio.NewScanner(file)
 	idx := 0
+	encoder := codec.NewJSONPBEncoder()
 	for scanner.Scan() {
 		idx++
 		line := strings.TrimSpace(scanner.Text())
@@ -859,7 +859,7 @@ func parseReplicationTask(in string) (tasks []*replication.ReplicationTask, err 
 		}
 
 		t := &replication.ReplicationTask{}
-		err := json.Unmarshal([]byte(line), t)
+		err := encoder.Decode([]byte(line), t)
 		if err != nil {
 			fmt.Printf("line %v cannot be deserialized to replicaiton task: %v.\n", idx, line)
 			return nil, err
