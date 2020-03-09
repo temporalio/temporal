@@ -3268,22 +3268,9 @@ func (wh *WorkflowHandler) validateTaskList(t *commonproto.TaskList, scope metri
 }
 
 func (wh *WorkflowHandler) validateExecutionAndEmitMetrics(w *commonproto.WorkflowExecution, scope metrics.Scope) error {
-	err := wh.validateExecution(w)
+	err := validateExecution(w)
 	if err != nil {
 		return wh.error(err, scope)
-	}
-	return nil
-}
-
-func (wh *WorkflowHandler) validateExecution(w *commonproto.WorkflowExecution) error {
-	if w == nil {
-		return errExecutionNotSet
-	}
-	if w.GetWorkflowId() == "" {
-		return errWorkflowIDNotSet
-	}
-	if w.GetRunId() != "" && uuid.Parse(w.GetRunId()) == nil {
-		return errInvalidRunID
 	}
 	return nil
 }

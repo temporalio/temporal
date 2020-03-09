@@ -30,6 +30,7 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
+	"github.com/temporalio/temporal/.gen/proto/token"
 	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/collection"
@@ -157,7 +158,11 @@ func (n *NDCHistoryResenderImpl) getPaginationFn(
 	endEventVersion int64,
 ) collection.PaginationFn {
 
-	return func(paginationToken []byte) ([]interface{}, []byte, error) {
+	return func(paginationToken interface{}) ([]interface{}, interface{}, error) {
+		historyToken, ok := paginationToken.(*token.RawHistoryContinuationToken)
+		if !ok {
+			return nil, nil, ErrIncorrectTokenType
+		}
 
 		response, err := n.getHistory(
 			domainID,
@@ -167,7 +172,7 @@ func (n *NDCHistoryResenderImpl) getPaginationFn(
 			startEventVersion,
 			endEventID,
 			endEventVersion,
-			paginationToken,
+			historyToken,
 			defaultPageSize,
 		)
 		if err != nil {
@@ -224,7 +229,7 @@ func (n *NDCHistoryResenderImpl) getHistory(
 	startEventVersion int64,
 	endEventID int64,
 	endEventVersion int64,
-	token []byte,
+	token *token.RawHistoryContinuationToken,
 	pageSize int32,
 ) (*adminservice.GetWorkflowExecutionRawHistoryV2Response, error) {
 

@@ -572,7 +572,11 @@ func (r *workflowResetterImpl) getPaginationFn(
 	branchToken []byte,
 ) collection.PaginationFn {
 
-	return func(paginationToken []byte) ([]interface{}, []byte, error) {
+	return func(paginationToken interface{}) ([]interface{}, interface{}, error) {
+		historyToken, ok := paginationToken.([]byte)
+		if !ok {
+			return nil, nil, ErrIncorrectTokenType
+		}
 
 		_, historyBatches, token, _, err := PaginateHistory(
 			r.historyV2Mgr,
@@ -580,7 +584,7 @@ func (r *workflowResetterImpl) getPaginationFn(
 			branchToken,
 			firstEventID,
 			nextEventID,
-			paginationToken,
+			historyToken,
 			nDCDefaultPageSize,
 			common.IntPtr(r.shard.GetShardID()),
 		)

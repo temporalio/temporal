@@ -22,12 +22,12 @@ package collection
 
 type (
 	// PaginationFn is the function which get a page of results
-	PaginationFn func(paginationToken []byte) ([]interface{}, []byte, error)
+	PaginationFn func(paginationToken interface{}) ([]interface{}, interface{}, error)
 
 	// PagingIteratorImpl is the implementation of PagingIterator
 	PagingIteratorImpl struct {
 		paginationFn      PaginationFn
-		pageToken         []byte
+		pageToken         interface{}
 		pageErr           error
 		pageItems         []interface{}
 		nextPageItemIndex int
@@ -59,7 +59,7 @@ func (iter *PagingIteratorImpl) HasNext() bool {
 		return true
 	}
 
-	if len(iter.pageToken) != 0 {
+	if iter.pageToken != nil {
 		iter.getNextPage()
 		return iter.HasNext()
 	}

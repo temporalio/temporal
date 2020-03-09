@@ -22,7 +22,6 @@ package frontend
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"strconv"
 	"time"
@@ -36,6 +35,7 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/replication"
+	"github.com/temporalio/temporal/.gen/proto/token"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/backoff"
@@ -65,18 +65,6 @@ type (
 		params                *resource.BootstrapParams
 		config                *Config
 		domainDLQHandler      domain.DLQMessageHandler
-	}
-
-	getWorkflowRawHistoryV2Token struct {
-		DomainName        string
-		WorkflowID        string
-		RunID             string
-		StartEventID      int64
-		StartEventVersion int64
-		EndEventID        int64
-		EndEventVersion   int64
-		PersistenceToken  []byte
-		VersionHistories  *commonproto.VersionHistories
 	}
 )
 
@@ -196,7 +184,7 @@ func (adh *AdminHandler) DescribeWorkflowExecution(ctx context.Context, request 
 		return nil, adh.error(errRequestNotSet, scope)
 	}
 
-	if err := adh.validateExecution(request.Execution); err != nil {
+	if err := validateExecution(request.Execution); err != nil {
 		return nil, adh.error(err, scope)
 	}
 
@@ -272,7 +260,7 @@ func (adh *AdminHandler) DescribeHistoryHost(ctx context.Context, request *admin
 	}
 
 	if request.ExecutionForHost != nil {
-		if err := adh.validateExecution(request.ExecutionForHost); err != nil {
+		if err := validateExecution(request.ExecutionForHost); err != nil {
 			return nil, adh.error(err, scope)
 		}
 	}
@@ -328,22 +316,22 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 		return nil, errInvalidPageSize
 	}
 
-	var token *getHistoryContinuationToken
+	var continuationToken *token.AdminHistoryContinuationToken
 	// initialize or validate the token
 	// token will be used as a source of truth
 	if request.NextPageToken != nil {
-		token, err = adh.deserializeHistoryToken(request.NextPageToken)
+		continuationToken = request.NextPageToken
 		if err != nil {
 			return nil, err
 		}
 
-		if execution.GetRunId() != token.RunID ||
+		if execution.GetRunId() != continuationToken.GetRunId() ||
 			// we guarantee to use the first event ID provided in the request
-			request.GetFirstEventId() != token.FirstEventID ||
+			request.GetFirstEventId() != continuationToken.GetFirstEventId() ||
 			// the next event ID in the request must be <= next event ID from mutable state, when initialized
 			// so as long as customer do not change next event ID during pagination,
 			// next event ID in the token <= next event ID in the request.
-			request.GetNextEventId() < token.NextEventID {
+			request.GetNextEventId() < continuationToken.GetNextEventId() {
 			return nil, errInvalidPaginationToken
 		}
 
@@ -374,20 +362,20 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 		if nextEventID > response.GetNextEventId() {
 			nextEventID = response.GetNextEventId()
 		}
-		token = &getHistoryContinuationToken{
-			RunID:            execution.GetRunId(),
+		continuationToken = &token.AdminHistoryContinuationToken{
+			RunId:            execution.GetRunId(),
 			BranchToken:      response.CurrentBranchToken,
-			FirstEventID:     firstEventID,
-			NextEventID:      nextEventID,
+			FirstEventId:     firstEventID,
+			NextEventId:      nextEventID,
 			PersistenceToken: nil, // this is the initialized value
 			ReplicationInfo:  response.ReplicationInfo,
 		}
 	}
 
-	if token.FirstEventID >= token.NextEventID {
+	if continuationToken.GetFirstEventId() >= continuationToken.GetNextEventId() {
 		return &adminservice.GetWorkflowExecutionRawHistoryResponse{
 			HistoryBatches:  []*commonproto.DataBlob{},
-			ReplicationInfo: token.ReplicationInfo,
+			ReplicationInfo: continuationToken.ReplicationInfo,
 			NextPageToken:   nil, // no further pagination
 		}, nil
 	}
@@ -395,15 +383,15 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 	// TODO need to deal with transient decision if to be used by client getting history
 	var historyBatches []*commonproto.History
 	shardID := common.WorkflowIDToHistoryShard(execution.GetWorkflowId(), adh.numberOfHistoryShards)
-	_, historyBatches, token.PersistenceToken, size, err = history.PaginateHistory(
+	_, historyBatches, continuationToken.PersistenceToken, size, err = history.PaginateHistory(
 		adh.GetHistoryManager(),
 		true, // this means that we are getting history by batch
-		token.BranchToken,
-		token.FirstEventID,
-		token.NextEventID,
-		token.PersistenceToken,
+		continuationToken.GetBranchToken(),
+		continuationToken.GetFirstEventId(),
+		continuationToken.GetNextEventId(),
+		continuationToken.GetPersistenceToken(),
 		pageSize,
-		common.IntPtr(shardID),
+		&shardID,
 	)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); ok {
@@ -411,7 +399,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 			// EntityNotExistsError, this API shall return empty response
 			return &adminservice.GetWorkflowExecutionRawHistoryResponse{
 				HistoryBatches:  []*commonproto.DataBlob{},
-				ReplicationInfo: token.ReplicationInfo,
+				ReplicationInfo: continuationToken.ReplicationInfo,
 				NextPageToken:   nil, // no further pagination
 			}, nil
 		}
@@ -437,12 +425,12 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 
 	result := &adminservice.GetWorkflowExecutionRawHistoryResponse{
 		HistoryBatches:  blobs,
-		ReplicationInfo: token.ReplicationInfo,
+		ReplicationInfo: continuationToken.ReplicationInfo,
 	}
-	if len(token.PersistenceToken) == 0 {
+	if len(continuationToken.PersistenceToken) == 0 {
 		result.NextPageToken = nil
 	} else {
-		result.NextPageToken, err = adh.serializeHistoryToken(token)
+		result.NextPageToken = continuationToken
 		if err != nil {
 			return nil, err
 		}
@@ -470,7 +458,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	scope = scope.Tagged(metrics.DomainTag(request.GetDomain()))
 
 	execution := request.Execution
-	var pageToken *getWorkflowRawHistoryV2Token
+	var pageToken *token.RawHistoryContinuationToken
 	var targetVersionHistory *persistence.VersionHistory
 	if request.NextPageToken == nil {
 		response, err := adh.GetHistoryClient().GetMutableState(ctx, &historyservice.GetMutableStateRequest{
@@ -492,13 +480,13 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 			return nil, adh.error(err, scope)
 		}
 
-		pageToken = adh.generatePaginationToken(request, versionHistories)
+		pageToken = generatePaginationToken(request, versionHistories)
 	} else {
-		pageToken, err = adh.deserializeRawHistoryToken(request.NextPageToken)
+		pageToken = request.NextPageToken
 		if err != nil {
 			return nil, adh.error(err, scope)
 		}
-		versionHistories := pageToken.VersionHistories
+		versionHistories := pageToken.GetVersionHistories()
 		if versionHistories == nil {
 			return nil, adh.error(errInvalidVersionHistories, scope)
 		}
@@ -511,14 +499,14 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 		}
 	}
 
-	if err := adh.validatePaginationToken(
+	if err := validatePaginationToken(
 		request,
 		pageToken,
 	); err != nil {
 		return nil, adh.error(err, scope)
 	}
 
-	if pageToken.StartEventID+1 == pageToken.EndEventID {
+	if pageToken.GetStartEventId()+1 == pageToken.GetEndEventId() {
 		// API is exclusive-exclusive. Return empty response here.
 		return &adminservice.GetWorkflowExecutionRawHistoryV2Response{
 			HistoryBatches: []*commonproto.DataBlob{},
@@ -535,11 +523,11 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 		BranchToken: targetVersionHistory.GetBranchToken(),
 		// GetWorkflowExecutionRawHistoryV2 is exclusive exclusive.
 		// ReadRawHistoryBranch is inclusive exclusive.
-		MinEventID:    pageToken.StartEventID + 1,
-		MaxEventID:    pageToken.EndEventID,
+		MinEventID:    pageToken.GetStartEventId() + 1,
+		MaxEventID:    pageToken.GetEndEventId(),
 		PageSize:      pageSize,
 		NextPageToken: pageToken.PersistenceToken,
-		ShardID:       common.IntPtr(shardID),
+		ShardID:       &shardID,
 	})
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); ok {
@@ -574,7 +562,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	if len(pageToken.PersistenceToken) == 0 {
 		result.NextPageToken = nil
 	} else {
-		result.NextPageToken, err = adh.serializeRawHistoryToken(pageToken)
+		result.NextPageToken = pageToken
 		if err != nil {
 			return nil, err
 		}
@@ -973,7 +961,7 @@ func (adh *AdminHandler) RefreshWorkflowTasks(
 	if request == nil {
 		return nil, adh.error(errRequestNotSet, scope)
 	}
-	if err := adh.validateExecution(request.Execution); err != nil {
+	if err := validateExecution(request.Execution); err != nil {
 		return nil, adh.error(err, scope)
 	}
 	domainEntry, err := adh.GetDomainCache().GetDomain(request.GetDomain())
@@ -1117,43 +1105,6 @@ func (adh *AdminHandler) setRequestDefaultValueAndGetTargetVersionHistory(
 	return targetBranch, nil
 }
 
-func (adh *AdminHandler) generatePaginationToken(
-	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
-	versionHistories *persistence.VersionHistories,
-) *getWorkflowRawHistoryV2Token {
-
-	execution := request.Execution
-	return &getWorkflowRawHistoryV2Token{
-		DomainName:        request.GetDomain(),
-		WorkflowID:        execution.GetWorkflowId(),
-		RunID:             execution.GetRunId(),
-		StartEventID:      request.GetStartEventId(),
-		StartEventVersion: request.GetStartEventVersion(),
-		EndEventID:        request.GetEndEventId(),
-		EndEventVersion:   request.GetEndEventVersion(),
-		VersionHistories:  versionHistories.ToProto(),
-		PersistenceToken:  nil, // this is the initialized value
-	}
-}
-
-func (adh *AdminHandler) validatePaginationToken(
-	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
-	token *getWorkflowRawHistoryV2Token,
-) error {
-
-	execution := request.Execution
-	if request.GetDomain() != token.DomainName ||
-		execution.GetWorkflowId() != token.WorkflowID ||
-		execution.GetRunId() != token.RunID ||
-		request.GetStartEventId() != token.StartEventID ||
-		request.GetStartEventVersion() != token.StartEventVersion ||
-		request.GetEndEventId() != token.EndEventID ||
-		request.GetEndEventVersion() != token.EndEventVersion {
-		return errInvalidPaginationToken
-	}
-	return nil
-}
-
 // startRequestProfile initiates recording of request metrics
 func (adh *AdminHandler) startRequestProfile(scope int) (metrics.Scope, metrics.Stopwatch) {
 	metricsScope := adh.GetMetricsClient().Scope(scope)
@@ -1203,20 +1154,6 @@ func (adh *AdminHandler) convertIndexedValueTypeToESDataType(valueType enums.Ind
 	}
 }
 
-// TODO: same func exists in workflowHandlerGRPC
-func (adh *AdminHandler) validateExecution(w *commonproto.WorkflowExecution) error {
-	if w == nil {
-		return errExecutionNotSet
-	}
-	if w.GetWorkflowId() == "" {
-		return errWorkflowIDNotSet
-	}
-	if w.GetRunId() != "" && uuid.Parse(w.GetRunId()) == nil {
-		return errInvalidRunID
-	}
-	return nil
-}
-
 func (adh *AdminHandler) checkPermission(
 	config *Config,
 	securityToken string,
@@ -1231,34 +1168,4 @@ func (adh *AdminHandler) checkPermission(
 		}
 	}
 	return nil
-}
-
-func (adh *AdminHandler) serializeRawHistoryToken(token *getWorkflowRawHistoryV2Token) ([]byte, error) {
-	if token == nil {
-		return nil, nil
-	}
-
-	bytes, err := json.Marshal(token)
-	return bytes, err
-}
-
-func (adh *AdminHandler) deserializeRawHistoryToken(bytes []byte) (*getWorkflowRawHistoryV2Token, error) {
-	token := &getWorkflowRawHistoryV2Token{}
-	err := json.Unmarshal(bytes, token)
-	return token, err
-}
-
-func (adh *AdminHandler) deserializeHistoryToken(bytes []byte) (*getHistoryContinuationToken, error) {
-	token := &getHistoryContinuationToken{}
-	err := json.Unmarshal(bytes, token)
-	return token, err
-}
-
-func (adh *AdminHandler) serializeHistoryToken(token *getHistoryContinuationToken) ([]byte, error) {
-	if token == nil {
-		return nil, nil
-	}
-
-	bytes, err := json.Marshal(token)
-	return bytes, err
 }

@@ -173,6 +173,7 @@ var (
 	ErrWorkflowParent = serviceerror.NewNotFound("workflow parent does not match")
 	// ErrDeserializingToken is the error to indicate task token is invalid
 	ErrDeserializingToken = serviceerror.NewInvalidArgument("error deserializing task token")
+	ErrIncorrectTokenType = serviceerror.NewInvalidArgument("incorrect token type")
 	// ErrSignalOverSize is the error to indicate signal input size is > 256K
 	ErrSignalOverSize = serviceerror.NewInvalidArgument("signal input size is over 256K")
 	// ErrCancellationAlreadyRequested is the error indicating cancellation for target workflow is already requested
