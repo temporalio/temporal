@@ -62,7 +62,7 @@ const (
 	defaultWorkflowIDReusePolicy    = enums.WorkflowIdReusePolicyAllowDuplicateFailedOnly
 
 	workflowStatusNotSet = -1
-	showErrorStackEnv    = `CADENCE_CLI_SHOW_STACKS`
+	showErrorStackEnv    = `TEMPORAL_CLI_SHOW_STACKS`
 
 	searchAttrInputSeparator = "|"
 )

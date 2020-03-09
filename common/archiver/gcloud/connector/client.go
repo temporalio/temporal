@@ -90,7 +90,7 @@ func NewClientWithParams(clientD GcloudStorageClient) (Client, error) {
 
 // Upload push a file to gcloud storage bucket (sinkPath)
 // example:
-// Upload(ctx, mockBucketHandleClient, "gs://my-bucket-cad/cadence_archival/development", "45273645-fileName.history", fileReader)
+// Upload(ctx, mockBucketHandleClient, "gs://my-bucket-cad/temporal_archival/development", "45273645-fileName.history", fileReader)
 func (s *storageWrapper) Upload(ctx context.Context, URI archiver.URI, fileName string, file []byte) (err error) {
 	bucket := s.client.Bucket(URI.Hostname())
 	writer := bucket.Object(formatSinkPath(URI.Path()) + "/" + fileName).NewWriter(ctx)
@@ -159,7 +159,7 @@ func formatSinkPath(sinkPath string) string {
 
 // GetBucketNameFromURI return a bucket name from a given google cloud storage URI
 // example:
-// gsBucketName := GetBucketNameFromURI("gs://my-bucket-cad/cadence_archival/development") // my-bucket-cad
+// gsBucketName := GetBucketNameFromURI("gs://my-bucket-cad/temporal_archival/development") // my-bucket-cad
 func getBucketNameFromURI(URI string) (gsBucketName string, err error) {
 	gsBucketName = bucketNameRegExp.FindString(URI)
 	gsBucketName = strings.Replace(gsBucketName, "gs://", "", -1)

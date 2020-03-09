@@ -3,9 +3,9 @@ Quickstart for localhost development
 
 Install docker: https://docs.docker.com/engine/installation/
 
-Following steps will bring up the docker container running cadence server
-along with all its dependencies (cassandra, statsd, graphite). Exposes cadence
-frontend on port 7933 and grafana metrics frontend on port 8080.
+Following steps will bring up the docker container running temporal server
+along with all its dependencies (cassandra, statsd, graphite). Exposes temporal
+frontend on port 7233 and grafana metrics frontend on port 8080.
 
 ```
 cd $GOPATH/src/github.com/temporalio/temporal/docker
@@ -14,15 +14,15 @@ docker-compose up
 
 View metrics at localhost:8080/dashboard    
 View Cadence-Web at localhost:8088  
-Use Cadence-CLI with `docker run --network=host --rm ubercadence/cli:master`
+Use Temporal-CLI with `docker run --network=host --rm temporalio/cli:master`
 
 For example to register new domain 'test-domain' with 1 retention day
-`docker run --network=host --rm ubercadence/cli:master --do test-domain domain register -rd 1`
+`docker run --network=host --rm temporalio/cli:master --do test-domain domain register -rd 1`
 
 
 Using a pre-built image
 -----------------------
-With every tagged release of the cadence server, there is also a corresponding
+With every tagged release of the temporal server, there is also a corresponding
 docker image that's uploaded to docker hub. In addition, the release will also
 contain a **docker.tar.gz** file (docker-compose startup scripts). 
 Go [here](https://github.com/temporalio/temporal/releases/latest) to download a latest **docker.tar.gz** 
@@ -42,20 +42,19 @@ Replace **YOUR_TAG** and **YOUR_CHECKOUT_BRANCH** in the below command to build:
 ```
 cd $GOPATH/src/github.com/temporalio/temporal
 git checkout YOUR_CHECKOUT_BRANCH
-docker build . -t ubercadence/server:YOUR_TAG --build-arg TARGET=auto-setup \
---build-arg SSH_PRIVATE_KEY="$(cat ~/.ssh/id_rsa)"
+docker build . -t temporalio/temporal:YOUR_TAG --build-arg TARGET=auto-setup
 ```
-Replace the tag of **image: ubercadence/server** to **YOUR_TAG** in docker-compose.yml .
+Replace the tag of **image: temporalio/temporal** to **YOUR_TAG** in docker-compose.yml .
 Then stop service and remove all containers using the below commands.
 ```
 docker-compose down
 docker-compose up
 ```
 
-Running cadence service with MySQL
+Running temporal service with MySQL
 -----------------------------------------
 
-Run cadence with MySQL instead of Cassandra, use following commads:
+Run temporal with MySQL instead of Cassandra, use following commads:
 
 ```
 docker-compose -f docker-compose-mysql.yml up
@@ -64,10 +63,10 @@ docker-compose -f docker-compose-mysql.yml down
 
 Please note that SQL support is still in active developement and it is not production ready yet.
 
-Running cadence service with ElasticSearch
+Running temporal service with ElasticSearch
 -----------------------------------------
 
-Run cadence with ElasticSearch for visibility instead of Cassandra/MySQL
+Run temporal with ElasticSearch for visibility instead of Cassandra/MySQL
 
 ```
 docker-compose -f docker-compose-es.yml up
@@ -76,7 +75,7 @@ docker-compose -f docker-compose-es.yml up
 Quickstart for production
 =========================
 In a typical production setting, dependencies (cassandra / statsd server) are
-managed / started independently of the cadence-server. To use the container in
+managed / started independently of the temporal-server. To use the container in
 a production setting, use the following command:
 
 
@@ -91,6 +90,6 @@ docker run -e CASSANDRA_SEEDS=10.x.x.x                  -- csv of cassandra serv
     -e SERVICES=history,matching \                      -- Spinup only the provided services
     -e LOG_LEVEL=debug,info \                           -- Logging level
     -e DYNAMIC_CONFIG_FILE_PATH=config/foo.yaml         -- Dynamic config file to be watched
-    ubercadence/server:<tag>
+    temporalio/temporal:<tag>
 ```
 

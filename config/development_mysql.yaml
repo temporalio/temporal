@@ -6,7 +6,7 @@ persistence:
     mysql-default:
       sql:
         pluginName: "mysql"
-        databaseName: "cadence"
+        databaseName: "temporal"
         connectAddr: "127.0.0.1:3306"
         connectProtocol: "tcp"
         user: "uber"
@@ -17,7 +17,7 @@ persistence:
     mysql-visibility:
       sql:
         pluginName: "mysql"
-        databaseName: "cadence_visibility"
+        databaseName: "temporal_visibility"
         connectAddr: "127.0.0.1:3306"
         connectProtocol: "tcp"
         user: "uber"
@@ -27,7 +27,7 @@ persistence:
         maxConnLifetime: "1h"
 
 ringpop:
-  name: cadence
+  name: temporal
   maxJoinDuration: 30s
 
 services:
@@ -39,7 +39,7 @@ services:
     metrics:
       statsd:
         hostPort: "127.0.0.1:8125"
-        prefix: "cadence"
+        prefix: "temporal"
     pprof:
       port: 7936
 
@@ -51,7 +51,7 @@ services:
     metrics:
       statsd:
         hostPort: "127.0.0.1:8125"
-        prefix: "cadence"
+        prefix: "temporal"
     pprof:
       port: 7938
 
@@ -63,7 +63,7 @@ services:
     metrics:
       statsd:
         hostPort: "127.0.0.1:8125"
-        prefix: "cadence"
+        prefix: "temporal"
     pprof:
       port: 7937
 
@@ -75,7 +75,7 @@ services:
     metrics:
       statsd:
         hostPort: "127.0.0.1:8125"
-        prefix: "cadence"
+        prefix: "temporal"
     pprof:
       port: 7940
 
@@ -111,7 +111,7 @@ domainDefaults:
   archival:
     history:
       status: "enabled"
-      URI: "file:///tmp/cadence_archival/development"
+      URI: "file:///tmp/temporal_archival/development"
     visibility:
       status: "disabled"
 
@@ -121,9 +121,9 @@ kafka:
       brokers:
         - 127.0.0.1:9092
   topics:
-    cadence-visibility-dev:
+    temporal-visibility-dev:
       cluster: test
-    cadence-visibility-dev-dlq:
+    temporal-visibility-dev-dlq:
       cluster: test
 
 publicClient:

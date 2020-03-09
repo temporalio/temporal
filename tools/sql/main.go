@@ -30,7 +30,7 @@ import (
 
 const defaultSQLPort = 3306
 
-// RunTool runs the cadence-cassandra-tool command line tool
+// RunTool runs the temporal-sql-tool command line tool
 func RunTool(args []string) error {
 	app := BuildCLIOptions()
 	return app.Run(args)
@@ -49,7 +49,7 @@ func cliHandler(c *cli.Context, handler func(c *cli.Context) error) {
 func BuildCLIOptions() *cli.App {
 
 	app := cli.NewApp()
-	app.Name = "cadence-sql-tool"
+	app.Name = "temporal-sql-tool"
 	app.Usage = "Command line tool for cadence sql operations"
 	app.Version = "0.0.1"
 
@@ -80,7 +80,7 @@ func BuildCLIOptions() *cli.App {
 		},
 		cli.StringFlag{
 			Name:   schema.CLIFlagDatabase,
-			Value:  "cadence",
+			Value:  "temporal",
 			Usage:  "name of the sql database",
 			EnvVar: "SQL_DATABASE",
 		},

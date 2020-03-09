@@ -12,7 +12,7 @@
 *.code-workspace
 /vendor
 /_vendor-*
-/cadence
+/temporal
 .DS_Store
 test
 test.log
@@ -23,8 +23,8 @@ test_eventsV2.log
 test_eventsV2_xdc
 test_eventsV2_xdc.log
 
-# Executables produced by cadence repo
-/cadence*
+# Executables produced by temporal repo
+/temporal*
 
 # protobuf generated files
 .gen/proto

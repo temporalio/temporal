@@ -22,7 +22,7 @@ THRIFTRW_SRCS = \
   idl/github.com/temporalio/temporal/sqlblobs.thrift \
   idl/github.com/temporalio/temporal/persistenceblobs.thrift \
 
-PROGS = cadence
+PROGS = temporal
 TEST_TIMEOUT = 20m
 TEST_ARG ?= -race -v -timeout $(TEST_TIMEOUT)
 BUILD := ./build
@@ -157,25 +157,25 @@ thriftc: yarpc-install $(THRIFTRW_GEN_SRC) copyright
 copyright: cmd/tools/copyright/licensegen.go
 	GOOS= GOARCH= go run ./cmd/tools/copyright/licensegen.go --verifyOnly
 
-cadence-cassandra-tool: $(TOOLS_SRC)
-	@echo "compiling cadence-cassandra-tool with OS: $(GOOS), ARCH: $(GOARCH)"
-	go build -i -o cadence-cassandra-tool cmd/tools/cassandra/main.go
+temporal-cassandra-tool: $(TOOLS_SRC)
+	@echo "compiling temporal-cassandra-tool with OS: $(GOOS), ARCH: $(GOARCH)"
+	go build -i -o temporal-cassandra-tool cmd/tools/cassandra/main.go
 
-cadence-sql-tool: $(TOOLS_SRC)
-	@echo "compiling cadence-sql-tool with OS: $(GOOS), ARCH: $(GOARCH)"
-	go build -i -o cadence-sql-tool cmd/tools/sql/main.go
+temporal-sql-tool: $(TOOLS_SRC)
+	@echo "compiling temporal-sql-tool with OS: $(GOOS), ARCH: $(GOARCH)"
+	go build -i -o temporal-sql-tool cmd/tools/sql/main.go
 
-cadence: $(TOOLS_SRC)
-	@echo "compiling cadence with OS: $(GOOS), ARCH: $(GOARCH)"
-	go build -i -o cadence cmd/tools/cli/main.go
+temporal: $(TOOLS_SRC)
+	@echo "compiling temporal with OS: $(GOOS), ARCH: $(GOARCH)"
+	go build -i -o temporal cmd/tools/cli/main.go
 
-cadence-server: $(ALL_SRC)
-	@echo "compiling cadence-server with OS: $(GOOS), ARCH: $(GOARCH)"
-	go build -ldflags '$(GO_BUILD_LDFLAGS)' -i -o cadence-server cmd/server/main.go
+temporal-server: $(ALL_SRC)
+	@echo "compiling temporal-server with OS: $(GOOS), ARCH: $(GOARCH)"
+	go build -ldflags '$(GO_BUILD_LDFLAGS)' -i -o temporal-server cmd/server/main.go
 
-cadence-canary: $(ALL_SRC)
-	@echo "compiling cadence-canary with OS: $(GOOS), ARCH: $(GOARCH)"
-	go build -i -o cadence-canary cmd/canary/main.go
+temporal-canary: $(ALL_SRC)
+	@echo "compiling temporal-canary with OS: $(GOOS), ARCH: $(GOARCH)"
+	go build -i -o temporal-canary cmd/canary/main.go
 
 go-generate:
 	GO111MODULE=off go get -u github.com/myitcv/gobin
@@ -203,7 +203,7 @@ fmt:
 	@echo "running goimports"
 	@goimports -local "github.com/temporalio/temporal" -w $(ALL_SRC)
 
-bins_nothrift: fmt lint copyright cadence-cassandra-tool cadence-sql-tool cadence cadence-server cadence-canary
+bins_nothrift: fmt lint copyright temporal-cassandra-tool temporal-sql-tool temporal temporal-server temporal-canary
 
 bins: proto thriftc bins_nothrift
 
@@ -288,73 +288,73 @@ cover_ci: $(COVER_ROOT)/cover.out
 	goveralls -coverprofile=$(COVER_ROOT)/cover.out -service=buildkite || echo Coveralls failed;
 
 clean:
-	rm -f cadence
-	rm -f cadence-server
-	rm -f cadence-canary
-	rm -f cadence-sql-tool
-	rm -f cadence-cassandra-tool
+	rm -f temporal
+	rm -f temporal-server
+	rm -f temporal-canary
+	rm -f temporal-sql-tool
+	rm -f temporal-cassandra-tool
 	rm -Rf $(BUILD)
 
 install-schema: bins
-	./cadence-cassandra-tool --ep 127.0.0.1 create -k cadence --rf 1
-	./cadence-cassandra-tool --ep 127.0.0.1 -k cadence setup-schema -v 0.0
-	./cadence-cassandra-tool --ep 127.0.0.1 -k cadence update-schema -d ./schema/cassandra/cadence/versioned
-	./cadence-cassandra-tool --ep 127.0.0.1 create -k cadence_visibility --rf 1
-	./cadence-cassandra-tool --ep 127.0.0.1 -k cadence_visibility setup-schema -v 0.0
-	./cadence-cassandra-tool --ep 127.0.0.1 -k cadence_visibility update-schema -d ./schema/cassandra/visibility/versioned
+	./temporal-cassandra-tool --ep 127.0.0.1 create -k temporal --rf 1
+	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal setup-schema -v 0.0
+	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal update-schema -d ./schema/cassandra/temporal/versioned
+	./temporal-cassandra-tool --ep 127.0.0.1 create -k temporal_visibility --rf 1
+	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_visibility setup-schema -v 0.0
+	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_visibility update-schema -d ./schema/cassandra/visibility/versioned
 
 install-schema-mysql: bins
-	./cadence-sql-tool --ep 127.0.0.1 create --db cadence
-	./cadence-sql-tool --ep 127.0.0.1 --db cadence setup-schema -v 0.0
-	./cadence-sql-tool --ep 127.0.0.1 --db cadence update-schema -d ./schema/mysql/v57/cadence/versioned
-	./cadence-sql-tool --ep 127.0.0.1 create --db cadence_visibility
-	./cadence-sql-tool --ep 127.0.0.1 --db cadence_visibility setup-schema -v 0.0
-	./cadence-sql-tool --ep 127.0.0.1 --db cadence_visibility update-schema -d ./schema/mysql/v57/visibility/versioned
+	./temporal-sql-tool --ep 127.0.0.1 create --db temporal
+	./temporal-sql-tool --ep 127.0.0.1 --db temporal setup-schema -v 0.0
+	./temporal-sql-tool --ep 127.0.0.1 --db temporal update-schema -d ./schema/mysql/v57/temporal/versioned
+	./temporal-sql-tool --ep 127.0.0.1 create --db temporal_visibility
+	./temporal-sql-tool --ep 127.0.0.1 --db temporal_visibility setup-schema -v 0.0
+	./temporal-sql-tool --ep 127.0.0.1 --db temporal_visibility update-schema -d ./schema/mysql/v57/visibility/versioned
 
 install-schema-postgres: bins
-	./cadence-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw cadence --pl postgres create --db cadence
-	./cadence-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw cadence --pl postgres --db cadence setup -v 0.0
-	./cadence-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw cadence --pl postgres --db cadence update-schema -d ./schema/postgres/cadence/versioned
-	./cadence-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw cadence --pl postgres create --db cadence_visibility
-	./cadence-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw cadence --pl postgres --db cadence_visibility setup-schema -v 0.0
-	./cadence-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw cadence --pl postgres --db cadence_visibility update-schema -d ./schema/postgres/visibility/versioned
+	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw temporal --pl postgres create --db temporal
+	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw temporal --pl postgres --db temporal setup -v 0.0
+	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw temporal --pl postgres --db temporal update-schema -d ./schema/postgres/temporal/versioned
+	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw temporal --pl postgres create --db temporal_visibility
+	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw temporal --pl postgres --db temporal_visibility setup-schema -v 0.0
+	./temporal-sql-tool --ep 127.0.0.1 -p 5432 -u postgres -pw temporal --pl postgres --db temporal_visibility update-schema -d ./schema/postgres/visibility/versioned
 
 start: bins
-	./cadence-server start
+	./temporal-server start
 
 install-schema-cdc: bins
-	@echo Setting up cadence_active key space
-	./cadence-cassandra-tool --ep 127.0.0.1 create -k cadence_active --rf 1
-	./cadence-cassandra-tool --ep 127.0.0.1 -k cadence_active setup-schema -v 0.0
-	./cadence-cassandra-tool --ep 127.0.0.1 -k cadence_active update-schema -d ./schema/cassandra/cadence/versioned
-	./cadence-cassandra-tool --ep 127.0.0.1 create -k cadence_visibility_active --rf 1
-	./cadence-cassandra-tool --ep 127.0.0.1 -k cadence_visibility_active setup-schema -v 0.0
-	./cadence-cassandra-tool --ep 127.0.0.1 -k cadence_visibility_active update-schema -d ./schema/cassandra/visibility/versioned
+	@echo Setting up temporal_active key space
+	./temporal-cassandra-tool --ep 127.0.0.1 create -k temporal_active --rf 1
+	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_active setup-schema -v 0.0
+	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_active update-schema -d ./schema/cassandra/temporal/versioned
+	./temporal-cassandra-tool --ep 127.0.0.1 create -k temporal_visibility_active --rf 1
+	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_visibility_active setup-schema -v 0.0
+	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_visibility_active update-schema -d ./schema/cassandra/visibility/versioned
 
-	@echo Setting up cadence_standby key space
-	./cadence-cassandra-tool --ep 127.0.0.1 create -k cadence_standby --rf 1
-	./cadence-cassandra-tool --ep 127.0.0.1 -k cadence_standby setup-schema -v 0.0
-	./cadence-cassandra-tool --ep 127.0.0.1 -k cadence_standby update-schema -d ./schema/cassandra/cadence/versioned
-	./cadence-cassandra-tool --ep 127.0.0.1 create -k cadence_visibility_standby --rf 1
-	./cadence-cassandra-tool --ep 127.0.0.1 -k cadence_visibility_standby setup-schema -v 0.0
-	./cadence-cassandra-tool --ep 127.0.0.1 -k cadence_visibility_standby update-schema -d ./schema/cassandra/visibility/versioned
+	@echo Setting up temporal_standby key space
+	./temporal-cassandra-tool --ep 127.0.0.1 create -k temporal_standby --rf 1
+	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_standby setup-schema -v 0.0
+	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_standby update-schema -d ./schema/cassandra/temporal/versioned
+	./temporal-cassandra-tool --ep 127.0.0.1 create -k temporal_visibility_standby --rf 1
+	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_visibility_standby setup-schema -v 0.0
+	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_visibility_standby update-schema -d ./schema/cassandra/visibility/versioned
 
-	@echo Setting up cadence_other key space
-	./cadence-cassandra-tool --ep 127.0.0.1 create -k cadence_other --rf 1
-	./cadence-cassandra-tool --ep 127.0.0.1 -k cadence_other setup-schema -v 0.0
-	./cadence-cassandra-tool --ep 127.0.0.1 -k cadence_other update-schema -d ./schema/cassandra/cadence/versioned
-	./cadence-cassandra-tool --ep 127.0.0.1 create -k cadence_visibility_other --rf 1
-	./cadence-cassandra-tool --ep 127.0.0.1 -k cadence_visibility_other setup-schema -v 0.0
-	./cadence-cassandra-tool --ep 127.0.0.1 -k cadence_visibility_other update-schema -d ./schema/cassandra/visibility/versioned
+	@echo Setting up temporal_other key space
+	./temporal-cassandra-tool --ep 127.0.0.1 create -k temporal_other --rf 1
+	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_other setup-schema -v 0.0
+	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_other update-schema -d ./schema/cassandra/temporal/versioned
+	./temporal-cassandra-tool --ep 127.0.0.1 create -k temporal_visibility_other --rf 1
+	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_visibility_other setup-schema -v 0.0
+	./temporal-cassandra-tool --ep 127.0.0.1 -k temporal_visibility_other update-schema -d ./schema/cassandra/visibility/versioned
 
 start-cdc-active: bins
-	./cadence-server --zone active start
+	./temporal-server --zone active start
 
 start-cdc-standby: bins
-	./cadence-server --zone standby start
+	./temporal-server --zone standby start
 
 start-cdc-other: bins
-	./cadence-server --zone other start
+	./temporal-server --zone other start
 
 start-canary: bins
-	./cadence-canary start
+	./temporal-canary start

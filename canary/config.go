@@ -32,13 +32,13 @@ import (
 
 const (
 	// EnvKeyRoot the environment variable key for runtime root dir
-	EnvKeyRoot = "CADENCE_CANARY_ROOT"
+	EnvKeyRoot = "TEMPORAL_CANARY_ROOT"
 	// EnvKeyConfigDir the environment variable key for config dir
-	EnvKeyConfigDir = "CADENCE_CANARY_CONFIG_DIR"
+	EnvKeyConfigDir = "TEMPORAL_CANARY_CONFIG_DIR"
 	// EnvKeyEnvironment is the environment variable key for environment
-	EnvKeyEnvironment = "CADENCE_CANARY_ENVIRONMENT"
+	EnvKeyEnvironment = "TEMPORAL_CANARY_ENVIRONMENT"
 	// EnvKeyAvailabilityZone is the environment variable key for AZ
-	EnvKeyAvailabilityZone = "CADENCE_CANARY_AVAILABILITY_ZONE"
+	EnvKeyAvailabilityZone = "TEMPORAL_CANARY_AVAILABILITY_ZONE"
 )
 
 const (
@@ -55,7 +55,7 @@ type (
 	// properties for the canary runtime
 	Config struct {
 		Canary  Canary         `yaml:"canary"`
-		Cadence Cadence        `yaml:"cadence"`
+		Cadence Cadence        `yaml:"temporal"`
 		Log     config.Logger  `yaml:"log"`
 		Metrics config.Metrics `yaml:"metrics"`
 	}

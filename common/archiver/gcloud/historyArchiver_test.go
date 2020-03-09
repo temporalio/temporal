@@ -67,7 +67,7 @@ func (h *historyArchiverSuite) SetupTest() {
 		Logger:        loggerimpl.NewLogger(zapLogger),
 		MetricsClient: metrics.NewClient(tally.NoopScope, metrics.History),
 	}
-	h.testArchivalURI, _ = archiver.NewURI("gs://my-bucket-cad/cadence_archival/development")
+	h.testArchivalURI, _ = archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
 }
 
 func TestHistoryArchiverSuite(t *testing.T) {
@@ -98,7 +98,7 @@ func (h *historyArchiverSuite) TestValidateURI() {
 			expectedErr: archiver.ErrURISchemeMismatch,
 		},
 		{
-			URI:         "gs:my-bucket-cad/cadence_archival/development",
+			URI:         "gs:my-bucket-cad/temporal_archival/development",
 			expectedErr: archiver.ErrInvalidURI,
 		},
 		{
@@ -110,11 +110,11 @@ func (h *historyArchiverSuite) TestValidateURI() {
 			expectedErr: archiver.ErrInvalidURI,
 		},
 		{
-			URI:         "gs:/my-bucket-cad/cadence_archival/development",
+			URI:         "gs:/my-bucket-cad/temporal_archival/development",
 			expectedErr: archiver.ErrInvalidURI,
 		},
 		{
-			URI:         "gs://my-bucket-cad/cadence_archival/development",
+			URI:         "gs://my-bucket-cad/temporal_archival/development",
 			expectedErr: nil,
 		},
 	}
@@ -156,7 +156,7 @@ func (h *historyArchiverSuite) TestArchive_Fail_InvalidURI() {
 
 func (h *historyArchiverSuite) TestArchive_Fail_InvalidRequest() {
 	ctx := context.Background()
-	URI, err := archiver.NewURI("gs://my-bucket-cad/cadence_archival/development")
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
 	h.NoError(err)
 	storageWrapper := &mocks.Client{}
 	storageWrapper.On("Exist", ctx, URI, "").Return(true, nil).Times(1)
@@ -182,7 +182,7 @@ func (h *historyArchiverSuite) TestArchive_Fail_InvalidRequest() {
 
 func (h *historyArchiverSuite) TestArchive_Fail_ErrorOnReadHistory() {
 	ctx := context.Background()
-	URI, err := archiver.NewURI("gs://my-bucket-cad/cadence_archival/development")
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
 	h.NoError(err)
 	storageWrapper := &mocks.Client{}
 	storageWrapper.On("Exist", ctx, URI, "").Return(true, nil).Times(1)
@@ -240,7 +240,7 @@ func (h *historyArchiverSuite) TestArchive_Fail_TimeoutWhenReadingHistory() {
 func (h *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 	ctx := context.Background()
 	mockCtrl := gomock.NewController(h.T())
-	URI, err := archiver.NewURI("gs://my-bucket-cad/cadence_archival/development")
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
 	h.NoError(err)
 	storageWrapper := &mocks.Client{}
 	storageWrapper.On("Exist", ctx, URI, "").Return(true, nil).Times(1)
@@ -287,7 +287,7 @@ func (h *historyArchiverSuite) TestArchive_Fail_NonRetriableErrorOption() {
 
 	ctx := context.Background()
 	mockCtrl := gomock.NewController(h.T())
-	URI, err := archiver.NewURI("gs://my-bucket-cad/cadence_archival/development")
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
 	h.NoError(err)
 	storageWrapper := &mocks.Client{}
 	storageWrapper.On("Exist", ctx, URI, "").Return(true, nil).Times(1)
@@ -317,7 +317,7 @@ func (h *historyArchiverSuite) TestArchive_Success() {
 
 	ctx := context.Background()
 	mockCtrl := gomock.NewController(h.T())
-	URI, err := archiver.NewURI("gs://my-bucket-cad/cadence_archival/development")
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
 	storageWrapper := &mocks.Client{}
 	storageWrapper.On("Exist", ctx, URI, mock.Anything).Return(false, nil)
 	storageWrapper.On("Upload", ctx, URI, mock.Anything, mock.Anything).Return(nil)
@@ -426,7 +426,7 @@ func (h *historyArchiverSuite) TestGet_Fail_InvalidToken() {
 func (h *historyArchiverSuite) TestGet_Success_PickHighestVersion() {
 	ctx := context.Background()
 	mockCtrl := gomock.NewController(h.T())
-	URI, err := archiver.NewURI("gs://my-bucket-cad/cadence_archival/development")
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
 	storageWrapper := &mocks.Client{}
 	storageWrapper.On("Exist", ctx, URI, "").Return(true, nil).Times(1)
 	storageWrapper.On("Query", ctx, URI, mock.Anything).Return([]string{"905702227796330300141628222723188294514017512010591354159_-24_0.history", "905702227796330300141628222723188294514017512010591354159_-25_0.history"}, nil).Times(1)
@@ -450,7 +450,7 @@ func (h *historyArchiverSuite) TestGet_Success_UseProvidedVersion() {
 
 	ctx := context.Background()
 	mockCtrl := gomock.NewController(h.T())
-	URI, err := archiver.NewURI("gs://my-bucket-cad/cadence_archival/development")
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
 	storageWrapper := &mocks.Client{}
 	storageWrapper.On("Exist", ctx, URI, "").Return(true, nil).Times(1)
 	storageWrapper.On("Query", ctx, URI, "71817125141568232911739672280485489488911532452831150339470").Return([]string{"905702227796330300141628222723188294514017512010591354159_-24_0.history", "905702227796330300141628222723188294514017512010591354159_-25_0.history"}, nil).Times(1)
@@ -475,7 +475,7 @@ func (h *historyArchiverSuite) TestGet_Success_PageSize() {
 
 	ctx := context.Background()
 	mockCtrl := gomock.NewController(h.T())
-	URI, err := archiver.NewURI("gs://my-bucket-cad/cadence_archival/development")
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
 	storageWrapper := &mocks.Client{}
 	storageWrapper.On("Exist", ctx, URI, "").Return(true, nil).Times(1)
 	storageWrapper.On("Query", ctx, URI, "71817125141568232911739672280485489488911532452831150339470").Return([]string{"905702227796330300141628222723188294514017512010591354159_-24_0.history", "905702227796330300141628222723188294514017512010591354159_-24_1.history", "905702227796330300141628222723188294514017512010591354159_-24_2.history", "905702227796330300141628222723188294514017512010591354159_-24_3.history", "905702227796330300141628222723188294514017512010591354159_-25_0.history"}, nil).Times(1)
@@ -504,7 +504,7 @@ func (h *historyArchiverSuite) TestGet_Success_FromToken() {
 
 	ctx := context.Background()
 	mockCtrl := gomock.NewController(h.T())
-	URI, err := archiver.NewURI("gs://my-bucket-cad/cadence_archival/development")
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
 	storageWrapper := &mocks.Client{}
 	storageWrapper.On("Exist", ctx, URI, "").Return(true, nil).Times(1)
 	storageWrapper.On("Query", ctx, URI, "71817125141568232911739672280485489488911532452831150339470").Return([]string{"905702227796330300141628222723188294514017512010591354159_-24_0.history", "905702227796330300141628222723188294514017512010591354159_-24_1.history", "905702227796330300141628222723188294514017512010591354159_-24_2.history", "905702227796330300141628222723188294514017512010591354159_-24_3.history", "905702227796330300141628222723188294514017512010591354159_-25_0.history"}, nil).Times(1)

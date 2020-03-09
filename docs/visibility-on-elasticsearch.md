@@ -69,7 +69,7 @@ persistence:
           scheme: "http"
           host: "127.0.0.1:9200"
         indices:
-          visibility: cadence-visibility-dev
+          visibility: temporal-visibility-dev
 ```
 This part is used to config advanced visibility store to ElasticSearch. 
  - `url` is for Cadence to discover ES 
@@ -80,8 +80,8 @@ kafka:
   ...
   applications:
     visibility:
-      topic: cadence-visibility-dev
-      dlq-topic: cadence-visibility-dev-dlq
+      topic: temporal-visibility-dev
+      dlq-topic: temporal-visibility-dev-dlq
   ...
 ``` 
 Also need to add a kafka topic to visibility, see above for example.  

@@ -154,7 +154,7 @@ func (s *TestCluster) DropDatabase() {
 
 // LoadSchema from PersistenceTestCluster interface
 func (s *TestCluster) LoadSchema(fileNames []string, schemaDir string) {
-	workflowSchemaDir := schemaDir + "/cadence"
+	workflowSchemaDir := schemaDir + "/temporal"
 	err := loadCassandraSchema(workflowSchemaDir, fileNames, s.cluster.Hosts, s.cluster.Port, s.DatabaseName(), true, nil)
 	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
 		log.Fatal(err)

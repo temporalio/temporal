@@ -265,7 +265,7 @@ const (
 	EnableNewKafkaClient
 	// EnableVisibilitySampling is key for enable visibility sampling
 	EnableVisibilitySampling
-	// EnableReadFromClosedExecutionV2 is key for enable read from cadence_visibility.closed_executions_v2
+	// EnableReadFromClosedExecutionV2 is key for enable read from temporal_visibility.closed_executions_v2
 	EnableReadFromClosedExecutionV2
 	// AdvancedVisibilityWritingMode is key for how to write to advanced visibility
 	AdvancedVisibilityWritingMode
