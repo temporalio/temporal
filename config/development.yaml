@@ -6,11 +6,11 @@ persistence:
     cass-default:
       cassandra:
         hosts: "127.0.0.1"
-        keyspace: "cadence"
+        keyspace: "temporal"
     cass-visibility:
       cassandra:
         hosts: "127.0.0.1"
-        keyspace: "cadence_visibility"
+        keyspace: "temporal_visibility"
 
 ringpop:
   name: cadence
@@ -26,7 +26,7 @@ services:
     metrics:
       statsd:
         hostPort: "127.0.0.1:8125"
-        prefix: "cadence"
+        prefix: "temporal"
     pprof:
       port: 7936
 
@@ -38,7 +38,7 @@ services:
     metrics:
       statsd:
         hostPort: "127.0.0.1:8125"
-        prefix: "cadence"
+        prefix: "temporal"
     pprof:
       port: 7938
 
@@ -50,7 +50,7 @@ services:
     metrics:
       statsd:
         hostPort: "127.0.0.1:8125"
-        prefix: "cadence"
+        prefix: "temporal"
     pprof:
       port: 7937
 
@@ -62,7 +62,7 @@ services:
     metrics:
       statsd:
         hostPort: "127.0.0.1:8125"
-        prefix: "cadence"
+        prefix: "temporal"
     pprof:
       port: 7940
 
@@ -100,7 +100,7 @@ domainDefaults:
   archival:
     history:
       status: "enabled"
-      URI: "file:///tmp/cadence_archival/development"
+      URI: "file:///tmp/temporal_archival/development"
     visibility:
       status: "disabled"
 
@@ -112,9 +112,9 @@ kafka:
       brokers:
         - 127.0.0.1:9092
   topics:
-    cadence-visibility-dev:
+    temporal-visibility-dev:
       cluster: test
-    cadence-visibility-dev-dlq:
+    temporal-visibility-dev-dlq:
       cluster: test
 
 publicClient:

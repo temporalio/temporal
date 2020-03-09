@@ -11,7 +11,7 @@ See Maxim's talk at [Data@Scale Conference](https://atscaleconference.com/videos
 
 ## Getting Started
 
-### Start the cadence-server locally
+### Start the temporal-server locally
 
 We highly recommend that you use [Cadence service docker](docker/README.md) to run the service.
 

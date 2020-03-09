@@ -80,7 +80,7 @@ func loadCassandraSchema(
 	tls *auth.TLS,
 ) (err error) {
 
-	tmpFile, err := ioutil.TempFile("", "_cadence_")
+	tmpFile, err := ioutil.TempFile("", "_temporal_")
 	if err != nil {
 		return fmt.Errorf("error creating tmp file:%v", err.Error())
 	}

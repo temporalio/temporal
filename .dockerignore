@@ -1,15 +1,15 @@
 build/
-cadence
-cadence-server
-cadence-canary
-cadence-sql-tool
-cadence-cassandra-tool
+temporal
+temporal-server
+temporal-canary
+temporal-sql-tool
+temporal-cassandra-tool
 vendor/
 .gobincache/
 .idea/
 .buildkite/
 # exclude binaries from the build context sent to docker
-cadence
-cadence-server
-cadence-cassandra-tool
-cadence-sql-tool
+temporal
+temporal-server
+temporal-cassandra-tool
+temporal-sql-tool

@@ -37,12 +37,12 @@ func TestValidTaskListNames(t *testing.T) {
 		{"list0", "list0", 0},
 		{"/list0", "/list0", 0},
 		{"/list0/", "/list0/", 0},
-		{"__cadence_sys/list0", "__cadence_sys/list0", 0},
-		{"__cadence_sys/list0/", "__cadence_sys/list0/", 0},
-		{"/__cadence_sys_list0", "/__cadence_sys_list0", 0},
-		{"/__cadence_sys/list0/1", "list0", 1},
-		{"/__cadence_sys//list0//41", "/list0/", 41},
-		{"/__cadence_sys//__cadence_sys/sys/0/41", "/__cadence_sys/sys/0", 41},
+		{"__temporal_sys/list0", "__temporal_sys/list0", 0},
+		{"__temporal_sys/list0/", "__temporal_sys/list0/", 0},
+		{"/__temporal_sys_list0", "/__temporal_sys_list0", 0},
+		{"/__temporal_sys/list0/1", "list0", 1},
+		{"/__temporal_sys//list0//41", "/list0/", 41},
+		{"/__temporal_sys//__temporal_sys/sys/0/41", "/__temporal_sys/sys/0", 41},
 	}
 
 	for _, tc := range testCases {
@@ -68,25 +68,25 @@ func TestTaskListParentName(t *testing.T) {
 		{"list0", 0, ""},
 		/* 1-ary tree */
 		{"list0", 1, ""},
-		{"/__cadence_sys/list0/1", 1, "list0"},
-		{"/__cadence_sys/list0/2", 1, "/__cadence_sys/list0/1"},
+		{"/__temporal_sys/list0/1", 1, "list0"},
+		{"/__temporal_sys/list0/2", 1, "/__temporal_sys/list0/1"},
 		/* 2-ary tree */
 		{"list0", 2, ""},
-		{"/__cadence_sys/list0/1", 2, "list0"},
-		{"/__cadence_sys/list0/2", 2, "list0"},
-		{"/__cadence_sys/list0/3", 2, "/__cadence_sys/list0/1"},
-		{"/__cadence_sys/list0/4", 2, "/__cadence_sys/list0/1"},
-		{"/__cadence_sys/list0/5", 2, "/__cadence_sys/list0/2"},
-		{"/__cadence_sys/list0/6", 2, "/__cadence_sys/list0/2"},
+		{"/__temporal_sys/list0/1", 2, "list0"},
+		{"/__temporal_sys/list0/2", 2, "list0"},
+		{"/__temporal_sys/list0/3", 2, "/__temporal_sys/list0/1"},
+		{"/__temporal_sys/list0/4", 2, "/__temporal_sys/list0/1"},
+		{"/__temporal_sys/list0/5", 2, "/__temporal_sys/list0/2"},
+		{"/__temporal_sys/list0/6", 2, "/__temporal_sys/list0/2"},
 		/* 3-ary tree */
-		{"/__cadence_sys/list0/1", 3, "list0"},
-		{"/__cadence_sys/list0/2", 3, "list0"},
-		{"/__cadence_sys/list0/3", 3, "list0"},
-		{"/__cadence_sys/list0/4", 3, "/__cadence_sys/list0/1"},
-		{"/__cadence_sys/list0/5", 3, "/__cadence_sys/list0/1"},
-		{"/__cadence_sys/list0/6", 3, "/__cadence_sys/list0/1"},
-		{"/__cadence_sys/list0/7", 3, "/__cadence_sys/list0/2"},
-		{"/__cadence_sys/list0/10", 3, "/__cadence_sys/list0/3"},
+		{"/__temporal_sys/list0/1", 3, "list0"},
+		{"/__temporal_sys/list0/2", 3, "list0"},
+		{"/__temporal_sys/list0/3", 3, "list0"},
+		{"/__temporal_sys/list0/4", 3, "/__temporal_sys/list0/1"},
+		{"/__temporal_sys/list0/5", 3, "/__temporal_sys/list0/1"},
+		{"/__temporal_sys/list0/6", 3, "/__temporal_sys/list0/1"},
+		{"/__temporal_sys/list0/7", 3, "/__temporal_sys/list0/2"},
+		{"/__temporal_sys/list0/10", 3, "/__temporal_sys/list0/3"},
 	}
 
 	for _, tc := range testCases {
@@ -100,13 +100,13 @@ func TestTaskListParentName(t *testing.T) {
 
 func TestInvalidTasklistNames(t *testing.T) {
 	inputs := []string{
-		"/__cadence_sys/",
-		"/__cadence_sys/0",
-		"/__cadence_sys//1",
-		"/__cadence_sys//0",
-		"/__cadence_sys/list0",
-		"/__cadence_sys/list0/0",
-		"/__cadence_sys/list0/-1",
+		"/__temporal_sys/",
+		"/__temporal_sys/0",
+		"/__temporal_sys//1",
+		"/__temporal_sys//0",
+		"/__temporal_sys/list0",
+		"/__temporal_sys/list0/0",
+		"/__temporal_sys/list0/-1",
 	}
 	for _, name := range inputs {
 		t.Run(name, func(t *testing.T) {

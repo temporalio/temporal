@@ -8,54 +8,54 @@ ES_PORT="${ES_PORT:-9200}"
 RF=${RF:-1}
 
 # cassandra env
-export KEYSPACE="${KEYSPACE:-cadence}"
-export VISIBILITY_KEYSPACE="${VISIBILITY_KEYSPACE:-cadence_visibility}"
+export KEYSPACE="${KEYSPACE:-temporal}"
+export VISIBILITY_KEYSPACE="${VISIBILITY_KEYSPACE:-temporal_visibility}"
 
 # mysql env
-export DBNAME="${DBNAME:-cadence}"
-export VISIBILITY_DBNAME="${VISIBILITY_DBNAME:-cadence_visibility}"
+export DBNAME="${DBNAME:-temporal}"
+export VISIBILITY_DBNAME="${VISIBILITY_DBNAME:-temporal_visibility}"
 export DB_PORT=${DB_PORT:-3306}
 
 setup_cassandra_schema() {
-    SCHEMA_DIR=$CADENCE_HOME/schema/cassandra/cadence/versioned
-    cadence-cassandra-tool --ep $CASSANDRA_SEEDS create -k $KEYSPACE --rf $RF
-    cadence-cassandra-tool --ep $CASSANDRA_SEEDS -k $KEYSPACE setup-schema -v 0.0
-    cadence-cassandra-tool --ep $CASSANDRA_SEEDS -k $KEYSPACE update-schema -d $SCHEMA_DIR
-    VISIBILITY_SCHEMA_DIR=$CADENCE_HOME/schema/cassandra/visibility/versioned
-    cadence-cassandra-tool --ep $CASSANDRA_SEEDS create -k $VISIBILITY_KEYSPACE --rf $RF
-    cadence-cassandra-tool --ep $CASSANDRA_SEEDS -k $VISIBILITY_KEYSPACE setup-schema -v 0.0
-    cadence-cassandra-tool --ep $CASSANDRA_SEEDS -k $VISIBILITY_KEYSPACE update-schema -d $VISIBILITY_SCHEMA_DIR
+    SCHEMA_DIR=$TEMPORAL_HOME/schema/cassandra/temporal/versioned
+    temporal-cassandra-tool --ep $CASSANDRA_SEEDS create -k $KEYSPACE --rf $RF
+    temporal-cassandra-tool --ep $CASSANDRA_SEEDS -k $KEYSPACE setup-schema -v 0.0
+    temporal-cassandra-tool --ep $CASSANDRA_SEEDS -k $KEYSPACE update-schema -d $SCHEMA_DIR
+    VISIBILITY_SCHEMA_DIR=$TEMPORAL_HOME/schema/cassandra/visibility/versioned
+    temporal-cassandra-tool --ep $CASSANDRA_SEEDS create -k $VISIBILITY_KEYSPACE --rf $RF
+    temporal-cassandra-tool --ep $CASSANDRA_SEEDS -k $VISIBILITY_KEYSPACE setup-schema -v 0.0
+    temporal-cassandra-tool --ep $CASSANDRA_SEEDS -k $VISIBILITY_KEYSPACE update-schema -d $VISIBILITY_SCHEMA_DIR
 }
 
 setup_mysql_schema() {
-    SCHEMA_DIR=$CADENCE_HOME/schema/mysql/v57/cadence/versioned
-    cadence-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD create --db $DBNAME
-    cadence-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD --db $DBNAME setup-schema -v 0.0
-    cadence-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD --db $DBNAME update-schema -d $SCHEMA_DIR
-    VISIBILITY_SCHEMA_DIR=$CADENCE_HOME/schema/mysql/v57/visibility/versioned
-    cadence-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD create --db $VISIBILITY_DBNAME
-    cadence-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD --db $VISIBILITY_DBNAME setup-schema -v 0.0
-    cadence-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD --db $VISIBILITY_DBNAME update-schema -d $VISIBILITY_SCHEMA_DIR
+    SCHEMA_DIR=$TEMPORAL_HOME/schema/mysql/v57/temporal/versioned
+    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD create --db $DBNAME
+    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD --db $DBNAME setup-schema -v 0.0
+    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD --db $DBNAME update-schema -d $SCHEMA_DIR
+    VISIBILITY_SCHEMA_DIR=$TEMPORAL_HOME/schema/mysql/v57/visibility/versioned
+    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD create --db $VISIBILITY_DBNAME
+    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD --db $VISIBILITY_DBNAME setup-schema -v 0.0
+    temporal-sql-tool --ep $MYSQL_SEEDS -u $MYSQL_USER --pw $MYSQL_PWD --db $VISIBILITY_DBNAME update-schema -d $VISIBILITY_SCHEMA_DIR
 }
 
 setup_postgres_schema() {
-    SCHEMA_DIR=$CADENCE_HOME/schema/postgres/cadence/versioned
-    cadence-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER --pw $POSTGRES_PWD -p $DB_PORT create --db $DBNAME
-    cadence-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER --pw $POSTGRES_PWD -p $DB_PORT --db $DBNAME setup-schema -v 0.0
-    cadence-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER --pw $POSTGRES_PWD -p $DB_PORT --db $DBNAME update-schema -d $SCHEMA_DIR
-    VISIBILITY_SCHEMA_DIR=$CADENCE_HOME/schema/postgres/visibility/versioned
-    cadence-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER --pw $POSTGRES_PWD -p $DB_PORT create --db $VISIBILITY_DBNAME
-    cadence-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER --pw $POSTGRES_PWD -p $DB_PORT --db $VISIBILITY_DBNAME setup-schema -v 0.0
-    cadence-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER --pw $POSTGRES_PWD -p $DB_PORT --db $VISIBILITY_DBNAME update-schema -d $VISIBILITY_SCHEMA_DIR
+    SCHEMA_DIR=$TEMPORAL_HOME/schema/postgres/temporal/versioned
+    temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER --pw $POSTGRES_PWD -p $DB_PORT create --db $DBNAME
+    temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER --pw $POSTGRES_PWD -p $DB_PORT --db $DBNAME setup-schema -v 0.0
+    temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER --pw $POSTGRES_PWD -p $DB_PORT --db $DBNAME update-schema -d $SCHEMA_DIR
+    VISIBILITY_SCHEMA_DIR=$TEMPORAL_HOME/schema/postgres/visibility/versioned
+    temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER --pw $POSTGRES_PWD -p $DB_PORT create --db $VISIBILITY_DBNAME
+    temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER --pw $POSTGRES_PWD -p $DB_PORT --db $VISIBILITY_DBNAME setup-schema -v 0.0
+    temporal-sql-tool --plugin postgres --ep $POSTGRES_SEEDS -u $POSTGRES_USER --pw $POSTGRES_PWD -p $DB_PORT --db $VISIBILITY_DBNAME update-schema -d $VISIBILITY_SCHEMA_DIR
 }
 
 
 setup_es_template() {
-    SCHEMA_FILE=$CADENCE_HOME/schema/elasticsearch/visibility/index_template.json
+    SCHEMA_FILE=$TEMPORAL_HOME/schema/elasticsearch/visibility/index_template.json
     server=`echo $ES_SEEDS | awk -F ',' '{print $1}'`
-    URL="http://$server:$ES_PORT/_template/cadence-visibility-template"
+    URL="http://$server:$ES_PORT/_template/temporal-visibility-template"
     curl -X PUT $URL -H 'Content-Type: application/json' --data-binary "@$SCHEMA_FILE"
-    URL="http://$server:$ES_PORT/cadence-visibility-dev"
+    URL="http://$server:$ES_PORT/temporal-visibility-dev"
     curl -X PUT $URL
 }
 
@@ -139,4 +139,4 @@ if [ "$SKIP_SCHEMA_SETUP" != true ]; then
     setup_schema
 fi
 
-bash /start-cadence.sh
+bash /start-temporal.sh

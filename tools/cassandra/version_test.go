@@ -61,7 +61,7 @@ func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
 	_, filename, _, ok := runtime.Caller(0)
 	s.True(ok)
 	root := path.Dir(path.Dir(path.Dir(filename)))
-	cqlFile := path.Join(root, "schema/cassandra/cadence/schema.cql")
+	cqlFile := path.Join(root, "schema/cassandra/temporal/schema.cql")
 	visCqlFile := path.Join(root, "schema/cassandra/visibility/schema.cql")
 
 	defer s.createKeyspace(keyspace)()

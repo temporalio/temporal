@@ -68,7 +68,7 @@ type (
 )
 
 const (
-	taskListPartitionPrefix = "/__cadence_sys/"
+	taskListPartitionPrefix = "/__temporal_sys/"
 )
 
 // NewLoadBalancer returns an instance of matching load balancer that

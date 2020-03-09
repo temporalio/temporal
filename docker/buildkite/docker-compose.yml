@@ -23,7 +23,7 @@ services:
   postgres:
     image: postgres:12
     environment:
-      POSTGRES_PASSWORD: cadence
+      POSTGRES_PASSWORD: temporal
     ports:
       - "5432:5432"
     networks:

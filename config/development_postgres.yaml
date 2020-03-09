@@ -6,22 +6,22 @@ persistence:
     postgres-default:
       sql:
         pluginName: "postgres"
-        databaseName: "cadence"
+        databaseName: "temporal"
         connectAddr: "127.0.0.1:5432"
         connectProtocol: "tcp"
         user: "postgres"
-        password: "cadence"
+        password: "temporal"
         maxConns: 20
         maxIdleConns: 20
         maxConnLifetime: "1h"
     postgres-visibility:
       sql:
         pluginName: "postgres"
-        databaseName: "cadence_visibility"
+        databaseName: "temporal_visibility"
         connectAddr: "127.0.0.1:5432"
         connectProtocol: "tcp"
         user: "postgres"
-        password: "cadence"
+        password: "temporal"
         maxConns: 2
         maxIdleConns: 2
         maxConnLifetime: "1h"
@@ -39,7 +39,7 @@ services:
     metrics:
       statsd:
         hostPort: "127.0.0.1:8125"
-        prefix: "cadence"
+        prefix: "temporal"
     pprof:
       port: 7936
 
@@ -51,7 +51,7 @@ services:
     metrics:
       statsd:
         hostPort: "127.0.0.1:8125"
-        prefix: "cadence"
+        prefix: "temporal"
     pprof:
       port: 7938
 
@@ -63,7 +63,7 @@ services:
     metrics:
       statsd:
         hostPort: "127.0.0.1:8125"
-        prefix: "cadence"
+        prefix: "temporal"
     pprof:
       port: 7937
 
@@ -75,7 +75,7 @@ services:
     metrics:
       statsd:
         hostPort: "127.0.0.1:8125"
-        prefix: "cadence"
+        prefix: "temporal"
     pprof:
       port: 7940
 
@@ -111,7 +111,7 @@ domainDefaults:
   archival:
     history:
       status: "enabled"
-      URI: "file:///tmp/cadence_archival/development"
+      URI: "file:///tmp/temporal_archival/development"
     visibility:
       status: "disabled"
 
@@ -121,9 +121,9 @@ kafka:
       brokers:
         - 127.0.0.1:9092
   topics:
-    cadence-visibility-dev:
+    temporal-visibility-dev:
       cluster: test
-    cadence-visibility-dev-dlq:
+    temporal-visibility-dev-dlq:
       cluster: test
 
 publicClient:

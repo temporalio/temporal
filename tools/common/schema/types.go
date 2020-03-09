@@ -155,7 +155,7 @@ const (
 )
 
 // DryrunDBName is the db name used for dryrun
-const DryrunDBName = "_cadence_dryrun_"
+const DryrunDBName = "_temporal_dryrun_"
 
 var rmspaceRegex = regexp.MustCompile(`\s+`)
 

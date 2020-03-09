@@ -6,14 +6,14 @@ persistence:
     cass-default:
       cassandra:
         hosts: "127.0.0.1"
-        keyspace: "cadence_standby"
+        keyspace: "temporal_standby"
     cass-visibility:
       cassandra:
         hosts: "127.0.0.1"
-        keyspace: "cadence_visibility_standby"
+        keyspace: "temporal_visibility_standby"
 
 ringpop:
-  name: cadence_standby
+  name: temporal_standby
   maxJoinDuration: 30s
 
 services:
@@ -25,7 +25,7 @@ services:
     metrics:
       statsd:
         hostPort: "127.0.0.1:8125"
-        prefix: "cadence_standby"
+        prefix: "temporal_standby"
     pprof:
       port: 8936
 
@@ -37,7 +37,7 @@ services:
     metrics:
       statsd:
         hostPort: "127.0.0.1:8125"
-        prefix: "cadence_standby"
+        prefix: "temporal_standby"
     pprof:
       port: 8938
 
@@ -49,7 +49,7 @@ services:
     metrics:
       statsd:
         hostPort: "127.0.0.1:8125"
-        prefix: "cadence_standby"
+        prefix: "temporal_standby"
     pprof:
       port: 8937
 
@@ -61,7 +61,7 @@ services:
     metrics:
       statsd:
         hostPort: "127.0.0.1:8125"
-        prefix: "cadence_standby"
+        prefix: "temporal_standby"
     pprof:
       port: 8941
 
@@ -143,7 +143,7 @@ domainDefaults:
   archival:
     history:
       status: "enabled"
-      URI: "file:///tmp/cadence_archival/development"
+      URI: "file:///tmp/temporal_archival/development"
     visibility:
       status: "disabled"
 

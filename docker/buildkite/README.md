@@ -7,7 +7,7 @@ The Dockerfile is the same for both.
 
 ## Testing the build locally
 To try out the build locally, start from the root folder of this repo 
-(cadence) and run the following commands.
+(temporal) and run the following commands.
 
 Build the container for 
 
@@ -47,8 +47,8 @@ Note that BuildKite will run basically the same commands.
 
 ## Testing the build in BuildKite
 Creating a PR against the master branch will trigger the BuildKite
-build. Members of the Cadence team can view the build pipeline here:
-https://buildkite.com/uberopensource/cadence-server
+build. Members of the Temporal team can view the build pipeline here:
+https://buildkite.com/temporal/temporal-server
 
 Eventually this pipeline should be made public. It will need to ignore 
 third party PRs for safety reasons.

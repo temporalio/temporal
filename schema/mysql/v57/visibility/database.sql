@@ -1,1 +1,1 @@
-CREATE DATABASE cadence_visibility character set utf8;
+CREATE DATABASE temporal_visibility character set utf8;

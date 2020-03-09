@@ -1,1 +1,1 @@
-CREATE DATABASE cadence_visibility;
+CREATE DATABASE temporal_visibility;

@@ -155,7 +155,7 @@ func constructPath(dir string, file string) string {
 func BuildCLI() *cli.App {
 
 	app := cli.NewApp()
-	app.Name = "cadence"
+	app.Name = "temporal"
 	app.Usage = "Cadence server"
 	app.Version = "0.0.1"
 

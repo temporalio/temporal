@@ -28,7 +28,7 @@ import (
 	"github.com/temporalio/temporal/tools/common/schema"
 )
 
-// RunTool runs the cadence-cassandra-tool command line tool
+// RunTool runs the temporal-cassandra-tool command line tool
 func RunTool(args []string) error {
 	app := buildCLIOptions()
 	return app.Run(args)
@@ -58,7 +58,7 @@ func cliHandler(c *cli.Context, handler func(c *cli.Context) error) {
 func buildCLIOptions() *cli.App {
 
 	app := cli.NewApp()
-	app.Name = "cadence-cassandra-tool"
+	app.Name = "temporal-cassandra-tool"
 	app.Usage = "Command line tool for cadence cassandra operations"
 	app.Version = "0.0.1"
 
@@ -95,7 +95,7 @@ func buildCLIOptions() *cli.App {
 		},
 		cli.StringFlag{
 			Name:   schema.CLIFlagKeyspace,
-			Value:  "cadence",
+			Value:  "temporal",
 			Usage:  "name of the cassandra Keyspace",
 			EnvVar: "CASSANDRA_KEYSPACE",
 		},

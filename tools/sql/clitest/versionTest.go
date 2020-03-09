@@ -70,7 +70,7 @@ func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
 	_, filename, _, ok := runtime.Caller(0)
 	s.True(ok)
 	root := path.Dir(path.Dir(path.Dir(path.Dir(filename))))
-	sqlFile := path.Join(root, "schema/mysql/v57/cadence/schema.sql")
+	sqlFile := path.Join(root, "schema/mysql/v57/temporal/schema.sql")
 	visSQLFile := path.Join(root, "schema/mysql/v57/visibility/schema.sql")
 
 	defer s.createDatabase(database)()
