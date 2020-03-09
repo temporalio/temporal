@@ -3899,7 +3899,9 @@ func (e *mutableStateBuilder) CloseTransactionAsMutation(
 
 	if len(workflowEventsSeq) > 0 {
 		lastEvents := workflowEventsSeq[len(workflowEventsSeq)-1].Events
+		firstEvent := lastEvents[0]
 		lastEvent := lastEvents[len(lastEvents)-1]
+		e.updateWithLastFirstEvent(firstEvent)
 		if err := e.updateWithLastWriteEvent(
 			lastEvent,
 			transactionPolicy,
@@ -3986,7 +3988,9 @@ func (e *mutableStateBuilder) CloseTransactionAsSnapshot(
 
 	if len(workflowEventsSeq) > 0 {
 		lastEvents := workflowEventsSeq[len(workflowEventsSeq)-1].Events
+		firstEvent := lastEvents[0]
 		lastEvent := lastEvents[len(lastEvents)-1]
+		e.updateWithLastFirstEvent(firstEvent)
 		if err := e.updateWithLastWriteEvent(
 			lastEvent,
 			transactionPolicy,
@@ -4288,6 +4292,12 @@ func (e *mutableStateBuilder) updateWithLastWriteEvent(
 		}
 	}
 	return nil
+}
+
+func (e *mutableStateBuilder) updateWithLastFirstEvent(
+	lastFirstEvent *workflow.HistoryEvent,
+) {
+	e.GetExecutionInfo().SetLastFirstEventID(lastFirstEvent.GetEventId())
 }
 
 func (e *mutableStateBuilder) canReplicateEvents() bool {
