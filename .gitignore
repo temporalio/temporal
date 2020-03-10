@@ -25,6 +25,7 @@ test_eventsV2_xdc.log
 
 # Executables produced by temporal repo
 /temporal*
+/tctl
 
 # protobuf generated files
 .gen/proto

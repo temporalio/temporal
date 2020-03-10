@@ -42,7 +42,7 @@ RUN go mod download
 COPY . .
 
 
-RUN CGO_ENABLED=0 make proto copyright temporal-cassandra-tool temporal-sql-tool temporal temporal-server
+RUN CGO_ENABLED=0 make proto copyright temporal-cassandra-tool temporal-sql-tool tctl temporal-server
 
 # Download dockerize
 FROM alpine:3.11 AS dockerize
@@ -78,7 +78,7 @@ COPY --from=tcheck /go/bin/tcheck /usr/local/bin
 COPY --from=dockerize /usr/local/bin/dockerize /usr/local/bin
 COPY --from=builder /temporal/temporal-cassandra-tool /usr/local/bin
 COPY --from=builder /temporal/temporal-sql-tool /usr/local/bin
-COPY --from=builder /temporal/temporal /usr/local/bin
+COPY --from=builder /temporal/tctl /usr/local/bin
 COPY --from=builder /temporal/temporal-server /usr/local/bin
 COPY --from=builder /temporal/schema /etc/temporal/schema
 
@@ -106,10 +106,10 @@ COPY docker/start.sh /start.sh
 CMD /start.sh
 
 # Temporal CLI
-FROM alpine AS temporal-cli
+FROM alpine AS tctl
 
 COPY --from=tcheck /go/bin/tcheck /usr/local/bin
-COPY --from=builder /temporal/temporal /usr/local/bin
+COPY --from=builder /temporal/tctl /usr/local/bin
 
 ENTRYPOINT ["temporal"]
 
@@ -123,11 +123,10 @@ COPY --from=tcheck /go/bin/tcheck /usr/local/bin
 COPY --from=dockerize /usr/local/bin/dockerize /usr/local/bin
 COPY --from=builder /temporal/temporal-cassandra-tool /usr/local/bin
 COPY --from=builder /temporal/temporal-sql-tool /usr/local/bin
-COPY --from=builder /temporal/temporal /usr/local/bin
+COPY --from=builder /temporal/tctl /usr/local/bin
 COPY --from=builder /temporal/temporal-server /usr/local/bin
 COPY --from=builder /temporal/schema /etc/temporal/schema
 COPY --from=tcheck /go/bin/tcheck /usr/local/bin
-COPY --from=builder /temporal/temporal /usr/local/bin
 
 COPY docker/entrypoint.sh /docker-entrypoint.sh
 COPY config/dynamicconfig /etc/temporal/config/dynamicconfig

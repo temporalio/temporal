@@ -698,7 +698,7 @@ func getCliIdentity() string {
 	if err != nil {
 		hostName = "UnKnown"
 	}
-	return fmt.Sprintf("cadence-cli@%s", hostName)
+	return fmt.Sprintf("tctl@%s", hostName)
 }
 
 func newContext(c *cli.Context) (context.Context, context.CancelFunc) {
