@@ -22,7 +22,6 @@ package frontend
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -30,11 +29,11 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
+	"go.temporal.io/temporal-proto/token"
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
-	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/archiver"
@@ -65,17 +64,6 @@ type (
 		domainHandler             domain.Handler
 		visibilityQueryValidator  *validator.VisibilityQueryValidator
 		searchAttributesValidator *validator.SearchAttributesValidator
-	}
-
-	getHistoryContinuationToken struct {
-		RunID             string
-		FirstEventID      int64
-		NextEventID       int64
-		IsWorkflowRunning bool
-		PersistenceToken  []byte
-		TransientDecision *commonproto.TransientDecisionInfo
-		BranchToken       []byte
-		ReplicationInfo   map[string]*replication.ReplicationInfo
 	}
 )
 
@@ -484,7 +472,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 	isLongPoll := request.GetWaitForNewEvent()
 	isCloseEventOnly := request.GetHistoryEventFilterType() == enums.HistoryEventFilterTypeCloseEvent
 	execution := request.Execution
-	token := &getHistoryContinuationToken{}
+	var continuationToken *token.HistoryContinuationToken
 
 	var runID string
 	lastFirstEventID := common.FirstEventID
@@ -494,35 +482,33 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 	// process the token for paging
 	queryNextEventID := common.EndEventID
 	if request.NextPageToken != nil {
-		token, err = wh.deserializeHistoryToken(request.NextPageToken)
-		if err != nil {
-			return nil, wh.error(errInvalidNextPageToken, scope)
-		}
-		if execution.GetRunId() != "" && execution.GetRunId() != token.RunID {
+		continuationToken = request.NextPageToken
+		if execution.GetRunId() != "" && execution.GetRunId() != continuationToken.GetRunId() {
 			return nil, wh.error(errNextPageTokenRunIDMismatch, scope)
 		}
 
-		execution.RunId = token.RunID
+		execution.RunId = continuationToken.GetRunId()
 
 		// we need to update the current next event ID and whether workflow is running
-		if len(token.PersistenceToken) == 0 && isLongPoll && token.IsWorkflowRunning {
+		if len(continuationToken.PersistenceToken) == 0 && isLongPoll && continuationToken.IsWorkflowRunning {
 			if !isCloseEventOnly {
-				queryNextEventID = token.NextEventID
+				queryNextEventID = continuationToken.GetNextEventId()
 			}
-			token.BranchToken, _, lastFirstEventID, nextEventID, isWorkflowRunning, err =
-				queryHistory(domainID, execution, queryNextEventID, token.BranchToken)
+			continuationToken.BranchToken, _, lastFirstEventID, nextEventID, isWorkflowRunning, err =
+				queryHistory(domainID, execution, queryNextEventID, continuationToken.BranchToken)
 			if err != nil {
 				return nil, wh.error(err, scope)
 			}
-			token.FirstEventID = token.NextEventID
-			token.NextEventID = nextEventID
-			token.IsWorkflowRunning = isWorkflowRunning
+			continuationToken.FirstEventId = continuationToken.GetNextEventId()
+			continuationToken.NextEventId = nextEventID
+			continuationToken.IsWorkflowRunning = isWorkflowRunning
 		}
 	} else {
+		continuationToken = &token.HistoryContinuationToken{}
 		if !isCloseEventOnly {
 			queryNextEventID = common.FirstEventID
 		}
-		token.BranchToken, runID, lastFirstEventID, nextEventID, isWorkflowRunning, err =
+		continuationToken.BranchToken, runID, lastFirstEventID, nextEventID, isWorkflowRunning, err =
 			queryHistory(domainID, execution, queryNextEventID, nil)
 		if err != nil {
 			return nil, wh.error(err, scope)
@@ -530,11 +516,11 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 
 		execution.RunId = runID
 
-		token.RunID = runID
-		token.FirstEventID = common.FirstEventID
-		token.NextEventID = nextEventID
-		token.IsWorkflowRunning = isWorkflowRunning
-		token.PersistenceToken = nil
+		continuationToken.RunId = runID
+		continuationToken.FirstEventId = common.FirstEventID
+		continuationToken.NextEventId = nextEventID
+		continuationToken.IsWorkflowRunning = isWorkflowRunning
+		continuationToken.PersistenceToken = nil
 	}
 
 	history := &commonproto.History{}
@@ -549,40 +535,40 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 				nextEventID,
 				request.GetMaximumPageSize(),
 				nil,
-				token.TransientDecision,
-				token.BranchToken,
+				continuationToken.TransientDecision,
+				continuationToken.BranchToken,
 			)
 			if err != nil {
 				return nil, wh.error(err, scope)
 			}
 			// since getHistory func will not return empty history, so the below is safe
 			history.Events = history.Events[len(history.Events)-1 : len(history.Events)]
-			token = nil
+			continuationToken = nil
 		} else if isLongPoll {
 			// set the persistence token to be nil so next time we will query history for updates
-			token.PersistenceToken = nil
+			continuationToken.PersistenceToken = nil
 		} else {
-			token = nil
+			continuationToken = nil
 		}
 	} else {
 		// return all events
-		if token.FirstEventID >= token.NextEventID {
+		if continuationToken.FirstEventId >= continuationToken.NextEventId {
 			// currently there is no new event
 			history.Events = []*commonproto.HistoryEvent{}
 			if !isWorkflowRunning {
-				token = nil
+				continuationToken = nil
 			}
 		} else {
-			history, token.PersistenceToken, err = wh.getHistory(
+			history, continuationToken.PersistenceToken, err = wh.getHistory(
 				scope,
 				domainID,
 				*execution,
-				token.FirstEventID,
-				token.NextEventID,
+				continuationToken.FirstEventId,
+				continuationToken.NextEventId,
 				request.GetMaximumPageSize(),
-				token.PersistenceToken,
-				token.TransientDecision,
-				token.BranchToken,
+				continuationToken.PersistenceToken,
+				continuationToken.TransientDecision,
+				continuationToken.BranchToken,
 			)
 			if err != nil {
 				return nil, wh.error(err, scope)
@@ -590,20 +576,16 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 
 			// here, for long pull on history events, we need to intercept the paging token from cassandra
 			// and do something clever
-			if len(token.PersistenceToken) == 0 && (!token.IsWorkflowRunning || !isLongPoll) {
+			if len(continuationToken.PersistenceToken) == 0 && (!continuationToken.IsWorkflowRunning || !isLongPoll) {
 				// meaning, there is no more history to be returned
-				token = nil
+				continuationToken = nil
 			}
 		}
 	}
 
-	nextToken, err := wh.serializeHistoryToken(token)
-	if err != nil {
-		return nil, wh.error(err, scope)
-	}
 	return &workflowservice.GetWorkflowExecutionHistoryResponse{
 		History:       history,
-		NextPageToken: nextToken,
+		NextPageToken: continuationToken,
 		Archived:      false,
 	}, nil
 }
@@ -2265,7 +2247,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 
 	return &workflowservice.ListClosedWorkflowExecutionsResponse{
 		Executions:    adapter.ToProtoWorkflowExecutionInfos(persistenceResp.Executions),
-		NextPageToken: nil,
+		NextPageToken: persistenceResp.NextPageToken,
 	}, nil
 }
 
@@ -2902,26 +2884,23 @@ func (wh *WorkflowHandler) GetWorkflowExecutionRawHistory(ctx context.Context, r
 	}
 
 	execution := request.Execution
-	token := &getHistoryContinuationToken{}
+	var continuationToken *token.HistoryContinuationToken
 
 	var runID string
 	var nextEventID int64
 
 	// process the token for paging
 	if request.NextPageToken != nil {
-		token, err = wh.deserializeHistoryToken(request.NextPageToken)
-		if err != nil {
-			return nil, wh.error(errInvalidNextPageToken, scope)
-		}
-		if execution.GetRunId() != token.RunID {
+		continuationToken = request.NextPageToken
+		if execution.GetRunId() != continuationToken.GetRunId() {
 			return nil, wh.error(errNextPageTokenRunIDMismatch, scope)
 		}
 
-		execution.RunId = token.RunID
+		execution.RunId = continuationToken.GetRunId()
 
 	} else {
-
-		token.BranchToken, runID, nextEventID, err =
+		continuationToken = &token.HistoryContinuationToken{}
+		continuationToken.BranchToken, runID, nextEventID, err =
 			queryHistory(domainID, execution, nil)
 		if err != nil {
 			return nil, wh.error(err, scope)
@@ -2929,48 +2908,44 @@ func (wh *WorkflowHandler) GetWorkflowExecutionRawHistory(ctx context.Context, r
 
 		execution.RunId = runID
 
-		token.RunID = runID
-		token.FirstEventID = common.FirstEventID
-		token.NextEventID = nextEventID
-		token.PersistenceToken = nil
+		continuationToken.RunId = runID
+		continuationToken.FirstEventId = common.FirstEventID
+		continuationToken.NextEventId = nextEventID
+		continuationToken.PersistenceToken = nil
 	}
 
 	var history []*commonproto.DataBlob
 	// return all events
-	if token.FirstEventID >= token.NextEventID {
+	if continuationToken.GetFirstEventId() >= continuationToken.GetNextEventId() {
 		return &workflowservice.GetWorkflowExecutionRawHistoryResponse{
 			RawHistory:    []*commonproto.DataBlob{},
 			NextPageToken: nil,
 		}, nil
 	}
 
-	history, token.PersistenceToken, err = wh.getRawHistory(
+	history, continuationToken.PersistenceToken, err = wh.getRawHistory(
 		scope,
 		domainID,
 		*execution,
-		token.FirstEventID,
-		token.NextEventID,
+		continuationToken.GetFirstEventId(),
+		continuationToken.GetNextEventId(),
 		request.GetMaximumPageSize(),
-		token.PersistenceToken,
-		token.TransientDecision,
-		token.BranchToken,
+		continuationToken.PersistenceToken,
+		continuationToken.TransientDecision,
+		continuationToken.BranchToken,
 	)
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
 
-	if len(token.PersistenceToken) == 0 {
+	if len(continuationToken.PersistenceToken) == 0 {
 		// meaning, there is no more history to be returned
-		token = nil
+		continuationToken = nil
 	}
 
-	nextToken, err := wh.serializeHistoryToken(token)
-	if err != nil {
-		return nil, wh.error(err, scope)
-	}
 	return &workflowservice.GetWorkflowExecutionRawHistoryResponse{
 		RawHistory:    history,
-		NextPageToken: nextToken,
+		NextPageToken: continuationToken,
 	}, nil
 }
 
@@ -3289,7 +3264,7 @@ func (wh *WorkflowHandler) createPollForDecisionTaskResponse(
 	}
 
 	var history *commonproto.History
-	var continuation []byte
+	var continuation *token.HistoryContinuationToken
 	var err error
 
 	if matchingResp.GetStickyExecutionEnabled() && matchingResp.Query != nil {
@@ -3334,16 +3309,13 @@ func (wh *WorkflowHandler) createPollForDecisionTaskResponse(
 		}
 
 		if len(persistenceToken) != 0 {
-			continuation, err = wh.serializeHistoryToken(&getHistoryContinuationToken{
-				RunID:             matchingResp.WorkflowExecution.GetRunId(),
-				FirstEventID:      firstEventID,
-				NextEventID:       nextEventID,
+			continuation = &token.HistoryContinuationToken{
+				RunId:             matchingResp.WorkflowExecution.GetRunId(),
+				FirstEventId:      firstEventID,
+				NextEventId:       nextEventID,
 				PersistenceToken:  persistenceToken,
 				TransientDecision: matchingResp.GetDecisionInfo(),
 				BranchToken:       branchToken,
-			})
-			if err != nil {
-				return nil, err
 			}
 		}
 	}
@@ -3422,21 +3394,6 @@ func (wh *WorkflowHandler) verifyHistoryIsComplete(
 		isFirstPage,
 		isLastPage,
 		pageSize))
-}
-
-func (wh *WorkflowHandler) deserializeHistoryToken(bytes []byte) (*getHistoryContinuationToken, error) {
-	token := &getHistoryContinuationToken{}
-	err := json.Unmarshal(bytes, token)
-	return token, err
-}
-
-func (wh *WorkflowHandler) serializeHistoryToken(token *getHistoryContinuationToken) ([]byte, error) {
-	if token == nil {
-		return nil, nil
-	}
-
-	bytes, err := json.Marshal(token)
-	return bytes, err
 }
 
 func (wh *WorkflowHandler) isFailoverRequest(updateRequest *workflowservice.UpdateDomainRequest) bool {
