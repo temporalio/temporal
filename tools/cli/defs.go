@@ -30,8 +30,7 @@ import (
 )
 
 const (
-	localHostPort     = "127.0.0.1:7933"
-	localHostPortGRPC = "127.0.0.1:7233"
+	localHostPort = "127.0.0.1:7233"
 
 	maxOutputStringLength = 200 // max length for output string
 	maxWorkflowTypeLength = 32  // max item length for output workflow type in table
@@ -63,7 +62,7 @@ const (
 	defaultWorkflowIDReusePolicy    = enums.WorkflowIdReusePolicyAllowDuplicateFailedOnly
 
 	workflowStatusNotSet = -1
-	showErrorStackEnv    = `CADENCE_CLI_SHOW_STACKS`
+	showErrorStackEnv    = `TEMPORAL_CLI_SHOW_STACKS`
 
 	searchAttrInputSeparator = "|"
 )

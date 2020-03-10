@@ -3,8 +3,8 @@ services:
   postgres:
     image: postgres:12
     environment:
-      POSTGRES_USER: cadence
-      POSTGRES_PASSWORD: cadence
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
     ports:
       - "5432:5432"
   statsd:
@@ -28,8 +28,9 @@ services:
     environment:
       - "DB=postgres"
       - "DB_PORT=5432"
-      - "POSTGRES_USER=cadence"
-      - "POSTGRES_PWD=cadence"
+      - "POSTGRES_USER=temporal"
+      - "POSTGRES_PWD=temporal"
+      - "POSTGRES_PWD=temporal"
       - "POSTGRES_SEEDS=postgres"
       - "STATSD_ENDPOINT=statsd:8125"
       - "DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development.yaml"
@@ -38,7 +39,7 @@ services:
   cadence-web:
     image: ubercadence/web:3.4.1
     environment:
-      - "CADENCE_TCHANNEL_PEERS=temporal:7233"
+      - "TEMPORAL_TCHANNEL_PEERS=temporal:7233"
     ports:
       - "8088:8088"
     depends_on:

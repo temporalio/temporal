@@ -201,13 +201,13 @@ func ActivityInfoFromBlob(b []byte, proto string) (*persistenceblobs.ActivityInf
 	return result, protoRWDecode(b, proto, result)
 }
 
-func ChildExecutionInfoToBlob(info *sqlblobs.ChildExecutionInfo) (DataBlob, error) {
-	return thriftRWEncode(info)
+func ChildExecutionInfoToBlob(info *persistenceblobs.ChildExecutionInfo) (DataBlob, error) {
+	return protoRWEncode(info)
 }
 
-func ChildExecutionInfoFromBlob(b []byte, proto string) (*sqlblobs.ChildExecutionInfo, error) {
-	result := &sqlblobs.ChildExecutionInfo{}
-	return result, thriftRWDecode(b, proto, result)
+func ChildExecutionInfoFromBlob(b []byte, proto string) (*persistenceblobs.ChildExecutionInfo, error) {
+	result := &persistenceblobs.ChildExecutionInfo{}
+	return result, protoRWDecode(b, proto, result)
 }
 
 func SignalInfoToBlob(info *persistenceblobs.SignalInfo) (DataBlob, error) {

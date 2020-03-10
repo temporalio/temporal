@@ -32,13 +32,13 @@ import (
 
 const (
 	// EnvKeyRoot the environment variable key for runtime root dir
-	EnvKeyRoot = "CADENCE_ROOT"
+	EnvKeyRoot = "TEMPORAL_ROOT"
 	// EnvKeyConfigDir the environment variable key for config dir
-	EnvKeyConfigDir = "CADENCE_CONFIG_DIR"
+	EnvKeyConfigDir = "TEMPORAL_CONFIG_DIR"
 	// EnvKeyEnvironment is the environment variable key for environment
-	EnvKeyEnvironment = "CADENCE_ENVIRONMENT"
+	EnvKeyEnvironment = "TEMPORAL_ENVIRONMENT"
 	// EnvKeyAvailabilityZone is the environment variable key for AZ
-	EnvKeyAvailabilityZone = "CADENCE_AVAILABILTY_ZONE"
+	EnvKeyAvailabilityZone = "TEMPORAL_AVAILABILTY_ZONE"
 )
 
 const (

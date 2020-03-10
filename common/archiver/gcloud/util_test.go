@@ -29,6 +29,7 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 
 	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/common/codec"
 )
 
 func (s *utilSuite) SetupTest() {
@@ -71,10 +72,11 @@ func (s *utilSuite) TestEncodeDecodeHistoryBatches() {
 		},
 	}
 
-	encodedHistoryBatches, err := encodeHistoryBatches(historyBatches)
+	encoder := codec.NewJSONPBEncoder()
+	encodedHistoryBatches, err := encoder.EncodeHistories(historyBatches)
 	s.NoError(err)
 
-	decodedHistoryBatches, err := decodeHistoryBatches(encodedHistoryBatches)
+	decodedHistoryBatches, err := encoder.DecodeHistories(encodedHistoryBatches)
 	s.NoError(err)
 	s.Equal(historyBatches, decodedHistoryBatches)
 }

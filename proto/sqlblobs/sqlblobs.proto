@@ -47,18 +47,3 @@ message DomainInfo {
     string visibilityArchivalURI = 21;
 }
 
-message ChildExecutionInfo {
-    int64 version = 1;
-    int64 initiatedEventBatchID = 2;
-    int64 startedID = 3;
-    bytes initiatedEvent = 4;
-    string initiatedEventEncoding = 5;
-    string startedWorkflowID = 6;
-    bytes startedRunID = 7;
-    bytes startedEvent = 8;
-    string startedEventEncoding = 9;
-    string createRequestID = 10;
-    string domainName = 11;
-    string workflowTypeName = 12;
-    int32 parentClosePolicy = 13;
-}

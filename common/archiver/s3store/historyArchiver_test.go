@@ -48,6 +48,7 @@ import (
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/s3store/mocks"
+	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/metrics"
@@ -640,7 +641,8 @@ func (s *historyArchiverSuite) setupHistoryDirectory() {
 }
 
 func (s *historyArchiverSuite) writeHistoryBatchesForGetTest(historyBatches []*commonproto.History, version int64) {
-	data, err := encodeHistoryBatches(historyBatches)
+	encoder := codec.NewJSONPBEncoder()
+	data, err := encoder.EncodeHistories(historyBatches)
 	s.Require().NoError(err)
 	key := constructHistoryKey("", testDomainID, testWorkflowID, testRunID, version)
 	_, err = s.s3cli.PutObjectWithContext(context.Background(), &s3.PutObjectInput{

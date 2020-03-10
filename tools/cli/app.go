@@ -38,7 +38,7 @@ func SetFactory(factory ClientFactory) {
 // NewCliApp instantiates a new instance of the CLI application.
 func NewCliApp() *cli.App {
 	app := cli.NewApp()
-	app.Name = "cadence"
+	app.Name = "temporal"
 	app.Usage = "A command-line tool for cadence users"
 	app.Version = Version
 	app.Flags = []cli.Flag{
@@ -46,18 +46,18 @@ func NewCliApp() *cli.App {
 			Name:   FlagAddressWithAlias,
 			Value:  "",
 			Usage:  "host:port for cadence frontend service",
-			EnvVar: "CADENCE_CLI_ADDRESS",
+			EnvVar: "TEMPORAL_CLI_ADDRESS",
 		},
 		cli.StringFlag{
 			Name:   FlagDomainWithAlias,
 			Usage:  "cadence workflow domain",
-			EnvVar: "CADENCE_CLI_DOMAIN",
+			EnvVar: "TEMPORAL_CLI_DOMAIN",
 		},
 		cli.IntFlag{
 			Name:   FlagContextTimeoutWithAlias,
 			Value:  defaultContextTimeoutInSeconds,
 			Usage:  "optional timeout for context of RPC call in seconds",
-			EnvVar: "CADENCE_CONTEXT_TIMEOUT",
+			EnvVar: "TEMPORAL_CONTEXT_TIMEOUT",
 		},
 	}
 	app.Commands = []cli.Command{

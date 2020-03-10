@@ -25,7 +25,7 @@ Q: How do I update existing schema ?
   * Add a manifest.json
   * Add your changes in a cql file
 * Update the unit test within ./tools/cassandra/updateTask_test.go `TestDryrun` with your version x.x
-* Once you are done with these use the ./cadence-cassandra-tool to update the schema
+* Once you are done with these use the ./temporal-cassandra-tool to update the schema
 
 Q: What's the format of manifest.json
 

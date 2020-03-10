@@ -514,7 +514,7 @@ func (s *decisionAttrValidatorSuite) TestValidateTaskListName() {
 		{"", taskList("tl-1"), taskList("tl-1"), false},
 		{"tl-1", taskList("tl-1"), taskList("tl-1"), false},
 		{"", taskList("/tl-1"), taskList("/tl-1"), false},
-		{"", taskList("/__cadence_sys"), taskList("/__cadence_sys"), false},
+		{"", taskList("/__temporal_sys"), taskList("/__temporal_sys"), false},
 		{"", nil, &commonproto.TaskList{}, true},
 		{"", taskList(""), taskList(""), true},
 		{"", taskList(reservedTaskListPrefix), taskList(reservedTaskListPrefix), true},

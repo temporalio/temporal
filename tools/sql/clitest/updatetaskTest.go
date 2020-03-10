@@ -73,7 +73,7 @@ func (s *UpdateSchemaTestSuite) TestDryrun() {
 	conn, err := newTestConn(s.DBName, s.pluginName)
 	s.Nil(err)
 	defer conn.Close()
-	dir := "../../../../../schema/mysql/v57/cadence/versioned"
+	dir := "../../../../../schema/mysql/v57/temporal/versioned"
 	s.RunDryrunTest(sql.BuildCLIOptions(), conn, "--db", dir, mysql.Version)
 }
 

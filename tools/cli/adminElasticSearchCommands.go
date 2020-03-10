@@ -38,6 +38,7 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/indexer"
 	"github.com/temporalio/temporal/common/clock"
+	"github.com/temporalio/temporal/common/codec"
 	es "github.com/temporalio/temporal/common/elasticsearch"
 	"github.com/temporalio/temporal/common/elasticsearch/esql"
 	"github.com/temporalio/temporal/common/tokenbucket"
@@ -245,6 +246,7 @@ func parseIndexerMessage(fileName string) (messages []*indexer.Message, err erro
 
 	scanner := bufio.NewScanner(file)
 	idx := 0
+	encoder := codec.NewJSONPBEncoder()
 	for scanner.Scan() {
 		idx++
 		line := strings.TrimSpace(scanner.Text())
@@ -254,7 +256,7 @@ func parseIndexerMessage(fileName string) (messages []*indexer.Message, err erro
 		}
 
 		msg := &indexer.Message{}
-		err := json.Unmarshal([]byte(line), msg)
+		err := encoder.Decode([]byte(line), msg)
 		if err != nil {
 			fmt.Printf("line %v cannot be deserialized to indexer message: %v.\n", idx, line)
 			return nil, err

@@ -64,7 +64,7 @@ type (
 )
 
 const (
-	reservedTaskListPrefix = "/__cadence_sys/"
+	reservedTaskListPrefix = "/__temporal_sys/"
 )
 
 func newDecisionAttrValidator(

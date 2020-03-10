@@ -147,7 +147,7 @@ func (s *TestCluster) DropDatabase() {
 
 // LoadSchema from PersistenceTestCluster interface
 func (s *TestCluster) LoadSchema(fileNames []string, schemaDir string) {
-	workflowSchemaDir := schemaDir + "/cadence"
+	workflowSchemaDir := schemaDir + "/temporal"
 	err := s.loadDatabaseSchema(workflowSchemaDir, fileNames, true)
 	if err != nil {
 		log.Fatal(err)

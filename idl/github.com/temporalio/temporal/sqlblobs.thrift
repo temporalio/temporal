@@ -45,19 +45,3 @@ struct DomainInfo {
   46: optional i16 visibilityArchivalStatus
   48: optional string visibilityArchivalURI
 }
-
-struct ChildExecutionInfo {
-  10: optional i64 (js.type = "Long") version
-  12: optional i64 (js.type = "Long") initiatedEventBatchID
-  14: optional i64 (js.type = "Long") startedID
-  16: optional binary initiatedEvent
-  18: optional string initiatedEventEncoding
-  20: optional string startedWorkflowID
-  22: optional binary startedRunID
-  24: optional binary startedEvent
-  26: optional string startedEventEncoding
-  28: optional string createRequestID
-  30: optional string domainName
-  32: optional string workflowTypeName
-  35: optional i32 parentClosePolicy
-}

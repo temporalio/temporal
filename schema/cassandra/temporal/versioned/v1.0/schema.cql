@@ -13,23 +13,6 @@ CREATE TYPE replication_state (
   last_replication_info            map<text, frozen<replication_info>>, -- information about replication events from other clusters
 );
 
--- Child execution in progress mutable state
-CREATE TYPE child_execution_info (
-  version                   bigint,
-  initiated_id              bigint,
-  initiated_event_batch_id  bigint,
-  initiated_event           blob,
-  started_id                bigint,
-  started_workflow_id       text,
-  started_run_id            uuid,
-  started_event             blob, -- deprecated
-  create_request_id         uuid,
-  event_data_encoding       text, -- Protocol used for history serialization
-  domain_name               text,
-  workflow_type_name        text,
-  parent_close_policy       int,
-);
-
 CREATE TYPE domain (
   id          uuid,
   name        text,
@@ -105,7 +88,8 @@ CREATE TABLE executions (
   activity_map_encoding          text,
   timer_map                      map<text, blob>,
   timer_map_encoding             text,
-  child_executions_map           map<bigint, frozen<child_execution_info>>,
+  child_executions_map           map<bigint, blob>,
+  child_executions_map_encoding  text,
   request_cancel_map             map<bigint, blob>,
   request_cancel_map_encoding    text,
   signal_map                     map<bigint, blob>,
@@ -150,16 +134,16 @@ CREATE TABLE history_tree (
 
 -- Stores activity or workflow tasks
 CREATE TABLE tasks (
-  domain_id          uuid,
-  task_list_name     text,
-  task_list_type     int, -- enum TaskListType {ActivityTask, DecisionTask}
-  type               int, -- enum rowType {Task, TaskList}
-  task_id            bigint,  -- unique identifier for tasks, monotonically increasing
-  range_id           bigint, -- Used to ensure that only one process can write to the table
-  task               blob,
-  task_encoding      text,
-  task_list          blob,
-  task_list_encoding text,
+  domain_id             uuid,
+  task_list_name        text,
+  task_list_type        int, -- enum TaskListType {ActivityTask, DecisionTask}
+  type                  int, -- enum rowType {Task, TaskList}
+  task_id               bigint,  -- unique identifier for tasks, monotonically increasing
+  range_id              bigint, -- Used to ensure that only one process can write to the table
+  task                  blob,
+  task_encoding         text,
+  task_list             blob,
+  task_list_encoding    text,
   PRIMARY KEY ((domain_id, task_list_name, task_list_type), type, task_id)
 ) WITH COMPACTION = {
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
@@ -191,6 +175,15 @@ CREATE TABLE domains_by_name_v2 (
      'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
    };
 
+CREATE TABLE queue (
+  queue_type      int,
+  message_id      int,
+  message_payload blob,
+  PRIMARY KEY  (queue_type, message_id)
+) WITH COMPACTION = {
+    'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
+  };
+
 CREATE TABLE queue_metadata (
   queue_type        int,
   cluster_ack_level map<text, bigint>,
@@ -210,6 +203,16 @@ CREATE TABLE cluster_metadata (
     };
 
 -- Create metadata for system domain
+INSERT INTO domains (
+   id,
+   domain
+) VALUES (
+   32049b68-7872-4094-8e63-d0dd59896a83,
+   {
+       name: 'cadence-system'
+   }
+) IF NOT EXISTS;
+
 INSERT INTO domains_by_name_v2 (
    domains_partition,
    name,
@@ -240,25 +243,6 @@ INSERT INTO domains_by_name_v2 (
    -1
 ) IF NOT EXISTS;
 
-INSERT INTO domains (
-   id,
-   domain
-) VALUES (
-   32049b68-7872-4094-8e63-d0dd59896a83,
-   {
-       name: 'cadence-system'
-   }
-) IF NOT EXISTS;
-
-CREATE TABLE queue (
-  queue_type      int,
-  message_id      int,
-  message_payload blob,
-  PRIMARY KEY  (queue_type, message_id)
-) WITH COMPACTION = {
-    'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
-  };
-
 CREATE TABLE cluster_membership
 (
     membership_partition tinyint,
@@ -271,7 +255,8 @@ CREATE TABLE cluster_membership
     PRIMARY KEY (membership_partition, role, host_id)
 ) WITH COMPACTION = {
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
-  };
+    };
 
 CREATE INDEX cm_lastheartbeat_idx on cluster_membership (last_heartbeat);
 CREATE INDEX cm_sessionstart_idx on cluster_membership (session_start);
+

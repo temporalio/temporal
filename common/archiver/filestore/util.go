@@ -21,7 +21,6 @@
 package filestore
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -32,7 +31,6 @@ import (
 	"strings"
 
 	"github.com/dgryski/go-farm"
-	"github.com/gogo/protobuf/jsonpb"
 	commonproto "go.temporal.io/temporal-proto/common"
 
 	"github.com/temporalio/temporal/common/archiver"
@@ -143,46 +141,6 @@ func listFilesByPrefix(dirPath string, prefix string) ([]string, error) {
 
 func encode(v interface{}) ([]byte, error) {
 	return json.Marshal(v)
-}
-
-func encodeHistoryBatches(histories []*commonproto.History) ([]byte, error) {
-	m := jsonpb.Marshaler{}
-	var buf bytes.Buffer
-	buf.WriteString("[")
-	lastHistoryIndex := len(histories) - 1
-	for i, history := range histories {
-		if err := m.Marshal(&buf, history); err != nil {
-			return nil, err
-		}
-
-		if i == lastHistoryIndex {
-			buf.WriteString("]")
-		} else {
-			buf.WriteString(",")
-		}
-	}
-
-	return buf.Bytes(), nil
-}
-
-func decodeHistoryBatches(data []byte) ([]*commonproto.History, error) {
-	jsonDecoder := json.NewDecoder(bytes.NewReader(data))
-
-	_, err := jsonDecoder.Token()
-	if err != nil {
-		return nil, err
-	}
-	var histories []*commonproto.History
-	for jsonDecoder.More() {
-		history := &commonproto.History{}
-		err := jsonpb.UnmarshalNext(jsonDecoder, history)
-		if err != nil {
-			return nil, err
-		}
-		histories = append(histories, history)
-	}
-
-	return histories, nil
 }
 
 func decodeVisibilityRecord(data []byte) (*visibilityRecord, error) {

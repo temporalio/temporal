@@ -317,7 +317,7 @@ workflow_state = ? ` +
 		`IF range_id = ?`
 
 	templateGetWorkflowExecutionQuery = `SELECT execution, execution_encoding, execution_state, execution_state_encoding, next_event_id, replication_state, activity_map, activity_map_encoding, timer_map, timer_map_encoding, ` +
-		`child_executions_map, request_cancel_map, request_cancel_map_encoding, signal_map, signal_map_encoding, signal_requested, buffered_events_list, ` +
+		`child_executions_map, child_executions_map_encoding, request_cancel_map, request_cancel_map_encoding, signal_map, signal_map_encoding, signal_requested, buffered_events_list, ` +
 		`buffered_replication_tasks_map, version_histories, version_histories_encoding, checksum, checksum_encoding ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
@@ -444,7 +444,7 @@ workflow_state = ? ` +
 		`and task_id = ? `
 
 	templateUpdateChildExecutionInfoQuery = `UPDATE executions ` +
-		`SET child_executions_map[ ? ] =` + templateChildExecutionInfoType + ` ` +
+		`SET child_executions_map[ ? ] = ?, child_executions_map_encoding = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and domain_id = ? ` +
@@ -454,7 +454,7 @@ workflow_state = ? ` +
 		`and task_id = ? `
 
 	templateResetChildExecutionInfoQuery = `UPDATE executions ` +
-		`SET child_executions_map = ?` +
+		`SET child_executions_map = ?, child_executions_map_encoding = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and domain_id = ? ` +
@@ -1223,10 +1223,14 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 	state.TimerInfos = timerInfos
 
 	childExecutionInfos := make(map[int64]*p.InternalChildExecutionInfo)
-	cMap := result["child_executions_map"].(map[int64]map[string]interface{})
+	cMap := result["child_executions_map"].(map[int64][]byte)
+	cMapEncoding := result["child_executions_map_encoding"].(string)
 	for key, value := range cMap {
-		info := createChildExecutionInfo(value)
-		childExecutionInfos[key] = info
+		cInfo, err := serialization.ChildExecutionInfoFromBlob(value, cMapEncoding)
+		if err != nil {
+			return nil, err
+		}
+		childExecutionInfos[key] = p.ProtoChildExecutionInfoToInternal(cInfo)
 	}
 	state.ChildExecutionInfos = childExecutionInfos
 

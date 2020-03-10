@@ -16,16 +16,16 @@ persistence:
         default:
             cassandra:
                 hosts: {{ default .Env.CASSANDRA_SEEDS "" }}
-                keyspace: {{ default .Env.KEYSPACE "cadence" }}
+                keyspace: {{ default .Env.KEYSPACE "temporal" }}
         visibility:
             cassandra:
                 hosts: {{ default .Env.CASSANDRA_SEEDS "" }}
-                keyspace: {{ default .Env.VISIBILITY_KEYSPACE "cadence_visibility" }}
+                keyspace: {{ default .Env.VISIBILITY_KEYSPACE "temporal_visibility" }}
         {{- else if eq $db "mysql" }}
         default:
             sql:
                 pluginName: "mysql"
-                databaseName: {{ default .Env.DBNAME "cadence" }}
+                databaseName: {{ default .Env.DBNAME "temporal" }}
                 connectAddr: "{{ default .Env.MYSQL_SEEDS "" }}:{{ default .Env.DB_PORT "3306" }}"
                 connectProtocol: "tcp"
                 user: {{ default .Env.MYSQL_USER "" }}
@@ -37,7 +37,7 @@ persistence:
         visibility:
             sql:
                 pluginName: "mysql"
-                databaseName: {{ default .Env.VISIBILITY_DBNAME "cadence_visibility" }}
+                databaseName: {{ default .Env.VISIBILITY_DBNAME "temporal_visibility" }}
                 connectAddr: "{{ default .Env.MYSQL_SEEDS "" }}:{{ default .Env.DB_PORT "3306" }}"
                 connectProtocol: "tcp"
                 user: {{ default .Env.MYSQL_USER "" }}
@@ -50,7 +50,7 @@ persistence:
         default:
             sql:
                 pluginName: "postgres"
-                databaseName: {{ default .Env.DBNAME "cadence" }}
+                databaseName: {{ default .Env.DBNAME "temporal" }}
                 connectAddr: "{{ default .Env.POSTGRES_SEEDS "" }}:{{ default .Env.DB_PORT "5432" }}"
                 connectProtocol: "tcp"
                 user: {{ default .Env.POSTGRES_USER "" }}
@@ -61,7 +61,7 @@ persistence:
         visibility:
             sql:
                 pluginName: "postgres"
-                databaseName: {{ default .Env.VISIBILITY_DBNAME "cadence_visibility" }}
+                databaseName: {{ default .Env.VISIBILITY_DBNAME "temporal_visibility" }}
                 connectAddr: "{{ default .Env.POSTGRES_SEEDS "" }}:{{ default .Env.DB_PORT "5432" }}"
                 connectProtocol: "tcp"
                 user: {{ default .Env.POSTGRES_USER "" }}
@@ -77,11 +77,11 @@ persistence:
                     scheme: "http"
                     host: "{{ default .Env.ES_SEEDS "" }}:9200"
                 indices:
-                    visibility: cadence-visibility-dev
+                    visibility: temporal-visibility-dev
         {{- end }}
 
 ringpop:
-    name: cadence
+    name: temporal
     maxJoinDuration: 30s
 
 services:
@@ -185,7 +185,7 @@ domainDefaults:
   archival:
     history:
       status: "enabled"
-      URI: "file:///tmp/cadence_archival/development"
+      URI: "file:///tmp/temporal_archival/development"
     visibility:
       status: "disabled"
 
@@ -197,18 +197,18 @@ kafka:
             brokers:
                 - {{ default .Env.KAFKA_SEEDS "" }}:9092
     topics:
-        cadence-visibility-dev:
+        temporal-visibility-dev:
             cluster: test
-        cadence-visibility-dev-dlq:
+        temporal-visibility-dev-dlq:
             cluster: test
     applications:
         visibility:
-            topic: cadence-visibility-dev
-            dlq-topic: cadence-visibility-dev-dlq
+            topic: temporal-visibility-dev
+            dlq-topic: temporal-visibility-dev-dlq
 
 publicClient:
     hostPort: {{ default .Env.BIND_ON_IP "127.0.0.1" }}:7233
 
 dynamicConfigClient:
-    filepath: {{ default .Env.DYNAMIC_CONFIG_FILE_PATH "/etc/cadence/config/dynamicconfig" }}
+    filepath: {{ default .Env.DYNAMIC_CONFIG_FILE_PATH "/etc/temporal/config/dynamicconfig" }}
     pollInterval: "60s"

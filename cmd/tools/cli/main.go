@@ -27,7 +27,7 @@ import (
 )
 
 // Start using this CLI tool with command
-// See cadence/tools/cli/README.md for usage
+// See temporal/tools/cli/README.md for usage
 func main() {
 	app := cli.NewCliApp()
 	app.Run(os.Args)

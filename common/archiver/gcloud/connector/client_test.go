@@ -46,12 +46,12 @@ func (s *clientSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	file, _ := json.MarshalIndent(&fakeData{data: "example"}, "", " ")
 
-	os.MkdirAll("/tmp/cadence_archival/development", os.ModePerm)
-	s.Require().NoError(ioutil.WriteFile("/tmp/cadence_archival/development/myfile.history", file, 0644))
+	os.MkdirAll("/tmp/temporal_archival/development", os.ModePerm)
+	s.Require().NoError(ioutil.WriteFile("/tmp/temporal_archival/development/myfile.history", file, 0644))
 }
 
 func (s *clientSuite) TearDownTest() {
-	os.Remove("/tmp/cadence_archival/development/myfile.history")
+	os.Remove("/tmp/temporal_archival/development/myfile.history")
 }
 
 func TestClientSuite(t *testing.T) {
@@ -78,12 +78,12 @@ func (s *clientSuite) TestUpload() {
 	storageWrapper, _ := connector.NewClientWithParams(mockStorageClient)
 
 	mockStorageClient.On("Bucket", "my-bucket-cad").Return(mockBucketHandleClient).Times(1)
-	mockBucketHandleClient.On("Object", "cadence_archival/development/myfile.history").Return(mockObjectHandler).Times(1)
+	mockBucketHandleClient.On("Object", "temporal_archival/development/myfile.history").Return(mockObjectHandler).Times(1)
 	mockObjectHandler.On("NewWriter", ctx).Return(mockWriter).Times(1)
 	mockWriter.On("Write", mock.Anything).Return(2, nil).Times(2)
 	mockWriter.On("Close").Return(nil).Times(1)
 
-	URI, err := archiver.NewURI("gs://my-bucket-cad/cadence_archival/development")
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
 	err = storageWrapper.Upload(ctx, URI, "myfile.history", []byte("{}"))
 	s.Require().NoError(err)
 }
@@ -99,12 +99,12 @@ func (s *clientSuite) TestUploadWriterCloseError() {
 	storageWrapper, _ := connector.NewClientWithParams(mockStorageClient)
 
 	mockStorageClient.On("Bucket", "my-bucket-cad").Return(mockBucketHandleClient).Times(1)
-	mockBucketHandleClient.On("Object", "cadence_archival/development/myfile.history").Return(mockObjectHandler).Times(1)
+	mockBucketHandleClient.On("Object", "temporal_archival/development/myfile.history").Return(mockObjectHandler).Times(1)
 	mockObjectHandler.On("NewWriter", ctx).Return(mockWriter).Times(1)
 	mockWriter.On("Write", mock.Anything).Return(2, nil).Times(2)
 	mockWriter.On("Close").Return(errors.New("Not Found")).Times(1)
 
-	URI, err := archiver.NewURI("gs://my-bucket-cad/cadence_archival/development")
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
 	err = storageWrapper.Upload(ctx, URI, "myfile.history", []byte("{}"))
 	s.Require().EqualError(err, "Not Found")
 }
@@ -123,7 +123,7 @@ func (s *clientSuite) TestExist() {
 	}{
 		{
 			callContext:         ctx,
-			URI:                 "gs://my-bucket-cad/cadence_archival/development",
+			URI:                 "gs://my-bucket-cad/temporal_archival/development",
 			fileName:            "",
 			bucketName:          "my-bucket-cad",
 			bucketExists:        true,
@@ -133,7 +133,7 @@ func (s *clientSuite) TestExist() {
 		},
 		{
 			callContext:         ctx,
-			URI:                 "gs://my-bucket-cad/cadence_archival/development",
+			URI:                 "gs://my-bucket-cad/temporal_archival/development",
 			fileName:            "",
 			bucketName:          "my-bucket-cad",
 			bucketExists:        false,
@@ -143,7 +143,7 @@ func (s *clientSuite) TestExist() {
 		},
 		{
 			callContext:         ctx,
-			URI:                 "gs://my-bucket-cad/cadence_archival/development",
+			URI:                 "gs://my-bucket-cad/temporal_archival/development",
 			fileName:            "myfile.history",
 			bucketName:          "my-bucket-cad",
 			bucketExists:        true,
@@ -153,7 +153,7 @@ func (s *clientSuite) TestExist() {
 		},
 		{
 			callContext:         ctx,
-			URI:                 "gs://my-bucket-cad/cadence_archival/development",
+			URI:                 "gs://my-bucket-cad/temporal_archival/development",
 			fileName:            "myfile.history",
 			bucketName:          "my-bucket-cad",
 			bucketExists:        true,
@@ -205,12 +205,12 @@ func (s *clientSuite) TestGet() {
 	storageWrapper, _ := connector.NewClientWithParams(mockStorageClient)
 
 	mockStorageClient.On("Bucket", "my-bucket-cad").Return(mockBucketHandleClient).Times(1)
-	mockBucketHandleClient.On("Object", "cadence_archival/development/myfile.history").Return(mockObjectHandler).Times(1)
+	mockBucketHandleClient.On("Object", "temporal_archival/development/myfile.history").Return(mockObjectHandler).Times(1)
 	mockObjectHandler.On("NewReader", ctx).Return(mockReader, nil).Times(1)
 	mockReader.On("Read", mock.Anything).Return(2, io.EOF).Times(2)
 	mockReader.On("Close").Return(nil).Times(1)
 
-	URI, err := archiver.NewURI("gs://my-bucket-cad/cadence_archival/development")
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
 	_, err = storageWrapper.Get(ctx, URI, "myfile.history")
 	s.Require().NoError(err)
 }
@@ -252,7 +252,7 @@ func (s *clientSuite) TestQuery() {
 	}).Times(2)
 
 	var fileNames []string
-	URI, err := archiver.NewURI("gs://my-bucket-cad/cadence_archival/development")
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
 	fileNames, err = storageWrapper.Query(ctx, URI, "7478875943689868082123907395549832634615673687049942026838")
 	s.Require().NoError(err)
 	s.Equal(strings.Join(fileNames, ", "), "fileName_01")

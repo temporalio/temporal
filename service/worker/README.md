@@ -32,12 +32,12 @@ bin/kafka-topics.sh --create --zookeeper localhost:2181 --replication-factor 1 -
 ```
 3. Start Cadence development server for active zone:
 ```
-./cadence-server --zone active start
+./temporal-server --zone active start
 ```
 
 4. Start Cadence development server for standby(passive) zone:
 ```
-./cadence-server --zone standby start
+./temporal-server --zone standby start
 ```
 
 5. Create global domains

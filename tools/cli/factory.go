@@ -68,7 +68,7 @@ func (b *clientFactory) AdminClient(c *cli.Context) adminservice.AdminServiceCli
 
 func (b *clientFactory) createGRPCConnection(hostPort string) *grpc.ClientConn {
 	if hostPort == "" {
-		hostPort = localHostPortGRPC
+		hostPort = localHostPort
 	}
 
 	connection, err := rpc.Dial(hostPort)

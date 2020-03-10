@@ -46,7 +46,7 @@ type (
 
 const (
 	// taskListPartitionPrefix is the required naming prefix for any task list partition other than partition 0
-	taskListPartitionPrefix = "/__cadence_sys/"
+	taskListPartitionPrefix = "/__temporal_sys/"
 )
 
 // newTaskListName returns a fully qualified task list name.
@@ -56,7 +56,7 @@ const (
 // one partition for a user specified task list, each of the
 // individual partitions have an internal name of the form
 //
-//     /__cadence_sys/[original-name]/[partitionID]
+//     /__temporal_sys/[original-name]/[partitionID]
 //
 // The name of the root partition is always the same as the user specified name. Rest of
 // the partitions follow the naming convention above. In addition, the task lists partitions

@@ -61,7 +61,7 @@ func (s *UpdateSchemaTestSuite) TestDryrun() {
 	client, err := newTestCQLClient(s.DBName)
 	s.Nil(err)
 	defer client.Close()
-	dir := "../../schema/cassandra/cadence/versioned"
+	dir := "../../schema/cassandra/temporal/versioned"
 	s.RunDryrunTest(buildCLIOptions(), client, "-k", dir, cassandra.Version)
 }
 
