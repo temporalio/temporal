@@ -20,12 +20,12 @@
       active-es:
         enabled: true
         initialFailoverVersion: 0
-        rpcName: "cadence-frontend"
+        rpcName: "frontend"
         rpcAddress: "127.0.0.1:9134"
       standby-es:
         enabled: true
         initialFailoverVersion: 1
-        rpcName: "cadence-frontend"
+        rpcName: "frontend"
         rpcAddress: "127.0.0.1:10134"
   enablearchival: false
   workerconfig:
@@ -96,12 +96,12 @@
       active-es:
         enabled: true
         initialFailoverVersion: 0
-        rpcName: "cadence-frontend"
+        rpcName: "frontend"
         rpcAddress: "127.0.0.1:9134"
       standby-es:
         enabled: true
         initialFailoverVersion: 1
-        rpcName: "cadence-frontend"
+        rpcName: "frontend"
         rpcAddress: "127.0.0.1:10134"
   enablearchival: false
   workerconfig:

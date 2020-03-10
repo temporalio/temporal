@@ -27,11 +27,3 @@ const (
 	MatchingService = "matching"
 	WorkerService   = "worker"
 )
-
-// ServiceNameRolePrefix is the prefix used to construct the ServiceName
-const ServiceNameRolePrefix = "cadence-"
-
-// GetServiceNameFromRole converts the role name used in config to service name used by ringpop ring
-func GetServiceNameFromRole(role string) string {
-	return ServiceNameRolePrefix + role
-}

@@ -168,14 +168,14 @@ func (c *canaryImpl) newActivityContext() context.Context {
 func (c *canaryImpl) createDomain() error {
 	name := c.canaryDomain
 	desc := "Domain for running cadence canary workflows"
-	owner := "cadence-canary"
+	owner := "canary"
 	return c.canaryClient.createDomain(name, desc, owner, enums.ArchivalStatusDisabled)
 }
 
 func (c *canaryImpl) createArchivalDomain() error {
 	name := archivalDomain
 	desc := "Domain used by cadence canary workflows to verify archival"
-	owner := "cadence-canary"
+	owner := "canary"
 	archivalStatus := enums.ArchivalStatusEnabled
 	return c.archivalClient.createDomain(name, desc, owner, archivalStatus)
 }
