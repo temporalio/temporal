@@ -94,7 +94,7 @@ services:
         metrics:
             statsd:
                 hostPort: {{ .Env.STATSD_ENDPOINT }}
-                prefix: "cadence-frontend"
+                prefix: "frontend"
         {{- else if .Env.PROMETHEUS_ENDPOINT }}
         metrics:
             prometheus:
@@ -111,7 +111,7 @@ services:
         metrics:
             statsd:
                 hostPort: {{ .Env.STATSD_ENDPOINT }}
-                prefix: "cadence-matching"
+                prefix: "matching"
         {{- else if .Env.PROMETHEUS_ENDPOINT }}
         metrics:
             prometheus:
@@ -128,7 +128,7 @@ services:
         metrics:
             statsd:
                 hostPort: {{ .Env.STATSD_ENDPOINT }}
-                prefix: "cadence-history"
+                prefix: "history"
         {{- else if .Env.PROMETHEUS_ENDPOINT }}
         metrics:
             prometheus:
@@ -162,7 +162,7 @@ clusterMetadata:
         active:
             enabled: true
             initialFailoverVersion: 0
-            rpcName: "cadence-frontend"
+            rpcName: "frontend"
             rpcAddress: "127.0.0.1:7233"
 
 dcRedirectionPolicy:

@@ -106,7 +106,7 @@ func (s *server) startService() common.Daemon {
 	var err error
 
 	params := resource.BootstrapParams{}
-	params.Name = primitives.GetServiceNameFromRole(s.name)
+	params.Name = s.name
 	params.Logger = loggerimpl.NewLogger(s.cfg.Log.NewZapLogger())
 	params.PersistenceConfig = s.cfg.Persistence
 
@@ -125,7 +125,7 @@ func (s *server) startService() common.Daemon {
 	// services to correct addresses used by clients through ServiceResolver lookup API
 	servicePortMap := make(map[string]int)
 	for roleName, svcCfg := range s.cfg.Services {
-		serviceName := primitives.GetServiceNameFromRole(roleName)
+		serviceName := roleName
 		servicePortMap[serviceName] = svcCfg.RPC.GRPCPort
 	}
 

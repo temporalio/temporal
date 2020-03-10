@@ -74,7 +74,7 @@ clusterMetadata:
     active:
       enabled: true
       initialFailoverVersion: 0
-      rpcName: "cadence-frontend"
+      rpcName: "frontend"
       rpcAddress: "localhost:7933"
 
 dcRedirectionPolicy:

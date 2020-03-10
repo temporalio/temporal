@@ -38,7 +38,7 @@ import (
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
-// Service represents the cadence-matching service
+// Service represents the matching service
 type Service struct {
 	resource.Resource
 
@@ -49,7 +49,7 @@ type Service struct {
 	server *grpc.Server
 }
 
-// NewService builds a new cadence-matching service
+// NewService builds a new matching service
 func NewService(
 	params *resource.BootstrapParams,
 ) (resource.Resource, error) {

@@ -85,8 +85,8 @@ func getZone(c *cli.Context) string {
 
 func buildCLI() *cli.App {
 	app := cli.NewApp()
-	app.Name = "cadence-canary"
-	app.Usage = "Cadence canary"
+	app.Name = "canary"
+	app.Usage = "Temporal canary"
 	app.Version = "0.0.1"
 
 	app.Flags = []cli.Flag{
@@ -119,7 +119,7 @@ func buildCLI() *cli.App {
 	app.Commands = []cli.Command{
 		{
 			Name:  "start",
-			Usage: "start cadence canary",
+			Usage: "start temporal canary",
 			Action: func(c *cli.Context) {
 				startHandler(c)
 			},

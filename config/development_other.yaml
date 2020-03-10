@@ -76,17 +76,17 @@ clusterMetadata:
     active:
       enabled: true
       initialFailoverVersion: 1
-      rpcName: "cadence-frontend"
+      rpcName: "frontend"
       rpcAddress: "localhost:7933"
     standby:
       enabled: true
       initialFailoverVersion: 0
-      rpcName: "cadence-frontend"
+      rpcName: "frontend"
       rpcAddress: "localhost:8933"
     other:
       enabled: true
       initialFailoverVersion: 2
-      rpcName: "cadence-frontend"
+      rpcName: "frontend"
       rpcAddress: "localhost:9933"
 
 dcRedirectionPolicy:
