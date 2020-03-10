@@ -145,7 +145,7 @@ func newMatchingEngine(
 		taskLists:       make(map[taskListID]taskListManager),
 		logger:          logger,
 		metricsClient:   metrics.NewClient(tally.NoopScope, metrics.Matching),
-		tokenSerializer: common.NewJSONTaskTokenSerializer(),
+		tokenSerializer: common.NewProtoTaskTokenSerializer(),
 		config:          config,
 		domainCache:     mockDomainCache,
 	}

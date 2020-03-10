@@ -22,7 +22,6 @@ package history
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -40,6 +39,7 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/token"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
@@ -138,7 +138,7 @@ func (s *engine2Suite) SetupTest() {
 		logger:               s.logger,
 		throttledLogger:      s.logger,
 		metricsClient:        metrics.NewClient(tally.NoopScope, metrics.History),
-		tokenSerializer:      common.NewJSONTaskTokenSerializer(),
+		tokenSerializer:      common.NewProtoTaskTokenSerializer(),
 		config:               s.config,
 		timeSource:           s.mockShard.GetTimeSource(),
 		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string) int { return 0 }),
@@ -840,11 +840,12 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 		RunId:      testRunID,
 	}
 	tl := "testTaskList"
-	taskToken, _ := json.Marshal(&common.TaskToken{
-		WorkflowID: "wId",
-		RunID:      primitives.MustParseUUID(we.GetRunId()),
-		ScheduleID: 2,
-	})
+	taskToken := &token.TaskToken{
+		WorkflowId: "wId",
+		RunId:      primitives.MustParseUUID(we.GetRunId()),
+		ScheduleId: 2,
+	}
+	serializedTaskToken, _ := taskToken.Marshal()
 	identity := "testIdentity"
 	markerDetails := []byte("marker details")
 	markerName := "marker name"
@@ -875,7 +876,7 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 	_, err := s.historyEngine.RespondDecisionTaskCompleted(context.Background(), &historyservice.RespondDecisionTaskCompletedRequest{
 		DomainUUID: domainID,
 		CompleteRequest: &workflowservice.RespondDecisionTaskCompletedRequest{
-			TaskToken:        taskToken,
+			TaskToken:        serializedTaskToken,
 			Decisions:        decisions,
 			ExecutionContext: nil,
 			Identity:         identity,

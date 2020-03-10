@@ -39,6 +39,7 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/token"
 	"github.com/temporalio/temporal/client/history"
 	"github.com/temporalio/temporal/client/matching"
 	"github.com/temporalio/temporal/common"
@@ -118,7 +119,7 @@ func NewEngine(taskManager persistence.TaskManager,
 	return &matchingEngineImpl{
 		taskManager:          taskManager,
 		historyService:       historyService,
-		tokenSerializer:      common.NewJSONTaskTokenSerializer(),
+		tokenSerializer:      common.NewProtoTaskTokenSerializer(),
 		taskLists:            make(map[taskListID]taskListManager),
 		logger:               logger.WithTags(tag.ComponentMatchingEngine),
 		metricsClient:        metricsClient,
@@ -681,25 +682,25 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(
 	historyResponse *historyservice.RecordDecisionTaskStartedResponse,
 ) *matchingservice.PollForDecisionTaskResponse {
 
-	var token []byte
+	var serializedToken []byte
 	if task.isQuery() {
 		// for a query task
 		queryRequest := task.query.request
-		taskToken := &common.QueryTaskToken{
-			DomainID: queryRequest.DomainUUID,
+		taskToken := &token.QueryTaskToken{
+			DomainId: queryRequest.DomainUUID,
 			TaskList: queryRequest.TaskList.Name,
-			TaskID:   task.query.taskID,
+			TaskId:   task.query.taskID,
 		}
-		token, _ = e.tokenSerializer.SerializeQueryTaskToken(taskToken)
+		serializedToken, _ = e.tokenSerializer.SerializeQueryTaskToken(taskToken)
 	} else {
-		taskToken := &common.TaskToken{
-			DomainID:        task.event.Data.DomainID,
-			WorkflowID:      task.event.Data.WorkflowID,
-			RunID:           task.event.Data.RunID,
-			ScheduleID:      historyResponse.GetScheduledEventId(),
+		taskToken := &token.TaskToken{
+			DomainId:        task.event.Data.DomainID,
+			WorkflowId:      task.event.Data.WorkflowID,
+			RunId:           task.event.Data.RunID,
+			ScheduleId:      historyResponse.GetScheduledEventId(),
 			ScheduleAttempt: historyResponse.GetAttempt(),
 		}
-		token, _ = e.tokenSerializer.Serialize(taskToken)
+		serializedToken, _ = e.tokenSerializer.Serialize(taskToken)
 		if task.responseC == nil {
 			scope := e.metricsClient.Scope(metrics.MatchingPollForDecisionTaskScope)
 			ct, _ := types.TimestampFromProto(task.event.Data.CreatedTime)
@@ -710,7 +711,7 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(
 	response := common.CreateMatchingPollForDecisionTaskResponse(
 		historyResponse,
 		task.workflowExecution(),
-		token)
+		serializedToken)
 	if task.query != nil {
 		response.Query = task.query.request.QueryRequest.Query
 	}
@@ -738,15 +739,15 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(
 		scope.Tagged(metrics.DomainTag(task.domainName)).RecordTimer(metrics.AsyncMatchLatency, time.Since(ct))
 	}
 
-	token := &common.TaskToken{
-		DomainID:        task.event.Data.DomainID,
-		WorkflowID:      task.event.Data.WorkflowID,
-		RunID:           task.event.Data.RunID,
-		ScheduleID:      task.event.Data.ScheduleID,
+	taskToken := &token.TaskToken{
+		DomainId:        task.event.Data.DomainID,
+		WorkflowId:      task.event.Data.WorkflowID,
+		RunId:           task.event.Data.RunID,
+		ScheduleId:      task.event.Data.ScheduleID,
 		ScheduleAttempt: historyResponse.GetAttempt(),
 	}
 
-	taskToken, _ := e.tokenSerializer.Serialize(token)
+	serializedToken, _ := e.tokenSerializer.Serialize(taskToken)
 
 	return &matchingservice.PollForActivityTaskResponse{
 		ActivityId:                      attributes.ActivityId,
@@ -760,8 +761,8 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(
 		StartedTimestamp:                historyResponse.StartedTimestamp,
 		StartToCloseTimeoutSeconds:      attributes.StartToCloseTimeoutSeconds,
 		HeartbeatTimeoutSeconds:         attributes.HeartbeatTimeoutSeconds,
-		TaskToken:                       taskToken,
-		Attempt:                         int32(token.ScheduleAttempt),
+		TaskToken:                       serializedToken,
+		Attempt:                         int32(taskToken.ScheduleAttempt),
 		HeartbeatDetails:                historyResponse.HeartbeatDetails,
 		WorkflowType:                    historyResponse.WorkflowType,
 		WorkflowDomain:                  historyResponse.WorkflowDomain,

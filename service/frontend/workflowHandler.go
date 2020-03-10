@@ -81,7 +81,7 @@ func NewWorkflowHandler(
 	handler := &WorkflowHandler{
 		Resource:        resource,
 		config:          config,
-		tokenSerializer: common.NewJSONTaskTokenSerializer(),
+		tokenSerializer: common.NewProtoTaskTokenSerializer(),
 		rateLimiter: quotas.NewMultiStageRateLimiter(
 			func() float64 {
 				return float64(config.RPS())
@@ -727,7 +727,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(ctx context.Context, req
 		return nil, wh.error(err, scope)
 	}
 
-	domainId := primitives.UUIDString(taskToken.DomainID)
+	domainId := primitives.UUIDString(taskToken.GetDomainId())
 	if domainId == "" {
 		return nil, wh.error(errDomainNotSet, scope)
 	}
@@ -756,17 +756,17 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(ctx context.Context, req
 
 	completedResp := &workflowservice.RespondDecisionTaskCompletedResponse{}
 	if request.GetReturnNewDecisionTask() && histResp != nil && histResp.StartedResponse != nil {
-		taskToken := &common.TaskToken{
-			DomainID:        taskToken.DomainID,
-			WorkflowID:      taskToken.WorkflowID,
-			RunID:           taskToken.RunID,
-			ScheduleID:      histResp.StartedResponse.GetScheduledEventId(),
+		taskToken := &token.TaskToken{
+			DomainId:        taskToken.GetDomainId(),
+			WorkflowId:      taskToken.GetWorkflowId(),
+			RunId:           taskToken.GetRunId(),
+			ScheduleId:      histResp.StartedResponse.GetScheduledEventId(),
 			ScheduleAttempt: histResp.StartedResponse.GetAttempt(),
 		}
 		token, _ := wh.tokenSerializer.Serialize(taskToken)
 		workflowExecution := &commonproto.WorkflowExecution{
-			WorkflowId: taskToken.WorkflowID,
-			RunId:      primitives.UUIDString(taskToken.DomainID),
+			WorkflowId: taskToken.GetWorkflowId(),
+			RunId:      primitives.UUIDString(taskToken.GetDomainId()),
 		}
 		matchingResp := common.CreateMatchingPollForDecisionTaskResponse(histResp.StartedResponse, workflowExecution, token)
 
@@ -806,7 +806,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskFailed(ctx context.Context, reques
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
-	domainId := primitives.UUIDString(taskToken.DomainID)
+	domainId := primitives.UUIDString(taskToken.GetDomainId())
 	if domainId == "" {
 		return nil, wh.error(errDomainNotSet, scope)
 	}
@@ -833,8 +833,8 @@ func (wh *WorkflowHandler) RespondDecisionTaskFailed(ctx context.Context, reques
 		sizeLimitWarn,
 		sizeLimitError,
 		domainId,
-		taskToken.WorkflowID,
-		primitives.UUIDString(taskToken.RunID),
+		taskToken.GetWorkflowId(),
+		primitives.UUIDString(taskToken.GetRunId()),
 		scope,
 		wh.GetThrottledLogger(),
 	); err != nil {
@@ -988,7 +988,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
-	domainId := primitives.UUIDString(taskToken.DomainID)
+	domainId := primitives.UUIDString(taskToken.GetDomainId())
 	if domainId == "" {
 		return nil, wh.error(errDomainNotSet, scope)
 	}
@@ -1011,8 +1011,8 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 		sizeLimitWarn,
 		sizeLimitError,
 		domainId,
-		taskToken.WorkflowID,
-		primitives.UUIDString(taskToken.RunID),
+		taskToken.GetWorkflowId(),
+		primitives.UUIDString(taskToken.GetRunId()),
 		scope,
 		wh.GetThrottledLogger(),
 	); err != nil {
@@ -1085,12 +1085,12 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatByID(ctx context.Context, 
 		return nil, wh.error(errActivityIDNotSet, scope)
 	}
 
-	taskToken := &common.TaskToken{
-		DomainID:   primitives.MustParseUUID(domainID),
-		RunID:      primitives.MustParseUUID(runID),
-		WorkflowID: workflowID,
-		ScheduleID: common.EmptyEventID,
-		ActivityID: activityID,
+	taskToken := &token.TaskToken{
+		DomainId:   primitives.MustParseUUID(domainID),
+		RunId:      primitives.MustParseUUID(runID),
+		WorkflowId: workflowID,
+		ScheduleId: common.EmptyEventID,
+		ActivityId: activityID,
 	}
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1113,8 +1113,8 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatByID(ctx context.Context, 
 		sizeLimitWarn,
 		sizeLimitError,
 		domainID,
-		taskToken.WorkflowID,
-		primitives.UUIDString(taskToken.RunID),
+		taskToken.GetWorkflowId(),
+		primitives.UUIDString(taskToken.GetRunId()),
 		scope,
 		wh.GetThrottledLogger(),
 	); err != nil {
@@ -1178,7 +1178,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(ctx context.Context, req
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
-	domainId := primitives.UUIDString(taskToken.DomainID)
+	domainId := primitives.UUIDString(taskToken.GetDomainId())
 	if domainId == "" {
 		return nil, wh.error(errDomainNotSet, scope)
 	}
@@ -1205,8 +1205,8 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(ctx context.Context, req
 		sizeLimitWarn,
 		sizeLimitError,
 		domainId,
-		taskToken.WorkflowID,
-		primitives.UUIDString(taskToken.RunID),
+		taskToken.GetWorkflowId(),
+		primitives.UUIDString(taskToken.GetRunId()),
 		scope,
 		wh.GetThrottledLogger(),
 	); err != nil {
@@ -1281,12 +1281,12 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedByID(ctx context.Context,
 		return nil, wh.error(errIdentityTooLong, scope)
 	}
 
-	taskToken := &common.TaskToken{
-		DomainID:   primitives.MustParseUUID(domainID),
-		RunID:      primitives.MustParseUUID(runID),
-		WorkflowID: workflowID,
-		ScheduleID: common.EmptyEventID,
-		ActivityID: activityID,
+	taskToken := &token.TaskToken{
+		DomainId:   primitives.MustParseUUID(domainID),
+		RunId:      primitives.MustParseUUID(runID),
+		WorkflowId: workflowID,
+		ScheduleId: common.EmptyEventID,
+		ActivityId: activityID,
 	}
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1309,7 +1309,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedByID(ctx context.Context,
 		sizeLimitWarn,
 		sizeLimitError,
 		domainID,
-		taskToken.WorkflowID,
+		taskToken.GetWorkflowId(),
 		runID,
 		scope,
 		wh.GetThrottledLogger(),
@@ -1374,7 +1374,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(ctx context.Context, reques
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
-	domainID := primitives.UUIDString(taskToken.DomainID)
+	domainID := primitives.UUIDString(taskToken.GetDomainId())
 	if domainID == "" {
 		return nil, wh.error(errDomainNotSet, scope)
 	}
@@ -1402,8 +1402,8 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(ctx context.Context, reques
 		sizeLimitWarn,
 		sizeLimitError,
 		domainID,
-		taskToken.WorkflowID,
-		primitives.UUIDString(taskToken.RunID),
+		taskToken.GetWorkflowId(),
+		primitives.UUIDString(taskToken.GetRunId()),
 		scope,
 		wh.GetThrottledLogger(),
 	); err != nil {
@@ -1465,12 +1465,12 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedByID(ctx context.Context, re
 		return nil, wh.error(errIdentityTooLong, scope)
 	}
 
-	taskToken := &common.TaskToken{
-		DomainID:   primitives.MustParseUUID(domainID),
-		RunID:      primitives.MustParseUUID(runID),
-		WorkflowID: workflowID,
-		ScheduleID: common.EmptyEventID,
-		ActivityID: activityID,
+	taskToken := &token.TaskToken{
+		DomainId:   primitives.MustParseUUID(domainID),
+		RunId:      primitives.MustParseUUID(runID),
+		WorkflowId: workflowID,
+		ScheduleId: common.EmptyEventID,
+		ActivityId: activityID,
 	}
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1493,7 +1493,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedByID(ctx context.Context, re
 		sizeLimitWarn,
 		sizeLimitError,
 		domainID,
-		taskToken.WorkflowID,
+		taskToken.GetWorkflowId(),
 		runID,
 		scope,
 		wh.GetThrottledLogger(),
@@ -1548,7 +1548,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 		return nil, wh.error(err, scope)
 	}
 
-	domainID := primitives.UUIDString(taskToken.DomainID)
+	domainID := primitives.UUIDString(taskToken.GetDomainId())
 
 	if domainID == "" {
 		return nil, wh.error(errDomainNotSet, scope)
@@ -1577,8 +1577,8 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 		sizeLimitWarn,
 		sizeLimitError,
 		domainID,
-		taskToken.WorkflowID,
-		primitives.UUIDString(taskToken.RunID),
+		taskToken.GetWorkflowId(),
+		primitives.UUIDString(taskToken.GetRunId()),
 		scope,
 		wh.GetThrottledLogger(),
 	); err != nil {
@@ -1590,7 +1590,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 			Identity:  request.Identity,
 		}
 		_, err = wh.GetHistoryClient().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
-			DomainUUID:    primitives.UUIDString(taskToken.DomainID),
+			DomainUUID:    primitives.UUIDString(taskToken.GetDomainId()),
 			FailedRequest: failRequest,
 		})
 		if err != nil {
@@ -1598,7 +1598,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 		}
 	} else {
 		_, err = wh.GetHistoryClient().RespondActivityTaskCanceled(ctx, &historyservice.RespondActivityTaskCanceledRequest{
-			DomainUUID:    primitives.UUIDString(taskToken.DomainID),
+			DomainUUID:    primitives.UUIDString(taskToken.GetDomainId()),
 			CancelRequest: request,
 		})
 		if err != nil {
@@ -1652,12 +1652,12 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledByID(ctx context.Context, 
 		return nil, wh.error(errIdentityTooLong, scope)
 	}
 
-	taskToken := &common.TaskToken{
-		DomainID:   primitives.MustParseUUID(domainID),
-		RunID:      primitives.MustParseUUID(runID),
-		WorkflowID: workflowID,
-		ScheduleID: common.EmptyEventID,
-		ActivityID: activityID,
+	taskToken := &token.TaskToken{
+		DomainId:   primitives.MustParseUUID(domainID),
+		RunId:      primitives.MustParseUUID(runID),
+		WorkflowId: workflowID,
+		ScheduleId: common.EmptyEventID,
+		ActivityId: activityID,
 	}
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1680,7 +1680,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledByID(ctx context.Context, 
 		sizeLimitWarn,
 		sizeLimitError,
 		domainID,
-		taskToken.WorkflowID,
+		taskToken.GetWorkflowId(),
 		runID,
 		scope,
 		wh.GetThrottledLogger(),
@@ -2553,11 +2553,11 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(ctx context.Context, reques
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
-	if queryTaskToken.DomainID == "" || queryTaskToken.TaskList == "" || queryTaskToken.TaskID == "" {
+	if queryTaskToken.GetDomainId() == "" || queryTaskToken.GetTaskList() == "" || queryTaskToken.GetTaskId() == "" {
 		return nil, wh.error(errInvalidTaskToken, scope)
 	}
 
-	domainEntry, err := wh.GetDomainCache().GetDomainByID(queryTaskToken.DomainID)
+	domainEntry, err := wh.GetDomainCache().GetDomainByID(queryTaskToken.GetDomainId())
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -2575,7 +2575,7 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(ctx context.Context, reques
 		len(request.GetQueryResult()),
 		sizeLimitWarn,
 		sizeLimitError,
-		queryTaskToken.DomainID,
+		queryTaskToken.GetDomainId(),
 		"",
 		"",
 		scope,
@@ -2595,9 +2595,9 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(ctx context.Context, reques
 		FeatureVersion: headers[1],
 	}
 	matchingRequest := &matchingservice.RespondQueryTaskCompletedRequest{
-		DomainUUID:       queryTaskToken.DomainID,
-		TaskList:         &commonproto.TaskList{Name: queryTaskToken.TaskList},
-		TaskID:           queryTaskToken.TaskID,
+		DomainUUID:       queryTaskToken.GetDomainId(),
+		TaskList:         &commonproto.TaskList{Name: queryTaskToken.GetTaskList()},
+		TaskID:           queryTaskToken.GetTaskId(),
 		CompletedRequest: request,
 	}
 

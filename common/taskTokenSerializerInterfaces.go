@@ -20,29 +20,16 @@
 
 package common
 
+import (
+	"github.com/temporalio/temporal/.gen/proto/token"
+)
+
 type (
 	// TaskTokenSerializer serializes task tokens
 	TaskTokenSerializer interface {
-		Serialize(token *TaskToken) ([]byte, error)
-		Deserialize(data []byte) (*TaskToken, error)
-		SerializeQueryTaskToken(token *QueryTaskToken) ([]byte, error)
-		DeserializeQueryTaskToken(data []byte) (*QueryTaskToken, error)
-	}
-
-	// TaskToken identifies a task
-	TaskToken struct {
-		DomainID        []byte `json:"domainId"`
-		WorkflowID      string `json:"workflowId"`
-		RunID           []byte `json:"runId"`
-		ScheduleID      int64  `json:"scheduleId"`
-		ScheduleAttempt int64  `json:"scheduleAttempt"`
-		ActivityID      string `json:"activityId"`
-	}
-
-	// QueryTaskToken identifies a query task
-	QueryTaskToken struct {
-		DomainID string `json:"domainId"`
-		TaskList string `json:"taskList"`
-		TaskID   string `json:"taskId"`
+		Serialize(token *token.TaskToken) ([]byte, error)
+		Deserialize(data []byte) (*token.TaskToken, error)
+		SerializeQueryTaskToken(token *token.QueryTaskToken) ([]byte, error)
+		DeserializeQueryTaskToken(data []byte) (*token.QueryTaskToken, error)
 	}
 )

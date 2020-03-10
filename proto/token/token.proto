@@ -61,7 +61,7 @@ message TaskToken {
 }
 
 message QueryTaskToken {
-    string DomainID = 1;
+    string DomainId = 1;
     string TaskList = 2;
-    string TaskID = 3;
+    string TaskId = 3;
 }
