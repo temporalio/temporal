@@ -46,6 +46,7 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/token"
 	"github.com/temporalio/temporal/client/history"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cache"
@@ -554,15 +555,15 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		s.Equal(true, validateTimeRange(time.Unix(0, result.StartedTimestamp), time.Minute))
 		s.Equal(int32(50), result.StartToCloseTimeoutSeconds)
 		s.Equal(int32(10), result.HeartbeatTimeoutSeconds)
-		token := &common.TaskToken{
-			DomainID:   domainID,
-			WorkflowID: workflowID,
-			RunID:      runID,
-			ScheduleID: scheduleID,
+		taskToken := &token.TaskToken{
+			DomainId:   domainID,
+			WorkflowId: workflowID,
+			RunId:      runID,
+			ScheduleId: scheduleID,
 		}
 
-		taskToken, _ := s.matchingEngine.tokenSerializer.Serialize(token)
-		s.EqualValues(taskToken, result.TaskToken)
+		serializedToken, _ := s.matchingEngine.tokenSerializer.Serialize(taskToken)
+		s.EqualValues(serializedToken, result.TaskToken)
 		i++
 	}
 	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
@@ -701,17 +702,17 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		s.EqualValues(activityType, result.ActivityType)
 		s.EqualValues(activityInput, result.Input)
 		s.EqualValues(workflowExecution, result.WorkflowExecution)
-		token := &common.TaskToken{
-			DomainID:   domainID,
-			WorkflowID: workflowID,
-			RunID:      runID,
-			ScheduleID: scheduleID,
+		taskToken := &token.TaskToken{
+			DomainId:   domainID,
+			WorkflowId: workflowID,
+			RunId:      runID,
+			ScheduleId: scheduleID,
 		}
 
-		taskToken, _ := s.matchingEngine.tokenSerializer.Serialize(token)
+		serializedToken, _ := s.matchingEngine.tokenSerializer.Serialize(taskToken)
 		// s.EqualValues(scheduleID, result.TaskToken)
 
-		s.EqualValues(string(taskToken), string(result.TaskToken))
+		s.EqualValues(serializedToken, result.TaskToken)
 	}
 
 	time.Sleep(20 * time.Millisecond) // So any buffer tasks from 0 rps get picked up
@@ -882,18 +883,18 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 				s.EqualValues(activityInput, result.Input)
 				s.EqualValues(activityHeader, result.Header)
 				s.EqualValues(workflowExecution, result.WorkflowExecution)
-				token := &common.TaskToken{
-					DomainID:   domainID,
-					WorkflowID: workflowID,
-					RunID:      runID,
-					ScheduleID: scheduleID,
+				taskToken := &token.TaskToken{
+					DomainId:   domainID,
+					WorkflowId: workflowID,
+					RunId:      runID,
+					ScheduleId: scheduleID,
 				}
 				resultToken, err := s.matchingEngine.tokenSerializer.Deserialize(result.TaskToken)
 				s.NoError(err)
 
 				// taskToken, _ := s.matchingEngine.tokenSerializer.Serialize(token)
 				// s.EqualValues(taskToken, result.TaskToken, fmt.Sprintf("%v!=%v", string(taskToken)))
-				s.EqualValues(token, resultToken, fmt.Sprintf("%v!=%v", token, resultToken))
+				s.EqualValues(taskToken, resultToken, fmt.Sprintf("%v!=%v", taskToken, resultToken))
 				i++
 			}
 		}(p)
@@ -1001,11 +1002,11 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 				s.EqualValues(workflowType, result.WorkflowType)
 				s.EqualValues(startedEventID, result.StartedEventId)
 				s.EqualValues(workflowExecution, result.WorkflowExecution)
-				token := &common.TaskToken{
-					DomainID:   domainID,
-					WorkflowID: workflowID,
-					RunID:      runID,
-					ScheduleID: scheduleID,
+				taskToken := &token.TaskToken{
+					DomainId:   domainID,
+					WorkflowId: workflowID,
+					RunId:      runID,
+					ScheduleId: scheduleID,
 				}
 				resultToken, err := s.matchingEngine.tokenSerializer.Deserialize(result.TaskToken)
 				if err != nil {
@@ -1014,7 +1015,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 
 				// taskToken, _ := s.matchingEngine.tokenSerializer.Serialize(token)
 				// s.EqualValues(taskToken, result.TaskToken, fmt.Sprintf("%v!=%v", string(taskToken)))
-				s.EqualValues(token, resultToken, fmt.Sprintf("%v!=%v", token, resultToken))
+				s.EqualValues(taskToken, resultToken, fmt.Sprintf("%v!=%v", taskToken, resultToken))
 				i++
 			}
 			wg.Done()
@@ -1176,11 +1177,11 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 				s.EqualValues(activityType, result.ActivityType)
 				s.EqualValues(activityInput, result.Input)
 				s.EqualValues(workflowExecution, result.WorkflowExecution)
-				token := &common.TaskToken{
-					DomainID:   domainID,
-					WorkflowID: workflowID,
-					RunID:      runID,
-					ScheduleID: scheduleID,
+				taskToken := &token.TaskToken{
+					DomainId:   domainID,
+					WorkflowId: workflowID,
+					RunId:      runID,
+					ScheduleId: scheduleID,
 				}
 				resultToken, err := engine.tokenSerializer.Deserialize(result.TaskToken)
 				if err != nil {
@@ -1188,7 +1189,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 				}
 				// taskToken, _ := s.matchingEngine.tokenSerializer.Serialize(token)
 				// s.EqualValues(taskToken, result.TaskToken, fmt.Sprintf("%v!=%v", string(taskToken)))
-				s.EqualValues(token, resultToken, fmt.Sprintf("%v!=%v", token, resultToken))
+				s.EqualValues(taskToken, resultToken, fmt.Sprintf("%v!=%v", taskToken, resultToken))
 				i++
 			}
 		}
@@ -1311,11 +1312,11 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 				s.EqualValues(workflowType, result.WorkflowType)
 				s.EqualValues(startedEventID, result.StartedEventId)
 				s.EqualValues(workflowExecution, result.WorkflowExecution)
-				token := &common.TaskToken{
-					DomainID:   domainID,
-					WorkflowID: workflowID,
-					RunID:      runID,
-					ScheduleID: scheduleID,
+				taskToken := &token.TaskToken{
+					DomainId:   domainID,
+					WorkflowId: workflowID,
+					RunId:      runID,
+					ScheduleId: scheduleID,
 				}
 				resultToken, err := engine.tokenSerializer.Deserialize(result.TaskToken)
 				if err != nil {
@@ -1324,7 +1325,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 
 				// taskToken, _ := s.matchingEngine.tokenSerializer.Serialize(token)
 				// s.EqualValues(taskToken, result.TaskToken, fmt.Sprintf("%v!=%v", string(taskToken)))
-				s.EqualValues(token, resultToken, fmt.Sprintf("%v!=%v", token, resultToken))
+				s.EqualValues(taskToken, resultToken, fmt.Sprintf("%v!=%v", taskToken, resultToken))
 				i++
 			}
 		}
