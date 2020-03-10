@@ -32,7 +32,6 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
-	"github.com/temporalio/temporal/.gen/proto/token"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -453,7 +452,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	// this function poll events from history side
 	pageSize := 1
 	getHistory := func(domain string, execution *commonproto.WorkflowExecution, firstEventID int64, nextEventID int64,
-		token *token.AdminHistoryContinuationToken) (*adminservice.GetWorkflowExecutionRawHistoryResponse, error) {
+		token []byte) (*adminservice.GetWorkflowExecutionRawHistoryResponse, error) {
 
 		return s.adminClient.GetWorkflowExecutionRawHistory(NewContext(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 			Domain:          domain,
@@ -481,7 +480,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	}
 
 	var blobs []*commonproto.DataBlob
-	var token *token.AdminHistoryContinuationToken
+	var token []byte
 
 	resp, err := getHistory(s.domainName, execution, common.FirstEventID, common.EndEventID, token)
 	s.NoError(err)
@@ -502,7 +501,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	poller.PollAndProcessDecisionTask(false, false)
 	blobs = nil
 	token = nil
-	for continuePaging := true; continuePaging; continuePaging = token != nil {
+	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
 		resp, err = getHistory(s.domainName, execution, common.FirstEventID, common.EndEventID, token)
 		s.NoError(err)
 		s.True(len(resp.HistoryBatches) <= pageSize)
@@ -522,7 +521,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	// continue to get the history
 	token = nil
 	beginingEventID := events[len(events)-1].GetEventId() + 1
-	for continuePaging := true; continuePaging; continuePaging = token != nil {
+	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
 		resp, err = getHistory(s.domainName, execution, beginingEventID, common.EndEventID, token)
 		s.NoError(err)
 		s.True(len(resp.HistoryBatches) <= pageSize)
@@ -544,7 +543,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	// continue to get the history
 	token = nil
 	beginingEventID = events[len(events)-1].GetEventId() + 1
-	for continuePaging := true; continuePaging; continuePaging = token != nil {
+	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
 		resp, err = getHistory(s.domainName, execution, beginingEventID, common.EndEventID, token)
 		s.NoError(err)
 		s.True(len(resp.HistoryBatches) <= pageSize)
@@ -566,7 +565,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 	// get history in between
 	blobs = nil // clear existing blobs
 	token = nil
-	for continuePaging := true; continuePaging; continuePaging = token != nil {
+	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
 		resp, err = getHistory(s.domainName, execution, 4, 7, token)
 		s.NoError(err)
 		s.True(len(resp.HistoryBatches) <= pageSize)
@@ -668,7 +667,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 	}
 
 	getHistory := func(domain string, execution *commonproto.WorkflowExecution, firstEventID int64, nextEventID int64,
-		token *token.AdminHistoryContinuationToken) (*adminservice.GetWorkflowExecutionRawHistoryResponse, error) {
+		token []byte) (*adminservice.GetWorkflowExecutionRawHistoryResponse, error) {
 
 		return s.adminClient.GetWorkflowExecutionRawHistory(NewContext(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
 			Domain:          domain,
@@ -698,7 +697,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_InTheMiddle()
 
 	// trying getting history from the middle to the end
 	firstEventID := int64(5)
-	var token *token.AdminHistoryContinuationToken
+	var token []byte
 	// this should get the #4 batch, activity task started
 	resp, err := getHistory(s.domainName, execution, firstEventID, common.EndEventID, token)
 	s.NoError(err)

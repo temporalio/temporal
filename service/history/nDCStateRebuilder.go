@@ -226,11 +226,7 @@ func (r *nDCStateRebuilderImpl) getPaginationFn(
 	branchToken []byte,
 ) collection.PaginationFn {
 
-	return func(paginationToken interface{}) ([]interface{}, interface{}, error) {
-		historyToken, ok := paginationToken.([]byte)
-		if !ok {
-			return nil, nil, ErrIncorrectTokenType
-		}
+	return func(paginationToken []byte) ([]interface{}, []byte, error) {
 
 		_, historyBatches, token, size, err := PaginateHistory(
 			r.historyV2Mgr,
@@ -238,7 +234,7 @@ func (r *nDCStateRebuilderImpl) getPaginationFn(
 			branchToken,
 			firstEventID,
 			nextEventID,
-			historyToken,
+			paginationToken,
 			nDCDefaultPageSize,
 			common.IntPtr(r.shard.GetShardID()),
 		)

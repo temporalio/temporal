@@ -316,11 +316,11 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 		return nil, errInvalidPageSize
 	}
 
-	var continuationToken *token.AdminHistoryContinuationToken
+	var continuationToken *token.HistoryContinuationToken
 	// initialize or validate the token
 	// token will be used as a source of truth
 	if request.NextPageToken != nil {
-		continuationToken = request.NextPageToken
+		continuationToken, err = deserializeHistoryToken(request.NextPageToken)
 		if err != nil {
 			return nil, err
 		}
@@ -362,7 +362,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 		if nextEventID > response.GetNextEventId() {
 			nextEventID = response.GetNextEventId()
 		}
-		continuationToken = &token.AdminHistoryContinuationToken{
+		continuationToken = &token.HistoryContinuationToken{
 			RunId:            execution.GetRunId(),
 			BranchToken:      response.CurrentBranchToken,
 			FirstEventId:     firstEventID,
@@ -430,7 +430,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(ctx context.Context, req
 	if len(continuationToken.PersistenceToken) == 0 {
 		result.NextPageToken = nil
 	} else {
-		result.NextPageToken = continuationToken
+		result.NextPageToken, err = serializeHistoryToken(continuationToken)
 		if err != nil {
 			return nil, err
 		}
@@ -482,7 +482,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 
 		pageToken = generatePaginationToken(request, versionHistories)
 	} else {
-		pageToken = request.NextPageToken
+		pageToken, err = deserializeRawHistoryToken(request.NextPageToken)
 		if err != nil {
 			return nil, adh.error(err, scope)
 		}
@@ -562,7 +562,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	if len(pageToken.PersistenceToken) == 0 {
 		result.NextPageToken = nil
 	} else {
-		result.NextPageToken = pageToken
+		result.NextPageToken, err = serializeRawHistoryToken(pageToken)
 		if err != nil {
 			return nil, err
 		}

@@ -28,7 +28,6 @@ import "common/common.proto";
 import "common/domain.proto";
 import "common/workflow_execution.proto";
 import "replication/replication.proto";
-import "token/token.proto";
 
 message DescribeWorkflowExecutionRequest {
     string domain = 1;
@@ -81,11 +80,11 @@ message GetWorkflowExecutionRawHistoryRequest {
     int64 firstEventId = 3;
     int64 nextEventId = 4;
     int32 maximumPageSize = 5;
-    token.AdminHistoryContinuationToken nextPageToken = 6;
+    bytes nextPageToken = 6;
 }
 
 message GetWorkflowExecutionRawHistoryResponse {
-    token.AdminHistoryContinuationToken nextPageToken = 1;
+    bytes nextPageToken = 1;
     repeated common.DataBlob historyBatches = 2;
     map<string, replication.ReplicationInfo> replicationInfo = 3;
     int32 eventStoreVersion = 4;
@@ -103,11 +102,11 @@ message GetWorkflowExecutionRawHistoryV2Request {
     int64 endEventId = 5;
     int64 endEventVersion = 6;
     int32 maximumPageSize = 7;
-    token.RawHistoryContinuationToken nextPageToken = 8;
+    bytes nextPageToken = 8;
 }
 
 message GetWorkflowExecutionRawHistoryV2Response {
-    token.RawHistoryContinuationToken nextPageToken = 1;
+    bytes nextPageToken = 1;
     repeated common.DataBlob historyBatches = 2;
     common.VersionHistory versionHistory = 3;
 }

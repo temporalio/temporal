@@ -29,11 +29,11 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
-	"go.temporal.io/temporal-proto/token"
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
+	"github.com/temporalio/temporal/.gen/proto/token"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/archiver"
@@ -482,7 +482,10 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 	// process the token for paging
 	queryNextEventID := common.EndEventID
 	if request.NextPageToken != nil {
-		continuationToken = request.NextPageToken
+		continuationToken, err = deserializeHistoryToken(request.NextPageToken)
+		if err != nil {
+			return nil, wh.error(errInvalidNextPageToken, scope)
+		}
 		if execution.GetRunId() != "" && execution.GetRunId() != continuationToken.GetRunId() {
 			return nil, wh.error(errNextPageTokenRunIDMismatch, scope)
 		}
@@ -583,9 +586,13 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		}
 	}
 
+	nextToken, err := serializeHistoryToken(continuationToken)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
 	return &workflowservice.GetWorkflowExecutionHistoryResponse{
 		History:       history,
-		NextPageToken: continuationToken,
+		NextPageToken: nextToken,
 		Archived:      false,
 	}, nil
 }
@@ -2891,7 +2898,10 @@ func (wh *WorkflowHandler) GetWorkflowExecutionRawHistory(ctx context.Context, r
 
 	// process the token for paging
 	if request.NextPageToken != nil {
-		continuationToken = request.NextPageToken
+		continuationToken, err = deserializeHistoryToken(request.NextPageToken)
+		if err != nil {
+			return nil, wh.error(errInvalidNextPageToken, scope)
+		}
 		if execution.GetRunId() != continuationToken.GetRunId() {
 			return nil, wh.error(errNextPageTokenRunIDMismatch, scope)
 		}
@@ -2943,9 +2953,13 @@ func (wh *WorkflowHandler) GetWorkflowExecutionRawHistory(ctx context.Context, r
 		continuationToken = nil
 	}
 
+	nextToken, err := serializeHistoryToken(continuationToken)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
 	return &workflowservice.GetWorkflowExecutionRawHistoryResponse{
 		RawHistory:    history,
-		NextPageToken: continuationToken,
+		NextPageToken: nextToken,
 	}, nil
 }
 
@@ -3264,7 +3278,7 @@ func (wh *WorkflowHandler) createPollForDecisionTaskResponse(
 	}
 
 	var history *commonproto.History
-	var continuation *token.HistoryContinuationToken
+	var continuation []byte
 	var err error
 
 	if matchingResp.GetStickyExecutionEnabled() && matchingResp.Query != nil {
@@ -3309,13 +3323,16 @@ func (wh *WorkflowHandler) createPollForDecisionTaskResponse(
 		}
 
 		if len(persistenceToken) != 0 {
-			continuation = &token.HistoryContinuationToken{
+			continuation, err = serializeHistoryToken(&token.HistoryContinuationToken{
 				RunId:             matchingResp.WorkflowExecution.GetRunId(),
 				FirstEventId:      firstEventID,
 				NextEventId:       nextEventID,
 				PersistenceToken:  persistenceToken,
 				TransientDecision: matchingResp.GetDecisionInfo(),
 				BranchToken:       branchToken,
+			})
+			if err != nil {
+				return nil, err
 			}
 		}
 	}

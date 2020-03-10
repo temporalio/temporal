@@ -31,7 +31,6 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/.gen/proto/token"
 	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
@@ -52,9 +51,6 @@ var (
 
 	// ErrUnknownEncodingType indicate that the encoding type is unknown
 	ErrUnknownEncodingType = serviceerror.NewInternal("unknown encoding type")
-
-	// ErrUnknownEncodingType indicate that the encoding type is unknown
-	ErrIncorrectTokenType = serviceerror.NewInternal("incorrect token type")
 )
 
 const (
@@ -206,8 +202,8 @@ func (c *historyRereplicationContext) sendSingleWorkflowHistory(domainID string,
 
 	var replicationInfo map[string]*replication.ReplicationInfo
 
-	var token *token.AdminHistoryContinuationToken
-	for doPaging := true; doPaging; doPaging = token != nil {
+	var token []byte
+	for doPaging := true; doPaging; doPaging = len(token) > 0 {
 		response, err := c.getHistory(domainID, workflowID, runID, firstEventID, nextEventID, token, defaultPageSize)
 		if err != nil {
 			return "", err
@@ -244,8 +240,9 @@ func (c *historyRereplicationContext) sendSingleWorkflowHistory(domainID string,
 	if len(nextRunID) > 0 {
 		// last event is continue as new
 		// we need to do something special for that
+		var token []byte
 		pageSize := int32(1)
-		response, err := c.getHistory(domainID, workflowID, nextRunID, common.FirstEventID, common.EndEventID, nil, pageSize)
+		response, err := c.getHistory(domainID, workflowID, nextRunID, common.FirstEventID, common.EndEventID, token, pageSize)
 		if err != nil {
 			return "", err
 		}
@@ -391,7 +388,7 @@ func (c *historyRereplicationContext) getHistory(
 	runID string,
 	firstEventID int64,
 	nextEventID int64,
-	token *token.AdminHistoryContinuationToken,
+	token []byte,
 	pageSize int32,
 ) (*adminservice.GetWorkflowExecutionRawHistoryResponse, error) {
 
@@ -428,8 +425,9 @@ func (c *historyRereplicationContext) getHistory(
 
 func (c *historyRereplicationContext) getPrevRunID(domainID string, workflowID string, runID string) (string, error) {
 
+	var token []byte // use nil since we are only getting the first event batch, for the start event
 	pageSize := int32(1)
-	response, err := c.getHistory(domainID, workflowID, runID, common.FirstEventID, common.EndEventID, nil, pageSize)
+	response, err := c.getHistory(domainID, workflowID, runID, common.FirstEventID, common.EndEventID, token, pageSize)
 	if err != nil {
 		return "", err
 	}

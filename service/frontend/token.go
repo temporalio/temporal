@@ -42,3 +42,31 @@ func validatePaginationToken(
 	}
 	return nil
 }
+
+func serializeRawHistoryToken(token *token.RawHistoryContinuationToken) ([]byte, error) {
+	if token == nil {
+		return nil, nil
+	}
+
+	return token.Marshal()
+}
+
+func deserializeRawHistoryToken(bytes []byte) (*token.RawHistoryContinuationToken, error) {
+	token := &token.RawHistoryContinuationToken{}
+	err := token.Unmarshal(bytes)
+	return token, err
+}
+
+func serializeHistoryToken(token *token.HistoryContinuationToken) ([]byte, error) {
+	if token == nil {
+		return nil, nil
+	}
+
+	return token.Marshal()
+}
+
+func deserializeHistoryToken(bytes []byte) (*token.HistoryContinuationToken, error) {
+	token := &token.HistoryContinuationToken{}
+	err := token.Unmarshal(bytes)
+	return token, err
+}

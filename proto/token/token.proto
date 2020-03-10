@@ -28,7 +28,7 @@ import "common/common.proto";
 import "common/decision.proto";
 import "replication/replication.proto";
 
-message AdminHistoryContinuationToken{
+message HistoryContinuationToken {
     string RunId = 1;
     int64 FirstEventId = 2;
     int64 NextEventId = 3;
@@ -49,4 +49,19 @@ message RawHistoryContinuationToken{
     int64 EndEventVersion = 7;
     bytes PersistenceToken = 8;
     common.VersionHistories VersionHistories = 9;
+}
+
+message TaskToken {
+    bytes DomainId = 1;
+    string WorkflowId  = 2;
+    bytes RunId = 3;
+    int64 ScheduleId = 4;
+    int64 ScheduleAttempt = 5;
+    string ActivityId = 6;
+}
+
+message QueryTaskToken {
+    string DomainID = 1;
+    string TaskList = 2;
+    string TaskID = 3;
 }
