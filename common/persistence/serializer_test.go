@@ -21,12 +21,15 @@
 package persistence
 
 import (
+	"reflect"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
@@ -68,20 +71,22 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 
 	serializer := NewPayloadSerializer()
 
-	eventType := workflow.EventTypeActivityTaskCompleted
-	event0 := &workflow.HistoryEvent{
-		EventId:   common.Int64Ptr(999),
-		Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-		EventType: &eventType,
-		ActivityTaskCompletedEventAttributes: &workflow.ActivityTaskCompletedEventAttributes{
-			Result:           []byte("result-1-event-1"),
-			ScheduledEventId: common.Int64Ptr(4),
-			StartedEventId:   common.Int64Ptr(5),
-			Identity:         common.StringPtr("event-1"),
+	eventType := enums.EventTypeActivityTaskCompleted
+	event0 := &commonproto.HistoryEvent{
+		EventId:   999,
+		Timestamp: time.Now().UnixNano(),
+		EventType: eventType,
+		Attributes: &commonproto.HistoryEvent_ActivityTaskCompletedEventAttributes{
+			ActivityTaskCompletedEventAttributes: &commonproto.ActivityTaskCompletedEventAttributes{
+				Result:           []byte("result-1-event-1"),
+				ScheduledEventId: 4,
+				StartedEventId:   5,
+				Identity:         "event-1",
+			},
 		},
 	}
 
-	history0 := &workflow.History{Events: []*workflow.HistoryEvent{event0, event0}}
+	history0 := &commonproto.History{Events: []*commonproto.HistoryEvent{event0, event0}}
 
 	memoFields := map[string][]byte{
 		"TestField": []byte(`Test binary`),
@@ -164,7 +169,7 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 			s.Nil(err)
 			s.NotNil(dJSON)
 
-			dThrift, err := serializer.SerializeEvent(event0, common.EncodingTypeThriftRW)
+			dThrift, err := serializer.SerializeEvent(event0, common.EncodingTypeProto3)
 			s.Nil(err)
 			s.NotNil(dThrift)
 
@@ -174,7 +179,7 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 
 			// serialize batch events
 
-			nilEvents, err := serializer.SerializeBatchEvents(nil, common.EncodingTypeThriftRW)
+			nilEvents, err := serializer.SerializeBatchEvents(nil, common.EncodingTypeProto3)
 			s.Nil(err)
 			s.NotNil(nilEvents)
 
@@ -187,9 +192,9 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 			s.Nil(err)
 			s.NotNil(dsJSON)
 
-			dsThrift, err := serializer.SerializeBatchEvents(history0.Events, common.EncodingTypeThriftRW)
+			dsProto, err := serializer.SerializeBatchEvents(history0.Events, common.EncodingTypeProto3)
 			s.Nil(err)
-			s.NotNil(dsThrift)
+			s.NotNil(dsProto)
 
 			dsEmpty, err := serializer.SerializeBatchEvents(history0.Events, common.EncodingType(""))
 			s.Nil(err)
@@ -244,15 +249,15 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 
 			event1, err := serializer.DeserializeEvent(dJSON)
 			s.Nil(err)
-			s.True(event0.Equals(event1))
+			s.True(reflect.DeepEqual(event0, event1))
 
 			event2, err := serializer.DeserializeEvent(dThrift)
 			s.Nil(err)
-			s.True(event0.Equals(event2))
+			s.True(reflect.DeepEqual(event0, event2))
 
 			event3, err := serializer.DeserializeEvent(dEmpty)
 			s.Nil(err)
-			s.True(event0.Equals(event3))
+			s.True(reflect.DeepEqual(event0, event3))
 
 			// deserialize batch events
 
@@ -261,19 +266,19 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 			s.Nil(dNilEvents)
 
 			events, err := serializer.DeserializeBatchEvents(dsJSON)
-			history1 := &workflow.History{Events: events}
+			history1 := &commonproto.History{Events: events}
 			s.Nil(err)
-			s.True(history0.Equals(history1))
+			s.True(reflect.DeepEqual(history0, history1))
 
-			events, err = serializer.DeserializeBatchEvents(dsThrift)
-			history2 := &workflow.History{Events: events}
+			events, err = serializer.DeserializeBatchEvents(dsProto)
+			history2 := &commonproto.History{Events: events}
 			s.Nil(err)
-			s.True(history0.Equals(history2))
+			s.True(reflect.DeepEqual(history0, history2))
 
 			events, err = serializer.DeserializeBatchEvents(dsEmpty)
-			history3 := &workflow.History{Events: events}
+			history3 := &commonproto.History{Events: events}
 			s.Nil(err)
-			s.True(history0.Equals(history3))
+			s.True(reflect.DeepEqual(history0, history3))
 
 			// deserialize visibility memo
 

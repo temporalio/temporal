@@ -44,7 +44,7 @@ type thriftRWType interface {
 	FromWire(w wire.Value) error
 }
 
-type protoMarshal interface {
+type ProtoMarshal interface {
 	Marshal() ([]byte, error)
 	Unmarshal([]byte) error
 }
@@ -70,7 +70,7 @@ func decodeErr(encoding common.EncodingType, err error) error {
 	return fmt.Errorf("error deserializing blob to blob using encoding - %v - : %v", encoding, err)
 }
 
-func protoRWEncode(m protoMarshal) (DataBlob, error) {
+func protoRWEncode(m ProtoMarshal) (DataBlob, error) {
 	blob := DataBlob{Encoding: common.EncodingTypeProto3}
 	data, err := m.Marshal()
 	if err != nil {
@@ -80,7 +80,7 @@ func protoRWEncode(m protoMarshal) (DataBlob, error) {
 	return blob, nil
 }
 
-func protoRWDecode(b []byte, proto string, result protoMarshal) error {
+func protoRWDecode(b []byte, proto string, result ProtoMarshal) error {
 	if err := validateProto(proto, common.EncodingTypeProto3); err != nil {
 		return err
 	}
