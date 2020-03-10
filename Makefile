@@ -22,7 +22,6 @@ THRIFTRW_SRCS = \
   idl/github.com/temporalio/temporal/sqlblobs.thrift \
   idl/github.com/temporalio/temporal/persistenceblobs.thrift \
 
-PROGS = temporal
 TEST_TIMEOUT = 20m
 TEST_ARG ?= -race -v -timeout $(TEST_TIMEOUT)
 BUILD := ./build
@@ -165,9 +164,9 @@ temporal-sql-tool: $(TOOLS_SRC)
 	@echo "compiling temporal-sql-tool with OS: $(GOOS), ARCH: $(GOARCH)"
 	go build -i -o temporal-sql-tool cmd/tools/sql/main.go
 
-temporal: $(TOOLS_SRC)
-	@echo "compiling temporal with OS: $(GOOS), ARCH: $(GOARCH)"
-	go build -i -o temporal cmd/tools/cli/main.go
+tctl: $(TOOLS_SRC)
+	@echo "compiling tctl with OS: $(GOOS), ARCH: $(GOARCH)"
+	go build -i -o tctl cmd/tools/cli/main.go
 
 temporal-server: $(ALL_SRC)
 	@echo "compiling temporal-server with OS: $(GOOS), ARCH: $(GOARCH)"
@@ -203,7 +202,7 @@ fmt:
 	@echo "running goimports"
 	@goimports -local "github.com/temporalio/temporal" -w $(ALL_SRC)
 
-bins_nothrift: fmt lint copyright temporal-cassandra-tool temporal-sql-tool temporal temporal-server temporal-canary
+bins_nothrift: fmt lint copyright temporal-cassandra-tool temporal-sql-tool tctl temporal-server temporal-canary
 
 bins: proto thriftc bins_nothrift
 
