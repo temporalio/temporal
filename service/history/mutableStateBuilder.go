@@ -271,7 +271,7 @@ func (e *mutableStateBuilder) CopyToPersistence() *persistence.WorkflowMutableSt
 	state.SignalInfos = e.pendingSignalInfoIDs
 	state.SignalRequestedIDs = e.pendingSignalRequestedIDs
 	state.ExecutionInfo = e.executionInfo
-	state.BufferedEvents = adapter.ToThriftHistoryEvents(e.bufferedEvents)
+	state.BufferedEvents = e.bufferedEvents
 	state.VersionHistories = e.versionHistories
 	state.Checksum = e.checksum
 
@@ -300,7 +300,7 @@ func (e *mutableStateBuilder) Load(
 	e.executionInfo = state.ExecutionInfo
 
 	e.replicationState = state.ReplicationState
-	e.bufferedEvents = adapter.ToProtoHistoryEvents(state.BufferedEvents)
+	e.bufferedEvents = state.BufferedEvents
 
 	e.currentVersion = common.EmptyVersion
 	e.hasBufferedEventsInDB = len(e.bufferedEvents) > 0
@@ -952,7 +952,7 @@ func (e *mutableStateBuilder) GetActivityScheduledEvent(
 
 	// Needed for backward compatibility reason
 	if ai.ScheduledEvent != nil {
-		return adapter.ToProtoHistoryEvent(ai.ScheduledEvent), nil
+		return ai.ScheduledEvent, nil
 	}
 
 	currentBranchToken, err := e.GetCurrentBranchToken()
@@ -1019,7 +1019,7 @@ func (e *mutableStateBuilder) GetChildExecutionInitiatedEvent(
 
 	// Needed for backward compatibility reason
 	if ci.InitiatedEvent != nil {
-		return adapter.ToProtoHistoryEvent(ci.InitiatedEvent), nil
+		return ci.InitiatedEvent, nil
 	}
 
 	currentBranchToken, err := e.GetCurrentBranchToken()
@@ -1110,7 +1110,7 @@ func (e *mutableStateBuilder) GetCompletionEvent() (*commonproto.HistoryEvent, e
 
 	// Needed for backward compatibility reason
 	if e.executionInfo.CompletionEvent != nil {
-		return adapter.ToProtoHistoryEvent(e.executionInfo.CompletionEvent), nil
+		return e.executionInfo.CompletionEvent, nil
 	}
 
 	// Needed for backward compatibility reason
@@ -3884,7 +3884,7 @@ func (e *mutableStateBuilder) CloseTransactionAsMutation(
 		lastEvents := workflowEventsSeq[len(workflowEventsSeq)-1].Events
 		lastEvent := lastEvents[len(lastEvents)-1]
 		if err := e.updateWithLastWriteEvent(
-			adapter.ToProtoHistoryEvent(lastEvent),
+			lastEvent,
 			transactionPolicy,
 		); err != nil {
 			return nil, nil, err
@@ -3920,7 +3920,7 @@ func (e *mutableStateBuilder) CloseTransactionAsMutation(
 		DeleteSignalInfo:          e.deleteSignalInfo,
 		UpsertSignalRequestedIDs:  convertSignalRequestedIDs(e.updateSignalRequestedIDs),
 		DeleteSignalRequestedID:   e.deleteSignalRequestedID,
-		NewBufferedEvents:         adapter.ToThriftHistoryEvents(e.updateBufferedEvents),
+		NewBufferedEvents:         e.updateBufferedEvents,
 		ClearBufferedEvents:       e.clearBufferedEvents,
 
 		TransferTasks:    e.insertTransferTasks,
@@ -3967,7 +3967,7 @@ func (e *mutableStateBuilder) CloseTransactionAsSnapshot(
 		lastEvents := workflowEventsSeq[len(workflowEventsSeq)-1].Events
 		lastEvent := lastEvents[len(lastEvents)-1]
 		if err := e.updateWithLastWriteEvent(
-			adapter.ToProtoHistoryEvent(lastEvent),
+			lastEvent,
 			transactionPolicy,
 		); err != nil {
 			return nil, nil, err
@@ -4128,7 +4128,7 @@ func (e *mutableStateBuilder) prepareEventsAndReplicationTasks(
 			WorkflowID:  e.executionInfo.WorkflowID,
 			RunID:       e.executionInfo.RunID,
 			BranchToken: currentBranchToken,
-			Events:      adapter.ToThriftHistoryEvents(e.hBuilder.transientHistory),
+			Events:      e.hBuilder.transientHistory,
 		})
 	}
 	if len(e.hBuilder.history) != 0 {
@@ -4137,7 +4137,7 @@ func (e *mutableStateBuilder) prepareEventsAndReplicationTasks(
 			WorkflowID:  e.executionInfo.WorkflowID,
 			RunID:       e.executionInfo.RunID,
 			BranchToken: currentBranchToken,
-			Events:      adapter.ToThriftHistoryEvents(e.hBuilder.history),
+			Events:      e.hBuilder.history,
 		})
 	}
 
@@ -4149,7 +4149,7 @@ func (e *mutableStateBuilder) prepareEventsAndReplicationTasks(
 	}
 
 	for _, workflowEvents := range workflowEventsSeq {
-		replicationTasks, err := e.eventsToReplicationTask(transactionPolicy, adapter.ToProtoHistoryEvents(workflowEvents.Events))
+		replicationTasks, err := e.eventsToReplicationTask(transactionPolicy, workflowEvents.Events)
 		if err != nil {
 			return nil, err
 		}

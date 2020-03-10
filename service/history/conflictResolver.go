@@ -27,7 +27,6 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -207,7 +206,7 @@ func (r *conflictResolverImpl) getHistory(domainID string, execution commonproto
 	if err != nil {
 		return nil, 0, 0, nil, err
 	}
-	return adapter.ToProtoHistoryEvents(response.HistoryEvents), response.Size, response.LastFirstEventID, response.NextPageToken, nil
+	return response.HistoryEvents, response.Size, response.LastFirstEventID, response.NextPageToken, nil
 }
 
 func (r *conflictResolverImpl) logError(msg string, err error) {
