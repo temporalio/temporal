@@ -156,7 +156,7 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 
 			// serialize event
 
-			nilEvent, err := serializer.SerializeEvent(nil, common.EncodingTypeThriftRW)
+			nilEvent, err := serializer.SerializeEvent(nil, common.EncodingTypeProto3)
 			s.Nil(err)
 			s.Nil(nilEvent)
 
