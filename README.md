@@ -1,38 +1,38 @@
-# Cadence  
-[![Build Status](https://badge.buildkite.com/159887afd42000f11126f85237317d4090de97b26c287ebc40.svg?theme=github&branch=master)](https://buildkite.com/uberopensource/cadence-server) 
-[![Coverage Status](https://coveralls.io/repos/github/uber/cadence/badge.svg)](https://coveralls.io/github/uber/cadence)
-[![Slack Status](https://img.shields.io/badge/slack-join_chat-white.svg?logo=slack&style=social)](https://app.slack.com/team/UFQ98VD0T)
+# Temporal  
+[![Build status](https://badge.buildkite.com/fc0e676d7bee1a159916af52ebdb541708d4b9f88b8a980f6b.svg)](https://buildkite.com/temporal/temporal-server)
+[![Coverage Status](https://coveralls.io/repos/github/temporalio/temporal/badge.svg?branch=master)](https://coveralls.io/github/temporalio/temporal?branch=master)
+[![Slack Status](https://img.shields.io/badge/slack-join_chat-white.svg?logo=slack&style=social)](https://join.slack.com/t/temporalio/shared_invite/zt-c1e99p8g-beF7~ZZW2HP6gGStXD8Nuw)
 
-Visit [cadenceworkflow.io](https://cadenceworkflow.io) to learn about Cadence.
+Visit [docs.temporal.io](https://docs.temporal.io) to learn about Temporal.
 
-This repo contains the source code of the Cadence server. To implement workflows, activities and worker use [Go client](https://github.com/uber-go/cadence-client) or [Java client](https://github.com/uber-java/cadence-client).
+This repo contains the source code of the Temporal server. To implement workflows, activities and worker use [Go SDK](https://github.com/temporalio/temporal-go-client) or [Java SDK](https://github.com/temporalio/temporal-java-client).
 
-See Maxim's talk at [Data@Scale Conference](https://atscaleconference.com/videos/cadence-microservice-architecture-beyond-requestreply) for an architectural overview of Cadence.
+See Maxim's talk at [Data@Scale Conference](https://atscaleconference.com/videos/cadence-microservice-architecture-beyond-requestreply) for an architectural overview of Temporal.
 
 ## Getting Started
 
 ### Start the temporal-server locally
 
-We highly recommend that you use [Cadence service docker](docker/README.md) to run the service.
+We highly recommend that you use [Temporal service docker](docker/README.md) to run the service.
 
 ### Run the Samples
 
-Try out the sample recipes for [Go](https://github.com/uber-common/cadence-samples) or [Java](https://github.com/temporalio/temporal-java-samples) to get started.
+Try out the sample recipes for [Go](https://github.com/temporalio/temporal-go-samples) or [Java](https://github.com/temporalio/temporal-java-samples) to get started.
 
 ### Use CLI
 
-Try out [Cadence command-line tool](tools/cli/README.md) to perform various tasks on Cadence
+Try out [Temporal command-line tool](tools/cli/README.md) to perform various tasks on Temporal
 
-### Use Cadence Web
+### Use Temporal Web
 
-Try out [Cadence Web UI](https://github.com/temporalio/temporal-web) to view your workflows on Cadence.  
-(This is already available at localhost:8088 if you run Cadence with docker compose)
+Try out [Temporal Web UI](https://github.com/temporalio/temporal-web) to view your workflows on Temporal.  
+(This is already available at localhost:8088 if you run Temporal with docker compose)
 
 ## Contributing
 
-We'd love your help in making Cadence great. Please review our [contribution guide](CONTRIBUTING.md).
+We'd love your help in making Temporal great. Please review our [contribution guide](CONTRIBUTING.md).
 
-If you'd like to propose a new feature, first join the Cadence [discussion group](https://groups.google.com/d/forum/cadence-discussion) and [Slack channel](https://join.slack.com/t/uber-cadence/shared_invite/enQtNDczNTgxMjYxNDEzLTQyYjcxZDM2YTIxMTZkMzQ0NjgxYmI3OWY5ODhiOTliM2I5MzA4NTM4MjU4YzgzZDkwNGEzOTUzNTBlNDk3Yjc) to start a discussion and check if there are existing design discussions. Also peruse our [design docs](docs/design/index.md) in case a feature has been designed but not yet implemented. Once you're sure the proposal is not covered elsewhere, please follow our [proposal instructions](PROPOSALS.md).
+If you'd like to propose a new feature, first join the Temporal [discussion group](https://groups.google.com/d/forum/cadence-discussion) and [Slack channel](https://join.slack.com/t/temporalio/shared_invite/zt-c1e99p8g-beF7~ZZW2HP6gGStXD8Nuw) to start a discussion and check if there are existing design discussions. Also peruse our [design docs](docs/design/index.md) in case a feature has been designed but not yet implemented. Once you're sure the proposal is not covered elsewhere, please follow our [proposal instructions](PROPOSALS.md).
 
 ## License
 
