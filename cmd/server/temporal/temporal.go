@@ -156,7 +156,7 @@ func BuildCLI() *cli.App {
 
 	app := cli.NewApp()
 	app.Name = "temporal"
-	app.Usage = "Cadence server"
+	app.Usage = "Temporal server"
 	app.Version = "0.0.1"
 
 	app.Flags = []cli.Flag{
@@ -190,7 +190,7 @@ func BuildCLI() *cli.App {
 		{
 			Name:    "start",
 			Aliases: []string{""},
-			Usage:   "start cadence server",
+			Usage:   "start temporal server",
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  "services, s",

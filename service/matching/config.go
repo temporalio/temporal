@@ -29,7 +29,7 @@ import (
 )
 
 type (
-	// Config represents configuration for cadence-matching service
+	// Config represents configuration for matching service
 	Config struct {
 		PersistenceMaxQPS dynamicconfig.IntPropertyFn
 		EnableSyncMatch   dynamicconfig.BoolPropertyFnWithTaskListInfoFilters

@@ -42,7 +42,7 @@ import (
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
-// Config represents configuration for cadence-history service
+// Config represents configuration for history service
 type Config struct {
 	NumberOfShards int
 
@@ -338,7 +338,7 @@ func (config *Config) GetShardID(workflowID string) int {
 	return common.WorkflowIDToHistoryShard(workflowID, config.NumberOfShards)
 }
 
-// Service represents the cadence-history service
+// Service represents the history service
 type Service struct {
 	resource.Resource
 
@@ -350,7 +350,7 @@ type Service struct {
 	server *grpc.Server
 }
 
-// NewService builds a new cadence-history service
+// NewService builds a new history service
 func NewService(
 	params *resource.BootstrapParams,
 ) (resource.Resource, error) {

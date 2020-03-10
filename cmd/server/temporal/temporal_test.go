@@ -44,9 +44,9 @@ func (s *CadenceSuite) TestIsValidService() {
 	s.True(isValidService("history"))
 	s.True(isValidService("matching"))
 	s.True(isValidService("frontend"))
-	s.False(isValidService("cadence-history"))
-	s.False(isValidService("cadence-matching"))
-	s.False(isValidService("cadence-frontend"))
+	s.False(isValidService("temporal-history"))
+	s.False(isValidService("temporal-matching"))
+	s.False(isValidService("temporal-frontend"))
 	s.False(isValidService("foobar"))
 }
 
