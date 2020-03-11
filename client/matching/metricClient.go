@@ -51,8 +51,8 @@ func (c *metricClient) AddActivityTask(
 	request *matchingservice.AddActivityTaskRequest,
 	opts ...grpc.CallOption) (*matchingservice.AddActivityTaskResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.MatchingClientAddActivityTaskScope, metrics.CadenceClientRequests)
-	sw := c.metricsClient.StartTimer(metrics.MatchingClientAddActivityTaskScope, metrics.CadenceClientLatency)
+	c.metricsClient.IncCounter(metrics.MatchingClientAddActivityTaskScope, metrics.ClientRequests)
+	sw := c.metricsClient.StartTimer(metrics.MatchingClientAddActivityTaskScope, metrics.ClientLatency)
 
 	c.emitForwardedFromStats(
 		metrics.MatchingClientAddActivityTaskScope,
@@ -64,7 +64,7 @@ func (c *metricClient) AddActivityTask(
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientAddActivityTaskScope, metrics.CadenceClientFailures)
+		c.metricsClient.IncCounter(metrics.MatchingClientAddActivityTaskScope, metrics.ClientFailures)
 	}
 
 	return resp, err
@@ -75,8 +75,8 @@ func (c *metricClient) AddDecisionTask(
 	request *matchingservice.AddDecisionTaskRequest,
 	opts ...grpc.CallOption) (*matchingservice.AddDecisionTaskResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.MatchingClientAddDecisionTaskScope, metrics.CadenceClientRequests)
-	sw := c.metricsClient.StartTimer(metrics.MatchingClientAddDecisionTaskScope, metrics.CadenceClientLatency)
+	c.metricsClient.IncCounter(metrics.MatchingClientAddDecisionTaskScope, metrics.ClientRequests)
+	sw := c.metricsClient.StartTimer(metrics.MatchingClientAddDecisionTaskScope, metrics.ClientLatency)
 
 	c.emitForwardedFromStats(
 		metrics.MatchingClientAddDecisionTaskScope,
@@ -88,7 +88,7 @@ func (c *metricClient) AddDecisionTask(
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientAddDecisionTaskScope, metrics.CadenceClientFailures)
+		c.metricsClient.IncCounter(metrics.MatchingClientAddDecisionTaskScope, metrics.ClientFailures)
 	}
 
 	return resp, err
@@ -99,8 +99,8 @@ func (c *metricClient) PollForActivityTask(
 	request *matchingservice.PollForActivityTaskRequest,
 	opts ...grpc.CallOption) (*matchingservice.PollForActivityTaskResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.MatchingClientPollForActivityTaskScope, metrics.CadenceClientRequests)
-	sw := c.metricsClient.StartTimer(metrics.MatchingClientPollForActivityTaskScope, metrics.CadenceClientLatency)
+	c.metricsClient.IncCounter(metrics.MatchingClientPollForActivityTaskScope, metrics.ClientRequests)
+	sw := c.metricsClient.StartTimer(metrics.MatchingClientPollForActivityTaskScope, metrics.ClientLatency)
 
 	if request.PollRequest != nil {
 		c.emitForwardedFromStats(
@@ -114,7 +114,7 @@ func (c *metricClient) PollForActivityTask(
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientPollForActivityTaskScope, metrics.CadenceClientFailures)
+		c.metricsClient.IncCounter(metrics.MatchingClientPollForActivityTaskScope, metrics.ClientFailures)
 	}
 
 	return resp, err
@@ -125,8 +125,8 @@ func (c *metricClient) PollForDecisionTask(
 	request *matchingservice.PollForDecisionTaskRequest,
 	opts ...grpc.CallOption) (*matchingservice.PollForDecisionTaskResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.MatchingClientPollForDecisionTaskScope, metrics.CadenceClientRequests)
-	sw := c.metricsClient.StartTimer(metrics.MatchingClientPollForDecisionTaskScope, metrics.CadenceClientLatency)
+	c.metricsClient.IncCounter(metrics.MatchingClientPollForDecisionTaskScope, metrics.ClientRequests)
+	sw := c.metricsClient.StartTimer(metrics.MatchingClientPollForDecisionTaskScope, metrics.ClientLatency)
 
 	if request.PollRequest != nil {
 		c.emitForwardedFromStats(
@@ -140,7 +140,7 @@ func (c *metricClient) PollForDecisionTask(
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientPollForDecisionTaskScope, metrics.CadenceClientFailures)
+		c.metricsClient.IncCounter(metrics.MatchingClientPollForDecisionTaskScope, metrics.ClientFailures)
 	}
 
 	return resp, err
@@ -151,8 +151,8 @@ func (c *metricClient) QueryWorkflow(
 	request *matchingservice.QueryWorkflowRequest,
 	opts ...grpc.CallOption) (*matchingservice.QueryWorkflowResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.MatchingClientQueryWorkflowScope, metrics.CadenceClientRequests)
-	sw := c.metricsClient.StartTimer(metrics.MatchingClientQueryWorkflowScope, metrics.CadenceClientLatency)
+	c.metricsClient.IncCounter(metrics.MatchingClientQueryWorkflowScope, metrics.ClientRequests)
+	sw := c.metricsClient.StartTimer(metrics.MatchingClientQueryWorkflowScope, metrics.ClientLatency)
 
 	c.emitForwardedFromStats(
 		metrics.MatchingClientQueryWorkflowScope,
@@ -164,7 +164,7 @@ func (c *metricClient) QueryWorkflow(
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientQueryWorkflowScope, metrics.CadenceClientFailures)
+		c.metricsClient.IncCounter(metrics.MatchingClientQueryWorkflowScope, metrics.ClientFailures)
 	}
 
 	return resp, err
@@ -175,14 +175,14 @@ func (c *metricClient) RespondQueryTaskCompleted(
 	request *matchingservice.RespondQueryTaskCompletedRequest,
 	opts ...grpc.CallOption) (*matchingservice.RespondQueryTaskCompletedResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.MatchingClientRespondQueryTaskCompletedScope, metrics.CadenceClientRequests)
+	c.metricsClient.IncCounter(metrics.MatchingClientRespondQueryTaskCompletedScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.MatchingClientRespondQueryTaskCompletedScope, metrics.CadenceClientLatency)
+	sw := c.metricsClient.StartTimer(metrics.MatchingClientRespondQueryTaskCompletedScope, metrics.ClientLatency)
 	resp, err := c.client.RespondQueryTaskCompleted(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientRespondQueryTaskCompletedScope, metrics.CadenceClientFailures)
+		c.metricsClient.IncCounter(metrics.MatchingClientRespondQueryTaskCompletedScope, metrics.ClientFailures)
 	}
 
 	return resp, err
@@ -193,14 +193,14 @@ func (c *metricClient) CancelOutstandingPoll(
 	request *matchingservice.CancelOutstandingPollRequest,
 	opts ...grpc.CallOption) (*matchingservice.CancelOutstandingPollResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.MatchingClientCancelOutstandingPollScope, metrics.CadenceClientRequests)
+	c.metricsClient.IncCounter(metrics.MatchingClientCancelOutstandingPollScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.MatchingClientCancelOutstandingPollScope, metrics.CadenceClientLatency)
+	sw := c.metricsClient.StartTimer(metrics.MatchingClientCancelOutstandingPollScope, metrics.ClientLatency)
 	resp, err := c.client.CancelOutstandingPoll(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientCancelOutstandingPollScope, metrics.CadenceClientFailures)
+		c.metricsClient.IncCounter(metrics.MatchingClientCancelOutstandingPollScope, metrics.ClientFailures)
 	}
 
 	return resp, err
@@ -211,14 +211,14 @@ func (c *metricClient) DescribeTaskList(
 	request *matchingservice.DescribeTaskListRequest,
 	opts ...grpc.CallOption) (*matchingservice.DescribeTaskListResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.MatchingClientDescribeTaskListScope, metrics.CadenceClientRequests)
+	c.metricsClient.IncCounter(metrics.MatchingClientDescribeTaskListScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.MatchingClientDescribeTaskListScope, metrics.CadenceClientLatency)
+	sw := c.metricsClient.StartTimer(metrics.MatchingClientDescribeTaskListScope, metrics.ClientLatency)
 	resp, err := c.client.DescribeTaskList(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientDescribeTaskListScope, metrics.CadenceClientFailures)
+		c.metricsClient.IncCounter(metrics.MatchingClientDescribeTaskListScope, metrics.ClientFailures)
 	}
 
 	return resp, err
@@ -229,14 +229,14 @@ func (c *metricClient) ListTaskListPartitions(
 	request *matchingservice.ListTaskListPartitionsRequest,
 	opts ...grpc.CallOption) (*matchingservice.ListTaskListPartitionsResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.MatchingClientListTaskListPartitionsScope, metrics.CadenceClientRequests)
+	c.metricsClient.IncCounter(metrics.MatchingClientListTaskListPartitionsScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.MatchingClientListTaskListPartitionsScope, metrics.CadenceClientLatency)
+	sw := c.metricsClient.StartTimer(metrics.MatchingClientListTaskListPartitionsScope, metrics.ClientLatency)
 	resp, err := c.client.ListTaskListPartitions(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientListTaskListPartitionsScope, metrics.CadenceClientFailures)
+		c.metricsClient.IncCounter(metrics.MatchingClientListTaskListPartitionsScope, metrics.ClientFailures)
 	}
 
 	return resp, err

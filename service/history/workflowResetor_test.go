@@ -135,7 +135,7 @@ func (s *resetorSuite) SetupTest() {
 		historyCache:         historyCache,
 		logger:               s.logger,
 		metricsClient:        s.mockShard.GetMetricsClient(),
-		tokenSerializer:      common.NewJSONTaskTokenSerializer(),
+		tokenSerializer:      common.NewProtoTaskTokenSerializer(),
 		config:               s.config,
 		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), s.mockShard.GetMetricsClient(), func(string) int { return 0 }),
 		txProcessor:          s.mockTxProcessor,

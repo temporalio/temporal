@@ -22,7 +22,6 @@ package frontend
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -34,7 +33,7 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
-	"github.com/temporalio/temporal/.gen/proto/replication"
+	"github.com/temporalio/temporal/.gen/proto/token"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/archiver"
@@ -66,17 +65,6 @@ type (
 		visibilityQueryValidator  *validator.VisibilityQueryValidator
 		searchAttributesValidator *validator.SearchAttributesValidator
 	}
-
-	getHistoryContinuationToken struct {
-		RunID             string
-		FirstEventID      int64
-		NextEventID       int64
-		IsWorkflowRunning bool
-		PersistenceToken  []byte
-		TransientDecision *commonproto.TransientDecisionInfo
-		BranchToken       []byte
-		ReplicationInfo   map[string]*replication.ReplicationInfo
-	}
 )
 
 var (
@@ -93,7 +81,7 @@ func NewWorkflowHandler(
 	handler := &WorkflowHandler{
 		Resource:        resource,
 		config:          config,
-		tokenSerializer: common.NewJSONTaskTokenSerializer(),
+		tokenSerializer: common.NewProtoTaskTokenSerializer(),
 		rateLimiter: quotas.NewMultiStageRateLimiter(
 			func() float64 {
 				return float64(config.RPS())
@@ -484,7 +472,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 	isLongPoll := request.GetWaitForNewEvent()
 	isCloseEventOnly := request.GetHistoryEventFilterType() == enums.HistoryEventFilterTypeCloseEvent
 	execution := request.Execution
-	token := &getHistoryContinuationToken{}
+	var continuationToken *token.HistoryContinuation
 
 	var runID string
 	lastFirstEventID := common.FirstEventID
@@ -494,35 +482,36 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 	// process the token for paging
 	queryNextEventID := common.EndEventID
 	if request.NextPageToken != nil {
-		token, err = wh.deserializeHistoryToken(request.NextPageToken)
+		continuationToken, err = deserializeHistoryToken(request.NextPageToken)
 		if err != nil {
 			return nil, wh.error(errInvalidNextPageToken, scope)
 		}
-		if execution.GetRunId() != "" && execution.GetRunId() != token.RunID {
+		if execution.GetRunId() != "" && execution.GetRunId() != continuationToken.GetRunId() {
 			return nil, wh.error(errNextPageTokenRunIDMismatch, scope)
 		}
 
-		execution.RunId = token.RunID
+		execution.RunId = continuationToken.GetRunId()
 
 		// we need to update the current next event ID and whether workflow is running
-		if len(token.PersistenceToken) == 0 && isLongPoll && token.IsWorkflowRunning {
+		if len(continuationToken.PersistenceToken) == 0 && isLongPoll && continuationToken.IsWorkflowRunning {
 			if !isCloseEventOnly {
-				queryNextEventID = token.NextEventID
+				queryNextEventID = continuationToken.GetNextEventId()
 			}
-			token.BranchToken, _, lastFirstEventID, nextEventID, isWorkflowRunning, err =
-				queryHistory(domainID, execution, queryNextEventID, token.BranchToken)
+			continuationToken.BranchToken, _, lastFirstEventID, nextEventID, isWorkflowRunning, err =
+				queryHistory(domainID, execution, queryNextEventID, continuationToken.BranchToken)
 			if err != nil {
 				return nil, wh.error(err, scope)
 			}
-			token.FirstEventID = token.NextEventID
-			token.NextEventID = nextEventID
-			token.IsWorkflowRunning = isWorkflowRunning
+			continuationToken.FirstEventId = continuationToken.GetNextEventId()
+			continuationToken.NextEventId = nextEventID
+			continuationToken.IsWorkflowRunning = isWorkflowRunning
 		}
 	} else {
+		continuationToken = &token.HistoryContinuation{}
 		if !isCloseEventOnly {
 			queryNextEventID = common.FirstEventID
 		}
-		token.BranchToken, runID, lastFirstEventID, nextEventID, isWorkflowRunning, err =
+		continuationToken.BranchToken, runID, lastFirstEventID, nextEventID, isWorkflowRunning, err =
 			queryHistory(domainID, execution, queryNextEventID, nil)
 		if err != nil {
 			return nil, wh.error(err, scope)
@@ -530,11 +519,11 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 
 		execution.RunId = runID
 
-		token.RunID = runID
-		token.FirstEventID = common.FirstEventID
-		token.NextEventID = nextEventID
-		token.IsWorkflowRunning = isWorkflowRunning
-		token.PersistenceToken = nil
+		continuationToken.RunId = runID
+		continuationToken.FirstEventId = common.FirstEventID
+		continuationToken.NextEventId = nextEventID
+		continuationToken.IsWorkflowRunning = isWorkflowRunning
+		continuationToken.PersistenceToken = nil
 	}
 
 	history := &commonproto.History{}
@@ -549,40 +538,40 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 				nextEventID,
 				request.GetMaximumPageSize(),
 				nil,
-				token.TransientDecision,
-				token.BranchToken,
+				continuationToken.TransientDecision,
+				continuationToken.BranchToken,
 			)
 			if err != nil {
 				return nil, wh.error(err, scope)
 			}
 			// since getHistory func will not return empty history, so the below is safe
 			history.Events = history.Events[len(history.Events)-1 : len(history.Events)]
-			token = nil
+			continuationToken = nil
 		} else if isLongPoll {
 			// set the persistence token to be nil so next time we will query history for updates
-			token.PersistenceToken = nil
+			continuationToken.PersistenceToken = nil
 		} else {
-			token = nil
+			continuationToken = nil
 		}
 	} else {
 		// return all events
-		if token.FirstEventID >= token.NextEventID {
+		if continuationToken.FirstEventId >= continuationToken.NextEventId {
 			// currently there is no new event
 			history.Events = []*commonproto.HistoryEvent{}
 			if !isWorkflowRunning {
-				token = nil
+				continuationToken = nil
 			}
 		} else {
-			history, token.PersistenceToken, err = wh.getHistory(
+			history, continuationToken.PersistenceToken, err = wh.getHistory(
 				scope,
 				domainID,
 				*execution,
-				token.FirstEventID,
-				token.NextEventID,
+				continuationToken.FirstEventId,
+				continuationToken.NextEventId,
 				request.GetMaximumPageSize(),
-				token.PersistenceToken,
-				token.TransientDecision,
-				token.BranchToken,
+				continuationToken.PersistenceToken,
+				continuationToken.TransientDecision,
+				continuationToken.BranchToken,
 			)
 			if err != nil {
 				return nil, wh.error(err, scope)
@@ -590,14 +579,14 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 
 			// here, for long pull on history events, we need to intercept the paging token from cassandra
 			// and do something clever
-			if len(token.PersistenceToken) == 0 && (!token.IsWorkflowRunning || !isLongPoll) {
+			if len(continuationToken.PersistenceToken) == 0 && (!continuationToken.IsWorkflowRunning || !isLongPoll) {
 				// meaning, there is no more history to be returned
-				token = nil
+				continuationToken = nil
 			}
 		}
 	}
 
-	nextToken, err := wh.serializeHistoryToken(token)
+	nextToken, err := serializeHistoryToken(continuationToken)
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -738,7 +727,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(ctx context.Context, req
 		return nil, wh.error(err, scope)
 	}
 
-	domainId := primitives.UUIDString(taskToken.DomainID)
+	domainId := primitives.UUIDString(taskToken.GetDomainId())
 	if domainId == "" {
 		return nil, wh.error(errDomainNotSet, scope)
 	}
@@ -767,17 +756,17 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(ctx context.Context, req
 
 	completedResp := &workflowservice.RespondDecisionTaskCompletedResponse{}
 	if request.GetReturnNewDecisionTask() && histResp != nil && histResp.StartedResponse != nil {
-		taskToken := &common.TaskToken{
-			DomainID:        taskToken.DomainID,
-			WorkflowID:      taskToken.WorkflowID,
-			RunID:           taskToken.RunID,
-			ScheduleID:      histResp.StartedResponse.GetScheduledEventId(),
+		taskToken := &token.Task{
+			DomainId:        taskToken.GetDomainId(),
+			WorkflowId:      taskToken.GetWorkflowId(),
+			RunId:           taskToken.GetRunId(),
+			ScheduleId:      histResp.StartedResponse.GetScheduledEventId(),
 			ScheduleAttempt: histResp.StartedResponse.GetAttempt(),
 		}
 		token, _ := wh.tokenSerializer.Serialize(taskToken)
 		workflowExecution := &commonproto.WorkflowExecution{
-			WorkflowId: taskToken.WorkflowID,
-			RunId:      primitives.UUIDString(taskToken.DomainID),
+			WorkflowId: taskToken.GetWorkflowId(),
+			RunId:      primitives.UUIDString(taskToken.GetDomainId()),
 		}
 		matchingResp := common.CreateMatchingPollForDecisionTaskResponse(histResp.StartedResponse, workflowExecution, token)
 
@@ -817,7 +806,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskFailed(ctx context.Context, reques
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
-	domainId := primitives.UUIDString(taskToken.DomainID)
+	domainId := primitives.UUIDString(taskToken.GetDomainId())
 	if domainId == "" {
 		return nil, wh.error(errDomainNotSet, scope)
 	}
@@ -844,8 +833,8 @@ func (wh *WorkflowHandler) RespondDecisionTaskFailed(ctx context.Context, reques
 		sizeLimitWarn,
 		sizeLimitError,
 		domainId,
-		taskToken.WorkflowID,
-		primitives.UUIDString(taskToken.RunID),
+		taskToken.GetWorkflowId(),
+		primitives.UUIDString(taskToken.GetRunId()),
 		scope,
 		wh.GetThrottledLogger(),
 	); err != nil {
@@ -999,7 +988,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
-	domainId := primitives.UUIDString(taskToken.DomainID)
+	domainId := primitives.UUIDString(taskToken.GetDomainId())
 	if domainId == "" {
 		return nil, wh.error(errDomainNotSet, scope)
 	}
@@ -1022,8 +1011,8 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 		sizeLimitWarn,
 		sizeLimitError,
 		domainId,
-		taskToken.WorkflowID,
-		primitives.UUIDString(taskToken.RunID),
+		taskToken.GetWorkflowId(),
+		primitives.UUIDString(taskToken.GetRunId()),
 		scope,
 		wh.GetThrottledLogger(),
 	); err != nil {
@@ -1096,12 +1085,12 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatByID(ctx context.Context, 
 		return nil, wh.error(errActivityIDNotSet, scope)
 	}
 
-	taskToken := &common.TaskToken{
-		DomainID:   primitives.MustParseUUID(domainID),
-		RunID:      primitives.MustParseUUID(runID),
-		WorkflowID: workflowID,
-		ScheduleID: common.EmptyEventID,
-		ActivityID: activityID,
+	taskToken := &token.Task{
+		DomainId:   primitives.MustParseUUID(domainID),
+		RunId:      primitives.MustParseUUID(runID),
+		WorkflowId: workflowID,
+		ScheduleId: common.EmptyEventID,
+		ActivityId: activityID,
 	}
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1124,8 +1113,8 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatByID(ctx context.Context, 
 		sizeLimitWarn,
 		sizeLimitError,
 		domainID,
-		taskToken.WorkflowID,
-		primitives.UUIDString(taskToken.RunID),
+		taskToken.GetWorkflowId(),
+		primitives.UUIDString(taskToken.GetRunId()),
 		scope,
 		wh.GetThrottledLogger(),
 	); err != nil {
@@ -1189,7 +1178,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(ctx context.Context, req
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
-	domainId := primitives.UUIDString(taskToken.DomainID)
+	domainId := primitives.UUIDString(taskToken.GetDomainId())
 	if domainId == "" {
 		return nil, wh.error(errDomainNotSet, scope)
 	}
@@ -1216,8 +1205,8 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(ctx context.Context, req
 		sizeLimitWarn,
 		sizeLimitError,
 		domainId,
-		taskToken.WorkflowID,
-		primitives.UUIDString(taskToken.RunID),
+		taskToken.GetWorkflowId(),
+		primitives.UUIDString(taskToken.GetRunId()),
 		scope,
 		wh.GetThrottledLogger(),
 	); err != nil {
@@ -1292,12 +1281,12 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedByID(ctx context.Context,
 		return nil, wh.error(errIdentityTooLong, scope)
 	}
 
-	taskToken := &common.TaskToken{
-		DomainID:   primitives.MustParseUUID(domainID),
-		RunID:      primitives.MustParseUUID(runID),
-		WorkflowID: workflowID,
-		ScheduleID: common.EmptyEventID,
-		ActivityID: activityID,
+	taskToken := &token.Task{
+		DomainId:   primitives.MustParseUUID(domainID),
+		RunId:      primitives.MustParseUUID(runID),
+		WorkflowId: workflowID,
+		ScheduleId: common.EmptyEventID,
+		ActivityId: activityID,
 	}
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1320,7 +1309,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedByID(ctx context.Context,
 		sizeLimitWarn,
 		sizeLimitError,
 		domainID,
-		taskToken.WorkflowID,
+		taskToken.GetWorkflowId(),
 		runID,
 		scope,
 		wh.GetThrottledLogger(),
@@ -1385,7 +1374,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(ctx context.Context, reques
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
-	domainID := primitives.UUIDString(taskToken.DomainID)
+	domainID := primitives.UUIDString(taskToken.GetDomainId())
 	if domainID == "" {
 		return nil, wh.error(errDomainNotSet, scope)
 	}
@@ -1413,8 +1402,8 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(ctx context.Context, reques
 		sizeLimitWarn,
 		sizeLimitError,
 		domainID,
-		taskToken.WorkflowID,
-		primitives.UUIDString(taskToken.RunID),
+		taskToken.GetWorkflowId(),
+		primitives.UUIDString(taskToken.GetRunId()),
 		scope,
 		wh.GetThrottledLogger(),
 	); err != nil {
@@ -1476,12 +1465,12 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedByID(ctx context.Context, re
 		return nil, wh.error(errIdentityTooLong, scope)
 	}
 
-	taskToken := &common.TaskToken{
-		DomainID:   primitives.MustParseUUID(domainID),
-		RunID:      primitives.MustParseUUID(runID),
-		WorkflowID: workflowID,
-		ScheduleID: common.EmptyEventID,
-		ActivityID: activityID,
+	taskToken := &token.Task{
+		DomainId:   primitives.MustParseUUID(domainID),
+		RunId:      primitives.MustParseUUID(runID),
+		WorkflowId: workflowID,
+		ScheduleId: common.EmptyEventID,
+		ActivityId: activityID,
 	}
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1504,7 +1493,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedByID(ctx context.Context, re
 		sizeLimitWarn,
 		sizeLimitError,
 		domainID,
-		taskToken.WorkflowID,
+		taskToken.GetWorkflowId(),
 		runID,
 		scope,
 		wh.GetThrottledLogger(),
@@ -1559,7 +1548,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 		return nil, wh.error(err, scope)
 	}
 
-	domainID := primitives.UUIDString(taskToken.DomainID)
+	domainID := primitives.UUIDString(taskToken.GetDomainId())
 
 	if domainID == "" {
 		return nil, wh.error(errDomainNotSet, scope)
@@ -1588,8 +1577,8 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 		sizeLimitWarn,
 		sizeLimitError,
 		domainID,
-		taskToken.WorkflowID,
-		primitives.UUIDString(taskToken.RunID),
+		taskToken.GetWorkflowId(),
+		primitives.UUIDString(taskToken.GetRunId()),
 		scope,
 		wh.GetThrottledLogger(),
 	); err != nil {
@@ -1601,7 +1590,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 			Identity:  request.Identity,
 		}
 		_, err = wh.GetHistoryClient().RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
-			DomainUUID:    primitives.UUIDString(taskToken.DomainID),
+			DomainUUID:    primitives.UUIDString(taskToken.GetDomainId()),
 			FailedRequest: failRequest,
 		})
 		if err != nil {
@@ -1609,7 +1598,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 		}
 	} else {
 		_, err = wh.GetHistoryClient().RespondActivityTaskCanceled(ctx, &historyservice.RespondActivityTaskCanceledRequest{
-			DomainUUID:    primitives.UUIDString(taskToken.DomainID),
+			DomainUUID:    primitives.UUIDString(taskToken.GetDomainId()),
 			CancelRequest: request,
 		})
 		if err != nil {
@@ -1663,12 +1652,12 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledByID(ctx context.Context, 
 		return nil, wh.error(errIdentityTooLong, scope)
 	}
 
-	taskToken := &common.TaskToken{
-		DomainID:   primitives.MustParseUUID(domainID),
-		RunID:      primitives.MustParseUUID(runID),
-		WorkflowID: workflowID,
-		ScheduleID: common.EmptyEventID,
-		ActivityID: activityID,
+	taskToken := &token.Task{
+		DomainId:   primitives.MustParseUUID(domainID),
+		RunId:      primitives.MustParseUUID(runID),
+		WorkflowId: workflowID,
+		ScheduleId: common.EmptyEventID,
+		ActivityId: activityID,
 	}
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1691,7 +1680,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledByID(ctx context.Context, 
 		sizeLimitWarn,
 		sizeLimitError,
 		domainID,
-		taskToken.WorkflowID,
+		taskToken.GetWorkflowId(),
 		runID,
 		scope,
 		wh.GetThrottledLogger(),
@@ -2265,7 +2254,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 
 	return &workflowservice.ListClosedWorkflowExecutionsResponse{
 		Executions:    persistenceResp.Executions,
-		NextPageToken: nil,
+		NextPageToken: persistenceResp.NextPageToken,
 	}, nil
 }
 
@@ -2564,11 +2553,11 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(ctx context.Context, reques
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
-	if queryTaskToken.DomainID == "" || queryTaskToken.TaskList == "" || queryTaskToken.TaskID == "" {
+	if queryTaskToken.GetDomainId() == "" || queryTaskToken.GetTaskList() == "" || queryTaskToken.GetTaskId() == "" {
 		return nil, wh.error(errInvalidTaskToken, scope)
 	}
 
-	domainEntry, err := wh.GetDomainCache().GetDomainByID(queryTaskToken.DomainID)
+	domainEntry, err := wh.GetDomainCache().GetDomainByID(queryTaskToken.GetDomainId())
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -2586,7 +2575,7 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(ctx context.Context, reques
 		len(request.GetQueryResult()),
 		sizeLimitWarn,
 		sizeLimitError,
-		queryTaskToken.DomainID,
+		queryTaskToken.GetDomainId(),
 		"",
 		"",
 		scope,
@@ -2606,9 +2595,9 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(ctx context.Context, reques
 		FeatureVersion: headers[1],
 	}
 	matchingRequest := &matchingservice.RespondQueryTaskCompletedRequest{
-		DomainUUID:       queryTaskToken.DomainID,
-		TaskList:         &commonproto.TaskList{Name: queryTaskToken.TaskList},
-		TaskID:           queryTaskToken.TaskID,
+		DomainUUID:       queryTaskToken.GetDomainId(),
+		TaskList:         &commonproto.TaskList{Name: queryTaskToken.GetTaskList()},
+		TaskID:           queryTaskToken.GetTaskId(),
 		CompletedRequest: request,
 	}
 
@@ -2902,26 +2891,26 @@ func (wh *WorkflowHandler) GetWorkflowExecutionRawHistory(ctx context.Context, r
 	}
 
 	execution := request.Execution
-	token := &getHistoryContinuationToken{}
+	var continuationToken *token.HistoryContinuation
 
 	var runID string
 	var nextEventID int64
 
 	// process the token for paging
 	if request.NextPageToken != nil {
-		token, err = wh.deserializeHistoryToken(request.NextPageToken)
+		continuationToken, err = deserializeHistoryToken(request.NextPageToken)
 		if err != nil {
 			return nil, wh.error(errInvalidNextPageToken, scope)
 		}
-		if execution.GetRunId() != token.RunID {
+		if execution.GetRunId() != continuationToken.GetRunId() {
 			return nil, wh.error(errNextPageTokenRunIDMismatch, scope)
 		}
 
-		execution.RunId = token.RunID
+		execution.RunId = continuationToken.GetRunId()
 
 	} else {
-
-		token.BranchToken, runID, nextEventID, err =
+		continuationToken = &token.HistoryContinuation{}
+		continuationToken.BranchToken, runID, nextEventID, err =
 			queryHistory(domainID, execution, nil)
 		if err != nil {
 			return nil, wh.error(err, scope)
@@ -2929,42 +2918,42 @@ func (wh *WorkflowHandler) GetWorkflowExecutionRawHistory(ctx context.Context, r
 
 		execution.RunId = runID
 
-		token.RunID = runID
-		token.FirstEventID = common.FirstEventID
-		token.NextEventID = nextEventID
-		token.PersistenceToken = nil
+		continuationToken.RunId = runID
+		continuationToken.FirstEventId = common.FirstEventID
+		continuationToken.NextEventId = nextEventID
+		continuationToken.PersistenceToken = nil
 	}
 
 	var history []*commonproto.DataBlob
 	// return all events
-	if token.FirstEventID >= token.NextEventID {
+	if continuationToken.GetFirstEventId() >= continuationToken.GetNextEventId() {
 		return &workflowservice.GetWorkflowExecutionRawHistoryResponse{
 			RawHistory:    []*commonproto.DataBlob{},
 			NextPageToken: nil,
 		}, nil
 	}
 
-	history, token.PersistenceToken, err = wh.getRawHistory(
+	history, continuationToken.PersistenceToken, err = wh.getRawHistory(
 		scope,
 		domainID,
 		*execution,
-		token.FirstEventID,
-		token.NextEventID,
+		continuationToken.GetFirstEventId(),
+		continuationToken.GetNextEventId(),
 		request.GetMaximumPageSize(),
-		token.PersistenceToken,
-		token.TransientDecision,
-		token.BranchToken,
+		continuationToken.PersistenceToken,
+		continuationToken.TransientDecision,
+		continuationToken.BranchToken,
 	)
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
 
-	if len(token.PersistenceToken) == 0 {
+	if len(continuationToken.PersistenceToken) == 0 {
 		// meaning, there is no more history to be returned
-		token = nil
+		continuationToken = nil
 	}
 
-	nextToken, err := wh.serializeHistoryToken(token)
+	nextToken, err := serializeHistoryToken(continuationToken)
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -3073,7 +3062,7 @@ func (wh *WorkflowHandler) getRawHistory(
 
 	if len(nextPageToken) == 0 && transientDecision != nil {
 		if err := wh.validateTransientDecisionEvents(nextEventID, transientDecision); err != nil {
-			scope.IncCounter(metrics.CadenceErrIncompleteHistoryCounter)
+			scope.IncCounter(metrics.ServiceErrIncompleteHistoryCounter)
 			wh.GetLogger().Error("getHistory error",
 				tag.WorkflowDomainID(domainID),
 				tag.WorkflowID(execution.GetWorkflowId()),
@@ -3142,7 +3131,7 @@ func (wh *WorkflowHandler) getHistory(
 		isFirstPage,
 		isLastPage,
 		int(pageSize)); err != nil {
-		scope.IncCounter(metrics.CadenceErrIncompleteHistoryCounter)
+		scope.IncCounter(metrics.ServiceErrIncompleteHistoryCounter)
 		wh.GetLogger().Error("getHistory: incomplete history",
 			tag.WorkflowDomainID(domainID),
 			tag.WorkflowID(execution.GetWorkflowId()),
@@ -3153,7 +3142,7 @@ func (wh *WorkflowHandler) getHistory(
 
 	if len(nextPageToken) == 0 && transientDecision != nil {
 		if err := wh.validateTransientDecisionEvents(nextEventID, transientDecision); err != nil {
-			scope.IncCounter(metrics.CadenceErrIncompleteHistoryCounter)
+			scope.IncCounter(metrics.ServiceErrIncompleteHistoryCounter)
 			wh.GetLogger().Error("getHistory error",
 				tag.WorkflowDomainID(domainID),
 				tag.WorkflowID(execution.GetWorkflowId()),
@@ -3190,8 +3179,8 @@ func (wh *WorkflowHandler) validateTransientDecisionEvents(
 func (wh *WorkflowHandler) startRequestProfile(scope int) (metrics.Scope, metrics.Stopwatch) {
 	metricsScope := wh.GetMetricsClient().Scope(scope).Tagged(metrics.DomainUnknownTag())
 	// timer should be emitted with the all tag
-	sw := metricsScope.StartTimer(metrics.CadenceLatency)
-	metricsScope.IncCounter(metrics.CadenceRequests)
+	sw := metricsScope.StartTimer(metrics.ServiceLatency)
+	metricsScope.IncCounter(metrics.ServiceRequests)
 	return metricsScope, sw
 }
 
@@ -3203,8 +3192,8 @@ func (wh *WorkflowHandler) startRequestProfileWithDomain(scope int, domain strin
 	} else {
 		metricsScope = wh.GetMetricsClient().Scope(scope).Tagged(metrics.DomainUnknownTag())
 	}
-	sw := metricsScope.StartTimer(metrics.CadenceLatency)
-	metricsScope.IncCounter(metrics.CadenceRequests)
+	sw := metricsScope.StartTimer(metrics.ServiceLatency)
+	metricsScope.IncCounter(metrics.ServiceRequests)
 	return metricsScope, sw
 }
 
@@ -3217,42 +3206,42 @@ func (wh *WorkflowHandler) error(err error, scope metrics.Scope, tagsForErrorLog
 	switch err := err.(type) {
 	case *serviceerror.Internal, *serviceerror.DataLoss:
 		wh.GetLogger().WithTags(tagsForErrorLog...).Error("Internal service error", tag.Error(err))
-		scope.IncCounter(metrics.CadenceFailures)
+		scope.IncCounter(metrics.ServiceFailures)
 		return err
 	case *serviceerror.InvalidArgument:
-		scope.IncCounter(metrics.CadenceErrBadRequestCounter)
+		scope.IncCounter(metrics.ServiceErrBadRequestCounter)
 		return err
 	case *serviceerror.DomainNotActive:
-		scope.IncCounter(metrics.CadenceErrBadRequestCounter)
+		scope.IncCounter(metrics.ServiceErrBadRequestCounter)
 		return err
 	case *serviceerror.ResourceExhausted:
-		scope.IncCounter(metrics.CadenceErrServiceBusyCounter)
+		scope.IncCounter(metrics.ServiceErrServiceBusyCounter)
 		return err
 	case *serviceerror.NotFound:
-		scope.IncCounter(metrics.CadenceErrEntityNotExistsCounter)
+		scope.IncCounter(metrics.ServiceErrEntityNotExistsCounter)
 		return err
 	case *serviceerror.WorkflowExecutionAlreadyStarted:
-		scope.IncCounter(metrics.CadenceErrExecutionAlreadyStartedCounter)
+		scope.IncCounter(metrics.ServiceErrExecutionAlreadyStartedCounter)
 		return err
 	case *serviceerror.DomainAlreadyExists:
-		scope.IncCounter(metrics.CadenceErrDomainAlreadyExistsCounter)
+		scope.IncCounter(metrics.ServiceErrDomainAlreadyExistsCounter)
 		return err
 	case *serviceerror.CancellationAlreadyRequested:
-		scope.IncCounter(metrics.CadenceErrCancellationAlreadyRequestedCounter)
+		scope.IncCounter(metrics.ServiceErrCancellationAlreadyRequestedCounter)
 		return err
 	case *serviceerror.QueryFailed:
-		scope.IncCounter(metrics.CadenceErrQueryFailedCounter)
+		scope.IncCounter(metrics.ServiceErrQueryFailedCounter)
 		return err
 	case *serviceerror.ClientVersionNotSupported:
-		scope.IncCounter(metrics.CadenceErrClientVersionNotSupportedCounter)
+		scope.IncCounter(metrics.ServiceErrClientVersionNotSupportedCounter)
 		return err
 	case *serviceerror.DeadlineExceeded:
-		scope.IncCounter(metrics.CadenceErrContextTimeoutCounter)
+		scope.IncCounter(metrics.ServiceErrContextTimeoutCounter)
 		return err
 	}
 
 	wh.GetLogger().WithTags(tagsForErrorLog...).Error("Unknown error", tag.Error(err))
-	scope.IncCounter(metrics.CadenceFailures)
+	scope.IncCounter(metrics.ServiceFailures)
 
 	return err
 }
@@ -3268,22 +3257,9 @@ func (wh *WorkflowHandler) validateTaskList(t *commonproto.TaskList, scope metri
 }
 
 func (wh *WorkflowHandler) validateExecutionAndEmitMetrics(w *commonproto.WorkflowExecution, scope metrics.Scope) error {
-	err := wh.validateExecution(w)
+	err := validateExecution(w)
 	if err != nil {
 		return wh.error(err, scope)
-	}
-	return nil
-}
-
-func (wh *WorkflowHandler) validateExecution(w *commonproto.WorkflowExecution) error {
-	if w == nil {
-		return errExecutionNotSet
-	}
-	if w.GetWorkflowId() == "" {
-		return errWorkflowIDNotSet
-	}
-	if w.GetRunId() != "" && uuid.Parse(w.GetRunId()) == nil {
-		return errInvalidRunID
 	}
 	return nil
 }
@@ -3347,10 +3323,10 @@ func (wh *WorkflowHandler) createPollForDecisionTaskResponse(
 		}
 
 		if len(persistenceToken) != 0 {
-			continuation, err = wh.serializeHistoryToken(&getHistoryContinuationToken{
-				RunID:             matchingResp.WorkflowExecution.GetRunId(),
-				FirstEventID:      firstEventID,
-				NextEventID:       nextEventID,
+			continuation, err = serializeHistoryToken(&token.HistoryContinuation{
+				RunId:             matchingResp.WorkflowExecution.GetRunId(),
+				FirstEventId:      firstEventID,
+				NextEventId:       nextEventID,
 				PersistenceToken:  persistenceToken,
 				TransientDecision: matchingResp.GetDecisionInfo(),
 				BranchToken:       branchToken,
@@ -3435,21 +3411,6 @@ func (wh *WorkflowHandler) verifyHistoryIsComplete(
 		isFirstPage,
 		isLastPage,
 		pageSize))
-}
-
-func (wh *WorkflowHandler) deserializeHistoryToken(bytes []byte) (*getHistoryContinuationToken, error) {
-	token := &getHistoryContinuationToken{}
-	err := json.Unmarshal(bytes, token)
-	return token, err
-}
-
-func (wh *WorkflowHandler) serializeHistoryToken(token *getHistoryContinuationToken) ([]byte, error) {
-	if token == nil {
-		return nil, nil
-	}
-
-	bytes, err := json.Marshal(token)
-	return bytes, err
 }
 
 func (wh *WorkflowHandler) isFailoverRequest(updateRequest *workflowservice.UpdateDomainRequest) bool {
@@ -3590,7 +3551,7 @@ func (wh *WorkflowHandler) checkBadBinary(domainEntry *cache.DomainCacheEntry, b
 		badBinaries := domainEntry.GetConfig().BadBinaries.Binaries
 		_, ok := badBinaries[binaryChecksum]
 		if ok {
-			wh.GetMetricsClient().IncCounter(metrics.FrontendPollForDecisionTaskScope, metrics.CadenceErrBadBinaryCounter)
+			wh.GetMetricsClient().IncCounter(metrics.FrontendPollForDecisionTaskScope, metrics.ServiceErrBadBinaryCounter)
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("Binary %v already marked as bad deployment.", binaryChecksum))
 		}
 	}

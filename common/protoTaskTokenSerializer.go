@@ -20,39 +20,41 @@
 
 package common
 
-import "encoding/json"
-
-type (
-	jsonTaskTokenSerializer struct{}
+import (
+	"github.com/temporalio/temporal/.gen/proto/token"
 )
 
-// NewJSONTaskTokenSerializer creates a new instance of TaskTokenSerializer
-func NewJSONTaskTokenSerializer() TaskTokenSerializer {
-	return &jsonTaskTokenSerializer{}
+type (
+	protoTaskTokenSerializer struct{}
+)
+
+// NewProtoTaskTokenSerializer creates a new instance of TaskTokenSerializer
+func NewProtoTaskTokenSerializer() TaskTokenSerializer {
+	return &protoTaskTokenSerializer{}
 }
 
-func (j *jsonTaskTokenSerializer) Serialize(token *TaskToken) ([]byte, error) {
-	data, err := json.Marshal(token)
-
-	return data, err
+func (j *protoTaskTokenSerializer) Serialize(taskToken *token.Task) ([]byte, error) {
+	if taskToken == nil {
+		return nil, nil
+	}
+	return taskToken.Marshal()
 }
 
-func (j *jsonTaskTokenSerializer) Deserialize(data []byte) (*TaskToken, error) {
-	var token TaskToken
-	err := json.Unmarshal(data, &token)
-
-	return &token, err
+func (j *protoTaskTokenSerializer) Deserialize(data []byte) (*token.Task, error) {
+	taskToken := &token.Task{}
+	err := taskToken.Unmarshal(data)
+	return taskToken, err
 }
 
-func (j *jsonTaskTokenSerializer) SerializeQueryTaskToken(token *QueryTaskToken) ([]byte, error) {
-	data, err := json.Marshal(token)
-
-	return data, err
+func (j *protoTaskTokenSerializer) SerializeQueryTaskToken(taskToken *token.QueryTask) ([]byte, error) {
+	if taskToken == nil {
+		return nil, nil
+	}
+	return taskToken.Marshal()
 }
 
-func (j *jsonTaskTokenSerializer) DeserializeQueryTaskToken(data []byte) (*QueryTaskToken, error) {
-	var token QueryTaskToken
-	err := json.Unmarshal(data, &token)
-
-	return &token, err
+func (j *protoTaskTokenSerializer) DeserializeQueryTaskToken(data []byte) (*token.QueryTask, error) {
+	taskToken := token.QueryTask{}
+	err := taskToken.Unmarshal(data)
+	return &taskToken, err
 }

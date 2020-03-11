@@ -146,7 +146,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 		executionManager:     s.mockExecutionMgr,
 		historyCache:         historyCache,
 		logger:               s.logger,
-		tokenSerializer:      common.NewJSONTaskTokenSerializer(),
+		tokenSerializer:      common.NewProtoTaskTokenSerializer(),
 		metricsClient:        s.mockShard.GetMetricsClient(),
 		historyEventNotifier: newHistoryEventNotifier(s.timeSource, metrics.NewClient(tally.NoopScope, metrics.History), func(string) int { return 0 }),
 		txProcessor:          s.mockTxProcessor,

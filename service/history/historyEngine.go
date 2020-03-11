@@ -228,7 +228,7 @@ func NewEngineWithShardContext(
 		historyV2Mgr:         historyV2Manager,
 		executionManager:     executionManager,
 		visibilityMgr:        visibilityMgr,
-		tokenSerializer:      common.NewJSONTaskTokenSerializer(),
+		tokenSerializer:      common.NewProtoTaskTokenSerializer(),
 		historyCache:         historyCache,
 		logger:               logger.WithTags(tag.ComponentHistoryEngine),
 		throttledLogger:      shard.GetThrottledLogger().WithTags(tag.ComponentHistoryEngine),
@@ -1458,8 +1458,8 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 	}
 
 	workflowExecution := commonproto.WorkflowExecution{
-		WorkflowId: token.WorkflowID,
-		RunId:      primitives.UUIDString(token.RunID),
+		WorkflowId: token.GetWorkflowId(),
+		RunId:      primitives.UUIDString(token.GetRunId()),
 	}
 
 	return e.updateWorkflowExecution(ctx, domainID, workflowExecution, true,
@@ -1468,9 +1468,9 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 				return ErrWorkflowCompleted
 			}
 
-			scheduleID := token.ScheduleID
+			scheduleID := token.GetScheduleId()
 			if scheduleID == common.EmptyEventID { // client call CompleteActivityById, so get scheduleID by activityID
-				scheduleID, err0 = getScheduleID(token.ActivityID, mutableState)
+				scheduleID, err0 = getScheduleID(token.GetActivityId(), mutableState)
 				if err0 != nil {
 					return err0
 				}
@@ -1485,7 +1485,7 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 			}
 
 			if !isRunning || ai.StartedID == common.EmptyEventID ||
-				(token.ScheduleID != common.EmptyEventID && token.ScheduleAttempt != int64(ai.Attempt)) {
+				(token.GetScheduleId() != common.EmptyEventID && token.ScheduleAttempt != int64(ai.Attempt)) {
 				return ErrActivityTaskNotFound
 			}
 
@@ -1516,8 +1516,8 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 	}
 
 	workflowExecution := commonproto.WorkflowExecution{
-		WorkflowId: token.WorkflowID,
-		RunId:      primitives.UUIDString(token.RunID),
+		WorkflowId: token.GetWorkflowId(),
+		RunId:      primitives.UUIDString(token.GetRunId()),
 	}
 
 	return e.updateWorkflowExecutionWithAction(ctx, domainID, workflowExecution,
@@ -1526,9 +1526,9 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 				return nil, ErrWorkflowCompleted
 			}
 
-			scheduleID := token.ScheduleID
+			scheduleID := token.GetScheduleId()
 			if scheduleID == common.EmptyEventID { // client call CompleteActivityById, so get scheduleID by activityID
-				scheduleID, err0 = getScheduleID(token.ActivityID, mutableState)
+				scheduleID, err0 = getScheduleID(token.GetActivityId(), mutableState)
 				if err0 != nil {
 					return nil, err0
 				}
@@ -1543,7 +1543,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 			}
 
 			if !isRunning || ai.StartedID == common.EmptyEventID ||
-				(token.ScheduleID != common.EmptyEventID && token.ScheduleAttempt != int64(ai.Attempt)) {
+				(token.GetScheduleId() != common.EmptyEventID && token.ScheduleAttempt != int64(ai.Attempt)) {
 				return nil, ErrActivityTaskNotFound
 			}
 
@@ -1584,8 +1584,8 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 	}
 
 	workflowExecution := commonproto.WorkflowExecution{
-		WorkflowId: token.WorkflowID,
-		RunId:      primitives.UUIDString(token.RunID),
+		WorkflowId: token.GetWorkflowId(),
+		RunId:      primitives.UUIDString(token.GetRunId()),
 	}
 
 	return e.updateWorkflowExecution(ctx, domainID, workflowExecution, true,
@@ -1594,9 +1594,9 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 				return ErrWorkflowCompleted
 			}
 
-			scheduleID := token.ScheduleID
+			scheduleID := token.GetScheduleId()
 			if scheduleID == common.EmptyEventID { // client call CompleteActivityById, so get scheduleID by activityID
-				scheduleID, err0 = getScheduleID(token.ActivityID, mutableState)
+				scheduleID, err0 = getScheduleID(token.GetActivityId(), mutableState)
 				if err0 != nil {
 					return err0
 				}
@@ -1611,7 +1611,7 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 			}
 
 			if !isRunning || ai.StartedID == common.EmptyEventID ||
-				(token.ScheduleID != common.EmptyEventID && token.ScheduleAttempt != int64(ai.Attempt)) {
+				(token.GetScheduleId() != common.EmptyEventID && token.ScheduleAttempt != int64(ai.Attempt)) {
 				return ErrActivityTaskNotFound
 			}
 
@@ -1652,8 +1652,8 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 	}
 
 	workflowExecution := commonproto.WorkflowExecution{
-		WorkflowId: token.WorkflowID,
-		RunId:      primitives.UUIDString(token.RunID),
+		WorkflowId: token.GetWorkflowId(),
+		RunId:      primitives.UUIDString(token.GetRunId()),
 	}
 
 	var cancelRequested bool
@@ -1664,9 +1664,9 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 				return ErrWorkflowCompleted
 			}
 
-			scheduleID := token.ScheduleID
+			scheduleID := token.GetScheduleId()
 			if scheduleID == common.EmptyEventID { // client call RecordActivityHeartbeatByID, so get scheduleID by activityID
-				scheduleID, err0 = getScheduleID(token.ActivityID, mutableState)
+				scheduleID, err0 = getScheduleID(token.GetActivityId(), mutableState)
 				if err0 != nil {
 					return err0
 				}
@@ -1681,7 +1681,7 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 			}
 
 			if !isRunning || ai.StartedID == common.EmptyEventID ||
-				(token.ScheduleID != common.EmptyEventID && token.ScheduleAttempt != int64(ai.Attempt)) {
+				(token.GetScheduleId() != common.EmptyEventID && token.ScheduleAttempt != int64(ai.Attempt)) {
 				return ErrActivityTaskNotFound
 			}
 
