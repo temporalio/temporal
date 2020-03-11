@@ -93,15 +93,15 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 	}
 	memo0 := &commonproto.Memo{Fields: memoFields}
 
-	resetPoints0 := &workflow.ResetPoints{
-		Points: []*workflow.ResetPointInfo{
+	resetPoints0 := &commonproto.ResetPoints{
+		Points: []*commonproto.ResetPointInfo{
 			{
-				BinaryChecksum:           common.StringPtr("bad-binary-cs"),
-				RunId:                    common.StringPtr("test-run-id"),
-				FirstDecisionCompletedId: common.Int64Ptr(123),
-				CreatedTimeNano:          common.Int64Ptr(456),
-				ExpiringTimeNano:         common.Int64Ptr(789),
-				Resettable:               common.BoolPtr(true),
+				BinaryChecksum:           "bad-binary-cs",
+				RunId:                    "test-run-id",
+				FirstDecisionCompletedId: 123,
+				CreatedTimeNano:          456,
+				ExpiringTimeNano:         789,
+				Resettable:               true,
 			},
 		},
 	}
@@ -324,23 +324,23 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 
 			dNilResetPoints1, err := serializer.DeserializeResetPoints(nil)
 			s.Nil(err)
-			s.Equal(&workflow.ResetPoints{}, dNilResetPoints1)
+			s.Equal(&commonproto.ResetPoints{}, dNilResetPoints1)
 
 			dNilResetPoints2, err := serializer.DeserializeResetPoints(nilResetPoints)
 			s.Nil(err)
-			s.Equal(&workflow.ResetPoints{}, dNilResetPoints2)
+			s.Equal(&commonproto.ResetPoints{}, dNilResetPoints2)
 
 			resetPoints1, err := serializer.DeserializeResetPoints(resetPointsJSON)
 			s.Nil(err)
-			s.True(resetPoints1.Equals(resetPoints0))
+			s.True(reflect.DeepEqual(resetPoints1, resetPoints0))
 
 			resetPoints2, err := serializer.DeserializeResetPoints(resetPointsThrift)
 			s.Nil(err)
-			s.True(resetPoints2.Equals(resetPoints0))
+			s.True(reflect.DeepEqual(resetPoints2, resetPoints0))
 
 			resetPoints3, err := serializer.DeserializeResetPoints(resetPointsEmpty)
 			s.Nil(err)
-			s.True(resetPoints3.Equals(resetPoints0))
+			s.True(reflect.DeepEqual(resetPoints3, resetPoints0))
 
 			// serialize bad binaries
 

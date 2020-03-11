@@ -52,8 +52,8 @@ type (
 		DeserializeVisibilityMemo(data *serialization.DataBlob) (*commonproto.Memo, error)
 
 		// serialize/deserialize reset points
-		SerializeResetPoints(event *workflow.ResetPoints, encodingType common.EncodingType) (*serialization.DataBlob, error)
-		DeserializeResetPoints(data *serialization.DataBlob) (*workflow.ResetPoints, error)
+		SerializeResetPoints(event *commonproto.ResetPoints, encodingType common.EncodingType) (*serialization.DataBlob, error)
+		DeserializeResetPoints(data *serialization.DataBlob) (*commonproto.ResetPoints, error)
 
 		// serialize/deserialize bad binaries
 		SerializeBadBinaries(event *workflow.BadBinaries, encodingType common.EncodingType) (*serialization.DataBlob, error)
@@ -160,17 +160,39 @@ func (t *serializerImpl) DeserializeEvent(data *serialization.DataBlob) (*common
 	return event, err
 }
 
-func (t *serializerImpl) SerializeResetPoints(rp *workflow.ResetPoints, encodingType common.EncodingType) (*serialization.DataBlob, error) {
+func (t *serializerImpl) SerializeResetPoints(rp *commonproto.ResetPoints, encodingType common.EncodingType) (*serialization.DataBlob, error) {
 	if rp == nil {
-		rp = &workflow.ResetPoints{}
+		rp = &commonproto.ResetPoints{}
 	}
 	return t.serialize(rp, encodingType)
 }
 
-func (t *serializerImpl) DeserializeResetPoints(data *serialization.DataBlob) (*workflow.ResetPoints, error) {
-	var rp workflow.ResetPoints
-	err := t.deserialize(data, &rp)
-	return &rp, err
+func (t *serializerImpl) DeserializeResetPoints(data *serialization.DataBlob) (*commonproto.ResetPoints, error) {
+	if data == nil {
+		return &commonproto.ResetPoints{}, nil
+	}
+	if len(data.Data) == 0 {
+		return &commonproto.ResetPoints{}, nil
+	}
+
+	memo := &commonproto.ResetPoints{}
+	var err error
+	switch data.Encoding {
+	case common.EncodingTypeJSON:
+		err = codec.NewJSONPBEncoder().Decode(data.Data, memo)
+	case common.EncodingTypeProto3, common.EncodingTypeThriftRW:
+		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
+		// Client API currently specifies encodingType on requests which span multiple of these objects
+		err = proto.Unmarshal(data.Data, memo)
+	default:
+		return nil, NewCadenceDeserializationError("DeserializeVisibilityMemo invalid encoding")
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return memo, err
 }
 
 func (t *serializerImpl) SerializeBadBinaries(bb *workflow.BadBinaries, encodingType common.EncodingType) (*serialization.DataBlob, error) {
@@ -341,10 +363,6 @@ func (t *serializerImpl) serialize(input interface{}, encodingType common.Encodi
 
 func (t *serializerImpl) thriftrwEncode(input interface{}) ([]byte, error) {
 	switch input.(type) {
-	case *workflow.Memo:
-		return t.thriftrwEncoder.Encode(input.(*workflow.Memo))
-	case *workflow.ResetPoints:
-		return t.thriftrwEncoder.Encode(input.(*workflow.ResetPoints))
 	case *workflow.BadBinaries:
 		return t.thriftrwEncoder.Encode(input.(*workflow.BadBinaries))
 	case *workflow.VersionHistories:
@@ -382,10 +400,6 @@ func (t *serializerImpl) deserialize(data *serialization.DataBlob, target interf
 
 func (t *serializerImpl) thriftrwDecode(data []byte, target interface{}) error {
 	switch target := target.(type) {
-	case *workflow.Memo:
-		return t.thriftrwEncoder.Decode(data, target)
-	case *workflow.ResetPoints:
-		return t.thriftrwEncoder.Decode(data, target)
 	case *workflow.BadBinaries:
 		return t.thriftrwEncoder.Decode(data, target)
 	case *workflow.VersionHistories:
