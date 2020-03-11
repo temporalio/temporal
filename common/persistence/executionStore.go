@@ -747,7 +747,7 @@ func (m *executionManagerImpl) SerializeVersionHistories(
 	if versionHistories == nil {
 		return nil, nil
 	}
-	return m.serializer.SerializeVersionHistories(versionHistories.ToThrift(), encoding)
+	return m.serializer.SerializeVersionHistories(versionHistories.ToProto(), encoding)
 }
 
 func (m *executionManagerImpl) DeserializeVersionHistories(
@@ -761,7 +761,7 @@ func (m *executionManagerImpl) DeserializeVersionHistories(
 	if err != nil {
 		return nil, err
 	}
-	return NewVersionHistoriesFromThrift(versionHistories), nil
+	return NewVersionHistoriesFromProto(versionHistories), nil
 }
 
 func (m *executionManagerImpl) DeleteTask(
