@@ -36,8 +36,8 @@ var (
 		WorkflowStateCorrupted: {},
 	}
 
-	validWorkflowCloseStatuses = map[int]struct{}{
-		WorkflowCloseStatusNone:           {},
+	validWorkflowCloseStatuses = map[int32]struct{}{
+		WorkflowCloseStatusRunning:        {},
 		WorkflowCloseStatusCompleted:      {},
 		WorkflowCloseStatusFailed:         {},
 		WorkflowCloseStatusCanceled:       {},
@@ -50,7 +50,7 @@ var (
 // ValidateCreateWorkflowStateCloseStatus validate workflow state and close status
 func ValidateCreateWorkflowStateCloseStatus(
 	state int,
-	closeStatus int,
+	closeStatus enums.WorkflowExecutionCloseStatus,
 ) error {
 
 	if err := validateWorkflowState(state); err != nil {
@@ -61,7 +61,7 @@ func ValidateCreateWorkflowStateCloseStatus(
 	}
 
 	// validate workflow state & close status
-	if state == WorkflowStateCompleted || closeStatus != WorkflowCloseStatusNone {
+	if state == WorkflowStateCompleted || closeStatus != WorkflowCloseStatusRunning {
 		return serviceerror.NewInternal(fmt.Sprintf("Create workflow with invalid state: %v or close status: %v", state, closeStatus))
 	}
 	return nil
@@ -70,7 +70,7 @@ func ValidateCreateWorkflowStateCloseStatus(
 // ValidateUpdateWorkflowStateCloseStatus validate workflow state and close status
 func ValidateUpdateWorkflowStateCloseStatus(
 	state int,
-	closeStatus int,
+	closeStatus enums.WorkflowExecutionCloseStatus,
 ) error {
 
 	if err := validateWorkflowState(state); err != nil {
@@ -81,7 +81,7 @@ func ValidateUpdateWorkflowStateCloseStatus(
 	}
 
 	// validate workflow state & close status
-	if closeStatus == WorkflowCloseStatusNone {
+	if closeStatus == WorkflowCloseStatusRunning {
 		if state == WorkflowStateCompleted {
 			return serviceerror.NewInternal(fmt.Sprintf("Update workflow with invalid state: %v or close status: %v", state, closeStatus))
 		}
@@ -113,10 +113,10 @@ func validateWorkflowState(
 
 // validateWorkflowCloseStatus validate workflow close status
 func validateWorkflowCloseStatus(
-	closeStatus int,
+	closeStatus enums.WorkflowExecutionCloseStatus,
 ) error {
 
-	if _, ok := validWorkflowCloseStatuses[closeStatus]; !ok {
+	if _, ok := validWorkflowCloseStatuses[int32(closeStatus)]; !ok {
 		return serviceerror.NewInternal(fmt.Sprintf("Invalid workflow close status: %v", closeStatus))
 	}
 

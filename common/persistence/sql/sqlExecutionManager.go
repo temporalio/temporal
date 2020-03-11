@@ -141,8 +141,8 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 				Msg:              fmt.Sprintf("Workflow execution already running. WorkflowId: %v", row.WorkflowID),
 				StartRequestID:   row.CreateRequestID,
 				RunID:            row.RunID.String(),
-				State:            int(row.State),
-				CloseStatus:      int(row.CloseStatus),
+				State:            row.State,
+				CloseStatus:      row.CloseStatus,
 				LastWriteVersion: row.LastWriteVersion,
 			}
 

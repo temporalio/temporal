@@ -26,6 +26,7 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/gogo/protobuf/types"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -975,7 +976,7 @@ func createOrUpdateCurrentExecution(
 	workflowID string,
 	runID string,
 	state int,
-	closeStatus int,
+	closeStatus enums.WorkflowExecutionCloseStatus,
 	createRequestID string,
 	startVersion int64,
 	lastWriteVersion int64,

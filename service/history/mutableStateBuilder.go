@@ -222,7 +222,7 @@ func newMutableStateBuilder(
 
 		NextEventID:        common.FirstEventID,
 		State:              persistence.WorkflowStateCreated,
-		CloseStatus:        persistence.WorkflowCloseStatusNone,
+		CloseStatus:        persistence.WorkflowCloseStatusRunning,
 		LastProcessedEvent: common.EmptyEventID,
 	}
 	s.hBuilder = newHistoryBuilder(s, logger)
@@ -1788,7 +1788,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 
 	if err := e.UpdateWorkflowStateCloseStatus(
 		persistence.WorkflowStateCreated,
-		persistence.WorkflowCloseStatusNone,
+		persistence.WorkflowCloseStatusRunning,
 	); err != nil {
 		return err
 	}
@@ -3835,7 +3835,7 @@ func (e *mutableStateBuilder) GetUpdateCondition() int64 {
 func (e *mutableStateBuilder) GetWorkflowStateCloseStatus() (int, int) {
 
 	executionInfo := e.executionInfo
-	return executionInfo.State, executionInfo.CloseStatus
+	return executionInfo.State, int(executionInfo.CloseStatus)
 }
 
 func (e *mutableStateBuilder) UpdateWorkflowStateCloseStatus(
@@ -3843,7 +3843,7 @@ func (e *mutableStateBuilder) UpdateWorkflowStateCloseStatus(
 	closeStatus int,
 ) error {
 
-	return e.executionInfo.UpdateWorkflowStateCloseStatus(state, closeStatus)
+	return e.executionInfo.UpdateWorkflowStateCloseStatus(state, enums.WorkflowExecutionCloseStatus(closeStatus))
 }
 
 func (e *mutableStateBuilder) StartTransaction(

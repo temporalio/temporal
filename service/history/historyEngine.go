@@ -759,7 +759,7 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 			case event := <-channel:
 				response.LastFirstEventId = event.lastFirstEventID
 				response.NextEventId = event.nextEventID
-				response.IsWorkflowRunning = event.workflowCloseState == persistence.WorkflowCloseStatusNone
+				response.IsWorkflowRunning = event.workflowCloseState == persistence.WorkflowCloseStatusRunning
 				response.PreviousStartedEventId = event.previousStartedEventID
 				response.WorkflowState = int32(event.workflowState)
 				response.WorkflowCloseState = int32(event.workflowCloseState)
@@ -1246,7 +1246,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 	}
 	if executionInfo.State == persistence.WorkflowStateCompleted {
 		// for closed workflow
-		result.WorkflowExecutionInfo.CloseStatus = persistence.ToProtoWorkflowExecutionCloseStatus(executionInfo.CloseStatus)
+		result.WorkflowExecutionInfo.CloseStatus = executionInfo.CloseStatus
 		completionEvent, err := mutableState.GetCompletionEvent()
 		if err != nil {
 			return nil, err
@@ -2723,7 +2723,7 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyHelper(
 	prevStartRequestID,
 	prevRunID string,
 	prevState int,
-	prevCloseState int,
+	prevCloseState enums.WorkflowExecutionCloseStatus,
 	domainID string,
 	execution commonproto.WorkflowExecution,
 	wfIDReusePolicy enums.WorkflowIdReusePolicy,
@@ -2745,7 +2745,7 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyHelper(
 
 	switch wfIDReusePolicy {
 	case enums.WorkflowIdReusePolicyAllowDuplicateFailedOnly:
-		if _, ok := FailedWorkflowCloseState[prevCloseState]; !ok {
+		if _, ok := FailedWorkflowCloseState[int(prevCloseState)]; !ok {
 			msg := "Workflow execution already finished successfully. WorkflowId: %v, RunId: %v. Workflow ID reuse policy: allow duplicate workflow ID if last run failed."
 			return getWorkflowAlreadyStartedError(msg, prevStartRequestID, execution.GetWorkflowId(), prevRunID)
 		}

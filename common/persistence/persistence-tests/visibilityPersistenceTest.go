@@ -723,7 +723,7 @@ func (s *VisibilityPersistenceSuite) assertClosedExecutionEquals(
 	s.Equal(req.WorkflowTypeName, resp.GetType().GetName())
 	s.Equal(s.nanosToMillis(req.StartTimestamp), s.nanosToMillis(resp.GetStartTime().Value))
 	s.Equal(s.nanosToMillis(req.CloseTimestamp), s.nanosToMillis(resp.GetCloseTime().Value))
-	s.Equal(req.Status, resp.GetCloseStatus())
+	s.EqualValues(req.Status, resp.GetCloseStatus())
 	s.Equal(req.HistoryLength, resp.HistoryLength)
 }
 
@@ -734,7 +734,7 @@ func (s *VisibilityPersistenceSuite) assertOpenExecutionEquals(
 	s.Equal(req.WorkflowTypeName, resp.GetType().GetName())
 	s.Equal(s.nanosToMillis(req.StartTimestamp), s.nanosToMillis(resp.GetStartTime().Value))
 	s.Nil(resp.CloseTime)
-	s.Equal(resp.CloseStatus, enums.WorkflowExecutionCloseStatusUnknown)
+	s.EqualValues(resp.CloseStatus, enums.WorkflowExecutionCloseStatusUnknown)
 	s.Zero(resp.HistoryLength)
 }
 

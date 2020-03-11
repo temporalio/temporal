@@ -638,7 +638,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_SameSchedule
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(localVersionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(nil, false).AnyTimes()
 	s.mockMutableState.EXPECT().GetWorkflowStateCloseStatus().
-		Return(persistence.WorkflowStateCreated, persistence.WorkflowCloseStatusNone).AnyTimes()
+		Return(persistence.WorkflowStateCreated, persistence.WorkflowCloseStatusRunning).AnyTimes()
 	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID, Name: domainName},
@@ -715,7 +715,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_VersionHistories_LocalVersion
 	s.mockMutableState.EXPECT().GetVersionHistories().Return(localVersionHistories).AnyTimes()
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(nil, false).AnyTimes()
 	s.mockMutableState.EXPECT().GetWorkflowStateCloseStatus().
-		Return(persistence.WorkflowStateCreated, persistence.WorkflowCloseStatusNone).AnyTimes()
+		Return(persistence.WorkflowStateCreated, persistence.WorkflowCloseStatusRunning).AnyTimes()
 	s.mockDomainCache.EXPECT().GetDomainByID(domainID).Return(
 		cache.NewGlobalDomainCacheEntryForTest(
 			&persistence.DomainInfo{ID: domainID, Name: domainName},

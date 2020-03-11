@@ -431,7 +431,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 			int64(1),
 			[]byte{1},
 			persistence.WorkflowStateCreated,
-			persistence.WorkflowCloseStatusNone))
+			persistence.WorkflowCloseStatusRunning))
 	}
 
 	// return immediately, since the expected next event ID appears
@@ -536,7 +536,7 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnCompleted() {
 	s.NoError(err)
 	s.Nil(resp.GetResponse().QueryResult)
 	s.NotNil(resp.GetResponse().QueryRejected)
-	s.Equal(enums.WorkflowExecutionCloseStatusCompleted, resp.GetResponse().GetQueryRejected().CloseStatus)
+	s.EqualValues(enums.WorkflowExecutionCloseStatusCompleted, resp.GetResponse().GetQueryRejected().CloseStatus)
 }
 
 func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
@@ -570,7 +570,7 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
 	s.NoError(err)
 	s.Nil(resp.GetResponse().QueryResult)
 	s.NotNil(resp.GetResponse().QueryRejected)
-	s.Equal(enums.WorkflowExecutionCloseStatusFailed, resp.GetResponse().GetQueryRejected().CloseStatus)
+	s.EqualValues(enums.WorkflowExecutionCloseStatusFailed, resp.GetResponse().GetQueryRejected().CloseStatus)
 
 	request = &historyservice.QueryWorkflowRequest{
 		DomainUUID: testDomainID,
@@ -584,7 +584,7 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
 	s.NoError(err)
 	s.Nil(resp.GetResponse().QueryResult)
 	s.NotNil(resp.GetResponse().QueryRejected)
-	s.Equal(enums.WorkflowExecutionCloseStatusFailed, resp.GetResponse().GetQueryRejected().CloseStatus)
+	s.EqualValues(enums.WorkflowExecutionCloseStatusFailed, resp.GetResponse().GetQueryRejected().CloseStatus)
 }
 
 func (s *engineSuite) TestQueryWorkflow_FirstDecisionNotCompleted() {

@@ -933,7 +933,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_Dedup() {
 		StartRequestID:   requestID,
 		RunID:            runID,
 		State:            p.WorkflowStateRunning,
-		CloseStatus:      p.WorkflowCloseStatusNone,
+		CloseStatus:      p.WorkflowCloseStatusRunning,
 		LastWriteVersion: lastWriteVersion,
 	}).Once()
 
@@ -969,7 +969,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_NonDeDup() {
 		StartRequestID:   "oldRequestID",
 		RunID:            runID,
 		State:            p.WorkflowStateRunning,
-		CloseStatus:      p.WorkflowCloseStatusNone,
+		CloseStatus:      p.WorkflowCloseStatusRunning,
 		LastWriteVersion: lastWriteVersion,
 	}).Once()
 
@@ -1100,7 +1100,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 			StartRequestID:   "oldRequestID",
 			RunID:            runIDs[i],
 			State:            p.WorkflowStateCompleted,
-			CloseStatus:      closeState,
+			CloseStatus:      enums.WorkflowExecutionCloseStatus(closeState),
 			LastWriteVersion: lastWriteVersion,
 		}).Times(len(expecedErrs))
 
@@ -1368,7 +1368,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 		StartRequestID:   requestID, // use same requestID
 		RunID:            runID,
 		State:            p.WorkflowStateRunning,
-		CloseStatus:      p.WorkflowCloseStatusNone,
+		CloseStatus:      p.WorkflowCloseStatusRunning,
 		LastWriteVersion: common.EmptyVersion,
 	}
 
@@ -1428,7 +1428,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 		StartRequestID:   "new request ID",
 		RunID:            runID,
 		State:            p.WorkflowStateRunning,
-		CloseStatus:      p.WorkflowCloseStatusNone,
+		CloseStatus:      p.WorkflowCloseStatusRunning,
 		LastWriteVersion: common.EmptyVersion,
 	}
 

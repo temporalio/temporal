@@ -219,7 +219,7 @@ type (
 		DecisionStartToCloseTimeout        int32
 		ExecutionContext                   []byte
 		State                              int
-		CloseStatus                        int
+		CloseStatus                        enums.WorkflowExecutionCloseStatus
 		LastFirstEventID                   int64
 		LastEventTaskID                    int64
 		NextEventID                        int64
@@ -850,7 +850,7 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		WorkflowTimeout:                    info.GetWorkflowTimeoutSeconds(),
 		DecisionStartToCloseTimeout:        info.GetDecisionTaskTimeoutSeconds(),
 		State:                              int(state.GetState()),
-		CloseStatus:                        int(state.GetCloseStatus()),
+		CloseStatus:                        enums.WorkflowExecutionCloseStatus(state.GetCloseStatus()),
 		LastFirstEventID:                   info.GetLastFirstEventID(),
 		LastProcessedEvent:                 info.GetLastProcessedEvent(),
 		StartTimestamp:                     time.Unix(0, info.GetStartTimeNanos()),

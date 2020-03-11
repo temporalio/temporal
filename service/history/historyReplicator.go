@@ -843,7 +843,7 @@ func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(
 		return "", 0, 0, nil
 	}
 
-	if currentCloseStatus != persistence.WorkflowCloseStatusNone {
+	if currentCloseStatus != persistence.WorkflowCloseStatusRunning {
 		// current workflow finished
 		// note, it is impossible that a current workflow ends with continue as new as close status
 		logger.Info("Conflict resolution current workflow finished.")

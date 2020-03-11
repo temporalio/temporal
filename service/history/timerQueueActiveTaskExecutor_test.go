@@ -1309,7 +1309,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_ContinueAsNew_Re
 
 	state, closeStatus := s.getMutableStateFromCache(s.domainID, execution.GetWorkflowId(), execution.GetRunId()).GetWorkflowStateCloseStatus()
 	s.Equal(persistence.WorkflowStateCompleted, state)
-	s.Equal(persistence.WorkflowCloseStatusContinuedAsNew, closeStatus)
+	s.EqualValues(persistence.WorkflowCloseStatusContinuedAsNew, closeStatus)
 }
 
 func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_ContinueAsNew_Cron() {
@@ -1368,7 +1368,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_ContinueAsNew_Cr
 
 	state, closeStatus := s.getMutableStateFromCache(s.domainID, execution.GetWorkflowId(), execution.GetRunId()).GetWorkflowStateCloseStatus()
 	s.Equal(persistence.WorkflowStateCompleted, state)
-	s.Equal(persistence.WorkflowCloseStatusContinuedAsNew, closeStatus)
+	s.EqualValues(persistence.WorkflowCloseStatusContinuedAsNew, closeStatus)
 }
 
 func (s *timerQueueActiveTaskExecutorSuite) createPersistenceMutableState(

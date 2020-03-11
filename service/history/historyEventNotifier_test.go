@@ -85,7 +85,7 @@ func (s *historyEventNotifierSuite) TestSingleSubscriberWatchingEvents() {
 	previousStartedEventID := int64(5)
 	nextEventID := int64(18)
 	workflowState := persistence.WorkflowStateCreated
-	workflowCloseState := persistence.WorkflowCloseStatusNone
+	workflowCloseState := persistence.WorkflowCloseStatusRunning
 	branchToken := make([]byte, 0)
 	historyEvent := newHistoryEventNotification(domainID, execution, lastFirstEventID, nextEventID, previousStartedEventID, branchToken, workflowState, workflowCloseState)
 	timerChan := time.NewTimer(time.Second * 2).C
@@ -118,7 +118,7 @@ func (s *historyEventNotifierSuite) TestMultipleSubscriberWatchingEvents() {
 	previousStartedEventID := int64(5)
 	nextEventID := int64(18)
 	workflowState := persistence.WorkflowStateCreated
-	workflowCloseState := persistence.WorkflowCloseStatusNone
+	workflowCloseState := persistence.WorkflowCloseStatusRunning
 	branchToken := make([]byte, 0)
 	historyEvent := newHistoryEventNotification(domainID, execution, lastFirstEventID, nextEventID, previousStartedEventID, branchToken, workflowState, workflowCloseState)
 	timerChan := time.NewTimer(time.Second * 5).C

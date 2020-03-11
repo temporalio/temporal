@@ -471,7 +471,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		if err != nil {
 			return nil, "", 0, 0, false, err
 		}
-		isWorkflowRunning := response.GetWorkflowCloseState() == persistence.WorkflowCloseStatusNone
+		isWorkflowRunning := response.GetWorkflowCloseState() == persistence.WorkflowCloseStatusRunning
 
 		return response.CurrentBranchToken,
 			response.Execution.GetRunId(),
