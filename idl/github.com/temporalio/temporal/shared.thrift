@@ -51,12 +51,6 @@ enum TimeoutType {
     Heartbeat,
 }
 
-enum ParentClosePolicy {
-	ABANDON,
-	REQUEST_CANCEL,
-	TERMINATE,
-}
-
 
 // whenever this list of decision is changed
 // do change the mutableStateBuilder.go
@@ -197,11 +191,6 @@ enum HistoryEventFilterType {
 enum TaskListKind {
   NORMAL,
   STICKY,
-}
-
-enum ArchivalStatus {
-  DISABLED,
-  ENABLED,
 }
 
 enum IndexedValueType {
@@ -352,24 +341,6 @@ struct ClusterReplicationConfiguration {
 struct DomainReplicationConfiguration {
  10: optional string activeClusterName
  20: optional list<ClusterReplicationConfiguration> clusters
-}
-
-struct RegisterDomainRequest {
-  10: optional string name
-  20: optional string description
-  30: optional string ownerEmail
-  40: optional i32 workflowExecutionRetentionPeriodInDays
-  50: optional bool emitMetric = true
-  60: optional list<ClusterReplicationConfiguration> clusters
-  70: optional string activeClusterName
-  // A key-value map for any customized purpose
-  80: optional map<string,string> data
-  90: optional string securityToken
-  120: optional bool isGlobalDomain
-  130: optional ArchivalStatus historyArchivalStatus
-  140: optional string historyArchivalURI
-  150: optional ArchivalStatus visibilityArchivalStatus
-  160: optional string visibilityArchivalURI
 }
 
 struct StartWorkflowExecutionResponse {
@@ -552,29 +523,6 @@ struct WorkflowQueryResult {
   30: optional string errorMessage
 }
 
-struct PendingActivityInfo {
-  10: optional string activityID
-  20: optional ActivityType activityType
-  30: optional PendingActivityState state
-  40: optional binary heartbeatDetails
-  50: optional i64 (js.type = "Long") lastHeartbeatTimestamp
-  60: optional i64 (js.type = "Long") lastStartedTimestamp
-  70: optional i32 attempt
-  80: optional i32 maximumAttempts
-  90: optional i64 (js.type = "Long") scheduledTimestamp
-  100: optional i64 (js.type = "Long") expirationTimestamp
-  110: optional string lastFailureReason
-  120: optional string lastWorkerIdentity
-  130: optional binary lastFailureDetails
-}
-
-struct PendingChildExecutionInfo {
-  10: optional string workflowID
-  20: optional string runID
-  30: optional string workflowTypName
-  40: optional i64 (js.type = "Long") initiatedID
-  50: optional ParentClosePolicy parentClosePolicy
-}
 struct DescribeTaskListRequest {
   10: optional string domain
   20: optional TaskList taskList

@@ -34,9 +34,9 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	gen "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/cluster"
 	p "github.com/temporalio/temporal/common/persistence"
 )
@@ -99,9 +99,9 @@ func (m *MetadataPersistenceSuiteV2) TestCreateDomain() {
 	data := map[string]string{"k1": "v1"}
 	retention := int32(10)
 	emitMetric := true
-	historyArchivalStatus := gen.ArchivalStatusEnabled
+	historyArchivalStatus := enums.ArchivalStatusEnabled
 	historyArchivalURI := "test://history/uri"
-	visibilityArchivalStatus := gen.ArchivalStatusEnabled
+	visibilityArchivalStatus := enums.ArchivalStatusEnabled
 	visibilityArchivalURI := "test://visibility/uri"
 	badBinaries := commonproto.BadBinaries{map[string]*commonproto.BadBinaryInfo{}}
 	isGlobalDomain := false
@@ -173,9 +173,9 @@ func (m *MetadataPersistenceSuiteV2) TestCreateDomain() {
 		&p.DomainConfig{
 			Retention:                100,
 			EmitMetric:               false,
-			HistoryArchivalStatus:    gen.ArchivalStatusDisabled,
+			HistoryArchivalStatus:    enums.ArchivalStatusDisabled,
 			HistoryArchivalURI:       "",
-			VisibilityArchivalStatus: gen.ArchivalStatusDisabled,
+			VisibilityArchivalStatus: enums.ArchivalStatusDisabled,
 			VisibilityArchivalURI:    "",
 		},
 		&p.DomainReplicationConfig{},
@@ -198,9 +198,9 @@ func (m *MetadataPersistenceSuiteV2) TestGetDomain() {
 	data := map[string]string{"k1": "v1"}
 	retention := int32(10)
 	emitMetric := true
-	historyArchivalStatus := gen.ArchivalStatusEnabled
+	historyArchivalStatus := enums.ArchivalStatusEnabled
 	historyArchivalURI := "test://history/uri"
-	visibilityArchivalStatus := gen.ArchivalStatusEnabled
+	visibilityArchivalStatus := enums.ArchivalStatusEnabled
 	visibilityArchivalURI := "test://visibility/uri"
 
 	clusterActive := "some random active cluster name"
@@ -332,9 +332,9 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateDomain() {
 	owner := "create-domain-test-owner"
 	retention := int32(10)
 	emitMetric := true
-	historyArchivalStatus := gen.ArchivalStatusEnabled
+	historyArchivalStatus := enums.ArchivalStatusEnabled
 	historyArchivalURI := "test://history/uri"
-	visibilityArchivalStatus := gen.ArchivalStatusEnabled
+	visibilityArchivalStatus := enums.ArchivalStatusEnabled
 	visibilityArchivalURI := "test://visibility/uri"
 
 	clusterActive := "some random active cluster name"
@@ -443,9 +443,9 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateDomain() {
 	data := map[string]string{"k1": "v1"}
 	retention := int32(10)
 	emitMetric := true
-	historyArchivalStatus := gen.ArchivalStatusEnabled
+	historyArchivalStatus := enums.ArchivalStatusEnabled
 	historyArchivalURI := "test://history/uri"
-	visibilityArchivalStatus := gen.ArchivalStatusEnabled
+	visibilityArchivalStatus := enums.ArchivalStatusEnabled
 	visibilityArchivalURI := "test://visibility/uri"
 	badBinaries := commonproto.BadBinaries{map[string]*commonproto.BadBinaryInfo{}}
 
@@ -595,9 +595,9 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateDomain() {
 	data := map[string]string{"k1": "v1"}
 	retention := int32(10)
 	emitMetric := true
-	historyArchivalStatus := gen.ArchivalStatusEnabled
+	historyArchivalStatus := enums.ArchivalStatusEnabled
 	historyArchivalURI := "test://history/uri"
-	visibilityArchivalStatus := gen.ArchivalStatusEnabled
+	visibilityArchivalStatus := enums.ArchivalStatusEnabled
 	visibilityArchivalURI := "test://visibility/uri"
 
 	clusterActive := "some random active cluster name"
@@ -655,9 +655,9 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateDomain() {
 	updatedData := map[string]string{"k1": "v2"}
 	updatedRetention := int32(20)
 	updatedEmitMetric := false
-	updatedHistoryArchivalStatus := gen.ArchivalStatusDisabled
+	updatedHistoryArchivalStatus := enums.ArchivalStatusDisabled
 	updatedHistoryArchivalURI := ""
-	updatedVisibilityArchivalStatus := gen.ArchivalStatusDisabled
+	updatedVisibilityArchivalStatus := enums.ArchivalStatusDisabled
 	updatedVisibilityArchivalURI := ""
 
 	updateClusterActive := "other random active cluster name"
@@ -776,9 +776,9 @@ func (m *MetadataPersistenceSuiteV2) TestDeleteDomain() {
 	data := map[string]string{"k1": "v1"}
 	retention := 10
 	emitMetric := true
-	historyArchivalStatus := gen.ArchivalStatusEnabled
+	historyArchivalStatus := enums.ArchivalStatusEnabled
 	historyArchivalURI := "test://history/uri"
-	visibilityArchivalStatus := gen.ArchivalStatusEnabled
+	visibilityArchivalStatus := enums.ArchivalStatusEnabled
 	visibilityArchivalURI := "test://visibility/uri"
 
 	clusterActive := "some random active cluster name"
@@ -939,9 +939,9 @@ func (m *MetadataPersistenceSuiteV2) TestListDomains() {
 			Config: &p.DomainConfig{
 				Retention:                109,
 				EmitMetric:               true,
-				HistoryArchivalStatus:    gen.ArchivalStatusEnabled,
+				HistoryArchivalStatus:    enums.ArchivalStatusEnabled,
 				HistoryArchivalURI:       "test://history/uri",
-				VisibilityArchivalStatus: gen.ArchivalStatusEnabled,
+				VisibilityArchivalStatus: enums.ArchivalStatusEnabled,
 				VisibilityArchivalURI:    "test://visibility/uri",
 				BadBinaries:              testBinaries1,
 			},
@@ -965,9 +965,9 @@ func (m *MetadataPersistenceSuiteV2) TestListDomains() {
 			Config: &p.DomainConfig{
 				Retention:                326,
 				EmitMetric:               false,
-				HistoryArchivalStatus:    gen.ArchivalStatusDisabled,
+				HistoryArchivalStatus:    enums.ArchivalStatusDisabled,
 				HistoryArchivalURI:       "",
-				VisibilityArchivalStatus: gen.ArchivalStatusDisabled,
+				VisibilityArchivalStatus: enums.ArchivalStatusDisabled,
 				VisibilityArchivalURI:    "",
 				BadBinaries:              testBinaries2,
 			},

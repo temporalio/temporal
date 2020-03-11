@@ -35,7 +35,6 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
@@ -215,9 +214,9 @@ func (s *IntegrationBase) registerArchivalDomain() error {
 		},
 		Config: &persistence.DomainConfig{
 			Retention:                0,
-			HistoryArchivalStatus:    *adapter.ToThriftArchivalStatus(enums.ArchivalStatusEnabled),
+			HistoryArchivalStatus:    enums.ArchivalStatusEnabled,
 			HistoryArchivalURI:       s.testCluster.archiverBase.historyURI,
-			VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(enums.ArchivalStatusEnabled),
+			VisibilityArchivalStatus: enums.ArchivalStatusEnabled,
 			VisibilityArchivalURI:    s.testCluster.archiverBase.visibilityURI,
 			BadBinaries:              commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}},
 		},

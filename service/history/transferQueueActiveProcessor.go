@@ -37,7 +37,6 @@ import (
 	"github.com/temporalio/temporal/client/history"
 	"github.com/temporalio/temporal/client/matching"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/log"
@@ -1612,11 +1611,11 @@ func (t *transferQueueActiveProcessorImpl) applyParentClosePolicy(
 	defer cancel()
 
 	switch childInfo.ParentClosePolicy {
-	case *adapter.ToThriftParentClosePolicy(enums.ParentClosePolicyAbandon):
+	case enums.ParentClosePolicyAbandon:
 		// noop
 		return nil
 
-	case *adapter.ToThriftParentClosePolicy(enums.ParentClosePolicyTerminate):
+	case enums.ParentClosePolicyTerminate:
 		_, err := t.historyClient.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
 			DomainUUID: domainID,
 			TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
@@ -1631,7 +1630,7 @@ func (t *transferQueueActiveProcessorImpl) applyParentClosePolicy(
 		})
 		return err
 
-	case *adapter.ToThriftParentClosePolicy(enums.ParentClosePolicyRequestCancel):
+	case enums.ParentClosePolicyRequestCancel:
 		_, err := t.historyClient.RequestCancelWorkflowExecution(ctx, &historyservice.RequestCancelWorkflowExecutionRequest{
 			DomainUUID: domainID,
 			CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{

@@ -46,7 +46,6 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/.gen/proto/token"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
@@ -109,7 +108,7 @@ var testGlobalDomainEntry = cache.NewGlobalDomainCacheEntryForTest(
 	&persistence.DomainInfo{ID: testDomainID, Name: testDomainName},
 	&persistence.DomainConfig{
 		Retention:                1,
-		VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(enums.ArchivalStatusEnabled),
+		VisibilityArchivalStatus: enums.ArchivalStatusEnabled,
 		VisibilityArchivalURI:    "test:///visibility/archival",
 	},
 	&persistence.DomainReplicationConfig{

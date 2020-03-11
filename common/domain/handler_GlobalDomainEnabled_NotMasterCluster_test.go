@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
 	"github.com/temporalio/temporal/common/cluster"
@@ -520,9 +519,9 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestUpdateGetDom
 		Config: &persistence.DomainConfig{
 			Retention:                retention,
 			EmitMetric:               emitMetric,
-			HistoryArchivalStatus:    *adapter.ToThriftArchivalStatus(enums.ArchivalStatusDisabled),
+			HistoryArchivalStatus:    enums.ArchivalStatusDisabled,
 			HistoryArchivalURI:       "",
-			VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(enums.ArchivalStatusDisabled),
+			VisibilityArchivalStatus: enums.ArchivalStatusDisabled,
 			VisibilityArchivalURI:    "",
 		},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
@@ -581,9 +580,9 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestUpdateGetDom
 		Config: &persistence.DomainConfig{
 			Retention:                0,
 			EmitMetric:               false,
-			HistoryArchivalStatus:    *adapter.ToThriftArchivalStatus(enums.ArchivalStatusDisabled),
+			HistoryArchivalStatus:    enums.ArchivalStatusDisabled,
 			HistoryArchivalURI:       "",
-			VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(enums.ArchivalStatusDisabled),
+			VisibilityArchivalStatus: enums.ArchivalStatusDisabled,
 			VisibilityArchivalURI:    "",
 		},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
@@ -661,9 +660,9 @@ func (s *domainHandlerGlobalDomainEnabledNotMasterClusterSuite) TestUpdateGetDom
 		Config: &persistence.DomainConfig{
 			Retention:                retention,
 			EmitMetric:               emitMetric,
-			HistoryArchivalStatus:    *adapter.ToThriftArchivalStatus(enums.ArchivalStatusDisabled),
+			HistoryArchivalStatus:    enums.ArchivalStatusDisabled,
 			HistoryArchivalURI:       "",
-			VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(enums.ArchivalStatusDisabled),
+			VisibilityArchivalStatus: enums.ArchivalStatusDisabled,
 			VisibilityArchivalURI:    "",
 		},
 		ReplicationConfig: &persistence.DomainReplicationConfig{

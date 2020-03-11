@@ -37,7 +37,6 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/checksum"
@@ -3440,7 +3439,7 @@ func (e *mutableStateBuilder) ReplicateStartChildWorkflowExecutionInitiatedEvent
 		CreateRequestID:       createRequestID,
 		DomainName:            attributes.GetDomain(),
 		WorkflowTypeName:      attributes.GetWorkflowType().GetName(),
-		ParentClosePolicy:     *adapter.ToThriftParentClosePolicy(attributes.GetParentClosePolicy()),
+		ParentClosePolicy:     attributes.GetParentClosePolicy(),
 	}
 
 	e.pendingChildExecutionInfoIDs[initiatedEventID] = ci

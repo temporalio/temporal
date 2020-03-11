@@ -26,7 +26,6 @@ import (
 	"go.temporal.io/temporal-proto/enums"
 
 	"github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/messaging"
@@ -86,9 +85,9 @@ func (domainReplicator *domainReplicatorImpl) HandleTransmissionTask(domainOpera
 		Config: &commonproto.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: config.Retention,
 			EmitMetric:                             &types.BoolValue{Value: config.EmitMetric},
-			HistoryArchivalStatus:                  adapter.ToProtoArchivalStatus(&config.HistoryArchivalStatus),
+			HistoryArchivalStatus:                  config.HistoryArchivalStatus,
 			HistoryArchivalURI:                     config.HistoryArchivalURI,
-			VisibilityArchivalStatus:               adapter.ToProtoArchivalStatus(&config.VisibilityArchivalStatus),
+			VisibilityArchivalStatus:               config.VisibilityArchivalStatus,
 			VisibilityArchivalURI:                  config.VisibilityArchivalURI,
 			BadBinaries:                            &config.BadBinaries,
 		},

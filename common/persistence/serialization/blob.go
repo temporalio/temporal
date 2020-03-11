@@ -30,7 +30,6 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 )
@@ -266,24 +265,6 @@ func ChecksumFromBlob(b []byte, proto string) (*persistenceblobs.Checksum, error
 type DataBlob struct {
 	Encoding common.EncodingType
 	Data     []byte
-}
-
-// ToThrift convert data blob to thrift representation
-func (d *DataBlob) ToThrift() *shared.DataBlob {
-	switch d.Encoding {
-	case common.EncodingTypeJSON:
-		return &shared.DataBlob{
-			EncodingType: shared.EncodingTypeJSON.Ptr(),
-			Data:         d.Data,
-		}
-	case common.EncodingTypeThriftRW:
-		return &shared.DataBlob{
-			EncodingType: shared.EncodingTypeThriftRW.Ptr(),
-			Data:         d.Data,
-		}
-	default:
-		panic(fmt.Sprintf("DataBlob seeing unsupported enconding type: %v", d.Encoding))
-	}
 }
 
 // ToProto convert data blob to thrift representation

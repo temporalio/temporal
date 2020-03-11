@@ -24,9 +24,9 @@ import (
 	"database/sql"
 	"fmt"
 
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
@@ -211,13 +211,13 @@ func (m *sqlMetadataManagerV2) domainRowToGetDomainResponse(row *sqlplugin.Domai
 			Data:        domainInfo.GetData(),
 		},
 		Config: &persistence.InternalDomainConfig{
-			Retention:                int32(domainInfo.GetRetentionDays()),
+			Retention:                domainInfo.GetRetentionDays(),
 			EmitMetric:               domainInfo.GetEmitMetric(),
 			ArchivalBucket:           domainInfo.GetArchivalBucket(),
-			ArchivalStatus:           workflow.ArchivalStatus(domainInfo.GetArchivalStatus()),
-			HistoryArchivalStatus:    workflow.ArchivalStatus(domainInfo.GetHistoryArchivalStatus()),
+			ArchivalStatus:           enums.ArchivalStatus(domainInfo.GetArchivalStatus()),
+			HistoryArchivalStatus:    enums.ArchivalStatus(domainInfo.GetHistoryArchivalStatus()),
 			HistoryArchivalURI:       domainInfo.GetHistoryArchivalURI(),
-			VisibilityArchivalStatus: workflow.ArchivalStatus(domainInfo.GetVisibilityArchivalStatus()),
+			VisibilityArchivalStatus: enums.ArchivalStatus(domainInfo.GetVisibilityArchivalStatus()),
 			VisibilityArchivalURI:    domainInfo.GetVisibilityArchivalURI(),
 			BadBinaries:              badBinaries,
 		},

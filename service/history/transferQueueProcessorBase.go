@@ -32,7 +32,6 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/client/matching"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
@@ -318,7 +317,7 @@ func (t *transferQueueProcessorBase) recordWorkflowClosed(
 		}
 
 		clusterConfiguredForVisibilityArchival := t.shard.GetService().GetArchivalMetadata().GetVisibilityConfig().ClusterConfiguredForArchival()
-		domainConfiguredForVisibilityArchival := domainEntry.GetConfig().VisibilityArchivalStatus == *adapter.ToThriftArchivalStatus(enums.ArchivalStatusEnabled)
+		domainConfiguredForVisibilityArchival := domainEntry.GetConfig().VisibilityArchivalStatus == enums.ArchivalStatusEnabled
 		archiveVisibility = clusterConfiguredForVisibilityArchival && domainConfiguredForVisibilityArchival
 	}
 
