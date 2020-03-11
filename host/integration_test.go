@@ -667,7 +667,7 @@ func (s *integrationSuite) TestWorkflowRetry() {
 				backoff = time.Second
 			}
 		}
-		expectedExecutionTime := dweResponse.WorkflowExecutionInfo.GetStartTime() + backoff.Nanoseconds()
+		expectedExecutionTime := dweResponse.WorkflowExecutionInfo.GetStartTime().Value + backoff.Nanoseconds()
 		s.Equal(expectedExecutionTime, dweResponse.WorkflowExecutionInfo.GetExecutionTime())
 	}
 }
@@ -904,7 +904,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	s.NoError(err)
 	s.Equal(1, len(resp.GetExecutions()))
 	executionInfo := resp.GetExecutions()[0]
-	s.Equal(targetBackoffDuration.Nanoseconds(), executionInfo.GetExecutionTime()-executionInfo.GetStartTime())
+	s.Equal(targetBackoffDuration.Nanoseconds(), executionInfo.GetExecutionTime()-executionInfo.GetStartTime().Value)
 
 	_, err = poller.PollAndProcessDecisionTask(false, false)
 	s.True(err == nil, err)
@@ -987,11 +987,11 @@ func (s *integrationSuite) TestCronWorkflow() {
 		},
 	})
 	s.NoError(err)
-	expectedExecutionTime := dweResponse.WorkflowExecutionInfo.GetStartTime() + 3*time.Second.Nanoseconds()
+	expectedExecutionTime := dweResponse.WorkflowExecutionInfo.GetStartTime().Value + 3*time.Second.Nanoseconds()
 	s.Equal(expectedExecutionTime, dweResponse.WorkflowExecutionInfo.GetExecutionTime())
 
 	sort.Slice(closedExecutions, func(i, j int) bool {
-		return closedExecutions[i].GetStartTime() < closedExecutions[j].GetStartTime()
+		return closedExecutions[i].GetStartTime().Value < closedExecutions[j].GetStartTime().Value
 	})
 	lastExecution := closedExecutions[0]
 	for i := 1; i != 4; i++ {
@@ -1002,7 +1002,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 		// However, the current execution time is based on the current start time
 		// This code is to remove the diff between current start time and last execution close time
 		// TODO: Remove this line once we unify the time source
-		executionTimeDiff := executionInfo.GetStartTime()/1000000000 - lastExecution.GetCloseTime()/1000000000
+		executionTimeDiff := executionInfo.GetStartTime().Value/1000000000 - lastExecution.GetCloseTime().Value/1000000000
 		// The backoff between any two executions should be multiplier of the target backoff duration which is 3 in this test
 		s.Equal(int64(0), int64(expectedBackoff-executionTimeDiff)%(targetBackoffDuration.Nanoseconds()/1000000000))
 		lastExecution = executionInfo
@@ -1430,7 +1430,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 	}
 	dweResponse, err := describeWorkflowExecution()
 	s.NoError(err)
-	s.Equal(int64(0), dweResponse.WorkflowExecutionInfo.CloseTime)
+	s.Nil(dweResponse.WorkflowExecutionInfo.CloseTime)
 	s.Equal(int64(2), dweResponse.WorkflowExecutionInfo.HistoryLength) // WorkflowStarted, DecisionScheduled
 	s.Equal(dweResponse.WorkflowExecutionInfo.GetStartTime(), dweResponse.WorkflowExecutionInfo.GetExecutionTime())
 
@@ -2014,7 +2014,7 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 	}
 	s.NotNil(closedExecutions)
 	sort.Slice(closedExecutions, func(i, j int) bool {
-		return closedExecutions[i].GetStartTime() < closedExecutions[j].GetStartTime()
+		return closedExecutions[i].GetStartTime().Value < closedExecutions[j].GetStartTime().Value
 	})
 	//The first parent is not the cron workflow, only verify child workflow with cron schedule
 	lastExecution := closedExecutions[1]
@@ -2026,7 +2026,7 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 		// However, the current execution time is based on the current start time
 		// This code is to remove the diff between current start time and last execution close time
 		// TODO: Remove this line once we unify the time source.
-		executionTimeDiff := executionInfo.GetStartTime()/1000000000 - lastExecution.GetCloseTime()/1000000000
+		executionTimeDiff := executionInfo.GetStartTime().Value/1000000000 - lastExecution.GetCloseTime().Value/1000000000
 		// The backoff between any two executions should be multiplier of the target backoff duration which is 3 in this test
 		s.Equal(int64(0), int64(expectedBackoff-executionTimeDiff)/1000000000%(targetBackoffDuration.Nanoseconds()/1000000000))
 		lastExecution = executionInfo

@@ -869,8 +869,8 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 	executionInfo := &cliproto.WorkflowExecutionInfo{
 		Execution:        info.Execution,
 		Type:             info.Type,
-		CloseTime:        convertTime(info.GetCloseTime(), false),
-		StartTime:        convertTime(info.GetStartTime(), false),
+		CloseTime:        convertTime(info.GetCloseTime().Value, false),
+		StartTime:        convertTime(info.GetStartTime().Value, false),
 		CloseStatus:      info.CloseStatus,
 		HistoryLength:    info.HistoryLength,
 		ParentDomainId:   info.ParentDomainId,
@@ -1058,11 +1058,11 @@ func appendWorkflowExecutionsToTable(
 		if printRawTime {
 			startTime = fmt.Sprintf("%d", e.GetStartTime())
 			executionTime = fmt.Sprintf("%d", e.GetExecutionTime())
-			closeTime = fmt.Sprintf("%d", e.GetCloseTime())
+			closeTime = fmt.Sprintf("%d", e.GetCloseTime().Value)
 		} else {
-			startTime = convertTime(e.GetStartTime(), !printDateTime)
+			startTime = convertTime(e.GetStartTime().Value, !printDateTime)
 			executionTime = convertTime(e.GetExecutionTime(), !printDateTime)
-			closeTime = convertTime(e.GetCloseTime(), !printDateTime)
+			closeTime = convertTime(e.GetCloseTime().Value, !printDateTime)
 		}
 		row := []string{trimWorkflowType(e.Type.GetName()), e.Execution.GetWorkflowId(), e.Execution.GetRunId(), startTime, executionTime}
 		if !queryOpen {
@@ -1279,9 +1279,9 @@ func scanWorkflow(c *cli.Context, table *tablewriter.Table, queryOpen bool) func
 				executionTime = fmt.Sprintf("%d", e.GetExecutionTime())
 				closeTime = fmt.Sprintf("%d", e.GetCloseTime())
 			} else {
-				startTime = convertTime(e.GetStartTime(), !printDateTime)
+				startTime = convertTime(e.GetStartTime().Value, !printDateTime)
 				executionTime = convertTime(e.GetExecutionTime(), !printDateTime)
-				closeTime = convertTime(e.GetCloseTime(), !printDateTime)
+				closeTime = convertTime(e.GetCloseTime().Value, !printDateTime)
 			}
 			row := []string{trimWorkflowType(e.Type.GetName()), e.Execution.GetWorkflowId(), e.Execution.GetRunId(), startTime, executionTime}
 			if !queryOpen {
@@ -1617,7 +1617,7 @@ func doReset(c *cli.Context, domain, wid, rid string, params batchResetParamsTyp
 		rid = currentRunID
 	}
 
-	if resp.WorkflowExecutionInfo.CloseStatus == enums.WorkflowExecutionCloseStatusRunning || resp.WorkflowExecutionInfo.CloseTime == 0 {
+	if resp.WorkflowExecutionInfo.CloseStatus == enums.WorkflowExecutionCloseStatusRunning || resp.WorkflowExecutionInfo.CloseTime.Value == 0 {
 		if params.skipOpen {
 			fmt.Println("skip because current run is open: ", wid, rid, currentRunID)
 			//skip and not terminate current if open

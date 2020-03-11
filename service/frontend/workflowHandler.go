@@ -2402,7 +2402,7 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 	// special handling of ExecutionTime for cron or retry
 	for _, execution := range archiverResponse.Executions {
 		if execution.GetExecutionTime() == 0 {
-			execution.ExecutionTime = execution.GetStartTime()
+			execution.ExecutionTime = execution.GetStartTime().Value
 		}
 	}
 

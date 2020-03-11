@@ -145,9 +145,9 @@ func (s *integrationSuite) TestVisibilityArchival() {
 	for _, execution := range executions {
 		s.Equal(workflowID, execution.GetExecution().GetWorkflowId())
 		s.Equal(workflowType, execution.GetType().GetName())
-		s.NotZero(execution.StartTime)
+		s.NotZero(execution.StartTime.Value)
 		s.NotZero(execution.ExecutionTime)
-		s.NotZero(execution.CloseTime)
+		s.NotZero(execution.CloseTime.Value)
 	}
 }
 

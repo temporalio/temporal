@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
@@ -1218,7 +1219,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 				RunId:      executionInfo.RunID,
 			},
 			Type:             &commonproto.WorkflowType{Name: executionInfo.WorkflowTypeName},
-			StartTime:        executionInfo.StartTimestamp.UnixNano(),
+			StartTime:        &types.Int64Value{Value: executionInfo.StartTimestamp.UnixNano()},
 			HistoryLength:    mutableState.GetNextEventID() - common.FirstEventID,
 			AutoResetPoints:  adapter.ToProtoResetPoints(executionInfo.AutoResetPoints),
 			Memo:             &commonproto.Memo{Fields: executionInfo.Memo},
@@ -1234,7 +1235,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 		return nil, err
 	}
 	backoffDuration := time.Duration(startEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstDecisionTaskBackoffSeconds()) * time.Second
-	result.WorkflowExecutionInfo.ExecutionTime = result.WorkflowExecutionInfo.GetStartTime() + backoffDuration.Nanoseconds()
+	result.WorkflowExecutionInfo.ExecutionTime = result.WorkflowExecutionInfo.GetStartTime().Value + backoffDuration.Nanoseconds()
 
 	if executionInfo.ParentRunID != "" {
 		result.WorkflowExecutionInfo.ParentExecution = &commonproto.WorkflowExecution{
@@ -1250,7 +1251,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 		if err != nil {
 			return nil, err
 		}
-		result.WorkflowExecutionInfo.CloseTime = completionEvent.GetTimestamp()
+		result.WorkflowExecutionInfo.CloseTime = &types.Int64Value{Value: completionEvent.GetTimestamp()}
 	}
 
 	if len(mutableState.GetPendingActivityInfos()) > 0 {

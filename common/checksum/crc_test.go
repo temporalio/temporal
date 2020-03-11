@@ -26,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	commonproto "go.temporal.io/temporal-proto/common"
@@ -43,7 +44,9 @@ func TestCRC32OverThrift(t *testing.T) {
 			WorkflowId: uuid.New(),
 			RunId:      uuid.New(),
 		},
-		StartTime:     time.Now().UnixNano(),
+		StartTime: &types.Int64Value{
+			Value: time.Now().UnixNano(),
+		},
 		HistoryLength: 550,
 	}
 
