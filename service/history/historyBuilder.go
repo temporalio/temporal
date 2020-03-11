@@ -26,7 +26,6 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
 )
@@ -476,7 +475,7 @@ func (b *historyBuilder) newWorkflowExecutionStartedEvent(
 	var resetPoints *commonproto.ResetPoints
 	if previousExecution != nil {
 		prevRunID = previousExecution.RunID
-		resetPoints = adapter.ToProtoResetPoints(previousExecution.AutoResetPoints)
+		resetPoints = previousExecution.AutoResetPoints
 	}
 	request := startRequest.StartRequest
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(enums.EventTypeWorkflowExecutionStarted)

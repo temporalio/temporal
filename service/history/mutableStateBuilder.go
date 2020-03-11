@@ -1829,12 +1829,12 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 		e.executionInfo.NonRetriableErrors = event.RetryPolicy.NonRetriableErrorReasons
 	}
 
-	e.executionInfo.AutoResetPoints = adapter.ToThriftResetPoints(rolloverAutoResetPointsWithExpiringTime(
+	e.executionInfo.AutoResetPoints = rolloverAutoResetPointsWithExpiringTime(
 		event.GetPrevAutoResetPoints(),
 		event.GetContinuedExecutionRunId(),
 		startEvent.GetTimestamp(),
 		e.domainEntry.GetRetentionDays(e.executionInfo.WorkflowID),
-	))
+	)
 
 	if event.Memo != nil {
 		e.executionInfo.Memo = event.Memo.GetFields()
@@ -1938,7 +1938,7 @@ func (e *mutableStateBuilder) addBinaryCheckSumIfNotExists(
 	exeInfo := e.executionInfo
 	var currResetPoints []*commonproto.ResetPointInfo
 	if exeInfo.AutoResetPoints != nil && exeInfo.AutoResetPoints.Points != nil {
-		currResetPoints = adapter.ToProtoResetPointInfos(e.executionInfo.AutoResetPoints.Points)
+		currResetPoints = e.executionInfo.AutoResetPoints.Points
 	} else {
 		currResetPoints = make([]*commonproto.ResetPointInfo, 0, 1)
 	}
@@ -1975,9 +1975,9 @@ func (e *mutableStateBuilder) addBinaryCheckSumIfNotExists(
 		Resettable:               resettable,
 	}
 	currResetPoints = append(currResetPoints, info)
-	exeInfo.AutoResetPoints = adapter.ToThriftResetPoints(&commonproto.ResetPoints{
+	exeInfo.AutoResetPoints = &commonproto.ResetPoints{
 		Points: currResetPoints,
-	})
+	}
 	bytes, err := json.Marshal(recentBinaryChecksums)
 	if err != nil {
 		return err
@@ -4474,7 +4474,7 @@ func (e *mutableStateBuilder) closeTransactionHandleWorkflowReset(
 	if _, pt := FindAutoResetPoint(
 		e.timeSource,
 		adapter.ToProtoBadBinariesPtr(&domainEntry.GetConfig().BadBinaries),
-		adapter.ToProtoResetPoints(e.GetExecutionInfo().AutoResetPoints),
+		e.GetExecutionInfo().AutoResetPoints,
 	); pt != nil {
 		if err := e.taskGenerator.generateWorkflowResetTasks(
 			e.unixNanoToTime(now.UnixNano()),

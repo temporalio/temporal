@@ -43,7 +43,6 @@ import (
 	"github.com/temporalio/temporal/client/history"
 	"github.com/temporalio/temporal/client/matching"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
@@ -1220,7 +1219,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 			Type:             &commonproto.WorkflowType{Name: executionInfo.WorkflowTypeName},
 			StartTime:        &types.Int64Value{Value: executionInfo.StartTimestamp.UnixNano()},
 			HistoryLength:    mutableState.GetNextEventID() - common.FirstEventID,
-			AutoResetPoints:  adapter.ToProtoResetPoints(executionInfo.AutoResetPoints),
+			AutoResetPoints:  executionInfo.AutoResetPoints,
 			Memo:             &commonproto.Memo{Fields: executionInfo.Memo},
 			SearchAttributes: &commonproto.SearchAttributes{IndexedFields: executionInfo.SearchAttributes},
 			CloseStatus:      executionInfo.CloseStatus,
