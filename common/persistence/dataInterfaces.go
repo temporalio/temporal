@@ -1066,7 +1066,7 @@ type (
 		HistoryArchivalURI       string
 		VisibilityArchivalStatus workflow.ArchivalStatus
 		VisibilityArchivalURI    string
-		BadBinaries              workflow.BadBinaries
+		BadBinaries              commonproto.BadBinaries
 	}
 
 	// DomainReplicationConfig describes the cross DC domain replication configuration

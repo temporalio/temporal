@@ -21,7 +21,8 @@
 package persistence
 
 import (
-	"github.com/temporalio/temporal/.gen/go/shared"
+	commonproto "go.temporal.io/temporal-proto/common"
+
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 )
@@ -146,7 +147,7 @@ func (m *metadataManagerImpl) serializeDomainConfig(c *DomainConfig) (InternalDo
 		return InternalDomainConfig{}, nil
 	}
 	if c.BadBinaries.Binaries == nil {
-		c.BadBinaries.Binaries = map[string]*shared.BadBinaryInfo{}
+		c.BadBinaries.Binaries = map[string]*commonproto.BadBinaryInfo{}
 	}
 	badBinaries, err := m.serializer.SerializeBadBinaries(&c.BadBinaries, common.EncodingTypeThriftRW)
 	if err != nil {
@@ -172,7 +173,7 @@ func (m *metadataManagerImpl) deserializeDomainConfig(ic *InternalDomainConfig) 
 		return DomainConfig{}, err
 	}
 	if badBinaries.Binaries == nil {
-		badBinaries.Binaries = map[string]*shared.BadBinaryInfo{}
+		badBinaries.Binaries = map[string]*commonproto.BadBinaryInfo{}
 	}
 	return DomainConfig{
 		Retention:                ic.Retention,
