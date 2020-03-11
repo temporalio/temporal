@@ -28,7 +28,6 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/persistence"
 )
 
@@ -232,7 +231,7 @@ func (i *historyIterator) readHistory(firstEventID int64) ([]*commonproto.Histor
 		ShardID:     &i.request.ShardID,
 	}
 	historyBatches, _, _, err := persistence.ReadFullPageV2EventsByBatch(i.historyV2Manager, req)
-	return adapter.ToProtoHistories(historyBatches), err
+	return historyBatches, err
 }
 
 // reset resets iterator to a certain state given its encoded representation

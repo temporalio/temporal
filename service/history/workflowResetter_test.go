@@ -34,7 +34,6 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/collection"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
@@ -180,9 +179,9 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 		WorkflowID:  s.workflowID,
 		RunID:       s.resetRunID,
 		BranchToken: []byte("some random reset branch token"),
-		Events: adapter.ToThriftHistoryEvents([]*commonproto.HistoryEvent{{
+		Events: []*commonproto.HistoryEvent{{
 			EventId: 123,
-		}}),
+		}},
 	}}
 	resetEventsSize := int64(4321)
 	resetMutableState.EXPECT().CloseTransactionAsSnapshot(
@@ -426,7 +425,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents() {
 		NextPageToken: nil,
 		ShardID:       &shardId,
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
-		History:       adapter.ToThriftHistories([]*commonproto.History{{Events: baseEvents}}),
+		History:       []*commonproto.History{{Events: baseEvents}},
 		NextPageToken: nil,
 	}, nil).Once()
 
@@ -439,7 +438,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents() {
 		NextPageToken: nil,
 		ShardID:       &shardId,
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
-		History:       adapter.ToThriftHistories([]*commonproto.History{{Events: newEvents}}),
+		History:       []*commonproto.History{{Events: newEvents}},
 		NextPageToken: nil,
 	}, nil).Once()
 
@@ -511,7 +510,7 @@ func (s *workflowResetterSuite) TestReapplyWorkflowEvents() {
 		NextPageToken: nil,
 		ShardID:       &shardId,
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
-		History:       adapter.ToThriftHistories([]*commonproto.History{{Events: events}}),
+		History:       []*commonproto.History{{Events: events}},
 		NextPageToken: nil,
 	}, nil).Once()
 
@@ -615,7 +614,7 @@ func (s *workflowResetterSuite) TestPagination() {
 		NextPageToken: nil,
 		ShardID:       &shardId,
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
-		History:       adapter.ToThriftHistories(history1),
+		History:       history1,
 		NextPageToken: pageToken,
 		Size:          12345,
 	}, nil).Once()
@@ -627,7 +626,7 @@ func (s *workflowResetterSuite) TestPagination() {
 		NextPageToken: pageToken,
 		ShardID:       &shardId,
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
-		History:       adapter.ToThriftHistories(history2),
+		History:       history2,
 		NextPageToken: nil,
 		Size:          67890,
 	}, nil).Once()

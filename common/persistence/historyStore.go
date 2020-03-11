@@ -24,9 +24,9 @@ import (
 	"fmt"
 
 	"github.com/pborman/uuid"
+	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
@@ -169,8 +169,8 @@ func (m *historyV2ManagerImpl) AppendHistoryNodes(
 			Msg: fmt.Sprintf("events to be appended cannot be empty"),
 		}
 	}
-	version := *request.Events[0].Version
-	nodeID := *request.Events[0].EventId
+	version := request.Events[0].Version
+	nodeID := request.Events[0].EventId
 	lastID := nodeID - 1
 
 	if nodeID <= 0 {
@@ -179,12 +179,12 @@ func (m *historyV2ManagerImpl) AppendHistoryNodes(
 		}
 	}
 	for _, e := range request.Events {
-		if *e.Version != version {
+		if e.Version != version {
 			return nil, &InvalidPersistenceRequestError{
 				Msg: fmt.Sprintf("event version must be the same inside a batch"),
 			}
 		}
-		if *e.EventId != lastID+1 {
+		if e.EventId != lastID+1 {
 			return nil, &InvalidPersistenceRequestError{
 				Msg: fmt.Sprintf("event ID must be continous"),
 			}
@@ -404,7 +404,7 @@ func (m *historyV2ManagerImpl) readRawHistoryBranch(
 func (m *historyV2ManagerImpl) readHistoryBranch(
 	byBatch bool,
 	request *ReadHistoryBranchRequest,
-) ([]*workflow.HistoryEvent, []*workflow.History, []byte, int, int64, error) {
+) ([]*commonproto.HistoryEvent, []*commonproto.History, []byte, int, int64, error) {
 
 	dataBlobs, token, dataSize, logger, err := m.readRawHistoryBranch(request)
 	if err != nil {
@@ -412,8 +412,8 @@ func (m *historyV2ManagerImpl) readHistoryBranch(
 	}
 	defaultLastEventID := request.MinEventID - 1
 
-	historyEvents := make([]*workflow.HistoryEvent, 0, request.PageSize)
-	historyEventBatches := make([]*workflow.History, 0, request.PageSize)
+	historyEvents := make([]*commonproto.HistoryEvent, 0, request.PageSize)
+	historyEventBatches := make([]*commonproto.History, 0, request.PageSize)
 	// first_event_id of the last batch
 	lastFirstEventID := common.EmptyEventID
 
@@ -468,7 +468,7 @@ func (m *historyV2ManagerImpl) readHistoryBranch(
 		token.LastEventVersion = firstEvent.GetVersion()
 		token.LastEventID = lastEvent.GetEventId()
 		if byBatch {
-			historyEventBatches = append(historyEventBatches, &workflow.History{Events: events})
+			historyEventBatches = append(historyEventBatches, &commonproto.History{Events: events})
 		} else {
 			historyEvents = append(historyEvents, events...)
 		}

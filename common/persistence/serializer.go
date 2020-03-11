@@ -24,9 +24,12 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/gogo/protobuf/proto"
+	commonproto "go.temporal.io/temporal-proto/common"
+
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 
-	persist "github.com/temporalio/temporal/.gen/go/persistenceblobs"
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/codec"
@@ -37,12 +40,12 @@ type (
 	// It will only be used inside persistence, so that serialize/deserialize is transparent for application
 	PayloadSerializer interface {
 		// serialize/deserialize history events
-		SerializeBatchEvents(batch []*workflow.HistoryEvent, encodingType common.EncodingType) (*serialization.DataBlob, error)
-		DeserializeBatchEvents(data *serialization.DataBlob) ([]*workflow.HistoryEvent, error)
+		SerializeBatchEvents(batch []*commonproto.HistoryEvent, encodingType common.EncodingType) (*serialization.DataBlob, error)
+		DeserializeBatchEvents(data *serialization.DataBlob) ([]*commonproto.HistoryEvent, error)
 
 		// serialize/deserialize a single history event
-		SerializeEvent(event *workflow.HistoryEvent, encodingType common.EncodingType) (*serialization.DataBlob, error)
-		DeserializeEvent(data *serialization.DataBlob) (*workflow.HistoryEvent, error)
+		SerializeEvent(event *commonproto.HistoryEvent, encodingType common.EncodingType) (*serialization.DataBlob, error)
+		DeserializeEvent(data *serialization.DataBlob) (*commonproto.HistoryEvent, error)
 
 		// serialize/deserialize visibility memo fields
 		SerializeVisibilityMemo(memo *workflow.Memo, encodingType common.EncodingType) (*serialization.DataBlob, error)
@@ -61,8 +64,8 @@ type (
 		DeserializeVersionHistories(data *serialization.DataBlob) (*workflow.VersionHistories, error)
 
 		// serialize/deserialize immutable cluster metadata
-		SerializeImmutableClusterMetadata(icm *persist.ImmutableClusterMetadata, encodingType common.EncodingType) (*serialization.DataBlob, error)
-		DeserializeImmutableClusterMetadata(data *serialization.DataBlob) (*persist.ImmutableClusterMetadata, error)
+		SerializeImmutableClusterMetadata(icm *persistenceblobs.ImmutableClusterMetadata, encodingType common.EncodingType) (*serialization.DataBlob, error)
+		DeserializeImmutableClusterMetadata(data *serialization.DataBlob) (*persistenceblobs.ImmutableClusterMetadata, error)
 	}
 
 	// CadenceSerializationError is an error type for cadence serialization
@@ -92,36 +95,69 @@ func NewPayloadSerializer() PayloadSerializer {
 	}
 }
 
-func (t *serializerImpl) SerializeBatchEvents(events []*workflow.HistoryEvent, encodingType common.EncodingType) (*serialization.DataBlob, error) {
-	return t.serialize(events, encodingType)
+func (t *serializerImpl) SerializeBatchEvents(events []*commonproto.HistoryEvent, encodingType common.EncodingType) (*serialization.DataBlob, error) {
+	return t.serialize(&commonproto.History{Events: events}, encodingType)
 }
 
-func (t *serializerImpl) DeserializeBatchEvents(data *serialization.DataBlob) ([]*workflow.HistoryEvent, error) {
+func (t *serializerImpl) DeserializeBatchEvents(data *serialization.DataBlob) ([]*commonproto.HistoryEvent, error) {
 	if data == nil {
 		return nil, nil
 	}
-	var events []*workflow.HistoryEvent
-	if data != nil && len(data.Data) == 0 {
-		return events, nil
+	if len(data.Data) == 0 {
+		return nil, nil
 	}
-	err := t.deserialize(data, &events)
-	return events, err
+
+	events := &commonproto.History{}
+	var err error
+	switch data.Encoding {
+	case common.EncodingTypeJSON:
+		err = codec.NewJSONPBEncoder().Decode(data.Data, events)
+	case common.EncodingTypeProto3, common.EncodingTypeThriftRW:
+		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
+		// Client API currently specifies encodingType on requests which span multiple of these objects
+		err = proto.Unmarshal(data.Data, events)
+	default:
+		return nil, NewCadenceDeserializationError("DeserializeBatchEvents invalid encoding")
+	}
+	if err != nil {
+		return nil, err
+	}
+	return events.Events, nil
 }
 
-func (t *serializerImpl) SerializeEvent(event *workflow.HistoryEvent, encodingType common.EncodingType) (*serialization.DataBlob, error) {
+func (t *serializerImpl) SerializeEvent(event *commonproto.HistoryEvent, encodingType common.EncodingType) (*serialization.DataBlob, error) {
 	if event == nil {
 		return nil, nil
 	}
 	return t.serialize(event, encodingType)
 }
 
-func (t *serializerImpl) DeserializeEvent(data *serialization.DataBlob) (*workflow.HistoryEvent, error) {
+func (t *serializerImpl) DeserializeEvent(data *serialization.DataBlob) (*commonproto.HistoryEvent, error) {
 	if data == nil {
 		return nil, nil
 	}
-	var event workflow.HistoryEvent
-	err := t.deserialize(data, &event)
-	return &event, err
+	if len(data.Data) == 0 {
+		return nil, nil
+	}
+
+	event := &commonproto.HistoryEvent{}
+	var err error
+	switch data.Encoding {
+	case common.EncodingTypeJSON:
+		err = codec.NewJSONPBEncoder().Decode(data.Data, event)
+	case common.EncodingTypeProto3, common.EncodingTypeThriftRW:
+		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
+		// Client API currently specifies encodingType on requests which span multiple of these objects
+		err = proto.Unmarshal(data.Data, event)
+	default:
+		return nil, NewCadenceDeserializationError("DeserializeEvent invalid encoding")
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return event, err
 }
 
 func (t *serializerImpl) SerializeResetPoints(rp *workflow.ResetPoints, encodingType common.EncodingType) (*serialization.DataBlob, error) {
@@ -178,22 +214,87 @@ func (t *serializerImpl) DeserializeVersionHistories(data *serialization.DataBlo
 	return &histories, err
 }
 
-func (t *serializerImpl) SerializeImmutableClusterMetadata(icm *persist.ImmutableClusterMetadata, encodingType common.EncodingType) (*serialization.DataBlob, error) {
+func (t *serializerImpl) SerializeImmutableClusterMetadata(icm *persistenceblobs.ImmutableClusterMetadata, encodingType common.EncodingType) (*serialization.DataBlob, error) {
 	if icm == nil {
-		icm = &persist.ImmutableClusterMetadata{}
+		icm = &persistenceblobs.ImmutableClusterMetadata{}
 	}
 	return t.serialize(icm, encodingType)
 }
 
-func (t *serializerImpl) DeserializeImmutableClusterMetadata(data *serialization.DataBlob) (*persist.ImmutableClusterMetadata, error) {
-	var icm persist.ImmutableClusterMetadata
-	err := t.deserialize(data, &icm)
-	return &icm, err
+func (t *serializerImpl) DeserializeImmutableClusterMetadata(data *serialization.DataBlob) (*persistenceblobs.ImmutableClusterMetadata, error) {
+	if data == nil {
+		return nil, nil
+	}
+	if len(data.Data) == 0 {
+		return nil, nil
+	}
+
+	event := &persistenceblobs.ImmutableClusterMetadata{}
+	var err error
+	switch data.Encoding {
+	case common.EncodingTypeJSON:
+		err = codec.NewJSONPBEncoder().Decode(data.Data, event)
+	case common.EncodingTypeProto3, common.EncodingTypeThriftRW:
+		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
+		// Client API currently specifies encodingType on requests which span multiple of these objects
+		err = proto.Unmarshal(data.Data, event)
+	default:
+		return nil, NewCadenceDeserializationError("DeserializeImmutableClusterMetadata invalid encoding")
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return event, err
+}
+
+func (t *serializerImpl) serializeProto(p serialization.ProtoMarshal, encodingType common.EncodingType) (*serialization.DataBlob, error) {
+	if p == nil {
+		return nil, nil
+	}
+
+	var data []byte
+	var err error
+
+	switch encodingType {
+	case common.EncodingTypeProto3, common.EncodingTypeThriftRW:
+		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
+		// Client API currently specifies encodingType on requests which span multiple of these objects
+		data, err = p.Marshal()
+	case common.EncodingTypeJSON, common.EncodingTypeUnknown, common.EncodingTypeEmpty: // For backward-compatibility
+		encodingType = common.EncodingTypeJSON
+		pb, ok := p.(proto.Message)
+		if !ok {
+			return nil, NewCadenceSerializationError("could not cast protomarshal interface to proto.message")
+		}
+		data, err = codec.NewJSONPBEncoder().Encode(pb)
+	default:
+		return nil, NewUnknownEncodingTypeError(encodingType)
+	}
+
+	if err != nil {
+		return nil, NewCadenceSerializationError(err.Error())
+	}
+
+	// Shouldn't happen, but keeping
+	if data == nil {
+		return nil, nil
+	}
+
+	return &serialization.DataBlob{
+		Data:     data,
+		Encoding: encodingType,
+	}, nil
 }
 
 func (t *serializerImpl) serialize(input interface{}, encodingType common.EncodingType) (*serialization.DataBlob, error) {
 	if input == nil {
 		return nil, nil
+	}
+
+	if p, ok := input.(serialization.ProtoMarshal); ok {
+		return t.serializeProto(p, encodingType)
 	}
 
 	var data []byte
@@ -212,15 +313,12 @@ func (t *serializerImpl) serialize(input interface{}, encodingType common.Encodi
 	if err != nil {
 		return nil, NewCadenceSerializationError(err.Error())
 	}
+
 	return NewDataBlob(data, encodingType), nil
 }
 
 func (t *serializerImpl) thriftrwEncode(input interface{}) ([]byte, error) {
 	switch input.(type) {
-	case []*workflow.HistoryEvent:
-		return t.thriftrwEncoder.Encode(&workflow.History{Events: input.([]*workflow.HistoryEvent)})
-	case *workflow.HistoryEvent:
-		return t.thriftrwEncoder.Encode(input.(*workflow.HistoryEvent))
 	case *workflow.Memo:
 		return t.thriftrwEncoder.Encode(input.(*workflow.Memo))
 	case *workflow.ResetPoints:
@@ -229,8 +327,6 @@ func (t *serializerImpl) thriftrwEncode(input interface{}) ([]byte, error) {
 		return t.thriftrwEncoder.Encode(input.(*workflow.BadBinaries))
 	case *workflow.VersionHistories:
 		return t.thriftrwEncoder.Encode(input.(*workflow.VersionHistories))
-	case *persist.ImmutableClusterMetadata:
-		return t.thriftrwEncoder.Encode(input.(*persist.ImmutableClusterMetadata))
 	default:
 		return nil, nil
 	}
@@ -246,6 +342,8 @@ func (t *serializerImpl) deserialize(data *serialization.DataBlob, target interf
 	var err error
 
 	switch data.GetEncoding() {
+	case common.EncodingTypeProto3:
+		return NewCadenceDeserializationError(fmt.Sprintf("proto requires proto specific deserialization"))
 	case common.EncodingTypeThriftRW:
 		err = t.thriftrwDecode(data.Data, target)
 	case common.EncodingTypeJSON, common.EncodingTypeUnknown, common.EncodingTypeEmpty: // For backward-compatibility
@@ -262,15 +360,6 @@ func (t *serializerImpl) deserialize(data *serialization.DataBlob, target interf
 
 func (t *serializerImpl) thriftrwDecode(data []byte, target interface{}) error {
 	switch target := target.(type) {
-	case *[]*workflow.HistoryEvent:
-		history := workflow.History{Events: *target}
-		if err := t.thriftrwEncoder.Decode(data, &history); err != nil {
-			return err
-		}
-		*target = history.GetEvents()
-		return nil
-	case *workflow.HistoryEvent:
-		return t.thriftrwEncoder.Decode(data, target)
 	case *workflow.Memo:
 		return t.thriftrwEncoder.Decode(data, target)
 	case *workflow.ResetPoints:
@@ -278,8 +367,6 @@ func (t *serializerImpl) thriftrwDecode(data []byte, target interface{}) error {
 	case *workflow.BadBinaries:
 		return t.thriftrwEncoder.Decode(data, target)
 	case *workflow.VersionHistories:
-		return t.thriftrwEncoder.Decode(data, target)
-	case *persist.ImmutableClusterMetadata:
 		return t.thriftrwEncoder.Decode(data, target)
 	default:
 		return nil

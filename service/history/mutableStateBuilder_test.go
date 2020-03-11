@@ -36,7 +36,6 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/checksum"
 	"github.com/temporalio/temporal/common/definition"
@@ -333,7 +332,7 @@ func (s *mutableStateSuite) TestReorderEvents() {
 	dbState := &persistence.WorkflowMutableState{
 		ExecutionInfo:    info,
 		ActivityInfos:    activityInfos,
-		BufferedEvents:   adapter.ToThriftHistoryEvents(bufferedEvents),
+		BufferedEvents:   bufferedEvents,
 		ReplicationState: replicationState,
 	}
 
@@ -772,7 +771,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 			Version:               failoverVersion,
 			InitiatedID:           80,
 			InitiatedEventBatchID: 20,
-			InitiatedEvent:        adapter.ToThriftHistoryEvent(&commonproto.HistoryEvent{}),
+			InitiatedEvent:        &commonproto.HistoryEvent{},
 			StartedID:             common.EmptyEventID,
 			CreateRequestID:       uuid.New(),
 			DomainName:            testDomainID,
@@ -833,7 +832,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistence.WorkflowMut
 		ChildExecutionInfos: childInfos,
 		SignalInfos:         signalInfos,
 		SignalRequestedIDs:  signalRequestIDs,
-		BufferedEvents:      adapter.ToThriftHistoryEvents(bufferedEvents),
+		BufferedEvents:      bufferedEvents,
 		ReplicationState:    replicationState,
 		VersionHistories:    versionHistories,
 	}

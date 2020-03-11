@@ -43,11 +43,11 @@ const (
 
 const (
 	// CadenceLocalHostPort is the default address for cadence frontend service
-	CadenceLocalHostPort = "127.0.0.1:7933"
+	ServiceHostPort = "127.0.0.1:7933"
 	// CadenceServiceName is the default service name for cadence frontend
-	CadenceServiceName = "cadence-frontend"
+	ServiceName = "frontend"
 	// CanaryServiceName is the default service name for cadence canary
-	CanaryServiceName = "cadence-canary"
+	CanaryServiceName = "canary"
 )
 
 type (

@@ -20,7 +20,6 @@ default: test
 THRIFTRW_SRCS = \
   idl/github.com/temporalio/temporal/shared.thrift \
   idl/github.com/temporalio/temporal/sqlblobs.thrift \
-  idl/github.com/temporalio/temporal/persistenceblobs.thrift \
 
 TEST_TIMEOUT = 20m
 TEST_ARG ?= -race -v -timeout $(TEST_TIMEOUT)

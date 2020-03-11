@@ -44,7 +44,7 @@ func NewCanaryRunner(cfg *Config) (Runnable, error) {
 	metricsScope := cfg.Metrics.NewScope(loggerimpl.NewLogger(logger))
 
 	if cfg.Cadence.HostNameAndPort == "" {
-		cfg.Cadence.HostNameAndPort = CadenceLocalHostPort
+		cfg.Cadence.HostNameAndPort = ServiceHostPort
 	}
 
 	connection, err := rpc.Dial(cfg.Cadence.HostNameAndPort)

@@ -35,7 +35,6 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -1471,7 +1470,7 @@ func (h *Handler) ReapplyEvents(ctx context.Context, request *historyservice.Rea
 		request.GetDomainUUID(),
 		execution.GetWorkflowId(),
 		execution.GetRunId(),
-		adapter.ToProtoHistoryEvents(historyEvents),
+		historyEvents,
 	); err != nil {
 		return nil, h.error(err, scope, domainID, workflowID)
 	}

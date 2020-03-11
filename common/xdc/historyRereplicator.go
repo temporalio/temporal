@@ -33,7 +33,6 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -472,7 +471,7 @@ func (c *historyRereplicationContext) deserializeBlob(blob *commonproto.DataBlob
 	var historyEvents []*commonproto.HistoryEvent
 
 	switch blob.GetEncodingType() {
-	case enums.EncodingTypeThriftRW:
+	case enums.EncodingTypeProto3:
 		he, err := c.rereplicator.serializer.DeserializeBatchEvents(&serialization.DataBlob{
 			Encoding: common.EncodingTypeThriftRW,
 			Data:     blob.Data,
@@ -480,7 +479,7 @@ func (c *historyRereplicationContext) deserializeBlob(blob *commonproto.DataBlob
 		if err != nil {
 			return nil, err
 		}
-		historyEvents = adapter.ToProtoHistoryEvents(he)
+		historyEvents = he
 	default:
 		return nil, ErrUnknownEncodingType
 	}
