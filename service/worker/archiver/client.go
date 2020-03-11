@@ -264,7 +264,7 @@ func (c *client) sendArchiveSignal(ctx context.Context, request *ArchiveRequest,
 	c.metricsScope.IncCounter(metrics.ArchiverClientSendSignalCount)
 	if ok := c.rateLimiter.Allow(); !ok {
 		c.logger.Error(tooManyRequestsErrMsg)
-		c.metricsScope.IncCounter(metrics.CadenceErrServiceBusyCounter)
+		c.metricsScope.IncCounter(metrics.ServiceErrServiceBusyCounter)
 		return errors.New(tooManyRequestsErrMsg)
 	}
 

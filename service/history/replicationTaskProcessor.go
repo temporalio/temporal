@@ -490,20 +490,20 @@ func (p *ReplicationTaskProcessorImpl) updateFailureMetric(scope int, err error)
 	// Also update counter to distinguish between type of failures
 	switch err.(type) {
 	case *serviceerror.ShardOwnershipLost:
-		p.metricsClient.IncCounter(scope, metrics.CadenceErrShardOwnershipLostCounter)
+		p.metricsClient.IncCounter(scope, metrics.ServiceErrShardOwnershipLostCounter)
 	case *serviceerror.InvalidArgument:
-		p.metricsClient.IncCounter(scope, metrics.CadenceErrBadRequestCounter)
+		p.metricsClient.IncCounter(scope, metrics.ServiceErrBadRequestCounter)
 	case *serviceerror.DomainNotActive:
-		p.metricsClient.IncCounter(scope, metrics.CadenceErrDomainNotActiveCounter)
+		p.metricsClient.IncCounter(scope, metrics.ServiceErrDomainNotActiveCounter)
 	case *serviceerror.WorkflowExecutionAlreadyStarted:
-		p.metricsClient.IncCounter(scope, metrics.CadenceErrExecutionAlreadyStartedCounter)
+		p.metricsClient.IncCounter(scope, metrics.ServiceErrExecutionAlreadyStartedCounter)
 	case *serviceerror.NotFound:
-		p.metricsClient.IncCounter(scope, metrics.CadenceErrEntityNotExistsCounter)
+		p.metricsClient.IncCounter(scope, metrics.ServiceErrEntityNotExistsCounter)
 	case *serviceerror.ResourceExhausted:
-		p.metricsClient.IncCounter(scope, metrics.CadenceErrLimitExceededCounter)
+		p.metricsClient.IncCounter(scope, metrics.ServiceErrLimitExceededCounter)
 	case *serviceerror.RetryTask:
-		p.metricsClient.IncCounter(scope, metrics.CadenceErrRetryTaskCounter)
+		p.metricsClient.IncCounter(scope, metrics.ServiceErrRetryTaskCounter)
 	case *serviceerror.DeadlineExceeded:
-		p.metricsClient.IncCounter(scope, metrics.CadenceErrContextTimeoutCounter)
+		p.metricsClient.IncCounter(scope, metrics.ServiceErrContextTimeoutCounter)
 	}
 }

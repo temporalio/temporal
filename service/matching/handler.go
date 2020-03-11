@@ -99,8 +99,8 @@ func (h *Handler) Stop() {
 // startRequestProfile initiates recording of request metrics
 func (h *Handler) startRequestProfile(_ string, scope int) tally.Stopwatch {
 	h.startWG.Wait()
-	sw := h.metricsClient.StartTimer(scope, metrics.CadenceLatency)
-	h.metricsClient.IncCounter(scope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(scope, metrics.ServiceLatency)
+	h.metricsClient.IncCounter(scope, metrics.ServiceRequests)
 	return sw
 }
 
@@ -302,31 +302,31 @@ func (h *Handler) handleErr(err error, scope int) error {
 
 	switch err.(type) {
 	case *serviceerror.Internal:
-		h.metricsClient.IncCounter(scope, metrics.CadenceFailures)
+		h.metricsClient.IncCounter(scope, metrics.ServiceFailures)
 		return err
 	case *serviceerror.InvalidArgument:
-		h.metricsClient.IncCounter(scope, metrics.CadenceErrBadRequestCounter)
+		h.metricsClient.IncCounter(scope, metrics.ServiceErrBadRequestCounter)
 		return err
 	case *serviceerror.NotFound:
-		h.metricsClient.IncCounter(scope, metrics.CadenceErrEntityNotExistsCounter)
+		h.metricsClient.IncCounter(scope, metrics.ServiceErrEntityNotExistsCounter)
 		return err
 	case *serviceerror.WorkflowExecutionAlreadyStarted:
-		h.metricsClient.IncCounter(scope, metrics.CadenceErrExecutionAlreadyStartedCounter)
+		h.metricsClient.IncCounter(scope, metrics.ServiceErrExecutionAlreadyStartedCounter)
 		return err
 	case *serviceerror.DomainAlreadyExists:
-		h.metricsClient.IncCounter(scope, metrics.CadenceErrDomainAlreadyExistsCounter)
+		h.metricsClient.IncCounter(scope, metrics.ServiceErrDomainAlreadyExistsCounter)
 		return err
 	case *serviceerror.QueryFailed:
-		h.metricsClient.IncCounter(scope, metrics.CadenceErrQueryFailedCounter)
+		h.metricsClient.IncCounter(scope, metrics.ServiceErrQueryFailedCounter)
 		return err
 	case *serviceerror.ResourceExhausted:
-		h.metricsClient.IncCounter(scope, metrics.CadenceErrServiceBusyCounter)
+		h.metricsClient.IncCounter(scope, metrics.ServiceErrServiceBusyCounter)
 		return err
 	case *serviceerror.DomainNotActive:
-		h.metricsClient.IncCounter(scope, metrics.CadenceErrDomainNotActiveCounter)
+		h.metricsClient.IncCounter(scope, metrics.ServiceErrDomainNotActiveCounter)
 		return err
 	default:
-		h.metricsClient.IncCounter(scope, metrics.CadenceFailures)
+		h.metricsClient.IncCounter(scope, metrics.ServiceFailures)
 		return serviceerror.NewInternal(err.Error())
 	}
 }

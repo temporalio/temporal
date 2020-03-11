@@ -3073,7 +3073,7 @@ func (wh *WorkflowHandler) getRawHistory(
 
 	if len(nextPageToken) == 0 && transientDecision != nil {
 		if err := wh.validateTransientDecisionEvents(nextEventID, transientDecision); err != nil {
-			scope.IncCounter(metrics.CadenceErrIncompleteHistoryCounter)
+			scope.IncCounter(metrics.ServiceErrIncompleteHistoryCounter)
 			wh.GetLogger().Error("getHistory error",
 				tag.WorkflowDomainID(domainID),
 				tag.WorkflowID(execution.GetWorkflowId()),
@@ -3142,7 +3142,7 @@ func (wh *WorkflowHandler) getHistory(
 		isFirstPage,
 		isLastPage,
 		int(pageSize)); err != nil {
-		scope.IncCounter(metrics.CadenceErrIncompleteHistoryCounter)
+		scope.IncCounter(metrics.ServiceErrIncompleteHistoryCounter)
 		wh.GetLogger().Error("getHistory: incomplete history",
 			tag.WorkflowDomainID(domainID),
 			tag.WorkflowID(execution.GetWorkflowId()),
@@ -3153,7 +3153,7 @@ func (wh *WorkflowHandler) getHistory(
 
 	if len(nextPageToken) == 0 && transientDecision != nil {
 		if err := wh.validateTransientDecisionEvents(nextEventID, transientDecision); err != nil {
-			scope.IncCounter(metrics.CadenceErrIncompleteHistoryCounter)
+			scope.IncCounter(metrics.ServiceErrIncompleteHistoryCounter)
 			wh.GetLogger().Error("getHistory error",
 				tag.WorkflowDomainID(domainID),
 				tag.WorkflowID(execution.GetWorkflowId()),
@@ -3190,8 +3190,8 @@ func (wh *WorkflowHandler) validateTransientDecisionEvents(
 func (wh *WorkflowHandler) startRequestProfile(scope int) (metrics.Scope, metrics.Stopwatch) {
 	metricsScope := wh.GetMetricsClient().Scope(scope).Tagged(metrics.DomainUnknownTag())
 	// timer should be emitted with the all tag
-	sw := metricsScope.StartTimer(metrics.CadenceLatency)
-	metricsScope.IncCounter(metrics.CadenceRequests)
+	sw := metricsScope.StartTimer(metrics.ServiceLatency)
+	metricsScope.IncCounter(metrics.ServiceRequests)
 	return metricsScope, sw
 }
 
@@ -3203,8 +3203,8 @@ func (wh *WorkflowHandler) startRequestProfileWithDomain(scope int, domain strin
 	} else {
 		metricsScope = wh.GetMetricsClient().Scope(scope).Tagged(metrics.DomainUnknownTag())
 	}
-	sw := metricsScope.StartTimer(metrics.CadenceLatency)
-	metricsScope.IncCounter(metrics.CadenceRequests)
+	sw := metricsScope.StartTimer(metrics.ServiceLatency)
+	metricsScope.IncCounter(metrics.ServiceRequests)
 	return metricsScope, sw
 }
 
@@ -3217,42 +3217,42 @@ func (wh *WorkflowHandler) error(err error, scope metrics.Scope, tagsForErrorLog
 	switch err := err.(type) {
 	case *serviceerror.Internal, *serviceerror.DataLoss:
 		wh.GetLogger().WithTags(tagsForErrorLog...).Error("Internal service error", tag.Error(err))
-		scope.IncCounter(metrics.CadenceFailures)
+		scope.IncCounter(metrics.ServiceFailures)
 		return err
 	case *serviceerror.InvalidArgument:
-		scope.IncCounter(metrics.CadenceErrBadRequestCounter)
+		scope.IncCounter(metrics.ServiceErrBadRequestCounter)
 		return err
 	case *serviceerror.DomainNotActive:
-		scope.IncCounter(metrics.CadenceErrBadRequestCounter)
+		scope.IncCounter(metrics.ServiceErrBadRequestCounter)
 		return err
 	case *serviceerror.ResourceExhausted:
-		scope.IncCounter(metrics.CadenceErrServiceBusyCounter)
+		scope.IncCounter(metrics.ServiceErrServiceBusyCounter)
 		return err
 	case *serviceerror.NotFound:
-		scope.IncCounter(metrics.CadenceErrEntityNotExistsCounter)
+		scope.IncCounter(metrics.ServiceErrEntityNotExistsCounter)
 		return err
 	case *serviceerror.WorkflowExecutionAlreadyStarted:
-		scope.IncCounter(metrics.CadenceErrExecutionAlreadyStartedCounter)
+		scope.IncCounter(metrics.ServiceErrExecutionAlreadyStartedCounter)
 		return err
 	case *serviceerror.DomainAlreadyExists:
-		scope.IncCounter(metrics.CadenceErrDomainAlreadyExistsCounter)
+		scope.IncCounter(metrics.ServiceErrDomainAlreadyExistsCounter)
 		return err
 	case *serviceerror.CancellationAlreadyRequested:
-		scope.IncCounter(metrics.CadenceErrCancellationAlreadyRequestedCounter)
+		scope.IncCounter(metrics.ServiceErrCancellationAlreadyRequestedCounter)
 		return err
 	case *serviceerror.QueryFailed:
-		scope.IncCounter(metrics.CadenceErrQueryFailedCounter)
+		scope.IncCounter(metrics.ServiceErrQueryFailedCounter)
 		return err
 	case *serviceerror.ClientVersionNotSupported:
-		scope.IncCounter(metrics.CadenceErrClientVersionNotSupportedCounter)
+		scope.IncCounter(metrics.ServiceErrClientVersionNotSupportedCounter)
 		return err
 	case *serviceerror.DeadlineExceeded:
-		scope.IncCounter(metrics.CadenceErrContextTimeoutCounter)
+		scope.IncCounter(metrics.ServiceErrContextTimeoutCounter)
 		return err
 	}
 
 	wh.GetLogger().WithTags(tagsForErrorLog...).Error("Unknown error", tag.Error(err))
-	scope.IncCounter(metrics.CadenceFailures)
+	scope.IncCounter(metrics.ServiceFailures)
 
 	return err
 }
@@ -3590,7 +3590,7 @@ func (wh *WorkflowHandler) checkBadBinary(domainEntry *cache.DomainCacheEntry, b
 		badBinaries := domainEntry.GetConfig().BadBinaries.Binaries
 		_, ok := badBinaries[binaryChecksum]
 		if ok {
-			wh.GetMetricsClient().IncCounter(metrics.FrontendPollForDecisionTaskScope, metrics.CadenceErrBadBinaryCounter)
+			wh.GetMetricsClient().IncCounter(metrics.FrontendPollForDecisionTaskScope, metrics.ServiceErrBadBinaryCounter)
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("Binary %v already marked as bad deployment.", binaryChecksum))
 		}
 	}

@@ -104,7 +104,7 @@ func newHistoryArchiver(container *archiver.HistoryBootstrapContainer, historyIt
 func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request *archiver.ArchiveHistoryRequest, opts ...archiver.ArchiveOption) (err error) {
 	scope := h.container.MetricsClient.Scope(metrics.HistoryArchiverScope, metrics.DomainTag(request.DomainName))
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
-	sw := scope.StartTimer(metrics.CadenceLatency)
+	sw := scope.StartTimer(metrics.ServiceLatency)
 	defer func() {
 		sw.Stop()
 		if err != nil {

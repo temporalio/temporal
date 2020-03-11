@@ -96,7 +96,7 @@ func (v *visibilityArchiver) Archive(
 ) (err error) {
 	scope := v.container.MetricsClient.Scope(metrics.VisibilityArchiverScope, metrics.DomainTag(request.DomainName))
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
-	sw := scope.StartTimer(metrics.CadenceLatency)
+	sw := scope.StartTimer(metrics.ServiceLatency)
 	defer func() {
 		sw.Stop()
 		if err != nil {
