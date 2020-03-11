@@ -1023,7 +1023,7 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 			WorkflowID:  currentExecutionInfo.WorkflowID,
 			RunID:       currentExecutionInfo.RunID,
 			BranchToken: currentBranchToken,
-			Events:      adapter.ToThriftHistoryEvents(hBuilder.GetHistory().GetEvents()),
+			Events:      hBuilder.GetHistory().GetEvents(),
 		})
 		if retError != nil {
 			return
@@ -1098,7 +1098,7 @@ func (c *workflowExecutionContextImpl) resetWorkflowExecution(
 			DeleteSignalInfo:          nil,
 			UpsertSignalRequestedIDs:  []string{},
 			DeleteSignalRequestedID:   "",
-			NewBufferedEvents:         adapter.ToThriftHistoryEvents([]*commonproto.HistoryEvent{}),
+			NewBufferedEvents:         []*commonproto.HistoryEvent{},
 			ClearBufferedEvents:       false,
 
 			TransferTasks:    currTransferTasks,
@@ -1186,7 +1186,7 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 		}
 
 		for _, e := range events.Events {
-			event := adapter.ToProtoHistoryEvent(e)
+			event := e
 			switch event.GetEventType() {
 			case enums.EventTypeWorkflowExecutionSignaled:
 				reapplyEvents = append(reapplyEvents, event)
@@ -1228,7 +1228,7 @@ func (c *workflowExecutionContextImpl) reapplyEvents(
 	// The active cluster of the domain is the same as current cluster.
 	// Use the history from the same cluster to reapply events
 	reapplyEventsDataBlob, err := serializer.SerializeBatchEvents(
-		adapter.ToThriftHistoryEvents(reapplyEvents),
+		reapplyEvents,
 		common.EncodingTypeThriftRW,
 	)
 	if err != nil {

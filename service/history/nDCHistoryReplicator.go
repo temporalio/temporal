@@ -31,7 +31,6 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
@@ -526,7 +525,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithout
 			WorkflowID:  task.getExecution().GetWorkflowId(),
 			RunID:       task.getExecution().GetRunId(),
 			BranchToken: versionHistory.GetBranchToken(),
-			Events:      adapter.ToThriftHistoryEvents(task.getEvents()),
+			Events:      task.getEvents(),
 		},
 	)
 	if err != nil {

@@ -26,6 +26,8 @@ import (
 	"strings"
 	"time"
 
+	commonproto "go.temporal.io/temporal-proto/common"
+
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 
@@ -283,7 +285,7 @@ type (
 		ParentRunID                        string
 		InitiatedID                        int64
 		CompletionEventBatchID             int64
-		CompletionEvent                    *workflow.HistoryEvent
+		CompletionEvent                    *commonproto.HistoryEvent
 		TaskList                           string
 		WorkflowTypeName                   string
 		WorkflowTimeout                    int32
@@ -582,7 +584,7 @@ type (
 		ExecutionInfo       *WorkflowExecutionInfo
 		ExecutionStats      *ExecutionStats
 		ReplicationState    *ReplicationState
-		BufferedEvents      []*workflow.HistoryEvent
+		BufferedEvents      []*commonproto.HistoryEvent
 		VersionHistories    *VersionHistories
 		Checksum            checksum.Checksum
 	}
@@ -592,10 +594,10 @@ type (
 		Version                  int64
 		ScheduleID               int64
 		ScheduledEventBatchID    int64
-		ScheduledEvent           *workflow.HistoryEvent
+		ScheduledEvent           *commonproto.HistoryEvent
 		ScheduledTime            time.Time
 		StartedID                int64
-		StartedEvent             *workflow.HistoryEvent
+		StartedEvent             *commonproto.HistoryEvent
 		StartedTime              time.Time
 		DomainID                 string
 		ActivityID               string
@@ -632,11 +634,11 @@ type (
 		Version               int64
 		InitiatedID           int64
 		InitiatedEventBatchID int64
-		InitiatedEvent        *workflow.HistoryEvent
+		InitiatedEvent        *commonproto.HistoryEvent
 		StartedID             int64
 		StartedWorkflowID     string
 		StartedRunID          string
-		StartedEvent          *workflow.HistoryEvent
+		StartedEvent          *commonproto.HistoryEvent
 		CreateRequestID       string
 		DomainName            string
 		WorkflowTypeName      string
@@ -777,7 +779,7 @@ type (
 		WorkflowID  string
 		RunID       string
 		BranchToken []byte
-		Events      []*workflow.HistoryEvent
+		Events      []*commonproto.HistoryEvent
 	}
 
 	// WorkflowMutation is used as generic workflow execution state mutation
@@ -799,7 +801,7 @@ type (
 		DeleteSignalInfo          *int64
 		UpsertSignalRequestedIDs  []string
 		DeleteSignalRequestedID   string
-		NewBufferedEvents         []*workflow.HistoryEvent
+		NewBufferedEvents         []*commonproto.HistoryEvent
 		ClearBufferedEvents       bool
 
 		TransferTasks    []Task
@@ -1213,7 +1215,7 @@ type (
 		// The branch to be appended
 		BranchToken []byte
 		// The batch of events to be appended. The first eventID will become the nodeID of this batch
-		Events []*workflow.HistoryEvent
+		Events []*commonproto.HistoryEvent
 		// requested TransactionID for this write operation. For the same eventID, the node with larger TransactionID always wins
 		TransactionID int64
 		// optional binary encoding type
@@ -1248,7 +1250,7 @@ type (
 	// ReadHistoryBranchResponse is the response to ReadHistoryBranchRequest
 	ReadHistoryBranchResponse struct {
 		// History events
-		HistoryEvents []*workflow.HistoryEvent
+		HistoryEvents []*commonproto.HistoryEvent
 		// Token to read next page if there are more events beyond page size.
 		// Use this to set NextPageToken on ReadHistoryBranchRequest to read the next page.
 		// Empty means we have reached the last page, not need to continue
@@ -1262,7 +1264,7 @@ type (
 	// ReadHistoryBranchByBatchResponse is the response to ReadHistoryBranchRequest
 	ReadHistoryBranchByBatchResponse struct {
 		// History events by batch
-		History []*workflow.History
+		History []*commonproto.History
 		// Token to read next page if there are more events beyond page size.
 		// Use this to set NextPageToken on ReadHistoryBranchRequest to read the next page.
 		// Empty means we have reached the last page, not need to continue

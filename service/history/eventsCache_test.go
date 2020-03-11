@@ -31,7 +31,6 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/metrics"
@@ -146,7 +145,7 @@ func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
 		NextPageToken: nil,
 		ShardID:       &shardId,
 	}).Return(&persistence.ReadHistoryBranchResponse{
-		HistoryEvents:    adapter.ToThriftHistoryEvents([]*commonproto.HistoryEvent{event1, event2, event3, event4, event5, event6}),
+		HistoryEvents:    []*commonproto.HistoryEvent{event1, event2, event3, event4, event5, event6},
 		NextPageToken:    nil,
 		LastFirstEventID: event1.GetEventId(),
 	}, nil)
@@ -204,7 +203,7 @@ func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
 		NextPageToken: nil,
 		ShardID:       &shardId,
 	}).Return(&persistence.ReadHistoryBranchResponse{
-		HistoryEvents:    adapter.ToThriftHistoryEvents([]*commonproto.HistoryEvent{event2}),
+		HistoryEvents:    []*commonproto.HistoryEvent{event2},
 		NextPageToken:    nil,
 		LastFirstEventID: event2.GetEventId(),
 	}, nil)

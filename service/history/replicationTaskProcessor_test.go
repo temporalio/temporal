@@ -39,7 +39,6 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/client"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
@@ -223,7 +222,7 @@ func (s *replicationTaskProcessorSuite) TestPutReplicationTaskToDLQ_HistoryV2Rep
 		},
 	}
 	serializer := s.mockResource.GetPayloadSerializer()
-	data, err := serializer.SerializeBatchEvents(adapter.ToThriftHistoryEvents(events), common.EncodingTypeThriftRW)
+	data, err := serializer.SerializeBatchEvents(events, common.EncodingTypeProto3)
 	s.NoError(err)
 	task := &replication.ReplicationTask{
 		TaskType: enums.ReplicationTaskTypeHistoryV2,
