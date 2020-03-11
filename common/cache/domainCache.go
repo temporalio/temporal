@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
@@ -702,7 +701,7 @@ func (entry *DomainCacheEntry) duplicate() *DomainCacheEntry {
 		HistoryArchivalURI:       entry.config.HistoryArchivalURI,
 		VisibilityArchivalStatus: entry.config.VisibilityArchivalStatus,
 		VisibilityArchivalURI:    entry.config.VisibilityArchivalURI,
-		BadBinaries:              adapter.ToThriftBadBinaries(copyResetBinary(adapter.ToProtoBadBinaries(entry.config.BadBinaries))),
+		BadBinaries:              copyResetBinary(entry.config.BadBinaries),
 	}
 	result.replicationConfig = &persistence.DomainReplicationConfig{
 		ActiveClusterName: entry.replicationConfig.ActiveClusterName,

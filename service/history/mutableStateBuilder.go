@@ -4473,7 +4473,7 @@ func (e *mutableStateBuilder) closeTransactionHandleWorkflowReset(
 	}
 	if _, pt := FindAutoResetPoint(
 		e.timeSource,
-		adapter.ToProtoBadBinariesPtr(&domainEntry.GetConfig().BadBinaries),
+		&domainEntry.GetConfig().BadBinaries,
 		e.GetExecutionInfo().AutoResetPoints,
 	); pt != nil {
 		if err := e.taskGenerator.generateWorkflowResetTasks(

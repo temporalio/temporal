@@ -986,7 +986,7 @@ func (t *transferQueueActiveProcessorImpl) processResetWorkflow(
 	}
 	logger = logger.WithTags(tag.WorkflowDomainName(domainEntry.GetInfo().Name))
 
-	reason, resetPoint := FindAutoResetPoint(t.timeSource, adapter.ToProtoBadBinariesPtr(&domainEntry.GetConfig().BadBinaries), executionInfo.AutoResetPoints)
+	reason, resetPoint := FindAutoResetPoint(t.timeSource, &domainEntry.GetConfig().BadBinaries, executionInfo.AutoResetPoints)
 	if resetPoint == nil {
 		logger.Warn("Auto-Reset is skipped, because reset point is not found.")
 		return nil

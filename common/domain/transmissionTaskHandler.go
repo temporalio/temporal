@@ -21,6 +21,7 @@
 package domain
 
 import (
+	"github.com/gogo/protobuf/types"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 
@@ -84,12 +85,12 @@ func (domainReplicator *domainReplicatorImpl) HandleTransmissionTask(domainOpera
 		},
 		Config: &commonproto.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: config.Retention,
-			EmitMetric:                             adapter.ToProtoBool(&config.EmitMetric),
+			EmitMetric:                             &types.BoolValue{Value: config.EmitMetric},
 			HistoryArchivalStatus:                  adapter.ToProtoArchivalStatus(&config.HistoryArchivalStatus),
 			HistoryArchivalURI:                     config.HistoryArchivalURI,
 			VisibilityArchivalStatus:               adapter.ToProtoArchivalStatus(&config.VisibilityArchivalStatus),
 			VisibilityArchivalURI:                  config.VisibilityArchivalURI,
-			BadBinaries:                            adapter.ToProtoBadBinariesPtr(&config.BadBinaries),
+			BadBinaries:                            &config.BadBinaries,
 		},
 		ReplicationConfig: &commonproto.DomainReplicationConfiguration{
 			ActiveClusterName: replicationConfig.ActiveClusterName,
