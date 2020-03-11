@@ -20,11 +20,14 @@ fi
 
 echo "Building docker image for $BUILDKITE_MESSAGE"
 
-docker build . -f Dockerfile -t ubercadence/server:master --build-arg TARGET=server
-docker push ubercadence/server:master
+docker build . -f Dockerfile -t temporalio/temporal:master --build-arg TARGET=server
+docker push temporalio/temporal:master
 
-docker build . -f Dockerfile -t ubercadence/server:master-auto-setup --build-arg TARGET=auto-setup
-docker push ubercadence/server:master-auto-setup
+docker build . -f Dockerfile -t temporalio/temporal:master-auto-setup --build-arg TARGET=auto-setup 
+docker push temporalio/temporal:master-auto-setup
 
-docker build . -f Dockerfile -t ubercadence/cli:master --build-arg TARGET=cli
-docker push ubercadence/cli:master
+docker build . -f Dockerfile -t temporalio/tctl:master --build-arg TARGET=tctl
+docker push temporalio/tctl:master
+
+docker build . -f Dockerfile -t temporalio/admin-tools:master --build-arg TARGET=admin-tools
+docker push temporalio/admin-tools:master

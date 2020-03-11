@@ -106,7 +106,7 @@ COPY docker/start.sh /start.sh
 CMD /start.sh
 
 # Temporal CLI
-FROM alpine AS tctl
+FROM alpine AS temporal-tctl
 
 COPY --from=tcheck /go/bin/tcheck /usr/local/bin
 COPY --from=builder /temporal/tctl /usr/local/bin
