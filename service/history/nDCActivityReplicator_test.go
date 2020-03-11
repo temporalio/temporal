@@ -124,7 +124,7 @@ func (s *activityReplicatorSuite) SetupTest() {
 		executionManager:     s.mockExecutionMgr,
 		historyCache:         s.historyCache,
 		logger:               s.logger,
-		tokenSerializer:      common.NewJSONTaskTokenSerializer(),
+		tokenSerializer:      common.NewProtoTaskTokenSerializer(),
 		metricsClient:        s.mockShard.GetMetricsClient(),
 		timeSource:           s.mockShard.GetTimeSource(),
 		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string) int { return 0 }),

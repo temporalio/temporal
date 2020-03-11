@@ -59,7 +59,7 @@ func NewClient(
 ) Client {
 	return &clientImpl{
 		numberOfShards:  numberOfShards,
-		tokenSerializer: common.NewJSONTaskTokenSerializer(),
+		tokenSerializer: common.NewProtoTaskTokenSerializer(),
 		timeout:         timeout,
 		clients:         clients,
 		logger:          logger,
@@ -361,7 +361,7 @@ func (c *clientImpl) RespondDecisionTaskCompleted(
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.getClientForWorkflowID(taskToken.WorkflowID)
+	client, err := c.getClientForWorkflowID(taskToken.GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
@@ -385,7 +385,7 @@ func (c *clientImpl) RespondDecisionTaskFailed(
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.getClientForWorkflowID(taskToken.WorkflowID)
+	client, err := c.getClientForWorkflowID(taskToken.GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
@@ -414,7 +414,7 @@ func (c *clientImpl) RespondActivityTaskCompleted(
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.getClientForWorkflowID(taskToken.WorkflowID)
+	client, err := c.getClientForWorkflowID(taskToken.GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
@@ -443,7 +443,7 @@ func (c *clientImpl) RespondActivityTaskFailed(
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.getClientForWorkflowID(taskToken.WorkflowID)
+	client, err := c.getClientForWorkflowID(taskToken.GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
@@ -472,7 +472,7 @@ func (c *clientImpl) RespondActivityTaskCanceled(
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.getClientForWorkflowID(taskToken.WorkflowID)
+	client, err := c.getClientForWorkflowID(taskToken.GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
@@ -501,7 +501,7 @@ func (c *clientImpl) RecordActivityTaskHeartbeat(
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.getClientForWorkflowID(taskToken.WorkflowID)
+	client, err := c.getClientForWorkflowID(taskToken.GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}

@@ -31,6 +31,8 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/workflowservice"
+
+	"github.com/temporalio/temporal/common/codec"
 )
 
 func (s *integrationSuite) TestDecisionHeartbeatingWithEmptyResult() {
@@ -833,7 +835,8 @@ func (s *integrationSuite) assertHistory(we *commonproto.WorkflowExecution, expe
 	})
 	s.NoError(err)
 	history := historyResponse.History
-	data, err := json.MarshalIndent(history, "", "    ")
+	encoder := codec.NewJSONPBIndentEncoder("    ")
+	data, err := encoder.Encode(history)
 	s.NoError(err)
 	s.Equal(len(expectedHistory), len(history.Events), string(data))
 	for i, e := range history.Events {

@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2019 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,18 +18,22 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package common
+package frontend
 
 import (
-	"github.com/temporalio/temporal/.gen/proto/token"
+	"github.com/pborman/uuid"
+	commonproto "go.temporal.io/temporal-proto/common"
 )
 
-type (
-	// TaskTokenSerializer serializes task tokens
-	TaskTokenSerializer interface {
-		Serialize(token *token.Task) ([]byte, error)
-		Deserialize(data []byte) (*token.Task, error)
-		SerializeQueryTaskToken(token *token.QueryTask) ([]byte, error)
-		DeserializeQueryTaskToken(data []byte) (*token.QueryTask, error)
+func validateExecution(w *commonproto.WorkflowExecution) error {
+	if w == nil {
+		return errExecutionNotSet
 	}
-)
+	if w.GetWorkflowId() == "" {
+		return errWorkflowIDNotSet
+	}
+	if w.GetRunId() != "" && uuid.Parse(w.GetRunId()) == nil {
+		return errInvalidRunID
+	}
+	return nil
+}

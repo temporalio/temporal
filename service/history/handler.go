@@ -34,6 +34,7 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/healthservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/replication"
+	"github.com/temporalio/temporal/.gen/proto/token"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/definition"
 	"github.com/temporalio/temporal/common/log"
@@ -89,7 +90,7 @@ func NewHandler(
 	handler := &Handler{
 		Resource:        resource,
 		config:          config,
-		tokenSerializer: common.NewJSONTaskTokenSerializer(),
+		tokenSerializer: common.NewProtoTaskTokenSerializer(),
 		rateLimiter: quotas.NewDynamicRateLimiter(
 			func() float64 {
 				return float64(config.RPS())
@@ -188,16 +189,16 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *hist
 	}
 
 	heartbeatRequest := request.HeartbeatRequest
-	token, err0 := h.tokenSerializer.Deserialize(heartbeatRequest.TaskToken)
+	taskToken, err0 := h.tokenSerializer.Deserialize(heartbeatRequest.TaskToken)
 	if err0 != nil {
 		return nil, h.error(errDeserializeTaskToken.MessageArgs(err0), scope, domainID, "")
 	}
 
-	err0 = validateTaskToken(token)
+	err0 = validateTaskToken(taskToken)
 	if err0 != nil {
 		return nil, h.error(err0, scope, domainID, "")
 	}
-	workflowID := token.WorkflowID
+	workflowID := taskToken.GetWorkflowId()
 
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
@@ -318,16 +319,16 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *his
 	}
 
 	completeRequest := request.CompleteRequest
-	token, err0 := h.tokenSerializer.Deserialize(completeRequest.TaskToken)
+	taskToken, err0 := h.tokenSerializer.Deserialize(completeRequest.TaskToken)
 	if err0 != nil {
 		return nil, h.error(errDeserializeTaskToken.MessageArgs(err0), scope, domainID, "")
 	}
 
-	err0 = validateTaskToken(token)
+	err0 = validateTaskToken(taskToken)
 	if err0 != nil {
 		return nil, h.error(err0, scope, domainID, "")
 	}
-	workflowID := token.WorkflowID
+	workflowID := taskToken.GetWorkflowId()
 
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
@@ -362,16 +363,16 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 	}
 
 	failRequest := request.FailedRequest
-	token, err0 := h.tokenSerializer.Deserialize(failRequest.TaskToken)
+	taskToken, err0 := h.tokenSerializer.Deserialize(failRequest.TaskToken)
 	if err0 != nil {
 		return nil, h.error(errDeserializeTaskToken.MessageArgs(err0), scope, domainID, "")
 	}
 
-	err0 = validateTaskToken(token)
+	err0 = validateTaskToken(taskToken)
 	if err0 != nil {
 		return nil, h.error(err0, scope, domainID, "")
 	}
-	workflowID := token.WorkflowID
+	workflowID := taskToken.GetWorkflowId()
 
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
@@ -406,16 +407,16 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *hist
 	}
 
 	cancelRequest := request.CancelRequest
-	token, err0 := h.tokenSerializer.Deserialize(cancelRequest.TaskToken)
+	taskToken, err0 := h.tokenSerializer.Deserialize(cancelRequest.TaskToken)
 	if err0 != nil {
 		return nil, h.error(errDeserializeTaskToken.MessageArgs(err0), scope, domainID, "")
 	}
 
-	err0 = validateTaskToken(token)
+	err0 = validateTaskToken(taskToken)
 	if err0 != nil {
 		return nil, h.error(err0, scope, domainID, "")
 	}
-	workflowID := token.WorkflowID
+	workflowID := taskToken.GetWorkflowId()
 
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
@@ -459,16 +460,16 @@ func (h *Handler) RespondDecisionTaskCompleted(ctx context.Context, request *his
 	}
 
 	h.GetLogger().Debug("RespondDecisionTaskCompleted",
-		tag.WorkflowDomainIDBytes(token.DomainID),
-		tag.WorkflowID(token.WorkflowID),
-		tag.WorkflowRunIDBytes(token.RunID),
-		tag.WorkflowScheduleID(token.ScheduleID))
+		tag.WorkflowDomainIDBytes(token.GetDomainId()),
+		tag.WorkflowID(token.GetWorkflowId()),
+		tag.WorkflowRunIDBytes(token.GetRunId()),
+		tag.WorkflowScheduleID(token.GetScheduleId()))
 
 	err0 = validateTaskToken(token)
 	if err0 != nil {
 		return nil, h.error(err0, scope, domainID, "")
 	}
-	workflowID := token.WorkflowID
+	workflowID := token.GetWorkflowId()
 
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
@@ -510,14 +511,14 @@ func (h *Handler) RespondDecisionTaskFailed(ctx context.Context, request *histor
 	}
 
 	h.GetLogger().Debug("RespondDecisionTaskFailed",
-		tag.WorkflowDomainIDBytes(token.DomainID),
-		tag.WorkflowID(token.WorkflowID),
-		tag.WorkflowRunIDBytes(token.RunID),
-		tag.WorkflowScheduleID(token.ScheduleID))
+		tag.WorkflowDomainIDBytes(token.GetDomainId()),
+		tag.WorkflowID(token.GetWorkflowId()),
+		tag.WorkflowRunIDBytes(token.GetRunId()),
+		tag.WorkflowScheduleID(token.GetScheduleId()))
 
 	if failedRequest != nil && failedRequest.GetCause() == enums.DecisionTaskFailedCauseUnhandledDecision {
-		h.GetLogger().Info("Non-Deterministic Error", tag.WorkflowDomainIDBytes(token.DomainID), tag.WorkflowID(token.WorkflowID), tag.WorkflowRunIDBytes(token.RunID))
-		domainName, err := h.GetDomainCache().GetDomainName(primitives.UUIDString(token.DomainID))
+		h.GetLogger().Info("Non-Deterministic Error", tag.WorkflowDomainIDBytes(token.GetDomainId()), tag.WorkflowID(token.GetWorkflowId()), tag.WorkflowRunIDBytes(token.GetRunId()))
+		domainName, err := h.GetDomainCache().GetDomainName(primitives.UUIDString(token.GetDomainId()))
 		var domainTag metrics.Tag
 
 		if err == nil {
@@ -532,7 +533,7 @@ func (h *Handler) RespondDecisionTaskFailed(ctx context.Context, request *histor
 	if err0 != nil {
 		return nil, h.error(err0, scope, domainID, "")
 	}
-	workflowID := token.WorkflowID
+	workflowID := token.GetWorkflowId()
 
 	engine, err1 := h.controller.GetEngine(workflowID)
 	if err1 != nil {
@@ -1697,8 +1698,8 @@ func createShardOwnershipLostError(
 	return serviceerror.NewShardOwnershipLost(fmt.Sprintf("Shard is not owned by host: %v", currentHost), ownerHost)
 }
 
-func validateTaskToken(token *common.TaskToken) error {
-	if token.WorkflowID == "" {
+func validateTaskToken(taskToken *token.Task) error {
+	if taskToken.GetWorkflowId() == "" {
 		return errWorkflowIDNotSet
 	}
 	return nil

@@ -129,7 +129,7 @@ func (s *engine3Suite) SetupTest() {
 		logger:               s.logger,
 		throttledLogger:      s.logger,
 		metricsClient:        metrics.NewClient(tally.NoopScope, metrics.History),
-		tokenSerializer:      common.NewJSONTaskTokenSerializer(),
+		tokenSerializer:      common.NewProtoTaskTokenSerializer(),
 		config:               s.config,
 		timeSource:           s.mockShard.GetTimeSource(),
 		historyEventNotifier: newHistoryEventNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string) int { return 0 }),

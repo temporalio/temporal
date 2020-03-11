@@ -240,8 +240,8 @@ func (handler *decisionHandlerImpl) handleDecisionTaskFailed(
 	}
 
 	workflowExecution := commonproto.WorkflowExecution{
-		WorkflowId: token.WorkflowID,
-		RunId:      primitives.UUIDString(token.RunID),
+		WorkflowId: token.GetWorkflowId(),
+		RunId:      primitives.UUIDString(token.GetRunId()),
 	}
 
 	return handler.historyEngine.updateWorkflowExecution(ctx, domainID, workflowExecution, true,
@@ -250,7 +250,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskFailed(
 				return ErrWorkflowCompleted
 			}
 
-			scheduleID := token.ScheduleID
+			scheduleID := token.GetScheduleId()
 			decision, isRunning := mutableState.GetDecisionInfo(scheduleID)
 			if !isRunning || decision.Attempt != token.ScheduleAttempt || decision.StartedID == common.EmptyEventID {
 				return serviceerror.NewNotFound("Decision task not found.")
@@ -280,8 +280,8 @@ func (handler *decisionHandlerImpl) handleDecisionTaskCompleted(
 	}
 
 	workflowExecution := commonproto.WorkflowExecution{
-		WorkflowId: token.WorkflowID,
-		RunId:      primitives.UUIDString(token.RunID),
+		WorkflowId: token.GetWorkflowId(),
+		RunId:      primitives.UUIDString(token.GetRunId()),
 	}
 
 	clientHeaders := headers.GetValues(ctx, headers.LibraryVersionHeaderName, headers.FeatureVersionHeaderName, headers.ClientImplHeaderName)
@@ -311,7 +311,7 @@ Update_History_Loop:
 
 		executionInfo := msBuilder.GetExecutionInfo()
 
-		scheduleID := token.ScheduleID
+		scheduleID := token.GetScheduleId()
 		currentDecision, isRunning := msBuilder.GetDecisionInfo(scheduleID)
 
 		// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
@@ -443,8 +443,8 @@ Update_History_Loop:
 		if failDecision != nil {
 			handler.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.FailedDecisionsCounter)
 			handler.logger.Info("Failing the decision.", tag.WorkflowDecisionFailCause(int64(failDecision.cause)),
-				tag.WorkflowID(token.WorkflowID),
-				tag.WorkflowRunIDBytes(token.RunID),
+				tag.WorkflowID(token.GetWorkflowId()),
+				tag.WorkflowRunIDBytes(token.GetRunId()),
 				tag.WorkflowDomainID(domainID))
 			msBuilder, err = handler.historyEngine.failDecision(weContext, scheduleID, startedID, failDecision.cause, []byte(failDecision.message), request)
 			if err != nil {
