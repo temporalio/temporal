@@ -1617,7 +1617,7 @@ func doReset(c *cli.Context, domain, wid, rid string, params batchResetParamsTyp
 		rid = currentRunID
 	}
 
-	if resp.WorkflowExecutionInfo.CloseStatus == enums.WorkflowExecutionCloseStatusRunning || resp.WorkflowExecutionInfo.CloseTime.Value == 0 {
+	if resp.WorkflowExecutionInfo.CloseStatus == enums.WorkflowExecutionCloseStatusRunning || resp.WorkflowExecutionInfo.CloseTime == nil {
 		if params.skipOpen {
 			fmt.Println("skip because current run is open: ", wid, rid, currentRunID)
 			//skip and not terminate current if open
