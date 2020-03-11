@@ -28,7 +28,6 @@ import (
 
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
-	"github.com/temporalio/temporal/common/headers"
 	"github.com/temporalio/temporal/common/service/config"
 )
 
@@ -168,9 +167,8 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsDoma
 		return policy.currentClusterName, false
 	}
 
-	enforceDCRedirection := headers.GetValues(ctx, headers.EnforceDCRedirectionHeaderName)[0]
-	if !policy.config.EnableDomainNotActiveAutoForwarding(domainEntry.GetInfo().Name) && enforceDCRedirection != "true" {
-		// do not do dc redirection if auto-forwarding dynamic config and EnforceDCRedirectionHeaderName context flag is not enabled
+	if !policy.config.EnableDomainNotActiveAutoForwarding(domainEntry.GetInfo().Name) {
+		// do not do dc redirection if auto-forwarding dynamic config flag is not enabled
 		return policy.currentClusterName, false
 	}
 
