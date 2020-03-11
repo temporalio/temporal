@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
@@ -195,10 +194,10 @@ func (s *integrationSuite) isHistoryDeleted(execution *commonproto.WorkflowExecu
 func (s *integrationSuite) isMutableStateDeleted(domainID string, execution *commonproto.WorkflowExecution) bool {
 	request := &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+		Execution: commonproto.WorkflowExecution{
 			WorkflowId: execution.WorkflowId,
 			RunId:      execution.RunId,
-		}),
+		},
 	}
 
 	for i := 0; i < retryLimit; i++ {

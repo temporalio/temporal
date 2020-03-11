@@ -2161,7 +2161,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 	}
 
 	return &workflowservice.ListOpenWorkflowExecutionsResponse{
-		Executions:    adapter.ToProtoWorkflowExecutionInfos(persistenceResp.Executions),
+		Executions:    persistenceResp.Executions,
 		NextPageToken: persistenceResp.NextPageToken,
 	}, nil
 }
@@ -2250,7 +2250,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		} else {
 			persistenceResp, err = wh.GetVisibilityManager().ListClosedWorkflowExecutionsByStatus(&persistence.ListClosedWorkflowExecutionsByStatusRequest{
 				ListWorkflowExecutionsRequest: baseReq,
-				Status:                        *adapter.ToThriftWorkflowExecutionCloseStatus(request.GetStatusFilter().GetCloseStatus()),
+				Status:                        request.GetStatusFilter().GetCloseStatus(),
 			})
 		}
 		wh.GetLogger().Info("List closed workflow with filter",
@@ -2264,7 +2264,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 	}
 
 	return &workflowservice.ListClosedWorkflowExecutionsResponse{
-		Executions:    adapter.ToProtoWorkflowExecutionInfos(persistenceResp.Executions),
+		Executions:    persistenceResp.Executions,
 		NextPageToken: nil,
 	}, nil
 }
@@ -2323,7 +2323,7 @@ func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, request *
 	}
 
 	return &workflowservice.ListWorkflowExecutionsResponse{
-		Executions:    adapter.ToProtoWorkflowExecutionInfos(persistenceResp.Executions),
+		Executions:    persistenceResp.Executions,
 		NextPageToken: persistenceResp.NextPageToken,
 	}, nil
 }
@@ -2466,7 +2466,7 @@ func (wh *WorkflowHandler) ScanWorkflowExecutions(ctx context.Context, request *
 	}
 
 	resp := &workflowservice.ScanWorkflowExecutionsResponse{
-		Executions:    adapter.ToProtoWorkflowExecutionInfos(persistenceResp.Executions),
+		Executions:    persistenceResp.Executions,
 		NextPageToken: persistenceResp.NextPageToken,
 	}
 	return resp, nil

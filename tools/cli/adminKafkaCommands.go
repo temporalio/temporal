@@ -48,7 +48,6 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/auth"
 	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
@@ -498,10 +497,10 @@ func doRereplicate(shardID int, domainID, wid, rid string, minID, maxID int64, t
 		fmt.Printf("Start rereplicate for wid: %v, rid:%v \n", wid, rid)
 		resp, err := exeMgr.GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
 			DomainID: domainID,
-			Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+			Execution: commonproto.WorkflowExecution{
 				WorkflowId: wid,
 				RunId:      rid,
-			}),
+			},
 		})
 		if err != nil {
 			ErrorAndExit("GetWorkflowExecution error", err)
@@ -544,10 +543,10 @@ func doRereplicate(shardID int, domainID, wid, rid string, minID, maxID int64, t
 				newRunID = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
 				resp, err := exeMgr.GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
 					DomainID: domainID,
-					Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+					Execution: commonproto.WorkflowExecution{
 						WorkflowId: wid,
 						RunId:      newRunID,
-					}),
+					},
 				})
 				if err != nil {
 					ErrorAndExit("GetWorkflowExecution error", err)

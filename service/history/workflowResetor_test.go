@@ -42,7 +42,6 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
@@ -185,10 +184,10 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 
 	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+		Execution: commonproto.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      forkRunID,
-		}),
+		},
 	}
 
 	timerFiredID := "timerID0"
@@ -223,10 +222,10 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 
 	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+		Execution: commonproto.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      currRunID,
-		}),
+		},
 	}
 	currExeInfo := &persistence.WorkflowExecutionInfo{
 		DomainID:           domainID,
@@ -862,10 +861,10 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 
 	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+		Execution: commonproto.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      forkRunID,
-		}),
+		},
 	}
 
 	timerFiredID := "timerID0"
@@ -903,10 +902,10 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 
 	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+		Execution: commonproto.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      currRunID,
-		}),
+		},
 	}
 	currExeInfo := &persistence.WorkflowExecutionInfo{
 		DomainID:           domainID,
@@ -1450,10 +1449,10 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 
 	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+		Execution: commonproto.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      forkRunID,
-		}),
+		},
 	}
 
 	timerFiredID := "timerID0"
@@ -1499,10 +1498,10 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 
 	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+		Execution: commonproto.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      currRunID,
-		}),
+		},
 	}
 	currExeInfo := &persistence.WorkflowExecutionInfo{
 		DomainID:           domainID,
@@ -2156,10 +2155,10 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 
 	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+		Execution: commonproto.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      forkRunID,
-		}),
+		},
 	}
 
 	timerFiredID := "timerID0"
@@ -2205,10 +2204,10 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 
 	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+		Execution: commonproto.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      currRunID,
-		}),
+		},
 	}
 	currExeInfo := &persistence.WorkflowExecutionInfo{
 		DomainID:           domainID,
@@ -2756,10 +2755,10 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 
 	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+		Execution: commonproto.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      forkRunID,
-		}),
+		},
 	}
 
 	timerFiredID := "timerID0"
@@ -2805,10 +2804,10 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 
 	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+		Execution: commonproto.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      currRunID,
-		}),
+		},
 	}
 	currExeInfo := &persistence.WorkflowExecutionInfo{
 		DomainID:           domainID,
@@ -3435,10 +3434,10 @@ func (s *resetorSuite) TestApplyReset() {
 
 	forkGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+		Execution: commonproto.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      forkRunID,
-		}),
+		},
 	}
 
 	timerFiredID := "timerID0"
@@ -3483,10 +3482,10 @@ func (s *resetorSuite) TestApplyReset() {
 
 	currGwmsRequest := &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+		Execution: commonproto.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      currRunID,
-		}),
+		},
 	}
 	currExeInfo := &persistence.WorkflowExecutionInfo{
 		DomainID:           domainID,

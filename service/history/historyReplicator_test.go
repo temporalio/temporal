@@ -40,7 +40,6 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
@@ -474,10 +473,10 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	}, nil)
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+		Execution: commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      currentRunID,
-		}),
+		},
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State: &persistence.WorkflowMutableState{
 			ExecutionInfo: &persistence.WorkflowExecutionInfo{
@@ -546,10 +545,10 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	}, nil)
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+		Execution: commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      currentRunID,
-		}),
+		},
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State: &persistence.WorkflowMutableState{
 			ExecutionInfo: &persistence.WorkflowExecutionInfo{
@@ -691,10 +690,10 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	}, nil)
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+		Execution: commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      currentRunID,
-		}),
+		},
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State: &persistence.WorkflowMutableState{
 			ExecutionInfo: &persistence.WorkflowExecutionInfo{
@@ -761,10 +760,10 @@ func (s *historyReplicatorSuite) TestWorkflowReset() {
 	}, nil)
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+		Execution: commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      currentRunID,
-		}),
+		},
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State: &persistence.WorkflowMutableState{
 			ExecutionInfo: &persistence.WorkflowExecutionInfo{
@@ -835,10 +834,10 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 	}, nil)
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+		Execution: commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      currentRunID,
-		}),
+		},
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State: &persistence.WorkflowMutableState{
 			ExecutionInfo: &persistence.WorkflowExecutionInfo{

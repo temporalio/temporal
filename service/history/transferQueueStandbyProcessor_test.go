@@ -39,7 +39,6 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/matchingservicemock"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
 	"github.com/temporalio/temporal/common/cache"
@@ -1088,10 +1087,10 @@ func (s *transferQueueStandbyProcessorSuite) TestProcessRecordWorkflowStartedTas
 	s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", &persistence.RecordWorkflowExecutionStartedRequest{
 		DomainUUID: testDomainID,
 		Domain:     testDomainName,
-		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+		Execution: commonproto.WorkflowExecution{
 			WorkflowId: executionInfo.WorkflowID,
 			RunId:      executionInfo.RunID,
-		}),
+		},
 		WorkflowTypeName: executionInfo.WorkflowTypeName,
 		StartTimestamp:   event.GetTimestamp(),
 		WorkflowTimeout:  int64(executionInfo.WorkflowTimeout),
@@ -1150,10 +1149,10 @@ func (s *transferQueueStandbyProcessorSuite) TestProcessUpsertWorkflowSearchAttr
 	s.mockVisibilityMgr.On("UpsertWorkflowExecution", &persistence.UpsertWorkflowExecutionRequest{
 		DomainUUID: testDomainID,
 		Domain:     testDomainName,
-		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+		Execution: commonproto.WorkflowExecution{
 			WorkflowId: executionInfo.WorkflowID,
 			RunId:      executionInfo.RunID,
-		}),
+		},
 		WorkflowTypeName: executionInfo.WorkflowTypeName,
 		StartTimestamp:   event.GetTimestamp(),
 		WorkflowTimeout:  int64(executionInfo.WorkflowTimeout),

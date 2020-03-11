@@ -223,10 +223,10 @@ func (t *transferQueueProcessorBase) recordWorkflowStarted(
 	request := &persistence.RecordWorkflowExecutionStartedRequest{
 		DomainUUID: domainID,
 		Domain:     domain,
-		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+		Execution: commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
-		}),
+		},
 		WorkflowTypeName:   workflowTypeName,
 		StartTimestamp:     startTimeUnixNano,
 		ExecutionTimestamp: executionTimeUnixNano,
@@ -265,10 +265,10 @@ func (t *transferQueueProcessorBase) upsertWorkflowExecution(
 	request := &persistence.UpsertWorkflowExecutionRequest{
 		DomainUUID: domainID,
 		Domain:     domain,
-		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+		Execution: commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
-		}),
+		},
 		WorkflowTypeName:   workflowTypeName,
 		StartTimestamp:     startTimeUnixNano,
 		ExecutionTimestamp: executionTimeUnixNano,
@@ -326,15 +326,15 @@ func (t *transferQueueProcessorBase) recordWorkflowClosed(
 		if err := t.visibilityMgr.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{
 			DomainUUID: domainID,
 			Domain:     domain,
-			Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+			Execution: commonproto.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
-			}),
+			},
 			WorkflowTypeName:   workflowTypeName,
 			StartTimestamp:     startTimeUnixNano,
 			ExecutionTimestamp: executionTimeUnixNano,
 			CloseTimestamp:     endTimeUnixNano,
-			Status:             *adapter.ToThriftWorkflowExecutionCloseStatus(closeStatus),
+			Status:             closeStatus,
 			HistoryLength:      historyLength,
 			RetentionSeconds:   retentionSeconds,
 			TaskID:             taskID,

@@ -31,7 +31,6 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
@@ -383,10 +382,10 @@ func (r *nDCTransactionMgrImpl) checkWorkflowExists(
 	_, err := r.shard.GetExecutionManager().GetWorkflowExecution(
 		&persistence.GetWorkflowExecutionRequest{
 			DomainID: domainID,
-			Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+			Execution: commonproto.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
-			}),
+			},
 		},
 	)
 

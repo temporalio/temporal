@@ -34,7 +34,6 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/locks"
@@ -242,7 +241,7 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, er
 	if c.mutableState == nil {
 		response, err := c.getWorkflowExecutionWithRetry(&persistence.GetWorkflowExecutionRequest{
 			DomainID:  c.domainID,
-			Execution: *adapter.ToThriftWorkflowExecution(&c.workflowExecution),
+			Execution: c.workflowExecution,
 		})
 		if err != nil {
 			return nil, err

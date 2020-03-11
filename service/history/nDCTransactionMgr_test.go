@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
@@ -443,10 +442,10 @@ func (s *nDCTransactionMgrSuite) TestCheckWorkflowExists_DoesNotExists() {
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+		Execution: commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
-		}),
+		},
 	}).Return(nil, serviceerror.NewNotFound("")).Once()
 
 	exists, err := s.transactionMgr.checkWorkflowExists(ctx, domainID, workflowID, runID)
@@ -462,10 +461,10 @@ func (s *nDCTransactionMgrSuite) TestCheckWorkflowExists_DoesExists() {
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
 		DomainID: domainID,
-		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+		Execution: commonproto.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
-		}),
+		},
 	}).Return(&persistence.GetWorkflowExecutionResponse{}, nil).Once()
 
 	exists, err := s.transactionMgr.checkWorkflowExists(ctx, domainID, workflowID, runID)

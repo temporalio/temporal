@@ -41,7 +41,6 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/matchingservicemock"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
 	"github.com/temporalio/temporal/common/backoff"
@@ -1917,7 +1916,7 @@ func (s *transferQueueActiveProcessorSuite) createRecordWorkflowExecutionStarted
 	return &persistence.RecordWorkflowExecutionStartedRequest{
 		Domain:             domainName,
 		DomainUUID:         primitives.UUID(task.DomainID).String(),
-		Execution:          *adapter.ToThriftWorkflowExecution(execution),
+		Execution:          *execution,
 		WorkflowTypeName:   executionInfo.WorkflowTypeName,
 		StartTimestamp:     startEvent.GetTimestamp(),
 		ExecutionTimestamp: executionTimestamp.UnixNano(),
@@ -2043,7 +2042,7 @@ func (s *transferQueueActiveProcessorSuite) createUpsertWorkflowSearchAttributes
 	return &persistence.UpsertWorkflowExecutionRequest{
 		Domain:           domainName,
 		DomainUUID:       primitives.UUID(task.DomainID).String(),
-		Execution:        *adapter.ToThriftWorkflowExecution(execution),
+		Execution:        *execution,
 		WorkflowTypeName: executionInfo.WorkflowTypeName,
 		StartTimestamp:   startEvent.GetTimestamp(),
 		WorkflowTimeout:  int64(executionInfo.WorkflowTimeout),
