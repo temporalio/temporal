@@ -59,7 +59,7 @@ func buildCLIOptions() *cli.App {
 
 	app := cli.NewApp()
 	app.Name = "temporal-cassandra-tool"
-	app.Usage = "Command line tool for cadence cassandra operations"
+	app.Usage = "Command line tool for temporal cassandra operations"
 	app.Version = "0.0.1"
 
 	app.Flags = []cli.Flag{

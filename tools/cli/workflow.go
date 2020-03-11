@@ -47,7 +47,7 @@ func newWorkflowCommands() []cli.Command {
 		{
 			Name:        "showid",
 			Usage:       "show workflow history with given workflow_id and optional run_id (a shortcut of `show -w <wid> -r <rid>`)",
-			Description: "cadence workflow showid <workflow_id> <run_id>. workflow_id is required; run_id is optional",
+			Description: "temporal workflow showid <workflow_id> <run_id>. workflow_id is required; run_id is optional",
 			Flags:       getFlagsForShowID(),
 			Action: func(c *cli.Context) {
 				ShowHistoryWithWID(c)
@@ -160,7 +160,7 @@ func newWorkflowCommands() []cli.Command {
 		{
 			Name:    "scan",
 			Aliases: []string{"sc", "scanall"},
-			Usage: "scan workflow executions (need to enable Cadence server on ElasticSearch). " +
+			Usage: "scan workflow executions (need to enable Temporal server on ElasticSearch). " +
 				"It will be faster than listall, but result are not sorted.",
 			Flags: getFlagsForScan(),
 			Action: func(c *cli.Context) {
@@ -170,7 +170,7 @@ func newWorkflowCommands() []cli.Command {
 		{
 			Name:    "count",
 			Aliases: []string{"cnt"},
-			Usage:   "count number of workflow executions (need to enable Cadence server on ElasticSearch)",
+			Usage:   "count number of workflow executions (need to enable Temporal server on ElasticSearch)",
 			Flags:   getFlagsForCount(),
 			Action: func(c *cli.Context) {
 				CountWorkflow(c)
@@ -205,7 +205,7 @@ func newWorkflowCommands() []cli.Command {
 			Name:        "describeid",
 			Aliases:     []string{"descid"},
 			Usage:       "show information of workflow execution with given workflow_id and optional run_id (a shortcut of `describe -w <wid> -r <rid>`)",
-			Description: "cadence workflow describeid <workflow_id> <run_id>. workflow_id is required; run_id is optional",
+			Description: "tctl workflow describeid <workflow_id> <run_id>. workflow_id is required; run_id is optional",
 			Flags:       getFlagsForDescribeID(),
 			Action: func(c *cli.Context) {
 				DescribeWorkflowWithID(c)

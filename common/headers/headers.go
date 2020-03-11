@@ -36,9 +36,9 @@ const (
 	// tchannel / http header that contains the client
 	// feature version
 	// the feature version sent from client represents the
-	// feature set of the cadence client library support.
+	// feature set of the temporal sdk support.
 	// This can be used for client capibility check, on
-	// Cadence server, for backward compatibility
+	// Temporal server, for backward compatibility
 	FeatureVersionHeaderName = "temporal-sdk-feature-version"
 
 	// ClientImplHeaderName refers to the name of the

@@ -1,4 +1,5 @@
 // Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2017 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -339,9 +340,9 @@ func GenerateReport(c *cli.Context) {
 
 	// convert sql to dsl
 	e := esql.NewESql()
-	e.SetCadence(true)
+	e.SetTemporal(true)
 	e.ProcessQueryValue(timeKeyFilter, timeValProcess)
-	dsl, sortFields, err := e.ConvertPrettyCadence(sql, "")
+	dsl, sortFields, err := e.ConvertPrettyTemporal(sql, "")
 	if err != nil {
 		ErrorAndExit("Fail to convert sql to dsl", err)
 	}
@@ -371,7 +372,7 @@ func GenerateReport(c *cli.Context) {
 	bucket = buckets[0].(map[string]interface{})
 	// record the column position in the table of each returned item
 	ids := make(map[string]int)
-	// We want these 3 columns shows at leftmost of the table in cadence report usage. It can be changed in future.
+	// We want these 3 columns shows at leftmost of the table in temporal report usage. It can be changed in future.
 	primaryCols := []string{"group_DomainID", "group_WorkflowType", "group_CloseStatus"}
 	primaryColsMap := map[string]int{
 		"group_DomainID":     1,
@@ -434,7 +435,7 @@ func GenerateReport(c *cli.Context) {
 					datum = fmt.Sprintf("%v", vmap["value_as_string"])
 				} else {
 					datum = fmt.Sprintf("%v", vmap["value"])
-					// convert Cadence stored time (unix nano) to readable format
+					// convert Temporal stored time (unix nano) to readable format
 					if strings.Contains(k, "Time") && !strings.Contains(k, "Attr_") {
 						datum = toTimeStr(datum)
 					}

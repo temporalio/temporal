@@ -44,8 +44,8 @@ type (
 var _ test.DB = (*sql.Connection)(nil)
 
 const (
-	testUser     = "uber"
-	testPassword = "uber"
+	testUser     = "temporal"
+	testPassword = "temporal"
 )
 
 // NewSQLConnTestSuite returns the test suite

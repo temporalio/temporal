@@ -111,7 +111,7 @@ FROM alpine AS temporal-tctl
 COPY --from=tcheck /go/bin/tcheck /usr/local/bin
 COPY --from=builder /temporal/tctl /usr/local/bin
 
-ENTRYPOINT ["temporal"]
+ENTRYPOINT ["tctl"]
 
 # All temporal tool binaries
 FROM alpine AS temporal-admin-tools

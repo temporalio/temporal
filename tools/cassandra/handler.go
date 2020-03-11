@@ -40,7 +40,7 @@ type SetupSchemaConfig struct {
 	schema.SetupConfig
 }
 
-// VerifyCompatibleVersion ensures that the installed version of cadence and visibility keyspaces
+// VerifyCompatibleVersion ensures that the installed version of temporal and visibility keyspaces
 // is greater than or equal to the expected version.
 // In most cases, the versions should match. However if after a schema upgrade there is a code
 // rollback, the code version (expected version) would fall lower than the actual version in

@@ -236,8 +236,8 @@ func sanitizeAttr(inkey string, invalue string) (string, string) {
 }
 
 const (
-	testUser      = "uber"
-	testPassword  = "uber"
+	testUser      = "temporal"
+	testPassword  = "temporal"
 	testSchemaDir = "schema/mysql/v57"
 )
 

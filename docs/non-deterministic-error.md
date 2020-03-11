@@ -1,17 +1,17 @@
 
 # Abstract
 
-This article is for Cadence developers to understand and address issues with non-deterministic errors. It gives an introduction to the nature and categories of the non-deterministic error, and provide different ways for the fix. It uses Golang as example.
+This article is for Temporal developers to understand and address issues with non-deterministic errors. It gives an introduction to the nature and categories of the non-deterministic error, and provide different ways for the fix. It uses Golang as example.
 
 # What is non-deterministic error
 
-## Some Internals of Cadence workflow
+## Some Internals of Temporal workflow
 
-A Cadence workflow can be viewed as a long running process on a distributed operating system(OS). The process’s state and dispatching is owned by Cadence server, and customers’ workers provide CPU/memory resources to execute the process’s code. For most of the time, this process(workflow) is owned by a worker and running like in other normal OS. But because this is a distributed OS, the workflow ownership can be transferred to other workers and continue to run from the previous state. Unlike other OS, this is not restarting from the beginning. This is how workflow is fault tolerant to certain host failures. 
+A Temporal workflow can be viewed as a long running process on a distributed operating system(OS). The process’s state and dispatching is owned by Temporal server, and customers’ workers provide CPU/memory resources to execute the process’s code. For most of the time, this process(workflow) is owned by a worker and running like in other normal OS. But because this is a distributed OS, the workflow ownership can be transferred to other workers and continue to run from the previous state. Unlike other OS, this is not restarting from the beginning. This is how workflow is fault tolerant to certain host failures. 
 
 ![image alt text](images/non-deterministic-err.1.png)
 
-Non-deterministic issues arise during this workflow ownership transfer. Cadence is designed with event sourcing, meaning that it persists each workflow state mutation as "**history event**", instead of the whole workflow state machine. After switching to another worker, the workflow state machine has to be rebuilt. The process of rebuilding the state machine is called “**history replay**”. Any failure during this history replay is a “**non-deterministic error**”.
+Non-deterministic issues arise during this workflow ownership transfer. Temporal is designed with event sourcing, meaning that it persists each workflow state mutation as "**history event**", instead of the whole workflow state machine. After switching to another worker, the workflow state machine has to be rebuilt. The process of rebuilding the state machine is called “**history replay**”. Any failure during this history replay is a “**non-deterministic error**”.
 
 ![image alt text](images/non-deterministic-err.2.png)
 
@@ -21,15 +21,15 @@ Even if a workflow ownership doesn’t change, history replay is also required u
 
 * Sometimes the stack can be stale because of some errors.
 
-In Cadence, Workflow ownership is called "stickiness". 
+In Temporal, Workflow ownership is called "stickiness". 
 
 Worker memory cache for workflow stacks is called "sticky cache". 
 
-## Cadence History Protocol 
+## Temporal History Protocol 
 
 History replay process is under some basic rules/concepts. 
 
-In Cadence, we use "close" to describe the opposite status of “open”. For activity/decision, close includes complete,timeout,fail. For workflow, close means complete/timeout/fail/terminate/cancel/continueAsNew.
+In Temporal, we use "close" to describe the opposite status of “open”. For activity/decision, close includes complete,timeout,fail. For workflow, close means complete/timeout/fail/terminate/cancel/continueAsNew.
 
 ### Decision
 
@@ -53,7 +53,7 @@ In Cadence, we use "close" to describe the opposite status of “open”. For ac
 
 * Activity started by worker. Normally ActivityStartedEvent can be put at any place in history except for the between of DecisionStarted and DecisionClose. 
 
-* But Activity with RetryPolicy is a special case. Cadence will only write down Started event when Activity is finally closed. 
+* But Activity with RetryPolicy is a special case. Temporal will only write down Started event when Activity is finally closed. 
 
 * Activity completed/failed by worker, or timeouted by server -- they all consider activity closed, and it will trigger a decision task if no decision task on going. 
 
@@ -99,7 +99,7 @@ In Cadence, we use "close" to describe the opposite status of “open”. For ac
 
 ### More explanation of BufferedEvents 
 
-When a decision is in flight, if something like a signal comes in, Cadence has to put it into buffer. That’s because for the next decision, SDK always processes unhandled events starting from last decision completed.  There cannot be any other events to record between decision started and close event. [This may cause some issues](https://github.com/uber/cadence/issues/2934) if you are sending a signal to self within a local activities. 
+When a decision is in flight, if something like a signal comes in, Temporal has to put it into buffer. That’s because for the next decision, SDK always processes unhandled events starting from last decision completed.  There cannot be any other events to record between decision started and close event. [This may cause some issues](https://github.com/uber/temporal/issues/2934) if you are sending a signal to self within a local activities. 
 
 ## An Example of history protocol 
 
@@ -165,7 +165,7 @@ ID:27		WorkflowCompleted     : completed by decision
 
 ### Missing decision
 
-[Error message](https://github.com/uber-go/cadence-client/blob/e5081b085b0333bac23f198e57959681e0aee987/internal/internal_task_handlers.go#L1206):
+[Error message](https://github.com/temporalio/temporal-go-sdk/blob/e5081b085b0333bac23f198e57959681e0aee987/internal/internal_task_handlers.go#L1206):
 
 ```go
 fmt.Errorf("nondeterministic workflow: missing replay decision for %s", util.HistoryEventToString(e))
@@ -179,13 +179,13 @@ and restart worker, then it will run into this error. Because in the history, th
 
 ### Extra decision 
 
-[Error message](https://github.com/uber-go/cadence-client/blob/e5081b085b0333bac23f198e57959681e0aee987/internal/internal_task_handlers.go#L1210):
+[Error message](https://github.com/temporalio/temporal-go-sdk/blob/e5081b085b0333bac23f198e57959681e0aee987/internal/internal_task_handlers.go#L1210):
 
 ```go
 fmt.Errorf("nondeterministic workflow: extra replay decision for %s", util.DecisionToString(d))
 ```
 
-This is basically the opposite of the previous case, which means that during replay, Cadence generates more decisions than those in history events. Using the previous history as an example, when the workflow is waiting at the one hour timer(event ID 22), if we change the line of :
+This is basically the opposite of the previous case, which means that during replay, Temporal generates more decisions than those in history events. Using the previous history as an example, when the workflow is waiting at the one hour timer(event ID 22), if we change the line of :
 ```go
 err = workflow.ExecuteActivity(ctx, activityB, a).Get(ctx, nil)
 ```
@@ -208,7 +208,7 @@ And restart worker, then it will run into this error. Because in the history, th
 
 ### Decision mismatch
 
-[Error message](https://github.com/uber-go/cadence-client/blob/e5081b085b0333bac23f198e57959681e0aee987/internal/internal_task_handlers.go#L1214):
+[Error message](https://github.com/temporalio/temporal-go-sdk/blob/e5081b085b0333bac23f198e57959681e0aee987/internal/internal_task_handlers.go#L1214):
 
 ```go
 fmt.Errorf("nondeterministic workflow: history event is %s, replay decision is %s",util.HistoryEventToString(e), util.DecisionToString(d))
@@ -228,7 +228,7 @@ And restart worker, then it will run into this error. Because in the history, th
 
 ### Decision State Machine Panic
 
-[Error message](https://github.com/uber-go/cadence-client/blob/e5081b085b0333bac23f198e57959681e0aee987/internal/internal_decision_state_machine.go#L693):
+[Error message](https://github.com/temporalio/temporal-go-sdk/blob/e5081b085b0333bac23f198e57959681e0aee987/internal/internal_decision_state_machine.go#L693):
 
 ```go
 fmt.Sprintf("unknown decision %v, possible causes are nondeterministic workflow definition code"+" or incompatible change in the workflow definition", id)
@@ -266,13 +266,13 @@ For those needs, see "How to address non-deterministic issues" in the next secti
 
 ## Find the Non-Deterministic Code
 
-Workflow logic can be complicated and changes to workflow code can be non-trivial and non-isolated. In case you are not able to pinpoint the exact code change that introduces the workflow logic and non-deterministic error, you can download the workflow history with non-deterministic error and [replay it locally](https://github.com/uber-go/cadence-client/blob/master/worker/worker.go#L96). This is [an example](https://github.com/uber-common/cadence-samples/blob/03293b934579e0353e08e75c2f46a84a5a7b2df0/cmd/samples/recipes/helloworld/replay_test.go#L39) of using this utility. 
+Workflow logic can be complicated and changes to workflow code can be non-trivial and non-isolated. In case you are not able to pinpoint the exact code change that introduces the workflow logic and non-deterministic error, you can download the workflow history with non-deterministic error and [replay it locally](https://github.com/temporalio/temporal-go-sdk/blob/master/worker/worker.go#L96). This is [an example](https://github.com/temporalio/temporal-go-samples/blob/03293b934579e0353e08e75c2f46a84a5a7b2df0/cmd/samples/recipes/helloworld/replay_test.go#L39) of using this utility. 
 
 You can do this with different versions of your workflow code to see the difference in behavior. 
 
 However, it could be hard if you have too many versions or your code is too complicated to debug. In this case, you can run replay in debug mode to help you to step into your workflow logic.
 
-To do this you first change [this code](https://github.com/uber-go/cadence-client/blob/cc25a04f6f74c54ea9ae330741f63ae6df15f4df/internal/internal_event_handlers.go#L429) into 
+To do this you first change [this code](https://github.com/temporalio/temporal-go-sdk/blob/cc25a04f6f74c54ea9ae330741f63ae6df15f4df/internal/internal_event_handlers.go#L429) into 
 
 ```go
 func (wc *workflowEnvironmentImpl) GenerateSequence() int32 {
@@ -287,11 +287,11 @@ func (wc *workflowEnvironmentImpl) GenerateSequence() int32 {
 
 THE_ID_WITH_ERROR is the ActivityID/TimerID of activities/timers of decision runs into non-deterministic error during your replay with current code. When you pause the replay thread in the fmt.Println("PAUSE HERE IN DEBUG MODE") , trace back in the stack you will see the position of your workflow code that run into non-deterministic error.
 
-Currently this debugging experience is not very ideal. [This proposal will help](https://github.com/uber/cadence/issues/2801). 
+Currently this debugging experience is not very ideal. [This proposal will help](https://github.com/uber/temporal/issues/2801). 
 
 ## Automatic history replay and non-deterministic error detection
 
-We have ideas on how non-deterministic errors can be detected automatically and safe rollout can be achieved. See [this issue](https://github.com/uber/cadence/issues/2547).
+We have ideas on how non-deterministic errors can be detected automatically and safe rollout can be achieved. See [this issue](https://github.com/uber/temporal/issues/2547).
 
 # What to do with non-deterministic errors
 
@@ -336,7 +336,7 @@ What if Non-deterministic code change has been deployed without GetVersions()?
 
 Sometimes we may forget to use GetVersions(), or misuse it. This could be a serious problem because after deployment, we probably cannot rollback: because some workflows has run with new code but some workflows has stuck. Rollback will save the stuck workflows but also stuck other workflows. 
 
-The best way is to use BinaryChecksum and Now() to let workflow diverge at the breaking changes. **workflow.GetInfo().****[BinaryChecksu**m](https://github.com/uber-go/cadence-client/issues/925) is the checksum of the binary that made that decision. **workflow.****[no**w](https://github.com/uber-go/cadence-client/issues/926)**()** is timestamp that the decision is made. For better experience, you should integrate with binaryChecksum is in a format of "**Your GIT_REF**" by **worker.SetBinaryChecksum()** API.
+The best way is to use BinaryChecksum and Now() to let workflow diverge at the breaking changes. **workflow.GetInfo().****[BinaryChecksu**m](https://github.com/temporalio/temporal-go-sdk/issues/925) is the checksum of the binary that made that decision. **workflow.****[no**w](https://github.com/temporalio/temporal-go-sdk/issues/926)**()** is timestamp that the decision is made. For better experience, you should integrate with binaryChecksum is in a format of "**Your GIT_REF**" by **worker.SetBinaryChecksum()** API.
 
 Use the "extra decision" as an example. After deploy the code change, then there are workflow W1 stuck because of extra decision, however workflow W2 has started the two in-parallel activities. If we rollback the code, W1 will be fixed but W2 will be stuck. We can fix it by changing the code to:
 
@@ -367,7 +367,7 @@ BINARY_BEFORE_BAD_DEPLOYMENT is the previous binary checksum, DeploymentStartTim
 
 ## [Reset workflow](https://docs.temporal.io/docs/08_cli#restart-reset-workflow)
 
-The last solution is to reset the workflows. A process in real OS can only move forward but never go back to previous state. However, a Cadence workflow can go back to previous state since we have stored the history as a list. 
+The last solution is to reset the workflows. A process in real OS can only move forward but never go back to previous state. However, a Temporal workflow can go back to previous state since we have stored the history as a list. 
 
 Internally reset a workflow will use history as a tree. It takes a history as base, and fork a new branch from it. So that you will reset many times without losing the history(until history is deleted after retention). 
 
@@ -377,7 +377,7 @@ After forking from the base, reset will also collect all the signals along the c
 
 However, reset will schedule and execute some activities that has done before. So after reset, you may see some activities are re-executed. Same applies for timer/ChildWorkflows. If you don’t want to re-execute, you can emit a signal to self to identify that this activity/timer/childWorkflow is done -- since reset will collect signals after resetting point.
 
-Note  that reset with [child workflows](https://github.com/uber/cadence/issues/2951) is not fully supported yet. 
+Note  that reset with [child workflows](https://github.com/uber/temporal/issues/2951) is not fully supported yet. 
 
 ## Primitive Reset CLI Command
 
@@ -391,7 +391,7 @@ EventID has to be decisionCloseEventID as we designed reset must be done by deci
 
 ResetType support these: LastDecisionCompleted, LastContinuedAsNew, BadBinary ,FirstDecisionCompleted.
 
-If the workflowID has an open run, you need to be aware of [this race condition](https://github.com/uber/cadence/issues/2930) when resetting it. 
+If the workflowID has an open run, you need to be aware of [this race condition](https://github.com/uber/temporal/issues/2930) when resetting it. 
 
 ## Batch Reset CLI Command
 
@@ -423,13 +423,13 @@ To be safe, you may use DryRun option for only printing some logs before actuall
 
 For example, in the case of "Decision State Machine Panic", we might have to reset the workflows by command:
 
-*$nohup cadence --do samples-domain --env prod wf reset-batch --reason "fix outage" --query “WorkflowType=’SampleWorkflow’ AND CloseTime=missing”  --dry-run --reset-type <A-RESET-TYPE> --non_deterministic_only --skip_base_not_current &> reset.log &*
+*$nohup tctl --do samples-domain --env prod wf reset-batch --reason "fix outage" --query “WorkflowType=’SampleWorkflow’ AND CloseTime=missing”  --dry-run --reset-type <A-RESET-TYPE> --non_deterministic_only --skip_base_not_current &> reset.log &*
 
-For reset type, you may try LastDecisionCompleted. Then try FirstDecisionCompleted. We should also provide [firstPanicDecision](https://github.com/uber/cadence/issues/2952) resetType .
+For reset type, you may try LastDecisionCompleted. Then try FirstDecisionCompleted. We should also provide [firstPanicDecision](https://github.com/uber/temporal/issues/2952) resetType .
 
 ## AutoReset Workflow
 
-Cadence also provides a command to reset all progress made by any binary given a binaryChecksum. 
+Temporal also provides a command to reset all progress made by any binary given a binaryChecksum. 
 
 The way it works is to store the first decision completed ID as an **auto-reset point** for any binaryChecksum. Then when a customer mark a binary checksum is bad, the  badBinaryChecksum will be stored in domainConfig. Whenever an open workflow make any progress, it will reset the workflow to the auto-reset point. 
 
@@ -441,7 +441,7 @@ There are some limitations:
 
 3. It only reset when the open workflow make a decision respond
 
-4. [It could be much improved by this proposal, ](https://github.com/uber/cadence/issues/2810)
+4. [It could be much improved by this proposal, ](https://github.com/uber/temporal/issues/2810)
 
 However, you can use reset batch command to achieve the same to both open/closed workflows and without waiting for making decision respond. 
 

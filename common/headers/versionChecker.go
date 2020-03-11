@@ -31,9 +31,9 @@ import (
 
 const (
 	// GoSDK is the header value for common.ClientImplHeaderName indicating a go sdk client
-	GoSDK = "uber-go"
+	GoSDK = "temporal-go"
 	// JavaSDK is the header value for common.ClientImplHeaderName indicating a java sdk client
-	JavaSDK = "uber-java"
+	JavaSDK = "temporal-java"
 	// CLI is the header value for common.ClientImplHeaderName indicating a cli client
 	CLI = "cli"
 
