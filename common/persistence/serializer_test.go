@@ -106,12 +106,12 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 		},
 	}
 
-	badBinaries0 := &workflow.BadBinaries{
-		Binaries: map[string]*workflow.BadBinaryInfo{
+	badBinaries0 := &commonproto.BadBinaries{
+		Binaries: map[string]*commonproto.BadBinaryInfo{
 			"bad-binary-cs": {
-				CreatedTimeNano: common.Int64Ptr(456),
-				Operator:        common.StringPtr("test-operattor"),
-				Reason:          common.StringPtr("test-reason"),
+				CreatedTimeNano: 456,
+				Operator:        "test-operattor",
+				Reason:          "test-reason",
 			},
 		},
 	}
@@ -369,23 +369,23 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 
 			dNilBadBinaries1, err := serializer.DeserializeBadBinaries(nil)
 			s.Nil(err)
-			s.Equal(&workflow.BadBinaries{}, dNilBadBinaries1)
+			s.Equal(&commonproto.BadBinaries{}, dNilBadBinaries1)
 
 			dNilBadBinaries2, err := serializer.DeserializeBadBinaries(nilBadBinaries)
 			s.Nil(err)
-			s.Equal(&workflow.BadBinaries{}, dNilBadBinaries2)
+			s.Equal(&commonproto.BadBinaries{}, dNilBadBinaries2)
 
 			badBinaries1, err := serializer.DeserializeBadBinaries(badBinariesJSON)
 			s.Nil(err)
-			s.True(badBinaries1.Equals(badBinaries0))
+			s.True(reflect.DeepEqual(badBinaries1, badBinaries0))
 
 			badBinaries2, err := serializer.DeserializeBadBinaries(badBinariesThrift)
 			s.Nil(err)
-			s.True(badBinaries2.Equals(badBinaries0))
+			s.True(reflect.DeepEqual(badBinaries2, badBinaries0))
 
 			badBinaries3, err := serializer.DeserializeBadBinaries(badBinariesEmpty)
 			s.Nil(err)
-			s.True(badBinaries3.Equals(badBinaries0))
+			s.True(reflect.DeepEqual(badBinaries3, badBinaries0))
 
 			// serialize version histories
 

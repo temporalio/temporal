@@ -30,7 +30,6 @@ import (
 	"github.com/uber-go/tally"
 	commonproto "go.temporal.io/temporal-proto/common"
 
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
@@ -85,9 +84,9 @@ func (s *domainCacheSuite) TestListDomain() {
 		Info: &persistence.DomainInfo{ID: uuid.New(), Name: "some random domain name", Data: make(map[string]string)},
 		Config: &persistence.DomainConfig{
 			Retention: 1,
-			BadBinaries: adapter.ToThriftBadBinaries(commonproto.BadBinaries{
+			BadBinaries: commonproto.BadBinaries{
 				Binaries: map[string]*commonproto.BadBinaryInfo{},
-			})},
+			}},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
@@ -105,9 +104,9 @@ func (s *domainCacheSuite) TestListDomain() {
 		Info: &persistence.DomainInfo{ID: uuid.New(), Name: "another random domain name", Data: make(map[string]string)},
 		Config: &persistence.DomainConfig{
 			Retention: 2,
-			BadBinaries: adapter.ToThriftBadBinaries(commonproto.BadBinaries{
+			BadBinaries: commonproto.BadBinaries{
 				Binaries: map[string]*commonproto.BadBinaryInfo{},
-			})},
+			}},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
@@ -125,9 +124,9 @@ func (s *domainCacheSuite) TestListDomain() {
 		Info: &persistence.DomainInfo{ID: uuid.New(), Name: "yet another random domain name", Data: make(map[string]string)},
 		Config: &persistence.DomainConfig{
 			Retention: 3,
-			BadBinaries: adapter.ToThriftBadBinaries(commonproto.BadBinaries{
+			BadBinaries: commonproto.BadBinaries{
 				Binaries: map[string]*commonproto.BadBinaryInfo{},
-			})},
+			}},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
@@ -195,7 +194,7 @@ func (s *domainCacheSuite) TestGetDomain_NonLoaded_GetByName() {
 		Info: &persistence.DomainInfo{ID: uuid.New(), Name: "some random domain name", Data: make(map[string]string)},
 		Config: &persistence.DomainConfig{
 			Retention: 1,
-			BadBinaries: adapter.ToThriftBadBinaries(commonproto.BadBinaries{
+			BadBinaries: commonproto.BadBinaries{
 				Binaries: map[string]*commonproto.BadBinaryInfo{
 					"abc": {
 						Reason:          "test reason",
@@ -203,7 +202,7 @@ func (s *domainCacheSuite) TestGetDomain_NonLoaded_GetByName() {
 						CreatedTimeNano: 123,
 					},
 				},
-			})},
+			}},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
@@ -239,9 +238,9 @@ func (s *domainCacheSuite) TestGetDomain_NonLoaded_GetByID() {
 		Info: &persistence.DomainInfo{ID: uuid.New(), Name: "some random domain name", Data: make(map[string]string)},
 		Config: &persistence.DomainConfig{
 			Retention: 1,
-			BadBinaries: adapter.ToThriftBadBinaries(commonproto.BadBinaries{
+			BadBinaries: commonproto.BadBinaries{
 				Binaries: map[string]*commonproto.BadBinaryInfo{},
-			}),
+			},
 		},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -276,9 +275,9 @@ func (s *domainCacheSuite) TestRegisterCallback_CatchUp() {
 		Info: &persistence.DomainInfo{ID: uuid.New(), Name: "some random domain name", Data: make(map[string]string)},
 		Config: &persistence.DomainConfig{
 			Retention: 1,
-			BadBinaries: adapter.ToThriftBadBinaries(commonproto.BadBinaries{
+			BadBinaries: commonproto.BadBinaries{
 				Binaries: map[string]*commonproto.BadBinaryInfo{},
-			})},
+			}},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
@@ -298,9 +297,9 @@ func (s *domainCacheSuite) TestRegisterCallback_CatchUp() {
 		Info: &persistence.DomainInfo{ID: uuid.New(), Name: "another random domain name", Data: make(map[string]string)},
 		Config: &persistence.DomainConfig{
 			Retention: 2,
-			BadBinaries: adapter.ToThriftBadBinaries(commonproto.BadBinaries{
+			BadBinaries: commonproto.BadBinaries{
 				Binaries: map[string]*commonproto.BadBinaryInfo{},
-			})},
+			}},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
@@ -359,9 +358,9 @@ func (s *domainCacheSuite) TestUpdateCache_TriggerCallBack() {
 		Info: &persistence.DomainInfo{ID: uuid.New(), Name: "some random domain name", Data: make(map[string]string)},
 		Config: &persistence.DomainConfig{
 			Retention: 1,
-			BadBinaries: adapter.ToThriftBadBinaries(commonproto.BadBinaries{
+			BadBinaries: commonproto.BadBinaries{
 				Binaries: map[string]*commonproto.BadBinaryInfo{},
-			})},
+			}},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
@@ -381,9 +380,9 @@ func (s *domainCacheSuite) TestUpdateCache_TriggerCallBack() {
 		Info: &persistence.DomainInfo{ID: uuid.New(), Name: "another random domain name", Data: make(map[string]string)},
 		Config: &persistence.DomainConfig{
 			Retention: 2,
-			BadBinaries: adapter.ToThriftBadBinaries(commonproto.BadBinaries{
+			BadBinaries: commonproto.BadBinaries{
 				Binaries: map[string]*commonproto.BadBinaryInfo{},
-			})},
+			}},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
@@ -496,9 +495,9 @@ func (s *domainCacheSuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess() {
 		Info: &persistence.DomainInfo{ID: id, Name: "some random domain name", Data: make(map[string]string)},
 		Config: &persistence.DomainConfig{
 			Retention: 1,
-			BadBinaries: adapter.ToThriftBadBinaries(commonproto.BadBinaries{
+			BadBinaries: commonproto.BadBinaries{
 				Binaries: map[string]*commonproto.BadBinaryInfo{},
-			})},
+			}},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []*persistence.ClusterReplicationConfig{
@@ -607,9 +606,9 @@ func Test_IsSampledForLongerRetentionEnabled(t *testing.T) {
 		},
 		config: &persistence.DomainConfig{
 			Retention: 7,
-			BadBinaries: adapter.ToThriftBadBinaries(commonproto.BadBinaries{
+			BadBinaries: commonproto.BadBinaries{
 				Binaries: map[string]*commonproto.BadBinaryInfo{},
-			}),
+			},
 		},
 	}
 	wid := uuid.New()
@@ -626,9 +625,9 @@ func Test_IsSampledForLongerRetention(t *testing.T) {
 		},
 		config: &persistence.DomainConfig{
 			Retention: 7,
-			BadBinaries: adapter.ToThriftBadBinaries(commonproto.BadBinaries{
+			BadBinaries: commonproto.BadBinaries{
 				Binaries: map[string]*commonproto.BadBinaryInfo{},
-			}),
+			},
 		},
 	}
 	wid := uuid.New()

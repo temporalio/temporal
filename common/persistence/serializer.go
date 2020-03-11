@@ -56,8 +56,8 @@ type (
 		DeserializeResetPoints(data *serialization.DataBlob) (*commonproto.ResetPoints, error)
 
 		// serialize/deserialize bad binaries
-		SerializeBadBinaries(event *workflow.BadBinaries, encodingType common.EncodingType) (*serialization.DataBlob, error)
-		DeserializeBadBinaries(data *serialization.DataBlob) (*workflow.BadBinaries, error)
+		SerializeBadBinaries(event *commonproto.BadBinaries, encodingType common.EncodingType) (*serialization.DataBlob, error)
+		DeserializeBadBinaries(data *serialization.DataBlob) (*commonproto.BadBinaries, error)
 
 		// serialize/deserialize version histories
 		SerializeVersionHistories(histories *workflow.VersionHistories, encodingType common.EncodingType) (*serialization.DataBlob, error)
@@ -185,7 +185,7 @@ func (t *serializerImpl) DeserializeResetPoints(data *serialization.DataBlob) (*
 		// Client API currently specifies encodingType on requests which span multiple of these objects
 		err = proto.Unmarshal(data.Data, memo)
 	default:
-		return nil, NewCadenceDeserializationError("DeserializeVisibilityMemo invalid encoding")
+		return nil, NewCadenceDeserializationError("DeserializeResetPoints invalid encoding")
 	}
 
 	if err != nil {
@@ -195,17 +195,39 @@ func (t *serializerImpl) DeserializeResetPoints(data *serialization.DataBlob) (*
 	return memo, err
 }
 
-func (t *serializerImpl) SerializeBadBinaries(bb *workflow.BadBinaries, encodingType common.EncodingType) (*serialization.DataBlob, error) {
+func (t *serializerImpl) SerializeBadBinaries(bb *commonproto.BadBinaries, encodingType common.EncodingType) (*serialization.DataBlob, error) {
 	if bb == nil {
-		bb = &workflow.BadBinaries{}
+		bb = &commonproto.BadBinaries{}
 	}
 	return t.serialize(bb, encodingType)
 }
 
-func (t *serializerImpl) DeserializeBadBinaries(data *serialization.DataBlob) (*workflow.BadBinaries, error) {
-	var bb workflow.BadBinaries
-	err := t.deserialize(data, &bb)
-	return &bb, err
+func (t *serializerImpl) DeserializeBadBinaries(data *serialization.DataBlob) (*commonproto.BadBinaries, error) {
+	if data == nil {
+		return &commonproto.BadBinaries{}, nil
+	}
+	if len(data.Data) == 0 {
+		return &commonproto.BadBinaries{}, nil
+	}
+
+	memo := &commonproto.BadBinaries{}
+	var err error
+	switch data.Encoding {
+	case common.EncodingTypeJSON:
+		err = codec.NewJSONPBEncoder().Decode(data.Data, memo)
+	case common.EncodingTypeProto3, common.EncodingTypeThriftRW:
+		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
+		// Client API currently specifies encodingType on requests which span multiple of these objects
+		err = proto.Unmarshal(data.Data, memo)
+	default:
+		return nil, NewCadenceDeserializationError("DeserializeBadBinaries invalid encoding")
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return memo, err
 }
 
 func (t *serializerImpl) SerializeVisibilityMemo(memo *commonproto.Memo, encodingType common.EncodingType) (*serialization.DataBlob, error) {
@@ -363,8 +385,6 @@ func (t *serializerImpl) serialize(input interface{}, encodingType common.Encodi
 
 func (t *serializerImpl) thriftrwEncode(input interface{}) ([]byte, error) {
 	switch input.(type) {
-	case *workflow.BadBinaries:
-		return t.thriftrwEncoder.Encode(input.(*workflow.BadBinaries))
 	case *workflow.VersionHistories:
 		return t.thriftrwEncoder.Encode(input.(*workflow.VersionHistories))
 	default:
@@ -400,8 +420,6 @@ func (t *serializerImpl) deserialize(data *serialization.DataBlob, target interf
 
 func (t *serializerImpl) thriftrwDecode(data []byte, target interface{}) error {
 	switch target := target.(type) {
-	case *workflow.BadBinaries:
-		return t.thriftrwEncoder.Decode(data, target)
 	case *workflow.VersionHistories:
 		return t.thriftrwEncoder.Decode(data, target)
 	default:

@@ -23,6 +23,7 @@ package persistencetests
 import (
 	"fmt"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -32,10 +33,10 @@ import (
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
+	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	gen "github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/cluster"
 	p "github.com/temporalio/temporal/common/persistence"
 )
@@ -102,7 +103,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateDomain() {
 	historyArchivalURI := "test://history/uri"
 	visibilityArchivalStatus := gen.ArchivalStatusEnabled
 	visibilityArchivalURI := "test://visibility/uri"
-	badBinaries := gen.BadBinaries{map[string]*gen.BadBinaryInfo{}}
+	badBinaries := commonproto.BadBinaries{map[string]*commonproto.BadBinaryInfo{}}
 	isGlobalDomain := false
 	configVersion := int64(0)
 	failoverVersion := int64(0)
@@ -220,12 +221,12 @@ func (m *MetadataPersistenceSuiteV2) TestGetDomain() {
 	m.Nil(resp0)
 	m.Error(err0)
 	m.IsType(&serviceerror.NotFound{}, err0)
-	testBinaries := gen.BadBinaries{
-		Binaries: map[string]*gen.BadBinaryInfo{
-			"abc": &gen.BadBinaryInfo{
-				Reason:          common.StringPtr("test-reason"),
-				Operator:        common.StringPtr("test-operator"),
-				CreatedTimeNano: common.Int64Ptr(123),
+	testBinaries := commonproto.BadBinaries{
+		Binaries: map[string]*commonproto.BadBinaryInfo{
+			"abc": {
+				Reason:          "test-reason",
+				Operator:        "test-operator",
+				CreatedTimeNano: 123,
 			},
 		},
 	}
@@ -275,7 +276,7 @@ func (m *MetadataPersistenceSuiteV2) TestGetDomain() {
 	m.Equal(historyArchivalURI, resp2.Config.HistoryArchivalURI)
 	m.Equal(visibilityArchivalStatus, resp2.Config.VisibilityArchivalStatus)
 	m.Equal(visibilityArchivalURI, resp2.Config.VisibilityArchivalURI)
-	m.True(testBinaries.Equals(&resp2.Config.BadBinaries))
+	m.True(reflect.DeepEqual(testBinaries, resp2.Config.BadBinaries))
 	m.Equal(clusterActive, resp2.ReplicationConfig.ActiveClusterName)
 	m.Equal(len(clusters), len(resp2.ReplicationConfig.Clusters))
 	for index := range clusters {
@@ -350,12 +351,12 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateDomain() {
 		},
 	}
 
-	testBinaries := gen.BadBinaries{
-		Binaries: map[string]*gen.BadBinaryInfo{
-			"abc": &gen.BadBinaryInfo{
-				Reason:          common.StringPtr("test-reason"),
-				Operator:        common.StringPtr("test-operator"),
-				CreatedTimeNano: common.Int64Ptr(123),
+	testBinaries := commonproto.BadBinaries{
+		Binaries: map[string]*commonproto.BadBinaryInfo{
+			"abc": {
+				Reason:          "test-reason",
+				Operator:        "test-operator",
+				CreatedTimeNano: 123,
 			},
 		},
 	}
@@ -414,7 +415,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateDomain() {
 	m.Equal(historyArchivalURI, resp.Config.HistoryArchivalURI)
 	m.Equal(visibilityArchivalStatus, resp.Config.VisibilityArchivalStatus)
 	m.Equal(visibilityArchivalURI, resp.Config.VisibilityArchivalURI)
-	m.True(testBinaries.Equals(&resp.Config.BadBinaries))
+	m.True(reflect.DeepEqual(testBinaries, resp.Config.BadBinaries))
 	m.Equal(clusterActive, resp.ReplicationConfig.ActiveClusterName)
 	m.Equal(len(clusters), len(resp.ReplicationConfig.Clusters))
 	for index := range clusters {
@@ -446,7 +447,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateDomain() {
 	historyArchivalURI := "test://history/uri"
 	visibilityArchivalStatus := gen.ArchivalStatusEnabled
 	visibilityArchivalURI := "test://visibility/uri"
-	badBinaries := gen.BadBinaries{map[string]*gen.BadBinaryInfo{}}
+	badBinaries := commonproto.BadBinaries{map[string]*commonproto.BadBinaryInfo{}}
 
 	clusterActive := "some random active cluster name"
 	clusterStandby := "some random standby cluster name"
@@ -498,12 +499,12 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateDomain() {
 	m.NoError(err)
 	notificationVersion := metadata.NotificationVersion
 
-	testBinaries := gen.BadBinaries{
-		Binaries: map[string]*gen.BadBinaryInfo{
-			"abc": &gen.BadBinaryInfo{
-				Reason:          common.StringPtr("test-reason"),
-				Operator:        common.StringPtr("test-operator"),
-				CreatedTimeNano: common.Int64Ptr(123),
+	testBinaries := commonproto.BadBinaries{
+		Binaries: map[string]*commonproto.BadBinaryInfo{
+			"abc": {
+				Reason:          "test-reason",
+				Operator:        "test-operator",
+				CreatedTimeNano: 123,
 			},
 		},
 	}
@@ -566,7 +567,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateDomain() {
 	m.Equal(historyArchivalURI, resp3.Config.HistoryArchivalURI)
 	m.Equal(visibilityArchivalStatus, resp3.Config.VisibilityArchivalStatus)
 	m.Equal(visibilityArchivalURI, resp3.Config.VisibilityArchivalURI)
-	m.True(testBinaries.Equals(&resp3.Config.BadBinaries))
+	m.True(reflect.DeepEqual(testBinaries, resp3.Config.BadBinaries))
 	m.Equal(clusterActive, resp3.ReplicationConfig.ActiveClusterName)
 	m.Equal(len(clusters), len(resp3.ReplicationConfig.Clusters))
 	for index := range clusters {
@@ -672,12 +673,12 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateDomain() {
 			ClusterName: updateClusterStandby,
 		},
 	}
-	testBinaries := gen.BadBinaries{
-		Binaries: map[string]*gen.BadBinaryInfo{
-			"abc": &gen.BadBinaryInfo{
-				Reason:          common.StringPtr("test-reason"),
-				Operator:        common.StringPtr("test-operator"),
-				CreatedTimeNano: common.Int64Ptr(123),
+	testBinaries := commonproto.BadBinaries{
+		Binaries: map[string]*commonproto.BadBinaryInfo{
+			"abc": {
+				Reason:          "test-reason",
+				Operator:        "test-operator",
+				CreatedTimeNano: 123,
 			},
 		},
 	}
@@ -727,7 +728,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateDomain() {
 	m.Equal(updatedHistoryArchivalURI, resp4.Config.HistoryArchivalURI)
 	m.Equal(updatedVisibilityArchivalStatus, resp4.Config.VisibilityArchivalStatus)
 	m.Equal(updatedVisibilityArchivalURI, resp4.Config.VisibilityArchivalURI)
-	m.True(testBinaries.Equals(&resp4.Config.BadBinaries))
+	m.True(reflect.DeepEqual(testBinaries, resp4.Config.BadBinaries))
 	m.Equal(updateClusterActive, resp4.ReplicationConfig.ActiveClusterName)
 	m.Equal(len(updateClusters), len(resp4.ReplicationConfig.Clusters))
 	for index := range clusters {
@@ -906,21 +907,21 @@ func (m *MetadataPersistenceSuiteV2) TestListDomains() {
 		},
 	}
 
-	testBinaries1 := gen.BadBinaries{
-		Binaries: map[string]*gen.BadBinaryInfo{
-			"abc": &gen.BadBinaryInfo{
-				Reason:          common.StringPtr("test-reason1"),
-				Operator:        common.StringPtr("test-operator1"),
-				CreatedTimeNano: common.Int64Ptr(123),
+	testBinaries1 := commonproto.BadBinaries{
+		Binaries: map[string]*commonproto.BadBinaryInfo{
+			"abc": {
+				Reason:          "test-reason1",
+				Operator:        "test-operator1",
+				CreatedTimeNano: 123,
 			},
 		},
 	}
-	testBinaries2 := gen.BadBinaries{
-		Binaries: map[string]*gen.BadBinaryInfo{
-			"efg": &gen.BadBinaryInfo{
-				Reason:          common.StringPtr("test-reason2"),
-				Operator:        common.StringPtr("test-operator2"),
-				CreatedTimeNano: common.Int64Ptr(456),
+	testBinaries2 := commonproto.BadBinaries{
+		Binaries: map[string]*commonproto.BadBinaryInfo{
+			"efg": {
+				Reason:          "test-reason2",
+				Operator:        "test-operator2",
+				CreatedTimeNano: 456,
 			},
 		},
 	}

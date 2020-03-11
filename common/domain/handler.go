@@ -209,7 +209,7 @@ func (d *HandlerImpl) RegisterDomain(
 		HistoryArchivalURI:       nextHistoryArchivalState.URI,
 		VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(nextVisibilityArchivalState.Status),
 		VisibilityArchivalURI:    nextVisibilityArchivalState.URI,
-		BadBinaries:              adapter.ToThriftBadBinaries(commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}}),
+		BadBinaries:              commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}},
 	}
 	replicationConfig := &persistence.DomainReplicationConfig{
 		ActiveClusterName: activeClusterName,
@@ -448,7 +448,7 @@ func (d *HandlerImpl) UpdateDomain(
 		if updatedConfig.BadBinaries != nil {
 			maxLength := d.maxBadBinaryCount(updateRequest.GetName())
 			// only do merging
-			config.BadBinaries = adapter.ToThriftBadBinaries(d.mergeBadBinaries(adapter.ToProtoBadBinaries(config.BadBinaries).Binaries, updatedConfig.BadBinaries.Binaries, time.Now().UnixNano()))
+			config.BadBinaries = d.mergeBadBinaries(config.BadBinaries.Binaries, updatedConfig.BadBinaries.Binaries, time.Now().UnixNano())
 			if len(config.BadBinaries.Binaries) > maxLength {
 				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Total resetBinaries cannot exceed the max limit: %v", maxLength))
 			}
@@ -634,7 +634,7 @@ func (d *HandlerImpl) createResponse(
 		HistoryArchivalURI:                     config.HistoryArchivalURI,
 		VisibilityArchivalStatus:               adapter.ToProtoArchivalStatus(&config.VisibilityArchivalStatus),
 		VisibilityArchivalURI:                  config.VisibilityArchivalURI,
-		BadBinaries:                            adapter.ToProtoBadBinariesPtr(&config.BadBinaries),
+		BadBinaries:                            &config.BadBinaries,
 	}
 
 	var clusters []*commonproto.ClusterReplicationConfiguration

@@ -1629,11 +1629,11 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedBadBinary() {
 		&persistence.DomainInfo{ID: domainID, Name: testDomainName},
 		&persistence.DomainConfig{
 			Retention: 2,
-			BadBinaries: adapter.ToThriftBadBinaries(commonproto.BadBinaries{
+			BadBinaries: commonproto.BadBinaries{
 				Binaries: map[string]*commonproto.BadBinaryInfo{
 					"test-bad-binary": {},
 				},
-			}),
+			},
 		},
 		cluster.TestCurrentClusterName,
 		nil,

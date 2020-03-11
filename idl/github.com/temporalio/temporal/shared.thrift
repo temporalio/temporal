@@ -263,10 +263,6 @@ struct TaskListMetadata {
   10: optional double maxTasksPerSecond
 }
 
-struct Memo {
-  10: optional map<string,binary> fields
-}
-
 struct SearchAttributes {
   10: optional map<string,binary> indexedFields
 }
@@ -342,26 +338,6 @@ struct DomainInfo {
   60: optional string uuid
 }
 
-struct DomainConfiguration {
-  10: optional i32 workflowExecutionRetentionPeriodInDays
-  20: optional bool emitMetric
-  70: optional BadBinaries badBinaries
-  80: optional ArchivalStatus historyArchivalStatus
-  90: optional string historyArchivalURI
-  100: optional ArchivalStatus visibilityArchivalStatus
-  110: optional string visibilityArchivalURI
-}
-
-struct BadBinaries{
-  10: optional map<string, BadBinaryInfo> binaries
-}
-
-struct BadBinaryInfo{
-  10: optional string reason
-  20: optional string operator
-  30: optional i64 (js.type = "Long") createdTimeNano
-}
-
 struct UpdateDomainInfo {
   10: optional string description
   20: optional string ownerEmail
@@ -394,70 +370,6 @@ struct RegisterDomainRequest {
   140: optional string historyArchivalURI
   150: optional ArchivalStatus visibilityArchivalStatus
   160: optional string visibilityArchivalURI
-}
-
-struct ListDomainsRequest {
-  10: optional i32 pageSize
-  20: optional binary nextPageToken
-}
-
-struct ListDomainsResponse {
-  10: optional list<DescribeDomainResponse> domains
-  20: optional binary nextPageToken
-}
-
-struct DescribeDomainRequest {
-  10: optional string name
-  20: optional string uuid
-}
-
-struct DescribeDomainResponse {
-  10: optional DomainInfo domainInfo
-  20: optional DomainConfiguration configuration
-  30: optional DomainReplicationConfiguration replicationConfiguration
-  40: optional i64 (js.type = "Long") failoverVersion
-  50: optional bool isGlobalDomain
-}
-
-struct UpdateDomainRequest {
- 10: optional string name
- 20: optional UpdateDomainInfo updatedInfo
- 30: optional DomainConfiguration configuration
- 40: optional DomainReplicationConfiguration replicationConfiguration
- 50: optional string securityToken
- 60: optional string deleteBadBinary
-}
-
-struct UpdateDomainResponse {
-  10: optional DomainInfo domainInfo
-  20: optional DomainConfiguration configuration
-  30: optional DomainReplicationConfiguration replicationConfiguration
-  40: optional i64 (js.type = "Long") failoverVersion
-  50: optional bool isGlobalDomain
-}
-
-struct DeprecateDomainRequest {
- 10: optional string name
- 20: optional string securityToken
-}
-
-struct StartWorkflowExecutionRequest {
-  10: optional string domain
-  20: optional string workflowId
-  30: optional WorkflowType workflowType
-  40: optional TaskList taskList
-  50: optional binary input
-  60: optional i32 executionStartToCloseTimeoutSeconds
-  70: optional i32 taskStartToCloseTimeoutSeconds
-  80: optional string identity
-  90: optional string requestId
-  100: optional WorkflowIdReusePolicy workflowIdReusePolicy
-//  110: optional ChildPolicy childPolicy -- Removed but reserve the IDL order number
-  120: optional RetryPolicy retryPolicy
-  130: optional string cronSchedule
-  140: optional Memo memo
-  141: optional SearchAttributes searchAttributes
-  150: optional Header header
 }
 
 struct StartWorkflowExecutionResponse {
@@ -555,28 +467,6 @@ struct RespondActivityTaskCanceledByIDRequest {
   40: optional string activityID
   50: optional binary details
   60: optional string identity
-}
-
-
-struct SignalWithStartWorkflowExecutionRequest {
-  10: optional string domain
-  20: optional string workflowId
-  30: optional WorkflowType workflowType
-  40: optional TaskList taskList
-  50: optional binary input
-  60: optional i32 executionStartToCloseTimeoutSeconds
-  70: optional i32 taskStartToCloseTimeoutSeconds
-  80: optional string identity
-  90: optional string requestId
-  100: optional WorkflowIdReusePolicy workflowIdReusePolicy
-  110: optional string signalName
-  120: optional binary signalInput
-  130: optional binary control
-  140: optional RetryPolicy retryPolicy
-  150: optional string cronSchedule
-  160: optional Memo memo
-  161: optional SearchAttributes searchAttributes
-  170: optional Header header
 }
 
 struct ResetWorkflowExecutionResponse {
