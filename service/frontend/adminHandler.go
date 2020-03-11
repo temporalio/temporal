@@ -1156,8 +1156,8 @@ func (adh *AdminHandler) validatePaginationToken(
 // startRequestProfile initiates recording of request metrics
 func (adh *AdminHandler) startRequestProfile(scope int) (metrics.Scope, metrics.Stopwatch) {
 	metricsScope := adh.GetMetricsClient().Scope(scope)
-	sw := metricsScope.StartTimer(metrics.CadenceLatency)
-	metricsScope.IncCounter(metrics.CadenceRequests)
+	sw := metricsScope.StartTimer(metrics.ServiceLatency)
+	metricsScope.IncCounter(metrics.ServiceRequests)
 	return metricsScope, sw
 }
 
@@ -1165,20 +1165,20 @@ func (adh *AdminHandler) error(err error, scope metrics.Scope) error {
 	switch err.(type) {
 	case *serviceerror.Internal:
 		adh.GetLogger().Error("Internal service error", tag.Error(err))
-		scope.IncCounter(metrics.CadenceFailures)
+		scope.IncCounter(metrics.ServiceFailures)
 		return err
 	case *serviceerror.InvalidArgument:
-		scope.IncCounter(metrics.CadenceErrBadRequestCounter)
+		scope.IncCounter(metrics.ServiceErrBadRequestCounter)
 		return err
 	case *serviceerror.ResourceExhausted:
-		scope.IncCounter(metrics.CadenceErrServiceBusyCounter)
+		scope.IncCounter(metrics.ServiceErrServiceBusyCounter)
 		return err
 	case *serviceerror.NotFound:
 		return err
 	}
 
 	adh.GetLogger().Error("Unknown error", tag.Error(err))
-	scope.IncCounter(metrics.CadenceFailures)
+	scope.IncCounter(metrics.ServiceFailures)
 
 	return err
 }
