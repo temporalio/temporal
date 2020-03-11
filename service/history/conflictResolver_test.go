@@ -178,7 +178,7 @@ func (s *conflictResolverSuite) TestReset() {
 		NextPageToken: nil,
 		ShardID:       &shardId,
 	}).Return(&persistence.ReadHistoryBranchResponse{
-		HistoryEvents:    adapter.ToThriftHistoryEvents([]*commonproto.HistoryEvent{event1, event2}),
+		HistoryEvents:    []*commonproto.HistoryEvent{event1, event2},
 		NextPageToken:    nil,
 		LastFirstEventID: event1.GetEventId(),
 		Size:             int(historySize),

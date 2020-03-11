@@ -151,8 +151,8 @@ func (e *replicationTaskExecutorImpl) handleActivityTask(
 		if retryV1Err.RunId == "" {
 			return err
 		}
-		e.metricsClient.IncCounter(metrics.HistoryRereplicationByActivityReplicationScope, metrics.CadenceClientRequests)
-		stopwatch := e.metricsClient.StartTimer(metrics.HistoryRereplicationByActivityReplicationScope, metrics.CadenceClientLatency)
+		e.metricsClient.IncCounter(metrics.HistoryRereplicationByActivityReplicationScope, metrics.ClientRequests)
+		stopwatch := e.metricsClient.StartTimer(metrics.HistoryRereplicationByActivityReplicationScope, metrics.ClientLatency)
 		defer stopwatch.Stop()
 
 		// this is the retry error
@@ -169,8 +169,8 @@ func (e *replicationTaskExecutorImpl) handleActivityTask(
 			return err
 		}
 	} else if okV2 {
-		e.metricsClient.IncCounter(metrics.HistoryRereplicationByActivityReplicationScope, metrics.CadenceClientRequests)
-		stopwatch := e.metricsClient.StartTimer(metrics.HistoryRereplicationByActivityReplicationScope, metrics.CadenceClientLatency)
+		e.metricsClient.IncCounter(metrics.HistoryRereplicationByActivityReplicationScope, metrics.ClientRequests)
+		stopwatch := e.metricsClient.StartTimer(metrics.HistoryRereplicationByActivityReplicationScope, metrics.ClientLatency)
 		defer stopwatch.Stop()
 
 		if resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
@@ -230,8 +230,8 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTask(
 		return err
 	}
 
-	e.metricsClient.IncCounter(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.CadenceClientRequests)
-	stopwatch := e.metricsClient.StartTimer(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.CadenceClientLatency)
+	e.metricsClient.IncCounter(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.ClientRequests)
+	stopwatch := e.metricsClient.StartTimer(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.ClientLatency)
 	defer stopwatch.Stop()
 
 	resendErr := e.historyRereplicator.SendMultiWorkflowHistory(
@@ -281,8 +281,8 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTaskV2(
 	if !ok {
 		return err
 	}
-	e.metricsClient.IncCounter(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.CadenceClientRequests)
-	stopwatch := e.metricsClient.StartTimer(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.CadenceClientLatency)
+	e.metricsClient.IncCounter(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.ClientRequests)
+	stopwatch := e.metricsClient.StartTimer(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.ClientLatency)
 	defer stopwatch.Stop()
 
 	if resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(

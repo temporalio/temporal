@@ -33,7 +33,6 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/serialization"
@@ -474,7 +473,7 @@ func (s *integrationSuite) TestAdminGetWorkflowExecutionRawHistory_All() {
 				Data:     blob.Data,
 			})
 			s.NoError(err)
-			events = append(events, adapter.ToProtoHistoryEvents(blobEvents)...)
+			events = append(events, blobEvents...)
 		}
 		return events
 	}
@@ -761,7 +760,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 	// decider logic
 	activityScheduled := false
 	activityData := int32(1)
-	// var signalEvent *workflow.HistoryEvent
+	// var signalEvent *commonproto.HistoryEvent
 	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
 
@@ -837,7 +836,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 				Data:     blob.Data,
 			})
 			s.NoError(err)
-			events = append(events, adapter.ToProtoHistoryEvents(blobEvents)...)
+			events = append(events, blobEvents...)
 		}
 		return events
 	}

@@ -49,7 +49,6 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	adminClient "github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
@@ -1652,7 +1651,7 @@ func (s *nDCIntegrationTestSuite) generateNewRunHistory(
 		}},
 	}
 
-	eventBlob, err := s.serializer.SerializeBatchEvents(adapter.ToThriftHistoryEvents([]*commonproto.HistoryEvent{newRunFirstEvent}), common.EncodingTypeThriftRW)
+	eventBlob, err := s.serializer.SerializeBatchEvents([]*commonproto.HistoryEvent{newRunFirstEvent}, common.EncodingTypeThriftRW)
 	s.NoError(err)
 
 	return eventBlob
@@ -1700,7 +1699,7 @@ func (s *nDCIntegrationTestSuite) generateEventBlobs(
 	)
 	// must serialize events batch after attempt on continue as new as generateNewRunHistory will
 	// modify the NewExecutionRunId attr
-	eventBlob, err := s.serializer.SerializeBatchEvents(adapter.ToThriftHistoryEvents(batch.Events), common.EncodingTypeThriftRW)
+	eventBlob, err := s.serializer.SerializeBatchEvents(batch.Events, common.EncodingTypeThriftRW)
 	s.NoError(err)
 	return eventBlob, newRunEventBlob
 }

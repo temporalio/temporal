@@ -34,7 +34,6 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/auth"
 	"github.com/temporalio/temporal/common/codec"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
@@ -89,7 +88,7 @@ func AdminShowWorkflow(c *cli.Context) {
 		if err != nil {
 			ErrorAndExit("DeserializeBatchEvents err", err)
 		}
-		historyBatch := adapter.ToProtoHistoryEvents(historyBatchThrift)
+		historyBatch := historyBatchThrift
 		allEvents.Events = append(allEvents.Events, historyBatch...)
 		encoder := codec.NewJSONPBEncoder()
 		data, err := encoder.EncodeHistoryEvents(historyBatch)

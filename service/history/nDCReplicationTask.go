@@ -30,7 +30,6 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -379,5 +378,5 @@ func deserializeBlob(
 		Data:     blob.Data,
 	})
 
-	return adapter.ToProtoHistoryEvents(events), err
+	return events, err
 }

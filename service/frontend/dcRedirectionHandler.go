@@ -1189,9 +1189,9 @@ func (handler *DCRedirectionHandlerImpl) afterCall(
 	log.CapturePanicGRPC(handler.GetLogger(), retError)
 
 	scope = scope.Tagged(metrics.TargetClusterTag(cluster))
-	scope.IncCounter(metrics.CadenceDcRedirectionClientRequests)
-	scope.RecordTimer(metrics.CadenceDcRedirectionClientLatency, handler.GetTimeSource().Now().Sub(startTime))
+	scope.IncCounter(metrics.ClientRedirectionRequests)
+	scope.RecordTimer(metrics.ClientRedirectionLatency, handler.GetTimeSource().Now().Sub(startTime))
 	if *retError != nil {
-		scope.IncCounter(metrics.CadenceDcRedirectionClientFailures)
+		scope.IncCounter(metrics.ClientRedirectionFailures)
 	}
 }

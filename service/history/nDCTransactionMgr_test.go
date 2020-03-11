@@ -146,7 +146,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Ope
 	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{
-		Events: adapter.ToThriftHistoryEvents([]*commonproto.HistoryEvent{{EventId: 1}}),
+		Events: []*commonproto.HistoryEvent{{EventId: 1}},
 	}
 
 	workflow.EXPECT().getContext().Return(weContext).AnyTimes()
@@ -156,7 +156,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Ope
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.domainEntry.GetFailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
 
-	s.mockEventsReapplier.EXPECT().reapplyEvents(ctx, mutableState, adapter.ToProtoHistoryEvents(workflowEvents.Events), runID).Return(adapter.ToProtoHistoryEvents(workflowEvents.Events), nil).Times(1)
+	s.mockEventsReapplier.EXPECT().reapplyEvents(ctx, mutableState, workflowEvents.Events, runID).Return(workflowEvents.Events, nil).Times(1)
 
 	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(true).AnyTimes()
 	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
@@ -227,7 +227,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Clo
 		gomock.Any(),
 		workflow,
 		eventsReapplicationResetWorkflowReason,
-		adapter.ToProtoHistoryEvents(workflowEvents.Events),
+		workflowEvents.Events,
 	).Return(nil).Times(1)
 
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
@@ -256,7 +256,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Op
 	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{
-		Events: adapter.ToThriftHistoryEvents([]*commonproto.HistoryEvent{{EventId: 1}}),
+		Events: []*commonproto.HistoryEvent{{EventId: 1}},
 	}
 
 	workflow.EXPECT().getContext().Return(weContext).AnyTimes()
@@ -344,9 +344,9 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Active(
 	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{
-		Events: adapter.ToThriftHistoryEvents([]*commonproto.HistoryEvent{{
+		Events: []*commonproto.HistoryEvent{{
 			EventType: enums.EventTypeWorkflowExecutionSignaled,
-		}}),
+		}},
 		DomainID:   domainID,
 		WorkflowID: workflowID,
 	}
@@ -398,9 +398,9 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Passive
 	var releaseFn releaseWorkflowExecutionFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{
-		Events: adapter.ToThriftHistoryEvents([]*commonproto.HistoryEvent{{
+		Events: []*commonproto.HistoryEvent{{
 			EventType: enums.EventTypeWorkflowExecutionSignaled,
-		}}),
+		}},
 		DomainID:   domainID,
 		WorkflowID: workflowID,
 	}

@@ -75,7 +75,7 @@ func TestScopeDefsMapped(t *testing.T) {
 }
 
 func TestMetricDefsMapped(t *testing.T) {
-	for i := CadenceRequests; i < NumCommonMetrics; i++ {
+	for i := ServiceRequests; i < NumCommonMetrics; i++ {
 		key, ok := MetricDefs[Common][i]
 		require.True(t, ok)
 		require.NotEmpty(t, key)

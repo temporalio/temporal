@@ -29,7 +29,6 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -190,7 +189,7 @@ func (e *eventsCacheImpl) getHistoryEventFromStore(domainID, workflowID, runID s
 	// find history event from batch and return back single event to caller
 	for _, e := range response.HistoryEvents {
 		if e.GetEventId() == eventID {
-			return adapter.ToProtoHistoryEvent(e), nil
+			return e, nil
 		}
 	}
 

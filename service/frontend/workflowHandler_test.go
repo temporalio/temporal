@@ -977,11 +977,11 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 		ShardID:       common.IntPtr(shardID),
 	}
 	s.mockHistoryV2Mgr.On("ReadHistoryBranch", req).Return(&persistence.ReadHistoryBranchResponse{
-		HistoryEvents: adapter.ToThriftHistoryEvents([]*commonproto.HistoryEvent{
+		HistoryEvents: []*commonproto.HistoryEvent{
 			{
 				EventId: int64(100),
 			},
-		}),
+		},
 		NextPageToken:    []byte{},
 		Size:             1,
 		LastFirstEventID: nextEventID,

@@ -21,9 +21,9 @@
 package persistence
 
 import (
+	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence/serialization"
@@ -189,9 +189,9 @@ func (m *executionManagerImpl) DeserializeExecutionInfo(
 
 func (m *executionManagerImpl) DeserializeBufferedEvents(
 	blobs []*serialization.DataBlob,
-) ([]*workflow.HistoryEvent, error) {
+) ([]*commonproto.HistoryEvent, error) {
 
-	events := make([]*workflow.HistoryEvent, 0)
+	events := make([]*commonproto.HistoryEvent, 0)
 	for _, b := range blobs {
 		history, err := m.serializer.DeserializeBatchEvents(b)
 		if err != nil {
@@ -237,12 +237,13 @@ func (m *executionManagerImpl) DeserializeChildExecutionInfos(
 		// Updated the code to instead directly read WorkflowId and RunId from mutable state
 		// Existing mutable state won't have those values set so instead use started event to set StartedWorkflowID and
 		// StartedRunID on the mutable state before passing it to application
-		if startedEvent != nil && startedEvent.ChildWorkflowExecutionStartedEventAttributes != nil &&
-			startedEvent.ChildWorkflowExecutionStartedEventAttributes.WorkflowExecution != nil {
-			startedExecution := startedEvent.ChildWorkflowExecutionStartedEventAttributes.WorkflowExecution
-			c.StartedWorkflowID = startedExecution.GetWorkflowId()
-			c.StartedRunID = startedExecution.GetRunId()
+		if startedEventAttr := startedEvent.GetChildWorkflowExecutionStartedEventAttributes(); startedEventAttr != nil {
+			if startedExecution := startedEventAttr.WorkflowExecution; startedExecution != nil {
+				c.StartedWorkflowID = startedExecution.GetWorkflowId()
+				c.StartedRunID = startedExecution.GetRunId()
+			}
 		}
+
 		newInfos[k] = c
 	}
 	return newInfos, nil

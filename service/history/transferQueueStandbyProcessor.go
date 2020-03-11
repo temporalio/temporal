@@ -679,8 +679,8 @@ func (t *transferQueueStandbyProcessorImpl) fetchHistoryFromRemote(
 	transferTask := taskInfo.task.(*persistenceblobs.TransferTaskInfo)
 	resendInfo := postActionInfo.(*historyResendInfo)
 
-	t.metricsClient.IncCounter(metrics.HistoryRereplicationByTransferTaskScope, metrics.CadenceClientRequests)
-	stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByTransferTaskScope, metrics.CadenceClientLatency)
+	t.metricsClient.IncCounter(metrics.HistoryRereplicationByTransferTaskScope, metrics.ClientRequests)
+	stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByTransferTaskScope, metrics.ClientLatency)
 	defer stopwatch.Stop()
 
 	var err error

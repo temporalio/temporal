@@ -49,13 +49,13 @@ const (
 
 const (
 	// FrontendServiceName is the name of the frontend service
-	FrontendServiceName = "cadence-frontend"
+	FrontendServiceName = "frontend"
 	// HistoryServiceName is the name of the history service
-	HistoryServiceName = "cadence-history"
+	HistoryServiceName = "history"
 	// MatchingServiceName is the name of the matching service
-	MatchingServiceName = "cadence-matching"
+	MatchingServiceName = "matching"
 	// WorkerServiceName is the name of the worker service
-	WorkerServiceName = "cadence-worker"
+	WorkerServiceName = "worker"
 )
 
 // Data encoding types

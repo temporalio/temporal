@@ -265,7 +265,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 		NextPageToken:    nil,
 		Size:             1000,
 		LastFirstEventID: int64(31),
-		History: adapter.ToThriftHistories([]*commonproto.History{
+		History: []*commonproto.History{
 			{
 				Events: []*commonproto.HistoryEvent{
 					{
@@ -685,7 +685,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 					},
 				},
 			},
-		}),
+		},
 	}
 
 	eid := int64(0)
@@ -696,7 +696,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication() {
 			if e.GetEventId() != eid {
 				s.Fail(fmt.Sprintf("inconintous eventID: %v, %v", eid, e.GetEventId()))
 			}
-			e.Timestamp = &timestamp
+			e.Timestamp = timestamp
 		}
 	}
 
@@ -944,7 +944,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 		NextPageToken:    nil,
 		Size:             1000,
 		LastFirstEventID: int64(31),
-		History: adapter.ToThriftHistories([]*commonproto.History{
+		History: []*commonproto.History{
 			{
 				Events: []*commonproto.HistoryEvent{
 					{
@@ -1375,7 +1375,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 					},
 				},
 			},
-		}),
+		},
 	}
 
 	eid := int64(0)
@@ -1386,7 +1386,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_NoReplication_WithRequestCance
 			if e.GetEventId() != eid {
 				s.Fail(fmt.Sprintf("inconintous eventID: %v, %v", eid, e.GetEventId()))
 			}
-			e.Timestamp = &timestamp
+			e.Timestamp = timestamp
 		}
 	}
 
@@ -1542,7 +1542,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 		NextPageToken:    nil,
 		Size:             1000,
 		LastFirstEventID: int64(31),
-		History: adapter.ToThriftHistories([]*commonproto.History{
+		History: []*commonproto.History{
 			{
 				Events: []*commonproto.HistoryEvent{
 					{
@@ -1970,7 +1970,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 					},
 				},
 			},
-		}),
+		},
 	}
 
 	eid := int64(0)
@@ -1981,7 +1981,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_WithTerminatingCur
 			if e.GetEventId() != eid {
 				s.Fail(fmt.Sprintf("inconintous eventID: %v, %v", eid, e.GetEventId()))
 			}
-			e.Timestamp = &timestamp
+			e.Timestamp = timestamp
 		}
 	}
 
@@ -2247,7 +2247,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 		NextPageToken:    nil,
 		Size:             1000,
 		LastFirstEventID: int64(31),
-		History: adapter.ToThriftHistories([]*commonproto.History{
+		History: []*commonproto.History{
 			{
 				Events: []*commonproto.HistoryEvent{
 					{
@@ -2675,7 +2675,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 					},
 				},
 			},
-		}),
+		},
 	}
 
 	eid := int64(0)
@@ -2686,7 +2686,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NotActive() {
 			if e.GetEventId() != eid {
 				s.Fail(fmt.Sprintf("inconintous eventID: %v, %v", eid, e.GetEventId()))
 			}
-			e.Timestamp = &timestamp
+			e.Timestamp = timestamp
 		}
 	}
 
@@ -2849,7 +2849,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 		NextPageToken:    nil,
 		Size:             1000,
 		LastFirstEventID: int64(31),
-		History: adapter.ToThriftHistories([]*commonproto.History{
+		History: []*commonproto.History{
 			{
 				Events: []*commonproto.HistoryEvent{
 					{
@@ -3277,7 +3277,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 					},
 				},
 			},
-		}),
+		},
 	}
 
 	eid := int64(0)
@@ -3288,7 +3288,7 @@ func (s *resetorSuite) TestResetWorkflowExecution_Replication_NoTerminatingCurre
 			if e.GetEventId() != eid {
 				s.Fail(fmt.Sprintf("inconintous eventID: %v, %v", eid, e.GetEventId()))
 			}
-			e.Timestamp = &timestamp
+			e.Timestamp = timestamp
 		}
 	}
 
@@ -3524,7 +3524,7 @@ func (s *resetorSuite) TestApplyReset() {
 		NextPageToken:    nil,
 		Size:             1000,
 		LastFirstEventID: int64(31),
-		History: adapter.ToThriftHistories([]*commonproto.History{
+		History: []*commonproto.History{
 			{
 				Events: []*commonproto.HistoryEvent{
 					{
@@ -3893,7 +3893,7 @@ func (s *resetorSuite) TestApplyReset() {
 				},
 			},
 			/////////////// reset point/////////////
-		}),
+		},
 	}
 
 	eid := int64(0)
@@ -3904,7 +3904,7 @@ func (s *resetorSuite) TestApplyReset() {
 			if e.GetEventId() != eid {
 				s.Fail(fmt.Sprintf("inconintous eventID: %v, %v", eid, e.GetEventId()))
 			}
-			e.Timestamp = &timestamp
+			e.Timestamp = timestamp
 		}
 	}
 

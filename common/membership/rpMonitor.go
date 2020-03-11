@@ -125,9 +125,7 @@ func (rpo *ringpopMonitor) Start() {
 }
 
 func serviceNameToServiceTypeEnum(name string) (persistence.ServiceType, error) {
-	role := strings.Replace(name, primitives.ServiceNameRolePrefix, "", 1)
-
-	switch role {
+	switch name {
 	case primitives.FrontendService:
 		return persistence.Frontend, nil
 	case primitives.HistoryService:

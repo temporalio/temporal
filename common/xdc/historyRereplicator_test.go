@@ -39,7 +39,6 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
@@ -182,7 +181,7 @@ func (s *historyRereplicatorSuite) TestSendMultiWorkflowHistory_SameRunID() {
 		},
 		ReplicationInfo: replicationInfo,
 		History: &commonproto.DataBlob{
-			EncodingType: enums.EncodingTypeThriftRW,
+			EncodingType: enums.EncodingTypeProto3,
 			Data:         blob.Data,
 		},
 		NewRunHistory: nil,
@@ -537,7 +536,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_NotContinueAsNe
 		},
 		ReplicationInfo: replicationInfo,
 		History: &commonproto.DataBlob{
-			EncodingType: enums.EncodingTypeThriftRW,
+			EncodingType: enums.EncodingTypeProto3,
 			Data:         blob1.Data,
 		},
 		NewRunHistory: nil,
@@ -551,7 +550,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_NotContinueAsNe
 		},
 		ReplicationInfo: replicationInfo,
 		History: &commonproto.DataBlob{
-			EncodingType: enums.EncodingTypeThriftRW,
+			EncodingType: enums.EncodingTypeProto3,
 			Data:         blob2.Data,
 		},
 		NewRunHistory: nil,
@@ -691,7 +690,7 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 		},
 		ReplicationInfo: replicationInfo,
 		History: &commonproto.DataBlob{
-			EncodingType: enums.EncodingTypeThriftRW,
+			EncodingType: enums.EncodingTypeProto3,
 			Data:         blob1.Data,
 		},
 		NewRunHistory: nil,
@@ -705,11 +704,11 @@ func (s *historyRereplicatorSuite) TestSendSingleWorkflowHistory_ContinueAsNew()
 		},
 		ReplicationInfo: replicationInfo,
 		History: &commonproto.DataBlob{
-			EncodingType: enums.EncodingTypeThriftRW,
+			EncodingType: enums.EncodingTypeProto3,
 			Data:         blob2.Data,
 		},
 		NewRunHistory: &commonproto.DataBlob{
-			EncodingType: enums.EncodingTypeThriftRW,
+			EncodingType: enums.EncodingTypeProto3,
 			Data:         blobNew.Data,
 		},
 	}).Return(nil, nil).Times(1)
@@ -1114,7 +1113,7 @@ func (s *historyRereplicatorSuite) TestGetPrevEventID() {
 				EventType: enums.EventTypeDecisionTaskScheduled,
 			},
 		}
-		blob, err := s.serializer.SerializeBatchEvents(adapter.ToThriftHistoryEvents(eventBatch), common.EncodingTypeThriftRW)
+		blob, err := s.serializer.SerializeBatchEvents(eventBatch, common.EncodingTypeProto3)
 		s.Nil(err)
 
 		s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
@@ -1129,7 +1128,7 @@ func (s *historyRereplicatorSuite) TestGetPrevEventID() {
 			NextPageToken:   nil,
 		}).Return(&adminservice.GetWorkflowExecutionRawHistoryResponse{
 			HistoryBatches: []*commonproto.DataBlob{{
-				EncodingType: enums.EncodingTypeThriftRW,
+				EncodingType: enums.EncodingTypeProto3,
 				Data:         blob.Data,
 			}},
 		}, nil).Times(1)
@@ -1191,11 +1190,11 @@ func (s *historyRereplicatorSuite) TestGetNextRunID_ContinueAsNew() {
 			}},
 		},
 	}
-	blob, err := s.serializer.SerializeBatchEvents(adapter.ToThriftHistoryEvents(eventBatchIn), common.EncodingTypeThriftRW)
+	blob, err := s.serializer.SerializeBatchEvents(eventBatchIn, common.EncodingTypeProto3)
 	s.Nil(err)
 
 	runID, err := s.getDummyRereplicationContext().getNextRunID(&commonproto.DataBlob{
-		EncodingType: enums.EncodingTypeThriftRW,
+		EncodingType: enums.EncodingTypeProto3,
 		Data:         blob.Data,
 	})
 	s.Nil(err)
@@ -1218,11 +1217,11 @@ func (s *historyRereplicatorSuite) TestGetNextRunID_NotContinueAsNew() {
 			Attributes: &commonproto.HistoryEvent_WorkflowExecutionCancelRequestedEventAttributes{WorkflowExecutionCancelRequestedEventAttributes: &commonproto.WorkflowExecutionCancelRequestedEventAttributes{}},
 		},
 	}
-	blob, err := s.serializer.SerializeBatchEvents(adapter.ToThriftHistoryEvents(eventBatchIn), common.EncodingTypeThriftRW)
+	blob, err := s.serializer.SerializeBatchEvents(eventBatchIn, common.EncodingTypeProto3)
 	s.Nil(err)
 
 	runID, err := s.getDummyRereplicationContext().getNextRunID(&commonproto.DataBlob{
-		EncodingType: enums.EncodingTypeThriftRW,
+		EncodingType: enums.EncodingTypeProto3,
 		Data:         blob.Data,
 	})
 	s.Nil(err)
@@ -1247,11 +1246,11 @@ func (s *historyRereplicatorSuite) TestDeserializeBlob() {
 		},
 	}
 
-	blob, err := s.serializer.SerializeBatchEvents(adapter.ToThriftHistoryEvents(eventBatchIn), common.EncodingTypeThriftRW)
+	blob, err := s.serializer.SerializeBatchEvents(eventBatchIn, common.EncodingTypeProto3)
 	s.Nil(err)
 
 	eventBatchOut, err := s.getDummyRereplicationContext().deserializeBlob(&commonproto.DataBlob{
-		EncodingType: enums.EncodingTypeThriftRW,
+		EncodingType: enums.EncodingTypeProto3,
 		Data:         blob.Data,
 	})
 	s.Nil(err)
@@ -1259,10 +1258,10 @@ func (s *historyRereplicatorSuite) TestDeserializeBlob() {
 }
 
 func (s *historyRereplicatorSuite) serializeEvents(events []*commonproto.HistoryEvent) *commonproto.DataBlob {
-	blob, err := s.serializer.SerializeBatchEvents(adapter.ToThriftHistoryEvents(events), common.EncodingTypeThriftRW)
+	blob, err := s.serializer.SerializeBatchEvents(events, common.EncodingTypeProto3)
 	s.Nil(err)
 	return &commonproto.DataBlob{
-		EncodingType: enums.EncodingTypeThriftRW,
+		EncodingType: enums.EncodingTypeProto3,
 		Data:         blob.Data,
 	}
 }

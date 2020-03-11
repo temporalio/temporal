@@ -4545,7 +4545,7 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 	s.mockHistoryV2Mgr.On("AppendHistoryNodes", mock.Anything).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil).Run(func(arguments mock.Arguments) {
 		req := arguments.Get(0).(*persistence.AppendHistoryNodesRequest)
 		decTaskIndex := len(req.Events) - 1
-		if decTaskIndex >= 0 && enums.EventType(*req.Events[decTaskIndex].EventType) == enums.EventTypeDecisionTaskFailed {
+		if decTaskIndex >= 0 && req.Events[decTaskIndex].EventType == enums.EventTypeDecisionTaskFailed {
 			decisionFailedEvent = true
 		}
 	}).Once()
@@ -5253,7 +5253,7 @@ func createMutableState(ms mutableState) *persistence.WorkflowMutableState {
 		ExecutionStats:      stats,
 		ActivityInfos:       activityInfos,
 		TimerInfos:          timerInfos,
-		BufferedEvents:      adapter.ToThriftHistoryEvents(bufferedEvents),
+		BufferedEvents:      bufferedEvents,
 		SignalInfos:         signalInfos,
 		RequestCancelInfos:  cancellationInfos,
 		ChildExecutionInfos: childInfos,
@@ -5345,9 +5345,9 @@ func copyActivityInfo(sourceInfo *persistence.ActivityInfo) *persistence.Activit
 		Version:                  sourceInfo.Version,
 		ScheduleID:               sourceInfo.ScheduleID,
 		ScheduledEventBatchID:    sourceInfo.ScheduledEventBatchID,
-		ScheduledEvent:           adapter.ToThriftHistoryEvent(copyHistoryEvent(adapter.ToProtoHistoryEvent(sourceInfo.ScheduledEvent))),
+		ScheduledEvent:           copyHistoryEvent(sourceInfo.ScheduledEvent),
 		StartedID:                sourceInfo.StartedID,
-		StartedEvent:             adapter.ToThriftHistoryEvent(copyHistoryEvent(adapter.ToProtoHistoryEvent(sourceInfo.StartedEvent))),
+		StartedEvent:             copyHistoryEvent(sourceInfo.StartedEvent),
 		ActivityID:               sourceInfo.ActivityID,
 		RequestID:                sourceInfo.RequestID,
 		Details:                  details,
@@ -5424,8 +5424,8 @@ func copyChildInfo(sourceInfo *persistence.ChildExecutionInfo) *persistence.Chil
 		DomainName:            sourceInfo.DomainName,
 		WorkflowTypeName:      sourceInfo.WorkflowTypeName,
 		ParentClosePolicy:     sourceInfo.ParentClosePolicy,
-		InitiatedEvent:        adapter.ToThriftHistoryEvent(copyHistoryEvent(adapter.ToProtoHistoryEvent(sourceInfo.InitiatedEvent))),
-		StartedEvent:          adapter.ToThriftHistoryEvent(copyHistoryEvent(adapter.ToProtoHistoryEvent(sourceInfo.StartedEvent))),
+		InitiatedEvent:        copyHistoryEvent(sourceInfo.InitiatedEvent),
+		StartedEvent:          copyHistoryEvent(sourceInfo.StartedEvent),
 	}
 }
 

@@ -446,8 +446,8 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	timerTask := taskInfo.task.(*persistenceblobs.TimerTaskInfo)
 	resendInfo := postActionInfo.(*historyResendInfo)
 
-	t.metricsClient.IncCounter(metrics.HistoryRereplicationByTimerTaskScope, metrics.CadenceClientRequests)
-	stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByTimerTaskScope, metrics.CadenceClientLatency)
+	t.metricsClient.IncCounter(metrics.HistoryRereplicationByTimerTaskScope, metrics.ClientRequests)
+	stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByTimerTaskScope, metrics.ClientLatency)
 	defer stopwatch.Stop()
 
 	var err error

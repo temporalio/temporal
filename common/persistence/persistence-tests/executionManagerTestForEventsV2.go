@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
+	commonproto "go.temporal.io/temporal-proto/common"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/.gen/proto/replication"
@@ -902,7 +903,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 		ScheduleID:     111,
 		StartedID:      112,
 		ActivityID:     uuid.New(),
-		ScheduledEvent: &gen.HistoryEvent{EventId: int64Ptr(1)},
+		ScheduledEvent: &commonproto.HistoryEvent{EventId: 1},
 	}}
 
 	insertRequestCancelInfos := []*persistenceblobs.RequestCancelInfo{{
@@ -916,7 +917,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetWithCurrWithReplicat
 		InitiatedID:     131,
 		StartedID:       132,
 		CreateRequestID: uuid.New(),
-		InitiatedEvent:  &gen.HistoryEvent{EventId: int64Ptr(1)},
+		InitiatedEvent:  &commonproto.HistoryEvent{EventId: 1},
 	}}
 
 	insertSignalInfos := []*persistenceblobs.SignalInfo{{
@@ -1317,7 +1318,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 		ScheduleID:     111,
 		StartedID:      112,
 		ActivityID:     uuid.New(),
-		ScheduledEvent: &gen.HistoryEvent{EventId: int64Ptr(1)},
+		ScheduledEvent: &commonproto.HistoryEvent{EventId: 1},
 	}}
 
 	insertRequestCancelInfos := []*persistenceblobs.RequestCancelInfo{{
@@ -1331,7 +1332,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrWithReplicate(
 		InitiatedID:     131,
 		StartedID:       132,
 		CreateRequestID: uuid.New(),
-		InitiatedEvent:  &gen.HistoryEvent{EventId: int64Ptr(1)},
+		InitiatedEvent:  &commonproto.HistoryEvent{EventId: 1},
 	}}
 
 	insertSignalInfos := []*persistenceblobs.SignalInfo{{
@@ -1602,7 +1603,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowResetNoCurrNoReplicate() 
 		ScheduleID:     111,
 		StartedID:      112,
 		ActivityID:     uuid.New(),
-		ScheduledEvent: &gen.HistoryEvent{EventId: int64Ptr(1)},
+		ScheduledEvent: &commonproto.HistoryEvent{EventId: 1},
 	}}
 
 	insertRequestCancelInfos := []*persistenceblobs.RequestCancelInfo{{

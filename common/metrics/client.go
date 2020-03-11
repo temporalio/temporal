@@ -133,13 +133,13 @@ func mergeMapToRight(src map[string]string, dest map[string]string) {
 // GetMetricsServiceIdx returns the metrics name
 func GetMetricsServiceIdx(serviceName string, logger log.Logger) ServiceIdx {
 	switch serviceName {
-	case primitives.GetServiceNameFromRole(primitives.FrontendService):
+	case primitives.FrontendService:
 		return Frontend
-	case primitives.GetServiceNameFromRole(primitives.HistoryService):
+	case primitives.HistoryService:
 		return History
-	case primitives.GetServiceNameFromRole(primitives.MatchingService):
+	case primitives.MatchingService:
 		return Matching
-	case primitives.GetServiceNameFromRole(primitives.WorkerService):
+	case primitives.WorkerService:
 		return Worker
 	default:
 		logger.Fatal("Unknown service name '%v' for metrics!", tag.Service(serviceName))

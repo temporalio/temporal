@@ -46,7 +46,7 @@ import (
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
-// Config represents configuration for cadence-frontend service
+// Config represents configuration for frontend service
 type Config struct {
 	NumHistoryShards                int
 	PersistenceMaxQPS               dynamicconfig.IntPropertyFn
@@ -130,7 +130,7 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int, enableReadFro
 	}
 }
 
-// Service represents the cadence-frontend service
+// Service represents the frontend service
 type Service struct {
 	resource.Resource
 
@@ -142,7 +142,7 @@ type Service struct {
 	server       *grpc.Server
 }
 
-// NewService builds a new cadence-frontend service
+// NewService builds a new frontend service
 func NewService(
 	params *resource.BootstrapParams,
 ) (resource.Resource, error) {

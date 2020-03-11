@@ -296,7 +296,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 			if _, err := r.eventsReapplier.reapplyEvents(
 				ctx,
 				targetWorkflow.getMutableState(),
-				adapter.ToProtoHistoryEvents(targetWorkflowEvents.Events),
+				targetWorkflowEvents.Events,
 				targetWorkflow.getMutableState().GetExecutionInfo().RunID,
 			); err != nil {
 				return 0, transactionPolicyActive, err
@@ -350,7 +350,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 			uuid.New(),
 			targetWorkflow,
 			eventsReapplicationResetWorkflowReason,
-			adapter.ToProtoHistoryEvents(targetWorkflowEvents.Events),
+			targetWorkflowEvents.Events,
 		); err != nil {
 			return 0, transactionPolicyActive, err
 		}
