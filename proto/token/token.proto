@@ -28,7 +28,7 @@ import "common/common.proto";
 import "common/decision.proto";
 import "replication/replication.proto";
 
-message HistoryContinuationToken {
+message HistoryContinuation {
     string RunId = 1;
     int64 FirstEventId = 2;
     int64 NextEventId = 3;
@@ -39,7 +39,7 @@ message HistoryContinuationToken {
     map<string,replication.ReplicationInfo> ReplicationInfo = 9;
 }
 
-message RawHistoryContinuationToken{
+message RawHistoryContinuation{
     string DomainName = 1;
     string WorkflowId = 2;
     string RunId = 3;
@@ -51,7 +51,7 @@ message RawHistoryContinuationToken{
     common.VersionHistories VersionHistories = 9;
 }
 
-message TaskToken {
+message Task {
     bytes DomainId = 1;
     string WorkflowId  = 2;
     bytes RunId = 3;
@@ -60,7 +60,7 @@ message TaskToken {
     string ActivityId = 6;
 }
 
-message QueryTaskToken {
+message QueryTask {
     string DomainId = 1;
     string TaskList = 2;
     string TaskId = 3;

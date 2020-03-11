@@ -391,7 +391,7 @@ func (s *dcRedirectionHandlerSuite) TestRecordActivityTaskHeartbeat() {
 	s.mockDCRedirectionPolicy.On("WithDomainIDRedirect",
 		s.domainID, apiName, mock.Anything).Return(nil).Times(1)
 
-	taskToken, err := s.handler.tokenSerializer.Serialize(&token.TaskToken{
+	taskToken, err := s.handler.tokenSerializer.Serialize(&token.Task{
 		DomainId: primitives.MustParseUUID(s.domainID),
 	})
 	s.Nil(err)
@@ -510,7 +510,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskCanceled() {
 	s.mockDCRedirectionPolicy.On("WithDomainIDRedirect",
 		s.domainID, apiName, mock.Anything).Return(nil).Times(1)
 
-	token, err := s.handler.tokenSerializer.Serialize(&token.TaskToken{
+	token, err := s.handler.tokenSerializer.Serialize(&token.Task{
 		DomainId: primitives.MustParseUUID(s.domainID),
 	})
 	s.Nil(err)
@@ -558,7 +558,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskCompleted() {
 	s.mockDCRedirectionPolicy.On("WithDomainIDRedirect",
 		s.domainID, apiName, mock.Anything).Return(nil).Times(1)
 
-	taskToken, err := s.handler.tokenSerializer.Serialize(&token.TaskToken{
+	taskToken, err := s.handler.tokenSerializer.Serialize(&token.Task{
 		DomainId: primitives.MustParseUUID(s.domainID),
 	})
 	s.Nil(err)
@@ -606,7 +606,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskFailed() {
 	s.mockDCRedirectionPolicy.On("WithDomainIDRedirect",
 		s.domainID, apiName, mock.Anything).Return(nil).Times(1)
 
-	taskToken, err := s.handler.tokenSerializer.Serialize(&token.TaskToken{
+	taskToken, err := s.handler.tokenSerializer.Serialize(&token.Task{
 		DomainId: primitives.MustParseUUID(s.domainID),
 	})
 	s.Nil(err)
@@ -654,7 +654,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondDecisionTaskCompleted() {
 	s.mockDCRedirectionPolicy.On("WithDomainIDRedirect",
 		s.domainID, apiName, mock.Anything).Return(nil).Times(1)
 
-	taskToken, err := s.handler.tokenSerializer.Serialize(&token.TaskToken{
+	taskToken, err := s.handler.tokenSerializer.Serialize(&token.Task{
 		DomainId: primitives.MustParseUUID(s.domainID),
 	})
 	s.Nil(err)
@@ -681,7 +681,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondDecisionTaskFailed() {
 	s.mockDCRedirectionPolicy.On("WithDomainIDRedirect",
 		s.domainID, apiName, mock.Anything).Return(nil).Times(1)
 
-	token, err := s.handler.tokenSerializer.Serialize(&token.TaskToken{
+	token, err := s.handler.tokenSerializer.Serialize(&token.Task{
 		DomainId: primitives.MustParseUUID(s.domainID),
 	})
 	s.Nil(err)
@@ -707,7 +707,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondQueryTaskCompleted() {
 	s.mockDCRedirectionPolicy.On("WithDomainIDRedirect",
 		s.domainID, apiName, mock.Anything).Return(nil).Times(1)
 
-	taskToken, err := s.handler.tokenSerializer.SerializeQueryTaskToken(&token.QueryTaskToken{
+	taskToken, err := s.handler.tokenSerializer.SerializeQueryTaskToken(&token.QueryTask{
 		DomainId: s.domainID,
 	})
 	req := &workflowservice.RespondQueryTaskCompletedRequest{

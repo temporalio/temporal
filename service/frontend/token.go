@@ -29,10 +29,10 @@ import (
 func generatePaginationToken(
 	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
 	versionHistories *persistence.VersionHistories,
-) *token.RawHistoryContinuationToken {
+) *token.RawHistoryContinuation {
 
 	execution := request.Execution
-	return &token.RawHistoryContinuationToken{
+	return &token.RawHistoryContinuation{
 		DomainName:        request.GetDomain(),
 		WorkflowId:        execution.GetWorkflowId(),
 		RunId:             execution.GetRunId(),
@@ -47,7 +47,7 @@ func generatePaginationToken(
 
 func validatePaginationToken(
 	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
-	token *token.RawHistoryContinuationToken,
+	token *token.RawHistoryContinuation,
 ) error {
 
 	execution := request.Execution
@@ -63,7 +63,7 @@ func validatePaginationToken(
 	return nil
 }
 
-func serializeRawHistoryToken(token *token.RawHistoryContinuationToken) ([]byte, error) {
+func serializeRawHistoryToken(token *token.RawHistoryContinuation) ([]byte, error) {
 	if token == nil {
 		return nil, nil
 	}
@@ -71,13 +71,13 @@ func serializeRawHistoryToken(token *token.RawHistoryContinuationToken) ([]byte,
 	return token.Marshal()
 }
 
-func deserializeRawHistoryToken(bytes []byte) (*token.RawHistoryContinuationToken, error) {
-	token := &token.RawHistoryContinuationToken{}
+func deserializeRawHistoryToken(bytes []byte) (*token.RawHistoryContinuation, error) {
+	token := &token.RawHistoryContinuation{}
 	err := token.Unmarshal(bytes)
 	return token, err
 }
 
-func serializeHistoryToken(token *token.HistoryContinuationToken) ([]byte, error) {
+func serializeHistoryToken(token *token.HistoryContinuation) ([]byte, error) {
 	if token == nil {
 		return nil, nil
 	}
@@ -85,8 +85,8 @@ func serializeHistoryToken(token *token.HistoryContinuationToken) ([]byte, error
 	return token.Marshal()
 }
 
-func deserializeHistoryToken(bytes []byte) (*token.HistoryContinuationToken, error) {
-	token := &token.HistoryContinuationToken{}
+func deserializeHistoryToken(bytes []byte) (*token.HistoryContinuation, error) {
+	token := &token.HistoryContinuation{}
 	err := token.Unmarshal(bytes)
 	return token, err
 }

@@ -1698,7 +1698,7 @@ func createShardOwnershipLostError(
 	return serviceerror.NewShardOwnershipLost(fmt.Sprintf("Shard is not owned by host: %v", currentHost), ownerHost)
 }
 
-func validateTaskToken(taskToken *token.TaskToken) error {
+func validateTaskToken(taskToken *token.Task) error {
 	if taskToken.GetWorkflowId() == "" {
 		return errWorkflowIDNotSet
 	}

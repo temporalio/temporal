@@ -33,28 +33,28 @@ func NewProtoTaskTokenSerializer() TaskTokenSerializer {
 	return &protoTaskTokenSerializer{}
 }
 
-func (j *protoTaskTokenSerializer) Serialize(taskToken *token.TaskToken) ([]byte, error) {
+func (j *protoTaskTokenSerializer) Serialize(taskToken *token.Task) ([]byte, error) {
 	if taskToken == nil {
 		return nil, nil
 	}
 	return taskToken.Marshal()
 }
 
-func (j *protoTaskTokenSerializer) Deserialize(data []byte) (*token.TaskToken, error) {
-	taskToken := &token.TaskToken{}
+func (j *protoTaskTokenSerializer) Deserialize(data []byte) (*token.Task, error) {
+	taskToken := &token.Task{}
 	err := taskToken.Unmarshal(data)
 	return taskToken, err
 }
 
-func (j *protoTaskTokenSerializer) SerializeQueryTaskToken(taskToken *token.QueryTaskToken) ([]byte, error) {
+func (j *protoTaskTokenSerializer) SerializeQueryTaskToken(taskToken *token.QueryTask) ([]byte, error) {
 	if taskToken == nil {
 		return nil, nil
 	}
 	return taskToken.Marshal()
 }
 
-func (j *protoTaskTokenSerializer) DeserializeQueryTaskToken(data []byte) (*token.QueryTaskToken, error) {
-	taskToken := token.QueryTaskToken{}
+func (j *protoTaskTokenSerializer) DeserializeQueryTaskToken(data []byte) (*token.QueryTask, error) {
+	taskToken := token.QueryTask{}
 	err := taskToken.Unmarshal(data)
 	return &taskToken, err
 }

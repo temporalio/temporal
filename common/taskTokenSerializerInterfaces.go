@@ -27,9 +27,9 @@ import (
 type (
 	// TaskTokenSerializer serializes task tokens
 	TaskTokenSerializer interface {
-		Serialize(token *token.TaskToken) ([]byte, error)
-		Deserialize(data []byte) (*token.TaskToken, error)
-		SerializeQueryTaskToken(token *token.QueryTaskToken) ([]byte, error)
-		DeserializeQueryTaskToken(data []byte) (*token.QueryTaskToken, error)
+		Serialize(token *token.Task) ([]byte, error)
+		Deserialize(data []byte) (*token.Task, error)
+		SerializeQueryTaskToken(token *token.QueryTask) ([]byte, error)
+		DeserializeQueryTaskToken(data []byte) (*token.QueryTask, error)
 	}
 )

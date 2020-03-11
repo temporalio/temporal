@@ -472,7 +472,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 	isLongPoll := request.GetWaitForNewEvent()
 	isCloseEventOnly := request.GetHistoryEventFilterType() == enums.HistoryEventFilterTypeCloseEvent
 	execution := request.Execution
-	var continuationToken *token.HistoryContinuationToken
+	var continuationToken *token.HistoryContinuation
 
 	var runID string
 	lastFirstEventID := common.FirstEventID
@@ -507,7 +507,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 			continuationToken.IsWorkflowRunning = isWorkflowRunning
 		}
 	} else {
-		continuationToken = &token.HistoryContinuationToken{}
+		continuationToken = &token.HistoryContinuation{}
 		if !isCloseEventOnly {
 			queryNextEventID = common.FirstEventID
 		}
@@ -756,7 +756,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(ctx context.Context, req
 
 	completedResp := &workflowservice.RespondDecisionTaskCompletedResponse{}
 	if request.GetReturnNewDecisionTask() && histResp != nil && histResp.StartedResponse != nil {
-		taskToken := &token.TaskToken{
+		taskToken := &token.Task{
 			DomainId:        taskToken.GetDomainId(),
 			WorkflowId:      taskToken.GetWorkflowId(),
 			RunId:           taskToken.GetRunId(),
@@ -1085,7 +1085,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatByID(ctx context.Context, 
 		return nil, wh.error(errActivityIDNotSet, scope)
 	}
 
-	taskToken := &token.TaskToken{
+	taskToken := &token.Task{
 		DomainId:   primitives.MustParseUUID(domainID),
 		RunId:      primitives.MustParseUUID(runID),
 		WorkflowId: workflowID,
@@ -1281,7 +1281,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedByID(ctx context.Context,
 		return nil, wh.error(errIdentityTooLong, scope)
 	}
 
-	taskToken := &token.TaskToken{
+	taskToken := &token.Task{
 		DomainId:   primitives.MustParseUUID(domainID),
 		RunId:      primitives.MustParseUUID(runID),
 		WorkflowId: workflowID,
@@ -1465,7 +1465,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedByID(ctx context.Context, re
 		return nil, wh.error(errIdentityTooLong, scope)
 	}
 
-	taskToken := &token.TaskToken{
+	taskToken := &token.Task{
 		DomainId:   primitives.MustParseUUID(domainID),
 		RunId:      primitives.MustParseUUID(runID),
 		WorkflowId: workflowID,
@@ -1652,7 +1652,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledByID(ctx context.Context, 
 		return nil, wh.error(errIdentityTooLong, scope)
 	}
 
-	taskToken := &token.TaskToken{
+	taskToken := &token.Task{
 		DomainId:   primitives.MustParseUUID(domainID),
 		RunId:      primitives.MustParseUUID(runID),
 		WorkflowId: workflowID,
@@ -2891,7 +2891,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionRawHistory(ctx context.Context, r
 	}
 
 	execution := request.Execution
-	var continuationToken *token.HistoryContinuationToken
+	var continuationToken *token.HistoryContinuation
 
 	var runID string
 	var nextEventID int64
@@ -2909,7 +2909,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionRawHistory(ctx context.Context, r
 		execution.RunId = continuationToken.GetRunId()
 
 	} else {
-		continuationToken = &token.HistoryContinuationToken{}
+		continuationToken = &token.HistoryContinuation{}
 		continuationToken.BranchToken, runID, nextEventID, err =
 			queryHistory(domainID, execution, nil)
 		if err != nil {
@@ -3323,7 +3323,7 @@ func (wh *WorkflowHandler) createPollForDecisionTaskResponse(
 		}
 
 		if len(persistenceToken) != 0 {
-			continuation, err = serializeHistoryToken(&token.HistoryContinuationToken{
+			continuation, err = serializeHistoryToken(&token.HistoryContinuation{
 				RunId:             matchingResp.WorkflowExecution.GetRunId(),
 				FirstEventId:      firstEventID,
 				NextEventId:       nextEventID,

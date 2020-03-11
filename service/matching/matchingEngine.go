@@ -686,14 +686,14 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(
 	if task.isQuery() {
 		// for a query task
 		queryRequest := task.query.request
-		taskToken := &token.QueryTaskToken{
+		taskToken := &token.QueryTask{
 			DomainId: queryRequest.DomainUUID,
 			TaskList: queryRequest.TaskList.Name,
 			TaskId:   task.query.taskID,
 		}
 		serializedToken, _ = e.tokenSerializer.SerializeQueryTaskToken(taskToken)
 	} else {
-		taskToken := &token.TaskToken{
+		taskToken := &token.Task{
 			DomainId:        task.event.Data.DomainID,
 			WorkflowId:      task.event.Data.WorkflowID,
 			RunId:           task.event.Data.RunID,
@@ -739,7 +739,7 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(
 		scope.Tagged(metrics.DomainTag(task.domainName)).RecordTimer(metrics.AsyncMatchLatency, time.Since(ct))
 	}
 
-	taskToken := &token.TaskToken{
+	taskToken := &token.Task{
 		DomainId:        task.event.Data.DomainID,
 		WorkflowId:      task.event.Data.WorkflowID,
 		RunId:           task.event.Data.RunID,

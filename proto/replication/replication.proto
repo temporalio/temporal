@@ -23,8 +23,6 @@ syntax = "proto3";
 package replication;
 
 option go_package = "github.com/temporalio/temporal/.gen/proto/replication";
-option java_package = "io.temporal";
-option java_multiple_files = true;
 
 import "enums/enums.proto";
 import "common/common.proto";
