@@ -28,7 +28,6 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
 )
@@ -118,9 +117,9 @@ func (h *domainReplicationTaskExecutorImpl) handleDomainCreationReplicationTask(
 		Config: &persistence.DomainConfig{
 			Retention:                task.Config.GetWorkflowExecutionRetentionPeriodInDays(),
 			EmitMetric:               task.Config.GetEmitMetric().GetValue(),
-			HistoryArchivalStatus:    *adapter.ToThriftArchivalStatus(task.Config.GetHistoryArchivalStatus()),
+			HistoryArchivalStatus:    task.Config.GetHistoryArchivalStatus(),
 			HistoryArchivalURI:       task.Config.GetHistoryArchivalURI(),
-			VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(task.Config.GetVisibilityArchivalStatus()),
+			VisibilityArchivalStatus: task.Config.GetVisibilityArchivalStatus(),
 			VisibilityArchivalURI:    task.Config.GetVisibilityArchivalURI(),
 		},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
@@ -234,9 +233,9 @@ func (h *domainReplicationTaskExecutorImpl) handleDomainUpdateReplicationTask(ta
 		request.Config = &persistence.DomainConfig{
 			Retention:                task.Config.GetWorkflowExecutionRetentionPeriodInDays(),
 			EmitMetric:               task.Config.GetEmitMetric().GetValue(),
-			HistoryArchivalStatus:    *adapter.ToThriftArchivalStatus(task.Config.GetHistoryArchivalStatus()),
+			HistoryArchivalStatus:    task.Config.GetHistoryArchivalStatus(),
 			HistoryArchivalURI:       task.Config.GetHistoryArchivalURI(),
-			VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(task.Config.GetVisibilityArchivalStatus()),
+			VisibilityArchivalStatus: task.Config.GetVisibilityArchivalStatus(),
 			VisibilityArchivalURI:    task.Config.GetVisibilityArchivalURI(),
 		}
 		if task.Config.GetBadBinaries() != nil {

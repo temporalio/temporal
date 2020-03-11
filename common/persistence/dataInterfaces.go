@@ -42,7 +42,6 @@ import (
 
 	"github.com/pborman/uuid"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 )
 
@@ -642,7 +641,7 @@ type (
 		CreateRequestID       string
 		DomainName            string
 		WorkflowTypeName      string
-		ParentClosePolicy     workflow.ParentClosePolicy
+		ParentClosePolicy     enums.ParentClosePolicy
 	}
 
 	// CreateShardRequest is used to create a shard in executions table
@@ -1062,9 +1061,9 @@ type (
 		// NOTE: this retention is in days, not in seconds
 		Retention                int32
 		EmitMetric               bool
-		HistoryArchivalStatus    workflow.ArchivalStatus
+		HistoryArchivalStatus    enums.ArchivalStatus
 		HistoryArchivalURI       string
-		VisibilityArchivalStatus workflow.ArchivalStatus
+		VisibilityArchivalStatus enums.ArchivalStatus
 		VisibilityArchivalURI    string
 		BadBinaries              commonproto.BadBinaries
 	}

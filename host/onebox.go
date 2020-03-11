@@ -38,7 +38,6 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	adminClient "github.com/temporalio/temporal/client/admin"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	carchiver "github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
 	"github.com/temporalio/temporal/common/authorization"
@@ -776,8 +775,8 @@ func (c *cadenceImpl) createSystemDomain() error {
 		},
 		Config: &persistence.DomainConfig{
 			Retention:                1,
-			HistoryArchivalStatus:    *adapter.ToThriftArchivalStatus(enums.ArchivalStatusDisabled),
-			VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(enums.ArchivalStatusDisabled),
+			HistoryArchivalStatus:    enums.ArchivalStatusDisabled,
+			VisibilityArchivalStatus: enums.ArchivalStatusDisabled,
 		},
 		ReplicationConfig: &persistence.DomainReplicationConfig{},
 		FailoverVersion:   common.EmptyVersion,

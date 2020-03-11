@@ -38,7 +38,6 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
 	"github.com/temporalio/temporal/common/cache"
@@ -875,9 +874,9 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_ArchivalURIEmpty()
 	domainEntry := cache.NewLocalDomainCacheEntryForTest(
 		&persistence.DomainInfo{Name: "test-domain"},
 		&persistence.DomainConfig{
-			HistoryArchivalStatus:    *adapter.ToThriftArchivalStatus(enums.ArchivalStatusDisabled),
+			HistoryArchivalStatus:    enums.ArchivalStatusDisabled,
 			HistoryArchivalURI:       "",
-			VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(enums.ArchivalStatusDisabled),
+			VisibilityArchivalStatus: enums.ArchivalStatusDisabled,
 			VisibilityArchivalURI:    "",
 		},
 		"",
@@ -895,9 +894,9 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_InvalidURI() {
 	domainEntry := cache.NewLocalDomainCacheEntryForTest(
 		&persistence.DomainInfo{Name: "test-domain"},
 		&persistence.DomainConfig{
-			HistoryArchivalStatus:    *adapter.ToThriftArchivalStatus(enums.ArchivalStatusEnabled),
+			HistoryArchivalStatus:    enums.ArchivalStatusEnabled,
 			HistoryArchivalURI:       "uri without scheme",
-			VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(enums.ArchivalStatusDisabled),
+			VisibilityArchivalStatus: enums.ArchivalStatusDisabled,
 			VisibilityArchivalURI:    "",
 		},
 		"",
@@ -915,9 +914,9 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 	domainEntry := cache.NewLocalDomainCacheEntryForTest(
 		&persistence.DomainInfo{Name: "test-domain"},
 		&persistence.DomainConfig{
-			HistoryArchivalStatus:    *adapter.ToThriftArchivalStatus(enums.ArchivalStatusEnabled),
+			HistoryArchivalStatus:    enums.ArchivalStatusEnabled,
 			HistoryArchivalURI:       testHistoryArchivalURI,
-			VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(enums.ArchivalStatusDisabled),
+			VisibilityArchivalStatus: enums.ArchivalStatusDisabled,
 			VisibilityArchivalURI:    "",
 		},
 		"",
@@ -1029,7 +1028,7 @@ func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_DomainNotConfi
 	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(cache.NewLocalDomainCacheEntryForTest(
 		nil,
 		&persistence.DomainConfig{
-			VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(enums.ArchivalStatusDisabled),
+			VisibilityArchivalStatus: enums.ArchivalStatusDisabled,
 		},
 		"",
 		nil,
@@ -1047,7 +1046,7 @@ func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_InvalidURI() {
 	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(cache.NewLocalDomainCacheEntryForTest(
 		&persistence.DomainInfo{Name: "test-domain"},
 		&persistence.DomainConfig{
-			VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(enums.ArchivalStatusDisabled),
+			VisibilityArchivalStatus: enums.ArchivalStatusDisabled,
 			VisibilityArchivalURI:    "uri without scheme",
 		},
 		"",
@@ -1066,7 +1065,7 @@ func (s *workflowHandlerSuite) TestListArchivedVisibility_Success() {
 	s.mockDomainCache.EXPECT().GetDomain(gomock.Any()).Return(cache.NewLocalDomainCacheEntryForTest(
 		&persistence.DomainInfo{Name: "test-domain"},
 		&persistence.DomainConfig{
-			VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(enums.ArchivalStatusEnabled),
+			VisibilityArchivalStatus: enums.ArchivalStatusEnabled,
 			VisibilityArchivalURI:    testVisibilityArchivalURI,
 		},
 		"",
@@ -1314,9 +1313,9 @@ func persistenceGetDomainResponse(historyArchivalState, visibilityArchivalState 
 		Config: &persistence.DomainConfig{
 			Retention:                1,
 			EmitMetric:               true,
-			HistoryArchivalStatus:    *adapter.ToThriftArchivalStatus(historyArchivalState.Status),
+			HistoryArchivalStatus:    historyArchivalState.Status,
 			HistoryArchivalURI:       historyArchivalState.URI,
-			VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(visibilityArchivalState.Status),
+			VisibilityArchivalStatus: visibilityArchivalState.Status,
 			VisibilityArchivalURI:    visibilityArchivalState.URI,
 		},
 		ReplicationConfig: &persistence.DomainReplicationConfig{

@@ -30,7 +30,6 @@ import (
 	"go.temporal.io/temporal-proto/enums"
 
 	"github.com/temporalio/temporal/.gen/proto/replication"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/mocks"
 	p "github.com/temporalio/temporal/common/persistence"
@@ -107,9 +106,9 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterDomainTask_Is
 	config := &p.DomainConfig{
 		Retention:                retention,
 		EmitMetric:               emitMetric,
-		HistoryArchivalStatus:    *adapter.ToThriftArchivalStatus(historyArchivalStatus),
+		HistoryArchivalStatus:    historyArchivalStatus,
 		HistoryArchivalURI:       historyArchivalURI,
-		VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(visibilityArchivalStatus),
+		VisibilityArchivalStatus: visibilityArchivalStatus,
 		VisibilityArchivalURI:    visibilityArchivalURI,
 		BadBinaries:              commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}},
 	}
@@ -192,9 +191,9 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterDomainTask_No
 	config := &p.DomainConfig{
 		Retention:                retention,
 		EmitMetric:               emitMetric,
-		HistoryArchivalStatus:    *adapter.ToThriftArchivalStatus(historyArchivalStatus),
+		HistoryArchivalStatus:    historyArchivalStatus,
 		HistoryArchivalURI:       historyArchivalURI,
-		VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(visibilityArchivalStatus),
+		VisibilityArchivalStatus: visibilityArchivalStatus,
 		VisibilityArchivalURI:    visibilityArchivalURI,
 		BadBinaries:              commonproto.BadBinaries{},
 	}
@@ -247,9 +246,9 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateDomainTask_IsGl
 	config := &p.DomainConfig{
 		Retention:                retention,
 		EmitMetric:               emitMetric,
-		HistoryArchivalStatus:    *adapter.ToThriftArchivalStatus(historyArchivalStatus),
+		HistoryArchivalStatus:    historyArchivalStatus,
 		HistoryArchivalURI:       historyArchivalURI,
-		VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(visibilityArchivalStatus),
+		VisibilityArchivalStatus: visibilityArchivalStatus,
 		VisibilityArchivalURI:    visibilityArchivalURI,
 		BadBinaries:              commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}},
 	}
@@ -331,9 +330,9 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateDomainTask_NotG
 	config := &p.DomainConfig{
 		Retention:                retention,
 		EmitMetric:               emitMetric,
-		HistoryArchivalStatus:    *adapter.ToThriftArchivalStatus(historyArchivalStatus),
+		HistoryArchivalStatus:    historyArchivalStatus,
 		HistoryArchivalURI:       historyArchivalURI,
-		VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(visibilityArchivalStatus),
+		VisibilityArchivalStatus: visibilityArchivalStatus,
 		VisibilityArchivalURI:    visibilityArchivalURI,
 	}
 	replicationConfig := &p.DomainReplicationConfig{

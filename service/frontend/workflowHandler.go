@@ -35,7 +35,6 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
 	"github.com/temporalio/temporal/.gen/proto/token"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cache"
@@ -2362,7 +2361,7 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 		return nil, wh.error(err, scope)
 	}
 
-	if adapter.ToProtoArchivalStatus(&entry.GetConfig().VisibilityArchivalStatus) != enums.ArchivalStatusEnabled {
+	if entry.GetConfig().VisibilityArchivalStatus != enums.ArchivalStatusEnabled {
 		return nil, wh.error(errDomainIsNotConfiguredForVisibilityArchival, scope)
 	}
 

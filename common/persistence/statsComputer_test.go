@@ -26,9 +26,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonproto "go.temporal.io/temporal-proto/common"
-
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/common"
 )
 
 type (
@@ -68,11 +65,11 @@ func (s *statsComputerSuite) TestStatsWithStartedEvent() {
 		WorkflowId: "test-workflow-id",
 		RunId:      "run_id",
 	}
-	workflowType := &workflow.WorkflowType{
-		Name: common.StringPtr("test-workflow-type-name"),
+	workflowType := &commonproto.WorkflowType{
+		Name: "test-workflow-type-name",
 	}
-	taskList := &workflow.TaskList{
-		Name: common.StringPtr("test-tasklist"),
+	taskList := &commonproto.TaskList{
+		Name: "test-tasklist",
 	}
 
 	ms.UpdateWorkflowMutation.ExecutionInfo.DomainID = domainID

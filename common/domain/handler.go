@@ -35,7 +35,6 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
 	"github.com/temporalio/temporal/common/cluster"
@@ -205,9 +204,9 @@ func (d *HandlerImpl) RegisterDomain(
 	config := &persistence.DomainConfig{
 		Retention:                registerRequest.GetWorkflowExecutionRetentionPeriodInDays(),
 		EmitMetric:               registerRequest.GetEmitMetric(),
-		HistoryArchivalStatus:    *adapter.ToThriftArchivalStatus(nextHistoryArchivalState.Status),
+		HistoryArchivalStatus:    nextHistoryArchivalState.Status,
 		HistoryArchivalURI:       nextHistoryArchivalState.URI,
-		VisibilityArchivalStatus: *adapter.ToThriftArchivalStatus(nextVisibilityArchivalState.Status),
+		VisibilityArchivalStatus: nextVisibilityArchivalState.Status,
 		VisibilityArchivalURI:    nextVisibilityArchivalState.URI,
 		BadBinaries:              commonproto.BadBinaries{Binaries: map[string]*commonproto.BadBinaryInfo{}},
 	}
@@ -367,7 +366,7 @@ func (d *HandlerImpl) UpdateDomain(
 	isGlobalDomain := getResponse.IsGlobalDomain
 
 	currentHistoryArchivalState := &ArchivalState{
-		Status: adapter.ToProtoArchivalStatus(&config.HistoryArchivalStatus),
+		Status: config.HistoryArchivalStatus,
 		URI:    config.HistoryArchivalURI,
 	}
 	nextHistoryArchivalState := currentHistoryArchivalState
@@ -386,7 +385,7 @@ func (d *HandlerImpl) UpdateDomain(
 	}
 
 	currentVisibilityArchivalState := &ArchivalState{
-		Status: adapter.ToProtoArchivalStatus(&config.VisibilityArchivalStatus),
+		Status: config.VisibilityArchivalStatus,
 		URI:    config.VisibilityArchivalURI,
 	}
 	nextVisibilityArchivalState := currentVisibilityArchivalState
@@ -437,12 +436,12 @@ func (d *HandlerImpl) UpdateDomain(
 		}
 		if historyArchivalConfigChanged {
 			configurationChanged = true
-			config.HistoryArchivalStatus = *adapter.ToThriftArchivalStatus(nextHistoryArchivalState.Status)
+			config.HistoryArchivalStatus = nextHistoryArchivalState.Status
 			config.HistoryArchivalURI = nextHistoryArchivalState.URI
 		}
 		if visibilityArchivalConfigChanged {
 			configurationChanged = true
-			config.VisibilityArchivalStatus = *adapter.ToThriftArchivalStatus(nextVisibilityArchivalState.Status)
+			config.VisibilityArchivalStatus = nextVisibilityArchivalState.Status
 			config.VisibilityArchivalURI = nextVisibilityArchivalState.URI
 		}
 		if updatedConfig.BadBinaries != nil {
@@ -630,9 +629,9 @@ func (d *HandlerImpl) createResponse(
 	configResult := &commonproto.DomainConfiguration{
 		EmitMetric:                             &types.BoolValue{Value: config.EmitMetric},
 		WorkflowExecutionRetentionPeriodInDays: config.Retention,
-		HistoryArchivalStatus:                  adapter.ToProtoArchivalStatus(&config.HistoryArchivalStatus),
+		HistoryArchivalStatus:                  config.HistoryArchivalStatus,
 		HistoryArchivalURI:                     config.HistoryArchivalURI,
-		VisibilityArchivalStatus:               adapter.ToProtoArchivalStatus(&config.VisibilityArchivalStatus),
+		VisibilityArchivalStatus:               config.VisibilityArchivalStatus,
 		VisibilityArchivalURI:                  config.VisibilityArchivalURI,
 		BadBinaries:                            &config.BadBinaries,
 	}

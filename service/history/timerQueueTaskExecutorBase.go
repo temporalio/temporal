@@ -28,7 +28,6 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/log"
@@ -98,7 +97,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 		return err
 	}
 	clusterConfiguredForHistoryArchival := t.shard.GetService().GetArchivalMetadata().GetHistoryConfig().ClusterConfiguredForArchival()
-	domainConfiguredForHistoryArchival := domainCacheEntry.GetConfig().HistoryArchivalStatus == *adapter.ToThriftArchivalStatus(enums.ArchivalStatusEnabled)
+	domainConfiguredForHistoryArchival := domainCacheEntry.GetConfig().HistoryArchivalStatus == enums.ArchivalStatusEnabled
 	archiveHistory := clusterConfiguredForHistoryArchival && domainConfiguredForHistoryArchival
 
 	// TODO: @ycyang once archival backfill is in place cluster:paused && domain:enabled should be a nop rather than a delete

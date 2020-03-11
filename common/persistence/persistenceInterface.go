@@ -37,7 +37,6 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/checksum"
 )
@@ -334,7 +333,7 @@ type (
 		CreateRequestID       string
 		DomainName            string
 		WorkflowTypeName      string
-		ParentClosePolicy     workflow.ParentClosePolicy
+		ParentClosePolicy     enums.ParentClosePolicy
 	}
 
 	// InternalUpdateWorkflowExecutionRequest is used to update a workflow execution for Persistence Interface
@@ -626,12 +625,12 @@ type (
 	InternalDomainConfig struct {
 		// NOTE: this retention is in days, not in seconds
 		Retention                int32
-		EmitMetric               bool                    // deprecated
-		ArchivalBucket           string                  // deprecated
-		ArchivalStatus           workflow.ArchivalStatus // deprecated
-		HistoryArchivalStatus    workflow.ArchivalStatus
+		EmitMetric               bool                 // deprecated
+		ArchivalBucket           string               // deprecated
+		ArchivalStatus           enums.ArchivalStatus // deprecated
+		HistoryArchivalStatus    enums.ArchivalStatus
 		HistoryArchivalURI       string
-		VisibilityArchivalStatus workflow.ArchivalStatus
+		VisibilityArchivalStatus enums.ArchivalStatus
 		VisibilityArchivalURI    string
 		BadBinaries              *serialization.DataBlob
 	}
@@ -1037,7 +1036,7 @@ func ProtoChildExecutionInfoToInternal(rowInfo *persistenceblobs.ChildExecutionI
 		CreateRequestID:       rowInfo.GetCreateRequestID(),
 		DomainName:            rowInfo.GetDomainName(),
 		WorkflowTypeName:      rowInfo.GetWorkflowTypeName(),
-		ParentClosePolicy:     workflow.ParentClosePolicy(rowInfo.GetParentClosePolicy()),
+		ParentClosePolicy:     enums.ParentClosePolicy(rowInfo.GetParentClosePolicy()),
 		InitiatedEvent:        NewDataBlob(rowInfo.InitiatedEvent, common.EncodingType(rowInfo.InitiatedEventEncoding)),
 		StartedEvent:          NewDataBlob(rowInfo.StartedEvent, common.EncodingType(rowInfo.StartedEventEncoding)),
 	}
