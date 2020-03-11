@@ -15,11 +15,6 @@ THRIFT_GENDIR=.gen
 
 default: test
 
-# define the list of thrift files the service depends on
-# (if you have some)
-THRIFTRW_SRCS = \
-  idl/github.com/temporalio/temporal/shared.thrift \
-
 TEST_TIMEOUT = 20m
 TEST_ARG ?= -race -v -timeout $(TEST_TIMEOUT)
 BUILD := ./build
@@ -45,18 +40,6 @@ endif
 ifdef TEST_TAG
 override TEST_TAG := -tags $(TEST_TAG)
 endif
-
-define thriftrwrule
-THRIFTRW_GEN_SRC += $(THRIFT_GENDIR)/go/$1/$1.go
-
-$(THRIFT_GENDIR)/go/$1/$1.go:: $2
-	@mkdir -p $(THRIFT_GENDIR)/go
-	thriftrw --pkg-prefix=$(PROJECT_ROOT)/$(THRIFT_GENDIR)/go/ --out=$(THRIFT_GENDIR)/go $2
-endef
-
-$(foreach tsrc,$(THRIFTRW_SRCS),$(eval $(call \
-	thriftrwrule,$(basename $(notdir \
-	$(shell echo $(tsrc) | tr A-Z a-z))),$(tsrc))))
 
 # Automatically gather all srcs
 ALL_SRC := $(shell find . -name "*.go" | grep -v -e Godeps -e vendor \
@@ -149,8 +132,6 @@ yarpc-install:
 clean_thrift:
 	rm -rf .gen/go
 
-thriftc: yarpc-install $(THRIFTRW_GEN_SRC) copyright
-
 copyright: cmd/tools/copyright/licensegen.go
 	GOOS= GOARCH= go run ./cmd/tools/copyright/licensegen.go --verifyOnly
 
@@ -202,7 +183,7 @@ fmt:
 
 bins_nothrift: fmt lint copyright temporal-cassandra-tool temporal-sql-tool tctl temporal-server temporal-canary
 
-bins: proto thriftc bins_nothrift
+bins: proto bins_nothrift
 
 test: bins
 	@rm -f test
