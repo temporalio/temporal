@@ -1206,7 +1206,6 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 		return nil, err1
 	}
 	executionInfo := mutableState.GetExecutionInfo()
-
 	result := &historyservice.DescribeWorkflowExecutionResponse{
 		ExecutionConfiguration: &commonproto.WorkflowExecutionConfiguration{
 			TaskList:                            &commonproto.TaskList{Name: executionInfo.TaskList},
@@ -1224,6 +1223,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 			AutoResetPoints:  adapter.ToProtoResetPoints(executionInfo.AutoResetPoints),
 			Memo:             &commonproto.Memo{Fields: executionInfo.Memo},
 			SearchAttributes: &commonproto.SearchAttributes{IndexedFields: executionInfo.SearchAttributes},
+			CloseStatus:      executionInfo.CloseStatus,
 		},
 	}
 
