@@ -897,4 +897,3 @@ func ToProtoDomainCacheInfo(in *shared.DomainCacheInfo) *common.DomainCacheInfo 
 		NumOfItemsInCacheByName: in.GetNumOfItemsInCacheByName(),
 	}
 }
-

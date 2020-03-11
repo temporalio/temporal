@@ -37,8 +37,6 @@ import (
 
 	pblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 
-	"github.com/temporalio/temporal/.gen/go/persistenceblobs"
-
 	"github.com/temporalio/temporal/common/checksum"
 
 	"github.com/pborman/uuid"
@@ -1368,19 +1366,19 @@ type (
 	// InitializeImmutableClusterMetadataRequest is a request of InitializeImmutableClusterMetadata
 	// These values can only be set a single time upon cluster initialization.
 	InitializeImmutableClusterMetadataRequest struct {
-		persistenceblobs.ImmutableClusterMetadata
+		pblobs.ImmutableClusterMetadata
 	}
 
 	// InitializeImmutableClusterMetadataResponse is a request of InitializeImmutableClusterMetadata
 	InitializeImmutableClusterMetadataResponse struct {
-		PersistedImmutableData persistenceblobs.ImmutableClusterMetadata
+		PersistedImmutableData pblobs.ImmutableClusterMetadata
 		RequestApplied         bool
 	}
 
 	// GetImmutableClusterMetadataResponse is the response to GetImmutableClusterMetadata
 	// These values are set a single time upon cluster initialization.
 	GetImmutableClusterMetadataResponse struct {
-		persistenceblobs.ImmutableClusterMetadata
+		pblobs.ImmutableClusterMetadata
 	}
 
 	// GetClusterMembersRequest is the response to GetClusterMembers

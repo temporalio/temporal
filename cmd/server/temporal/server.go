@@ -28,7 +28,7 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 	"go.uber.org/zap"
 
-	persist "github.com/temporalio/temporal/.gen/go/persistenceblobs"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
@@ -271,9 +271,9 @@ func immutableClusterMetadataInitialization(
 
 	resp, err := clusterMetadataManager.InitializeImmutableClusterMetadata(
 		&persistence.InitializeImmutableClusterMetadataRequest{
-			ImmutableClusterMetadata: persist.ImmutableClusterMetadata{
-				HistoryShardCount: common.Int32Ptr(int32(persistenceConfig.NumHistoryShards)),
-				ClusterName:       &clusterMetadata.CurrentClusterName,
+			ImmutableClusterMetadata: persistenceblobs.ImmutableClusterMetadata{
+				HistoryShardCount: int32(persistenceConfig.NumHistoryShards),
+				ClusterName:       clusterMetadata.CurrentClusterName,
 			}})
 
 	if err != nil {
@@ -283,16 +283,16 @@ func immutableClusterMetadataInitialization(
 	if resp.RequestApplied {
 		logger.Info("Successfully applied immutable cluster metadata.")
 	} else {
-		if clusterMetadata.CurrentClusterName != *resp.PersistedImmutableData.ClusterName {
+		if clusterMetadata.CurrentClusterName != resp.PersistedImmutableData.ClusterName {
 			logImmutableMismatch(logger,
 				"ClusterMetadata.CurrentClusterName",
 				clusterMetadata.CurrentClusterName,
-				*resp.PersistedImmutableData.ClusterName)
+				resp.PersistedImmutableData.ClusterName)
 
-			clusterMetadata.CurrentClusterName = *resp.PersistedImmutableData.ClusterName
+			clusterMetadata.CurrentClusterName = resp.PersistedImmutableData.ClusterName
 		}
 
-		var persistedShardCount = int(*resp.PersistedImmutableData.HistoryShardCount)
+		var persistedShardCount = int(resp.PersistedImmutableData.HistoryShardCount)
 		if persistenceConfig.NumHistoryShards != persistedShardCount {
 			logImmutableMismatch(logger,
 				"Persistence.NumHistoryShards",
