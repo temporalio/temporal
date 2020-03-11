@@ -456,9 +456,6 @@ func (v *decisionAttrValidator) validateSignalExternalWorkflowExecutionAttribute
 	if attributes.SignalName == nil {
 		return &workflow.BadRequestError{Message: "SignalName is not set on decision."}
 	}
-	if attributes.Input == nil {
-		return &workflow.BadRequestError{Message: "Input is not set on decision."}
-	}
 
 	return nil
 }

@@ -126,11 +126,11 @@ func (s *decisionAttrValidatorSuite) TestValidateSignalExternalWorkflowExecution
 
 	attributes.SignalName = common.StringPtr("my signal name")
 	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testDomainID, s.testTargetDomainID, attributes)
-	s.EqualError(err, "BadRequestError{Message: Input is not set on decision.}")
+	s.NoError(err)
 
 	attributes.Input = []byte("test input")
 	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testDomainID, s.testTargetDomainID, attributes)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *decisionAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes() {
