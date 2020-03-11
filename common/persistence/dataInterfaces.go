@@ -27,6 +27,7 @@ import (
 	"time"
 
 	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common/persistence/serialization"
@@ -127,7 +128,8 @@ const (
 
 // Workflow execution close status
 const (
-	WorkflowCloseStatusNone = iota
+	_ = iota
+	WorkflowCloseStatusRunning
 	WorkflowCloseStatusCompleted
 	WorkflowCloseStatusFailed
 	WorkflowCloseStatusCanceled
@@ -234,7 +236,7 @@ type (
 		StartRequestID   string
 		RunID            string
 		State            int
-		CloseStatus      int
+		CloseStatus      enums.WorkflowExecutionCloseStatus
 		LastWriteVersion int64
 	}
 
@@ -290,7 +292,7 @@ type (
 		DecisionStartToCloseTimeout        int32
 		ExecutionContext                   []byte
 		State                              int
-		CloseStatus                        int
+		CloseStatus                        enums.WorkflowExecutionCloseStatus
 		LastFirstEventID                   int64
 		LastEventTaskID                    int64
 		NextEventID                        int64
@@ -683,7 +685,7 @@ type (
 	// GetWorkflowExecutionRequest is used to retrieve the info of a workflow execution
 	GetWorkflowExecutionRequest struct {
 		DomainID  string
-		Execution workflow.WorkflowExecution
+		Execution commonproto.WorkflowExecution
 	}
 
 	// GetWorkflowExecutionResponse is the response to GetworkflowExecutionRequest

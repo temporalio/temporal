@@ -141,8 +141,8 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(
 				Msg:              fmt.Sprintf("Workflow execution already running. WorkflowId: %v", row.WorkflowID),
 				StartRequestID:   row.CreateRequestID,
 				RunID:            row.RunID.String(),
-				State:            int(row.State),
-				CloseStatus:      int(row.CloseStatus),
+				State:            row.State,
+				CloseStatus:      row.CloseStatus,
 				LastWriteVersion: row.LastWriteVersion,
 			}
 
@@ -207,8 +207,8 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 ) (*p.InternalGetWorkflowExecutionResponse, error) {
 
 	domainID := primitives.MustParseUUID(request.DomainID)
-	runID := primitives.MustParseUUID(*request.Execution.RunId)
-	wfID := *request.Execution.WorkflowId
+	runID := primitives.MustParseUUID(request.Execution.RunId)
+	wfID := request.Execution.WorkflowId
 	execution, err := m.db.SelectFromExecutions(&sqlplugin.ExecutionsFilter{
 		ShardID: m.shardID, DomainID: domainID, WorkflowID: wfID, RunID: runID})
 

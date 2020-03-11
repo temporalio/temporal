@@ -91,7 +91,7 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 	memoFields := map[string][]byte{
 		"TestField": []byte(`Test binary`),
 	}
-	memo0 := &workflow.Memo{Fields: memoFields}
+	memo0 := &commonproto.Memo{Fields: memoFields}
 
 	resetPoints0 := &workflow.ResetPoints{
 		Points: []*workflow.ResetPointInfo{
@@ -207,7 +207,7 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 
 			// serialize visibility memo
 
-			nilMemo, err := serializer.SerializeVisibilityMemo(nil, common.EncodingTypeThriftRW)
+			nilMemo, err := serializer.SerializeVisibilityMemo(nil, common.EncodingTypeProto3)
 			s.Nil(err)
 			s.Nil(nilMemo)
 
@@ -215,7 +215,7 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 			s.Nil(err)
 			s.NotNil(mJSON)
 
-			mThrift, err := serializer.SerializeVisibilityMemo(memo0, common.EncodingTypeThriftRW)
+			mThrift, err := serializer.SerializeVisibilityMemo(memo0, common.EncodingTypeProto3)
 			s.Nil(err)
 			s.NotNil(mThrift)
 
@@ -284,18 +284,18 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 
 			dNilMemo, err := serializer.DeserializeVisibilityMemo(nilMemo)
 			s.Nil(err)
-			s.Equal(&workflow.Memo{}, dNilMemo)
+			s.Equal(&commonproto.Memo{}, dNilMemo)
 
 			memo1, err := serializer.DeserializeVisibilityMemo(mJSON)
 			s.Nil(err)
-			s.True(memo0.Equals(memo1))
+			s.True(reflect.DeepEqual(memo0, memo1))
 
 			memo2, err := serializer.DeserializeVisibilityMemo(mThrift)
 			s.Nil(err)
-			s.True(memo0.Equals(memo2))
+			s.True(reflect.DeepEqual(memo0, memo2))
 			memo3, err := serializer.DeserializeVisibilityMemo(mEmpty)
 			s.Nil(err)
-			s.True(memo0.Equals(memo3))
+			s.True(reflect.DeepEqual(memo0, memo3))
 
 			// serialize reset points
 

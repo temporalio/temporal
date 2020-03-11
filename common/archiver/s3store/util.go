@@ -32,6 +32,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
+	"github.com/gogo/protobuf/types"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.uber.org/multierr"
@@ -215,9 +216,11 @@ func convertToExecutionInfo(record *visibilityRecord) *commonproto.WorkflowExecu
 		Type: &commonproto.WorkflowType{
 			Name: record.WorkflowTypeName,
 		},
-		StartTime:     record.StartTimestamp,
+		StartTime: &types.Int64Value{
+			Value: record.StartTimestamp},
 		ExecutionTime: record.ExecutionTimestamp,
-		CloseTime:     record.CloseTimestamp,
+		CloseTime: &types.Int64Value{
+			Value: record.CloseTimestamp},
 		CloseStatus:   record.CloseStatus,
 		HistoryLength: record.HistoryLength,
 		Memo:          record.Memo,

@@ -760,8 +760,8 @@ func (c *cadenceImpl) startWorkerIndexer(params *resource.BootstrapParams, servi
 		c.logger,
 		service.GetMetricsClient())
 	if err := c.indexer.Start(); err != nil {
-		c.indexer.Stop()
 		c.logger.Fatal("Fail to start indexer when start worker", tag.Error(err))
+		c.indexer.Stop()
 	}
 }
 

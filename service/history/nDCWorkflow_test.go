@@ -308,7 +308,7 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 		RunID:           s.runID,
 		LastEventTaskID: lastEventTaskID,
 		State:           persistence.WorkflowStateRunning,
-		CloseStatus:     persistence.WorkflowCloseStatusNone,
+		CloseStatus:     persistence.WorkflowCloseStatusRunning,
 	}
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	nDCWorkflow := newNDCWorkflow(
@@ -355,5 +355,5 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 	s.NoError(err)
 	s.Equal(transactionPolicyPassive, policy)
 	s.Equal(persistence.WorkflowStateZombie, executionInfo.State)
-	s.Equal(persistence.WorkflowCloseStatusNone, executionInfo.CloseStatus)
+	s.EqualValues(persistence.WorkflowCloseStatusRunning, executionInfo.CloseStatus)
 }

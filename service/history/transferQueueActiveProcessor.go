@@ -468,7 +468,7 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(
 
 	workflowTypeName := executionInfo.WorkflowTypeName
 	workflowCloseTimestamp := wfCloseTime
-	workflowCloseStatus := persistence.ToProtoWorkflowExecutionCloseStatus(executionInfo.CloseStatus)
+	workflowCloseStatus := executionInfo.CloseStatus
 	workflowHistoryLength := mutableState.GetNextEventID() - 1
 
 	startEvent, err := mutableState.GetStartEvent()

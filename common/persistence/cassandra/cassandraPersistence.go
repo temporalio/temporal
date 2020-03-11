@@ -28,6 +28,7 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/gogo/protobuf/types"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
@@ -1105,7 +1106,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 							StartRequestID:   protoState.CreateRequestID,
 							RunID:            primitives.UUIDString(protoState.RunID),
 							State:            int(protoState.State),
-							CloseStatus:      int(protoState.CloseStatus),
+							CloseStatus:      enums.WorkflowExecutionCloseStatus(protoState.CloseStatus),
 							LastWriteVersion: lastWriteVersion,
 						}
 					}
@@ -1172,8 +1173,8 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 		d.shardID,
 		rowTypeExecution,
 		request.DomainID,
-		*execution.WorkflowId,
-		*execution.RunId,
+		execution.WorkflowId,
+		execution.RunId,
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID)
 

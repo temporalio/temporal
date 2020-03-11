@@ -29,6 +29,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gogo/protobuf/types"
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
@@ -331,9 +332,11 @@ func convertToExecutionInfo(record *visibilityRecord) *commonproto.WorkflowExecu
 		Type: &commonproto.WorkflowType{
 			Name: record.WorkflowTypeName,
 		},
-		StartTime:     record.StartTimestamp,
+		StartTime: &types.Int64Value{
+			Value: record.StartTimestamp},
 		ExecutionTime: record.ExecutionTimestamp,
-		CloseTime:     record.CloseTimestamp,
+		CloseTime: &types.Int64Value{
+			Value: record.CloseTimestamp},
 		CloseStatus:   record.CloseStatus,
 		HistoryLength: record.HistoryLength,
 		Memo:          record.Memo,

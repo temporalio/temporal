@@ -263,11 +263,6 @@ struct TaskListMetadata {
   10: optional double maxTasksPerSecond
 }
 
-struct WorkflowExecution {
-  10: optional string workflowId
-  20: optional string runId
-}
-
 struct Memo {
   10: optional map<string,binary> fields
 }
@@ -281,176 +276,11 @@ struct WorkerVersionInfo {
   20: optional string featureVersion
 }
 
-struct WorkflowExecutionInfo {
-  10: optional WorkflowExecution execution
-  20: optional WorkflowType type
-  30: optional i64 (js.type = "Long") startTime
-  40: optional i64 (js.type = "Long") closeTime
-  50: optional WorkflowExecutionCloseStatus closeStatus
-  60: optional i64 (js.type = "Long") historyLength
-  70: optional string parentDomainId
-  80: optional WorkflowExecution parentExecution
-  90: optional i64 (js.type = "Long") executionTime
-  100: optional Memo memo
-  101: optional SearchAttributes searchAttributes
-  110: optional ResetPoints autoResetPoints
-}
-
 struct WorkflowExecutionConfiguration {
   10: optional TaskList taskList
   20: optional i32 executionStartToCloseTimeoutSeconds
   30: optional i32 taskStartToCloseTimeoutSeconds
 //  40: optional ChildPolicy childPolicy -- Removed but reserve the IDL order number
-}
-
-struct ScheduleActivityTaskDecisionAttributes {
-  10: optional string activityId
-  20: optional ActivityType activityType
-  25: optional string domain
-  30: optional TaskList taskList
-  40: optional binary input
-  45: optional i32 scheduleToCloseTimeoutSeconds
-  50: optional i32 scheduleToStartTimeoutSeconds
-  55: optional i32 startToCloseTimeoutSeconds
-  60: optional i32 heartbeatTimeoutSeconds
-  70: optional RetryPolicy retryPolicy
-  80: optional Header header
-}
-
-struct RequestCancelActivityTaskDecisionAttributes {
-  10: optional string activityId
-}
-
-struct StartTimerDecisionAttributes {
-  10: optional string timerId
-  20: optional i64 (js.type = "Long") startToFireTimeoutSeconds
-}
-
-struct CompleteWorkflowExecutionDecisionAttributes {
-  10: optional binary result
-}
-
-struct FailWorkflowExecutionDecisionAttributes {
-  10: optional string reason
-  20: optional binary details
-}
-
-struct CancelTimerDecisionAttributes {
-  10: optional string timerId
-}
-
-struct CancelWorkflowExecutionDecisionAttributes {
-  10: optional binary details
-}
-
-struct RequestCancelExternalWorkflowExecutionDecisionAttributes {
-  10: optional string domain
-  20: optional string workflowId
-  30: optional string runId
-  40: optional binary control
-  50: optional bool childWorkflowOnly
-}
-
-struct SignalExternalWorkflowExecutionDecisionAttributes {
-  10: optional string domain
-  20: optional WorkflowExecution execution
-  30: optional string signalName
-  40: optional binary input
-  50: optional binary control
-  60: optional bool childWorkflowOnly
-}
-
-struct UpsertWorkflowSearchAttributesDecisionAttributes {
-  10: optional SearchAttributes searchAttributes
-}
-
-struct RecordMarkerDecisionAttributes {
-  10: optional string markerName
-  20: optional binary details
-  30: optional Header header
-}
-
-struct ContinueAsNewWorkflowExecutionDecisionAttributes {
-  10: optional WorkflowType workflowType
-  20: optional TaskList taskList
-  30: optional binary input
-  40: optional i32 executionStartToCloseTimeoutSeconds
-  50: optional i32 taskStartToCloseTimeoutSeconds
-  60: optional i32 backoffStartIntervalInSeconds
-  70: optional RetryPolicy retryPolicy
-  80: optional ContinueAsNewInitiator initiator
-  90: optional string failureReason
-  100: optional binary failureDetails
-  110: optional binary lastCompletionResult
-  120: optional string cronSchedule
-  130: optional Header header
-  140: optional Memo memo
-  150: optional SearchAttributes searchAttributes
-}
-
-struct StartChildWorkflowExecutionDecisionAttributes {
-  10: optional string domain
-  20: optional string workflowId
-  30: optional WorkflowType workflowType
-  40: optional TaskList taskList
-  50: optional binary input
-  60: optional i32 executionStartToCloseTimeoutSeconds
-  70: optional i32 taskStartToCloseTimeoutSeconds
-//  80: optional ChildPolicy childPolicy -- Removed but reserve the IDL order number
-  81: optional ParentClosePolicy parentClosePolicy
-  90: optional binary control
-  100: optional WorkflowIdReusePolicy workflowIdReusePolicy
-  110: optional RetryPolicy retryPolicy
-  120: optional string cronSchedule
-  130: optional Header header
-  140: optional Memo memo
-  150: optional SearchAttributes searchAttributes
-}
-
-struct Decision {
-  10:  optional DecisionType decisionType
-  20:  optional ScheduleActivityTaskDecisionAttributes scheduleActivityTaskDecisionAttributes
-  25:  optional StartTimerDecisionAttributes startTimerDecisionAttributes
-  30:  optional CompleteWorkflowExecutionDecisionAttributes completeWorkflowExecutionDecisionAttributes
-  35:  optional FailWorkflowExecutionDecisionAttributes failWorkflowExecutionDecisionAttributes
-  40:  optional RequestCancelActivityTaskDecisionAttributes requestCancelActivityTaskDecisionAttributes
-  50:  optional CancelTimerDecisionAttributes cancelTimerDecisionAttributes
-  60:  optional CancelWorkflowExecutionDecisionAttributes cancelWorkflowExecutionDecisionAttributes
-  70:  optional RequestCancelExternalWorkflowExecutionDecisionAttributes requestCancelExternalWorkflowExecutionDecisionAttributes
-  80:  optional RecordMarkerDecisionAttributes recordMarkerDecisionAttributes
-  90:  optional ContinueAsNewWorkflowExecutionDecisionAttributes continueAsNewWorkflowExecutionDecisionAttributes
-  100: optional StartChildWorkflowExecutionDecisionAttributes startChildWorkflowExecutionDecisionAttributes
-  110: optional SignalExternalWorkflowExecutionDecisionAttributes signalExternalWorkflowExecutionDecisionAttributes
-  120: optional UpsertWorkflowSearchAttributesDecisionAttributes upsertWorkflowSearchAttributesDecisionAttributes
-}
-
-struct WorkflowExecutionStartedEventAttributes {
-  10: optional WorkflowType workflowType
-  12: optional string parentWorkflowDomain
-  14: optional WorkflowExecution parentWorkflowExecution
-  16: optional i64 (js.type = "Long") parentInitiatedEventId
-  20: optional TaskList taskList
-  30: optional binary input
-  40: optional i32 executionStartToCloseTimeoutSeconds
-  50: optional i32 taskStartToCloseTimeoutSeconds
-//  52: optional ChildPolicy childPolicy -- Removed but reserve the IDL order number
-  54: optional string continuedExecutionRunId
-  55: optional ContinueAsNewInitiator initiator
-  56: optional string continuedFailureReason
-  57: optional binary continuedFailureDetails
-  58: optional binary lastCompletionResult
-  59: optional string originalExecutionRunId // This is the runID when the WorkflowExecutionStarted event is written
-  60: optional string identity
-  61: optional string firstExecutionRunId // This is the very first runID along the chain of ContinueAsNew and Reset.
-  70: optional RetryPolicy retryPolicy
-  80: optional i32 attempt
-  90: optional i64 (js.type = "Long") expirationTimestamp
-  100: optional string cronSchedule
-  110: optional i32 firstDecisionTaskBackoffSeconds
-  120: optional Memo memo
-  121: optional SearchAttributes searchAttributes
-  130: optional ResetPoints prevAutoResetPoints
-  140: optional Header header
 }
 
 struct ResetPoints{
@@ -487,323 +317,6 @@ enum ContinueAsNewInitiator {
   CronSchedule,
 }
 
-struct WorkflowExecutionContinuedAsNewEventAttributes {
-  10: optional string newExecutionRunId
-  20: optional WorkflowType workflowType
-  30: optional TaskList taskList
-  40: optional binary input
-  50: optional i32 executionStartToCloseTimeoutSeconds
-  60: optional i32 taskStartToCloseTimeoutSeconds
-  70: optional i64 (js.type = "Long") decisionTaskCompletedEventId
-  80: optional i32 backoffStartIntervalInSeconds
-  90: optional ContinueAsNewInitiator initiator
-  100: optional string failureReason
-  110: optional binary failureDetails
-  120: optional binary lastCompletionResult
-  130: optional Header header
-  140: optional Memo memo
-  150: optional SearchAttributes searchAttributes
-}
-
-struct DecisionTaskScheduledEventAttributes {
-  10: optional TaskList taskList
-  20: optional i32 startToCloseTimeoutSeconds
-  30: optional i64 (js.type = "Long") attempt
-}
-
-struct DecisionTaskStartedEventAttributes {
-  10: optional i64 (js.type = "Long") scheduledEventId
-  20: optional string identity
-  30: optional string requestId
-}
-
-struct DecisionTaskCompletedEventAttributes {
-  10: optional binary executionContext
-  20: optional i64 (js.type = "Long") scheduledEventId
-  30: optional i64 (js.type = "Long") startedEventId
-  40: optional string identity
-  50: optional string binaryChecksum
-}
-
-struct DecisionTaskTimedOutEventAttributes {
-  10: optional i64 (js.type = "Long") scheduledEventId
-  20: optional i64 (js.type = "Long") startedEventId
-  30: optional TimeoutType timeoutType
-}
-
-struct DecisionTaskFailedEventAttributes {
-  10: optional i64 (js.type = "Long") scheduledEventId
-  20: optional i64 (js.type = "Long") startedEventId
-  30: optional DecisionTaskFailedCause cause
-  35: optional binary details
-  40: optional string identity
-  50: optional string reason
-  // for reset workflow
-  60: optional string baseRunId
-  70: optional string newRunId
-  80: optional i64 (js.type = "Long") forkEventVersion
-  90: optional string binaryChecksum
-}
-
-struct ActivityTaskScheduledEventAttributes {
-  10: optional string activityId
-  20: optional ActivityType activityType
-  25: optional string domain
-  30: optional TaskList taskList
-  40: optional binary input
-  45: optional i32 scheduleToCloseTimeoutSeconds
-  50: optional i32 scheduleToStartTimeoutSeconds
-  55: optional i32 startToCloseTimeoutSeconds
-  60: optional i32 heartbeatTimeoutSeconds
-  90: optional i64 (js.type = "Long") decisionTaskCompletedEventId
-  110: optional RetryPolicy retryPolicy
-  120: optional Header header
-}
-
-struct ActivityTaskStartedEventAttributes {
-  10: optional i64 (js.type = "Long") scheduledEventId
-  20: optional string identity
-  30: optional string requestId
-  40: optional i32 attempt
-}
-
-struct ActivityTaskCompletedEventAttributes {
-  10: optional binary result
-  20: optional i64 (js.type = "Long") scheduledEventId
-  30: optional i64 (js.type = "Long") startedEventId
-  40: optional string identity
-}
-
-struct ActivityTaskFailedEventAttributes {
-  10: optional string reason
-  20: optional binary details
-  30: optional i64 (js.type = "Long") scheduledEventId
-  40: optional i64 (js.type = "Long") startedEventId
-  50: optional string identity
-}
-
-struct ActivityTaskTimedOutEventAttributes {
-  05: optional binary details
-  10: optional i64 (js.type = "Long") scheduledEventId
-  20: optional i64 (js.type = "Long") startedEventId
-  30: optional TimeoutType timeoutType
-  // For retry activity, it may have a failure before timeout. It's important to keep those information for debug.
-  // Client can also provide the info for making next decision
-  40: optional string lastFailureReason
-  50: optional binary lastFailureDetails
-}
-
-struct ActivityTaskCancelRequestedEventAttributes {
-  10: optional string activityId
-  20: optional i64 (js.type = "Long") decisionTaskCompletedEventId
-}
-
-struct RequestCancelActivityTaskFailedEventAttributes{
-  10: optional string activityId
-  20: optional string cause
-  30: optional i64 (js.type = "Long") decisionTaskCompletedEventId
-}
-
-struct ActivityTaskCanceledEventAttributes {
-  10: optional binary details
-  20: optional i64 (js.type = "Long") latestCancelRequestedEventId
-  30: optional i64 (js.type = "Long") scheduledEventId
-  40: optional i64 (js.type = "Long") startedEventId
-  50: optional string identity
-}
-
-struct TimerStartedEventAttributes {
-  10: optional string timerId
-  20: optional i64 (js.type = "Long") startToFireTimeoutSeconds
-  30: optional i64 (js.type = "Long") decisionTaskCompletedEventId
-}
-
-struct TimerFiredEventAttributes {
-  10: optional string timerId
-  20: optional i64 (js.type = "Long") startedEventId
-}
-
-struct TimerCanceledEventAttributes {
-  10: optional string timerId
-  20: optional i64 (js.type = "Long") startedEventId
-  30: optional i64 (js.type = "Long") decisionTaskCompletedEventId
-  40: optional string identity
-}
-
-struct CancelTimerFailedEventAttributes {
-  10: optional string timerId
-  20: optional string cause
-  30: optional i64 (js.type = "Long") decisionTaskCompletedEventId
-  40: optional string identity
-}
-
-struct WorkflowExecutionCancelRequestedEventAttributes {
-  10: optional string cause
-  20: optional i64 (js.type = "Long") externalInitiatedEventId
-  30: optional WorkflowExecution externalWorkflowExecution
-  40: optional string identity
-}
-
-struct WorkflowExecutionCanceledEventAttributes {
-  10: optional i64 (js.type = "Long") decisionTaskCompletedEventId
-  20: optional binary details
-}
-
-struct MarkerRecordedEventAttributes {
-  10: optional string markerName
-  20: optional binary details
-  30: optional i64 (js.type = "Long") decisionTaskCompletedEventId
-  40: optional Header header
-}
-
-struct WorkflowExecutionSignaledEventAttributes {
-  10: optional string signalName
-  20: optional binary input
-  30: optional string identity
-}
-
-struct WorkflowExecutionTerminatedEventAttributes {
-  10: optional string reason
-  20: optional binary details
-  30: optional string identity
-}
-
-struct RequestCancelExternalWorkflowExecutionInitiatedEventAttributes {
-  10: optional i64 (js.type = "Long") decisionTaskCompletedEventId
-  20: optional string domain
-  30: optional WorkflowExecution workflowExecution
-  40: optional binary control
-  50: optional bool childWorkflowOnly
-}
-
-struct RequestCancelExternalWorkflowExecutionFailedEventAttributes {
-  10: optional CancelExternalWorkflowExecutionFailedCause cause
-  20: optional i64 (js.type = "Long") decisionTaskCompletedEventId
-  30: optional string domain
-  40: optional WorkflowExecution workflowExecution
-  50: optional i64 (js.type = "Long") initiatedEventId
-  60: optional binary control
-}
-
-struct ExternalWorkflowExecutionCancelRequestedEventAttributes {
-  10: optional i64 (js.type = "Long") initiatedEventId
-  20: optional string domain
-  30: optional WorkflowExecution workflowExecution
-}
-
-struct SignalExternalWorkflowExecutionInitiatedEventAttributes {
-  10: optional i64 (js.type = "Long") decisionTaskCompletedEventId
-  20: optional string domain
-  30: optional WorkflowExecution workflowExecution
-  40: optional string signalName
-  50: optional binary input
-  60: optional binary control
-  70: optional bool childWorkflowOnly
-}
-
-struct SignalExternalWorkflowExecutionFailedEventAttributes {
-  10: optional SignalExternalWorkflowExecutionFailedCause cause
-  20: optional i64 (js.type = "Long") decisionTaskCompletedEventId
-  30: optional string domain
-  40: optional WorkflowExecution workflowExecution
-  50: optional i64 (js.type = "Long") initiatedEventId
-  60: optional binary control
-}
-
-struct ExternalWorkflowExecutionSignaledEventAttributes {
-  10: optional i64 (js.type = "Long") initiatedEventId
-  20: optional string domain
-  30: optional WorkflowExecution workflowExecution
-  40: optional binary control
-}
-
-struct UpsertWorkflowSearchAttributesEventAttributes {
-  10: optional i64 (js.type = "Long") decisionTaskCompletedEventId
-  20: optional SearchAttributes searchAttributes
-}
-
-struct StartChildWorkflowExecutionInitiatedEventAttributes {
-  10:  optional string domain
-  20:  optional string workflowId
-  30:  optional WorkflowType workflowType
-  40:  optional TaskList taskList
-  50:  optional binary input
-  60:  optional i32 executionStartToCloseTimeoutSeconds
-  70:  optional i32 taskStartToCloseTimeoutSeconds
-//  80:  optional ChildPolicy childPolicy -- Removed but reserve the IDL order number
-  81:  optional ParentClosePolicy parentClosePolicy
-  90:  optional binary control
-  100: optional i64 (js.type = "Long") decisionTaskCompletedEventId
-  110: optional WorkflowIdReusePolicy workflowIdReusePolicy
-  120: optional RetryPolicy retryPolicy
-  130: optional string cronSchedule
-  140: optional Header header
-  150: optional Memo memo
-  160: optional SearchAttributes searchAttributes
-}
-
-struct StartChildWorkflowExecutionFailedEventAttributes {
-  10: optional string domain
-  20: optional string workflowId
-  30: optional WorkflowType workflowType
-  40: optional ChildWorkflowExecutionFailedCause cause
-  50: optional binary control
-  60: optional i64 (js.type = "Long") initiatedEventId
-  70: optional i64 (js.type = "Long") decisionTaskCompletedEventId
-}
-
-struct ChildWorkflowExecutionStartedEventAttributes {
-  10: optional string domain
-  20: optional i64 (js.type = "Long") initiatedEventId
-  30: optional WorkflowExecution workflowExecution
-  40: optional WorkflowType workflowType
-  50: optional Header header
-}
-
-struct ChildWorkflowExecutionCompletedEventAttributes {
-  10: optional binary result
-  20: optional string domain
-  30: optional WorkflowExecution workflowExecution
-  40: optional WorkflowType workflowType
-  50: optional i64 (js.type = "Long") initiatedEventId
-  60: optional i64 (js.type = "Long") startedEventId
-}
-
-struct ChildWorkflowExecutionFailedEventAttributes {
-  10: optional string reason
-  20: optional binary details
-  30: optional string domain
-  40: optional WorkflowExecution workflowExecution
-  50: optional WorkflowType workflowType
-  60: optional i64 (js.type = "Long") initiatedEventId
-  70: optional i64 (js.type = "Long") startedEventId
-}
-
-struct ChildWorkflowExecutionCanceledEventAttributes {
-  10: optional binary details
-  20: optional string domain
-  30: optional WorkflowExecution workflowExecution
-  40: optional WorkflowType workflowType
-  50: optional i64 (js.type = "Long") initiatedEventId
-  60: optional i64 (js.type = "Long") startedEventId
-}
-
-struct ChildWorkflowExecutionTimedOutEventAttributes {
-  10: optional TimeoutType timeoutType
-  20: optional string domain
-  30: optional WorkflowExecution workflowExecution
-  40: optional WorkflowType workflowType
-  50: optional i64 (js.type = "Long") initiatedEventId
-  60: optional i64 (js.type = "Long") startedEventId
-}
-
-struct ChildWorkflowExecutionTerminatedEventAttributes {
-  10: optional string domain
-  20: optional WorkflowExecution workflowExecution
-  30: optional WorkflowType workflowType
-  40: optional i64 (js.type = "Long") initiatedEventId
-  50: optional i64 (js.type = "Long") startedEventId
-}
 
 struct WorkflowExecutionFilter {
   10: optional string workflowId
@@ -963,18 +476,6 @@ struct StickyExecutionAttributes {
   20: optional i32 scheduleToStartTimeoutSeconds
 }
 
-struct RespondDecisionTaskCompletedRequest {
-  10: optional binary taskToken
-  20: optional list<Decision> decisions
-  30: optional binary executionContext
-  40: optional string identity
-  50: optional StickyExecutionAttributes stickyAttributes
-  60: optional bool returnNewDecisionTask
-  70: optional bool forceCreateNewDecisionTask
-  80: optional string binaryChecksum
-  90: optional map<string, WorkflowQueryResult> queryResults
-}
-
 struct RespondDecisionTaskFailedRequest {
   10: optional binary taskToken
   20: optional DecisionTaskFailedCause cause
@@ -988,25 +489,6 @@ struct PollForActivityTaskRequest {
   20: optional TaskList taskList
   30: optional string identity
   40: optional TaskListMetadata taskListMetadata
-}
-
-struct PollForActivityTaskResponse {
-  10:  optional binary taskToken
-  20:  optional WorkflowExecution workflowExecution
-  30:  optional string activityId
-  40:  optional ActivityType activityType
-  50:  optional binary input
-  70:  optional i64 (js.type = "Long") scheduledTimestamp
-  80:  optional i32 scheduleToCloseTimeoutSeconds
-  90:  optional i64 (js.type = "Long") startedTimestamp
-  100: optional i32 startToCloseTimeoutSeconds
-  110: optional i32 heartbeatTimeoutSeconds
-  120: optional i32 attempt
-  130: optional i64 (js.type = "Long") scheduledTimestampOfThisAttempt
-  140: optional binary heartbeatDetails
-  150: optional WorkflowType workflowType
-  160: optional string workflowDomain
-  170: optional Header header
 }
 
 struct RecordActivityTaskHeartbeatRequest {
@@ -1075,31 +557,6 @@ struct RespondActivityTaskCanceledByIDRequest {
   60: optional string identity
 }
 
-struct RequestCancelWorkflowExecutionRequest {
-  10: optional string domain
-  20: optional WorkflowExecution workflowExecution
-  30: optional string identity
-  40: optional string requestId
-}
-
-struct GetWorkflowExecutionHistoryRequest {
-  10: optional string domain
-  20: optional WorkflowExecution execution
-  30: optional i32 maximumPageSize
-  40: optional binary nextPageToken
-  50: optional bool waitForNewEvent
-  60: optional HistoryEventFilterType HistoryEventFilterType
-}
-
-struct SignalWorkflowExecutionRequest {
-  10: optional string domain
-  20: optional WorkflowExecution workflowExecution
-  30: optional string signalName
-  40: optional binary input
-  50: optional string identity
-  60: optional string requestId
-  70: optional binary control
-}
 
 struct SignalWithStartWorkflowExecutionRequest {
   10: optional string domain
@@ -1122,22 +579,6 @@ struct SignalWithStartWorkflowExecutionRequest {
   170: optional Header header
 }
 
-struct TerminateWorkflowExecutionRequest {
-  10: optional string domain
-  20: optional WorkflowExecution workflowExecution
-  30: optional string reason
-  40: optional binary details
-  50: optional string identity
-}
-
-struct ResetWorkflowExecutionRequest {
-  10: optional string domain
-  20: optional WorkflowExecution workflowExecution
-  30: optional string reason
-  40: optional i64 (js.type = "Long") decisionFinishEventId
-  50: optional string requestId
-}
-
 struct ResetWorkflowExecutionResponse {
   10: optional string runId
 }
@@ -1151,11 +592,6 @@ struct ListOpenWorkflowExecutionsRequest {
   60: optional WorkflowTypeFilter typeFilter
 }
 
-struct ListOpenWorkflowExecutionsResponse {
-  10: optional list<WorkflowExecutionInfo> executions
-  20: optional binary nextPageToken
-}
-
 struct ListClosedWorkflowExecutionsRequest {
   10: optional string domain
   20: optional i32 maximumPageSize
@@ -1166,33 +602,17 @@ struct ListClosedWorkflowExecutionsRequest {
   70: optional WorkflowExecutionCloseStatus statusFilter
 }
 
-struct ListClosedWorkflowExecutionsResponse {
-  10: optional list<WorkflowExecutionInfo> executions
-  20: optional binary nextPageToken
-}
-
 struct ListWorkflowExecutionsRequest {
   10: optional string domain
   20: optional i32 pageSize
   30: optional binary nextPageToken
   40: optional string query
 }
-
-struct ListWorkflowExecutionsResponse {
-  10: optional list<WorkflowExecutionInfo> executions
-  20: optional binary nextPageToken
-}
-
 struct ListArchivedWorkflowExecutionsRequest {
   10: optional string domain
   20: optional i32 pageSize
   30: optional binary nextPageToken
   40: optional string query
-}
-
-struct ListArchivedWorkflowExecutionsResponse {
-  10: optional list<WorkflowExecutionInfo> executions
-  20: optional binary nextPageToken
 }
 
 struct CountWorkflowExecutionsRequest {
@@ -1206,15 +626,6 @@ struct CountWorkflowExecutionsResponse {
 
 struct GetSearchAttributesResponse {
   10: optional map<string, IndexedValueType> keys
-}
-
-struct QueryWorkflowRequest {
-  10: optional string domain
-  20: optional WorkflowExecution execution
-  30: optional WorkflowQuery query
-  // QueryRejectCondition can used to reject the query if workflow state does not satisify condition
-  40: optional QueryRejectCondition queryRejectCondition
-  50: optional QueryConsistencyLevel queryConsistencyLevel
 }
 
 struct QueryRejected {
@@ -1231,10 +642,6 @@ struct WorkflowQuery {
   20: optional binary queryArgs
 }
 
-struct ResetStickyTaskListRequest {
-  10: optional string domain
-  20: optional WorkflowExecution execution
-}
 
 struct ResetStickyTaskListResponse {
     // The reason to keep this response is to allow returning
@@ -1253,11 +660,6 @@ struct WorkflowQueryResult {
   10: optional QueryResultType resultType
   20: optional binary answer
   30: optional string errorMessage
-}
-
-struct DescribeWorkflowExecutionRequest {
-  10: optional string domain
-  20: optional WorkflowExecution execution
 }
 
 struct PendingActivityInfo {
@@ -1283,14 +685,6 @@ struct PendingChildExecutionInfo {
   40: optional i64 (js.type = "Long") initiatedID
   50: optional ParentClosePolicy parentClosePolicy
 }
-
-struct DescribeWorkflowExecutionResponse {
-  10: optional WorkflowExecutionConfiguration executionConfiguration
-  20: optional WorkflowExecutionInfo workflowExecutionInfo
-  30: optional list<PendingActivityInfo> pendingActivities
-  40: optional list<PendingChildExecutionInfo> pendingChildren
-}
-
 struct DescribeTaskListRequest {
   10: optional string domain
   20: optional TaskList taskList
@@ -1331,12 +725,6 @@ struct TaskIDBlock {
   20: optional i64 (js.type = "Long")  endID
 }
 
-//At least one of the parameters needs to be provided
-struct DescribeHistoryHostRequest {
-  10: optional string               hostAddress //ip:port
-  20: optional i32                  shardIdForHost
-  30: optional WorkflowExecution    executionForHost
-}
 
 struct RemoveTaskRequest {
   10: optional i32                      shardID
@@ -1438,12 +826,6 @@ struct VersionHistories{
   20: optional list<VersionHistory> histories
 }
 
-// ReapplyEventsRequest is the request for reapply events API
-struct ReapplyEventsRequest{
-  10: optional string domainName
-  20: optional WorkflowExecution workflowExecution
-  30: optional DataBlob events
-}
 
 // SupportedClientVersions contains the support versions for client library
 struct SupportedClientVersions{
@@ -1454,23 +836,6 @@ struct SupportedClientVersions{
 // ClusterInfo contains information about cadence cluster
 struct ClusterInfo{
   10: optional SupportedClientVersions supportedClientVersions
-}
-
-struct GetWorkflowExecutionRawHistoryRequest {
-  10: optional string domain
-  20: optional WorkflowExecution execution
-  30: optional i32 maximumPageSize
-  40: optional binary nextPageToken
-}
-
-struct GetWorkflowExecutionRawHistoryResponse {
-  10: optional list<DataBlob> rawHistory
-  20: optional binary nextPageToken
-}
-
-struct RefreshWorkflowTasksRequest {
-  10: optional string domain
-  20: optional WorkflowExecution execution
 }
 
 

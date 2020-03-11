@@ -110,14 +110,14 @@ func ListBatchJobs(c *cli.Context) {
 	for _, wf := range resp.Executions {
 		job := map[string]string{
 			"jobID":     wf.Execution.GetWorkflowId(),
-			"startTime": convertTime(wf.GetStartTime(), false),
+			"startTime": convertTime(wf.GetStartTime().Value, false),
 			"reason":    string(wf.Memo.Fields["Reason"]),
 			"operator":  string(wf.SearchAttributes.IndexedFields["Operator"]),
 		}
 
 		if wf.CloseStatus != enums.WorkflowExecutionCloseStatusRunning {
 			job["status"] = wf.CloseStatus.String()
-			job["closeTime"] = convertTime(wf.GetCloseTime(), false)
+			job["closeTime"] = convertTime(wf.GetCloseTime().Value, false)
 		} else {
 			job["status"] = "RUNNING"
 		}
