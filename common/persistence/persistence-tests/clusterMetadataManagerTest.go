@@ -31,8 +31,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	persist "github.com/temporalio/temporal/.gen/go/persistenceblobs"
-	"github.com/temporalio/temporal/common"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	p "github.com/temporalio/temporal/common/persistence"
 )
 
@@ -273,23 +272,23 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 	s.Nil(getResp)
 
 	var clusterNameToPersist = "testing"
-	var historyShardsToPersist = 43
+	var historyShardsToPersist int32 = 43
 
 	// Case 2 - Init, no data persisted yet
 	// First commit, this should be persisted
 	initialResp, err := s.ClusterMetadataManager.InitializeImmutableClusterMetadata(
 		&p.InitializeImmutableClusterMetadataRequest{
-			ImmutableClusterMetadata: persist.ImmutableClusterMetadata{
-				ClusterName:       &clusterNameToPersist,
-				HistoryShardCount: common.Int32Ptr(int32(historyShardsToPersist)),
+			ImmutableClusterMetadata: persistenceblobs.ImmutableClusterMetadata{
+				ClusterName:       clusterNameToPersist,
+				HistoryShardCount: historyShardsToPersist,
 			}})
 
 	s.Nil(err)
 	s.NotNil(initialResp)
 	s.NotNil(initialResp.PersistedImmutableData)
 	s.True(initialResp.RequestApplied) // request should be applied as this is first initialize
-	s.True(*initialResp.PersistedImmutableData.ClusterName == clusterNameToPersist)
-	s.True(int(*initialResp.PersistedImmutableData.HistoryShardCount) == historyShardsToPersist)
+	s.Equal(initialResp.PersistedImmutableData.ClusterName, clusterNameToPersist)
+	s.Equal(initialResp.PersistedImmutableData.HistoryShardCount, historyShardsToPersist)
 
 	// Case 3 - Get, data persisted
 	// Fetch the persisted values
@@ -298,24 +297,24 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 	// Validate they match our initializations
 	s.Nil(err)
 	s.True(getResp != nil)
-	s.True(*getResp.ClusterName == clusterNameToPersist)
-	s.True(int(*getResp.HistoryShardCount) == historyShardsToPersist)
+	s.True(getResp.ClusterName == clusterNameToPersist)
+	s.True(getResp.HistoryShardCount == historyShardsToPersist)
 
 	// Case 4 - Init, data persisted
 	// Attempt to overwrite with new values
 	var wrongClusterName = "overWriteClusterName"
 	secondResp, err := s.ClusterMetadataManager.InitializeImmutableClusterMetadata(&p.InitializeImmutableClusterMetadataRequest{
-		ImmutableClusterMetadata: persist.ImmutableClusterMetadata{
-			ClusterName:       &wrongClusterName,
-			HistoryShardCount: common.Int32Ptr(int32(77)),
+		ImmutableClusterMetadata: persistenceblobs.ImmutableClusterMetadata{
+			ClusterName:       wrongClusterName,
+			HistoryShardCount: int32(77),
 		}})
 
 	s.Nil(err)
 	s.NotNil(secondResp)
 	s.NotNil(secondResp.PersistedImmutableData)
 	s.False(secondResp.RequestApplied) // Should not have applied, and should match values from first request
-	s.True(*secondResp.PersistedImmutableData.ClusterName == clusterNameToPersist)
-	s.True(int(*secondResp.PersistedImmutableData.HistoryShardCount) == historyShardsToPersist)
+	s.Equal(secondResp.PersistedImmutableData.ClusterName, clusterNameToPersist)
+	s.Equal(secondResp.PersistedImmutableData.HistoryShardCount, historyShardsToPersist)
 
 	// Refetch persisted
 	getResp, err = s.ClusterMetadataManager.GetImmutableClusterMetadata()
@@ -323,6 +322,6 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 	// Validate they match our initial values
 	s.Nil(err)
 	s.True(getResp != nil)
-	s.True(*getResp.ClusterName == clusterNameToPersist)
-	s.True(int(*getResp.HistoryShardCount) == historyShardsToPersist)
+	s.Equal(getResp.ClusterName, clusterNameToPersist)
+	s.Equal(getResp.HistoryShardCount, historyShardsToPersist)
 }
