@@ -41,7 +41,6 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/indexer"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/definition"
 	es "github.com/temporalio/temporal/common/elasticsearch"
 	esMocks "github.com/temporalio/temporal/common/elasticsearch/mocks"
@@ -92,7 +91,7 @@ var (
 	filterByType   = fmt.Sprintf("map[match:map[WorkflowType:map[query:%s]]]", testWorkflowType)
 	filterByWID    = fmt.Sprintf("map[match:map[WorkflowID:map[query:%s]]]", testWorkflowID)
 	filterByRunID  = fmt.Sprintf("map[match:map[RunID:map[query:%s]]]", testRunID)
-	filterByStatus = fmt.Sprintf("map[match:map[CloseStatus:map[query:%d]]]", *adapter.ToThriftWorkflowExecutionCloseStatus(testCloseStatus))
+	filterByStatus = fmt.Sprintf("map[match:map[CloseStatus:map[query:%d]]]", testCloseStatus)
 )
 
 func TestESVisibilitySuite(t *testing.T) {
@@ -178,7 +177,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 	memoBytes := []byte(`test bytes`)
 	request.Memo = p.NewDataBlob(memoBytes, common.EncodingTypeThriftRW)
 	request.CloseTimestamp = int64(999)
-	request.Status = *adapter.ToThriftWorkflowExecutionCloseStatus(enums.WorkflowExecutionCloseStatusTerminated)
+	request.Status = enums.WorkflowExecutionCloseStatusTerminated
 	request.HistoryLength = int64(20)
 	s.mockProducer.On("Publish", mock.MatchedBy(func(input *indexer.Message) bool {
 		fields := input.Fields
@@ -192,7 +191,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 		s.Equal(memoBytes, fields[es.Memo].GetBinaryData())
 		s.Equal(string(common.EncodingTypeThriftRW), fields[es.Encoding].GetStringData())
 		s.Equal(request.CloseTimestamp, fields[es.CloseTime].GetIntData())
-		s.EqualValues(adapter.ToProtoWorkflowExecutionCloseStatus(&request.Status), fields[es.CloseStatus].GetIntData())
+		s.EqualValues(request.Status, fields[es.CloseStatus].GetIntData())
 		s.Equal(request.HistoryLength, fields[es.HistoryLength].GetIntData())
 		return true
 	})).Return(nil).Once()
@@ -353,7 +352,7 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByStatus() {
 
 	request := &p.ListClosedWorkflowExecutionsByStatusRequest{
 		ListWorkflowExecutionsRequest: *testRequest,
-		Status:                        *adapter.ToThriftWorkflowExecutionCloseStatus(testCloseStatus),
+		Status:                        testCloseStatus,
 	}
 	_, err := s.visibilityStore.ListClosedWorkflowExecutionsByStatus(request)
 	s.NoError(err)
@@ -376,10 +375,10 @@ func (s *ESVisibilitySuite) TestGetClosedWorkflowExecution() {
 	})).Return(testSearchResult, nil).Once()
 	request := &p.GetClosedWorkflowExecutionRequest{
 		DomainUUID: testDomainID,
-		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+		Execution: commonproto.WorkflowExecution{
 			WorkflowId: testWorkflowID,
 			RunId:      testRunID,
-		}),
+		},
 	}
 	_, err := s.visibilityStore.GetClosedWorkflowExecution(request)
 	s.NoError(err)
@@ -402,9 +401,9 @@ func (s *ESVisibilitySuite) TestGetClosedWorkflowExecution_NoRunID() {
 	})).Return(testSearchResult, nil).Once()
 	request := &p.GetClosedWorkflowExecutionRequest{
 		DomainUUID: testDomainID,
-		Execution: *adapter.ToThriftWorkflowExecution(&commonproto.WorkflowExecution{
+		Execution: commonproto.WorkflowExecution{
 			WorkflowId: testWorkflowID,
-		}),
+		},
 	}
 	_, err := s.visibilityStore.GetClosedWorkflowExecution(request)
 	s.NoError(err)
@@ -513,7 +512,7 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	s.Equal(0, len(resp.Executions))
 
 	// test for one hits
-	data := []byte(`{"CloseStatus": 0,
+	data := []byte(`{"CloseStatus": 1,
           "CloseTime": 1547596872817380000,
           "DomainID": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
           "HistoryLength": 29,
@@ -622,7 +621,7 @@ func (s *ESVisibilitySuite) TestSerializePageToken() {
 }
 
 func (s *ESVisibilitySuite) TestConvertSearchResultToVisibilityRecord() {
-	data := []byte(`{"CloseStatus": 1,
+	data := []byte(`{"CloseStatus": 2,
           "CloseTime": 1547596872817380000,
           "DomainID": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
           "HistoryLength": 29,
@@ -652,7 +651,7 @@ func (s *ESVisibilitySuite) TestConvertSearchResultToVisibilityRecord() {
 	s.Equal("TestWorkflowExecute", info.TypeName)
 	s.Equal(int64(1547596872371000000), info.StartTime.UnixNano())
 	s.Equal(int64(1547596872817380000), info.CloseTime.UnixNano())
-	s.Equal(enums.WorkflowExecutionCloseStatusCompleted, adapter.ToProtoWorkflowExecutionCloseStatus(info.Status))
+	s.Equal(enums.WorkflowExecutionCloseStatusCompleted, *info.Status)
 	s.Equal(int64(29), info.HistoryLength)
 
 	// test for error case

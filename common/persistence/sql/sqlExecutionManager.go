@@ -207,8 +207,8 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 ) (*p.InternalGetWorkflowExecutionResponse, error) {
 
 	domainID := primitives.MustParseUUID(request.DomainID)
-	runID := primitives.MustParseUUID(*request.Execution.RunId)
-	wfID := *request.Execution.WorkflowId
+	runID := primitives.MustParseUUID(request.Execution.RunId)
+	wfID := request.Execution.WorkflowId
 	execution, err := m.db.SelectFromExecutions(&sqlplugin.ExecutionsFilter{
 		ShardID: m.shardID, DomainID: domainID, WorkflowID: wfID, RunID: runID})
 

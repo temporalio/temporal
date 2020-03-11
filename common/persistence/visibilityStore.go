@@ -23,12 +23,11 @@ package persistence
 import (
 	"encoding/json"
 
+	"github.com/gogo/protobuf/types"
 	commonproto "go.temporal.io/temporal-proto/common"
 
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 
-	"github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -218,7 +217,7 @@ func (v *visibilityManagerImpl) convertInternalListResponse(internalResp *Intern
 	}
 
 	resp := &ListWorkflowExecutionsResponse{}
-	resp.Executions = make([]*shared.WorkflowExecutionInfo, len(internalResp.Executions))
+	resp.Executions = make([]*commonproto.WorkflowExecutionInfo, len(internalResp.Executions))
 	for i, execution := range internalResp.Executions {
 		resp.Executions[i] = v.convertVisibilityWorkflowExecutionInfo(execution)
 	}
@@ -227,7 +226,7 @@ func (v *visibilityManagerImpl) convertInternalListResponse(internalResp *Intern
 	return resp
 }
 
-func (v *visibilityManagerImpl) getSearchAttributes(attr map[string]interface{}) (*shared.SearchAttributes, error) {
+func (v *visibilityManagerImpl) getSearchAttributes(attr map[string]interface{}) (*commonproto.SearchAttributes, error) {
 	indexedFields := make(map[string][]byte)
 	var err error
 	var valBytes []byte
@@ -242,12 +241,12 @@ func (v *visibilityManagerImpl) getSearchAttributes(attr map[string]interface{})
 	if err != nil {
 		return nil, err
 	}
-	return &shared.SearchAttributes{
+	return &commonproto.SearchAttributes{
 		IndexedFields: indexedFields,
 	}, nil
 }
 
-func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution *VisibilityWorkflowExecutionInfo) *shared.WorkflowExecutionInfo {
+func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution *VisibilityWorkflowExecutionInfo) *commonproto.WorkflowExecutionInfo {
 	// special handling of ExecutionTime for cron or retry
 	if execution.ExecutionTime.UnixNano() == 0 {
 		execution.ExecutionTime = execution.StartTime
@@ -268,25 +267,29 @@ func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution
 			tag.Error(err))
 	}
 
-	convertedExecution := &shared.WorkflowExecutionInfo{
-		Execution: &shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(execution.WorkflowID),
-			RunId:      common.StringPtr(execution.RunID),
+	convertedExecution := &commonproto.WorkflowExecutionInfo{
+		Execution: &commonproto.WorkflowExecution{
+			WorkflowId: execution.WorkflowID,
+			RunId:      execution.RunID,
 		},
-		Type: &shared.WorkflowType{
-			Name: common.StringPtr(execution.TypeName),
+		Type: &commonproto.WorkflowType{
+			Name: execution.TypeName,
 		},
-		StartTime:        common.Int64Ptr(execution.StartTime.UnixNano()),
-		ExecutionTime:    common.Int64Ptr(execution.ExecutionTime.UnixNano()),
-		Memo:             adapter.ToThriftMemo(memo),
+		StartTime: &types.Int64Value{
+			Value: execution.StartTime.UnixNano(),
+		},
+		ExecutionTime:    execution.ExecutionTime.UnixNano(),
+		Memo:             memo,
 		SearchAttributes: searchAttributes,
 	}
 
 	// for close records
 	if execution.Status != nil {
-		convertedExecution.CloseTime = common.Int64Ptr(execution.CloseTime.UnixNano())
-		convertedExecution.CloseStatus = execution.Status
-		convertedExecution.HistoryLength = common.Int64Ptr(execution.HistoryLength)
+		convertedExecution.CloseTime = &types.Int64Value{
+			Value: execution.CloseTime.UnixNano(),
+		}
+		convertedExecution.CloseStatus = *execution.Status
+		convertedExecution.HistoryLength = execution.HistoryLength
 	}
 
 	return convertedExecution

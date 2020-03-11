@@ -30,10 +30,9 @@ import (
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
+	commonproto "go.temporal.io/temporal-proto/common"
 
-	gen "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
-	"github.com/temporalio/temporal/common"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/primitives"
 )
@@ -73,8 +72,8 @@ func (s *MatchingPersistenceSuite) SetupTest() {
 // TestCreateTask test
 func (s *MatchingPersistenceSuite) TestCreateTask() {
 	domainID := primitives.MustParseUUID("11adbd1b-f164-4ea7-b2f3-2e857a5048f1")
-	workflowExecution := gen.WorkflowExecution{WorkflowId: common.StringPtr("create-task-test"),
-		RunId: common.StringPtr("c949447a-691a-4132-8b2a-a5b38106793c")}
+	workflowExecution := commonproto.WorkflowExecution{WorkflowId: "create-task-test",
+		RunId: "c949447a-691a-4132-8b2a-a5b38106793c"}
 	task0, err0 := s.CreateDecisionTask(domainID, workflowExecution, "a5b38106793c", 5)
 	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
@@ -104,8 +103,8 @@ func (s *MatchingPersistenceSuite) TestCreateTask() {
 		s.NoError(err)
 		s.Equal(1, len(resp.Tasks))
 		s.EqualValues(domainID, resp.Tasks[0].Data.DomainID)
-		s.Equal(*workflowExecution.WorkflowId, resp.Tasks[0].Data.WorkflowID)
-		s.EqualValues(primitives.MustParseUUID(*workflowExecution.RunId), resp.Tasks[0].Data.RunID)
+		s.Equal(workflowExecution.WorkflowId, resp.Tasks[0].Data.WorkflowID)
+		s.EqualValues(primitives.MustParseUUID(workflowExecution.RunId), resp.Tasks[0].Data.RunID)
 		s.Equal(sid, resp.Tasks[0].Data.ScheduleID)
 		cTime, err := types.TimestampFromProto(resp.Tasks[0].Data.CreatedTime)
 		s.NoError(err)
@@ -123,8 +122,8 @@ func (s *MatchingPersistenceSuite) TestCreateTask() {
 // TestGetDecisionTasks test
 func (s *MatchingPersistenceSuite) TestGetDecisionTasks() {
 	domainID := primitives.MustParseUUID("aeac8287-527b-4b35-80a9-667cb47e7c6d")
-	workflowExecution := gen.WorkflowExecution{WorkflowId: common.StringPtr("get-decision-task-test"),
-		RunId: common.StringPtr("db20f7e2-1a1e-40d9-9278-d8b886738e05")}
+	workflowExecution := commonproto.WorkflowExecution{WorkflowId: "get-decision-task-test",
+		RunId: "db20f7e2-1a1e-40d9-9278-d8b886738e05"}
 	taskList := "d8b886738e05"
 	task0, err0 := s.CreateDecisionTask(domainID, workflowExecution, taskList, 5)
 	s.NoError(err0)
@@ -143,8 +142,8 @@ func (s *MatchingPersistenceSuite) TestGetTasksWithNoMaxReadLevel() {
 		s.T().Skip("this test is not applicable for cassandra persistence")
 	}
 	domainID := primitives.MustParseUUID("f1116985-d1f1-40e0-aba9-83344db915bc")
-	workflowExecution := gen.WorkflowExecution{WorkflowId: common.StringPtr("complete-decision-task-test"),
-		RunId: common.StringPtr("2aa0a74e-16ee-4f27-983d-48b07ec1915d")}
+	workflowExecution := commonproto.WorkflowExecution{WorkflowId: "complete-decision-task-test",
+		RunId: "2aa0a74e-16ee-4f27-983d-48b07ec1915d"}
 	taskList := "48b07ec1915d"
 	_, err0 := s.CreateActivityTasks(domainID, workflowExecution, map[int64]string{
 		10: taskList,
@@ -189,8 +188,8 @@ func (s *MatchingPersistenceSuite) TestGetTasksWithNoMaxReadLevel() {
 // TestCompleteDecisionTask test
 func (s *MatchingPersistenceSuite) TestCompleteDecisionTask() {
 	domainID := primitives.MustParseUUID("f1116985-d1f1-40e0-aba9-83344db915bc")
-	workflowExecution := gen.WorkflowExecution{WorkflowId: common.StringPtr("complete-decision-task-test"),
-		RunId: common.StringPtr("2aa0a74e-16ee-4f27-983d-48b07ec1915d")}
+	workflowExecution := commonproto.WorkflowExecution{WorkflowId: "complete-decision-task-test",
+		RunId: "2aa0a74e-16ee-4f27-983d-48b07ec1915d"}
 	taskList := "48b07ec1915d"
 	tasks0, err0 := s.CreateActivityTasks(domainID, workflowExecution, map[int64]string{
 		10: taskList,
@@ -215,8 +214,8 @@ func (s *MatchingPersistenceSuite) TestCompleteDecisionTask() {
 	s.Equal(5, len(tasksWithID1), "Expected 5 activity tasks.")
 	for _, t := range tasksWithID1 {
 		s.EqualValues(domainID, t.Data.DomainID)
-		s.Equal(*workflowExecution.WorkflowId, t.Data.WorkflowID)
-		s.EqualValues(primitives.MustParseUUID(*workflowExecution.RunId), t.Data.RunID)
+		s.Equal(workflowExecution.WorkflowId, t.Data.WorkflowID)
+		s.EqualValues(primitives.MustParseUUID(workflowExecution.RunId), t.Data.RunID)
 		s.True(t.TaskID > 0)
 
 		err2 := s.CompleteTask(domainID, taskList, p.TaskListTypeActivity, t.TaskID)
@@ -228,9 +227,9 @@ func (s *MatchingPersistenceSuite) TestCompleteDecisionTask() {
 func (s *MatchingPersistenceSuite) TestCompleteTasksLessThan() {
 	domainID := primitives.UUID(uuid.NewRandom())
 	taskList := "range-complete-task-tl0"
-	wfExec := gen.WorkflowExecution{
-		WorkflowId: common.StringPtr("range-complete-task-test"),
-		RunId:      common.StringPtr(uuid.New()),
+	wfExec := commonproto.WorkflowExecution{
+		WorkflowId: "range-complete-task-test",
+		RunId:      uuid.New(),
 	}
 	_, err := s.CreateActivityTasks(domainID, wfExec, map[int64]string{
 		10: taskList,

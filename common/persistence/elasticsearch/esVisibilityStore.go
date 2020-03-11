@@ -41,7 +41,6 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/indexer"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/definition"
 	es "github.com/temporalio/temporal/common/elasticsearch"
 	"github.com/temporalio/temporal/common/log"
@@ -139,7 +138,7 @@ func (v *esVisibilityStore) RecordWorkflowExecutionClosed(request *p.InternalRec
 		request.StartTimestamp,
 		request.ExecutionTimestamp,
 		request.CloseTimestamp,
-		adapter.ToProtoWorkflowExecutionCloseStatus(&request.Status),
+		request.Status,
 		request.HistoryLength,
 		request.TaskID,
 		request.Memo.Data,
@@ -877,7 +876,7 @@ func (v *esVisibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.S
 	}
 	if source.CloseTime != 0 {
 		record.CloseTime = time.Unix(0, source.CloseTime)
-		record.Status = adapter.ToThriftWorkflowExecutionCloseStatus(source.CloseStatus)
+		record.Status = &source.CloseStatus
 		record.HistoryLength = source.HistoryLength
 	}
 

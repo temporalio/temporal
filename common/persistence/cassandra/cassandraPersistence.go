@@ -1172,8 +1172,8 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 		d.shardID,
 		rowTypeExecution,
 		request.DomainID,
-		*execution.WorkflowId,
-		*execution.RunId,
+		execution.WorkflowId,
+		execution.RunId,
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID)
 

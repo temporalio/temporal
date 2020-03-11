@@ -26,10 +26,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	gen "github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/metrics"
 	mmocks "github.com/temporalio/temporal/common/metrics/mocks"
@@ -50,9 +50,9 @@ type VisibilitySamplingSuite struct {
 var (
 	testDomainUUID        = "fb15e4b5-356f-466d-8c6d-a29223e5c536"
 	testDomain            = "test-domain-name"
-	testWorkflowExecution = gen.WorkflowExecution{
-		WorkflowId: common.StringPtr("visibility-workflow-test"),
-		RunId:      common.StringPtr("843f6fc7-102a-4c63-a2d4-7c653b01bf52"),
+	testWorkflowExecution = commonproto.WorkflowExecution{
+		WorkflowId: "visibility-workflow-test",
+		RunId:      "843f6fc7-102a-4c63-a2d4-7c653b01bf52",
 	}
 	testWorkflowTypeName = "visibility-workflow"
 
@@ -103,14 +103,14 @@ func (s *VisibilitySamplingSuite) TestRecordWorkflowExecutionClosed() {
 		Domain:           testDomain,
 		Execution:        testWorkflowExecution,
 		WorkflowTypeName: testWorkflowTypeName,
-		Status:           gen.WorkflowExecutionCloseStatusCompleted,
+		Status:           enums.WorkflowExecutionCloseStatusCompleted,
 	}
 	request2 := &p.RecordWorkflowExecutionClosedRequest{
 		DomainUUID:       testDomainUUID,
 		Domain:           testDomain,
 		Execution:        testWorkflowExecution,
 		WorkflowTypeName: testWorkflowTypeName,
-		Status:           gen.WorkflowExecutionCloseStatusFailed,
+		Status:           enums.WorkflowExecutionCloseStatusFailed,
 	}
 
 	s.persistence.On("RecordWorkflowExecutionClosed", request).Return(nil).Once()
@@ -250,7 +250,7 @@ func (s *VisibilitySamplingSuite) TestListClosedWorkflowExecutionsByStatus() {
 	}
 	request := &p.ListClosedWorkflowExecutionsByStatusRequest{
 		ListWorkflowExecutionsRequest: req,
-		Status:                        gen.WorkflowExecutionCloseStatusFailed,
+		Status:                        enums.WorkflowExecutionCloseStatusFailed,
 	}
 	s.persistence.On("ListClosedWorkflowExecutionsByStatus", request).Return(nil, nil).Once()
 	_, err := s.client.ListClosedWorkflowExecutionsByStatus(request)

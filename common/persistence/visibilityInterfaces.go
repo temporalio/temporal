@@ -22,9 +22,9 @@ package persistence
 
 import (
 	commonproto "go.temporal.io/temporal-proto/common"
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	s "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/definition"
 )
 
@@ -40,7 +40,7 @@ type (
 	RecordWorkflowExecutionStartedRequest struct {
 		DomainUUID         string
 		Domain             string // not persisted, used as config filter key
-		Execution          s.WorkflowExecution
+		Execution          commonproto.WorkflowExecution
 		WorkflowTypeName   string
 		StartTimestamp     int64
 		ExecutionTimestamp int64
@@ -55,12 +55,12 @@ type (
 	RecordWorkflowExecutionClosedRequest struct {
 		DomainUUID         string
 		Domain             string // not persisted, used as config filter key
-		Execution          s.WorkflowExecution
+		Execution          commonproto.WorkflowExecution
 		WorkflowTypeName   string
 		StartTimestamp     int64
 		ExecutionTimestamp int64
 		CloseTimestamp     int64
-		Status             s.WorkflowExecutionCloseStatus
+		Status             enums.WorkflowExecutionCloseStatus
 		HistoryLength      int64
 		RetentionSeconds   int64
 		TaskID             int64 // not persisted, used as condition update version for ES
@@ -72,7 +72,7 @@ type (
 	UpsertWorkflowExecutionRequest struct {
 		DomainUUID         string
 		Domain             string // not persisted, used as config filter key
-		Execution          s.WorkflowExecution
+		Execution          commonproto.WorkflowExecution
 		WorkflowTypeName   string
 		StartTimestamp     int64
 		ExecutionTimestamp int64
@@ -108,7 +108,7 @@ type (
 
 	// ListWorkflowExecutionsResponse is the response to ListWorkflowExecutionsRequest
 	ListWorkflowExecutionsResponse struct {
-		Executions []*s.WorkflowExecutionInfo
+		Executions []*commonproto.WorkflowExecutionInfo
 		// Token to read next page if there are more workflow executions beyond page size.
 		// Use this to set NextPageToken on ListWorkflowExecutionsRequest to read the next page.
 		NextPageToken []byte
@@ -144,19 +144,19 @@ type (
 	// have specific close status
 	ListClosedWorkflowExecutionsByStatusRequest struct {
 		ListWorkflowExecutionsRequest
-		Status s.WorkflowExecutionCloseStatus
+		Status enums.WorkflowExecutionCloseStatus
 	}
 
 	// GetClosedWorkflowExecutionRequest is used retrieve the record for a specific execution
 	GetClosedWorkflowExecutionRequest struct {
 		DomainUUID string
 		Domain     string // domain name is not persisted, but used as config filter key
-		Execution  s.WorkflowExecution
+		Execution  commonproto.WorkflowExecution
 	}
 
 	// GetClosedWorkflowExecutionResponse is the response to GetClosedWorkflowExecutionRequest
 	GetClosedWorkflowExecutionResponse struct {
-		Execution *s.WorkflowExecutionInfo
+		Execution *commonproto.WorkflowExecutionInfo
 	}
 
 	// VisibilityDeleteWorkflowExecutionRequest contains the request params for DeleteWorkflowExecution call

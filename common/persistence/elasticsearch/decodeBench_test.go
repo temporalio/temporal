@@ -29,13 +29,12 @@ import (
 	"go.temporal.io/temporal-proto/enums"
 
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/definition"
 	p "github.com/temporalio/temporal/common/persistence"
 )
 
 var (
-	data = []byte(`{"CloseStatus": 0,
+	data = []byte(`{"CloseStatus": 1,
          "CloseTime": 1547596872817380000,
          "DomainID": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
          "HistoryLength": 29,
@@ -68,7 +67,7 @@ func BenchmarkJSONDecodeToType(b *testing.B) {
 			Memo:          p.NewDataBlob(source.Memo, common.EncodingType(source.Encoding)),
 		}
 		record.CloseTime = time.Unix(0, source.CloseTime)
-		record.Status = adapter.ToThriftWorkflowExecutionCloseStatus(source.CloseStatus)
+		record.Status = &source.CloseStatus
 		record.HistoryLength = source.HistoryLength
 	}
 }
@@ -97,7 +96,7 @@ func BenchmarkJSONDecodeToMap(b *testing.B) {
 		}
 		record.CloseTime = time.Unix(0, closeTime)
 		status := enums.WorkflowExecutionCloseStatus(closeStatus)
-		record.Status = adapter.ToThriftWorkflowExecutionCloseStatus(status)
+		record.Status = &status
 		record.HistoryLength = historyLen
 	}
 }

@@ -26,9 +26,9 @@ import (
 	"fmt"
 	"time"
 
+	"go.temporal.io/temporal-proto/enums"
 	"go.temporal.io/temporal-proto/serviceerror"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	p "github.com/temporalio/temporal/common/persistence"
@@ -223,7 +223,7 @@ func (s *sqlVisibilityStore) GetClosedWorkflowExecution(request *p.GetClosedWork
 	rows, err := s.db.SelectFromVisibility(&sqlplugin.VisibilityFilter{
 		DomainID: request.DomainUUID,
 		Closed:   true,
-		RunID:    execution.RunId,
+		RunID:    &execution.RunId,
 	})
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -274,7 +274,7 @@ func (s *sqlVisibilityStore) rowToInfo(row *sqlplugin.VisibilityRow) *p.Visibili
 		Memo:          p.NewDataBlob(row.Memo, common.EncodingType(row.Encoding)),
 	}
 	if row.CloseStatus != nil {
-		status := workflow.WorkflowExecutionCloseStatus(*row.CloseStatus)
+		status := enums.WorkflowExecutionCloseStatus(*row.CloseStatus)
 		info.Status = &status
 		info.CloseTime = *row.CloseTime
 		info.HistoryLength = *row.HistoryLength
