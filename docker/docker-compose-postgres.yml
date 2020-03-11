@@ -30,7 +30,6 @@ services:
       - "DB_PORT=5432"
       - "POSTGRES_USER=temporal"
       - "POSTGRES_PWD=temporal"
-      - "POSTGRES_PWD=temporal"
       - "POSTGRES_SEEDS=postgres"
       - "STATSD_ENDPOINT=statsd:8125"
       - "DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development.yaml"

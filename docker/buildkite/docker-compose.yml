@@ -12,7 +12,7 @@ services:
     image: mysql:5.7
     environment:
       MYSQL_DATABASE: db
-      MYSQL_ROOT_PASSWORD: uber
+      MYSQL_ROOT_PASSWORD: temporal
     volumes:
       - ./mysql-init:/docker-entrypoint-initdb.d
     networks:

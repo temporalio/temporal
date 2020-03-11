@@ -145,7 +145,7 @@ services:
         metrics:
             statsd:
                 hostPort: {{ .Env.STATSD_ENDPOINT }}
-                prefix: "cadence-worker"
+                prefix: "worker"
         {{- else if .Env.PROMETHEUS_ENDPOINT }}
         metrics:
             prometheus:
