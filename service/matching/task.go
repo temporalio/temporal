@@ -51,6 +51,7 @@ type (
 		query            *queryTaskInfo   // non-nil for a query task that's locally sync matched
 		started          *startedTaskInfo // non-nil for a task received from a parent partition which is already started
 		domainName       string
+		source           m.TaskSource
 		forwardedFrom    string     // name of the child partition this task is forwarded from (empty if not forwarded)
 		responseC        chan error // non-nil only where there is a caller waiting for response (sync-match)
 		backlogCountHint int64
@@ -60,6 +61,7 @@ type (
 func newInternalTask(
 	info *persistence.TaskInfo,
 	completionFunc func(*persistence.TaskInfo, error),
+	source m.TaskSource,
 	forwardedFrom string,
 	forSyncMatch bool,
 ) *internalTask {
@@ -68,6 +70,7 @@ func newInternalTask(
 			TaskInfo:       info,
 			completionFunc: completionFunc,
 		},
+		source:        source,
 		forwardedFrom: forwardedFrom,
 	}
 	if forSyncMatch {
@@ -85,7 +88,8 @@ func newInternalQueryTask(
 			taskID:  taskID,
 			request: request,
 		},
-		responseC: make(chan error, 1),
+		forwardedFrom: request.GetForwardedFrom(),
+		responseC:     make(chan error, 1),
 	}
 }
 

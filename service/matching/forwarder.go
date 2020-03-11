@@ -148,6 +148,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 			},
 			ScheduleId:                    &task.event.ScheduleID,
 			ScheduleToStartTimeoutSeconds: &task.event.ScheduleToStartTimeout,
+			Source:                        &task.source,
 			ForwardedFrom:                 &fwdr.taskListID.name,
 		})
 	case persistence.TaskListTypeActivity:
@@ -161,6 +162,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 			},
 			ScheduleId:                    &task.event.ScheduleID,
 			ScheduleToStartTimeoutSeconds: &task.event.ScheduleToStartTimeout,
+			Source:                        &task.source,
 			ForwardedFrom:                 &fwdr.taskListID.name,
 		})
 	default:

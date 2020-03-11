@@ -25,10 +25,10 @@ import (
 	"errors"
 	"time"
 
-	"github.com/uber/cadence/.gen/go/shared"
-
 	"golang.org/x/time/rate"
 
+	"github.com/uber/cadence/.gen/go/matching"
+	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/quotas"
 )
@@ -79,9 +79,27 @@ func newTaskMatcher(config *taskListConfig, fwdr *Forwarder, scopeFunc func() me
 // If the task is successfully matched with a consumer, this
 // method will return true and no error. If the task is matched
 // but consumer returned error, then this method will return
-// true and error message. Both regular tasks and query tasks
-// should use this method to match with a consumer. Likewise, sync matches
-// and non-sync matches both should use this method.
+// true and error message. This method should not be used for query
+// task. This method should ONLY be used for sync match.
+//
+// When a local poller is not available and forwarding to a parent
+// task list partition is possible, this method will attempt forwarding
+// to the parent partition.
+//
+// Cases when this method will block:
+//
+// Ratelimit:
+// When a ratelimit token is not available, this method might block
+// waiting for a token until the provided context timeout. Rate limits are
+// not enforced for forwarded tasks from child partition.
+//
+// Forwarded tasks that originated from db backlog:
+// When this method is called with a task that is forwarded from a
+// remote partition and if (1) this task list is root (2) task
+// was from db backlog - this method will block until context timeout
+// trying to match with a poller. The caller is expected to set the
+// correct context timeout.
+//
 // returns error when:
 //  - ratelimit is exceeded (does not apply to query task)
 //  - context deadline is exceeded
@@ -108,7 +126,7 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 		return false, nil
 	default:
 		// no poller waiting for tasks, try forwarding this task to the
-		// root partition if available
+		// root partition if possible
 		select {
 		case token := <-tm.fwdrAddReqTokenC():
 			if err := tm.fwdr.ForwardTask(ctx, task); err == nil {
@@ -118,6 +136,13 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 			}
 			token.release()
 		default:
+			if !tm.isForwardingAllowed() && // we are the root partition and forwarding is not possible
+				task.source == matching.TaskSourceDbBacklog && // task was from backlog (stored in db)
+				task.isForwarded() { // task came from a child partition
+				// a forwarded backlog task from a child partition, block trying
+				// to match with a poller until ctx timeout
+				return tm.offerOrTimeout(ctx, task)
+			}
 		}
 
 		if rsv != nil {
@@ -125,6 +150,23 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 			// return it since we did not really do any work
 			rsv.Cancel()
 		}
+		return false, nil
+	}
+}
+
+func (tm *TaskMatcher) offerOrTimeout(ctx context.Context, task *internalTask) (bool, error) {
+	select {
+	case tm.taskC <- task: // poller picked up the task
+		if task.responseC != nil {
+			select {
+			case err := <-task.responseC:
+				return true, err
+			case <-ctx.Done():
+				return false, nil
+			}
+		}
+		return false, nil
+	case <-ctx.Done():
 		return false, nil
 	}
 }
@@ -209,6 +251,10 @@ forLoop:
 				continue forLoop
 			}
 			cancel()
+			// at this point, we forwarded the task to a parent partition which
+			// in turn dispatched the task to a poller. Make sure we delete the
+			// task from the database
+			task.finish(nil)
 			return nil
 		case <-ctx.Done():
 			return ctx.Err()
@@ -374,4 +420,8 @@ func (tm *TaskMatcher) ratelimit(ctx context.Context) (*rate.Reservation, error)
 
 	time.Sleep(rsv.Delay())
 	return rsv, nil
+}
+
+func (tm *TaskMatcher) isForwardingAllowed() bool {
+	return tm.fwdr != nil
 }

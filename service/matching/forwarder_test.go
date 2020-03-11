@@ -72,7 +72,7 @@ func (t *ForwarderTestSuite) TearDownTest() {
 }
 
 func (t *ForwarderTestSuite) TestForwardTaskError() {
-	task := newInternalTask(&persistence.TaskInfo{}, nil, "", false)
+	task := newInternalTask(&persistence.TaskInfo{}, nil, gen.TaskSourceHistory, "", false)
 	t.Equal(errNoParent, t.fwdr.ForwardTask(context.Background(), task))
 
 	t.usingTasklistPartition(persistence.TaskListTypeActivity)
@@ -91,7 +91,7 @@ func (t *ForwarderTestSuite) TestForwardDecisionTask() {
 	).Return(nil).Times(1)
 
 	taskInfo := t.newTaskInfo()
-	task := newInternalTask(taskInfo, nil, "", false)
+	task := newInternalTask(taskInfo, nil, gen.TaskSourceHistory, "", false)
 	t.NoError(t.fwdr.ForwardTask(context.Background(), task))
 	t.NotNil(request)
 	t.Equal(t.taskList.Parent(20), request.TaskList.GetName())
@@ -115,7 +115,7 @@ func (t *ForwarderTestSuite) TestForwardActivityTask() {
 	).Return(nil).Times(1)
 
 	taskInfo := t.newTaskInfo()
-	task := newInternalTask(taskInfo, nil, "", false)
+	task := newInternalTask(taskInfo, nil, gen.TaskSourceHistory, "", false)
 	t.NoError(t.fwdr.ForwardTask(context.Background(), task))
 	t.NotNil(request)
 	t.Equal(t.taskList.Parent(20), request.TaskList.GetName())
@@ -135,7 +135,7 @@ func (t *ForwarderTestSuite) TestForwardTaskRateExceeded() {
 	rps := 2
 	t.client.EXPECT().AddActivityTask(gomock.Any(), gomock.Any()).Return(nil).Times(rps)
 	taskInfo := t.newTaskInfo()
-	task := newInternalTask(taskInfo, nil, "", false)
+	task := newInternalTask(taskInfo, nil, gen.TaskSourceHistory, "", false)
 	for i := 0; i < rps; i++ {
 		t.NoError(t.fwdr.ForwardTask(context.Background(), task))
 	}
