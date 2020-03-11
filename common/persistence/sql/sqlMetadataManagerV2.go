@@ -27,7 +27,7 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	workflow "github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/.gen/go/sqlblobs"
+	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/persistence"
@@ -89,30 +89,30 @@ func (m *sqlMetadataManagerV2) CreateDomain(request *persistence.InternalCreateD
 	}
 
 	var badBinaries []byte
-	var badBinariesEncoding *string
+	var badBinariesEncoding string
 	if request.Config.BadBinaries != nil {
 		badBinaries = request.Config.BadBinaries.Data
-		badBinariesEncoding = common.StringPtr(string(request.Config.BadBinaries.GetEncoding()))
+		badBinariesEncoding = string(request.Config.BadBinaries.GetEncoding())
 	}
-	domainInfo := &sqlblobs.DomainInfo{
-		Status:                      common.Int32Ptr(int32(request.Info.Status)),
-		Description:                 &request.Info.Description,
-		Owner:                       &request.Info.OwnerEmail,
+	domainInfo := &persistenceblobs.DomainInfo{
+		Status:                      int32(request.Info.Status),
+		Description:                 request.Info.Description,
+		Owner:                       request.Info.OwnerEmail,
 		Data:                        request.Info.Data,
-		RetentionDays:               common.Int16Ptr(int16(request.Config.Retention)),
-		EmitMetric:                  &request.Config.EmitMetric,
-		ArchivalBucket:              &request.Config.ArchivalBucket,
-		ArchivalStatus:              common.Int16Ptr(int16(request.Config.ArchivalStatus)),
-		HistoryArchivalStatus:       common.Int16Ptr(int16(request.Config.HistoryArchivalStatus)),
-		HistoryArchivalURI:          &request.Config.HistoryArchivalURI,
-		VisibilityArchivalStatus:    common.Int16Ptr(int16(request.Config.VisibilityArchivalStatus)),
-		VisibilityArchivalURI:       &request.Config.VisibilityArchivalURI,
-		ActiveClusterName:           &request.ReplicationConfig.ActiveClusterName,
+		RetentionDays:               request.Config.Retention,
+		EmitMetric:                  request.Config.EmitMetric,
+		ArchivalBucket:              request.Config.ArchivalBucket,
+		ArchivalStatus:              int32(request.Config.ArchivalStatus),
+		HistoryArchivalStatus:       int32(request.Config.HistoryArchivalStatus),
+		HistoryArchivalURI:          request.Config.HistoryArchivalURI,
+		VisibilityArchivalStatus:    int32(request.Config.VisibilityArchivalStatus),
+		VisibilityArchivalURI:       request.Config.VisibilityArchivalURI,
+		ActiveClusterName:           request.ReplicationConfig.ActiveClusterName,
 		Clusters:                    clusters,
-		ConfigVersion:               common.Int64Ptr(request.ConfigVersion),
-		FailoverVersion:             common.Int64Ptr(request.FailoverVersion),
-		NotificationVersion:         common.Int64Ptr(metadata.NotificationVersion),
-		FailoverNotificationVersion: common.Int64Ptr(persistence.InitialFailoverNotificationVersion),
+		ConfigVersion:               request.ConfigVersion,
+		FailoverVersion:             request.FailoverVersion,
+		NotificationVersion:         metadata.NotificationVersion,
+		FailoverNotificationVersion: persistence.InitialFailoverNotificationVersion,
 		BadBinaries:                 badBinaries,
 		BadBinariesEncoding:         badBinariesEncoding,
 	}
@@ -198,7 +198,7 @@ func (m *sqlMetadataManagerV2) domainRowToGetDomainResponse(row *sqlplugin.Domai
 
 	var badBinaries *serialization.DataBlob
 	if domainInfo.BadBinaries != nil {
-		badBinaries = persistence.NewDataBlob(domainInfo.BadBinaries, common.EncodingType(*domainInfo.BadBinariesEncoding))
+		badBinaries = persistence.NewDataBlob(domainInfo.BadBinaries, common.EncodingType(domainInfo.BadBinariesEncoding))
 	}
 
 	return &persistence.InternalGetDomainResponse{
@@ -240,30 +240,30 @@ func (m *sqlMetadataManagerV2) UpdateDomain(request *persistence.InternalUpdateD
 	}
 
 	var badBinaries []byte
-	var badBinariesEncoding *string
+	var badBinariesEncoding string
 	if request.Config.BadBinaries != nil {
 		badBinaries = request.Config.BadBinaries.Data
-		badBinariesEncoding = common.StringPtr(string(request.Config.BadBinaries.GetEncoding()))
+		badBinariesEncoding = string(request.Config.BadBinaries.GetEncoding())
 	}
-	domainInfo := &sqlblobs.DomainInfo{
-		Status:                      common.Int32Ptr(int32(request.Info.Status)),
-		Description:                 &request.Info.Description,
-		Owner:                       &request.Info.OwnerEmail,
+	domainInfo := &persistenceblobs.DomainInfo{
+		Status:                      int32(request.Info.Status),
+		Description:                 request.Info.Description,
+		Owner:                       request.Info.OwnerEmail,
 		Data:                        request.Info.Data,
-		RetentionDays:               common.Int16Ptr(int16(request.Config.Retention)),
-		EmitMetric:                  &request.Config.EmitMetric,
-		ArchivalBucket:              &request.Config.ArchivalBucket,
-		ArchivalStatus:              common.Int16Ptr(int16(request.Config.ArchivalStatus)),
-		HistoryArchivalStatus:       common.Int16Ptr(int16(request.Config.HistoryArchivalStatus)),
-		HistoryArchivalURI:          &request.Config.HistoryArchivalURI,
-		VisibilityArchivalStatus:    common.Int16Ptr(int16(request.Config.VisibilityArchivalStatus)),
-		VisibilityArchivalURI:       &request.Config.VisibilityArchivalURI,
-		ActiveClusterName:           &request.ReplicationConfig.ActiveClusterName,
+		RetentionDays:               request.Config.Retention,
+		EmitMetric:                  request.Config.EmitMetric,
+		ArchivalBucket:              request.Config.ArchivalBucket,
+		ArchivalStatus:              int32(request.Config.ArchivalStatus),
+		HistoryArchivalStatus:       int32(request.Config.HistoryArchivalStatus),
+		HistoryArchivalURI:          request.Config.HistoryArchivalURI,
+		VisibilityArchivalStatus:    int32(request.Config.VisibilityArchivalStatus),
+		VisibilityArchivalURI:       request.Config.VisibilityArchivalURI,
+		ActiveClusterName:           request.ReplicationConfig.ActiveClusterName,
 		Clusters:                    clusters,
-		ConfigVersion:               common.Int64Ptr(request.ConfigVersion),
-		FailoverVersion:             common.Int64Ptr(request.FailoverVersion),
-		NotificationVersion:         common.Int64Ptr(request.NotificationVersion),
-		FailoverNotificationVersion: common.Int64Ptr(request.FailoverNotificationVersion),
+		ConfigVersion:               request.ConfigVersion,
+		FailoverVersion:             request.FailoverVersion,
+		NotificationVersion:         request.NotificationVersion,
+		FailoverNotificationVersion: request.FailoverNotificationVersion,
 		BadBinaries:                 badBinaries,
 		BadBinariesEncoding:         badBinariesEncoding,
 	}

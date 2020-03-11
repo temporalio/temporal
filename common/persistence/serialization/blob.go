@@ -21,19 +21,16 @@
 package serialization
 
 import (
-	"bytes"
 	"fmt"
 
 	"github.com/gogo/protobuf/types"
 
-	"go.uber.org/thriftrw/protocol"
 	"go.uber.org/thriftrw/wire"
 
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
-	"github.com/temporalio/temporal/.gen/go/sqlblobs"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 )
@@ -87,31 +84,6 @@ func protoRWDecode(b []byte, proto string, result ProtoMarshal) error {
 	return decodeErr(common.EncodingTypeProto3, result.Unmarshal(b))
 }
 
-func thriftRWEncode(t thriftRWType) (DataBlob, error) {
-	blob := DataBlob{Encoding: common.EncodingTypeThriftRW}
-	value, err := t.ToWire()
-	if err != nil {
-		return blob, encodeErr(common.EncodingTypeThriftRW, err)
-	}
-	var b bytes.Buffer
-	if err := protocol.Binary.Encode(value, &b); err != nil {
-		return blob, encodeErr(common.EncodingTypeThriftRW, err)
-	}
-	blob.Data = b.Bytes()
-	return blob, nil
-}
-
-func thriftRWDecode(b []byte, proto string, result thriftRWType) error {
-	if err := validateProto(proto, common.EncodingTypeThriftRW); err != nil {
-		return err
-	}
-	value, err := protocol.Binary.Decode(bytes.NewReader(b), wire.TStruct)
-	if err != nil {
-		return decodeErr(common.EncodingTypeThriftRW, err)
-	}
-	return decodeErr(common.EncodingTypeThriftRW, result.FromWire(value))
-}
-
 func ShardInfoToBlob(info *persistenceblobs.ShardInfo) (DataBlob, error) {
 	return protoRWEncode(info)
 }
@@ -147,13 +119,13 @@ func ShardInfoFromBlob(b []byte, proto string, clusterName string) (*persistence
 	return shardInfo, nil
 }
 
-func DomainInfoToBlob(info *sqlblobs.DomainInfo) (DataBlob, error) {
-	return thriftRWEncode(info)
+func DomainInfoToBlob(info *persistenceblobs.DomainInfo) (DataBlob, error) {
+	return protoRWEncode(info)
 }
 
-func DomainInfoFromBlob(b []byte, proto string) (*sqlblobs.DomainInfo, error) {
-	result := &sqlblobs.DomainInfo{}
-	return result, thriftRWDecode(b, proto, result)
+func DomainInfoFromBlob(b []byte, proto string) (*persistenceblobs.DomainInfo, error) {
+	result := &persistenceblobs.DomainInfo{}
+	return result, protoRWDecode(b, proto, result)
 }
 
 func HistoryTreeInfoToBlob(info *persistenceblobs.HistoryTreeInfo) (DataBlob, error) {
