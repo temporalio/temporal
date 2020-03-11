@@ -60,7 +60,7 @@ type (
 	// RespondQueryTaskCompleted() or through an internal service error causing cadence to be unable to dispatch
 	// query task to workflow worker.
 	lockableQueryTaskMap struct {
-		sync.Mutex
+		sync.RWMutex
 		queryTaskMap map[string]chan *queryResult
 	}
 
@@ -829,8 +829,8 @@ func (m *lockableQueryTaskMap) put(key string, value chan *queryResult) {
 }
 
 func (m *lockableQueryTaskMap) get(key string) (chan *queryResult, bool) {
-	m.Lock()
-	defer m.Unlock()
+	m.RLock()
+	defer m.RUnlock()
 	result, ok := m.queryTaskMap[key]
 	return result, ok
 }
