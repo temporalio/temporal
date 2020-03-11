@@ -62,7 +62,7 @@ func (s *versionHistorySuite) TestConversion() {
 		Items:       Items,
 	}, history)
 
-	s.Equal(history, NewVersionHistoryFromThrift(history.ToThrift()))
+	s.Equal(history, NewVersionHistoryFromProto(history.ToProto()))
 }
 
 func (s *versionHistorySuite) TestDuplicateUntilLCAItem_Success() {
@@ -537,7 +537,7 @@ func (s *versionHistoriesSuite) TestConversion() {
 		Histories:                  []*VersionHistory{versionHistory},
 	}, histories)
 
-	s.Equal(histories, NewVersionHistoriesFromThrift(histories.ToThrift()))
+	s.Equal(histories, NewVersionHistoriesFromProto(histories.ToProto()))
 }
 
 func (s *versionHistoriesSuite) TestAddGetVersionHistory() {

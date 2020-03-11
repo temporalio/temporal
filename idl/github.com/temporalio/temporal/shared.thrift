@@ -681,42 +681,6 @@ struct RetryPolicy {
   60: optional i32 expirationIntervalInSeconds
 }
 
-// HistoryBranchRange represents a piece of range for a branch.
-struct HistoryBranchRange{
-  // branchID of original branch forked from
-  10: optional string branchID
-  // beinning node for the range, inclusive
-  20: optional i64 beginNodeID
-  // ending node for the range, exclusive
-  30: optional i64 endNodeID
-}
-
-// For history persistence to serialize/deserialize branch details
-struct HistoryBranch{
-  10: optional string treeID
-  20: optional string branchID
-  30: optional list<HistoryBranchRange> ancestors
-}
-
-// VersionHistoryItem contains signal eventID and the corresponding version
-struct VersionHistoryItem{
-  10: optional i64 (js.type = "Long") eventID
-  20: optional i64 (js.type = "Long") version
-}
-
-// VersionHistory contains the version history of a branch
-struct VersionHistory{
-  10: optional binary branchToken
-  20: optional list<VersionHistoryItem> items
-}
-
-// VersionHistories contains all version histories from all branches
-struct VersionHistories{
-  10: optional i32 currentVersionHistoryIndex
-  20: optional list<VersionHistory> histories
-}
-
-
 // SupportedClientVersions contains the support versions for client library
 struct SupportedClientVersions{
   10: optional string goSdk

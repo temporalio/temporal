@@ -30,7 +30,6 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/codec"
 )
@@ -60,8 +59,8 @@ type (
 		DeserializeBadBinaries(data *serialization.DataBlob) (*commonproto.BadBinaries, error)
 
 		// serialize/deserialize version histories
-		SerializeVersionHistories(histories *workflow.VersionHistories, encodingType common.EncodingType) (*serialization.DataBlob, error)
-		DeserializeVersionHistories(data *serialization.DataBlob) (*workflow.VersionHistories, error)
+		SerializeVersionHistories(histories *commonproto.VersionHistories, encodingType common.EncodingType) (*serialization.DataBlob, error)
+		DeserializeVersionHistories(data *serialization.DataBlob) (*commonproto.VersionHistories, error)
 
 		// serialize/deserialize immutable cluster metadata
 		SerializeImmutableClusterMetadata(icm *persistenceblobs.ImmutableClusterMetadata, encodingType common.EncodingType) (*serialization.DataBlob, error)
@@ -267,17 +266,39 @@ func (t *serializerImpl) DeserializeVisibilityMemo(data *serialization.DataBlob)
 	return memo, err
 }
 
-func (t *serializerImpl) SerializeVersionHistories(histories *workflow.VersionHistories, encodingType common.EncodingType) (*serialization.DataBlob, error) {
+func (t *serializerImpl) SerializeVersionHistories(histories *commonproto.VersionHistories, encodingType common.EncodingType) (*serialization.DataBlob, error) {
 	if histories == nil {
 		return nil, nil
 	}
 	return t.serialize(histories, encodingType)
 }
 
-func (t *serializerImpl) DeserializeVersionHistories(data *serialization.DataBlob) (*workflow.VersionHistories, error) {
-	var histories workflow.VersionHistories
-	err := t.deserialize(data, &histories)
-	return &histories, err
+func (t *serializerImpl) DeserializeVersionHistories(data *serialization.DataBlob) (*commonproto.VersionHistories, error) {
+	if data == nil {
+		return &commonproto.VersionHistories{}, nil
+	}
+	if len(data.Data) == 0 {
+		return &commonproto.VersionHistories{}, nil
+	}
+
+	memo := &commonproto.VersionHistories{}
+	var err error
+	switch data.Encoding {
+	case common.EncodingTypeJSON:
+		err = codec.NewJSONPBEncoder().Decode(data.Data, memo)
+	case common.EncodingTypeProto3, common.EncodingTypeThriftRW:
+		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
+		// Client API currently specifies encodingType on requests which span multiple of these objects
+		err = proto.Unmarshal(data.Data, memo)
+	default:
+		return nil, NewCadenceDeserializationError("DeserializeVersionHistories invalid encoding")
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return memo, err
 }
 
 func (t *serializerImpl) SerializeImmutableClusterMetadata(icm *persistenceblobs.ImmutableClusterMetadata, encodingType common.EncodingType) (*serialization.DataBlob, error) {
@@ -367,8 +388,6 @@ func (t *serializerImpl) serialize(input interface{}, encodingType common.Encodi
 	var err error
 
 	switch encodingType {
-	case common.EncodingTypeThriftRW:
-		data, err = t.thriftrwEncode(input)
 	case common.EncodingTypeJSON, common.EncodingTypeUnknown, common.EncodingTypeEmpty: // For backward-compatibility
 		encodingType = common.EncodingTypeJSON
 		data, err = json.Marshal(input)
@@ -383,15 +402,6 @@ func (t *serializerImpl) serialize(input interface{}, encodingType common.Encodi
 	return NewDataBlob(data, encodingType), nil
 }
 
-func (t *serializerImpl) thriftrwEncode(input interface{}) ([]byte, error) {
-	switch input.(type) {
-	case *workflow.VersionHistories:
-		return t.thriftrwEncoder.Encode(input.(*workflow.VersionHistories))
-	default:
-		return nil, nil
-	}
-}
-
 func (t *serializerImpl) deserialize(data *serialization.DataBlob, target interface{}) error {
 	if data == nil {
 		return nil
@@ -404,8 +414,6 @@ func (t *serializerImpl) deserialize(data *serialization.DataBlob, target interf
 	switch data.GetEncoding() {
 	case common.EncodingTypeProto3:
 		return NewCadenceDeserializationError(fmt.Sprintf("proto requires proto specific deserialization"))
-	case common.EncodingTypeThriftRW:
-		err = t.thriftrwDecode(data.Data, target)
 	case common.EncodingTypeJSON, common.EncodingTypeUnknown, common.EncodingTypeEmpty: // For backward-compatibility
 		err = json.Unmarshal(data.Data, target)
 	default:
@@ -416,16 +424,6 @@ func (t *serializerImpl) deserialize(data *serialization.DataBlob, target interf
 		return NewCadenceDeserializationError(fmt.Sprintf("DeserializeBatchEvents encoding: \"%v\", error: %v", data.Encoding, err.Error()))
 	}
 	return nil
-}
-
-func (t *serializerImpl) thriftrwDecode(data []byte, target interface{}) error {
-	switch target := target.(type) {
-	case *workflow.VersionHistories:
-		return t.thriftrwEncoder.Decode(data, target)
-	default:
-		return nil
-	}
-
 }
 
 // NewUnknownEncodingTypeError returns a new instance of encoding type error

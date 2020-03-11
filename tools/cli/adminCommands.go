@@ -201,7 +201,7 @@ func AdminDeleteWorkflow(c *cli.Context) {
 	if ms.VersionHistories != nil {
 		// if VersionHistories is set, then all branch infos are stored in VersionHistories
 		branchTokens = [][]byte{}
-		for _, versionHistory := range ms.VersionHistories.ToThrift().Histories {
+		for _, versionHistory := range ms.VersionHistories.ToProto().Histories {
 			branchTokens = append(branchTokens, versionHistory.BranchToken)
 		}
 	}

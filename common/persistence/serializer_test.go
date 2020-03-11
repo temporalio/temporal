@@ -31,7 +31,6 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/enums"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
@@ -116,31 +115,31 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 		},
 	}
 
-	histories := &workflow.VersionHistories{
-		Histories: []*workflow.VersionHistory{
+	histories := &commonproto.VersionHistories{
+		Histories: []*commonproto.VersionHistory{
 			{
 				BranchToken: []byte{1},
-				Items: []*workflow.VersionHistoryItem{
+				Items: []*commonproto.VersionHistoryItem{
 					{
-						EventID: common.Int64Ptr(1),
-						Version: common.Int64Ptr(0),
+						EventID: 1,
+						Version: 0,
 					},
 					{
-						EventID: common.Int64Ptr(2),
-						Version: common.Int64Ptr(1),
+						EventID: 2,
+						Version: 1,
 					},
 				},
 			},
 			{
 				BranchToken: []byte{2},
-				Items: []*workflow.VersionHistoryItem{
+				Items: []*commonproto.VersionHistoryItem{
 					{
-						EventID: common.Int64Ptr(2),
-						Version: common.Int64Ptr(0),
+						EventID: 2,
+						Version: 0,
 					},
 					{
-						EventID: common.Int64Ptr(3),
-						Version: common.Int64Ptr(1),
+						EventID: 3,
+						Version: 1,
 					},
 				},
 			},
@@ -391,23 +390,23 @@ func (s *cadenceSerializerSuite) TestSerializer() {
 
 			dNilHistories, err := serializer.DeserializeVersionHistories(nil)
 			s.Nil(err)
-			s.Equal(&workflow.VersionHistories{}, dNilHistories)
+			s.Equal(&commonproto.VersionHistories{}, dNilHistories)
 
 			dNilHistories2, err := serializer.DeserializeVersionHistories(nilHistories)
 			s.Nil(err)
-			s.Equal(&workflow.VersionHistories{}, dNilHistories2)
+			s.Equal(&commonproto.VersionHistories{}, dNilHistories2)
 
 			dHistoriesJSON, err := serializer.DeserializeVersionHistories(historiesJSON)
 			s.Nil(err)
-			s.True(dHistoriesJSON.Equals(histories))
+			s.True(reflect.DeepEqual(dHistoriesJSON, histories))
 
 			dHistoriesThrift, err := serializer.DeserializeVersionHistories(historiesThrift)
 			s.Nil(err)
-			s.True(dHistoriesThrift.Equals(histories))
+			s.True(reflect.DeepEqual(dHistoriesThrift, histories))
 
 			dHistoriesEmpty, err := serializer.DeserializeVersionHistories(historiesEmpty)
 			s.Nil(err)
-			s.True(dHistoriesEmpty.Equals(histories))
+			s.True(reflect.DeepEqual(dHistoriesEmpty, histories))
 		}()
 	}
 
