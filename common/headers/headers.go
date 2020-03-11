@@ -30,7 +30,7 @@ const (
 	// LibraryVersionHeaderName refers to the name of the
 	// tchannel / http header that contains the client
 	// library version
-	LibraryVersionHeaderName = "cadence-client-library-version"
+	LibraryVersionHeaderName = "temporal-sdk-version"
 
 	// FeatureVersionHeaderName refers to the name of the
 	// tchannel / http header that contains the client
@@ -39,15 +39,11 @@ const (
 	// feature set of the cadence client library support.
 	// This can be used for client capibility check, on
 	// Cadence server, for backward compatibility
-	FeatureVersionHeaderName = "cadence-client-feature-version"
+	FeatureVersionHeaderName = "temporal-sdk-feature-version"
 
 	// ClientImplHeaderName refers to the name of the
 	// header that contains the client implementation
-	ClientImplHeaderName = "cadence-client-name"
-	// EnforceDCRedirectionHeaderName refers to a boolean string of whether
-	// to enforce DCRedirection(auto-forwarding)
-	// Will be removed in the future: https://github.com/uber/cadence/issues/2304
-	EnforceDCRedirectionHeaderName = "cadence-enforce-dc-redirection"
+	ClientImplHeaderName = "temporal-sdk-name"
 )
 
 // GetValues returns header values for passed header names.
