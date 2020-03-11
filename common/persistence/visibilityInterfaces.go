@@ -21,6 +21,7 @@
 package persistence
 
 import (
+	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	s "github.com/temporalio/temporal/.gen/go/shared"
@@ -45,7 +46,7 @@ type (
 		ExecutionTimestamp int64
 		WorkflowTimeout    int64 // not persisted, used for cassandra ttl
 		TaskID             int64 // not persisted, used as condition update version for ES
-		Memo               *s.Memo
+		Memo               *commonproto.Memo
 		SearchAttributes   map[string][]byte
 	}
 
@@ -63,7 +64,7 @@ type (
 		HistoryLength      int64
 		RetentionSeconds   int64
 		TaskID             int64 // not persisted, used as condition update version for ES
-		Memo               *s.Memo
+		Memo               *commonproto.Memo
 		SearchAttributes   map[string][]byte
 	}
 
@@ -77,7 +78,7 @@ type (
 		ExecutionTimestamp int64
 		WorkflowTimeout    int64 // not persisted, used for cassandra ttl
 		TaskID             int64 // not persisted, used as condition update version for ES
-		Memo               *s.Memo
+		Memo               *commonproto.Memo
 		SearchAttributes   map[string][]byte
 	}
 

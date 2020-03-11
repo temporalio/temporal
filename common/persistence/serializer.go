@@ -48,8 +48,8 @@ type (
 		DeserializeEvent(data *serialization.DataBlob) (*commonproto.HistoryEvent, error)
 
 		// serialize/deserialize visibility memo fields
-		SerializeVisibilityMemo(memo *workflow.Memo, encodingType common.EncodingType) (*serialization.DataBlob, error)
-		DeserializeVisibilityMemo(data *serialization.DataBlob) (*workflow.Memo, error)
+		SerializeVisibilityMemo(memo *commonproto.Memo, encodingType common.EncodingType) (*serialization.DataBlob, error)
+		DeserializeVisibilityMemo(data *serialization.DataBlob) (*commonproto.Memo, error)
 
 		// serialize/deserialize reset points
 		SerializeResetPoints(event *workflow.ResetPoints, encodingType common.EncodingType) (*serialization.DataBlob, error)
@@ -186,7 +186,7 @@ func (t *serializerImpl) DeserializeBadBinaries(data *serialization.DataBlob) (*
 	return &bb, err
 }
 
-func (t *serializerImpl) SerializeVisibilityMemo(memo *workflow.Memo, encodingType common.EncodingType) (*serialization.DataBlob, error) {
+func (t *serializerImpl) SerializeVisibilityMemo(memo *commonproto.Memo, encodingType common.EncodingType) (*serialization.DataBlob, error) {
 	if memo == nil {
 		// Return nil here to be consistent with Event
 		// This check is not duplicate as check in following serialize
@@ -195,10 +195,32 @@ func (t *serializerImpl) SerializeVisibilityMemo(memo *workflow.Memo, encodingTy
 	return t.serialize(memo, encodingType)
 }
 
-func (t *serializerImpl) DeserializeVisibilityMemo(data *serialization.DataBlob) (*workflow.Memo, error) {
-	var memo workflow.Memo
-	err := t.deserialize(data, &memo)
-	return &memo, err
+func (t *serializerImpl) DeserializeVisibilityMemo(data *serialization.DataBlob) (*commonproto.Memo, error) {
+	if data == nil {
+		return &commonproto.Memo{}, nil
+	}
+	if len(data.Data) == 0 {
+		return &commonproto.Memo{}, nil
+	}
+
+	memo := &commonproto.Memo{}
+	var err error
+	switch data.Encoding {
+	case common.EncodingTypeJSON:
+		err = codec.NewJSONPBEncoder().Decode(data.Data, memo)
+	case common.EncodingTypeProto3, common.EncodingTypeThriftRW:
+		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
+		// Client API currently specifies encodingType on requests which span multiple of these objects
+		err = proto.Unmarshal(data.Data, memo)
+	default:
+		return nil, NewCadenceDeserializationError("DeserializeVisibilityMemo invalid encoding")
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return memo, err
 }
 
 func (t *serializerImpl) SerializeVersionHistories(histories *workflow.VersionHistories, encodingType common.EncodingType) (*serialization.DataBlob, error) {

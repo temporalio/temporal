@@ -23,6 +23,9 @@ package persistence
 import (
 	"encoding/json"
 
+	commonproto "go.temporal.io/temporal-proto/common"
+
+	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/persistence/serialization"
 
 	"github.com/temporalio/temporal/.gen/go/shared"
@@ -275,7 +278,7 @@ func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution
 		},
 		StartTime:        common.Int64Ptr(execution.StartTime.UnixNano()),
 		ExecutionTime:    common.Int64Ptr(execution.ExecutionTime.UnixNano()),
-		Memo:             memo,
+		Memo:             adapter.ToThriftMemo(memo),
 		SearchAttributes: searchAttributes,
 	}
 
@@ -289,7 +292,7 @@ func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution
 	return convertedExecution
 }
 
-func (v *visibilityManagerImpl) serializeMemo(visibilityMemo *shared.Memo, domainID, wID, rID string) *serialization.DataBlob {
+func (v *visibilityManagerImpl) serializeMemo(visibilityMemo *commonproto.Memo, domainID, wID, rID string) *serialization.DataBlob {
 	memo, err := v.serializer.SerializeVisibilityMemo(visibilityMemo, VisibilityEncoding)
 	if err != nil {
 		v.logger.WithTags(

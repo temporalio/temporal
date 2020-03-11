@@ -232,7 +232,7 @@ func (t *transferQueueProcessorBase) recordWorkflowStarted(
 		ExecutionTimestamp: executionTimeUnixNano,
 		WorkflowTimeout:    int64(workflowTimeout),
 		TaskID:             taskID,
-		Memo:               adapter.ToThriftMemo(visibilityMemo),
+		Memo:               visibilityMemo,
 		SearchAttributes:   searchAttributes,
 	}
 
@@ -274,7 +274,7 @@ func (t *transferQueueProcessorBase) upsertWorkflowExecution(
 		ExecutionTimestamp: executionTimeUnixNano,
 		WorkflowTimeout:    int64(workflowTimeout),
 		TaskID:             taskID,
-		Memo:               adapter.ToThriftMemo(visibilityMemo),
+		Memo:               visibilityMemo,
 		SearchAttributes:   searchAttributes,
 	}
 
@@ -338,7 +338,7 @@ func (t *transferQueueProcessorBase) recordWorkflowClosed(
 			HistoryLength:      historyLength,
 			RetentionSeconds:   retentionSeconds,
 			TaskID:             taskID,
-			Memo:               adapter.ToThriftMemo(visibilityMemo),
+			Memo:               visibilityMemo,
 			SearchAttributes:   searchAttributes,
 		}); err != nil {
 			return err
