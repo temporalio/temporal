@@ -310,3 +310,27 @@ message ChildExecutionInfo {
     int32 parentClosePolicy = 13;
     int64 initiatedID = 14;
 }
+
+message DomainInfo {
+    string name = 1;
+    string description = 2;
+    string owner = 3;
+    int32 status = 4;
+    int32 retentionDays = 5;
+    bool emitMetric = 6;
+    string archivalBucket = 7;
+    int32 archivalStatus = 8;
+    int64 configVersion = 9;
+    int64 notificationVersion = 10;
+    int64 failoverNotificationVersion = 11;
+    int64 failoverVersion = 12;
+    string activeClusterName = 13;
+    repeated string clusters = 14;
+    map<string, string> data = 15;
+    bytes badBinaries = 16;
+    string badBinariesEncoding = 17;
+    int32 historyArchivalStatus = 18;
+    string historyArchivalURI = 19;
+    int32 visibilityArchivalStatus = 20;
+    string visibilityArchivalURI = 21;
+}
