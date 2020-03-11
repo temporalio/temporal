@@ -303,11 +303,6 @@ struct WorkflowExecutionConfiguration {
 //  40: optional ChildPolicy childPolicy -- Removed but reserve the IDL order number
 }
 
-struct TransientDecisionInfo {
-  10: optional HistoryEvent scheduledEvent
-  20: optional HistoryEvent startedEvent
-}
-
 struct ScheduleActivityTaskDecisionAttributes {
   10: optional string activityId
   20: optional ActivityType activityType
@@ -810,60 +805,6 @@ struct ChildWorkflowExecutionTerminatedEventAttributes {
   50: optional i64 (js.type = "Long") startedEventId
 }
 
-struct HistoryEvent {
-  10:  optional i64 (js.type = "Long") eventId
-  20:  optional i64 (js.type = "Long") timestamp
-  30:  optional EventType eventType
-  35:  optional i64 (js.type = "Long") version
-  36:  optional i64 (js.type = "Long") taskId
-  40:  optional WorkflowExecutionStartedEventAttributes workflowExecutionStartedEventAttributes
-  50:  optional WorkflowExecutionCompletedEventAttributes workflowExecutionCompletedEventAttributes
-  60:  optional WorkflowExecutionFailedEventAttributes workflowExecutionFailedEventAttributes
-  70:  optional WorkflowExecutionTimedOutEventAttributes workflowExecutionTimedOutEventAttributes
-  80:  optional DecisionTaskScheduledEventAttributes decisionTaskScheduledEventAttributes
-  90:  optional DecisionTaskStartedEventAttributes decisionTaskStartedEventAttributes
-  100: optional DecisionTaskCompletedEventAttributes decisionTaskCompletedEventAttributes
-  110: optional DecisionTaskTimedOutEventAttributes decisionTaskTimedOutEventAttributes
-  120: optional DecisionTaskFailedEventAttributes decisionTaskFailedEventAttributes
-  130: optional ActivityTaskScheduledEventAttributes activityTaskScheduledEventAttributes
-  140: optional ActivityTaskStartedEventAttributes activityTaskStartedEventAttributes
-  150: optional ActivityTaskCompletedEventAttributes activityTaskCompletedEventAttributes
-  160: optional ActivityTaskFailedEventAttributes activityTaskFailedEventAttributes
-  170: optional ActivityTaskTimedOutEventAttributes activityTaskTimedOutEventAttributes
-  180: optional TimerStartedEventAttributes timerStartedEventAttributes
-  190: optional TimerFiredEventAttributes timerFiredEventAttributes
-  200: optional ActivityTaskCancelRequestedEventAttributes activityTaskCancelRequestedEventAttributes
-  210: optional RequestCancelActivityTaskFailedEventAttributes requestCancelActivityTaskFailedEventAttributes
-  220: optional ActivityTaskCanceledEventAttributes activityTaskCanceledEventAttributes
-  230: optional TimerCanceledEventAttributes timerCanceledEventAttributes
-  240: optional CancelTimerFailedEventAttributes cancelTimerFailedEventAttributes
-  250: optional MarkerRecordedEventAttributes markerRecordedEventAttributes
-  260: optional WorkflowExecutionSignaledEventAttributes workflowExecutionSignaledEventAttributes
-  270: optional WorkflowExecutionTerminatedEventAttributes workflowExecutionTerminatedEventAttributes
-  280: optional WorkflowExecutionCancelRequestedEventAttributes workflowExecutionCancelRequestedEventAttributes
-  290: optional WorkflowExecutionCanceledEventAttributes workflowExecutionCanceledEventAttributes
-  300: optional RequestCancelExternalWorkflowExecutionInitiatedEventAttributes requestCancelExternalWorkflowExecutionInitiatedEventAttributes
-  310: optional RequestCancelExternalWorkflowExecutionFailedEventAttributes requestCancelExternalWorkflowExecutionFailedEventAttributes
-  320: optional ExternalWorkflowExecutionCancelRequestedEventAttributes externalWorkflowExecutionCancelRequestedEventAttributes
-  330: optional WorkflowExecutionContinuedAsNewEventAttributes workflowExecutionContinuedAsNewEventAttributes
-  340: optional StartChildWorkflowExecutionInitiatedEventAttributes startChildWorkflowExecutionInitiatedEventAttributes
-  350: optional StartChildWorkflowExecutionFailedEventAttributes startChildWorkflowExecutionFailedEventAttributes
-  360: optional ChildWorkflowExecutionStartedEventAttributes childWorkflowExecutionStartedEventAttributes
-  370: optional ChildWorkflowExecutionCompletedEventAttributes childWorkflowExecutionCompletedEventAttributes
-  380: optional ChildWorkflowExecutionFailedEventAttributes childWorkflowExecutionFailedEventAttributes
-  390: optional ChildWorkflowExecutionCanceledEventAttributes childWorkflowExecutionCanceledEventAttributes
-  400: optional ChildWorkflowExecutionTimedOutEventAttributes childWorkflowExecutionTimedOutEventAttributes
-  410: optional ChildWorkflowExecutionTerminatedEventAttributes childWorkflowExecutionTerminatedEventAttributes
-  420: optional SignalExternalWorkflowExecutionInitiatedEventAttributes signalExternalWorkflowExecutionInitiatedEventAttributes
-  430: optional SignalExternalWorkflowExecutionFailedEventAttributes signalExternalWorkflowExecutionFailedEventAttributes
-  440: optional ExternalWorkflowExecutionSignaledEventAttributes externalWorkflowExecutionSignaledEventAttributes
-  450: optional UpsertWorkflowSearchAttributesEventAttributes upsertWorkflowSearchAttributesEventAttributes
-}
-
-struct History {
-  10: optional list<HistoryEvent> events
-}
-
 struct WorkflowExecutionFilter {
   10: optional string workflowId
   20: optional string runId
@@ -1017,23 +958,6 @@ struct PollForDecisionTaskRequest {
   40: optional string binaryChecksum
 }
 
-struct PollForDecisionTaskResponse {
-  10: optional binary taskToken
-  20: optional WorkflowExecution workflowExecution
-  30: optional WorkflowType workflowType
-  40: optional i64 (js.type = "Long") previousStartedEventId
-  50: optional i64 (js.type = "Long") startedEventId
-  51: optional i64 (js.type = 'Long') attempt
-  54: optional i64 (js.type = "Long") backlogCountHint
-  60: optional History history
-  70: optional binary nextPageToken
-  80: optional WorkflowQuery query
-  90: optional TaskList WorkflowExecutionTaskList
-  100:  optional i64 (js.type = "Long") scheduledTimestamp
-  110:  optional i64 (js.type = "Long") startedTimestamp
-  120:  optional map<string, WorkflowQuery> queries
-}
-
 struct StickyExecutionAttributes {
   10: optional TaskList workerTaskList
   20: optional i32 scheduleToStartTimeoutSeconds
@@ -1049,10 +973,6 @@ struct RespondDecisionTaskCompletedRequest {
   70: optional bool forceCreateNewDecisionTask
   80: optional string binaryChecksum
   90: optional map<string, WorkflowQueryResult> queryResults
-}
-
-struct RespondDecisionTaskCompletedResponse {
-  10: optional PollForDecisionTaskResponse decisionTask
 }
 
 struct RespondDecisionTaskFailedRequest {
@@ -1169,12 +1089,6 @@ struct GetWorkflowExecutionHistoryRequest {
   40: optional binary nextPageToken
   50: optional bool waitForNewEvent
   60: optional HistoryEventFilterType HistoryEventFilterType
-}
-
-struct GetWorkflowExecutionHistoryResponse {
-  10: optional History history
-  20: optional binary nextPageToken
-  30: optional bool archived
 }
 
 struct SignalWorkflowExecutionRequest {

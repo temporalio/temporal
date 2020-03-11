@@ -34,7 +34,6 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/collection"
@@ -198,7 +197,7 @@ func (s *nDCStateRebuilderSuite) TestPagination() {
 		NextPageToken: nil,
 		ShardID:       &shardId,
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
-		History:       adapter.ToThriftHistories(history1),
+		History:       history1,
 		NextPageToken: pageToken,
 		Size:          12345,
 	}, nil).Once()
@@ -210,7 +209,7 @@ func (s *nDCStateRebuilderSuite) TestPagination() {
 		NextPageToken: pageToken,
 		ShardID:       &shardId,
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
-		History:       adapter.ToThriftHistories(history2),
+		History:       history2,
 		NextPageToken: nil,
 		Size:          67890,
 	}, nil).Once()
@@ -281,7 +280,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		NextPageToken: nil,
 		ShardID:       &shardId,
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
-		History:       adapter.ToThriftHistories(history1),
+		History:       history1,
 		NextPageToken: pageToken,
 		Size:          historySize1,
 	}, nil).Once()
@@ -293,7 +292,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		NextPageToken: pageToken,
 		ShardID:       &shardId,
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
-		History:       adapter.ToThriftHistories(history2),
+		History:       history2,
 		NextPageToken: nil,
 		Size:          historySize2,
 	}, nil).Once()

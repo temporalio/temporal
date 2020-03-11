@@ -32,7 +32,6 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/backoff"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/log"
@@ -399,7 +398,7 @@ func PaginateHistory(
 
 		// Keep track of total history size
 		historySize += response.Size
-		historyBatches = append(historyBatches, adapter.ToProtoHistories(response.History)...)
+		historyBatches = append(historyBatches, response.History...)
 		tokenOut = response.NextPageToken
 
 	} else {
@@ -410,7 +409,7 @@ func PaginateHistory(
 
 		// Keep track of total history size
 		historySize += response.Size
-		historyEvents = append(historyEvents, adapter.ToProtoHistoryEvents(response.HistoryEvents)...)
+		historyEvents = append(historyEvents, response.HistoryEvents...)
 		tokenOut = response.NextPageToken
 	}
 

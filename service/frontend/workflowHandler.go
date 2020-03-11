@@ -3081,7 +3081,7 @@ func (wh *WorkflowHandler) getRawHistory(
 				tag.Error(err))
 		}
 
-		blob, err := wh.GetPayloadSerializer().SerializeEvent(adapter.ToThriftHistoryEvent(transientDecision.ScheduledEvent), common.EncodingTypeThriftRW)
+		blob, err := wh.GetPayloadSerializer().SerializeEvent(transientDecision.ScheduledEvent, common.EncodingTypeProto3)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -3090,7 +3090,7 @@ func (wh *WorkflowHandler) getRawHistory(
 			Data:         blob.Data,
 		})
 
-		blob, err = wh.GetPayloadSerializer().SerializeEvent(adapter.ToThriftHistoryEvent(transientDecision.StartedEvent), common.EncodingTypeThriftRW)
+		blob, err = wh.GetPayloadSerializer().SerializeEvent(transientDecision.StartedEvent, common.EncodingTypeProto3)
 		if err != nil {
 			return nil, nil, err
 		}

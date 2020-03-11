@@ -34,7 +34,6 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/cluster"
@@ -1080,7 +1079,7 @@ func (r *historyReplicator) deserializeBlob(
 	if len(historyEvents) == 0 {
 		return nil, ErrEmptyHistoryRawEventBatch
 	}
-	return adapter.ToProtoHistoryEvents(historyEvents), nil
+	return historyEvents, nil
 }
 
 func (r *historyReplicator) flushEventsBuffer(

@@ -35,7 +35,6 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/persistence"
@@ -521,7 +520,7 @@ func (w *workflowResetorImpl) replayReceivedSignals(
 			}
 			for _, batch := range readResp.History {
 				for _, event := range batch.Events {
-					e := adapter.ToProtoHistoryEvent(event)
+					e := event
 					if e.GetEventType() == enums.EventTypeWorkflowExecutionSignaled {
 						sigReq := &workflowservice.SignalWorkflowExecutionRequest{
 							SignalName: e.GetWorkflowExecutionSignaledEventAttributes().SignalName,
@@ -646,7 +645,7 @@ func (w *workflowResetorImpl) replayHistoryEvents(
 		}
 
 		for _, batch := range readResp.History {
-			history := adapter.ToProtoHistoryEvents(batch.Events)
+			history := batch.Events
 			firstEvent := history[0]
 			lastEvent := history[len(history)-1]
 
@@ -918,7 +917,7 @@ func (w *workflowResetorImpl) replicateResetEvent(
 			return
 		}
 		for _, batch := range readResp.History {
-			events := adapter.ToProtoHistoryEvents(batch.Events)
+			events := batch.Events
 			firstEvent := events[0]
 			lastEvent = events[len(events)-1]
 			if firstEvent.GetEventId() == common.FirstEventID {

@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
+	commonproto "go.temporal.io/temporal-proto/common"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
@@ -865,7 +866,7 @@ func (s *TestBase) UpdateWorkflowExecutionForSignal(
 // UpdateWorkflowExecutionForBufferEvents is a utility method to update workflow execution
 func (s *TestBase) UpdateWorkflowExecutionForBufferEvents(
 	updatedInfo *p.WorkflowExecutionInfo, updatedStats *p.ExecutionStats, rState *p.ReplicationState, condition int64,
-	bufferEvents []*workflow.HistoryEvent, clearBufferedEvents bool) error {
+	bufferEvents []*commonproto.HistoryEvent, clearBufferedEvents bool) error {
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:       updatedInfo,
@@ -1607,8 +1608,4 @@ func pickRandomEncoding() common.EncodingType {
 		encoding = common.EncodingType("")
 	}
 	return encoding
-}
-
-func int64Ptr(i int64) *int64 {
-	return &i
 }

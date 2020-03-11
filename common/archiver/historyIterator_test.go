@@ -31,7 +31,6 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/persistence"
 )
@@ -102,7 +101,7 @@ func (s *HistoryIteratorSuite) TestReadHistory_Failed_EventsV2() {
 func (s *HistoryIteratorSuite) TestReadHistory_Success_EventsV2() {
 	mockHistoryV2Manager := &mocks.HistoryV2Manager{}
 	resp := persistence.ReadHistoryBranchByBatchResponse{
-		History:       adapter.ToThriftHistories([]*commonproto.History{}),
+		History:       []*commonproto.History{},
 		NextPageToken: []byte{},
 	}
 	mockHistoryV2Manager.On("ReadHistoryBranchByBatch", mock.Anything).Return(&resp, nil)
@@ -632,7 +631,7 @@ func (s *HistoryIteratorSuite) constructMockHistoryV2Manager(batchInfo []int, re
 		}
 
 		resp := &persistence.ReadHistoryBranchByBatchResponse{
-			History: adapter.ToThriftHistories(s.constructHistoryBatches(batchInfo, p, firstEventIDs[p.firstbatchIdx])),
+			History: s.constructHistoryBatches(batchInfo, p, firstEventIDs[p.firstbatchIdx]),
 		}
 		mockHistoryV2Manager.On("ReadHistoryBranchByBatch", req).Return(resp, nil)
 	}

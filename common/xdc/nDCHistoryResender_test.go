@@ -38,7 +38,6 @@ import (
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/historyservicemock"
 	"github.com/temporalio/temporal/common"
-	"github.com/temporalio/temporal/common/adapter"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
@@ -363,10 +362,10 @@ func (s *nDCHistoryResenderSuite) TestGetHistory() {
 }
 
 func (s *nDCHistoryResenderSuite) serializeEvents(events []*commonproto.HistoryEvent) *commonproto.DataBlob {
-	blob, err := s.serializer.SerializeBatchEvents(adapter.ToThriftHistoryEvents(events), common.EncodingTypeThriftRW)
+	blob, err := s.serializer.SerializeBatchEvents(events, common.EncodingTypeProto3)
 	s.Nil(err)
 	return &commonproto.DataBlob{
-		EncodingType: enums.EncodingTypeThriftRW,
+		EncodingType: enums.EncodingTypeProto3,
 		Data:         blob.Data,
 	}
 }
