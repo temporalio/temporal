@@ -28,17 +28,17 @@ import (
 	"github.com/xwb1989/sqlparser"
 )
 
-// SetCadence ... specify whether do special handling for cadence visibility
+// SetTemporal ... specify whether do special handling for temporal visibility
 // should not be called if there is potential race condition
-// should not be called by non-cadence user
-func (e *ESql) SetCadence(cadenceArg bool) {
-	e.cadence = cadenceArg
+// should not be called by non-temporal user
+func (e *ESql) SetTemporal(temporalArg bool) {
+	e.temporal = temporalArg
 }
 
-// ConvertPrettyCadence ...
-// convert sql to es dsl, for cadence usage
-func (e *ESql) ConvertPrettyCadence(sql string, domainID string, pagination ...interface{}) (dsl string, sortFields []string, err error) {
-	dsl, sortFields, err = e.ConvertCadence(sql, domainID, pagination...)
+// ConvertPrettyTemporal ...
+// convert sql to es dsl, for temporal usage
+func (e *ESql) ConvertPrettyTemporal(sql string, domainID string, pagination ...interface{}) (dsl string, sortFields []string, err error) {
+	dsl, sortFields, err = e.ConvertTemporal(sql, domainID, pagination...)
 	if err != nil {
 		return "", nil, err
 	}
@@ -51,11 +51,11 @@ func (e *ESql) ConvertPrettyCadence(sql string, domainID string, pagination ...i
 	return prettifiedDSLBytes.String(), sortFields, err
 }
 
-// ConvertCadence ...
-// convert sql to es dsl, for cadence usage
-func (e *ESql) ConvertCadence(sql string, domainID string, pagination ...interface{}) (dsl string, sortFields []string, err error) {
-	if !e.cadence {
-		err = fmt.Errorf(`esql: cadence option not turned on`)
+// ConvertTemporal ...
+// convert sql to es dsl, for temporal usage
+func (e *ESql) ConvertTemporal(sql string, domainID string, pagination ...interface{}) (dsl string, sortFields []string, err error) {
+	if !e.temporal {
+		err = fmt.Errorf(`esql: temporal option not turned on`)
 		return "", nil, err
 	}
 	stmt, err := sqlparser.Parse(sql)

@@ -86,7 +86,7 @@ func (sv *SearchAttributesValidator) ValidateSearchAttributes(input *commonproto
 		if definition.IsSystemIndexedKey(key) {
 			sv.logger.WithTags(tag.ESKey(key), tag.WorkflowDomainName(domain)).
 				Error("illegal update of system reserved attribute")
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s is read-only Cadence reservered attribute", key))
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s is read-only Temporal reservered attribute", key))
 		}
 		// verify: size of single value <= limit
 		if len(val) > sv.searchAttributesSizeOfValueLimit(domain) {

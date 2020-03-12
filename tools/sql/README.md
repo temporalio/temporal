@@ -1,6 +1,6 @@
 ## Using the SQL schema tool
  
-This package contains the tooling for cadence sql operations. The tooling itself is agnostic of the storage engine behind
+This package contains the tooling for temporal sql operations. The tooling itself is agnostic of the storage engine behind
 the sql interface. So, this same tool can be used against, say, OracleDB and MySQLDB
 
 ## For localhost development

@@ -71,7 +71,7 @@ var opBinaryExpr = map[string]string{
 	"<<": "<<",
 }
 
-// default sizes and identifiers used in cadence visibility
+// default sizes and identifiers used in temporal visibility
 const (
 	DefaultPageSize      = 1000
 	DefaultBucketNumber  = 1000

@@ -27,30 +27,30 @@ import (
 	"github.com/xwb1989/sqlparser"
 )
 
-func (e *ESql) addCadenceSort(orderBySlice []string, sortFields []string) ([]string, []string, error) {
+func (e *ESql) addTemporalSort(orderBySlice []string, sortFields []string) ([]string, []string, error) {
 	switch len(orderBySlice) {
 	case 0: // if unsorted, use default sorting
-		cadenceOrderStartTime := fmt.Sprintf(`{"%v": "%v"}`, StartTime, StartTimeOrder)
-		orderBySlice = append(orderBySlice, cadenceOrderStartTime)
+		temporalOrderStartTime := fmt.Sprintf(`{"%v": "%v"}`, StartTime, StartTimeOrder)
+		orderBySlice = append(orderBySlice, temporalOrderStartTime)
 		sortFields = append(sortFields, StartTime)
 	case 1: // user should not use tieBreaker to sort
 		if sortFields[0] == TieBreaker {
-			err := fmt.Errorf("esql: Cadence does not allow user sort by RunID")
+			err := fmt.Errorf("esql: Temporal does not allow user sort by RunID")
 			return nil, nil, err
 		}
 	default:
-		err := fmt.Errorf("esql: Cadence only allow 1 custom sort field")
+		err := fmt.Errorf("esql: Temporal only allow 1 custom sort field")
 		return nil, nil, err
 	}
 
 	// add tie breaker
-	cadenceOrderTieBreaker := fmt.Sprintf(`{"%v": "%v"}`, TieBreaker, TieBreakerOrder)
-	orderBySlice = append(orderBySlice, cadenceOrderTieBreaker)
+	temporalOrderTieBreaker := fmt.Sprintf(`{"%v": "%v"}`, TieBreaker, TieBreakerOrder)
+	orderBySlice = append(orderBySlice, temporalOrderTieBreaker)
 	sortFields = append(sortFields, TieBreaker)
 	return orderBySlice, sortFields, nil
 }
 
-func (e *ESql) addCadenceDomainTimeQuery(sel sqlparser.Select, domainID string, dslMap map[string]interface{}) {
+func (e *ESql) addTemporalDomainTimeQuery(sel sqlparser.Select, domainID string, dslMap map[string]interface{}) {
 	var domainIDQuery string
 	if domainID != "" {
 		domainIDQuery = fmt.Sprintf(`{"term": {"%v": "%v"}}`, DomainID, domainID)

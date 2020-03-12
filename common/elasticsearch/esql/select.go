@@ -45,9 +45,9 @@ func (e *ESql) convertSelect(sel sqlparser.Select, domainID string, pagination .
 		}
 		dslMap["query"] = dslQuery
 	}
-	// cadence special handling: add domain ID query and time query bounds
-	if e.cadence {
-		e.addCadenceDomainTimeQuery(sel, domainID, dslMap)
+	// temporal special handling: add domain ID query and time query bounds
+	if e.temporal {
+		e.addTemporalDomainTimeQuery(sel, domainID, dslMap)
 	}
 
 	// handle FROM keyword, currently only support 1 target table
@@ -126,9 +126,9 @@ func (e *ESql) convertSelect(sel sqlparser.Select, domainID string, pagination .
 			orderBySlice = append(orderBySlice, orderByStr)
 			sortField = append(sortField, colNameStr)
 		}
-		// cadence special handling: add runID as sorting tie breaker
-		if e.cadence {
-			orderBySlice, sortField, err = e.addCadenceSort(orderBySlice, sortField)
+		// temporal special handling: add runID as sorting tie breaker
+		if e.temporal {
+			orderBySlice, sortField, err = e.addTemporalSort(orderBySlice, sortField)
 			if err != nil {
 				return "", nil, err
 			}

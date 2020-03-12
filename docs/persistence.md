@@ -109,8 +109,8 @@ persistence:
         databaseName: "temporal"        -- name of the database to connect to
         connectAddr: "127.0.0.1:3306"  -- connection address, could be ip address or domain socket
         connectProtocol: "tcp"         -- connection protocol, tcp or anything that SQL Data Source Name accepts
-        user: "uber" 
-        password: "uber"
+        user: "temporal" 
+        password: "temporal"
         maxConns: 20                   -- max number of connections to sql server from one host (optional)
         maxIdleConns: 20               -- max number of idle conns to sql server from one host (optional)
         maxConnLifetime: "1h"          -- max connection lifetime before it is discarded (optional)

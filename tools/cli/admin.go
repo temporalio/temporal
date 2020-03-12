@@ -211,7 +211,7 @@ func newAdminShardManagementCommands() []cli.Command {
 			Flags: []cli.Flag{
 				cli.IntFlag{
 					Name:  FlagShardID,
-					Usage: "ShardID for the cadence cluster to manage",
+					Usage: "ShardID for the temporal cluster to manage",
 				},
 			},
 			Action: func(c *cli.Context) {
@@ -225,7 +225,7 @@ func newAdminShardManagementCommands() []cli.Command {
 			Flags: []cli.Flag{
 				cli.IntFlag{
 					Name:  FlagShardID,
-					Usage: "ShardID for the cadence cluster to manage",
+					Usage: "ShardID for the temporal cluster to manage",
 				},
 				cli.Int64Flag{
 					Name:  FlagRemoveTaskID,
@@ -282,7 +282,7 @@ func newAdminHistoryHostCommands() []cli.Command {
 				},
 				cli.IntFlag{
 					Name:  FlagNumberOfShards,
-					Usage: "NumberOfShards for the cadence cluster(see config for numHistoryShards)",
+					Usage: "NumberOfShards for the temporal cluster(see config for numHistoryShards)",
 				},
 			},
 			Action: func(c *cli.Context) {
@@ -691,7 +691,7 @@ func newAdminElasticSearchCommands() []cli.Command {
 				},
 				cli.StringFlag{
 					Name: FlagInputFileWithAlias,
-					Usage: "Input file name. Redirect cadence wf list result (with tale format) to a file and use as delete input. " +
+					Usage: "Input file name. Redirect temporal wf list result (with tale format) to a file and use as delete input. " +
 						"First line should be table header like WORKFLOW TYPE | WORKFLOW ID | RUN ID | ...",
 				},
 				cli.IntFlag{

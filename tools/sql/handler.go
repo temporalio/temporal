@@ -34,7 +34,7 @@ import (
 	"github.com/temporalio/temporal/tools/common/schema"
 )
 
-// VerifyCompatibleVersion ensures that the installed version of cadence and visibility
+// VerifyCompatibleVersion ensures that the installed version of temporal and visibility
 // is greater than or equal to the expected version.
 func VerifyCompatibleVersion(
 	cfg config.Persistence,

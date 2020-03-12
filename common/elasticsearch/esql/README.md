@@ -91,7 +91,7 @@ page_token_colB := "bbc"
 dsl_page2_search_after, sortFields, err := e.ConvertPretty(sql_page2_search_after, page_colA, page_colB)
 ~~~~
 
-For Cadence usage, refer to [this link](cadenceDevReadme.md).
+For Temporal usage, refer to [this link](temporalDevReadme.md).
 
 
 ## ES V2.x vs ES V6.5

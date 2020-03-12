@@ -50,7 +50,7 @@ func BuildCLIOptions() *cli.App {
 
 	app := cli.NewApp()
 	app.Name = "temporal-sql-tool"
-	app.Usage = "Command line tool for cadence sql operations"
+	app.Usage = "Command line tool for temporal sql operations"
 	app.Version = "0.0.1"
 
 	app.Flags = []cli.Flag{
