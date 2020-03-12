@@ -225,8 +225,8 @@ type (
 	CustomDatastoreConfig struct {
 		// Name of the custom datastore
 		Name string `yaml:"name"`
-		// ConnectAttributes is a set of key-value attributes that can be used by AbstractDatastoreFactory implementation
-		ConnectAttributes map[string]string `yaml:"connectAttributes"`
+		// Options is a set of key-value attributes that can be used by AbstractDatastoreFactory implementation
+		Options map[string]string `yaml:"options"`
 	}
 
 	// Replicator describes the configuration of replicator

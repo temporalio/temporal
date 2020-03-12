@@ -69,22 +69,23 @@ type (
 	// TestBase wraps the base setup needed to create workflows over persistence layer.
 	TestBase struct {
 		suite.Suite
-		ShardMgr               p.ShardManager
-		ExecutionMgrFactory    client.Factory
-		ExecutionManager       p.ExecutionManager
-		TaskMgr                p.TaskManager
-		HistoryV2Mgr           p.HistoryManager
-		MetadataManager        p.MetadataManager
-		VisibilityMgr          p.VisibilityManager
-		DomainReplicationQueue p.DomainReplicationQueue
-		ShardInfo              *p.ShardInfo
-		TaskIDGenerator        TransferTaskIDGenerator
-		ClusterMetadata        cluster.Metadata
-		ReadLevel              int64
-		ReplicationReadLevel   int64
-		DefaultTestCluster     PersistenceTestCluster
-		VisibilityTestCluster  PersistenceTestCluster
-		logger                 log.Logger
+		ShardMgr                 p.ShardManager
+		AbstractDataStoreFactory client.AbstractDataStoreFactory
+		ExecutionMgrFactory      client.Factory
+		ExecutionManager         p.ExecutionManager
+		TaskMgr                  p.TaskManager
+		HistoryV2Mgr             p.HistoryManager
+		MetadataManager          p.MetadataManager
+		VisibilityMgr            p.VisibilityManager
+		DomainReplicationQueue   p.DomainReplicationQueue
+		ShardInfo                *p.ShardInfo
+		TaskIDGenerator          TransferTaskIDGenerator
+		ClusterMetadata          cluster.Metadata
+		ReadLevel                int64
+		ReplicationReadLevel     int64
+		DefaultTestCluster       PersistenceTestCluster
+		VisibilityTestCluster    PersistenceTestCluster
+		Logger                   log.Logger
 	}
 
 	// PersistenceTestCluster exposes management operations on a database
@@ -153,7 +154,7 @@ func newTestBase(options *TestBaseOptions, testCluster PersistenceTestCluster) T
 	if err != nil {
 		panic(err)
 	}
-	base.logger = logger
+	base.Logger = logger
 	return base
 }
 
@@ -182,8 +183,8 @@ func (s *TestBase) Setup() {
 
 	cfg := s.DefaultTestCluster.Config()
 	scope := tally.NewTestScope(common.HistoryServiceName, make(map[string]string))
-	metricsClient := metrics.NewClient(scope, service.GetMetricsServiceIdx(common.HistoryServiceName, s.logger))
-	factory := client.NewFactory(&cfg, nil, nil, clusterName, metricsClient, s.logger)
+	metricsClient := metrics.NewClient(scope, service.GetMetricsServiceIdx(common.HistoryServiceName, s.Logger))
+	factory := client.NewFactory(&cfg, nil, s.AbstractDataStoreFactory, clusterName, metricsClient, s.Logger)
 
 	s.TaskMgr, err = factory.NewTaskManager()
 	s.fatalOnError("NewTaskManager", err)
@@ -204,7 +205,7 @@ func (s *TestBase) Setup() {
 	visibilityFactory := factory
 	if s.VisibilityTestCluster != s.DefaultTestCluster {
 		vCfg := s.VisibilityTestCluster.Config()
-		visibilityFactory = client.NewFactory(&vCfg, nil, nil, clusterName, nil, s.logger)
+		visibilityFactory = client.NewFactory(&vCfg, nil, nil, clusterName, nil, s.Logger)
 	}
 	// SQL currently doesn't have support for visibility manager
 	s.VisibilityMgr, err = visibilityFactory.NewVisibilityManager()
@@ -235,7 +236,7 @@ func (s *TestBase) Setup() {
 
 func (s *TestBase) fatalOnError(msg string, err error) {
 	if err != nil {
-		s.logger.Fatal(msg, tag.Error(err))
+		s.Logger.Fatal(msg, tag.Error(err))
 	}
 }
 
@@ -1373,39 +1374,39 @@ func (s *TestBase) ClearTasks() {
 
 // ClearTransferQueue completes all tasks in transfer queue
 func (s *TestBase) ClearTransferQueue() {
-	s.logger.Info("Clearing transfer tasks", tag.ShardRangeID(s.ShardInfo.RangeID), tag.ReadLevel(s.GetTransferReadLevel()))
+	s.Logger.Info("Clearing transfer tasks", tag.ShardRangeID(s.ShardInfo.RangeID), tag.ReadLevel(s.GetTransferReadLevel()))
 	tasks, err := s.GetTransferTasks(100, true)
 	if err != nil {
-		s.logger.Fatal("Error during cleanup", tag.Error(err))
+		s.Logger.Fatal("Error during cleanup", tag.Error(err))
 	}
 
 	counter := 0
 	for _, t := range tasks {
-		s.logger.Info("Deleting transfer task with ID", tag.TaskID(t.TaskID))
+		s.Logger.Info("Deleting transfer task with ID", tag.TaskID(t.TaskID))
 		s.NoError(s.CompleteTransferTask(t.TaskID))
 		counter++
 	}
 
-	s.logger.Info("Deleted transfer tasks.", tag.Counter(counter))
+	s.Logger.Info("Deleted transfer tasks.", tag.Counter(counter))
 	atomic.StoreInt64(&s.ReadLevel, 0)
 }
 
 // ClearReplicationQueue completes all tasks in replication queue
 func (s *TestBase) ClearReplicationQueue() {
-	s.logger.Info("Clearing replication tasks", tag.ShardRangeID(s.ShardInfo.RangeID), tag.ReadLevel(s.GetReplicationReadLevel()))
+	s.Logger.Info("Clearing replication tasks", tag.ShardRangeID(s.ShardInfo.RangeID), tag.ReadLevel(s.GetReplicationReadLevel()))
 	tasks, err := s.GetReplicationTasks(100, true)
 	if err != nil {
-		s.logger.Fatal("Error during cleanup", tag.Error(err))
+		s.Logger.Fatal("Error during cleanup", tag.Error(err))
 	}
 
 	counter := 0
 	for _, t := range tasks {
-		s.logger.Info("Deleting replication task with ID", tag.TaskID(t.TaskID))
+		s.Logger.Info("Deleting replication task with ID", tag.TaskID(t.TaskID))
 		s.NoError(s.CompleteReplicationTask(t.TaskID))
 		counter++
 	}
 
-	s.logger.Info("Deleted replication tasks.", tag.Counter(counter))
+	s.Logger.Info("Deleted replication tasks.", tag.Counter(counter))
 	atomic.StoreInt64(&s.ReplicationReadLevel, 0)
 }
 
@@ -1427,7 +1428,7 @@ func (s *TestBase) validateTimeRange(t time.Time, expectedDuration time.Duration
 	currentTime := time.Now()
 	diff := time.Duration(currentTime.UnixNano() - t.UnixNano())
 	if diff > expectedDuration {
-		s.logger.Info("Check Current time, Application time, Differenrce", tag.Timestamp(t), tag.CursorTimestamp(currentTime), tag.Number(int64(diff)))
+		s.Logger.Info("Check Current time, Application time, Differenrce", tag.Timestamp(t), tag.CursorTimestamp(currentTime), tag.Number(int64(diff)))
 		return false
 	}
 	return true
