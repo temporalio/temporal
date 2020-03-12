@@ -276,7 +276,7 @@ func (t *timerQueueActiveTaskExecutor) executeDecisionTimeoutTask(
 		t.logger.Debug("Potentially duplicate task.", tag.TaskID(task.TaskID), tag.WorkflowScheduleID(scheduleID), tag.TaskType(persistence.TaskTypeDecisionTimeout))
 		return nil
 	}
-	ok, err = verifyTaskVersion(t.shard, t.logger, primitives.UUIDString(task.DomainID), decision.Version, task.Version, task)
+	ok, err = verifyTaskVersion(t.shard, t.logger, task.DomainID, decision.Version, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
@@ -394,7 +394,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		}
 		return nil
 	}
-	ok, err = verifyTaskVersion(t.shard, t.logger, primitives.UUIDString(task.DomainID), activityInfo.Version, task.Version, task)
+	ok, err = verifyTaskVersion(t.shard, t.logger, task.DomainID, activityInfo.Version, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
@@ -467,7 +467,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	if err != nil {
 		return err
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, primitives.UUIDString(task.DomainID), startVersion, task.Version, task)
+	ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, startVersion, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}

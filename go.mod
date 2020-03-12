@@ -77,6 +77,7 @@ require (
 	go.uber.org/thriftrw v1.20.2
 	go.uber.org/zap v1.13.0
 	golang.org/x/crypto v0.0.0-20190701094942-4def268fd1a4 // indirect
+	golang.org/x/net v0.0.0-20200202094626-16171245cfb2
 	golang.org/x/oauth2 v0.0.0-20190226205417-e64efc72b421
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4
 	golang.org/x/tools v0.0.0-20191114200427-caa0b0f7d508

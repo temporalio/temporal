@@ -276,7 +276,7 @@ func (t *timerQueueStandbyTaskExecutor) executeDecisionTimeoutTask(
 			return nil, nil
 		}
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, primitives.UUIDString(timerTask.DomainID), decision.Version, timerTask.Version, timerTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, timerTask.DomainID, decision.Version, timerTask.Version, timerTask)
 		if err != nil || !ok {
 			return nil, err
 		}
@@ -352,7 +352,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTimeoutTask(
 		if err != nil {
 			return nil, err
 		}
-		ok, err := verifyTaskVersion(t.shard, t.logger, primitives.UUIDString(timerTask.DomainID), startVersion, timerTask.Version, timerTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, timerTask.DomainID, startVersion, timerTask.Version, timerTask)
 		if err != nil || !ok {
 			return nil, err
 		}
