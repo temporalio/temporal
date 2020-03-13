@@ -313,7 +313,7 @@ func (f *factoryImpl) init(clusterName string, limiters map[string]quotas.Limite
 	visibilityCfg := f.config.DataStores[f.config.VisibilityStore]
 	visibilityDataStore := Datastore{ratelimit: limiters[f.config.VisibilityStore]}
 	switch {
-	case defaultCfg.Cassandra != nil:
+	case visibilityCfg.Cassandra != nil:
 		visibilityDataStore.factory = cassandra.NewFactory(*visibilityCfg.Cassandra, clusterName, f.logger)
 	case visibilityCfg.SQL != nil:
 		visibilityDataStore.factory = sql.NewFactory(*visibilityCfg.SQL, clusterName, f.logger)
