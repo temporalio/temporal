@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/temporal/workflow"
 
 	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/service/worker/scanner/executions"
 	"github.com/temporalio/temporal/service/worker/scanner/history"
 	"github.com/temporalio/temporal/service/worker/scanner/tasklist"
 )
@@ -54,10 +55,16 @@ const (
 	historyScannerWFTypeName     = "cadence-sys-history-scanner-workflow"
 	historyScannerTaskListName   = "cadence-sys-history-scanner-tasklist-0"
 	historyScavengerActivityName = "cadence-sys-history-scanner-scvg-activity"
+
+	executionsScannerWFID           = "cadence-sys-executions-scanner"
+	executionsScannerWFTypeName     = "cadence-sys-executions-scanner-workflow"
+	executionsScannerTaskListName   = "cadence-sys-executions-scanner-tasklist-0"
+	executionsScavengerActivityName = "cadence-sys-executions-scanner-scvg-activity"
 )
 
 var (
-	tlScavengerHBInterval = 10 * time.Second
+	tlScavengerHBInterval         = 10 * time.Second
+	executionsScavengerHBInterval = 10 * time.Second
 
 	activityRetryPolicy = temporal.RetryPolicy{
 		InitialInterval:    10 * time.Second,
@@ -85,6 +92,13 @@ var (
 		WorkflowIDReusePolicy:        cclient.WorkflowIDReusePolicyAllowDuplicate,
 		CronSchedule:                 "0 */12 * * *",
 	}
+	executionsScannerWFStartOptions = cclient.StartWorkflowOptions{
+		ID:                           executionsScannerWFID,
+		TaskList:                     executionsScannerTaskListName,
+		ExecutionStartToCloseTimeout: infiniteDuration,
+		WorkflowIDReusePolicy:        cclient.WorkflowIDReusePolicyAllowDuplicate,
+		CronSchedule:                 "0 */12 * * *",
+	}
 )
 
 // TaskListScannerWorkflow is the workflow that runs the task-list scanner background daemon
@@ -105,6 +119,16 @@ func HistoryScannerWorkflow(
 		workflow.WithActivityOptions(ctx, activityOptions),
 		historyScavengerActivityName,
 	)
+	return future.Get(ctx, nil)
+}
+
+// ExecutionsScannerWorkflow is the workflow that runs the executions scanner background daemon
+func ExecutionsScannerWorkflow(
+	ctx workflow.Context,
+	executionsScannerWorkflowParams executions.ScannerWorkflowParams,
+) error {
+
+	future := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, activityOptions), executionsScavengerActivityName, executionsScannerWorkflowParams)
 	return future.Get(ctx, nil)
 }
 
@@ -151,6 +175,28 @@ func TaskListScavengerActivity(
 			return activityCtx.Err()
 		}
 		time.Sleep(tlScavengerHBInterval)
+	}
+	return nil
+}
+
+// ExecutionsScavengerActivity is the activity that runs executions scavenger
+func ExecutionsScavengerActivity(
+	activityCtx context.Context,
+	executionsScannerWorkflowParams executions.ScannerWorkflowParams,
+) error {
+
+	ctx := activityCtx.Value(scannerContextKey).(scannerContext)
+	scavenger := executions.NewScavenger(executionsScannerWorkflowParams, ctx.GetFrontendClient(), ctx.GetHistoryManager(), ctx.GetMetricsClient(), ctx.GetLogger())
+	ctx.GetLogger().Info("Starting executions scavenger")
+	scavenger.Start()
+	for scavenger.Alive() {
+		activity.RecordHeartbeat(activityCtx)
+		if activityCtx.Err() != nil {
+			ctx.GetLogger().Info("activity context error, stopping scavenger", tag.Error(activityCtx.Err()))
+			scavenger.Stop()
+			return activityCtx.Err()
+		}
+		time.Sleep(executionsScavengerHBInterval)
 	}
 	return nil
 }

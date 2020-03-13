@@ -40,11 +40,19 @@ import (
 	"github.com/temporalio/temporal/common/resource"
 	"github.com/temporalio/temporal/common/service/config"
 	"github.com/temporalio/temporal/common/service/dynamicconfig"
+	"github.com/temporalio/temporal/service/worker/scanner/executions"
 )
 
 const (
 	// scannerStartUpDelay is to let services warm up
 	scannerStartUpDelay = time.Second * 4
+)
+
+var (
+	defaultExecutionsScannerParams = executions.ScannerWorkflowParams{
+		// fullExecutionsScanDefaultQuery indicates the visibility scanner should scan through all open workflows
+		VisibilityQuery: "SELECT * from elasticSearch.executions WHERE state IS open", // TODO: depending on if we go straight to ES or through frontend this query will look different
+	}
 )
 
 type (
@@ -56,6 +64,12 @@ type (
 		Persistence *config.Persistence
 		// ClusterMetadata contains the metadata for this cluster
 		ClusterMetadata cluster.Metadata
+		// TaskListScannerEnabled indicates if taskList scanner should be started as part of scanner
+		TaskListScannerEnabled dynamicconfig.BoolPropertyFn
+		// HistoryScannerEnabled indicates if history scanner should be started as part of scanner
+		HistoryScannerEnabled dynamicconfig.BoolPropertyFn
+		// ExecutionsScannerEnabled indicates if executions scanner should be started as part of scanner
+		ExecutionsScannerEnabled dynamicconfig.BoolPropertyFn
 	}
 
 	// BootstrapParams contains the set of params needed to bootstrap
@@ -120,27 +134,42 @@ func (s *Scanner) Start() error {
 		BackgroundActivityContext:              context.WithValue(context.Background(), scannerContextKey, s.context),
 	}
 
-	var workerTaskListName string
-	if s.context.cfg.Persistence.DefaultStoreType() == config.StoreTypeSQL {
-		go s.startWorkflowWithRetry(tlScannerWFStartOptions, tlScannerWFTypeName)
-		workerTaskListName = tlScannerTaskListName
-	} else if s.context.cfg.Persistence.DefaultStoreType() == config.StoreTypeCassandra {
-		go s.startWorkflowWithRetry(historyScannerWFStartOptions, historyScannerWFTypeName)
-		workerTaskListName = historyScannerTaskListName
+	var workerTaskListNames []string
+	if s.context.cfg.ExecutionsScannerEnabled() {
+		workerTaskListNames = append(workerTaskListNames, executionsScannerTaskListName)
+		go s.startWorkflowWithRetry(executionsScannerWFStartOptions, executionsScannerWFTypeName, defaultExecutionsScannerParams)
 	}
 
-	worker := worker.New(s.context.GetSDKClient(), common.SystemLocalDomainName, workerTaskListName, workerOpts)
-	worker.RegisterWorkflowWithOptions(TaskListScannerWorkflow, workflow.RegisterOptions{Name: tlScannerWFTypeName})
-	worker.RegisterWorkflowWithOptions(HistoryScannerWorkflow, workflow.RegisterOptions{Name: historyScannerWFTypeName})
-	worker.RegisterActivityWithOptions(TaskListScavengerActivity, activity.RegisterOptions{Name: taskListScavengerActivityName})
-	worker.RegisterActivityWithOptions(HistoryScavengerActivity, activity.RegisterOptions{Name: historyScavengerActivityName})
+	if s.context.cfg.Persistence.DefaultStoreType() == config.StoreTypeSQL && s.context.cfg.TaskListScannerEnabled() {
+		go s.startWorkflowWithRetry(tlScannerWFStartOptions, tlScannerWFTypeName)
+		workerTaskListNames = append(workerTaskListNames, tlScannerTaskListName)
+	} else if s.context.cfg.Persistence.DefaultStoreType() == config.StoreTypeCassandra && s.context.cfg.HistoryScannerEnabled() {
+		go s.startWorkflowWithRetry(historyScannerWFStartOptions, historyScannerWFTypeName)
+		workerTaskListNames = append(workerTaskListNames, historyScannerTaskListName)
+	}
 
-	return worker.Start()
+	for _, tl := range workerTaskListNames {
+		work := worker.New(s.context.GetSDKClient(), common.SystemLocalDomainName, tl, workerOpts)
+
+		work.RegisterWorkflowWithOptions(TaskListScannerWorkflow, workflow.RegisterOptions{Name: tlScannerWFTypeName})
+		work.RegisterWorkflowWithOptions(HistoryScannerWorkflow, workflow.RegisterOptions{Name: historyScannerWFTypeName})
+		work.RegisterWorkflowWithOptions(ExecutionsScannerWorkflow, workflow.RegisterOptions{Name: executionsScannerWFTypeName})
+		work.RegisterActivityWithOptions(TaskListScavengerActivity, activity.RegisterOptions{Name: taskListScavengerActivityName})
+		work.RegisterActivityWithOptions(HistoryScavengerActivity, activity.RegisterOptions{Name: historyScavengerActivityName})
+		work.RegisterActivityWithOptions(ExecutionsScavengerActivity, activity.RegisterOptions{Name: executionsScavengerActivityName})
+
+		if err := work.Start(); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (s *Scanner) startWorkflowWithRetry(
 	options cclient.StartWorkflowOptions,
 	workflowType string,
+	workflowArgs ...interface{},
 ) {
 
 	// let history / matching service warm up
@@ -151,12 +180,12 @@ func (s *Scanner) startWorkflowWithRetry(
 	policy.SetMaximumInterval(time.Minute)
 	policy.SetExpirationInterval(backoff.NoInterval)
 	err := backoff.Retry(func() error {
-		return s.startWorkflow(sdkClient, options, workflowType)
+		return s.startWorkflow(sdkClient, options, workflowType, workflowArgs)
 	}, policy, func(err error) bool {
 		return true
 	})
 	if err != nil {
-		s.context.GetLogger().Fatal("unable to start scanner", tag.Error(err))
+		s.context.GetLogger().Fatal("unable to start scanner", tag.WorkflowType(workflowType), tag.Error(err))
 	}
 }
 
@@ -164,10 +193,11 @@ func (s *Scanner) startWorkflow(
 	client cclient.Client,
 	options cclient.StartWorkflowOptions,
 	workflowType string,
+	workflowArgs ...interface{},
 ) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	_, err := client.ExecuteWorkflow(ctx, options, workflowType)
+	_, err := client.ExecuteWorkflow(ctx, options, workflowType, workflowArgs)
 	cancel()
 	if err != nil {
 		if _, ok := err.(*serviceerror.WorkflowExecutionAlreadyStarted); ok {
