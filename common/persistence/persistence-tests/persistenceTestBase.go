@@ -90,13 +90,9 @@ type (
 
 	// PersistenceTestCluster exposes management operations on a database
 	PersistenceTestCluster interface {
-		DatabaseName() string
 		SetupTestDatabase()
 		TearDownTestDatabase()
-		DropDatabase()
 		Config() config.Persistence
-		LoadSchema(fileNames []string, schemaDir string)
-		LoadVisibilitySchema(fileNames []string, schemaDir string)
 	}
 
 	// TestTransferTaskIDGenerator helper
