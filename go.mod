@@ -54,6 +54,7 @@ require (
 	go.temporal.io/temporal v0.10.11
 	go.temporal.io/temporal-proto v0.0.0-20200311025042-d9d2e74191de
 	go.uber.org/atomic v1.5.1
+	go.uber.org/cadence v0.9.1-0.20191023030824-883f86358883
 	go.uber.org/multierr v1.4.0
 	go.uber.org/thriftrw v1.20.2
 	go.uber.org/zap v1.13.0
