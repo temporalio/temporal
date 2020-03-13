@@ -1119,10 +1119,10 @@ func (adh *AdminHandler) error(err error, scope metrics.Scope) error {
 		scope.IncCounter(metrics.ServiceFailures)
 		return err
 	case *serviceerror.InvalidArgument:
-		scope.IncCounter(metrics.ServiceErrBadRequestCounter)
+		scope.IncCounter(metrics.ServiceErrInvalidArgumentCounter)
 		return err
 	case *serviceerror.ResourceExhausted:
-		scope.IncCounter(metrics.ServiceErrServiceBusyCounter)
+		scope.IncCounter(metrics.ServiceErrResourceExhaustedCounter)
 		return err
 	case *serviceerror.NotFound:
 		return err

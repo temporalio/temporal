@@ -1506,15 +1506,14 @@ const (
 	ServiceFailures
 	ServiceCriticalFailures
 	ServiceLatency
-	ServiceErrBadRequestCounter
+	ServiceErrInvalidArgumentCounter
 	ServiceErrDomainNotActiveCounter
-	ServiceErrServiceBusyCounter
-	ServiceErrEntityNotExistsCounter
+	ServiceErrResourceExhaustedCounter
+	ServiceErrNotFoundCounter
 	ServiceErrExecutionAlreadyStartedCounter
 	ServiceErrDomainAlreadyExistsCounter
 	ServiceErrCancellationAlreadyRequestedCounter
 	ServiceErrQueryFailedCounter
-	ServiceErrLimitExceededCounter
 	ServiceErrContextTimeoutCounter
 	ServiceErrRetryTaskCounter
 	ServiceErrBadBinaryCounter
@@ -1868,15 +1867,14 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ServiceFailures:                                     {metricName: "service_errors", metricType: Counter},
 		ServiceCriticalFailures:                             {metricName: "service_errors_critical", metricType: Counter},
 		ServiceLatency:                                      {metricName: "service_latency", metricType: Timer},
-		ServiceErrBadRequestCounter:                         {metricName: "service_errors_bad_request", metricType: Counter},
+		ServiceErrInvalidArgumentCounter:                    {metricName: "service_errors_invalid_argument", metricType: Counter},
 		ServiceErrDomainNotActiveCounter:                    {metricName: "service_errors_domain_not_active", metricType: Counter},
-		ServiceErrServiceBusyCounter:                        {metricName: "service_errors_service_busy", metricType: Counter},
-		ServiceErrEntityNotExistsCounter:                    {metricName: "service_errors_entity_not_exists", metricType: Counter},
+		ServiceErrResourceExhaustedCounter:                  {metricName: "service_errors_resource_exhausted", metricType: Counter},
+		ServiceErrNotFoundCounter:                           {metricName: "service_errors_entity_not_found", metricType: Counter},
 		ServiceErrExecutionAlreadyStartedCounter:            {metricName: "service_errors_execution_already_started", metricType: Counter},
 		ServiceErrDomainAlreadyExistsCounter:                {metricName: "service_errors_domain_already_exists", metricType: Counter},
 		ServiceErrCancellationAlreadyRequestedCounter:       {metricName: "service_errors_cancellation_already_requested", metricType: Counter},
 		ServiceErrQueryFailedCounter:                        {metricName: "service_errors_query_failed", metricType: Counter},
-		ServiceErrLimitExceededCounter:                      {metricName: "service_errors_limit_exceeded", metricType: Counter},
 		ServiceErrContextTimeoutCounter:                     {metricName: "service_errors_context_timeout", metricType: Counter},
 		ServiceErrRetryTaskCounter:                          {metricName: "service_errors_retry_task", metricType: Counter},
 		ServiceErrBadBinaryCounter:                          {metricName: "service_errors_bad_binary", metricType: Counter},
