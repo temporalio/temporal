@@ -1,8 +1,8 @@
-# Developing Cadence
+# Developing Temporal
 
-This doc is intended for contributors to `cadence` server (hopefully that's you!)
+This doc is intended for contributors to `temporal` server (hopefully that's you!)
 
-**Note:** All contributors also need to fill out the [Uber Contributor License Agreement](http://t.uber.com/cla) before we can merge in any of your changes
+**Note:** All contributors also need to fill out the [Temporal Contributor License Agreement](https://gist.github.com/samarabbas/7dcd41eb1d847e12263cc961ccfdb197) before we can merge in any of your changes
 
 ## Development Environment
 
@@ -18,14 +18,6 @@ git clone https://github.com/temporalio/temporal.git src/github.com/temporalio/t
 cd $GOPATH/src/github.com/temporalio/temporal
 ```
 
-## Dependency management
-
-Dependencies are recorded in `Gopkg.toml` and managed by dep. If you're not 
-familiar with dep, read the [docs](https://golang.github.io/dep/). The Makefile 
-will call `install-dep.sh` to install dep on Mac or Linux. You can use this 
-script directly, but it will be run automatically with  `make` commands. To 
-check dependencies, run `dep ensure`. 
-
 ## Licence headers
 
 This project is Open Source Software, and requires a header at the beginning of
@@ -37,7 +29,7 @@ make copyright
 
 ## Commit Messages And Titles of Pull Requests
 
-Overcommit adds some requirements to your commit messages. At Uber, we follow the
+Overcommit adds some requirements to your commit messages. At Temporal, we follow the
 [Chris Beams](http://chris.beams.io/posts/git-commit/) guide to writing git
 commit messages. Read it, follow it, learn it, love it.
 
@@ -46,20 +38,9 @@ Please don't use very generic titles like "bug fixes".
 
 All PR titles should start with UPPER case.
 
-Examples:
-
-- [Make sync activity retry multiple times before fetch history from remote](https://github.com/temporalio/temporal/pull/1379)
-- [Enable archival config per domain](https://github.com/temporalio/temporal/pull/1351)
-
-## Issues to start with
-
-Take a look at the list of issues labeled 
-[up-for-grabs](https://github.com/temporalio/temporal/labels/up-for-grabs). These issues 
-are a great way to start contributing to Cadence.
-
 ## Building
 
-You can compile the `cadence` service and helper tools without running test:
+You can compile the `temporal` service and helper tools without running test:
 
 ```bash
 make bins
