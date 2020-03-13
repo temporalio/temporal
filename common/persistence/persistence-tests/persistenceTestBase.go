@@ -185,7 +185,7 @@ func (s *TestBase) Setup() {
 	}
 
 	cfg := s.DefaultTestCluster.Config()
-	factory := client.NewFactory(&cfg, clusterName, nil, s.logger)
+	factory := client.NewFactory(&cfg, nil, clusterName, nil, s.logger)
 
 	s.TaskMgr, err = factory.NewTaskManager()
 	s.fatalOnError("NewTaskManager", err)
@@ -209,7 +209,7 @@ func (s *TestBase) Setup() {
 	visibilityFactory := factory
 	if s.VisibilityTestCluster != s.DefaultTestCluster {
 		vCfg := s.VisibilityTestCluster.Config()
-		visibilityFactory = client.NewFactory(&vCfg, clusterName, nil, s.logger)
+		visibilityFactory = client.NewFactory(&vCfg, nil, clusterName, nil, s.logger)
 	}
 	// SQL currently doesn't have support for visibility manager
 	s.VisibilityMgr, err = visibilityFactory.NewVisibilityManager()
