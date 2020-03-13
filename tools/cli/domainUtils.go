@@ -282,7 +282,7 @@ func initializeMetadataMgr(
 ) persistence.MetadataManager {
 
 	pConfig := serviceConfig.Persistence
-	pConfig.SetMaxQPS(pConfig.DefaultStore, dynamicconfig.GetIntPropertyFn(dependencyMaxQPS))
+	pConfig.SetMaxQPS(pConfig.DefaultStore, dependencyMaxQPS)
 	pConfig.VisibilityConfig = &config.VisibilityConfig{
 		VisibilityListMaxQPS:            dynamicconfig.GetIntPropertyFilteredByDomain(dependencyMaxQPS),
 		EnableSampling:                  dynamicconfig.GetBoolPropertyFn(false), // not used by domain operation
