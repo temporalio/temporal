@@ -33,10 +33,12 @@ type (
 	TaskToken struct {
 		DomainID        string `json:"domainId"`
 		WorkflowID      string `json:"workflowId"`
+		WorkflowType    string `json:"workflowType"`
 		RunID           string `json:"runId"`
 		ScheduleID      int64  `json:"scheduleId"`
 		ScheduleAttempt int64  `json:"scheduleAttempt"`
 		ActivityID      string `json:"activityId"`
+		ActivityType    string `json:"activityType"`
 	}
 
 	// QueryTaskToken identifies a query task

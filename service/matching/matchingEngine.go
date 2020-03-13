@@ -737,9 +737,12 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(
 	token := &common.TaskToken{
 		DomainID:        task.event.DomainID,
 		WorkflowID:      task.event.WorkflowID,
+		WorkflowType:    historyResponse.WorkflowType.GetName(),
 		RunID:           task.event.RunID,
 		ScheduleID:      task.event.ScheduleID,
 		ScheduleAttempt: historyResponse.GetAttempt(),
+		ActivityID:      attributes.GetActivityId(),
+		ActivityType:    attributes.GetActivityType().GetName(),
 	}
 
 	response.TaskToken, _ = e.tokenSerializer.Serialize(token)

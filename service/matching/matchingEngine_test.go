@@ -579,10 +579,12 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		s.Equal(int32(50), *result.StartToCloseTimeoutSeconds)
 		s.Equal(int32(10), *result.HeartbeatTimeoutSeconds)
 		token := &common.TaskToken{
-			DomainID:   domainID,
-			WorkflowID: workflowID,
-			RunID:      runID,
-			ScheduleID: scheduleID,
+			DomainID:     domainID,
+			WorkflowID:   workflowID,
+			RunID:        runID,
+			ScheduleID:   scheduleID,
+			ActivityID:   activityID,
+			ActivityType: activityTypeName,
 		}
 
 		taskToken, _ := s.matchingEngine.tokenSerializer.Serialize(token)
@@ -726,10 +728,12 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		s.EqualValues(activityInput, result.Input)
 		s.EqualValues(workflowExecution, *result.WorkflowExecution)
 		token := &common.TaskToken{
-			DomainID:   domainID,
-			WorkflowID: workflowID,
-			RunID:      runID,
-			ScheduleID: scheduleID,
+			DomainID:     domainID,
+			WorkflowID:   workflowID,
+			RunID:        runID,
+			ScheduleID:   scheduleID,
+			ActivityID:   activityID,
+			ActivityType: activityTypeName,
 		}
 
 		taskToken, _ := s.matchingEngine.tokenSerializer.Serialize(token)
@@ -908,10 +912,12 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 				s.EqualValues(activityHeader, result.Header)
 				s.EqualValues(workflowExecution, *result.WorkflowExecution)
 				token := &common.TaskToken{
-					DomainID:   domainID,
-					WorkflowID: workflowID,
-					RunID:      runID,
-					ScheduleID: scheduleID,
+					DomainID:     domainID,
+					WorkflowID:   workflowID,
+					RunID:        runID,
+					ScheduleID:   scheduleID,
+					ActivityID:   activityID,
+					ActivityType: activityTypeName,
 				}
 				resultToken, err := s.matchingEngine.tokenSerializer.Deserialize(result.TaskToken)
 				s.NoError(err)
@@ -1205,10 +1211,12 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 				s.EqualValues(activityInput, result.Input)
 				s.EqualValues(workflowExecution, *result.WorkflowExecution)
 				token := &common.TaskToken{
-					DomainID:   domainID,
-					WorkflowID: workflowID,
-					RunID:      runID,
-					ScheduleID: scheduleID,
+					DomainID:     domainID,
+					WorkflowID:   workflowID,
+					RunID:        runID,
+					ScheduleID:   scheduleID,
+					ActivityID:   activityID,
+					ActivityType: activityTypeName,
 				}
 				resultToken, err := engine.tokenSerializer.Deserialize(result.TaskToken)
 				if err != nil {

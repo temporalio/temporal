@@ -1449,6 +1449,7 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 		return err
 	}
 	domainID := domainEntry.GetInfo().ID
+	domainName := domainEntry.GetInfo().Name
 
 	request := req.CompleteRequest
 	token, err0 := e.tokenSerializer.Deserialize(request.TaskToken)
@@ -1461,7 +1462,9 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 		RunId:      common.StringPtr(token.RunID),
 	}
 
-	return e.updateWorkflowExecution(ctx, domainID, workflowExecution, true,
+	var activityStartedTime time.Time
+	var taskList string
+	err = e.updateWorkflowExecution(ctx, domainID, workflowExecution, true,
 		func(context workflowExecutionContext, mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return ErrWorkflowCompleted
@@ -1492,8 +1495,21 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 				// Unable to add ActivityTaskCompleted event to history
 				return &workflow.InternalServiceError{Message: "Unable to add ActivityTaskCompleted event to history."}
 			}
+			activityStartedTime = ai.StartedTime
+			taskList = ai.TaskList
 			return nil
 		})
+	if err == nil && !activityStartedTime.IsZero() {
+		scope := e.metricsClient.Scope(metrics.HistoryRespondActivityTaskCompletedScope).
+			Tagged(
+				metrics.DomainTag(domainName),
+				metrics.WorkflowTypeTag(token.WorkflowType),
+				metrics.ActivityTypeTag(token.ActivityType),
+				metrics.TaskListTag(taskList),
+			)
+		scope.RecordTimer(metrics.ActivityE2ELatency, time.Since(activityStartedTime))
+	}
+	return err
 }
 
 // RespondActivityTaskFailed completes an activity task failure.
@@ -1507,6 +1523,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 		return err
 	}
 	domainID := domainEntry.GetInfo().ID
+	domainName := domainEntry.GetInfo().Name
 
 	request := req.FailedRequest
 	token, err0 := e.tokenSerializer.Deserialize(request.TaskToken)
@@ -1519,7 +1536,9 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 		RunId:      common.StringPtr(token.RunID),
 	}
 
-	return e.updateWorkflowExecutionWithAction(ctx, domainID, workflowExecution,
+	var activityStartedTime time.Time
+	var taskList string
+	err = e.updateWorkflowExecutionWithAction(ctx, domainID, workflowExecution,
 		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
@@ -1560,8 +1579,21 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 				postActions.createDecision = true
 			}
 
+			activityStartedTime = ai.StartedTime
+			taskList = ai.TaskList
 			return postActions, nil
 		})
+	if err == nil && !activityStartedTime.IsZero() {
+		scope := e.metricsClient.Scope(metrics.HistoryRespondActivityTaskFailedScope).
+			Tagged(
+				metrics.DomainTag(domainName),
+				metrics.WorkflowTypeTag(token.WorkflowType),
+				metrics.ActivityTypeTag(token.ActivityType),
+				metrics.TaskListTag(taskList),
+			)
+		scope.RecordTimer(metrics.ActivityE2ELatency, time.Since(activityStartedTime))
+	}
+	return err
 }
 
 // RespondActivityTaskCanceled completes an activity task failure.
@@ -1575,6 +1607,7 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 		return err
 	}
 	domainID := domainEntry.GetInfo().ID
+	domainName := domainEntry.GetInfo().Name
 
 	request := req.CancelRequest
 	token, err0 := e.tokenSerializer.Deserialize(request.TaskToken)
@@ -1587,7 +1620,9 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 		RunId:      common.StringPtr(token.RunID),
 	}
 
-	return e.updateWorkflowExecution(ctx, domainID, workflowExecution, true,
+	var activityStartedTime time.Time
+	var taskList string
+	err = e.updateWorkflowExecution(ctx, domainID, workflowExecution, true,
 		func(context workflowExecutionContext, mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return ErrWorkflowCompleted
@@ -1624,9 +1659,21 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 				return &workflow.InternalServiceError{Message: "Unable to add ActivityTaskCanceled event to history."}
 			}
 
+			activityStartedTime = ai.StartedTime
+			taskList = ai.TaskList
 			return nil
 		})
-
+	if err == nil && !activityStartedTime.IsZero() {
+		scope := e.metricsClient.Scope(metrics.HistoryClientRespondActivityTaskCanceledScope).
+			Tagged(
+				metrics.DomainTag(domainName),
+				metrics.WorkflowTypeTag(token.WorkflowType),
+				metrics.ActivityTypeTag(token.ActivityType),
+				metrics.TaskListTag(taskList),
+			)
+		scope.RecordTimer(metrics.ActivityE2ELatency, time.Since(activityStartedTime))
+	}
+	return err
 }
 
 // RecordActivityTaskHeartbeat records an hearbeat for a task.

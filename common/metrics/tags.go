@@ -31,6 +31,8 @@ const (
 	domain        = "domain"
 	targetCluster = "target_cluster"
 	taskList      = "tasklist"
+	workflowType  = "workflowType"
+	activityType  = "activityType"
 
 	domainAllValue = "all"
 	unknownValue   = "_unknown_"
@@ -58,6 +60,14 @@ type (
 	}
 
 	taskListTag struct {
+		value string
+	}
+
+	workflowTypeTag struct {
+		value string
+	}
+
+	activityTypeTag struct {
 		value string
 	}
 )
@@ -145,5 +155,41 @@ func (d taskListTag) Key() string {
 
 // Value returns the value of the task list tag
 func (d taskListTag) Value() string {
+	return d.value
+}
+
+// WorkflowTypeTag returns a new workflow type tag.
+func WorkflowTypeTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return workflowTypeTag{value}
+}
+
+// Key returns the key of the workflow type tag
+func (d workflowTypeTag) Key() string {
+	return workflowType
+}
+
+// Value returns the value of the workflow type tag
+func (d workflowTypeTag) Value() string {
+	return d.value
+}
+
+// ActivityTypeTag returns a new activity type tag.
+func ActivityTypeTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return activityTypeTag{value}
+}
+
+// Key returns the key of the activity type tag
+func (d activityTypeTag) Key() string {
+	return activityType
+}
+
+// Value returns the value of the activity type tag
+func (d activityTypeTag) Value() string {
 	return d.value
 }
