@@ -35,6 +35,7 @@ import (
 
 	"github.com/temporalio/temporal/.gen/proto/historyservice"
 	"github.com/temporalio/temporal/.gen/proto/matchingservice"
+	"github.com/temporalio/temporal/.gen/proto/matchingservicemock"
 	"github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
@@ -59,7 +60,7 @@ type (
 		mockDomainCache        *cache.MockDomainCache
 		mockClusterMetadata    *cluster.MockMetadata
 		mockNDCHistoryResender *xdc.MockNDCHistoryResender
-		mockMatchingClient     *matchingservicetest.MockClient
+		mockMatchingClient     *matchingservicemock.MockMatchingServiceClient
 
 		mockVisibilityMgr       *mocks.VisibilityManager
 		mockExecutionMgr        *mocks.ExecutionManager

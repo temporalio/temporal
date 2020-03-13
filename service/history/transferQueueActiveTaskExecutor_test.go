@@ -267,7 +267,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveProcessorSuite) GetDomainIDBytes() primitives.UUID {
+func (s *transferQueueActiveTaskExecutorSuite) GetDomainIDBytes() primitives.UUID {
 	return primitives.MustParseUUID(s.domainID)
 }
 
@@ -595,7 +595,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessDecisionTask_Duplicati
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasParent() {
 
-	execution := workflow.WorkflowExecution{
+	execution := commonproto.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -612,7 +612,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 
 	mutableState := newMutableStateBuilderWithReplicationStateWithEventV2(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
-		*execution,
+		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			DomainUUID: s.domainID,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
@@ -656,7 +656,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 		DomainUUID:         parentDomainID,
 		WorkflowExecution:  parentExecution,
 		InitiatedId:        parentInitiatedID,
-		CompletedExecution: execution,
+		CompletedExecution: &execution,
 		CompletionEvent:    event,
 	}).Return(nil, nil).Times(1)
 	s.mockVisibilityMgr.On("RecordWorkflowExecutionClosed", mock.Anything).Return(nil).Once()
