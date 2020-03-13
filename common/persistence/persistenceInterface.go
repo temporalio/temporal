@@ -790,7 +790,6 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 		RetryMaximumIntervalSeconds:             executionInfo.MaximumInterval,
 		RetryMaximumAttempts:                    executionInfo.MaximumAttempts,
 		RetryExpirationSeconds:                  executionInfo.ExpirationSeconds,
-		RetryExpirationTimeNanos:                executionInfo.ExpirationTime.UnixNano(),
 		RetryNonRetryableErrors:                 executionInfo.NonRetriableErrors,
 		EventStoreVersion:                       EventStoreVersion,
 		EventBranchToken:                        executionInfo.BranchToken,
@@ -798,6 +797,10 @@ func InternalWorkflowExecutionInfoToProto(executionInfo *InternalWorkflowExecuti
 		AutoResetPointsEncoding:                 executionInfo.AutoResetPoints.GetEncoding().String(),
 		SearchAttributes:                        executionInfo.SearchAttributes,
 		Memo:                                    executionInfo.Memo,
+	}
+
+	if !executionInfo.ExpirationTime.IsZero() {
+		info.RetryExpirationTimeNanos = executionInfo.ExpirationTime.UnixNano()
 	}
 
 	completionEvent := executionInfo.CompletionEvent
@@ -880,12 +883,15 @@ func ProtoWorkflowExecutionToPartialInternalExecution(info *persistenceblobs.Wor
 		MaximumInterval:                    info.GetRetryMaximumIntervalSeconds(),
 		MaximumAttempts:                    info.GetRetryMaximumAttempts(),
 		ExpirationSeconds:                  info.GetRetryExpirationSeconds(),
-		ExpirationTime:                     time.Unix(0, info.GetRetryExpirationTimeNanos()),
 		BranchToken:                        info.GetEventBranchToken(),
 		ExecutionContext:                   info.GetExecutionContext(),
 		NonRetriableErrors:                 info.GetRetryNonRetryableErrors(),
 		SearchAttributes:                   info.GetSearchAttributes(),
 		Memo:                               info.GetMemo(),
+	}
+
+	if info.GetRetryExpirationTimeNanos() != 0 {
+		executionInfo.ExpirationTime = time.Unix(0, info.GetRetryExpirationTimeNanos())
 	}
 
 	if info.ParentDomainID != nil {
@@ -945,12 +951,14 @@ func ProtoActivityInfoToInternalActivityInfo(decoded *persistenceblobs.ActivityI
 		InitialInterval:          decoded.GetRetryInitialIntervalSeconds(),
 		BackoffCoefficient:       decoded.GetRetryBackoffCoefficient(),
 		MaximumInterval:          decoded.GetRetryMaximumIntervalSeconds(),
-		ExpirationTime:           time.Unix(0, decoded.GetRetryExpirationTimeNanos()),
 		MaximumAttempts:          decoded.GetRetryMaximumAttempts(),
 		NonRetriableErrors:       decoded.GetRetryNonRetryableErrors(),
 		LastFailureReason:        decoded.GetRetryLastFailureReason(),
 		LastWorkerIdentity:       decoded.GetRetryLastWorkerIdentity(),
 		LastFailureDetails:       decoded.GetRetryLastFailureDetails(),
+	}
+	if decoded.GetRetryExpirationTimeNanos() != 0 {
+		info.ExpirationTime = time.Unix(0, decoded.GetRetryExpirationTimeNanos())
 	}
 	if decoded.StartedEvent != nil {
 		info.StartedEvent = NewDataBlob(decoded.StartedEvent, common.EncodingType(decoded.GetStartedEventEncoding()))
@@ -992,12 +1000,14 @@ func (v *InternalActivityInfo) ToProto() *persistenceblobs.ActivityInfo {
 		RetryInitialIntervalSeconds:   v.InitialInterval,
 		RetryBackoffCoefficient:       v.BackoffCoefficient,
 		RetryMaximumIntervalSeconds:   v.MaximumInterval,
-		RetryExpirationTimeNanos:      v.ExpirationTime.UnixNano(),
 		RetryMaximumAttempts:          v.MaximumAttempts,
 		RetryNonRetryableErrors:       v.NonRetriableErrors,
 		RetryLastFailureReason:        v.LastFailureReason,
 		RetryLastWorkerIdentity:       v.LastWorkerIdentity,
 		RetryLastFailureDetails:       v.LastFailureDetails,
+	}
+	if !v.ExpirationTime.IsZero() {
+		info.RetryExpirationTimeNanos = v.ExpirationTime.UnixNano()
 	}
 	return info
 }
