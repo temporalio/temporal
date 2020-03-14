@@ -77,12 +77,6 @@ func (s *DecisionHandlerSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *DecisionHandlerSuite) TestHandleBufferedQueries_ClientNotSupports() {
-	s.assertQueryCounts(s.queryRegistry, 10, 0, 0, 0)
-	s.decisionHandler.handleBufferedQueries(s.mockMutableState, nil, false, testGlobalDomainEntry, false)
-	s.assertQueryCounts(s.queryRegistry, 0, 0, 0, 10)
-}
-
 func (s *DecisionHandlerSuite) TestHandleBufferedQueries_HeartbeatDecision() {
 	s.assertQueryCounts(s.queryRegistry, 10, 0, 0, 0)
 	queryResults := s.constructQueryResults(s.queryRegistry.getBufferedIDs()[0:5], 10)
