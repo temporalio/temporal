@@ -547,14 +547,7 @@ Update_History_Loop:
 			return nil, updateErr
 		}
 
-		handler.handleBufferedQueries(
-			msBuilder,
-			clientImpl,
-			clientFeatureVersion,
-			req.GetCompleteRequest().GetQueryResults(),
-			createNewDecisionTask,
-			domainEntry,
-			decisionHeartbeating)
+		handler.handleBufferedQueries(msBuilder, req.GetCompleteRequest().GetQueryResults(), createNewDecisionTask, domainEntry, decisionHeartbeating)
 
 		if decisionHeartbeatTimeout {
 			// at this point, update is successful, but we still return an error to client so that the worker will give up this workflow
@@ -634,15 +627,7 @@ func (handler *decisionHandlerImpl) createRecordDecisionTaskStartedResponse(
 	return response, nil
 }
 
-func (handler *decisionHandlerImpl) handleBufferedQueries(
-	msBuilder mutableState,
-	clientImpl string,
-	clientFeatureVersion string,
-	queryResults map[string]*commonproto.WorkflowQueryResult,
-	createNewDecisionTask bool,
-	domainEntry *cache.DomainCacheEntry,
-	decisionHeartbeating bool,
-) {
+func (handler *decisionHandlerImpl) handleBufferedQueries(msBuilder mutableState, queryResults map[string]*commonproto.WorkflowQueryResult, createNewDecisionTask bool, domainEntry *cache.DomainCacheEntry, decisionHeartbeating bool) {
 	queryRegistry := msBuilder.GetQueryRegistry()
 	if !queryRegistry.hasBufferedQuery() {
 		return
