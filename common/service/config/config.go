@@ -252,6 +252,7 @@ type (
 	ClusterInformation struct {
 		Enabled                bool  `yaml:"enabled"`
 		InitialFailoverVersion int64 `yaml:"initialFailoverVersion"`
+		// TODO: remove RPCName (not used with gRPC)
 		// RPCName indicate the remote service name
 		RPCName string `yaml:"rpcName"`
 		// Address indicate the remote service address(Host:Port). Host can be DNS name.
