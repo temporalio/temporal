@@ -81,15 +81,16 @@ func newTransferQueueActiveTaskExecutor(
 }
 
 func (t *transferQueueActiveTaskExecutor) execute(
-	taskInfo *taskInfo,
+	taskInfo queueTaskInfo,
+	shouldProcessTask bool,
 ) error {
 
-	task, ok := taskInfo.task.(*persistenceblobs.TransferTaskInfo)
+	task, ok := taskInfo.(*persistenceblobs.TransferTaskInfo)
 	if !ok {
 		return errUnexpectedQueueTask
 	}
 
-	if !taskInfo.shouldProcessTask {
+	if !shouldProcessTask {
 		return nil
 	}
 

@@ -397,3 +397,40 @@ func (mr *MockqueueTaskMockRecorder) GetQueueType() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetQueueType", reflect.TypeOf((*MockqueueTask)(nil).GetQueueType))
 }
+
+// MockqueueTaskExecutor is a mock of queueTaskExecutor interface
+type MockqueueTaskExecutor struct {
+	ctrl     *gomock.Controller
+	recorder *MockqueueTaskExecutorMockRecorder
+}
+
+// MockqueueTaskExecutorMockRecorder is the mock recorder for MockqueueTaskExecutor
+type MockqueueTaskExecutorMockRecorder struct {
+	mock *MockqueueTaskExecutor
+}
+
+// NewMockqueueTaskExecutor creates a new mock instance
+func NewMockqueueTaskExecutor(ctrl *gomock.Controller) *MockqueueTaskExecutor {
+	mock := &MockqueueTaskExecutor{ctrl: ctrl}
+	mock.recorder = &MockqueueTaskExecutorMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use
+func (m *MockqueueTaskExecutor) EXPECT() *MockqueueTaskExecutorMockRecorder {
+	return m.recorder
+}
+
+// execute mocks base method
+func (m *MockqueueTaskExecutor) execute(taskInfo queueTaskInfo, shouldProcessTask bool) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "execute", taskInfo, shouldProcessTask)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// execute indicates an expected call of execute
+func (mr *MockqueueTaskExecutorMockRecorder) execute(taskInfo, shouldProcessTask interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "execute", reflect.TypeOf((*MockqueueTaskExecutor)(nil).execute), taskInfo, shouldProcessTask)
+}

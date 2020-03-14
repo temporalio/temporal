@@ -73,8 +73,8 @@ func newTransferQueueStandbyProcessor(
 	}
 	logger = logger.WithTags(tag.ClusterName(clusterName))
 
-	transferTaskFilter := func(taskInfo *taskInfo) (bool, error) {
-		task, ok := taskInfo.task.(*persistenceblobs.TransferTaskInfo)
+	transferTaskFilter := func(taskInfo queueTaskInfo) (bool, error) {
+		task, ok := taskInfo.(*persistenceblobs.TransferTaskInfo)
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
@@ -145,5 +145,5 @@ func (t *transferQueueStandbyProcessorImpl) process(
 ) (int, error) {
 	// TODO: task metricScope should be determined when creating taskInfo
 	metricScope := t.getTransferTaskMetricsScope(taskInfo.task.GetTaskType(), false)
-	return metricScope, t.taskExecutor.execute(taskInfo)
+	return metricScope, t.taskExecutor.execute(taskInfo.task, taskInfo.shouldProcessTask)
 }
