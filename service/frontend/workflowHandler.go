@@ -2909,7 +2909,7 @@ func (wh *WorkflowHandler) PollForWorkflowExecutionRawHistory(ctx context.Contex
 		if err != nil {
 			return nil, wh.error(errInvalidNextPageToken, scope)
 		}
-		if execution.GetRunId() != token.RunId {
+		if execution.GetRunId() != "" && execution.GetRunId() != token.RunId {
 			return nil, wh.error(errNextPageTokenRunIDMismatch, scope)
 		}
 
