@@ -47,9 +47,9 @@ func (s *HeadersSuite) SetupTest() {
 func (s *HeadersSuite) TestPropagateHeaders_CreateNewOutgoingContext() {
 	ctx := context.Background()
 	ctx = metadata.NewIncomingContext(ctx, metadata.New(map[string]string{
-		LibraryVersionHeaderName: "22.08.78",
-		FeatureVersionHeaderName: "21.04.16",
-		ClientImplHeaderName:     "28.08.14",
+		SDKVersionHeaderName:        "22.08.78",
+		SDKFeatureVersionHeaderName: "21.04.16",
+		SDKImplHeaderName:           "28.08.14",
 	}))
 
 	ctx = PropagateVersions(ctx)
@@ -57,17 +57,17 @@ func (s *HeadersSuite) TestPropagateHeaders_CreateNewOutgoingContext() {
 	md, ok := metadata.FromOutgoingContext(ctx)
 	s.True(ok)
 
-	s.Equal("22.08.78", md.Get(LibraryVersionHeaderName)[0])
-	s.Equal("21.04.16", md.Get(FeatureVersionHeaderName)[0])
-	s.Equal("28.08.14", md.Get(ClientImplHeaderName)[0])
+	s.Equal("22.08.78", md.Get(SDKVersionHeaderName)[0])
+	s.Equal("21.04.16", md.Get(SDKFeatureVersionHeaderName)[0])
+	s.Equal("28.08.14", md.Get(SDKImplHeaderName)[0])
 }
 
 func (s *HeadersSuite) TestPropagateHeaders_UpdateExistingEmptyOutgoingContext() {
 	ctx := context.Background()
 	ctx = metadata.NewIncomingContext(ctx, metadata.New(map[string]string{
-		LibraryVersionHeaderName: "22.08.78",
-		FeatureVersionHeaderName: "21.04.16",
-		ClientImplHeaderName:     "28.08.14",
+		SDKVersionHeaderName:        "22.08.78",
+		SDKFeatureVersionHeaderName: "21.04.16",
+		SDKImplHeaderName:           "28.08.14",
 	}))
 
 	ctx = metadata.NewOutgoingContext(ctx, metadata.MD{})
@@ -77,22 +77,22 @@ func (s *HeadersSuite) TestPropagateHeaders_UpdateExistingEmptyOutgoingContext()
 	md, ok := metadata.FromOutgoingContext(ctx)
 	s.True(ok)
 
-	s.Equal("22.08.78", md.Get(LibraryVersionHeaderName)[0])
-	s.Equal("21.04.16", md.Get(FeatureVersionHeaderName)[0])
-	s.Equal("28.08.14", md.Get(ClientImplHeaderName)[0])
+	s.Equal("22.08.78", md.Get(SDKVersionHeaderName)[0])
+	s.Equal("21.04.16", md.Get(SDKFeatureVersionHeaderName)[0])
+	s.Equal("28.08.14", md.Get(SDKImplHeaderName)[0])
 }
 
 func (s *HeadersSuite) TestPropagateHeaders_UpdateExistingNonEmptyOutgoingContext() {
 	ctx := context.Background()
 	ctx = metadata.NewIncomingContext(ctx, metadata.New(map[string]string{
-		LibraryVersionHeaderName: "07.08.78", // Must be ignored
-		FeatureVersionHeaderName: "07.04.16", // Must be ignored
+		SDKVersionHeaderName:        "07.08.78", // Must be ignored
+		SDKFeatureVersionHeaderName: "07.04.16", // Must be ignored
 	}))
 
 	ctx = metadata.NewOutgoingContext(ctx, metadata.New(map[string]string{
-		LibraryVersionHeaderName: "22.08.78",
-		FeatureVersionHeaderName: "21.04.16",
-		ClientImplHeaderName:     "28.08.14",
+		SDKVersionHeaderName:        "22.08.78",
+		SDKFeatureVersionHeaderName: "21.04.16",
+		SDKImplHeaderName:           "28.08.14",
 	}))
 
 	ctx = PropagateVersions(ctx)
@@ -100,18 +100,18 @@ func (s *HeadersSuite) TestPropagateHeaders_UpdateExistingNonEmptyOutgoingContex
 	md, ok := metadata.FromOutgoingContext(ctx)
 	s.True(ok)
 
-	s.Equal("22.08.78", md.Get(LibraryVersionHeaderName)[0])
-	s.Equal("21.04.16", md.Get(FeatureVersionHeaderName)[0])
-	s.Equal("28.08.14", md.Get(ClientImplHeaderName)[0])
+	s.Equal("22.08.78", md.Get(SDKVersionHeaderName)[0])
+	s.Equal("21.04.16", md.Get(SDKFeatureVersionHeaderName)[0])
+	s.Equal("28.08.14", md.Get(SDKImplHeaderName)[0])
 }
 
 func (s *HeadersSuite) TestPropagateHeaders_EmptyIncomingContext() {
 	ctx := context.Background()
 
 	ctx = metadata.NewOutgoingContext(ctx, metadata.New(map[string]string{
-		LibraryVersionHeaderName: "22.08.78",
-		FeatureVersionHeaderName: "21.04.16",
-		ClientImplHeaderName:     "28.08.14",
+		SDKVersionHeaderName:        "22.08.78",
+		SDKFeatureVersionHeaderName: "21.04.16",
+		SDKImplHeaderName:           "28.08.14",
 	}))
 
 	ctx = PropagateVersions(ctx)
@@ -119,7 +119,7 @@ func (s *HeadersSuite) TestPropagateHeaders_EmptyIncomingContext() {
 	md, ok := metadata.FromOutgoingContext(ctx)
 	s.True(ok)
 
-	s.Equal("22.08.78", md.Get(LibraryVersionHeaderName)[0])
-	s.Equal("21.04.16", md.Get(FeatureVersionHeaderName)[0])
-	s.Equal("28.08.14", md.Get(ClientImplHeaderName)[0])
+	s.Equal("22.08.78", md.Get(SDKVersionHeaderName)[0])
+	s.Equal("21.04.16", md.Get(SDKFeatureVersionHeaderName)[0])
+	s.Equal("28.08.14", md.Get(SDKImplHeaderName)[0])
 }

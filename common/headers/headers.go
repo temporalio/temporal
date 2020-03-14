@@ -27,23 +27,16 @@ import (
 )
 
 const (
-	// LibraryVersionHeaderName refers to the name of the
-	// tchannel / http header that contains the client
-	// library version
-	LibraryVersionHeaderName = "temporal-sdk-version"
+	// SDKVersionHeaderName refers to the name of the gRPC metadata header that contains the SDK version.
+	SDKVersionHeaderName = "temporal-sdk-version"
 
-	// FeatureVersionHeaderName refers to the name of the
-	// tchannel / http header that contains the client
-	// feature version
-	// the feature version sent from client represents the
-	// feature set of the temporal sdk support.
-	// This can be used for client capibility check, on
-	// Temporal server, for backward compatibility
-	FeatureVersionHeaderName = "temporal-sdk-feature-version"
+	// SDKFeatureVersionHeaderName refers to the name of the gRPC metadata header that contains the client feature version.
+	// The feature version sent from client represents the feature set of the Temporal SDK supports.
+	// This can be used for client capability check, on Temporal server, for backward compatibility.
+	SDKFeatureVersionHeaderName = "temporal-sdk-feature-version"
 
-	// ClientImplHeaderName refers to the name of the
-	// header that contains the client implementation
-	ClientImplHeaderName = "temporal-sdk-name"
+	// SDKImplHeaderName refers to the name of the gRPC metadata header that contains the client implementation.
+	SDKImplHeaderName = "temporal-sdk-name"
 )
 
 // GetValues returns header values for passed header names.
@@ -67,7 +60,7 @@ func PropagateVersions(ctx context.Context) context.Context {
 	if mdIncoming, ok := metadata.FromIncomingContext(ctx); ok {
 		var headersToAppend []string
 		mdOutgoing, mdOutgoingExist := metadata.FromOutgoingContext(ctx)
-		for _, headerName := range []string{LibraryVersionHeaderName, FeatureVersionHeaderName, ClientImplHeaderName} {
+		for _, headerName := range []string{SDKVersionHeaderName, SDKFeatureVersionHeaderName, SDKImplHeaderName} {
 			if incomingValue := mdIncoming.Get(headerName); len(incomingValue) > 0 {
 				if mdOutgoingExist {
 					if outgoingValue := mdOutgoing.Get(headerName); len(outgoingValue) > 0 {
@@ -100,11 +93,11 @@ func SetCLIVersions(ctx context.Context) context.Context {
 
 // SetVersionsForTests sets headers as they would be received from the client.
 // Must be used in tests only.
-func SetVersionsForTests(ctx context.Context, libraryVersion, clientImpl, featureVersion string) context.Context {
+func SetVersionsForTests(ctx context.Context, clientVersion, clientImpl, clientFeatureVersion string) context.Context {
 	return metadata.NewIncomingContext(ctx, metadata.New(map[string]string{
-		LibraryVersionHeaderName: libraryVersion,
-		FeatureVersionHeaderName: featureVersion,
-		ClientImplHeaderName:     clientImpl,
+		SDKVersionHeaderName:        clientVersion,
+		SDKFeatureVersionHeaderName: clientFeatureVersion,
+		SDKImplHeaderName:           clientImpl,
 	}))
 }
 

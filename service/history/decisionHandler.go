@@ -284,7 +284,7 @@ func (handler *decisionHandlerImpl) handleDecisionTaskCompleted(
 		RunId:      primitives.UUIDString(token.GetRunId()),
 	}
 
-	clientHeaders := headers.GetValues(ctx, headers.LibraryVersionHeaderName, headers.FeatureVersionHeaderName, headers.ClientImplHeaderName)
+	clientHeaders := headers.GetValues(ctx, headers.SDKVersionHeaderName, headers.SDKFeatureVersionHeaderName, headers.SDKImplHeaderName)
 	clientLibVersion := clientHeaders[0]
 	clientFeatureVersion := clientHeaders[1]
 	clientImpl := clientHeaders[2]
@@ -654,36 +654,6 @@ func (handler *decisionHandlerImpl) handleBufferedQueries(
 	runID := msBuilder.GetExecutionInfo().RunID
 
 	scope := handler.metricsClient.Scope(metrics.HistoryRespondDecisionTaskCompletedScope)
-
-	// Consistent query requires both server and client worker support. If a consistent query was requested (meaning there are
-	// buffered queries) but worker does not support consistent query then all buffered queries should be failed.
-	if versionErr := handler.versionChecker.SupportsConsistentQuery(clientImpl, clientFeatureVersion); versionErr != nil {
-		scope.IncCounter(metrics.WorkerNotSupportsConsistentQueryCount)
-		failedTerminationState := &queryTerminationState{
-			queryTerminationType: queryTerminationTypeFailed,
-			failure:              serviceerror.NewInvalidArgument(versionErr.Error()),
-		}
-		buffered := queryRegistry.getBufferedIDs()
-		handler.logger.Info(
-			"failing query because worker does not support consistent query",
-			tag.WorkflowDomainName(domain),
-			tag.WorkflowID(workflowID),
-			tag.WorkflowRunID(runID),
-			tag.Error(versionErr))
-		for _, id := range buffered {
-			if err := queryRegistry.setTerminationState(id, failedTerminationState); err != nil {
-				handler.logger.Error(
-					"failed to set query termination state to failed",
-					tag.WorkflowDomainName(domain),
-					tag.WorkflowID(workflowID),
-					tag.WorkflowRunID(runID),
-					tag.QueryID(id),
-					tag.Error(err))
-				scope.IncCounter(metrics.QueryRegistryInvalidStateCount)
-			}
-		}
-		return
-	}
 
 	// if its a heartbeat decision it means local activities may still be running on the worker
 	// which were started by an external event which happened before the query
