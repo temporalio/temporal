@@ -24,6 +24,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/client/admin"
@@ -182,7 +184,7 @@ func (p *domainReplicationMessageProcessor) putDomainReplicationTaskToDLQ(
 
 	domainAttribute := task.GetDomainTaskAttributes()
 	if domainAttribute == nil {
-		return &workflow.InternalServiceError{
+		return &serviceerror.Internal{
 			Message: "Domain replication task does not set domain task attribute",
 		}
 	}

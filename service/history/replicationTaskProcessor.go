@@ -389,9 +389,9 @@ func (p *ReplicationTaskProcessorImpl) putReplicationTaskToDLQ(replicationTask *
 		return nil
 	}
 	p.logger.Info("Put history replication to DLQ",
-		tag.WorkflowDomainID(request.TaskInfo.GetDomainID()),
+		tag.WorkflowDomainIDBytes(request.TaskInfo.GetDomainID()),
 		tag.WorkflowID(request.TaskInfo.GetWorkflowID()),
-		tag.WorkflowRunID(request.TaskInfo.GetRunID()),
+		tag.WorkflowRunIDBytes(request.TaskInfo.GetRunID()),
 		tag.TaskID(request.TaskInfo.GetTaskID()),
 	)
 

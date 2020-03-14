@@ -159,7 +159,7 @@ func (q *cassandraQueue) tryEnqueue(
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
 		if isThrottlingError(err) {
-			return serviceerror.NewResourceExhausted(fmt.Sprintf("Failed to enqueue message. Error: %v, Type: %v.", err, queueType))
+			return emptyMessageID, serviceerror.NewResourceExhausted(fmt.Sprintf("Failed to enqueue message. Error: %v, Type: %v.", err, queueType))
 		}
 		return emptyMessageID, serviceerror.NewInternal(fmt.Sprintf("Failed to enqueue message. Error: %v, Type: %v.", err, queueType))
 	}

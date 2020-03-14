@@ -34,7 +34,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 
-<<<<<<< HEAD
 	pblobs "github.com/temporalio/temporal/.gen/proto/persistenceblobs"
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/common"
@@ -43,6 +42,7 @@ import (
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/log/tag"
+	"github.com/temporalio/temporal/common/metrics"
 	p "github.com/temporalio/temporal/common/persistence"
 	"github.com/temporalio/temporal/common/persistence/cassandra"
 	"github.com/temporalio/temporal/common/persistence/client"
@@ -50,37 +50,6 @@ import (
 	"github.com/temporalio/temporal/common/primitives"
 	"github.com/temporalio/temporal/common/primitives/timestamp"
 	"github.com/temporalio/temporal/common/service/config"
-||||||| merged common ancestors
-	"github.com/uber/cadence/.gen/go/replicator"
-	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/backoff"
-	"github.com/uber/cadence/common/cluster"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/loggerimpl"
-	"github.com/uber/cadence/common/log/tag"
-	p "github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/persistence/cassandra"
-	"github.com/uber/cadence/common/persistence/client"
-	"github.com/uber/cadence/common/persistence/sql"
-	"github.com/uber/cadence/common/service/config"
-=======
-	"github.com/uber/cadence/.gen/go/replicator"
-	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/backoff"
-	"github.com/uber/cadence/common/cluster"
-	"github.com/uber/cadence/common/log"
-	"github.com/uber/cadence/common/log/loggerimpl"
-	"github.com/uber/cadence/common/log/tag"
-	"github.com/uber/cadence/common/metrics"
-	p "github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/persistence/cassandra"
-	"github.com/uber/cadence/common/persistence/client"
-	"github.com/uber/cadence/common/persistence/sql"
-	"github.com/uber/cadence/common/service"
-	"github.com/uber/cadence/common/service/config"
->>>>>>> 7c07af4fbb043b70332a132d395e7e1aa8c3fcff
 )
 
 type (
@@ -219,7 +188,7 @@ func (s *TestBase) Setup() {
 
 	cfg := s.DefaultTestCluster.Config()
 	scope := tally.NewTestScope(common.HistoryServiceName, make(map[string]string))
-	metricsClient := metrics.NewClient(scope, service.GetMetricsServiceIdx(common.HistoryServiceName, s.logger))
+	metricsClient := metrics.NewClient(scope, metrics.GetMetricsServiceIdx(common.HistoryServiceName, s.logger))
 	factory := client.NewFactory(&cfg, nil, clusterName, metricsClient, s.logger)
 
 	s.TaskMgr, err = factory.NewTaskManager()

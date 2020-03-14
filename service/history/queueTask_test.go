@@ -29,8 +29,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
+	"go.temporal.io/temporal-proto/serviceerror"
 
-	workflow "github.com/temporalio/temporal/.gen/go/shared"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/clock"
 	"github.com/temporalio/temporal/common/log"
@@ -116,7 +116,7 @@ func (s *queueTaskSuite) TestHandleErr_ErrEntityNotExists() {
 		return true, nil
 	})
 
-	err := &workflow.EntityNotExistsError{}
+	err := &serviceerror.NotFound{}
 	s.NoError(queueTaskBase.HandleErr(err))
 }
 
@@ -143,7 +143,7 @@ func (s *queueTaskSuite) TestHandleErr_ErrDomainNotActive() {
 		return true, nil
 	})
 
-	err := &workflow.DomainNotActiveError{}
+	err := &serviceerror.DomainNotActive{}
 
 	queueTaskBase.submitTime = time.Now().Add(-cache.DomainCacheRefreshInterval * time.Duration(2))
 	s.NoError(queueTaskBase.HandleErr(err))
