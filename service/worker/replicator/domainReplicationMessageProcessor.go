@@ -166,7 +166,7 @@ func (p *domainReplicationMessageProcessor) getAndHandleDomainReplicationTasks()
 			}, p.retryPolicy, isTransientRetryableError)
 			if dlqErr != nil {
 				p.logger.Error("Failed to put replication tasks to DLQ", tag.Error(dlqErr))
-				p.metricsClient.IncCounter(metrics.DomainReplicationTaskScope, metrics.ReplicatorFailures)
+				p.metricsClient.IncCounter(metrics.DomainReplicationTaskScope, metrics.ReplicatorDLQFailures)
 				return
 			}
 		}
@@ -180,6 +180,16 @@ func (p *domainReplicationMessageProcessor) putDomainReplicationTaskToDLQ(
 	task *replication.ReplicationTask,
 ) error {
 
+	domainAttribute := task.GetDomainTaskAttributes()
+	if domainAttribute == nil {
+		return &workflow.InternalServiceError{
+			Message: "Domain replication task does not set domain task attribute",
+		}
+	}
+	p.metricsClient.Scope(
+		metrics.DomainReplicationTaskScope,
+		metrics.DomainTag(domainAttribute.GetInfo().GetName()),
+	).IncCounter(metrics.DomainReplicationEnqueueDLQCount)
 	return p.domainReplicationQueue.PublishToDLQ(task)
 }
 
