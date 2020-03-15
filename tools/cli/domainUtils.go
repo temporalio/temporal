@@ -282,7 +282,6 @@ func initializeMetadataMgr(
 ) persistence.MetadataManager {
 
 	pConfig := serviceConfig.Persistence
-	pConfig.SetMaxQPS(pConfig.DefaultStore, dependencyMaxQPS)
 	pConfig.VisibilityConfig = &config.VisibilityConfig{
 		VisibilityListMaxQPS:            dynamicconfig.GetIntPropertyFilteredByDomain(dependencyMaxQPS),
 		EnableSampling:                  dynamicconfig.GetBoolPropertyFn(false), // not used by domain operation
@@ -290,6 +289,7 @@ func initializeMetadataMgr(
 	}
 	pFactory := client.NewFactory(
 		&pConfig,
+		dynamicconfig.GetIntPropertyFn(dependencyMaxQPS),
 		nil, // TODO propagate abstract datastore factory from the CLI.
 		clusterMetadata.GetCurrentClusterName(),
 		metricsClient,

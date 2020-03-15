@@ -540,7 +540,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 		PageSize: 1,
 		Query:    "parsed by mockParser",
 	}
-	executions = []*shared.WorkflowExecutionInfo{}
+	executions = []*commonproto.WorkflowExecutionInfo{}
 	first = true
 	for first || request.NextPageToken != nil {
 		response, err := visibilityArchiver.Query(context.Background(), URI, request)
