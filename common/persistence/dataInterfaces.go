@@ -354,20 +354,6 @@ type (
 		*pblobs.ReplicationTaskInfo
 	}
 
-	// TimerTaskInfo describes a timer task.
-	TimerTaskInfo struct {
-		DomainID            string
-		WorkflowID          string
-		RunID               string
-		VisibilityTimestamp time.Time
-		TaskID              int64
-		TaskType            int
-		TimeoutType         int
-		EventID             int64
-		ScheduleAttempt     int64
-		Version             int64
-	}
-
 	// Task is the generic interface for workflow tasks
 	Task interface {
 		GetType() int
@@ -2231,49 +2217,6 @@ func (a *SyncActivityTask) GetVisibilityTimestamp() time.Time {
 // SetVisibilityTimestamp set the visibility timestamp
 func (a *SyncActivityTask) SetVisibilityTimestamp(timestamp time.Time) {
 	a.VisibilityTimestamp = timestamp
-}
-
-// GetTaskID returns the task ID for timer task
-func (t *TimerTaskInfo) GetTaskID() int64 {
-	return t.TaskID
-}
-
-// GetVersion returns the task version for timer task
-func (t *TimerTaskInfo) GetVersion() int64 {
-	return t.Version
-}
-
-// GetTaskType returns the task type for timer task
-func (t *TimerTaskInfo) GetTaskType() int32 {
-	return int32(t.TaskType)
-}
-
-// GetVisibilityTimestamp returns the task type for timer task
-func (t *TimerTaskInfo) GetVisibilityTimestamp() time.Time {
-	return t.VisibilityTimestamp
-}
-
-// GetWorkflowID returns the workflow ID for timer task
-func (t *TimerTaskInfo) GetWorkflowID() string {
-	return t.WorkflowID
-}
-
-// GetRunID returns the run ID for timer task
-func (t *TimerTaskInfo) GetRunID() []byte {
-	return primitives.MustParseUUID(t.RunID)
-}
-
-// GetDomainID returns the domain ID for timer task
-func (t *TimerTaskInfo) GetDomainID() []byte {
-	return primitives.MustParseUUID(t.DomainID)
-}
-
-// GetTaskType returns the task type for timer task
-func (t *TimerTaskInfo) String() string {
-	return fmt.Sprintf(
-		"{DomainID: %v, WorkflowID: %v, RunID: %v, VisibilityTimestamp: %v, TaskID: %v, TaskType: %v, TimeoutType: %v, EventID: %v, ScheduleAttempt: %v, Version: %v.}",
-		t.DomainID, t.WorkflowID, t.RunID, t.VisibilityTimestamp, t.TaskID, t.TaskType, t.TimeoutType, t.EventID, t.ScheduleAttempt, t.Version,
-	)
 }
 
 // SerializeClusterConfigs makes an array of *ClusterReplicationConfig serializable
