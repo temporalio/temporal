@@ -30,6 +30,7 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
+	"github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/mocks"
 	"github.com/temporalio/temporal/common/persistence"
@@ -350,7 +351,7 @@ func (s *HistoryIteratorSuite) TestNext_Fail_IteratorDepleted() {
 	}
 	s.assertStateMatches(expectedIteratorState, itr)
 	s.NotNil(blob)
-	expectedHeader := &HistoryBlobHeader{
+	expectedHeader := &archiver.HistoryBlobHeader{
 		DomainName:           testDomainName,
 		DomainID:             testDomainID,
 		WorkflowID:           testWorkflowID,
@@ -412,7 +413,7 @@ func (s *HistoryIteratorSuite) TestNext_Fail_ReturnErrOnSecondCallToNext() {
 	}
 	s.assertStateMatches(expectedIteratorState, itr)
 	s.NotNil(blob)
-	expectedHeader := &HistoryBlobHeader{
+	expectedHeader := &archiver.HistoryBlobHeader{
 		DomainName:           testDomainName,
 		DomainID:             testDomainID,
 		WorkflowID:           testWorkflowID,
@@ -463,7 +464,7 @@ func (s *HistoryIteratorSuite) TestNext_Success_TenCallsToNext() {
 		blob, err := itr.Next()
 		s.NoError(err)
 		s.NotNil(blob)
-		expectedHeader := &HistoryBlobHeader{
+		expectedHeader := &archiver.HistoryBlobHeader{
 			DomainName:           testDomainName,
 			DomainID:             testDomainID,
 			WorkflowID:           testWorkflowID,
