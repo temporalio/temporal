@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/temporal-proto/workflowservice"
 	cclient "go.temporal.io/temporal/client"
 
+	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common"
 	carchiver "github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/provider"
@@ -243,7 +244,7 @@ func (c *client) archiveVisibilityInline(ctx context.Context, request *ClientReq
 		return
 	}
 
-	err = visibilityArchiver.Archive(ctx, URI, &carchiver.ArchiveVisibilityRequest{
+	err = visibilityArchiver.Archive(ctx, URI, &archiverproto.ArchiveVisibilityRequest{
 		DomainID:           request.ArchiveRequest.DomainID,
 		DomainName:         request.ArchiveRequest.DomainName,
 		WorkflowID:         request.ArchiveRequest.WorkflowID,

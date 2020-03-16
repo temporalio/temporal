@@ -38,7 +38,9 @@ import (
 	"go.temporal.io/temporal-proto/serviceerror"
 	"go.uber.org/multierr"
 
+	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common/archiver"
+	"github.com/temporalio/temporal/common/codec"
 )
 
 // encoding & decoding util
@@ -47,9 +49,10 @@ func encode(v interface{}) ([]byte, error) {
 	return json.Marshal(v)
 }
 
-func decodeVisibilityRecord(data []byte) (*visibilityRecord, error) {
-	record := &visibilityRecord{}
-	err := json.Unmarshal(data, record)
+func decodeVisibilityRecord(data []byte) (*archiverproto.ArchiveVisibilityRequest, error) {
+	record := &archiverproto.ArchiveVisibilityRequest{}
+	encoder := codec.NewJSONPBEncoder()
+	err := encoder.Decode(data, record)
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +255,7 @@ func contextExpired(ctx context.Context) bool {
 	}
 }
 
-func convertToExecutionInfo(record *visibilityRecord) *commonproto.WorkflowExecutionInfo {
+func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *commonproto.WorkflowExecutionInfo {
 	return &commonproto.WorkflowExecutionInfo{
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: record.WorkflowID,

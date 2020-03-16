@@ -29,6 +29,7 @@ import (
 
 	"go.temporal.io/temporal-proto/serviceerror"
 
+	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/gcloud/connector"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -58,7 +59,7 @@ type (
 		Offset int
 	}
 
-	visibilityRecord archiver.ArchiveVisibilityRequest
+	visibilityRecord archiverproto.ArchiveVisibilityRequest
 
 	queryVisibilityRequest struct {
 		domainID      string
@@ -87,7 +88,7 @@ func NewVisibilityArchiver(container *archiver.VisibilityBootstrapContainer, con
 // The only difference is that the ArchiveOption parameter won't include an option for recording process.
 // Please make sure your implementation is lossless. If any in-memory batching mechanism is used, then those batched records will be lost during server restarts.
 // This method will be invoked when workflow closes. Note that because of conflict resolution, it is possible for a workflow to through the closing process multiple times, which means that this method can be invoked more than once after a workflow closes.
-func (v *visibilityArchiver) Archive(ctx context.Context, URI archiver.URI, request *archiver.ArchiveVisibilityRequest, opts ...archiver.ArchiveOption) (err error) {
+func (v *visibilityArchiver) Archive(ctx context.Context, URI archiver.URI, request *archiverproto.ArchiveVisibilityRequest, opts ...archiver.ArchiveOption) (err error) {
 	scope := v.container.MetricsClient.Scope(metrics.HistoryArchiverScope, metrics.DomainTag(request.DomainName))
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
 	sw := scope.StartTimer(metrics.ServiceLatency)

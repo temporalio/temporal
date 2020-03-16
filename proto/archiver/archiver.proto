@@ -24,6 +24,8 @@ package replication;
 
 option go_package = "github.com/temporalio/temporal/.gen/proto/archiver";
 
+import "enums/enums.proto";
+import "common/common.proto";
 import "common/history.proto";
 
 
@@ -44,4 +46,21 @@ message HistoryBlobHeader {
 message HistoryBlob  {
     HistoryBlobHeader Header = 1;
     repeated common.History Body = 2;
+}
+
+// ArchiveVisibilityRequest is request to Archive single workflow visibility record
+message ArchiveVisibilityRequest {
+    string DomainID = 1;
+    string DomainName = 2;
+    string WorkflowID = 3;
+    string RunID = 4;
+    string WorkflowTypeName = 5;
+    int64 StartTimestamp = 6;
+    int64 ExecutionTimestamp = 7;
+    int64 CloseTimestamp = 8;
+    enums.WorkflowExecutionCloseStatus CloseStatus = 9;
+    int64 HistoryLength = 10;
+    common.Memo Memo = 11;
+    map<string, string> SearchAttributes = 12;
+    string HistoryArchivalURI = 13;
 }

@@ -29,6 +29,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"go.temporal.io/temporal-proto/serviceerror"
 
+	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
@@ -42,7 +43,7 @@ type (
 		queryParser QueryParser
 	}
 
-	visibilityRecord archiver.ArchiveVisibilityRequest
+	visibilityRecord archiverproto.ArchiveVisibilityRequest
 
 	queryVisibilityRequest struct {
 		domainID      string
@@ -97,7 +98,7 @@ func newVisibilityArchiver(
 func (v *visibilityArchiver) Archive(
 	ctx context.Context,
 	URI archiver.URI,
-	request *archiver.ArchiveVisibilityRequest,
+	request *archiverproto.ArchiveVisibilityRequest,
 	opts ...archiver.ArchiveOption,
 ) (err error) {
 	scope := v.container.MetricsClient.Scope(metrics.VisibilityArchiverScope, metrics.DomainTag(request.DomainName))
@@ -148,7 +149,7 @@ func (v *visibilityArchiver) Archive(
 	scope.IncCounter(metrics.VisibilityArchiveSuccessCount)
 	return nil
 }
-func createIndexesToArchive(request *archiver.ArchiveVisibilityRequest) []indexToArchive {
+func createIndexesToArchive(request *archiverproto.ArchiveVisibilityRequest) []indexToArchive {
 	return []indexToArchive{
 		{primaryIndexKeyWorkflowTypeName, request.WorkflowTypeName, secondaryIndexKeyCloseTimeout, request.CloseTimestamp},
 		{primaryIndexKeyWorkflowTypeName, request.WorkflowTypeName, secondaryIndexKeyStartTimeout, request.StartTimestamp},

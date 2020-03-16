@@ -33,6 +33,7 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
+	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/service/config"
@@ -55,7 +56,7 @@ type (
 		LastRunID     string
 	}
 
-	visibilityRecord archiver.ArchiveVisibilityRequest
+	visibilityRecord archiverproto.ArchiveVisibilityRequest
 
 	queryVisibilityRequest struct {
 		domainID      string
@@ -89,7 +90,7 @@ func NewVisibilityArchiver(
 func (v *visibilityArchiver) Archive(
 	ctx context.Context,
 	URI archiver.URI,
-	request *archiver.ArchiveVisibilityRequest,
+	request *archiverproto.ArchiveVisibilityRequest,
 	opts ...archiver.ArchiveOption,
 ) (err error) {
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
@@ -304,7 +305,7 @@ func sortAndFilterFiles(filenames []string, token *queryVisibilityToken) ([]stri
 	return filteredFilenames, nil
 }
 
-func matchQuery(record *visibilityRecord, query *parsedQuery) bool {
+func matchQuery(record *archiverproto.ArchiveVisibilityRequest, query *parsedQuery) bool {
 	if record.CloseTimestamp < query.earliestCloseTime || record.CloseTimestamp > query.latestCloseTime {
 		return false
 	}
@@ -323,7 +324,7 @@ func matchQuery(record *visibilityRecord, query *parsedQuery) bool {
 	return true
 }
 
-func convertToExecutionInfo(record *visibilityRecord) *commonproto.WorkflowExecutionInfo {
+func convertToExecutionInfo(record *archiverproto.ArchiveVisibilityRequest) *commonproto.WorkflowExecutionInfo {
 	return &commonproto.WorkflowExecutionInfo{
 		Execution: &commonproto.WorkflowExecution{
 			WorkflowId: record.WorkflowID,

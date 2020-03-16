@@ -90,6 +90,7 @@ message AddDecisionTaskRequest {
     int64 scheduleId = 4;
     int32 scheduleToStartTimeoutSeconds = 5;
     string forwardedFrom = 6;
+    TaskSource source = 7;
 }
 
 message AddDecisionTaskResponse {
@@ -103,6 +104,7 @@ message AddActivityTaskRequest {
     int64 scheduleId = 5;
     int32 scheduleToStartTimeoutSeconds = 6;
     string forwardedFrom = 7;
+    TaskSource source = 8;
 }
 
 message AddActivityTaskResponse {
@@ -158,4 +160,11 @@ message ListTaskListPartitionsRequest {
 message ListTaskListPartitionsResponse {
     repeated common.TaskListPartitionMetadata activityTaskListPartitions = 1;
     repeated common.TaskListPartitionMetadata decisionTaskListPartitions = 2;
+}
+
+// TaskSource is the source from which a task was produced
+enum TaskSource {
+    Unknown = 0;
+    TaskSourceHistory = 1;    // Task produced by history service
+    TaskSourceDbBacklog = 2; // Task produced from matching db backlog
 }

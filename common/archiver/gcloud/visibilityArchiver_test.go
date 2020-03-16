@@ -35,6 +35,7 @@ import (
 	"github.com/uber-go/tally"
 	"go.uber.org/zap"
 
+	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/gcloud/connector/mocks"
@@ -132,7 +133,7 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidVisibilityURI() {
 
 	visibilityArchiver := newVisibilityArchiver(s.container, storageWrapper)
 	s.NoError(err)
-	request := &archiver.ArchiveVisibilityRequest{
+	request := &archiverproto.ArchiveVisibilityRequest{
 		DomainID:   testDomainID,
 		DomainName: testDomainName,
 		WorkflowID: testWorkflowID,
@@ -177,7 +178,7 @@ func (s *visibilityArchiverSuite) TestVisibilityArchive() {
 	visibilityArchiver := newVisibilityArchiver(s.container, storageWrapper)
 	s.NoError(err)
 
-	request := &archiver.ArchiveVisibilityRequest{
+	request := &archiverproto.ArchiveVisibilityRequest{
 		DomainName:         testDomainName,
 		DomainID:           testDomainID,
 		WorkflowID:         testWorkflowID,
