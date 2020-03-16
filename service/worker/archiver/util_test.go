@@ -25,6 +25,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/uber/cadence/.gen/go/shared"
 )
 
 type UtilSuite struct {
@@ -38,6 +39,53 @@ func TestUtilSuite(t *testing.T) {
 
 func (s *UtilSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
+}
+
+func (s *UtilSuite) TestHashDeterminism() {
+	testCases := []struct {
+		instance interface{}
+	}{
+		{
+			instance: "some random string",
+		},
+		{
+			instance: map[string]string{
+				"key1": "value1",
+				"key2": "value2",
+				"key3": "value3",
+			},
+		},
+		{
+			instance: []string{"value1", "value2", "value3"},
+		},
+		{
+			instance: ArchiveRequest{
+				DomainID:    "some random domainID",
+				ShardID:     0,
+				BranchToken: []byte{1, 2, 3},
+				NextEventID: int64(123),
+				CloseStatus: shared.WorkflowExecutionCloseStatusContinuedAsNew,
+				Memo: &shared.Memo{
+					Fields: map[string][]byte{
+						"memoKey1": []byte{1, 2, 3},
+						"memoKey2": []byte{4, 5, 6},
+					},
+				},
+				SearchAttributes: map[string][]byte{
+					"customKey1": []byte{1, 2, 3},
+					"customKey2": []byte{4, 5, 6},
+				},
+				Targets: []ArchivalTarget{ArchiveTargetHistory, ArchiveTargetVisibility},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		expectedHash := hash(tc.instance)
+		for i := 0; i != 100; i++ {
+			s.Equal(expectedHash, hash(tc.instance))
+		}
+	}
 }
 
 func (s *UtilSuite) TestHashesEqual() {
