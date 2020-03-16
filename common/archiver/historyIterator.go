@@ -27,6 +27,7 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
+	"github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/persistence"
 )
@@ -38,29 +39,9 @@ const (
 type (
 	// HistoryIterator is used to get history batches
 	HistoryIterator interface {
-		Next() (*HistoryBlob, error)
+		Next() (*archiver.HistoryBlob, error)
 		HasNext() bool
 		GetState() ([]byte, error)
-	}
-
-	// HistoryBlobHeader is the header attached to all history blobs
-	HistoryBlobHeader struct {
-		DomainName           string `json:"domain_name,omitempty"`
-		DomainID             string `json:"domain_id,omitempty"`
-		WorkflowID           string `json:"workflow_id,omitempty"`
-		RunID                string `json:"run_id,omitempty"`
-		IsLast               bool   `json:"is_last,omitempty"`
-		FirstFailoverVersion int64  `json:"first_failover_version,omitempty"`
-		LastFailoverVersion  int64  `json:"last_failover_version,omitempty"`
-		FirstEventID         int64  `json:"first_event_id,omitempty"`
-		LastEventID          int64  `json:"last_event_id,omitempty"`
-		EventCount           int64  `json:"event_count,omitempty"`
-	}
-
-	// HistoryBlob is the serializable data that forms the body of a blob
-	HistoryBlob struct {
-		Header *HistoryBlobHeader     `json:"header"`
-		Body   []*commonproto.History `json:"body"`
 	}
 
 	historyIteratorState struct {
@@ -127,7 +108,7 @@ func newHistoryIterator(
 	}
 }
 
-func (i *historyIterator) Next() (*HistoryBlob, error) {
+func (i *historyIterator) Next() (*archiver.HistoryBlob, error) {
 	if !i.HasNext() {
 		return nil, errIteratorDepleted
 	}
@@ -145,7 +126,7 @@ func (i *historyIterator) Next() (*HistoryBlob, error) {
 	for _, batch := range historyBatches {
 		eventCount += int64(len(batch.Events))
 	}
-	header := &HistoryBlobHeader{
+	header := &archiver.HistoryBlobHeader{
 		DomainName:           i.request.DomainName,
 		DomainID:             i.request.DomainID,
 		WorkflowID:           i.request.WorkflowID,
@@ -158,7 +139,7 @@ func (i *historyIterator) Next() (*HistoryBlob, error) {
 		EventCount:           eventCount,
 	}
 
-	return &HistoryBlob{
+	return &archiver.HistoryBlob{
 		Header: header,
 		Body:   historyBatches,
 	}, nil

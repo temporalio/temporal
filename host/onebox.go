@@ -655,6 +655,7 @@ func (c *cadenceImpl) startWorker(hosts map[string][]string, startWG *sync.WaitG
 	service, err := resource.New(
 		params,
 		common.WorkerServiceName,
+		dynamicconfig.GetIntPropertyFn(5000),
 		dynamicconfig.GetIntPropertyFn(10000),
 		func(
 			persistenceBean persistenceClient.Bean,

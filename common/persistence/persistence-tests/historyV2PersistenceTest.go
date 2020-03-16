@@ -117,7 +117,7 @@ func (s *HistoryV2PersistenceSuite) TestGenUUIDs() {
 
 // TestScanAllTrees test
 func (s *HistoryV2PersistenceSuite) TestScanAllTrees() {
-	// TODO https://github.com/uber/cadence/issues/2458
+	// TODO https://github.com/temporalio/temporal/issues/2458
 	if s.HistoryV2Mgr.GetName() != "cassandra" {
 		return
 	}

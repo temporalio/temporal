@@ -24,8 +24,8 @@ import (
 	"context"
 
 	commonproto "go.temporal.io/temporal-proto/common"
-	"go.temporal.io/temporal-proto/enums"
 
+	"github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common/cache"
 	"github.com/temporalio/temporal/common/cluster"
 	"github.com/temporalio/temporal/common/log"
@@ -86,23 +86,6 @@ type (
 		DomainCache     cache.DomainCache
 	}
 
-	// ArchiveVisibilityRequest is request to Archive single workflow visibility record
-	ArchiveVisibilityRequest struct {
-		DomainID           string
-		DomainName         string // doesn't need to be archived
-		WorkflowID         string
-		RunID              string
-		WorkflowTypeName   string
-		StartTimestamp     int64
-		ExecutionTimestamp int64
-		CloseTimestamp     int64
-		CloseStatus        enums.WorkflowExecutionCloseStatus
-		HistoryLength      int64
-		Memo               *commonproto.Memo
-		SearchAttributes   map[string]string
-		HistoryArchivalURI string
-	}
-
 	// QueryVisibilityRequest is the request to query archived visibility records
 	QueryVisibilityRequest struct {
 		DomainID      string
@@ -119,7 +102,7 @@ type (
 
 	// VisibilityArchiver is used to archive visibility and read archived visibility
 	VisibilityArchiver interface {
-		Archive(context.Context, URI, *ArchiveVisibilityRequest, ...ArchiveOption) error
+		Archive(context.Context, URI, *archiver.ArchiveVisibilityRequest, ...ArchiveOption) error
 		Query(context.Context, URI, *QueryVisibilityRequest) (*QueryVisibilityResponse, error)
 		ValidateURI(URI) error
 	}

@@ -36,5 +36,7 @@ type (
 		// This option is basically the inverse of InSecureSkipVerify
 		// See InSecureSkipVerify in http://golang.org/pkg/crypto/tls/ for more info
 		EnableHostVerification bool `yaml:"enableHostVerification"`
+
+		ServerName string `yaml:"serverName"`
 	}
 )

@@ -22,6 +22,7 @@ package messaging
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/Shopify/sarama"
 	"go.temporal.io/temporal-proto/enums"
@@ -96,9 +97,15 @@ func (p *kafkaProducer) getKeyForReplicationTask(task *replication.ReplicationTa
 	switch task.GetTaskType() {
 	case enums.ReplicationTaskTypeHistory:
 		// Use workflowID as the partition key so all replication tasks for a workflow are dispatched to the same
-		// Kafka partition.  This will give us some ordering guarantee for workflow replication tasks atleast at
+		// Kafka partition.  This will give us some ordering guarantee for workflow replication tasks at least at
 		// the messaging layer perspective
 		attributes := task.GetHistoryTaskAttributes()
+		return sarama.StringEncoder(attributes.GetWorkflowId())
+	case enums.ReplicationTaskTypeHistoryV2:
+		// Use workflowID as the partition key so all replication tasks for a workflow are dispatched to the same
+		// Kafka partition.  This will give us some ordering guarantee for workflow replication tasks at least at
+		// the messaging layer perspective
+		attributes := task.GetHistoryTaskV2Attributes()
 		return sarama.StringEncoder(attributes.GetWorkflowId())
 	case enums.ReplicationTaskTypeSyncActivity:
 		// Use workflowID as the partition key so all sync activity tasks for a workflow are dispatched to the same
@@ -106,6 +113,12 @@ func (p *kafkaProducer) getKeyForReplicationTask(task *replication.ReplicationTa
 		// the messaging layer perspective
 		attributes := task.GetSyncActivityTaskAttributes()
 		return sarama.StringEncoder(attributes.GetWorkflowId())
+	case enums.ReplicationTaskTypeHistoryMetadata,
+		enums.ReplicationTaskTypeDomain,
+		enums.ReplicationTaskTypeSyncShardStatus:
+		return nil
+	default:
+		panic(fmt.Sprintf("encounter unsupported replication task type: %v", task.GetTaskType()))
 	}
 
 	return nil

@@ -95,8 +95,12 @@ archival:
       gstorage:
         credentialsPath: "/tmp/gcloud/keyfile.json"
   visibility:
-    status: "disabled"
-    enableRead: false
+    status: "enabled"
+    enableRead: true
+    provider:
+      filestore:
+        fileMode: "0666"
+        dirMode: "0766"
 
 domainDefaults:
   archival:
@@ -104,7 +108,8 @@ domainDefaults:
       status: "enabled"
       URI: "file:///tmp/temporal_archival/development"
     visibility:
-      status: "disabled"
+      status: "enabled"
+      URI: "file:///tmp/cadence_vis_archival/development"
 
 kafka:
   tls:

@@ -58,6 +58,8 @@ message Task {
     int64 ScheduleId = 4;
     int64 ScheduleAttempt = 5;
     string ActivityId = 6;
+    string WorkflowType = 7;
+    string ActivityType = 8;
 }
 
 message QueryTask {

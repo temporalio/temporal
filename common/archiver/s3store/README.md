@@ -35,11 +35,12 @@ The syntax for the query is based on SQL
 
 Supported column names are
 - WorkflowID *String*
+- WorkflowTypeName *String*
 - StartTime *Date*
 - CloseTime *Date*
 - SearchPrecision *String - Day, Hour, Minute, Second*
 
-WorkflowID and SearchPrecision are always required. One of StartTime and CloseTime are required and they are mutually exclusive.
+WorkflowID or WorkflowTypeName is required. If filtering on date use StartTime or CloseTime in combination with SearchPrecision.
 
 Searching for a record will be done in times in the UTC timezone
 
@@ -58,11 +59,15 @@ it will search all records starting from `2020-01-21T00:00:00Z` to `2020-01-21T5
 ## Storage in S3
 Workflow runs are stored in s3 using the following structure
 ```
-s3://<bucket-name>/<domain-id>/<workflow-id>/
-	history/<run-id>
+s3://<bucket-name>/<domain-id>/
+	history/<workflow-id>/<run-id>
 	visibility/
-		startTimeout/2020-01-21T16:16:11Z/<run-id>
-		closeTimeout/2020-01-21T16:16:11Z/<run-id>
+            workflowTypeName/<workflow-type-name>/
+                startTimeout/2020-01-21T16:16:11Z/<run-id>
+                closeTimeout/2020-01-21T16:16:11Z/<run-id>
+            workflowID/<workflow-id>/
+                startTimeout/2020-01-21T16:16:11Z/<run-id>
+                closeTimeout/2020-01-21T16:16:11Z/<run-id>
 ```
 
 ## Using localstack for local development
