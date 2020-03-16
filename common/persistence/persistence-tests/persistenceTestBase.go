@@ -75,6 +75,7 @@ type (
 	TestBase struct {
 		suite.Suite
 		ShardMgr               p.ShardManager
+                AbstractDataStoreFactory client.AbstractDataStoreFactory
 		ExecutionMgrFactory    client.Factory
 		ExecutionManager       p.ExecutionManager
 		TaskMgr                p.TaskManager
@@ -189,7 +190,7 @@ func (s *TestBase) Setup() {
 	cfg := s.DefaultTestCluster.Config()
 	scope := tally.NewTestScope(common.HistoryServiceName, make(map[string]string))
 	metricsClient := metrics.NewClient(scope, metrics.GetMetricsServiceIdx(common.HistoryServiceName, s.logger))
-	factory := client.NewFactory(&cfg, nil, nil, clusterName, metricsClient, s.logger)
+	factory := client.NewFactory(&cfg, nil, s.AbstractDataStoreFactory, clusterName, metricsClient, s.logger)
 
 	s.TaskMgr, err = factory.NewTaskManager()
 	s.fatalOnError("NewTaskManager", err)
