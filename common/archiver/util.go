@@ -23,6 +23,7 @@ package archiver
 import (
 	"errors"
 
+	"github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common/log"
 	"github.com/temporalio/temporal/common/log/tag"
 )
@@ -55,7 +56,7 @@ func TagLoggerWithArchiveHistoryRequestAndURI(logger log.Logger, request *Archiv
 }
 
 // TagLoggerWithArchiveVisibilityRequestAndURI tags logger with fields in the archive visibility request and the URI
-func TagLoggerWithArchiveVisibilityRequestAndURI(logger log.Logger, request *ArchiveVisibilityRequest, URI string) log.Logger {
+func TagLoggerWithArchiveVisibilityRequestAndURI(logger log.Logger, request *archiver.ArchiveVisibilityRequest, URI string) log.Logger {
 	return logger.WithTags(
 		tag.ArchivalRequestDomainID(request.DomainID),
 		tag.ArchivalRequestDomainName(request.DomainName),
@@ -103,7 +104,7 @@ func ValidateGetRequest(request *GetHistoryRequest) error {
 }
 
 // ValidateVisibilityArchivalRequest validates the archive visibility request
-func ValidateVisibilityArchivalRequest(request *ArchiveVisibilityRequest) error {
+func ValidateVisibilityArchivalRequest(request *archiver.ArchiveVisibilityRequest) error {
 	if request.DomainID == "" {
 		return errEmptyDomainID
 	}

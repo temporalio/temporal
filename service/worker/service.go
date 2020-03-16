@@ -77,14 +77,10 @@ func NewService(
 
 	serviceConfig := NewConfig(params)
 
-	params.PersistenceConfig.SetMaxQPS(
-		params.PersistenceConfig.DefaultStore,
-		serviceConfig.ReplicationCfg.PersistenceMaxQPS(),
-	)
-
 	serviceResource, err := resource.New(
 		params,
 		common.WorkerServiceName,
+		serviceConfig.ReplicationCfg.PersistenceMaxQPS,
 		serviceConfig.ThrottledLogRPS,
 		func(
 			persistenceBean persistenceClient.Bean,
@@ -127,9 +123,12 @@ func NewConfig(params *resource.BootstrapParams) *Config {
 			TimeLimitPerArchivalIteration: dc.GetDurationProperty(dynamicconfig.WorkerTimeLimitPerArchivalIteration, archiver.MaxArchivalIterationTimeout()),
 		},
 		ScannerCfg: &scanner.Config{
-			PersistenceMaxQPS: dc.GetIntProperty(dynamicconfig.ScannerPersistenceMaxQPS, 100),
-			Persistence:       &params.PersistenceConfig,
-			ClusterMetadata:   params.ClusterMetadata,
+			PersistenceMaxQPS:        dc.GetIntProperty(dynamicconfig.ScannerPersistenceMaxQPS, 100),
+			Persistence:              &params.PersistenceConfig,
+			ClusterMetadata:          params.ClusterMetadata,
+			TaskListScannerEnabled:   dc.GetBoolProperty(dynamicconfig.TaskListScannerEnabled, true),
+			HistoryScannerEnabled:    dc.GetBoolProperty(dynamicconfig.HistoryScannerEnabled, true),
+			ExecutionsScannerEnabled: dc.GetBoolProperty(dynamicconfig.ExecutionsScannerEnabled, false),
 		},
 		BatcherCfg: &batcher.Config{
 			AdminOperationToken: dc.GetStringProperty(dynamicconfig.AdminOperationToken, common.DefaultAdminOperationToken),

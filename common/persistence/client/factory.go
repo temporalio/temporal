@@ -30,6 +30,7 @@ import (
 	"github.com/temporalio/temporal/common/persistence/sql"
 	"github.com/temporalio/temporal/common/quotas"
 	"github.com/temporalio/temporal/common/service/config"
+	"github.com/temporalio/temporal/common/service/dynamicconfig"
 )
 
 type (
@@ -77,6 +78,12 @@ type (
 		// NewClusterMetadataStore returns a new metadata store
 		NewClusterMetadataStore() (p.ClusterMetadataStore, error)
 	}
+	// AbstractDataStoreFactory creates a DataStoreFactory, can be used to implement custom datastore support outside
+	// of the Temporal core.
+	AbstractDataStoreFactory interface {
+		NewFactory(cfg config.CustomDatastoreConfig, clusterName string, logger log.Logger) DataStoreFactory
+	}
+
 	// Datastore represents a datastore
 	Datastore struct {
 		factory   DataStoreFactory
@@ -84,11 +91,12 @@ type (
 	}
 	factoryImpl struct {
 		sync.RWMutex
-		config        *config.Persistence
-		metricsClient metrics.Client
-		logger        log.Logger
-		datastores    map[storeType]Datastore
-		clusterName   string
+		config                   *config.Persistence
+		abstractDataStoreFactory AbstractDataStoreFactory
+		metricsClient            metrics.Client
+		logger                   log.Logger
+		datastores               map[storeType]Datastore
+		clusterName              string
 	}
 
 	storeType int
@@ -125,17 +133,20 @@ var storeTypes = []storeType{
 // given configuration. In addition, all objects will emit metrics automatically
 func NewFactory(
 	cfg *config.Persistence,
+	persistenceMaxQPS dynamicconfig.IntPropertyFn,
+	abstractDataStoreFactory AbstractDataStoreFactory,
 	clusterName string,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) Factory {
 	factory := &factoryImpl{
-		config:        cfg,
-		metricsClient: metricsClient,
-		logger:        logger,
-		clusterName:   clusterName,
+		config:                   cfg,
+		abstractDataStoreFactory: abstractDataStoreFactory,
+		metricsClient:            metricsClient,
+		logger:                   logger,
+		clusterName:              clusterName,
 	}
-	limiters := buildRatelimiters(cfg)
+	limiters := buildRatelimiters(cfg, persistenceMaxQPS)
 	factory.init(clusterName, limiters)
 	return factory
 }
@@ -313,6 +324,8 @@ func (f *factoryImpl) init(clusterName string, limiters map[string]quotas.Limite
 		defaultDataStore.factory = cassandra.NewFactory(*defaultCfg.Cassandra, clusterName, f.logger)
 	case defaultCfg.SQL != nil:
 		defaultDataStore.factory = sql.NewFactory(*defaultCfg.SQL, clusterName, f.logger)
+	case defaultCfg.CustomDataStoreConfig != nil:
+		defaultDataStore.factory = f.abstractDataStoreFactory.NewFactory(*defaultCfg.CustomDataStoreConfig, clusterName, f.logger)
 	default:
 		f.logger.Fatal("invalid config: one of cassandra or sql params must be specified")
 	}
@@ -326,7 +339,7 @@ func (f *factoryImpl) init(clusterName string, limiters map[string]quotas.Limite
 	visibilityCfg := f.config.DataStores[f.config.VisibilityStore]
 	visibilityDataStore := Datastore{ratelimit: limiters[f.config.VisibilityStore]}
 	switch {
-	case defaultCfg.Cassandra != nil:
+	case visibilityCfg.Cassandra != nil:
 		visibilityDataStore.factory = cassandra.NewFactory(*visibilityCfg.Cassandra, clusterName, f.logger)
 	case visibilityCfg.SQL != nil:
 		visibilityDataStore.factory = sql.NewFactory(*visibilityCfg.SQL, clusterName, f.logger)
@@ -337,18 +350,11 @@ func (f *factoryImpl) init(clusterName string, limiters map[string]quotas.Limite
 	f.datastores[storeTypeVisibility] = visibilityDataStore
 }
 
-func buildRatelimiters(cfg *config.Persistence) map[string]quotas.Limiter {
+func buildRatelimiters(cfg *config.Persistence, maxQPS dynamicconfig.IntPropertyFn) map[string]quotas.Limiter {
 	result := make(map[string]quotas.Limiter, len(cfg.DataStores))
-	for dsName, ds := range cfg.DataStores {
-		qps := 0
-		if ds.Cassandra != nil {
-			qps = ds.Cassandra.MaxQPS
-		}
-		if ds.SQL != nil {
-			qps = ds.SQL.MaxQPS
-		}
-		if qps > 0 {
-			result[dsName] = quotas.NewSimpleRateLimiter(qps)
+	for dsName, _ := range cfg.DataStores {
+		if maxQPS != nil && maxQPS() > 0 {
+			result[dsName] = quotas.NewDynamicRateLimiter(func() float64 { return float64(maxQPS()) })
 		}
 	}
 	return result

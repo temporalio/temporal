@@ -1449,6 +1449,7 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 		return err
 	}
 	domainID := domainEntry.GetInfo().ID
+	domainName := domainEntry.GetInfo().Name
 
 	request := req.CompleteRequest
 	token, err0 := e.tokenSerializer.Deserialize(request.TaskToken)
@@ -1461,7 +1462,9 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 		RunId:      primitives.UUIDString(token.GetRunId()),
 	}
 
-	return e.updateWorkflowExecution(ctx, domainID, workflowExecution, true,
+	var activityStartedTime time.Time
+	var taskList string
+	err = e.updateWorkflowExecution(ctx, domainID, workflowExecution, true,
 		func(context workflowExecutionContext, mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return ErrWorkflowCompleted
@@ -1492,8 +1495,21 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 				// Unable to add ActivityTaskCompleted event to history
 				return serviceerror.NewInternal("Unable to add ActivityTaskCompleted event to history.")
 			}
+			activityStartedTime = ai.StartedTime
+			taskList = ai.TaskList
 			return nil
 		})
+	if err == nil && !activityStartedTime.IsZero() {
+		scope := e.metricsClient.Scope(metrics.HistoryRespondActivityTaskCompletedScope).
+			Tagged(
+				metrics.DomainTag(domainName),
+				metrics.WorkflowTypeTag(token.WorkflowType),
+				metrics.ActivityTypeTag(token.ActivityType),
+				metrics.TaskListTag(taskList),
+			)
+		scope.RecordTimer(metrics.ActivityE2ELatency, time.Since(activityStartedTime))
+	}
+	return err
 }
 
 // RespondActivityTaskFailed completes an activity task failure.
@@ -1507,6 +1523,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 		return err
 	}
 	domainID := domainEntry.GetInfo().ID
+	domainName := domainEntry.GetInfo().Name
 
 	request := req.FailedRequest
 	token, err0 := e.tokenSerializer.Deserialize(request.TaskToken)
@@ -1519,7 +1536,9 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 		RunId:      primitives.UUIDString(token.GetRunId()),
 	}
 
-	return e.updateWorkflowExecutionWithAction(ctx, domainID, workflowExecution,
+	var activityStartedTime time.Time
+	var taskList string
+	err = e.updateWorkflowExecutionWithAction(ctx, domainID, workflowExecution,
 		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
@@ -1560,8 +1579,21 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 				postActions.createDecision = true
 			}
 
+			activityStartedTime = ai.StartedTime
+			taskList = ai.TaskList
 			return postActions, nil
 		})
+	if err == nil && !activityStartedTime.IsZero() {
+		scope := e.metricsClient.Scope(metrics.HistoryRespondActivityTaskFailedScope).
+			Tagged(
+				metrics.DomainTag(domainName),
+				metrics.WorkflowTypeTag(token.WorkflowType),
+				metrics.ActivityTypeTag(token.ActivityType),
+				metrics.TaskListTag(taskList),
+			)
+		scope.RecordTimer(metrics.ActivityE2ELatency, time.Since(activityStartedTime))
+	}
+	return err
 }
 
 // RespondActivityTaskCanceled completes an activity task failure.
@@ -1575,6 +1607,7 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 		return err
 	}
 	domainID := domainEntry.GetInfo().ID
+	domainName := domainEntry.GetInfo().Name
 
 	request := req.CancelRequest
 	token, err0 := e.tokenSerializer.Deserialize(request.TaskToken)
@@ -1587,7 +1620,9 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 		RunId:      primitives.UUIDString(token.GetRunId()),
 	}
 
-	return e.updateWorkflowExecution(ctx, domainID, workflowExecution, true,
+	var activityStartedTime time.Time
+	var taskList string
+	err = e.updateWorkflowExecution(ctx, domainID, workflowExecution, true,
 		func(context workflowExecutionContext, mutableState mutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return ErrWorkflowCompleted
@@ -1624,9 +1659,21 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 				return serviceerror.NewInternal("Unable to add ActivityTaskCanceled event to history.")
 			}
 
+			activityStartedTime = ai.StartedTime
+			taskList = ai.TaskList
 			return nil
 		})
-
+	if err == nil && !activityStartedTime.IsZero() {
+		scope := e.metricsClient.Scope(metrics.HistoryClientRespondActivityTaskCanceledScope).
+			Tagged(
+				metrics.DomainTag(domainName),
+				metrics.WorkflowTypeTag(token.WorkflowType),
+				metrics.ActivityTypeTag(token.ActivityType),
+				metrics.TaskListTag(taskList),
+			)
+		scope.RecordTimer(metrics.ActivityE2ELatency, time.Since(activityStartedTime))
+	}
+	return err
 }
 
 // RecordActivityTaskHeartbeat records an hearbeat for a task.
@@ -2841,6 +2888,29 @@ func (e *historyEngineImpl) ReapplyEvents(
 		domainID,
 		currentExecution,
 		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
+			// Filter out reapply event from the same cluster
+			toReapplyEvents := make([]*commonproto.HistoryEvent, len(reapplyEvents))
+			lastWriteVersion, err := mutableState.GetLastWriteVersion()
+			if err != nil {
+				return nil, err
+			}
+			for _, event := range reapplyEvents {
+				if event.GetVersion() == lastWriteVersion {
+					// The reapply is from the same cluster. Ignoring.
+					continue
+				}
+				dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
+				if mutableState.IsResourceDuplicated(dedupResource) {
+					// already apply the signal
+					continue
+				}
+				toReapplyEvents = append(toReapplyEvents, event)
+			}
+			if len(toReapplyEvents) == 0 {
+				return &updateWorkflowAction{
+					noop: true,
+				}, nil
+			}
 
 			if !mutableState.IsWorkflowExecutionRunning() {
 				// need to reset target workflow (which is also the current workflow)
@@ -2892,7 +2962,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 						noopReleaseFn,
 					),
 					eventsReapplicationResetWorkflowReason,
-					reapplyEvents,
+					toReapplyEvents,
 				); err != nil {
 					return nil, err
 				}
@@ -2911,7 +2981,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 			reappliedEvents, err := e.eventsReapplier.reapplyEvents(
 				ctx,
 				mutableState,
-				reapplyEvents,
+				toReapplyEvents,
 				runID,
 			)
 			if err != nil {

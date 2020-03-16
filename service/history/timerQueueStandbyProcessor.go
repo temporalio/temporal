@@ -66,8 +66,8 @@ func newTimerQueueStandbyProcessor(
 		return shard.UpdateTimerClusterAckLevel(clusterName, ackLevel.VisibilityTimestamp)
 	}
 	logger = logger.WithTags(tag.ClusterName(clusterName))
-	timerTaskFilter := func(taskInfo *taskInfo) (bool, error) {
-		timer, ok := taskInfo.task.(*persistenceblobs.TimerTaskInfo)
+	timerTaskFilter := func(taskInfo queueTaskInfo) (bool, error) {
+		timer, ok := taskInfo.(*persistenceblobs.TimerTaskInfo)
 		if !ok {
 			return false, errUnexpectedQueueTask
 		}
@@ -177,5 +177,5 @@ func (t *timerQueueStandbyProcessorImpl) process(
 ) (int, error) {
 	// TODO: task metricScope should be determined when creating taskInfo
 	metricScope := t.timerQueueProcessorBase.getTimerTaskMetricScope(int(taskInfo.task.GetTaskType()), false)
-	return metricScope, t.taskExecutor.execute(taskInfo)
+	return metricScope, t.taskExecutor.execute(taskInfo.task, taskInfo.shouldProcessTask)
 }

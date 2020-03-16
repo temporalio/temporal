@@ -44,6 +44,7 @@ import (
 	commonproto "go.temporal.io/temporal-proto/common"
 	"go.temporal.io/temporal-proto/serviceerror"
 
+	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/backoff"
@@ -284,7 +285,7 @@ func (h *historyArchiver) ValidateURI(URI archiver.URI) error {
 	return validateDirPath(URI.Path())
 }
 
-func getNextHistoryBlob(ctx context.Context, historyIterator archiver.HistoryIterator) (*archiver.HistoryBlob, error) {
+func getNextHistoryBlob(ctx context.Context, historyIterator archiver.HistoryIterator) (*archiverproto.HistoryBlob, error) {
 	historyBlob, err := historyIterator.Next()
 	op := func() error {
 		historyBlob, err = historyIterator.Next()

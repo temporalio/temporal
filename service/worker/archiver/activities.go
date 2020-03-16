@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/temporal"
 	"go.temporal.io/temporal/activity"
 
+	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common"
 	carchiver "github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/log/tag"
@@ -146,7 +147,7 @@ func archiveVisibilityActivity(ctx context.Context, request ArchiveRequest) (err
 		logger.Error(carchiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason("failed to get visibility archiver"), tag.Error(err))
 		return errArchiveVisibilityNonRetriable
 	}
-	err = visibilityArchiver.Archive(ctx, URI, &carchiver.ArchiveVisibilityRequest{
+	err = visibilityArchiver.Archive(ctx, URI, &archiverproto.ArchiveVisibilityRequest{
 		DomainID:           request.DomainID,
 		DomainName:         request.DomainName,
 		WorkflowID:         request.WorkflowID,

@@ -219,6 +219,27 @@ func (a *AccessControlledWorkflowHandler) GetWorkflowExecutionRawHistory(
 	return a.frontendHandler.GetWorkflowExecutionRawHistory(ctx, request)
 }
 
+// PollForWorkflowExecutionRawHistory API call
+func (a *AccessControlledWorkflowHandler) PollForWorkflowExecutionRawHistory(
+	ctx context.Context,
+	request *workflowservice.PollForWorkflowExecutionRawHistoryRequest,
+) (*workflowservice.PollForWorkflowExecutionRawHistoryResponse, error) {
+
+	attr := &authorization.Attributes{
+		APIName:    "PollForWorkflowExecutionRawHistory",
+		DomainName: request.GetDomain(),
+	}
+	isAuthorized, err := a.isAuthorized(ctx, attr)
+	if err != nil {
+		return nil, err
+	}
+	if !isAuthorized {
+		return nil, errUnauthorized
+	}
+
+	return a.frontendHandler.PollForWorkflowExecutionRawHistory(ctx, request)
+}
+
 // ListArchivedWorkflowExecutions API call
 func (a *AccessControlledWorkflowHandler) ListArchivedWorkflowExecutions(
 	ctx context.Context,

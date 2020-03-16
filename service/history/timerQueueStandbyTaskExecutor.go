@@ -74,15 +74,16 @@ func newTimerQueueStandbyTaskExecutor(
 }
 
 func (t *timerQueueStandbyTaskExecutor) execute(
-	taskInfo *taskInfo,
+	taskInfo queueTaskInfo,
+	shouldProcessTask bool,
 ) error {
 
-	timerTask, ok := taskInfo.task.(*persistenceblobs.TimerTaskInfo)
+	timerTask, ok := taskInfo.(*persistenceblobs.TimerTaskInfo)
 	if !ok {
 		return errUnexpectedQueueTask
 	}
 
-	if !taskInfo.shouldProcessTask &&
+	if !shouldProcessTask &&
 		timerTask.TaskType != persistence.TaskTypeWorkflowTimeout &&
 		timerTask.TaskType != persistence.TaskTypeDeleteHistoryEvent {
 		// guarantee the processing of workflow execution history deletion
@@ -91,19 +92,19 @@ func (t *timerQueueStandbyTaskExecutor) execute(
 
 	switch timerTask.TaskType {
 	case persistence.TaskTypeUserTimer:
-		return t.executeUserTimerTimeoutTask(taskInfo)
+		return t.executeUserTimerTimeoutTask(timerTask)
 	case persistence.TaskTypeActivityTimeout:
-		return t.executeActivityTimeoutTask(taskInfo)
+		return t.executeActivityTimeoutTask(timerTask)
 	case persistence.TaskTypeDecisionTimeout:
-		return t.executeDecisionTimeoutTask(taskInfo)
+		return t.executeDecisionTimeoutTask(timerTask)
 	case persistence.TaskTypeWorkflowTimeout:
-		return t.executeWorkflowTimeoutTask(taskInfo)
+		return t.executeWorkflowTimeoutTask(timerTask)
 	case persistence.TaskTypeActivityRetryTimer:
 		// retry backoff timer should not get created on passive cluster
 		// TODO: add error logs
 		return nil
 	case persistence.TaskTypeWorkflowBackoffTimer:
-		return t.executeWorkflowBackoffTimerTask(taskInfo)
+		return t.executeWorkflowBackoffTimerTask(timerTask)
 	case persistence.TaskTypeDeleteHistoryEvent:
 		return t.executeDeleteHistoryEventTask(timerTask)
 	default:
@@ -112,12 +113,11 @@ func (t *timerQueueStandbyTaskExecutor) execute(
 }
 
 func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
-	taskInfo *taskInfo,
+	timerTask *persistenceblobs.TimerTaskInfo,
 ) error {
 
 	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
-		timerTask := taskInfo.task.(*persistenceblobs.TimerTaskInfo)
 		timerSequence := t.getTimerSequence(mutableState)
 
 	Loop:
@@ -145,10 +145,10 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 	}
 
 	return t.processTimer(
-		taskInfo,
+		timerTask,
 		actionFn,
 		getStandbyPostActionFn(
-			taskInfo,
+			timerTask,
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsResendDelay(),
 			t.config.StandbyTaskMissingEventsDiscardDelay(),
@@ -159,7 +159,7 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 }
 
 func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
-	taskInfo *taskInfo,
+	timerTask *persistenceblobs.TimerTaskInfo,
 ) error {
 
 	// activity heartbeat timer task is a special snowflake.
@@ -176,7 +176,6 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 
 	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
 
-		timerTask := taskInfo.task.(*persistenceblobs.TimerTaskInfo)
 		timerSequence := t.getTimerSequence(mutableState)
 		updateMutableState := false
 
@@ -243,10 +242,10 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 	}
 
 	return t.processTimer(
-		taskInfo,
+		timerTask,
 		actionFn,
 		getStandbyPostActionFn(
-			taskInfo,
+			timerTask,
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsResendDelay(),
 			t.config.StandbyTaskMissingEventsDiscardDelay(),
@@ -257,26 +256,24 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 }
 
 func (t *timerQueueStandbyTaskExecutor) executeDecisionTimeoutTask(
-	taskInfo *taskInfo,
+	timerTask *persistenceblobs.TimerTaskInfo,
 ) error {
 
 	// decision schedule to start timer task is a special snowflake.
 	// the schedule to start timer is for sticky decision, which is
 	// not applicable on the passive cluster
-	if taskInfo.task.(*persistenceblobs.TimerTaskInfo).TimeoutType == int32(enums.TimeoutTypeScheduleToStart) {
+	if timerTask.TimeoutType == int32(enums.TimeoutTypeScheduleToStart) {
 		return nil
 	}
 
 	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
-
-		timerTask := taskInfo.task.(*persistenceblobs.TimerTaskInfo)
 
 		decision, isPending := mutableState.GetDecisionInfo(timerTask.EventID)
 		if !isPending {
 			return nil, nil
 		}
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, primitives.UUIDString(timerTask.DomainID), decision.Version, timerTask.Version, timerTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, timerTask.DomainID, decision.Version, timerTask.Version, timerTask)
 		if err != nil || !ok {
 			return nil, err
 		}
@@ -285,10 +282,10 @@ func (t *timerQueueStandbyTaskExecutor) executeDecisionTimeoutTask(
 	}
 
 	return t.processTimer(
-		taskInfo,
+		timerTask,
 		actionFn,
 		getStandbyPostActionFn(
-			taskInfo,
+			timerTask,
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsResendDelay(),
 			t.config.StandbyTaskMissingEventsDiscardDelay(),
@@ -299,7 +296,7 @@ func (t *timerQueueStandbyTaskExecutor) executeDecisionTimeoutTask(
 }
 
 func (t *timerQueueStandbyTaskExecutor) executeWorkflowBackoffTimerTask(
-	taskInfo *taskInfo,
+	timerTask *persistenceblobs.TimerTaskInfo,
 ) error {
 
 	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
@@ -324,10 +321,10 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowBackoffTimerTask(
 	}
 
 	return t.processTimer(
-		taskInfo,
+		timerTask,
 		actionFn,
 		getStandbyPostActionFn(
-			taskInfo,
+			timerTask,
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsResendDelay(),
 			t.config.StandbyTaskMissingEventsDiscardDelay(),
@@ -338,12 +335,10 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowBackoffTimerTask(
 }
 
 func (t *timerQueueStandbyTaskExecutor) executeWorkflowTimeoutTask(
-	taskInfo *taskInfo,
+	timerTask *persistenceblobs.TimerTaskInfo,
 ) error {
 
 	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
-
-		timerTask := taskInfo.task.(*persistenceblobs.TimerTaskInfo)
 
 		// we do not need to notify new timer to base, since if there is no new event being replicated
 		// checking again if the timer can be completed is meaningless
@@ -352,7 +347,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTimeoutTask(
 		if err != nil {
 			return nil, err
 		}
-		ok, err := verifyTaskVersion(t.shard, t.logger, primitives.UUIDString(timerTask.DomainID), startVersion, timerTask.Version, timerTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, timerTask.DomainID, startVersion, timerTask.Version, timerTask)
 		if err != nil || !ok {
 			return nil, err
 		}
@@ -361,10 +356,10 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTimeoutTask(
 	}
 
 	return t.processTimer(
-		taskInfo,
+		timerTask,
 		actionFn,
 		getStandbyPostActionFn(
-			taskInfo,
+			timerTask,
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsResendDelay(),
 			t.config.StandbyTaskMissingEventsDiscardDelay(),
@@ -391,12 +386,11 @@ func (t *timerQueueStandbyTaskExecutor) getTimerSequence(
 }
 
 func (t *timerQueueStandbyTaskExecutor) processTimer(
-	taskInfo *taskInfo,
+	timerTask *persistenceblobs.TimerTaskInfo,
 	actionFn standbyActionFn,
 	postActionFn standbyPostActionFn,
 ) (retError error) {
 
-	timerTask := taskInfo.task.(*persistenceblobs.TimerTaskInfo)
 	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
 		t.getDomainIDAndWorkflowExecution(timerTask),
 	)
@@ -430,11 +424,11 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 	}
 
 	release(nil)
-	return postActionFn(taskInfo, historyResendInfo, taskInfo.logger)
+	return postActionFn(timerTask, historyResendInfo, t.logger)
 }
 
 func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
-	taskInfo *taskInfo,
+	taskInfo queueTaskInfo,
 	postActionInfo interface{},
 	log log.Logger,
 ) error {
@@ -443,7 +437,7 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		return nil
 	}
 
-	timerTask := taskInfo.task.(*persistenceblobs.TimerTaskInfo)
+	timerTask := taskInfo.(*persistenceblobs.TimerTaskInfo)
 	resendInfo := postActionInfo.(*historyResendInfo)
 
 	t.metricsClient.IncCounter(metrics.HistoryRereplicationByTimerTaskScope, metrics.ClientRequests)

@@ -33,7 +33,9 @@ import (
 	"github.com/dgryski/go-farm"
 	commonproto "go.temporal.io/temporal-proto/common"
 
+	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common/archiver"
+	"github.com/temporalio/temporal/common/codec"
 )
 
 var (
@@ -143,9 +145,10 @@ func encode(v interface{}) ([]byte, error) {
 	return json.Marshal(v)
 }
 
-func decodeVisibilityRecord(data []byte) (*visibilityRecord, error) {
-	record := &visibilityRecord{}
-	err := json.Unmarshal(data, record)
+func decodeVisibilityRecord(data []byte) (*archiverproto.ArchiveVisibilityRequest, error) {
+	record := &archiverproto.ArchiveVisibilityRequest{}
+	encoder := codec.NewJSONPBEncoder()
+	err := encoder.Decode(data, record)
 	if err != nil {
 		return nil, err
 	}
