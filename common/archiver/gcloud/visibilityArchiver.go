@@ -59,8 +59,6 @@ type (
 		Offset int
 	}
 
-	visibilityRecord archiverproto.ArchiveVisibilityRequest
-
 	queryVisibilityRequest struct {
 		domainID      string
 		pageSize      int

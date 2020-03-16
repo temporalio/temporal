@@ -55,7 +55,7 @@ func (s *visibilityArchiverSuite) SetupTest() {
 		Logger:        loggerimpl.NewLogger(zapLogger),
 		MetricsClient: metrics.NewClient(tally.NoopScope, metrics.History),
 	}
-	s.expectedVisibilityRecords = []*visibilityRecord{
+	s.expectedVisibilityRecords = []*archiverproto.ArchiveVisibilityRequest{
 		{
 			DomainID:         testDomainID,
 			DomainName:       testDomainName,
@@ -77,7 +77,7 @@ type visibilityArchiverSuite struct {
 	*require.Assertions
 	suite.Suite
 	container                 *archiver.VisibilityBootstrapContainer
-	expectedVisibilityRecords []*visibilityRecord
+	expectedVisibilityRecords []*archiverproto.ArchiveVisibilityRequest
 }
 
 func (s *visibilityArchiverSuite) TestValidateVisibilityURI() {
