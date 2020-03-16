@@ -23,7 +23,7 @@ RUN pip install PyYAML==3.13
 
 RUN go get -u golang.org/x/lint/golint
 RUN go get github.com/axw/gocov/gocov
-RUN go get github.com/dmetzgar/goveralls
+RUN go get github.com/mattn/goveralls
 RUN go get golang.org/x/tools/cmd/cover
 
 
