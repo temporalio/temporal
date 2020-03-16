@@ -131,7 +131,7 @@ func (s *server) startService() common.Daemon {
 	params.MembershipFactoryInitializer =
 		func(persistenceBean persistenceClient.Bean, logger l.Logger) (resource.MembershipMonitorFactory, error) {
 			return ringpop.NewRingpopFactory(
-				&s.cfg.Ringpop,
+				&s.cfg.Server.Ringpop,
 				params.RPCFactory.GetRingpopChannel(),
 				params.Name,
 				servicePortMap,
@@ -139,8 +139,6 @@ func (s *server) startService() common.Daemon {
 				persistenceBean.GetClusterMetadataManager(),
 			)
 		}
-
-	params.PProfInitializer = svcCfg.PProf.NewInitializer(params.Logger)
 
 	params.DCRedirectionPolicy = s.cfg.DCRedirectionPolicy
 

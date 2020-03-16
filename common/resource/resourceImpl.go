@@ -121,8 +121,6 @@ type (
 		ringpopChannel *tchannel.Channel
 
 		// internal vars
-
-		pprofInitializer       common.PProfInitializer
 		runtimeMetricsReporter *metrics.RuntimeMetricsReporter
 		rpcFactory             common.RPCFactory
 	}
@@ -327,7 +325,6 @@ func New(
 		ringpopChannel: ringpopChannel,
 
 		// internal vars
-		pprofInitializer: params.PProfInitializer,
 		runtimeMetricsReporter: metrics.NewRuntimeMetricsReporter(
 			params.MetricScope,
 			time.Minute,
@@ -353,9 +350,6 @@ func (h *Impl) Start() {
 	h.metricsScope.Counter(metrics.RestartCount).Inc(1)
 	h.runtimeMetricsReporter.Start()
 
-	if err := h.pprofInitializer.Start(); err != nil {
-		h.logger.WithTags(tag.Error(err)).Fatal("fail to start PProf")
-	}
 	h.membershipMonitor.Start()
 	h.domainCache.Start()
 

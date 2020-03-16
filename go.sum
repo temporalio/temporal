@@ -229,13 +229,8 @@ github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2 h1:zzrxE1FKn5ryB
 github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2/go.mod h1:hzfGeIUDq/j97IG+FhNqkowIyEcD88LrW6fyU3K3WqY=
 go.opencensus.io v0.21.0 h1:mU6zScU4U1YAFPHEHYk+3JC4SY7JxgkqS10ZOSyksNg=
 go.opencensus.io v0.21.0/go.mod h1:mSImk1erAIZhrmZN+AvHh14ztQfjbGwt4TtuofqLduU=
-go.temporal.io/temporal v0.0.0-20200314013520-c42e945ca2a2 h1:O8W7ff/iPcndLtufXN0eV8uwMHVsRqqWMZ00dklMDrM=
-go.temporal.io/temporal v0.0.0-20200314013520-c42e945ca2a2/go.mod h1:4iG21ZgnHW0zgOFbxIuSlp/M5HwLhEe4EHKimMqXABM=
-go.temporal.io/temporal v0.10.11 h1:6sNA/S9gujfL27mHzZakMBAqbswL6b3ClW9ePMZ8z5M=
-go.temporal.io/temporal v0.10.11/go.mod h1:40Idznv+1A+C0q/pHZSEwzTzpe+phMWgzRqIDwv/b+U=
 go.temporal.io/temporal v0.10.12 h1:6nLCyY26EjyFUYXPW4t81Pr6JBwi+o501al3H2w7YbA=
 go.temporal.io/temporal v0.10.12/go.mod h1:4iG21ZgnHW0zgOFbxIuSlp/M5HwLhEe4EHKimMqXABM=
-go.temporal.io/temporal-proto v0.0.0-20200303231739-1a10aa50117a/go.mod h1:SszgPhzKZvtDenZxaN68OKKj1RD1uVmDOHUn1RnTctk=
 go.temporal.io/temporal-proto v0.0.0-20200313230351-15ab29fd00f3 h1:TcP3gsEAA64kGVc/1dH/dJrhuLES1SsWLku9I1+ecyg=
 go.temporal.io/temporal-proto v0.0.0-20200313230351-15ab29fd00f3/go.mod h1:SszgPhzKZvtDenZxaN68OKKj1RD1uVmDOHUn1RnTctk=
 go.temporal.io/temporal-proto v0.0.0-20200316214407-583dbd3e3b32 h1:4otOD3el3H50v1/WEDnKZMsYSOcRvxDWDvmFIPGT13Q=

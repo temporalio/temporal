@@ -27,6 +27,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/temporalio/temporal/common/log/loggerimpl"
 	"github.com/temporalio/temporal/common/primitives"
 
 	"github.com/urfave/cli"
@@ -62,11 +63,15 @@ func startHandler(c *cli.Context) {
 	}
 	// cassandra schema version validation
 	if err := cassandra.VerifyCompatibleVersion(cfg.Persistence); err != nil {
-		log.Fatal("cassandra schema version compatibility check failed: ", err)
+		log.Fatalf("cassandra schema version compatibility check failed: %v", err)
 	}
 	// sql schema version validation
 	if err := sql.VerifyCompatibleVersion(cfg.Persistence); err != nil {
-		log.Fatal("sql schema version compatibility check failed: ", err)
+		log.Fatalf("sql schema version compatibility check failed: %v", err)
+	}
+
+	if err := cfg.Server.PProf.NewInitializer(loggerimpl.NewLogger(cfg.Log.NewZapLogger())).Start(); err != nil {
+		log.Fatalf("fail to start PProf: %v", err)
 	}
 
 	var daemons []common.Daemon
