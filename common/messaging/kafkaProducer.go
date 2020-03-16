@@ -96,9 +96,15 @@ func (p *kafkaProducer) getKeyForReplicationTask(task *replication.ReplicationTa
 	switch task.GetTaskType() {
 	case enums.ReplicationTaskTypeHistory:
 		// Use workflowID as the partition key so all replication tasks for a workflow are dispatched to the same
-		// Kafka partition.  This will give us some ordering guarantee for workflow replication tasks atleast at
+		// Kafka partition.  This will give us some ordering guarantee for workflow replication tasks at least at
 		// the messaging layer perspective
 		attributes := task.GetHistoryTaskAttributes()
+		return sarama.StringEncoder(attributes.GetWorkflowId())
+	case enums.ReplicationTaskTypeHistoryV2:
+		// Use workflowID as the partition key so all replication tasks for a workflow are dispatched to the same
+		// Kafka partition.  This will give us some ordering guarantee for workflow replication tasks at least at
+		// the messaging layer perspective
+		attributes := task.GetHistoryTaskV2Attributes()
 		return sarama.StringEncoder(attributes.GetWorkflowId())
 	case enums.ReplicationTaskTypeSyncActivity:
 		// Use workflowID as the partition key so all sync activity tasks for a workflow are dispatched to the same

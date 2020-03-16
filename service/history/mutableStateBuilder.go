@@ -4267,7 +4267,7 @@ func (e *mutableStateBuilder) updateWithLastWriteEvent(
 }
 
 func (e *mutableStateBuilder) updateWithLastFirstEvent(
-	lastFirstEvent *workflow.HistoryEvent,
+	lastFirstEvent *commonproto.HistoryEvent,
 ) {
 	e.GetExecutionInfo().SetLastFirstEventID(lastFirstEvent.GetEventId())
 }
