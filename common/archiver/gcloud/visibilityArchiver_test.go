@@ -45,7 +45,7 @@ import (
 
 const (
 	testWorkflowTypeName    = "test-workflow-type"
-	exampleVisibilityRecord = `{"DomainID":"test-domain-id","DomainName":"test-domain-name","WorkflowID":"test-workflow-id","RunID":"test-run-id","WorkflowTypeName":"test-workflow-type","StartTimestamp":1580896574804475000,"ExecutionTimestamp":0,"CloseTimestamp":1580896575946478000,"CloseStatus":"COMPLETED","HistoryLength":36,"Memo":null,"SearchAttributes":{},"HistoryArchivalURI":"gs://my-bucket-cad/cadence_archival/development"}`
+	exampleVisibilityRecord = `{"DomainID":"test-domain-id","DomainName":"test-domain-name","WorkflowID":"test-workflow-id","RunID":"test-run-id","WorkflowTypeName":"test-workflow-type","StartTimestamp":1580896574804475000,"ExecutionTimestamp":0,"CloseTimestamp":1580896575946478000,"CloseStatus":"WorkflowExecutionCloseStatusCompleted","HistoryLength":36,"Memo":null,"SearchAttributes":{},"HistoryArchivalURI":"gs://my-bucket-cad/cadence_archival/development"}`
 )
 
 func (s *visibilityArchiverSuite) SetupTest() {

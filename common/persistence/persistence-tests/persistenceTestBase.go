@@ -74,24 +74,24 @@ type (
 	// TestBase wraps the base setup needed to create workflows over persistence layer.
 	TestBase struct {
 		suite.Suite
-		ShardMgr               p.ShardManager
-                AbstractDataStoreFactory client.AbstractDataStoreFactory
-		ExecutionMgrFactory    client.Factory
-		ExecutionManager       p.ExecutionManager
-		TaskMgr                p.TaskManager
-		HistoryV2Mgr           p.HistoryManager
-		ClusterMetadataManager p.ClusterMetadataManager
-		MetadataManager        p.MetadataManager
-		VisibilityMgr          p.VisibilityManager
-		DomainReplicationQueue p.DomainReplicationQueue
-		ShardInfo              *pblobs.ShardInfo
-		TaskIDGenerator        TransferTaskIDGenerator
-		ClusterMetadata        cluster.Metadata
-		ReadLevel              int64
-		ReplicationReadLevel   int64
-		DefaultTestCluster     PersistenceTestCluster
-		VisibilityTestCluster  PersistenceTestCluster
-		logger                 log.Logger
+		ShardMgr                 p.ShardManager
+		AbstractDataStoreFactory client.AbstractDataStoreFactory
+		ExecutionMgrFactory      client.Factory
+		ExecutionManager         p.ExecutionManager
+		TaskMgr                  p.TaskManager
+		HistoryV2Mgr             p.HistoryManager
+		ClusterMetadataManager   p.ClusterMetadataManager
+		MetadataManager          p.MetadataManager
+		VisibilityMgr            p.VisibilityManager
+		DomainReplicationQueue   p.DomainReplicationQueue
+		ShardInfo                *pblobs.ShardInfo
+		TaskIDGenerator          TransferTaskIDGenerator
+		ClusterMetadata          cluster.Metadata
+		ReadLevel                int64
+		ReplicationReadLevel     int64
+		DefaultTestCluster       PersistenceTestCluster
+		VisibilityTestCluster    PersistenceTestCluster
+		logger                   log.Logger
 	}
 
 	// PersistenceTestCluster exposes management operations on a database

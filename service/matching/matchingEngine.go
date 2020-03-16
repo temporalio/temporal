@@ -747,6 +747,8 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(
 		RunId:           task.event.Data.RunID,
 		ScheduleId:      task.event.Data.ScheduleID,
 		ScheduleAttempt: historyResponse.GetAttempt(),
+		ActivityId:      attributes.GetActivityId(),
+		ActivityType:    attributes.GetActivityType().GetName(),
 	}
 
 	serializedToken, _ := e.tokenSerializer.Serialize(taskToken)
