@@ -55,7 +55,7 @@ type visibilityArchiverSuite struct {
 
 	container         *archiver.VisibilityBootstrapContainer
 	logger            log.Logger
-	visibilityRecords []*visibilityRecord
+	visibilityRecords []*archiverproto.ArchiveVisibilityRequest
 
 	controller      *gomock.Controller
 	testArchivalURI archiver.URI
@@ -558,7 +558,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 }
 
 func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
-	s.visibilityRecords = []*visibilityRecord{
+	s.visibilityRecords = []*archiverproto.ArchiveVisibilityRequest{
 		{
 			DomainID:         testDomainID,
 			DomainName:       testDomainName,
@@ -599,7 +599,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 	}
 }
 
-func (s *visibilityArchiverSuite) writeVisibilityRecordForQueryTest(visibilityArchiver *visibilityArchiver, record *visibilityRecord) {
+func (s *visibilityArchiverSuite) writeVisibilityRecordForQueryTest(visibilityArchiver *visibilityArchiver, record *archiverproto.ArchiveVisibilityRequest) {
 	err := visibilityArchiver.Archive(context.Background(), s.testArchivalURI, (*archiverproto.ArchiveVisibilityRequest)(record))
 	s.Require().NoError(err)
 }

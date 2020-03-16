@@ -56,8 +56,6 @@ type (
 		LastRunID     string
 	}
 
-	visibilityRecord archiverproto.ArchiveVisibilityRequest
-
 	queryVisibilityRequest struct {
 		domainID      string
 		pageSize      int

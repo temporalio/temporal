@@ -43,8 +43,6 @@ type (
 		queryParser QueryParser
 	}
 
-	visibilityRecord archiverproto.ArchiveVisibilityRequest
-
 	queryVisibilityRequest struct {
 		domainID      string
 		pageSize      int
