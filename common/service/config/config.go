@@ -88,8 +88,8 @@ type (
 	RPC struct {
 		// GRPCPort is the port  on which gRPC will listen
 		GRPCPort int `yaml:"grpcPort"`
-		// Port used for ringpop listener
-		RingpopPort int `yaml:"ringpopPort"`
+		// Port used for membership listener
+		MembershipPort int `yaml:"membershipPort"`
 		// BindOnLocalHost is true if localhost is the bind address
 		BindOnLocalHost bool `yaml:"bindOnLocalHost"`
 		// BindOnIP can be used to bind service on specific ip (eg. `0.0.0.0`) -
