@@ -24,6 +24,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/temporal-proto/serviceerror"
+
 	"github.com/temporalio/temporal/.gen/proto/adminservice"
 	"github.com/temporalio/temporal/.gen/proto/replication"
 	"github.com/temporalio/temporal/client/admin"
@@ -166,7 +168,7 @@ func (p *domainReplicationMessageProcessor) getAndHandleDomainReplicationTasks()
 			}, p.retryPolicy, isTransientRetryableError)
 			if dlqErr != nil {
 				p.logger.Error("Failed to put replication tasks to DLQ", tag.Error(dlqErr))
-				p.metricsClient.IncCounter(metrics.DomainReplicationTaskScope, metrics.ReplicatorFailures)
+				p.metricsClient.IncCounter(metrics.DomainReplicationTaskScope, metrics.ReplicatorDLQFailures)
 				return
 			}
 		}
@@ -180,6 +182,16 @@ func (p *domainReplicationMessageProcessor) putDomainReplicationTaskToDLQ(
 	task *replication.ReplicationTask,
 ) error {
 
+	domainAttribute := task.GetDomainTaskAttributes()
+	if domainAttribute == nil {
+		return &serviceerror.Internal{
+			Message: "Domain replication task does not set domain task attribute",
+		}
+	}
+	p.metricsClient.Scope(
+		metrics.DomainReplicationTaskScope,
+		metrics.DomainTag(domainAttribute.GetInfo().GetName()),
+	).IncCounter(metrics.DomainReplicationEnqueueDLQCount)
 	return p.domainReplicationQueue.PublishToDLQ(task)
 }
 

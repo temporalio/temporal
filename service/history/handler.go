@@ -1631,17 +1631,17 @@ func (h *Handler) updateErrorMetric(
 	case *serviceerror.EventAlreadyStarted:
 		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrEventAlreadyStartedCounter)
 	case *serviceerror.InvalidArgument:
-		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrBadRequestCounter)
+		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrInvalidArgumentCounter)
 	case *serviceerror.DomainNotActive:
-		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrBadRequestCounter)
+		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrInvalidArgumentCounter)
 	case *serviceerror.WorkflowExecutionAlreadyStarted:
 		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrExecutionAlreadyStartedCounter)
 	case *serviceerror.NotFound:
-		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrEntityNotExistsCounter)
+		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrNotFoundCounter)
 	case *serviceerror.CancellationAlreadyRequested:
 		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrCancellationAlreadyRequestedCounter)
 	case *serviceerror.ResourceExhausted:
-		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrServiceBusyCounter)
+		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrResourceExhaustedCounter)
 	case *serviceerror.RetryTask:
 		h.GetMetricsClient().IncCounter(scope, metrics.ServiceErrRetryTaskCounter)
 	case *serviceerror.RetryTaskV2:

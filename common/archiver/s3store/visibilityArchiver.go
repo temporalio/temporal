@@ -22,8 +22,6 @@ package s3store
 
 import (
 	"context"
-	"fmt"
-	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -31,6 +29,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"go.temporal.io/temporal-proto/serviceerror"
 
+	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
@@ -44,20 +43,27 @@ type (
 		queryParser QueryParser
 	}
 
-	visibilityRecord archiver.ArchiveVisibilityRequest
-
 	queryVisibilityRequest struct {
 		domainID      string
 		pageSize      int
 		nextPageToken []byte
 		parsedQuery   *parsedQuery
 	}
+
+	indexToArchive struct {
+		primaryIndex            string
+		primaryIndexValue       string
+		secondaryIndex          string
+		secondaryIndexTimestamp int64
+	}
 )
 
 const (
-	errEncodeVisibilityRecord = "failed to encode visibility record"
-	indexKeyStartTimeout      = "startTimeout"
-	indexKeyCloseTimeout      = "closeTimeout"
+	errEncodeVisibilityRecord       = "failed to encode visibility record"
+	secondaryIndexKeyStartTimeout   = "startTimeout"
+	secondaryIndexKeyCloseTimeout   = "closeTimeout"
+	primaryIndexKeyWorkflowTypeName = "workflowTypeName"
+	primaryIndexKeyWorkflowID       = "workflowID"
 )
 
 // NewVisibilityArchiver creates a new archiver.VisibilityArchiver based on s3
@@ -75,7 +81,6 @@ func newVisibilityArchiver(
 		Endpoint:         config.Endpoint,
 		Region:           aws.String(config.Region),
 		S3ForcePathStyle: aws.Bool(config.S3ForcePathStyle),
-		MaxRetries:       aws.Int(0),
 	}
 	sess, err := session.NewSession(s3Config)
 	if err != nil {
@@ -91,19 +96,23 @@ func newVisibilityArchiver(
 func (v *visibilityArchiver) Archive(
 	ctx context.Context,
 	URI archiver.URI,
-	request *archiver.ArchiveVisibilityRequest,
+	request *archiverproto.ArchiveVisibilityRequest,
 	opts ...archiver.ArchiveOption,
 ) (err error) {
 	scope := v.container.MetricsClient.Scope(metrics.VisibilityArchiverScope, metrics.DomainTag(request.DomainName))
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
 	sw := scope.StartTimer(metrics.ServiceLatency)
+	logger := archiver.TagLoggerWithArchiveVisibilityRequestAndURI(v.container.Logger, request, URI.String())
+	archiveFailReason := ""
 	defer func() {
 		sw.Stop()
 		if err != nil {
 			if isRetryableError(err) {
 				scope.IncCounter(metrics.VisibilityArchiverArchiveTransientErrorCount)
+				logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(archiveFailReason), tag.Error(err))
 			} else {
 				scope.IncCounter(metrics.VisibilityArchiverArchiveNonRetryableErrorCount)
+				logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(archiveFailReason), tag.Error(err))
 				if featureCatalog.NonRetriableError != nil {
 					err = featureCatalog.NonRetriableError()
 				}
@@ -111,62 +120,42 @@ func (v *visibilityArchiver) Archive(
 		}
 	}()
 
-	logger := archiver.TagLoggerWithArchiveVisibilityRequestAndURI(v.container.Logger, request, URI.String())
-
 	if err := softValidateURI(URI); err != nil {
-		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonInvalidURI), tag.Error(err))
+		archiveFailReason = archiver.ErrReasonInvalidURI
 		return err
 	}
 
 	if err := archiver.ValidateVisibilityArchivalRequest(request); err != nil {
-		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonInvalidArchiveRequest), tag.Error(err))
+		archiveFailReason = archiver.ErrReasonInvalidArchiveRequest
 		return err
 	}
 
 	encodedVisibilityRecord, err := encode(request)
 	if err != nil {
-		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(errEncodeVisibilityRecord), tag.Error(err))
+		archiveFailReason = errEncodeVisibilityRecord
 		return err
 	}
-
+	indexes := createIndexesToArchive(request)
 	// Upload archive to all indexes
-	key := constructTimestampIndex(URI.Path(), request.DomainID, request.WorkflowID, indexKeyCloseTimeout, request.CloseTimestamp, request.RunID)
-	if err := upload(ctx, v.s3cli, URI, key, encodedVisibilityRecord); err != nil {
-		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(errWriteKey), tag.Error(err))
-		return err
-	}
-	key = constructTimestampIndex(URI.Path(), request.DomainID, request.WorkflowID, indexKeyStartTimeout, request.StartTimestamp, request.RunID)
-	if err := upload(ctx, v.s3cli, URI, key, encodedVisibilityRecord); err != nil {
-		logger.Error(archiver.ArchiveNonRetriableErrorMsg, tag.ArchivalArchiveFailReason(errWriteKey), tag.Error(err))
-		return err
+	for _, element := range indexes {
+		key := constructTimestampIndex(URI.Path(), request.DomainID, element.primaryIndex, element.primaryIndexValue, element.secondaryIndex, element.secondaryIndexTimestamp, request.RunID)
+		if err := upload(ctx, v.s3cli, URI, key, encodedVisibilityRecord); err != nil {
+			archiveFailReason = errWriteKey
+			return err
+		}
 	}
 	scope.IncCounter(metrics.VisibilityArchiveSuccessCount)
 	return nil
 }
-
-func constructTimeBasedSearchKey(path, domainID, workflowID, indexKey string, timestamp int64, precision string) string {
-	t := time.Unix(0, timestamp).In(time.UTC)
-	var timeFormat = ""
-	switch precision {
-	case PrecisionSecond:
-		timeFormat = ":05"
-		fallthrough
-	case PrecisionMinute:
-		timeFormat = ":04" + timeFormat
-		fallthrough
-	case PrecisionHour:
-		timeFormat = "15" + timeFormat
-		fallthrough
-	case PrecisionDay:
-		timeFormat = "2006-01-02T" + timeFormat
+func createIndexesToArchive(request *archiverproto.ArchiveVisibilityRequest) []indexToArchive {
+	return []indexToArchive{
+		{primaryIndexKeyWorkflowTypeName, request.WorkflowTypeName, secondaryIndexKeyCloseTimeout, request.CloseTimestamp},
+		{primaryIndexKeyWorkflowTypeName, request.WorkflowTypeName, secondaryIndexKeyStartTimeout, request.StartTimestamp},
+		{primaryIndexKeyWorkflowID, request.WorkflowID, secondaryIndexKeyCloseTimeout, request.CloseTimestamp},
+		{primaryIndexKeyWorkflowID, request.WorkflowID, secondaryIndexKeyStartTimeout, request.StartTimestamp},
 	}
+}
 
-	return fmt.Sprintf("%s/%s", constructVisibilitySearchPrefix(path, domainID, workflowID, indexKey), t.Format(timeFormat))
-}
-func constructTimestampIndex(path, domainID, workflowID, indexKey string, timestamp int64, runID string) string {
-	t := time.Unix(0, timestamp).In(time.UTC)
-	return fmt.Sprintf("%s/%s/%s", constructVisibilitySearchPrefix(path, domainID, workflowID, indexKey), t.Format(time.RFC3339), runID)
-}
 func (v *visibilityArchiver) Query(
 	ctx context.Context,
 	URI archiver.URI,
@@ -183,9 +172,6 @@ func (v *visibilityArchiver) Query(
 	parsedQuery, err := v.queryParser.Parse(request.Query)
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument(err.Error())
-	}
-	if parsedQuery.emptyResult {
-		return &archiver.QueryVisibilityResponse{}, nil
 	}
 
 	return v.query(ctx, URI, &queryVisibilityRequest{
@@ -207,12 +193,18 @@ func (v *visibilityArchiver) query(
 	if request.nextPageToken != nil {
 		token = deserializeQueryVisibilityToken(request.nextPageToken)
 	}
-	var prefix = constructVisibilitySearchPrefix(URI.Path(), request.domainID, *request.parsedQuery.workflowID, indexKeyCloseTimeout) + "/"
+	primaryIndex := primaryIndexKeyWorkflowTypeName
+	primaryIndexValue := request.parsedQuery.workflowTypeName
+	if request.parsedQuery.workflowID != nil {
+		primaryIndex = primaryIndexKeyWorkflowID
+		primaryIndexValue = request.parsedQuery.workflowID
+	}
+	var prefix = constructVisibilitySearchPrefix(URI.Path(), request.domainID, primaryIndex, *primaryIndexValue, secondaryIndexKeyCloseTimeout) + "/"
 	if request.parsedQuery.closeTime != nil {
-		prefix = constructTimeBasedSearchKey(URI.Path(), request.domainID, *request.parsedQuery.workflowID, indexKeyCloseTimeout, *request.parsedQuery.closeTime, *request.parsedQuery.searchPrecision)
+		prefix = constructTimeBasedSearchKey(URI.Path(), request.domainID, primaryIndex, *primaryIndexValue, secondaryIndexKeyCloseTimeout, *request.parsedQuery.closeTime, *request.parsedQuery.searchPrecision)
 	}
 	if request.parsedQuery.startTime != nil {
-		prefix = constructTimeBasedSearchKey(URI.Path(), request.domainID, *request.parsedQuery.workflowID, indexKeyStartTimeout, *request.parsedQuery.startTime, *request.parsedQuery.searchPrecision)
+		prefix = constructTimeBasedSearchKey(URI.Path(), request.domainID, primaryIndex, *primaryIndexValue, secondaryIndexKeyStartTimeout, *request.parsedQuery.startTime, *request.parsedQuery.searchPrecision)
 	}
 
 	results, err := v.s3cli.ListObjectsV2WithContext(ctx, &s3.ListObjectsV2Input{

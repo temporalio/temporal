@@ -168,6 +168,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 				Kind: enums.TaskListKind(fwdr.taskListKind),
 			},
 			ScheduleId:                    task.event.Data.ScheduleID,
+			Source:                        task.source,
 			ScheduleToStartTimeoutSeconds: newScheduleToStartTimeout,
 			ForwardedFrom:                 fwdr.taskListID.name,
 		})
@@ -181,6 +182,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 				Kind: enums.TaskListKind(fwdr.taskListKind),
 			},
 			ScheduleId:                    task.event.Data.ScheduleID,
+			Source:                        task.source,
 			ScheduleToStartTimeoutSeconds: newScheduleToStartTimeout,
 			ForwardedFrom:                 fwdr.taskListID.name,
 		})

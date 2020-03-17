@@ -30,13 +30,14 @@ import (
 	"github.com/temporalio/temporal/common/log/tag"
 	"github.com/temporalio/temporal/common/metrics"
 	"github.com/temporalio/temporal/common/persistence"
+	"github.com/temporalio/temporal/common/primitives"
 )
 
 // verifyTaskVersion, will return true if failover version check is successful
 func verifyTaskVersion(
 	shard ShardContext,
 	logger log.Logger,
-	domainID string,
+	domainID []byte,
 	version int64,
 	taskVersion int64,
 	task interface{},
@@ -47,19 +48,19 @@ func verifyTaskVersion(
 	}
 
 	// the first return value is whether this task is valid for further processing
-	domainEntry, err := shard.GetDomainCache().GetDomainByID(domainID)
+	domainEntry, err := shard.GetDomainCache().GetDomainByID(primitives.UUIDString(domainID))
 	if err != nil {
-		logger.Debug("Cannot find domainID", tag.WorkflowDomainID(domainID), tag.Error(err))
+		logger.Debug("Cannot find domainID", tag.WorkflowDomainIDBytes(domainID), tag.Error(err))
 		return false, err
 	}
 	if !domainEntry.IsGlobalDomain() {
-		logger.Debug("DomainID is not active, task version check pass", tag.WorkflowDomainID(domainID), tag.Task(task))
+		logger.Debug("DomainID is not active, task version check pass", tag.WorkflowDomainIDBytes(domainID), tag.Task(task))
 		return true, nil
 	} else if version != taskVersion {
-		logger.Debug("DomainID is active, task version != target version", tag.WorkflowDomainID(domainID), tag.Task(task), tag.TaskVersion(version))
+		logger.Debug("DomainID is active, task version != target version", tag.WorkflowDomainIDBytes(domainID), tag.Task(task), tag.TaskVersion(version))
 		return false, nil
 	}
-	logger.Debug("DomainID is active, task version == target version", tag.WorkflowDomainID(domainID), tag.Task(task), tag.TaskVersion(version))
+	logger.Debug("DomainID is active, task version == target version", tag.WorkflowDomainIDBytes(domainID), tag.Task(task), tag.TaskVersion(version))
 	return true, nil
 }
 

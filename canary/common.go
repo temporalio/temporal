@@ -43,6 +43,14 @@ func absDurationDiff(d1, d2 time.Duration) time.Duration {
 	return d2 - d1
 }
 
+func stringPtr(v string) *string {
+	return &v
+}
+
+func int32Ptr(v int32) *int32 {
+	return &v
+}
+
 // getContextValue retrieves and returns the value corresponding
 // to the given key - panics if the key does not exist
 func getContextValue(ctx context.Context, key string) interface{} {

@@ -925,3 +925,208 @@ func (s *integrationSuite) TestGetWorkflowExecutionRawHistory_All() {
 	s.True(len(blobs) == 7)
 	s.True(len(events) == 11)
 }
+
+func (s *integrationSuite) TestPollForWorkflowExecutionRawHistory_All() {
+	workflowID := "integration-poll-for-workflow-raw-history-events-long-poll-test-all"
+	workflowTypeName := "integration-poll-for-workflow-raw-history-events-long-poll-test-all-type"
+	tasklistName := "integration-poll-for-workflow-raw-history-events-long-poll-test-all-tasklist"
+	identity := "worker1"
+	activityName := "activity_type1"
+
+	workflowType := &commonproto.WorkflowType{}
+	workflowType.Name = workflowTypeName
+
+	taskList := &commonproto.TaskList{}
+	taskList.Name = tasklistName
+
+	// Start workflow execution
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:                           uuid.New(),
+		Domain:                              s.domainName,
+		WorkflowId:                          workflowID,
+		WorkflowType:                        workflowType,
+		TaskList:                            taskList,
+		Input:                               nil,
+		ExecutionStartToCloseTimeoutSeconds: 100,
+		TaskStartToCloseTimeoutSeconds:      1,
+		Identity:                            identity,
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	s.Nil(err0)
+
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+
+	// decider logic
+	activityScheduled := false
+	activityData := int32(1)
+	// var signalEvent *commonproto.HistoryEvent
+	dtHandler := func(execution *commonproto.WorkflowExecution, wt *commonproto.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *commonproto.History) ([]byte, []*commonproto.Decision, error) {
+
+		if !activityScheduled {
+			activityScheduled = true
+			buf := new(bytes.Buffer)
+			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
+
+			return nil, []*commonproto.Decision{{
+				DecisionType: enums.DecisionTypeScheduleActivityTask,
+				Attributes: &commonproto.Decision_ScheduleActivityTaskDecisionAttributes{
+					ScheduleActivityTaskDecisionAttributes: &commonproto.ScheduleActivityTaskDecisionAttributes{
+						ActivityId:                    strconv.Itoa(int(1)),
+						ActivityType:                  &commonproto.ActivityType{Name: activityName},
+						TaskList:                      taskList,
+						Input:                         buf.Bytes(),
+						ScheduleToCloseTimeoutSeconds: 100,
+						ScheduleToStartTimeoutSeconds: 25,
+						StartToCloseTimeoutSeconds:    50,
+						HeartbeatTimeoutSeconds:       25,
+					},
+				},
+			}}, nil
+		}
+
+		return nil, []*commonproto.Decision{{
+			DecisionType: enums.DecisionTypeCompleteWorkflowExecution,
+			Attributes: &commonproto.Decision_CompleteWorkflowExecutionDecisionAttributes{
+				CompleteWorkflowExecutionDecisionAttributes: &commonproto.CompleteWorkflowExecutionDecisionAttributes{
+					Result: []byte("Done."),
+				},
+			}}}, nil
+	}
+
+	// activity handler
+	atHandler := func(execution *commonproto.WorkflowExecution, activityType *commonproto.ActivityType,
+		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
+
+		return []byte("Activity Result."), false, nil
+	}
+
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.Logger,
+		T:               s.T(),
+	}
+
+	// this function poll events from history side
+	getHistoryWithLongPoll := func(domain string, workflowID string, token []byte) ([]*commonproto.DataBlob, []byte) {
+		responseInner, err := s.engine.PollForWorkflowExecutionRawHistory(NewContext(), &workflowservice.PollForWorkflowExecutionRawHistoryRequest{
+			Domain: domain,
+			Execution: &commonproto.WorkflowExecution{
+				WorkflowId: workflowID,
+			},
+			// since the page size have essential no relation with number of events..
+			// so just use a really larger number, to test whether long poll works
+			MaximumPageSize: 100,
+			NextPageToken:   token,
+		})
+		s.Nil(err)
+
+		return responseInner.RawHistory, responseInner.NextPageToken
+	}
+
+	getHistory := func(domain string, workflowID string, token []byte) ([]*commonproto.DataBlob, []byte) {
+		responseInner, err := s.engine.GetWorkflowExecutionRawHistory(NewContext(), &workflowservice.GetWorkflowExecutionRawHistoryRequest{
+			Domain: domain,
+			Execution: &commonproto.WorkflowExecution{
+				WorkflowId: workflowID,
+			},
+			MaximumPageSize: int32(100),
+			NextPageToken:   token,
+		})
+		s.Nil(err)
+
+		return responseInner.RawHistory, responseInner.NextPageToken
+	}
+
+	serializer := persistence.NewPayloadSerializer()
+	convertBlob := func(blobs []*commonproto.DataBlob) []*commonproto.HistoryEvent {
+		events := []*commonproto.HistoryEvent{}
+		for _, blob := range blobs {
+			s.True(blob.GetEncodingType() == enums.EncodingTypeThriftRW)
+			blobEvents, err := serializer.DeserializeBatchEvents(&serialization.DataBlob{
+				Encoding: common.EncodingTypeThriftRW,
+				Data:     blob.Data,
+			})
+			s.Nil(err)
+			events = append(events, blobEvents...)
+		}
+		return events
+	}
+
+	var blobs []*commonproto.DataBlob
+	var token []byte
+
+	var allEvents []*commonproto.HistoryEvent
+	var events []*commonproto.HistoryEvent
+
+	// here do a long pull (which return immediately with at least the WorkflowExecutionStarted)
+	start := time.Now()
+	blobs, token = getHistoryWithLongPoll(s.domainName, workflowID, token)
+	events = convertBlob(blobs)
+	allEvents = append(allEvents, events...)
+	s.True(time.Now().Before(start.Add(time.Second * 5)))
+	s.NotEmpty(events)
+	s.NotNil(token)
+
+	// here do a long pull and check # of events and time elapsed
+	// make first decision to schedule activity, this should affect the long poll above
+	time.AfterFunc(time.Second*8, func() {
+		_, errDecision1 := poller.PollAndProcessDecisionTask(false, false)
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errDecision1))
+	})
+	start = time.Now()
+	blobs, token = getHistoryWithLongPoll(s.domainName, workflowID, token)
+	events = convertBlob(blobs)
+	allEvents = append(allEvents, events...)
+	s.True(time.Now().After(start.Add(time.Second * 5)))
+	s.NotEmpty(events)
+	s.NotNil(token)
+
+	// finish the activity and poll all events
+	time.AfterFunc(time.Second*5, func() {
+		errActivity := poller.PollAndProcessActivityTask(false)
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errActivity))
+	})
+	time.AfterFunc(time.Second*8, func() {
+		_, errDecision2 := poller.PollAndProcessDecisionTask(false, false)
+		s.Logger.Info("PollAndProcessDecisionTask", tag.Error(errDecision2))
+	})
+	for token != nil {
+		blobs, token = getHistoryWithLongPoll(s.domainName, workflowID, token)
+		events = convertBlob(blobs)
+		allEvents = append(allEvents, events...)
+	}
+
+	// there are total 11 events
+	//  1. WorkflowExecutionStarted
+	//  2. DecisionTaskScheduled
+	//  3. DecisionTaskStarted
+	//  4. DecisionTaskCompleted
+	//  5. ActivityTaskScheduled
+	//  6. ActivityTaskStarted
+	//  7. ActivityTaskCompleted
+	//  8. DecisionTaskScheduled
+	//  9. DecisionTaskStarted
+	// 10. DecisionTaskCompleted
+	// 11. WorkflowExecutionCompleted
+	s.Equal(11, len(allEvents))
+
+	// test non long poll
+	allEvents = nil
+	token = nil
+	for {
+		blobs, token = getHistory(s.domainName, workflowID, token)
+		events = convertBlob(blobs)
+		allEvents = append(allEvents, events...)
+		if token == nil {
+			break
+		}
+	}
+	s.Equal(11, len(allEvents))
+}

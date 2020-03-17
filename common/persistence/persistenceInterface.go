@@ -171,7 +171,7 @@ type (
 		DeleteMessagesBefore(messageID int) error
 		UpdateAckLevel(messageID int, clusterName string) error
 		GetAckLevels() (map[string]int, error)
-		EnqueueMessageToDLQ(messagePayload []byte) error
+		EnqueueMessageToDLQ(messagePayload []byte) (int, error)
 		ReadMessagesFromDLQ(firstMessageID int, lastMessageID int, pageSize int, pageToken []byte) ([]*QueueMessage, []byte, error)
 		DeleteMessageFromDLQ(messageID int) error
 		RangeDeleteMessagesFromDLQ(firstMessageID int, lastMessageID int) error
@@ -181,8 +181,9 @@ type (
 
 	// QueueMessage is the message that stores in the queue
 	QueueMessage struct {
-		ID      int
-		Payload []byte
+		ID        int       `json:"message_id"`
+		QueueType QueueType `json:"queue_type"`
+		Payload   []byte    `json:"message_payload"`
 	}
 
 	// DataBlob represents a blob for any binary data.

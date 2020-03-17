@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/temporal-proto/enums"
 	"go.uber.org/zap"
 
+	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/log/loggerimpl"
@@ -54,7 +55,7 @@ type visibilityArchiverSuite struct {
 	container          *archiver.VisibilityBootstrapContainer
 	testArchivalURI    archiver.URI
 	testQueryDirectory string
-	visibilityRecords  []*visibilityRecord
+	visibilityRecords  []*archiverproto.ArchiveVisibilityRequest
 
 	controller *gomock.Controller
 }
@@ -120,7 +121,7 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidURI() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	URI, err := archiver.NewURI("wrongscheme://")
 	s.NoError(err)
-	request := &archiver.ArchiveVisibilityRequest{
+	request := &archiverproto.ArchiveVisibilityRequest{
 		DomainName:         testDomainName,
 		DomainID:           testDomainID,
 		WorkflowID:         testWorkflowID,
@@ -138,7 +139,7 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidURI() {
 
 func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidRequest() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
-	err := visibilityArchiver.Archive(context.Background(), s.testArchivalURI, &archiver.ArchiveVisibilityRequest{})
+	err := visibilityArchiver.Archive(context.Background(), s.testArchivalURI, &archiverproto.ArchiveVisibilityRequest{})
 	s.Error(err)
 }
 
@@ -148,7 +149,7 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_NonRetriableErrorOption() {
 	err := visibilityArchiver.Archive(
 		context.Background(),
 		s.testArchivalURI,
-		&archiver.ArchiveVisibilityRequest{},
+		&archiverproto.ArchiveVisibilityRequest{},
 		archiver.GetNonRetriableErrorOption(nonRetriableErr),
 	)
 	s.Equal(nonRetriableErr, err)
@@ -161,7 +162,7 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	closeTimestamp := time.Now()
-	request := &archiver.ArchiveVisibilityRequest{
+	request := &archiverproto.ArchiveVisibilityRequest{
 		DomainID:           testDomainID,
 		DomainName:         testDomainName,
 		WorkflowID:         testWorkflowID,
@@ -193,7 +194,7 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 	data, err := readFile(filepath)
 	s.NoError(err)
 
-	archivedRecord := &archiver.ArchiveVisibilityRequest{}
+	archivedRecord := &archiverproto.ArchiveVisibilityRequest{}
 	err = json.Unmarshal(data, archivedRecord)
 	s.NoError(err)
 	s.Equal(request, archivedRecord)
@@ -202,7 +203,7 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 func (s *visibilityArchiverSuite) TestMatchQuery() {
 	testCases := []struct {
 		query       *parsedQuery
-		record      *visibilityRecord
+		record      *archiverproto.ArchiveVisibilityRequest
 		shouldMatch bool
 	}{
 		{
@@ -210,7 +211,7 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 				earliestCloseTime: int64(1000),
 				latestCloseTime:   int64(12345),
 			},
-			record: &visibilityRecord{
+			record: &archiverproto.ArchiveVisibilityRequest{
 				CloseTimestamp: int64(1999),
 			},
 			shouldMatch: true,
@@ -220,7 +221,7 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 				earliestCloseTime: int64(1000),
 				latestCloseTime:   int64(12345),
 			},
-			record: &visibilityRecord{
+			record: &archiverproto.ArchiveVisibilityRequest{
 				CloseTimestamp: int64(999),
 			},
 			shouldMatch: false,
@@ -231,7 +232,7 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 				latestCloseTime:   int64(12345),
 				workflowID:        common.StringPtr("random workflowID"),
 			},
-			record: &visibilityRecord{
+			record: &archiverproto.ArchiveVisibilityRequest{
 				CloseTimestamp: int64(2000),
 			},
 			shouldMatch: false,
@@ -243,7 +244,7 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 				workflowID:        common.StringPtr("random workflowID"),
 				runID:             common.StringPtr("random runID"),
 			},
-			record: &visibilityRecord{
+			record: &archiverproto.ArchiveVisibilityRequest{
 				CloseTimestamp:   int64(12345),
 				WorkflowID:       "random workflowID",
 				RunID:            "random runID",
@@ -257,7 +258,7 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 				latestCloseTime:   int64(12345),
 				workflowTypeName:  common.StringPtr("some random type name"),
 			},
-			record: &visibilityRecord{
+			record: &archiverproto.ArchiveVisibilityRequest{
 				CloseTimestamp: int64(12345),
 			},
 			shouldMatch: false,
@@ -269,7 +270,7 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 				workflowTypeName:  common.StringPtr("some random type name"),
 				closeStatus:       toWorkflowExecutionCloseStatusPtr(enums.WorkflowExecutionCloseStatusContinuedAsNew),
 			},
-			record: &visibilityRecord{
+			record: &archiverproto.ArchiveVisibilityRequest{
 				CloseTimestamp:   int64(12345),
 				CloseStatus:      enums.WorkflowExecutionCloseStatusContinuedAsNew,
 				WorkflowTypeName: "some random type name",
@@ -469,7 +470,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 	URI, err := archiver.NewURI("file://" + dir)
 	s.NoError(err)
 	for _, record := range s.visibilityRecords {
-		err := visibilityArchiver.Archive(context.Background(), URI, (*archiver.ArchiveVisibilityRequest)(record))
+		err := visibilityArchiver.Archive(context.Background(), URI, (*archiverproto.ArchiveVisibilityRequest)(record))
 		s.NoError(err)
 	}
 
@@ -502,7 +503,7 @@ func (s *visibilityArchiverSuite) newTestVisibilityArchiver() *visibilityArchive
 }
 
 func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
-	s.visibilityRecords = []*visibilityRecord{
+	s.visibilityRecords = []*archiverproto.ArchiveVisibilityRequest{
 		{
 			DomainID:         testDomainID,
 			DomainName:       testDomainName,
@@ -569,7 +570,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 	}
 }
 
-func (s *visibilityArchiverSuite) writeVisibilityRecordForQueryTest(record *visibilityRecord) {
+func (s *visibilityArchiverSuite) writeVisibilityRecordForQueryTest(record *archiverproto.ArchiveVisibilityRequest) {
 	data, err := encode(record)
 	s.Require().NoError(err)
 	filename := constructVisibilityFilename(record.CloseTimestamp, record.RunID)

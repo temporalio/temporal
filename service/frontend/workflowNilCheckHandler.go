@@ -452,6 +452,14 @@ func (wh *WorkflowNilCheckHandler) DescribeTaskList(ctx context.Context, request
 	return resp, err
 }
 
+func (wh *WorkflowNilCheckHandler) PollForWorkflowExecutionRawHistory(ctx context.Context, request *workflowservice.PollForWorkflowExecutionRawHistoryRequest) (_ *workflowservice.PollForWorkflowExecutionRawHistoryResponse, retError error) {
+	resp, err := wh.parentHandler.PollForWorkflowExecutionRawHistory(ctx, request)
+	if resp == nil && err == nil {
+		resp = &workflowservice.PollForWorkflowExecutionRawHistoryResponse{}
+	}
+	return resp, err
+}
+
 // GetWorkflowExecutionRawHistory retrieves raw history directly from DB layer.
 func (wh *WorkflowNilCheckHandler) GetWorkflowExecutionRawHistory(ctx context.Context, request *workflowservice.GetWorkflowExecutionRawHistoryRequest) (_ *workflowservice.GetWorkflowExecutionRawHistoryResponse, retError error) {
 	resp, err := wh.parentHandler.GetWorkflowExecutionRawHistory(ctx, request)

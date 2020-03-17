@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/temporal-proto/enums"
 	"go.uber.org/zap"
 
+	archiverproto "github.com/temporalio/temporal/.gen/proto/archiver"
 	"github.com/temporalio/temporal/common"
 	"github.com/temporalio/temporal/common/archiver"
 	"github.com/temporalio/temporal/common/archiver/s3store/mocks"
@@ -54,7 +55,7 @@ type visibilityArchiverSuite struct {
 
 	container         *archiver.VisibilityBootstrapContainer
 	logger            log.Logger
-	visibilityRecords []*visibilityRecord
+	visibilityRecords []*archiverproto.ArchiveVisibilityRequest
 
 	controller      *gomock.Controller
 	testArchivalURI archiver.URI
@@ -150,7 +151,7 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidURI() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	URI, err := archiver.NewURI("wrongscheme://")
 	s.NoError(err)
-	request := &archiver.ArchiveVisibilityRequest{
+	request := &archiverproto.ArchiveVisibilityRequest{
 		DomainName:         testDomainName,
 		DomainID:           testDomainID,
 		WorkflowID:         testWorkflowID,
@@ -168,7 +169,7 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidURI() {
 
 func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidRequest() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
-	err := visibilityArchiver.Archive(context.Background(), s.testArchivalURI, &archiver.ArchiveVisibilityRequest{})
+	err := visibilityArchiver.Archive(context.Background(), s.testArchivalURI, &archiverproto.ArchiveVisibilityRequest{})
 	s.Error(err)
 }
 
@@ -178,7 +179,7 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_NonRetriableErrorOption() {
 	err := visibilityArchiver.Archive(
 		context.Background(),
 		s.testArchivalURI,
-		&archiver.ArchiveVisibilityRequest{
+		&archiverproto.ArchiveVisibilityRequest{
 			DomainID: testDomainID,
 		},
 		archiver.GetNonRetriableErrorOption(nonRetriableErr),
@@ -189,7 +190,7 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_NonRetriableErrorOption() {
 func (s *visibilityArchiverSuite) TestArchive_Success() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	closeTimestamp := time.Now()
-	request := &archiver.ArchiveVisibilityRequest{
+	request := &archiverproto.ArchiveVisibilityRequest{
 		DomainID:           testDomainID,
 		DomainName:         testDomainName,
 		WorkflowID:         testWorkflowID,
@@ -214,11 +215,11 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 	err = visibilityArchiver.Archive(context.Background(), URI, request)
 	s.NoError(err)
 
-	expectedKey := constructTimestampIndex(URI.Path(), testDomainID, testWorkflowID, indexKeyCloseTimeout, closeTimestamp.UnixNano(), testRunID)
+	expectedKey := constructTimestampIndex(URI.Path(), testDomainID, primaryIndexKeyWorkflowID, testWorkflowID, secondaryIndexKeyCloseTimeout, closeTimestamp.UnixNano(), testRunID)
 	data, err := download(context.Background(), visibilityArchiver.s3cli, URI, expectedKey)
 	s.NoError(err, expectedKey)
 
-	archivedRecord := &archiver.ArchiveVisibilityRequest{}
+	archivedRecord := &archiverproto.ArchiveVisibilityRequest{}
 	err = json.Unmarshal(data, archivedRecord)
 	s.NoError(err)
 	s.Equal(request, archivedRecord)
@@ -417,11 +418,11 @@ func (s *visibilityArchiverSuite) TestArchiveAndQueryPrecisions() {
 		},
 	}
 	visibilityArchiver := s.newTestVisibilityArchiver()
-	URI, err := archiver.NewURI(testBucketURI + "/archive-and-query")
+	URI, err := archiver.NewURI(testBucketURI + "/archive-and-query-precision")
 	s.NoError(err)
 
 	for i, testData := range precisionTests {
-		record := archiver.ArchiveVisibilityRequest{
+		record := archiverproto.ArchiveVisibilityRequest{
 			DomainID:         testDomainID,
 			DomainName:       testDomainName,
 			WorkflowID:       testWorkflowID,
@@ -468,24 +469,48 @@ func (s *visibilityArchiverSuite) TestArchiveAndQueryPrecisions() {
 		s.NoError(err)
 		s.NotNil(response)
 		s.Len(response.Executions, 2, "Iteration ", i)
+
+		mockParser = NewMockQueryParser(s.controller)
+		mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
+			closeTime:        common.Int64Ptr((testData.day+30)*int64(time.Hour)*24 + testData.hour*int64(time.Hour) + testData.minute*int64(time.Minute) + testData.second*int64(time.Second)),
+			searchPrecision:  common.StringPtr(testData.precision),
+			workflowTypeName: common.StringPtr(testWorkflowTypeName),
+		}, nil).AnyTimes()
+		visibilityArchiver.queryParser = mockParser
+
+		response, err = visibilityArchiver.Query(context.Background(), URI, request)
+		s.NoError(err)
+		s.NotNil(response)
+		s.Len(response.Executions, 2, "Iteration ", i)
+
+		mockParser = NewMockQueryParser(s.controller)
+		mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
+			startTime:        common.Int64Ptr((testData.day)*int64(time.Hour)*24 + testData.hour*int64(time.Hour) + testData.minute*int64(time.Minute) + testData.second*int64(time.Second)),
+			searchPrecision:  common.StringPtr(testData.precision),
+			workflowTypeName: common.StringPtr(testWorkflowTypeName),
+		}, nil).AnyTimes()
+		visibilityArchiver.queryParser = mockParser
+
+		response, err = visibilityArchiver.Query(context.Background(), URI, request)
+		s.NoError(err)
+		s.NotNil(response)
+		s.Len(response.Executions, 2, "Iteration ", i)
 	}
 }
 func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
-	mockParser := NewMockQueryParser(s.controller)
-	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-		closeTime:       common.Int64Ptr(int64(1 * time.Hour)),
-		searchPrecision: common.StringPtr(PrecisionHour),
-		workflowID:      common.StringPtr(testWorkflowID),
-	}, nil).AnyTimes()
-	visibilityArchiver.queryParser = mockParser
 	URI, err := archiver.NewURI(testBucketURI + "/archive-and-query")
 	s.NoError(err)
 	for _, record := range s.visibilityRecords {
-		err := visibilityArchiver.Archive(context.Background(), URI, (*archiver.ArchiveVisibilityRequest)(record))
+		err := visibilityArchiver.Archive(context.Background(), URI, (*archiverproto.ArchiveVisibilityRequest)(record))
 		s.NoError(err)
 	}
 
+	mockParser := NewMockQueryParser(s.controller)
+	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
+		workflowID: common.StringPtr(testWorkflowID),
+	}, nil).AnyTimes()
+	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{
 		DomainID: testDomainID,
 		PageSize: 1,
@@ -501,13 +526,39 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 		request.NextPageToken = response.NextPageToken
 		first = false
 	}
-	s.Len(executions, 2)
+	s.Len(executions, 3)
 	s.Equal(convertToExecutionInfo(s.visibilityRecords[0]), executions[0])
 	s.Equal(convertToExecutionInfo(s.visibilityRecords[1]), executions[1])
+	s.Equal(convertToExecutionInfo(s.visibilityRecords[2]), executions[2])
+
+	mockParser = NewMockQueryParser(s.controller)
+	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
+		workflowTypeName: common.StringPtr(testWorkflowTypeName),
+	}, nil).AnyTimes()
+	visibilityArchiver.queryParser = mockParser
+	request = &archiver.QueryVisibilityRequest{
+		DomainID: testDomainID,
+		PageSize: 1,
+		Query:    "parsed by mockParser",
+	}
+	executions = []*commonproto.WorkflowExecutionInfo{}
+	first = true
+	for first || request.NextPageToken != nil {
+		response, err := visibilityArchiver.Query(context.Background(), URI, request)
+		s.NoError(err)
+		s.NotNil(response)
+		executions = append(executions, response.Executions...)
+		request.NextPageToken = response.NextPageToken
+		first = false
+	}
+	s.Len(executions, 3)
+	s.Equal(convertToExecutionInfo(s.visibilityRecords[0]), executions[0])
+	s.Equal(convertToExecutionInfo(s.visibilityRecords[1]), executions[1])
+	s.Equal(convertToExecutionInfo(s.visibilityRecords[2]), executions[2])
 }
 
 func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
-	s.visibilityRecords = []*visibilityRecord{
+	s.visibilityRecords = []*archiverproto.ArchiveVisibilityRequest{
 		{
 			DomainID:         testDomainID,
 			DomainName:       testDomainName,
@@ -548,7 +599,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 	}
 }
 
-func (s *visibilityArchiverSuite) writeVisibilityRecordForQueryTest(visibilityArchiver *visibilityArchiver, record *visibilityRecord) {
-	err := visibilityArchiver.Archive(context.Background(), s.testArchivalURI, (*archiver.ArchiveVisibilityRequest)(record))
+func (s *visibilityArchiverSuite) writeVisibilityRecordForQueryTest(visibilityArchiver *visibilityArchiver, record *archiverproto.ArchiveVisibilityRequest) {
+	err := visibilityArchiver.Archive(context.Background(), s.testArchivalURI, (*archiverproto.ArchiveVisibilityRequest)(record))
 	s.Require().NoError(err)
 }

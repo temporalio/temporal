@@ -88,8 +88,8 @@ type (
 	RPC struct {
 		// GRPCPort is the port  on which gRPC will listen
 		GRPCPort int `yaml:"grpcPort"`
-		// Port used for ringpop listener
-		RingpopPort int `yaml:"ringpopPort"`
+		// Port used for membership listener
+		MembershipPort int `yaml:"membershipPort"`
 		// BindOnLocalHost is true if localhost is the bind address
 		BindOnLocalHost bool `yaml:"bindOnLocalHost"`
 		// BindOnIP can be used to bind service on specific ip (eg. `0.0.0.0`) -
@@ -142,6 +142,8 @@ type (
 		Cassandra *Cassandra `yaml:"cassandra"`
 		// SQL contains the config for a SQL based datastore
 		SQL *SQL `yaml:"sql"`
+		// Custom contains the config for custom datastore implementation
+		CustomDataStoreConfig *CustomDatastoreConfig `yaml:"customDatastore"`
 		// ElasticSearch contains the config for a ElasticSearch datastore
 		ElasticSearch *elasticsearch.Config `yaml:"elasticsearch"`
 	}
@@ -180,8 +182,6 @@ type (
 		Keyspace string `yaml:"keyspace" validate:"nonzero"`
 		// Datacenter is the data center filter arg for cassandra
 		Datacenter string `yaml:"datacenter"`
-		// MaxQPS is the max request rate to this datastore
-		MaxQPS int `yaml:"maxQPS"`
 		// MaxConns is the max number of connections to this datastore for a single keyspace
 		MaxConns int `yaml:"maxConns"`
 		// TLS configuration
@@ -204,8 +204,6 @@ type (
 		ConnectProtocol string `yaml:"connectProtocol" validate:"nonzero"`
 		// ConnectAttributes is a set of key-value attributes to be sent as part of connect data_source_name url
 		ConnectAttributes map[string]string `yaml:"connectAttributes"`
-		// MaxQPS the max request rate on this datastore
-		MaxQPS int `yaml:"maxQPS"`
 		// MaxConns the max number of connections to this datastore
 		MaxConns int `yaml:"maxConns"`
 		// MaxIdleConns is the max number of idle connections to this datastore
@@ -217,6 +215,14 @@ type (
 		NumShards int `yaml:"nShards"`
 		// TLS is the configuration for TLS connections
 		TLS *auth.TLS `yaml:"tls"`
+	}
+
+	// CustomDatastoreConfig is the configuration for connecting to a custom datastore that is not supported by cadence core
+	CustomDatastoreConfig struct {
+		// Name of the custom datastore
+		Name string `yaml:"name"`
+		// Options is a set of key-value attributes that can be used by AbstractDatastoreFactory implementation
+		Options map[string]string `yaml:"options"`
 	}
 
 	// Replicator describes the configuration of replicator
@@ -347,6 +353,7 @@ type (
 	VisibilityArchiverProvider struct {
 		Filestore *FilestoreArchiver `yaml:"filestore"`
 		S3store   *S3Archiver        `yaml:"s3store"`
+		Gstorage  *GstorageArchiver  `yaml:"gstorage"`
 	}
 
 	// FilestoreArchiver contain the config for filestore archiver
@@ -359,6 +366,7 @@ type (
 	GstorageArchiver struct {
 		CredentialsPath string `yaml:"credentialsPath"`
 	}
+
 	// S3Archiver contains the config for S3 archiver
 	S3Archiver struct {
 		Region           string  `yaml:"region"`

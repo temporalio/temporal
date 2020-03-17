@@ -21,6 +21,7 @@
 package task
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -42,6 +43,8 @@ type (
 		controller    *gomock.Controller
 		mockProcessor *MockProcessor
 
+		queueSize int
+
 		scheduler *fifoTaskSchedulerImpl
 	}
 )
@@ -57,11 +60,12 @@ func (s *fifoTaskSchedulerSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockProcessor = NewMockProcessor(s.controller)
 
+	s.queueSize = 2
 	s.scheduler = NewFIFOTaskScheduler(
 		loggerimpl.NewDevelopmentForTest(s.Suite),
 		metrics.NewClient(tally.NoopScope, metrics.Common).Scope(metrics.TaskSchedulerScope),
 		&FIFOTaskSchedulerOptions{
-			QueueSize:   0,
+			QueueSize:   s.queueSize,
 			WorkerCount: 1,
 			RetryPolicy: backoff.NewExponentialRetryPolicy(time.Millisecond),
 		},
@@ -75,14 +79,20 @@ func (s *fifoTaskSchedulerSuite) TearDownTest() {
 func (s *fifoTaskSchedulerSuite) TestFIFO() {
 	numTasks := 5
 	tasks := []PriorityTask{}
+	var taskWG sync.WaitGroup
 
 	calls := []*gomock.Call{
 		s.mockProcessor.EXPECT().Start(),
 	}
+	mockFn := func(_ Task) error {
+		taskWG.Done()
+		return nil
+	}
 	for i := 0; i != numTasks; i++ {
 		mockTask := NewMockPriorityTask(s.controller)
 		tasks = append(tasks, mockTask)
-		calls = append(calls, s.mockProcessor.EXPECT().Submit(newMockPriorityTaskMatcher(mockTask)).Return(nil))
+		taskWG.Add(1)
+		calls = append(calls, s.mockProcessor.EXPECT().Submit(newMockPriorityTaskMatcher(mockTask)).DoAndReturn(mockFn))
 	}
 	calls = append(calls, s.mockProcessor.EXPECT().Stop())
 	gomock.InOrder(calls...)
@@ -90,7 +100,23 @@ func (s *fifoTaskSchedulerSuite) TestFIFO() {
 	s.scheduler.processor = s.mockProcessor
 	s.scheduler.Start()
 	for _, task := range tasks {
-		s.scheduler.Submit(task)
+		s.NoError(s.scheduler.Submit(task))
 	}
+	taskWG.Wait()
 	s.scheduler.Stop()
+}
+
+func (s *fifoTaskSchedulerSuite) TestTrySubmit() {
+	for i := 0; i != s.queueSize; i++ {
+		mockTask := NewMockPriorityTask(s.controller)
+		submitted, err := s.scheduler.TrySubmit(mockTask)
+		s.NoError(err)
+		s.True(submitted)
+	}
+
+	// now the queue is full, submit one more task, should be non-blocking
+	mockTask := NewMockPriorityTask(s.controller)
+	submitted, err := s.scheduler.TrySubmit(mockTask)
+	s.NoError(err)
+	s.False(submitted)
 }
